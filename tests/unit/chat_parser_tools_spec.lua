@@ -342,3 +342,221 @@ describe("chat_parser tolerates malformed tool blocks", function()
         assert.same({}, found.input)
     end)
 end)
+
+-- #200 M2: cb_append_line already tracked tool-body fences correctly
+-- (chat_parser.lua:455-469), but the main loop classified every line without
+-- consulting that state. Tool output routinely contains 💬:/🤖:/📎: lines —
+-- reading a transcript, grepping this repo — and each one forked a spurious
+-- exchange that then dragged the rest of the tool body out of its block.
+describe("structural markers inside a tool body (#200)", function()
+    -- Reuses the file's existing `parser` and `test_config()` helpers rather
+    -- than introducing a second set.
+    local function parse(lines)
+        return parser.parse_chat(lines, 4, test_config())
+    end
+
+    local header = { "---", "topic: t", "file: f.md", "---" }
+
+    it("treats a question marker inside a tool result as content", function()
+        local lines = vim.list_extend(vim.deepcopy(header), {
+            "",
+            "💬: show me the transcript",
+            "",
+            "🤖: [A]",
+            "📎: read_file id=r1",
+            "```",
+            "💬: a question from the file being read",
+            "🤖: and its answer",
+            "```",
+            "",
+            "💬: second real question",
+        })
+        local parsed = parse(lines)
+        assert.message("an in-body 💬: forked a spurious exchange")
+            .equals(2, #parsed.exchanges)
+        -- Line 11 is the marker INSIDE the body; the real second question is
+        -- at 15, after the closing fence and the blank line.
+        assert.equals(15, parsed.exchanges[2].question.line_start)
+    end)
+
+    it("treats a tool-result marker inside a tool body as content", function()
+        local lines = vim.list_extend(vim.deepcopy(header), {
+            "",
+            "💬: q",
+            "",
+            "🤖: [A]",
+            "📎: grep id=r1",
+            "```",
+            "match: 📎: read_file id=other",
+            "📎: read_file id=other",
+            "```",
+        })
+        local parsed = parse(lines)
+        assert.equals(1, #parsed.exchanges)
+    end)
+
+    it("resumes structural parsing after the body closes", function()
+        local lines = vim.list_extend(vim.deepcopy(header), {
+            "",
+            "💬: q1",
+            "",
+            "🤖: [A]",
+            "📎: read id=r1",
+            "```",
+            "💬: not a turn",
+            "```",
+            "",
+            "💬: q2",
+            "",
+            "🤖: [A]",
+            "",
+            "💬: q3",
+        })
+        local parsed = parse(lines)
+        assert.equals(3, #parsed.exchanges)
+    end)
+
+    it("keeps a longer nested fence inside the body", function()
+        local lines = vim.list_extend(vim.deepcopy(header), {
+            "",
+            "💬: q",
+            "",
+            "🤖: [A]",
+            "📎: read id=r1",
+            "````",
+            "```lua",
+            "💬: still content",
+            "```",
+            "````",
+            "",
+            "💬: real",
+        })
+        local parsed = parse(lines)
+        assert.equals(2, #parsed.exchanges)
+    end)
+
+    it("does not suppress markers outside a tool body", function()
+        local lines = vim.list_extend(vim.deepcopy(header), {
+            "",
+            "💬: q1",
+            "",
+            "🤖: [A]",
+            "```",
+            "💬: inside ordinary answer prose, still a turn today",
+            "```",
+        })
+        -- Scope boundary, recorded as a non-goal in the plan: only tool bodies
+        -- are suppressed. Ordinary answer prose stays fence-naive.
+        assert.equals(2, #parse(lines).exchanges)
+    end)
+end)
+
+-- BR-30: suppression was gated on "fence open and body not complete", with no
+-- terminator. An opener that never gets a matching bare close reclassified
+-- every later marker as text, so the rest of the chat forked no exchanges at
+-- all. Reachable without a malformed file: an answer quoting a 📎: line in
+-- ordinary prose starts a tool block whose body never closes.
+describe("unterminated tool body (#200 BR-30)", function()
+    local function parse(lines)
+        return parser.parse_chat(lines, 4, test_config())
+    end
+    local header = { "---", "topic: t", "file: f.md", "---" }
+
+    it("does not swallow the rest of the chat after an unclosed fence", function()
+        local lines = vim.list_extend(vim.deepcopy(header), {
+            "",
+            "💬: q1",
+            "",
+            "🤖: [A]",
+            "📎: read id=r1",
+            "```",
+            "a body whose fence is never closed",
+            "",
+            "💬: q2",
+            "",
+            "🤖: [A]",
+            "",
+            "💬: q3",
+        })
+        assert.message("an unclosed fence swallowed the following exchanges")
+            .equals(3, #parse(lines).exchanges)
+    end)
+
+    -- Characterization, NOT a fix pin: verified green against b2bf1d5 as well.
+    -- The swallow case above is the one that pins BR-30.
+    it("does not swallow the chat when prose quotes a tool marker", function()
+        local lines = vim.list_extend(vim.deepcopy(header), {
+            "",
+            "💬: q1",
+            "",
+            "🤖: [A]",
+            "The transcript format uses lines like",
+            "📎: read_file id=example",
+            "to mark a tool result.",
+            "",
+            "💬: q2",
+        })
+        assert.equals(2, #parse(lines).exchanges)
+    end)
+end)
+
+-- BR-43: three shapes where a tool-body scan that accepts an opener anywhere
+-- after the marker, or rejects a legitimate CommonMark opener, reads a CLOSING
+-- fence as an opening one — and the rest of the chat stops forking exchanges.
+-- None of them appears in the live 115-file corpus.
+describe("tool-body extent desync (#200 BR-43)", function()
+    local function count(extra)
+        local lines = { "---", "topic: t", "file: f.md", "---" }
+        vim.list_extend(lines, extra)
+        return #parser.parse_chat(lines, 4, test_config()).exchanges
+    end
+
+    it("survives an opener whose info string the old grammar rejected", function()
+        assert.equals(3, count({
+            "", "💬: q1", "", "🤖: [A]", "📎: r id=1",
+            '```json {"type": "request"}', "body", "```",
+            "", "💬: q2", "", "🤖: [A]", "", "💬: q3",
+        }))
+    end)
+
+    -- Deferred to #203 (operator decision, 2026-08-21). An unclosed body
+    -- that latches onto a later unrelated bare fence is locally
+    -- indistinguishable from a legitimate body quoting a transcript: both have
+    -- an opener after the marker and a matching bare close further down. Every
+    -- local discriminator tried either reintroduces the swallow or defeats M2's
+    -- headline case (suppressing a 💬: that really is tool output). Bounding at
+    -- the "next structural boundary" is circular — the boundary may itself be
+    -- inside the body.
+    --
+    -- Unreachable from anything parley writes: for_content guarantees a body
+    -- cannot close its own fence, so the first matching close is always right
+    -- for well-formed input. This shape needs a hand-edited, truncated, or
+    -- externally-pasted transcript, and recovering from it needs a real
+    -- fence-depth parser rather than another heuristic — hence #203.
+    -- Current behaviour: 2 exchanges, where M1 (dc5ee17) gave 3.
+    pending("survives an unclosed body followed by a later bare fence", function()
+        assert.equals(3, count({
+            "", "💬: q1", "", "🤖: [A]", "📎: r id=1", "```", "never closed",
+            "", "💬: q2", "", "🤖: [A]", "```", "", "💬: q3",
+        }))
+    end)
+
+    -- The shape that folded a question at HEAD: a 📎: inside a ```text block is
+    -- not a marker, and treating it as one made that block's CLOSER read as a
+    -- body opener, so the "body" spanned 💬: q2 and fold_projection suppressed
+    -- its own guard over those rows.
+    it("does not treat a marker inside an ordinary fenced block as structural", function()
+        assert.equals(3, count({
+            "", "💬: q1", "🤖: [A]", "```text", "📎: read_file id=x", "```", "",
+            "💬: q2", "", "🤖: [A]", "```", "code", "```", "", "💬: q3",
+        }))
+    end)
+
+    it("survives an answer that shows the transcript format in a plain block", function()
+        assert.equals(3, count({
+            "", "💬: q1", "", "🤖: [A]", "the transcript format looks like",
+            "```text", "📎: read_file id=x", "```",
+            "", "💬: q2", "", "🤖: [A]", "", "💬: q3",
+        }))
+    end)
+end)

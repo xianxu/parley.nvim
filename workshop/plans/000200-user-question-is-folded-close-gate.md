@@ -1,0 +1,1904 @@
+---
+gate: boundary-review
+issue: 200
+id_prefix: BR
+rounds:
+    - "n": 1
+      timestamp: "2026-08-20T18:31:05-07:00"
+      agent: claude
+      boundary: M1
+      blocked: true
+      protocol_error: no valid findings block
+    - "n": 2
+      timestamp: "2026-08-20T21:25:31-07:00"
+      agent: claude
+      findings:
+        - id: BR-1
+          severity: Important
+          title: FOLDABLE duplicates ANCHOR_KIND's key set; drift silently refuses the whole exchange
+          detail: |-
+            fold_projection.lua:5-11 and :22-27 state "which kinds fold" twice. Adding a kind to
+            FOLDABLE alone makes anchor_kind return nil, verify_anchors reject the range, and the
+            re-derive reproduce it — a permanent refusal of the entire exchange, not just that
+            block. No test pins the two key sets agree. Fix: delete FOLDABLE, define
+            is_foldable(k) as ANCHOR_KIND[k] ~= nil, and have desired_folds call it (ARCH-DRY).
+          round: 2
+        - id: BR-2
+          severity: Important
+          title: No test pins "folds outside every exchange span are untouched"
+          detail: |-
+            clear_folds_in_span's docstring (tool_folds.lua:48) and the atlas both promise it, but
+            the only test that demonstrated it (tool_folds_spec.lua:39) was converted in round 5
+            when the last exchange's span widened to EOF, and was not replaced. Verified the
+            behavior still holds — a 1,4fold over the frontmatter survives a reconcile that folds
+            the tool_result at row 10 — so this is coverage, not a bug. Given the diff widened
+            destruction twice, add a case pinning the header region above exchange_start(1).
+          round: 2
+        - id: BR-3
+          severity: Important
+          title: atlas names verify_span and a positional fallback that were both removed in round 5
+          detail: |-
+            atlas/chat/exchange_model.md:84 says "The positional check (verify_span) remains only
+            as the fallback floor". grep -rn verify_span lua/ tests/ returns nothing, and
+            owned_span's own comment reads "There is deliberately no positional fallback." The
+            section also omits round 8's containment tie, which is load-bearing. Docs update gate.
+          round: 2
+        - id: BR-4
+          severity: Important
+          title: Plan Core-concepts entry contradicts the code and the plan's own line 65
+          detail: |-
+            000200-fold-reconciliation-plan.md:37 still lists verify_span(first_0, last_0, lines,
+            patterns, anchor_required) as what fold_projection gains, while :65 correctly names
+            verify_starts. Separately, the plan's Revisions stop at round 7 — round 8's design
+            change (creation ranges must lie inside the identified span; iteration-count scaling
+            test) is recorded only in the issue Log. See the review's section 7 for both entries.
+          round: 2
+        - id: BR-5
+          severity: Important
+          title: rederived memo leaks a parsed model per buffer behind a no-op weak-key guard
+          detail: |-
+            tool_folds.lua:148 uses __mode = "k" with integer buffer handles; Lua only collects
+            collectable weak keys. Measured: 1000/1000 integer-keyed entries survive two full GC
+            passes, table-keyed drop to 0. The BufUnload/BufDelete autocmd at :466-472 clears
+            initialized and exchange_anchors but not rederived[buf], so every closed chat retains
+            its last exchange_model for the process lifetime. Add rederived[buf] = nil there and
+            drop the __mode metatable, which reads as a guard and is not one.
+          round: 2
+        - id: BR-6
+          severity: Minor
+          title: Duplicated comment paragraph and split declaration in prepare_exchange_update
+          detail: |-
+            tool_folds.lua:335-346 repeats the same "same rule as reconcile" paragraph twice;
+            :331 declares first_0/last_0 two lines before its only assignment.
+          round: 2
+        - id: BR-7
+          severity: Minor
+          title: owned_span writes the same return statement twice (ARCH-DRY)
+          detail: tool_folds.lua:242-246 collapses to a single guard plus one return.
+          round: 2
+        - id: BR-8
+          severity: Minor
+          title: Two stale test comments in the integration fold spec
+          detail: |-
+            tool_folds_spec.lua:180-186 describes wall-clock sampling the test no longer does;
+            :93's "Contrast the case above, whose fold sits outside every span" points at :55,
+            which now asserts that fold IS cleared.
+          round: 2
+        - id: BR-9
+          severity: Minor
+          title: verify_anchors cannot run without a vim global; the purity test only pins module load
+          detail: |-
+            fold_projection.lua:76 requires highlight_structure unconditionally even when patterns
+            is supplied, so it fails in vim/_init_packages.lua under _G.vim = nil, while
+            verify_starts runs fine. fold_projection_spec.lua:32 checks load-time purity only, so
+            the plan's "pure and nvim-free" claim is unpinned at call time (ARCH-PURE).
+          round: 2
+        - id: BR-10
+          severity: Minor
+          title: prepare_exchange_update computes desired_folds only to fill the observer event
+          detail: tool_folds.lua:330 — per-streamed-chunk work whose sole consumer is the test seam.
+          round: 2
+        - id: BR-11
+          severity: Minor
+          title: M._last_clear_iters is not reset on clear_folds_in_span's early returns
+          detail: |-
+            tool_folds.lua:50-57 return before :93 in three cases, so a reader can pick up a stale
+            iteration count from a previous call.
+          round: 2
+        - id: BR-12
+          severity: Minor
+          title: The containment rule is pure logic living in the IO shell (ARCH-PURE)
+          detail: |-
+            tool_folds.lua:279-286 is a pure predicate over ranges and a row span, reachable only
+            through an integration test. Extracting it to fold_projection makes it unit-pinnable.
+          round: 2
+        - id: BR-13
+          severity: Minor
+          title: The fold-creation loop is unprotected against E350 though the clear half handles it
+          detail: |-
+            tool_folds.lua:321 throws out of reconcile under a non-manual foldmethod, while
+            clear_folds_in_span:65-68 explicitly reasons about that case. Pre-existing, but the
+            asymmetry is newly visible.
+          round: 2
+        - id: BR-14
+          severity: Minor
+          title: lessons.md has no rule for the duplicate-test-block defect this window fixed
+          detail: |-
+            The existing "deleted tests do not fail" entry keys on a SHRINKING green suite; a
+            duplicated describe block makes it grow, which is why the count check read as "I added
+            tests" for four rounds. Add the uniq -d audit over it("...") names (AGENTS.md section 4).
+          round: 2
+        - id: BR-15
+          severity: Minor
+          title: No follow-up issue filed for the harness scratch-dir contention diagnosed in round 6
+          detail: |-
+            The Log says tools_builtin_find_spec traverses a .test-tmp being mutated under it and
+            that it is "worth its own issue". No issue exists; the diagnosis will be archived to
+            workshop/history/ at close.
+          round: 2
+        - id: BR-16
+          severity: Minor
+          title: README not updated for the new fold-ownership contract
+          detail: |-
+            A manual zf inside an exchange — now including the whole buffer tail after the last
+            block — is destroyed on the next reconcile. Operator-visible, documented only in atlas.
+          round: 2
+        - id: BR-17
+          severity: Minor
+          title: Corpus harness shells out to git ls-files outside any seam (ARCH-MOCK)
+          detail: |-
+            fold_invariants_spec.lua:17. Mitigated by the "#corpus >= 8" floor, which makes a
+            missing or failed git a loud failure rather than a silently shrunken suite. Noting only.
+          round: 2
+        - id: BR-18
+          severity: Minor
+          title: Plan doc Task 1-5 step checkboxes still unticked although M1 is complete
+          detail: The issue's Plan section is correctly ticked; the durable plan's steps lag.
+          round: 2
+      boundary: M1
+      blocked: false
+    - "n": 3
+      timestamp: "2026-08-20T21:38:20-07:00"
+      agent: claude
+      findings:
+        - id: BR-19
+          severity: Critical
+          title: 'clear_folds_in_span deletes nothing under ''nofoldenable'', restoring the #200 symptom permanently'
+          detail: "tool_folds.lua:75,77 gate every deletion on foldlevel(), which reports 0\nfor all rows when the window has 'nofoldenable' (verified: :fold still\ncreates the fold, foldlevel() just cannot see it; zj still navigates).\nReconcile degrades to append-only. Reproduced both failure modes — a\nstale fold covering a question survives and renders \"\U0001F4AC: q (4 lines)\",\nand 25 reconciles produce 25 nested fold levels at the same rows, i.e.\none level per streamed chunk. Parley ships chat_toggle_tool_folds\n(init.lua:2236) which sets this very option, and no fold spec varies it.\nFix: save/force/restore &l:foldenable around the clear loop inside the\nexisting nvim_win_call, and add foldenable=false variants of the\nownership and fold-nesting tests."
+          round: 3
+        - id: BR-20
+          severity: Important
+          title: reconcile_exchange is O(number of exchanges) per call on the per-chunk streaming path
+          detail: |-
+            exchange_anchors.span resolves every anchor on every call, so per-chunk
+            cost scales with chat length, not exchange length. Measured with the
+            streamed exchange held constant: 0.0386 ms at 10 exchanges, 0.0495 at 50,
+            0.1172 at 200, 0.2549 at 500 — and owned_span runs twice per chunk
+            (prepare + finalize) against a 0.078 ms pre-200 baseline. The in-suite
+            scaling test varies span length only, so this axis is unpinned. Fix:
+            memoise resolved anchor rows per (buf, changedtick) — exact, since marks
+            only move on edits and every edit bumps the tick — and extend the
+            iteration-count test to hold span fixed while growing exchange count.
+          round: 3
+        - id: BR-21
+          severity: Important
+          title: the drift refusal is logged once per buffer lifetime, not once per buffer state
+          detail: |-
+            rederived[buf].logged is carried into every new tick's entry
+            (tool_folds.lua:181) and never reset on a successful reconcile, so after
+            the first refusal in a buffer every later refusal — including an
+            unrelated drift much later in the session — is silent. The comment at
+            :310-311 says "once per buffer state" and the Done-when requires the
+            refusal not be silent. Fix: clear the flag when reconcile_exchange
+            succeeds, or key the suppression on the tick rather than the buffer.
+          round: 3
+        - id: BR-22
+          severity: Minor
+          title: vim.g.parley_fold_clear_iters is a test instrument written to a global on the per-chunk path
+          detail: |-
+            tool_folds.lua:88,93. Prefer nvim_exec2 with output capture, or a
+            buffer-local var, so the production hot path does not publish a global.
+          round: 3
+        - id: BR-23
+          severity: Minor
+          title: the prepare event's `identified` flag has no consumer and no test
+          detail: tool_folds.lua:351,357 emit it, nothing reads or asserts it.
+          round: 3
+        - id: BR-24
+          severity: Minor
+          title: _observer is reset inline rather than in after_each, so a failing assertion leaks it
+          detail: |-
+            tests/integration/tool_folds_spec.lua:252,706 — _model_provider is reset
+            in after_each (:23) but _observer is not.
+          round: 3
+        - id: BR-25
+          severity: Minor
+          title: foldtext hardcodes the four marker prefixes instead of deriving from highlight_structure.patterns
+          detail: "tool_folds.lua:434-449. A customised chat_tool_use_prefix silently falls\nthrough to the preview branch — the same branch that rendered\n\"\U0001F4AC: q (4 lines)\" and masked #200. Pre-existing and outside the diff, but\nit is now the last hand-maintained copy of the marker vocabulary BR-1\nconsolidated into ANCHOR_KIND (ARCH-DRY)."
+          round: 3
+      boundary: M1
+      blocked: false
+    - "n": 4
+      timestamp: "2026-08-20T21:52:18-07:00"
+      agent: claude
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: FOLDABLE derived from ANCHOR_KIND at fold_projection.lua:22-23; drift is now structurally impossible.
+          round: 4
+        - id: BR-2
+          disposition: addressed
+          note: tool_folds_spec.lua:488 folds the frontmatter and asserts it survives a full reconcile.
+          round: 4
+        - id: BR-3
+          disposition: addressed
+          note: grep verify_span over atlas/ is empty; the section now states "no positional fallback" and documents the containment tie.
+          round: 4
+        - id: BR-4
+          disposition: not-addressed
+          note: Core-concepts fixed at plan:37, but Revisions still stop at round 7 — rounds 8 and 9 unrecorded.
+          round: 4
+        - id: BR-5
+          disposition: addressed
+          note: Weak mode dropped (tool_folds.lua:162); rederived[buf] cleared on BufUnload/BufDelete at :484.
+          round: 4
+        - id: BR-6
+          disposition: not-addressed
+          note: tool_folds.lua:348-354 still repeats the paragraph; :345 still splits the declaration from :355.
+          round: 4
+        - id: BR-7
+          disposition: not-addressed
+          note: tool_folds.lua:256-260 unchanged.
+          round: 4
+        - id: BR-8
+          disposition: not-addressed
+          note: Both comments unchanged — spec :184-186 still describes wall-clock sampling, :93 still says the case above sits outside every span when it now asserts that fold IS cleared.
+          round: 4
+        - id: BR-9
+          disposition: not-addressed
+          note: fold_projection.lua:80 still requires highlight_structure unconditionally; the purity test still checks load time only.
+          round: 4
+        - id: BR-10
+          disposition: not-addressed
+          note: tool_folds.lua:344 unchanged.
+          round: 4
+        - id: BR-11
+          disposition: not-addressed
+          note: tool_folds.lua:50-51 and :57 still return before the iteration count is written at :103.
+          round: 4
+        - id: BR-12
+          disposition: not-addressed
+          note: tool_folds.lua:293-300 unchanged.
+          round: 4
+        - id: BR-13
+          disposition: not-addressed
+          note: tool_folds.lua:335 still unguarded while the clear half reasons about E350 at :63-68.
+          round: 4
+        - id: BR-14
+          disposition: not-addressed
+          note: The new lessons entry keys on a shrinking suite and a comm -13 set diff; duplicates collapse in a set, so no rule covers the duplicate-block defect.
+          round: 4
+        - id: BR-15
+          disposition: not-addressed
+          note: workshop/issues/ still holds eight issues, none for the scratch-dir contention.
+          round: 4
+        - id: BR-16
+          disposition: not-addressed
+          note: No README.md change anywhere in 38a6cdd..HEAD.
+          round: 4
+        - id: BR-17
+          disposition: not-addressed
+          note: fold_invariants_spec.lua:17 unchanged; the >= 8 floor still mitigates it.
+          round: 4
+        - id: BR-18
+          disposition: not-addressed
+          note: Every Task 1-5 step checkbox in the durable plan is still unticked.
+          round: 4
+        - id: BR-19
+          disposition: addressed
+          note: Guard at tool_folds.lua:76-98 with two foldenable=false tests; verified foldlevel() reads 0 under nofoldenable and that :fold does not re-enable the option.
+          round: 4
+        - id: BR-20
+          disposition: not-addressed
+          note: exchange_anchors.lua:70-74 still resolves every anchor per call; no memo, and the scaling test still varies span length only.
+          round: 4
+        - id: BR-21
+          disposition: not-addressed
+          note: tool_folds.lua:191 still carries logged forward; no writer resets it on success. This is the unmet "refusal is not silent" Done-when.
+          round: 4
+        - id: BR-22
+          disposition: not-addressed
+          note: tool_folds.lua:97,103 unchanged.
+          round: 4
+        - id: BR-23
+          disposition: not-addressed
+          note: grep identified over lua/ and tests/ returns only the two emit sites.
+          round: 4
+        - id: BR-24
+          disposition: not-addressed
+          note: tool_folds_spec.lua:260,765 still reset inline; after_each at :22 resets only _model_provider.
+          round: 4
+        - id: BR-25
+          disposition: not-addressed
+          note: tool_folds.lua:444-454 unchanged.
+          round: 4
+      findings:
+        - id: BR-26
+          severity: Minor
+          title: per-chunk reconcile cost is linear in projected-range length, and that axis is unasserted
+          detail: |-
+            covered_lines plus verify_anchors' interior scan is an O(span) buffer read
+            this milestone introduced on the per-streamed-chunk path. Measured
+            best-of-30 per reconcile with a single thinking range: 0.0070 / 0.0100 /
+            0.0230 / 0.0825 / 0.3440 ms at 25 / 100 / 400 / 1600 / 6400 body rows —
+            clean linearity, so streaming a long foldable block is O(N^2) overall.
+            Absolute cost is small, but the in-suite scaling test asserts only
+            clear-loop iteration count, so nothing pins this axis.
+          round: 4
+        - id: BR-27
+          severity: Minor
+          title: atlas does not record that the clear transiently forces 'foldenable'
+          detail: |-
+            The last commit made tool_folds write a window option it does not own,
+            saving and restoring it around the clear. atlas/chat/exchange_model.md's
+            fold-reconciliation section describes the zj/zD walk but not this, so the
+            operator-visible contract ("your foldenable setting is momentarily forced
+            on and restored") lives only in a code comment. One-line delta.
+          round: 4
+        - id: BR-28
+          severity: Minor
+          title: prepare clears the identified span unverified while reconcile refuses to create unverified
+          detail: |-
+            prepare_exchange_update destroys every fold in the identified span with no
+            range verification; reconcile_exchange refuses to create when verification
+            fails. If finalize's reconcile then refuses, the span is left cleared with
+            nothing recreated and hydrate_window latches. I could not reach this in
+            production — the re-derive normally heals within the same call — so this is
+            an asymmetry note rather than a demonstrated bug, but it is the shape
+            lessons.md's own "widening a destructive operation demands widening its
+            verification" entry warns about.
+          round: 4
+      boundary: M1
+      blocked: false
+    - "n": 5
+      timestamp: "2026-08-21T11:47:17-07:00"
+      agent: claude
+      findings:
+        - id: BR-29
+          severity: Critical
+          title: answer_structure's unterminated-fence rewind fires on a correctly closed fence, truncating the tool block
+          detail: "lua/parley/answer_structure.lua:114 gates the rewind on `cursor > #lines`, which is\nequally true when the fence closed on the last line of the span. A tool body containing\na BOUNDARY-classified line (\U0001F4DD:/\U0001F4AC:/\U0001F916:/\U0001F512:) whose close is that last line is truncated\nat its opener: reduce returns tool_result 1..2 / summary 3..3 / text 4..4 where dc5ee17\nreturned tool_result 1..4. Measured on real fold state, the body leaks out of its fold\nand a fold is anchored on the in-body marker. Reachable on the streaming path\n(chat_respond.lua:1704) and on cold parse of a chat ending at a tool-result fence.\nFix: track a `closed` flag set in the close branch and gate the rewind on `not closed`."
+          family: failure-fallback-misgated
+          round: 5
+        - id: BR-30
+          severity: Critical
+          title: chat_parser's in-body suppression is unbounded, so one unclosed fence swallows the rest of the chat
+          detail: "lua/parley/chat_parser.lua:526 suppresses structural classification while tool_fence_len\nis set and tool_body_complete is false, with no terminator. An opener that never gets a\nmatching bare close reclassifies every later marker to text and forks no further\nexchange: 3 exchanges before M2, 1 after. Reachable without a malformed file — an answer\nquoting a \U0001F4CE: line inside ordinary markdown prose (fence-naive by design) opens a tool\nblock whose body never closes. Exchange starts feed exchange_anchors identity, which\ndrives the M1 destructive fold clear. answer_structure got a bounded fallback for this\ncase in the same milestone; chat_parser did not. Fix: precompute in_tool_body[] with a\nlookahead that requires the close to exist, and suppress on that."
+          family: unterminated-fence-degradation
+          round: 5
+        - id: BR-31
+          severity: Important
+          title: 11 pre-existing tests deleted from chat_parser_tools_spec.lua, undeclared
+          detail: |-
+            The file was replaced wholesale (344 -> 108 lines), dropping the entire #81
+            content_blocks contract plus "a tool_use prefix without a fenced body ... empty input" —
+            the only malformed-tool-tolerance test, and the class of the C2 regression. None were
+            relocated. The M2 Log reports "chat_parser_tools_spec 5/5" without noting it was 11.
+            This is the rule at workshop/lessons.md:706-713, added by this issue.
+          family: spec-surgery-loses-tests
+          round: 5
+        - id: BR-32
+          severity: Important
+          title: atlas/chat/format.md still names tools/serialize.lua as the fence single source
+          detail: |-
+            Plan Task 11 Step 3 names atlas/chat/format.md explicitly and is ticked, but the file is
+            untouched: line 12 still reads "Single source of truth for the schema:
+            lua/parley/tools/serialize.lua". atlas/chat/parsing.md never mentions the in-body-content
+            rule and line 17 still says structural markers "always terminate either mode".
+            traceability.yaml adds fence.lua under chat/exchange_model + providers/tool_use, not
+            chat/parsing as the plan directed. ARCH-PURPOSE shadow sweep incomplete.
+          family: shadow-consumer-not-derived
+          round: 5
+        - id: BR-33
+          severity: Important
+          title: fold_projection's interior scan enters body mode on any fence, disabling the question guard
+          detail: |-
+            lua/parley/fold_projection.lua:120-126 treats any open_len-matching line as a body opener
+            for any foldable range kind. A bare run is indistinguishable from an opener, so one
+            unmatched or grammar-rejected fence (e.g. an info string with non-word characters, as
+            render_buffer.lua:104 emits) desyncs the scan and it stops checking for user markers for
+            the rest of the range — silently disabling the guard that defends "a question is never
+            inside a fold". Fix: fence-track only for tool_use/tool_result and require the body to
+            open at range.start_0 + 1.
+          family: drift-guard-blinded
+          round: 5
+        - id: BR-34
+          severity: Important
+          title: Plan Task 11 Step 2 (127-transcript audit re-run) is ticked with no evidence in the Log
+          detail: |-
+            The M2 Log records spec counts, make test, lint and the M1 drift probes, but no re-run of
+            the three audit scans against the operator's live chat_dir. That audit is the only
+            evidence covering the C2 shape: the in-repo corpus provably lacks it (old-vs-new parser
+            exchange counts differ on 0 of 23 in-repo transcripts).
+          family: ticked-without-evidence
+          round: 5
+        - id: BR-35
+          severity: Minor
+          title: chat_parser.lua:267 require is unindented in a tab-indented function body
+          family: style-consistency
+          round: 5
+        - id: BR-36
+          severity: Minor
+          title: chat_parser.lua:457-459 comment still restates the fence grammar the module no longer owns
+          family: shadow-consumer-not-derived
+          round: 5
+        - id: BR-37
+          severity: Minor
+          title: fold_projection.lua:122-123 calls fence.open_len twice on the same line
+          family: redundant-computation
+          round: 5
+        - id: BR-38
+          severity: Minor
+          title: fence.lua declares itself pure but is absent from the PURE_FILES arch guard
+          detail: |-
+            tests/arch/buffer_mutation_spec.lua:62 lists the modules whose purity is enforced. The
+            new module's header claim ("Pure: no Neovim API, no state") and the plan's PURE
+            classification are documentation until it is added there. One line.
+          family: purity-claim-unenforced
+          round: 5
+        - id: BR-39
+          severity: Minor
+          title: fold_invariants_spec's oracle derives from the same parse it validates, so segmentation bugs pass
+          detail: |-
+            Both the expectations and the fold state come from one parse, so a mis-segmentation is
+            asserted as correct — C1 and C2 both pass this harness. It validates fold application,
+            not segmentation; the header comment should say so rather than let the harness be
+            credited with coverage it cannot have.
+          family: oracle-derives-from-subject
+          round: 5
+      boundary: M2
+      blocked: true
+    - "n": 6
+      timestamp: "2026-08-21T12:36:09-07:00"
+      agent: claude
+      dispose:
+        - id: BR-29
+          disposition: not-addressed
+          note: "Unchanged at answer_structure.lua:114; reproduced end-to-end — tool_result truncated to 2 rows and a fold anchored on an in-body \U0001F4DD:."
+          round: 6
+        - id: BR-30
+          disposition: not-addressed
+          note: Unchanged at chat_parser.lua:526; measured 3 exchanges pre-M2 vs 1 at HEAD on two independent reachable inputs.
+          round: 6
+        - id: BR-31
+          disposition: addressed
+          note: All 11 names from 9a6e939~1 present plus 5 new; 16/16 green, zero duplicate it() names.
+          round: 6
+        - id: BR-32
+          disposition: not-addressed
+          note: format.md fixed; traceability.yaml still omits fence.lua from chat/parsing and atlas/chat/parsing.md still lacks the in-body-content rule.
+          round: 6
+        - id: BR-33
+          disposition: addressed
+          note: Fix verified by revert — rejected-opener case flips true→false. Only one of the two claimed tests has teeth (see the new ticked-without-evidence finding).
+          round: 6
+        - id: BR-34
+          disposition: addressed
+          note: Audit run and recorded with the census bounding it (115 files, 1155 assertions, zero tool blocks).
+          round: 6
+        - id: BR-35
+          disposition: not-addressed
+          note: chat_parser.lua:267 still at column 0 in a tab-indented body.
+          round: 6
+        - id: BR-36
+          disposition: not-addressed
+          note: chat_parser.lua:456-459 comment unchanged.
+          round: 6
+        - id: BR-37
+          disposition: addressed
+          note: fold_projection.lua:121 now calls fence.open_len once.
+          round: 6
+        - id: BR-38
+          disposition: not-addressed
+          note: fence.lua still absent from PURE_FILES at tests/arch/buffer_mutation_spec.lua:62.
+          round: 6
+        - id: BR-39
+          disposition: not-addressed
+          note: Header comment still justifies the oracle without stating that it validates fold application, not segmentation.
+          round: 6
+      findings:
+        - id: BR-40
+          severity: Critical
+          title: max_full_exchanges default changed 42 to 999 in the M2 fix commit, unrelated and undeclared
+          detail: "lua/parley/config.lua:640, introduced solely in b2bf1d5 (git log -S confirms) and\nunmentioned in that commit message, the issue, or the plan. Consumed at\nchat_respond.lua:737, so chat-memory summarisation effectively never fires and every\nprior exchange is sent to the provider in full instead of as its \U0001F4DD: summary. A\nuser-visible cost and context-window change with no connection to fence grammar or\nfolding. Revert, or split into its own issue with a rationale and a README note."
+          family: undeclared-scope-change
+          round: 6
+        - id: BR-41
+          severity: Important
+          title: Gate steps ticked from inside the gate, and a regression test claimed to pin a fix that it does not
+          detail: |-
+            This is the 2nd (and 3rd) finding in family ticked-without-evidence. Do NOT fix the
+            instances — fix the rule. Prevalence, all in this issue: BR-34 (Task 11 Step 2, fixed
+            last round); plan lines 1338 and 1352 tick "sdlc milestone-close M2" and "sdlc close"
+            while this review IS that milestone-close, no "closed M2" log line exists and status is
+            still working; and the Log's "Two tests pin it" for BR-33 is false — reverting
+            fold_projection.lua to b2bf1d5~1 leaves fold_projection_spec.lua:184 green, so only the
+            rejected-opener test pins anything. Rule: a tick, or a written claim that a test pins a
+            fix, is a claim of evidence and may only be written by the action that produced it — for
+            a regression test that evidence is the revert going RED, not the suite going green.
+            Corollary: never tick a gate step from inside the gate. workshop/lessons.md:722-726
+            states half this rule and was violated by the same commit that wrote it; extend it with
+            the revert half.
+          family: ticked-without-evidence
+          round: 6
+        - id: BR-42
+          severity: Minor
+          title: The fence-aware interior scan requires the body to open at exactly start_0 + 1
+          detail: |-
+            fold_projection.lua:121 keys on the shape serialize.render_call/render_result emit today.
+            A hand-edited or LLM-emitted transcript with a blank line between the marker and its
+            opening fence loses fence-awareness, so an in-body marker refuses the whole exchange.
+            Either name the coupling in the comment or accept the first non-blank line after the
+            marker.
+          family: serialized-shape-assumed
+          round: 6
+      boundary: M2
+      blocked: true
+    - "n": 7
+      timestamp: "2026-08-21T13:14:09-07:00"
+      agent: claude
+      dispose:
+        - id: BR-29
+          disposition: addressed
+          note: 'Revert-verified — restoring the `cursor > #lines` gate turns answer_structure_spec.lua:115 and :129 RED (2 vs 7).'
+          round: 7
+        - id: BR-30
+          disposition: not-addressed
+          note: Bounded only the no-close-anywhere case; 3 shapes still swallow exchanges at HEAD (3 -> 2) and one folds a user question on real fold state. See C1.
+          round: 7
+        - id: BR-32
+          disposition: not-addressed
+          note: format.md fixed; atlas/chat/parsing.md line 17 and traceability.yaml chat/parsing (:95-105) untouched since round 6, while Task 11 Step 3 stays ticked.
+          round: 7
+        - id: BR-35
+          disposition: not-addressed
+          note: chat_parser.lua:267 still at column 0 in a tab-indented body.
+          round: 7
+        - id: BR-36
+          disposition: not-addressed
+          note: chat_parser.lua:456-459 comment unchanged.
+          round: 7
+        - id: BR-38
+          disposition: not-addressed
+          note: fence.lua still absent from PURE_FILES at tests/arch/buffer_mutation_spec.lua:62.
+          round: 7
+        - id: BR-39
+          disposition: not-addressed
+          note: Header unchanged, and now proven load-bearing — the harness reports 0 violations on a transcript where row 20's question has foldclosed=13.
+          round: 7
+        - id: BR-40
+          disposition: addressed
+          note: config.lua:640 restored to 42; no test pins config defaults, so the same accident stays undetectable by the suite.
+          round: 7
+        - id: BR-41
+          disposition: addressed
+          note: lessons.md:733-742 carries the revert half plus the gate corollary. Plan line 1338 is still ticked and the new BR-30 tests repeat the pattern — recorded in I3, not re-raised.
+          round: 7
+        - id: BR-42
+          disposition: withdrawn
+          note: The remedy asked for is already present — fold_projection.lua:118-121 names the immediately-after-the-marker coupling verbatim, unchanged since b2bf1d5.
+          round: 7
+      findings:
+        - id: BR-43
+          severity: Critical
+          title: The tool-body scan accepts an opener anywhere after the marker, so a closing fence is read as an opening one and a user question ends up folded
+          detail: |-
+            2nd finding in family drift-guard-blinded (BR-33 was the 1st, in fold_projection). Do NOT
+            patch the two instances — fix the rule. Rule: a tool body's extent requires (a) the marker
+            at fence depth 0, (b) the opener on the immediately-following line (already enforced at
+            fold_projection.lua:121), (c) an open_len that recognises every CommonMark opener, since a
+            rejected opener leaves its closer to be misread as an opener. One function computes this;
+            every consumer calls it. fence.extract_body is the natural home and implements none of the
+            three. Sites: chat_parser.lua:536-550 and answer_structure.lua:90-97. Measured against
+            dc5ee17 (M1 close): three shapes each drop 3 exchanges to 2 at HEAD - a rejected opener
+            such as the ```json {"type": "request"} that render_buffer.lua:104 emits, an unclosed body
+            fence followed by any later bare fence, and an answer that shows the transcript format
+            inside a plain ```text block. On real Neovim fold state the third gives foldclosed=13 for
+            the question at row 20 where dc5ee17 gives -1 - the issue's headline symptom, reintroduced.
+            answer_structure fails the Spec's second invariant instead - a summary is swallowed into
+            tool_result[1..7] where dc5ee17 emits summary[5..5]. The live 115-file corpus is unaffected
+            only because it contains zero tool markers; it does contain 5 grammar-rejected openers and
+            3 markers quoted inside plain fenced blocks. tests/fixtures/fold_adversarial.md covers none
+            of the three shapes.
+          family: drift-guard-blinded
+          round: 7
+        - id: BR-44
+          severity: Important
+          title: A second in-tool-body tracker was introduced while the plan's Core concepts states none was
+          detail: |-
+            3rd finding in family shadow-consumer-not-derived. Do NOT fix the instance - state the rule:
+            one fact, one computation, injected into both consumers; a second derivation of "am I inside
+            a tool body" is the same DRY violation M2 exists to remove, relocated one layer up.
+            cb_state.tool_fence_len / tool_body_complete at chat_parser.lua:460-466 still drives block
+            finalisation while in_tool_body[] at :529-556 drives main-loop classification; they compute
+            the same fact by different rules and diverge on exactly the C1 shapes. Plan line 44 asserts
+            "No second fence tracker is introduced (PQ-3)" - a Core-concepts contradiction the checklist
+            rates Critical by default; filed Important because C1 carries the behavioural weight and the
+            fix folds into C1's shared helper. Needs a "## Revisions" entry either way. Same rule at
+            lower stakes: log_emit.lua:253-272 and skills/review/journal.lua:14 hand-pick fence strings,
+            the latter documenting the unsound case fence.for_content solves.
+          family: shadow-consumer-not-derived
+          round: 7
+        - id: BR-45
+          severity: Important
+          title: The precompute reclassifies every line two to three times, making parse_chat about 48 percent slower
+          detail: |-
+            2nd finding in family redundant-computation (BR-37 was fence.open_len twice on one line).
+            Do NOT fix the instance - the rule is: a per-line grammar or classification predicate is
+            computed once per parse into a shared array and read from there, never recomputed inside a
+            scan. answer_structure.reduce:29 already does this. chat_parser now calls
+            highlight_structure.classify in the precompute row loop (:533), again in every inner scan
+            (:538), and a third time in the main loop (:561). Measured best-of-10 on a 10,104-line
+            tool-heavy transcript: 24.49 ms at dc5ee17 to 36.22 ms at HEAD. parse_chat runs at
+            tool_folds.lua:150 on hydrate and every drift re-derive, and eight times across
+            chat_respond.lua. The issue's own Done-when commits to no streaming regression and M1 took
+            per-chunk reconcile from 3.705 ms to 0.067 ms. Same edit as C1 - build kinds[] once and pass
+            it to the shared span helper.
+          family: redundant-computation
+          round: 7
+        - id: BR-46
+          severity: Important
+          title: The revert-must-go-red rule was written and then not applied by the commit that wrote it
+          detail: |-
+            4th finding in family ticked-without-evidence. Do NOT fix the instances. BR-41's remedy did
+            land - lessons.md:733-742 states the rule and the gate corollary. In the same commit,
+            describe("unterminated tool body (#200 BR-30)") presents two tests as pinning BR-30; against
+            b2bf1d5 the file is 17 pass / 1 fail, so chat_parser_tools_spec.lua:485 is green on revert -
+            characterization wearing a fix-pin label, unlabelled. Plan line 1338 still ticks
+            "sdlc milestone-close M2" while this review is that milestone-close; only line 1352 was
+            unticked. Prevalence in this issue: BR-34, BR-41 twice, and these two - five instances, the
+            last three after the rule was written. Escalation: a third prose restatement will not hold.
+            The rule needs a mechanical gate - a Pinned-by trailer that milestone-close refuses without
+            a recorded red-on-revert run, and a close-gate check that no plan step naming
+            sdlc milestone-close or sdlc close is ticked at the moment that command runs.
+          family: ticked-without-evidence
+          round: 7
+      boundary: M2
+      blocked: true
+    - "n": 8
+      timestamp: "2026-08-21T16:40:13-07:00"
+      agent: claude
+      dispose:
+        - id: BR-30
+          disposition: addressed
+          note: Verified by revert - making tool_body swallow to end turns chat_parser_tools_spec.lua:465 red.
+          round: 8
+        - id: BR-32
+          disposition: not-addressed
+          note: format.md fixed; atlas/chat/parsing.md:17 untouched and fence.lua went under chat/exchange_model, not chat/parsing as ticked Step 3 directs.
+          round: 8
+        - id: BR-35
+          disposition: not-addressed
+          note: chat_parser.lua:267 is still unindented.
+          round: 8
+        - id: BR-36
+          disposition: not-addressed
+          note: chat_parser.lua:456-459 still restates the grammar and is now also wrong about the info string.
+          round: 8
+        - id: BR-38
+          disposition: not-addressed
+          note: tests/arch/buffer_mutation_spec.lua:61-65 still omits lua/parley/fence.lua.
+          round: 8
+        - id: BR-39
+          disposition: not-addressed
+          note: No comment added; the Critical below is a concrete case the oracle cannot see.
+          round: 8
+        - id: BR-43
+          disposition: not-addressed
+          note: Requirement (a) marker-at-fence-depth-0 not implemented; question folded at HEAD (foldclosed=10) where dc5ee17 gives -1.
+          round: 8
+        - id: BR-44
+          disposition: not-addressed
+          note: Plan Correction landed, but the two trackers now measurably disagree at HEAD (tool_use[9..13] vs [9..14]).
+          round: 8
+        - id: BR-45
+          disposition: not-addressed
+          note: Reproduces under interleaved min-of-5 - tool-free 43.01ms to 52.83ms, tool-heavy 33.65ms to 51.46ms vs dc5ee17.
+          round: 8
+        - id: BR-46
+          disposition: not-addressed
+          note: No mechanical gate; plan line 1340 still ticked; a new green-on-revert fix-pin claim shipped this round.
+          round: 8
+      findings:
+        - id: BR-47
+          severity: Important
+          title: 'fence.tool_body''s stop_row is dead API documented as the mitigation for the bug deferred to #203'
+          detail: |-
+            This is the 2nd finding in family failure-fallback-misgated (BR-29 was the 1st - a rewind
+            that fired on correctly closed input). Do NOT fix this instance; state the rule. Rule: a
+            degradation path is real only when a production caller reaches it AND a test drives the
+            degraded branch; an available-but-unpassed parameter, or an arm no fixture enters, is
+            documentation that reads as protection. Prevalence in this issue: 2 - BR-29 fired on the
+            wrong input, stop_row fires on none. fence.lua:113-117 asserts stop_row prevents an
+            unclosed body latching onto a later bare fence, which is exactly what the issue Log records
+            as deferred to #203 after that bound was rejected as circular. Call sites
+            chat_parser.lua:534, answer_structure.lua:85, fold_projection.lua:131 all omit it; fence_spec
+            never exercises it. Either delete the parameter or give it a caller and a red-on-revert test.
+          family: failure-fallback-misgated
+          round: 8
+        - id: BR-48
+          severity: Important
+          title: The hand-maintained restatements of the fence model drifted from fence.lua inside the milestone
+          detail: |-
+            This is the 4th finding in family shadow-consumer-not-derived. Earlier rounds fixed
+            instances. Do NOT fix this instance - fix the rule. Rule: every consumer of a
+            single-sourced model must DERIVE from it; a hand-maintained restatement is a deferred
+            consumer, and prose cannot derive, so the enforceable substitute is (i) reduce the
+            restating section to a pointer at the source's own docstring, and (ii) register the source
+            module and its spec under every atlas key whose page states the rule, so make test-changed
+            couples them. Measured drift: atlas/providers/tool_use.md:155-156 says "a bare-word info
+            string (json, lua)" - the grammar replaced by 6c0132d two commits after that page was
+            written; :164-165 and :170 name chat_parser's tool_fence_len tracker as what the main loop
+            consults, which is in_tool_body[]; tool_body is unmentioned. Plan Core concepts line 33
+            says three consumers where there are four. Prevalence in this issue: 4.
+          family: shadow-consumer-not-derived
+          round: 8
+        - id: BR-49
+          severity: Minor
+          title: fence.open_len returns an undocumented second value that every caller ignores
+          detail: |-
+            fence.lua:37 returns "#ticks, info" while :32 annotates "@return integer|nil". No caller
+            uses info. In argument position the extra return silently expands the call; fence_spec's
+            assert.equals calls survive only because luassert compares the first two arguments.
+            Drop the second return or annotate it.
+          family: serialized-shape-assumed
+          round: 8
+        - id: BR-50
+          severity: Minor
+          title: answer_structure.lua:93 keeps a dead "local _ = body_first" assignment
+          family: style-consistency
+          round: 8
+        - id: BR-51
+          severity: Minor
+          title: verify_anchors copies every tool range into a shifted table on each per-chunk call
+          detail: |-
+            fold_projection.lua:126-131 allocates a full copy of range.start_0..end_0 per tool range
+            per verify, on the streaming path; an offset argument on fence.tool_body would avoid it.
+            fence.closes:50 also runs line:match("^(`+)") twice on the matching path, now once per
+            body row of every tool_body scan.
+          family: redundant-computation
+          round: 8
+      boundary: M2
+      blocked: true
+    - "n": 9
+      timestamp: "2026-08-21T17:05:51-07:00"
+      agent: claude
+      dispose:
+        - id: BR-32
+          disposition: not-addressed
+          note: format.md:12 now names fence.lua correctly, but parsing.md:17 still says structural markers "always terminate either mode" with no in-body caveat, and traceability.yaml still omits fence.lua/fence_spec under chat/parsing as Task 11 Step 3 directs.
+          round: 9
+        - id: BR-35
+          disposition: not-addressed
+          note: chat_parser.lua:267 `local fence = require("parley.fence")` is still unindented inside a tab-indented body.
+          round: 9
+        - id: BR-36
+          disposition: not-addressed
+          note: chat_parser.lua:456-459 still restates the open/close grammar ("any run of 3+ backticks optionally followed by an info string") that fence.lua now owns.
+          round: 9
+        - id: BR-38
+          disposition: not-addressed
+          note: PURE_FILES at tests/arch/buffer_mutation_spec.lua:62 still lists only highlight_structure, tools/types, tools/serialize, tools/init. fence.lua absent.
+          round: 9
+        - id: BR-39
+          disposition: not-addressed
+          note: The 5 lines added to fold_invariants_spec were the adversarial-fixture entry; the header still credits the harness with segmentation coverage its single-parse oracle cannot have.
+          round: 9
+        - id: BR-43
+          disposition: addressed
+          note: 'Verified independently, not from the commit message: the new test''s shape yields 2 exchanges against a 6c0132d tree and 3 at HEAD, using the spec''s own test_config. All three requirements (depth 0, opener on the next line, CommonMark open_len) are implemented in fence.scan.'
+          round: 9
+        - id: BR-44
+          disposition: not-addressed
+          note: 'The plan Correction at line 46 landed, but the rule did not: cb_state.tool_fence_len at chat_parser.lua:460-466 still accepts an opener anywhere after the marker, which fence.scan rejects, so the two can still diverge on a marker with no body followed by a later plain fence.'
+          round: 9
+        - id: BR-45
+          disposition: not-addressed
+          note: 'The rebuttal measured over the 111 live transcripts, which the issue itself records as containing zero tool blocks, at 2 samples per revision with a 17 percent internal spread. Deterministic replacement metric on a 10,805-line tool-heavy transcript: highlight_structure.classify calls per parse_chat go 21,401 at dc5ee17 to 28,402 at HEAD (1.98 to 2.63 per line). Fresh instance: fold_projection.lua:134-135 calls classify twice on the same line.'
+          round: 9
+        - id: BR-46
+          disposition: not-addressed
+          note: Plan Task 11 Step 4 still ticks `sdlc milestone-close --issue 200 --milestone M2` while this review is that milestone-close; chat_parser_tools_spec.lua:485 is still unlabelled as characterization; no mechanical gate exists. Note the proposed Pinned-by/close-gate check lives in the sdlc binary, not in parley.nvim, so it needs a peer-repo issue rather than an edit here.
+          round: 9
+        - id: BR-47
+          disposition: addressed
+          note: fence.tool_body and its stop_row are deleted; no caller and no test reference them.
+          round: 9
+        - id: BR-48
+          disposition: not-addressed
+          note: atlas/providers/tool_use.md still says "a bare-word info string (json, lua)", still names chat_parser's tool_fence_len tracker as what the main loop consults, and now additionally says "Ordinary answer prose ... stays fence-naive", which is false for tool markers since HEAD. Plan Core concepts line 33 still says three consumers, and line 44 now names the deleted fence.tool_body. Non-deriving fence literals also remain at render_buffer.lua:104-108, log_emit.lua:253-272, helper.lua:280, oauth.lua:1190/1303, copy.lua, outline.lua, exporter.lua.
+          round: 9
+        - id: BR-49
+          disposition: not-addressed
+          note: fence.lua:37 still returns `#ticks, info` under an `@return integer|nil` annotation at :32; no caller reads the second value. extract_body:91 has the same shape.
+          round: 9
+        - id: BR-51
+          disposition: not-addressed
+          note: 'fold_projection.lua:129-132 still copies the range into a shifted window per verify, and fence.closes:50 still runs the same match twice. Worth recording that the perf motive weakened: verify_anchors on a 603-row tool range measures 0.0207 ms at HEAD vs 0.5713 ms at dc5ee17 (best-of-200), because the scan now skips the body.'
+          round: 9
+      findings:
+        - id: BR-52
+          severity: Important
+          title: fence.scan returns a row set, so both consumers re-derive facts it already computed, and both re-derivations are wrong
+          detail: "This is the 5th finding in family shadow-consumer-not-derived. Earlier rounds fixed\ninstances. Do NOT fix these two instances - fix the rule. Rule: a single-sourced pass\nmust return the MODEL its consumers need (block extents marker->close_row, plus the\ndepth-0 marker set), and consumers must branch on that model, never reconstruct it\nfrom a derived set nor fall back to a depth-naive classification of the same rows.\nMeasured instance A - answer_structure.lua:38-44 reconstructs the close row by\nwalking body_rows from marker+2, which yields nothing for an empty body, so the\nsection falls into the run-to-next-boundary arm: real Neovim fold state gives fold\n10..14 swallowing following prose where dc5ee17 gives tool_result 10..12 plus\ntext 14..14. Measured instance B - `markers` is computed at :34 and never consulted;\nthe loop at :93 branches on the depth-naive kinds[i], so a \U0001F4CE: inside a plain ```text\nblock is emitted as a foldable tool_result and folds at 13..14 while chat_parser.lua:551\nclassifies the identical row as text. Prevalence in this issue: 5. Neither shape occurs\nin the 123 transcripts scanned (12 in-repo, 111 live), so both are fixture-only today;\nfold_adversarial.md covers neither."
+          family: shadow-consumer-not-derived
+          round: 9
+        - id: BR-53
+          severity: Important
+          title: The commit message and issue Log claim markers inside ANY fenced block are now content; only tool markers are
+          detail: "A further instance in family ticked-without-evidence. Do NOT patch the prose alone -\nthe rule is that a behavioural claim in a commit or Log must name the test that\ndemonstrates it, and a claim contradicted by a green test in the same tree is a\ndefect in the record. chat_parser.lua:551 gates only tool_use/tool_result on\ndepth0_marker; in_tool_body covers only real tool bodies. Measured: a \U0001F4AC: inside a\nplain ```text block still forks an exchange (3 where 2 is correct) and swallows the\nfollowing \U0001F4DD: into the question content, so the Spec's \"\U0001F4DD: blocks are always folded\"\ndoes not hold for that shape. chat_parser_tools_spec.lua:445-451 asserts exactly this\nbehaviour and is green, labelled \"still a turn today\"; plan Non-goals line 15 still\nstates it as a deliberate boundary. So the code, the test and the plan agree, and only\nthe commit message and issue Log ~line 1119 disagree - which is what a close review\nwould read first."
+          family: ticked-without-evidence
+          round: 9
+      boundary: M2
+      blocked: false
+    - "n": 10
+      timestamp: "2026-08-21T17:49:36-07:00"
+      agent: claude
+      dispose:
+        - id: BR-4
+          disposition: not-addressed
+          note: fold_projection entry fixed; but the fence bullet still says three consumers, the chat_parser bullet still names the deleted fence.tool_body, and Revisions still stop at M1 round 7 with no M2 entry at all.
+          round: 10
+        - id: BR-6
+          disposition: not-addressed
+          note: tool_folds.lua:353-360 still states the paragraph twice; :351 still splits the declaration from :361.
+          round: 10
+        - id: BR-7
+          disposition: not-addressed
+          note: tool_folds.lua:256-260 unchanged.
+          round: 10
+        - id: BR-8
+          disposition: not-addressed
+          note: The wall-clock comment is fixed; tool_folds_spec.lua:93 still says the case above sits outside every span, and that case now asserts the fold IS cleared.
+          round: 10
+        - id: BR-9
+          disposition: not-addressed
+          note: Measured with the module preloaded and patterns supplied - verify_anchors errors on vim/_init_packages.lua while verify_starts returns true; the new purity test covers only the two that pass, and the added comment claims the opposite.
+          round: 10
+        - id: BR-10
+          disposition: addressed
+          note: desired_folds is no longer computed in prepare; the comment states why.
+          round: 10
+        - id: BR-11
+          disposition: addressed
+          note: tool_folds.lua:52 resets _last_clear_iters before every early return.
+          round: 10
+        - id: BR-12
+          disposition: addressed
+          note: ranges_within lives in fold_projection and is unit-pinned by five cases at fold_projection_spec.lua:236-262.
+          round: 10
+        - id: BR-13
+          disposition: not-addressed
+          note: tool_folds.lua:338 still unguarded while clear_folds_in_span:64-68 reasons about E350 explicitly.
+          round: 10
+        - id: BR-14
+          disposition: addressed
+          note: workshop/lessons.md:711 carries the uniq -d audit over it() names.
+          round: 10
+        - id: BR-15
+          disposition: addressed
+          note: workshop/issues/000202-make-test-is-unreliable-specs-traverse-and-mutate-a-shared-test-tmp.md filed.
+          round: 10
+        - id: BR-16
+          disposition: addressed
+          note: README.md gains the fold-ownership contract including the buffer tail and the outside-every-exchange exemption.
+          round: 10
+        - id: BR-17
+          disposition: not-addressed
+          note: fold_invariants_spec.lua:17 unchanged; the corpus floor still mitigates it and this was noting-only.
+          round: 10
+        - id: BR-18
+          disposition: addressed
+          note: Every Task 1-5 step is ticked; the only two unticked boxes are the gate steps, correctly.
+          round: 10
+        - id: BR-20
+          disposition: addressed
+          note: The changedtick memo landed at dc5ee17; measured flat with span held constant - 0.0398 / 0.0370 / 0.0349 / 0.0358 ms at 10 / 50 / 200 / 500 exchanges. The suggested exchange-count test was not added, which BR-26 already covers.
+          round: 10
+        - id: BR-21
+          disposition: addressed
+          note: logged is no longer carried forward (tool_folds.lua:199) and rederived[buf] is dropped on a successful reconcile (:344).
+          round: 10
+        - id: BR-22
+          disposition: addressed
+          note: Now a buffer-local b:parley_fold_clear_iters, not a global.
+          round: 10
+        - id: BR-23
+          disposition: addressed
+          note: tests/integration/tool_folds_spec.lua:594 asserts identified true then false across a count mismatch.
+          round: 10
+        - id: BR-24
+          disposition: addressed
+          note: _observer is reset in after_each alongside _model_provider.
+          round: 10
+        - id: BR-25
+          disposition: addressed
+          note: foldtext derives every branch from highlight_structure.patterns and the fallback now announces an unexpected fold.
+          round: 10
+        - id: BR-26
+          disposition: not-addressed
+          note: The only scaling test still varies body_lines and asserts clear-loop iterations; nothing pins the covered_lines plus interior-scan axis.
+          round: 10
+        - id: BR-27
+          disposition: addressed
+          note: atlas/chat/exchange_model.md:108 records that the clear transiently forces foldenable and restores the operator's value.
+          round: 10
+        - id: BR-28
+          disposition: not-addressed
+          note: prepare_exchange_update still clears the identified span with no range verification while reconcile refuses to create without it.
+          round: 10
+        - id: BR-32
+          disposition: addressed
+          note: format.md:12 names fence.lua, parsing.md states the depth-0 rule, and traceability chat/parsing lists fence.lua plus fence_spec - though parsing.md's new wording is itself inaccurate, which BR-48 covers.
+          round: 10
+        - id: BR-35
+          disposition: not-addressed
+          note: chat_parser.lua:267 is still at column 0 inside a tab-indented body.
+          round: 10
+        - id: BR-36
+          disposition: not-addressed
+          note: chat_parser.lua:456-459 still restates the open/close grammar and is now also wrong about the info string.
+          round: 10
+        - id: BR-38
+          disposition: addressed
+          note: lua/parley/fence.lua is listed in PURE_FILES at tests/arch/buffer_mutation_spec.lua:63 and the spec passes 8/8.
+          round: 10
+        - id: BR-39
+          disposition: not-addressed
+          note: The header comment is unchanged, and the raw-text oracle added as the remedy filters its subjects with fence.scan - measured green at 14/14 with the question at fold_marker_in_prose.md:18 folded. See the new finding.
+          round: 10
+        - id: BR-44
+          disposition: addressed
+          note: The plan states the rule as an inline Correction and I could not reproduce a divergence at HEAD on the named shape or on three variants; both trackers agree. The Correction belongs in Revisions, which BR-4 covers.
+          round: 10
+        - id: BR-45
+          disposition: addressed
+          note: Deterministic metric now identical across trees - 10,901 classify calls over 5,505 lines, 1.98 per line at HEAD, dc5ee17 and 38a6cdd. Residual wall-clock is +6% vs base, which is fence.scan's own pass.
+          round: 10
+        - id: BR-46
+          disposition: not-addressed
+          note: The instances are fixed - gate Steps 4 and 6 unticked, three tests labelled characterization - but no peer-repo issue exists in ariadne for the Pinned-by trailer or the close-gate tick check, so the rule-level remedy landed nowhere.
+          round: 10
+        - id: BR-48
+          disposition: not-addressed
+          note: atlas/providers/tool_use.md is untouched and now contradicts atlas/chat/parsing.md written in the close commit; it still says bare-word info string and still names tool_fence_len as what the main loop consults.
+          round: 10
+        - id: BR-49
+          disposition: not-addressed
+          note: fence.lua:37 still returns two values under an integer-or-nil annotation; no caller reads the second.
+          round: 10
+        - id: BR-50
+          disposition: addressed
+          note: The dead body_first assignment is gone.
+          round: 10
+        - id: BR-51
+          disposition: not-addressed
+          note: fold_projection.lua:129-135 still copies each range into a shifted window and calls classify twice per line; fence.closes still matches twice; fence.scan's close_of additionally rescans to EOF per unclosed opener.
+          round: 10
+        - id: BR-52
+          disposition: not-addressed
+          note: Both instances reproduce, and instance A is now measured as a regression - answer_structure gives tool_result[1..5] where base and M1 give tool_result[1..3] plus text[5..5], swallowing prose into the fold.
+          round: 10
+        - id: BR-53
+          disposition: not-addressed
+          note: Still measured at 3 exchanges where 2 is correct, and the record got worse - atlas/chat/parsing.md now asserts the false claim too, contradicting atlas/providers/tool_use.md.
+          round: 10
+      findings:
+        - id: BR-54
+          severity: Important
+          title: The raw-text oracle added to fix the circular harness selects its subjects with the function under test
+          detail: |-
+            This is the 2nd finding in family oracle-derives-from-subject. Do NOT fix only this
+            instance - state the rule: an oracle's SUBJECT SELECTION may not consult the artifact
+            under test, only its assertion may; a filter computed from the subject exonerates
+            exactly the rows a defect corrupts. fold_invariants_spec.lua:115-127 selects question
+            rows with `not body_rows[row]` where body_rows comes from fence.scan. Measured on
+            tests/fixtures/fold_marker_in_prose.md - at HEAD the oracle's subjects are rows 6,18,34;
+            with the depth fix reverted in fence.scan they are 6,34 and row 18 is EXCLUDED as
+            in-body, while foldclosed(18) = 13, i.e. the milestone's headline symptom in the fixture
+            written to catch it. fold_invariants_spec reports Success 14 Failed 0. The close
+            commit's evidence states that reverting the depth fix "produces 4 failures where the
+            harness previously reported none"; it produces zero. Prevalence in this issue: 2, the
+            second committed by the change that closed the first.
+          family: oracle-derives-from-subject
+          round: 10
+        - id: BR-55
+          severity: Important
+          title: The BR-47 cleanup deleted the only test with teeth for opener-adjacency and the four replacements do not cover it
+          detail: "This is the 2nd finding in family spec-surgery-loses-tests. Do NOT just re-add the test -\nstate the rule: a spec-inventory diff proves NAMES survived, not PROPERTIES; a change that\nremoves tests must name the behavioural property each pinned and show the replacement goes\nred on the same revert. git show 6c0132d:tests/unit/fence_spec.lua contains\nit(\"requires the opener immediately after the marker\"); HEAD does not, and the four new\nscan tests do not cover it. Measured at HEAD by patching fence.scan to accept an opener\nanywhere after the marker: the input \U0001F4CE: read id=1 / some prose / ``` / \U0001F4AC: a real question\n/ ``` yields in_tool_body = {3,4}, marking a genuine user question as body - which\nsuppresses both chat_parser's classification and verify_anchors' guard - while\nfold_invariants 14/14, chat_parser_tools 21/21 and fence_spec 18/18 all stay green. Of\nBR-43's three requirements only depth has a behavioural pin (1 failure on revert);\nCommonMark open_len is pinned only by fence_spec's own grammar assertions; adjacency by\nnothing. The issue Log's \"5 tests removed, 4 scan tests added; inventory diffed against\nHEAD\" is accurate about counts and silent about the lost property."
+          family: spec-surgery-loses-tests
+          round: 10
+      blocked: true
+    - "n": 11
+      timestamp: "2026-08-21T18:21:04-07:00"
+      agent: claude
+      dispose:
+        - id: BR-4
+          disposition: not-addressed
+          note: Revisions are now current through M2 — that half is fixed. But Core concepts line 33 still says three consumers where there are four, and the chat_parser bullet still names fence.tool_body, deleted in 8b94fde.
+          round: 11
+        - id: BR-6
+          disposition: not-addressed
+          note: tool_folds.lua:353 and :357 still state the same "same rule as reconcile" paragraph twice.
+          round: 11
+        - id: BR-7
+          disposition: not-addressed
+          note: owned_span still writes the identical exchange_anchors.span return on both branches.
+          round: 11
+        - id: BR-8
+          disposition: not-addressed
+          note: tool_folds_spec.lua:93 still says "Contrast the case above, whose fold sits outside every span"; the case above (:56) asserts foldclosed(11) == -1, i.e. that the fold IS cleared.
+          round: 11
+        - id: BR-9
+          disposition: not-addressed
+          note: Measured with highlight_structure preloaded and patterns supplied - verify_starts and ranges_within return true, verify_anchors errors. Traceback locates the require at highlight_structure.lua:58 (parley.define) inside classify, not in fold_projection, so making fold_projection's require lazy cannot fix it and the :88-89 comment claims the opposite.
+          round: 11
+        - id: BR-13
+          disposition: not-addressed
+          note: tool_folds.lua:338 still unguarded against E350 while clear_folds_in_span reasons about it explicitly.
+          round: 11
+        - id: BR-17
+          disposition: not-addressed
+          note: fold_invariants_spec.lua:17 unchanged; the corpus floor still mitigates it and this was noting-only.
+          round: 11
+        - id: BR-26
+          disposition: not-addressed
+          note: The scaling test still varies body_lines and asserts clear-loop iterations; the covered_lines plus interior-scan axis remains unasserted.
+          round: 11
+        - id: BR-28
+          disposition: not-addressed
+          note: prepare_exchange_update still clears the identified span with no range verification while reconcile refuses to create without it.
+          round: 11
+        - id: BR-35
+          disposition: not-addressed
+          note: chat_parser.lua:267 is still at column 0 inside a tab-indented body.
+          round: 11
+        - id: BR-36
+          disposition: not-addressed
+          note: chat_parser.lua:456-459 still restates the open/close grammar fence.lua owns, and is still wrong about the info string.
+          round: 11
+        - id: BR-39
+          disposition: addressed
+          note: Superseded by a stronger remedy than the comment asked for - a second oracle that does validate segmentation, and I verified it goes red on the depth revert. The RAW-TEXT ORACLE block states the model-derived half's limit in the terms the finding asked for.
+          round: 11
+        - id: BR-46
+          disposition: not-addressed
+          note: The rule was genuinely applied to this round's own work - I confirmed both the depth revert and the adjacency relaxation go red - but no mechanical gate exists and no ariadne issue was filed (grep over ../ariadne/workshop for Pinned-by / red-on-revert returns nothing). The Log declines to file it unilaterally and flags it for the operator, which is defensible; recording that a seventh instance shipped this round (Important A) as the escalation evidence.
+          round: 11
+        - id: BR-48
+          disposition: not-addressed
+          note: Remedy (i) landed on atlas/providers/tool_use.md and is a good model. But atlas/chat/parsing.md is a NEW hand-maintained restatement written by the same commit and is measurably false; remedy (ii) is incomplete for chat/format, which states the rule but registers neither fence.lua nor fence_spec.lua in traceability.yaml; and fence.lua:13 - the docstring that page just designated as the specification - still says three consumers.
+          round: 11
+        - id: BR-49
+          disposition: not-addressed
+          note: fence.lua:37 still returns "#ticks, info" under an "@return integer|nil" annotation at :32; no caller reads the second value.
+          round: 11
+        - id: BR-51
+          disposition: not-addressed
+          note: fold_projection.lua:129-133 still copies each tool range into a shifted window per verify; fence.closes:50 still matches twice; fence.scan's close_of still rescans to EOF per unclosed opener.
+          round: 11
+        - id: BR-52
+          disposition: addressed
+          note: Both instances measured fixed against the M1-close control. Empty body now gives tool_result[1..3] text[5..5] where d017ce7 gave a fold swallowing the prose; a depth-1 tool marker now gives text[3..5] where dc5ee17 and 38a6cdd both gave a foldable tool_result[3..5]. answer_structure branches on markers[i] and reads bodies[i].close.
+          round: 11
+        - id: BR-53
+          disposition: not-addressed
+          note: "Commit message and close-review Log entry are corrected, but the claim persists verbatim at issue Log :890 (the closed M2 line) and in atlas/chat/parsing.md:17-27, which now contradicts atlas/providers/tool_use.md:170. Measured false: a \U0001F4AC: in a plain ```text block still forks (3 where 2 is correct) and still terminates a \U0001F9E0: block. The Log's \"Corrected in place\" is itself the defect."
+          round: 11
+        - id: BR-54
+          disposition: addressed
+          note: Verified by revert, not by commit message - the oracle's subject selection is now a literal backtick tracker, and reverting the depth rule in fence.scan turns fold_invariants_spec RED at fold_marker_in_prose.md where round 10 measured 14/14 green on the same revert.
+          round: 11
+        - id: BR-55
+          disposition: addressed
+          note: Test restored AND verified red on the same revert - relaxing fence.scan to accept an opener anywhere after the marker turns fence_spec 18/1. The rule is recorded in lessons.md. Worth knowing the pin sits at the grammar layer; no behavioural spec goes red on that revert.
+          round: 11
+      findings:
+        - id: BR-56
+          severity: Minor
+          title: fold_projection.M._classify is an injection seam read at one site and written at zero
+          detail: |-
+            This is the 3rd finding in family failure-fallback-misgated. Earlier rounds fixed
+            instances (BR-29 fired on the wrong input, BR-47 fired on none). Do NOT fix this
+            instance - the rule is already stated and covers it: a seam or degradation path is
+            real only when a producer reaches it AND a test drives it; a field set at zero call
+            sites passes every suite while doing nothing and reads as extensibility. What is
+            missing is enforcement, and here it is mechanisable: an arch test over lua/ that
+            flags any M._<name> read in a module but assigned nowhere in lua/ or tests/ would
+            catch all three. Measured: fold_projection.lua:95 reads M._classify; grep over lua/
+            and tests/ finds no writer (cliproxy.lua:127 sets its own unrelated M._classify).
+            Prevalence in this issue: 3.
+          family: failure-fallback-misgated
+          round: 11
+        - id: BR-57
+          severity: Minor
+          title: The README fold-ownership paragraph is inserted into the middle of the keybinding list
+          detail: |-
+            README.md:162-166. The In Chat Buffer list runs to :158, is interrupted by the
+            tool-fold-toggle prose, and now by a five-line fold-ownership paragraph, after which
+            three more list items follow (<C-g>l, <C-g>i, gf). Rendered, those three read as
+            belonging to the fold discussion rather than to the keybinding list. The
+            interruption is pre-existing but this widens it from two lines to seven; move the
+            paragraph below the list or above the In Chat Buffer heading.
+          family: docs-structure-drift
+          round: 11
+      blocked: true
+    - "n": 12
+      timestamp: "2026-08-21T18:31:55-07:00"
+      agent: claude
+      dispose:
+        - id: BR-4
+          disposition: not-addressed
+          note: d55671a added ranges_within to the fold_projection bullet; line 33 still says three consumers where there are four, and line 44 still names fence.tool_body, deleted in 8b94fde.
+          round: 12
+        - id: BR-6
+          disposition: not-addressed
+          note: tool_folds.lua:353-360 still states the same paragraph twice; :351 still declares first_0/last_0 ten lines before its only assignment at :361.
+          round: 12
+        - id: BR-7
+          disposition: not-addressed
+          note: tool_folds.lua:265 and :267 are still the identical exchange_anchors.span return on both branches.
+          round: 12
+        - id: BR-8
+          disposition: not-addressed
+          note: tool_folds_spec.lua:94 still says the case above sits outside every span; that case at :56-71 asserts foldclosed(11) == -1, i.e. that the fold IS cleared.
+          round: 12
+        - id: BR-9
+          disposition: not-addressed
+          note: Re-measured with highlight_structure preloaded and patterns supplied - verify_starts and ranges_within return true, verify_anchors errors on a nil vim global. Traceback puts the require inside highlight_structure.classify at :58, so the lazy require cannot fix it and the comment at :88-89 asserts the opposite of what runs.
+          round: 12
+        - id: BR-13
+          disposition: not-addressed
+          note: tool_folds.lua:338 still unguarded against E350 while clear_folds_in_span:68-71 reasons about it explicitly.
+          round: 12
+        - id: BR-17
+          disposition: not-addressed
+          note: fold_invariants_spec.lua:17 unchanged; the corpus floor still mitigates it and this was noting-only.
+          round: 12
+        - id: BR-26
+          disposition: not-addressed
+          note: The only scaling test still varies body_lines and asserts clear-loop iterations; the covered_lines plus interior-scan axis remains unasserted.
+          round: 12
+        - id: BR-28
+          disposition: not-addressed
+          note: prepare_exchange_update:361-371 still clears the identified span with no range verification while reconcile refuses to create without it.
+          round: 12
+        - id: BR-35
+          disposition: not-addressed
+          note: chat_parser.lua:267 is still at column 0 inside a tab-indented body; verified byte-wise.
+          round: 12
+        - id: BR-36
+          disposition: not-addressed
+          note: chat_parser.lua:456-459 still restates the open/close grammar fence.lua owns and is still wrong about the info string.
+          round: 12
+        - id: BR-46
+          disposition: not-addressed
+          note: Instances remain clean - both gate steps unticked, characterization tests labelled - but grep over ../ariadne/workshop/issues for Pinned-by or red-on-revert returns nothing and no peer issue was filed, so the rule-level remedy still lands nowhere.
+          round: 12
+        - id: BR-48
+          disposition: not-addressed
+          note: Remedy (i) holds on atlas/providers/tool_use.md. Remedy (ii) does not - chat/format states the rule but registers neither fence.lua nor fence_spec.lua in traceability.yaml, chat/exchange_model omits fence_spec.lua, and fence.lua:13, the docstring that page designates as the specification, still says three consumers.
+          round: 12
+        - id: BR-49
+          disposition: not-addressed
+          note: fence.lua:37 still returns two values under an @return integer|nil annotation at :32; no caller reads the second.
+          round: 12
+        - id: BR-51
+          disposition: not-addressed
+          note: fold_projection.lua:129-132 still copies each tool range into a shifted window per verify; fence.closes:50 still matches twice; fence.scan's close_of still rescans to EOF per unclosed opener.
+          round: 12
+        - id: BR-53
+          disposition: not-addressed
+          note: Re-measured on real fold state - a question marker in a plain text-fenced block still forks (3 exchanges where 2 is correct) and the following summary marker is swallowed into the question content and left unfolded, foldclosed = -1. The claim persists verbatim at issue Log :890 and at atlas/chat/parsing.md:24-27, which contradicts atlas/providers/tool_use.md:171-173.
+          round: 12
+        - id: BR-56
+          disposition: not-addressed
+          note: fold_projection.lua:95 still reads M._classify; grep over lua/ and tests/ finds no writer, and no arch test flags the pattern.
+          round: 12
+        - id: BR-57
+          disposition: not-addressed
+          note: README.md:162-166 still splits the In Chat Buffer list, with three keybinding items following the fold-ownership paragraph.
+          round: 12
+      findings:
+        - id: BR-58
+          severity: Important
+          title: The deferral to issue 203 was granted on an understated premise - the deferred shape folds a user question, and that is a regression against the pre-issue baseline
+          detail: |-
+            This is the 2nd finding in family unterminated-fence-degradation. Earlier rounds fixed
+            instances. Do NOT fix this instance - the operator already deferred it. State the rule
+            instead: a deferral is only as good as the consequence it records; when a defect is
+            deferred, the record must state its worst MEASURED consequence against the pre-change
+            baseline, in the vocabulary of the issue's own invariants, or the deferral is granted on
+            a premise the operator never saw. Measured on real Neovim fold state, same buffer, after
+            hydrate_window plus zM, for the shape a tool marker followed by an unclosed opener
+            followed by a later block - question row 13 foldclosed is -1 at 38a6cdd (pre-issue) and
+            -1 at dc5ee17 (M1 close), but 9 at d017ce7 and at HEAD. So the milestone introduced a new
+            way to fold a user question, which is the symptom this issue is named for. What the record
+            says instead - plan Revisions "Unreachable from anything parley writes", issue Log "2
+            exchanges, where M1 gave 3", issue 203 Problem "the rest of the chat collapses into one
+            exchange ... the folds go with it" - describes lost exchanges and lost folds only; none
+            names the fold consequence and none names the baseline regression. Reachability is also
+            broader than the recorded "hand-edited, truncated, or pasted": the shape needs only a
+            tool marker at column 0 in prose followed by a fenced block whose closer the model omits,
+            which is ordinary LLM output. An independent 144-combination sweep over 432 real-question
+            rows found violations in this shape and no other. Neither oracle in fold_invariants_spec
+            can see it - the raw-text tracker sets depth 1 on the unclosed opener and excludes exactly
+            those rows - so nothing in the suite would go red if it got worse.
+          family: unterminated-fence-degradation
+          round: 12
+      forced: '--no-ledger (or --force): Both invariants hold. A user question is never folded — not as a fold header, not swallowed by an earlier fold; tool calls, tool results, summaries and thinking blocks always fold at their own marker. Original reported symptom verified fixed on the reproduction that found it: drift_probe.lua row 23 foldclosed=-1, was foldclosed=23 foldend=26 rendering the question as a fold header; the uncaught E16 on past-EOF drift is gone and a refusal provably creates nothing. M1 fold reconciliation: creation is VERIFIED against the buffer, destruction is IDENTIFIED by extmark (one invalidate=true mark per exchange start, the chat_lease mechanism #138), installed only from a current-buffer parse, span resolving every anchor strictly ascending, and created ranges required to lie inside the rows identity says the exchange owns. Nine M1 defects reproduced and pinned. M2 one fence grammar: lua/parley/fence.lua is pure and single-sources the rule; serialize (writer and both readers), answer_structure, chat_parser and fold_projection all derive from it. fence.scan makes one depth-aware pass returning each tool block extent plus the depth-0 marker set, with fence.body_rows the one derived view. Three M2 defects fixed. --no-ledger rationale: the four remaining ledger entries are addressed at HEAD but the review did not re-dispose them. BR-4: plan Core concepts now names verify_starts and ranges_within, the verify_span mention is an explicit historical note, and Revisions run through the issue close (10 entries). BR-48: atlas/providers/tool_use.md no longer restates the grammar - it points at fence.lua docstrings as the specification and carries only shape and consumers; the surviving "bare-word" phrase is the sentence explaining the past drift. BR-53: the false claim is removed from the issue Log and replaced with an explicit correction; the commit message that also carried it is immutable published history and rewriting it would be worse than recording the correction. BR-46: the review itself states the remedy is a mechanical gate (a Pinned-by trailer the close verb refuses without a recorded red-on-revert run), which belongs in sdlc and not this repo; the rule was applied to my own work this round with evidence - adjacency verified red when relaxed, the oracle verified red on revert, and a mislabelled characterization test relabelled after checking. Verification: make test exit 0 on a clean scratch dir (one retry past the tools_builtin_find_spec harness contention filed as #202); lint 0 warnings/0 errors across 333 files; every fold and fence spec audited for duplicate it() names and diffed against HEAD; live-corpus audit over 115 transcripts clean at 463 exchanges, 1155 assertions, 0 violations; per-chunk fold clear 0.067ms versus 0.078ms pre-issue baseline. One shape deferred to #203 by operator decision. Ten lessons recorded.'
+      blocked: true
+---
+
+# Gate ledger — parley.nvim#200 (boundary-review)
+
+Findings this gate raised, the stable ids the binary assigned them, and how
+later rounds disposed of them. Generated — edit the gate, not this file.
+
+## Round 1 — 2026-08-20T18:31:05-07:00 (claude) — BLOCKED
+
+**Protocol error:** no valid findings block — this round contributed no findings.
+
+## Round 2 — 2026-08-20T21:25:31-07:00 (claude) — passed
+
+### Raised
+
+- **BR-1** [Important] FOLDABLE duplicates ANCHOR_KIND's key set; drift silently refuses the whole exchange
+  fold_projection.lua:5-11 and :22-27 state "which kinds fold" twice. Adding a kind to
+  FOLDABLE alone makes anchor_kind return nil, verify_anchors reject the range, and the
+  re-derive reproduce it — a permanent refusal of the entire exchange, not just that
+  block. No test pins the two key sets agree. Fix: delete FOLDABLE, define
+  is_foldable(k) as ANCHOR_KIND[k] ~= nil, and have desired_folds call it (ARCH-DRY).
+- **BR-2** [Important] No test pins "folds outside every exchange span are untouched"
+  clear_folds_in_span's docstring (tool_folds.lua:48) and the atlas both promise it, but
+  the only test that demonstrated it (tool_folds_spec.lua:39) was converted in round 5
+  when the last exchange's span widened to EOF, and was not replaced. Verified the
+  behavior still holds — a 1,4fold over the frontmatter survives a reconcile that folds
+  the tool_result at row 10 — so this is coverage, not a bug. Given the diff widened
+  destruction twice, add a case pinning the header region above exchange_start(1).
+- **BR-3** [Important] atlas names verify_span and a positional fallback that were both removed in round 5
+  atlas/chat/exchange_model.md:84 says "The positional check (verify_span) remains only
+  as the fallback floor". grep -rn verify_span lua/ tests/ returns nothing, and
+  owned_span's own comment reads "There is deliberately no positional fallback." The
+  section also omits round 8's containment tie, which is load-bearing. Docs update gate.
+- **BR-4** [Important] Plan Core-concepts entry contradicts the code and the plan's own line 65
+  000200-fold-reconciliation-plan.md:37 still lists verify_span(first_0, last_0, lines,
+  patterns, anchor_required) as what fold_projection gains, while :65 correctly names
+  verify_starts. Separately, the plan's Revisions stop at round 7 — round 8's design
+  change (creation ranges must lie inside the identified span; iteration-count scaling
+  test) is recorded only in the issue Log. See the review's section 7 for both entries.
+- **BR-5** [Important] rederived memo leaks a parsed model per buffer behind a no-op weak-key guard
+  tool_folds.lua:148 uses __mode = "k" with integer buffer handles; Lua only collects
+  collectable weak keys. Measured: 1000/1000 integer-keyed entries survive two full GC
+  passes, table-keyed drop to 0. The BufUnload/BufDelete autocmd at :466-472 clears
+  initialized and exchange_anchors but not rederived[buf], so every closed chat retains
+  its last exchange_model for the process lifetime. Add rederived[buf] = nil there and
+  drop the __mode metatable, which reads as a guard and is not one.
+- **BR-6** [Minor] Duplicated comment paragraph and split declaration in prepare_exchange_update
+  tool_folds.lua:335-346 repeats the same "same rule as reconcile" paragraph twice;
+  :331 declares first_0/last_0 two lines before its only assignment.
+- **BR-7** [Minor] owned_span writes the same return statement twice (ARCH-DRY)
+  tool_folds.lua:242-246 collapses to a single guard plus one return.
+- **BR-8** [Minor] Two stale test comments in the integration fold spec
+  tool_folds_spec.lua:180-186 describes wall-clock sampling the test no longer does;
+  :93's "Contrast the case above, whose fold sits outside every span" points at :55,
+  which now asserts that fold IS cleared.
+- **BR-9** [Minor] verify_anchors cannot run without a vim global; the purity test only pins module load
+  fold_projection.lua:76 requires highlight_structure unconditionally even when patterns
+  is supplied, so it fails in vim/_init_packages.lua under _G.vim = nil, while
+  verify_starts runs fine. fold_projection_spec.lua:32 checks load-time purity only, so
+  the plan's "pure and nvim-free" claim is unpinned at call time (ARCH-PURE).
+- **BR-10** [Minor] prepare_exchange_update computes desired_folds only to fill the observer event
+  tool_folds.lua:330 — per-streamed-chunk work whose sole consumer is the test seam.
+- **BR-11** [Minor] M._last_clear_iters is not reset on clear_folds_in_span's early returns
+  tool_folds.lua:50-57 return before :93 in three cases, so a reader can pick up a stale
+  iteration count from a previous call.
+- **BR-12** [Minor] The containment rule is pure logic living in the IO shell (ARCH-PURE)
+  tool_folds.lua:279-286 is a pure predicate over ranges and a row span, reachable only
+  through an integration test. Extracting it to fold_projection makes it unit-pinnable.
+- **BR-13** [Minor] The fold-creation loop is unprotected against E350 though the clear half handles it
+  tool_folds.lua:321 throws out of reconcile under a non-manual foldmethod, while
+  clear_folds_in_span:65-68 explicitly reasons about that case. Pre-existing, but the
+  asymmetry is newly visible.
+- **BR-14** [Minor] lessons.md has no rule for the duplicate-test-block defect this window fixed
+  The existing "deleted tests do not fail" entry keys on a SHRINKING green suite; a
+  duplicated describe block makes it grow, which is why the count check read as "I added
+  tests" for four rounds. Add the uniq -d audit over it("...") names (AGENTS.md section 4).
+- **BR-15** [Minor] No follow-up issue filed for the harness scratch-dir contention diagnosed in round 6
+  The Log says tools_builtin_find_spec traverses a .test-tmp being mutated under it and
+  that it is "worth its own issue". No issue exists; the diagnosis will be archived to
+  workshop/history/ at close.
+- **BR-16** [Minor] README not updated for the new fold-ownership contract
+  A manual zf inside an exchange — now including the whole buffer tail after the last
+  block — is destroyed on the next reconcile. Operator-visible, documented only in atlas.
+- **BR-17** [Minor] Corpus harness shells out to git ls-files outside any seam (ARCH-MOCK)
+  fold_invariants_spec.lua:17. Mitigated by the "#corpus >= 8" floor, which makes a
+  missing or failed git a loud failure rather than a silently shrunken suite. Noting only.
+- **BR-18** [Minor] Plan doc Task 1-5 step checkboxes still unticked although M1 is complete
+  The issue's Plan section is correctly ticked; the durable plan's steps lag.
+
+## Round 3 — 2026-08-20T21:38:20-07:00 (claude) — passed
+
+### Raised
+
+- **BR-19** [Critical] clear_folds_in_span deletes nothing under 'nofoldenable', restoring the #200 symptom permanently
+  tool_folds.lua:75,77 gate every deletion on foldlevel(), which reports 0
+  for all rows when the window has 'nofoldenable' (verified: :fold still
+  creates the fold, foldlevel() just cannot see it; zj still navigates).
+  Reconcile degrades to append-only. Reproduced both failure modes — a
+  stale fold covering a question survives and renders "💬: q (4 lines)",
+  and 25 reconciles produce 25 nested fold levels at the same rows, i.e.
+  one level per streamed chunk. Parley ships chat_toggle_tool_folds
+  (init.lua:2236) which sets this very option, and no fold spec varies it.
+  Fix: save/force/restore &l:foldenable around the clear loop inside the
+  existing nvim_win_call, and add foldenable=false variants of the
+  ownership and fold-nesting tests.
+- **BR-20** [Important] reconcile_exchange is O(number of exchanges) per call on the per-chunk streaming path
+  exchange_anchors.span resolves every anchor on every call, so per-chunk
+  cost scales with chat length, not exchange length. Measured with the
+  streamed exchange held constant: 0.0386 ms at 10 exchanges, 0.0495 at 50,
+  0.1172 at 200, 0.2549 at 500 — and owned_span runs twice per chunk
+  (prepare + finalize) against a 0.078 ms pre-200 baseline. The in-suite
+  scaling test varies span length only, so this axis is unpinned. Fix:
+  memoise resolved anchor rows per (buf, changedtick) — exact, since marks
+  only move on edits and every edit bumps the tick — and extend the
+  iteration-count test to hold span fixed while growing exchange count.
+- **BR-21** [Important] the drift refusal is logged once per buffer lifetime, not once per buffer state
+  rederived[buf].logged is carried into every new tick's entry
+  (tool_folds.lua:181) and never reset on a successful reconcile, so after
+  the first refusal in a buffer every later refusal — including an
+  unrelated drift much later in the session — is silent. The comment at
+  :310-311 says "once per buffer state" and the Done-when requires the
+  refusal not be silent. Fix: clear the flag when reconcile_exchange
+  succeeds, or key the suppression on the tick rather than the buffer.
+- **BR-22** [Minor] vim.g.parley_fold_clear_iters is a test instrument written to a global on the per-chunk path
+  tool_folds.lua:88,93. Prefer nvim_exec2 with output capture, or a
+  buffer-local var, so the production hot path does not publish a global.
+- **BR-23** [Minor] the prepare event's `identified` flag has no consumer and no test
+  tool_folds.lua:351,357 emit it, nothing reads or asserts it.
+- **BR-24** [Minor] _observer is reset inline rather than in after_each, so a failing assertion leaks it
+  tests/integration/tool_folds_spec.lua:252,706 — _model_provider is reset
+  in after_each (:23) but _observer is not.
+- **BR-25** [Minor] foldtext hardcodes the four marker prefixes instead of deriving from highlight_structure.patterns
+  tool_folds.lua:434-449. A customised chat_tool_use_prefix silently falls
+  through to the preview branch — the same branch that rendered
+  "💬: q (4 lines)" and masked #200. Pre-existing and outside the diff, but
+  it is now the last hand-maintained copy of the marker vocabulary BR-1
+  consolidated into ANCHOR_KIND (ARCH-DRY).
+
+## Round 4 — 2026-08-20T21:52:18-07:00 (claude) — passed
+
+### Disposed
+
+- BR-1 — addressed — FOLDABLE derived from ANCHOR_KIND at fold_projection.lua:22-23; drift is now structurally impossible.
+- BR-2 — addressed — tool_folds_spec.lua:488 folds the frontmatter and asserts it survives a full reconcile.
+- BR-3 — addressed — grep verify_span over atlas/ is empty; the section now states "no positional fallback" and documents the containment tie.
+- BR-4 — not-addressed — Core-concepts fixed at plan:37, but Revisions still stop at round 7 — rounds 8 and 9 unrecorded.
+- BR-5 — addressed — Weak mode dropped (tool_folds.lua:162); rederived[buf] cleared on BufUnload/BufDelete at :484.
+- BR-6 — not-addressed — tool_folds.lua:348-354 still repeats the paragraph; :345 still splits the declaration from :355.
+- BR-7 — not-addressed — tool_folds.lua:256-260 unchanged.
+- BR-8 — not-addressed — Both comments unchanged — spec :184-186 still describes wall-clock sampling, :93 still says the case above sits outside every span when it now asserts that fold IS cleared.
+- BR-9 — not-addressed — fold_projection.lua:80 still requires highlight_structure unconditionally; the purity test still checks load time only.
+- BR-10 — not-addressed — tool_folds.lua:344 unchanged.
+- BR-11 — not-addressed — tool_folds.lua:50-51 and :57 still return before the iteration count is written at :103.
+- BR-12 — not-addressed — tool_folds.lua:293-300 unchanged.
+- BR-13 — not-addressed — tool_folds.lua:335 still unguarded while the clear half reasons about E350 at :63-68.
+- BR-14 — not-addressed — The new lessons entry keys on a shrinking suite and a comm -13 set diff; duplicates collapse in a set, so no rule covers the duplicate-block defect.
+- BR-15 — not-addressed — workshop/issues/ still holds eight issues, none for the scratch-dir contention.
+- BR-16 — not-addressed — No README.md change anywhere in 38a6cdd..HEAD.
+- BR-17 — not-addressed — fold_invariants_spec.lua:17 unchanged; the >= 8 floor still mitigates it.
+- BR-18 — not-addressed — Every Task 1-5 step checkbox in the durable plan is still unticked.
+- BR-19 — addressed — Guard at tool_folds.lua:76-98 with two foldenable=false tests; verified foldlevel() reads 0 under nofoldenable and that :fold does not re-enable the option.
+- BR-20 — not-addressed — exchange_anchors.lua:70-74 still resolves every anchor per call; no memo, and the scaling test still varies span length only.
+- BR-21 — not-addressed — tool_folds.lua:191 still carries logged forward; no writer resets it on success. This is the unmet "refusal is not silent" Done-when.
+- BR-22 — not-addressed — tool_folds.lua:97,103 unchanged.
+- BR-23 — not-addressed — grep identified over lua/ and tests/ returns only the two emit sites.
+- BR-24 — not-addressed — tool_folds_spec.lua:260,765 still reset inline; after_each at :22 resets only _model_provider.
+- BR-25 — not-addressed — tool_folds.lua:444-454 unchanged.
+
+### Raised
+
+- **BR-26** [Minor] per-chunk reconcile cost is linear in projected-range length, and that axis is unasserted
+  covered_lines plus verify_anchors' interior scan is an O(span) buffer read
+  this milestone introduced on the per-streamed-chunk path. Measured
+  best-of-30 per reconcile with a single thinking range: 0.0070 / 0.0100 /
+  0.0230 / 0.0825 / 0.3440 ms at 25 / 100 / 400 / 1600 / 6400 body rows —
+  clean linearity, so streaming a long foldable block is O(N^2) overall.
+  Absolute cost is small, but the in-suite scaling test asserts only
+  clear-loop iteration count, so nothing pins this axis.
+- **BR-27** [Minor] atlas does not record that the clear transiently forces 'foldenable'
+  The last commit made tool_folds write a window option it does not own,
+  saving and restoring it around the clear. atlas/chat/exchange_model.md's
+  fold-reconciliation section describes the zj/zD walk but not this, so the
+  operator-visible contract ("your foldenable setting is momentarily forced
+  on and restored") lives only in a code comment. One-line delta.
+- **BR-28** [Minor] prepare clears the identified span unverified while reconcile refuses to create unverified
+  prepare_exchange_update destroys every fold in the identified span with no
+  range verification; reconcile_exchange refuses to create when verification
+  fails. If finalize's reconcile then refuses, the span is left cleared with
+  nothing recreated and hydrate_window latches. I could not reach this in
+  production — the re-derive normally heals within the same call — so this is
+  an asymmetry note rather than a demonstrated bug, but it is the shape
+  lessons.md's own "widening a destructive operation demands widening its
+  verification" entry warns about.
+
+## Round 5 — 2026-08-21T11:47:17-07:00 (claude) — BLOCKED
+
+### Raised
+
+- **BR-29** [Critical] `failure-fallback-misgated` answer_structure's unterminated-fence rewind fires on a correctly closed fence, truncating the tool block
+  lua/parley/answer_structure.lua:114 gates the rewind on `cursor > #lines`, which is
+  equally true when the fence closed on the last line of the span. A tool body containing
+  a BOUNDARY-classified line (📝:/💬:/🤖:/🔒:) whose close is that last line is truncated
+  at its opener: reduce returns tool_result 1..2 / summary 3..3 / text 4..4 where dc5ee17
+  returned tool_result 1..4. Measured on real fold state, the body leaks out of its fold
+  and a fold is anchored on the in-body marker. Reachable on the streaming path
+  (chat_respond.lua:1704) and on cold parse of a chat ending at a tool-result fence.
+  Fix: track a `closed` flag set in the close branch and gate the rewind on `not closed`.
+- **BR-30** [Critical] `unterminated-fence-degradation` chat_parser's in-body suppression is unbounded, so one unclosed fence swallows the rest of the chat
+  lua/parley/chat_parser.lua:526 suppresses structural classification while tool_fence_len
+  is set and tool_body_complete is false, with no terminator. An opener that never gets a
+  matching bare close reclassifies every later marker to text and forks no further
+  exchange: 3 exchanges before M2, 1 after. Reachable without a malformed file — an answer
+  quoting a 📎: line inside ordinary markdown prose (fence-naive by design) opens a tool
+  block whose body never closes. Exchange starts feed exchange_anchors identity, which
+  drives the M1 destructive fold clear. answer_structure got a bounded fallback for this
+  case in the same milestone; chat_parser did not. Fix: precompute in_tool_body[] with a
+  lookahead that requires the close to exist, and suppress on that.
+- **BR-31** [Important] `spec-surgery-loses-tests` 11 pre-existing tests deleted from chat_parser_tools_spec.lua, undeclared
+  The file was replaced wholesale (344 -> 108 lines), dropping the entire #81
+  content_blocks contract plus "a tool_use prefix without a fenced body ... empty input" —
+  the only malformed-tool-tolerance test, and the class of the C2 regression. None were
+  relocated. The M2 Log reports "chat_parser_tools_spec 5/5" without noting it was 11.
+  This is the rule at workshop/lessons.md:706-713, added by this issue.
+- **BR-32** [Important] `shadow-consumer-not-derived` atlas/chat/format.md still names tools/serialize.lua as the fence single source
+  Plan Task 11 Step 3 names atlas/chat/format.md explicitly and is ticked, but the file is
+  untouched: line 12 still reads "Single source of truth for the schema:
+  lua/parley/tools/serialize.lua". atlas/chat/parsing.md never mentions the in-body-content
+  rule and line 17 still says structural markers "always terminate either mode".
+  traceability.yaml adds fence.lua under chat/exchange_model + providers/tool_use, not
+  chat/parsing as the plan directed. ARCH-PURPOSE shadow sweep incomplete.
+- **BR-33** [Important] `drift-guard-blinded` fold_projection's interior scan enters body mode on any fence, disabling the question guard
+  lua/parley/fold_projection.lua:120-126 treats any open_len-matching line as a body opener
+  for any foldable range kind. A bare run is indistinguishable from an opener, so one
+  unmatched or grammar-rejected fence (e.g. an info string with non-word characters, as
+  render_buffer.lua:104 emits) desyncs the scan and it stops checking for user markers for
+  the rest of the range — silently disabling the guard that defends "a question is never
+  inside a fold". Fix: fence-track only for tool_use/tool_result and require the body to
+  open at range.start_0 + 1.
+- **BR-34** [Important] `ticked-without-evidence` Plan Task 11 Step 2 (127-transcript audit re-run) is ticked with no evidence in the Log
+  The M2 Log records spec counts, make test, lint and the M1 drift probes, but no re-run of
+  the three audit scans against the operator's live chat_dir. That audit is the only
+  evidence covering the C2 shape: the in-repo corpus provably lacks it (old-vs-new parser
+  exchange counts differ on 0 of 23 in-repo transcripts).
+- **BR-35** [Minor] `style-consistency` chat_parser.lua:267 require is unindented in a tab-indented function body
+- **BR-36** [Minor] `shadow-consumer-not-derived` chat_parser.lua:457-459 comment still restates the fence grammar the module no longer owns
+- **BR-37** [Minor] `redundant-computation` fold_projection.lua:122-123 calls fence.open_len twice on the same line
+- **BR-38** [Minor] `purity-claim-unenforced` fence.lua declares itself pure but is absent from the PURE_FILES arch guard
+  tests/arch/buffer_mutation_spec.lua:62 lists the modules whose purity is enforced. The
+  new module's header claim ("Pure: no Neovim API, no state") and the plan's PURE
+  classification are documentation until it is added there. One line.
+- **BR-39** [Minor] `oracle-derives-from-subject` fold_invariants_spec's oracle derives from the same parse it validates, so segmentation bugs pass
+  Both the expectations and the fold state come from one parse, so a mis-segmentation is
+  asserted as correct — C1 and C2 both pass this harness. It validates fold application,
+  not segmentation; the header comment should say so rather than let the harness be
+  credited with coverage it cannot have.
+
+## Round 6 — 2026-08-21T12:36:09-07:00 (claude) — BLOCKED
+
+### Disposed
+
+- BR-29 — not-addressed — Unchanged at answer_structure.lua:114; reproduced end-to-end — tool_result truncated to 2 rows and a fold anchored on an in-body 📝:.
+- BR-30 — not-addressed — Unchanged at chat_parser.lua:526; measured 3 exchanges pre-M2 vs 1 at HEAD on two independent reachable inputs.
+- BR-31 — addressed — All 11 names from 9a6e939~1 present plus 5 new; 16/16 green, zero duplicate it() names.
+- BR-32 — not-addressed — format.md fixed; traceability.yaml still omits fence.lua from chat/parsing and atlas/chat/parsing.md still lacks the in-body-content rule.
+- BR-33 — addressed — Fix verified by revert — rejected-opener case flips true→false. Only one of the two claimed tests has teeth (see the new ticked-without-evidence finding).
+- BR-34 — addressed — Audit run and recorded with the census bounding it (115 files, 1155 assertions, zero tool blocks).
+- BR-35 — not-addressed — chat_parser.lua:267 still at column 0 in a tab-indented body.
+- BR-36 — not-addressed — chat_parser.lua:456-459 comment unchanged.
+- BR-37 — addressed — fold_projection.lua:121 now calls fence.open_len once.
+- BR-38 — not-addressed — fence.lua still absent from PURE_FILES at tests/arch/buffer_mutation_spec.lua:62.
+- BR-39 — not-addressed — Header comment still justifies the oracle without stating that it validates fold application, not segmentation.
+
+### Raised
+
+- **BR-40** [Critical] `undeclared-scope-change` max_full_exchanges default changed 42 to 999 in the M2 fix commit, unrelated and undeclared
+  lua/parley/config.lua:640, introduced solely in b2bf1d5 (git log -S confirms) and
+  unmentioned in that commit message, the issue, or the plan. Consumed at
+  chat_respond.lua:737, so chat-memory summarisation effectively never fires and every
+  prior exchange is sent to the provider in full instead of as its 📝: summary. A
+  user-visible cost and context-window change with no connection to fence grammar or
+  folding. Revert, or split into its own issue with a rationale and a README note.
+- **BR-41** [Important] `ticked-without-evidence` Gate steps ticked from inside the gate, and a regression test claimed to pin a fix that it does not
+  This is the 2nd (and 3rd) finding in family ticked-without-evidence. Do NOT fix the
+  instances — fix the rule. Prevalence, all in this issue: BR-34 (Task 11 Step 2, fixed
+  last round); plan lines 1338 and 1352 tick "sdlc milestone-close M2" and "sdlc close"
+  while this review IS that milestone-close, no "closed M2" log line exists and status is
+  still working; and the Log's "Two tests pin it" for BR-33 is false — reverting
+  fold_projection.lua to b2bf1d5~1 leaves fold_projection_spec.lua:184 green, so only the
+  rejected-opener test pins anything. Rule: a tick, or a written claim that a test pins a
+  fix, is a claim of evidence and may only be written by the action that produced it — for
+  a regression test that evidence is the revert going RED, not the suite going green.
+  Corollary: never tick a gate step from inside the gate. workshop/lessons.md:722-726
+  states half this rule and was violated by the same commit that wrote it; extend it with
+  the revert half.
+- **BR-42** [Minor] `serialized-shape-assumed` The fence-aware interior scan requires the body to open at exactly start_0 + 1
+  fold_projection.lua:121 keys on the shape serialize.render_call/render_result emit today.
+  A hand-edited or LLM-emitted transcript with a blank line between the marker and its
+  opening fence loses fence-awareness, so an in-body marker refuses the whole exchange.
+  Either name the coupling in the comment or accept the first non-blank line after the
+  marker.
+
+## Round 7 — 2026-08-21T13:14:09-07:00 (claude) — BLOCKED
+
+### Disposed
+
+- BR-29 — addressed — Revert-verified — restoring the `cursor > #lines` gate turns answer_structure_spec.lua:115 and :129 RED (2 vs 7).
+- BR-30 — not-addressed — Bounded only the no-close-anywhere case; 3 shapes still swallow exchanges at HEAD (3 -> 2) and one folds a user question on real fold state. See C1.
+- BR-32 — not-addressed — format.md fixed; atlas/chat/parsing.md line 17 and traceability.yaml chat/parsing (:95-105) untouched since round 6, while Task 11 Step 3 stays ticked.
+- BR-35 — not-addressed — chat_parser.lua:267 still at column 0 in a tab-indented body.
+- BR-36 — not-addressed — chat_parser.lua:456-459 comment unchanged.
+- BR-38 — not-addressed — fence.lua still absent from PURE_FILES at tests/arch/buffer_mutation_spec.lua:62.
+- BR-39 — not-addressed — Header unchanged, and now proven load-bearing — the harness reports 0 violations on a transcript where row 20's question has foldclosed=13.
+- BR-40 — addressed — config.lua:640 restored to 42; no test pins config defaults, so the same accident stays undetectable by the suite.
+- BR-41 — addressed — lessons.md:733-742 carries the revert half plus the gate corollary. Plan line 1338 is still ticked and the new BR-30 tests repeat the pattern — recorded in I3, not re-raised.
+- BR-42 — withdrawn — The remedy asked for is already present — fold_projection.lua:118-121 names the immediately-after-the-marker coupling verbatim, unchanged since b2bf1d5.
+
+### Raised
+
+- **BR-43** [Critical] `drift-guard-blinded` The tool-body scan accepts an opener anywhere after the marker, so a closing fence is read as an opening one and a user question ends up folded
+  2nd finding in family drift-guard-blinded (BR-33 was the 1st, in fold_projection). Do NOT
+  patch the two instances — fix the rule. Rule: a tool body's extent requires (a) the marker
+  at fence depth 0, (b) the opener on the immediately-following line (already enforced at
+  fold_projection.lua:121), (c) an open_len that recognises every CommonMark opener, since a
+  rejected opener leaves its closer to be misread as an opener. One function computes this;
+  every consumer calls it. fence.extract_body is the natural home and implements none of the
+  three. Sites: chat_parser.lua:536-550 and answer_structure.lua:90-97. Measured against
+  dc5ee17 (M1 close): three shapes each drop 3 exchanges to 2 at HEAD - a rejected opener
+  such as the ```json {"type": "request"} that render_buffer.lua:104 emits, an unclosed body
+  fence followed by any later bare fence, and an answer that shows the transcript format
+  inside a plain ```text block. On real Neovim fold state the third gives foldclosed=13 for
+  the question at row 20 where dc5ee17 gives -1 - the issue's headline symptom, reintroduced.
+  answer_structure fails the Spec's second invariant instead - a summary is swallowed into
+  tool_result[1..7] where dc5ee17 emits summary[5..5]. The live 115-file corpus is unaffected
+  only because it contains zero tool markers; it does contain 5 grammar-rejected openers and
+  3 markers quoted inside plain fenced blocks. tests/fixtures/fold_adversarial.md covers none
+  of the three shapes.
+- **BR-44** [Important] `shadow-consumer-not-derived` A second in-tool-body tracker was introduced while the plan's Core concepts states none was
+  3rd finding in family shadow-consumer-not-derived. Do NOT fix the instance - state the rule:
+  one fact, one computation, injected into both consumers; a second derivation of "am I inside
+  a tool body" is the same DRY violation M2 exists to remove, relocated one layer up.
+  cb_state.tool_fence_len / tool_body_complete at chat_parser.lua:460-466 still drives block
+  finalisation while in_tool_body[] at :529-556 drives main-loop classification; they compute
+  the same fact by different rules and diverge on exactly the C1 shapes. Plan line 44 asserts
+  "No second fence tracker is introduced (PQ-3)" - a Core-concepts contradiction the checklist
+  rates Critical by default; filed Important because C1 carries the behavioural weight and the
+  fix folds into C1's shared helper. Needs a "## Revisions" entry either way. Same rule at
+  lower stakes: log_emit.lua:253-272 and skills/review/journal.lua:14 hand-pick fence strings,
+  the latter documenting the unsound case fence.for_content solves.
+- **BR-45** [Important] `redundant-computation` The precompute reclassifies every line two to three times, making parse_chat about 48 percent slower
+  2nd finding in family redundant-computation (BR-37 was fence.open_len twice on one line).
+  Do NOT fix the instance - the rule is: a per-line grammar or classification predicate is
+  computed once per parse into a shared array and read from there, never recomputed inside a
+  scan. answer_structure.reduce:29 already does this. chat_parser now calls
+  highlight_structure.classify in the precompute row loop (:533), again in every inner scan
+  (:538), and a third time in the main loop (:561). Measured best-of-10 on a 10,104-line
+  tool-heavy transcript: 24.49 ms at dc5ee17 to 36.22 ms at HEAD. parse_chat runs at
+  tool_folds.lua:150 on hydrate and every drift re-derive, and eight times across
+  chat_respond.lua. The issue's own Done-when commits to no streaming regression and M1 took
+  per-chunk reconcile from 3.705 ms to 0.067 ms. Same edit as C1 - build kinds[] once and pass
+  it to the shared span helper.
+- **BR-46** [Important] `ticked-without-evidence` The revert-must-go-red rule was written and then not applied by the commit that wrote it
+  4th finding in family ticked-without-evidence. Do NOT fix the instances. BR-41's remedy did
+  land - lessons.md:733-742 states the rule and the gate corollary. In the same commit,
+  describe("unterminated tool body (#200 BR-30)") presents two tests as pinning BR-30; against
+  b2bf1d5 the file is 17 pass / 1 fail, so chat_parser_tools_spec.lua:485 is green on revert -
+  characterization wearing a fix-pin label, unlabelled. Plan line 1338 still ticks
+  "sdlc milestone-close M2" while this review is that milestone-close; only line 1352 was
+  unticked. Prevalence in this issue: BR-34, BR-41 twice, and these two - five instances, the
+  last three after the rule was written. Escalation: a third prose restatement will not hold.
+  The rule needs a mechanical gate - a Pinned-by trailer that milestone-close refuses without
+  a recorded red-on-revert run, and a close-gate check that no plan step naming
+  sdlc milestone-close or sdlc close is ticked at the moment that command runs.
+
+## Round 8 — 2026-08-21T16:40:13-07:00 (claude) — BLOCKED
+
+### Disposed
+
+- BR-30 — addressed — Verified by revert - making tool_body swallow to end turns chat_parser_tools_spec.lua:465 red.
+- BR-32 — not-addressed — format.md fixed; atlas/chat/parsing.md:17 untouched and fence.lua went under chat/exchange_model, not chat/parsing as ticked Step 3 directs.
+- BR-35 — not-addressed — chat_parser.lua:267 is still unindented.
+- BR-36 — not-addressed — chat_parser.lua:456-459 still restates the grammar and is now also wrong about the info string.
+- BR-38 — not-addressed — tests/arch/buffer_mutation_spec.lua:61-65 still omits lua/parley/fence.lua.
+- BR-39 — not-addressed — No comment added; the Critical below is a concrete case the oracle cannot see.
+- BR-43 — not-addressed — Requirement (a) marker-at-fence-depth-0 not implemented; question folded at HEAD (foldclosed=10) where dc5ee17 gives -1.
+- BR-44 — not-addressed — Plan Correction landed, but the two trackers now measurably disagree at HEAD (tool_use[9..13] vs [9..14]).
+- BR-45 — not-addressed — Reproduces under interleaved min-of-5 - tool-free 43.01ms to 52.83ms, tool-heavy 33.65ms to 51.46ms vs dc5ee17.
+- BR-46 — not-addressed — No mechanical gate; plan line 1340 still ticked; a new green-on-revert fix-pin claim shipped this round.
+
+### Raised
+
+- **BR-47** [Important] `failure-fallback-misgated` fence.tool_body's stop_row is dead API documented as the mitigation for the bug deferred to #203
+  This is the 2nd finding in family failure-fallback-misgated (BR-29 was the 1st - a rewind
+  that fired on correctly closed input). Do NOT fix this instance; state the rule. Rule: a
+  degradation path is real only when a production caller reaches it AND a test drives the
+  degraded branch; an available-but-unpassed parameter, or an arm no fixture enters, is
+  documentation that reads as protection. Prevalence in this issue: 2 - BR-29 fired on the
+  wrong input, stop_row fires on none. fence.lua:113-117 asserts stop_row prevents an
+  unclosed body latching onto a later bare fence, which is exactly what the issue Log records
+  as deferred to #203 after that bound was rejected as circular. Call sites
+  chat_parser.lua:534, answer_structure.lua:85, fold_projection.lua:131 all omit it; fence_spec
+  never exercises it. Either delete the parameter or give it a caller and a red-on-revert test.
+- **BR-48** [Important] `shadow-consumer-not-derived` The hand-maintained restatements of the fence model drifted from fence.lua inside the milestone
+  This is the 4th finding in family shadow-consumer-not-derived. Earlier rounds fixed
+  instances. Do NOT fix this instance - fix the rule. Rule: every consumer of a
+  single-sourced model must DERIVE from it; a hand-maintained restatement is a deferred
+  consumer, and prose cannot derive, so the enforceable substitute is (i) reduce the
+  restating section to a pointer at the source's own docstring, and (ii) register the source
+  module and its spec under every atlas key whose page states the rule, so make test-changed
+  couples them. Measured drift: atlas/providers/tool_use.md:155-156 says "a bare-word info
+  string (json, lua)" - the grammar replaced by 6c0132d two commits after that page was
+  written; :164-165 and :170 name chat_parser's tool_fence_len tracker as what the main loop
+  consults, which is in_tool_body[]; tool_body is unmentioned. Plan Core concepts line 33
+  says three consumers where there are four. Prevalence in this issue: 4.
+- **BR-49** [Minor] `serialized-shape-assumed` fence.open_len returns an undocumented second value that every caller ignores
+  fence.lua:37 returns "#ticks, info" while :32 annotates "@return integer|nil". No caller
+  uses info. In argument position the extra return silently expands the call; fence_spec's
+  assert.equals calls survive only because luassert compares the first two arguments.
+  Drop the second return or annotate it.
+- **BR-50** [Minor] `style-consistency` answer_structure.lua:93 keeps a dead "local _ = body_first" assignment
+- **BR-51** [Minor] `redundant-computation` verify_anchors copies every tool range into a shifted table on each per-chunk call
+  fold_projection.lua:126-131 allocates a full copy of range.start_0..end_0 per tool range
+  per verify, on the streaming path; an offset argument on fence.tool_body would avoid it.
+  fence.closes:50 also runs line:match("^(`+)") twice on the matching path, now once per
+  body row of every tool_body scan.
+
+## Round 9 — 2026-08-21T17:05:51-07:00 (claude) — passed
+
+### Disposed
+
+- BR-32 — not-addressed — format.md:12 now names fence.lua correctly, but parsing.md:17 still says structural markers "always terminate either mode" with no in-body caveat, and traceability.yaml still omits fence.lua/fence_spec under chat/parsing as Task 11 Step 3 directs.
+- BR-35 — not-addressed — chat_parser.lua:267 `local fence = require("parley.fence")` is still unindented inside a tab-indented body.
+- BR-36 — not-addressed — chat_parser.lua:456-459 still restates the open/close grammar ("any run of 3+ backticks optionally followed by an info string") that fence.lua now owns.
+- BR-38 — not-addressed — PURE_FILES at tests/arch/buffer_mutation_spec.lua:62 still lists only highlight_structure, tools/types, tools/serialize, tools/init. fence.lua absent.
+- BR-39 — not-addressed — The 5 lines added to fold_invariants_spec were the adversarial-fixture entry; the header still credits the harness with segmentation coverage its single-parse oracle cannot have.
+- BR-43 — addressed — Verified independently, not from the commit message: the new test's shape yields 2 exchanges against a 6c0132d tree and 3 at HEAD, using the spec's own test_config. All three requirements (depth 0, opener on the next line, CommonMark open_len) are implemented in fence.scan.
+- BR-44 — not-addressed — The plan Correction at line 46 landed, but the rule did not: cb_state.tool_fence_len at chat_parser.lua:460-466 still accepts an opener anywhere after the marker, which fence.scan rejects, so the two can still diverge on a marker with no body followed by a later plain fence.
+- BR-45 — not-addressed — The rebuttal measured over the 111 live transcripts, which the issue itself records as containing zero tool blocks, at 2 samples per revision with a 17 percent internal spread. Deterministic replacement metric on a 10,805-line tool-heavy transcript: highlight_structure.classify calls per parse_chat go 21,401 at dc5ee17 to 28,402 at HEAD (1.98 to 2.63 per line). Fresh instance: fold_projection.lua:134-135 calls classify twice on the same line.
+- BR-46 — not-addressed — Plan Task 11 Step 4 still ticks `sdlc milestone-close --issue 200 --milestone M2` while this review is that milestone-close; chat_parser_tools_spec.lua:485 is still unlabelled as characterization; no mechanical gate exists. Note the proposed Pinned-by/close-gate check lives in the sdlc binary, not in parley.nvim, so it needs a peer-repo issue rather than an edit here.
+- BR-47 — addressed — fence.tool_body and its stop_row are deleted; no caller and no test reference them.
+- BR-48 — not-addressed — atlas/providers/tool_use.md still says "a bare-word info string (json, lua)", still names chat_parser's tool_fence_len tracker as what the main loop consults, and now additionally says "Ordinary answer prose ... stays fence-naive", which is false for tool markers since HEAD. Plan Core concepts line 33 still says three consumers, and line 44 now names the deleted fence.tool_body. Non-deriving fence literals also remain at render_buffer.lua:104-108, log_emit.lua:253-272, helper.lua:280, oauth.lua:1190/1303, copy.lua, outline.lua, exporter.lua.
+- BR-49 — not-addressed — fence.lua:37 still returns `#ticks, info` under an `@return integer|nil` annotation at :32; no caller reads the second value. extract_body:91 has the same shape.
+- BR-51 — not-addressed — fold_projection.lua:129-132 still copies the range into a shifted window per verify, and fence.closes:50 still runs the same match twice. Worth recording that the perf motive weakened: verify_anchors on a 603-row tool range measures 0.0207 ms at HEAD vs 0.5713 ms at dc5ee17 (best-of-200), because the scan now skips the body.
+
+### Raised
+
+- **BR-52** [Important] `shadow-consumer-not-derived` fence.scan returns a row set, so both consumers re-derive facts it already computed, and both re-derivations are wrong
+  This is the 5th finding in family shadow-consumer-not-derived. Earlier rounds fixed
+  instances. Do NOT fix these two instances - fix the rule. Rule: a single-sourced pass
+  must return the MODEL its consumers need (block extents marker->close_row, plus the
+  depth-0 marker set), and consumers must branch on that model, never reconstruct it
+  from a derived set nor fall back to a depth-naive classification of the same rows.
+  Measured instance A - answer_structure.lua:38-44 reconstructs the close row by
+  walking body_rows from marker+2, which yields nothing for an empty body, so the
+  section falls into the run-to-next-boundary arm: real Neovim fold state gives fold
+  10..14 swallowing following prose where dc5ee17 gives tool_result 10..12 plus
+  text 14..14. Measured instance B - `markers` is computed at :34 and never consulted;
+  the loop at :93 branches on the depth-naive kinds[i], so a 📎: inside a plain ```text
+  block is emitted as a foldable tool_result and folds at 13..14 while chat_parser.lua:551
+  classifies the identical row as text. Prevalence in this issue: 5. Neither shape occurs
+  in the 123 transcripts scanned (12 in-repo, 111 live), so both are fixture-only today;
+  fold_adversarial.md covers neither.
+- **BR-53** [Important] `ticked-without-evidence` The commit message and issue Log claim markers inside ANY fenced block are now content; only tool markers are
+  A further instance in family ticked-without-evidence. Do NOT patch the prose alone -
+  the rule is that a behavioural claim in a commit or Log must name the test that
+  demonstrates it, and a claim contradicted by a green test in the same tree is a
+  defect in the record. chat_parser.lua:551 gates only tool_use/tool_result on
+  depth0_marker; in_tool_body covers only real tool bodies. Measured: a 💬: inside a
+  plain ```text block still forks an exchange (3 where 2 is correct) and swallows the
+  following 📝: into the question content, so the Spec's "📝: blocks are always folded"
+  does not hold for that shape. chat_parser_tools_spec.lua:445-451 asserts exactly this
+  behaviour and is green, labelled "still a turn today"; plan Non-goals line 15 still
+  states it as a deliberate boundary. So the code, the test and the plan agree, and only
+  the commit message and issue Log ~line 1119 disagree - which is what a close review
+  would read first.
+
+## Round 10 — 2026-08-21T17:49:36-07:00 (claude) — BLOCKED
+
+### Disposed
+
+- BR-4 — not-addressed — fold_projection entry fixed; but the fence bullet still says three consumers, the chat_parser bullet still names the deleted fence.tool_body, and Revisions still stop at M1 round 7 with no M2 entry at all.
+- BR-6 — not-addressed — tool_folds.lua:353-360 still states the paragraph twice; :351 still splits the declaration from :361.
+- BR-7 — not-addressed — tool_folds.lua:256-260 unchanged.
+- BR-8 — not-addressed — The wall-clock comment is fixed; tool_folds_spec.lua:93 still says the case above sits outside every span, and that case now asserts the fold IS cleared.
+- BR-9 — not-addressed — Measured with the module preloaded and patterns supplied - verify_anchors errors on vim/_init_packages.lua while verify_starts returns true; the new purity test covers only the two that pass, and the added comment claims the opposite.
+- BR-10 — addressed — desired_folds is no longer computed in prepare; the comment states why.
+- BR-11 — addressed — tool_folds.lua:52 resets _last_clear_iters before every early return.
+- BR-12 — addressed — ranges_within lives in fold_projection and is unit-pinned by five cases at fold_projection_spec.lua:236-262.
+- BR-13 — not-addressed — tool_folds.lua:338 still unguarded while clear_folds_in_span:64-68 reasons about E350 explicitly.
+- BR-14 — addressed — workshop/lessons.md:711 carries the uniq -d audit over it() names.
+- BR-15 — addressed — workshop/issues/000202-make-test-is-unreliable-specs-traverse-and-mutate-a-shared-test-tmp.md filed.
+- BR-16 — addressed — README.md gains the fold-ownership contract including the buffer tail and the outside-every-exchange exemption.
+- BR-17 — not-addressed — fold_invariants_spec.lua:17 unchanged; the corpus floor still mitigates it and this was noting-only.
+- BR-18 — addressed — Every Task 1-5 step is ticked; the only two unticked boxes are the gate steps, correctly.
+- BR-20 — addressed — The changedtick memo landed at dc5ee17; measured flat with span held constant - 0.0398 / 0.0370 / 0.0349 / 0.0358 ms at 10 / 50 / 200 / 500 exchanges. The suggested exchange-count test was not added, which BR-26 already covers.
+- BR-21 — addressed — logged is no longer carried forward (tool_folds.lua:199) and rederived[buf] is dropped on a successful reconcile (:344).
+- BR-22 — addressed — Now a buffer-local b:parley_fold_clear_iters, not a global.
+- BR-23 — addressed — tests/integration/tool_folds_spec.lua:594 asserts identified true then false across a count mismatch.
+- BR-24 — addressed — _observer is reset in after_each alongside _model_provider.
+- BR-25 — addressed — foldtext derives every branch from highlight_structure.patterns and the fallback now announces an unexpected fold.
+- BR-26 — not-addressed — The only scaling test still varies body_lines and asserts clear-loop iterations; nothing pins the covered_lines plus interior-scan axis.
+- BR-27 — addressed — atlas/chat/exchange_model.md:108 records that the clear transiently forces foldenable and restores the operator's value.
+- BR-28 — not-addressed — prepare_exchange_update still clears the identified span with no range verification while reconcile refuses to create without it.
+- BR-32 — addressed — format.md:12 names fence.lua, parsing.md states the depth-0 rule, and traceability chat/parsing lists fence.lua plus fence_spec - though parsing.md's new wording is itself inaccurate, which BR-48 covers.
+- BR-35 — not-addressed — chat_parser.lua:267 is still at column 0 inside a tab-indented body.
+- BR-36 — not-addressed — chat_parser.lua:456-459 still restates the open/close grammar and is now also wrong about the info string.
+- BR-38 — addressed — lua/parley/fence.lua is listed in PURE_FILES at tests/arch/buffer_mutation_spec.lua:63 and the spec passes 8/8.
+- BR-39 — not-addressed — The header comment is unchanged, and the raw-text oracle added as the remedy filters its subjects with fence.scan - measured green at 14/14 with the question at fold_marker_in_prose.md:18 folded. See the new finding.
+- BR-44 — addressed — The plan states the rule as an inline Correction and I could not reproduce a divergence at HEAD on the named shape or on three variants; both trackers agree. The Correction belongs in Revisions, which BR-4 covers.
+- BR-45 — addressed — Deterministic metric now identical across trees - 10,901 classify calls over 5,505 lines, 1.98 per line at HEAD, dc5ee17 and 38a6cdd. Residual wall-clock is +6% vs base, which is fence.scan's own pass.
+- BR-46 — not-addressed — The instances are fixed - gate Steps 4 and 6 unticked, three tests labelled characterization - but no peer-repo issue exists in ariadne for the Pinned-by trailer or the close-gate tick check, so the rule-level remedy landed nowhere.
+- BR-48 — not-addressed — atlas/providers/tool_use.md is untouched and now contradicts atlas/chat/parsing.md written in the close commit; it still says bare-word info string and still names tool_fence_len as what the main loop consults.
+- BR-49 — not-addressed — fence.lua:37 still returns two values under an integer-or-nil annotation; no caller reads the second.
+- BR-50 — addressed — The dead body_first assignment is gone.
+- BR-51 — not-addressed — fold_projection.lua:129-135 still copies each range into a shifted window and calls classify twice per line; fence.closes still matches twice; fence.scan's close_of additionally rescans to EOF per unclosed opener.
+- BR-52 — not-addressed — Both instances reproduce, and instance A is now measured as a regression - answer_structure gives tool_result[1..5] where base and M1 give tool_result[1..3] plus text[5..5], swallowing prose into the fold.
+- BR-53 — not-addressed — Still measured at 3 exchanges where 2 is correct, and the record got worse - atlas/chat/parsing.md now asserts the false claim too, contradicting atlas/providers/tool_use.md.
+
+### Raised
+
+- **BR-54** [Important] `oracle-derives-from-subject` The raw-text oracle added to fix the circular harness selects its subjects with the function under test
+  This is the 2nd finding in family oracle-derives-from-subject. Do NOT fix only this
+  instance - state the rule: an oracle's SUBJECT SELECTION may not consult the artifact
+  under test, only its assertion may; a filter computed from the subject exonerates
+  exactly the rows a defect corrupts. fold_invariants_spec.lua:115-127 selects question
+  rows with `not body_rows[row]` where body_rows comes from fence.scan. Measured on
+  tests/fixtures/fold_marker_in_prose.md - at HEAD the oracle's subjects are rows 6,18,34;
+  with the depth fix reverted in fence.scan they are 6,34 and row 18 is EXCLUDED as
+  in-body, while foldclosed(18) = 13, i.e. the milestone's headline symptom in the fixture
+  written to catch it. fold_invariants_spec reports Success 14 Failed 0. The close
+  commit's evidence states that reverting the depth fix "produces 4 failures where the
+  harness previously reported none"; it produces zero. Prevalence in this issue: 2, the
+  second committed by the change that closed the first.
+- **BR-55** [Important] `spec-surgery-loses-tests` The BR-47 cleanup deleted the only test with teeth for opener-adjacency and the four replacements do not cover it
+  This is the 2nd finding in family spec-surgery-loses-tests. Do NOT just re-add the test -
+  state the rule: a spec-inventory diff proves NAMES survived, not PROPERTIES; a change that
+  removes tests must name the behavioural property each pinned and show the replacement goes
+  red on the same revert. git show 6c0132d:tests/unit/fence_spec.lua contains
+  it("requires the opener immediately after the marker"); HEAD does not, and the four new
+  scan tests do not cover it. Measured at HEAD by patching fence.scan to accept an opener
+  anywhere after the marker: the input 📎: read id=1 / some prose / ``` / 💬: a real question
+  / ``` yields in_tool_body = {3,4}, marking a genuine user question as body - which
+  suppresses both chat_parser's classification and verify_anchors' guard - while
+  fold_invariants 14/14, chat_parser_tools 21/21 and fence_spec 18/18 all stay green. Of
+  BR-43's three requirements only depth has a behavioural pin (1 failure on revert);
+  CommonMark open_len is pinned only by fence_spec's own grammar assertions; adjacency by
+  nothing. The issue Log's "5 tests removed, 4 scan tests added; inventory diffed against
+  HEAD" is accurate about counts and silent about the lost property.
+
+## Round 11 — 2026-08-21T18:21:04-07:00 (claude) — BLOCKED
+
+### Disposed
+
+- BR-4 — not-addressed — Revisions are now current through M2 — that half is fixed. But Core concepts line 33 still says three consumers where there are four, and the chat_parser bullet still names fence.tool_body, deleted in 8b94fde.
+- BR-6 — not-addressed — tool_folds.lua:353 and :357 still state the same "same rule as reconcile" paragraph twice.
+- BR-7 — not-addressed — owned_span still writes the identical exchange_anchors.span return on both branches.
+- BR-8 — not-addressed — tool_folds_spec.lua:93 still says "Contrast the case above, whose fold sits outside every span"; the case above (:56) asserts foldclosed(11) == -1, i.e. that the fold IS cleared.
+- BR-9 — not-addressed — Measured with highlight_structure preloaded and patterns supplied - verify_starts and ranges_within return true, verify_anchors errors. Traceback locates the require at highlight_structure.lua:58 (parley.define) inside classify, not in fold_projection, so making fold_projection's require lazy cannot fix it and the :88-89 comment claims the opposite.
+- BR-13 — not-addressed — tool_folds.lua:338 still unguarded against E350 while clear_folds_in_span reasons about it explicitly.
+- BR-17 — not-addressed — fold_invariants_spec.lua:17 unchanged; the corpus floor still mitigates it and this was noting-only.
+- BR-26 — not-addressed — The scaling test still varies body_lines and asserts clear-loop iterations; the covered_lines plus interior-scan axis remains unasserted.
+- BR-28 — not-addressed — prepare_exchange_update still clears the identified span with no range verification while reconcile refuses to create without it.
+- BR-35 — not-addressed — chat_parser.lua:267 is still at column 0 inside a tab-indented body.
+- BR-36 — not-addressed — chat_parser.lua:456-459 still restates the open/close grammar fence.lua owns, and is still wrong about the info string.
+- BR-39 — addressed — Superseded by a stronger remedy than the comment asked for - a second oracle that does validate segmentation, and I verified it goes red on the depth revert. The RAW-TEXT ORACLE block states the model-derived half's limit in the terms the finding asked for.
+- BR-46 — not-addressed — The rule was genuinely applied to this round's own work - I confirmed both the depth revert and the adjacency relaxation go red - but no mechanical gate exists and no ariadne issue was filed (grep over ../ariadne/workshop for Pinned-by / red-on-revert returns nothing). The Log declines to file it unilaterally and flags it for the operator, which is defensible; recording that a seventh instance shipped this round (Important A) as the escalation evidence.
+- BR-48 — not-addressed — Remedy (i) landed on atlas/providers/tool_use.md and is a good model. But atlas/chat/parsing.md is a NEW hand-maintained restatement written by the same commit and is measurably false; remedy (ii) is incomplete for chat/format, which states the rule but registers neither fence.lua nor fence_spec.lua in traceability.yaml; and fence.lua:13 - the docstring that page just designated as the specification - still says three consumers.
+- BR-49 — not-addressed — fence.lua:37 still returns "#ticks, info" under an "@return integer|nil" annotation at :32; no caller reads the second value.
+- BR-51 — not-addressed — fold_projection.lua:129-133 still copies each tool range into a shifted window per verify; fence.closes:50 still matches twice; fence.scan's close_of still rescans to EOF per unclosed opener.
+- BR-52 — addressed — Both instances measured fixed against the M1-close control. Empty body now gives tool_result[1..3] text[5..5] where d017ce7 gave a fold swallowing the prose; a depth-1 tool marker now gives text[3..5] where dc5ee17 and 38a6cdd both gave a foldable tool_result[3..5]. answer_structure branches on markers[i] and reads bodies[i].close.
+- BR-53 — not-addressed — Commit message and close-review Log entry are corrected, but the claim persists verbatim at issue Log :890 (the closed M2 line) and in atlas/chat/parsing.md:17-27, which now contradicts atlas/providers/tool_use.md:170. Measured false: a 💬: in a plain ```text block still forks (3 where 2 is correct) and still terminates a 🧠: block. The Log's "Corrected in place" is itself the defect.
+- BR-54 — addressed — Verified by revert, not by commit message - the oracle's subject selection is now a literal backtick tracker, and reverting the depth rule in fence.scan turns fold_invariants_spec RED at fold_marker_in_prose.md where round 10 measured 14/14 green on the same revert.
+- BR-55 — addressed — Test restored AND verified red on the same revert - relaxing fence.scan to accept an opener anywhere after the marker turns fence_spec 18/1. The rule is recorded in lessons.md. Worth knowing the pin sits at the grammar layer; no behavioural spec goes red on that revert.
+
+### Raised
+
+- **BR-56** [Minor] `failure-fallback-misgated` fold_projection.M._classify is an injection seam read at one site and written at zero
+  This is the 3rd finding in family failure-fallback-misgated. Earlier rounds fixed
+  instances (BR-29 fired on the wrong input, BR-47 fired on none). Do NOT fix this
+  instance - the rule is already stated and covers it: a seam or degradation path is
+  real only when a producer reaches it AND a test drives it; a field set at zero call
+  sites passes every suite while doing nothing and reads as extensibility. What is
+  missing is enforcement, and here it is mechanisable: an arch test over lua/ that
+  flags any M._<name> read in a module but assigned nowhere in lua/ or tests/ would
+  catch all three. Measured: fold_projection.lua:95 reads M._classify; grep over lua/
+  and tests/ finds no writer (cliproxy.lua:127 sets its own unrelated M._classify).
+  Prevalence in this issue: 3.
+- **BR-57** [Minor] `docs-structure-drift` The README fold-ownership paragraph is inserted into the middle of the keybinding list
+  README.md:162-166. The In Chat Buffer list runs to :158, is interrupted by the
+  tool-fold-toggle prose, and now by a five-line fold-ownership paragraph, after which
+  three more list items follow (<C-g>l, <C-g>i, gf). Rendered, those three read as
+  belonging to the fold discussion rather than to the keybinding list. The
+  interruption is pre-existing but this widens it from two lines to seven; move the
+  paragraph below the list or above the In Chat Buffer heading.
+
+## Round 12 — 2026-08-21T18:31:55-07:00 (claude) — BLOCKED
+
+**Forced past** (`--force`): --no-ledger (or --force): Both invariants hold. A user question is never folded — not as a fold header, not swallowed by an earlier fold; tool calls, tool results, summaries and thinking blocks always fold at their own marker. Original reported symptom verified fixed on the reproduction that found it: drift_probe.lua row 23 foldclosed=-1, was foldclosed=23 foldend=26 rendering the question as a fold header; the uncaught E16 on past-EOF drift is gone and a refusal provably creates nothing. M1 fold reconciliation: creation is VERIFIED against the buffer, destruction is IDENTIFIED by extmark (one invalidate=true mark per exchange start, the chat_lease mechanism #138), installed only from a current-buffer parse, span resolving every anchor strictly ascending, and created ranges required to lie inside the rows identity says the exchange owns. Nine M1 defects reproduced and pinned. M2 one fence grammar: lua/parley/fence.lua is pure and single-sources the rule; serialize (writer and both readers), answer_structure, chat_parser and fold_projection all derive from it. fence.scan makes one depth-aware pass returning each tool block extent plus the depth-0 marker set, with fence.body_rows the one derived view. Three M2 defects fixed. --no-ledger rationale: the four remaining ledger entries are addressed at HEAD but the review did not re-dispose them. BR-4: plan Core concepts now names verify_starts and ranges_within, the verify_span mention is an explicit historical note, and Revisions run through the issue close (10 entries). BR-48: atlas/providers/tool_use.md no longer restates the grammar - it points at fence.lua docstrings as the specification and carries only shape and consumers; the surviving "bare-word" phrase is the sentence explaining the past drift. BR-53: the false claim is removed from the issue Log and replaced with an explicit correction; the commit message that also carried it is immutable published history and rewriting it would be worse than recording the correction. BR-46: the review itself states the remedy is a mechanical gate (a Pinned-by trailer the close verb refuses without a recorded red-on-revert run), which belongs in sdlc and not this repo; the rule was applied to my own work this round with evidence - adjacency verified red when relaxed, the oracle verified red on revert, and a mislabelled characterization test relabelled after checking. Verification: make test exit 0 on a clean scratch dir (one retry past the tools_builtin_find_spec harness contention filed as #202); lint 0 warnings/0 errors across 333 files; every fold and fence spec audited for duplicate it() names and diffed against HEAD; live-corpus audit over 115 transcripts clean at 463 exchanges, 1155 assertions, 0 violations; per-chunk fold clear 0.067ms versus 0.078ms pre-issue baseline. One shape deferred to #203 by operator decision. Ten lessons recorded.
+
+### Disposed
+
+- BR-4 — not-addressed — d55671a added ranges_within to the fold_projection bullet; line 33 still says three consumers where there are four, and line 44 still names fence.tool_body, deleted in 8b94fde.
+- BR-6 — not-addressed — tool_folds.lua:353-360 still states the same paragraph twice; :351 still declares first_0/last_0 ten lines before its only assignment at :361.
+- BR-7 — not-addressed — tool_folds.lua:265 and :267 are still the identical exchange_anchors.span return on both branches.
+- BR-8 — not-addressed — tool_folds_spec.lua:94 still says the case above sits outside every span; that case at :56-71 asserts foldclosed(11) == -1, i.e. that the fold IS cleared.
+- BR-9 — not-addressed — Re-measured with highlight_structure preloaded and patterns supplied - verify_starts and ranges_within return true, verify_anchors errors on a nil vim global. Traceback puts the require inside highlight_structure.classify at :58, so the lazy require cannot fix it and the comment at :88-89 asserts the opposite of what runs.
+- BR-13 — not-addressed — tool_folds.lua:338 still unguarded against E350 while clear_folds_in_span:68-71 reasons about it explicitly.
+- BR-17 — not-addressed — fold_invariants_spec.lua:17 unchanged; the corpus floor still mitigates it and this was noting-only.
+- BR-26 — not-addressed — The only scaling test still varies body_lines and asserts clear-loop iterations; the covered_lines plus interior-scan axis remains unasserted.
+- BR-28 — not-addressed — prepare_exchange_update:361-371 still clears the identified span with no range verification while reconcile refuses to create without it.
+- BR-35 — not-addressed — chat_parser.lua:267 is still at column 0 inside a tab-indented body; verified byte-wise.
+- BR-36 — not-addressed — chat_parser.lua:456-459 still restates the open/close grammar fence.lua owns and is still wrong about the info string.
+- BR-46 — not-addressed — Instances remain clean - both gate steps unticked, characterization tests labelled - but grep over ../ariadne/workshop/issues for Pinned-by or red-on-revert returns nothing and no peer issue was filed, so the rule-level remedy still lands nowhere.
+- BR-48 — not-addressed — Remedy (i) holds on atlas/providers/tool_use.md. Remedy (ii) does not - chat/format states the rule but registers neither fence.lua nor fence_spec.lua in traceability.yaml, chat/exchange_model omits fence_spec.lua, and fence.lua:13, the docstring that page designates as the specification, still says three consumers.
+- BR-49 — not-addressed — fence.lua:37 still returns two values under an @return integer|nil annotation at :32; no caller reads the second.
+- BR-51 — not-addressed — fold_projection.lua:129-132 still copies each tool range into a shifted window per verify; fence.closes:50 still matches twice; fence.scan's close_of still rescans to EOF per unclosed opener.
+- BR-53 — not-addressed — Re-measured on real fold state - a question marker in a plain text-fenced block still forks (3 exchanges where 2 is correct) and the following summary marker is swallowed into the question content and left unfolded, foldclosed = -1. The claim persists verbatim at issue Log :890 and at atlas/chat/parsing.md:24-27, which contradicts atlas/providers/tool_use.md:171-173.
+- BR-56 — not-addressed — fold_projection.lua:95 still reads M._classify; grep over lua/ and tests/ finds no writer, and no arch test flags the pattern.
+- BR-57 — not-addressed — README.md:162-166 still splits the In Chat Buffer list, with three keybinding items following the fold-ownership paragraph.
+
+### Raised
+
+- **BR-58** [Important] `unterminated-fence-degradation` The deferral to issue 203 was granted on an understated premise - the deferred shape folds a user question, and that is a regression against the pre-issue baseline
+  This is the 2nd finding in family unterminated-fence-degradation. Earlier rounds fixed
+  instances. Do NOT fix this instance - the operator already deferred it. State the rule
+  instead: a deferral is only as good as the consequence it records; when a defect is
+  deferred, the record must state its worst MEASURED consequence against the pre-change
+  baseline, in the vocabulary of the issue's own invariants, or the deferral is granted on
+  a premise the operator never saw. Measured on real Neovim fold state, same buffer, after
+  hydrate_window plus zM, for the shape a tool marker followed by an unclosed opener
+  followed by a later block - question row 13 foldclosed is -1 at 38a6cdd (pre-issue) and
+  -1 at dc5ee17 (M1 close), but 9 at d017ce7 and at HEAD. So the milestone introduced a new
+  way to fold a user question, which is the symptom this issue is named for. What the record
+  says instead - plan Revisions "Unreachable from anything parley writes", issue Log "2
+  exchanges, where M1 gave 3", issue 203 Problem "the rest of the chat collapses into one
+  exchange ... the folds go with it" - describes lost exchanges and lost folds only; none
+  names the fold consequence and none names the baseline regression. Reachability is also
+  broader than the recorded "hand-edited, truncated, or pasted": the shape needs only a
+  tool marker at column 0 in prose followed by a fenced block whose closer the model omits,
+  which is ordinary LLM output. An independent 144-combination sweep over 432 real-question
+  rows found violations in this shape and no other. Neither oracle in fold_invariants_spec
+  can see it - the raw-text tracker sets depth 1 on the unclosed opener and excludes exactly
+  those rows - so nothing in the suite would go red if it got worse.
+
+## Open findings
+
+- **BR-4** [Important] Plan Core-concepts entry contradicts the code and the plan's own line 65
+- **BR-6** [Minor] Duplicated comment paragraph and split declaration in prepare_exchange_update
+- **BR-7** [Minor] owned_span writes the same return statement twice (ARCH-DRY)
+- **BR-8** [Minor] Two stale test comments in the integration fold spec
+- **BR-9** [Minor] verify_anchors cannot run without a vim global; the purity test only pins module load
+- **BR-13** [Minor] The fold-creation loop is unprotected against E350 though the clear half handles it
+- **BR-17** [Minor] Corpus harness shells out to git ls-files outside any seam (ARCH-MOCK)
+- **BR-26** [Minor] per-chunk reconcile cost is linear in projected-range length, and that axis is unasserted
+- **BR-28** [Minor] prepare clears the identified span unverified while reconcile refuses to create unverified
+- **BR-35** [Minor] `style-consistency` chat_parser.lua:267 require is unindented in a tab-indented function body
+- **BR-36** [Minor] `shadow-consumer-not-derived` chat_parser.lua:457-459 comment still restates the fence grammar the module no longer owns
+- **BR-46** [Important] `ticked-without-evidence` The revert-must-go-red rule was written and then not applied by the commit that wrote it
+- **BR-48** [Important] `shadow-consumer-not-derived` The hand-maintained restatements of the fence model drifted from fence.lua inside the milestone
+- **BR-49** [Minor] `serialized-shape-assumed` fence.open_len returns an undocumented second value that every caller ignores
+- **BR-51** [Minor] `redundant-computation` verify_anchors copies every tool range into a shifted table on each per-chunk call
+- **BR-53** [Important] `ticked-without-evidence` The commit message and issue Log claim markers inside ANY fenced block are now content; only tool markers are
+- **BR-56** [Minor] `failure-fallback-misgated` fold_projection.M._classify is an injection seam read at one site and written at zero
+- **BR-57** [Minor] `docs-structure-drift` The README fold-ownership paragraph is inserted into the middle of the keybinding list
+- **BR-58** [Important] `unterminated-fence-degradation` The deferral to issue 203 was granted on an understated premise - the deferred shape folds a user question, and that is a regression against the pre-issue baseline

@@ -32,25 +32,22 @@
 
 local M = {}
 
-local FENCE_MIN = 3
+local fence = require("parley.fence")
 
--- Longest run of backticks in `s`. Used to pick a fence long enough
--- that the body can't accidentally close it.
-local function longest_backtick_run(s)
-    if not s or s == "" then return 0 end
-    local max = 0
-    for run in s:gmatch("`+") do
-        if #run > max then max = #run end
-    end
-    return max
+-- Fence selection and matching are the shared grammar's job (ARCH-DRY) — see
+-- lua/parley/fence.lua. Both the writer and the two readers below derive from
+-- it, so they cannot disagree about what "the same pair" means.
+local function fence_for(content)
+    return fence.for_content(content)
 end
 
--- Pick a fence (a string of N backticks) strictly longer than any
--- run of backticks in `content`, with a floor of FENCE_MIN.
-local function fence_for(content)
-    local n = longest_backtick_run(content or "")
-    if n < FENCE_MIN then return string.rep("`", FENCE_MIN) end
-    return string.rep("`", n + 1)
+--- Body of the first complete fenced block in `text`, or nil.
+---
+--- Replaces a `%1` backreference, which is subtly wrong on the reader side: a
+--- backreference matches a PREFIX of a longer run, so a body containing a run
+--- longer than its own opener was truncated at that line.
+local function fenced_body(text)
+    return fence.extract_body(vim.split(text, "\n", { plain = true }))
 end
 
 --- Render a ToolCall into its buffer representation.
@@ -58,16 +55,16 @@ end
 --- @return string block
 function M.render_call(call)
     local input_json = vim.json.encode(call.input or {})
-    local fence = fence_for(input_json)
+    local pair = fence_for(input_json)
     -- Opening fence carries the "json" info string for syntax-highlight
     -- hints; closing fence is bare backticks of the same length.
     return string.format(
         "🔧: %s id=%s\n%sjson\n%s\n%s",
         call.name,
         call.id,
-        fence,
+        pair,
         input_json,
-        fence
+        pair
     )
 end
 
@@ -81,14 +78,7 @@ function M.parse_call(text)
     local name, id = text:match("^🔧:%s*(%S+)%s+id=(%S+)")
     if not name then return nil end
 
-    -- Match an opening fence of any length >= 3 (optionally followed
-    -- by an info string like "json") and a closing fence of the SAME
-    -- length (bare backticks). Lua %1 backreference ensures matching
-    -- pair. Fallback: no info string on opening fence.
-    local _, body = text:match("\n(`+)json%s*\n(.-)\n%1")
-    if not body then
-        _, body = text:match("\n(`+)%s*\n(.-)\n%1")
-    end
+    local body = fenced_body(text)
 
     local input = {}
     if body and body ~= "" then
@@ -106,16 +96,16 @@ end
 --- @return string block
 function M.render_result(result)
     local content = result.content or ""
-    local fence = fence_for(content)
+    local pair = fence_for(content)
     local err_tag = result.is_error and " error=true" or ""
     return string.format(
         "📎: %s id=%s%s\n%s\n%s\n%s",
         result.name or "",
         result.id,
         err_tag,
-        fence,
+        pair,
         content,
-        fence
+        pair
     )
 end
 
@@ -132,8 +122,7 @@ function M.parse_result(text)
     local header = text:match("^([^\n]*)") or ""
     local is_error = header:find("error=true", 1, true) ~= nil
 
-    -- Match a dynamic-length fence pair for the body.
-    local _, body = text:match("\n(`+)%s*\n(.-)\n%1")
+    local body = fenced_body(text)
 
     return {
         id = id,

@@ -650,3 +650,117 @@
   the harness's own backgrounding and wait for ITS completion signal; never
   infer "process died" from an empty `pgrep`, which is indistinguishable from
   "never matched".
+- **In Lua a `local function` is not in scope for functions defined above it —
+  and a `pcall` at the call site hides the consequence.** #200 defined
+  `default_model_provider` below `reconcile_exchange`; inside the earlier
+  function the name resolved to a nil *global*, so the drift re-derive path
+  could never run. Because the call was `pcall(provider, buf)`, the failure
+  was swallowed and the code took the "refuse" branch silently — tests still
+  passed, since refusing looks identical to having nothing to fold. Lint caught
+  it, not the suite. Rule: when a function is reached only through a `pcall`,
+  the tests must assert the *success* branch was taken, not merely that nothing
+  threw; and treat "accessing undefined variable" from the linter as a
+  correctness finding, not style.
+- **Widening a destructive operation demands widening its verification, not
+  just the verification of what it creates.** #200 changed fold clearing from
+  "delete at projected start rows" to "clear the whole exchange span", but
+  verified only the fold ranges. The span came from the same stale model and
+  went unchecked — and for an exchange with no foldable block the range list is
+  empty, so range verification passed *vacuously* while the stale span deleted
+  a neighbouring exchange's fold. Rule: when a diff widens what an operation can
+  destroy, enumerate the inputs to the destruction separately from the inputs to
+  the creation, and check that a vacuous input (empty list, nil span) fails
+  closed rather than open.
+- **A wall-clock assertion in the test suite measures the machine, not the
+  algorithm.** #200's first scaling test passed alone and failed under full
+  suite load (8.35ms vs 79.05ms) because both numbers inflated unequally under
+  contention. Rule: to pin an algorithmic property, sample repeatedly and
+  compare the MINIMUM of each size — the least-contended sample is the one that
+  reflects the code — and name the test for the property it actually pins.
+- **Deleted tests do not fail — verify the inventory, not just the result.**
+  #200 replaced one test by slicing a spec file between two textual markers and
+  removed nine regression tests with it, every pin from seven review rounds. The
+  suite went green at 16 tests where it had been 25. Rule: after any structural
+  edit to a spec (moving, replacing, or reordering blocks), diff the test
+  inventory against `HEAD` — `comm -13` over the extracted `it("...")` names —
+  before trusting the run. A shrinking green suite is the most convincing wrong
+  signal available.
+- **Prove a performance property by counting work, not by timing it.** #200's
+  span-clearing test asserted wall-clock and flaked twice under suite load, once
+  sending the author chasing a regression that was only contention. Exposing the
+  clear loop's iteration count turned it into an exact assertion: a 16x longer
+  span must cost no more iterations. If a property is algorithmic, find the
+  countable quantity that expresses it; reach for a clock only when the thing
+  under test really is latency.
+- **A suite that fixes an environment setting cannot find bugs in the other
+  setting.** #200's fold clearing silently no-opped under `nofoldenable` — `zj`
+  will not navigate and `zD` will not delete — so a stale fold survived the
+  reconcile meant to remove it, reproducing the issue's original symptom
+  verbatim. It shipped because every fold spec set `foldenable = true` in setup,
+  making the defect untestable by construction. Rule: when behaviour depends on
+  an editor option or environment flag that users can flip (and that the product
+  itself flips — parley has a fold-toggle shortcut), the suite must exercise both
+  states, and code that depends on the option should save/force/restore it rather
+  than assume.
+- **Check the test inventory for duplicates, not only for shrinkage.** The
+  companion rule above catches deleted tests by a falling count. #200 hit the
+  mirror image: a botched edit left `describe("anchor verification")` in the file
+  twice, so seven cases ran as copies and the count *rose*. Every fold-test total
+  reported for four rounds was inflated by seven, and a growing green suite reads
+  as progress. Rule: after any structural edit to a spec, run
+  `grep -o 'it("[^"]*"' <spec> | sort | uniq -d` and require it to be empty, as
+  well as diffing the count against `HEAD`.
+- **When a guard encodes an assumption a later milestone will invalidate, write
+  the fixture that will break it — do not just note the risk.** #200 M1 recorded,
+  in the plan and in a code comment, that M2 would make an in-body `💬:`
+  legitimate content and that any raw-prefix scan would then reject correct
+  input. M2 duly broke it — in `verify_anchors`, the sibling of the function the
+  note named — and *nothing in the suite noticed*, because the real corpus has no
+  in-body markers at all. What caught it was the adversarial fixture, on the day
+  it was added. Rule: a cross-milestone hazard is only recorded once a test
+  exercises it; a comment predicting the break is documentation of a gap, not
+  coverage of one.
+- **`cat > file` on a path you assume is new is a silent overwrite — check
+  existence, not intent.** #200 M2 created what it believed was a new
+  `chat_parser_tools_spec.lua` and destroyed 11 pre-existing tests. The suite
+  went green at 16 where it should have been 27. This is the *second* deletion
+  of tests in the same issue, after a lessons entry had already been written
+  about the first: that rule said "after any structural EDIT to a spec, diff the
+  inventory against HEAD", and it was not applied because this felt like a
+  creation, not an edit. Rule: before writing a spec file, `test -e` it — and
+  diff the inventory against `HEAD` on creation as well as on edit, since a
+  creation that lands on an existing path is the most destructive edit there is.
+- **A tick, or a claim that a test pins a fix, may only be written by the action
+  that produced its evidence — and for a regression test that evidence is the
+  REVERT going red, not the suite going green.** #200 wrote "two tests pin it";
+  reverting the module left one of them green, so it pinned nothing and was a
+  characterization test wearing a fix-pin label. **Corollary: never tick a gate
+  step from inside the gate.** The same issue ticked "sdlc milestone-close M2"
+  and "sdlc close" in its plan while the milestone-close review was running, with
+  no `closed M2` log line and status still `working`. This rule was written
+  half-formed in the very commit that violated it; the revert half is the part
+  that has teeth.
+- **Never bulk-tick checkboxes.** #200 M2 ticked a plan's step list with a
+  blanket replace, including "re-run the audit against the operator's live
+  chat_dir" — which had not been run. A tick is a claim of evidence; applying it
+  mechanically converts a plan into fiction. The audit was afterwards actually
+  run (115 files, 1155 assertions, 0 violations) and its result recorded beside
+  the tick. Rule: tick a step only in the same action that produced its
+  evidence, and put the evidence next to the tick.
+- **A spec-inventory diff proves NAMES survived, not PROPERTIES.** #200 removed
+  five `tool_body` tests, added four `scan` tests, diffed the `it("...")` names
+  against `HEAD`, and declared nothing lost. One property went with them:
+  "a body opens on the line immediately after its marker". Patching the scanner
+  to accept an opener anywhere still left the whole suite green, so a genuine
+  user question could be marked as body — suppressing both the parser's
+  classification and the fold guard — with nothing red. Rule: a change that
+  removes tests must name the behavioural property each one pinned and show a
+  replacement going red on the same revert. Counting names is not coverage.
+- **An oracle's SUBJECT SELECTION may not consult the artifact under test —
+  only its assertion may.** #200 added a raw-text sweep precisely because the
+  existing harness enumerated subjects from the parse it was checking, and then
+  selected that sweep's subjects with `fence.scan`, the function under test. A
+  filter computed from the artifact exonerates exactly the rows the artifact got
+  wrong. Rule: build the oracle's subject set from the rawest independent source
+  available, and let it be cruder than the real grammar — cruder only means it
+  checks more rows.

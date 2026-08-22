@@ -264,6 +264,7 @@ M.parse_chat = function(lines, header_end, config)
 
 	-- Get prefixes
 	local highlight_structure = require("parley.highlight_structure")
+local fence = require("parley.fence")
 	local decoration_patterns = highlight_structure.patterns(config)
 	local memory_enabled = config.chat_memory and config.chat_memory.enable
 	local summary_prefix = decoration_patterns.summary_prefix
@@ -458,15 +459,9 @@ M.parse_chat = function(lines, header_end, config)
 		-- the same number of bare backticks with no info string.
 		if cb_state.current_kind == "tool_use" or cb_state.current_kind == "tool_result" then
 			if not cb_state.tool_fence_len then
-				local fence = line:match("^(`+)[%w_%-]*%s*$")
-				if fence and #fence >= 3 then
-					cb_state.tool_fence_len = #fence
-				end
-			else
-				local expected_close = string.rep("`", cb_state.tool_fence_len)
-				if line == expected_close then
-					cb_state.tool_body_complete = true
-				end
+				cb_state.tool_fence_len = fence.open_len(line)
+			elseif fence.closes(line, cb_state.tool_fence_len) then
+				cb_state.tool_body_complete = true
 			end
 		end
 	end
@@ -518,9 +513,54 @@ M.parse_chat = function(lines, header_end, config)
 	end
 
 	-- Loop through content lines
+	-- #200: structural markers inside a tool body are CONTENT. Tool output
+	-- routinely contains 💬:/🤖:/📎: lines (reading a transcript, grepping this
+	-- repo), and each one used to fork a spurious exchange that then dragged
+	-- the rest of the body out of its block.
+	--
+	-- Precomputed with a lookahead that requires the close to EXIST (BR-30).
+	-- Suppressing on "fence open and not yet complete" has no terminator, so an
+	-- opener that never closes reclassifies every later marker and the rest of
+	-- the chat forks no exchanges at all. That is reachable without a malformed
+	-- file: an answer quoting a 📎: line in ordinary prose starts a tool block
+	-- whose body never closes. Exchange starts feed exchange_anchors identity,
+	-- which drives a destructive fold clear, so degrading open-endedly here is
+	-- not acceptable.
+	-- #200: one depth-aware pass decides both which rows are inside a tool body
+	-- and which tool markers are structural. Depth is the requirement: a 📎:
+	-- written inside an ordinary fenced block is not a marker, and treating it
+	-- as one makes that block's closer look like a body opener — the scan then
+	-- latches onto the next block and the "body" spans a real question, folding
+	-- it (BR-43).
+	-- Classify every line ONCE, into an array both the scan and the main loop
+	-- read. Recomputing a per-line predicate inside a scan is the redundant-work
+	-- pattern `answer_structure.reduce` already avoids.
+	local kinds = {}
+	for row = header_end + 1, #lines do
+		kinds[row] = highlight_structure.classify(lines[row], decoration_patterns).kind
+	end
+
+	local body_lines = {}
+	for row = header_end + 1, #lines do body_lines[row - header_end] = lines[row] end
+	local bodies, marker_set = fence.scan(body_lines, function(_, row)
+		local kind = kinds[row + header_end]
+		return kind == "tool_use" or kind == "tool_result"
+	end)
+	local in_tool_body, depth0_marker = {}, {}
+	for k in pairs(fence.body_rows(bodies)) do in_tool_body[k + header_end] = true end
+	for k in pairs(marker_set) do depth0_marker[k + header_end] = true end
+
 	for i = header_end + 1, #lines do
 		local line = lines[i]
-		local decoration_kind = highlight_structure.classify(line, decoration_patterns).kind
+		local decoration_kind = kinds[i]
+
+		if in_tool_body[i] then
+			decoration_kind = "text"
+		elseif (decoration_kind == "tool_use" or decoration_kind == "tool_result")
+			and not depth0_marker[i] then
+			-- A marker inside some other fenced block is content, not a block.
+			decoration_kind = "text"
+		end
 
 		-- Check for branch reference (🌿:) — always detected, even between consecutive links.
 		-- Before the first question: first 🌿: is parent_link, subsequent ones are children.

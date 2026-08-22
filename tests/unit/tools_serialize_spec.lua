@@ -175,3 +175,38 @@ describe("serialize fence length invariant", function()
         assert.equals(runs[1], runs[#runs])
     end)
 end)
+
+-- #200 M2: the reader used a `%1` backreference, which matches a PREFIX of a
+-- longer run — so a body containing a run longer than its own opener was
+-- silently truncated at that line. Reachable from a hand-edited transcript or
+-- any tool output not produced by render_result.
+describe("fenced body extraction (#200)", function()
+    local serialize = require("parley.tools.serialize")
+
+    it("does not truncate a result body at a run longer than its opener", function()
+        local parsed = serialize.parse_result("📎: grep id=r1\n```\na\n`````\nb\n```")
+        assert.equals("a\n`````\nb", parsed.content)
+    end)
+
+    -- parse_call is a separate reader path, so pin it on its own. The run must
+    -- start a line to distinguish the two implementations: an inline run is
+    -- never a candidate close, and render_call only ever emits single-line JSON.
+    --
+    -- The old backreference truncated the body to `{"a":1}`, which decodes —
+    -- so a malformed block silently produced plausible input. Reading the whole
+    -- body means the decode fails and input falls back to empty, which is the
+    -- honest answer.
+    it("does not truncate a call body at a run longer than its opener", function()
+        local parsed = serialize.parse_call(
+            '🔧: read_file id=t1\n```\n{"a":1}\n`````\ntrailing\n```')
+        assert.same({}, parsed.input)
+    end)
+
+    -- Characterization, not a fix pin: the old backreference also handled a
+    -- nested SHORTER fence. Kept so a future rewrite cannot lose it.
+    it("keeps a nested shorter fence inside a result body", function()
+        local parsed = serialize.parse_result(
+            "📎: read_file id=r1\n````\nmd:\n```lua\nprint()\n```\nend\n````")
+        assert.equals("md:\n```lua\nprint()\n```\nend", parsed.content)
+    end)
+end)

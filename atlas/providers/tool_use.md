@@ -147,6 +147,28 @@ Tool blocks in the transcript:
 ```
 ```
 
+### The fenced-body grammar
+
+`lua/parley/fence.lua` is the single source for how a tool body is delimited.
+**Its docstrings are the specification** — this page deliberately does not
+restate the rule, because prose cannot derive from a module and a restatement
+drifts silently (it did, within this milestone: this section described a
+bare-word info string two commits after the grammar became CommonMark-conformant).
+
+What belongs here is the shape and the consumers:
+
+- `fence.open_len` / `closes` / `for_content` define opening, closing and
+  selection; `fence.scan` makes one depth-aware pass returning each tool block's
+  extent plus the depth-0 marker set, and `fence.body_rows` is the derived view.
+- Consumers, all deriving: `tools/serialize` (writer *and* both reader paths),
+  `answer_structure`'s section scanner, `chat_parser`'s precompute and its
+  `cb_state` tracker, and `fold_projection`'s interior drift scan.
+
+**Which markers the depth rule covers** is stated once, in
+`atlas/chat/parsing.md`: tool markers only. Inside a tool body, or inside any
+other fenced block, a `🔧:`/`📎:` is content; a `💬:`/`🤖:` in a plain fenced
+block still starts a turn.
+
 ## Safety
 
 - **root-policy scope**: chat and `skill_invoke` pass one neighborhood policy to
