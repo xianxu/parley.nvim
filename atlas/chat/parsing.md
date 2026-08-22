@@ -14,7 +14,21 @@ The parser decides termination mode per-block at open time by looking ahead from
 - **Explicit-end mode** — if a `🧠:[END]` line appears before the next structural marker, blank lines inside the block are part of the reasoning content and only `🧠:[END]` (or a structural marker) terminates. This is the mode for chats whose system prompt requests `🧠:[END]` — custom prompts, or back-compat (the shipped default dropped the `🧠:` thinking-block protocol in #143, so default-prompt chats no longer emit `🧠:` at all). Where a prompt does request it, an explicit closer is more reliable than a blank-line terminator, since Claude is reluctant to suppress blank lines in reasoning.
 - **Legacy mode** — otherwise, the first blank line terminates the block (back-compat with chats authored under the previous single-line `🧠:` convention).
 
-Structural markers (`📝/🔧/📎/💬/🤖/🌿/🔒`) always terminate either mode.
+Structural markers (`📝/🔧/📎/💬/🤖/🌿/🔒`) terminate either mode — **when they
+are at fence depth 0**. Since #200 M2 a marker inside a fenced block is content,
+not structure:
+
+- inside a **tool body** (the fenced block opening on the line right after a
+  `🔧:`/`📎:` marker), because tool output routinely quotes transcripts —
+  `read_file` on a chat, `grep` for `💬:`;
+- inside **any other fenced block**, because a marker written in ordinary prose
+  showing the transcript format is not a turn either. Treating one as structural
+  made the enclosing block's closer read as a body opener, and a real question
+  ended up folded.
+
+`lua/parley/fence.lua` owns this: `fence.scan` makes one depth-aware pass and
+returns both the in-body rows and the depth-0 marker rows, and `chat_parser`,
+`answer_structure` and `fold_projection` all consume that one answer.
 
 ## Parser → Model Pipeline
 `answer_structure.reduce` is the one semantic answer grammar. It produces

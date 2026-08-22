@@ -532,10 +532,18 @@ local fence = require("parley.fence")
 	-- as one makes that block's closer look like a body opener — the scan then
 	-- latches onto the next block and the "body" spans a real question, folding
 	-- it (BR-43).
+	-- Classify every line ONCE, into an array both the scan and the main loop
+	-- read. Recomputing a per-line predicate inside a scan is the redundant-work
+	-- pattern `answer_structure.reduce` already avoids.
+	local kinds = {}
+	for row = header_end + 1, #lines do
+		kinds[row] = highlight_structure.classify(lines[row], decoration_patterns).kind
+	end
+
 	local body_lines = {}
 	for row = header_end + 1, #lines do body_lines[row - header_end] = lines[row] end
-	local body_set, marker_set = fence.scan(body_lines, function(line)
-		local kind = highlight_structure.classify(line, decoration_patterns).kind
+	local body_set, marker_set = fence.scan(body_lines, function(_, row)
+		local kind = kinds[row + header_end]
 		return kind == "tool_use" or kind == "tool_result"
 	end)
 	local in_tool_body, depth0_marker = {}, {}
@@ -544,7 +552,7 @@ local fence = require("parley.fence")
 
 	for i = header_end + 1, #lines do
 		local line = lines[i]
-		local decoration_kind = highlight_structure.classify(line, decoration_patterns).kind
+		local decoration_kind = kinds[i]
 
 		if in_tool_body[i] then
 			decoration_kind = "text"

@@ -482,6 +482,8 @@ describe("unterminated tool body (#200 BR-30)", function()
             .equals(3, #parse(lines).exchanges)
     end)
 
+    -- Characterization, NOT a fix pin: verified green against b2bf1d5 as well.
+    -- The swallow case above is the one that pins BR-30.
     it("does not swallow the chat when prose quotes a tool marker", function()
         local lines = vim.list_extend(vim.deepcopy(header), {
             "",

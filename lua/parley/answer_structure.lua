@@ -31,9 +31,8 @@ function M.reduce(lines, patterns, opts)
 
     -- Depth-aware body extents, shared with chat_parser and fold_projection so
     -- the three cannot disagree about where a tool body is (#200 BR-43).
-    local body_rows, markers = fence.scan(lines, function(line)
-        local kind = classify(line, patterns).kind
-        return kind == "tool_use" or kind == "tool_result"
+    local body_rows, markers = fence.scan(lines, function(_, row)
+        return kinds[row] == "tool_use" or kinds[row] == "tool_result"
     end)
     local body_close = {}
     for marker in pairs(markers) do

@@ -53,6 +53,10 @@ describe("fold invariants over the repo transcript corpus", function()
         -- content. The real corpus contains none of these (the audit found 0),
         -- so without this fixture nothing exercises the M2 defects.
         "tests/fixtures/fold_adversarial.md",
+        -- BR-43's shape: a marker quoted inside an ordinary fenced block. The
+        -- adversarial fixture covers nesting but none of the shapes that
+        -- actually broke, so this one carries the raw-text oracle's teeth.
+        "tests/fixtures/fold_marker_in_prose.md",
     }
     for _, path in ipairs(corpus_provider()) do
         if vim.fn.filereadable(path) == 1 then corpus[#corpus + 1] = path end
@@ -98,6 +102,30 @@ describe("fold invariants over the repo transcript corpus", function()
                     end
                 end
             end
+            -- RAW-TEXT ORACLE. The model-derived checks above enumerate their
+            -- subjects from the same parse the folder used, so a defect that
+            -- makes the parser DROP an exchange hides itself: the lost
+            -- question is simply never a subject, and the file reports
+            -- violations=0. That is exactly how #200 M2 shipped a folded
+            -- question (BR-43) past this harness. This sweep reads the buffer
+            -- text instead, so it sees questions the parser lost.
+            --
+            -- A `💬:` at column 0 that is NOT inside a fenced body must never
+            -- be folded, whatever the parse thinks.
+            local body_rows = require("parley.fence").scan(lines, function(l)
+                local k = require("parley.highlight_structure")
+                    .classify(l, require("parley.highlight_structure").patterns(
+                        require("parley.config"))).kind
+                return k == "tool_use" or k == "tool_result"
+            end)
+            for row, text in ipairs(lines) do
+                if text:match("^💬:") and not body_rows[row] then
+                    checked = checked + 1
+                    assert.message(("raw sweep: question folded at %s:%d")
+                        :format(path, row)).equals(-1, vim.fn.foldclosed(row))
+                end
+            end
+
             -- A parser/format change must not turn this file green-and-empty.
             assert.message(("%s asserted nothing — parse produced no subjects"):format(path))
                 .is_true(checked > 0)

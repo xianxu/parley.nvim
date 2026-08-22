@@ -113,7 +113,10 @@ end
 ---     silently losing exchanges.
 ---
 --- @param lines string[]                    1-based
---- @param is_tool_marker fun(line):boolean  true for 🔧:/📎: at column 0
+--- @param is_tool_marker fun(line, row):boolean  true for 🔧:/📎: at column 0.
+---        Receives the 1-based row too, so a caller that already classified
+---        every line can index its array instead of reclassifying. The scan
+---        skips rows while consuming a body, so a call counter would desync.
 --- @return table in_tool_body  set of 1-based rows inside a tool body
 --- @return table markers       set of 1-based rows holding a depth-0 tool marker
 function M.scan(lines, is_tool_marker)
@@ -129,7 +132,7 @@ function M.scan(lines, is_tool_marker)
     local row = 1
     while row <= #lines do
         local line = lines[row] or ""
-        if is_tool_marker(line) then
+        if is_tool_marker(line, row) then
             markers[row] = true
             local body_len = M.open_len(lines[row + 1] or "")
             local close = body_len and close_of(body_len, row + 2)

@@ -96,12 +96,14 @@ atlas:
     code:
       - lua/parley/answer_structure.lua
       - lua/parley/chat_parser.lua
+      - lua/parley/fence.lua
       - lua/parley/helper.lua
     tests:
       - tests/unit/answer_structure_spec.lua
       - tests/unit/parse_chat_spec.lua
       - tests/unit/chat_parser_section_lines_spec.lua
       - tests/unit/chat_parser_tools_spec.lua
+      - tests/unit/fence_spec.lua
       - tests/unit/chat_finder_logic_spec.lua
 
   chat/exchange_model:

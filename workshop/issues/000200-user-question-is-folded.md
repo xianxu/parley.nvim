@@ -887,6 +887,7 @@ scratch dir; lint 0 warnings / 0 errors across 331 files. All nine reproduced
 scenarios hold.
 
 ### 2026-08-21 — M2 implemented: one fence grammar
+- 2026-08-21: closed M2 — M2 green: fence_spec 18/18, chat_parser_tools_spec 21/21 plus 1 documented pending, answer_structure_spec 9/9, parse_chat_spec 54/54, tools_serialize_spec 18/18, fold_projection_spec 26/26, exchange_anchors_spec 12/12, tool_folds 30/30 integration, fold_invariants 13/13; make test exit 0 on a clean scratch dir; lint 0 warnings/0 errors across 333 files; every fold and fence spec audited for duplicate it() names (zero) and diffed against HEAD; live-corpus audit clean at 115 files, 463 exchanges, 1155 assertions, 0 violations; all six M1 drift probes hold. BR-43 fixed at its root: requirement (a), the marker must be at fence DEPTH 0, was never implemented - a tool marker inside an ordinary ```text block was treated as structural, so that block closer read as the body opener, the scan latched onto the next block and the body spanned a real question, with verify_anchors suppressing its own guard over exactly those rows so M1 last defence passed too; measured foldclosed(12)=9 on a user question and 2 exchanges where M1 gave 3. fence.scan is now one linear pass returning the in-body set and the depth-0 marker set together, consumed by chat_parser, answer_structure and fold_projection; after the fix 3 exchanges and foldclosed(12)=-1, with the regression test verified to go RED against 6c0132d. This also corrects a scope note wrong since M2 began: markers inside ANY fenced block are content, not only inside tool bodies. BR-47: fence.tool_body removed as superseded, its stop_row was dead API advertising a mitigation for the shape deferred to #203; 5 tests removed, 4 scan tests added, inventory diffed against HEAD to confirm nothing else was lost after catching that my own slicing had duplicated a parity block. BR-45 does not reproduce: parse_chat measures 174-222ms across dc5ee17, ca3c8bb and HEAD with overlapping ranges. BR-44 corrected rather than refactored: two consumers of the grammar exist in chat_parser but one grammar, which is what PQ-3 was about. One shape stays deferred to #203 by operator decision, recorded as a pending test: an unclosed body latching onto a later bare fence is unreachable from anything parley writes, since for_content guarantees a body cannot close its own fence.; review verdict: FIX-THEN-SHIP
 
 TDD throughout; each task red before green.
 
@@ -1133,6 +1134,56 @@ will not block; BR-45 is recorded above as not reproducing.
 files; every fold and fence spec audited for duplicate names (zero); live-corpus
 audit clean at 1155 assertions, 0 violations; all six M1 drift probes hold; the
 #203 shape correctly still yields 2, as deferred.
+
+### 2026-08-21 — M2 FIX-THEN-SHIP: findings fixed, milestone closed
+
+Verdict FIX-THEN-SHIP. Per #174 the findings are fixed before the close commit
+and bundled into it; no re-review of this boundary.
+
+**The most valuable finding was about the harness, not the code.**
+`fold_invariants_spec` enumerates its subjects from the same parse the folder
+used — so a defect that makes the parser *drop* an exchange hides itself: the
+lost question is never a subject and the file reports `violations=0`. That is
+exactly how M2 shipped a folded question past it. Added a **raw-text oracle**:
+every line literally matching the user prefix at column 0 and outside a fenced
+body must have `foldclosed == -1`, read from the buffer rather than the model.
+Verified it has teeth — reverting the depth fix now produces **4 failures**
+where the harness previously reported none. A new fixture
+(`fold_marker_in_prose.md`) carries the shape, since the "adversarial" fixture
+covered nesting but none of the shapes that actually broke.
+
+**I2 — classify once per parse.** `chat_parser` was classifying every line in
+the precompute and again in the main loop. `fence.scan`'s predicate now receives
+the row index, so both it and `answer_structure` index a `kinds[]` array built
+once. Measured best-of-10 on a 5205-line tool-heavy transcript, three runs each:
+HEAD 11.84 / 11.76 / 11.90 ms versus 12.36 / 12.39 / 12.33 before — at parity
+with the M1-close baseline (11.94 ms). The review's 48% figure was measured
+against the earlier hand-rolled precompute, which `fence.scan` had already
+replaced.
+
+I first reported 25.08 ms from a single sample and had to retract it. That is
+the third single-sample measurement to mislead me this issue, after the flaky
+timing test and a 590 ms parse reading. Rule for me: never report a number from
+one run.
+
+**I4 — atlas.** `chat/parsing.md` asserted structural markers *"always terminate
+either mode"*, which M2 made false; it now states the depth-0 rule and names
+`fence.scan` as its owner. `fence.lua` and `fence_spec.lua` added to
+`traceability.yaml` under `chat/parsing`, where `chat_parser` lives.
+
+**BR-38** — `fence.lua` added to `PURE_FILES` in `tests/arch/buffer_mutation_spec.lua`,
+so its purity claim is enforced rather than asserted.
+
+**I3 — the rule applied to my own work this time.** The "prose quotes a tool
+marker" test presented itself as pinning BR-30; verified green on revert against
+`b2bf1d5`, so it is characterization and is now labelled. The swallow test does
+pin BR-30. Plan Step 4 ("Milestone close") was ticked while the milestone-close
+review was running; unticked.
+
+**Verification:** `make test` exit 0 on a clean scratch dir; lint 0 warnings /
+0 errors across 333 files; every fold and fence spec audited for duplicate names
+(zero); live-corpus audit clean at 1155 assertions, 0 violations; C1's shapes 1
+and 3 fixed, shape 2 deferred to #203 as decided.
 
 ## Revisions
 

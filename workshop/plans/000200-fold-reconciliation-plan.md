@@ -1337,7 +1337,7 @@ Census from the same run, worth recording because it bounds what the audit prove
 
 Update `atlas/chat/format.md` — the tool-body fence rule (same-length pair) is now normative and single-sourced in `lua/parley/fence.lua`; markers inside a body are content. Update `atlas/chat/exchange_model.md` if Task 5 left anything to add. Add `lua/parley/fence.lua` to `atlas/traceability.yaml` under `chat/parsing` and `providers/tool_use`.
 
-- [x] **Step 4: Milestone close**
+- [ ] **Step 4: Milestone close**
 
 ```bash
 sdlc milestone-close --issue 200 --milestone M2

@@ -770,6 +770,77 @@ rounds:
           round: 8
       boundary: M2
       blocked: true
+    - "n": 9
+      timestamp: "2026-08-21T17:05:51-07:00"
+      agent: claude
+      dispose:
+        - id: BR-32
+          disposition: not-addressed
+          note: format.md:12 now names fence.lua correctly, but parsing.md:17 still says structural markers "always terminate either mode" with no in-body caveat, and traceability.yaml still omits fence.lua/fence_spec under chat/parsing as Task 11 Step 3 directs.
+          round: 9
+        - id: BR-35
+          disposition: not-addressed
+          note: chat_parser.lua:267 `local fence = require("parley.fence")` is still unindented inside a tab-indented body.
+          round: 9
+        - id: BR-36
+          disposition: not-addressed
+          note: chat_parser.lua:456-459 still restates the open/close grammar ("any run of 3+ backticks optionally followed by an info string") that fence.lua now owns.
+          round: 9
+        - id: BR-38
+          disposition: not-addressed
+          note: PURE_FILES at tests/arch/buffer_mutation_spec.lua:62 still lists only highlight_structure, tools/types, tools/serialize, tools/init. fence.lua absent.
+          round: 9
+        - id: BR-39
+          disposition: not-addressed
+          note: The 5 lines added to fold_invariants_spec were the adversarial-fixture entry; the header still credits the harness with segmentation coverage its single-parse oracle cannot have.
+          round: 9
+        - id: BR-43
+          disposition: addressed
+          note: 'Verified independently, not from the commit message: the new test''s shape yields 2 exchanges against a 6c0132d tree and 3 at HEAD, using the spec''s own test_config. All three requirements (depth 0, opener on the next line, CommonMark open_len) are implemented in fence.scan.'
+          round: 9
+        - id: BR-44
+          disposition: not-addressed
+          note: 'The plan Correction at line 46 landed, but the rule did not: cb_state.tool_fence_len at chat_parser.lua:460-466 still accepts an opener anywhere after the marker, which fence.scan rejects, so the two can still diverge on a marker with no body followed by a later plain fence.'
+          round: 9
+        - id: BR-45
+          disposition: not-addressed
+          note: 'The rebuttal measured over the 111 live transcripts, which the issue itself records as containing zero tool blocks, at 2 samples per revision with a 17 percent internal spread. Deterministic replacement metric on a 10,805-line tool-heavy transcript: highlight_structure.classify calls per parse_chat go 21,401 at dc5ee17 to 28,402 at HEAD (1.98 to 2.63 per line). Fresh instance: fold_projection.lua:134-135 calls classify twice on the same line.'
+          round: 9
+        - id: BR-46
+          disposition: not-addressed
+          note: Plan Task 11 Step 4 still ticks `sdlc milestone-close --issue 200 --milestone M2` while this review is that milestone-close; chat_parser_tools_spec.lua:485 is still unlabelled as characterization; no mechanical gate exists. Note the proposed Pinned-by/close-gate check lives in the sdlc binary, not in parley.nvim, so it needs a peer-repo issue rather than an edit here.
+          round: 9
+        - id: BR-47
+          disposition: addressed
+          note: fence.tool_body and its stop_row are deleted; no caller and no test reference them.
+          round: 9
+        - id: BR-48
+          disposition: not-addressed
+          note: atlas/providers/tool_use.md still says "a bare-word info string (json, lua)", still names chat_parser's tool_fence_len tracker as what the main loop consults, and now additionally says "Ordinary answer prose ... stays fence-naive", which is false for tool markers since HEAD. Plan Core concepts line 33 still says three consumers, and line 44 now names the deleted fence.tool_body. Non-deriving fence literals also remain at render_buffer.lua:104-108, log_emit.lua:253-272, helper.lua:280, oauth.lua:1190/1303, copy.lua, outline.lua, exporter.lua.
+          round: 9
+        - id: BR-49
+          disposition: not-addressed
+          note: fence.lua:37 still returns `#ticks, info` under an `@return integer|nil` annotation at :32; no caller reads the second value. extract_body:91 has the same shape.
+          round: 9
+        - id: BR-51
+          disposition: not-addressed
+          note: 'fold_projection.lua:129-132 still copies the range into a shifted window per verify, and fence.closes:50 still runs the same match twice. Worth recording that the perf motive weakened: verify_anchors on a 603-row tool range measures 0.0207 ms at HEAD vs 0.5713 ms at dc5ee17 (best-of-200), because the scan now skips the body.'
+          round: 9
+      findings:
+        - id: BR-52
+          severity: Important
+          title: fence.scan returns a row set, so both consumers re-derive facts it already computed, and both re-derivations are wrong
+          detail: "This is the 5th finding in family shadow-consumer-not-derived. Earlier rounds fixed\ninstances. Do NOT fix these two instances - fix the rule. Rule: a single-sourced pass\nmust return the MODEL its consumers need (block extents marker->close_row, plus the\ndepth-0 marker set), and consumers must branch on that model, never reconstruct it\nfrom a derived set nor fall back to a depth-naive classification of the same rows.\nMeasured instance A - answer_structure.lua:38-44 reconstructs the close row by\nwalking body_rows from marker+2, which yields nothing for an empty body, so the\nsection falls into the run-to-next-boundary arm: real Neovim fold state gives fold\n10..14 swallowing following prose where dc5ee17 gives tool_result 10..12 plus\ntext 14..14. Measured instance B - `markers` is computed at :34 and never consulted;\nthe loop at :93 branches on the depth-naive kinds[i], so a \U0001F4CE: inside a plain ```text\nblock is emitted as a foldable tool_result and folds at 13..14 while chat_parser.lua:551\nclassifies the identical row as text. Prevalence in this issue: 5. Neither shape occurs\nin the 123 transcripts scanned (12 in-repo, 111 live), so both are fixture-only today;\nfold_adversarial.md covers neither."
+          family: shadow-consumer-not-derived
+          round: 9
+        - id: BR-53
+          severity: Important
+          title: The commit message and issue Log claim markers inside ANY fenced block are now content; only tool markers are
+          detail: "A further instance in family ticked-without-evidence. Do NOT patch the prose alone -\nthe rule is that a behavioural claim in a commit or Log must name the test that\ndemonstrates it, and a claim contradicted by a green test in the same tree is a\ndefect in the record. chat_parser.lua:551 gates only tool_use/tool_result on\ndepth0_marker; in_tool_body covers only real tool bodies. Measured: a \U0001F4AC: inside a\nplain ```text block still forks an exchange (3 where 2 is correct) and swallows the\nfollowing \U0001F4DD: into the question content, so the Spec's \"\U0001F4DD: blocks are always folded\"\ndoes not hold for that shape. chat_parser_tools_spec.lua:445-451 asserts exactly this\nbehaviour and is green, labelled \"still a turn today\"; plan Non-goals line 15 still\nstates it as a deliberate boundary. So the code, the test and the plan agree, and only\nthe commit message and issue Log ~line 1119 disagree - which is what a close review\nwould read first."
+          family: ticked-without-evidence
+          round: 9
+      boundary: M2
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#200 (boundary-review)
@@ -1195,6 +1266,56 @@ later rounds disposed of them. Generated — edit the gate, not this file.
   fence.closes:50 also runs line:match("^(`+)") twice on the matching path, now once per
   body row of every tool_body scan.
 
+## Round 9 — 2026-08-21T17:05:51-07:00 (claude) — passed
+
+### Disposed
+
+- BR-32 — not-addressed — format.md:12 now names fence.lua correctly, but parsing.md:17 still says structural markers "always terminate either mode" with no in-body caveat, and traceability.yaml still omits fence.lua/fence_spec under chat/parsing as Task 11 Step 3 directs.
+- BR-35 — not-addressed — chat_parser.lua:267 `local fence = require("parley.fence")` is still unindented inside a tab-indented body.
+- BR-36 — not-addressed — chat_parser.lua:456-459 still restates the open/close grammar ("any run of 3+ backticks optionally followed by an info string") that fence.lua now owns.
+- BR-38 — not-addressed — PURE_FILES at tests/arch/buffer_mutation_spec.lua:62 still lists only highlight_structure, tools/types, tools/serialize, tools/init. fence.lua absent.
+- BR-39 — not-addressed — The 5 lines added to fold_invariants_spec were the adversarial-fixture entry; the header still credits the harness with segmentation coverage its single-parse oracle cannot have.
+- BR-43 — addressed — Verified independently, not from the commit message: the new test's shape yields 2 exchanges against a 6c0132d tree and 3 at HEAD, using the spec's own test_config. All three requirements (depth 0, opener on the next line, CommonMark open_len) are implemented in fence.scan.
+- BR-44 — not-addressed — The plan Correction at line 46 landed, but the rule did not: cb_state.tool_fence_len at chat_parser.lua:460-466 still accepts an opener anywhere after the marker, which fence.scan rejects, so the two can still diverge on a marker with no body followed by a later plain fence.
+- BR-45 — not-addressed — The rebuttal measured over the 111 live transcripts, which the issue itself records as containing zero tool blocks, at 2 samples per revision with a 17 percent internal spread. Deterministic replacement metric on a 10,805-line tool-heavy transcript: highlight_structure.classify calls per parse_chat go 21,401 at dc5ee17 to 28,402 at HEAD (1.98 to 2.63 per line). Fresh instance: fold_projection.lua:134-135 calls classify twice on the same line.
+- BR-46 — not-addressed — Plan Task 11 Step 4 still ticks `sdlc milestone-close --issue 200 --milestone M2` while this review is that milestone-close; chat_parser_tools_spec.lua:485 is still unlabelled as characterization; no mechanical gate exists. Note the proposed Pinned-by/close-gate check lives in the sdlc binary, not in parley.nvim, so it needs a peer-repo issue rather than an edit here.
+- BR-47 — addressed — fence.tool_body and its stop_row are deleted; no caller and no test reference them.
+- BR-48 — not-addressed — atlas/providers/tool_use.md still says "a bare-word info string (json, lua)", still names chat_parser's tool_fence_len tracker as what the main loop consults, and now additionally says "Ordinary answer prose ... stays fence-naive", which is false for tool markers since HEAD. Plan Core concepts line 33 still says three consumers, and line 44 now names the deleted fence.tool_body. Non-deriving fence literals also remain at render_buffer.lua:104-108, log_emit.lua:253-272, helper.lua:280, oauth.lua:1190/1303, copy.lua, outline.lua, exporter.lua.
+- BR-49 — not-addressed — fence.lua:37 still returns `#ticks, info` under an `@return integer|nil` annotation at :32; no caller reads the second value. extract_body:91 has the same shape.
+- BR-51 — not-addressed — fold_projection.lua:129-132 still copies the range into a shifted window per verify, and fence.closes:50 still runs the same match twice. Worth recording that the perf motive weakened: verify_anchors on a 603-row tool range measures 0.0207 ms at HEAD vs 0.5713 ms at dc5ee17 (best-of-200), because the scan now skips the body.
+
+### Raised
+
+- **BR-52** [Important] `shadow-consumer-not-derived` fence.scan returns a row set, so both consumers re-derive facts it already computed, and both re-derivations are wrong
+  This is the 5th finding in family shadow-consumer-not-derived. Earlier rounds fixed
+  instances. Do NOT fix these two instances - fix the rule. Rule: a single-sourced pass
+  must return the MODEL its consumers need (block extents marker->close_row, plus the
+  depth-0 marker set), and consumers must branch on that model, never reconstruct it
+  from a derived set nor fall back to a depth-naive classification of the same rows.
+  Measured instance A - answer_structure.lua:38-44 reconstructs the close row by
+  walking body_rows from marker+2, which yields nothing for an empty body, so the
+  section falls into the run-to-next-boundary arm: real Neovim fold state gives fold
+  10..14 swallowing following prose where dc5ee17 gives tool_result 10..12 plus
+  text 14..14. Measured instance B - `markers` is computed at :34 and never consulted;
+  the loop at :93 branches on the depth-naive kinds[i], so a 📎: inside a plain ```text
+  block is emitted as a foldable tool_result and folds at 13..14 while chat_parser.lua:551
+  classifies the identical row as text. Prevalence in this issue: 5. Neither shape occurs
+  in the 123 transcripts scanned (12 in-repo, 111 live), so both are fixture-only today;
+  fold_adversarial.md covers neither.
+- **BR-53** [Important] `ticked-without-evidence` The commit message and issue Log claim markers inside ANY fenced block are now content; only tool markers are
+  A further instance in family ticked-without-evidence. Do NOT patch the prose alone -
+  the rule is that a behavioural claim in a commit or Log must name the test that
+  demonstrates it, and a claim contradicted by a green test in the same tree is a
+  defect in the record. chat_parser.lua:551 gates only tool_use/tool_result on
+  depth0_marker; in_tool_body covers only real tool bodies. Measured: a 💬: inside a
+  plain ```text block still forks an exchange (3 where 2 is correct) and swallows the
+  following 📝: into the question content, so the Spec's "📝: blocks are always folded"
+  does not hold for that shape. chat_parser_tools_spec.lua:445-451 asserts exactly this
+  behaviour and is green, labelled "still a turn today"; plan Non-goals line 15 still
+  states it as a deliberate boundary. So the code, the test and the plan agree, and only
+  the commit message and issue Log ~line 1119 disagree - which is what a close review
+  would read first.
+
 ## Open findings
 
 - **BR-4** [Important] Plan Core-concepts entry contradicts the code and the plan's own line 65
@@ -1225,12 +1346,12 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-36** [Minor] `shadow-consumer-not-derived` chat_parser.lua:457-459 comment still restates the fence grammar the module no longer owns
 - **BR-38** [Minor] `purity-claim-unenforced` fence.lua declares itself pure but is absent from the PURE_FILES arch guard
 - **BR-39** [Minor] `oracle-derives-from-subject` fold_invariants_spec's oracle derives from the same parse it validates, so segmentation bugs pass
-- **BR-43** [Critical] `drift-guard-blinded` The tool-body scan accepts an opener anywhere after the marker, so a closing fence is read as an opening one and a user question ends up folded
 - **BR-44** [Important] `shadow-consumer-not-derived` A second in-tool-body tracker was introduced while the plan's Core concepts states none was
 - **BR-45** [Important] `redundant-computation` The precompute reclassifies every line two to three times, making parse_chat about 48 percent slower
 - **BR-46** [Important] `ticked-without-evidence` The revert-must-go-red rule was written and then not applied by the commit that wrote it
-- **BR-47** [Important] `failure-fallback-misgated` fence.tool_body's stop_row is dead API documented as the mitigation for the bug deferred to #203
 - **BR-48** [Important] `shadow-consumer-not-derived` The hand-maintained restatements of the fence model drifted from fence.lua inside the milestone
 - **BR-49** [Minor] `serialized-shape-assumed` fence.open_len returns an undocumented second value that every caller ignores
 - **BR-50** [Minor] `style-consistency` answer_structure.lua:93 keeps a dead "local _ = body_first" assignment
 - **BR-51** [Minor] `redundant-computation` verify_anchors copies every tool range into a shifted table on each per-chunk call
+- **BR-52** [Important] `shadow-consumer-not-derived` fence.scan returns a row set, so both consumers re-derive facts it already computed, and both re-derivations are wrong
+- **BR-53** [Important] `ticked-without-evidence` The commit message and issue Log claim markers inside ANY fenced block are now content; only tool markers are

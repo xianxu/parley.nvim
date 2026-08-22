@@ -906,3 +906,172 @@ findings:
       fence.closes:50 also runs line:match("^(`+)") twice on the matching path, now once per
       body row of every tool_body scan.
 ```
+
+---
+
+## Re-review — 2026-08-21T17:05:51-07:00 (FIX-THEN-SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 200 — user question is folded |
+| repo | parley.nvim |
+| issue file | workshop/issues/000200-user-question-is-folded.md |
+| boundary | milestone M2 |
+| milestone | M2 |
+| window | 8b94fde99b2229997aa3edb6ceefc4ade44d9cba..8b94fde99b2229997aa3edb6ceefc4ade44d9cba |
+| command | sdlc milestone-close --issue 200 --milestone M2 |
+| reviewer | claude |
+| timestamp | 2026-08-21T17:05:51-07:00 |
+| verdict | FIX-THEN-SHIP |
+
+## Review
+
+```verdict
+verdict: FIX-THEN-SHIP
+confidence: high
+```
+
+The headline defect is genuinely fixed and genuinely pinned: `fence.scan` (lua/parley/fence.lua:119) is the single depth-aware pass BR-43 specified, and the new test at tests/unit/chat_parser_tools_spec.lua:546 goes red on revert — I ran the shape against a 6c0132d tree with the spec's own `test_config()` and got 2 exchanges where the test asserts 3. (Careful: `PlenaryBustedFile` does **not** honour a `runtimepath` prepend — it loaded HEAD's `chat_parser` and reported 21/21 green against the old tree. A direct `luafile` probe is the only reliable revert harness here.) What keeps this from SHIP is that the new pass returns a *row set* and then lets two consumers reconstruct facts from it: `answer_structure` re-derives the close row (and gets it wrong for an empty body — a measured regression against dc5ee17) and ignores the depth-0 marker set entirely, so `chat_parser` and `answer_structure` now disagree about the same row. Neither shape occurs in the 123 transcripts I scanned, so both are latent. Separately, ten prior-round findings are still open, including an atlas page that documents the opposite of the shipped grammar in three places.
+
+**1. Strengths**
+
+- `fence.scan` (fence.lua:119-152) is the right shape — one linear pass, and it gets depth without a stack by *skipping* closed blocks (`row = close + 1`) rather than tracking a counter. Returning both facts from one traversal is what makes the three consumers structurally unable to disagree about body extent.
+- The BR-43 fix is pinned by evidence, not by assertion. Verified red-on-revert independently (3 → 2).
+- `answer_structure` is materially better than M1 here: for a tool section followed by a summary, dc5ee17 emitted `tool_result 13..16` (swallowing the `📝:`); HEAD emits `tool_result 13..14` + `summary 16..16`.
+- `verify_anchors` got much cheaper on the streaming path — best-of-200 on a 603-row tool range: **0.5713 ms at dc5ee17 → 0.0207 ms at HEAD**, because the scan jumps the body instead of classifying every interior row. That is the opposite of the perf worry, and worth recording.
+- The #203 deferral is honest: `pending(...)` at chat_parser_tools_spec.lua:535 carries the full reasoning *and* states the current behaviour (2, where M1 gave 3) rather than hiding it.
+- Lint clean: 0 warnings / 0 errors across 333 files.
+
+**2. Critical findings**
+
+None.
+
+**3. Important findings**
+
+- **fence.scan's model is lossy, and both re-derivations are wrong** — lua/parley/fence.lua:119, lua/parley/answer_structure.lua:34-44.
+  - *Empty body:* `body_close[marker]` is only set when `last > marker`, which needs at least one body row. For `📎: x` / ```` ``` ```` / ```` ``` ```` there are none, so the section falls into the "run to the next boundary" arm. Measured on real Neovim fold state: fold `10..14`, swallowing `some prose after the empty result`; dc5ee17 gives `tool_result 10..12` + `text 14..14`. `serialize.render_result("")` emits a blank body row so this needs a hand-edited transcript — but it is a regression this milestone introduced.
+  - *Marker set discarded:* `markers` is computed at :34 and used only to build `body_close`. The `while` loop at :93 still branches on the depth-naive `kinds[i]`, so a `📎:` inside an ordinary ```` ```text ```` block is emitted as a foldable `tool_result` section. Measured: fold `13..14` on the quoted marker, while `chat_parser` classifies that same row `text` (chat_parser.lua:551-555).
+  - Fix: have `scan` return the block extents (`marker → close_row`) alongside the depth-0 marker set, and have `answer_structure` branch on that marker set instead of `kinds[i]`. One edit closes both.
+- **The commit message and issue Log claim a behaviour the code does not have** — the HEAD message and issue line ~1119 both state "markers inside *any* fenced block are content, not only inside tool bodies." Only `tool_use`/`tool_result` are depth-gated (chat_parser.lua:551). A `💬:` inside a plain ```` ```text ```` block still forks an exchange and swallows the following `📝:` into the question content — I measured 3 exchanges where 2 is correct. The repo already documents the true behaviour: chat_parser_tools_spec.lua:445-451 asserts it, green, labelled "still a turn today", and the plan's Non-goal at line 15 is un-revised. The record now contradicts itself in two directions.
+
+**4. Minor findings**
+
+- `fence.scan`'s `close_of` rescans to EOF for every opener with no matching close — O(k·n). Measured impact is small (8.73 ms vs 6.77 ms on a synthetic 4,510-line worst case), but it is unbounded in principle.
+- `fence.extract_body` (fence.lua:91) returns `open_index, close_index` that no caller reads — the same shape as BR-49 on `open_len`.
+
+**5. Test coverage notes**
+
+- All unit specs green. Two integration failures — `git_markdown_source_spec`, `markdown_finder_async_spec` — are environmental, not this diff: reproduced directly as `git init` exit 128, `cannot copy .../hooks/commit-msg.sample: Operation not permitted` under `.test-tmp`. Neither spec contains `fold` or `fence`. This matches the caveat already in the Log, so `make test` exit 0 is not currently reproducible in an agent sandbox.
+- No fixture covers either shape in finding 1. `fold_adversarial.md` has a nested-shorter-fence body and in-body markers, but no empty body and no marker quoted inside a *plain* depth-0 block.
+- Corpus reality check: I scanned 12 in-repo + 111 live iCloud transcripts. **Zero** depth-0 tool markers, zero quoted-in-plain-fence, zero empty bodies. So the fixtures are the only coverage of everything M2 fixed — which the harness comment at fold_invariants_spec.lua:39-42 already says, correctly.
+
+**6. Architectural notes**
+
+- **ARCH-DRY — flag.** Finding 1. `answer_structure` computes the depth-0 marker set and then classifies against a second, depth-naive source. Also still two body-state machines in `chat_parser` (`cb_state.tool_fence_len` at :460-466 vs `in_tool_body`/`depth0_marker` at :541-555) with different rules — `cb_state` accepts an opener *anywhere* after the marker, which `fence.scan` deliberately rejects.
+- **ARCH-PURE — pass on substance.** `fence`, `fold_projection`, `answer_structure` are deterministic and unit-tested with no mocks and no IO. The one gap is enforcement: `fence.lua` claims purity in its header but is absent from `PURE_FILES` (tests/arch/buffer_mutation_spec.lua:62) — see BR-38.
+- **ARCH-PURPOSE — flag.** Shadow sweep incomplete. Deriving consumers: `serialize` (writer + reader) ✓, `chat_parser` ✓, `fold_projection` ✓, `answer_structure` partial. Non-deriving hand-written fences remain at `render_buffer.lua:104-108`, `log_emit.lua:253-272/321-323`, `helper.lua:280`, `oauth.lua:1190/1303`, `copy.lua:16/32`, `outline.lua:14/33/285`, `exporter.lua:352`, `highlight_structure.lua:61`. I checked `render_buffer` for live unsoundness: `python3 -m json.tool` never emits a bare-``` line, so it is safe today by accident, not by construction.
+- **ARCH-MOCK — pass.** No external binary or service enters this window; the diff is pure Lua text processing.
+
+**7. Plan revision recommendations**
+
+- **Non-goals line 15** — either revise to match the code (only *tool* markers are depth-gated; `💬:` in plain prose still forks) or withdraw the commit-message claim. Right now the plan, the commit, and the test at chat_parser_tools_spec.lua:445 assert three different things.
+- **Core concepts line 33** — "one grammar, three consumers" is four (`fold_projection` was added in M2).
+- **Core concepts line 44** — names `in_tool_body[]` as "built from `fence.tool_body`", a function HEAD deleted. Replace with `fence.scan`, and state the return contract (row set + marker set) so the lossiness in finding 1 is visible at design level.
+- **Task 11 Step 4** (`sdlc milestone-close --issue 200 --milestone M2`, plan ~line 1338) is still `- [x]` while this review *is* that milestone-close — the exact corollary written into workshop/lessons.md:733-742. Untick until the gate runs.
+- **Task 11 Step 3** still directs adding `fence.lua` to `traceability.yaml` under `chat/parsing`; it is under `chat/exchange_model` and `providers/tool_use` only. Do it or revise the step.
+
+```findings
+dispose:
+  - id: BR-32
+    disposition: not-addressed
+    note: |
+      format.md:12 now names fence.lua correctly, but parsing.md:17 still says structural markers "always terminate either mode" with no in-body caveat, and traceability.yaml still omits fence.lua/fence_spec under chat/parsing as Task 11 Step 3 directs.
+  - id: BR-35
+    disposition: not-addressed
+    note: |
+      chat_parser.lua:267 `local fence = require("parley.fence")` is still unindented inside a tab-indented body.
+  - id: BR-36
+    disposition: not-addressed
+    note: |
+      chat_parser.lua:456-459 still restates the open/close grammar ("any run of 3+ backticks optionally followed by an info string") that fence.lua now owns.
+  - id: BR-38
+    disposition: not-addressed
+    note: |
+      PURE_FILES at tests/arch/buffer_mutation_spec.lua:62 still lists only highlight_structure, tools/types, tools/serialize, tools/init. fence.lua absent.
+  - id: BR-39
+    disposition: not-addressed
+    note: |
+      The 5 lines added to fold_invariants_spec were the adversarial-fixture entry; the header still credits the harness with segmentation coverage its single-parse oracle cannot have.
+  - id: BR-43
+    disposition: addressed
+    note: |
+      Verified independently, not from the commit message: the new test's shape yields 2 exchanges against a 6c0132d tree and 3 at HEAD, using the spec's own test_config. All three requirements (depth 0, opener on the next line, CommonMark open_len) are implemented in fence.scan.
+  - id: BR-44
+    disposition: not-addressed
+    note: |
+      The plan Correction at line 46 landed, but the rule did not: cb_state.tool_fence_len at chat_parser.lua:460-466 still accepts an opener anywhere after the marker, which fence.scan rejects, so the two can still diverge on a marker with no body followed by a later plain fence.
+  - id: BR-45
+    disposition: not-addressed
+    note: |
+      The rebuttal measured over the 111 live transcripts, which the issue itself records as containing zero tool blocks, at 2 samples per revision with a 17 percent internal spread. Deterministic replacement metric on a 10,805-line tool-heavy transcript: highlight_structure.classify calls per parse_chat go 21,401 at dc5ee17 to 28,402 at HEAD (1.98 to 2.63 per line). Fresh instance: fold_projection.lua:134-135 calls classify twice on the same line.
+  - id: BR-46
+    disposition: not-addressed
+    note: |
+      Plan Task 11 Step 4 still ticks `sdlc milestone-close --issue 200 --milestone M2` while this review is that milestone-close; chat_parser_tools_spec.lua:485 is still unlabelled as characterization; no mechanical gate exists. Note the proposed Pinned-by/close-gate check lives in the sdlc binary, not in parley.nvim, so it needs a peer-repo issue rather than an edit here.
+  - id: BR-47
+    disposition: addressed
+    note: |
+      fence.tool_body and its stop_row are deleted; no caller and no test reference them.
+  - id: BR-48
+    disposition: not-addressed
+    note: |
+      atlas/providers/tool_use.md still says "a bare-word info string (json, lua)", still names chat_parser's tool_fence_len tracker as what the main loop consults, and now additionally says "Ordinary answer prose ... stays fence-naive", which is false for tool markers since HEAD. Plan Core concepts line 33 still says three consumers, and line 44 now names the deleted fence.tool_body. Non-deriving fence literals also remain at render_buffer.lua:104-108, log_emit.lua:253-272, helper.lua:280, oauth.lua:1190/1303, copy.lua, outline.lua, exporter.lua.
+  - id: BR-49
+    disposition: not-addressed
+    note: |
+      fence.lua:37 still returns `#ticks, info` under an `@return integer|nil` annotation at :32; no caller reads the second value. extract_body:91 has the same shape.
+  - id: BR-51
+    disposition: not-addressed
+    note: |
+      fold_projection.lua:129-132 still copies the range into a shifted window per verify, and fence.closes:50 still runs the same match twice. Worth recording that the perf motive weakened: verify_anchors on a 603-row tool range measures 0.0207 ms at HEAD vs 0.5713 ms at dc5ee17 (best-of-200), because the scan now skips the body.
+findings:
+  - id: new
+    severity: Important
+    family: shadow-consumer-not-derived
+    title: |
+      fence.scan returns a row set, so both consumers re-derive facts it already computed, and both re-derivations are wrong
+    detail: |
+      This is the 5th finding in family shadow-consumer-not-derived. Earlier rounds fixed
+      instances. Do NOT fix these two instances - fix the rule. Rule: a single-sourced pass
+      must return the MODEL its consumers need (block extents marker->close_row, plus the
+      depth-0 marker set), and consumers must branch on that model, never reconstruct it
+      from a derived set nor fall back to a depth-naive classification of the same rows.
+      Measured instance A - answer_structure.lua:38-44 reconstructs the close row by
+      walking body_rows from marker+2, which yields nothing for an empty body, so the
+      section falls into the run-to-next-boundary arm: real Neovim fold state gives fold
+      10..14 swallowing following prose where dc5ee17 gives tool_result 10..12 plus
+      text 14..14. Measured instance B - `markers` is computed at :34 and never consulted;
+      the loop at :93 branches on the depth-naive kinds[i], so a 📎: inside a plain ```text
+      block is emitted as a foldable tool_result and folds at 13..14 while chat_parser.lua:551
+      classifies the identical row as text. Prevalence in this issue: 5. Neither shape occurs
+      in the 123 transcripts scanned (12 in-repo, 111 live), so both are fixture-only today;
+      fold_adversarial.md covers neither.
+  - id: new
+    severity: Important
+    family: ticked-without-evidence
+    title: |
+      The commit message and issue Log claim markers inside ANY fenced block are now content; only tool markers are
+    detail: |
+      A further instance in family ticked-without-evidence. Do NOT patch the prose alone -
+      the rule is that a behavioural claim in a commit or Log must name the test that
+      demonstrates it, and a claim contradicted by a green test in the same tree is a
+      defect in the record. chat_parser.lua:551 gates only tool_use/tool_result on
+      depth0_marker; in_tool_body covers only real tool bodies. Measured: a 💬: inside a
+      plain ```text block still forks an exchange (3 where 2 is correct) and swallows the
+      following 📝: into the question content, so the Spec's "📝: blocks are always folded"
+      does not hold for that shape. chat_parser_tools_spec.lua:445-451 asserts exactly this
+      behaviour and is green, labelled "still a turn today"; plan Non-goals line 15 still
+      states it as a deliberate boundary. So the code, the test and the plan agree, and only
+      the commit message and issue Log ~line 1119 disagree - which is what a close review
+      would read first.
+```
