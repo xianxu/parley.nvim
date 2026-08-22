@@ -10,6 +10,31 @@
 - Refresh SSE fixtures: `ANTHROPIC_API_KEY=... OPENAI_API_KEY=... make fixtures`
 - Test files live in `tests/unit/` (pure logic, no Neovim APIs) and `tests/integration/` (full Neovim runtime)
 
+## Test Scratch Directories
+
+The harness gives every run its own `HOME`, `XDG_*`, and `TMPDIR` so tests never
+touch your real config. Those trees live **outside the repo**, under
+
+```
+$TMPDIR/parley-test-env/<checkout-name>-<cksum-of-path>/{home,xdg,tmp}
+```
+
+Print the resolved path with `make -n test-clean-env`, or override the whole
+root with `make test TEST_ENV_ROOT=/some/where`.
+
+They sit outside `$(CURDIR)` deliberately (#202). Eight parallel jobs create and
+delete entries in the scratch tmp dir for the whole run, while the `find`/`grep`/
+`ack` tool specs traverse the repo to exercise the real tree — and one of them,
+`grep`'s "defaults missing path to cwd", cannot be written any other way. When
+the scratch lived in `.test-tmp/`, those specs raced a directory vanishing
+mid-traversal and `find` exited nonzero, which read as an unrelated flake.
+Keeping the churn out of the tree the specs walk is what makes the suite
+deterministic; no spec has to defend itself.
+
+`make test` runs `make test-clean-env` first, so each full run starts from an
+empty root. `test-clean-env` also removes the pre-#202 in-repo `.test-home`,
+`.test-xdg`, and `.test-tmp` directories if they are still around.
+
 ## Chat-Typing Performance Report
 
 `make perf` opens normally attached Parley chat buffers at 100, 1,000, and
@@ -19,8 +44,9 @@ spell phases. Inclusive `edit_total` overlaps the isolated measurements; do not
 add or subtract the isolated phase timings as if they decomposed it.
 
 The command prints median/p95 timings and scaling ratios, then overwrites
-`.test-tmp/perf/parley-chat-typing.json`. Override the destination (including a
-new parent directory) with:
+`$(TEST_TMP)/perf/parley-chat-typing.json` (see *Test scratch directories*
+below for where that resolves). Override the destination (including a new
+parent directory) with:
 
 ```sh
 make perf PERF_OUTPUT=/path/to/parley-chat-typing.json

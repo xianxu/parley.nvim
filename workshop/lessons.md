@@ -1,5 +1,40 @@
 # Lessons
 
+## 2026-08-21 (#202)
+
+- **A test that must not be affected by shared mutable state is fixed at the
+  writer, not at every reader.** The suite's scratch tree lived in `$(CURDIR)`,
+  so eight parallel jobs churned the very directory the `find`/`grep`/`ack` tool
+  specs traverse; the first plan scoped one spec's traversal away and added an
+  arch rule to police the rest. That rule would have failed three legitimate
+  specs — including `grep`'s "defaults missing path to cwd", whose whole subject
+  *is* traversing cwd. Rule: when N readers race one writer, count the readers.
+  If the invariant needs a lint to hold, you are defending it in the wrong place
+  — move the writer out of the readers' reach and the lint becomes unnecessary
+  (`ARCH-DRY`, Root Cause).
+- **Readiness signalled by file existence is a torn read waiting to happen.**
+  The fake SSE server `open()`ed its ready file and wrote the port digits at
+  close, so the path was readable while zero bytes long; the poller waited on
+  `filereadable()`, read nothing, and crashed concatenating nil into a URL. The
+  filed diagnosis blamed a bind failure — but the bind completes inside the
+  `TCPServer` constructor, before any readiness is published, so retrying it
+  would have changed nothing. Rule: publish a readiness signal atomically
+  (write a sibling path, rename onto it) *and* have the consumer wait on a
+  parseable value rather than on existence. Verify a suspected race by
+  reproducing the window, not by reasoning about which step "looks" racy.
+- **"Ten runs agreed" is weak evidence for a race fix; construct the failing
+  state instead.** The empty-then-filled, absent, and non-numeric signals are
+  all constructible directly, so the guard gets deterministic tests with no race
+  to win, and the soak proves only what a soak can — that nothing else broke
+  (`ARCH-PURPOSE`).
+- **A gate that raises a better design has done its job — take the redesign, not
+  the patch.** The round-1 plan-quality findings turned a per-spec workaround
+  into a one-site placement fix that also cleared an unrelated sandbox `git
+  init` failure. Rule: when a review names an alternative you rejected
+  implicitly, either adopt it or write down why in Non-goals; an unstated
+  rejection is indistinguishable from not having considered it.
+
+
 ## 2026-07-19 (#196)
 
 - **A value cached at attach/init goes stale when its inputs are recognized

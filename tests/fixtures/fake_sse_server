@@ -54,7 +54,22 @@ class Server(socketserver.TCPServer):
     allow_reuse_address = True
 
 
+def publish_ready(port):
+    """Publish the port atomically.
+
+    Writing straight to READY_FILE creates it before the digits are flushed, so
+    a poller watching for the path can observe a zero-byte file and read no
+    port at all (#202). Rename is atomic within a directory, so the ready path
+    only ever appears already complete.
+    """
+    staging = READY_FILE + ".partial"
+    with open(staging, "w", encoding="utf-8") as ready:
+        ready.write(str(port))
+        ready.flush()
+        os.fsync(ready.fileno())
+    os.replace(staging, READY_FILE)
+
+
 with Server(("127.0.0.1", 0), Handler) as server:
-    with open(READY_FILE, "w", encoding="utf-8") as ready:
-        ready.write(str(server.server_address[1]))
+    publish_ready(server.server_address[1])
     server.handle_request()

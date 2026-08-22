@@ -21,6 +21,7 @@ parley.setup({
     },
 })
 
+local ready_port = require("tests.helpers.ready_port")
 local fixture = vim.fn.getcwd() .. "/tests/fixtures/fake_sse_server"
 local uv = vim.uv or vim.loop
 local processes = {}
@@ -42,8 +43,11 @@ local function start_server(mode)
     end)
     assert.is_not_nil(handle)
     table.insert(processes, { handle = handle, exited = function() return exited end })
-    assert.is_true(vim.wait(1000, function() return vim.fn.filereadable(ready_file) == 1 end, 10))
-    local port = tonumber(vim.fn.readfile(ready_file)[1])
+    -- Wait for a parseable port, not for the path to exist: the ready file is
+    -- readable before its digits land, and reading it early used to yield nil
+    -- and crash the caller concatenating it into a URL (#202).
+    local port, err = ready_port.wait_for_port(ready_file, 2000)
+    assert.is_not_nil(port, err)
     vim.fn.delete(ready_file)
     return port
 end

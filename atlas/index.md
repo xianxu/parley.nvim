@@ -55,6 +55,7 @@ This index provides a central directory for all atlas entries of the `parley.nvi
 - [Logging System](infra/logging.md): Logging and inspection tools.
 - [Raw-Mode Logging](infra/raw_logging.md): **First-line debug tool for LLM-pipeline bugs.** Per-chat side-file logs (exchange + raw API), YAML format, lualine red flag. `:ParleyToggleExchangeLog` / `:ParleyToggleRawLog`.
 - [Linting](infra/linting.md): Lua static analysis baseline and `make lint` behavior.
+- [Test Harness](infra/test_harness.md): `make test` shape, the parallel per-spec runners, and the scratch-placement invariant that keeps the suite deterministic (#202).
 - [OpenShell Sandbox](infra/openshell.md): Policy-enforced agent sandbox via NVIDIA OpenShell + mutagen file sync.
 - [AI Workflow](infra/workflow.md): Issue-based development, worktree management, and pre-merge checks.
 
