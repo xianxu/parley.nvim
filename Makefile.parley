@@ -6,9 +6,9 @@
 help-parley:
 	@printf '%s\n' \
 	"Parley (Lua/Neovim):" \
-	"  make test             Run all tests (unit parallel + integration sequential)" \
-	"  make test-unit        Run unit tests in parallel" \
-	"  make test-integration Run integration tests sequentially" \
+	"  make test             Run the whole suite" \
+	"  make test-unit        Run unit tests" \
+	"  make test-integration Run integration + arch tests" \
 	"  make test-spec SPEC=  Run tests for a specific spec key" \
 	"  make test-changed     Run tests for changed spec files" \
 	"  make perf             Report real headless chat-typing performance" \
@@ -49,7 +49,9 @@ define PREP_TEST_ENV
 mkdir -p "$(TEST_HOME)" "$(TEST_XDG)/data" "$(TEST_XDG)/state" "$(TEST_XDG)/cache" "$(TEST_TMP)"
 endef
 
-# Run all tests: unit in parallel, integration sequentially.
+# Run the whole suite. Execution model (parallel fan-out, per-spec processes,
+# scratch placement) is documented in atlas/infra/test_harness.md — restating it
+# here is how these comments went stale.
 #
 # Recursive $(MAKE) rather than prerequisites: prerequisite order is only
 # guaranteed under serial make, and `make -j test` could otherwise schedule the
@@ -71,8 +73,7 @@ JOBS ?= 8
 # summary is authoritative either way.
 RUN_SPEC = sh -c 'out=$$(mktemp "$$TMPDIR/parley-test.XXXXXX"); if nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile $$1" -c "qa!" >"$$out" 2>&1; then printf "PASS: %s\n" "$$1"; rm -f "$$out"; else { printf "===FAIL: %s===\n" "$$1"; sed "s/^/  /" "$$out"; }; echo "$$1" >> "$$FAILED_LOG"; rm -f "$$out"; exit 1; fi' _
 
-# Run unit tests in parallel — each file in its own Neovim process.
-# Safe because unit tests have no shared state.
+# Each spec file runs in its own Neovim process.
 test-unit:
 	@$(PREP_TEST_ENV)
 	@export $(TEST_ENV); \
@@ -88,7 +89,7 @@ test-unit:
 	rm -f "$$FAILED_LOG"; \
 	exit $$rc
 
-# Run integration + arch tests in parallel — each file in its own Neovim process.
+# Integration + arch specs, same per-file process fan-out.
 test-integration:
 	@$(PREP_TEST_ENV)
 	@export $(TEST_ENV); \

@@ -52,6 +52,13 @@ with mtimes before and after, and diff.
 `make test` runs `test-clean-env` first, so every full run starts empty. Two
 things follow from that recipe being destructive and running on every run:
 
+`tests/arch/destructive_recipe_spec.lua` is the guard: it re-expands the recipe
+with `make -n` (under a probe root containing a space, and from a copy under a
+spaced checkout), splits the argument list the way `sh -c` would — a single
+parse, so `set --` and never `eval set --` — and rejects any argument that is
+not an absolute path the harness built. Green today; red on either historical
+shape.
+
 - **It deletes only the leaves `PREP_TEST_ENV` constructs** (`home`, `xdg`,
   `tmp`), never `$(TEST_ENV_ROOT)` verbatim — plus the pre-#202 in-repo
   `.test-*` dirs. The rule: a destructive recipe may only remove paths the

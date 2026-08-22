@@ -16,13 +16,19 @@ local M = {}
 --- @param extra_env table<string, string>|nil extra environment entries
 --- @return userdata handle, fun(): boolean exited
 function M.spawn(script, args, extra_env)
-    local env = {}
-    for name, value in pairs(vim.fn.environ()) do
-        table.insert(env, name .. "=" .. value)
-    end
+    -- Fold into a keyed map before flattening: libuv passes duplicate keys
+    -- straight through and the child's lookup resolves the *parent's* entry, so
+    -- appending would let a same-named variable in the caller's shell silently
+    -- override what a spec asked for.
+    local merged = vim.fn.environ()
     -- Keep Python from writing __pycache__ next to the fixture, inside the repo.
-    table.insert(env, "PYTHONDONTWRITEBYTECODE=1")
+    merged.PYTHONDONTWRITEBYTECODE = "1"
     for name, value in pairs(extra_env or {}) do
+        merged[name] = value
+    end
+
+    local env = {}
+    for name, value in pairs(merged) do
         table.insert(env, name .. "=" .. value)
     end
 

@@ -164,6 +164,76 @@ rounds:
           family: copy-pasted-spec-scaffolding
           round: 2
       blocked: true
+    - "n": 3
+      timestamp: "2026-08-22T00:08:30-07:00"
+      agent: claude
+      dispose:
+        - id: BR-10
+          disposition: addressed
+          note: Verified at the expansion under the advertised override - make -n test TEST_ENV_ROOT=/tmp/rootprobe emits only the three leaves plus quoted legacy dirs; repo-wide sweep finds no other non-compliant destructive recipe.
+          round: 3
+        - id: BR-11
+          disposition: addressed
+          note: Hazard accepted rather than eliminated, but documented in TOOLING.md and the atlas with both escape hatches and the rejected per-run-suffix alternative - an adequate disposition for a Minor.
+          round: 3
+        - id: BR-12
+          disposition: addressed
+          note: vim.fn.environ() and PYTHONDONTWRITEBYTECODE now occur in exactly one file; both fixture specs consume the helper and the publisher guard still goes red on both revert shapes after the refactor.
+          round: 3
+      findings:
+        - id: BR-13
+          severity: Important
+          title: The test-clean-env blast-radius rule is defended only by a comment, after producing two Important findings
+          detail: |-
+            Third finding in this family (BR-2, BR-8 preceded it), so per the repeat protocol the fix is the rule,
+            not the instance - an invariant this gate has had to enforce gets an executable guard in the same commit,
+            because a comment is not a guard. Makefile.parley:225-229 and atlas/infra/test_harness.md:53-61 state the
+            rule in prose; nothing goes red if the next edit re-introduces either shape. Prototyped a 15-line guard
+            that re-expands the recipe under a probe root, word-splits with eval set -- exactly as the shell would,
+            and rejects any argument that is not a harness-built leaf. Verified - green on HEAD (6 args, all
+            harness-owned), red on BR-10's shape (bare root) and red on BR-1's shape (4 word-split fragments). No
+            false-positive surface, since it inspects the expansion rather than source text. tests/arch/ is the home.
+          family: invariant-without-regression-guard
+          round: 3
+        - id: BR-14
+          severity: Important
+          title: The rm -rf rule that produced BR-1 and BR-10 never reached workshop/lessons.md
+          detail: |-
+            AGENTS.md section 4 requires review-found mistakes to become rules in workshop/lessons.md. The 2026-08-21
+            (#202) block records four round-0 design lessons but neither of the two bugs the reviews actually found -
+            the unquoted rm -rf path list and the rm -rf of a caller-supplied root. The rule lives only in
+            atlas/infra/test_harness.md, which is the right place for the harness instance but is not the file read
+            at session start; the defect recurred within this very issue because the rule was site-local. One bullet -
+            a destructive recipe may only remove paths the tool itself constructed and can name literally, each quoted
+            individually, verified by reading the expansion rather than the source.
+          family: rule-not-recorded-in-lessons
+          round: 3
+        - id: BR-15
+          severity: Minor
+          title: fixture_process.spawn appends extra_env instead of replacing, so a same-named parent variable wins
+          detail: |-
+            tests/helpers/fixture_process.lua:25-27 appends caller entries after the vim.fn.environ() fold. libuv
+            passes duplicate keys straight through (verified - a child printed both DUPKEY=first and DUPKEY=second),
+            and the fixture's os.environ.get resolves the parent's entry. Reproduced - with PARLEY_PUBLISH_DELAY=0
+            exported in the shell, fixture_ready_publish_spec fails with "port appeared after 47ms;
+            PARLEY_PUBLISH_DELAY=300ms was not honored", a spurious red whose message points at the fixture rather
+            than the helper. Fold into a keyed map before flattening (~3 lines) so extra_env is authoritative; this is
+            new internal API other specs will consume.
+          family: override-not-authoritative
+          round: 3
+        - id: BR-16
+          severity: Minor
+          title: Makefile help and the test target comment still claim integration tests run sequentially
+          detail: |-
+            4th finding in this family, so state the rule rather than patch the wording - a surface that restates a
+            fact the code owns goes stale, and BR-7 already applied the fix shape by pointing at the atlas.
+            Makefile.parley:9, 11 and 52 all say integration runs sequentially; the recipe has used xargs -P $(JOBS)
+            since 752c8e0, and the new atlas page correctly documents the parallel fan-out. Line 52 is the context
+            line immediately above this window's edit to the test target. The help block should name what to run and
+            let atlas/infra/test_harness.md own the execution model.
+          family: stale-restatement-of-moved-source
+          round: 3
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#202 (boundary-review)
@@ -249,8 +319,52 @@ later rounds disposed of them. Generated — edit the gate, not this file.
   uv.spawn and close-on-exit block from chat_progress_process_spec.lua:33-38 (ARCH-DRY). tests/helpers/
   now exists and is the natural home for a spawn_fixture(mode, ready_file) shared by both.
 
+## Round 3 — 2026-08-22T00:08:30-07:00 (claude) — BLOCKED
+
+### Disposed
+
+- BR-10 — addressed — Verified at the expansion under the advertised override - make -n test TEST_ENV_ROOT=/tmp/rootprobe emits only the three leaves plus quoted legacy dirs; repo-wide sweep finds no other non-compliant destructive recipe.
+- BR-11 — addressed — Hazard accepted rather than eliminated, but documented in TOOLING.md and the atlas with both escape hatches and the rejected per-run-suffix alternative - an adequate disposition for a Minor.
+- BR-12 — addressed — vim.fn.environ() and PYTHONDONTWRITEBYTECODE now occur in exactly one file; both fixture specs consume the helper and the publisher guard still goes red on both revert shapes after the refactor.
+
+### Raised
+
+- **BR-13** [Important] `invariant-without-regression-guard` The test-clean-env blast-radius rule is defended only by a comment, after producing two Important findings
+  Third finding in this family (BR-2, BR-8 preceded it), so per the repeat protocol the fix is the rule,
+  not the instance - an invariant this gate has had to enforce gets an executable guard in the same commit,
+  because a comment is not a guard. Makefile.parley:225-229 and atlas/infra/test_harness.md:53-61 state the
+  rule in prose; nothing goes red if the next edit re-introduces either shape. Prototyped a 15-line guard
+  that re-expands the recipe under a probe root, word-splits with eval set -- exactly as the shell would,
+  and rejects any argument that is not a harness-built leaf. Verified - green on HEAD (6 args, all
+  harness-owned), red on BR-10's shape (bare root) and red on BR-1's shape (4 word-split fragments). No
+  false-positive surface, since it inspects the expansion rather than source text. tests/arch/ is the home.
+- **BR-14** [Important] `rule-not-recorded-in-lessons` The rm -rf rule that produced BR-1 and BR-10 never reached workshop/lessons.md
+  AGENTS.md section 4 requires review-found mistakes to become rules in workshop/lessons.md. The 2026-08-21
+  (#202) block records four round-0 design lessons but neither of the two bugs the reviews actually found -
+  the unquoted rm -rf path list and the rm -rf of a caller-supplied root. The rule lives only in
+  atlas/infra/test_harness.md, which is the right place for the harness instance but is not the file read
+  at session start; the defect recurred within this very issue because the rule was site-local. One bullet -
+  a destructive recipe may only remove paths the tool itself constructed and can name literally, each quoted
+  individually, verified by reading the expansion rather than the source.
+- **BR-15** [Minor] `override-not-authoritative` fixture_process.spawn appends extra_env instead of replacing, so a same-named parent variable wins
+  tests/helpers/fixture_process.lua:25-27 appends caller entries after the vim.fn.environ() fold. libuv
+  passes duplicate keys straight through (verified - a child printed both DUPKEY=first and DUPKEY=second),
+  and the fixture's os.environ.get resolves the parent's entry. Reproduced - with PARLEY_PUBLISH_DELAY=0
+  exported in the shell, fixture_ready_publish_spec fails with "port appeared after 47ms;
+  PARLEY_PUBLISH_DELAY=300ms was not honored", a spurious red whose message points at the fixture rather
+  than the helper. Fold into a keyed map before flattening (~3 lines) so extra_env is authoritative; this is
+  new internal API other specs will consume.
+- **BR-16** [Minor] `stale-restatement-of-moved-source` Makefile help and the test target comment still claim integration tests run sequentially
+  4th finding in this family, so state the rule rather than patch the wording - a surface that restates a
+  fact the code owns goes stale, and BR-7 already applied the fix shape by pointing at the atlas.
+  Makefile.parley:9, 11 and 52 all say integration runs sequentially; the recipe has used xargs -P $(JOBS)
+  since 752c8e0, and the new atlas page correctly documents the parallel fan-out. Line 52 is the context
+  line immediately above this window's edit to the test target. The help block should name what to run and
+  let atlas/infra/test_harness.md own the execution model.
+
 ## Open findings
 
-- **BR-10** [Important] `unbounded-destructive-wipe` make test rm -rf's a caller-supplied TEST_ENV_ROOT wholesale, and TOOLING.md advertises that override
-- **BR-11** [Minor] `shared-scratch-across-concurrent-runs` The new pre-run wipe makes a second concurrent make test in the same checkout destructive
-- **BR-12** [Minor] `copy-pasted-spec-scaffolding` fixture_ready_publish_spec copy-pastes the env-building and spawn scaffolding from chat_progress_process_spec
+- **BR-13** [Important] `invariant-without-regression-guard` The test-clean-env blast-radius rule is defended only by a comment, after producing two Important findings
+- **BR-14** [Important] `rule-not-recorded-in-lessons` The rm -rf rule that produced BR-1 and BR-10 never reached workshop/lessons.md
+- **BR-15** [Minor] `override-not-authoritative` fixture_process.spawn appends extra_env instead of replacing, so a same-named parent variable wins
+- **BR-16** [Minor] `stale-restatement-of-moved-source` Makefile help and the test target comment still claim integration tests run sequentially

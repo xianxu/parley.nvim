@@ -265,6 +265,7 @@ atlas:
       - tests/perf/chat_typing.lua
     tests:
       - tests/arch/scratch_placement_spec.lua
+      - tests/arch/destructive_recipe_spec.lua
       - tests/unit/ready_port_spec.lua
       - tests/integration/fixture_ready_publish_spec.lua
       - tests/integration/chat_progress_process_spec.lua

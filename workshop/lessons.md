@@ -2,6 +2,28 @@
 
 ## 2026-08-21 (#202)
 
+- **A destructive recipe may only remove paths the tool itself constructed and
+  can name literally, each quoted individually — and you verify it by reading
+  the expansion, not the source.** This cost two Important review findings in
+  one issue. `test-clean-env` first shipped `rm -rf "$(TEST_ENV_ROOT)"
+  $(LEGACY_TEST_DIRS)`: the unquoted list word-splits, so a checkout at
+  `~/my code/parley.nvim` expands to `rm -rf ~/my`; and `TEST_ENV_ROOT` is a
+  *documented override* that propagates to the sub-make, so
+  `make test TEST_ENV_ROOT=/some/where` expands to `rm -rf /some/where`. Both
+  are invisible in the source line and obvious in `make -n`. The recipe now
+  removes only the leaves `PREP_TEST_ENV` creates, and
+  `tests/arch/destructive_recipe_spec.lua` asserts it against the *expansion*.
+  Rule: before shipping any `rm -rf` in a recipe, print the expansion under a
+  path containing a space and under every documented override
+  (`ARCH-PURPOSE`, Root Cause).
+- **`eval set -- $args` is not "split like the shell would" — it parses twice.**
+  The first guard I wrote for the rule above reported a false violation on a
+  correctly quoted recipe, because `sh` consumes the quotes parsing the `eval`
+  line and `eval` then re-splits `"a b"` into two words. `make` hands a recipe
+  to `sh -c`, which parses it *once*, so `set -- $args` is the faithful model.
+  Rule: when a test models a shell behavior, count the parses.
+
+
 - **A test that must not be affected by shared mutable state is fixed at the
   writer, not at every reader.** The suite's scratch tree lived in `$(CURDIR)`,
   so eight parallel jobs churned the very directory the `find`/`grep`/`ack` tool

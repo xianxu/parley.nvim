@@ -332,3 +332,159 @@ findings:
       uv.spawn and close-on-exit block from chat_progress_process_spec.lua:33-38 (ARCH-DRY). tests/helpers/
       now exists and is the natural home for a spawn_fixture(mode, ready_file) shared by both.
 ```
+
+---
+
+## Re-review — 2026-08-22T00:08:30-07:00 (FIX-THEN-SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 202 — make test is unreliable: specs traverse and mutate a shared .test-tmp |
+| repo | parley.nvim |
+| issue file | workshop/issues/000202-make-test-is-unreliable-specs-traverse-and-mutate-a-shared-test-tmp.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 8bb4d2c17bcae1f11058d9c1e8f11b871d0b1579..79e844b02c170aefacebdc870b7b987e6f1ee42a |
+| command | sdlc close --issue 202 |
+| reviewer | claude |
+| timestamp | 2026-08-22T00:08:30-07:00 |
+| verdict | FIX-THEN-SHIP |
+
+## Review
+
+I've verified the work by running it — full suite, mutation tests on each claimed fix, and a repo-wide sweep of the family the last two rounds kept hitting.
+
+```verdict
+verdict: FIX-THEN-SHIP
+confidence: high
+```
+
+All three round-2 findings are genuinely addressed, and I confirmed the two substantive ones by expansion and by reverting rather than by reading the commit message: `make -n test TEST_ENV_ROOT=/tmp/rootprobe` now expands to `rm -rf "/tmp/rootprobe/home" "/tmp/rootprobe/xdg" "/tmp/rootprobe/tmp"` plus three individually-quoted legacy paths and never the bare root (BR-10), and the BR-12 helper extraction did not weaken the publisher guard — `fixture_ready_publish_spec` still goes red against *both* revert shapes (non-atomic write with the hook kept → 452 observations of `size=0 content=""`; `publish_ready` deleted → "port appeared after 37ms; PARLEY_PUBLISH_DELAY=300ms was not honored"). Independently: `make test` exits 0 at 186 PASS in 24.9s, four consecutive runs produce byte-identical PASS sets, and a `find`+`stat` mtime/size snapshot of the working tree (1072 entries) is identical before and after all four. What holds SHIP back is not a defect in the code but the third appearance of one gap: the `test-clean-env` blast-radius rule — which has now produced two Important findings on this issue — is defended only by a comment. Nothing goes red if the next edit re-introduces either shape, and the rule never reached `workshop/lessons.md`.
+
+## 1. Strengths
+
+- **BR-10 fixed at the rule, not the instance, and the family is actually swept.** `Makefile.parley:230` deletes only the three leaves `PREP_TEST_ENV` constructs. I grepped every Makefile and script in the repo for destructive recipes: the only other one is `Makefile.workflow:219`, whose `rm -rf "$$d1" "$$d2"` operates on `mktemp -d` results, quoted — it already complies. There is no third site.
+- **Both halves of the readiness contract survive the refactor, verified by reversion.** The `PARLEY_PUBLISH_DELAY`-honored assertion (`fixture_ready_publish_spec.lua:68`) is what catches hook deletion, and it still fires after the spawn scaffolding moved into the helper — the risk with any test-support refactor, and it held.
+- **The placement guard is load-bearing, re-verified this round.** `tests/arch/scratch_placement_spec.lua` is 6/6 green with scratch outside the tree and 6/6 red when `HOME`/`XDG_*`/`TMPDIR` are pointed inside a copy of the repo. Asserting produced paths rather than env vars is the right call and the atlas says why.
+- **BR-12 left no residue.** `vim.fn.environ()` and `PYTHONDONTWRITEBYTECODE` now appear in exactly one file, `tests/helpers/fixture_process.lua`; both fixture specs consume it (ARCH-DRY).
+- **BR-11 disposed honestly.** The hazard is documented in both TOOLING.md and the atlas *with the rejected alternative and why* (per-run suffix breaks the perf report's derived default path and leaves unreaped directories). An accepted-and-recorded risk beats a silent one.
+- **Docs gate satisfied.** `scripts/spec_test_map.sh list-tests infra/test_harness` resolves four specs, all of which exist; atlas entry + index link present. README correctly untouched — it exposes no test surface beyond a pointer to TOOLING.md.
+
+## 2. Critical findings
+
+None.
+
+## 3. Important findings
+
+**(a) `Makefile.parley:230` — the destructive-recipe rule has no executable guard, and this is the third finding in the family.**
+
+> **This is the 3rd finding in family `invariant-without-regression-guard`** (BR-2, BR-8 preceded it). Per the repeat protocol: do not fix this instance — state and fix the rule.
+
+The rule is now written down twice in prose (`Makefile.parley:225-229`, `atlas/infra/test_harness.md:53-61`), but both BR-1 and BR-10 were caught by a human reading `make -n` output, and nothing catches the third. The issue itself established the counter-precedent: BR-2 was a comment-defended invariant until `scratch_placement_spec.lua` made it executable. The rule that covers all three: **an invariant this gate has had to enforce gets an executable guard in the same commit that fixes it; a comment is not a guard.** A guard here is ~15 lines and I verified it discriminates — it re-expands the recipe under a probe root, word-splits the arguments exactly as the shell would, and rejects any path that is not a harness-built leaf:
+
+```sh
+line=$(make -n test-clean-env TEST_ENV_ROOT="$probe" | grep -E '^[[:space:]]*rm ')
+eval "set -- ${line#*rm -rf }"        # reproduces the shell's own splitting
+for a in "$@"; do case "$a" in "$probe"/home|"$probe"/xdg|"$probe"/tmp|"$PWD"/.test-*) ;; *) fail "$a" ;; esac; done
+```
+
+Green on HEAD (6 args, all harness-owned); red on BR-10's shape (`VIOLATION: [/…/probe-root]`); red on BR-1's shape (`VIOLATION: [/Users/x/my]`, `[code/.test-home]`, …). No false-positive surface, since it inspects an expansion rather than source text — the same blindness `PQ-2` correctly rejected for line-wise greps. `tests/arch/` is the natural home; it would be the first arch spec to shell out, which is a fair trade for the only `rm -rf` in the repo.
+
+**(b) `workshop/lessons.md` — the rule that produced two blocking findings on this issue never became a lesson.**
+
+AGENTS.md §4 is explicit: "When you run code review, add rules to `workshop/lessons.md` that prevent the mistakes you found." The #202 block records four design lessons (writer-not-readers, torn readiness, soaks-are-weak-evidence, take-the-redesign) — all from round 0. The two *bugs the reviews actually found* — an unquoted `rm -rf` path list, then an `rm -rf` of a caller-supplied root — are absent. They are recorded only in `atlas/infra/test_harness.md`, which is the right place for the harness-specific instance but is not the file read at session start, and the defect recurred *within this issue* precisely because the rule was site-local. One bullet: *a destructive recipe may only remove paths the tool itself constructed and can name literally, each quoted individually; verify by reading the expansion, not the source.*
+
+## 4. Minor findings
+
+- **`tests/helpers/fixture_process.lua:25-27` — `extra_env` is appended, not authoritative.** libuv passes duplicate keys straight through to the child (verified: a child `env` printed both `DUPKEY=first` and `DUPKEY=second`), and the fixture's `os.environ.get` resolves to the parent's entry. Reproduced: with `PARLEY_PUBLISH_DELAY=0` exported in the developer's shell, `fixture_ready_publish_spec` fails with *"port appeared after 47ms; PARLEY_PUBLISH_DELAY=300ms was not honored"* — a spurious red whose message points the reader at the fixture, not at the helper. Narrow trigger and loud, hence Minor; the fix is to fold into a keyed map before flattening, ~3 lines, in a helper that is new API other specs will consume.
+- **`Makefile.parley:9,11,52` claim integration tests run sequentially; they have run with `xargs -P $(JOBS)` since `752c8e0`, and the new atlas page says so.** Line 52 is the context line directly above this window's edit to the `test:` target. **This is the 4th finding in family `stale-restatement-of-moved-source`** — so per the protocol, not the instance: the rule is that a surface restating a fact the code owns goes stale, and BR-7 already applied the fix shape (point at the atlas instead of restating). The help block should say what to run and let `atlas/infra/test_harness.md` own the execution model.
+- Pre-existing, not from this diff, and noted by both earlier rounds without being raised: the repo root still holds `nvim.xianxu/` (round-1's unwritable-`$TMPDIR` probe artifact) and `.test-home XDG_DATA_HOME=` (an older mis-quoted invocation). Untracked, not gitignored, invisible to `git status` only because they contain no files. The `test-clean-env` migration sweep is the natural reaper if you want them gone.
+- Operational, for the close commit: the working tree carries an uncommitted deletion (`workshop/parley/…global-warming-overview.md`) and three untracked files unrelated to #202. Don't let the close hoover them in.
+
+## 5. Test coverage notes
+
+- Mutation-verified load-bearing this round: the placement guard (6/6 red on revert), the atomic publisher (red on both revert shapes, *after* the BR-12 refactor). The consumer guard was mutation-verified in round 2 and is untouched here.
+- Done-when item 2 independently re-confirmed: 1072 tree entries identical across four full runs. Item 6 spot-checked at 4 of the claimed 10 runs — identical 186-spec PASS sets each time; the 10-run claim is consistent with what I measured but I did not reproduce all ten.
+- The gap is the harness recipe itself: nothing pins that `test-clean-env` deletes only owned paths, and nothing pins that `make test` runs it *first* (the recursive-`$(MAKE)` ordering that `Makefile.parley:52-60` argues for). Finding 3(a) closes the first; the second is one more `case` in the same guard.
+- `chat_typing.lua:355-358`'s derived default is still exercised only when `start()` runs without `PERF_OUTPUT`, which `make perf` never does. Evaluated by hand, correct; extracting a pure `default_output(tmpdir)` would make it a one-line unit case if you ever want one.
+
+## 6. Architectural notes for upcoming work
+
+- **ARCH-DRY — pass.** BR-12's extraction is real and complete (single occurrence of the environ fold repo-wide). The other spawners (`cliproxy_*`, `openai_tool_loop`) drive different fixtures with a lighter pattern and don't fold the environment; folding them into the same helper would be speculative, not DRY.
+- **ARCH-PURE — pass, same nudge as round 2.** `wait_for_port` still fuses the pure predicate (*is this string a TCP port?*) with the polling IO, so four of six unit cases are pure string cases routed through the filesystem. `fixture_process.spawn` is correctly a thin IO seam. Splitting `M.parse_port(content) -> port, err` remains the cheap improvement, and finding 4's fix lands naturally beside it.
+- **ARCH-PURPOSE — pass.** Shadow-sweep re-run: no live consumer hand-restates the scratch location (`.test-*` survives only in `.gitignore`'s safety net, the legacy-cleanup list, historical prose, and one explanatory comment). BR-10 was fixed at the rule with a repo-wide sweep rather than at the reported line — that is the purpose, not the easy subset.
+- **ARCH-MOCK — pass.** The SSE fake sits behind the same HTTP boundary production uses; `PARLEY_PUBLISH_DELAY` is a fake-only observability hook whose effect is itself asserted, so it cannot rot silently. `cksum`/`cut` are build-time. Finding 4 is the one wrinkle in that seam: the hook is only reliably injectable when the parent environment doesn't already define it.
+- Carry-forward for a separate issue, unchanged and still true after two rounds: `tests/integration/openai_tool_loop_spec.lua:36`'s `free_port()` — bind, read, close, hand the number to a fixture that binds it later — is the same TOCTOU family this issue closed on the ready-file channel, and the atlas's "Fixture readiness" rules don't cover it.
+
+## 7. Plan revision recommendations
+
+None. Every `## Plan` item is delivered at its stated location, every Done-when item is satisfied by evidence I reproduced, the single-pass no-`Mx` shape is correct, and the `## Revisions` entry accurately records the round-1 pivot. If 3(a) is deferred rather than fixed, add a `## Revisions` note stating that the destructive-recipe rule is enforced by comment and review only — so the next editor of that recipe doesn't mistake the prose for a guard.
+
+```findings
+dispose:
+  - id: BR-10
+    disposition: addressed
+    note: |
+      Verified at the expansion under the advertised override - make -n test TEST_ENV_ROOT=/tmp/rootprobe emits only the three leaves plus quoted legacy dirs; repo-wide sweep finds no other non-compliant destructive recipe.
+  - id: BR-11
+    disposition: addressed
+    note: |
+      Hazard accepted rather than eliminated, but documented in TOOLING.md and the atlas with both escape hatches and the rejected per-run-suffix alternative - an adequate disposition for a Minor.
+  - id: BR-12
+    disposition: addressed
+    note: |
+      vim.fn.environ() and PYTHONDONTWRITEBYTECODE now occur in exactly one file; both fixture specs consume the helper and the publisher guard still goes red on both revert shapes after the refactor.
+findings:
+  - id: new
+    severity: Important
+    family: invariant-without-regression-guard
+    title: |
+      The test-clean-env blast-radius rule is defended only by a comment, after producing two Important findings
+    detail: |
+      Third finding in this family (BR-2, BR-8 preceded it), so per the repeat protocol the fix is the rule,
+      not the instance - an invariant this gate has had to enforce gets an executable guard in the same commit,
+      because a comment is not a guard. Makefile.parley:225-229 and atlas/infra/test_harness.md:53-61 state the
+      rule in prose; nothing goes red if the next edit re-introduces either shape. Prototyped a 15-line guard
+      that re-expands the recipe under a probe root, word-splits with eval set -- exactly as the shell would,
+      and rejects any argument that is not a harness-built leaf. Verified - green on HEAD (6 args, all
+      harness-owned), red on BR-10's shape (bare root) and red on BR-1's shape (4 word-split fragments). No
+      false-positive surface, since it inspects the expansion rather than source text. tests/arch/ is the home.
+  - id: new
+    severity: Important
+    family: rule-not-recorded-in-lessons
+    title: |
+      The rm -rf rule that produced BR-1 and BR-10 never reached workshop/lessons.md
+    detail: |
+      AGENTS.md section 4 requires review-found mistakes to become rules in workshop/lessons.md. The 2026-08-21
+      (#202) block records four round-0 design lessons but neither of the two bugs the reviews actually found -
+      the unquoted rm -rf path list and the rm -rf of a caller-supplied root. The rule lives only in
+      atlas/infra/test_harness.md, which is the right place for the harness instance but is not the file read
+      at session start; the defect recurred within this very issue because the rule was site-local. One bullet -
+      a destructive recipe may only remove paths the tool itself constructed and can name literally, each quoted
+      individually, verified by reading the expansion rather than the source.
+  - id: new
+    severity: Minor
+    family: override-not-authoritative
+    title: |
+      fixture_process.spawn appends extra_env instead of replacing, so a same-named parent variable wins
+    detail: |
+      tests/helpers/fixture_process.lua:25-27 appends caller entries after the vim.fn.environ() fold. libuv
+      passes duplicate keys straight through (verified - a child printed both DUPKEY=first and DUPKEY=second),
+      and the fixture's os.environ.get resolves the parent's entry. Reproduced - with PARLEY_PUBLISH_DELAY=0
+      exported in the shell, fixture_ready_publish_spec fails with "port appeared after 47ms;
+      PARLEY_PUBLISH_DELAY=300ms was not honored", a spurious red whose message points at the fixture rather
+      than the helper. Fold into a keyed map before flattening (~3 lines) so extra_env is authoritative; this is
+      new internal API other specs will consume.
+  - id: new
+    severity: Minor
+    family: stale-restatement-of-moved-source
+    title: |
+      Makefile help and the test target comment still claim integration tests run sequentially
+    detail: |
+      4th finding in this family, so state the rule rather than patch the wording - a surface that restates a
+      fact the code owns goes stale, and BR-7 already applied the fix shape by pointing at the atlas.
+      Makefile.parley:9, 11 and 52 all say integration runs sequentially; the recipe has used xargs -P $(JOBS)
+      since 752c8e0, and the new atlas page correctly documents the parallel fan-out. Line 52 is the context
+      line immediately above this window's edit to the test target. The help block should name what to run and
+      let atlas/infra/test_harness.md own the execution model.
+```

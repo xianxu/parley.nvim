@@ -375,3 +375,50 @@ runs all exit 0 with the **same 186-spec PASS set**; repo working tree
 Re-verified: `make test` green at **186 specs**; ten consecutive runs all exit 0
 with the **same 186-spec PASS set**; repo working tree **IDENTICAL** across all
 ten (1072 entries compared).
+
+### 2026-08-22 (close review round 3 — 2 blocking, all fixed)
+
+The gate's note was "not converging: fix rules, not instances", and it was
+right — rounds 1–2 fixed two instances of one rule and left the rule itself
+undefended.
+
+- **BR-13 (Important) — a comment is not a guard.** The blast-radius rule was
+  stated in prose in `Makefile.parley` and the atlas; nothing went red if the
+  next edit re-introduced either shape. Added
+  `tests/arch/destructive_recipe_spec.lua`, which asserts against the
+  **expansion** rather than source text: re-expand via `make -n` (once under a
+  probe root containing a space, once from a copy under a spaced checkout),
+  split the argument list the way `sh -c` does, and reject anything that is not
+  an absolute harness-built path. Proven three ways — green on HEAD, red on
+  BR-10's shape (bare `$(TEST_ENV_ROOT)`), red on BR-1's shape (unquoted legacy
+  list → `"test/.test-home" is not an absolute path`).
+- **BR-14 (Important) — AGENTS.md §4 violation on my part.** The lessons entry
+  recorded four round-0 *design* lessons but neither bug the reviews actually
+  found. The reviewer's diagnosis is the sharp part: the rule lived only in
+  `atlas/infra/test_harness.md`, which is the right home for the harness
+  instance but is not the file read at session start — and the defect recurred
+  *within this same issue* because the rule was site-local. Now in
+  `workshop/lessons.md`.
+- **BR-15 (Minor) — real bug in the new helper.** `fixture_process.spawn`
+  appended `extra_env` after the parent environment, and libuv passes duplicate
+  keys straight through, so the child's lookup resolved the *parent's* entry:
+  with `PARLEY_PUBLISH_DELAY=0` exported in the shell,
+  `fixture_ready_publish_spec` went spuriously red with a message pointing at
+  the fixture rather than the helper. Folded into a keyed map before flattening
+  so the caller is authoritative; verified by re-running with
+  `PARLEY_PUBLISH_DELAY=0` exported — green.
+- **BR-16 (Minor) — fourth finding in the stale-restatement family**, so the
+  rule rather than the wording: the Makefile help and comments still claimed
+  integration tests run sequentially, which stopped being true at 752c8e0. The
+  help block now names what to run and lets `atlas/infra/test_harness.md` own
+  the execution model.
+
+I also found and fixed a bug in my own first draft of the BR-13 guard: it used
+`eval set -- $args`, which parses **twice** — `sh` consumes the quotes parsing
+the `eval` line and `eval` re-splits `"a b"` into two words — so it reported a
+false violation on a correctly quoted recipe. `make` hands a recipe to `sh -c`,
+which parses once, so `set -- $args` is the faithful model. Recorded in lessons.
+
+Re-verified: `make test` green at **187 specs**; ten consecutive runs all exit 0
+with the **same 187-spec PASS set**; repo working tree **IDENTICAL** across all
+ten (1073 entries compared).
