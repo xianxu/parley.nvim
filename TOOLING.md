@@ -32,8 +32,14 @@ Keeping the churn out of the tree the specs walk is what makes the suite
 deterministic; no spec has to defend itself.
 
 `make test` runs `make test-clean-env` first, so each full run starts from an
-empty root. `test-clean-env` also removes the pre-#202 in-repo `.test-home`,
-`.test-xdg`, and `.test-tmp` directories if they are still around.
+empty root. It removes the `home`, `xdg`, and `tmp` leaves under the root — never
+the root itself — so pointing `TEST_ENV_ROOT` at a directory holding anything
+else is safe. It also removes the pre-#202 in-repo `.test-home`, `.test-xdg`,
+and `.test-tmp` directories if they are still around.
+
+Run only one `make test` per checkout at a time: a second concurrent run deletes
+the first's scratch, loudly. Use a separate worktree (the root is keyed by
+checkout) or a distinct `TEST_ENV_ROOT` for concurrent suites.
 
 ## Chat-Typing Performance Report
 
@@ -45,8 +51,8 @@ add or subtract the isolated phase timings as if they decomposed it.
 
 The command prints median/p95 timings and scaling ratios, then overwrites
 `$(TEST_TMP)/perf/parley-chat-typing.json` — see *Test Scratch Directories*
-above for where that resolves. Note that `make test` wipes the scratch root
-first, so a report left at the default path does not survive the next test run;
+above for where that resolves. The default path is inside the `tmp` leaf that
+`make test` wipes, so a report left there does not survive the next test run;
 pass `PERF_OUTPUT` to keep one. Override the destination (including a new parent
 directory) with:
 

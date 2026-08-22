@@ -260,6 +260,7 @@ atlas:
       - Makefile.parley
       - tests/minimal_init.vim
       - tests/helpers/ready_port.lua
+      - tests/helpers/fixture_process.lua
       - tests/fixtures/fake_sse_server
       - tests/perf/chat_typing.lua
     tests:

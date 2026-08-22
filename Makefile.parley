@@ -220,5 +220,11 @@ model-check:
 # Backward-compatible alias.
 model-checker: model-check
 
+# Removes only the leaves PREP_TEST_ENV itself creates — never $(TEST_ENV_ROOT)
+# verbatim. TEST_ENV_ROOT is a documented override, this target now runs first in
+# every `make test`, and command-line overrides propagate to the sub-make, so
+# `make test TEST_ENV_ROOT=/some/where` would otherwise `rm -rf /some/where`.
+# The rule: delete paths the harness constructs and can name literally, each
+# quoted individually so a path containing a space stays one word.
 test-clean-env:
-	@rm -rf "$(TEST_ENV_ROOT)" $(LEGACY_TEST_DIRS)
+	@rm -rf "$(TEST_HOME)" "$(TEST_XDG)" "$(TEST_TMP)" $(LEGACY_TEST_DIRS)

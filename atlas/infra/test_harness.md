@@ -47,6 +47,28 @@ Corollary worth keeping: a full `make test` mutates nothing inside the repo
 working tree. That is checkable — snapshot `find . -path ./.git -prune -o -print`
 with mtimes before and after, and diff.
 
+## Wiping the scratch
+
+`make test` runs `test-clean-env` first, so every full run starts empty. Two
+things follow from that recipe being destructive and running on every run:
+
+- **It deletes only the leaves `PREP_TEST_ENV` constructs** (`home`, `xdg`,
+  `tmp`), never `$(TEST_ENV_ROOT)` verbatim — plus the pre-#202 in-repo
+  `.test-*` dirs. The rule: a destructive recipe may only remove paths the
+  harness itself built and can name literally, each quoted individually.
+  `TEST_ENV_ROOT` is a documented override and command-line overrides propagate
+  to the sub-make, so `rm -rf "$(TEST_ENV_ROOT)"` would have turned
+  `make test TEST_ENV_ROOT=/some/where` into `rm -rf /some/where`. The quoting
+  half of the rule is the same defect one step earlier: an unquoted path list
+  word-splits, so a checkout under `~/my code/` deleted `~/my`.
+- **One `make test` per checkout at a time.** A second concurrent run in the
+  same checkout wipes the first's live scratch. It fails loudly
+  (`rm: ... Directory not empty`) rather than corrupting silently. Run
+  concurrent suites from separate worktrees — the root is keyed by checkout — or
+  pass a distinct `TEST_ENV_ROOT`. A per-run suffix was rejected: it makes the
+  scratch path unpredictable (the perf report's default location derives from
+  it) and leaves one directory per run with nothing to reap them.
+
 ## Fixture readiness
 
 Spawned fixtures that bind port 0 publish the port through a file. Two rules,

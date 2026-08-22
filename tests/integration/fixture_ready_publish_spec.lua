@@ -11,6 +11,7 @@
 -- open for a fixed span instead of hoping to win a microsecond race. The delay
 -- is also asserted, so the hook cannot be deleted to make the spec pass.
 
+local fixture_process = require("tests.helpers.fixture_process")
 local uv = vim.uv or vim.loop
 
 local DELAY_MS = 300
@@ -23,7 +24,7 @@ describe("fake SSE server readiness publish", function()
         if handle and not handle:is_closing() then
             pcall(handle.kill, handle, "sigterm")
         end
-        vim.wait(1000, function() return exited end, 10)
+        vim.wait(1000, function() return exited == nil or exited() end, 10)
     end)
 
     it("never exposes the ready path in an incomplete state", function()
@@ -31,21 +32,11 @@ describe("fake SSE server readiness publish", function()
         vim.fn.mkdir(dir, "p")
         local ready_file = dir .. "/ready"
 
-        local env = {}
-        for name, value in pairs(vim.fn.environ()) do
-            table.insert(env, name .. "=" .. value)
-        end
-        table.insert(env, "PYTHONDONTWRITEBYTECODE=1")
-        table.insert(env, ("PARLEY_PUBLISH_DELAY=%.3f"):format(DELAY_MS / 1000))
-
-        exited = false
         local started = uv.hrtime()
-        handle = uv.spawn(vim.fn.getcwd() .. "/tests/fixtures/fake_sse_server",
-            { args = { "unauthorized", ready_file }, env = env },
-            function()
-                exited = true
-                if handle and not handle:is_closing() then handle:close() end
-            end)
+        handle, exited = fixture_process.spawn(
+            vim.fn.getcwd() .. "/tests/fixtures/fake_sse_server",
+            { "unauthorized", ready_file },
+            { PARLEY_PUBLISH_DELAY = ("%.3f"):format(DELAY_MS / 1000) })
         assert.is_not_nil(handle)
 
         -- Sample the ready path continuously across the whole publish window.

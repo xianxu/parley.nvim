@@ -343,3 +343,35 @@ went 1.06 → 1.64.
 Re-verified after the fixes: `make test` green at **186 specs**; ten consecutive
 runs all exit 0 with the **same 186-spec PASS set**; repo working tree
 **IDENTICAL** across all ten (1070 entries compared).
+
+### 2026-08-21 (close review round 2 — 1 blocking, all fixed)
+
+- **BR-10 (Important) — same rule as BR-1, second instance.** `test-clean-env`
+  wiped `"$(TEST_ENV_ROOT)"` verbatim. That target now runs first in every
+  `make test`, command-line overrides propagate to the sub-make, and TOOLING.md
+  *advertises* the override — so `make test TEST_ENV_ROOT=/some/where` expanded
+  to `rm -rf /some/where`. Reproduced before fixing. The reviewer's framing was
+  right: fix the rule, not the instance. **A destructive recipe may only remove
+  paths the harness itself constructs and can name literally, each quoted
+  individually.** It now removes the three leaves `PREP_TEST_ENV` creates
+  (`home`, `xdg`, `tmp`) plus the legacy in-repo dirs; with the advertised
+  override it expands to `.../rootprobe/{home,xdg,tmp}`, never the root.
+  BR-1 was the quoting half of the same rule; both are now stated in
+  `atlas/infra/test_harness.md` so the next edit to that recipe inherits it.
+- **BR-11 (Minor) — accepted hazard, documented.** The pre-run wipe makes a
+  second concurrent `make test` in the same checkout destructive; it was benign
+  before because the shared root was never auto-wiped. It fails loudly rather
+  than corrupting silently. Documented in TOOLING.md and the atlas with the two
+  escape hatches (separate worktree — the root is keyed by checkout — or a
+  distinct `TEST_ENV_ROOT`). A per-run suffix was considered and rejected: it
+  makes the scratch path unpredictable, which the perf report's default location
+  depends on, and leaves one directory per run with nothing to reap them.
+- **BR-12 (Minor).** `fixture_ready_publish_spec` had copy-pasted the environ
+  fold, `PYTHONDONTWRITEBYTECODE`, spawn, and close-on-exit block from
+  `chat_progress_process_spec`. Extracted to `tests/helpers/fixture_process.lua`
+  (`spawn(script, args, extra_env) -> handle, exited`); both specs use it
+  (`ARCH-DRY`).
+
+Re-verified: `make test` green at **186 specs**; ten consecutive runs all exit 0
+with the **same 186-spec PASS set**; repo working tree **IDENTICAL** across all
+ten (1072 entries compared).

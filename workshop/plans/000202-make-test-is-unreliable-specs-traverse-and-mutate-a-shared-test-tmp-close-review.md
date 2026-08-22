@@ -176,3 +176,159 @@ findings:
     title: |
       make test now wipes the documented default PERF_OUTPUT location, which TOOLING.md does not mention
 ```
+
+---
+
+## Re-review — 2026-08-21T23:50:30-07:00 (FIX-THEN-SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 202 — make test is unreliable: specs traverse and mutate a shared .test-tmp |
+| repo | parley.nvim |
+| issue file | workshop/issues/000202-make-test-is-unreliable-specs-traverse-and-mutate-a-shared-test-tmp.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 8bb4d2c17bcae1f11058d9c1e8f11b871d0b1579..e1329cd5faa0c3e8379f303472d1620077273023 |
+| command | sdlc close --issue 202 |
+| reviewer | claude |
+| timestamp | 2026-08-21T23:50:30-07:00 |
+| verdict | FIX-THEN-SHIP |
+
+## Review
+
+I ran the suite, mutation-tested each claimed fix, and swept the consumers. Here's the review.
+
+```verdict
+verdict: FIX-THEN-SHIP
+confidence: high
+```
+
+All nine round-1 findings are genuinely addressed, and I confirmed the two substantive ones by reverting them in a scratch copy rather than trusting the commit message: `tests/arch/scratch_placement_spec.lua` goes 6/6 green → 6/6 red when `TEST_ENV_ROOT` is moved back under `$(CURDIR)` and `directory` repointed into the tree, and `tests/integration/fixture_ready_publish_spec.lua` goes red against *both* revert shapes of the publisher (non-atomic write with the hook kept → 466 observations of `size=0 content=""`; `publish_ready` deleted entirely → "port appeared after 44ms; PARLEY_PUBLISH_DELAY=300ms was not honored"). Independently: `make test` exits 0 at 186 PASS in 25.4s, and a `find`+`stat` mtime/size snapshot of the working tree (1071 entries) is byte-identical before and after. What holds SHIP back is a second blast-radius defect in the same one-line `test-clean-env` recipe BR-1 came from — `make test TEST_ENV_ROOT=/some/where`, the override TOOLING.md now advertises, `rm -rf`s that directory wholesale on every run.
+
+## 1. Strengths
+
+- **Both halves of the readiness contract are now pinned by tests that fail without the fix.** BR-3's `PARLEY_PUBLISH_DELAY` approach is better than the spin-stat probe I'd have expected: it holds the window open deterministically *and* asserts the delay was honored (`fixture_ready_publish_spec.lua:75-78`), so the hook can't be deleted to make the spec green. I verified that second assertion is what catches the delete-the-whole-function revert. The consumer half is load-bearing too — dropping the `content == ""` guard in `ready_port.lua:33` turns 2 of 6 unit cases red.
+- **The placement guard inspects the writer, not the traversers** (`tests/arch/scratch_placement_spec.lua`). Asserting the *produced* paths (`vim.fn.tempname()`, `'directory'`) rather than the env vars is the right call and the atlas explains why (nvim's tempdir fallback chain ends at cwd). Verified red under the revert.
+- **The shadow-sweep is clean.** Every live consumer of the scratch location now derives: `PERF_OUTPUT ?= $(TEST_TMP)/...` (Makefile), `directory` from `$TMPDIR` (minimal_init), and `chat_typing.lua:355-358` from `vim.env.TMPDIR` — which I evaluated directly (`TMPDIR=/tmp/claude-501/xyz/` → `/tmp/claude-501/xyz/perf/parley-chat-typing.json`, trailing slash handled). The only surviving `.test-*` strings are the `.gitignore` safety net, the legacy-cleanup list, and historical prose.
+- **BR-1's fix verified at the expansion, not the source:** `make -n test-clean-env` emits four separately-quoted words.
+- **Docs gate satisfied properly:** atlas entry + `atlas/index.md` link + traceability, and `scripts/spec_test_map.sh list-tests infra/test_harness` resolves all four specs, each of which exists. README correctly untouched (it documents no test commands).
+
+## 2. Critical findings
+
+None.
+
+## 3. Important findings
+
+**`Makefile.parley:224` — the auto-run wipe deletes a caller-supplied root wholesale.**
+
+> **This is the 2nd defect in `test-clean-env`'s `rm -rf` blast radius** (BR-1, `unquoted-path-expansion`, was the first). Per the repeat protocol: do not fix this instance in isolation — state and fix the rule.
+
+`TOOLING.md:22-23` tells the reader to `make test TEST_ENV_ROOT=/some/where`, and `test-clean-env` now runs first in every `make test` with `rm -rf "$(TEST_ENV_ROOT)"`. Command-line overrides propagate to the recursive sub-make. Verified with a probe directory containing `IMPORTANT.txt`:
+
+```
+$ make -n test TEST_ENV_ROOT=/tmp/claude-501/rootprobe
+make --no-print-directory test-clean-env
+rm -rf "/tmp/claude-501/rootprobe" "…/.test-home" "…/.test-xdg" "…/.test-tmp"
+```
+
+So `make test TEST_ENV_ROOT=/tmp` erases `/tmp`, and `TEST_ENV_ROOT=$HOME/scratch` erases that. The rule covering both this and BR-1: **`test-clean-env` may only delete paths the harness itself constructs and can name literally — never a caller-supplied path used verbatim, and every path individually quoted.** Concretely, remove the three leaves it creates instead of the root: `@rm -rf "$(TEST_HOME)" "$(TEST_XDG)" "$(TEST_TMP)" $(LEGACY_TEST_DIRS)`. Same effect for the default root (those are the only three children `PREP_TEST_ENV` makes), bounded blast radius under any override, and it makes a future quoting slip non-catastrophic. If wiping the root itself is wanted, always append `$(TEST_ENV_KEY)` to the override so a user-supplied path is treated as a *parent*, and say so in TOOLING.md.
+
+## 4. Minor findings
+
+- **Concurrent `make test` in one checkout is now destructive, not just interfering.** Reproduced: with `make test-unit` running, a second `make test-clean-env` deleted most of the live scratch tree and exited 1 (`rm: …/tmp: Directory not empty`). Run A happened to survive; run B aborted at step 1. Pre-#202 the root was shared but never auto-wiped, so this hazard is new. Loud rather than silent, hence Minor — a per-run suffix or a lock would close it.
+- **`fixture_ready_publish_spec.lua:34-40` copy-pastes the env-building + spawn scaffolding from `chat_progress_process_spec.lua:33-38`** (`vim.fn.environ()` fold + `PYTHONDONTWRITEBYTECODE=1` + `uv.spawn` + close-on-exit). `tests/helpers/` now exists and is the obvious home for a `spawn_fixture(mode, ready_file)` (ARCH-DRY).
+- Pre-existing, not from this diff: the repo root holds an empty untracked `nvim.xianxu/` directory (mtime 23:40 — the artifact of round 1's unwritable-`$TMPDIR` probe). Invisible to `git status` only because it's empty, and not gitignored. Same class as the `.test-home XDG_DATA_HOME=` stray the last round noted.
+- `TOOLING.md:21` — "Print the resolved path with `make -n test-clean-env`" works, but hands the reader an `rm -rf` line to read the path out of. An `@echo $(TEST_ENV_ROOT)` target would be a kinder affordance.
+
+## 5. Test coverage notes
+
+- Mutation-verified load-bearing: the placement guard (6/6 red on revert), the atomic publisher (red on both revert shapes), the consumer empty-file guard (2/6 red on revert). That is the whole of what Done-when items 1, 3 and 4 claim.
+- Done-when item 2 (repo tree untouched) independently confirmed at 1071 entries identical across a full run. Item 6 (ten consecutive agreeing runs) I did not re-run — I confirmed one green run of 186; the Log's ten-run evidence stands unchallenged but unverified by me.
+- `chat_typing.lua`'s new default has no test, and `make perf` always sets `PERF_OUTPUT`, so the fallback branch is exercised only when `start()` is called directly. I verified the expression by evaluating it rather than by a spec. Not worth a guard on its own — but if you want one, extracting a pure `default_output(tmpdir)` would make it a one-line unit case (see ARCH-PURE below).
+- `tests/unit/ready_port_spec.lua` does real filesystem IO in a directory TOOLING describes as "pure logic, no Neovim APIs". Consistent with existing drift across the unit suite; noted, not raised.
+
+## 6. Architectural notes for upcoming work
+
+- **ARCH-DRY** — flag (Minor, §4): the spawn scaffolding duplication. Otherwise pass; the scratch location is single-sourced and the four-way rationale restatement was correctly reduced to two pointers plus two audiences (TOOLING = developer-facing, atlas = map).
+- **ARCH-PURE** — pass, with a nudge: `wait_for_port` fuses the pure predicate (*is this string a TCP port?*) with the polling IO, so four of six unit cases — newline, garbage, out-of-range, empty — are pure string cases forced through the filesystem. Splitting out `M.parse_port(content) -> port, err` would leave exactly one genuinely time-dependent case, and would give `chat_typing`'s default-path derivation a pure seam too.
+- **ARCH-PURPOSE** — pass: the diff delivers the purpose rather than the easy subset. The redesign moved the fix from N readers to one writer, and the two "follow-up"-shaped gaps round 1 identified (an unguarded invariant, an untested publisher) were both closed in-window rather than deferred.
+- **ARCH-MOCK** — pass: the SSE fake sits behind the same HTTP boundary production uses; `PARLEY_PUBLISH_DELAY` is a fake-only observability hook whose effect is itself asserted, so it can't rot silently. No new out-of-seam external calls; `cksum`/`cut` are build-time.
+- Carry-forward for a separate issue (unchanged from round 1, still true): `tests/integration/openai_tool_loop_spec.lua:27`'s `free_port()` — bind, read, close, hand the number to a fixture that binds it later — is the same TOCTOU family this issue just closed on the ready-file channel, and the atlas's "Fixture readiness" rules don't cover it.
+
+## 7. Plan revision recommendations
+
+None. Every `## Plan` item is delivered at its stated location, the single-pass no-`Mx` shape is right, and the `## Revisions` entry accurately records the pivot. Round 1's conditional recommendation (a note that Done-when item 3 was inspection-only) is moot — item 3 is now test-backed.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Verified at the expansion: make -n test-clean-env emits four separately-quoted words.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      tests/arch/scratch_placement_spec.lua verified 6/6 green at HEAD, 6/6 red with scratch repointed into the repo.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      fixture_ready_publish_spec verified red on both revert shapes; the honored-delay assertion catches hook deletion.
+  - id: BR-4
+    disposition: addressed
+    note: |
+      Derivation from vim.env.TMPDIR evaluated directly and correct; shadow-sweep finds no other live restatement.
+  - id: BR-5
+    disposition: addressed
+    note: |
+      TOOLING.md:47 now reads "see Test Scratch Directories above".
+  - id: BR-6
+    disposition: addressed
+    note: |
+      TEST_ENV_KEY hoisted to := at Makefile.parley:35.
+  - id: BR-7
+    disposition: addressed
+    note: |
+      Makefile.parley:26-28 and minimal_init.vim:19-21 now point at the atlas entry instead of restating it.
+  - id: BR-8
+    disposition: addressed
+    note: |
+      atlas/infra/test_harness.md records the cwd fallback and why the guard asserts produced paths.
+  - id: BR-9
+    disposition: addressed
+    note: |
+      TOOLING.md now warns that make test wipes the scratch root and a default-path perf report with it.
+findings:
+  - id: new
+    severity: Important
+    family: unbounded-destructive-wipe
+    title: |
+      make test rm -rf's a caller-supplied TEST_ENV_ROOT wholesale, and TOOLING.md advertises that override
+    detail: |
+      Second blast-radius defect in the same one-line recipe as BR-1, so fix the rule, not the instance.
+      Makefile.parley:224 wipes "$(TEST_ENV_ROOT)" verbatim, test-clean-env now runs first in every make
+      test, and command-line overrides propagate to the sub-make. Verified with make -n test
+      TEST_ENV_ROOT=/tmp/claude-501/rootprobe, which expands to rm -rf on that whole directory; TOOLING.md:22
+      tells readers to pass TEST_ENV_ROOT=/some/where. Rule - test-clean-env may only delete paths the harness
+      itself constructs and can name literally, never a caller-supplied path used verbatim, and each quoted.
+      Concretely, remove the three leaves PREP_TEST_ENV creates instead of the root - rm -rf "$(TEST_HOME)"
+      "$(TEST_XDG)" "$(TEST_TMP)" $(LEGACY_TEST_DIRS) - or always append $(TEST_ENV_KEY) to the override.
+  - id: new
+    severity: Minor
+    family: shared-scratch-across-concurrent-runs
+    title: |
+      The new pre-run wipe makes a second concurrent make test in the same checkout destructive
+    detail: |
+      Reproduced - with make test-unit in flight, make test-clean-env deleted most of the live scratch tree
+      and exited 1 with "rm - .../tmp - Directory not empty"; the running suite survived by luck. Pre-202 the
+      root was shared but never auto-wiped, so the hazard is new. Fails loudly rather than silently, hence
+      Minor; a per-run suffix or a lock file would close it.
+  - id: new
+    severity: Minor
+    family: copy-pasted-spec-scaffolding
+    title: |
+      fixture_ready_publish_spec copy-pastes the env-building and spawn scaffolding from chat_progress_process_spec
+    detail: |
+      fixture_ready_publish_spec.lua:34-40 duplicates the vim.fn.environ() fold, PYTHONDONTWRITEBYTECODE=1,
+      uv.spawn and close-on-exit block from chat_progress_process_spec.lua:33-38 (ARCH-DRY). tests/helpers/
+      now exists and is the natural home for a spawn_fixture(mode, ready_file) shared by both.
+```
