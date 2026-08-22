@@ -1117,9 +1117,14 @@ Fixed with the single linear pass the review specified — `fence.scan` returns
 pass. After: 3 exchanges, `foldclosed(12) = -1`. Pinned, and the test verified to
 go red against `6c0132d`.
 
-This also settles a scope note that had been wrong since M2 started: markers
-inside *any* fenced block are content, not only inside tool bodies. The plan's
-"answer prose stays fence-naive" non-goal was what let this through.
+**Correction (BR-53):** this entry originally claimed "markers inside *any*
+fenced block are content". That overstates what shipped. Only **tool** markers
+are gated on depth — `chat_parser` consults `depth0_marker` for
+`tool_use`/`tool_result` alone. A `💬:` inside a plain ```` ```text ```` block
+still forks an exchange, `chat_parser_tools_spec.lua` asserts exactly that and
+is green, and the plan's Non-goals record it as a deliberate boundary. The code,
+the test and the plan agreed; only my prose disagreed, which is the version a
+close review reads first.
 
 **BR-47 — `fence.tool_body` removed.** `fence.scan` supersedes it, and its
 `stop_row` parameter was dead API whose doc comment advertised a mitigation for
@@ -1184,6 +1189,65 @@ review was running; unticked.
 0 errors across 333 files; every fold and fence spec audited for duplicate names
 (zero); live-corpus audit clean at 1155 assertions, 0 violations; C1's shapes 1
 and 3 fixed, shape 2 deferred to #203 as decided.
+
+### 2026-08-21 — issue close review: seven findings addressed
+
+Verdict FIX-THEN-SHIP with seven open ledger findings. Each was verified before
+acting; all four new ones were correct.
+
+**BR-54 — I reintroduced circularity while fixing circularity.** The raw-text
+oracle added last round to escape a model-derived harness then selected *its*
+subjects with `fence.scan` — the function under test. A filter computed from the
+artifact exonerates exactly the rows the artifact got wrong. Rewritten as a
+literal backtick-run tracker consulting nothing under test; deliberately cruder
+than the real grammar, because cruder only means it checks more rows. Still 4
+failures on revert.
+
+**BR-55 — my inventory diff proved names survived, not properties.** Removing
+the five `tool_body` tests took the "opener must be immediately after the
+marker" property with it, and none of the four replacements covered it.
+Demonstrated: relaxing adjacency in `fence.scan` marks a genuine user question
+as body — suppressing both the parser's classification and the fold guard —
+while `fold_invariants` 14/14, `chat_parser_tools` 21/21 and `fence_spec` 18/18
+all stay green. Test restored and verified red when adjacency is relaxed.
+
+**BR-52 — consumers were rebuilding a model the pass already had.**
+`fence.scan` returned a row set, so `answer_structure` reconstructed close rows
+by walking it from `marker + 2` — which yields nothing for an *empty* body, so
+the section fell into the run-to-next-boundary arm and swallowed the prose
+after it. And the depth-0 `markers` set was computed and never consulted, so a
+`📎:` inside a plain ```` ```text ```` block still became a foldable
+`tool_result`. `scan` now returns `marker_row -> {first, last, close}` plus the
+marker set; consumers branch on that model, with `fence.body_rows` as the one
+derived view.
+
+**BR-53 — the record was wrong, not the code.** I claimed "markers inside *any*
+fenced block are content". Only tool markers are gated on depth; a `💬:` inside
+a plain fenced block still forks, the spec asserts it, and the plan records it
+as a deliberate non-goal. Code, test and plan agreed — only my prose didn't,
+and that is what a close review reads first. Corrected in place.
+
+**BR-48 — prose cannot derive.** `atlas/providers/tool_use.md` restated the
+grammar as "a bare-word info string" two commits after it became
+CommonMark-conformant. The section now points at `fence.lua`'s docstrings as the
+specification and carries only the shape and the consumer list.
+
+**BR-4** — Core concepts still named `verify_span`, replaced by `verify_starts`
+in M1 round 5; and the plan's Revisions stopped at round 7. Both fixed: the
+signature corrected, and rounds 8 through the issue close recorded in the plan
+rather than only in this Log.
+
+**BR-46 — not restated a third time.** The revert-must-go-red rule was applied
+to my own work this round with evidence (adjacency red on relaxation, oracle red
+on revert, the characterization test relabelled after checking). The review is
+right that prose alone has not held: the escalation it asks for is a mechanical
+gate — a `Pinned-by:` trailer the close verb refuses without a recorded
+red-on-revert run — which belongs in `sdlc`, not here. Flagged for the operator
+rather than filed unilaterally in a peer repo.
+
+**Verification:** `make test` exit 0 on a clean scratch dir (one retry past the
+`tools_builtin_find_spec` contention filed as #202); lint 0 warnings / 0 errors
+across 333 files; live-corpus audit clean at 1155 assertions, 0 violations.
 
 ## Revisions
 

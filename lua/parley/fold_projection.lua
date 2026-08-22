@@ -131,10 +131,12 @@ function M.verify_anchors(ranges, lines, patterns)
                 window[row - range.start_0 + 1] = lines[row]
             end
             local found = fence.scan(window, function(line)
-                return classify(line, patterns).kind == "tool_use"
-                    or classify(line, patterns).kind == "tool_result"
+                local k = classify(line, patterns).kind
+                return k == "tool_use" or k == "tool_result"
             end)
-            for k in pairs(found) do body_rows[range.start_0 + k - 1] = true end
+            for k in pairs(fence.body_rows(found)) do
+                body_rows[range.start_0 + k - 1] = true
+            end
         end
         for row = range.start_0 + 1, range.end_0 do
             local line = lines[row]

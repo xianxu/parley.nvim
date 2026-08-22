@@ -31,16 +31,13 @@ function M.reduce(lines, patterns, opts)
 
     -- Depth-aware body extents, shared with chat_parser and fold_projection so
     -- the three cannot disagree about where a tool body is (#200 BR-43).
-    local body_rows, markers = fence.scan(lines, function(_, row)
+    -- Branch on the MODEL the scan returns, not on a set derived from it:
+    -- reconstructing extents by walking body rows is lossy, because an EMPTY
+    -- body has no rows and reads as "no body" — the section then falls into the
+    -- run-to-next-boundary arm and swallows the prose after it (#200 BR-52).
+    local bodies, markers = fence.scan(lines, function(_, row)
         return kinds[row] == "tool_use" or kinds[row] == "tool_result"
     end)
-    local body_close = {}
-    for marker in pairs(markers) do
-        local last = marker
-        local row = marker + 2
-        while body_rows[row] do last = row row = row + 1 end
-        if last > marker then body_close[marker] = last + 1 end
-    end
 
     local explicit_end_for = {}
     local end_ahead = false
@@ -89,13 +86,13 @@ function M.reduce(lines, patterns, opts)
         elseif kind == "summary" then
             add("summary", i, i)
             i = i + 1
-        elseif kind == "tool_use" or kind == "tool_result" then
+        elseif (kind == "tool_use" or kind == "tool_result") and markers[i] then
             -- One definition of the body's extent, shared with chat_parser and
             -- fold_projection (BR-43). A body exists only when the opener sits
             -- immediately after the marker AND a matching close exists; without
             -- one, the section stops at the next boundary rather than running
             -- to the end of the answer.
-            local close_row = body_close[i]
+            local close_row = bodies[i] and bodies[i].close
             local last, cursor
             if close_row then
                 last, cursor = close_row, close_row + 1

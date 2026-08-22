@@ -154,38 +154,52 @@ describe("depth-aware scan", function()
     end
 
     it("ignores a tool marker written inside an ordinary fenced block", function()
-        local body, markers = fence.scan({
+        local bodies, markers = fence.scan({
             "🤖: [A]", "```text", "📎: read_file id=x", "```", "💬: q2",
         }, is_marker)
         assert.is_nil(markers[3])
-        assert.is_nil(body[5])
+        assert.is_nil(fence.body_rows(bodies)[5])
     end)
 
     it("marks a real tool body and stops at its close", function()
-        local body, markers = fence.scan({
+        local bodies, markers = fence.scan({
             "📎: read id=1", "```", "a", "b", "```", "💬: q2",
         }, is_marker)
         assert.is_true(markers[1])
-        assert.is_true(body[3])
-        assert.is_true(body[4])
-        assert.is_nil(body[5])
-        assert.is_nil(body[6])
+        assert.same({ first = 3, last = 4, close = 5 }, bodies[1])
+        local rows = fence.body_rows(bodies)
+        assert.is_true(rows[3])
+        assert.is_true(rows[4])
+        assert.is_nil(rows[5])
+    end)
+
+    -- BR-55: the property the removed tool_body tests pinned, restored. A body
+    -- opens on the line IMMEDIATELY after its marker. Accepting one further
+    -- down marks genuine prose — including a real question — as body, which
+    -- suppresses both the parser's classification and verify_anchors' guard.
+    it("requires the body opener on the line right after the marker", function()
+        local bodies = fence.scan({
+            "📎: read id=1", "some prose", "```", "💬: a real question", "```",
+        }, is_marker)
+        assert.is_nil(bodies[1])
+        assert.is_nil(fence.body_rows(bodies)[4])
     end)
 
     it("treats an unclosed opener as text rather than swallowing the rest", function()
-        local body = fence.scan({
+        local bodies = fence.scan({
             "🤖: [A]", "```", "never closed", "💬: q2", "🤖: [A]",
         }, is_marker)
-        assert.is_nil(body[4])
+        assert.is_nil(fence.body_rows(bodies)[4])
     end)
 
     it("keeps in-body markers as content inside a real tool body", function()
-        local body, markers = fence.scan({
+        local bodies, markers = fence.scan({
             "📎: read id=1", "````", "💬: quoted", "📎: quoted", "````", "💬: real",
         }, is_marker)
-        assert.is_true(body[3])
-        assert.is_true(body[4])
+        local rows = fence.body_rows(bodies)
+        assert.is_true(rows[3])
+        assert.is_true(rows[4])
         assert.is_nil(markers[4])
-        assert.is_nil(body[6])
+        assert.is_nil(rows[6])
     end)
 end)

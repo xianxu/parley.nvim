@@ -149,28 +149,28 @@ Tool blocks in the transcript:
 
 ### The fenced-body grammar
 
-`lua/parley/fence.lua` is the single source for how a tool body is delimited,
-and every consumer derives from it (#200 M2):
+`lua/parley/fence.lua` is the single source for how a tool body is delimited.
+**Its docstrings are the specification** — this page deliberately does not
+restate the rule, because prose cannot derive from a module and a restatement
+drifts silently (it did, within this milestone: this section described a
+bare-word info string two commits after the grammar became CommonMark-conformant).
 
-- A body **opens** on a run of ≥3 backticks, optionally followed by a bare-word
-  info string (`json`, `lua`).
-- It **closes** only on a bare run of the *same length*. Not a shorter run —
-  that is body content — and not a longer one, which belongs to some other pair.
-- A writer picks a fence strictly longer than the longest run in the content, so
-  nothing in the body can terminate it. That is what lets tool output contain
-  fenced code, or an entire transcript, verbatim.
+What belongs here is the shape and the consumers:
 
-The consumers: `tools/serialize` (writer *and* both reader paths),
-`answer_structure`'s tool-section scanner, `chat_parser`'s `tool_fence_len`
-tracker, and `fold_projection`'s interior drift scan.
+- `fence.open_len` / `closes` / `for_content` define opening, closing and
+  selection; `fence.scan` makes one depth-aware pass returning each tool block's
+  extent plus the depth-0 marker set, and `fence.body_rows` is the derived view.
+- Consumers, all deriving: `tools/serialize` (writer *and* both reader paths),
+  `answer_structure`'s section scanner, `chat_parser`'s precompute and its
+  `cb_state` tracker, and `fold_projection`'s interior drift scan.
 
-**Inside a body, structural markers are content.** Tool output routinely quotes
-transcripts — `read_file` on a chat, `grep` for `💬:` — so a `💬:`/`🤖:`/`📎:`
-line within a fenced body does not start a turn and does not end a block.
-`chat_parser`'s main loop consults the tracker before classifying; the fold
-projection's drift scan skips fenced rows for the same reason. Ordinary answer
-prose is a deliberate exception: it stays fence-naive, because suppressing there
-would need a general markdown block model rather than a fence pair.
+**Inside a tool body, structural markers are content.** Tool output routinely
+quotes transcripts — `read_file` on a chat, `grep` for `💬:` — so a marker
+within a body neither starts a turn nor ends a block. Markers inside *other*
+fenced blocks are not treated as tool markers either, which is what stops an
+enclosing block's closer being read as a body opener. Ordinary answer prose
+remains fence-naive for non-tool markers: a `💬:` inside a plain ```` ```text ````
+block still starts a turn, recorded as a deliberate non-goal in the plan.
 
 ## Safety
 

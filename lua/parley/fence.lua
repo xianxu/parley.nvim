@@ -112,15 +112,13 @@ end
 ---     swallowing the remainder, so malformed input over-forks instead of
 ---     silently losing exchanges.
 ---
---- @param lines string[]                    1-based
---- @param is_tool_marker fun(line, row):boolean  true for 🔧:/📎: at column 0.
----        Receives the 1-based row too, so a caller that already classified
----        every line can index its array instead of reclassifying. The scan
----        skips rows while consuming a body, so a call counter would desync.
---- @return table in_tool_body  set of 1-based rows inside a tool body
---- @return table markers       set of 1-based rows holding a depth-0 tool marker
+--- @param lines string[]                         1-based
+--- @param is_tool_marker fun(line, row):boolean  true for 🔧:/📎: at column 0
+--- @return table bodies   marker_row -> { first, last, close } (first > last for
+---                        an empty body; close is nil when none was found)
+--- @return table markers  set of 1-based rows holding a depth-0 tool marker
 function M.scan(lines, is_tool_marker)
-    local in_tool_body, markers = {}, {}
+    local bodies, markers = {}, {}
 
     local function close_of(open_len, from)
         for row = from, #lines do
@@ -137,7 +135,7 @@ function M.scan(lines, is_tool_marker)
             local body_len = M.open_len(lines[row + 1] or "")
             local close = body_len and close_of(body_len, row + 2)
             if close then
-                for body = row + 2, close - 1 do in_tool_body[body] = true end
+                bodies[row] = { first = row + 2, last = close - 1, close = close }
                 row = close + 1
             else
                 row = row + 1
@@ -150,7 +148,23 @@ function M.scan(lines, is_tool_marker)
             row = close and (close + 1) or (row + 1)
         end
     end
-    return in_tool_body, markers
+    return bodies, markers
+end
+
+--- Convenience view: the set of rows lying inside some tool body.
+---
+--- Derived here rather than by each consumer. Reconstructing extents from a row
+--- set is lossy — an EMPTY body has no rows, so a consumer walking the set
+--- cannot tell "no body" from "body with nothing in it" and mis-segments
+--- (#200 BR-52).
+--- @param bodies table  as returned by M.scan
+--- @return table       set of 1-based rows
+function M.body_rows(bodies)
+    local rows = {}
+    for _, body in pairs(bodies) do
+        for row = body.first, body.last do rows[row] = true end
+    end
+    return rows
 end
 
 return M

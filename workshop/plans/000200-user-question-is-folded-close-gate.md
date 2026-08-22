@@ -841,6 +841,184 @@ rounds:
           round: 9
       boundary: M2
       blocked: false
+    - "n": 10
+      timestamp: "2026-08-21T17:49:36-07:00"
+      agent: claude
+      dispose:
+        - id: BR-4
+          disposition: not-addressed
+          note: fold_projection entry fixed; but the fence bullet still says three consumers, the chat_parser bullet still names the deleted fence.tool_body, and Revisions still stop at M1 round 7 with no M2 entry at all.
+          round: 10
+        - id: BR-6
+          disposition: not-addressed
+          note: tool_folds.lua:353-360 still states the paragraph twice; :351 still splits the declaration from :361.
+          round: 10
+        - id: BR-7
+          disposition: not-addressed
+          note: tool_folds.lua:256-260 unchanged.
+          round: 10
+        - id: BR-8
+          disposition: not-addressed
+          note: The wall-clock comment is fixed; tool_folds_spec.lua:93 still says the case above sits outside every span, and that case now asserts the fold IS cleared.
+          round: 10
+        - id: BR-9
+          disposition: not-addressed
+          note: Measured with the module preloaded and patterns supplied - verify_anchors errors on vim/_init_packages.lua while verify_starts returns true; the new purity test covers only the two that pass, and the added comment claims the opposite.
+          round: 10
+        - id: BR-10
+          disposition: addressed
+          note: desired_folds is no longer computed in prepare; the comment states why.
+          round: 10
+        - id: BR-11
+          disposition: addressed
+          note: tool_folds.lua:52 resets _last_clear_iters before every early return.
+          round: 10
+        - id: BR-12
+          disposition: addressed
+          note: ranges_within lives in fold_projection and is unit-pinned by five cases at fold_projection_spec.lua:236-262.
+          round: 10
+        - id: BR-13
+          disposition: not-addressed
+          note: tool_folds.lua:338 still unguarded while clear_folds_in_span:64-68 reasons about E350 explicitly.
+          round: 10
+        - id: BR-14
+          disposition: addressed
+          note: workshop/lessons.md:711 carries the uniq -d audit over it() names.
+          round: 10
+        - id: BR-15
+          disposition: addressed
+          note: workshop/issues/000202-make-test-is-unreliable-specs-traverse-and-mutate-a-shared-test-tmp.md filed.
+          round: 10
+        - id: BR-16
+          disposition: addressed
+          note: README.md gains the fold-ownership contract including the buffer tail and the outside-every-exchange exemption.
+          round: 10
+        - id: BR-17
+          disposition: not-addressed
+          note: fold_invariants_spec.lua:17 unchanged; the corpus floor still mitigates it and this was noting-only.
+          round: 10
+        - id: BR-18
+          disposition: addressed
+          note: Every Task 1-5 step is ticked; the only two unticked boxes are the gate steps, correctly.
+          round: 10
+        - id: BR-20
+          disposition: addressed
+          note: The changedtick memo landed at dc5ee17; measured flat with span held constant - 0.0398 / 0.0370 / 0.0349 / 0.0358 ms at 10 / 50 / 200 / 500 exchanges. The suggested exchange-count test was not added, which BR-26 already covers.
+          round: 10
+        - id: BR-21
+          disposition: addressed
+          note: logged is no longer carried forward (tool_folds.lua:199) and rederived[buf] is dropped on a successful reconcile (:344).
+          round: 10
+        - id: BR-22
+          disposition: addressed
+          note: Now a buffer-local b:parley_fold_clear_iters, not a global.
+          round: 10
+        - id: BR-23
+          disposition: addressed
+          note: tests/integration/tool_folds_spec.lua:594 asserts identified true then false across a count mismatch.
+          round: 10
+        - id: BR-24
+          disposition: addressed
+          note: _observer is reset in after_each alongside _model_provider.
+          round: 10
+        - id: BR-25
+          disposition: addressed
+          note: foldtext derives every branch from highlight_structure.patterns and the fallback now announces an unexpected fold.
+          round: 10
+        - id: BR-26
+          disposition: not-addressed
+          note: The only scaling test still varies body_lines and asserts clear-loop iterations; nothing pins the covered_lines plus interior-scan axis.
+          round: 10
+        - id: BR-27
+          disposition: addressed
+          note: atlas/chat/exchange_model.md:108 records that the clear transiently forces foldenable and restores the operator's value.
+          round: 10
+        - id: BR-28
+          disposition: not-addressed
+          note: prepare_exchange_update still clears the identified span with no range verification while reconcile refuses to create without it.
+          round: 10
+        - id: BR-32
+          disposition: addressed
+          note: format.md:12 names fence.lua, parsing.md states the depth-0 rule, and traceability chat/parsing lists fence.lua plus fence_spec - though parsing.md's new wording is itself inaccurate, which BR-48 covers.
+          round: 10
+        - id: BR-35
+          disposition: not-addressed
+          note: chat_parser.lua:267 is still at column 0 inside a tab-indented body.
+          round: 10
+        - id: BR-36
+          disposition: not-addressed
+          note: chat_parser.lua:456-459 still restates the open/close grammar and is now also wrong about the info string.
+          round: 10
+        - id: BR-38
+          disposition: addressed
+          note: lua/parley/fence.lua is listed in PURE_FILES at tests/arch/buffer_mutation_spec.lua:63 and the spec passes 8/8.
+          round: 10
+        - id: BR-39
+          disposition: not-addressed
+          note: The header comment is unchanged, and the raw-text oracle added as the remedy filters its subjects with fence.scan - measured green at 14/14 with the question at fold_marker_in_prose.md:18 folded. See the new finding.
+          round: 10
+        - id: BR-44
+          disposition: addressed
+          note: The plan states the rule as an inline Correction and I could not reproduce a divergence at HEAD on the named shape or on three variants; both trackers agree. The Correction belongs in Revisions, which BR-4 covers.
+          round: 10
+        - id: BR-45
+          disposition: addressed
+          note: Deterministic metric now identical across trees - 10,901 classify calls over 5,505 lines, 1.98 per line at HEAD, dc5ee17 and 38a6cdd. Residual wall-clock is +6% vs base, which is fence.scan's own pass.
+          round: 10
+        - id: BR-46
+          disposition: not-addressed
+          note: The instances are fixed - gate Steps 4 and 6 unticked, three tests labelled characterization - but no peer-repo issue exists in ariadne for the Pinned-by trailer or the close-gate tick check, so the rule-level remedy landed nowhere.
+          round: 10
+        - id: BR-48
+          disposition: not-addressed
+          note: atlas/providers/tool_use.md is untouched and now contradicts atlas/chat/parsing.md written in the close commit; it still says bare-word info string and still names tool_fence_len as what the main loop consults.
+          round: 10
+        - id: BR-49
+          disposition: not-addressed
+          note: fence.lua:37 still returns two values under an integer-or-nil annotation; no caller reads the second.
+          round: 10
+        - id: BR-50
+          disposition: addressed
+          note: The dead body_first assignment is gone.
+          round: 10
+        - id: BR-51
+          disposition: not-addressed
+          note: fold_projection.lua:129-135 still copies each range into a shifted window and calls classify twice per line; fence.closes still matches twice; fence.scan's close_of additionally rescans to EOF per unclosed opener.
+          round: 10
+        - id: BR-52
+          disposition: not-addressed
+          note: Both instances reproduce, and instance A is now measured as a regression - answer_structure gives tool_result[1..5] where base and M1 give tool_result[1..3] plus text[5..5], swallowing prose into the fold.
+          round: 10
+        - id: BR-53
+          disposition: not-addressed
+          note: Still measured at 3 exchanges where 2 is correct, and the record got worse - atlas/chat/parsing.md now asserts the false claim too, contradicting atlas/providers/tool_use.md.
+          round: 10
+      findings:
+        - id: BR-54
+          severity: Important
+          title: The raw-text oracle added to fix the circular harness selects its subjects with the function under test
+          detail: |-
+            This is the 2nd finding in family oracle-derives-from-subject. Do NOT fix only this
+            instance - state the rule: an oracle's SUBJECT SELECTION may not consult the artifact
+            under test, only its assertion may; a filter computed from the subject exonerates
+            exactly the rows a defect corrupts. fold_invariants_spec.lua:115-127 selects question
+            rows with `not body_rows[row]` where body_rows comes from fence.scan. Measured on
+            tests/fixtures/fold_marker_in_prose.md - at HEAD the oracle's subjects are rows 6,18,34;
+            with the depth fix reverted in fence.scan they are 6,34 and row 18 is EXCLUDED as
+            in-body, while foldclosed(18) = 13, i.e. the milestone's headline symptom in the fixture
+            written to catch it. fold_invariants_spec reports Success 14 Failed 0. The close
+            commit's evidence states that reverting the depth fix "produces 4 failures where the
+            harness previously reported none"; it produces zero. Prevalence in this issue: 2, the
+            second committed by the change that closed the first.
+          family: oracle-derives-from-subject
+          round: 10
+        - id: BR-55
+          severity: Important
+          title: The BR-47 cleanup deleted the only test with teeth for opener-adjacency and the four replacements do not cover it
+          detail: "This is the 2nd finding in family spec-surgery-loses-tests. Do NOT just re-add the test -\nstate the rule: a spec-inventory diff proves NAMES survived, not PROPERTIES; a change that\nremoves tests must name the behavioural property each pinned and show the replacement goes\nred on the same revert. git show 6c0132d:tests/unit/fence_spec.lua contains\nit(\"requires the opener immediately after the marker\"); HEAD does not, and the four new\nscan tests do not cover it. Measured at HEAD by patching fence.scan to accept an opener\nanywhere after the marker: the input \U0001F4CE: read id=1 / some prose / ``` / \U0001F4AC: a real question\n/ ``` yields in_tool_body = {3,4}, marking a genuine user question as body - which\nsuppresses both chat_parser's classification and verify_anchors' guard - while\nfold_invariants 14/14, chat_parser_tools 21/21 and fence_spec 18/18 all stay green. Of\nBR-43's three requirements only depth has a behavioural pin (1 failure on revert);\nCommonMark open_len is pinned only by fence_spec's own grammar assertions; adjacency by\nnothing. The issue Log's \"5 tests removed, 4 scan tests added; inventory diffed against\nHEAD\" is accurate about counts and silent about the lost property."
+          family: spec-surgery-loses-tests
+          round: 10
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#200 (boundary-review)
@@ -1316,6 +1494,79 @@ later rounds disposed of them. Generated — edit the gate, not this file.
   the commit message and issue Log ~line 1119 disagree - which is what a close review
   would read first.
 
+## Round 10 — 2026-08-21T17:49:36-07:00 (claude) — BLOCKED
+
+### Disposed
+
+- BR-4 — not-addressed — fold_projection entry fixed; but the fence bullet still says three consumers, the chat_parser bullet still names the deleted fence.tool_body, and Revisions still stop at M1 round 7 with no M2 entry at all.
+- BR-6 — not-addressed — tool_folds.lua:353-360 still states the paragraph twice; :351 still splits the declaration from :361.
+- BR-7 — not-addressed — tool_folds.lua:256-260 unchanged.
+- BR-8 — not-addressed — The wall-clock comment is fixed; tool_folds_spec.lua:93 still says the case above sits outside every span, and that case now asserts the fold IS cleared.
+- BR-9 — not-addressed — Measured with the module preloaded and patterns supplied - verify_anchors errors on vim/_init_packages.lua while verify_starts returns true; the new purity test covers only the two that pass, and the added comment claims the opposite.
+- BR-10 — addressed — desired_folds is no longer computed in prepare; the comment states why.
+- BR-11 — addressed — tool_folds.lua:52 resets _last_clear_iters before every early return.
+- BR-12 — addressed — ranges_within lives in fold_projection and is unit-pinned by five cases at fold_projection_spec.lua:236-262.
+- BR-13 — not-addressed — tool_folds.lua:338 still unguarded while clear_folds_in_span:64-68 reasons about E350 explicitly.
+- BR-14 — addressed — workshop/lessons.md:711 carries the uniq -d audit over it() names.
+- BR-15 — addressed — workshop/issues/000202-make-test-is-unreliable-specs-traverse-and-mutate-a-shared-test-tmp.md filed.
+- BR-16 — addressed — README.md gains the fold-ownership contract including the buffer tail and the outside-every-exchange exemption.
+- BR-17 — not-addressed — fold_invariants_spec.lua:17 unchanged; the corpus floor still mitigates it and this was noting-only.
+- BR-18 — addressed — Every Task 1-5 step is ticked; the only two unticked boxes are the gate steps, correctly.
+- BR-20 — addressed — The changedtick memo landed at dc5ee17; measured flat with span held constant - 0.0398 / 0.0370 / 0.0349 / 0.0358 ms at 10 / 50 / 200 / 500 exchanges. The suggested exchange-count test was not added, which BR-26 already covers.
+- BR-21 — addressed — logged is no longer carried forward (tool_folds.lua:199) and rederived[buf] is dropped on a successful reconcile (:344).
+- BR-22 — addressed — Now a buffer-local b:parley_fold_clear_iters, not a global.
+- BR-23 — addressed — tests/integration/tool_folds_spec.lua:594 asserts identified true then false across a count mismatch.
+- BR-24 — addressed — _observer is reset in after_each alongside _model_provider.
+- BR-25 — addressed — foldtext derives every branch from highlight_structure.patterns and the fallback now announces an unexpected fold.
+- BR-26 — not-addressed — The only scaling test still varies body_lines and asserts clear-loop iterations; nothing pins the covered_lines plus interior-scan axis.
+- BR-27 — addressed — atlas/chat/exchange_model.md:108 records that the clear transiently forces foldenable and restores the operator's value.
+- BR-28 — not-addressed — prepare_exchange_update still clears the identified span with no range verification while reconcile refuses to create without it.
+- BR-32 — addressed — format.md:12 names fence.lua, parsing.md states the depth-0 rule, and traceability chat/parsing lists fence.lua plus fence_spec - though parsing.md's new wording is itself inaccurate, which BR-48 covers.
+- BR-35 — not-addressed — chat_parser.lua:267 is still at column 0 inside a tab-indented body.
+- BR-36 — not-addressed — chat_parser.lua:456-459 still restates the open/close grammar and is now also wrong about the info string.
+- BR-38 — addressed — lua/parley/fence.lua is listed in PURE_FILES at tests/arch/buffer_mutation_spec.lua:63 and the spec passes 8/8.
+- BR-39 — not-addressed — The header comment is unchanged, and the raw-text oracle added as the remedy filters its subjects with fence.scan - measured green at 14/14 with the question at fold_marker_in_prose.md:18 folded. See the new finding.
+- BR-44 — addressed — The plan states the rule as an inline Correction and I could not reproduce a divergence at HEAD on the named shape or on three variants; both trackers agree. The Correction belongs in Revisions, which BR-4 covers.
+- BR-45 — addressed — Deterministic metric now identical across trees - 10,901 classify calls over 5,505 lines, 1.98 per line at HEAD, dc5ee17 and 38a6cdd. Residual wall-clock is +6% vs base, which is fence.scan's own pass.
+- BR-46 — not-addressed — The instances are fixed - gate Steps 4 and 6 unticked, three tests labelled characterization - but no peer-repo issue exists in ariadne for the Pinned-by trailer or the close-gate tick check, so the rule-level remedy landed nowhere.
+- BR-48 — not-addressed — atlas/providers/tool_use.md is untouched and now contradicts atlas/chat/parsing.md written in the close commit; it still says bare-word info string and still names tool_fence_len as what the main loop consults.
+- BR-49 — not-addressed — fence.lua:37 still returns two values under an integer-or-nil annotation; no caller reads the second.
+- BR-50 — addressed — The dead body_first assignment is gone.
+- BR-51 — not-addressed — fold_projection.lua:129-135 still copies each range into a shifted window and calls classify twice per line; fence.closes still matches twice; fence.scan's close_of additionally rescans to EOF per unclosed opener.
+- BR-52 — not-addressed — Both instances reproduce, and instance A is now measured as a regression - answer_structure gives tool_result[1..5] where base and M1 give tool_result[1..3] plus text[5..5], swallowing prose into the fold.
+- BR-53 — not-addressed — Still measured at 3 exchanges where 2 is correct, and the record got worse - atlas/chat/parsing.md now asserts the false claim too, contradicting atlas/providers/tool_use.md.
+
+### Raised
+
+- **BR-54** [Important] `oracle-derives-from-subject` The raw-text oracle added to fix the circular harness selects its subjects with the function under test
+  This is the 2nd finding in family oracle-derives-from-subject. Do NOT fix only this
+  instance - state the rule: an oracle's SUBJECT SELECTION may not consult the artifact
+  under test, only its assertion may; a filter computed from the subject exonerates
+  exactly the rows a defect corrupts. fold_invariants_spec.lua:115-127 selects question
+  rows with `not body_rows[row]` where body_rows comes from fence.scan. Measured on
+  tests/fixtures/fold_marker_in_prose.md - at HEAD the oracle's subjects are rows 6,18,34;
+  with the depth fix reverted in fence.scan they are 6,34 and row 18 is EXCLUDED as
+  in-body, while foldclosed(18) = 13, i.e. the milestone's headline symptom in the fixture
+  written to catch it. fold_invariants_spec reports Success 14 Failed 0. The close
+  commit's evidence states that reverting the depth fix "produces 4 failures where the
+  harness previously reported none"; it produces zero. Prevalence in this issue: 2, the
+  second committed by the change that closed the first.
+- **BR-55** [Important] `spec-surgery-loses-tests` The BR-47 cleanup deleted the only test with teeth for opener-adjacency and the four replacements do not cover it
+  This is the 2nd finding in family spec-surgery-loses-tests. Do NOT just re-add the test -
+  state the rule: a spec-inventory diff proves NAMES survived, not PROPERTIES; a change that
+  removes tests must name the behavioural property each pinned and show the replacement goes
+  red on the same revert. git show 6c0132d:tests/unit/fence_spec.lua contains
+  it("requires the opener immediately after the marker"); HEAD does not, and the four new
+  scan tests do not cover it. Measured at HEAD by patching fence.scan to accept an opener
+  anywhere after the marker: the input 📎: read id=1 / some prose / ``` / 💬: a real question
+  / ``` yields in_tool_body = {3,4}, marking a genuine user question as body - which
+  suppresses both chat_parser's classification and verify_anchors' guard - while
+  fold_invariants 14/14, chat_parser_tools 21/21 and fence_spec 18/18 all stay green. Of
+  BR-43's three requirements only depth has a behavioural pin (1 failure on revert);
+  CommonMark open_len is pinned only by fence_spec's own grammar assertions; adjacency by
+  nothing. The issue Log's "5 tests removed, 4 scan tests added; inventory diffed against
+  HEAD" is accurate about counts and silent about the lost property.
+
 ## Open findings
 
 - **BR-4** [Important] Plan Core-concepts entry contradicts the code and the plan's own line 65
@@ -1323,35 +1574,18 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-7** [Minor] owned_span writes the same return statement twice (ARCH-DRY)
 - **BR-8** [Minor] Two stale test comments in the integration fold spec
 - **BR-9** [Minor] verify_anchors cannot run without a vim global; the purity test only pins module load
-- **BR-10** [Minor] prepare_exchange_update computes desired_folds only to fill the observer event
-- **BR-11** [Minor] M._last_clear_iters is not reset on clear_folds_in_span's early returns
-- **BR-12** [Minor] The containment rule is pure logic living in the IO shell (ARCH-PURE)
 - **BR-13** [Minor] The fold-creation loop is unprotected against E350 though the clear half handles it
-- **BR-14** [Minor] lessons.md has no rule for the duplicate-test-block defect this window fixed
-- **BR-15** [Minor] No follow-up issue filed for the harness scratch-dir contention diagnosed in round 6
-- **BR-16** [Minor] README not updated for the new fold-ownership contract
 - **BR-17** [Minor] Corpus harness shells out to git ls-files outside any seam (ARCH-MOCK)
-- **BR-18** [Minor] Plan doc Task 1-5 step checkboxes still unticked although M1 is complete
-- **BR-20** [Important] reconcile_exchange is O(number of exchanges) per call on the per-chunk streaming path
-- **BR-21** [Important] the drift refusal is logged once per buffer lifetime, not once per buffer state
-- **BR-22** [Minor] vim.g.parley_fold_clear_iters is a test instrument written to a global on the per-chunk path
-- **BR-23** [Minor] the prepare event's `identified` flag has no consumer and no test
-- **BR-24** [Minor] _observer is reset inline rather than in after_each, so a failing assertion leaks it
-- **BR-25** [Minor] foldtext hardcodes the four marker prefixes instead of deriving from highlight_structure.patterns
 - **BR-26** [Minor] per-chunk reconcile cost is linear in projected-range length, and that axis is unasserted
-- **BR-27** [Minor] atlas does not record that the clear transiently forces 'foldenable'
 - **BR-28** [Minor] prepare clears the identified span unverified while reconcile refuses to create unverified
-- **BR-32** [Important] `shadow-consumer-not-derived` atlas/chat/format.md still names tools/serialize.lua as the fence single source
 - **BR-35** [Minor] `style-consistency` chat_parser.lua:267 require is unindented in a tab-indented function body
 - **BR-36** [Minor] `shadow-consumer-not-derived` chat_parser.lua:457-459 comment still restates the fence grammar the module no longer owns
-- **BR-38** [Minor] `purity-claim-unenforced` fence.lua declares itself pure but is absent from the PURE_FILES arch guard
 - **BR-39** [Minor] `oracle-derives-from-subject` fold_invariants_spec's oracle derives from the same parse it validates, so segmentation bugs pass
-- **BR-44** [Important] `shadow-consumer-not-derived` A second in-tool-body tracker was introduced while the plan's Core concepts states none was
-- **BR-45** [Important] `redundant-computation` The precompute reclassifies every line two to three times, making parse_chat about 48 percent slower
 - **BR-46** [Important] `ticked-without-evidence` The revert-must-go-red rule was written and then not applied by the commit that wrote it
 - **BR-48** [Important] `shadow-consumer-not-derived` The hand-maintained restatements of the fence model drifted from fence.lua inside the milestone
 - **BR-49** [Minor] `serialized-shape-assumed` fence.open_len returns an undocumented second value that every caller ignores
-- **BR-50** [Minor] `style-consistency` answer_structure.lua:93 keeps a dead "local _ = body_first" assignment
 - **BR-51** [Minor] `redundant-computation` verify_anchors copies every tool range into a shifted table on each per-chunk call
 - **BR-52** [Important] `shadow-consumer-not-derived` fence.scan returns a row set, so both consumers re-derive facts it already computed, and both re-derivations are wrong
 - **BR-53** [Important] `ticked-without-evidence` The commit message and issue Log claim markers inside ANY fenced block are now content; only tool markers are
+- **BR-54** [Important] `oracle-derives-from-subject` The raw-text oracle added to fix the circular harness selects its subjects with the function under test
+- **BR-55** [Important] `spec-surgery-loses-tests` The BR-47 cleanup deleted the only test with teeth for opener-adjacency and the four replacements do not cover it

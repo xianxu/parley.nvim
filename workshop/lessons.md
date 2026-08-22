@@ -747,3 +747,20 @@
   run (115 files, 1155 assertions, 0 violations) and its result recorded beside
   the tick. Rule: tick a step only in the same action that produced its
   evidence, and put the evidence next to the tick.
+- **A spec-inventory diff proves NAMES survived, not PROPERTIES.** #200 removed
+  five `tool_body` tests, added four `scan` tests, diffed the `it("...")` names
+  against `HEAD`, and declared nothing lost. One property went with them:
+  "a body opens on the line immediately after its marker". Patching the scanner
+  to accept an opener anywhere still left the whole suite green, so a genuine
+  user question could be marked as body — suppressing both the parser's
+  classification and the fold guard — with nothing red. Rule: a change that
+  removes tests must name the behavioural property each one pinned and show a
+  replacement going red on the same revert. Counting names is not coverage.
+- **An oracle's SUBJECT SELECTION may not consult the artifact under test —
+  only its assertion may.** #200 added a raw-text sweep precisely because the
+  existing harness enumerated subjects from the parse it was checking, and then
+  selected that sweep's subjects with `fence.scan`, the function under test. A
+  filter computed from the artifact exonerates exactly the rows the artifact got
+  wrong. Rule: build the oracle's subject set from the rawest independent source
+  available, and let it be cruder than the real grammar — cruder only means it
+  checks more rows.

@@ -1648,3 +1648,40 @@ Delta:
   invalidates that mark, so two anchors cannot coincide. The strictly-ascending
   check is defensive, not a reachable path — do not write a test that claims to
   exercise it by collapsing rows.
+
+### 2026-08-20 — M1 round 8: creation tied to destruction
+
+Reason: `model_fits` proved a range matched the buffer's *text* and identity
+proved which rows an exchange *owns*, but nothing tied the two together, so a
+stale model's ranges could verify against a later exchange's markers while the
+clear removed this one's rows.
+
+Delta: an O(#ranges) containment check — every created range must lie inside the
+identified span — extracted to `fold_projection.ranges_within` and unit-pinned.
+The span-scaling test was rewritten to assert the clear loop's **iteration
+count** rather than wall-clock, after the timing form flaked twice under suite
+load.
+
+### 2026-08-21 — M2 rounds 1-5 and issue close
+
+Reason: the plan's Revisions had fallen behind the issue Log. Recorded here so
+the design document, not only the Log, carries the shape of what shipped.
+
+Delta:
+
+- `lua/parley/fence.lua` owns the grammar; `open_len` is CommonMark-conformant
+  (a too-strict info string made a genuine opener invisible and its closer read
+  as an opener — the root of the whole guard-blinds-itself family).
+- `fence.scan` is one depth-aware pass returning each tool block's extent plus
+  the depth-0 marker set; `fence.body_rows` is the derived view. Consumers branch
+  on the **model**, never reconstruct it from a derived set — an empty body has
+  no rows and would read as "no body".
+- `verify_span` was replaced by `verify_starts` in M1 round 5; Core concepts is
+  corrected to match.
+- One shape deferred to #203: an unclosed body latching onto a later bare fence.
+  Unreachable from anything parley writes, since `for_content` guarantees a body
+  cannot close its own fence.
+- The corpus harness gained a raw-text oracle whose subject selection consults
+  nothing under test, after the model-derived one was shown structurally unable
+  to see a dropped exchange.
+

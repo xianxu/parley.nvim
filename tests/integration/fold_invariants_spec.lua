@@ -104,22 +104,26 @@ describe("fold invariants over the repo transcript corpus", function()
             end
             -- RAW-TEXT ORACLE. The model-derived checks above enumerate their
             -- subjects from the same parse the folder used, so a defect that
-            -- makes the parser DROP an exchange hides itself: the lost
-            -- question is simply never a subject, and the file reports
-            -- violations=0. That is exactly how #200 M2 shipped a folded
-            -- question (BR-43) past this harness. This sweep reads the buffer
-            -- text instead, so it sees questions the parser lost.
+            -- makes the parser DROP an exchange hides itself: the lost question
+            -- is never a subject and the file reports violations=0. That is how
+            -- a folded question shipped past this harness (#200 BR-43).
             --
-            -- A `💬:` at column 0 that is NOT inside a fenced body must never
-            -- be folded, whatever the parse thinks.
-            local body_rows = require("parley.fence").scan(lines, function(l)
-                local k = require("parley.highlight_structure")
-                    .classify(l, require("parley.highlight_structure").patterns(
-                        require("parley.config"))).kind
-                return k == "tool_use" or k == "tool_result"
-            end)
+            -- Subject selection here deliberately uses NOTHING from the code
+            -- under test — not fence.scan, not highlight_structure. A filter
+            -- computed from the artifact exonerates exactly the rows that
+            -- artifact got wrong, which is the same circularity in a new place
+            -- (BR-54). This is a literal backtick-run tracker, independent by
+            -- construction: it is allowed to be cruder than the real grammar,
+            -- because being cruder only makes it check MORE rows.
+            local depth, open_len = 0, nil
             for row, text in ipairs(lines) do
-                if text:match("^💬:") and not body_rows[row] then
+                local ticks = text:match("^(`+)")
+                if depth == 0 and ticks and #ticks >= 3 then
+                    depth, open_len = 1, #ticks
+                elseif depth == 1 and ticks and #ticks == open_len
+                    and text:match("^`+%s*$") then
+                    depth, open_len = 0, nil
+                elseif depth == 0 and text:match("^💬:") then
                     checked = checked + 1
                     assert.message(("raw sweep: question folded at %s:%d")
                         :format(path, row)).equals(-1, vim.fn.foldclosed(row))

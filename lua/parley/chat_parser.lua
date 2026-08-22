@@ -542,12 +542,12 @@ local fence = require("parley.fence")
 
 	local body_lines = {}
 	for row = header_end + 1, #lines do body_lines[row - header_end] = lines[row] end
-	local body_set, marker_set = fence.scan(body_lines, function(_, row)
+	local bodies, marker_set = fence.scan(body_lines, function(_, row)
 		local kind = kinds[row + header_end]
 		return kind == "tool_use" or kind == "tool_result"
 	end)
 	local in_tool_body, depth0_marker = {}, {}
-	for k in pairs(body_set) do in_tool_body[k + header_end] = true end
+	for k in pairs(fence.body_rows(bodies)) do in_tool_body[k + header_end] = true end
 	for k in pairs(marker_set) do depth0_marker[k + header_end] = true end
 
 	for i = header_end + 1, #lines do
