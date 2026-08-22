@@ -29,6 +29,23 @@ describe("fold_projection", function()
         assert.same({}, projection.desired_folds(model, 3))
     end)
 
+    -- The purity claim, stated exactly. The module LOADS without vim, and the
+    -- two predicates that need no classifier RUN without it. verify_anchors
+    -- does not — it reaches highlight_structure.classify — and a test that
+    -- exercised only the passing pair let a false comment stand.
+    it("needs a Neovim global for verify_anchors but not for the rest", function()
+        local projection = require("parley.fold_projection")
+        local patterns = require("parley.highlight_structure").patterns({})
+        projection.verify_anchors({}, {}, patterns)  -- preload the requires
+        local saved = _G.vim
+        _G.vim = nil
+        local anchors_ok = pcall(projection.verify_anchors,
+            { { kind = "tool_result", start_0 = 1, end_0 = 2 } },
+            { [1] = "📎: x", [2] = "body" }, patterns)
+        _G.vim = saved
+        assert.is_false(anchors_ok)
+    end)
+
     it("verifies without a Neovim global when patterns are supplied", function()
         local projection = require("parley.fold_projection")
         local patterns = require("parley.highlight_structure").patterns({})

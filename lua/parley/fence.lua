@@ -10,7 +10,7 @@
 -- had it right on the writer side and restated it twice more as `%1`
 -- backreferences on the reader side; `answer_structure` closed on *any*
 -- >= 3-backtick run, so a nested ``` truncated a tool section; `chat_parser`
--- carried its own correct-but-separate tracker. One source, three consumers
+-- carried its own correct-but-separate tracker. One source, four consumers
 -- deriving from it (ARCH-DRY).
 --
 -- Pure: no Neovim API, no state.

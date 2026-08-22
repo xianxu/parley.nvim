@@ -164,13 +164,10 @@ What belongs here is the shape and the consumers:
   `answer_structure`'s section scanner, `chat_parser`'s precompute and its
   `cb_state` tracker, and `fold_projection`'s interior drift scan.
 
-**Inside a tool body, structural markers are content.** Tool output routinely
-quotes transcripts — `read_file` on a chat, `grep` for `💬:` — so a marker
-within a body neither starts a turn nor ends a block. Markers inside *other*
-fenced blocks are not treated as tool markers either, which is what stops an
-enclosing block's closer being read as a body opener. Ordinary answer prose
-remains fence-naive for non-tool markers: a `💬:` inside a plain ```` ```text ````
-block still starts a turn, recorded as a deliberate non-goal in the plan.
+**Which markers the depth rule covers** is stated once, in
+`atlas/chat/parsing.md`: tool markers only. Inside a tool body, or inside any
+other fenced block, a `🔧:`/`📎:` is content; a `💬:`/`🤖:` in a plain fenced
+block still starts a turn.
 
 ## Safety
 

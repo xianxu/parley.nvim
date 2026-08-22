@@ -5,10 +5,12 @@ version: 1
 atlas:
   chat/format:
     code:
+      - lua/parley/fence.lua
       - lua/parley/render.lua
       - lua/parley/chat_parser.lua
       - lua/parley/init.lua
     tests:
+      - tests/unit/fence_spec.lua
       - tests/unit/parse_chat_spec.lua
       - tests/unit/build_messages_spec.lua
       - tests/integration/chat_respond_spec.lua

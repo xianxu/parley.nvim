@@ -85,8 +85,11 @@ end
 --- drift this guard exists to catch.
 --- @return boolean ok, integer|nil failed_range_index
 function M.verify_anchors(ranges, lines, patterns)
-    -- Required lazily and only when the caller did not supply patterns, so the
-    -- module stays callable — not merely loadable — without a Neovim global.
+    -- Patterns are required lazily so the module LOADS without a Neovim global.
+    -- It does not follow that this function RUNS without one: the anchor check
+    -- needs `highlight_structure.classify`, which reaches `parley.define` and
+    -- touches `vim`. `verify_starts` and `ranges_within` are callable with vim
+    -- absent; `verify_anchors` is not, and claiming otherwise was wrong.
     local highlight_structure
     if not patterns then
         highlight_structure = require("parley.highlight_structure")
