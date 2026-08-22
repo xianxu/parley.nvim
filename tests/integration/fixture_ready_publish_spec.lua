@@ -33,11 +33,12 @@ describe("fake SSE server readiness publish", function()
         local ready_file = dir .. "/ready"
 
         local started = uv.hrtime()
-        handle, exited = fixture_process.spawn(
+        local spawn_err
+        handle, exited, spawn_err = fixture_process.spawn(
             vim.fn.getcwd() .. "/tests/fixtures/fake_sse_server",
             { "unauthorized", ready_file },
             { PARLEY_PUBLISH_DELAY = ("%.3f"):format(DELAY_MS / 1000) })
-        assert.is_not_nil(handle)
+        assert.is_not_nil(handle, spawn_err)
 
         -- Sample the ready path continuously across the whole publish window.
         local incomplete, absent_samples, published_ns = {}, 0, nil

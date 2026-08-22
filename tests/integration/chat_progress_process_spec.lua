@@ -29,8 +29,8 @@ local processes = {}
 
 local function start_server(mode)
     local ready_file = tmp_dir .. "/ready-" .. mode .. "-" .. math.random(100000)
-    local handle, exited = fixture_process.spawn(fixture, { mode, ready_file })
-    assert.is_not_nil(handle)
+    local handle, exited, spawn_err = fixture_process.spawn(fixture, { mode, ready_file })
+    assert.is_not_nil(handle, spawn_err)
     table.insert(processes, { handle = handle, exited = exited })
     -- Wait for a parseable port, not for the path to exist: the ready file is
     -- readable before its digits land, and reading it early used to yield nil

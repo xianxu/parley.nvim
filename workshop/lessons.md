@@ -16,6 +16,22 @@
   Rule: before shipping any `rm -rf` in a recipe, print the expansion under a
   path containing a space and under every documented override
   (`ARCH-PURPOSE`, Root Cause).
+- **A guard must assert the invariant it names, not a proxy that rejects the
+  shapes already seen.** My first guard for the rule above checked "every
+  removed path is inside the repo or the scratch root" — and `$(CURDIR)` is
+  inside `$(CURDIR)`, so a recipe deleting the entire working tree passed 2/2
+  green. It now compares the removed set against the exact set the harness
+  builds. Rule: after writing a fitness function, ask what *else* satisfies the
+  assertion besides the correct code; if a catastrophic input passes, the
+  assertion is a proxy (`ARCH-PURPOSE`).
+- **Verify a harness-sensitive spec through the harness, not a hand-built env.**
+  The exact-set guard passed every hand-rolled `nvim -u tests/minimal_init.vim`
+  run and failed all ten `make test` runs: under the harness `$TMPDIR` is
+  `/tmp/claude-501/...`, and make reports `$(CURDIR)` as the *physical* path, so
+  `/tmp/...` never equalled `/private/tmp/...`. Rule: when a spec's subject is
+  the build environment, the only run that proves anything is the real one — and
+  ask the authority under test (`pwd -P`) rather than canonicalizing by hand,
+  since probe paths may not exist yet.
 - **`eval set -- $args` is not "split like the shell would" — it parses twice.**
   The first guard I wrote for the rule above reported a false violation on a
   correctly quoted recipe, because `sh` consumes the quotes parsing the `eval`

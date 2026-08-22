@@ -1,12 +1,13 @@
 ---
 id: 000202
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-08-20
-updated: 2026-08-21
+updated: 2026-08-22
 estimate_hours: 1.64
 started: 2026-08-21T22:47:58-07:00
+actual_hours: 1.89
 ---
 
 # make test is unreliable: specs traverse and mutate a shared .test-tmp
@@ -377,6 +378,7 @@ with the **same 186-spec PASS set**; repo working tree **IDENTICAL** across all
 ten (1072 entries compared).
 
 ### 2026-08-22 (close review round 3 — 2 blocking, all fixed)
+- 2026-08-22: closed — make test green at 187 specs. Ten consecutive runs all exit 0 with the same 187-spec PASS set; repo working tree byte-identical across all ten (find+stat snapshot, 1073 entries). Every invariant has an executable guard proven red on regression: scratch_placement_spec (6/6 green, 6/6 red with scratch repointed into the repo); destructive_recipe_spec (green on HEAD, red on BR-10 bare-root shape, red on BR-1 unquoted-list shape, asserted against the make -n expansion); fixture_ready_publish_spec (green, red on both revert shapes of the publisher); ready_port_spec 6/6 constructed cases. BR-15 env-precedence fix verified by re-running with PARLEY_PUBLISH_DELAY=0 exported. Previously-failing git_markdown_source_spec + markdown_finder_async_spec now pass.; review verdict: FIX-THEN-SHIP
 
 The gate's note was "not converging: fix rules, not instances", and it was
 right — rounds 1–2 fixed two instances of one rule and left the rule itself
@@ -422,3 +424,43 @@ which parses once, so `set -- $args` is the faithful model. Recorded in lessons.
 Re-verified: `make test` green at **187 specs**; ten consecutive runs all exit 0
 with the **same 187-spec PASS set**; repo working tree **IDENTICAL** across all
 ten (1073 entries compared).
+
+### 2026-08-22 (close review round 4 — FIX-THEN-SHIP, fixed before the close commit)
+
+The gate closed the issue (`codecomplete`, actual 1.89h vs estimate 1.64h —
+ratio 0.9×, trusted window) but demoted **BR-17** past the round cap, so nothing
+downstream would have caught it. It was right, and it was a hole in my own
+round-3 guard, so it is fixed here under the #174 FIX-THEN-SHIP protocol rather
+than waved through.
+
+- **BR-17 (Important) — my guard asserted a proxy, not the rule.**
+  `destructive_recipe_spec` checked "every removed path is inside the repo or
+  the scratch root". `$(CURDIR)` is inside `$(CURDIR)`, so a recipe with
+  `rm -rf "$(CURDIR)"` — deleting the whole working tree — passed 2/2 green.
+  Verified that claim before fixing. The guard now compares the removed set
+  against the **exact** set the harness constructs (`{root}/{home,xdg,tmp}` plus
+  the three legacy `.test-*`), which is the rule itself. Re-proven on four
+  shapes: green on HEAD, red on `$(CURDIR)`, red on the bare root, red on the
+  unquoted list. BR-17's second half is also covered — a third case asserts the
+  wipe is emitted *before* the scratch is first used in `make -n test`, pinning
+  what the recursive `$(MAKE)` ordering exists to guarantee; it goes red when
+  `test` is reverted to plain prerequisites.
+- **BR-18 (Minor) — dissolved rather than relocated.** The duplicated
+  `is_within` predicate is gone from `destructive_recipe_spec` because exact-set
+  comparison does not need containment at all; one owner remains, so there is
+  nothing to hoist into `arch_helper`.
+- **BR-19 (Minor).** `fixture_process.spawn` dropped libuv's error string, so an
+  ENOENT on the fixture path read as a bare "expected not nil". It returns
+  `handle, exited, err` now and both callers assert with the reason.
+
+**A bug of mine that the soak caught, worth recording.** The exact-set guard
+passed every hand-rolled `nvim -u tests/minimal_init.vim` invocation and failed
+all ten `make test` runs: under the harness `$TMPDIR` is `/tmp/claude-501/...`,
+and make reports `$(CURDIR)` as the *physical* path, so `/tmp/...` never equalled
+`/private/tmp/...`. The spec now asks `pwd -P` — the same authority make uses —
+rather than canonicalizing by hand, which also handles probe paths that do not
+exist yet. Both this and BR-17's lesson are in `workshop/lessons.md`.
+
+Final: `make test` green at **187 specs**; ten consecutive runs all exit 0 with
+the **same 187-spec PASS set**; repo working tree **IDENTICAL** across all ten
+(1073 entries compared).

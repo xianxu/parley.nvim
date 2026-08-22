@@ -14,7 +14,10 @@ local M = {}
 --- @param script string absolute path to the fixture executable
 --- @param args string[] arguments passed to it
 --- @param extra_env table<string, string>|nil extra environment entries
---- @return userdata handle, fun(): boolean exited
+--- @return userdata|nil handle, fun(): boolean exited, string|nil err
+--- On failure `handle` is nil and `err` carries libuv's reason — assert with it
+--- (`assert.is_not_nil(handle, err)`), or an ENOENT on the fixture path reads
+--- only as "expected not nil".
 function M.spawn(script, args, extra_env)
     -- Fold into a keyed map before flattening: libuv passes duplicate keys
     -- straight through and the child's lookup resolves the *parent's* entry, so
@@ -33,14 +36,14 @@ function M.spawn(script, args, extra_env)
     end
 
     local exited = false
-    local handle
-    handle = uv.spawn(script, { args = args, env = env }, function()
+    local handle, err
+    handle, err = uv.spawn(script, { args = args, env = env }, function()
         exited = true
         if handle and not handle:is_closing() then
             handle:close()
         end
     end)
-    return handle, function() return exited end
+    return handle, function() return exited end, err
 end
 
 return M

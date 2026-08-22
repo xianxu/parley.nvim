@@ -488,3 +488,155 @@ findings:
       line immediately above this window's edit to the test target. The help block should name what to run and
       let atlas/infra/test_harness.md own the execution model.
 ```
+
+---
+
+## Re-review — 2026-08-22T00:26:05-07:00 (FIX-THEN-SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 202 — make test is unreliable: specs traverse and mutate a shared .test-tmp |
+| repo | parley.nvim |
+| issue file | workshop/issues/000202-make-test-is-unreliable-specs-traverse-and-mutate-a-shared-test-tmp.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 8bb4d2c17bcae1f11058d9c1e8f11b871d0b1579..c1078dd3f86aaa8719f59b7d7dd2ddce25626867 |
+| command | sdlc close --issue 202 |
+| reviewer | claude |
+| timestamp | 2026-08-22T00:26:05-07:00 |
+| verdict | FIX-THEN-SHIP |
+
+## Review
+
+```verdict
+verdict: FIX-THEN-SHIP
+confidence: high
+```
+
+All four open findings are genuinely addressed, and I confirmed the two substantive ones by reverting rather than by reading the commit message: `tests/arch/destructive_recipe_spec.lua` is green on HEAD and goes red on **both** historical shapes (BR-10's bare `$(TEST_ENV_ROOT)` → *"rm -rf targets the caller-supplied TEST_ENV_ROOT itself"*; BR-1's unquoted legacy list → *"test/.test-home" is not an absolute path*), and `workshop/lessons.md` now carries the rule plus the `eval`-parses-twice correction. Independently: `make test` exits 0 at **187 PASS** in ~25s, a `find`+`stat` mtime/size snapshot of the working tree (**1073 entries**) is byte-identical before and after a full run, and I re-mutation-tested every Done-when claim — reverting `publish_ready` to a non-atomic write turns `fixture_ready_publish_spec` red with 300+ `size=0 content=""` observations, and dropping the `content == ""` guard turns 2 of 6 `ready_port_spec` cases red. What holds SHIP back is one thing: the guard that round 3 added to make the blast-radius rule executable encodes a *containment* predicate rather than the rule it names, and I verified it passes green on `rm -rf "$(CURDIR)"` — a recipe that deletes the entire checkout.
+
+## 1. Strengths
+
+- **BR-13's guard is real and load-bearing, verified three ways.** I rebuilt a minimal checkout under `$TMPDIR` and ran `tests/arch/destructive_recipe_spec.lua` against HEAD (2/2 green) and against each reverted shape (1 red each, with the *right* message pointing at the right defect). The `set --` vs `eval set --` reasoning in the comment at `tests/arch/destructive_recipe_spec.lua:36-38` is correct and non-obvious, and it's the difference between a guard and a false-positive generator.
+- **BR-15's premise turned out to be wrong, but the fix is the better code anyway.** I probed libuv directly (1.50.0, macOS): duplicate env keys are **deduplicated with last-wins** — a child spawned with `{"DUPKEY=first", "DUPKEY=second"}` printed exactly one `RAW:DUPKEY=second`. I then reverted `fixture_process.lua` to the appending form in a scratch copy and the spec passed with `PARLEY_PUBLISH_DELAY=0` exported, so round 3's reproduction does not hold here. The keyed-map fold at `tests/helpers/fixture_process.lua:22-28` is still correct and now doesn't depend on libuv's dedup semantics — accepted as addressed with that correction noted.
+- **BR-14 landed with more than the minimum.** `workshop/lessons.md` records not just the rm -rf rule but the *meta*-lesson from getting the guard wrong first ("when a test models a shell behavior, count the parses") — that's the one an agent reading at session start actually needs.
+- **The determinism claim survives adversarial re-testing.** `fixture_ready_publish_spec` ran 8/8 green under six spinning CPU hogs; `make test` ran twice with an identical 187-spec PASS set and an identical tree.
+- **Docs gate satisfied.** `scripts/spec_test_map.sh list-tests infra/test_harness` resolves all five specs, each of which exists; atlas entry + `atlas/index.md` link + traceability present. README correctly untouched — it exposes no test surface beyond a pointer to TOOLING.md.
+
+## 2. Critical findings
+
+None.
+
+## 3. Important findings
+
+**`tests/arch/destructive_recipe_spec.lua:49-70` — the guard's predicate is a containment proxy, not the invariant it names, and `rm -rf "$(CURDIR)"` passes it green.**
+
+> **This is the 4th finding in family `invariant-without-regression-guard`** (BR-2, BR-8, BR-13 preceded it). Per the repeat protocol: do not patch this instance — state and fix the rule.
+
+The rule, stated verbatim in the spec's own header and in `atlas/infra/test_harness.md:53-56`, is *"a destructive recipe may only remove paths the tool itself constructed and can name literally."* The guard implements that as `is_within(word, probe) or is_within(word, repo)` — prefix containment, which is strictly weaker: `$(CURDIR)` is contained in `$(CURDIR)`. Verified by substituting `@rm -rf "$(TEST_HOME)" "$(TEST_XDG)" "$(TEST_TMP)" "$(CURDIR)"` into a probe checkout — **2/2 Success**, no failure. The atlas's claim that it "rejects any argument that is not an absolute path the harness built" is therefore overstated (ARCH-PURPOSE: the source is documentation the guard doesn't actually enforce).
+
+The rule that covers all four findings in this family: **a guard must assert the invariant itself, not a proxy that happens to reject the shapes you already know about.** Concretely here, the invariant *is* set membership, and the expected set is already in hand at the call site — `{probe/home, probe/xdg, probe/tmp}` ∪ `{repo/.test-home, repo/.test-xdg, repo/.test-tmp}`. Replacing both `is_within` assertions with `assert.is_true(expected[word], ...)` is ~4 lines, closes the hole, and makes the "ancestor" and "absolute path" checks fall out for free. Same guard, same two revert shapes still red — I checked the expected set matches the current expansion exactly.
+
+Second application of the same rule while you're in there: nothing pins that `test-clean-env` runs **first** in `make test`, which is what the recursive-`$(MAKE)` ordering at `Makefile.parley:52-63` exists to guarantee. Converting it back to prerequisites would let `make -j test` schedule the wipe into a running suite and nothing would go red. One more `make -n test` expansion assertion in the same spec covers it.
+
+## 4. Minor findings
+
+- **`Makefile.parley:19` — the help line still says `test-clean-env` removes "the scratch root", which BR-10 made false.** The recipe removes only the `home`/`xdg`/`tmp` leaves, and `TOOLING.md:36` says so explicitly ("never the root itself"). **This is the 5th finding in family `stale-restatement-of-moved-source`** — so not the wording: the rule BR-7 and BR-16 already applied is that a surface restating a fact the code owns goes stale. This line was *edited in this window* and still restates the recipe's semantics; it should name the target and let `atlas/infra/test_harness.md` own what it deletes.
+- **The path-containment predicate is written twice, in two files added by the same commit range** — `tests/arch/destructive_recipe_spec.lua:49-51` and `tests/arch/scratch_placement_spec.lua:27`. **This is the 2nd finding in family `copy-pasted-spec-scaffolding`.** BR-12's fix created the shared-owner pattern (`tests/helpers/`), and `tests/arch/arch_helper.lua` is the existing owner for arch-spec helpers; the rule was applied by hand once and re-violated within the same window. The rule cannot cheaply be made executable (a lint for "duplicated two-line predicate" is all false positives), so recording the family and its measured prevalence — 2 instances across 4 commits — is the honest disposition (ARCH-DRY).
+- `tests/helpers/fixture_process.lua:38` — `uv.spawn`'s second return (the error string) is dropped, so a spawn failure surfaces at the caller as a bare `assert.is_not_nil(handle)` with no reason. `chat_progress_process_spec.lua:223` proves the nil-plus-message contract is real. Returning `handle, exited, err` (or asserting inside the helper with the message) is a one-liner in new internal API two specs already consume.
+- `tests/fixtures/fake_sse_server:13` — `float(os.environ.get("PARLEY_PUBLISH_DELAY", "0"))` at import raises `ValueError` on garbage, which surfaces as the consumer's "fixture never published a port" timeout rather than the actual cause. Test-hook-only; noted, not worth a guard.
+- `atlas/infra/test_harness.md:52-53` — "Two things follow from that recipe being destructive…:" is followed by a paragraph about the guard *before* the two bullets, so the colon dangles.
+- Pre-existing, noted by rounds 1–2 and still true: `nvim.xianxu/` and `.test-home XDG_DATA_HOME=` sit untracked and un-ignored in the repo root, invisible to `git status` only because they hold no files.
+- Operational, for the close commit: the working tree carries an uncommitted deletion (`workshop/parley/…global-warming-overview.md`) and three untracked files unrelated to #202. Don't let the close sweep them in.
+
+## 5. Test coverage notes
+
+- Mutation-verified load-bearing **this round**, by me, in scratch copies: the destructive-recipe guard (red on both historical shapes), the atomic publisher (red on the non-atomic revert), the consumer empty-file guard (4 pass / 2 fail on revert). The placement guard was mutation-verified in rounds 2 and 3 and is untouched here.
+- Done-when items 1, 2, 3, 4 and 5 all independently reproduced. Item 6 (ten agreeing runs) spot-checked at 2 of 10 — identical 187-spec PASS sets, identical 1073-entry tree — consistent with the Log's claim but not fully reproduced.
+- The coverage gap is the one in §3: the guard's own predicate, and the `test-clean-env`-runs-first ordering.
+- BR-15's fix has no test that fails without it, and after direct probing I'm satisfied one isn't worth writing — libuv dedups last-wins, so the appending form was never actually broken on this platform. The fold is defensive hardening, and pinning it would mean asserting libuv's behavior rather than ours.
+- `tests/unit/ready_port_spec.lua` does real filesystem IO in a directory TOOLING describes as "pure logic, no Neovim APIs" — consistent with existing drift across the unit suite; noted by two prior rounds, not raised.
+
+## 6. Architectural notes for upcoming work
+
+- **ARCH-DRY — flag (Minor, §4):** the duplicated containment predicate across the two new arch specs. Otherwise pass: `vim.fn.environ()` and `PYTHONDONTWRITEBYTECODE` occur in exactly one file repo-wide, and the scratch location is single-sourced.
+- **ARCH-PURE — pass, with the standing nudge.** `wait_for_port` still fuses the pure predicate (*is this string a TCP port?*) with the polling IO, so four of six unit cases are pure string cases routed through the filesystem. `fixture_process.spawn` is correctly a thin IO seam. Splitting `M.parse_port(content) -> port, err` remains the cheap improvement.
+- **ARCH-PURPOSE — flag (Important, §3), otherwise pass.** Shadow-sweep re-run: no live consumer hand-restates the scratch location; `.test-*` survives only in `.gitignore`'s safety net, the legacy-cleanup list, and explanatory prose. The flag is that the *rule* is now enforced only for the shapes already seen, while the atlas states it universally — enforcement narrower than the documented source is the same shape ARCH-PURPOSE names.
+- **ARCH-MOCK — pass.** The SSE fake sits behind the same HTTP boundary production uses, and `PARLEY_PUBLISH_DELAY` is a fake-only hook whose *effect* is asserted (`fixture_ready_publish_spec.lua:68`), so it can't rot silently. `destructive_recipe_spec` shells out to the real `make` with no seam, which is correct here — `make`'s expansion **is** the subject under test, and a fake would assert nothing. `cksum`/`cut` are build-time.
+- Carry-forward for a separate issue, unchanged after three rounds and still true: `tests/integration/openai_tool_loop_spec.lua`'s `free_port()` — bind, read, close, hand the number to a fixture that binds it later — is the same TOCTOU family this issue closed on the ready-file channel, and the atlas's "Fixture readiness" rules don't cover it.
+
+## 7. Plan revision recommendations
+
+None. Every `## Plan` item is delivered at its stated location, every Done-when item is satisfied by evidence I reproduced myself, the single-pass no-`Mx` shape is correct, and the `## Revisions` entry accurately records the round-1 pivot. One conditional: if §3 is deferred rather than fixed, `atlas/infra/test_harness.md:50-51` should stop claiming the guard "rejects any argument that is not an absolute path the harness built" and say what it actually rejects — otherwise the next editor of that recipe trusts a guard that would wave through deleting the checkout.
+
+```findings
+dispose:
+  - id: BR-13
+    disposition: addressed
+    note: |
+      Verified by reversion in a probe checkout - green 2/2 on HEAD, red on BR-10's bare-root shape and red on BR-1's unquoted-list shape, each with the correct message. See the new Important finding for a hole in its predicate.
+  - id: BR-14
+    disposition: addressed
+    note: |
+      workshop/lessons.md now carries the destructive-recipe rule plus the eval-parses-twice correction from writing the guard.
+  - id: BR-15
+    disposition: addressed
+    note: |
+      Keyed-map fold landed and verified under the hostile parent env. Correction - the finding's premise does not hold here: libuv 1.50 on macOS dedups duplicate env keys last-wins (probed directly), and the reverted appending form also passes, so the fix is hardening rather than a bug fix.
+  - id: BR-16
+    disposition: addressed
+    note: |
+      No "sequentially" claim survives in Makefile.parley; the test target comment now points at atlas/infra/test_harness.md for the execution model.
+findings:
+  - id: new
+    severity: Important
+    family: invariant-without-regression-guard
+    title: |
+      The destructive-recipe guard asserts containment, not the rule it names, so rm -rf "$(CURDIR)" passes green
+    detail: |
+      4th finding in this family (BR-2, BR-8, BR-13 preceded it), so per the repeat protocol the fix is the rule,
+      not the instance. The rule stated in tests/arch/destructive_recipe_spec.lua's header and
+      atlas/infra/test_harness.md:53 is "only paths the tool constructed and can name literally"; line 67
+      implements it as prefix containment (is_within(word, probe) or is_within(word, repo)), which is strictly
+      weaker - $(CURDIR) is contained in $(CURDIR). Verified by substituting rm -rf "$(TEST_HOME)" "$(TEST_XDG)"
+      "$(TEST_TMP)" "$(CURDIR)" into a probe checkout: 2/2 Success, no failure, i.e. a recipe that deletes the
+      whole working tree is waved through. The rule - a guard must assert the invariant itself, not a proxy that
+      rejects only the shapes already seen (ARCH-PURPOSE). Concretely, compare each word against the literal
+      expected set the harness builds, which is already known at the call site: probe/home, probe/xdg, probe/tmp
+      plus the three repo/.test-* legacy paths. Same rule, second application - nothing pins that test-clean-env
+      runs FIRST in make test, which is what the recursive $(MAKE) ordering at Makefile.parley:52-63 exists to
+      guarantee; one more make -n test expansion assertion in the same spec covers it.
+  - id: new
+    severity: Minor
+    family: stale-restatement-of-moved-source
+    title: |
+      Makefile help still says test-clean-env removes "the scratch root", which BR-10 made false
+    detail: |
+      5th finding in this family, so state the rule rather than patch the wording. Makefile.parley:19 was edited
+      in this window and still restates the recipe's semantics; the recipe removes only the home/xdg/tmp leaves,
+      and TOOLING.md:36 says explicitly "never the root itself". BR-7 and BR-16 already applied the fix shape -
+      name the target, let atlas/infra/test_harness.md own what it deletes.
+  - id: new
+    severity: Minor
+    family: copy-pasted-spec-scaffolding
+    title: |
+      The path-containment predicate is written twice across the two arch specs added in this window
+    detail: |
+      2nd finding in this family. tests/arch/destructive_recipe_spec.lua:49-51 and
+      tests/arch/scratch_placement_spec.lua:27 implement the same "path == root or path starts with root/" check;
+      tests/arch/arch_helper.lua is the existing owner for arch-spec helpers (ARCH-DRY). BR-12's fix established
+      the one-owner pattern by hand and it was re-violated inside the same commit range. The rule cannot be made
+      executable cheaply - a lint for a duplicated two-line predicate is all false positives - so the family is
+      recorded with its measured prevalence: 2 instances across 4 commits.
+  - id: new
+    severity: Minor
+    family: error-detail-dropped-at-seam
+    title: |
+      fixture_process.spawn discards uv.spawn's error string, so a spawn failure surfaces as a bare nil assert
+    detail: |
+      tests/helpers/fixture_process.lua:38 keeps only the handle from uv.spawn, which returns nil plus an error
+      message on failure (chat_progress_process_spec.lua:223 relies on exactly that contract). Callers then do
+      assert.is_not_nil(handle) with no reason attached, so an ENOENT on the fixture path reads as "expected not
+      nil". Return the error alongside, or assert inside the helper with the message - one line, in new internal
+      API two specs already consume.
+```
