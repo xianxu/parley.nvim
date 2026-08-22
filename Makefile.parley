@@ -23,25 +23,26 @@ help-parley:
 PLENARY = ~/.local/share/nvim/lazy/plenary.nvim
 REAL_HOME = $(HOME)
 
-# The harness scratch trees live OUTSIDE $(CURDIR) on purpose (#202). Eight
-# parallel jobs create and delete entries in TEST_TMP for the whole run, while
-# the find/grep/ack tool specs traverse the repo to exercise the real tree —
-# one of them ("defaults missing path to cwd") cannot be written any other way.
-# With the scratch inside $(CURDIR) those specs raced a directory vanishing
-# mid-traversal and `find` exited nonzero. Placement enforces the invariant so
-# no spec has to cope, now or later.
+# The harness scratch trees live OUTSIDE $(CURDIR) on purpose — see
+# atlas/infra/test_harness.md for why (#202). tests/arch/scratch_placement_spec.lua
+# fails if this moves back into the tree.
 #
 # Keyed by the checkout so two worktrees of this repo do not share a root.
-# `cksum` is POSIX; `shasum`/`sha256sum` are not both portable.
+# `cksum` is POSIX; `shasum`/`sha256sum` are not both portable. TEST_ENV_KEY is
+# `:=` so the subshell runs once per make invocation, not once per expansion of
+# TEST_ENV.
 REAL_TMP := $(patsubst %/,%,$(or $(TMPDIR),/tmp))
-TEST_ENV_ROOT ?= $(REAL_TMP)/parley-test-env/$(notdir $(CURDIR))-$(shell printf '%s' '$(CURDIR)' | cksum | cut -d' ' -f1)
+TEST_ENV_KEY := $(notdir $(CURDIR))-$(shell printf '%s' '$(CURDIR)' | cksum | cut -d' ' -f1)
+TEST_ENV_ROOT ?= $(REAL_TMP)/parley-test-env/$(TEST_ENV_KEY)
 TEST_HOME = $(TEST_ENV_ROOT)/home
 TEST_XDG = $(TEST_ENV_ROOT)/xdg
 TEST_TMP = $(TEST_ENV_ROOT)/tmp
 
 # Pre-#202 in-repo locations. Still removed by test-clean-env so the migration
 # completes itself for anyone who pulls this change onto a dirty checkout.
-LEGACY_TEST_DIRS = $(CURDIR)/.test-home $(CURDIR)/.test-xdg $(CURDIR)/.test-tmp
+# Quoted individually at the use site: an unquoted list word-splits, and a
+# checkout under a path with a space would make `rm -rf` target the fragments.
+LEGACY_TEST_DIRS = "$(CURDIR)/.test-home" "$(CURDIR)/.test-xdg" "$(CURDIR)/.test-tmp"
 TEST_ENV = HOME="$(TEST_HOME)" XDG_DATA_HOME="$(TEST_XDG)/data" XDG_STATE_HOME="$(TEST_XDG)/state" XDG_CACHE_HOME="$(TEST_XDG)/cache" TMPDIR="$(TEST_TMP)" NVIM_TEST_PLENARY="$(REAL_HOME)/.local/share/nvim/lazy/plenary.nvim"
 
 define PREP_TEST_ENV

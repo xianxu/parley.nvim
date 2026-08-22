@@ -301,3 +301,45 @@ Note on the estimate: the estimate-quality judge's F1 priced the ten-run soak at
 this tree is ~25s, so the soak is ~0.07h — that correction (with the measurement)
 and F2's unpriced gate-round time are both folded into the revised block, which
 went 1.06 → 1.64.
+
+### 2026-08-21 (close review round 1 — 4 blocking, all fixed)
+
+- **BR-1 (real bug I introduced).** `test-clean-env`'s `rm -rf` quoted
+  `"$(TEST_ENV_ROOT)"` but not `$(LEGACY_TEST_DIRS)`, so a checkout under a path
+  with a space would word-split into `rm -rf '<parent>/my'`. This target now runs
+  first in *every* `make test`, so the blast radius was real. Each legacy path is
+  quoted individually; verified by copying the makefile under a directory named
+  `space test` and reading the expansion — all four paths come out as single
+  quoted words.
+- **BR-2.** The invariant the whole issue rests on had no guard: moving
+  `TEST_ENV_ROOT` back inside `$(CURDIR)` would just resume flaking. The Non-goals
+  rejection of a lint stands — but it was aimed at *spec traversal roots*, and a
+  guard on the **writer** has no false-positive problem. Added
+  `tests/arch/scratch_placement_spec.lua`: `vim.fn.tempname()`, `'directory'`,
+  `$HOME`, `$XDG_*` must all resolve outside `getcwd()`. Proven both ways — 6/6
+  green today, 6/6 red when run with the scratch pointed back into the repo.
+- **BR-3.** Done-when claimed atomic publishing, but reverting `publish_ready`
+  left the suite green because the consumer guard absorbed it. Rather than
+  spin-stat and hope to win a microsecond window, the fixture takes a
+  `PARLEY_PUBLISH_DELAY` hook that holds the window open, and
+  `tests/integration/fixture_ready_publish_spec.lua` asserts the ready path is
+  never observable incomplete **and** that the delay was honored — so the hook
+  cannot be deleted to make the spec pass. Proven against both revert shapes:
+  in-place write with the hook kept → 300+ observations of `size=0 content=""`;
+  `publish_ready` deleted entirely → "was not honored".
+- **BR-4.** `tests/perf/chat_typing.lua` still hardcoded
+  `.test-tmp/perf/parley-chat-typing.json` as its fallback — the one surviving
+  consumer not deriving from the relocated source, and it would have written
+  into the repo tree whenever `start()` ran without `PERF_OUTPUT`. Now derived
+  from `vim.env.TMPDIR`.
+- Minors: TOOLING's "see below" pointer corrected (the section is above) and the
+  scratch wipe's effect on a default-path perf report noted; `TEST_ENV_KEY`
+  hoisted to `:=` so `cksum` forks once per make invocation instead of once per
+  expansion; the duplicated rationale in `minimal_init.vim` and `Makefile.parley`
+  reduced to pointers at the atlas entry; atlas now records that nvim's tempdir
+  fallback chain ends at cwd, which is why the guard asserts produced paths
+  rather than env vars.
+
+Re-verified after the fixes: `make test` green at **186 specs**; ten consecutive
+runs all exit 0 with the **same 186-spec PASS set**; repo working tree
+**IDENTICAL** across all ten (1070 entries compared).

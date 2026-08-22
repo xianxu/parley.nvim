@@ -44,9 +44,11 @@ spell phases. Inclusive `edit_total` overlaps the isolated measurements; do not
 add or subtract the isolated phase timings as if they decomposed it.
 
 The command prints median/p95 timings and scaling ratios, then overwrites
-`$(TEST_TMP)/perf/parley-chat-typing.json` (see *Test scratch directories*
-below for where that resolves). Override the destination (including a new
-parent directory) with:
+`$(TEST_TMP)/perf/parley-chat-typing.json` — see *Test Scratch Directories*
+above for where that resolves. Note that `make test` wipes the scratch root
+first, so a report left at the default path does not survive the next test run;
+pass `PERF_OUTPUT` to keep one. Override the destination (including a new parent
+directory) with:
 
 ```sh
 make perf PERF_OUTPUT=/path/to/parley-chat-typing.json

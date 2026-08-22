@@ -8,6 +8,9 @@ import time
 
 MODE = sys.argv[1]
 READY_FILE = sys.argv[2]
+# Test hook (#202): hold the publish window open so an observer can prove the
+# ready path is never visible in an incomplete state. Zero in normal runs.
+PUBLISH_DELAY = float(os.environ.get("PARLEY_PUBLISH_DELAY", "0"))
 PARTIAL = b'data: {"choices":[{"delta":{"content":"partial answer"}}]}\n\n'
 DONE = b'data: [DONE]\n\n'
 
@@ -67,6 +70,8 @@ def publish_ready(port):
         ready.write(str(port))
         ready.flush()
         os.fsync(ready.fileno())
+    if PUBLISH_DELAY:
+        time.sleep(PUBLISH_DELAY)
     os.replace(staging, READY_FILE)
 
 

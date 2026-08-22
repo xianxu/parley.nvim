@@ -34,6 +34,15 @@ spec has to defend itself and no lint has to police traversal roots. `nvim`'s
 `directory` (swap) follows `$TMPDIR` for the same reason
 (`tests/minimal_init.vim`).
 
+`tests/arch/scratch_placement_spec.lua` is the guard: it asserts
+`vim.fn.tempname()`, `'directory'`, `$HOME`, and the `$XDG_*` dirs all resolve
+outside `getcwd()`. It guards the *writer*, which — unlike a lint over spec
+traversal roots — has no false-positive problem. It asserts the produced paths
+rather than the env vars on purpose: nvim's tempdir fallback chain ends at the
+cwd, so an unwritable `$TMPDIR` would silently put scratch back in-tree.
+(`PREP_TEST_ENV`'s `mkdir -p` aborts a `make` run before that, but the guard
+does not depend on that failure being loud.)
+
 Corollary worth keeping: a full `make test` mutates nothing inside the repo
 working tree. That is checkable — snapshot `find . -path ./.git -prune -o -print`
 with mtimes before and after, and diff.
@@ -48,6 +57,13 @@ because a reader cannot tell partial digits from complete ones:
 - Consumer waits for a *parseable* port, never for mere existence
   (`tests/helpers/ready_port.lua`), so an incomplete signal is a named timeout
   instead of a nil concatenated into a URL.
+
+Both halves are guarded. `tests/unit/ready_port_spec.lua` constructs the absent,
+zero-byte, empty-then-filled, non-numeric, and out-of-range signals directly.
+`tests/integration/fixture_ready_publish_spec.lua` holds the publish window open
+via `PARLEY_PUBLISH_DELAY` and asserts the ready path is never observable
+incomplete — and asserts the delay was honored, so the hook cannot be deleted to
+make it pass. Neither has a race to win.
 
 ## Related
 

@@ -16,10 +16,9 @@ endif
 " Load plenary plugin so PlenaryBusted* commands are registered
 runtime plugin/plenary.vim
 
-" Hermetic test runtime: keep every scratch write out of the repo tree. The
-" suite traverses the repo (find/grep/ack tool specs) while eight parallel jobs
-" run, so a swap file landing in-tree can vanish mid-traversal (#202). $TMPDIR
-" is the harness scratch root, which Makefile.parley places outside $(CURDIR).
+" Hermetic test runtime: keep every scratch write out of the repo tree — see
+" atlas/infra/test_harness.md for why (#202). $TMPDIR is the harness scratch
+" root, which Makefile.parley places outside $(CURDIR).
 set noswapfile
 execute 'set directory=' . fnameescape(empty($TMPDIR) ? '/tmp' : $TMPDIR) . '//'
 let g:parley_test_mode = v:true
