@@ -327,3 +327,37 @@ with an exact-block helper that refuses on anything other than one match. This
 is the second instance this session (ariadne#203 silently swallowed a
 `## Done when` the same way), so it is now a rule in `workshop/lessons.md`
 rather than a note.
+
+### 2026-08-22 (close review round 1 — REWORK, 5 blocking, all fixed)
+
+- **BR-1 (Critical) — I re-opened BR-43.** The #203 bound went into the *shared*
+  `close_of`, which ordinary fenced blocks also use to establish depth. A block
+  containing a marker then failed to establish depth, its closer read as an
+  opener, and the quoted `📎:` became a depth-0 marker — the exact defect #200
+  closed. Verified directly before fixing: `markers[2] == true` for
+  `["```text", "📎: read_file id=x", "```"]`. The bound now lives in a separate
+  `body_close_of` used only by the tool-body branch.
+  **The whole suite stayed green while this was broken**, including the tests
+  named for BR-43 — they assert downstream exchange counts, which this shape does
+  not change. Pinned now at the scan itself, where the defect lives.
+- **BR-2 (Important)** — the producer guard hand-listed five tools while the
+  atlas claimed it derived from the registry. Now every registered tool must
+  appear in `READ_INPUTS` or in `NOT_ECHOING` *with a reason*, so a new builtin
+  fails the guard until ruled. The atlas claim is true now rather than aspirational.
+- **BR-3 (Important)** — `answer_structure.BOUNDARY` still hand-listed the kind
+  set the diff had just single-sourced. It derives from `STRUCTURAL_KINDS` now,
+  with the one legitimate difference stated: `reasoning` is a boundary (a 🧠:
+  terminates a preceding block) but is not a marker a body may not span.
+- **BR-4 (Important)** — `atlas/chat/format.md` was named in the atlas Plan step
+  I ticked, and not updated; its "markers inside a body are content" was left
+  false. Corrected to the actual rule (content when indented, which is how every
+  tool emits them; column-0 bounds the body).
+- **BR-5 (Important) — my close evidence overclaimed.** `fold_invariants_spec`
+  drops unreadable tracked files silently, and one transcript is deleted-but-
+  unstaged in this working tree, so "clean over every tracked transcript" was
+  false. The skip is now counted and reported, and fails if more than one file is
+  missing. Evidence rewritten to say what was actually covered.
+
+The unifying shape across BR-2/BR-4/BR-5 is one I keep hitting: **a claim wider
+than the mechanism that backs it.** Each was a sentence — in a test, an atlas
+page, or a `--verified` string — asserting coverage the code did not deliver.

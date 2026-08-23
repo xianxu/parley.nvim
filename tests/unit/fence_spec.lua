@@ -250,3 +250,31 @@ describe("fence.scan body bounds (#203)", function()
         assert.equals(6, bodies[1].close)
     end)
 end)
+
+-- #203 BR-1: the structural bound belongs to TOOL BODIES only. Applying it to
+-- the depth search for ordinary fenced blocks makes a block containing a marker
+-- fail to establish depth, so its closer reads as an opener and the marker
+-- becomes structural — BR-43 exactly. The suite stayed green when this broke,
+-- so the shape is pinned here, at the scan, rather than downstream.
+describe("fence.scan depth for ordinary blocks (#203 BR-1)", function()
+    local fence = require("parley.fence")
+
+    it("keeps a marker quoted in an ordinary fenced block non-structural", function()
+        local lines = { "```text", "📎: read_file id=x", "```", "💬: q" }
+        local _, markers = fence.scan(lines,
+            function(line) return line:match("^📎:") ~= nil end,
+            function(line) return line:match("^[💬🤖📎🔧📝]") ~= nil end)
+        assert.message("an ordinary block stopped establishing depth, so its "
+            .. "quoted marker became structural (BR-43)")
+            .is_nil(markers[2])
+    end)
+
+    it("still establishes depth when the block spans several markers", function()
+        local lines = { "```text", "💬: a", "🤖: b", "```", "📎: r", "```", "x", "```" }
+        local _, markers = fence.scan(lines,
+            function(line) return line:match("^📎:") ~= nil end,
+            function(line) return line:match("^[💬🤖📎🔧📝]") ~= nil end)
+        assert.is_nil(markers[2])
+        assert.message("the real marker after the block was lost").is_true(markers[5])
+    end)
+end)

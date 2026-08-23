@@ -52,6 +52,10 @@ describe("tool output never begins a line with a structural marker (#203)", func
         return names
     end
 
+    -- Declared here, assigned below; plenary evaluates it() bodies eagerly, so
+    -- any case reading this table must come AFTER the assignment.
+    local READ_INPUTS
+
     local function assert_no_column0_marker(name, content)
         for _, line in ipairs(vim.split(content or "", "\n")) do
             local kind = highlight_structure.classify(line, patterns).kind
@@ -67,14 +71,36 @@ describe("tool output never begins a line with a structural marker (#203)", func
             "registry shrank — this guard derives its subjects from it")
     end)
 
+    -- Tools that cannot echo file content back, and why. Every registered tool
+    -- must appear here or in READ_INPUTS — the assertion below fails otherwise,
+    -- so a new builtin is ruled rather than silently uncovered (#203 BR-2). The
+    -- previous draft hand-listed five and let the atlas claim it derived from
+    -- the registry; that claim is only true with this check.
+    local NOT_ECHOING = {
+        edit_file = "returns a status message, never file content",
+        write_file = "returns a status message",
+        propose_edits = "returns a status message",
+        emit_definition = "returns the empty string",
+        chat_history_search = "rg with --with-filename --line-number, then the "
+            .. "path prefix is rewritten to {label}/ — never column 0",
+    }
+
     -- Read-shaped tools are the ones that can echo file content back.
-    local READ_INPUTS = {
+    READ_INPUTS = {
         read_file = function(f) return { file_path = f } end,
         grep = function(f, d) return { pattern = "💬", path = d } end,
         ack = function(f, d) return { pattern = "💬", path = d } end,
         ls = function(f, d) return { path = d } end,
         find = function(f, d) return { path = d } end,
     }
+
+    it("rules on every registered tool, none silently uncovered", function()
+        for _, name in ipairs(registered()) do
+            assert.message(("%s is registered but neither exercised nor ruled out — "
+                .. "add it to READ_INPUTS or NOT_ECHOING with a reason"):format(name))
+                .is_true(READ_INPUTS[name] ~= nil or NOT_ECHOING[name] ~= nil)
+        end
+    end)
 
     for name, build in pairs(READ_INPUTS) do
         it(name .. " prefixes any marker it echoes", function()

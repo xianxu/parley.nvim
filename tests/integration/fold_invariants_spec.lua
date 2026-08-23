@@ -58,9 +58,31 @@ describe("fold invariants over the repo transcript corpus", function()
         -- actually broke, so this one carries the raw-text oracle's teeth.
         "tests/fixtures/fold_marker_in_prose.md",
     }
+    -- Dropping unreadable tracked files is deliberate (a file can be deleted but
+    -- unstaged), but a SILENT drop lets "the audit is clean over every tracked
+    -- transcript" be false without anyone noticing — #203's own close evidence
+    -- claimed exactly that while one deleted transcript was skipped (BR-5). So
+    -- the skips are counted and reported as a case of their own.
+    local skipped = {}
     for _, path in ipairs(corpus_provider()) do
-        if vim.fn.filereadable(path) == 1 then corpus[#corpus + 1] = path end
+        if vim.fn.filereadable(path) == 1 then
+            corpus[#corpus + 1] = path
+        else
+            skipped[#skipped + 1] = path
+        end
     end
+
+    it("reports any tracked transcript it could not read", function()
+        -- Not a failure: an unstaged deletion is a legitimate working-tree
+        -- state. But the count is evidence, so it is stated rather than lost.
+        if #skipped > 0 then
+            print(("fold_invariants: skipped %d unreadable tracked transcript(s): %s")
+                :format(#skipped, table.concat(skipped, ", ")))
+        end
+        assert.message(("%d tracked transcript(s) unreadable — the audit did NOT "
+            .. "cover the whole corpus; say so in any evidence that cites it"):format(#skipped))
+            .is_true(#skipped <= 1)
+    end)
 
     it("finds a corpus to check", function()
         assert.message(("only %d readable transcripts under workshop/parley/")

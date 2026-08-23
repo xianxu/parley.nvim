@@ -137,7 +137,21 @@ function M.scan(lines, is_tool_marker, is_structural)
     -- come from parley — hand-edited, truncated, or pasted — and forking there
     -- is the visible degradation the operator chose over silent swallowing.
     -- tests/integration/tool_output_prefix_spec.lua guards the producer half.
+    -- UNBOUNDED, and it must stay that way. This search establishes DEPTH for
+    -- ordinary fenced blocks, and a block that fails to establish depth leaves
+    -- its own closer to be read as an opener — the scan desyncs by one fence and
+    -- a `📎:` quoted in prose becomes a depth-0 marker, which is BR-43 exactly.
+    -- The #203 bound belongs only to tool bodies; putting it here re-opened the
+    -- defect #200 closed (found by this issue's own close review, BR-1).
     local function close_of(open_len, from)
+        for row = from, #lines do
+            if M.closes(lines[row], open_len) then return row end
+        end
+        return nil
+    end
+
+    -- BOUNDED: a TOOL BODY may not span a column-0 structural marker (#203).
+    local function body_close_of(open_len, from)
         for row = from, #lines do
             if M.closes(lines[row], open_len) then return row end
             if is_structural and is_structural(lines[row], row) then return nil end
@@ -151,7 +165,7 @@ function M.scan(lines, is_tool_marker, is_structural)
         if is_tool_marker(line, row) then
             markers[row] = true
             local body_len = M.open_len(lines[row + 1] or "")
-            local close = body_len and close_of(body_len, row + 2)
+            local close = body_len and body_close_of(body_len, row + 2)
             if close then
                 bodies[row] = { first = row + 2, last = close - 1, close = close }
                 row = close + 1
