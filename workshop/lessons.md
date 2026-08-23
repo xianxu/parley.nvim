@@ -14,6 +14,16 @@
   same session, after the helper existed, because `s.index` is the thing the
   fingers reach for. The anchor that bit last was `--- @param lines string[]`,
   whose first match was a different function's docblock two definitions up.
+- **Green means "ran nothing" more often than it means "held" — break the
+  invariant and watch it fail, every time.** Three separate guards this session
+  were vacuous when written: the producer guard skipped every case because
+  `tools.get` returned nil without `register_builtins`; the corpus-skip report
+  used `print`, which `RUN_SPEC` discards on a pass; and the five marker pins
+  asserted an exchange count that was identical with and without the rule. Each
+  was caught only by deliberately deleting the thing under test. Rule: a guard is
+  not finished when it is green — it is finished when you have seen it red for
+  the right reason.
+
 - **A test that skips is not a test that passes.** The producer guard for #203
   was green on HEAD and *still green* with the invariant it guards deliberately
   broken: `tools.get` returns nil without `register_builtins()`, and the guard's

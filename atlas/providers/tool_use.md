@@ -194,9 +194,11 @@ exceptions, both degrading to over-forking:
 This is a *producer* obligation the *parser* depends on, so it is guarded where
 it is produced: `tests/integration/tool_output_prefix_spec.lua` derives its
 subjects from `tools.BUILTIN_NAMES` + `OPTIONAL_NAMES`, so a new builtin is
-covered by construction, and fails loudly rather than skipping when a tool is
-unregistered — its first draft passed with `read_file`'s prefix deleted because
-it skipped every case.
+covered by construction, and drives each over a **call-shape product** (single
+file and directory) — one shape per tool is how its first draft passed while
+`grep` on a single file was emitting column-0 markers. A missing builtin fails;
+an absent OPTIONAL tool (`ack`) is reported `pending` rather than skipped
+silently, so green never means "never checked".
 
 
 **Which markers the depth rule covers** is stated once, in

@@ -1,12 +1,13 @@
 ---
 id: 000203
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-08-21
 updated: 2026-08-22
 estimate_hours: 2.18
 started: 2026-08-22T17:34:39-07:00
+actual_hours: 5.44
 ---
 
 # chat_parser: recover from a malformed or truncated tool fence
@@ -248,6 +249,7 @@ three failed heuristics are in #200's `## Log`; the pending test carries a
 pointer here.
 
 ### 2026-08-22 (experiment — model decision and the fold risk)
+- 2026-08-22: closed — make test green at 188 spec files. BR-14 fixed properly this time and PROVEN to discriminate: the five marker pins assert fence.scan body extent (nil vs table) instead of exchange counts, each with a prefixed twin; deleting the rule from fence.lua fires all five (the previous version gave 2 exchanges at base and HEAD, passing without the rule). BR-18: three hand-maintained restatements of the kind set collapsed to one - STRUCTURAL_KINDS derives from TOKENS via a token membership list, chat_parser:761 calls is_structural_kind, and highlight_structure_spec pins membership; adding footnote to the set fails with "footnote is in STRUCTURAL_KINDS but no marker classifies as it". Earlier rounds stand: BR-1 bound confined to body_close_of, BR-12 producer fix with tool x call-shape guard, BR-13 docblock restored (code-only diff vs pre-#203 is exactly the param, body_close_of, one call site), BR-5 named exclusion.; review verdict: FIX-THEN-SHIP
 
 Ran the discriminator #200 rejected on a throwaway patch; tree restored, nothing
 committed.
@@ -470,3 +472,38 @@ and both are the same class this issue is about.
 
 Round 4 also recorded that `ack` self-skips with no counted allowlist and the
 marker-named fixture is read by no case (BR-15, advisory) — noted, not fixed.
+
+### 2026-08-22 (close CLEARED at round 5; advisories fixed under FIX-THEN-SHIP)
+
+Gate passed: `codecomplete`, actual **5.44h** against a 2.18h estimate
+(ratio 0.4x). Seven advisories fixed here before the close commit.
+
+- **BR-17** was a latent crash, not a style note. `fold_projection`'s
+  `highlight_structure` was assigned only inside the `not patterns` branch or as
+  a side effect of the classify closure running, so a caller passing `patterns`
+  **with `M._classify` injected** — the seam that line exists for — left it nil
+  and the first tool range indexed a nil value. My `is_structural` closure
+  introduced that coupling. Assigned unconditionally now, still at function
+  scope so the module keeps loading without a Neovim global.
+- **BR-9** was the worst of them: I had committed `203-experiment.patch` into
+  `workshop/plans/` — 1760 lines, ~1690 of which are a corpus transcript the
+  patch would **delete** on apply. Removed.
+- **BR-7** — the two `fence.scan` predicates each ran a full classify on every
+  line, in a function documented as per-streamed-chunk hot. One memoized
+  classify now serves both.
+- **BR-16** — the producer guard's own header still asserted the totality BR-12
+  falsified, contradicting its body a hundred lines down. **BR-15** — it dropped
+  `ack` coverage silently on a host without ack while the atlas claimed it fails
+  loudly rather than skipping; it reports `pending` now, and the atlas says what
+  is actually true. **BR-11** — `is_structural` is documented as optional,
+  matching the signature, with the reason it stays that way.
+
+**Estimate miss: 2.18h estimated, 5.44h actual (0.4x)** — the worst of the
+session, against 0.9x on the two before it. The estimate priced the plan's nine
+steps; what it did not price was five close-review rounds, of which four found
+real defects in my own work (a BR-43 regression, a falsified premise, an
+incomplete restore, and two vacuous guards). `scope-pivot` at 0.30 design
+covered one gate round, not five. The honest lesson for calibration is that an
+issue whose deliverable is a *guard* carries review rounds proportional to how
+many ways the guard can be vacuous — and that is not a function of the plan's
+step count.

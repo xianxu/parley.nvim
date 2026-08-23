@@ -799,3 +799,149 @@ findings:
       Nothing pins the agreement, so adding a kind to STRUCTURAL_KINDS would
       silently stop terminating reasoning blocks on it.
 ```
+
+---
+
+## Re-review — 2026-08-22T19:43:40-07:00 (FIX-THEN-SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 203 — chat_parser: recover from a malformed or truncated tool fence |
+| repo | parley.nvim |
+| issue file | workshop/issues/000203-chat-parser-recover-from-a-malformed-or-truncated-tool-fence.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 5c65036ec43c303681e7969d7bb479b4c9a2c3e5..597bb1fd20d348a3e9783d94f0227bd96def5381 |
+| command | sdlc close --issue 203 |
+| reviewer | claude |
+| timestamp | 2026-08-22T19:43:40-07:00 |
+| verdict | FIX-THEN-SHIP |
+
+## Review
+
+Verification complete. Working tree restored to its starting state; every probe reverted.
+
+```verdict
+verdict: FIX-THEN-SHIP
+confidence: high
+```
+
+The rule is correct and I confirmed it independently rather than trusting the Log: a 343-file sweep of the parsed model (exchange count, question lines, every content-block type/span) with the `#203` bound on vs. off diffs **empty**, and the deleted-but-unstaged transcript restored from HEAD is byte-identical too — so Spec bullet 2 ("well-formed transcripts keep today's behaviour exactly") holds. Suite is clean: luacheck 0/0 over 340 files, 134 unit spec files pass, integration exits 0. BR-14 is genuinely closed this round — I deleted the bound from `fence.lua` and all five `refuses to span a column-0 …` cases went red, which is exactly what round 4 said they could not do. BR-10 likewise has teeth (adding `f` to `STRUCTURAL_TOKENS` fires two of the three new cases). What holds SHIP back is that **BR-18 is half-delivered and recorded as done**: its enumeration named two hand-maintained restatements, `chat_parser.lua:761` was converted and `highlight_structure.lua:142-146` was not — and I proved nothing pins their agreement by deleting `tool_result` from that site and watching all seven potentially-affected specs stay green. That is the finding's own predicted failure, still live, in the module that declares the set.
+
+## 1. Strengths
+
+- **BR-14's fix discriminates now, verified by revert.** Removing the bound from `lua/parley/fence.lua:164` turns 8 cases red in `chat_parser_tools_spec`, including all five `refuses to span a column-0 X inside a body`. The switch from an exchange count to `fence.scan`'s body extent is what made them able to see the rule — the round-4 finding named the assertion and it works.
+- **No drift on real content, measured not asserted.** 343 tracked + untracked markdown files parsed with the bound on and off: identical. The named-exclusion transcript (`global-warming-overview.md`, restored from HEAD) also parses identically, so the one gap in the corpus audit conceals nothing.
+- **BR-10's new pins have teeth** (`tests/unit/highlight_structure_spec.lua:163-187`): injecting a bogus token fails both *"is exactly the markers chat_parser calls structural"* and *"every member is a real kind the classifier can produce"*, the latter with a precise message.
+- **The producer guard actually ran end to end here** — all 7 cases (`read_file` single-file, `grep`/`ack` × {single file, directory}) executed with `ack` present on this host, and `grep.lua:159` / `ack.lua:78` put `-H` at the producer so every single-target spelling is covered by construction rather than by a fixture.
+- **`fence.lua`'s two search functions carry their own, non-contradictory rationales** (`:132-138` UNBOUNDED with the BR-1 history, `:146-160` BOUNDED with the producer argument and both stated exceptions). Exactly three `fence.scan` callers exist and all three pass the predicate.
+
+## 2. Critical findings
+
+None. No correctness defect, no behavior drift, no reachable crash in the diff.
+
+## 3. Important findings
+
+**I1 — `lua/parley/highlight_structure.lua:142-146`: BR-18's second named site is unchanged, and the round-4 Log records the class as swept.** This is BR-18 re-opened, not a new id. The fix introduced `STRUCTURAL_TOKENS` at `:24-25` and used it at exactly one place — the derivation at `:28`. The reasoning-termination scan 118 lines below still spells the membership out by hand:
+
+```lua
+elseif token == TOKENS.user or token == TOKENS.assistant
+    or token == TOKENS["local"] or token == TOKENS.branch
+    or token == TOKENS.summary or token == TOKENS.tool_use
+    or token == TOKENS.tool_result then
+```
+
+Measured: deleting `or token == TOKENS.tool_result` from that site leaves **every** spec that could notice green — `highlight_structure_spec` (12/0, including its own `STRUCTURAL_KINDS (#203)` block), `parse_chat_spec` (54/0, including all seven reasoning-termination cases), `chat_parser_tools_spec` (35/0), `answer_structure_spec`, `fold_projection_spec`, `highlighter_spec`, `chat_parser_section_lines_spec`. So the drift BR-18 predicted — *"adding a kind to STRUCTURAL_KINDS would silently stop terminating reasoning blocks on it"* — is exactly as live as it was, and the module now has **two** implementations of reasoning termination (this one and `chat_parser.lua:758-766`) with only one deriving.
+
+Two claims are false as a result: the docstring at `:22-23` (*"Membership is stated once, as the token set below"*) and the round-4 `## Log` entry (*"the lookahead calls `is_structural_kind`"* — singular; `chat_parser`'s does, this module's does not). Substitution is exact, as the finding said: `reasoning_end` is handled by the preceding branch, and `STRUCTURAL_TOKENS[token]` is membership-identical. Add a case that fails when the two disagree — that is the part BR-18 asked for and the part still missing.
+
+## 4. Minor findings
+
+- **BR-17 reproduced.** With `M._classify` injected, `fold_projection.verify_anchors` dies at `fold_projection.lua:140`: `attempt to index upvalue 'highlight_structure' (a nil value)`. Still unreachable in production (nothing sets the seam), so Minor stands.
+- **BR-16 confirmed unchanged**: `tool_output_prefix_spec.lua:3-8` still states *"no tool EMITS one — every tool prefixes its output"*, contradicting `:110-117` of the same file. My enumeration of the invariant's prose restatements finds seven sites (`fence.lua:146-160`, `grep.lua:152-158`, `ack.lua:76-77`, the spec header, `atlas/providers/tool_use.md:172-200`, `atlas/chat/format.md:12`, `atlas/chat/parsing.md:21-25`); six were corrected for BR-12, the spec header was not.
+- **BR-7, BR-9, BR-11, BR-15 confirmed byte-unchanged** in this window; see the dispose block for per-finding evidence.
+- **BR-10 residue**: `tests/unit/highlight_structure_spec.lua` now exists and has teeth, but is still absent from `chat/parsing`'s `tests:` list in `atlas/traceability.yaml`, though `highlight_structure.lua` was added to that entry's `code:` list — so `make test-spec SPEC=chat/parsing` skips the spec for the module owning the set.
+- `lua/parley/tools/builtin/grep.lua:110` — the `flags` schema still advertises `-n, --line-number` as caller-selectable while `:159` emits `-n` unconditionally, so the model is offered a no-op flag. Harmless (duplicate `-n` is fine for both `rg` and `grep`), but it is now dead surface in a prompt-visible description.
+
+## 5. Test coverage notes
+
+- The pins that matter are real and I checked each by reverting rather than reading: the `#203` bound (5+3 cases red), the BR-1 separation, and the `STRUCTURAL_KINDS` membership. The producer guard exercised all 7 cases on this host.
+- **The one coverage claim that is now false** is raised below: `tests/fixtures/fold_adversarial.md`'s read_file body gained the `%5d  ` prefix, and `fence.open_len` anchors at `^`, so the indented ```` ``` ```` lines at `:22`/`:24` are no longer fences. The fixture's own line 24 still reads *"this nested block uses a shorter fence"*, and `fold_invariants_spec.lua:51-54` still justifies including the fixture partly because it supplies *"a shorter fence nested in a longer one"*. Neither is true any more. The property itself is still pinned at `fence_spec.lua:246` and `chat_parser_tools_spec.lua:474-484`, so this is a false claim plus a lost integration-level instance, not a suite hole.
+- `survives a body truncated mid-write with no close at all` still passes with the bound removed entirely (no close exists anywhere, so both searches return nil). Valid as a regression pin; not a pin on the new rule. Round 3's note still applies.
+
+## 6. Architectural notes
+
+- **ARCH-DRY — flag (I1, BR-16).** The structural set has one declared source and one un-derived consumer inside the declaring module, with nothing pinning agreement; and the producer invariant is restated in seven prose sites, six of which were updated for BR-12 and one of which was not. Both are the same shape: a restatement is a deferred consumer. A separate, still-unbanked consolidation: all three `fence.scan` call sites spell out `is_structural_kind(classify(…))`; one exported `highlight_structure.structural_predicate(kinds)` would retire BR-7's second classify and BR-17's upvalue coupling together and make a fourth consumer hard to get wrong.
+- **ARCH-PURE — pass.** `fence.lua` is pure, the predicate is injected, and `fence_spec` exercises the new rule with no IO. `answer_structure`'s new module-level `require` of `highlight_structure` is safe — it is only ever required lazily from `chat_parser`/`chat_respond`, so nothing depends on it loading without `vim`. Residue is efficiency and initialization order (BR-7, BR-17), not purity.
+- **ARCH-PURPOSE — flag (I1).** The headline purpose is delivered and I verified it: the malformed shape recovers, and the 343-file sweep shows the well-formed case pays nothing. What is under-delivered is again the *class*: BR-18 wrote the enumeration out explicitly, with both file:line pairs, and one of the two was fixed. The `hand-maintained-set-restates-source` family has now produced a finding in three consecutive rounds (BR-3 → BR-18 → this), each time closing the site named and not the set named — which is precisely the ledger telling you the enumeration was never executed as a sweep.
+- **ARCH-MOCK — pass, with the standing note.** `tool_output_prefix_spec` shells out to the real `rg`/`ack`/`ls`/`find` against a tempdir. That is the right call: the invariant *is* conformance with the real binary's output shape, and BR-12 is the proof no fake would have modelled rg's single-file filename suppression. It should be labelled in `atlas/providers/tool_use.md` as the live-conformance check so a later move to a fake does not silently drop it; BR-15's machine-dependent `ack` coverage is the stated cost of that choice and did not bite on this host.
+
+## 7. Plan revision recommendations
+
+- **Un-tick Plan step 2 again, or finish it.** *"Name the kind set once … do not hand-list kinds at the call sites"* is ticked for the third round while `highlight_structure.lua:142-146` still hand-lists. Add a `## Revisions` entry recording that the sweep — not the predicate — is the deliverable, and that the acceptance test for the step is *"break one site's membership and watch a test go red."*
+- **Correct the round-4 `## Log` entry for BR-18.** It reads *"the lookahead calls `is_structural_kind`, and `highlight_structure_spec` pins the membership"*; the spec pins the set's membership, not its agreement with the site that restates it, and only one of the two lookaheads was converted.
+- **Record the fixture-fidelity consequence.** Plan step 7 changed `fold_adversarial.md` deliberately, but two coverage claims about that fixture were not re-derived from its new content — note that the corpus-level nested-fence instance is gone and where the property is still pinned.
+
+```findings
+dispose:
+  - id: BR-7
+    disposition: not-addressed
+    note: |
+      fold_projection.lua:140 unchanged — still a second full classify per line inside verify_anchors, no shared kinds memo.
+  - id: BR-9
+    disposition: not-addressed
+    note: |
+      workshop/plans/203-experiment.patch still tracked at 76KB / 1760 lines and still deletes a tracked transcript on apply.
+  - id: BR-10
+    disposition: addressed
+    note: |
+      Verified by falsification — adding f to STRUCTURAL_TOKENS fires two of the three new highlight_structure_spec cases with precise messages. Residue: the spec is still absent from chat/parsing's tests list in traceability.yaml though the module is in its code list.
+  - id: BR-11
+    disposition: not-addressed
+    note: |
+      fence.lua:127 signature unchanged; the guard at :164 is still `if is_structural and ...`.
+  - id: BR-14
+    disposition: addressed
+    note: |
+      Verified by revert — deleting the bound at fence.lua:164 turns all five "refuses to span a column-0 X" cases red (8 fails total in chat_parser_tools_spec, 27 pass); the extent assertion discriminates where the exchange count could not.
+  - id: BR-15
+    disposition: not-addressed
+    note: |
+      tool_output_prefix_spec.lua:140-151 unchanged; ack still self-skips with no counted allowlist, and the marker-named fixture at :47 is still read by no case. All 7 cases ran on this host, so the gap is untriggered rather than closed.
+  - id: BR-16
+    disposition: not-addressed
+    note: |
+      tool_output_prefix_spec.lua:3-8 still states the absolute claim BR-12 falsified, contradicting :110-117 of the same file; enumeration this round finds seven prose restatements of the invariant, six updated and this one not.
+  - id: BR-17
+    disposition: not-addressed
+    note: |
+      Reproduced: with M._classify injected, verify_anchors dies at fold_projection.lua:140 with "attempt to index upvalue 'highlight_structure' (a nil value)". Still unreachable in production.
+  - id: BR-18
+    disposition: not-addressed
+    note: |
+      Only one of the two sites the finding enumerated was converted. highlight_structure.lua:142-146 still hand-lists the membership STRUCTURAL_TOKENS declares 118 lines above, and nothing pins the agreement — deleting `or token == TOKENS.tool_result` from that site leaves highlight_structure_spec, parse_chat_spec, chat_parser_tools_spec, answer_structure_spec, fold_projection_spec, highlighter_spec and chat_parser_section_lines_spec all green.
+findings:
+  - id: new
+    severity: Minor
+    family: stale-test-premise
+    title: |
+      Two coverage claims about fold_adversarial.md survived the fixture change that falsified them
+    detail: |
+      This is the 2nd finding in family stale-test-premise, so the ask is the
+      RULE. BR-14 fixed the instance where a test's NAME outlived what it
+      exercised; the class is wider — any claim about what a fixture covers must
+      be re-derived when the fixture changes. Plan step 7 correctly gave
+      fold_adversarial.md's read_file body the `%5d  ` prefix, and because
+      fence.open_len anchors at `^`, the indented ``` lines at :22 and :24 stopped
+      being fences at all. Two claims were not re-derived: the fixture's own line
+      24 still reads "this nested block uses a shorter fence", and
+      fold_invariants_spec.lua:51-54 still justifies including the fixture partly
+      because it supplies "a shorter fence nested in a longer one". Neither is
+      true, so the corpus-level nested-fence instance is gone with nothing
+      recording it. The property is still pinned at fence_spec.lua:246 and
+      chat_parser_tools_spec.lua:474-484, so this is a false claim plus a lost
+      integration instance, not a suite hole. Enumeration for the rule: every
+      fixture touched in 5c65036..597bb1f (fold_adversarial.md alone), and every
+      site claiming what it exercises — the fixture's inline prose and each spec
+      that lists it with a justification.
+```

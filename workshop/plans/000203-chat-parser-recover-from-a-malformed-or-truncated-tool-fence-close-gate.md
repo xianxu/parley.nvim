@@ -415,6 +415,71 @@ rounds:
           family: hand-maintained-set-restates-source
           round: 4
       blocked: false
+    - "n": 5
+      timestamp: "2026-08-22T19:43:40-07:00"
+      agent: claude
+      dispose:
+        - id: BR-7
+          disposition: not-addressed
+          note: fold_projection.lua:140 unchanged — still a second full classify per line inside verify_anchors, no shared kinds memo.
+          round: 5
+        - id: BR-9
+          disposition: not-addressed
+          note: workshop/plans/203-experiment.patch still tracked at 76KB / 1760 lines and still deletes a tracked transcript on apply.
+          round: 5
+        - id: BR-10
+          disposition: addressed
+          note: 'Verified by falsification — adding f to STRUCTURAL_TOKENS fires two of the three new highlight_structure_spec cases with precise messages. Residue: the spec is still absent from chat/parsing''s tests list in traceability.yaml though the module is in its code list.'
+          round: 5
+        - id: BR-11
+          disposition: not-addressed
+          note: fence.lua:127 signature unchanged; the guard at :164 is still `if is_structural and ...`.
+          round: 5
+        - id: BR-14
+          disposition: addressed
+          note: Verified by revert — deleting the bound at fence.lua:164 turns all five "refuses to span a column-0 X" cases red (8 fails total in chat_parser_tools_spec, 27 pass); the extent assertion discriminates where the exchange count could not.
+          round: 5
+        - id: BR-15
+          disposition: not-addressed
+          note: tool_output_prefix_spec.lua:140-151 unchanged; ack still self-skips with no counted allowlist, and the marker-named fixture at :47 is still read by no case. All 7 cases ran on this host, so the gap is untriggered rather than closed.
+          round: 5
+        - id: BR-16
+          disposition: not-addressed
+          note: tool_output_prefix_spec.lua:3-8 still states the absolute claim BR-12 falsified, contradicting :110-117 of the same file; enumeration this round finds seven prose restatements of the invariant, six updated and this one not.
+          round: 5
+        - id: BR-17
+          disposition: not-addressed
+          note: 'Reproduced: with M._classify injected, verify_anchors dies at fold_projection.lua:140 with "attempt to index upvalue ''highlight_structure'' (a nil value)". Still unreachable in production.'
+          round: 5
+        - id: BR-18
+          disposition: not-addressed
+          note: Only one of the two sites the finding enumerated was converted. highlight_structure.lua:142-146 still hand-lists the membership STRUCTURAL_TOKENS declares 118 lines above, and nothing pins the agreement — deleting `or token == TOKENS.tool_result` from that site leaves highlight_structure_spec, parse_chat_spec, chat_parser_tools_spec, answer_structure_spec, fold_projection_spec, highlighter_spec and chat_parser_section_lines_spec all green.
+          round: 5
+      findings:
+        - id: BR-19
+          severity: Minor
+          title: Two coverage claims about fold_adversarial.md survived the fixture change that falsified them
+          detail: |-
+            This is the 2nd finding in family stale-test-premise, so the ask is the
+            RULE. BR-14 fixed the instance where a test's NAME outlived what it
+            exercised; the class is wider — any claim about what a fixture covers must
+            be re-derived when the fixture changes. Plan step 7 correctly gave
+            fold_adversarial.md's read_file body the `%5d  ` prefix, and because
+            fence.open_len anchors at `^`, the indented ``` lines at :22 and :24 stopped
+            being fences at all. Two claims were not re-derived: the fixture's own line
+            24 still reads "this nested block uses a shorter fence", and
+            fold_invariants_spec.lua:51-54 still justifies including the fixture partly
+            because it supplies "a shorter fence nested in a longer one". Neither is
+            true, so the corpus-level nested-fence instance is gone with nothing
+            recording it. The property is still pinned at fence_spec.lua:246 and
+            chat_parser_tools_spec.lua:474-484, so this is a false claim plus a lost
+            integration instance, not a suite hole. Enumeration for the rule: every
+            fixture touched in 5c65036..597bb1f (fold_adversarial.md alone), and every
+            site claiming what it exercises — the fixture's inline prose and each spec
+            that lists it with a justification.
+          family: stale-test-premise
+          round: 5
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#203 (boundary-review)
@@ -668,14 +733,48 @@ later rounds disposed of them. Generated — edit the gate, not this file.
   Nothing pins the agreement, so adding a kind to STRUCTURAL_KINDS would
   silently stop terminating reasoning blocks on it.
 
+## Round 5 — 2026-08-22T19:43:40-07:00 (claude) — passed
+
+### Disposed
+
+- BR-7 — not-addressed — fold_projection.lua:140 unchanged — still a second full classify per line inside verify_anchors, no shared kinds memo.
+- BR-9 — not-addressed — workshop/plans/203-experiment.patch still tracked at 76KB / 1760 lines and still deletes a tracked transcript on apply.
+- BR-10 — addressed — Verified by falsification — adding f to STRUCTURAL_TOKENS fires two of the three new highlight_structure_spec cases with precise messages. Residue: the spec is still absent from chat/parsing's tests list in traceability.yaml though the module is in its code list.
+- BR-11 — not-addressed — fence.lua:127 signature unchanged; the guard at :164 is still `if is_structural and ...`.
+- BR-14 — addressed — Verified by revert — deleting the bound at fence.lua:164 turns all five "refuses to span a column-0 X" cases red (8 fails total in chat_parser_tools_spec, 27 pass); the extent assertion discriminates where the exchange count could not.
+- BR-15 — not-addressed — tool_output_prefix_spec.lua:140-151 unchanged; ack still self-skips with no counted allowlist, and the marker-named fixture at :47 is still read by no case. All 7 cases ran on this host, so the gap is untriggered rather than closed.
+- BR-16 — not-addressed — tool_output_prefix_spec.lua:3-8 still states the absolute claim BR-12 falsified, contradicting :110-117 of the same file; enumeration this round finds seven prose restatements of the invariant, six updated and this one not.
+- BR-17 — not-addressed — Reproduced: with M._classify injected, verify_anchors dies at fold_projection.lua:140 with "attempt to index upvalue 'highlight_structure' (a nil value)". Still unreachable in production.
+- BR-18 — not-addressed — Only one of the two sites the finding enumerated was converted. highlight_structure.lua:142-146 still hand-lists the membership STRUCTURAL_TOKENS declares 118 lines above, and nothing pins the agreement — deleting `or token == TOKENS.tool_result` from that site leaves highlight_structure_spec, parse_chat_spec, chat_parser_tools_spec, answer_structure_spec, fold_projection_spec, highlighter_spec and chat_parser_section_lines_spec all green.
+
+### Raised
+
+- **BR-19** [Minor] `stale-test-premise` Two coverage claims about fold_adversarial.md survived the fixture change that falsified them
+  This is the 2nd finding in family stale-test-premise, so the ask is the
+  RULE. BR-14 fixed the instance where a test's NAME outlived what it
+  exercised; the class is wider — any claim about what a fixture covers must
+  be re-derived when the fixture changes. Plan step 7 correctly gave
+  fold_adversarial.md's read_file body the `%5d  ` prefix, and because
+  fence.open_len anchors at `^`, the indented ``` lines at :22 and :24 stopped
+  being fences at all. Two claims were not re-derived: the fixture's own line
+  24 still reads "this nested block uses a shorter fence", and
+  fold_invariants_spec.lua:51-54 still justifies including the fixture partly
+  because it supplies "a shorter fence nested in a longer one". Neither is
+  true, so the corpus-level nested-fence instance is gone with nothing
+  recording it. The property is still pinned at fence_spec.lua:246 and
+  chat_parser_tools_spec.lua:474-484, so this is a false claim plus a lost
+  integration instance, not a suite hole. Enumeration for the rule: every
+  fixture touched in 5c65036..597bb1f (fold_adversarial.md alone), and every
+  site claiming what it exercises — the fixture's inline prose and each spec
+  that lists it with a justification.
+
 ## Open findings
 
 - **BR-7** [Minor] `redundant-per-line-work-in-scan` fold_projection's is_structural predicate does a per-line require plus a second full classify in a function documented as per-streamed-chunk hot
 - **BR-9** [Minor] `experiment-artifact-committed-unpruned` workshop/plans/203-experiment.patch is 1760 lines, ~1690 of which are a corpus transcript it would delete on apply
-- **BR-10** [Minor] `single-source-untested-directly` STRUCTURAL_KINDS and is_structural_kind have no direct unit test despite deciding the rule
 - **BR-11** [Minor] `optional-param-documented-as-required` fence.scan's is_structural is documented "Required in practice" but is optional in the signature
-- **BR-14** [Important] `stale-test-premise` A test still asserts by name the premise this issue refuted, and stays green because its assertion cannot see the change
 - **BR-15** [Minor] `silent-skip-guard` The producer guard silently drops ack coverage on a host without ack, while the atlas claims it fails loudly rather than skipping
 - **BR-16** [Minor] `atlas-surface-not-updated` The producer guard's own header still states the absolute claim BR-12 falsified, contradicting its body 100 lines down
 - **BR-17** [Minor] `closure-captures-lazy-upvalue` fold_projection's new is_structural closure reads an upvalue initialized only as a side effect of another closure
 - **BR-18** [Important] `hand-maintained-set-restates-source` Two hand-maintained restatements of STRUCTURAL_KINDS survive, one inside the module that declares it and one at the site the Plan named as the source
+- **BR-19** [Minor] `stale-test-premise` Two coverage claims about fold_adversarial.md survived the fixture change that falsified them

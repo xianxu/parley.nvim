@@ -1,11 +1,17 @@
 -- #203: the producer half of the parser's safety.
 --
 -- `fence.scan` refuses to let a tool body span a column-0 structural marker.
--- That is only safe because no tool EMITS one — every tool prefixes its output
--- (read_file `%5d  `, grep/ack `file:line:`, chat_history_search
--- `{label}/path:line:`). Nothing enforced that, so a future tool that returned
--- raw file content would silently re-open the ambiguity #203 closed, and the
--- failure would show up as chats collapsing into one exchange.
+-- That is safe because the CONTENT-ECHOING tools never emit one: they prefix
+-- their output (read_file `%5d  `, grep/ack `-H` giving `file:line:`,
+-- chat_history_search `{label}/path:line:`). Nothing enforced that, so a future
+-- tool returning raw file content would silently re-open the ambiguity #203
+-- closed, and the failure would show up as chats collapsing into one exchange.
+--
+-- The claim is BOUNDED, not total (#203 BR-12/BR-16), and the exceptions are in
+-- NOT_ECHOING below with their reasons: path-echoing tools emit a marker for a
+-- file NAMED like one, and the shell tools splice raw stderr on error. Both
+-- degrade to over-forking. This header used to assert totality and contradict
+-- its own body a hundred lines down.
 --
 -- The tool list is DERIVED from the registry, not hand-listed: the first draft
 -- of this guard named four of ten and missed `emit_definition`, which is the
@@ -141,12 +147,16 @@ describe("tool output never begins a line with a structural marker (#203)", func
             if not def then
                 -- Absent is only acceptable for an OPTIONAL tool; for a builtin
                 -- it means the registry moved and this guard stopped running.
+                -- Either way it is REPORTED as a pending case rather than a
+                -- silent return, so "green" cannot mean "ack was never checked"
+                -- on a host without ack (#203 BR-15).
                 local optional = false
                 for _, n in ipairs(tools.OPTIONAL_NAMES) do
                     if n == name then optional = true end
                 end
                 assert.message(name .. " is not registered — guard would silently skip")
                     .is_true(optional)
+                pending(name .. " is not installed on this host; coverage NOT exercised")
                 return
             end
             local result = def.handler(build(file, dir))

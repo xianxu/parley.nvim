@@ -117,10 +117,13 @@ end
 ---
 --- @param lines string[]                         1-based
 --- @param is_tool_marker fun(line, row):boolean  true for 🔧:/📎: at column 0
---- @param is_structural fun(line, row):boolean   true for 📝/🔧/📎/💬/🤖/🌿/🔒 at
----                        column 0 (#203). Every consumer passes it; omitting it
----                        silently restores the pre-#203 search, in which a body
----                        can latch onto a close belonging to another pair.
+--- @param is_structural fun(line, row):boolean|nil  true for 📝/🔧/📎/💬/🤖/🌿/🔒
+---                        at column 0 (#203). Optional in the signature and
+---                        passed by every consumer: omitting it restores the
+---                        pre-#203 search, in which a body can latch onto a close
+---                        belonging to another pair. It stays optional because
+---                        fence_spec drives scan without it to test the grammar
+---                        alone.
 --- @return table bodies   marker_row -> { first, last, close } (first > last for
 ---                        an empty body; close is nil when none was found)
 --- @return table markers  set of 1-based rows holding a depth-0 tool marker
