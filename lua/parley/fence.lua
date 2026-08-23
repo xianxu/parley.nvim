@@ -110,19 +110,61 @@ end
 ---     depth > 0 and yields no markers;
 ---   * an opener with no matching close is treated as ordinary text rather than
 ---     swallowing the remainder, so malformed input over-forks instead of
----     silently losing exchanges.
+---     silently losing exchanges;
+---   * a tool body's close must also fall before the next column-0 structural
+---     marker (#203) — see body_close_of for why that bound is safe and where
+---     it is not total.
 ---
 --- @param lines string[]                         1-based
 --- @param is_tool_marker fun(line, row):boolean  true for 🔧:/📎: at column 0
+--- @param is_structural fun(line, row):boolean|nil  true for 📝/🔧/📎/💬/🤖/🌿/🔒
+---                        at column 0 (#203). Optional in the signature and
+---                        passed by every consumer: omitting it restores the
+---                        pre-#203 search, in which a body can latch onto a close
+---                        belonging to another pair. It stays optional because
+---                        fence_spec drives scan without it to test the grammar
+---                        alone.
 --- @return table bodies   marker_row -> { first, last, close } (first > last for
 ---                        an empty body; close is nil when none was found)
 --- @return table markers  set of 1-based rows holding a depth-0 tool marker
-function M.scan(lines, is_tool_marker)
+function M.scan(lines, is_tool_marker, is_structural)
     local bodies, markers = {}, {}
 
+    -- UNBOUNDED, and it must stay that way. This search establishes DEPTH for
+    -- ORDINARY fenced blocks. A block that fails to establish depth leaves its
+    -- own closer to be read as an opener: the scan desyncs by one fence and a
+    -- `📎:` quoted in prose becomes a depth-0 marker — BR-43 exactly. The #203
+    -- bound belongs to tool bodies alone; putting it here re-opened the defect
+    -- #200 closed, and the whole suite stayed green while it was broken (found
+    -- by this issue's own close review, BR-1).
     local function close_of(open_len, from)
         for row = from, #lines do
             if M.closes(lines[row], open_len) then return row end
+        end
+        return nil
+    end
+
+    -- BOUNDED: a TOOL BODY may not span a column-0 structural marker (#203).
+    -- Without the bound, an opener that is never closed latches onto some later
+    -- unrelated bare fence, and every 💬: in between stops starting an exchange
+    -- — the rest of the chat collapses into one, silently.
+    --
+    -- The bound is safe because a marker inside a body means the content did not
+    -- come from a parley tool: the content-echoing tools all prefix their output
+    -- (read_file `%5d  `, grep/ack `-H` giving `file:line:`, chat_history_search
+    -- `{label}/path:line:`). So the body is hand-edited, truncated, or pasted,
+    -- and forking there is the visible degradation chosen over silent swallowing.
+    --
+    -- NOT a total invariant, and the claim is bounded rather than chased: the
+    -- path-echoing tools (ls, find) emit a column-0 marker for a file NAMED like
+    -- one, and the shell tools splice raw stderr on error. Both degrade to
+    -- over-forking, which is the accepted direction.
+    -- tests/integration/tool_output_prefix_spec.lua guards the producer half over
+    -- a tool x call-shape product, and records those two exceptions.
+    local function body_close_of(open_len, from)
+        for row = from, #lines do
+            if M.closes(lines[row], open_len) then return row end
+            if is_structural and is_structural(lines[row], row) then return nil end
         end
         return nil
     end
@@ -133,7 +175,7 @@ function M.scan(lines, is_tool_marker)
         if is_tool_marker(line, row) then
             markers[row] = true
             local body_len = M.open_len(lines[row + 1] or "")
-            local close = body_len and close_of(body_len, row + 2)
+            local close = body_len and body_close_of(body_len, row + 2)
             if close then
                 bodies[row] = { first = row + 2, last = close - 1, close = close }
                 row = close + 1

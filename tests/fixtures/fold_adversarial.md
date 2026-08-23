@@ -16,13 +16,13 @@ file: fold_adversarial.md
 
 📎: read_file id=a1
 ````
-💬: a question that lives inside the file being read
-🤖: and the answer that follows it
-📎: read_file id=nested
-```
-this nested block uses a shorter fence
-```
-📝: even a summary marker in here is content
+    1  💬: a question that lives inside the file being read
+    2  🤖: and the answer that follows it
+    3  📎: read_file id=nested
+    4  ```
+    5  this nested block uses a shorter fence
+    6  ```
+    7  📝: even a summary marker in here is content
 ````
 
 📝: read the transcript; its contents only look structural

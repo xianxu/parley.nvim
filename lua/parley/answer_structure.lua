@@ -3,17 +3,18 @@
 local M = {}
 
 local fence = require("parley.fence")
+local highlight_structure = require("parley.highlight_structure")
 
-local BOUNDARY = {
-    reasoning = true,
-    summary = true,
-    tool_use = true,
-    tool_result = true,
-    user = true,
-    assistant = true,
-    branch = true,
-    ["local"] = true,
-}
+-- Derived, not hand-listed (#203 BR-3): this is
+-- highlight_structure.STRUCTURAL_KINDS plus `reasoning`. The two sets
+-- legitimately differ — a 🧠: TERMINATES a preceding block, so it is a boundary
+-- here, but it is not a structural marker a tool body may not span, so it is not
+-- in STRUCTURAL_KINDS. Stating that difference once beats maintaining two
+-- near-identical tables that drift apart silently (ARCH-DRY).
+local BOUNDARY = { reasoning = true }
+for kind in pairs(highlight_structure.STRUCTURAL_KINDS) do
+    BOUNDARY[kind] = true
+end
 
 local function trim_span(lines, first, last)
     while first <= last and not lines[first]:match("%S") do first = first + 1 end
@@ -37,6 +38,8 @@ function M.reduce(lines, patterns, opts)
     -- run-to-next-boundary arm and swallows the prose after it (#200 BR-52).
     local bodies, markers = fence.scan(lines, function(_, row)
         return kinds[row] == "tool_use" or kinds[row] == "tool_result"
+    end, function(_, row)
+        return highlight_structure.is_structural_kind(kinds[row])
     end)
 
     local explicit_end_for = {}

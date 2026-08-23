@@ -154,3 +154,36 @@ describe("highlight_structure", function()
         assert.is_true(structure.state_before(after, 2).in_question)
     end)
 end)
+
+-- #203 BR-18: STRUCTURAL_KINDS had three hand-maintained restatements — the set
+-- itself, TOKENS in the same module, and chat_parser's reasoning-termination
+-- lookahead. Nothing pinned their agreement, so adding a kind would silently
+-- stop terminating reasoning blocks on it. The set derives from TOKENS now;
+-- this pins the membership so the derivation cannot quietly change what it means.
+describe("STRUCTURAL_KINDS (#203)", function()
+    local hs = require("parley.highlight_structure")
+
+    it("is exactly the markers chat_parser calls structural", function()
+        local want = { assistant = true, branch = true, ["local"] = true,
+            summary = true, tool_result = true, tool_use = true, user = true }
+        assert.same(want, hs.STRUCTURAL_KINDS)
+    end)
+
+    it("excludes reasoning — 🧠: is terminated BY a structural marker", function()
+        assert.is_false(hs.is_structural_kind("reasoning"))
+        assert.is_false(hs.is_structural_kind("reasoning_end"))
+    end)
+
+    it("every member is a real kind the classifier can produce", function()
+        local patterns = hs.patterns(require("parley.config"))
+        local produced = {}
+        for _, line in ipairs({ "💬: q", "🤖: a", "📝: s", "🔧: t", "📎: r",
+                                "🌿: b", "🔒: l" }) do
+            produced[hs.classify(line, patterns).kind] = true
+        end
+        for kind in pairs(hs.STRUCTURAL_KINDS) do
+            assert.message(kind .. " is in STRUCTURAL_KINDS but no marker classifies as it")
+                .is_true(produced[kind] == true)
+        end
+    end)
+end)

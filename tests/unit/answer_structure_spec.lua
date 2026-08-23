@@ -116,7 +116,7 @@ describe("tool section closing on the last line (#200 BR-29)", function()
         local lines = {
             "📎: read_file",
             "```",
-            "📝: a summary marker quoted inside the body",
+            "    1  📝: a summary marker quoted inside the body",
             "```",
         }
         local sections = answer_structure.reduce(lines, patterns).sections
@@ -130,7 +130,7 @@ describe("tool section closing on the last line (#200 BR-29)", function()
         local lines = {
             "🔧: read_file",
             "````",
-            "💬: quoted question",
+            "    1  💬: quoted question",
             "```",
             "nested",
             "```",

@@ -99,6 +99,7 @@ atlas:
       - lua/parley/answer_structure.lua
       - lua/parley/chat_parser.lua
       - lua/parley/fence.lua
+      - lua/parley/highlight_structure.lua
       - lua/parley/helper.lua
     tests:
       - tests/unit/answer_structure_spec.lua
@@ -106,6 +107,8 @@ atlas:
       - tests/unit/chat_parser_section_lines_spec.lua
       - tests/unit/chat_parser_tools_spec.lua
       - tests/unit/fence_spec.lua
+      - tests/unit/fold_projection_spec.lua
+      - tests/integration/tool_output_prefix_spec.lua
       - tests/unit/chat_finder_logic_spec.lua
 
   chat/exchange_model:

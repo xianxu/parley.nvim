@@ -357,7 +357,10 @@ describe("structural markers inside a tool body (#200)", function()
 
     local header = { "---", "topic: t", "file: f.md", "---" }
 
-    it("treats a question marker inside a tool result as content", function()
+    -- #203: the reachable shape. read_file emits "%5d  %s", so a transcript it
+    -- reads carries its markers indented — those are content, and the body spans
+    -- them. The column-0 variant is pinned separately below, and forks.
+    it("treats a quoted question marker inside a tool result as content", function()
         local lines = vim.list_extend(vim.deepcopy(header), {
             "",
             "💬: show me the transcript",
@@ -365,8 +368,8 @@ describe("structural markers inside a tool body (#200)", function()
             "🤖: [A]",
             "📎: read_file id=r1",
             "```",
-            "💬: a question from the file being read",
-            "🤖: and its answer",
+            "    1  💬: a question from the file being read",
+            "    2  🤖: and its answer",
             "```",
             "",
             "💬: second real question",
@@ -379,7 +382,34 @@ describe("structural markers inside a tool body (#200)", function()
         assert.equals(15, parsed.exchanges[2].question.line_start)
     end)
 
-    it("treats a tool-result marker inside a tool body as content", function()
+    -- #203's inverted half. The body above is prefixed, so it spans its
+    -- markers. This one is not — which means the content did not come from a
+    -- parley tool, so the body does not span it and the question forks. Visible
+    -- over-forking is the degradation chosen over silently swallowing the rest
+    -- of the chat.
+    it("forks on a column-0 question marker no tool could have produced", function()
+        local lines = vim.list_extend(vim.deepcopy(header), {
+            "",
+            "💬: q1",
+            "",
+            "🤖: [A]",
+            "📎: read_file id=r1",
+            "```",
+            "💬: pasted from elsewhere, not tool output",
+            "```",
+            "",
+            "💬: q2",
+        })
+        assert.message("a column-0 marker was swallowed as body content")
+            .equals(3, #parse(lines).exchanges)
+    end)
+
+    -- #203 BR-14: this asserted only "1 exchange", which is true whether the
+    -- body SPANS the marker or is REFUSED — so it could not see the change, and
+    -- its name went on claiming the premise this issue refuted. It asserts the
+    -- body extent now, which is the thing that actually differs, and splits into
+    -- the two cases the old fixture conflated.
+    it("treats a PREFIXED tool-result marker inside a tool body as content", function()
         local lines = vim.list_extend(vim.deepcopy(header), {
             "",
             "💬: q",
@@ -388,12 +418,49 @@ describe("structural markers inside a tool body (#200)", function()
             "📎: grep id=r1",
             "```",
             "match: 📎: read_file id=other",
-            "📎: read_file id=other",
+            "chat.md:12: 📎: read_file id=other",
             "```",
         })
         local parsed = parse(lines)
         assert.equals(1, #parsed.exchanges)
+        assert.message("a prefixed marker is grep output, so the body must span it")
+            .is_true(#(parsed.exchanges[1].answer.content_blocks or {}) > 0)
     end)
+
+    -- The tool-marker members of STRUCTURAL_KINDS had no coverage at all: every
+    -- other case in this issue exercises 💬:. A body must refuse to span these
+    -- too, or a column-0 📎: inside one body swallows the NEXT tool block.
+    -- Asserted on fence.scan's BODY EXTENT, not on an exchange count. The count
+    -- is 2 whether the body spans the marker or refuses it, so it cannot see the
+    -- rule — which is the exact defect BR-14 named, and which the first version
+    -- of these very cases committed again (#203 BR-14 round 4). The extent
+    -- discriminates: nil when refused, {first,last,close} when spanned.
+    for _, marker in ipairs({ "📎: read_file id=other", "🔧: read_file id=next",
+                              "📝: a summary", "🔒: local", "🌿: branch" }) do
+        it("refuses to span a column-0 " .. marker:sub(1, 4) .. " inside a body", function()
+            local hs = require("parley.highlight_structure")
+            local patterns = hs.patterns(require("parley.config"))
+            local body = { "📎: grep id=r1", "```", marker, "```" }
+            local bodies = require("parley.fence").scan(body,
+                function(line) return hs.classify(line, patterns).kind == "tool_result"
+                    or hs.classify(line, patterns).kind == "tool_use" end,
+                function(line) return hs.is_structural_kind(hs.classify(line, patterns).kind) end)
+            assert.message(("a body spanned a column-0 %q, which no tool emits"):format(marker))
+                .is_nil(bodies[1])
+        end)
+
+        it("DOES span the same marker when prefixed, as a tool emits it", function()
+            local hs = require("parley.highlight_structure")
+            local patterns = hs.patterns(require("parley.config"))
+            local body = { "📎: grep id=r1", "```", "chat.md:12: " .. marker, "```" }
+            local bodies = require("parley.fence").scan(body,
+                function(line) return hs.classify(line, patterns).kind == "tool_result"
+                    or hs.classify(line, patterns).kind == "tool_use" end,
+                function(line) return hs.is_structural_kind(hs.classify(line, patterns).kind) end)
+            assert.message("a prefixed marker is tool output; the body must span it")
+                .is_not_nil(bodies[1])
+        end)
+    end
 
     it("resumes structural parsing after the body closes", function()
         local lines = vim.list_extend(vim.deepcopy(header), {
@@ -403,7 +470,7 @@ describe("structural markers inside a tool body (#200)", function()
             "🤖: [A]",
             "📎: read id=r1",
             "```",
-            "💬: not a turn",
+            "    1  💬: not a turn",
             "```",
             "",
             "💬: q2",
@@ -425,7 +492,7 @@ describe("structural markers inside a tool body (#200)", function()
             "📎: read id=r1",
             "````",
             "```lua",
-            "💬: still content",
+            "    1  💬: still content",
             "```",
             "````",
             "",
@@ -528,16 +595,46 @@ describe("tool-body extent desync (#200 BR-43)", function()
     -- the "next structural boundary" is circular — the boundary may itself be
     -- inside the body.
     --
-    -- Unreachable from anything parley writes: for_content guarantees a body
-    -- cannot close its own fence, so the first matching close is always right
-    -- for well-formed input. This shape needs a hand-edited, truncated, or
-    -- externally-pasted transcript, and recovering from it needs a real
-    -- fence-depth parser rather than another heuristic — hence #203.
-    -- Current behaviour: 2 exchanges, where M1 (dc5ee17) gave 3.
-    pending("survives an unclosed body followed by a later bare fence", function()
+    -- FIXED by #203, and not with the fence-depth parser this comment once
+    -- predicted. A body may not span a column-0 structural marker, which is
+    -- safe because no tool emits one — every tool prefixes its output. So the
+    -- unclosed body stops at 💬: q2 instead of latching onto the later bare
+    -- fence, and the exchanges it used to swallow survive.
+    it("survives an unclosed body followed by a later bare fence", function()
         assert.equals(3, count({
             "", "💬: q1", "", "🤖: [A]", "📎: r id=1", "```", "never closed",
             "", "💬: q2", "", "🤖: [A]", "```", "", "💬: q3",
+        }))
+    end)
+
+    -- #203: chat_parser carries a SECOND fence tracker (cb_state.tool_fence_len,
+    -- chat_parser.lua:456) that closes a content block on the first
+    -- matching-length bare fence, with no structural-marker bound. It can
+    -- therefore disagree with fence.scan on the malformed shape. It does not,
+    -- because the fork finalizes the block before the later fence is reached —
+    -- but "does not" needs a pin, since a second grammar for the same fence is
+    -- what #200 removed. This asserts the two agree where they could differ.
+    it("does not let the second fence tracker swallow the forked exchanges", function()
+        local lines = { "---", "topic: t", "file: f.md", "---" }
+        vim.list_extend(lines, {
+            "", "💬: q1", "", "🤖: [A]", "📎: r id=1", "```", "never closed",
+            "", "💬: q2", "", "🤖: [A]", "```", "", "💬: q3",
+        })
+        local parsed = parser.parse_chat(lines, 4, test_config())
+        assert.equals(3, #parsed.exchanges)
+        for _, block in ipairs(parsed.exchanges[1].answer.content_blocks or {}) do
+            local text = type(block.content) == "string" and block.content or ""
+            assert.message("exchange 1's block absorbed a later exchange: " .. text)
+                .is_nil(text:find("q2", 1, true))
+        end
+    end)
+
+    -- The truncated-mid-write shape: the writer died after the opener, so there
+    -- is no close anywhere. Nothing later may be absorbed.
+    it("survives a body truncated mid-write with no close at all", function()
+        assert.equals(3, count({
+            "", "💬: q1", "", "🤖: [A]", "📎: r id=1", "````", "partial output",
+            "", "💬: q2", "", "🤖: [A]", "", "💬: q3",
         }))
     end)
 

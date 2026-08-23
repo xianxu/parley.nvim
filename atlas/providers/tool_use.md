@@ -162,7 +162,44 @@ What belongs here is the shape and the consumers:
   extent plus the depth-0 marker set, and `fence.body_rows` is the derived view.
 - Consumers, all deriving: `tools/serialize` (writer *and* both reader paths),
   `answer_structure`'s section scanner, `chat_parser`'s precompute and its
-  `cb_state` tracker, and `fold_projection`'s interior drift scan.
+  `cb_state` tracker, and `fold_projection`'s interior drift scan. All three
+  `fence.scan` callers pass the structural predicate — a caller left without it
+  gets the pre-#203 close search, which is the divergence #200 collapsed.
+- **A body may not span a column-0 structural marker** (#203). The close search
+  stops there rather than latching onto a later bare fence belonging to another
+  pair, which used to swallow every exchange in between, silently.
+
+#### The producer-side invariant that rule rests on
+
+The bound is safe because **the content-echoing tools never emit a column-0
+marker**: each prefixes its output — `read_file` `%5d  `, `grep`/`ack` `-H`
+giving `file:line:`, `chat_history_search` `{label}/path:line:`, and the write
+tools return status messages. So a column-0 marker inside a body means the
+content did not come from a parley tool — hand-edited, truncated, or pasted —
+and forking there is the visible degradation chosen over silent swallowing.
+
+`grep`/`ack` pass `-H` unconditionally rather than leaving it to the caller
+(#203 BR-12): both omit the filename on a **single-file** search, so
+`grep pattern=💬 path=chat.md` used to return bare transcript lines and fork a
+well-formed body.
+
+**The invariant is not total, and the claim is bounded rather than chased.** Two
+exceptions, both degrading to over-forking:
+
+- **path-echoing tools** — for `ls`/`find` the path IS the output, so a file
+  *named* `💬: notes.md` yields a column-0 marker and no flag prevents it;
+- **error paths** — `grep`/`ack`/`ls`/`find` splice raw stderr after a prefixed
+  first line, so a hostile message can carry one.
+
+This is a *producer* obligation the *parser* depends on, so it is guarded where
+it is produced: `tests/integration/tool_output_prefix_spec.lua` derives its
+subjects from `tools.BUILTIN_NAMES` + `OPTIONAL_NAMES`, so a new builtin is
+covered by construction, and drives each over a **call-shape product** (single
+file and directory) — one shape per tool is how its first draft passed while
+`grep` on a single file was emitting column-0 markers. A missing builtin fails;
+an absent OPTIONAL tool (`ack`) is reported `pending` rather than skipped
+silently, so green never means "never checked".
+
 
 **Which markers the depth rule covers** is stated once, in
 `atlas/chat/parsing.md`: tool markers only. Inside a tool body, or inside any

@@ -545,6 +545,8 @@ local fence = require("parley.fence")
 	local bodies, marker_set = fence.scan(body_lines, function(_, row)
 		local kind = kinds[row + header_end]
 		return kind == "tool_use" or kind == "tool_result"
+	end, function(_, row)
+		return highlight_structure.is_structural_kind(kinds[row + header_end])
 	end)
 	local in_tool_body, depth0_marker = {}, {}
 	for k in pairs(fence.body_rows(bodies)) do in_tool_body[k + header_end] = true end
@@ -756,10 +758,10 @@ local fence = require("parley.fence")
 					has_end_marker = true
 					break
 				end
-				if ahead_kind == "summary" or ahead_kind == "tool_use"
-					or ahead_kind == "tool_result" or ahead_kind == "user"
-					or ahead_kind == "assistant" or ahead_kind == "branch"
-					or ahead_kind == "local" then
+				-- The same set STRUCTURAL_KINDS names (#203 BR-18). Hand-listed
+				-- here until this issue, so adding a kind to the set would have
+				-- silently stopped terminating reasoning blocks on it.
+				if highlight_structure.is_structural_kind(ahead_kind) then
 					break
 				end
 			end

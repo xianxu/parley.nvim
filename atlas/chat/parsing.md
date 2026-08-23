@@ -18,6 +18,11 @@ Structural markers (`📝/🔧/📎/💬/🤖/🌿/🔒`) terminate either mode,
 exception that `lua/parley/fence.lua` owns — see its docstrings for the grammar
 itself; this page states only which markers the rule covers.
 
+**A tool body may not span a column-0 structural marker** (#203) —
+`📝/🔧/📎/💬/🤖/🌿/🔒`, the set named in `highlight_structure.STRUCTURAL_KINDS`.
+See `atlas/providers/tool_use.md` for the rule and the producer-side invariant
+it depends on.
+
 **Tool markers only.** A `🔧:`/`📎:` is structural only at fence depth 0:
 
 - inside a **tool body** (the fenced block opening on the line right after such

@@ -90,13 +90,15 @@ function M.verify_anchors(ranges, lines, patterns)
     -- needs `highlight_structure.classify`, which reaches `parley.define` and
     -- touches `vim`. `verify_starts` and `ranges_within` are callable with vim
     -- absent; `verify_anchors` is not, and claiming otherwise was wrong.
-    local highlight_structure
-    if not patterns then
-        highlight_structure = require("parley.highlight_structure")
-        patterns = highlight_structure.patterns()
-    end
+    -- Assigned UNCONDITIONALLY (#203 BR-17). It used to be set only inside the
+    -- `not patterns` branch or as a side effect of the classify closure running,
+    -- so a caller passing `patterns` WITH M._classify injected — the seam that
+    -- line exists for — left it nil, and the first tool range indexed a nil
+    -- value. Requiring here is still lazy enough: this is function scope, so the
+    -- module continues to LOAD without a Neovim global.
+    local highlight_structure = require("parley.highlight_structure")
+    patterns = patterns or highlight_structure.patterns()
     local classify = M._classify or function(line, p)
-        highlight_structure = highlight_structure or require("parley.highlight_structure")
         return highlight_structure.classify(line, p)
     end
     local user_pattern = patterns.user_pattern
@@ -133,9 +135,22 @@ function M.verify_anchors(ranges, lines, patterns)
             for row = range.start_0, range.end_0 do
                 window[row - range.start_0 + 1] = lines[row]
             end
+            -- One classify per line, memoized: this runs per streamed chunk, and
+            -- the two predicates asked the same question twice (#203 BR-7).
+            local kind_of = {}
+            local function kind(line)
+                local k = kind_of[line]
+                if k == nil then
+                    k = classify(line, patterns).kind
+                    kind_of[line] = k
+                end
+                return k
+            end
             local found = fence.scan(window, function(line)
-                local k = classify(line, patterns).kind
+                local k = kind(line)
                 return k == "tool_use" or k == "tool_result"
+            end, function(line)
+                return highlight_structure.is_structural_kind(kind(line))
             end)
             for k in pairs(fence.body_rows(found)) do
                 body_rows[range.start_0 + k - 1] = true

@@ -58,9 +58,55 @@ describe("fold invariants over the repo transcript corpus", function()
         -- actually broke, so this one carries the raw-text oracle's teeth.
         "tests/fixtures/fold_marker_in_prose.md",
     }
+    -- Dropping unreadable tracked files is deliberate (a file can be deleted but
+    -- unstaged), but a SILENT drop lets "the audit is clean over every tracked
+    -- transcript" be false without anyone noticing — #203's own close evidence
+    -- claimed exactly that while one deleted transcript was skipped (BR-5). So
+    -- the skips are counted and reported as a case of their own.
+    local skipped = {}
     for _, path in ipairs(corpus_provider()) do
-        if vim.fn.filereadable(path) == 1 then corpus[#corpus + 1] = path end
+        if vim.fn.filereadable(path) == 1 then
+            corpus[#corpus + 1] = path
+        else
+            skipped[#skipped + 1] = path
+        end
     end
+
+    -- This audit is cited as evidence that the fold invariants hold over the
+    -- whole corpus, so a silently skipped file makes that evidence false (#203
+    -- BR-5). The first fix printed the skips — but RUN_SPEC discards output on a
+    -- PASS, so nobody would ever see it. It asserts now.
+    --
+    -- Zero is the right threshold, not "however many are broken today": either
+    -- resolution of a deleted-but-unstaged transcript clears it. Commit the
+    -- deletion and the file stops being tracked, so it is never listed; restore
+    -- it and it is readable. Only the limbo state fails, which is the state that
+    -- actually invalidates the claim.
+    -- One NAMED exclusion, deliberately not a numeric tolerance (#203 BR-5).
+    -- A "<= 1" threshold would silently absorb whichever file broke next; naming
+    -- it means any OTHER skip still fails, and the coverage claim can state its
+    -- own exception instead of overstating itself.
+    --
+    -- This transcript is deleted-but-unstaged in the working tree, and the
+    -- operator chose (2026-08-22) to leave it in limbo rather than commit the
+    -- deletion or restore it. Either resolution retires this entry: committing
+    -- the deletion untracks the file so it is never listed; restoring it makes
+    -- it readable.
+    local KNOWN_UNREADABLE = {
+        ["workshop/parley/2026-05-03.22-29-53.828_global-warming-overview.md"] =
+            "deleted-but-unstaged; operator deferred the decision (#203 BR-5)",
+    }
+
+    it("skips no tracked transcript except the one known exclusion", function()
+        local unexpected = {}
+        for _, path in ipairs(skipped) do
+            if not KNOWN_UNREADABLE[path] then unexpected[#unexpected + 1] = path end
+        end
+        assert.message(("%d tracked transcript(s) unreadable and NOT the known "
+            .. "exclusion, so this audit does not cover the corpus it is cited "
+            .. "for: %s"):format(#unexpected, table.concat(unexpected, ", ")))
+            .equals(0, #unexpected)
+    end)
 
     it("finds a corpus to check", function()
         assert.message(("only %d readable transcripts under workshop/parley/")
