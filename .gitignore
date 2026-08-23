@@ -3,6 +3,10 @@
 tasks/*
 !tasks/lessons.md
 .nvimlog
+# Pre-#202 harness scratch locations. The suite now writes to a root
+# outside the repo (see Makefile.parley); these stay ignored so a stale
+# tree on an older checkout doesn't show up in git status. `make
+# test-clean-env` removes them.
 .test-xdg/
 .test-tmp/
 .test-home/

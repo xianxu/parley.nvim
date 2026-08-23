@@ -6,33 +6,61 @@
 help-parley:
 	@printf '%s\n' \
 	"Parley (Lua/Neovim):" \
-	"  make test             Run all tests (unit parallel + integration sequential)" \
-	"  make test-unit        Run unit tests in parallel" \
-	"  make test-integration Run integration tests sequentially" \
+	"  make test             Run the whole suite" \
+	"  make test-unit        Run unit tests" \
+	"  make test-integration Run integration + arch tests" \
 	"  make test-spec SPEC=  Run tests for a specific spec key" \
 	"  make test-changed     Run tests for changed spec files" \
 	"  make perf             Report real headless chat-typing performance" \
 	"  make lint             Run luacheck on lua/ and tests/" \
 	"  make fixtures         Refresh SSE fixture files from real APIs" \
 	"  make model-check      Check latest model offerings from providers" \
-	"  make test-clean-env   Remove test environment directories" \
+	"  make test-clean-env   Remove the scratch root (and legacy in-repo dirs)" \
 	""
 
 # ── Test environment ─────────────────────────────────────────────────────────
 
 PLENARY = ~/.local/share/nvim/lazy/plenary.nvim
 REAL_HOME = $(HOME)
-TEST_HOME = $(CURDIR)/.test-home
-TEST_XDG = $(CURDIR)/.test-xdg
-TEST_TMP = $(CURDIR)/.test-tmp
+
+# The harness scratch trees live OUTSIDE $(CURDIR) on purpose — see
+# atlas/infra/test_harness.md for why (#202). tests/arch/scratch_placement_spec.lua
+# fails if this moves back into the tree.
+#
+# Keyed by the checkout so two worktrees of this repo do not share a root.
+# `cksum` is POSIX; `shasum`/`sha256sum` are not both portable. TEST_ENV_KEY is
+# `:=` so the subshell runs once per make invocation, not once per expansion of
+# TEST_ENV.
+REAL_TMP := $(patsubst %/,%,$(or $(TMPDIR),/tmp))
+TEST_ENV_KEY := $(notdir $(CURDIR))-$(shell printf '%s' '$(CURDIR)' | cksum | cut -d' ' -f1)
+TEST_ENV_ROOT ?= $(REAL_TMP)/parley-test-env/$(TEST_ENV_KEY)
+TEST_HOME = $(TEST_ENV_ROOT)/home
+TEST_XDG = $(TEST_ENV_ROOT)/xdg
+TEST_TMP = $(TEST_ENV_ROOT)/tmp
+
+# Pre-#202 in-repo locations. Still removed by test-clean-env so the migration
+# completes itself for anyone who pulls this change onto a dirty checkout.
+# Quoted individually at the use site: an unquoted list word-splits, and a
+# checkout under a path with a space would make `rm -rf` target the fragments.
+LEGACY_TEST_DIRS = "$(CURDIR)/.test-home" "$(CURDIR)/.test-xdg" "$(CURDIR)/.test-tmp"
 TEST_ENV = HOME="$(TEST_HOME)" XDG_DATA_HOME="$(TEST_XDG)/data" XDG_STATE_HOME="$(TEST_XDG)/state" XDG_CACHE_HOME="$(TEST_XDG)/cache" TMPDIR="$(TEST_TMP)" NVIM_TEST_PLENARY="$(REAL_HOME)/.local/share/nvim/lazy/plenary.nvim"
 
 define PREP_TEST_ENV
 mkdir -p "$(TEST_HOME)" "$(TEST_XDG)/data" "$(TEST_XDG)/state" "$(TEST_XDG)/cache" "$(TEST_TMP)"
 endef
 
-# Run all tests: unit in parallel, integration sequentially.
-test: lint test-unit test-integration
+# Run the whole suite. Execution model (parallel fan-out, per-spec processes,
+# scratch placement) is documented in atlas/infra/test_harness.md — restating it
+# here is how these comments went stale.
+#
+# Recursive $(MAKE) rather than prerequisites: prerequisite order is only
+# guaranteed under serial make, and `make -j test` could otherwise schedule the
+# scratch wipe alongside — or into the middle of — a running suite.
+test:
+	@$(MAKE) --no-print-directory test-clean-env
+	@$(MAKE) --no-print-directory lint
+	@$(MAKE) --no-print-directory test-unit
+	@$(MAKE) --no-print-directory test-integration
 
 # Number of parallel test processes (override with JOBS=N).
 JOBS ?= 8
@@ -45,8 +73,7 @@ JOBS ?= 8
 # summary is authoritative either way.
 RUN_SPEC = sh -c 'out=$$(mktemp "$$TMPDIR/parley-test.XXXXXX"); if nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile $$1" -c "qa!" >"$$out" 2>&1; then printf "PASS: %s\n" "$$1"; rm -f "$$out"; else { printf "===FAIL: %s===\n" "$$1"; sed "s/^/  /" "$$out"; }; echo "$$1" >> "$$FAILED_LOG"; rm -f "$$out"; exit 1; fi' _
 
-# Run unit tests in parallel — each file in its own Neovim process.
-# Safe because unit tests have no shared state.
+# Each spec file runs in its own Neovim process.
 test-unit:
 	@$(PREP_TEST_ENV)
 	@export $(TEST_ENV); \
@@ -62,7 +89,7 @@ test-unit:
 	rm -f "$$FAILED_LOG"; \
 	exit $$rc
 
-# Run integration + arch tests in parallel — each file in its own Neovim process.
+# Integration + arch specs, same per-file process fan-out.
 test-integration:
 	@$(PREP_TEST_ENV)
 	@export $(TEST_ENV); \
@@ -194,5 +221,11 @@ model-check:
 # Backward-compatible alias.
 model-checker: model-check
 
+# Removes only the leaves PREP_TEST_ENV itself creates — never $(TEST_ENV_ROOT)
+# verbatim. TEST_ENV_ROOT is a documented override, this target now runs first in
+# every `make test`, and command-line overrides propagate to the sub-make, so
+# `make test TEST_ENV_ROOT=/some/where` would otherwise `rm -rf /some/where`.
+# The rule: delete paths the harness constructs and can name literally, each
+# quoted individually so a path containing a space stays one word.
 test-clean-env:
-	rm -rf "$(TEST_HOME)" "$(TEST_XDG)" "$(TEST_TMP)"
+	@rm -rf "$(TEST_HOME)" "$(TEST_XDG)" "$(TEST_TMP)" $(LEGACY_TEST_DIRS)

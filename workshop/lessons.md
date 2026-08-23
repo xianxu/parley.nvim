@@ -1,5 +1,78 @@
 # Lessons
 
+## 2026-08-21 (#202)
+
+- **A destructive recipe may only remove paths the tool itself constructed and
+  can name literally, each quoted individually — and you verify it by reading
+  the expansion, not the source.** This cost two Important review findings in
+  one issue. `test-clean-env` first shipped `rm -rf "$(TEST_ENV_ROOT)"
+  $(LEGACY_TEST_DIRS)`: the unquoted list word-splits, so a checkout at
+  `~/my code/parley.nvim` expands to `rm -rf ~/my`; and `TEST_ENV_ROOT` is a
+  *documented override* that propagates to the sub-make, so
+  `make test TEST_ENV_ROOT=/some/where` expands to `rm -rf /some/where`. Both
+  are invisible in the source line and obvious in `make -n`. The recipe now
+  removes only the leaves `PREP_TEST_ENV` creates, and
+  `tests/arch/destructive_recipe_spec.lua` asserts it against the *expansion*.
+  Rule: before shipping any `rm -rf` in a recipe, print the expansion under a
+  path containing a space and under every documented override
+  (`ARCH-PURPOSE`, Root Cause).
+- **A guard must assert the invariant it names, not a proxy that rejects the
+  shapes already seen.** My first guard for the rule above checked "every
+  removed path is inside the repo or the scratch root" — and `$(CURDIR)` is
+  inside `$(CURDIR)`, so a recipe deleting the entire working tree passed 2/2
+  green. It now compares the removed set against the exact set the harness
+  builds. Rule: after writing a fitness function, ask what *else* satisfies the
+  assertion besides the correct code; if a catastrophic input passes, the
+  assertion is a proxy (`ARCH-PURPOSE`).
+- **Verify a harness-sensitive spec through the harness, not a hand-built env.**
+  The exact-set guard passed every hand-rolled `nvim -u tests/minimal_init.vim`
+  run and failed all ten `make test` runs: under the harness `$TMPDIR` is
+  `/tmp/claude-501/...`, and make reports `$(CURDIR)` as the *physical* path, so
+  `/tmp/...` never equalled `/private/tmp/...`. Rule: when a spec's subject is
+  the build environment, the only run that proves anything is the real one — and
+  ask the authority under test (`pwd -P`) rather than canonicalizing by hand,
+  since probe paths may not exist yet.
+- **`eval set -- $args` is not "split like the shell would" — it parses twice.**
+  The first guard I wrote for the rule above reported a false violation on a
+  correctly quoted recipe, because `sh` consumes the quotes parsing the `eval`
+  line and `eval` then re-splits `"a b"` into two words. `make` hands a recipe
+  to `sh -c`, which parses it *once*, so `set -- $args` is the faithful model.
+  Rule: when a test models a shell behavior, count the parses.
+
+
+- **A test that must not be affected by shared mutable state is fixed at the
+  writer, not at every reader.** The suite's scratch tree lived in `$(CURDIR)`,
+  so eight parallel jobs churned the very directory the `find`/`grep`/`ack` tool
+  specs traverse; the first plan scoped one spec's traversal away and added an
+  arch rule to police the rest. That rule would have failed three legitimate
+  specs — including `grep`'s "defaults missing path to cwd", whose whole subject
+  *is* traversing cwd. Rule: when N readers race one writer, count the readers.
+  If the invariant needs a lint to hold, you are defending it in the wrong place
+  — move the writer out of the readers' reach and the lint becomes unnecessary
+  (`ARCH-DRY`, Root Cause).
+- **Readiness signalled by file existence is a torn read waiting to happen.**
+  The fake SSE server `open()`ed its ready file and wrote the port digits at
+  close, so the path was readable while zero bytes long; the poller waited on
+  `filereadable()`, read nothing, and crashed concatenating nil into a URL. The
+  filed diagnosis blamed a bind failure — but the bind completes inside the
+  `TCPServer` constructor, before any readiness is published, so retrying it
+  would have changed nothing. Rule: publish a readiness signal atomically
+  (write a sibling path, rename onto it) *and* have the consumer wait on a
+  parseable value rather than on existence. Verify a suspected race by
+  reproducing the window, not by reasoning about which step "looks" racy.
+- **"Ten runs agreed" is weak evidence for a race fix; construct the failing
+  state instead.** The empty-then-filled, absent, and non-numeric signals are
+  all constructible directly, so the guard gets deterministic tests with no race
+  to win, and the soak proves only what a soak can — that nothing else broke
+  (`ARCH-PURPOSE`).
+- **A gate that raises a better design has done its job — take the redesign, not
+  the patch.** The round-1 plan-quality findings turned a per-spec workaround
+  into a one-site placement fix that also cleared an unrelated sandbox `git
+  init` failure. Rule: when a review names an alternative you rejected
+  implicitly, either adopt it or write down why in Non-goals; an unstated
+  rejection is indistinguishable from not having considered it.
+
+
 ## 2026-07-19 (#196)
 
 - **A value cached at attach/init goes stale when its inputs are recognized

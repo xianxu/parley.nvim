@@ -255,6 +255,21 @@ atlas:
     tests:
       - tests/unit/pure_functions_spec.lua
 
+  infra/test_harness:
+    code:
+      - Makefile.parley
+      - tests/minimal_init.vim
+      - tests/helpers/ready_port.lua
+      - tests/helpers/fixture_process.lua
+      - tests/fixtures/fake_sse_server
+      - tests/perf/chat_typing.lua
+    tests:
+      - tests/arch/scratch_placement_spec.lua
+      - tests/arch/destructive_recipe_spec.lua
+      - tests/unit/ready_port_spec.lua
+      - tests/integration/fixture_ready_publish_spec.lua
+      - tests/integration/chat_progress_process_spec.lua
+
   infra/vault:
     code:
       - lua/parley/vault.lua

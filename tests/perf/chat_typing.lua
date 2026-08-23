@@ -349,7 +349,14 @@ function M.start(opts)
     end
     local function finish()
         M.assert_hard_gates(report)
-        local output = opts.output or os.getenv("PERF_OUTPUT") or ".test-tmp/perf/parley-chat-typing.json"
+        -- Derive the default from the harness scratch root rather than naming a
+        -- path: the scratch lives outside the repo (#202), and a hardcoded
+        -- ".test-tmp/..." would write the report back into the tree the suite
+        -- traverses whenever start() runs without PERF_OUTPUT.
+        local scratch = vim.env.TMPDIR
+        if scratch == nil or scratch == "" then scratch = "/tmp" end
+        local output = opts.output or os.getenv("PERF_OUTPUT")
+            or (scratch:gsub("/$", "") .. "/perf/parley-chat-typing.json")
         M.write_report(output, harness.encode(report))
         print(harness.render_table(report))
         print("JSON: " .. output)
