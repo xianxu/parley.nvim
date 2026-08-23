@@ -156,18 +156,39 @@ describe("anchor verification", function()
     -- The interior scan is a guard against DRIFT, not a second fence parser:
     -- it must reject only a line classified as `user` at column 0. M2 owns
     -- in-body marker suppression.
-    -- Since M2 a marker inside a tool body is content even at column 0, because
-    -- tool output quotes transcripts. The guard must still fire for one OUTSIDE
-    -- the body — that is the drift it exists to catch.
-    it("accepts an unindented question marker inside the fenced body", function()
+    -- M2 accepted a marker inside a body even at COLUMN 0, on the premise that
+    -- "tool output quotes transcripts". #203 measured that premise false: every
+    -- tool prefixes its output, so a transcript read by read_file arrives as
+    -- "    1  💬: …" and its marker is never at column 0. The reachable case is
+    -- the prefixed one, and that is what this now pins. The guard must still
+    -- fire for a marker OUTSIDE the body — the drift it exists to catch.
+    it("accepts a quoted question marker inside the fenced body", function()
         local ranges = { { kind = "tool_result", start_0 = 4, end_0 = 8 } }
         assert.is_true(projection.verify_anchors(ranges, {
             [4] = "📎: read_file",
             [5] = "```",
-            [6] = "💬: a question quoted from the file being read",
-            [7] = "🤖: and its answer",
+            [6] = "    1  💬: a question quoted from the file being read",
+            [7] = "    2  🤖: and its answer",
             [8] = "```",
         }, patterns))
+    end)
+
+    -- The inverted half (#203): a COLUMN-0 marker inside a body cannot have come
+    -- from a tool, so the content is hand-edited, truncated, or pasted. The body
+    -- does not span it — forking there is the visible degradation chosen over
+    -- silently swallowing every exchange that follows.
+    it("does not extend a body across a column-0 question marker", function()
+        local lines = {
+            "📎: read_file", "```",
+            "💬: pasted, not tool output",
+            "```",
+        }
+        local hs = require("parley.highlight_structure")
+        local bodies = require("parley.fence").scan(lines,
+            function(_, row) return row == 1 end,
+            function(line) return hs.is_structural_kind(hs.classify(line, patterns).kind) end)
+        assert.message("a body spanned a column-0 marker it cannot have produced")
+            .is_nil(bodies[1])
     end)
 
     it("still rejects a question after the body has closed", function()
@@ -189,7 +210,7 @@ describe("anchor verification", function()
             [4] = "📎: read_file",
             [5] = "````",
             [6] = "```",
-            [7] = "💬: still inside the outer body",
+            [7] = "    1  💬: still inside the outer body",
             [8] = "```",
             [9] = "````",
         }, patterns))

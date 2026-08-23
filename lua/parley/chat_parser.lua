@@ -545,6 +545,8 @@ local fence = require("parley.fence")
 	local bodies, marker_set = fence.scan(body_lines, function(_, row)
 		local kind = kinds[row + header_end]
 		return kind == "tool_use" or kind == "tool_result"
+	end, function(_, row)
+		return highlight_structure.is_structural_kind(kinds[row + header_end])
 	end)
 	local in_tool_body, depth0_marker = {}, {}
 	for k in pairs(fence.body_rows(bodies)) do in_tool_body[k + header_end] = true end

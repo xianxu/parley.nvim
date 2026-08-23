@@ -1,0 +1,1760 @@
+diff --git a/lua/parley/chat_parser.lua b/lua/parley/chat_parser.lua
+index 71a9a01..9b97f21 100644
+--- a/lua/parley/chat_parser.lua
++++ b/lua/parley/chat_parser.lua
+@@ -545,6 +545,10 @@ local fence = require("parley.fence")
+ 	local bodies, marker_set = fence.scan(body_lines, function(_, row)
+ 		local kind = kinds[row + header_end]
+ 		return kind == "tool_use" or kind == "tool_result"
++	end, function(_, row)
++		-- EXPERIMENT (#203): column-0 structural markers a body may not span.
++		local kind = kinds[row + header_end]
++		return kind == "user" or kind == "assistant"
+ 	end)
+ 	local in_tool_body, depth0_marker = {}, {}
+ 	for k in pairs(fence.body_rows(bodies)) do in_tool_body[k + header_end] = true end
+diff --git a/lua/parley/fence.lua b/lua/parley/fence.lua
+index fea1c1d..70f7deb 100644
+--- a/lua/parley/fence.lua
++++ b/lua/parley/fence.lua
+@@ -117,7 +117,7 @@ end
+ --- @return table bodies   marker_row -> { first, last, close } (first > last for
+ ---                        an empty body; close is nil when none was found)
+ --- @return table markers  set of 1-based rows holding a depth-0 tool marker
+-function M.scan(lines, is_tool_marker)
++function M.scan(lines, is_tool_marker, is_structural)
+     local bodies, markers = {}, {}
+ 
+     local function close_of(open_len, from)
+@@ -127,13 +127,24 @@ function M.scan(lines, is_tool_marker)
+         return nil
+     end
+ 
++    -- EXPERIMENT (#203): a tool body may not span a column-0 structural marker.
++    -- The close it would otherwise latch onto belongs to a different pair.
++    local function close_before_marker(open_len, from)
++        for row = from, #lines do
++            if M.closes(lines[row], open_len) then return row end
++            if is_structural and is_structural(lines[row], row) then return nil end
++        end
++        return nil
++    end
++
+     local row = 1
+     while row <= #lines do
+         local line = lines[row] or ""
+         if is_tool_marker(line, row) then
+             markers[row] = true
+             local body_len = M.open_len(lines[row + 1] or "")
+-            local close = body_len and close_of(body_len, row + 2)
++            local finder = is_structural and close_before_marker or close_of
++            local close = body_len and finder(body_len, row + 2)
+             if close then
+                 bodies[row] = { first = row + 2, last = close - 1, close = close }
+                 row = close + 1
+diff --git a/tests/fixtures/fold_adversarial.md b/tests/fixtures/fold_adversarial.md
+index 98e663a..7aa9b88 100644
+--- a/tests/fixtures/fold_adversarial.md
++++ b/tests/fixtures/fold_adversarial.md
+@@ -16,13 +16,13 @@ file: fold_adversarial.md
+ 
+ 📎: read_file id=a1
+ ````
+-💬: a question that lives inside the file being read
+-🤖: and the answer that follows it
+-📎: read_file id=nested
+-```
+-this nested block uses a shorter fence
+-```
+-📝: even a summary marker in here is content
++    1  💬: a question that lives inside the file being read
++    2  🤖: and the answer that follows it
++    3  📎: read_file id=nested
++    4  ```
++    5  this nested block uses a shorter fence
++    6  ```
++    7  📝: even a summary marker in here is content
+ ````
+ 
+ 📝: read the transcript; its contents only look structural
+diff --git a/tests/unit/chat_parser_tools_spec.lua b/tests/unit/chat_parser_tools_spec.lua
+index 56c7a51..ab18081 100644
+--- a/tests/unit/chat_parser_tools_spec.lua
++++ b/tests/unit/chat_parser_tools_spec.lua
+@@ -365,8 +365,8 @@ describe("structural markers inside a tool body (#200)", function()
+             "🤖: [A]",
+             "📎: read_file id=r1",
+             "```",
+-            "💬: a question from the file being read",
+-            "🤖: and its answer",
++            "    1  💬: a question from the file being read",
++            "    2  🤖: and its answer",
+             "```",
+             "",
+             "💬: second real question",
+@@ -534,7 +534,7 @@ describe("tool-body extent desync (#200 BR-43)", function()
+     -- externally-pasted transcript, and recovering from it needs a real
+     -- fence-depth parser rather than another heuristic — hence #203.
+     -- Current behaviour: 2 exchanges, where M1 (dc5ee17) gave 3.
+-    pending("survives an unclosed body followed by a later bare fence", function()
++    it("survives an unclosed body followed by a later bare fence", function()
+         assert.equals(3, count({
+             "", "💬: q1", "", "🤖: [A]", "📎: r id=1", "```", "never closed",
+             "", "💬: q2", "", "🤖: [A]", "```", "", "💬: q3",
+diff --git a/workshop/parley/2026-05-03.22-29-53.828_global-warming-overview.md b/workshop/parley/2026-05-03.22-29-53.828_global-warming-overview.md
+deleted file mode 100644
+index dc9abae..0000000
+--- a/workshop/parley/2026-05-03.22-29-53.828_global-warming-overview.md
++++ /dev/null
+@@ -1,1651 +0,0 @@
+----
+-topic: Global Warming Overview
+-file: 2026-05-03.22-29-53.828_global-warming-overview.md
+-tags:
+----
+-
+-💬: what is the date today and what's the weather in Menlo Park, CA. 
+-
+-🤖:[ToolSol*]
+-
+-Today is **Saturday, August 15, 2026**.
+-
+-In **Menlo Park, California**, it is currently **mostly sunny and 75°F (24°C)**. Temperatures should gradually fall to about **62°F (17°C)** by late tonight, with mostly clear skies becoming cloudy overnight. 
+-
+-📝: you asked about today’s date and the weather in Menlo Park, CA, I answered with August 15, 2026 and current conditions of mostly sunny at 75°F (24°C)
+-
+-💬: tell me about this repo
+-
+-🤖:[ToolSol*]
+-
+-### Plan
+-
+-I’ll inspect the repository’s top-level structure and primary documentation, then summarize its purpose, architecture, and likely development workflow.
+-
+-🔧: ls id=call_bMSVBER8Fbj31lTpeanyBd7t
+-```json
+-{"path":".","flags":["-la"],"offset":1,"limit":200}
+-```
+-
+-📎: ls id=call_bMSVBER8Fbj31lTpeanyBd7t
+-```
+-total 304
+-drwxr-xr-x   49 xianxu  staff   1568 Aug 15 12:05 .
+-drwxr-xr-x   30 xianxu  staff    960 Jul 17 20:47 ..
+-drwxr-xr-x@   3 xianxu  staff     96 Jun 16 17:47 .agents
+--rw-r--r--    1 xianxu  staff      7 Apr 25 17:17 .ariadne-mode
+-drwxr-xr-x    8 xianxu  staff    256 Jul 19 11:53 .claude
+-drwxr-xr-x@   3 xianxu  staff     96 May 28 22:39 .codex
+-drwxr-xr-x@   7 xianxu  staff    224 Jun 15 08:40 .colima
+--rw-r--r--    1 xianxu  staff    128 Apr 25 17:17 .editorconfig
+-drwxr-xr-x   15 xianxu  staff    480 Aug 15 12:08 .git
+-drwxr-xr-x    4 xianxu  staff    128 Apr 25 17:17 .github
+--rw-r--r--@   1 xianxu  staff    892 Jun 18 17:14 .gitignore
+--rw-r--r--@   1 xianxu  staff     72 Jul 15 09:56 .goto
+--rw-r--r--    1 xianxu  staff    728 Apr 25 17:17 .luacheckrc
+--rw-r--r--@   1 xianxu  staff      0 Jun 25 11:51 .nvimlog
+-drwxr-xr-x    4 xianxu  staff    128 Apr 25 17:17 .opencode
+-drwxr-xr-x    9 xianxu  staff    288 May 27 10:27 .openshell
+--rw-r--r--    1 xianxu  staff      0 Apr 25 17:17 .parley
+-drwxr-xr-x@   4 xianxu  staff    128 May 27 10:27 .tart
+-drwxr-xr-x@   5 xianxu  staff    160 Aug  1 11:35 .test-home
+-drwx------@   3 xianxu  staff     96 Jun 18 09:19 .test-home XDG_DATA_HOME=
+-drwxr-xr-x@ 545 xianxu  staff  17440 Aug 15 12:07 .test-tmp
+-drwxr-xr-x@   5 xianxu  staff    160 Jul  7 00:45 .test-xdg
+--rw-r--r--    1 xianxu  staff    518 Apr 25 17:17 AGENTS.local.md
+--rw-r--r--@   1 xianxu  staff  15273 Jul 29 14:45 AGENTS.md
+--rw-r--r--    1 xianxu  staff    318 Apr 25 17:17 ARCH.md
+-drwxr-xr-x   16 xianxu  staff    512 Aug 15 11:01 atlas
+-drwxr-xr-x@   2 xianxu  staff     64 Jun 15 09:00 bin
+--rwxr-xr-x@   1 xianxu  staff   9293 Jun  2 11:49 bootstrap.sh
+--rw-r--r--@   1 xianxu  staff  15273 Jul 29 14:45 CLAUDE.md
+-drwxr-xr-x    8 xianxu  staff    256 Jun 18 17:14 construct
+-drwxr-xr-x   19 xianxu  staff    608 Apr 25 17:17 debug-slowness
+-drwxr-xr-x    3 xianxu  staff     96 Apr 25 17:17 docs
+--rw-r--r--@   1 xianxu  staff  15273 Jul 29 14:45 GEMINI.md
+--rw-r--r--@   1 xianxu  staff     48 May 26 19:02 go.mod
+--rw-r--r--@   1 xianxu  staff      0 May 26 19:02 go.sum
+--rw-r--r--    1 xianxu  staff   1100 Apr 25 17:17 LICENSE
+-drwxr-xr-x    3 xianxu  staff     96 Apr 25 17:17 lua
+-lrwxr-xr-x@   1 xianxu  staff     19 May 27 10:27 Makefile -> ../ariadne/Makefile
+--rw-r--r--    1 xianxu  staff    128 Apr 25 17:17 Makefile.local
+--rw-r--r--@   1 xianxu  staff   7463 Jul 12 19:07 Makefile.parley
+-lrwxr-xr-x@   1 xianxu  staff     28 May 27 10:27 Makefile.workflow -> ../ariadne/Makefile.workflow
+--rw-r--r--@   1 xianxu  staff  14039 Apr 25 17:17 pitch-deck.html
+--rw-r--r--@   1 xianxu  staff  13318 Aug  1 12:31 README.md
+-drwxr-xr-x   20 xianxu  staff    640 Aug 15 11:33 scripts
+--rw-r--r--    1 xianxu  staff   3959 Apr 25 17:17 SKILL.md
+--rw-r--r--    1 xianxu  staff    624 Apr 25 17:17 STYLE.md
+-drwxr-xr-x   10 xianxu  staff    320 Jul 16 08:54 tests
+--rw-r--r--@   1 xianxu  staff   3660 Jul 12 19:07 TOOLING.md
+-drwxr-xr-x   12 xianxu  staff    384 Jul 28 22:26 workshop
+-```
+-
+-🔧: find id=call_F9kXknu19bfWCNT1YnmrWuo1
+-```json
+-{"iname":"","offset":1,"maxdepth":3,"path":".","type":"f","mindepth":1,"name":"README*","limit":50}
+-```
+-
+-📎: find id=call_F9kXknu19bfWCNT1YnmrWuo1 error=true
+-```
+-iname must be a non-empty string
+-```
+-
+-🔧: find id=call_i5eFqWzeLu0pjKyNvQpaGZgM
+-```json
+-{"iname":"","offset":1,"maxdepth":4,"path":".","type":"f","mindepth":1,"name":"*.lua","limit":300}
+-```
+-
+-📎: find id=call_i5eFqWzeLu0pjKyNvQpaGZgM error=true
+-```
+-iname must be a non-empty string
+-```
+-
+-🔧: find id=call_gD9BqnqgQUdKkVDFlkRkhhvs
+-```json
+-{"iname":"*test*","offset":1,"maxdepth":3,"path":".","type":"f","mindepth":1,"name":"","limit":300}
+-```
+-
+-📎: find id=call_gD9BqnqgQUdKkVDFlkRkhhvs error=true
+-```
+-name must be a non-empty string
+-```
+-
+-🔧: read_file id=call_JiAkOOWMmz2mtGQRJnpvcYte
+-```json
+-{"file_path":"README.md","offset":1,"limit":260}
+-```
+-
+-📎: read_file id=call_JiAkOOWMmz2mtGQRJnpvcYte
+-````
+-    1  <!-- panvimdoc-ignore-start -->
+-    2  
+-    3  <a href="https://github.com/xianxu/parley.nvim/blob/main/LICENSE"><img alt="GitHub" src="https://img.shields.io/github/license/xianxu/parley.nvim"></a>
+-    4  
+-    5  # Parley.nvim
+-    6  
+-    7  <!-- panvimdoc-ignore-end -->
+-    8  
+-    9  Parley started as a Neovim chat notebook for LLM conversations. It's created to help me research on a topic with the help with many different agents. A side goal of Parley is really a test bed for me to play with agentic coding workflow. This leading me to see a future of **markdown as state, nvim/`coding agent` as human operator interface, the beginning of future operating system for startups**. 
+-   10  
+-   11  There are just many different ways user can leverage it. With Parley, you have all the power of Neovim at your fingertips in your LLM chat, thus making comprehensive research easier. All your chat history also lives in plain markdown files, you can easily search through using local tools. You can even direct your coding agent to act according to the "brainstorming" chat thread you had with other agents, for example. The possibilities seem endless.
+-   12  
+-   13  Compared to stock chatbot, Parley supports a "tree of chats", essentially allowing user to branch of some side topic, in a linked but different file. This way, information is always organized, matching how human research and learn a topic.
+-   14  
+-   15  The philosophy behind Parley is Keep Things Simple, and Local, and a bit of Unix:
+-   16  - Keep chats as plain Markdown files you can edit any place
+-   17  - The chat transcript file has the full state of LLM chat
+-   18  - Highly configurable but also have good default out-of-box
+-   19  - Keep the workflow keyboard-first and fast
+-   20  - Keep behavior predictable across different chat providers
+-   21  - Leverage Neovim, and all its goodies
+-   22  - Minimal dependencies, install and it works, all you need is your API keys
+-   23  
+-   24  ## Developer performance testing
+-   25  
+-   26  Run `make perf` to collect Parley's report-only chat-typing benchmark. See
+-   27  [TOOLING.md](TOOLING.md#chat-typing-performance-report) for the scenario, output schema,
+-   28  structural correctness gates, and optional MarkdownPreview comparison.
+-   29  
+-   30  Despite of such simple interface, it's very powerful, sometimes more so than official app
+-   31  - You can use "any" LLM providers, mix in the same conversation input from many different LLMs
+-   32  - Your chat transcript can be as complex as a tree with branches, to allow you to explore into different directions, without being forced into a linear conversation
+-   33  - You can jump easily between such tree branches
+-   34  - You can access your private local file, and private Google Drive file through oauth
+-   35  - You can edit anything in the transcript, including LLM responses, which presumably would influence the agent's future responses, a soft prompt engineering. You are constructing an understanding of a topic together with the help of LLMs
+-   36  - All you chat history in one place locally, you can search and further refine with whatever tools you want
+-   37  - Tweak system prompts to best suit your needs
+-   38  - Have many different chat threads active in different vim buffers, terminals etc., no limits
+-   39  - Easily switch between different chat threads, instant search experience with Chat Finder <C-g>f anywhere in Neovim
+-   40  - Also a good learning tool for LLM interactions, e.g. in raw request/response modes, you see all request/response details
+-   41  - New LLMs support web search and grounding, you can easily enable or disable if you want it to be faster
+-   42  - Publish your chat as markdown or HTML, for blogging or sharing, e.g. [a chat about async programming](https://xianxu.github.io/2025/05/12/conversation_around_concurrent_programming_models.html)
+-   43  - Share your brainstorming transcripts with your coding agents to start materializing it!
+-   44  
+-   45  ## Quick Install
+-   46  
+-   47  Optional dependencies:
+-   48  - [`lualine.nvim`](https://github.com/nvim-lualine/lualine.nvim) for status line integration. Not missing much if not available.
+-   49  - `curl` for oauth and fetching web content.
+-   50  - [`pandoc`](https://pandoc.org/) for exporting non-chat markdown files to HTML (`<C-g>eh`). Install with `brew install pandoc`.
+-   51  
+-   52  Example with `lazy.nvim`
+-   53  
+-   54  ```lua
+-   55  {
+-   56      "xianxu/parley.nvim",
+-   57      config = function()
+-   58          require("parley").setup({
+-   59              -- supply at least one
+-   60              api_keys = {
+-   61                  -- openai = "sk-...", -- or set env vars and fetch with os.getenv
+-   62                  openai = os.getenv("OPENAI_API_KEY"),
+-   63                  -- anthropic = ...
+-   64                  -- googleai = ...
+-   65                  -- ollama = ...
+-   66              },
+-   67          })
+-   68      end,
+-   69  }
+-   70  ```
+-   71  
+-   72  A bit safer, macOS Keychain example:
+-   73  
+-   74  1. First save API keys to Keychain (replace `your_username` and key values):
+-   75  
+-   76  ```bash
+-   77  security add-generic-password -a "your_username" -s "OPENAI_API_KEY" -w "sk-..." -U
+-   78  ...
+-   79  ```
+-   80  
+-   81  2. Then fetch keys from Keychain in `api_keys`:
+-   82  
+-   83  ```lua
+-   84  {
+-   85      "xianxu/parley.nvim",
+-   86      config = function()
+-   87          require("parley").setup({
+-   88              -- supply at least one
+-   89              api_keys = {
+-   90                  openai = { "security", "find-generic-password", "-a", "your_username", "-s", "OPENAI_API_KEY", "-w" },
+-   91                  -- anthropic = ...
+-   92                  -- googleai = ...
+-   93                  -- ollama = ...
+-   94              },
+-   95          })
+-   96      end,
+-   97  }
+-   98  ```
+-   99  
+-  100  Notes:
+-  101  - Configure at least one provider key.
+-  102  - `api_keys` values can be strings or shell commands (for password managers/Keychain) resolve to a string.
+-  103  
+-  104  ## First 60 Seconds
+-  105  
+-  106  1. Run `:ParleyChatNew` (default shortcut: `<C-g>c`) to create a new chat.
+-  107  2. Type your question after `💬:`, no need for anything else. `Topic: ?` will be automatically filled with summary of your question.
+-  108  3. Run `:ParleyChatRespond` (default shortcut: `<C-g><C-g>`) with mouse on the question line.
+-  109  4. Get a response from the agent after `🤖:`, streaming in real time. A slow
+-  110     start shows a playful virtual progress line after one second; it never enters
+-  111     the Markdown transcript.
+-  112  
+-  113  A Parley chat is a normal markdown file with a header and alternating `💬:` / `🤖:` blocks.
+-  114  
+-  115  ## Basic Commands
+-  116  
+-  117  Most-used defaults:
+-  118  
+-  119  **Global**
+-  120  - `<C-g>c` new chat - global hotkey
+-  121  - `<C-g>f` find chat - opens immediately with a cancellable animated
+-  122    `scanning…` row while Chat Finder asynchronously discovers chat headers; an
+-  123    exact background prewarm is reused when available
+-  124  - `<C-n>f` find notes - the same immediate loading experience over recursive
+-  125    note metadata; note bodies are not read, and special folders still bypass
+-  126    recency filtering
+-  127  - `<C-y>f` find issues - asynchronously read issue/history metadata with
+-  128    vocabulary-backed ordering and repository facets in super-repo mode
+-  129  - `<C-j>f` find vision initiatives - asynchronously read YAML file bundles,
+-  130    preserving file/parser order and exact source-line jumps
+-  131  - `<C-g>m` find Markdown files - directory facets in ordinary repo mode and
+-  132    repository facets in super-repo mode; query text and facet choices persist
+-  133    across finder reopenings within the current Neovim session. When a facet bar
+-  134    wraps beyond its visible height, point at the bar and use the mouse wheel to
+-  135    reach the remaining facets. The picker opens immediately with a cancellable
+-  136    animated `scanning…` row while Git discovers all tracked Markdown files plus
+-  137    untracked, non-ignored Markdown files; ignored untracked files and Markdown
+-  138    inside nested repositories or submodules are excluded from the parent scan.
+-  139  - `<C-g>p` toggle peer (super-repo) mode - aggregate reads across sibling
+-  140    `.parley` repositories. The explicit repo/peer choice persists separately for
+-  141    each repository; an unsaved repository starts in ordinary repo mode.
+-  142  
+-  143  **In Chat Buffer**
+-  144  - `<C-g>?` show key bindings
+-  145  - `<C-g><C-g>` respond
+-  146  - `<M-CR>` respond (normal/insert); **visual-select a phrase + `<M-CR>`** → inline term definition — immediately shows a spinner after the selection, then on success replaces it with a markdown footnote reference/footer and centered diagnostic float, honoring `:ToggleWebSearch` for unfamiliar terms
+-  147    - Reopened chats recover multi-word highlights from structured footnotes such as `[^acos]: "Advertising Cost of Sales". Ratio...`; generated ids such as `[^serverless-functions]` also recover `serverless functions` from the slug when that phrase appears before the reference.
+-  148  - `<C-g>G` respond all
+-  149  - `<C-g>x` stop
+-  150  - `u` / `<C-r>` undo/redo normally; while a response is pending, Parley asks
+-  151    before cancelling that buffer's request and changing history (default: No)
+-  152  - `<C-g>t` chat outline
+-  153  - `<C-g>a` change agent
+-  154  - `<C-g>P` next system prompt
+-  155  - `<C-g>s` skill picker (review, voice-apply, etc.)
+-  156  - `<C-g>b` branch/prune - move the current exchange and following exchanges to
+-  157    a child chat
+-  158  
+-  159  Tool-fold toggling is configurable but unbound by default. To opt in, set
+-  160  `chat_shortcut_toggle_tool_folds = { modes = { "n" }, shortcut = "<leader>tf" }`.
+-  161  - `<C-g>l` toggle follow cursor
+-  162  - `<C-g>i` to insert a fork in the chat tree, can be inline or standalone
+-  163  - `gf` smart go-to-file: on an ariadne artifact ref (`ariadne#11`, `#15 M4`, `pair#84`) resolves it and jumps (family picker when it resolves to many); on a plain path, Vim's native `gf`
+-  164  
+-  165  **Corresponding commands**
+-  166  - `:ParleyChatNew` create a new chat
+-  167  - `:ParleyChatFinder` asynchronous chat finder with joinable metadata prewarm
+-  168  - `:ParleyNoteFinder` asynchronous recursive note finder with joinable metadata prewarm
+-  169  - `:ParleyIssueFinder` asynchronous issue/history finder
+-  170  - `:ParleyVisionShow` asynchronous project-initiative finder
+-  171  - `:ParleyMarkdownFinder` asynchronous Git-aware Markdown finder with contextual directory/repository facets
+-  172  - `:ParleyChatRespond` answer current question
+-  173  - `:ParleyChatRespondAll` regenerate from start to cursor
+-  174  - `:ParleyStop` stop running generation
+-  175  - `:ParleyOutline` display questions in this buffer for navigation
+-  176  - `:ParleyKeyBindings` show active Parley keyboard shortcuts
+-  177  - `:ParleyAgent` switch agent
+-  178  - `:ParleySystemPrompt` switch system prompt
+-  179  - `:ParleyToggleFollowCursor` toggle live cursor-follow during streaming
+-  180  
+-  181  All five disk-backed finders open their picker shell immediately and keep the
+-  182  prompt live while `scanning…` animates. Settled results replace the loading row
+-  183  in one update; partial failures retain usable rows with a warning, total failure
+-  184  leaves a nonselectable error, and Esc cancels picker-owned work. Markdown uses
+-  185  Git's tracked union untracked-nonignored boundary, so ignored vendor trees are
+-  186  not searched in either ordinary or super-repo mode.
+-  187  
+-  188  ## What Parley Supports
+-  189  
+-  190  - Providers: OpenAI, Anthropic, Google AI, Ollama, OpenAI-compatible endpoints, and CLIProxyAPI.
+-  191    - parley can **manage a local `cliproxyapi`** for you — it renders the config from Lua and lazily starts/reuses/health-checks the proxy. `:ParleyProxy status|start|stop|restart|models <provider>|providers|login <provider>|reap|update` (bare `:ParleyProxy` prints per-subcommand help). **On by default but dormant** — only acts when a cliproxyapi-provider agent runs, and reuses an existing proxy if one is up; a fresh machine needs `brew install cliproxyapi` + a one-time `:ParleyProxy login`. Set `cliproxy = { manage = false }` to opt out. See [atlas/providers/cliproxy-managed.md](atlas/providers/cliproxy-managed.md).
+-  192  - File context with `@@path/to/file` and directory patterns.
+-  193  - Web search toggle for supported providers, with semantic search/reasoning status shown in the response's transient virtual progress line.
+-  194  - Outline navigation, highlighting.
+-  195  - Export chat to markdown or HTML, for blogging, e.g. [a chat about async programming](https://xianxu.github.io/2025/05/12/conversation_around_concurrent_programming_models.html).
+-  196  - Misc: notes, interview mode, raw mode, and export.
+-  197  
+-  198  ## Configuration Entry Points
+-  199  
+-  200  Common options live in `setup()`:
+-  201  - `api_keys`
+-  202  - `chat_dir`
+-  203  - `notes_dir`
+-  204  
+-  205  Merge behavior in `setup(opts)`:
+-  206  - `agents`, `system_prompts`, and `hooks` are merged by key/name, so you can override only selected entries.
+-  207  - Most other top-level keys are replaced when provided (for example `chat_dir`, `chat_dirs`, `notes_dir`, `chat_template`, `raw_mode`, `highlight`, `chat_memory`, `providers`, `api_keys`).
+-  208  - Practical rule: for non-merged tables, provide the full table you want, not just one nested field.
+-  209  - Reference [lua/parley/config.lua](https://github.com/xianxu/parley.nvim/blob/main/lua/parley/config.lua) for full defaults and examples.
+-  210  
+-  211  Chat storage roots:
+-  212  - `chat_dir` is the primary writable root used for new chats.
+-  213  - `chat_dirs` is an optional list of additional roots that Chat Finder, chat validation, and chat-aware commands will scan alongside `chat_dir`.
+-  214  - `:ParleyChatDirs` opens a picker to add or remove chat roots at runtime.
+-  215  - `:ParleyChatDirAdd {dir}` adds a root directly, with directory completion.
+-  216  - `:ParleyChatDirRemove {dir}` removes a configured root directly.
+-  217  - `:ParleyChatMove {dir}` moves the current chat to another registered chat root.
+-  218  - The primary `chat_dir` cannot be removed at runtime.
+-  219  - The default shortcut for chat-root management is `<C-g>h`.
+-  220  
+-  221  For full defaults and examples, see [`lua/parley/config.lua`](lua/parley/config.lua).
+-  222  
+-  223  ## Detailed Docs (Atlas)
+-  224  
+-  225  Advanced behavior is intentionally kept out of this README and documented in the atlas:
+-  226  
+-  227  - Overview index: [`atlas/index.md`](atlas/index.md)
+-  228  
+-  229  ## Acknowledgement
+-  230  
+-  231  Parley was adapted from [gp.nvim](https://github.com/Robitx/gp.nvim), but has since been largely redesigned and rewritten.
+-````
+-
+-🔧: read_file id=call_QvVvpv4theLstdp7BDHmGWYw
+-```json
+-{"file_path":"ARCH.md","offset":1,"limit":120}
+-```
+-
+-📎: read_file id=call_QvVvpv4theLstdp7BDHmGWYw
+-```
+-    1  # Architecture
+-    2  
+-    3  ## Project Overview
+-    4  Parley.nvim is a Neovim plugin that provides a streamlined LLM chat interface with highlighting and navigation features. It supports multiple AI providers (OpenAI, Anthropic, Google AI, Ollama).
+-    5  
+-    6  ## Atlas
+-    7  Detailed feature atlas lives in `atlas/`. See `atlas/index.md` for an index.
+-```
+-
+-🔧: ls id=call_h9RvYsZlFrDzrR7jyluYP8FL
+-```json
+-{"path":"lua","flags":["-R"],"offset":1,"limit":500}
+-```
+-
+-📎: ls id=call_h9RvYsZlFrDzrR7jyluYP8FL
+-```
+-parley
+-
+-/Users/xianxu/workspace/parley.nvim/lua/parley:
+-agent_info.lua
+-agent_picker.lua
+-answer_structure.lua
+-artifact_ref.lua
+-async_file_enrichment.lua
+-async_file_source.lua
+-async_operation_queue.lua
+-buffer_edit.lua
+-buffer_lifecycle.lua
+-chat_dirs.lua
+-chat_finder_records.lua
+-chat_finder.lua
+-chat_history.lua
+-chat_lease.lua
+-chat_parser.lua
+-chat_pending.lua
+-chat_presentation.lua
+-chat_respond.lua
+-chat_slug.lua
+-cliproxy_auth.lua
+-cliproxy_config.lua
+-cliproxy.lua
+-config.lua
+-copy.lua
+-custom_prompts.lua
+-defaults.lua
+-define.lua
+-diagnostic_refresh.lua
+-discovery
+-dispatcher.lua
+-drill_in.lua
+-exchange_clipboard.lua
+-exchange_model.lua
+-exporter.lua
+-facet_bar_layout.lua
+-file_tracker.lua
+-finder_batcher.lua
+-finder_facets.lua
+-finder_loader.lua
+-finder_producer.lua
+-finder_scan.lua
+-finder_sticky.lua
+-float_picker.lua
+-fold_projection.lua
+-git_markdown_source.lua
+-google_drive.lua
+-health.lua
+-helper.lua
+-highlight_structure.lua
+-highlighter.lua
+-init.lua
+-interview.lua
+-issue_finder_records.lua
+-issue_finder.lua
+-issue_vocabulary.lua
+-issues.lua
+-keybinding_registry.lua
+-line_reader.lua
+-log_emit.lua
+-logger.lua
+-lualine.lua
+-markdown_finder.lua
+-memory_prefs.lua
+-neighborhood.lua
+-note_dir_picker.lua
+-note_dirs.lua
+-note_finder_records.lua
+-note_finder.lua
+-notes.lua
+-oauth.lua
+-obfuscate.lua
+-outline.lua
+-picker_status.lua
+-progress.lua
+-provider_params.lua
+-providers.lua
+-raw_log.lua
+-render_buffer.lua
+-render.lua
+-repo_artifacts.lua
+-repo_mode.lua
+-review_menu.lua
+-review.lua
+-root_dir_picker.lua
+-root_dirs.lua
+-selection_spinner.lua
+-skill_assembly.lua
+-skill_edits.lua
+-skill_invoke.lua
+-skill_manifest.lua
+-skill_picker.lua
+-skill_providers.lua
+-skill_registry.lua
+-skill_render.lua
+-skills
+-spell.lua
+-spinner.lua
+-sse.lua
+-super_repo.lua
+-system_prompt_msgs.lua
+-system_prompt_picker.lua
+-tasker.lua
+-test_agent_picker.lua
+-timezone_diagnostics.lua
+-tool_folds.lua
+-tool_loop.lua
+-tools
+-vault.lua
+-vision_finder_records.lua
+-vision_finder.lua
+-vision.lua
+-
+-/Users/xianxu/workspace/parley.nvim/lua/parley/discovery:
+-base.lua
+-descriptor.lua
+-init.lua
+-local_types.lua
+-matcher.lua
+-merge.lua
+-registry.lua
+-
+-/Users/xianxu/workspace/parley.nvim/lua/parley/skills:
+-define
+-review
+-voice_apply
+-
+-/Users/xianxu/workspace/parley.nvim/lua/parley/skills/define:
+-init.lua
+-
+-/Users/xianxu/workspace/parley.nvim/lua/parley/skills/review:
+-diag_display.lua
+-init.lua
+-journal.lua
+-mode.lua
+-modes
+-projection.lua
+-SKILL.md
+-
+-/Users/xianxu/workspace/parley.nvim/lua/parley/skills/review/modes:
+-copy-editing.md
+-developmental.md
+-fact-check.md
+-free-form.md
+-line-editing.md
+-proofreading.md
+-
+-/Users/xianxu/workspace/parley.nvim/lua/parley/skills/voice_apply:
+-init.lua
+-SKILL.md
+-
+-/Users/xianxu/workspace/parley.nvim/lua/parley/tools:
+-backup.lua
+-builtin
+-dispatcher.lua
+-init.lua
+-serialize.lua
+-types.lua
+-version.lua
+-wire_anthropic.lua
+-wire_openai.lua
+-wire.lua
+-
+-/Users/xianxu/workspace/parley.nvim/lua/parley/tools/builtin:
+-ack.lua
+-argv.lua
+-chat_history_search.lua
+-edit_file.lua
+-emit_definition.lua
+-find.lua
+-grep.lua
+-ls.lua
+-propose_edits.lua
+-read_file.lua
+-write_file.lua
+-```
+-
+-🔧: ls id=call_JzvOlBCv0YmFqZMxsfUqDCI2
+-```json
+-{"path":"tests","flags":["-R"],"offset":1,"limit":500}
+-```
+-
+-📎: ls id=call_JzvOlBCv0YmFqZMxsfUqDCI2
+-```
+-arch
+-fixtures
+-integration
+-minimal_init.vim
+-perf
+-perf_chat_finder.lua
+-test_agents.sh
+-unit
+-
+-/Users/xianxu/workspace/parley.nvim/tests/arch:
+-arch_helper.lua
+-buffer_mutation_spec.lua
+-performance_line_reader_spec.lua
+-
+-/Users/xianxu/workspace/parley.nvim/tests/fixtures:
+-anthropic_error.txt
+-anthropic_stream.txt
+-anthropic_tool_use_request.json
+-anthropic_tool_use_stream_real.jsonl
+-cliproxy_auth_files.json
+-fake_cliproxy
+-fake_git_file_list
+-fake_sse_server
+-golden_payloads
+-googleai_error.txt
+-googleai_stream.txt
+-openai_error.txt
+-openai_parallel_tool_calls.sse
+-openai_stream.txt
+-openai_tool_use_stream.sse
+-pre_81_vanilla_claude_prompts.lua
+-pre_81_vanilla_claude_request_1.json
+-pre_81_vanilla_claude_request_2.json
+-pre_81_vanilla_claude_request_3.json
+-ps_cliproxy_peers.txt
+-transcripts
+-
+-/Users/xianxu/workspace/parley.nvim/tests/fixtures/golden_payloads:
+-dynamic-fence-stress.json
+-mixed-text-and-tools.json
+-one-round-tool-use.json
+-openai-mixed-text-and-tools.json
+-openai-one-round-tool-use.json
+-openai-tool-error.json
+-openai-two-round-tool-use.json
+-simple-chat.json
+-single-user.json
+-tool-error.json
+-two-round-tool-use.json
+-
+-/Users/xianxu/workspace/parley.nvim/tests/fixtures/transcripts:
+-dynamic-fence-stress.md
+-mixed-text-and-tools.md
+-one-round-tool-use.md
+-simple-chat.md
+-single-user.md
+-tool-error.md
+-two-round-tool-use.md
+-
+-/Users/xianxu/workspace/parley.nvim/tests/integration:
+-async_file_source_spec.lua
+-chat_lease_spec.lua
+-chat_move_spec.lua
+-chat_pending_spec.lua
+-chat_progress_process_spec.lua
+-chat_respond_spec.lua
+-cliproxy_auth_login_spec.lua
+-cliproxy_caller_teardown_spec.lua
+-cliproxy_command_spec.lua
+-cliproxy_conformance_spec.lua
+-cliproxy_dispatch_spec.lua
+-cliproxy_download_spec.lua
+-cliproxy_lifecycle_spec.lua
+-cliproxy_login_spec.lua
+-cliproxy_recovery_e2e_spec.lua
+-cliproxy_tool_conformance_spec.lua
+-create_handler_spec.lua
+-define_spec.lua
+-diagnostic_refresh_spec.lua
+-discovery_builder_spec.lua
+-discovery_local_types_spec.lua
+-export_spec.lua
+-git_markdown_source_spec.lua
+-highlighting_spec.lua
+-markdown_finder_async_spec.lua
+-neighborhood_completion_spec.lua
+-new_chat_spec.lua
+-not_chat_spec.lua
+-openai_tool_loop_spec.lua
+-perf_chat_typing_spec.lua
+-progress_spec.lua
+-review_diag_display_spec.lua
+-review_journal_io_spec.lua
+-review_menu_spec.lua
+-review_mode_load_spec.lua
+-review_projection_spec.lua
+-skill_invoke_review_spec.lua
+-skill_invoke_spec.lua
+-skill_providers_spec.lua
+-skill_registry_spec.lua
+-spell_chat_spec.lua
+-tasker_run_spec.lua
+-timer_race_spec.lua
+-tool_folds_spec.lua
+-topic_gen_spec.lua
+-tree_export_spec.lua
+-voice_apply_spec.lua
+-
+-/Users/xianxu/workspace/parley.nvim/tests/perf:
+-chat_typing.lua
+-harness.lua
+-
+-/Users/xianxu/workspace/parley.nvim/tests/unit:
+-ancestor_messages_spec.lua
+-answer_structure_spec.lua
+-anthropic_tool_decode_spec.lua
+-anthropic_tool_encode_spec.lua
+-anthropic_tool_wire_spec.lua
+-arch_helper_spec.lua
+-artifact_ref_spec.lua
+-async_file_source_spec.lua
+-buffer_edit_spec.lua
+-buffer_lifecycle_spec.lua
+-build_messages_spec.lua
+-chat_dirs_spec.lua
+-chat_finder_logic_spec.lua
+-chat_finder_records_spec.lua
+-chat_history_spec.lua
+-chat_parser_section_lines_spec.lua
+-chat_parser_tools_spec.lua
+-chat_presentation_spec.lua
+-chat_respond_footnote_spec.lua
+-chat_slug_resolve_spec.lua
+-chat_slug_spec.lua
+-cliproxy_auth_spec.lua
+-cliproxy_budget_spec.lua
+-cliproxy_config_spec.lua
+-config_tools_spec.lua
+-custom_prompts_spec.lua
+-define_spec.lua
+-diagnostic_refresh_spec.lua
+-discovery_base_spec.lua
+-discovery_descriptor_spec.lua
+-discovery_matcher_spec.lua
+-discovery_merge_spec.lua
+-discovery_registry_spec.lua
+-dispatcher_query_spec.lua
+-dispatcher_spec.lua
+-drill_in_spec.lua
+-exchange_clipboard_spec.lua
+-exchange_model_spec.lua
+-exporter_tree_spec.lua
+-facet_bar_layout_spec.lua
+-failure_notice_spec.lua
+-file_tracker_spec.lua
+-finder_facets_spec.lua
+-finder_loader_spec.lua
+-finder_producer_spec.lua
+-finder_scan_spec.lua
+-finder_sticky_spec.lua
+-float_picker_spec.lua
+-float_picker_tag_bar_spec.lua
+-fold_projection_spec.lua
+-get_week_number_spec.lua
+-helper_io_spec.lua
+-helper_spec.lua
+-highlight_structure_spec.lua
+-highlighter_spec.lua
+-inline_branch_spec.lua
+-issue_finder_records_spec.lua
+-issue_finder_spec.lua
+-issue_vocabulary_spec.lua
+-issues_spec.lua
+-keybindings_spec.lua
+-line_reader_spec.lua
+-log_emit_spec.lua
+-logger_spec.lua
+-markdown_draft_block_spec.lua
+-markdown_finder_spec.lua
+-memory_prefs_spec.lua
+-neighborhood_spec.lua
+-note_finder_logic_spec.lua
+-note_finder_records_spec.lua
+-oauth_spec.lua
+-obfuscate_spec.lua
+-open_chat_reference_spec.lua
+-openai_message_translate_spec.lua
+-openai_payload_tools_spec.lua
+-openai_tool_decode_spec.lua
+-openai_tool_encode_spec.lua
+-outline_spec.lua
+-parley_harness_golden_spec.lua
+-parley_harness_spec.lua
+-parse_at_reference_spec.lua
+-parse_chat_spec.lua
+-perf_harness_spec.lua
+-picker_items_spec.lua
+-picker_status_spec.lua
+-process_directory_pattern_spec.lua
+-progress_spec.lua
+-provider_params_output_cap_spec.lua
+-provider_params_spec.lua
+-providers_pre_query_spec.lua
+-pure_functions_spec.lua
+-raw_log_spec.lua
+-remote_references_spec.lua
+-render_buffer_roundtrip_spec.lua
+-render_buffer_spec.lua
+-render_spec.lua
+-repo_mode_spec.lua
+-review_journal_spec.lua
+-review_mode_spec.lua
+-review_spec.lua
+-skill_assembly_spec.lua
+-skill_edits_spec.lua
+-skill_manifest_spec.lua
+-skill_picker_spec.lua
+-skill_render_spec.lua
+-spell_spec.lua
+-sse_parsing_spec.lua
+-super_repo_spec.lua
+-system_prompt_msgs_spec.lua
+-tasker_unit_spec.lua
+-timezone_diagnostics_spec.lua
+-tool_folds_spec.lua
+-tool_loop_spec.lua
+-tool_wire_registry_spec.lua
+-tools_builtin_ack_spec.lua
+-tools_builtin_chat_history_search_spec.lua
+-tools_builtin_find_spec.lua
+-tools_builtin_grep_spec.lua
+-tools_builtin_ls_spec.lua
+-tools_builtin_propose_edits_spec.lua
+-tools_builtin_read_file_spec.lua
+-tools_builtin_registered_spec.lua
+-tools_dispatcher_spec.lua
+-tools_registry_spec.lua
+-tools_serialize_spec.lua
+-tools_types_spec.lua
+-vault_spec.lua
+-vision_finder_records_spec.lua
+-vision_finder_spec.lua
+-vision_spec.lua
+-```
+-
+-🔧: read_file id=call_54xOZ0zby1OTlqU1BKWNCtfy
+-```json
+-{"file_path":"Makefile.parley","offset":1,"limit":260}
+-```
+-
+-📎: read_file id=call_54xOZ0zby1OTlqU1BKWNCtfy
+-```
+-    1  # Parley-specific targets (Lua/Neovim plugin) — include from your project Makefile:
+-    2  #   include Makefile.parley
+-    3  
+-    4  .PHONY: help-parley test test-unit test-integration test-spec test-changed perf lint fixtures model-check model-checker test-clean-env
+-    5  
+-    6  help-parley:
+-    7  	@printf '%s\n' \
+-    8  	"Parley (Lua/Neovim):" \
+-    9  	"  make test             Run all tests (unit parallel + integration sequential)" \
+-   10  	"  make test-unit        Run unit tests in parallel" \
+-   11  	"  make test-integration Run integration tests sequentially" \
+-   12  	"  make test-spec SPEC=  Run tests for a specific spec key" \
+-   13  	"  make test-changed     Run tests for changed spec files" \
+-   14  	"  make perf             Report real headless chat-typing performance" \
+-   15  	"  make lint             Run luacheck on lua/ and tests/" \
+-   16  	"  make fixtures         Refresh SSE fixture files from real APIs" \
+-   17  	"  make model-check      Check latest model offerings from providers" \
+-   18  	"  make test-clean-env   Remove test environment directories" \
+-   19  	""
+-   20  
+-   21  # ── Test environment ─────────────────────────────────────────────────────────
+-   22  
+-   23  PLENARY = ~/.local/share/nvim/lazy/plenary.nvim
+-   24  REAL_HOME = $(HOME)
+-   25  TEST_HOME = $(CURDIR)/.test-home
+-   26  TEST_XDG = $(CURDIR)/.test-xdg
+-   27  TEST_TMP = $(CURDIR)/.test-tmp
+-   28  TEST_ENV = HOME="$(TEST_HOME)" XDG_DATA_HOME="$(TEST_XDG)/data" XDG_STATE_HOME="$(TEST_XDG)/state" XDG_CACHE_HOME="$(TEST_XDG)/cache" TMPDIR="$(TEST_TMP)" NVIM_TEST_PLENARY="$(REAL_HOME)/.local/share/nvim/lazy/plenary.nvim"
+-   29  
+-   30  define PREP_TEST_ENV
+-   31  mkdir -p "$(TEST_HOME)" "$(TEST_XDG)/data" "$(TEST_XDG)/state" "$(TEST_XDG)/cache" "$(TEST_TMP)"
+-   32  endef
+-   33  
+-   34  # Run all tests: unit in parallel, integration sequentially.
+-   35  test: lint test-unit test-integration
+-   36  
+-   37  # Number of parallel test processes (override with JOBS=N).
+-   38  JOBS ?= 8
+-   39  
+-   40  # Per-file test runner. Captures the file's output; prints `PASS: <path>` on
+-   41  # success or a labelled `===FAIL: <path>===` block (with indented output) on
+-   42  # failure; appends the failing path to $FAILED_LOG so the recipe can print a
+-   43  # reliable summary after xargs finishes. Single-line PASS writes are atomic;
+-   44  # the FAIL block is best-effort across parallel jobs but the end-of-run
+-   45  # summary is authoritative either way.
+-   46  RUN_SPEC = sh -c 'out=$$(mktemp "$$TMPDIR/parley-test.XXXXXX"); if nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile $$1" -c "qa!" >"$$out" 2>&1; then printf "PASS: %s\n" "$$1"; rm -f "$$out"; else { printf "===FAIL: %s===\n" "$$1"; sed "s/^/  /" "$$out"; }; echo "$$1" >> "$$FAILED_LOG"; rm -f "$$out"; exit 1; fi' _
+-   47  
+-   48  # Run unit tests in parallel — each file in its own Neovim process.
+-   49  # Safe because unit tests have no shared state.
+-   50  test-unit:
+-   51  	@$(PREP_TEST_ENV)
+-   52  	@export $(TEST_ENV); \
+-   53  	FAILED_LOG=$$(mktemp "$$TMPDIR/parley-failed.XXXXXX"); export FAILED_LOG; \
+-   54  	find tests/unit -name '*_spec.lua' | sort | \
+-   55  	  xargs -P $(JOBS) -I {} $(RUN_SPEC) {}; \
+-   56  	rc=0; \
+-   57  	if [ -s "$$FAILED_LOG" ]; then \
+-   58  	  printf '\n=== Failed unit test files ===\n'; \
+-   59  	  sort -u "$$FAILED_LOG"; \
+-   60  	  rc=1; \
+-   61  	fi; \
+-   62  	rm -f "$$FAILED_LOG"; \
+-   63  	exit $$rc
+-   64  
+-   65  # Run integration + arch tests in parallel — each file in its own Neovim process.
+-   66  test-integration:
+-   67  	@$(PREP_TEST_ENV)
+-   68  	@export $(TEST_ENV); \
+-   69  	FAILED_LOG=$$(mktemp "$$TMPDIR/parley-failed.XXXXXX"); export FAILED_LOG; \
+-   70  	find tests/integration tests/arch -name '*_spec.lua' | sort | \
+-   71  	  xargs -P $(JOBS) -I {} $(RUN_SPEC) {}; \
+-   72  	rc=0; \
+-   73  	if [ -s "$$FAILED_LOG" ]; then \
+-   74  	  printf '\n=== Failed integration test files ===\n'; \
+-   75  	  sort -u "$$FAILED_LOG"; \
+-   76  	  rc=1; \
+-   77  	fi; \
+-   78  	rm -f "$$FAILED_LOG"; \
+-   79  	exit $$rc
+-   80  
+-   81  # Run tests mapped to one spec key/path from atlas/traceability.yaml.
+-   82  # Example: make test-spec SPEC=chat/lifecycle
+-   83  test-spec:
+-   84  	@if [ -z "$(SPEC)" ]; then \
+-   85  		echo "Usage: make test-spec SPEC=chat/lifecycle"; \
+-   86  		exit 1; \
+-   87  	fi
+-   88  	@$(PREP_TEST_ENV); \
+-   89  	tests="$$(scripts/spec_test_map.sh list-tests "$(SPEC)")"; \
+-   90  	if [ -z "$$tests" ]; then \
+-   91  		echo "No tests mapped for spec: $(SPEC)"; \
+-   92  		echo "Update atlas/traceability.yaml to add mappings."; \
+-   93  		exit 1; \
+-   94  	fi; \
+-   95  	for test_file in $$tests; do \
+-   96  		echo "Running $$test_file"; \
+-   97  		$(TEST_ENV) nvim -n --headless --noplugin -u tests/minimal_init.vim \
+-   98  		  -c "PlenaryBustedFile $$test_file" \
+-   99  		  -c "qa!" || exit $$?; \
+-  100  	done
+-  101  
+-  102  # Run tests mapped to changed spec files under atlas/*/*.md.
+-  103  # Uses tracked and untracked file changes since feature-branch base
+-  104  # (default base ref: remote/main, fallback origin/main, then main).
+-  105  test-changed:
+-  106  	@$(PREP_TEST_ENV); \
+-  107  	scripts/spec_test_map.sh base-info; \
+-  108  	changed_specs="$$(scripts/spec_test_map.sh list-changed-specs)"; \
+-  109  	if [ -z "$$changed_specs" ]; then \
+-  110  		echo "No changed spec files under atlas/*/*.md"; \
+-  111  		exit 0; \
+-  112  	fi; \
+-  113  	echo "Changed specs:"; \
+-  114  	printf '%s\n' "$$changed_specs"; \
+-  115  	missing=0; \
+-  116  	for spec_path in $$changed_specs; do \
+-  117  		if ! scripts/spec_test_map.sh has-mapping "$$spec_path"; then \
+-  118  			echo "No traceability entry for $$spec_path"; \
+-  119  			missing=1; \
+-  120  		fi; \
+-  121  	done; \
+-  122  	if [ "$$missing" -ne 0 ]; then \
+-  123  		echo "Please update atlas/traceability.yaml for missing mappings."; \
+-  124  		exit 1; \
+-  125  	fi; \
+-  126  	all_tests="$$(scripts/spec_test_map.sh list-tests-from-changed-specs)"; \
+-  127  	if [ -z "$$all_tests" ]; then \
+-  128  		echo "No mapped tests for changed specs (all may have tests: [])."; \
+-  129  		exit 0; \
+-  130  	fi; \
+-  131  	lua_tests=""; sh_tests=""; unknown=""; \
+-  132  	for f in $$all_tests; do \
+-  133  		case "$$f" in \
+-  134  			*.lua) lua_tests="$$lua_tests $$f" ;; \
+-  135  			*.sh)  sh_tests="$$sh_tests $$f" ;; \
+-  136  			*)     unknown="$$unknown $$f" ;; \
+-  137  		esac; \
+-  138  	done; \
+-  139  	if [ -n "$$unknown" ]; then \
+-  140  		echo "Unknown test types:$$unknown"; \
+-  141  		exit 1; \
+-  142  	fi; \
+-  143  	sh_pids=""; sh_fail=0; \
+-  144  	for test_file in $$sh_tests; do \
+-  145  		echo "Running $$test_file (background)"; \
+-  146  		bash "$$test_file" & \
+-  147  		sh_pids="$$sh_pids $$!"; \
+-  148  	done; \
+-  149  	if [ -n "$$lua_tests" ]; then \
+-  150  		for test_file in $$lua_tests; do \
+-  151  			echo "Running $$test_file"; \
+-  152  			$(TEST_ENV) nvim -n --headless --noplugin -u tests/minimal_init.vim \
+-  153  			  -c "PlenaryBustedFile $$test_file" \
+-  154  			  -c "qa!" || exit $$?; \
+-  155  		done; \
+-  156  	fi; \
+-  157  	for pid in $$sh_pids; do \
+-  158  		wait "$$pid" || sh_fail=1; \
+-  159  	done; \
+-  160  	if [ "$$sh_fail" -ne 0 ]; then \
+-  161  		echo "One or more shell tests failed"; \
+-  162  		exit 1; \
+-  163  	fi
+-  164  
+-  165  # Report-only real-Neovim chat typing benchmark. Elapsed timings never gate CI;
+-  166  # scenario validity and structural work accounting still fail loudly.
+-  167  PERF_OUTPUT ?= $(TEST_TMP)/perf/parley-chat-typing.json
+-  168  perf:
+-  169  	@$(PREP_TEST_ENV)
+-  170  	@$(TEST_ENV) PERF_OUTPUT="$(PERF_OUTPUT)" nvim -n --headless --noplugin -u tests/minimal_init.vim \
+-  171  	  -c "lua require('tests.perf.chat_typing').start()"
+-  172  
+-  173  # Run static analysis for Lua code and tests.
+-  174  lint:
+-  175  	@command -v luacheck >/dev/null 2>&1 || { \
+-  176  		echo "luacheck not found. Install with: luarocks install luacheck"; \
+-  177  		exit 1; \
+-  178  	}
+-  179  	@luacheck lua tests
+-  180  
+-  181  # Refresh SSE fixture files from real APIs.
+-  182  # Requires ANTHROPIC_API_KEY, OPENAI_API_KEY, GOOGLEAI_API_KEY in environment.
+-  183  fixtures:
+-  184  	@$(PREP_TEST_ENV)
+-  185  	@$(TEST_ENV) nvim --headless --noplugin -u tests/minimal_init.vim \
+-  186  	  -c "luafile scripts/record_fixtures.lua" \
+-  187  	  -c "qa!"
+-  188  
+-  189  # Check latest model offerings from each provider and optionally update fixture models.
+-  190  # Requires API keys in environment.
+-  191  model-check:
+-  192  	@bash scripts/model_check.sh
+-  193  
+-  194  # Backward-compatible alias.
+-  195  model-checker: model-check
+-  196  
+-  197  test-clean-env:
+-  198  	rm -rf "$(TEST_HOME)" "$(TEST_XDG)" "$(TEST_TMP)"
+-```
+-
+-🔧: read_file id=call_zBTVqnVTsgbwytLVy6JHUOXB
+-```json
+-{"file_path":"lua/parley/init.lua","offset":1,"limit":220}
+-```
+-
+-📎: read_file id=call_zBTVqnVTsgbwytLVy6JHUOXB
+-```
+-    1  -- Parley - A Neovim LLM Chat Plugin
+-    2  -- https://github.com/xianxu/parley.nvim/
+-    3  -- A streamlined LLM chat interface for Neovim with highlighting and navigation
+-    4  
+-    5  --------------------------------------------------------------------------------
+-    6  -- This is the main module
+-    7  --------------------------------------------------------------------------------
+-    8  local config = require("parley.config")
+-    9  local repo_artifacts = require("parley.repo_artifacts")
+-   10  
+-   11  local M = {
+-   12  	_Name = "Parley", -- plugin name
+-   13  	_state = {
+-   14  		interview_mode = false, -- interview mode state
+-   15  		interview_start_time = nil, -- interview start timestamp
+-   16  		interview_timer = nil, -- timer handle for statusline updates
+-   17  	}, -- table of state variables
+-   18  	agents = {}, -- table of agents
+-   19  	system_prompts = {}, -- table of system prompts
+-   20  	cmd = {}, -- default command functions
+-   21  	config = {}, -- config variables
+-   22  	hooks = {}, -- user defined command functions
+-   23  	defaults = require("parley.defaults"), -- some useful defaults
+-   24  chat_parser = require("parley.chat_parser"), -- chat file parser
+-   25  	dispatcher = require("parley.dispatcher"), -- handle communication with LLM providers
+-   26  	helpers = require("parley.helper"), -- helper functions
+-   27  	logger = require("parley.logger"), -- logger module
+-   28  	outline = require("parley.outline"), -- outline navigation module
+-   29  	render = require("parley.render"), -- render module
+-   30  	tasker = require("parley.tasker"), -- tasker module
+-   31  	vault = require("parley.vault"), -- handles secrets
+-   32  	lualine = require("parley.lualine"), -- lualine integration
+-   33  	agent_picker = require("parley.agent_picker"), -- agent selection UI
+-   34  	system_prompt_picker = require("parley.system_prompt_picker"), -- system prompt selection UI
+-   35  	note_dir_picker = require("parley.note_dir_picker"), -- note root management UI
+-   36  	float_picker = require("parley.float_picker"), -- shared floating window picker
+-   37  }
+-   38  
+-   39  -- Chat slug module for filename slug generation and parsing
+-   40  local chat_slug = require("parley.chat_slug")
+-   41  
+-   42  -- Custom system prompts persistence (loaded here; wired up via custom_prompts.setup() inside M.setup())
+-   43  local custom_prompts = require("parley.custom_prompts")
+-   44  
+-   45  -- Interview mode module (loaded here; wired up via interview.setup() inside M.setup())
+-   46  local interview = require("parley.interview")
+-   47  
+-   48  -- Notes module (loaded here; wired up immediately since it only needs M reference)
+-   49  local notes = require("parley.notes")
+-   50  notes.setup(M)
+-   51  
+-   52  -- Chat dirs module (loaded here; wired up immediately since it only needs M reference)
+-   53  local chat_dirs = require("parley.chat_dirs")
+-   54  chat_dirs.setup(M)
+-   55  -- Local wrappers so all existing callers in init.lua work unchanged
+-   56  local find_chat_root = function(f) return chat_dirs.find_chat_root(f) end
+-   57  local find_chat_root_record = function(f) return chat_dirs.find_chat_root_record(f) end
+-   58  local registered_chat_dir = function(d) return chat_dirs.registered_chat_dir(d) end
+-   59  local chat_root_display = function(r, i) return chat_dirs.chat_root_display(r, i) end
+-   60  
+-   61  -- Note dirs module (loaded here; wired up immediately since it only needs M reference)
+-   62  local note_dirs = require("parley.note_dirs")
+-   63  note_dirs.setup(M)
+-   64  
+-   65  -- Canonical directory identity for persisted repo keys and root comparisons.
+-   66  local resolve_dir_key = function(d) return vim.fn.resolve(vim.fn.expand(d)):gsub("/+$", "") end
+-   67  
+-   68  -- Super-repo module (loaded here; wired up immediately since it only needs M reference)
+-   69  local super_repo = require("parley.super_repo")
+-   70  local repo_mode = require("parley.repo_mode")
+-   71  super_repo.setup(M)
+-   72  M.super_repo = super_repo
+-   73  M.toggle_super_repo = function()
+-   74  	local transitioned, err = super_repo.toggle()
+-   75  	if not transitioned then
+-   76  		return false, err
+-   77  	end
+-   78  
+-   79  	local root = M.config.repo_root
+-   80  	if type(root) == "string" and root ~= "" then
+-   81  		local canonical_root = resolve_dir_key(root)
+-   82  		local mode = super_repo.is_active() and "super_repo" or "repo"
+-   83  		M._state.repo_modes = repo_mode.updated(M._state.repo_modes, canonical_root, mode)
+-   84  		local persisted = M.persist_state()
+-   85  		if not persisted then
+-   86  			M.logger.warning("super-repo: preference not saved")
+-   87  		end
+-   88  	end
+-   89  
+-   90  	return true
+-   91  end
+-   92  M.is_super_repo_active = function() return super_repo.is_active() end
+-   93  
+-   94  -- Discovery registry (#116): the repo's noun-vocabulary (what file types exist
+-   95  -- and how to find their instances). Pure given mode context; current() reads it
+-   96  -- from live config (repo_root + super_repo_members) via the injected M ref.
+-   97  local discovery = require("parley.discovery")
+-   98  discovery.setup(M)
+-   99  M.discovery = discovery
+-  100  
+-  101  -- Skill registry (#128): declarative skill manifests unioned from providers
+-  102  -- (plugin-disk ∪ user-disk ∪ repo/virtual seams). current() discovers the live
+-  103  -- stack; the per-turn assembly + read_skill tool (M2) consume it.
+-  104  M.skills = require("parley.skill_registry")
+-  105  
+-  106  -- Memory preferences module (loaded here; wired up immediately since it only needs M reference)
+-  107  local memory_prefs = require("parley.memory_prefs")
+-  108  memory_prefs.setup(M)
+-  109  
+-  110  -- Issues module (loaded here; wired up immediately since it only needs M reference)
+-  111  local issues_mod = require("parley.issues")
+-  112  issues_mod.setup(M)
+-  113  
+-  114  -- Issue finder module
+-  115  local issue_finder_mod = require("parley.issue_finder")
+-  116  issue_finder_mod.setup(M)
+-  117  
+-  118  -- Vision tracker module
+-  119  local vision_mod = require("parley.vision")
+-  120  vision_mod.setup(M)
+-  121  
+-  122  -- Vision finder module
+-  123  local vision_finder_mod = require("parley.vision_finder")
+-  124  vision_finder_mod.setup(M)
+-  125  
+-  126  -- Keybinding registry (scope hierarchy, entries, help generation, registration)
+-  127  local kb_registry = require("parley.keybinding_registry")
+-  128  
+-  129  -- Exporter module (loaded here; wired up at module-load time with M reference)
+-  130  local exporter = require("parley.exporter")
+-  131  exporter.setup(M)
+-  132  
+-  133  local exchange_clipboard = require("parley.exchange_clipboard")
+-  134  
+-  135  -- Chat finder module (loaded here; wired up immediately since it only needs M reference)
+-  136  local chat_finder_mod = require("parley.chat_finder")
+-  137  chat_finder_mod.setup(M)
+-  138  
+-  139  -- Note finder module (loaded here; wired up immediately since it only needs M reference)
+-  140  local note_finder_mod = require("parley.note_finder")
+-  141  note_finder_mod.setup(M)
+-  142  
+-  143  -- Markdown finder module
+-  144  local markdown_finder_mod = require("parley.markdown_finder")
+-  145  markdown_finder_mod.setup(M)
+-  146  
+-  147  -- Highlighter module (loaded here; wired up immediately since it only needs M reference)
+-  148  local highlighter = require("parley.highlighter")
+-  149  highlighter.setup(M)
+-  150  
+-  151  -- Chat respond module (loaded here; wired up immediately since it only needs M reference)
+-  152  local chat_respond = require("parley.chat_respond")
+-  153  chat_respond.setup(M)
+-  154  
+-  155  --------------------------------------------------------------------------------
+-  156  -- Module helper functions and variables
+-  157  --------------------------------------------------------------------------------
+-  158  
+-  159  local agent_completion = function()
+-  160  	return M._agents
+-  161  end
+-  162  
+-  163  local function chat_dir_completion(arg_lead)
+-  164  	local lead = (arg_lead or ""):lower()
+-  165  	local matches = {}
+-  166  	for _, dir in ipairs(M.get_chat_dirs()) do
+-  167  		if lead == "" or dir:lower():find(lead, 1, true) == 1 then
+-  168  			table.insert(matches, dir)
+-  169  		end
+-  170  	end
+-  171  	return matches
+-  172  end
+-  173  
+-  174  local function stop_and_close_timer(timer)
+-  175  	if not timer then
+-  176  		return
+-  177  	end
+-  178  
+-  179  	local ok, is_closing = pcall(function()
+-  180  		return timer:is_closing()
+-  181  	end)
+-  182  	if ok and is_closing then
+-  183  		return
+-  184  	end
+-  185  
+-  186  	pcall(function()
+-  187  		timer:stop()
+-  188  	end)
+-  189  
+-  190  	ok, is_closing = pcall(function()
+-  191  		return timer:is_closing()
+-  192  	end)
+-  193  	if ok and is_closing then
+-  194  		return
+-  195  	end
+-  196  
+-  197  	pcall(function()
+-  198  		timer:close()
+-  199  	end)
+-  200  end
+-  201  
+-  202  local function find_chat_header_end(lines)
+-  203  	return M.chat_parser.find_header_end(lines)
+-  204  end
+-  205  
+-  206  local function parse_chat_headers(lines)
+-  207  	local header_end = find_chat_header_end(lines)
+-  208  	if not header_end then
+-  209  		return nil, nil
+-  210  	end
+-  211  	local cfg = M.config or {}
+-  212  	local parse_config = {
+-  213  		chat_user_prefix = cfg.chat_user_prefix or "💬:",
+-  214  		chat_local_prefix = cfg.chat_local_prefix or "🔒:",
+-  215  		chat_assistant_prefix = cfg.chat_assistant_prefix or { "🤖:" },
+-  216  		chat_memory = cfg.chat_memory or {
+-  217  			enable = true,
+-  218  			summary_prefix = "📝:",
+-  219  			reasoning_prefix = "🧠:",
+-  220  		},
+-```
+-
+-🔧: read_file id=call_vG7Xv758zTXx1hPSIq4pnId5
+-```json
+-{"file_path":"atlas/index.md","offset":1,"limit":220}
+-```
+-
+-📎: read_file id=call_vG7Xv758zTXx1hPSIq4pnId5
+-```
+-    1  # Parley.nvim Atlas
+-    2  
+-    3  ## Overview
+-    4  This index provides a central directory for all atlas entries of the `parley.nvim` plugin — practical pointers for future developers and agents to understand the sketch of functionalities, history, and intention. Details live in the code.
+-    5  
+-    6  ## 1. Core Chat System
+-    7  - [Chat Format](chat/format.md): Transcript prefixes and front matter header metadata.
+-    8  - [Chat Lifecycle](chat/lifecycle.md): Creation, slug rename (auto from topic), response, resubmission, and deletion.
+-    9  - [Chat Response Progress](chat/response_progress.md): Delayed playful pending presentation, semantic status handoff, tool continuation, and terminal cleanup for chat-producing LLM legs.
+-   10  - [Chat Memory](chat/memory.md): History management, summarization, and preservation.
+-   11  - [Memory Preferences](chat/memory_prefs.md): Per-tag user preference profiles from chat history summaries.
+-   12  - [Chat Parsing](chat/parsing.md): Buffer segmentation, turn identification, and branch link parsing.
+-   13  - [Exchange Model](chat/exchange_model.md): Size-based positional model — single source of truth for buffer layout. Everything is a block.
+-   14  - [Inline Branch Links](chat/inline_branch_links.md): Footnote-style `[🌿:text](file)` links within chat text.
+-   15  - [Drill-In Markers](chat/drill_in.md): Inline `[T]` discussion markers — gather/strip into the next user turn on respond; reuses the review-skill marker syntax.
+-   16  - [Inline Term Definition](chat/inline_define.md): Visual-select a phrase + `<M-CR>` → concise context-aware definition as a managed footnote diagnostic rehydrated for markdown buffers (the `define` skill + `emit_definition` tool; honors `:ToggleWebSearch`).
+-   17  - [Spell Typeahead](chat/spell_typeahead.md): As-you-type spell-suggestion completion + squiggles on chat buffers (`config.chat_spell`); plugin-free on `spellsuggest()`.
+-   18  
+-   19  ## 2. LLM Providers & Agents
+-   20  - [Provider Architecture](providers/architecture.md): Transport layer, payload construction, and streaming.
+-   21  - [OpenAI Provider](providers/openai.md): Implementation for OpenAI-compatible backends.
+-   22  - [CLIProxyAPI Provider](providers/cliproxyapi.md): OpenAI-compatible local proxy provider for multi-vendor models.
+-   23  - [Managed cliproxyapi](providers/cliproxy-managed.md): Opt-in lifecycle + config management for a local cliproxyapi (render from Lua, lazy start/reuse, `:ParleyProxy`).
+-   24  - [Anthropic Provider](providers/anthropic.md): Implementation for Claude models.
+-   25  - [Google AI Provider](providers/googleai.md): Implementation for Gemini models.
+-   26  - [Agents](providers/agents.md): Agent configuration and selection mechanisms.
+-   27  - [Tool Use](providers/tool_use.md): Client-side tool loop, per-provider wires (anthropic/openai) behind one registry, Unix tools (ls/find/grep), file operations (read/edit/write), safety mechanisms.
+-   28  - [System Prompts](providers/system_prompts.md): Editable system prompts with built-in/custom/modified sources.
+-   29  
+-   30  ## 3. Context & References
+-   31  - [File References (@@)](context/file_references.md): Syntax for local file and directory inclusion.
+-   32  - [Artifact-Ref Navigation](context/artifact_refs.md): Jump from `ariadne#11` / `#15 M4` / `pair#84` under the cursor to its current file (shells to `sdlc resolve`; loose local detector, sdlc owns the grammar); smart `gf` + `ParleyArtifactRef` highlight.
+-   33  - [Google Drive Context](context/google_drive.md): Google Docs integration and OAuth flow.
+-   34  - [Web Search](context/web_search.md): Provider-specific web search tools.
+-   35  
+-   36  ## 4. Notes & Templates
+-   37  - [Note Finder](notes/finder.md): Recursive note picker with recency filtering and deletion.
+-   38  - [Notes Structure](notes/structure.md): Year/Month/Week organization logic.
+-   39  - [Note Templates](notes/templates.md): Template system for new notes.
+-   40  
+-   41  ## 5. Issue Management
+-   42  - [Issue Management](issues/issue-management.md): Repo-local issue tracking with single-file-per-issue format, scheduler, and decomposition.
+-   43  
+-   44  ## 6. UI & UX Components
+-   45  - [UI Pickers](ui/pickers.md): Custom floating-window pickers for agents, prompts, finder, and outline navigation.
+-   46  - [Key Bindings Help](ui/keybindings.md): Shortcut reference command and default mapping.
+-   47  - [Outline Navigation](ui/outline.md): Buffer navigation and outline logic.
+-   48  - [Lualine Integration](ui/lualine.md): Statusline component and indicators.
+-   49  - [Syntax Highlighting](ui/highlights.md): Highlighting groups and rules.
+-   50  
+-   51  ## 7. Infrastructure & Security
+-   52  - [Repo Mode](infra/repo_mode.md): Marker-file detection for parley-enabled repos with auto-created local directories.
+-   53  - [Configuration System](infra/config.md): Settings and merging logic.
+-   54  - [Vault (Secret Management)](infra/vault.md): Secret retrieval and storage.
+-   55  - [Logging System](infra/logging.md): Logging and inspection tools.
+-   56  - [Raw-Mode Logging](infra/raw_logging.md): **First-line debug tool for LLM-pipeline bugs.** Per-chat side-file logs (exchange + raw API), YAML format, lualine red flag. `:ParleyToggleExchangeLog` / `:ParleyToggleRawLog`.
+-   57  - [Linting](infra/linting.md): Lua static analysis baseline and `make lint` behavior.
+-   58  - [OpenShell Sandbox](infra/openshell.md): Policy-enforced agent sandbox via NVIDIA OpenShell + mutagen file sync.
+-   59  - [AI Workflow](infra/workflow.md): Issue-based development, worktree management, and pre-merge checks.
+-   60  
+-   61  ## 8. Skill System & Special Modes
+-   62  - [Skill System](skills/skill-system.md): AI-powered buffer-editing **skills** (the P2 artifact-workbench mode). **Redesigned (#128, M1–M4 done):** declarative manifests; P2 rides the existing dispatcher/tools layer (the P1 chat loop is untouched — no new engine); the v1 `skill_runner` engine was deleted (both `review` and `voice-apply` run through `skill_invoke`).
+-   63  - [Interview Mode](modes/interview.md): Mechanics, automatic timestamps, and `{thought}` highlighting.
+-   64  - [Raw Mode](modes/raw_mode.md): API debugging via raw requests/responses — see [Raw-Mode Logging](infra/raw_logging.md) for the debug workflow.
+-   65  - [Document Review](modes/review.md): LLM-powered document review via 🤖 markers (implemented as a skill).
+-   66  - [Super-Repo Mode](modes/super_repo.md): Toggle peers (`<C-g>p`) to aggregate reads across sibling `.parley` repos; the explicit choice persists per repository.
+-   67  
+-   68  ## 9. Export
+-   69  - [Export Formats](export/formats.md): Jekyll HTML and Markdown export logic.
+-   70  - [Tree Export](export/tree_export.md): Exporting chat trees as multiple linked files with navigation.
+-   71  
+-   72  ## 10. Vision Tracker
+-   73  - [Vision Format](vision/format.md): YAML schema, multi-file namespacing, and ID resolution rules.
+-   74  - [Vision Exports](vision/exports.md): CSV, DOT graph export, and validation.
+-   75  
+-   76  ## 11. Discovery Registry
+-   77  - [Discovery Registry](discovery/registry.md): Data-driven noun-vocabulary (what file types exist + how to find instances); base ∪ local composition, matcher discriminator kinds, the `query()`/`render()` consumers, grep-now/index-later seam. Feeds parley's repo-aware **chat context** (the P1 "chat as ariadne workbench" mode) — not a #128 skill (see #128 re-scope).
+-   78  
+-   79  ## 12. Traceability
+-   80  - [Traceability Map](traceability.yaml): Mapping from each feature entry to implementation files and related tests.
+-```
+-
+-🔧: read_file id=call_1bwuJWhxEaGJ60g5OQJEFKLK
+-```json
+-{"file_path":"TOOLING.md","offset":1,"limit":180}
+-```
+-
+-📎: read_file id=call_1bwuJWhxEaGJ60g5OQJEFKLK
+-````
+-    1  # Tooling
+-    2  
+-    3  ## Development Commands
+-    4  - Manual testing: Start Neovim and use `:lua require('parley').setup()` followed by `:Parley`
+-    5  - Run tests: `make test` (runs all unit + integration tests via plenary.nvim in headless Neovim)
+-    6  - Lint: `make lint` (requires `luacheck`; see install note below)
+-    7  - Run tests for one spec: `make test-spec SPEC=chat/lifecycle` (uses `atlas/traceability.yaml` mapping)
+-    8  - Run tests for changed specs: `make test-changed` (runs mapped tests for changed `atlas/*/*.md` files), this is faster than full test run
+-    9  - Run the report-only real chat-typing benchmark: `make perf` (details below).
+-   10  - Refresh SSE fixtures: `ANTHROPIC_API_KEY=... OPENAI_API_KEY=... make fixtures`
+-   11  - Test files live in `tests/unit/` (pure logic, no Neovim APIs) and `tests/integration/` (full Neovim runtime)
+-   12  
+-   13  ## Chat-Typing Performance Report
+-   14  
+-   15  `make perf` opens normally attached Parley chat buffers at 100, 1,000, and
+-   16  5,000 lines, performs 5 warmups and 20 measured samples, and reports the real
+-   17  insert-event/redraw interval plus isolated timezone, footnote, decoration, and
+-   18  spell phases. Inclusive `edit_total` overlaps the isolated measurements; do not
+-   19  add or subtract the isolated phase timings as if they decomposed it.
+-   20  
+-   21  The command prints median/p95 timings and scaling ratios, then overwrites
+-   22  `.test-tmp/perf/parley-chat-typing.json`. Override the destination (including a
+-   23  new parent directory) with:
+-   24  
+-   25  ```sh
+-   26  make perf PERF_OUTPUT=/path/to/parley-chat-typing.json
+-   27  ```
+-   28  
+-   29  The JSON envelope has `schema_version: 1`, `generated_at`,
+-   30  `timing_unit: "milliseconds"`, `environment` (`os`, `nvim`, and the measured
+-   31  git `commit`), and `scenarios`. Every scenario records `name`, `phase`,
+-   32  `attribution` (`inclusive` or `isolated`), `line_count`, `iteration_count`,
+-   33  `elapsed_ms` (`samples`, `median`, `p95`), and `work`
+-   34  (`line_read_calls`, `lines_requested`, `full_buffer_reads`, and
+-   35  `structure_rows_processed`). Generated reports are ignored artifacts; durable
+-   36  baseline/optimized summaries belong in the issue log.
+-   37  
+-   38  Elapsed timings are report-only and never fail CI. Scenario validity and
+-   39  structural bounds are correctness gates: the measured insert event must not
+-   40  perform a full-buffer read; decoration reads stay within the viewport/context
+-   41  allowances; matched 1,000/5,000-line viewports request identical work; and
+-   42  ordinary prose edits process the same bounded structure rows. Timezone and
+-   43  managed-footnote diagnostics deliberately remain stale during `TextChangedI`,
+-   44  then converge synchronously on `InsertLeave`, normal `TextChanged`,
+-   45  `BufWritePost`, `BufEnter`, `WinEnter`, and stream-leg finalization. Structural
+-   46  marker edits may suppress decorations during insertion; the same convergence
+-   47  events rebuild structure before returning. Redraw itself consumes only the
+-   48  buffer-owned bounded structure snapshot and visible/context rows.
+-   49  
+-   50  For an optional manual comparison, repeat ordinary typing with
+-   51  `:MarkdownPreview` enabled. The automated report intentionally excludes that
+-   52  external plugin so its measurements attribute only Parley-owned work.
+-   53  
+-   54  ## Installing `luacheck` (macOS)
+-   55  
+-   56  `luacheck` 1.2.0 (current stable) is incompatible with Lua 5.5's stricter
+-   57  `<const>` semantics — loading fails with `attempt to assign to const variable
+-   58  'field_name'`. Brew's `lua` formula tracks latest, so a fresh
+-   59  `brew install luarocks` pulls in 5.5 and breaks lint.
+-   60  
+-   61  Install against Lua 5.4 instead:
+-   62  
+-   63  ```
+-   64  brew install lua@5.4
+-   65  luarocks --lua-version=5.4 install luacheck
+-   66  ln -sf "$(brew --prefix lua@5.4)/bin/luacheck-5.4" "$(brew --prefix)/bin/luacheck"
+-   67  ```
+-   68  
+-   69  Verify with `luacheck --version`. If `make test` still complains, ensure
+-   70  `luacheck` is on `PATH` ahead of any 5.5 install.
+-````
+-
+-🔧: read_file id=call_Avo8lRWZZexrsFTUrQS75hVE
+-```json
+-{"file_path":"go.mod","offset":1,"limit":180}
+-```
+-
+-📎: read_file id=call_Avo8lRWZZexrsFTUrQS75hVE
+-```
+-    1  module github.com/xianxu/parley.nvim
+-    2  
+-    3  go 1.26.3
+-```
+-
+-### What this repository is
+-
+-**Certainly, `parley.nvim` is a local-first LLM research and agentic-workflow environment built as a Neovim plugin.**
+-
+-It began as a Markdown chat notebook, but the repository has evolved into something broader: a keyboard-first workbench for conversations, research, file operations, document review, project knowledge, and coding-agent workflows.
+-
+-Its central idea is:
+-
+-> **Markdown files hold durable state; Neovim is the human interface; LLMs act as collaborators.**
+-
+-### Core design
+-
+-Parley deliberately keeps conversations as ordinary Markdown files:
+-
+-- `💬:` marks user messages.
+-- `🤖:` marks assistant responses.
+-- `📝:` holds compact conversation memory.
+-- Chat metadata lives in the file header.
+-- Branches are linked Markdown files rather than hidden database records.
+-- Users can edit any part of the transcript, affecting the context supplied to subsequent model calls.
+-
+-This gives the user ownership of the complete conversation state. Chats can be inspected, searched, version-controlled, edited with normal Unix tools, or passed to coding agents.
+-
+-A notable feature is its **tree of chats**. You can move an exchange and its descendants into a child chat, allowing research to branch without turning the original conversation into one long, disorganized thread.
+-
+-### Major capabilities
+-
+-The repository currently contains several interconnected systems:
+-
+-- **Multi-provider LLM chat**
+-  - OpenAI and compatible APIs
+-  - Anthropic
+-  - Google AI
+-  - Ollama
+-  - CLIProxyAPI, including management of a local proxy process
+-
+-- **Context gathering**
+-  - Local files and directory patterns through `@@path`
+-  - Google Drive documents through OAuth
+-  - Provider-supported web search
+-  - Repository-aware artifact references
+-
+-- **Conversation management**
+-  - Chat creation, parsing, streaming, cancellation, and regeneration
+-  - Branching and tree export
+-  - Multiple chat roots
+-  - Conversation memory and preference extraction
+-  - Searchable chat finder and outline navigation
+-
+-- **Repository workbench features**
+-  - Markdown, note, issue, and project-vision finders
+-  - Ordinary-repository and “super-repo” modes
+-  - Repository artifact navigation
+-  - A discovery registry describing the kinds of documents available in a repository
+-
+-- **Agent tools**
+-  - Safe wrappers around `ls`, `find`, `grep`, `ack`, and chat-history search
+-  - File reading, editing, writing, and structured edit proposals
+-  - Provider-neutral tool-call encoding and dispatch
+-  - Multi-round client-side tool execution
+-
+-- **Skills**
+-  - Contextual term definition
+-  - Document review
+-  - Applying an established writing voice
+-  - Declarative skill manifests and provider-specific discovery
+-
+-- **Supporting modes**
+-  - Notes
+-  - Interview mode
+-  - Raw API debugging
+-  - Chat and document export
+-
+-### Code organization
+-
+-The implementation is predominantly **Lua running inside Neovim**.
+-
+-```text
+-parley.nvim/
+-├── lua/parley/          Main plugin implementation
+-│   ├── init.lua         Composition root and Neovim-facing setup
+-│   ├── config.lua       Configuration and defaults
+-│   ├── chat_*.lua       Chat parsing, lifecycle, response, and presentation
+-│   ├── dispatcher.lua   LLM request dispatch
+-│   ├── providers.lua    Provider definitions and behavior
+-│   ├── sse.lua          Streaming-response parsing
+-│   ├── tool_loop.lua    Multi-round model tool execution
+-│   ├── tools/           Tool registry, wire formats, and built-in tools
+-│   ├── skills/          Review, definition, and voice-application skills
+-│   └── discovery/       Repository content-type registry
+-├── atlas/               Feature-oriented architecture documentation
+-├── tests/
+-│   ├── unit/            Logic-focused tests
+-│   ├── integration/     Tests involving a Neovim runtime
+-│   ├── arch/            Architectural and performance constraints
+-│   ├── fixtures/        Recorded API streams and golden transcripts
+-│   └── perf/            Chat-typing performance harness
+-├── scripts/             Development and maintenance utilities
+-├── docs/                Additional documentation
+-├── README.md            User-facing overview and installation
+-├── TOOLING.md           Development and performance commands
+-└── Makefile.parley      Plugin-specific build and test targets
+-```
+-
+-`lua/parley/init.lua` acts as a large **composition root**. It loads modules, supplies the central `M` object to subsystems, registers commands and keybindings, and coordinates shared configuration and state. Much of the newer functionality has been split into focused modules rather than implemented directly in that file.
+-
+-### Architectural flow
+-
+-A typical chat response probably follows this approximate route:
+-
+-```text
+-Markdown chat buffer
+-        │
+-        ▼
+-chat_parser / exchange_model
+-        │
+-        ▼
+-chat_respond
+-        │
+-        ▼
+-dispatcher + provider_params
+-        │
+-        ▼
+-provider-specific HTTP/SSE protocol
+-        │
+-        ├── streamed text ──► render/presentation
+-        │
+-        └── tool request ───► tool_loop ───► tools/dispatcher
+-                                      │
+-                                      └── subsequent model request
+-```
+-
+-The important architectural boundary is that provider-specific representations are translated into a common internal workflow. The same chat interface and tool system can therefore operate across different model vendors.
+-
+-### Documentation strategy
+-
+-The `README.md` is the user entry point, but detailed behavior lives in `atlas/`.
+-
+-The Atlas is organized by capability:
+-
+-- chat
+-- providers
+-- context
+-- notes
+-- issues
+-- UI
+-- infrastructure
+-- skills and modes
+-- exports
+-- vision tracking
+-- discovery
+-
+-`atlas/traceability.yaml` maps feature documentation to implementation and tests. That indicates a **specification-oriented development workflow**: change a feature document, identify its mapped tests, and run only the affected suite when appropriate.
+-
+-### Development workflow
+-
+-The main commands are:
+-
+-```bash
+-# Lint and run all tests
+-make test
+-
+-# Run unit tests
+-make test-unit
+-
+-# Run integration and architecture tests
+-make test-integration
+-
+-# Run tests associated with one Atlas feature
+-make test-spec SPEC=chat/lifecycle
+-
+-# Run tests associated with modified Atlas specifications
+-make test-changed
+-
+-# Run the chat-typing performance report
+-make perf
+-
+-# Static analysis only
+-make lint
+-```
+-
+-Tests run through `plenary.nvim` in isolated, headless Neovim processes. Unit files run in parallel, while integration and architecture suites cover real Neovim behavior, asynchronous processes, streaming, cancellation, tool calls, and buffer mutation.
+-
+-The test suite is unusually extensive for a Neovim plugin. It includes:
+-
+-- Golden request payloads and transcript fixtures
+-- Recorded SSE streams from multiple providers
+-- Tool-use protocol tests
+-- Proxy lifecycle tests
+-- Race-condition and cancellation tests
+-- Buffer round-trip and parsing tests
+-- Architectural constraints
+-- Real-Neovim typing performance measurements
+-
+-### What seems distinctive
+-
+-The most important distinction is that Parley is **not merely a chat sidebar for Neovim**.
+-
+-Its direction is closer to a persistent knowledge and work environment where:
+-
+-1. Markdown is the durable and inspectable state.
+-2. Neovim supplies editing, navigation, and composition.
+-3. LLM providers are interchangeable reasoning services.
+-4. Tools allow agents to act on local material.
+-5. Chat branches preserve the shape of research.
+-6. Repository documents provide structured project context.
+-7. The same artifacts can move between conversation, planning, and implementation.
+-
+-### Current maturity and complexity
+-
+-The project appears mature in testing and feature breadth, but it is also **considerably more complex than its “simple Markdown chat” foundation suggests**. There are many modules for asynchronous finders, repository discovery, skills, proxy management, structured tools, issue tracking, and UI behavior.
+-
+-A few observations:
+-
+-- `ARCH.md` is too short to describe the real architecture; the Atlas is the authoritative conceptual map.
+-- `init.lua` remains a substantial integration point, although behavior is increasingly delegated to specialized modules.
+-- The repository contains generated local test directories such as `.test-home`, `.test-xdg`, and `.test-tmp`; these are development artifacts rather than product source.
+-- A `go.mod` exists, but the core plugin is Lua. I did not find enough evidence from the files inspected to say what Go code, if any, is currently intended to support.
+-- The linked top-level `Makefile` appears to come from a neighboring `ariadne` repository, while `Makefile.parley` contains the project-specific Lua/Neovim targets. This suggests Parley participates in a larger local multi-repository development workflow.
+-
+-**In short:** Parley is a Markdown-native Neovim environment for durable LLM conversations and agent-assisted knowledge work, with provider-neutral streaming, local tools, branching chats, repository discovery, skills, and a substantial automated test suite.
+-
+-📝: you asked about this repository, I answered with its purpose as a Markdown-native Neovim LLM workbench, its principal features, module structure, request architecture, Atlas-driven documentation, testing workflow, and notable design characteristics
+-
+-💬:
+-
+-
+-

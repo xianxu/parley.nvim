@@ -1,5 +1,38 @@
 # Lessons
 
+## 2026-08-22 (#203)
+
+- **A span-based text edit is only as safe as the boundary you assume — and an
+  empty span is catastrophic, not a no-op.** Twice this session an edit computed
+  `s[index(A):index(B)]` where B occurred somewhere unexpected. Once it swallowed
+  a whole `## Done when` section; once B landed *before* A, the slice came back
+  empty, and `str.replace("", new)` inserted the replacement between every
+  character of the file — 409,224 lines from a 78-line issue. Rule: replace an
+  exact known block and assert it matches exactly once; never a range between two
+  landmarks you have not just verified are ordered and unique.
+- **A test that skips is not a test that passes.** The producer guard for #203
+  was green on HEAD and *still green* with the invariant it guards deliberately
+  broken: `tools.get` returns nil without `register_builtins()`, and the guard's
+  `if not def then return end` skipped every case. Rule: after writing a guard,
+  break the thing it guards and watch it go red. A guard that has never failed
+  has never been tested — and "skip when absent" is the most common way to make
+  one permanently vacuous (`ARCH-PURPOSE`).
+- **Check whether a rejected option was rejected for a true reason.** #203 was
+  deferred because "declining when the body holds a question defeats M2's
+  headline case, because `read_file` on a transcript produces exactly that" — and
+  two tests were observed going red. `read_file` emits `"%5d  %s"`; it cannot
+  produce that shape. The tests encoded a fixture that modelled the tool
+  incorrectly, while their own siblings modelled `grep` correctly two cases
+  below. Rule: when a plan says an approach was tried and failed, verify the
+  premise before building the expensive alternative — the failure may belong to
+  the fixture, not the approach.
+- **A fixture is a claim about the world and can be wrong.** The same file
+  modelled `grep` faithfully (prefixed) and `read_file` unfaithfully
+  (unprefixed), and the unfaithful half drove a design decision for two issues.
+  Rule: when a fixture stands in for a real producer, derive its shape from that
+  producer's code, and say in the fixture which producer it models.
+
+
 ## 2026-08-21 (#202)
 
 - **A destructive recipe may only remove paths the tool itself constructed and

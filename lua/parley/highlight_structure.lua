@@ -9,6 +9,25 @@ local TOKENS = {
     draft_end = "D", footnote = "f", blank = "_",
 }
 
+--- The kinds a tool body may not span (#203).
+---
+--- These are the markers `chat_parser` calls structural: 📝/🔧/📎/💬/🤖/🌿/🔒.
+--- `reasoning` is deliberately absent — 🧠: is terminated BY a structural
+--- marker, it is not one.
+---
+--- Named here because this module owns the kind vocabulary (TOKENS above). The
+--- three `fence.scan` consumers derive their predicate from this rather than
+--- each hand-listing kinds, which is how they diverged before #200.
+M.STRUCTURAL_KINDS = {
+    user = true, assistant = true, summary = true,
+    tool_use = true, tool_result = true, branch = true, ["local"] = true,
+}
+
+--- Whether `kind` is a structural marker a tool body may not span.
+function M.is_structural_kind(kind)
+    return M.STRUCTURAL_KINDS[kind] == true
+end
+
 local function escape_pattern(text)
     return (text:gsub("([^%w])", "%%%1"))
 end

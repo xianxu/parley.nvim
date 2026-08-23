@@ -117,12 +117,30 @@ end
 --- @return table bodies   marker_row -> { first, last, close } (first > last for
 ---                        an empty body; close is nil when none was found)
 --- @return table markers  set of 1-based rows holding a depth-0 tool marker
-function M.scan(lines, is_tool_marker)
+--- @param lines string[]
+--- @param is_tool_marker fun(line: string, row: integer): boolean
+--- @param is_structural fun(line: string, row: integer): boolean|nil
+---   A column-0 structural marker a tool body may not span (#203). Required in
+---   practice: every consumer passes it, and omitting it restores the pre-#203
+---   search that lets a body latch onto a close belonging to another pair.
+function M.scan(lines, is_tool_marker, is_structural)
     local bodies, markers = {}, {}
 
+    -- A tool body's close must appear before the next column-0 structural
+    -- marker (#203). Without the bound, an opener that is never closed latches
+    -- onto some later unrelated bare fence, and every 💬: in between stops
+    -- starting an exchange — the rest of the chat collapses into one, silently.
+    --
+    -- Safe because no parley tool emits a column-0 marker: every one prefixes
+    -- its output (read_file `%5d  `, grep/ack `file:line:`, chat_history_search
+    -- `{label}/path:line:`). So a marker inside a body means the content did not
+    -- come from parley — hand-edited, truncated, or pasted — and forking there
+    -- is the visible degradation the operator chose over silent swallowing.
+    -- tests/integration/tool_output_prefix_spec.lua guards the producer half.
     local function close_of(open_len, from)
         for row = from, #lines do
             if M.closes(lines[row], open_len) then return row end
+            if is_structural and is_structural(lines[row], row) then return nil end
         end
         return nil
     end

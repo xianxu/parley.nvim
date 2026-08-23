@@ -136,6 +136,9 @@ function M.verify_anchors(ranges, lines, patterns)
             local found = fence.scan(window, function(line)
                 local k = classify(line, patterns).kind
                 return k == "tool_use" or k == "tool_result"
+            end, function(line)
+                return require("parley.highlight_structure")
+                    .is_structural_kind(classify(line, patterns).kind)
             end)
             for k in pairs(fence.body_rows(found)) do
                 body_rows[range.start_0 + k - 1] = true

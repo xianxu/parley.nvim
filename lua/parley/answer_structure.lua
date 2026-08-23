@@ -37,6 +37,8 @@ function M.reduce(lines, patterns, opts)
     -- run-to-next-boundary arm and swallows the prose after it (#200 BR-52).
     local bodies, markers = fence.scan(lines, function(_, row)
         return kinds[row] == "tool_use" or kinds[row] == "tool_result"
+    end, function(_, row)
+        return require("parley.highlight_structure").is_structural_kind(kinds[row])
     end)
 
     local explicit_end_for = {}

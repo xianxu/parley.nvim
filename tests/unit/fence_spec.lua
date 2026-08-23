@@ -203,3 +203,50 @@ describe("depth-aware scan", function()
         assert.is_nil(rows[6])
     end)
 end)
+
+-- #203: the close search is bounded by column-0 structural markers, so a body
+-- can never span one. Asserted on scan's own bodies/markers model rather than a
+-- downstream exchange count — the rule lives here, so it is pinned here.
+describe("fence.scan body bounds (#203)", function()
+    local fence = require("parley.fence")
+
+    -- Row 1 is the tool marker; rows carrying a bare 💬: are structural.
+    local function scan(lines)
+        return fence.scan(lines,
+            function(_, row) return row == 1 end,
+            function(line) return line:match("^💬:") ~= nil end)
+    end
+
+    it("takes the matching close when nothing structural intervenes", function()
+        local bodies = scan({ "📎: r", "```", "content", "```", "after" })
+        assert.is_not_nil(bodies[1])
+        assert.equals(3, bodies[1].first)
+        assert.equals(3, bodies[1].last)
+        assert.equals(4, bodies[1].close)
+    end)
+
+    it("refuses a close that lies beyond a structural marker", function()
+        -- The bare fence on the last row belongs to some other pair; taking it
+        -- would swallow the question between.
+        local bodies = scan({ "📎: r", "```", "never closed", "💬: q", "```" })
+        assert.message("body latched onto a close belonging to another pair")
+            .is_nil(bodies[1])
+    end)
+
+    it("refuses when the opener has no close at all", function()
+        local bodies = scan({ "📎: r", "```", "truncated mid-write" })
+        assert.is_nil(bodies[1])
+    end)
+
+    it("still reports the marker even when the body is refused", function()
+        local _, markers = scan({ "📎: r", "```", "x", "💬: q", "```" })
+        assert.message("a refused body must not also lose its marker")
+            .is_true(markers[1])
+    end)
+
+    it("keeps a nested shorter fence inside a longer body", function()
+        local bodies = scan({ "📎: r", "````", "```", "inner", "```", "````" })
+        assert.is_not_nil(bodies[1])
+        assert.equals(6, bodies[1].close)
+    end)
+end)

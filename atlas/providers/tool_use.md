@@ -162,7 +162,32 @@ What belongs here is the shape and the consumers:
   extent plus the depth-0 marker set, and `fence.body_rows` is the derived view.
 - Consumers, all deriving: `tools/serialize` (writer *and* both reader paths),
   `answer_structure`'s section scanner, `chat_parser`'s precompute and its
-  `cb_state` tracker, and `fold_projection`'s interior drift scan.
+  `cb_state` tracker, and `fold_projection`'s interior drift scan. All three
+  `fence.scan` callers pass the structural predicate — a caller left without it
+  gets the pre-#203 close search, which is the divergence #200 collapsed.
+- **A body may not span a column-0 structural marker** (#203). The close search
+  stops there rather than latching onto a later bare fence belonging to another
+  pair, which used to swallow every exchange in between, silently.
+
+#### The producer-side invariant that rule rests on
+
+The bound is only safe because **no tool emits a column-0 marker**: each one
+prefixes its output (`read_file` `%5d  `, `grep`/`ack` `file:line:`,
+`chat_history_search` `{label}/path:line:`, `ls`/`find` paths, and the write
+tools return status messages). So a column-0 marker inside a body means the
+content did not come from parley — hand-edited, truncated, or pasted — and
+forking there is the visible degradation chosen over silent swallowing.
+
+This is a *producer* obligation the *parser* depends on, so it is guarded where
+it is produced: `tests/integration/tool_output_prefix_spec.lua` derives its
+subjects from `tools.BUILTIN_NAMES` + `OPTIONAL_NAMES`, so a new builtin is
+covered by construction, and fails loudly rather than skipping when a tool is
+unregistered — its first draft passed with `read_file`'s prefix deleted because
+it skipped every case.
+
+**Known exception, stated not hidden:** `grep`/`ack`/`ls`/`find` splice raw
+stderr after a prefixed first line, so a hostile error message can carry a
+column-0 marker. That degrades to over-forking, which is the accepted direction.
 
 **Which markers the depth rule covers** is stated once, in
 `atlas/chat/parsing.md`: tool markers only. Inside a tool body, or inside any
