@@ -404,7 +404,12 @@ describe("structural markers inside a tool body (#200)", function()
             .equals(3, #parse(lines).exchanges)
     end)
 
-    it("treats a tool-result marker inside a tool body as content", function()
+    -- #203 BR-14: this asserted only "1 exchange", which is true whether the
+    -- body SPANS the marker or is REFUSED — so it could not see the change, and
+    -- its name went on claiming the premise this issue refuted. It asserts the
+    -- body extent now, which is the thing that actually differs, and splits into
+    -- the two cases the old fixture conflated.
+    it("treats a PREFIXED tool-result marker inside a tool body as content", function()
         local lines = vim.list_extend(vim.deepcopy(header), {
             "",
             "💬: q",
@@ -413,12 +418,33 @@ describe("structural markers inside a tool body (#200)", function()
             "📎: grep id=r1",
             "```",
             "match: 📎: read_file id=other",
-            "📎: read_file id=other",
+            "chat.md:12: 📎: read_file id=other",
             "```",
         })
         local parsed = parse(lines)
         assert.equals(1, #parsed.exchanges)
+        assert.message("a prefixed marker is grep output, so the body must span it")
+            .is_true(#(parsed.exchanges[1].answer.content_blocks or {}) > 0)
     end)
+
+    -- The tool-marker members of STRUCTURAL_KINDS had no coverage at all: every
+    -- other case in this issue exercises 💬:. A body must refuse to span these
+    -- too, or a column-0 📎: inside one body swallows the NEXT tool block.
+    for _, marker in ipairs({ "📎: read_file id=other", "🔧: read_file id=next",
+                              "📝: a summary", "🔒: local", "🌿: branch" }) do
+        it("refuses to span a column-0 " .. marker:sub(1, 4) .. " inside a body", function()
+            local lines = { "---", "topic: t", "file: f.md", "---" }
+            vim.list_extend(lines, {
+                "", "💬: q1", "", "🤖: [A]", "📎: grep id=r1", "```",
+                marker,
+                "```", "", "💬: q2",
+            })
+            local parsed = parser.parse_chat(lines, 4, test_config())
+            assert.message(("a body spanned a column-0 %q, which no tool emits")
+                :format(marker))
+                .equals(2, #parsed.exchanges)
+        end)
+    end
 
     it("resumes structural parsing after the body closes", function()
         local lines = vim.list_extend(vim.deepcopy(header), {

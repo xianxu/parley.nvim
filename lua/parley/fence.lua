@@ -78,11 +78,6 @@ end
 --- Scans for an opener, then for the matching close of the same length. This is
 --- the reader half of the grammar, shared so that reader and writer cannot
 --- disagree about what "the same pair" means.
---- Extract the body of the first complete fenced block in `lines`.
----
---- Scans for an opener, then for the matching close of the same length. This is
---- the reader half of the grammar, shared so that reader and writer cannot
---- disagree about what "the same pair" means.
 --- @param lines string[]
 --- @param from integer|nil  1-based index to start scanning at (default 1)
 --- @return string|nil body, integer|nil open_index, integer|nil close_index
@@ -99,12 +94,36 @@ function M.extract_body(lines, from)
     return nil
 end
 
---- @param lines string[]
---- @param is_tool_marker fun(line: string, row: integer): boolean
---- @param is_structural fun(line: string, row: integer): boolean
----   Whether a line is a column-0 structural marker (#203). Every consumer
----   passes it; a caller that omits it silently gets the pre-#203 search, in
----   which a tool body can latch onto a close belonging to another pair.
+--- One linear pass over a buffer, answering both questions at once: which rows
+--- are inside a tool body, and which tool markers are structural.
+---
+--- The missing requirement in every earlier attempt was **fence depth**. A
+--- `📎:` written inside an ordinary fenced block is not a marker at all, and
+--- treating it as one makes the enclosing block's CLOSER look like the body's
+--- opener — the scan then latches onto the next block's opener and the "body"
+--- spans a real question. That folded a `💬:` line at depth 0 (#200 BR-43).
+---
+--- The pass:
+---   * at depth 0, a tool marker whose NEXT line opens a body consumes through
+---     that body's close; the rows between are body;
+---   * any other depth-0 opener skips to its own close — everything inside is
+---     depth > 0 and yields no markers;
+---   * an opener with no matching close is treated as ordinary text rather than
+---     swallowing the remainder, so malformed input over-forks instead of
+---     silently losing exchanges;
+---   * a tool body's close must also fall before the next column-0 structural
+---     marker (#203) — see body_close_of for why that bound is safe and where
+---     it is not total.
+---
+--- @param lines string[]                         1-based
+--- @param is_tool_marker fun(line, row):boolean  true for 🔧:/📎: at column 0
+--- @param is_structural fun(line, row):boolean   true for 📝/🔧/📎/💬/🤖/🌿/🔒 at
+---                        column 0 (#203). Every consumer passes it; omitting it
+---                        silently restores the pre-#203 search, in which a body
+---                        can latch onto a close belonging to another pair.
+--- @return table bodies   marker_row -> { first, last, close } (first > last for
+---                        an empty body; close is nil when none was found)
+--- @return table markers  set of 1-based rows holding a depth-0 tool marker
 function M.scan(lines, is_tool_marker, is_structural)
     local bodies, markers = {}, {}
 

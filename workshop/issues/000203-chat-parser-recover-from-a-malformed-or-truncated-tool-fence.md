@@ -417,3 +417,28 @@ verified the file now differs from the commit only in comments. I had built a
 guarded `once()` helper earlier precisely to prevent this and then reached for
 `s.index` out of habit. The lesson entry is updated to say the helper is not
 optional.
+
+### 2026-08-22 (close review round 3 — FIX-THEN-SHIP, 8 disposed, 2 fixed here)
+
+- **BR-13** — my BR-1 restore was incomplete. Rewriting `fence.lua`'s docblock
+  had deleted `M.scan`'s grammar prose and both `@return` lines, and the
+  emergency restore of `extract_body` left its docblock duplicated. Both
+  recovered from `5c65036`; the `@param` duplication actually predated this
+  rework (my first #203 commit appended a second block rather than merging).
+  `fence.lua` now differs from pre-#203 by exactly: the `is_structural`
+  parameter, `body_close_of`, and the one call site — verified by a code-only
+  diff.
+- **BR-14 — the sharpest finding in the issue, and my recurring error.**
+  `chat_parser_tools_spec.lua:407` put a column-0 `📎:` inside a grep body and
+  asserted only `1 exchange` — true whether the body SPANS the marker or is
+  REFUSED. So it stayed green through the change while its name went on
+  claiming the premise this issue refuted. The reviewer named the cause exactly:
+  *"Plan step 7 enumerated 'the tests that went red' rather than 'the tests that
+  encode the premise'."* Enumerating by symptom again, in the issue about
+  enumerating by class. It now asserts the body extent, which is what actually
+  differs, split into the prefixed case (body spans) and the column-0 case.
+- **Consequence BR-14 surfaced: the tool-marker members of `STRUCTURAL_KINDS`
+  had no coverage at all.** Every other case in this issue exercises `💬:`, so
+  `📎`/`🔧`/`📝`/`🔒`/`🌿` were in the set on my say-so. Five cases added — a
+  column-0 one of each inside a body must not be spanned, or a `📎:` in one body
+  swallows the next tool block.

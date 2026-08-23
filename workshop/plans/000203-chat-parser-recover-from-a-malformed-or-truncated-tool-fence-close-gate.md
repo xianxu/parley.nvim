@@ -212,6 +212,144 @@ rounds:
           family: guard-covers-instance-not-class
           round: 2
       blocked: true
+    - "n": 3
+      timestamp: "2026-08-22T19:17:37-07:00"
+      agent: claude
+      dispose:
+        - id: BR-5
+          disposition: addressed
+          note: Named exclusion with teeth — removing the KNOWN_UNREADABLE entry turns the new case red; I also confirmed the excluded transcript shows no base-vs-HEAD divergence.
+          round: 3
+        - id: BR-6
+          disposition: addressed
+          note: scan's docblock is one block now; the same commit duplicated extract_body's and deleted scan's @return, raised as the family's 2nd finding rather than re-raised here.
+          round: 3
+        - id: BR-7
+          disposition: not-addressed
+          note: answer_structure's per-call require is gone and fold_projection's laziness is now justified, but the second full classify per line remains — no shared kinds memo.
+          round: 3
+        - id: BR-8
+          disposition: addressed
+          note: Both the tool names and the shape names are sorted before registration.
+          round: 3
+        - id: BR-9
+          disposition: not-addressed
+          note: workshop/plans/203-experiment.patch still tracked at 1760 lines and still deletes a tracked transcript on apply.
+          round: 3
+        - id: BR-10
+          disposition: not-addressed
+          note: highlight_structure_spec.lua untouched and still absent from chat/parsing's tests list though the module is in its code list.
+          round: 3
+        - id: BR-11
+          disposition: not-addressed
+          note: fence.lua:108 signature unchanged; the guard at :145 is still `if is_structural and ...`.
+          round: 3
+        - id: BR-12
+          disposition: addressed
+          note: Verified by revert (grep and ack single-file cases both go red without -H) and end-to-end (serialized grep-on-a-single-file block parses to 2 exchanges, matching base); 343-file base-vs-HEAD sweep diffs empty.
+          round: 3
+      findings:
+        - id: BR-13
+          severity: Important
+          title: The fence.lua docblock rework deleted M.scan's grammar prose and both @return lines, and duplicated extract_body's block
+          detail: |-
+            This is the 2nd finding in family docblock-hygiene, so the ask is the
+            RULE. fence.lua:76-85 carries extract_body's docblock twice verbatim, and
+            M.scan's docblock at :102-107 lost the "One linear pass" grammar
+            description and both @return entries — the bodies extent model
+            (marker_row -> {first,last,close}, first > last for an empty body, close
+            nil when none found) is now undocumented, though #200 BR-52 requires
+            consumers to branch on exactly that. Two atlas pages designate this
+            docstring as the specification and are falsified by the deletion:
+            atlas/chat/parsing.md:19 ("see its docstrings for the grammar itself") and
+            atlas/providers/tool_use.md:153 ("Its docstrings are the specification —
+            this page deliberately does not restate the rule"), which then restates
+            the rule twice in its own new section. The rule: fence.lua's docstrings
+            are a designated specification surface, not commentary, so a docblock
+            rewrite must be diffed against the block it replaces — the Log records
+            this edit as a recovered span-edit, which is the exact failure mode that
+            silently drops a block. Enumeration for this round: every docblock touched
+            in 5c65036..bd1a623 (fence.extract_body, fence.scan,
+            highlight_structure.STRUCTURAL_KINDS, highlight_structure.is_structural_kind
+            — the last has no @param or @return at all), checked for no duplication, a
+            @param per parameter, a @return per return value, and any prose an atlas
+            page defers to.
+          family: docblock-hygiene
+          round: 3
+        - id: BR-14
+          severity: Important
+          title: A test still asserts by name the premise this issue refuted, and stays green because its assertion cannot see the change
+          detail: |-
+            chat_parser_tools_spec.lua:407 "treats a tool-result marker inside a tool
+            body as content" puts a column-0 tool-result marker inside a grep body and
+            asserts only that there is 1 exchange. Measured on that exact window:
+            base 5c65036 gives bodies[1] = {first=3,last=4,close=5} (the marker IS body
+            content), HEAD gives bodies[1] = nil (the body is refused and the marker is
+            skipped by depth). Both yield 1 exchange, so the assertion cannot
+            distinguish, and the test now reads as coverage for the opposite of what
+            the code does. Plan step 7 enumerated "the tests that went red" rather than
+            "the tests that encode the premise", which is why this one was never swept.
+            Consequence beyond the stale name: nothing anywhere pins the tool-marker
+            members of STRUCTURAL_KINDS — fence_spec, the new chat_parser fork case and
+            fold_projection_spec all use a user-marker predicate, so tool_use,
+            tool_result, summary, branch and local bounding a body is asserted nowhere,
+            in the issue that single-sourced that set. Fix: give this case the "%5d  "
+            prefix its siblings got, and add a case pinning a column-0 tool-result
+            marker refusing the body, asserted on fence.scan's bodies.
+          family: stale-test-premise
+          round: 3
+        - id: BR-15
+          severity: Minor
+          title: The producer guard silently drops ack coverage on a host without ack, while the atlas claims it fails loudly rather than skipping
+          detail: |-
+            This is the 2nd finding in family silent-skip-guard, so the ask is the
+            RULE, not this instance. tool_output_prefix_spec.lua:141-151 returns
+            Success after asserting only "is optional" when tools.get returns nil, so
+            on a host without ack 2 of 7 cases vanish with nothing reporting it —
+            while atlas/providers/tool_use.md:197 states the guard "fails loudly
+            rather than skipping when a tool is unregistered". Same file, same shape:
+            the marker-named fixture at :47 says "without this the path-echoing tools
+            were never exercised", but ls/find were moved to NOT_ECHOING at :116-117,
+            so no case reads it. The rule: every coverage-dropping skip must be
+            counted and asserted against a NAMED allowlist with a reason — which is
+            exactly the mechanism fold_invariants_spec.lua:95-109 now has for its
+            corpus. Apply that same shape here (a named OPTIONAL_ABSENT record, and a
+            case that fails when a fixture no consumer reads is left behind), and make
+            the atlas sentence state the exception instead of overstating it.
+          family: silent-skip-guard
+          round: 3
+        - id: BR-16
+          severity: Minor
+          title: The producer guard's own header still states the absolute claim BR-12 falsified, contradicting its body 100 lines down
+          detail: |-
+            This is the 2nd finding in family atlas-surface-not-updated, so the ask is
+            the RULE. tool_output_prefix_spec.lua:3-8 still reads "no tool EMITS one —
+            every tool prefixes its output", which BR-12 disproved and which :110-117
+            of the same file contradicts. Six of the invariant's seven prose
+            restatements (fence.lua, grep.lua, ack.lua, tool_use.md, format.md,
+            parsing.md) were updated for BR-12 and this one was not. The rule: the
+            producer invariant must be STATED once — in atlas/providers/tool_use.md's
+            bounded-claim paragraph — and every other site must point at it rather
+            than restate it, because a restatement is a deferred consumer that drifts
+            silently (ARCH-DRY). Enumeration: grep the tree for "prefixes its output",
+            "column-0 marker" and "-H" and reduce each hit to a pointer.
+          family: atlas-surface-not-updated
+          round: 3
+        - id: BR-17
+          severity: Minor
+          title: fold_projection's new is_structural closure reads an upvalue initialized only as a side effect of another closure
+          detail: |-
+            fold_projection.lua:140 calls highlight_structure.is_structural_kind on the
+            local declared at :94, which is assigned only inside the `not patterns`
+            branch or as a side effect of the DEFAULT classify closure at :98-101. With
+            M._classify injected — the seam that line exists for — the first tool_use /
+            tool_result range indexes a nil value and verify_anchors crashes. Nothing
+            sets M._classify today so it is unreachable, but the diff introduced the
+            coupling. One unconditional assignment of highlight_structure before the
+            loop removes it.
+          family: closure-captures-lazy-upvalue
+          round: 3
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#203 (boundary-review)
@@ -339,13 +477,105 @@ later rounds disposed of them. Generated — edit the gate, not this file.
   every tool emits them" (only read_file indents; a column-0 reasoning marker
   is still content).
 
+## Round 3 — 2026-08-22T19:17:37-07:00 (claude) — BLOCKED
+
+### Disposed
+
+- BR-5 — addressed — Named exclusion with teeth — removing the KNOWN_UNREADABLE entry turns the new case red; I also confirmed the excluded transcript shows no base-vs-HEAD divergence.
+- BR-6 — addressed — scan's docblock is one block now; the same commit duplicated extract_body's and deleted scan's @return, raised as the family's 2nd finding rather than re-raised here.
+- BR-7 — not-addressed — answer_structure's per-call require is gone and fold_projection's laziness is now justified, but the second full classify per line remains — no shared kinds memo.
+- BR-8 — addressed — Both the tool names and the shape names are sorted before registration.
+- BR-9 — not-addressed — workshop/plans/203-experiment.patch still tracked at 1760 lines and still deletes a tracked transcript on apply.
+- BR-10 — not-addressed — highlight_structure_spec.lua untouched and still absent from chat/parsing's tests list though the module is in its code list.
+- BR-11 — not-addressed — fence.lua:108 signature unchanged; the guard at :145 is still `if is_structural and ...`.
+- BR-12 — addressed — Verified by revert (grep and ack single-file cases both go red without -H) and end-to-end (serialized grep-on-a-single-file block parses to 2 exchanges, matching base); 343-file base-vs-HEAD sweep diffs empty.
+
+### Raised
+
+- **BR-13** [Important] `docblock-hygiene` The fence.lua docblock rework deleted M.scan's grammar prose and both @return lines, and duplicated extract_body's block
+  This is the 2nd finding in family docblock-hygiene, so the ask is the
+  RULE. fence.lua:76-85 carries extract_body's docblock twice verbatim, and
+  M.scan's docblock at :102-107 lost the "One linear pass" grammar
+  description and both @return entries — the bodies extent model
+  (marker_row -> {first,last,close}, first > last for an empty body, close
+  nil when none found) is now undocumented, though #200 BR-52 requires
+  consumers to branch on exactly that. Two atlas pages designate this
+  docstring as the specification and are falsified by the deletion:
+  atlas/chat/parsing.md:19 ("see its docstrings for the grammar itself") and
+  atlas/providers/tool_use.md:153 ("Its docstrings are the specification —
+  this page deliberately does not restate the rule"), which then restates
+  the rule twice in its own new section. The rule: fence.lua's docstrings
+  are a designated specification surface, not commentary, so a docblock
+  rewrite must be diffed against the block it replaces — the Log records
+  this edit as a recovered span-edit, which is the exact failure mode that
+  silently drops a block. Enumeration for this round: every docblock touched
+  in 5c65036..bd1a623 (fence.extract_body, fence.scan,
+  highlight_structure.STRUCTURAL_KINDS, highlight_structure.is_structural_kind
+  — the last has no @param or @return at all), checked for no duplication, a
+  @param per parameter, a @return per return value, and any prose an atlas
+  page defers to.
+- **BR-14** [Important] `stale-test-premise` A test still asserts by name the premise this issue refuted, and stays green because its assertion cannot see the change
+  chat_parser_tools_spec.lua:407 "treats a tool-result marker inside a tool
+  body as content" puts a column-0 tool-result marker inside a grep body and
+  asserts only that there is 1 exchange. Measured on that exact window:
+  base 5c65036 gives bodies[1] = {first=3,last=4,close=5} (the marker IS body
+  content), HEAD gives bodies[1] = nil (the body is refused and the marker is
+  skipped by depth). Both yield 1 exchange, so the assertion cannot
+  distinguish, and the test now reads as coverage for the opposite of what
+  the code does. Plan step 7 enumerated "the tests that went red" rather than
+  "the tests that encode the premise", which is why this one was never swept.
+  Consequence beyond the stale name: nothing anywhere pins the tool-marker
+  members of STRUCTURAL_KINDS — fence_spec, the new chat_parser fork case and
+  fold_projection_spec all use a user-marker predicate, so tool_use,
+  tool_result, summary, branch and local bounding a body is asserted nowhere,
+  in the issue that single-sourced that set. Fix: give this case the "%5d  "
+  prefix its siblings got, and add a case pinning a column-0 tool-result
+  marker refusing the body, asserted on fence.scan's bodies.
+- **BR-15** [Minor] `silent-skip-guard` The producer guard silently drops ack coverage on a host without ack, while the atlas claims it fails loudly rather than skipping
+  This is the 2nd finding in family silent-skip-guard, so the ask is the
+  RULE, not this instance. tool_output_prefix_spec.lua:141-151 returns
+  Success after asserting only "is optional" when tools.get returns nil, so
+  on a host without ack 2 of 7 cases vanish with nothing reporting it —
+  while atlas/providers/tool_use.md:197 states the guard "fails loudly
+  rather than skipping when a tool is unregistered". Same file, same shape:
+  the marker-named fixture at :47 says "without this the path-echoing tools
+  were never exercised", but ls/find were moved to NOT_ECHOING at :116-117,
+  so no case reads it. The rule: every coverage-dropping skip must be
+  counted and asserted against a NAMED allowlist with a reason — which is
+  exactly the mechanism fold_invariants_spec.lua:95-109 now has for its
+  corpus. Apply that same shape here (a named OPTIONAL_ABSENT record, and a
+  case that fails when a fixture no consumer reads is left behind), and make
+  the atlas sentence state the exception instead of overstating it.
+- **BR-16** [Minor] `atlas-surface-not-updated` The producer guard's own header still states the absolute claim BR-12 falsified, contradicting its body 100 lines down
+  This is the 2nd finding in family atlas-surface-not-updated, so the ask is
+  the RULE. tool_output_prefix_spec.lua:3-8 still reads "no tool EMITS one —
+  every tool prefixes its output", which BR-12 disproved and which :110-117
+  of the same file contradicts. Six of the invariant's seven prose
+  restatements (fence.lua, grep.lua, ack.lua, tool_use.md, format.md,
+  parsing.md) were updated for BR-12 and this one was not. The rule: the
+  producer invariant must be STATED once — in atlas/providers/tool_use.md's
+  bounded-claim paragraph — and every other site must point at it rather
+  than restate it, because a restatement is a deferred consumer that drifts
+  silently (ARCH-DRY). Enumeration: grep the tree for "prefixes its output",
+  "column-0 marker" and "-H" and reduce each hit to a pointer.
+- **BR-17** [Minor] `closure-captures-lazy-upvalue` fold_projection's new is_structural closure reads an upvalue initialized only as a side effect of another closure
+  fold_projection.lua:140 calls highlight_structure.is_structural_kind on the
+  local declared at :94, which is assigned only inside the `not patterns`
+  branch or as a side effect of the DEFAULT classify closure at :98-101. With
+  M._classify injected — the seam that line exists for — the first tool_use /
+  tool_result range indexes a nil value and verify_anchors crashes. Nothing
+  sets M._classify today so it is unreachable, but the diff introduced the
+  coupling. One unconditional assignment of highlight_structure before the
+  loop removes it.
+
 ## Open findings
 
-- **BR-5** [Important] `silent-skip-guard` The corpus audit cited as close evidence silently skipped a tracked transcript deleted in the working tree
-- **BR-6** [Minor] `docblock-hygiene` fence.scan's docblock now has duplicated @param lines / @param is_tool_marker entries, with @param after @return
 - **BR-7** [Minor] `redundant-per-line-work-in-scan` fold_projection's is_structural predicate does a per-line require plus a second full classify in a function documented as per-streamed-chunk hot
-- **BR-8** [Minor] `nondeterministic-test-registration` tool_output_prefix_spec iterates READ_INPUTS with pairs(), so test order varies run to run
 - **BR-9** [Minor] `experiment-artifact-committed-unpruned` workshop/plans/203-experiment.patch is 1760 lines, ~1690 of which are a corpus transcript it would delete on apply
 - **BR-10** [Minor] `single-source-untested-directly` STRUCTURAL_KINDS and is_structural_kind have no direct unit test despite deciding the rule
 - **BR-11** [Minor] `optional-param-documented-as-required` fence.scan's is_structural is documented "Required in practice" but is optional in the signature
-- **BR-12** [Critical] `guard-covers-instance-not-class` grep/ack omit --with-filename, so a single-file search emits column-0 markers and a well-formed tool body now forks the chat
+- **BR-13** [Important] `docblock-hygiene` The fence.lua docblock rework deleted M.scan's grammar prose and both @return lines, and duplicated extract_body's block
+- **BR-14** [Important] `stale-test-premise` A test still asserts by name the premise this issue refuted, and stays green because its assertion cannot see the change
+- **BR-15** [Minor] `silent-skip-guard` The producer guard silently drops ack coverage on a host without ack, while the atlas claims it fails loudly rather than skipping
+- **BR-16** [Minor] `atlas-surface-not-updated` The producer guard's own header still states the absolute claim BR-12 falsified, contradicting its body 100 lines down
+- **BR-17** [Minor] `closure-captures-lazy-upvalue` fold_projection's new is_structural closure reads an upvalue initialized only as a side effect of another closure
