@@ -758,10 +758,10 @@ local fence = require("parley.fence")
 					has_end_marker = true
 					break
 				end
-				if ahead_kind == "summary" or ahead_kind == "tool_use"
-					or ahead_kind == "tool_result" or ahead_kind == "user"
-					or ahead_kind == "assistant" or ahead_kind == "branch"
-					or ahead_kind == "local" then
+				-- The same set STRUCTURAL_KINDS names (#203 BR-18). Hand-listed
+				-- here until this issue, so adding a kind to the set would have
+				-- silently stopped terminating reasoning blocks on it.
+				if highlight_structure.is_structural_kind(ahead_kind) then
 					break
 				end
 			end

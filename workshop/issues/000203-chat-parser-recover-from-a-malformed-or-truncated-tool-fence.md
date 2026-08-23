@@ -442,3 +442,31 @@ optional.
   `📎`/`🔧`/`📝`/`🔒`/`🌿` were in the set on my say-so. Five cases added — a
   column-0 one of each inside a body must not be spanned, or a `📎:` in one body
   swallows the next tool block.
+
+### 2026-08-22 (close review round 4 — the two demoted findings, fixed anyway)
+
+The gate stopped blocking at the round cap and demoted both, so nothing
+downstream would have caught them. Fixed because both are defects in my work,
+and both are the same class this issue is about.
+
+- **BR-14 — my fix for BR-14 was itself vacuous.** The rename and the
+  prefixed/column-0 split landed, but the five marker cases I added to close it
+  asserted *exchange counts*, and the reviewer measured them: 2 at base, 2 at
+  HEAD. They passed without the rule. That is precisely the defect BR-14 named —
+  an assertion that cannot see the change — committed while fixing it. They
+  assert `fence.scan`'s body extent now (nil when refused, a table when spanned),
+  and each has a prefixed twin asserting the body DOES span a tool-emitted
+  marker. Falsified: deleting the rule from `fence.lua` fires all five.
+- **BR-18 — the "named once" plan step was ticked and false.** Three
+  hand-maintained restatements survived: `STRUCTURAL_KINDS` itself, `TOKENS` in
+  the same module, and `chat_parser.lua:761`'s reasoning-termination lookahead —
+  the last being the very site Plan step 2 cited as the source of the set.
+  Nothing pinned their agreement, so adding a kind would have silently stopped
+  terminating reasoning blocks on it. The set derives from `TOKENS` now via a
+  token membership list, the lookahead calls `is_structural_kind`, and
+  `highlight_structure_spec` pins the membership. Falsified: adding `footnote`
+  to the set fails with *"footnote is in STRUCTURAL_KINDS but no marker
+  classifies as it"*.
+
+Round 4 also recorded that `ack` self-skips with no counted allowlist and the
+marker-named fixture is read by no case (BR-15, advisory) — noted, not fixed.

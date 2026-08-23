@@ -430,19 +430,35 @@ describe("structural markers inside a tool body (#200)", function()
     -- The tool-marker members of STRUCTURAL_KINDS had no coverage at all: every
     -- other case in this issue exercises 💬:. A body must refuse to span these
     -- too, or a column-0 📎: inside one body swallows the NEXT tool block.
+    -- Asserted on fence.scan's BODY EXTENT, not on an exchange count. The count
+    -- is 2 whether the body spans the marker or refuses it, so it cannot see the
+    -- rule — which is the exact defect BR-14 named, and which the first version
+    -- of these very cases committed again (#203 BR-14 round 4). The extent
+    -- discriminates: nil when refused, {first,last,close} when spanned.
     for _, marker in ipairs({ "📎: read_file id=other", "🔧: read_file id=next",
                               "📝: a summary", "🔒: local", "🌿: branch" }) do
         it("refuses to span a column-0 " .. marker:sub(1, 4) .. " inside a body", function()
-            local lines = { "---", "topic: t", "file: f.md", "---" }
-            vim.list_extend(lines, {
-                "", "💬: q1", "", "🤖: [A]", "📎: grep id=r1", "```",
-                marker,
-                "```", "", "💬: q2",
-            })
-            local parsed = parser.parse_chat(lines, 4, test_config())
-            assert.message(("a body spanned a column-0 %q, which no tool emits")
-                :format(marker))
-                .equals(2, #parsed.exchanges)
+            local hs = require("parley.highlight_structure")
+            local patterns = hs.patterns(require("parley.config"))
+            local body = { "📎: grep id=r1", "```", marker, "```" }
+            local bodies = require("parley.fence").scan(body,
+                function(line) return hs.classify(line, patterns).kind == "tool_result"
+                    or hs.classify(line, patterns).kind == "tool_use" end,
+                function(line) return hs.is_structural_kind(hs.classify(line, patterns).kind) end)
+            assert.message(("a body spanned a column-0 %q, which no tool emits"):format(marker))
+                .is_nil(bodies[1])
+        end)
+
+        it("DOES span the same marker when prefixed, as a tool emits it", function()
+            local hs = require("parley.highlight_structure")
+            local patterns = hs.patterns(require("parley.config"))
+            local body = { "📎: grep id=r1", "```", "chat.md:12: " .. marker, "```" }
+            local bodies = require("parley.fence").scan(body,
+                function(line) return hs.classify(line, patterns).kind == "tool_result"
+                    or hs.classify(line, patterns).kind == "tool_use" end,
+                function(line) return hs.is_structural_kind(hs.classify(line, patterns).kind) end)
+            assert.message("a prefixed marker is tool output; the body must span it")
+                .is_not_nil(bodies[1])
         end)
     end
 

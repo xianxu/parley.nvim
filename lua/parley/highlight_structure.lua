@@ -18,10 +18,15 @@ local TOKENS = {
 --- Named here because this module owns the kind vocabulary (TOKENS above). The
 --- three `fence.scan` consumers derive their predicate from this rather than
 --- each hand-listing kinds, which is how they diverged before #200.
-M.STRUCTURAL_KINDS = {
-    user = true, assistant = true, summary = true,
-    tool_use = true, tool_result = true, branch = true, ["local"] = true,
-}
+--- Derived from TOKENS, not a parallel literal: a kind that exists in one table
+--- and not the other is the drift this issue is about (#203 BR-18). Membership
+--- is stated once, as the token set below.
+local STRUCTURAL_TOKENS = { u = true, a = true, s = true, U = true, R = true,
+    b = true, l = true }
+M.STRUCTURAL_KINDS = {}
+for kind, token in pairs(TOKENS) do
+    if STRUCTURAL_TOKENS[token] then M.STRUCTURAL_KINDS[kind] = true end
+end
 
 --- Whether `kind` is a structural marker a tool body may not span.
 function M.is_structural_kind(kind)

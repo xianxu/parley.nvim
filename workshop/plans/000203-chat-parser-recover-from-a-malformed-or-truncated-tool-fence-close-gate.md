@@ -350,6 +350,71 @@ rounds:
           family: closure-captures-lazy-upvalue
           round: 3
       blocked: true
+    - "n": 4
+      timestamp: "2026-08-22T19:30:42-07:00"
+      agent: claude
+      dispose:
+        - id: BR-7
+          disposition: not-addressed
+          note: fold_projection.lua:140 unchanged — still a second full classify per line inside verify_anchors; no shared kinds memo.
+          round: 4
+        - id: BR-9
+          disposition: not-addressed
+          note: workshop/plans/203-experiment.patch still tracked at 1760 lines and still deletes a tracked transcript on apply.
+          round: 4
+        - id: BR-10
+          disposition: not-addressed
+          note: highlight_structure_spec.lua untouched and still absent from chat/parsing's tests list though the module is in its code list.
+          round: 4
+        - id: BR-11
+          disposition: not-addressed
+          note: fence.lua:127 signature unchanged; the guard at :164 is still `if is_structural and ...`.
+          round: 4
+        - id: BR-13
+          disposition: addressed
+          note: Verified by code-only diff against 5c65036 — fence.lua differs by exactly the is_structural param, body_close_of and one call site; extract_body's block appears once, scan's grammar prose and both @return lines are back. The enumeration's is_structural_kind item is consistent with its module, which carries zero @param/@return across all 8 exported functions.
+          round: 4
+        - id: BR-14
+          disposition: not-addressed
+          note: Rename and the prefixed/column-0 split landed, but the pin did not — measured on the spec's exact fixture, all five new marker cases give 2 exchanges at base and 2 at HEAD, so they pass without the rule; fence.scan's bodies (nil vs {3,3,4}) is the assertion the finding asked for and it discriminates.
+          round: 4
+        - id: BR-15
+          disposition: not-addressed
+          note: tool_output_prefix_spec.lua:141-151 unchanged; ack still self-skips with no counted allowlist, and the marker-named fixture at :47 is still read by no case.
+          round: 4
+        - id: BR-16
+          disposition: not-addressed
+          note: tool_output_prefix_spec.lua:3-8 still states the absolute claim BR-12 falsified, contradicting :110-117 of the same file.
+          round: 4
+        - id: BR-17
+          disposition: not-addressed
+          note: fold_projection.lua:94-101,140 unchanged; the highlight_structure upvalue is still assigned only as a side effect of the default classify closure, so an injected M._classify makes verify_anchors index nil.
+          round: 4
+      findings:
+        - id: BR-18
+          severity: Important
+          title: Two hand-maintained restatements of STRUCTURAL_KINDS survive, one inside the module that declares it and one at the site the Plan named as the source
+          detail: |-
+            This is the 2nd finding in family hand-maintained-set-restates-source, so
+            the ask is the RULE. BR-3 fixed answer_structure.BOUNDARY; the class was
+            never enumerated. The rule: the structural-marker set has exactly one
+            source, highlight_structure.STRUCTURAL_KINDS, and every site deciding "is
+            this a structural marker?" calls is_structural_kind — a site that spells
+            the members out is a deferred consumer that drifts silently (ARCH-DRY,
+            ARCH-PURPOSE). Enumeration run this round over every lua/ file with three
+            or more structural-kind name occurrences, each hit inspected; all other
+            hits are legitimate per-kind dispatch. The complete remainder is two, both
+            deciding reasoning-block termination and both membership-identical to
+            STRUCTURAL_KINDS with reasoning_end already handled by an earlier branch,
+            so substitution is exact: highlight_structure.lua:137-141 (token form, 115
+            lines below the declaration — needs a STRUCTURAL_TOKENS derived from
+            TOKENS) and chat_parser.lua:761-765 (kind form). The second is the site
+            Plan step 2 cites as the source of the set, and that step is ticked.
+            Nothing pins the agreement, so adding a kind to STRUCTURAL_KINDS would
+            silently stop terminating reasoning blocks on it.
+          family: hand-maintained-set-restates-source
+          round: 4
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#203 (boundary-review)
@@ -568,14 +633,49 @@ later rounds disposed of them. Generated — edit the gate, not this file.
   coupling. One unconditional assignment of highlight_structure before the
   loop removes it.
 
+## Round 4 — 2026-08-22T19:30:42-07:00 (claude) — passed
+
+### Disposed
+
+- BR-7 — not-addressed — fold_projection.lua:140 unchanged — still a second full classify per line inside verify_anchors; no shared kinds memo.
+- BR-9 — not-addressed — workshop/plans/203-experiment.patch still tracked at 1760 lines and still deletes a tracked transcript on apply.
+- BR-10 — not-addressed — highlight_structure_spec.lua untouched and still absent from chat/parsing's tests list though the module is in its code list.
+- BR-11 — not-addressed — fence.lua:127 signature unchanged; the guard at :164 is still `if is_structural and ...`.
+- BR-13 — addressed — Verified by code-only diff against 5c65036 — fence.lua differs by exactly the is_structural param, body_close_of and one call site; extract_body's block appears once, scan's grammar prose and both @return lines are back. The enumeration's is_structural_kind item is consistent with its module, which carries zero @param/@return across all 8 exported functions.
+- BR-14 — not-addressed — Rename and the prefixed/column-0 split landed, but the pin did not — measured on the spec's exact fixture, all five new marker cases give 2 exchanges at base and 2 at HEAD, so they pass without the rule; fence.scan's bodies (nil vs {3,3,4}) is the assertion the finding asked for and it discriminates.
+- BR-15 — not-addressed — tool_output_prefix_spec.lua:141-151 unchanged; ack still self-skips with no counted allowlist, and the marker-named fixture at :47 is still read by no case.
+- BR-16 — not-addressed — tool_output_prefix_spec.lua:3-8 still states the absolute claim BR-12 falsified, contradicting :110-117 of the same file.
+- BR-17 — not-addressed — fold_projection.lua:94-101,140 unchanged; the highlight_structure upvalue is still assigned only as a side effect of the default classify closure, so an injected M._classify makes verify_anchors index nil.
+
+### Raised
+
+- **BR-18** [Important] `hand-maintained-set-restates-source` Two hand-maintained restatements of STRUCTURAL_KINDS survive, one inside the module that declares it and one at the site the Plan named as the source
+  This is the 2nd finding in family hand-maintained-set-restates-source, so
+  the ask is the RULE. BR-3 fixed answer_structure.BOUNDARY; the class was
+  never enumerated. The rule: the structural-marker set has exactly one
+  source, highlight_structure.STRUCTURAL_KINDS, and every site deciding "is
+  this a structural marker?" calls is_structural_kind — a site that spells
+  the members out is a deferred consumer that drifts silently (ARCH-DRY,
+  ARCH-PURPOSE). Enumeration run this round over every lua/ file with three
+  or more structural-kind name occurrences, each hit inspected; all other
+  hits are legitimate per-kind dispatch. The complete remainder is two, both
+  deciding reasoning-block termination and both membership-identical to
+  STRUCTURAL_KINDS with reasoning_end already handled by an earlier branch,
+  so substitution is exact: highlight_structure.lua:137-141 (token form, 115
+  lines below the declaration — needs a STRUCTURAL_TOKENS derived from
+  TOKENS) and chat_parser.lua:761-765 (kind form). The second is the site
+  Plan step 2 cites as the source of the set, and that step is ticked.
+  Nothing pins the agreement, so adding a kind to STRUCTURAL_KINDS would
+  silently stop terminating reasoning blocks on it.
+
 ## Open findings
 
 - **BR-7** [Minor] `redundant-per-line-work-in-scan` fold_projection's is_structural predicate does a per-line require plus a second full classify in a function documented as per-streamed-chunk hot
 - **BR-9** [Minor] `experiment-artifact-committed-unpruned` workshop/plans/203-experiment.patch is 1760 lines, ~1690 of which are a corpus transcript it would delete on apply
 - **BR-10** [Minor] `single-source-untested-directly` STRUCTURAL_KINDS and is_structural_kind have no direct unit test despite deciding the rule
 - **BR-11** [Minor] `optional-param-documented-as-required` fence.scan's is_structural is documented "Required in practice" but is optional in the signature
-- **BR-13** [Important] `docblock-hygiene` The fence.lua docblock rework deleted M.scan's grammar prose and both @return lines, and duplicated extract_body's block
 - **BR-14** [Important] `stale-test-premise` A test still asserts by name the premise this issue refuted, and stays green because its assertion cannot see the change
 - **BR-15** [Minor] `silent-skip-guard` The producer guard silently drops ack coverage on a host without ack, while the atlas claims it fails loudly rather than skipping
 - **BR-16** [Minor] `atlas-surface-not-updated` The producer guard's own header still states the absolute claim BR-12 falsified, contradicting its body 100 lines down
 - **BR-17** [Minor] `closure-captures-lazy-upvalue` fold_projection's new is_structural closure reads an upvalue initialized only as a side effect of another closure
+- **BR-18** [Important] `hand-maintained-set-restates-source` Two hand-maintained restatements of STRUCTURAL_KINDS survive, one inside the module that declares it and one at the site the Plan named as the source
