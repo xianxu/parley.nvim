@@ -130,6 +130,88 @@ rounds:
           family: optional-param-documented-as-required
           round: 1
       blocked: true
+    - "n": 2
+      timestamp: "2026-08-22T18:55:56-07:00"
+      agent: claude
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: Verified by revert (fence_spec goes red) and by a 321-file base-vs-HEAD parse sweep that diffs empty.
+          round: 2
+        - id: BR-2
+          disposition: addressed
+          note: Verified by revert; removing emit_definition from NOT_ECHOING turns the new case red. Residual is the call-shape axis, raised as a new Critical in the same family.
+          round: 2
+        - id: BR-3
+          disposition: addressed
+          note: BOUNDARY now derives; membership identical to the old hand-list, suite green.
+          round: 2
+        - id: BR-4
+          disposition: addressed
+          note: format.md updated; its new wording is imprecise ("INDENTED", "how every tool emits them") and is folded into the new Critical's doc fix.
+          round: 2
+        - id: BR-5
+          disposition: not-addressed
+          note: Tree state unresolved (the transcript is still deleted-but-unstaged), Done-when still claims "every tracked transcript", the <= 1 threshold encodes the current breakage, and Makefile.parley's RUN_SPEC discards the print on pass.
+          round: 2
+        - id: BR-6
+          disposition: not-addressed
+          note: Docblock still has duplicate @param lines/@param is_tool_marker after @return, and the rework merged the bounded rationale into the comment above the UNBOUNDED close_of, so it now reads as its own contradiction on the function BR-1 turned on.
+          round: 2
+        - id: BR-7
+          disposition: not-addressed
+          note: fold_projection.lua:139-141 unchanged; the same per-call require now also exists at answer_structure.lua:41.
+          round: 2
+        - id: BR-8
+          disposition: not-addressed
+          note: tool_output_prefix_spec.lua:105 still iterates pairs(READ_INPUTS).
+          round: 2
+        - id: BR-9
+          disposition: not-addressed
+          note: workshop/plans/203-experiment.patch still committed at 1760 lines, still deletes a tracked transcript on apply.
+          round: 2
+        - id: BR-10
+          disposition: not-addressed
+          note: highlight_structure_spec.lua untouched, and it is not in chat/parsing's tests list even though highlight_structure.lua was added to that entry's code list.
+          round: 2
+        - id: BR-11
+          disposition: not-addressed
+          note: fence.lua:126 signature unchanged; is_structural still optional.
+          round: 2
+      findings:
+        - id: BR-12
+          severity: Critical
+          title: grep/ack omit --with-filename, so a single-file search emits column-0 markers and a well-formed tool body now forks the chat
+          detail: |-
+            This is the 2nd finding in family guard-covers-instance-not-class, so
+            the ask is the RULE, not this instance: a producer-side invariant must be
+            ENFORCED by the producer and guarded across the tool x call-shape x
+            content-shape matrix, never observed on one hand-picked call.
+            Verified enumeration on this machine: grep with path=<single file> returns
+            the raw matched line, no prefix (kind=user, structural=true); ack the same;
+            ls returns bare basenames with no prefix mechanism at all, so a directory
+            holding a file named "the marker: notes.md" emits a column-0 marker on a
+            success path; find's prefix comes from the caller's path arg and its guard
+            case is vacuous; chat_history_search is excluded by assertion and never
+            exercised. End-to-end on the block tools/serialize.render_result writes for
+            grep-on-a-single-file: 3 exchanges at dbb2ed9 vs 2 at 5c65036 — the grep
+            output line becomes a real question, so Spec bullet 2 and Done-when bullet 2
+            ("well-formed bodies unaffected") are false as shipped. The guard misses it
+            because tool_output_prefix_spec.lua:91-94 receives the file and passes the
+            directory. NOT_ECHOING:84 names the fix itself — chat_history_search is
+            excluded because it runs rg with --with-filename --line-number, the flags
+            grep/ack omit. Consolidate that prefixing discipline (ARCH-DRY), drive
+            READ_INPUTS off a call-shape product with a marker-named file in the
+            fixture, and move whatever remains into the atlas's stated-exception
+            paragraph. Three doc statements are falsified and must change with it:
+            atlas/providers/tool_use.md's "no tool emits a column-0 marker … ls/find
+            paths", the same claim at lua/parley/fence.lua:134-139, and
+            atlas/chat/format.md:12's "content when they are INDENTED, which is how
+            every tool emits them" (only read_file indents; a column-0 reasoning marker
+            is still content).
+          family: guard-covers-instance-not-class
+          round: 2
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#203 (boundary-review)
@@ -211,12 +293,54 @@ later rounds disposed of them. Generated — edit the gate, not this file.
   fence.lua:122-126. A fourth caller that omits it silently gets the
   pre-#203 close search. Make it required, or assert on nil.
 
+## Round 2 — 2026-08-22T18:55:56-07:00 (claude) — BLOCKED
+
+### Disposed
+
+- BR-1 — addressed — Verified by revert (fence_spec goes red) and by a 321-file base-vs-HEAD parse sweep that diffs empty.
+- BR-2 — addressed — Verified by revert; removing emit_definition from NOT_ECHOING turns the new case red. Residual is the call-shape axis, raised as a new Critical in the same family.
+- BR-3 — addressed — BOUNDARY now derives; membership identical to the old hand-list, suite green.
+- BR-4 — addressed — format.md updated; its new wording is imprecise ("INDENTED", "how every tool emits them") and is folded into the new Critical's doc fix.
+- BR-5 — not-addressed — Tree state unresolved (the transcript is still deleted-but-unstaged), Done-when still claims "every tracked transcript", the <= 1 threshold encodes the current breakage, and Makefile.parley's RUN_SPEC discards the print on pass.
+- BR-6 — not-addressed — Docblock still has duplicate @param lines/@param is_tool_marker after @return, and the rework merged the bounded rationale into the comment above the UNBOUNDED close_of, so it now reads as its own contradiction on the function BR-1 turned on.
+- BR-7 — not-addressed — fold_projection.lua:139-141 unchanged; the same per-call require now also exists at answer_structure.lua:41.
+- BR-8 — not-addressed — tool_output_prefix_spec.lua:105 still iterates pairs(READ_INPUTS).
+- BR-9 — not-addressed — workshop/plans/203-experiment.patch still committed at 1760 lines, still deletes a tracked transcript on apply.
+- BR-10 — not-addressed — highlight_structure_spec.lua untouched, and it is not in chat/parsing's tests list even though highlight_structure.lua was added to that entry's code list.
+- BR-11 — not-addressed — fence.lua:126 signature unchanged; is_structural still optional.
+
+### Raised
+
+- **BR-12** [Critical] `guard-covers-instance-not-class` grep/ack omit --with-filename, so a single-file search emits column-0 markers and a well-formed tool body now forks the chat
+  This is the 2nd finding in family guard-covers-instance-not-class, so
+  the ask is the RULE, not this instance: a producer-side invariant must be
+  ENFORCED by the producer and guarded across the tool x call-shape x
+  content-shape matrix, never observed on one hand-picked call.
+  Verified enumeration on this machine: grep with path=<single file> returns
+  the raw matched line, no prefix (kind=user, structural=true); ack the same;
+  ls returns bare basenames with no prefix mechanism at all, so a directory
+  holding a file named "the marker: notes.md" emits a column-0 marker on a
+  success path; find's prefix comes from the caller's path arg and its guard
+  case is vacuous; chat_history_search is excluded by assertion and never
+  exercised. End-to-end on the block tools/serialize.render_result writes for
+  grep-on-a-single-file: 3 exchanges at dbb2ed9 vs 2 at 5c65036 — the grep
+  output line becomes a real question, so Spec bullet 2 and Done-when bullet 2
+  ("well-formed bodies unaffected") are false as shipped. The guard misses it
+  because tool_output_prefix_spec.lua:91-94 receives the file and passes the
+  directory. NOT_ECHOING:84 names the fix itself — chat_history_search is
+  excluded because it runs rg with --with-filename --line-number, the flags
+  grep/ack omit. Consolidate that prefixing discipline (ARCH-DRY), drive
+  READ_INPUTS off a call-shape product with a marker-named file in the
+  fixture, and move whatever remains into the atlas's stated-exception
+  paragraph. Three doc statements are falsified and must change with it:
+  atlas/providers/tool_use.md's "no tool emits a column-0 marker … ls/find
+  paths", the same claim at lua/parley/fence.lua:134-139, and
+  atlas/chat/format.md:12's "content when they are INDENTED, which is how
+  every tool emits them" (only read_file indents; a column-0 reasoning marker
+  is still content).
+
 ## Open findings
 
-- **BR-1** [Critical] `shared-helper-gains-caller-specific-rule` The #203 structural bound was added to the shared close_of, so ordinary fenced blocks stop establishing depth and BR-43 returns
-- **BR-2** [Important] `guard-covers-instance-not-class` The producer guard hand-lists five tools while the atlas claims it derives its subjects from the registry
-- **BR-3** [Important] `hand-maintained-set-restates-source` answer_structure.BOUNDARY still hand-lists the kind set the diff just single-sourced
-- **BR-4** [Important] `atlas-surface-not-updated` atlas/chat/format.md was named by the ticked atlas Plan step and not updated, and its statement is now false
 - **BR-5** [Important] `silent-skip-guard` The corpus audit cited as close evidence silently skipped a tracked transcript deleted in the working tree
 - **BR-6** [Minor] `docblock-hygiene` fence.scan's docblock now has duplicated @param lines / @param is_tool_marker entries, with @param after @return
 - **BR-7** [Minor] `redundant-per-line-work-in-scan` fold_projection's is_structural predicate does a per-line require plus a second full classify in a function documented as per-streamed-chunk hot
@@ -224,3 +348,4 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-9** [Minor] `experiment-artifact-committed-unpruned` workshop/plans/203-experiment.patch is 1760 lines, ~1690 of which are a corpus transcript it would delete on apply
 - **BR-10** [Minor] `single-source-untested-directly` STRUCTURAL_KINDS and is_structural_kind have no direct unit test despite deciding the rule
 - **BR-11** [Minor] `optional-param-documented-as-required` fence.scan's is_structural is documented "Required in practice" but is optional in the signature
+- **BR-12** [Critical] `guard-covers-instance-not-class` grep/ack omit --with-filename, so a single-file search emits column-0 markers and a well-formed tool body now forks the chat

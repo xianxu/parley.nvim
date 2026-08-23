@@ -78,6 +78,11 @@ end
 --- Scans for an opener, then for the matching close of the same length. This is
 --- the reader half of the grammar, shared so that reader and writer cannot
 --- disagree about what "the same pair" means.
+--- Extract the body of the first complete fenced block in `lines`.
+---
+--- Scans for an opener, then for the matching close of the same length. This is
+--- the reader half of the grammar, shared so that reader and writer cannot
+--- disagree about what "the same pair" means.
 --- @param lines string[]
 --- @param from integer|nil  1-based index to start scanning at (default 1)
 --- @return string|nil body, integer|nil open_index, integer|nil close_index
@@ -94,55 +99,22 @@ function M.extract_body(lines, from)
     return nil
 end
 
---- One linear pass over a buffer, answering both questions at once: which rows
---- are inside a tool body, and which tool markers are structural.
----
---- The missing requirement in every earlier attempt was **fence depth**. A
---- `📎:` written inside an ordinary fenced block is not a marker at all, and
---- treating it as one makes the enclosing block's CLOSER look like the body's
---- opener — the scan then latches onto the next block's opener and the "body"
---- spans a real question. That folded a `💬:` line at depth 0 (#200 BR-43).
----
---- The pass:
----   * at depth 0, a tool marker whose NEXT line opens a body consumes through
----     that body's close; the rows between are body;
----   * any other depth-0 opener skips to its own close — everything inside is
----     depth > 0 and yields no markers;
----   * an opener with no matching close is treated as ordinary text rather than
----     swallowing the remainder, so malformed input over-forks instead of
----     silently losing exchanges.
----
---- @param lines string[]                         1-based
---- @param is_tool_marker fun(line, row):boolean  true for 🔧:/📎: at column 0
---- @return table bodies   marker_row -> { first, last, close } (first > last for
----                        an empty body; close is nil when none was found)
---- @return table markers  set of 1-based rows holding a depth-0 tool marker
 --- @param lines string[]
 --- @param is_tool_marker fun(line: string, row: integer): boolean
---- @param is_structural fun(line: string, row: integer): boolean|nil
----   A column-0 structural marker a tool body may not span (#203). Required in
----   practice: every consumer passes it, and omitting it restores the pre-#203
----   search that lets a body latch onto a close belonging to another pair.
+--- @param is_structural fun(line: string, row: integer): boolean
+---   Whether a line is a column-0 structural marker (#203). Every consumer
+---   passes it; a caller that omits it silently gets the pre-#203 search, in
+---   which a tool body can latch onto a close belonging to another pair.
 function M.scan(lines, is_tool_marker, is_structural)
     local bodies, markers = {}, {}
 
-    -- A tool body's close must appear before the next column-0 structural
-    -- marker (#203). Without the bound, an opener that is never closed latches
-    -- onto some later unrelated bare fence, and every 💬: in between stops
-    -- starting an exchange — the rest of the chat collapses into one, silently.
-    --
-    -- Safe because no parley tool emits a column-0 marker: every one prefixes
-    -- its output (read_file `%5d  `, grep/ack `file:line:`, chat_history_search
-    -- `{label}/path:line:`). So a marker inside a body means the content did not
-    -- come from parley — hand-edited, truncated, or pasted — and forking there
-    -- is the visible degradation the operator chose over silent swallowing.
-    -- tests/integration/tool_output_prefix_spec.lua guards the producer half.
     -- UNBOUNDED, and it must stay that way. This search establishes DEPTH for
-    -- ordinary fenced blocks, and a block that fails to establish depth leaves
-    -- its own closer to be read as an opener — the scan desyncs by one fence and
-    -- a `📎:` quoted in prose becomes a depth-0 marker, which is BR-43 exactly.
-    -- The #203 bound belongs only to tool bodies; putting it here re-opened the
-    -- defect #200 closed (found by this issue's own close review, BR-1).
+    -- ORDINARY fenced blocks. A block that fails to establish depth leaves its
+    -- own closer to be read as an opener: the scan desyncs by one fence and a
+    -- `📎:` quoted in prose becomes a depth-0 marker — BR-43 exactly. The #203
+    -- bound belongs to tool bodies alone; putting it here re-opened the defect
+    -- #200 closed, and the whole suite stayed green while it was broken (found
+    -- by this issue's own close review, BR-1).
     local function close_of(open_len, from)
         for row = from, #lines do
             if M.closes(lines[row], open_len) then return row end
@@ -151,6 +123,22 @@ function M.scan(lines, is_tool_marker, is_structural)
     end
 
     -- BOUNDED: a TOOL BODY may not span a column-0 structural marker (#203).
+    -- Without the bound, an opener that is never closed latches onto some later
+    -- unrelated bare fence, and every 💬: in between stops starting an exchange
+    -- — the rest of the chat collapses into one, silently.
+    --
+    -- The bound is safe because a marker inside a body means the content did not
+    -- come from a parley tool: the content-echoing tools all prefix their output
+    -- (read_file `%5d  `, grep/ack `-H` giving `file:line:`, chat_history_search
+    -- `{label}/path:line:`). So the body is hand-edited, truncated, or pasted,
+    -- and forking there is the visible degradation chosen over silent swallowing.
+    --
+    -- NOT a total invariant, and the claim is bounded rather than chased: the
+    -- path-echoing tools (ls, find) emit a column-0 marker for a file NAMED like
+    -- one, and the shell tools splice raw stderr on error. Both degrade to
+    -- over-forking, which is the accepted direction.
+    -- tests/integration/tool_output_prefix_spec.lua guards the producer half over
+    -- a tool x call-shape product, and records those two exceptions.
     local function body_close_of(open_len, from)
         for row = from, #lines do
             if M.closes(lines[row], open_len) then return row end

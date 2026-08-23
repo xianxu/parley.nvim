@@ -238,3 +238,187 @@ findings:
       fence.lua:122-126. A fourth caller that omits it silently gets the
       pre-#203 close search. Make it required, or assert on nil.
 ```
+
+---
+
+## Re-review — 2026-08-22T18:55:56-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 203 — chat_parser: recover from a malformed or truncated tool fence |
+| repo | parley.nvim |
+| issue file | workshop/issues/000203-chat-parser-recover-from-a-malformed-or-truncated-tool-fence.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 5c65036ec43c303681e7969d7bb479b4c9a2c3e5..dbb2ed907de39412f6abca7c5e912fa86e70ecca |
+| command | sdlc close --issue 203 |
+| reviewer | claude |
+| timestamp | 2026-08-22T18:55:56-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+The rework fixes BR-1 cleanly and I verified it two ways: reverting the bound back into the shared `close_of` turns `fence_spec.lua:236` red, and a base-vs-HEAD parse sweep over all 321 parseable tracked markdown files (plus the deleted and untracked transcripts) is byte-identical, so `fold_marker_in_prose.md` is back to `ex1 = [text:10-16]`. BR-2/BR-3/BR-4 are genuinely delivered. What blocks SHIP is a new Critical: the producer-side invariant the whole #203 rule rests on — *"no tool emits a column-0 marker"* — is **false on a reachable, well-formed path**. `grep` and `ack` never pass `--with-filename`/`-H`, so a call with `path` set to a **single file** (the exact shape `tools_builtin_grep_spec.lua:12` itself uses) returns raw matched lines with no prefix at all. I parsed a transcript that `tools/serialize.render_result` would write for such a call: **3 exchanges at HEAD, 2 at base** — a well-formed body parley produced now forks, contradicting the Spec's "well-formed transcripts keep today's behaviour exactly". The producer guard misses it because its `grep`/`ack` builders receive the file and pass the directory instead.
+
+## 1. Strengths
+
+- **BR-1's fix is real and pinned, not asserted.** Verified by revert: putting the bound back into the shared `close_of` makes `fence_spec.lua` *"keeps a marker quoted in an ordinary fenced block non-structural"* fail (25 pass / 1 fail). The separate `body_close_of` at `lua/parley/fence.lua:154-161` is the right shape.
+- **No regression on the real corpus.** My own base-vs-HEAD sweep of the parsed model (question line + content-block types/spans) over 321 files — every tracked transcript, fixture, `docs/`, `atlas/`, `workshop/` — diffs empty, and so do the two untracked transcripts and the deleted one restored from HEAD. That is stronger evidence than the suite provides.
+- **BR-2's fix has teeth.** Removing `emit_definition` from `NOT_ECHOING` turns *"rules on every registered tool, none silently uncovered"* red. Requiring a documented reason per exclusion is the right shape.
+- **BR-3's derivation is correct and behaviour-preserving** (`answer_structure.lua:13-16`): the derived `BOUNDARY` has exactly the previous 8 members, and the one legitimate difference (`reasoning`) is stated once rather than duplicated.
+- **`fence_spec.lua:207-252` pins the rule where it lives**, including *"a refused body must not also lose its marker"* — the invariant a downstream exchange count would not have caught.
+- `make lint` 0 warnings / 0 errors over 340 files; full unit + integration suites green.
+
+## 2. Critical findings
+
+**C1 — `lua/parley/tools/builtin/grep.lua:152-205`, `ack.lua:76-104`: the producer invariant is false, and a well-formed transcript now forks.**
+
+Neither tool passes `--with-filename`/`-H` (nor `-n` by default). Measured on this machine:
+
+```
+grep { pattern="💬", path=<single file> }  ->  "💬: a question at column zero"   kind=user  structural=true
+grep { pattern="💬", path=<directory>   }  ->  "/abs/path/transcript.md:💬: …"   kind=text  structural=false
+ack  { pattern="💬", path=<single file> }  ->  "💬: a question at column zero"   kind=user  structural=true
+```
+
+Feeding the exact block `tools/serialize.render_result` writes for that call through `chat_parser.parse_chat`:
+
+```
+HEAD dbb2ed9 : exchanges = 3   ex1 q=6 | ex2 q=15 "how does folding work"  <- grep OUTPUT became a turn | ex3 q=21
+BASE 5c65036 : exchanges = 2   ex1 q=6 | ex2 q=21
+```
+
+So the grep result line is promoted to a real question, the `📎:` block is destroyed, and the forked exchange starts feed `exchange_anchors` identity — the same path #200's destructive fold clear rides. This is not the malformed input the Spec licenses over-forking for; it is output parley itself produced, and Done-when bullet 2 ("Well-formed bodies are unaffected") is false as shipped.
+
+**This is the 2nd finding in family `guard-covers-instance-not-class`.** BR-2 fixed the tool-set axis; the class is wider than the tool set. Per the escalation rule I am not asking for the grep instance to be patched — here is the rule and its enumeration:
+
+> **A producer-side invariant must be ENFORCED by the producer, not observed on one hand-picked call, and its guard must enumerate the tool × call-shape × content-shape matrix.**
+
+The enumeration, all verified on this machine:
+
+| tool | shape that breaks the invariant | status |
+|---|---|---|
+| `grep` | `path` = a single file → no prefix | **verified broken** (parse regression above) |
+| `ack` | `path` = a single file → no prefix | **verified broken** |
+| `ls` | directory containing a file named `💬: notes.md` → `ls` emits **bare basenames, no prefix at all** | **verified**: `content = "💬: pasted note.md"`, `kind=user`, `structural=true` |
+| `find` | prefix comes from the caller's path arg, not the tool | mechanism real, but `tool_output_prefix_spec.lua:94` case is vacuous (fixture has no marker-named file) |
+| `chat_history_search` | excluded by assertion in `NOT_ECHOING`, never exercised — though `tools_builtin_chat_history_search_spec.lua` shows it is ~10 lines to set up | untested; its error branch also splices raw stderr into an `is_error = false` result |
+
+The guard's own text names the fix: `tool_output_prefix_spec.lua:84` justifies excluding `chat_history_search` because it runs *"rg with `--with-filename --line-number`"* — the very flags `grep`/`ack` omit. Make `grep`/`ack` derive that same discipline (ARCH-DRY: one prefixing rule, three consumers), and drive `READ_INPUTS` off a `{tool} × {dir-path, single-file-path}` product plus a fixture directory that contains a marker-named file, so `ls`/`find` stop being unfalsifiable. `tests/unit/tools_builtin_grep_spec.lua`'s assertions are loose (`content:match("function M.new")`), so adding `-H -n` does not break them.
+
+Whatever the enumeration cannot cover must move into the atlas's *"Known exception, stated not hidden"* paragraph, which currently lists only the stderr splice. Two consequential doc statements are false as written and must change with the fix: `atlas/providers/tool_use.md` ("**no tool emits a column-0 marker**: each one prefixes its output … `ls`/`find` paths"), the same claim restated in `lua/parley/fence.lua:134-139`, and `atlas/chat/format.md:12` ("markers inside a body are content when they are **INDENTED**, which is how every tool emits them") — only `read_file` indents; `grep`/`ack`/`chat_history_search` prefix, `ls` does neither, and a column-0 `🧠:` is still content because `reasoning` is not in `STRUCTURAL_KINDS`.
+
+## 3. Important findings
+
+None beyond the disposition of BR-5 below (still open, so not re-raised as new).
+
+## 4. Minor findings
+
+None new — BR-6 through BR-11 remain open and are disposed `not-addressed` below rather than re-raised.
+
+## 5. Test coverage notes
+
+- The suite is green and lint-clean, but it stayed green through C1, and it would have stayed green through BR-1 too. Both defects live at the `fence.scan`/producer seam and both were invisible to downstream exchange counts. `fence_spec.lua`'s new BR-1 block is the right correction for one half; the producer half still has no case that can fail for 2 of its 5 exercised tools.
+- `fence_spec.lua:262-278` ("still establishes depth when the block spans several markers") passes with the BR-1 fix reverted — its `is_tool_marker` only matches `📎:`, so `markers[2]` was never going to be set. Only the sibling at :236 carries teeth. Worth noting so the pair is not mistaken for two independent pins.
+- `tests/unit/highlight_structure_spec.lua` is still untouched and is not in `chat/parsing`'s `tests:` list in `atlas/traceability.yaml`, even though `highlight_structure.lua` was added to that entry's `code:` list. So `make test-spec SPEC=chat/parsing` does not run the spec for the module that now owns the rule's single source (compounds BR-10).
+
+## 6. Architectural notes
+
+- **ARCH-DRY — flag (C1).** Three prefixing implementations across `grep`, `ack`, `chat_history_search`; only one is correct, and the correct one's rationale is quoted in the test that excludes it. One shared "always emit `--with-filename --line-number`" helper is the consolidation. Separately, the three `fence.scan` call sites each spell out `is_structural_kind(classify(...))`; an exported `highlight_structure.structural_predicate(kinds)` would make a fourth consumer hard to get wrong. BR-3's fix is a genuine DRY win.
+- **ARCH-PURE — pass.** `fence.lua` stays pure, the predicate is injected, `fence_spec` runs it with no IO. `fold_projection.lua:139-141`'s per-line `require` + second full `classify` (BR-7) is a purity-neutral efficiency blemish; the same shape now also exists at `answer_structure.lua:41`, which BR-7 did not name.
+- **ARCH-PURPOSE — flag (C1).** The issue's purpose is "a malformed fence must not swallow later exchanges **without costing the well-formed case**". The bound delivers the first clause; C1 shows the second clause is not delivered, because the producer obligation the plan identified was documented rather than enforced. That is the deferred-consumer shape: the invariant is stated in three places and derived in none. It is also the class-vs-instance shape again — BR-2 was answered on the tool-set axis and the call-shape axis was never enumerated, which is why the same family fires twice.
+- **ARCH-MOCK — pass, with a note.** The producer guard shells out to the real `rg`/`ack`/`ls`/`find` against a tempdir, which is defensible: the invariant *is* conformance with the real binary's output shape, so this is the live-conformance half, not a missing fake. It should be recorded in `atlas/providers/tool_use.md` as the conformance check so a future move to a fake does not silently drop it. Note `ack`'s case self-skips when `ack` is absent from the host — legitimate, but it means the guard's coverage varies by machine.
+
+## 7. Plan revision recommendations
+
+Add to `workshop/issues/000203-…md`'s `## Revisions`:
+
+- **"The producer invariant must be enforced, not documented."** Record that `grep`/`ack` omit `--with-filename`, so a single-file search returns unprefixed content and a well-formed `📎: grep` body forks (evidence: 3 exchanges at `dbb2ed9` vs 2 at `5c65036` on the serialized block); that `ls` emits bare basenames with no prefix mechanism at all; and that the guard must enumerate call shapes and content shapes, not tools alone. Name `ls` (and any residue) in the atlas's "Known exception" paragraph rather than in the absolute claim.
+- **Correct Done-when bullet 2.** "Well-formed bodies are unaffected" is false until C1 lands; and the parenthetical "`fold_invariants_spec` over every tracked transcript" is still false in this working tree (see BR-5 below) — the sentence was never rewritten despite the round-1 Log claiming it was.
+- **Re-open the atlas step** for the three statements C1 falsifies (`tool_use.md`, `fence.lua`, `format.md:12`).
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Verified by revert (fence_spec goes red) and by a 321-file base-vs-HEAD parse sweep that diffs empty.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      Verified by revert; removing emit_definition from NOT_ECHOING turns the new case red. Residual is the call-shape axis, raised as a new Critical in the same family.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      BOUNDARY now derives; membership identical to the old hand-list, suite green.
+  - id: BR-4
+    disposition: addressed
+    note: |
+      format.md updated; its new wording is imprecise ("INDENTED", "how every tool emits them") and is folded into the new Critical's doc fix.
+  - id: BR-5
+    disposition: not-addressed
+    note: |
+      Tree state unresolved (the transcript is still deleted-but-unstaged), Done-when still claims "every tracked transcript", the <= 1 threshold encodes the current breakage, and Makefile.parley's RUN_SPEC discards the print on pass.
+  - id: BR-6
+    disposition: not-addressed
+    note: |
+      Docblock still has duplicate @param lines/@param is_tool_marker after @return, and the rework merged the bounded rationale into the comment above the UNBOUNDED close_of, so it now reads as its own contradiction on the function BR-1 turned on.
+  - id: BR-7
+    disposition: not-addressed
+    note: |
+      fold_projection.lua:139-141 unchanged; the same per-call require now also exists at answer_structure.lua:41.
+  - id: BR-8
+    disposition: not-addressed
+    note: |
+      tool_output_prefix_spec.lua:105 still iterates pairs(READ_INPUTS).
+  - id: BR-9
+    disposition: not-addressed
+    note: |
+      workshop/plans/203-experiment.patch still committed at 1760 lines, still deletes a tracked transcript on apply.
+  - id: BR-10
+    disposition: not-addressed
+    note: |
+      highlight_structure_spec.lua untouched, and it is not in chat/parsing's tests list even though highlight_structure.lua was added to that entry's code list.
+  - id: BR-11
+    disposition: not-addressed
+    note: |
+      fence.lua:126 signature unchanged; is_structural still optional.
+findings:
+  - id: new
+    severity: Critical
+    family: guard-covers-instance-not-class
+    title: |
+      grep/ack omit --with-filename, so a single-file search emits column-0 markers and a well-formed tool body now forks the chat
+    detail: |
+      This is the 2nd finding in family guard-covers-instance-not-class, so
+      the ask is the RULE, not this instance: a producer-side invariant must be
+      ENFORCED by the producer and guarded across the tool x call-shape x
+      content-shape matrix, never observed on one hand-picked call.
+      Verified enumeration on this machine: grep with path=<single file> returns
+      the raw matched line, no prefix (kind=user, structural=true); ack the same;
+      ls returns bare basenames with no prefix mechanism at all, so a directory
+      holding a file named "the marker: notes.md" emits a column-0 marker on a
+      success path; find's prefix comes from the caller's path arg and its guard
+      case is vacuous; chat_history_search is excluded by assertion and never
+      exercised. End-to-end on the block tools/serialize.render_result writes for
+      grep-on-a-single-file: 3 exchanges at dbb2ed9 vs 2 at 5c65036 — the grep
+      output line becomes a real question, so Spec bullet 2 and Done-when bullet 2
+      ("well-formed bodies unaffected") are false as shipped. The guard misses it
+      because tool_output_prefix_spec.lua:91-94 receives the file and passes the
+      directory. NOT_ECHOING:84 names the fix itself — chat_history_search is
+      excluded because it runs rg with --with-filename --line-number, the flags
+      grep/ack omit. Consolidate that prefixing discipline (ARCH-DRY), drive
+      READ_INPUTS off a call-shape product with a marker-named file in the
+      fixture, and move whatever remains into the atlas's stated-exception
+      paragraph. Three doc statements are falsified and must change with it:
+      atlas/providers/tool_use.md's "no tool emits a column-0 marker … ls/find
+      paths", the same claim at lua/parley/fence.lua:134-139, and
+      atlas/chat/format.md:12's "content when they are INDENTED, which is how
+      every tool emits them" (only read_file indents; a column-0 reasoning marker
+      is still content).
+```

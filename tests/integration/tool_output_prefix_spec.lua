@@ -41,6 +41,10 @@ describe("tool output never begins a line with a structural marker (#203)", func
         vim.fn.mkdir(dir, "p")
         file = dir .. "/transcript.md"
         vim.fn.writefile(vim.split(MARKED, "\n"), file)
+        -- A file whose NAME is a marker: ls/find echo paths, so the name is the
+        -- output. Without this the path-echoing tools were never exercised
+        -- against the thing they can actually emit.
+        vim.fn.writefile({ "x" }, dir .. "/💬: marker-named file.md")
         patterns = highlight_structure.patterns(require("parley.config"))
     end)
 
@@ -86,13 +90,31 @@ describe("tool output never begins a line with a structural marker (#203)", func
     }
 
     -- Read-shaped tools are the ones that can echo file content back.
+    -- A PRODUCT of tool x call shape, not one input per tool (#203 BR-12). The
+    -- previous draft searched only a DIRECTORY, where rg adds the filename
+    -- prefix automatically — so it never saw that a SINGLE-FILE search omits it
+    -- and emits column-0 markers. One shape per tool is how a guard passes while
+    -- the invariant it guards is false.
     READ_INPUTS = {
-        read_file = function(f) return { file_path = f } end,
-        grep = function(f, d) return { pattern = "💬", path = d } end,
-        ack = function(f, d) return { pattern = "💬", path = d } end,
-        ls = function(f, d) return { path = d } end,
-        find = function(f, d) return { path = d } end,
+        read_file = { ["single file"] = function(f) return { file_path = f } end },
+        grep = {
+            ["single file"] = function(f) return { pattern = "💬", path = f } end,
+            ["directory"] = function(f, d) return { pattern = "💬", path = d } end,
+        },
+        ack = {
+            ["single file"] = function(f) return { pattern = "💬", path = f } end,
+            ["directory"] = function(f, d) return { pattern = "💬", path = d } end,
+        },
     }
+
+    -- PATH-ECHOING tools are a real exception, not an oversight: for ls and find
+    -- the path IS the output, so a file NAMED "💬: notes.md" yields a column-0
+    -- marker and no flag can prevent it. Consequence is over-forking — visible —
+    -- on a rare input, which is the degradation direction this issue chose. They
+    -- are ruled out here rather than waived silently, and the exception is
+    -- recorded in atlas/providers/tool_use.md beside the stderr one.
+    NOT_ECHOING.ls = "echoes paths; a marker-NAMED file is an accepted exception"
+    NOT_ECHOING.find = "echoes paths; same accepted exception as ls"
 
     it("rules on every registered tool, none silently uncovered", function()
         for _, name in ipairs(registered()) do
@@ -102,8 +124,19 @@ describe("tool output never begins a line with a structural marker (#203)", func
         end
     end)
 
-    for name, build in pairs(READ_INPUTS) do
-        it(name .. " prefixes any marker it echoes", function()
+    -- Sorted, so a failure names the same tool every run (#203 BR-8).
+    local ordered = {}
+    for name in pairs(READ_INPUTS) do ordered[#ordered + 1] = name end
+    table.sort(ordered)
+
+    for _, name in ipairs(ordered) do
+      local shapes = READ_INPUTS[name]
+      local shape_names = {}
+      for shape in pairs(shapes) do shape_names[#shape_names + 1] = shape end
+      table.sort(shape_names)
+      for _, shape in ipairs(shape_names) do
+        local build = shapes[shape]
+        it(name .. " prefixes any marker it echoes (" .. shape .. ")", function()
             local def = tools.get(name)
             if not def then
                 -- Absent is only acceptable for an OPTIONAL tool; for a builtin
@@ -122,7 +155,8 @@ describe("tool output never begins a line with a structural marker (#203)", func
             -- success path was actually exercised.
             assert.message(name .. " only produced errors — the guard exercised nothing")
                 .is_false(result.is_error)
-            assert_no_column0_marker(name, result.content)
+            assert_no_column0_marker(name .. " (" .. shape .. ")", result.content)
         end)
+      end
     end
 end)

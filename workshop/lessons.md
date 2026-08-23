@@ -9,7 +9,11 @@
   empty, and `str.replace("", new)` inserted the replacement between every
   character of the file — 409,224 lines from a 78-line issue. Rule: replace an
   exact known block and assert it matches exactly once; never a range between two
-  landmarks you have not just verified are ordered and unique.
+  landmarks you have not just verified are ordered and unique. **Write the
+  guarded helper and then actually use it** — this happened a THIRD time in the
+  same session, after the helper existed, because `s.index` is the thing the
+  fingers reach for. The anchor that bit last was `--- @param lines string[]`,
+  whose first match was a different function's docblock two definitions up.
 - **A test that skips is not a test that passes.** The producer guard for #203
   was green on HEAD and *still green* with the invariant it guards deliberately
   broken: `tools.get` returns nil without `register_builtins()`, and the guard's

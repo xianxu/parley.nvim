@@ -171,12 +171,25 @@ What belongs here is the shape and the consumers:
 
 #### The producer-side invariant that rule rests on
 
-The bound is only safe because **no tool emits a column-0 marker**: each one
-prefixes its output (`read_file` `%5d  `, `grep`/`ack` `file:line:`,
-`chat_history_search` `{label}/path:line:`, `ls`/`find` paths, and the write
-tools return status messages). So a column-0 marker inside a body means the
-content did not come from parley — hand-edited, truncated, or pasted — and
-forking there is the visible degradation chosen over silent swallowing.
+The bound is safe because **the content-echoing tools never emit a column-0
+marker**: each prefixes its output — `read_file` `%5d  `, `grep`/`ack` `-H`
+giving `file:line:`, `chat_history_search` `{label}/path:line:`, and the write
+tools return status messages. So a column-0 marker inside a body means the
+content did not come from a parley tool — hand-edited, truncated, or pasted —
+and forking there is the visible degradation chosen over silent swallowing.
+
+`grep`/`ack` pass `-H` unconditionally rather than leaving it to the caller
+(#203 BR-12): both omit the filename on a **single-file** search, so
+`grep pattern=💬 path=chat.md` used to return bare transcript lines and fork a
+well-formed body.
+
+**The invariant is not total, and the claim is bounded rather than chased.** Two
+exceptions, both degrading to over-forking:
+
+- **path-echoing tools** — for `ls`/`find` the path IS the output, so a file
+  *named* `💬: notes.md` yields a column-0 marker and no flag prevents it;
+- **error paths** — `grep`/`ack`/`ls`/`find` splice raw stderr after a prefixed
+  first line, so a hostile message can carry one.
 
 This is a *producer* obligation the *parser* depends on, so it is guarded where
 it is produced: `tests/integration/tool_output_prefix_spec.lua` derives its
@@ -185,9 +198,6 @@ covered by construction, and fails loudly rather than skipping when a tool is
 unregistered — its first draft passed with `read_file`'s prefix deleted because
 it skipped every case.
 
-**Known exception, stated not hidden:** `grep`/`ack`/`ls`/`find` splice raw
-stderr after a prefixed first line, so a hostile error message can carry a
-column-0 marker. That degrades to over-forking, which is the accepted direction.
 
 **Which markers the depth rule covers** is stated once, in
 `atlas/chat/parsing.md`: tool markers only. Inside a tool body, or inside any

@@ -72,16 +72,40 @@ describe("fold invariants over the repo transcript corpus", function()
         end
     end
 
-    it("reports any tracked transcript it could not read", function()
-        -- Not a failure: an unstaged deletion is a legitimate working-tree
-        -- state. But the count is evidence, so it is stated rather than lost.
-        if #skipped > 0 then
-            print(("fold_invariants: skipped %d unreadable tracked transcript(s): %s")
-                :format(#skipped, table.concat(skipped, ", ")))
+    -- This audit is cited as evidence that the fold invariants hold over the
+    -- whole corpus, so a silently skipped file makes that evidence false (#203
+    -- BR-5). The first fix printed the skips — but RUN_SPEC discards output on a
+    -- PASS, so nobody would ever see it. It asserts now.
+    --
+    -- Zero is the right threshold, not "however many are broken today": either
+    -- resolution of a deleted-but-unstaged transcript clears it. Commit the
+    -- deletion and the file stops being tracked, so it is never listed; restore
+    -- it and it is readable. Only the limbo state fails, which is the state that
+    -- actually invalidates the claim.
+    -- One NAMED exclusion, deliberately not a numeric tolerance (#203 BR-5).
+    -- A "<= 1" threshold would silently absorb whichever file broke next; naming
+    -- it means any OTHER skip still fails, and the coverage claim can state its
+    -- own exception instead of overstating itself.
+    --
+    -- This transcript is deleted-but-unstaged in the working tree, and the
+    -- operator chose (2026-08-22) to leave it in limbo rather than commit the
+    -- deletion or restore it. Either resolution retires this entry: committing
+    -- the deletion untracks the file so it is never listed; restoring it makes
+    -- it readable.
+    local KNOWN_UNREADABLE = {
+        ["workshop/parley/2026-05-03.22-29-53.828_global-warming-overview.md"] =
+            "deleted-but-unstaged; operator deferred the decision (#203 BR-5)",
+    }
+
+    it("skips no tracked transcript except the one known exclusion", function()
+        local unexpected = {}
+        for _, path in ipairs(skipped) do
+            if not KNOWN_UNREADABLE[path] then unexpected[#unexpected + 1] = path end
         end
-        assert.message(("%d tracked transcript(s) unreadable — the audit did NOT "
-            .. "cover the whole corpus; say so in any evidence that cites it"):format(#skipped))
-            .is_true(#skipped <= 1)
+        assert.message(("%d tracked transcript(s) unreadable and NOT the known "
+            .. "exclusion, so this audit does not cover the corpus it is cited "
+            .. "for: %s"):format(#unexpected, table.concat(unexpected, ", ")))
+            .equals(0, #unexpected)
     end)
 
     it("finds a corpus to check", function()

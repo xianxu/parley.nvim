@@ -58,8 +58,12 @@ suppress when the body holds a question defeats M2's headline case, since
       yields 2.
 - [x] Well-formed bodies are unaffected — measured by BEHAVIOUR, not by leaving
       fixtures byte-identical: `fold_tool_transcript.md` unchanged, and the
-      live-corpus audit (`fold_invariants_spec` over every tracked transcript)
-      still clean. `fold_adversarial.md` DOES change: its read_file body gains
+      live-corpus audit clean over every tracked transcript **except one named
+      exclusion** — `2026-05-03...global-warming-overview.md`, deleted-but-
+      unstaged, which the operator chose to leave in limbo (#203 BR-5).
+      `fold_invariants_spec` fails on any OTHER skip, so the claim states its
+      own exception rather than a numeric tolerance that would absorb the next
+      one silently. `fold_adversarial.md` DOES change: its read_file body gains
       the `%5d  ` prefix that tool actually emits, which is a fidelity
       correction, not a relaxation — its grep body already models the real
       prefix and is untouched.
@@ -361,3 +365,55 @@ rather than a note.
 The unifying shape across BR-2/BR-4/BR-5 is one I keep hitting: **a claim wider
 than the mechanism that backs it.** Each was a sentence — in a test, an atlas
 page, or a `--verified` string — asserting coverage the code did not deliver.
+
+### 2026-08-22 (close review round 2 — REWORK again; BR-12 falsified my premise)
+
+- **BR-12 (Critical) — the premise this whole issue rests on was false for a
+  common call.** `grep`/`ack` omit the filename on a **single-file** search, so
+  `grep pattern=💬 path=chat.md` returned bare transcript lines. Verified through
+  the tool: `GREP OUTPUT: [💬: a question]` — column 0, from a well-formed call.
+  With #203's rule that forks a well-formed body, which violates the Spec's
+  "well-formed bodies are unaffected". Fixed at the producer: `grep`/`ack` pass
+  `-H` unconditionally rather than leaving it to the caller's optional flags
+  (`ack` takes `-H` alone; `--line-number` is not an ack flag).
+  **My guard missed it because it exercised one call shape per tool** — always a
+  directory, where rg adds the filename itself. It now runs a tool × call-shape
+  product, and immediately found more.
+- **The invariant is not total, and is now bounded rather than chased.** The
+  extended guard found `ls` emitting `💬: marker-named file.md` — for path-
+  echoing tools the path IS the output and no flag prevents it. Ruled as a named
+  exception with its reason, beside the stderr-splice one, in the guard, in
+  `fence.lua`, and in the atlas. Both degrade to over-forking.
+- **Three doc statements BR-12 falsified** were corrected: the atlas's "no tool
+  emits a column-0 marker … ls/find paths", the same claim in `fence.lua`, and
+  `atlas/chat/format.md`'s "which is how every tool emits them" (only the
+  content-echoing tools prefix; and 🧠: is not in the structural set, so a
+  column-0 reasoning marker is still content).
+- **BR-6** — the rework had merged the *bounded* rationale into the comment above
+  the *unbounded* `close_of`, so it read as its own contradiction on the function
+  BR-1 had just turned off. Each rationale now sits on its own function.
+- **BR-7** — the per-call `require` is gone from `answer_structure`. In
+  `fold_projection` it stays lazy on purpose: a module-level require makes that
+  file touch `vim` at load, which breaks `verify_starts`/`ranges_within` being
+  callable without it — I hoisted it, luacheck caught the shadowing, and the
+  existing comment at :90 explains why the laziness is deliberate.
+- **BR-8** — the guard iterates sorted names, so a failure names the same tool
+  every run.
+- **BR-5** — the four objections were right, including that my "loud" skip used
+  `print`, which `RUN_SPEC` discards on a pass: the fix was itself invisible. The
+  audit now asserts. The operator chose (2026-08-22) to leave the deleted-but-
+  unstaged transcript in limbo rather than commit or restore it, so the skip is a
+  **named** exclusion with its reason — not the `<= 1` tolerance the reviewer
+  objected to, which would have absorbed whichever file broke next. Any other
+  skip fails, and the coverage claim states its own exception.
+
+**Third span-edit corruption of the session, by me, after writing the rule
+against it.** Rewriting `fence.lua`'s docblock, I used
+`s[index("--- @param lines string[]") : index("local function close_of")]` — and
+the first match for that anchor is **`extract_body`'s** docblock, not `scan`'s.
+The span swallowed `M.extract_body` entirely; five specs went red with
+`attempt to call field 'extract_body' (a nil value)`. Restored from HEAD and
+verified the file now differs from the commit only in comments. I had built a
+guarded `once()` helper earlier precisely to prevent this and then reached for
+`s.index` out of habit. The lesson entry is updated to say the helper is not
+optional.

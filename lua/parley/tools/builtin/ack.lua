@@ -73,7 +73,9 @@ local function build_command(input)
         return nil, "ignore_case must be boolean"
     end
 
-    local cmd = { ack_cmd }
+    -- ALWAYS prefixed (#203 BR-12) — see grep.lua for why the parser depends on
+    -- it and why it is not left to the caller.
+    local cmd = { ack_cmd, "-H" }
     if input.ignore_case then
         cmd[#cmd + 1] = "-i"
     end

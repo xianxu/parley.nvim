@@ -149,7 +149,14 @@ return {
             }
         end
 
-        local cmd = { grep_cmd }
+        -- ALWAYS prefixed (#203 BR-12). rg and grep omit the filename when the
+        -- search target is a single file, so `grep pattern=💬 path=chat.md`
+        -- returned bare transcript lines — column-0 markers, which
+        -- `fence.scan` reads as structural and which then fork a well-formed
+        -- tool body. The parser's rule depends on this being emitted here, so it
+        -- is not left to the caller's optional flags.
+        -- tests/integration/tool_output_prefix_spec.lua drives both call shapes.
+        local cmd = { grep_cmd, "-H", "-n" }
         for _, flag in ipairs(flags) do
             cmd[#cmd + 1] = flag
         end
