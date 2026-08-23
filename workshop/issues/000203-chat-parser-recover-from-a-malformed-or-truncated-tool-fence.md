@@ -1,11 +1,12 @@
 ---
 id: 000203
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-08-21
-updated: 2026-08-21
+updated: 2026-08-22
 estimate_hours:
+started: 2026-08-22T17:34:39-07:00
 ---
 
 # chat_parser: recover from a malformed or truncated tool fence
