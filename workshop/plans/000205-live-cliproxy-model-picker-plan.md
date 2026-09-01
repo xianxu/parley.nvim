@@ -139,6 +139,19 @@ describe("series", function()
     it("returns a stable non-empty key for an all-numeric tail", function()
         assert.equals("gpt-image", cat.series("gpt-image-2"))
     end)
+
+    -- Strategy for the malformed class, not seven more examples: ids are
+    -- vendor-controlled and series() is the only pattern mangler over them.
+    it("never returns an empty key, whatever the id", function()
+        for _, id in ipairs({ "2026", "1.2.3", "-", "5-5-5", "" }) do
+            assert.is_true(#cat.series(id) > 0 or id == "",
+                ("series(%q) collapsed to empty"):format(id))
+        end
+    end)
+
+    it("keeps distinct alphabetic stems distinct", function()
+        assert.are_not.equals(cat.series("alpha-1"), cat.series("beta-1"))
+    end)
 end)
 ```
 
@@ -177,7 +190,14 @@ function M.series(id)
         return ""
     end
     local s = id:gsub("%-?%d[%d%.%-]*", "-"):gsub("%-+", "-")
-    return (s:gsub("^%-", ""):gsub("%-$", ""))
+    s = s:gsub("^%-", ""):gsub("%-$", "")
+    -- An all-numeral id strips to "", which would collapse every such model into
+    -- one series and let curate drop all but one. Vendor-controlled input: fall
+    -- back to the id itself rather than emit a colliding empty key.
+    if s == "" then
+        return id
+    end
+    return s
 end
 
 return M
@@ -1185,122 +1205,119 @@ sdlc milestone-close --issue 205 --milestone M3
 
 ## Chunk 4: M4 — retire the hardcoded lists
 
-### Task 4.1: Catalog-derived channel CANDIDATES (not a channel)
+### Task 4.1: Resolve channel CANDIDATES and let health pick among them
 
 **Files:**
-- Modify: `lua/parley/cliproxy_config.lua` (`resolve_channel`, `resolve_login_provider`)
-- Modify: `lua/parley/cliproxy.lua:1236` (the `recover` call site)
-- Test: `tests/unit/cliproxy_config_spec.lua`
+- Modify: `lua/parley/cliproxy_config.lua` (`resolve_channel` → `resolve_channels`, `resolve_login_provider`)
+- Modify: `lua/parley/cliproxy.lua` (`credential_health_for_login:474-491`, `recover:1236`, the give_up text at `:1249`)
+- Test: `tests/unit/cliproxy_config_spec.lua`, `tests/integration/cliproxy_recovery_e2e_spec.lua`
 
-**Why this is not a one-line inversion.** An earlier draft proposed inverting
-`PROVIDER_OWNED_BY` to get a channel. That is wrong on the axis: its keys are
-login-shaped providers, and `CHANNEL_LOGIN` (`cliproxy_config.lua:140-149`) has
-no `google` key at all — google is three channels (`gemini`, `gemini-cli`,
-`aistudio`) behind one login, and the comment at `cliproxy_config.lua:154-158`
-records that querying credential health on the login axis "silently finds
-nothing". The Spec says the same thing from the other side: `owned_by` is
-"never a channel identifier" — measured, since one id was reported under
-`anthropic` on one proxy start and `antigravity` on the next.
+**Two rejected designs, so the third is understood.** Inverting
+`PROVIDER_OWNED_BY` is an axis error: its keys are login-shaped and
+`CHANNEL_LOGIN:140-149` has no `google` — that login is three channels. But
+narrowing to candidates and returning nil when several remain is *worse*: both
+providers the default config ships (`claude` → {claude, antigravity},
+`codex` → {codex, antigravity}) are ambiguous, so every diagnosis would degrade
+to "no cliproxy channel is configured" precisely where it works today. The
+`expired` kinds a dead Claude token produces (`cliproxy_auth.lua:31-34`) capture
+no `provider`, so with the alias block deleted there would be no resolver left.
 
-So the catalog cannot name **the** channel. It can honestly narrow to the
-**candidates**, and the health machinery already knows how to span several
-channels and pick the healthiest (`credential_health_for_login` + `healthier`).
+The resolution is that **ambiguity is not the end of the answer** — health
+decides it. `credential_health_for_login` already fans out across the channels
+of one login and reduces with `ca.healthier`. Diagnosis needs the same fan-out
+with the opposite reducer: the LEAST healthy candidate is the one that plausibly
+failed. So the fan-out gets extracted once and both callers share it (ARCH-DRY).
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Write the failing tests**
 
 ```lua
-describe("channels_for_owner", function()
-    it("narrows an owner to its candidate channels, never one guess", function()
-        assert.same({ "antigravity", "claude" }, cc.channels_for_owner("anthropic"))
-        assert.same({ "antigravity", "codex" }, cc.channels_for_owner("openai"))
-    end)
-
-    it("keeps every google channel, because they share one login", function()
-        assert.same({ "aistudio", "antigravity", "gemini", "gemini-cli" },
-            cc.channels_for_owner("google"))
-    end)
-
-    it("returns empty for an owner it does not know", function()
-        assert.same({}, cc.channels_for_owner("who-knows"))
-    end)
-end)
-
-describe("resolve_channel", function()
-    it("still prefers an explicit alias entry (the override path)", function()
+describe("resolve_channels", function()
+    it("returns the operator's explicit pin alone", function()
         local alias = { codex = { { name = "claude-opus-5", alias = "claude-opus-5" } } }
-        assert.equals("codex", cc.resolve_channel("claude-opus-5", alias, {}))
+        assert.same({ "codex" }, cc.resolve_channels("claude-opus-5", alias, {}))
     end)
 
-    it("resolves from the catalog when exactly one candidate is possible", function()
-        local models = { { id = "gemini-3-flash", owner = "antigravity" } }
-        assert.equals("antigravity", cc.resolve_channel("gemini-3-flash", {}, models))
-    end)
-
-    it("returns nil when the catalog leaves the channel ambiguous", function()
-        -- anthropic is served by BOTH claude and antigravity; naming one would
-        -- report another account's health for the failing model (#197's rule:
-        -- admitting we don't know beats guessing).
+    it("returns every candidate that can serve the owner", function()
         local models = { { id = "claude-opus-5", owner = "anthropic" } }
-        assert.is_nil(cc.resolve_channel("claude-opus-5", {}, models))
+        assert.same({ "antigravity", "claude" },
+            cc.resolve_channels("claude-opus-5", {}, models))
     end)
-end)
 
-describe("resolve_login_provider", function()
-    it("is threaded with the catalog too, not just resolve_channel", function()
-        local models = { { id = "gemini-3-flash", owner = "antigravity" } }
-        assert.equals("antigravity",
-            cc.resolve_login_provider("gemini-3-flash", {}, models))
+    it("returns empty when neither alias nor catalog knows the model", function()
+        assert.same({}, cc.resolve_channels("who-knows-1", {}, {}))
     end)
 end)
 ```
 
-- [ ] **Step 2: Run it and watch it fail**
-
-Run: `make test-spec SPEC=unit/cliproxy_config`
-Expected: FAIL — `channels_for_owner` is nil; the third argument is ignored
-
-- [ ] **Step 3: Implement**
+and the regression test that the CURRENT proof spec cannot express — note it
+passes an **empty** alias block, which is what the default config will ship:
 
 ```lua
--- Which cliproxy CHANNELS can serve a model of a given catalog `owned_by`.
--- Candidates, deliberately plural: antigravity serves claude, gemini AND
--- gpt-oss models alongside the native channel, so an owner never implies one
--- channel. Kept explicit rather than inverted out of PROVIDER_OWNED_BY, whose
--- keys are login-shaped (`google`) and so are NOT channels.
-local OWNER_CHANNELS = {
-    anthropic   = { "antigravity", "claude" },
-    openai      = { "antigravity", "codex" },
-    google      = { "aistudio", "antigravity", "gemini", "gemini-cli" },
-    antigravity = { "antigravity" },
-    moonshot    = { "kimi" },
-    xai         = { "xai" },
-}
+it("names the claude login for an expired token with NO alias block", function()
+    -- cliproxy_recovery_e2e_spec.lua:74-77 builds its own oauth-model-alias, so
+    -- it passes with or without Task 4.2's deletion. This case is the one that
+    -- actually detects the regression.
+    set_cliproxy_config({ ["oauth-model-alias"] = {} })
+    seed_catalog({ { id = "claude-opus-5", owner = "anthropic" } })
+    seed_auth_files({ claude = "expired", antigravity = "active" })
+    local msg = run_failing_query("claude-opus-5", "401 authentication_error")
+    assert.is_true(msg:find("claude", 1, true) ~= nil)
+    assert.is_nil(msg:find("oauth-model-alias", 1, true),
+        "the diagnosis must stop telling operators to add a key the config no longer has")
+end)
+```
 
----@param owner string # a catalog row's owned_by
----@return string[] # sorted candidate channels; empty when unknown
-function M.channels_for_owner(owner)
-    return vim.deepcopy(OWNER_CHANNELS[owner] or {})
+- [ ] **Step 2: Run them and watch them fail**
+
+Run: `make test-spec SPEC=unit/cliproxy_config && make test-spec SPEC=integration/cliproxy_recovery_e2e`
+Expected: FAIL — `resolve_channels` is nil; the diagnosis still names the alias block
+
+- [ ] **Step 3: Extract the fan-out, then add the second reducer**
+
+```lua
+--- Read credential health across several channels and reduce to one.
+--- The fan-out both callers share: `credential_health_for_login` wants the
+--- HEALTHIEST reading (is this account usable at all), diagnosis wants the
+--- LEAST healthy (which credential plausibly caused this failure). One
+--- traversal, injected comparator (ARCH-DRY).
+---@param channels string[]
+---@param prefer fun(a: table, b: table): boolean # true when `a` should win
+---@param cb fun(health: table, channel: string|nil)
+function M.credential_health_across(channels, prefer, cb)
+    -- …the existing loop from credential_health_for_login, tracking the winning
+    -- channel alongside the winning health so the caller can name the login…
 end
 ```
 
-`resolve_channel(model, alias, models)` then reads: alias first (an operator's
-explicit pin always wins); else look the model up in the catalog and return its
-owner's single candidate **only when there is exactly one**; else nil, which the
-caller at `cliproxy.lua:1247` already renders as "no cliproxy channel is
-configured for X".
+`credential_health_for_login` becomes a two-line caller with `ca.healthier`;
+`recover` calls it with the inverse and gets back both the health AND the channel
+that owns it.
 
-- [ ] **Step 4: Sweep every caller — the enumeration, not just the site**
+- [ ] **Step 4: Rewire `recover`**
+
+```lua
+local channels = verdict.provider and { verdict.provider }
+    or cc.resolve_channels(verdict.model, alias_block() or {}, M.catalog_cached())
+```
+
+- `#channels == 0` → today's give_up, with the message rewritten: it must stop
+  instructing the operator to add an `oauth-model-alias` key (`cliproxy.lua:1249`
+  and the second copy at `:1291`), since Task 4.2 removes that block from the
+  default config. Both copies, not one — grep `oauth-model-alias` under `lua/`.
+- `#channels == 1` → today's path, unchanged.
+- `#channels > 1` → `credential_health_across(channels, least_healthy)`; the
+  diagnosis names the login of the channel it returns.
+
+- [ ] **Step 5: Sweep every caller**
 
 ```bash
-grep -rn "resolve_channel\|resolve_login_provider" lua/ tests/
+grep -rn "resolve_channel\|resolve_login_provider\|oauth-model-alias" lua/ tests/
 ```
-Expected callers, all threaded with the catalog in this same commit:
-`cliproxy_config.lua:218` (`resolve_login_provider`), `cliproxy.lua:1236`
-(`recover`). `resolve_login_provider`'s own docstring promises it derives from
-`resolve_channel` "so there is one model to channel source (ARCH-DRY)" — leaving
-it unthreaded would make that comment false.
+All of them threaded in this commit: `resolve_login_provider`
+(`cliproxy_config.lua:218`, whose docstring promises it derives from the same
+source), `recover` (`cliproxy.lua:1236`), and both give_up texts.
 
-- [ ] **Step 5: Run the specs that would catch a regression**
+- [ ] **Step 6: Run the specs that would catch a regression**
 
 ```bash
 make test-spec SPEC=unit/cliproxy_config
@@ -1308,12 +1325,12 @@ make test-spec SPEC=unit/cliproxy_auth
 make test-spec SPEC=unit/failure_notice
 make test-spec SPEC=integration/cliproxy_recovery_e2e
 ```
-Expected: PASS
+Expected: PASS, including the new empty-alias case
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add -u && git commit -m "#205 M4: resolve channel candidates from the catalog, alias stays the override"
+git add -u && git commit -m "#205 M4: channel candidates resolved by credential health, not by guessing"
 ```
 
 ### Task 4.2: Delete the model lists from the default config
@@ -1348,11 +1365,13 @@ Expected: a completion, not `unknown provider for model`
 
 - [ ] **Step 3: Verify the auth diagnosis still names the right login**
 
-Run the `#197` recovery spec, which is what would regress if channel resolution
-lost its source:
+The load-bearing case is Task 4.1's empty-alias test, NOT the pre-existing
+recovery spec — that one builds its own `oauth-model-alias`
+(`cliproxy_recovery_e2e_spec.lua:74-77`) and so passes whether or not this
+deletion regresses anything.
 
 ```bash
-make test-spec SPEC=integration/cliproxy_recovery_e2e
+make test-spec SPEC=integration/cliproxy_recovery_e2e   # incl. the empty-alias case
 make test-spec SPEC=unit/failure_notice
 ```
 Expected: PASS

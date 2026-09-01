@@ -173,7 +173,10 @@ Two measured constraints:
 - A configured provider with no healthy credential shows as `(logged out)` and
   selecting that row starts its login.
 - `oauth-model-alias` is gone from the default config and auth diagnosis still
-  names the right login for a failing model.
+  names the right login for a failing model — proven by a case that runs with an
+  EMPTY alias block, since a test that builds its own passes either way. Where
+  several channels could serve the model, credential health picks between them
+  rather than the code guessing or giving up.
 - Opening the picker never starts the proxy.
 
 ## Plan
@@ -266,3 +269,18 @@ rule would ship a broken gemini agent.
   CANDIDATES and returns a channel only when exactly one is possible; `owned_by`
   is not a channel and antigravity serves several owners' models (plan-gate
   PQ-1). The alias block stays the operator's explicit override.
+
+### 2026-08-31 — channel ambiguity resolved by health, not abandoned
+
+**Reason:** plan-gate PQ-10. The candidate-narrowing fix returned nil for both
+providers the default config ships (anthropic and openai are each served by their
+native channel AND antigravity), so M4 as written would have degraded every
+real diagnosis to "no cliproxy channel is configured".
+
+**Delta:** `resolve_channel` becomes `resolve_channels` (plural). When more than
+one candidate remains, the existing cross-channel health fan-out decides — the
+same traversal `credential_health_for_login` uses, extracted with an injectable
+reducer so "healthiest" and "least healthy" share one implementation. The
+give_up texts that tell the operator to add an `oauth-model-alias` key are
+rewritten in the same pass, and Done-when now demands a proof that runs with an
+empty alias block.

@@ -139,6 +139,50 @@ rounds:
           family: invented-test-api
           round: 2
       blocked: false
+    - "n": 3
+      timestamp: "2026-08-31T19:49:50-07:00"
+      agent: claude
+      dispose:
+        - id: PQ-9
+          disposition: not-addressed
+          note: Rule written into Notes-for-the-implementer but never run; port_is_listening, fake_plugin, agent_picker_spec.lua and get(route) all still fail it.
+          round: 3
+      findings:
+        - id: PQ-10
+          severity: Critical
+          title: Catalog-derived resolve_channel returns nil for both providers the default config ships, and the named proof spec cannot detect it
+          detail: |-
+            channels_for_owner gives anthropic {antigravity,claude} and openai
+            {antigravity,codex}, so the "exactly one candidate" rule never fires for
+            any shipped model. verdict.provider is set only by the one no_auth pattern
+            at cliproxy_auth.lua:28; the expired kinds a dead Claude token produces
+            (cliproxy_auth.lua:31-34) capture no provider, so the alias block deleted in
+            Task 4.2 is today's only resolver. Task 4.2 Step 3 offers
+            cliproxy_recovery_e2e as proof, but that spec builds its own
+            oauth-model-alias at cliproxy_recovery_e2e_spec.lua:74-77 and passes either
+            way. The give_up text at cliproxy.lua:1249 also still tells the operator to
+            add the key M4 removes. The plan's rationale cites
+            credential_health_for_login + healthier (cliproxy.lua:474-491) as the
+            machinery for plural candidates, then no step calls it. 2nd in family
+            after PQ-4: fix the rule, not the site - every rationale sentence
+            justifying a design by naming existing machinery needs a step in the same
+            task that invokes it, or the sentence goes and Done-when absorbs the
+            consequence.
+          family: stated-design-not-implemented
+          round: 3
+        - id: PQ-11
+          severity: Minor
+          title: No adversarial-input strategy named for series, the only pattern mangler over vendor-controlled ids
+          detail: |-
+            series() rewrites arbitrary model ids with gsub; an all-numeral id reduces
+            to the empty string, collapsing every such model into one series so curate
+            drops all but one. The plan has seven enumerated curate cases and no
+            strategy line for the malformed class. One line replaces them - property
+            test that series output is non-empty and that ids with distinct alphabetic
+            stems stay distinct.
+          family: test-strategy-not-enumeration
+          round: 3
+      blocked: true
 content_hash: c74c003dde4afff96c46c05e592c6e49f0daa6bb76328725d064a6147aa4cd65
 ---
 
@@ -216,6 +260,41 @@ later rounds disposed of them. Generated — edit the gate, not this file.
   the task's Files section as newly created. Run that grep once over all proposed test
   blocks; 2 of 2 named test-only APIs on this issue have now been non-existent.
 
+## Round 3 — 2026-08-31T19:49:50-07:00 (claude) — BLOCKED
+
+### Disposed
+
+- PQ-9 — not-addressed — Rule written into Notes-for-the-implementer but never run; port_is_listening, fake_plugin, agent_picker_spec.lua and get(route) all still fail it.
+
+### Raised
+
+- **PQ-10** [Critical] `stated-design-not-implemented` Catalog-derived resolve_channel returns nil for both providers the default config ships, and the named proof spec cannot detect it
+  channels_for_owner gives anthropic {antigravity,claude} and openai
+  {antigravity,codex}, so the "exactly one candidate" rule never fires for
+  any shipped model. verdict.provider is set only by the one no_auth pattern
+  at cliproxy_auth.lua:28; the expired kinds a dead Claude token produces
+  (cliproxy_auth.lua:31-34) capture no provider, so the alias block deleted in
+  Task 4.2 is today's only resolver. Task 4.2 Step 3 offers
+  cliproxy_recovery_e2e as proof, but that spec builds its own
+  oauth-model-alias at cliproxy_recovery_e2e_spec.lua:74-77 and passes either
+  way. The give_up text at cliproxy.lua:1249 also still tells the operator to
+  add the key M4 removes. The plan's rationale cites
+  credential_health_for_login + healthier (cliproxy.lua:474-491) as the
+  machinery for plural candidates, then no step calls it. 2nd in family
+  after PQ-4: fix the rule, not the site - every rationale sentence
+  justifying a design by naming existing machinery needs a step in the same
+  task that invokes it, or the sentence goes and Done-when absorbs the
+  consequence.
+- **PQ-11** [Minor] `test-strategy-not-enumeration` No adversarial-input strategy named for series, the only pattern mangler over vendor-controlled ids
+  series() rewrites arbitrary model ids with gsub; an all-numeral id reduces
+  to the empty string, collapsing every such model into one series so curate
+  drops all but one. The plan has seven enumerated curate cases and no
+  strategy line for the malformed class. One line replaces them - property
+  test that series output is non-empty and that ids with distinct alphabetic
+  stems stay distinct.
+
 ## Open findings
 
 - **PQ-9** [Minor] `invented-test-api` Task 2.2 calls ready_port.free_port() and port_is_listening(), neither of which exists
+- **PQ-10** [Critical] `stated-design-not-implemented` Catalog-derived resolve_channel returns nil for both providers the default config ships, and the named proof spec cannot detect it
+- **PQ-11** [Minor] `test-strategy-not-enumeration` No adversarial-input strategy named for series, the only pattern mangler over vendor-controlled ids
