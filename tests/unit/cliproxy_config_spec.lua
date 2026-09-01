@@ -424,3 +424,33 @@ describe("channels_for_owner preference order", function()
         end
     end)
 end)
+
+describe("bound_candidates", function()
+    it("keeps the native channel and the cross-vendor re-server", function()
+        -- The cap must keep what its rationale promises. Trimming from the tail
+        -- kept {gemini-cli, gemini} for google and dropped antigravity — the
+        -- fallback the comment claimed was always retained.
+        assert.same({ "gemini-cli", "antigravity" },
+            cc.bound_candidates({ "gemini-cli", "gemini", "aistudio", "antigravity" }, 2))
+    end)
+
+    it("is a no-op when the list already fits", function()
+        assert.same({ "claude", "antigravity" },
+            cc.bound_candidates({ "claude", "antigravity" }, 2))
+        assert.same({ "kimi" }, cc.bound_candidates({ "kimi" }, 2))
+    end)
+
+    it("does not mutate the caller's list", function()
+        local input = { "gemini-cli", "gemini", "aistudio", "antigravity" }
+        cc.bound_candidates(input, 2)
+        assert.equals(4, #input)
+    end)
+
+    it("bounds every owner to the native channel plus the re-server", function()
+        for _, owner in ipairs({ "anthropic", "openai", "google" }) do
+            local bounded = cc.bound_candidates(cc.channels_for_owner(owner), 2)
+            assert.equals(cc.channels_for_owner(owner)[1], bounded[1], owner)
+            assert.equals("antigravity", bounded[#bounded], owner)
+        end
+    end)
+end)

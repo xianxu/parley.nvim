@@ -1371,11 +1371,11 @@ function M.recover(failure, retry, give_up)
     -- guessing: naming the wrong account is worse than admitting we don't know.
     local candidates = verdict.provider and { verdict.provider }
         or cc.resolve_channels(verdict.model, alias_block() or {}, M.catalog_cached())
-    -- Bounded: see MAX_CANDIDATE_CHANNELS. The list is in preference order, so
-    -- truncating keeps the native channel.
-    while #candidates > MAX_CANDIDATE_CHANNELS do
-        table.remove(candidates)
-    end
+    -- Bounded: see MAX_CANDIDATE_CHANNELS. Keeps the NATIVE channel and the
+    -- cross-vendor re-server, which is what the budget rationale promises —
+    -- trimming from the tail instead dropped antigravity for google, the only
+    -- owner with more than two candidates.
+    candidates = cc.bound_candidates(candidates, MAX_CANDIDATE_CHANNELS)
     local channel = candidates[1]
     local login = cc.channel_login(channel)
     local attempt = failure.attempt or 0

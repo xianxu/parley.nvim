@@ -35,7 +35,7 @@ from unticked boxes here.
 | `cliproxy_default_web_search_strategy` | `lua/parley/providers.lua` | new |
 | `get_cliproxy_strategy` | `lua/parley/providers.lua` | modified |
 | `resolve_channel` | `lua/parley/cliproxy_config.lua` | modified |
-| `resolve_channels` / `channels_for_owner` | `lua/parley/cliproxy_config.lua` | new |
+| `resolve_channels` / `channels_for_owner` / `bound_candidates` | `lua/parley/cliproxy_config.lua` | new |
 | `could_have_served` / `likeliest_culprit` / `healthiest` | `lua/parley/cliproxy_auth.lua` | new |
 | `build_payload` (`opts.agent`) | `scripts/parley_harness.lua` | modified |
 | `golden_fixture` | `scripts/golden_fixture.lua` | new |
@@ -2291,3 +2291,18 @@ unverified.
   and immediately caught the stale `resolve_login_provider` row I had left.
 - **BR-92 / BR-16.** `unhealthier` deleted (no callers); the atlas now names
   `cliproxy_catalog.lua`, the pure core it had never mentioned.
+
+### 2026-09-01 — issue close round 2 (BR-101)
+
+The candidate cap trimmed from the TAIL, which for google kept
+`{gemini-cli, gemini}` and dropped `antigravity` — the cross-vendor fallback the
+cap's own rationale promised to keep, and google is the only owner with more than
+two candidates, so the claim was false exactly where it mattered. `bound_candidates`
+keeps the native channel and the re-server, lives in the pure module so the choice
+is testable without the recovery path, and is verified by reverting to a tail trim.
+
+Three findings still listed by the ledger — BR-72, BR-80, BR-91 — are verified
+fixed at HEAD by direct measurement (`_force_stale` clears after the write and
+after its failure return; zero stacked doc blocks and zero `@param prefer`; the
+guard requires a definition and caught a stale row when it was tightened). They
+are carried dispositions, not live defects.

@@ -2299,6 +2299,120 @@ rounds:
           note: 'Verified by probe: appending `M._brand_new_seam = catalog_path` to cliproxy.lua now reddens the guard.'
           round: 27
       blocked: true
+    - "n": 28
+      timestamp: "2026-09-01T13:42:45-07:00"
+      agent: claude
+      dispose:
+        - id: BR-15
+          disposition: addressed
+          note: Five config sites dropped; get_cliproxy_strategy consults the source as a CORRECTION step with a documented five-step precedence and four new spec cases.
+          round: 28
+        - id: BR-16
+          disposition: addressed
+          note: atlas/providers/cliproxy-managed.md:66-67 now names cliproxy_catalog.lua as the pure core; residual, the `## Pieces` inventory at :16-34 still lists only three modules.
+          round: 28
+        - id: BR-17
+          disposition: not-addressed
+          note: init.lua:4339 and :1337 are still the same four-line registration with divergent clobber rules; no shared helper.
+          round: 28
+        - id: BR-18
+          disposition: not-addressed
+          note: plan.md:1492-1495 still runs four identical commands, :1540-1541 two; no prose enumeration of what each step covers.
+          round: 28
+        - id: BR-29
+          disposition: not-addressed
+          note: is_managed gate, repaint identity and the catalog_path mkdir are fixed; the chained GETs (cliproxy.lua:1722-1723) and pending() vs SKIP (conformance_spec:235,254) remain.
+          round: 28
+        - id: BR-35
+          disposition: not-addressed
+          note: scope moved global to parley_buffer, so it renders under Buffer rather than Global; no agent_picker scope added and agent_picker_mappings is still absent from config.lua.
+          round: 28
+        - id: BR-69
+          disposition: not-addressed
+          note: 'Two claims false at HEAD: plan.md:2255-2257 "0 stacked blocks remain, checked mechanically" (three remain) and :2158-2159 "annotated in place" (plan.md:1355 unannotated).'
+          round: 28
+        - id: BR-71
+          disposition: not-addressed
+          note: float_picker.lua:1706-1714 still carries both paragraphs.
+          round: 28
+        - id: BR-72
+          disposition: not-addressed
+          note: 'MEASURED: moving `_force_stale = false` back to the top of _write_catalog leaves all 20 files under SPEC=providers/cliproxy-managed green. Write failure still unlogged (:1584) and the boolean still discarded at :1746.'
+          round: 28
+        - id: BR-80
+          disposition: not-addressed
+          note: 'MEASURED at HEAD: cliproxy.lua:494-514 (@param login/@param cb above credential_health_across), :645-665 (warm_catalog doubled), :1356-1371 (recover''s superseded paragraph). The @param-vs-signature lint was not written.'
+          round: 28
+        - id: BR-87
+          disposition: not-addressed
+          note: plan.md:1355 still reads "the LEAST healthy candidate is the one that plausibly failed" with no annotation.
+          round: 28
+        - id: BR-90
+          disposition: addressed
+          note: Rule stated at cliproxy_config.lua:186-191, contract in the @return at :203, and cliproxy_config_spec.lua:411-421 asserts native-first for every owner by iterating the enumeration.
+          round: 28
+        - id: BR-91
+          disposition: not-addressed
+          note: 'The bare-name grep is gone and the stale resolve_login_provider row was caught, but the fourth alternative `%s *=` is not a definition form: `series` is satisfied by `m.series =` in cliproxy.lua:1566, `parse` by drill_in.lua, `Model` by exchange_model.lua. The guard also ignores the row''s declared path.'
+          round: 28
+        - id: BR-93
+          disposition: addressed
+          note: _repair_budget_sec carries CURL_MAX_TIME * MAX_CANDIDATE_CHANNELS and recover truncates; budget spec green with 7s headroom. See the new finding on what the cap costs and that it is untested.
+          round: 28
+        - id: BR-95
+          disposition: not-addressed
+          note: init.lua:4398 is still a bare error(); the seven sibling operator-facing raises use error(msg, 0).
+          round: 28
+        - id: BR-96
+          disposition: not-addressed
+          note: cliproxy_recovery_e2e_spec.lua:109 still has the stray leading space; chat_respond_spec.lua:1296-1309 is still at column 0 inside the describe.
+          round: 28
+      findings:
+        - id: BR-101
+          severity: Important
+          title: MAX_CANDIDATE_CHANNELS drops aistudio and antigravity from google diagnosis, its justifying comment is false for that owner, and no test reaches the path
+          detail: |-
+            cliproxy.lua:1376-1378 truncates the preference list from the tail, so
+            OWNER_CHANNELS.google collapses to { gemini-cli, gemini }. An operator whose
+            google credential lives in aistudio and expires gets both survivors as
+            `missing`, could_have_served disqualifies both, and likeliest_culprit falls
+            through to readings[1] (cliproxy_auth.lua:237) reporting "gemini-cli: no
+            credential is loaded" for a credential that exists and failed — the wrong-state
+            diagnosis M4's Done-when forbids. The comment at :34-36 justifies the constant as
+            "the NATIVE channel first, with one cross-vendor fallback behind it", which is
+            untrue for google, the only owner with more than two natives and the one whose
+            four channels motivated the multiplier. No fixture drives a google-owned row
+            through recover (cliproxy_recovery_e2e_spec.lua:131 is anthropic), so deleting
+            the truncation changes no test outcome and cliproxy_budget_spec only sums the
+            declared table. This is the 2nd finding in family `envelope-not-rederived`; the
+            rule: when a budget is balanced by capping a list that other decisions read, the
+            cap is a behavioural change and needs its own test and its own revision entry,
+            not just a term in the arithmetic.
+          family: envelope-not-rederived
+          round: 28
+        - id: BR-102
+          severity: Minor
+          title: The close round's two Important findings each produced a reusable rule and workshop/lessons.md gained neither
+          detail: |-
+            BR-90 ("a list whose order is read as a decision must declare that order as its
+            contract and assert it") and BR-93 ("a change that adds a repeated step to a
+            budgeted path must add the term in the same change") are both stated only in code
+            comments; commit 2acba1a does not touch workshop/lessons.md. This is the 3rd
+            finding in family `lesson-not-recorded` (AGENTS.md section 4).
+          family: lesson-not-recorded
+          round: 28
+        - id: BR-103
+          severity: Minor
+          title: atlas/providers/agents.md:6 still names Proxy-GPT5.4 and Claude-Code, neither of which exists in config.lua at HEAD
+          detail: |-
+            The same file gained fourteen lines this window for the live-model section, so the
+            stale default-agent inventory directly above it was read past. This is the 5th
+            finding in family `atlas-not-updated-for-new-surface`; the rule: when a diff edits
+            an atlas file, the surrounding claims in that file are in scope for the same
+            verification as the added ones.
+          family: atlas-not-updated-for-new-surface
+          round: 28
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#205 (boundary-review)
@@ -3341,10 +3455,61 @@ overstates what is measured.
 in workshop/lessons.md.
 - BR-100 — addressed — Verified by probe: appending `M._brand_new_seam = catalog_path` to cliproxy.lua now reddens the guard.
 
+## Round 28 — 2026-09-01T13:42:45-07:00 (claude) — BLOCKED
+
+### Disposed
+
+- BR-15 — addressed — Five config sites dropped; get_cliproxy_strategy consults the source as a CORRECTION step with a documented five-step precedence and four new spec cases.
+- BR-16 — addressed — atlas/providers/cliproxy-managed.md:66-67 now names cliproxy_catalog.lua as the pure core; residual, the `## Pieces` inventory at :16-34 still lists only three modules.
+- BR-17 — not-addressed — init.lua:4339 and :1337 are still the same four-line registration with divergent clobber rules; no shared helper.
+- BR-18 — not-addressed — plan.md:1492-1495 still runs four identical commands, :1540-1541 two; no prose enumeration of what each step covers.
+- BR-29 — not-addressed — is_managed gate, repaint identity and the catalog_path mkdir are fixed; the chained GETs (cliproxy.lua:1722-1723) and pending() vs SKIP (conformance_spec:235,254) remain.
+- BR-35 — not-addressed — scope moved global to parley_buffer, so it renders under Buffer rather than Global; no agent_picker scope added and agent_picker_mappings is still absent from config.lua.
+- BR-69 — not-addressed — Two claims false at HEAD: plan.md:2255-2257 "0 stacked blocks remain, checked mechanically" (three remain) and :2158-2159 "annotated in place" (plan.md:1355 unannotated).
+- BR-71 — not-addressed — float_picker.lua:1706-1714 still carries both paragraphs.
+- BR-72 — not-addressed — MEASURED: moving `_force_stale = false` back to the top of _write_catalog leaves all 20 files under SPEC=providers/cliproxy-managed green. Write failure still unlogged (:1584) and the boolean still discarded at :1746.
+- BR-80 — not-addressed — MEASURED at HEAD: cliproxy.lua:494-514 (@param login/@param cb above credential_health_across), :645-665 (warm_catalog doubled), :1356-1371 (recover's superseded paragraph). The @param-vs-signature lint was not written.
+- BR-87 — not-addressed — plan.md:1355 still reads "the LEAST healthy candidate is the one that plausibly failed" with no annotation.
+- BR-90 — addressed — Rule stated at cliproxy_config.lua:186-191, contract in the @return at :203, and cliproxy_config_spec.lua:411-421 asserts native-first for every owner by iterating the enumeration.
+- BR-91 — not-addressed — The bare-name grep is gone and the stale resolve_login_provider row was caught, but the fourth alternative `%s *=` is not a definition form: `series` is satisfied by `m.series =` in cliproxy.lua:1566, `parse` by drill_in.lua, `Model` by exchange_model.lua. The guard also ignores the row's declared path.
+- BR-93 — addressed — _repair_budget_sec carries CURL_MAX_TIME * MAX_CANDIDATE_CHANNELS and recover truncates; budget spec green with 7s headroom. See the new finding on what the cap costs and that it is untested.
+- BR-95 — not-addressed — init.lua:4398 is still a bare error(); the seven sibling operator-facing raises use error(msg, 0).
+- BR-96 — not-addressed — cliproxy_recovery_e2e_spec.lua:109 still has the stray leading space; chat_respond_spec.lua:1296-1309 is still at column 0 inside the describe.
+
+### Raised
+
+- **BR-101** [Important] `envelope-not-rederived` MAX_CANDIDATE_CHANNELS drops aistudio and antigravity from google diagnosis, its justifying comment is false for that owner, and no test reaches the path
+  cliproxy.lua:1376-1378 truncates the preference list from the tail, so
+  OWNER_CHANNELS.google collapses to { gemini-cli, gemini }. An operator whose
+  google credential lives in aistudio and expires gets both survivors as
+  `missing`, could_have_served disqualifies both, and likeliest_culprit falls
+  through to readings[1] (cliproxy_auth.lua:237) reporting "gemini-cli: no
+  credential is loaded" for a credential that exists and failed — the wrong-state
+  diagnosis M4's Done-when forbids. The comment at :34-36 justifies the constant as
+  "the NATIVE channel first, with one cross-vendor fallback behind it", which is
+  untrue for google, the only owner with more than two natives and the one whose
+  four channels motivated the multiplier. No fixture drives a google-owned row
+  through recover (cliproxy_recovery_e2e_spec.lua:131 is anthropic), so deleting
+  the truncation changes no test outcome and cliproxy_budget_spec only sums the
+  declared table. This is the 2nd finding in family `envelope-not-rederived`; the
+  rule: when a budget is balanced by capping a list that other decisions read, the
+  cap is a behavioural change and needs its own test and its own revision entry,
+  not just a term in the arithmetic.
+- **BR-102** [Minor] `lesson-not-recorded` The close round's two Important findings each produced a reusable rule and workshop/lessons.md gained neither
+  BR-90 ("a list whose order is read as a decision must declare that order as its
+  contract and assert it") and BR-93 ("a change that adds a repeated step to a
+  budgeted path must add the term in the same change") are both stated only in code
+  comments; commit 2acba1a does not touch workshop/lessons.md. This is the 3rd
+  finding in family `lesson-not-recorded` (AGENTS.md section 4).
+- **BR-103** [Minor] `atlas-not-updated-for-new-surface` atlas/providers/agents.md:6 still names Proxy-GPT5.4 and Claude-Code, neither of which exists in config.lua at HEAD
+  The same file gained fourteen lines this window for the live-model section, so the
+  stale default-agent inventory directly above it was read past. This is the 5th
+  finding in family `atlas-not-updated-for-new-surface`; the rule: when a diff edits
+  an atlas file, the surrounding claims in that file are in scope for the same
+  verification as the added ones.
+
 ## Open findings
 
-- **BR-15** [Important] `single-source-not-enforced` cliproxy_default_web_search_strategy is not in the resolution chain; five config sites still hand-state what it derives
-- **BR-16** [Important] `atlas-not-updated-for-new-surface` atlas/providers/cliproxy-managed.md gains no entry for cliproxy_catalog.lua, the third pure module of the feature it maps
 - **BR-17** [Minor] `duplicated-logic-not-extracted` The agent-registration block is copy-pasted between register_live_agent and the refresh_state restore, and the copies already disagree
 - **BR-18** [Minor] `plan-command-does-not-run` The BR-9 referent sweep collapsed four distinct spec keys into four identical commands, destroying which surfaces the step covers
 - **BR-29** [Minor] `stated-design-not-implemented` Assorted envelope and idiom nits: is_managed gate, 4s chained budget, repaint-under-cursor, pending vs SKIP
@@ -3354,8 +3519,9 @@ in workshop/lessons.md.
 - **BR-72** [Important] `retry-not-rate-limited` `_force_stale` is cleared at the top of `_write_catalog`, before the write it is paid for can fail
 - **BR-80** [Important] `docs-insert-orphans-section` Three stacked doc blocks precede credential_health_across, one documenting a `prefer` parameter that no longer exists
 - **BR-87** [Minor] `stated-design-not-implemented` Plan Task 4.1 still presents "the LEAST healthy candidate is the one that plausibly failed" as the design
-- **BR-90** [Important] `one-value-two-decisions` OWNER_CHANNELS' order is documented as "sorted" but read as a preference ranking at three sites, so antigravity outranks the native channel for every owner it serves
 - **BR-91** [Important] `test-title-overstates-guard` The plan-to-code arch guard matches a textual occurrence, so a deleted function stays green because a spec comment mentions its name
-- **BR-93** [Important] `envelope-not-rederived` Serializing the fan-out added up to three probes to the budgeted recovery path, and M._repair_budget_sec gained no term
 - **BR-95** [Minor] `ui-path-log-level` get_agent's empty-roster raise uses bare error(), so the operator sees an init.lua:4398 source prefix
 - **BR-96** [Minor] `style-drift-in-diff` Two indentation regressions introduced by this window
+- **BR-101** [Important] `envelope-not-rederived` MAX_CANDIDATE_CHANNELS drops aistudio and antigravity from google diagnosis, its justifying comment is false for that owner, and no test reaches the path
+- **BR-102** [Minor] `lesson-not-recorded` The close round's two Important findings each produced a reusable rule and workshop/lessons.md gained neither
+- **BR-103** [Minor] `atlas-not-updated-for-new-surface` atlas/providers/agents.md:6 still names Proxy-GPT5.4 and Claude-Code, neither of which exists in config.lua at HEAD

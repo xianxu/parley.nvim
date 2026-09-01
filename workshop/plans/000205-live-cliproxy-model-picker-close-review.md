@@ -264,3 +264,210 @@ dispose:
     note: |
       Verified by probe: appending `M._brand_new_seam = catalog_path` to cliproxy.lua now reddens the guard.
 ```
+
+---
+
+## Re-review — 2026-09-01T13:42:45-07:00 (FIX-THEN-SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 205 — live cliproxy model picker; retire hardcoded model lists |
+| repo | parley.nvim |
+| issue file | workshop/issues/000205-live-cliproxy-model-picker.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 42d72b9d2f12bad462d847d8e5b24876a1a6a63b..2acba1adbdc84d0499da23ebd5ee88a7d2e87535 |
+| command | sdlc close --issue 205 |
+| reviewer | claude |
+| timestamp | 2026-09-01T13:42:45-07:00 |
+| verdict | FIX-THEN-SHIP |
+
+## Review
+
+```verdict
+verdict: FIX-THEN-SHIP
+confidence: high
+```
+
+The feature is delivered and the code is in good shape: `make test` is green both on the working tree and on the *committed* HEAD tree (I ran it both ways), the pure core is genuinely pure and fixture-driven, the live-catalog path replaces `oauth-model-alias` end to end, and the two Importants the last commit set out to fix (BR-90 preference order, BR-93 budget term) are properly fixed *with* the enumeration and per-owner assertion the rule demanded. What keeps this from SHIP is a three-part pattern this gate exists to catch: (1) the final commit's candidate cap (`MAX_CANDIDATE_CHANNELS = 2`) silently narrows auth diagnosis for google-owned models — it drops `aistudio` and `antigravity` from candidacy before any credential is read, its justifying comment is false for the one owner that motivated it, and nothing exercises the >2-candidate path; (2) BR-72's fix is still unpinned — I moved `_force_stale = false` back to the top of `_write_catalog` and all 20 cliproxy spec files stayed green; and (3) two completion claims are measurably false at HEAD (`031cf82` and plan.md:2255 say "0 stacked doc blocks remain across the three cliproxy modules, checked mechanically" — three remain; plan.md:2159 says Task 4.1 is "annotated in place" — plan.md:1355 is unannotated). Those two claims will be copied into the close record if they aren't struck first.
+
+### 1. Strengths
+
+- **BR-90 was answered as a class, not an instance.** `cliproxy_config.lua:186-191` states the ordering *contract* in prose, `channels_for_owner`'s `@return` declares it (`:203`), and `cliproxy_config_spec.lua:411-421` asserts native-first for **every** owner by iterating the enumeration rather than spot-checking two rows. This is exactly the shape the family escalation asked for.
+- **The BR-15 wiring resisted three over-reaches and the tests record each one.** `providers.lua:120-168` documents a five-step precedence, and `cliproxy_catalog_spec.lua:410-519` pins each step separately: a provider-level `none` survives derivation, `openai_search_model` survives for a gpt model, and nothing is invented when nothing is configured. The behaviour change (claude cliproxy agents now default to the anthropic wire) is declared as one in the atlas and plan rather than smuggled in as a DRY cleanup.
+- **ARCH-PURE is real here, not asserted.** `cliproxy_catalog.lua` (242 lines, zero IO), `could_have_served`/`likeliest_culprit`/`healthiest` in `cliproxy_auth.lua:204-254`, `catalog_stale` in `cliproxy_config.lua`, and `_view_for`/`_build_items`/`_identity`/`_select` in `agent_picker.lua` are all callable from a unit test with no seams. `_view_for`'s own docstring (`agent_picker.lua:148-152`) names the failure mode that forced the extraction — a spec that re-implemented the dedup and therefore couldn't fail.
+- **ARCH-MOCK is satisfied at both ends.** `tests/fixtures/fake_cliproxy` grew `/v1beta/models` *and* `cliproxy_conformance_spec.lua:233-269` checks the fake's model against the real binary, including that the two routes actually join on id.
+- **`catalog_cached` sanitizes at one boundary** (`cliproxy.lua:1556-1568`) instead of nil-checking per consumer, and memoizes on mtime so the keystroke path doesn't re-read and re-`mkdir`.
+
+### 2. Critical findings
+
+None.
+
+### 3. Important findings
+
+**I1 — `MAX_CANDIDATE_CHANNELS = 2` drops eligible channels for google-owned models, and its justifying comment is false for that owner** (`lua/parley/cliproxy.lua:33-37`, truncation at `:1376-1378`).
+
+`OWNER_CHANNELS.google = { "gemini-cli", "gemini", "aistudio", "antigravity" }`. The cap truncates from the tail, leaving `{ gemini-cli, gemini }`, so `aistudio` — a first-class channel with its own `CHANNEL_LOGIN` entry (`cliproxy_config.lua:145`) — is never read. An operator whose google credential lives in `aistudio` and expires gets both remaining readings as `missing`; `could_have_served` disqualifies both; `likeliest_culprit` falls through to `readings[1]` (`cliproxy_auth.lua:237-238`) and reports **`gemini-cli`: no credential is loaded** for a credential that exists and failed. That is the #197 wrong-account/wrong-state symptom reached by a fourth route — the one the Done-when ("credential health picks between them rather than the code guessing") forbids. The comment at `:34-36` claims the cap keeps "the NATIVE channel first … with one cross-vendor fallback behind it"; for google it keeps two natives and drops the cross-vendor one entirely, so the sentence is untrue for precisely the owner whose four channels made the multiplier necessary. Nothing tests it: no fixture puts a `google`-owned row through `recover` (`cliproxy_recovery_e2e_spec.lua:131` is the only catalog seed and it is `anthropic`), so deleting `:1376-1378` changes no test outcome, and `cliproxy_budget_spec.lua` only sums the declared table. Fix sketch: don't cap by list position. Either (a) drop `poll_healthy`'s slack or `port_release` so `auth_files = CURL_MAX_TIME * 4` fits the 5s headroom floor, or (b) keep the cap but select *which* candidates survive by login-provider coverage (one per distinct `channel_login`) rather than by index, and correct the comment. Either way add a spec that drives `recover` with a `google`-owned catalog row and asserts the channel actually holding the credential is the one named — that spec must go red when the truncation is removed or reintroduced.
+
+**I2 — BR-72's fix is not pinned by any test; the write failure is still silent and its boolean discarded** (`lua/parley/cliproxy.lua:1579-1596`, caller at `:1746`).
+
+The flag now clears in the right place (`:1592`, after the write), but the rule BR-72 asked for was the enumeration + a guard, and neither landed. Measured this round: moving `_force_stale = false` to the top of `_write_catalog` and deleting the later clear leaves **all 20 files** under `make test-spec SPEC=providers/cliproxy-managed` green (0 failures, 0 errors). The early return at `:1584-1586` logs nothing, and `:1746` discards the boolean, so an unwritable data dir consumes a login's invalidation, stores nothing, and the operator waits out the TTL with no trace anywhere. Fix sketch: `logger.debug` on the `io.open` failure; have the caller honour the `false`; and add a spec that points `_set_data_dir` at a read-only path, calls `invalidate_catalog()`, drives a write, and asserts `catalog_stale()` is still true.
+
+**I3 — three stacked doc blocks remain in `cliproxy.lua`, one documenting parameters the function does not have, while the commit and plan claim zero remain.**
+
+`cliproxy.lua:494-514`: `credential_health_for_login`'s docstring (ending `---@param login` / `---@param cb`) sits directly above `function M.credential_health_across(channels, choose, cb)` — the exact instance BR-80 named four rounds ago; `credential_health_for_login` itself (`:585`) has none. `cliproxy.lua:645-665`: `warm_catalog` carries two full paragraphs saying the same thing. `cliproxy.lua:1356-1371`: `recover`'s superseded "fall back to resolving the model through oauth-model-alias" paragraph still sits above its replacement. **This is the 4th finding in family `docs-insert-orphans-section`.** Do not patch the three sites again — the rule was written down at `workshop/lessons.md:962-964`, restated, and re-broken by the range that appends to that file, so restatement has failed three times. The deliverable is the mechanical check BR-80 specified and the last round wrote and then did not commit: lint any `function M.x(...)` whose immediately-preceding `---@param` block names an identifier absent from the signature, wired into `tests/arch/`. It fires on `:501` on the first run.
+
+**I4 — the plan→code guard now requires an assignment, but the fourth alternative accepts any table-field write anywhere in the tree** (`tests/arch/single_source_sweeps_spec.lua:143`).
+
+The pattern is `(function M\.%s\b|M\.%s *=|local function %s\b|%s *=)`. The first three are definition forms; the fourth, bare `%s *=`, is not, and it is load-bearing today. Measured: a row naming `series` is satisfied by `m.series = type(m.series) …` at `cliproxy.lua:1566`; a row naming `parse` is satisfied by `function M.parse` in the unrelated `lua/parley/drill_in.lua`; the `Model` (record) row is satisfied by `lua/parley/exchange_model.lua`. So deleting `cliproxy_catalog.M.series` leaves the guard green — the drift it exists to catch. The guard also never checks the row's *declared path*, which is why an unrelated module can satisfy it. **This is the 7th finding in family `test-title-overstates-guard`.** The rule that covers all seven: *an agreement check must match the definition form at the declared location, and must be verified by injection in both directions before it is claimed to have teeth.* Fix sketch: drop the bare-`=` alternative, restrict the grep to the `.lua` path named in the same table row, and handle non-function rows (`Model` (record), `agent_picker` live section) by an explicit row marker rather than by loosening the matcher for everything.
+
+**I5 — two completion claims are false at HEAD and will be copied into the close record** (`plan.md:2255-2257`, `plan.md:2158-2159`; commit `031cf82` body).
+
+"Every stacked doc block is collapsed — 0 remain across the three cliproxy modules, checked mechanically" — three remain (I3). "Task 4.1's superseded 'least healthy candidate' phrasing is annotated in place" — `plan.md:1355` still reads "the LEAST healthy candidate is the one that plausibly failed" with no annotation. **This is the 7th finding in family `stated-design-not-implemented`**, and the fifth and sixth overstated claims across three rounds. Do not simply rewrite the two bullets. The rule, already at `workshop/lessons.md:914-925` and violated by the window that added it: *a `## Revisions` bullet or commit body claiming a finding fixed must name the mutation that goes red and the spec that catches it; a claim with neither is a claim about intent, and must be written as one ("attempted", "partially") or omitted.* Making that mechanical is cheap here — the close-gate ledger already records a `disposition` per finding; the plan's Revisions should cite the ledger id and disposition rather than restating the outcome in prose.
+
+### 4. Minor findings
+
+- **BR-17 still open.** `init.lua:4339` (`M.agents[name] = agent`) and `:1337` (`M.agents[name] = M.agents[name] or agent`) are the same four-line registration with divergent clobber rules — a live pick replaces a same-named configured agent for the session but not after a restart. One `M._register_agent(agent)`, one clobber decision.
+- **BR-18 still open.** `plan.md:1492-1495` runs `make test-spec SPEC=providers/cliproxy-managed` four identical times and `:1540-1541` twice; the enumeration of what those steps cover is still destroyed. `plan.md:1485-1487` also still cites `resolve_login_provider` at `cliproxy_config.lua:218`, deleted this window.
+- **BR-29 residuals.** The two catalog GETs are still chained (`cliproxy.lua:1722-1723`), so the worst case is 2×`CURL_MAX_TIME`, not the stated 2s; `cliproxy_conformance_spec.lua:235,254` still use `pending()` where the file's five siblings `print("SKIP: …")`.
+- **BR-35 residual.** The `<C-a>` row moved from `scope = "global"` to `"parley_buffer"` (`keybinding_registry.lua:759`), so it no longer renders under Global — but no `agent_picker` scope was added, so it now renders under **Buffer**, where `<C-a>` is Vim's increment and parley binds nothing. The three sibling finders each have their own standalone scope. `agent_picker_mappings` is also still absent from `config.lua` (`chat_finder_mappings`/`note_finder_mappings`/`issue_finder_mappings` are all there), so the documented `config_key` has no example.
+- **BR-71 still open.** `float_picker.lua:1706-1714` — two stacked paragraphs in `update`'s numeric branch, the second explaining the removed `sel_idx` write as if the first weren't there.
+- **BR-95 still open.** `init.lua:4398` is a bare `error(...)`; the seven sibling operator-facing raises in `lua/parley/` use `error(msg, 0)`.
+- **BR-96 still open.** `cliproxy_recovery_e2e_spec.lua:109` has a stray leading space; `chat_respond_spec.lua:1296-1309` is de-indented to column 0 inside its `describe`.
+- **`atlas/providers/agents.md:6`** — the "Default agents" line names `Proxy-GPT5.4` and `Claude-Code`, neither of which exists in `config.lua` at HEAD, in the file this window edited for the roster feature.
+- **Plan Core-concepts Integration table has a duplicate row** — `invalidate_catalog / _reset_catalog_clock / _set_failed_attempt_at` appears at both `plan.md:76` and `:82`.
+- **`workshop/lessons.md` gained nothing from this round.** BR-90 and BR-93 each produced a crisply reusable rule (a list read as a decision must declare and assert its order; a change adding a repeated step to a budgeted path must add the term in the same change) and both live only in code comments. **This is the 3rd finding in family `lesson-not-recorded`.**
+- **`chat_respond_spec.lua:1296-1299`** says the cases "named `ToolSonnet`, which stopped shipping" — `ToolSonnet` ships at `config.lua:317` on the committed tree; the comment describes the operator's uncommitted roster deletion.
+
+### 5. Test coverage notes
+
+Coverage is strong where the issue was reviewed hardest: `cliproxy_catalog_spec` drives every documented `curate` render as an equality keyed by its spec string, `picker_items_spec` covers overlap/unknown-provider/ownerless rendering through the production `_view_for`, `live_agent_state_spec` covers the restart restore, and `providers_pre_query_spec` + `cliproxy_catalog_spec.lua:425-478` pin the warm at the seam production actually takes for **both** `manage` modes. The gaps are all at the newest edges: the candidate cap (I1), the catalog write failure (I2), and the arch guard's own teeth (I4) — i.e. the three things added or last touched in the final two commits, each of which is the sort of guard that passes every suite while doing nothing.
+
+### 6. Architectural notes
+
+- **ARCH-DRY — flag (minor).** `agent_name`, `cliproxy_route`, `CLIPROXY_STRATEGIES`, `endpoint_opts` and `golden_fixture.lua` are all proper consolidations with guards. The one live duplication is BR-17's two registration blocks, which already disagree.
+- **ARCH-PURE — pass.** See Strengths. No test in the diff needs a mock to run a "pure" entity.
+- **ARCH-PURPOSE — flag.** The purpose is delivered, but I1 is the easy-win pattern in miniature: a budget problem was closed by capping the list rather than by re-deriving what the path must still cover, and the capped-away members are exactly the ones the Done-when ("credential health picks between them") promised would be read.
+- **ARCH-MOCK — pass.** Stateful process fake behind the same seam, plus a live conformance check that compares the fake's `/v1beta/models` shape and the join against the real binary.
+- **ARCH-CONSTRAINTS — flag.** The declared envelope is now internally consistent (`auth_files = CURL_MAX_TIME * MAX_CANDIDATE_CHANNELS`, headroom 7s of 30s), but its key premise — that the code truncates to 2 — is enforced at one line no test reaches (I1), and the picker's refresh still chains its two GETs.
+
+### 7. Plan revision recommendations
+
+1. **Strike the two false completion claims.** `plan.md:2255-2257` ("0 remain across the three cliproxy modules, checked mechanically") and `plan.md:2158-2159` ("annotated in place") — replace each with what is actually true, citing the ledger disposition rather than restating an outcome.
+2. **Annotate Task 4.1 in place.** `plan.md:1355` still presents "the LEAST healthy candidate is the one that plausibly failed" as the design; add the inline pointer to the superseding C1/BR-75 revision so a reader arriving at Task 4.1 first doesn't get the rule the code was fixed to stop implementing.
+3. **Add a `## Revisions` entry for the candidate cap.** `MAX_CANDIDATE_CHANNELS = 2` is a behavioural narrowing of M4's diagnosis contract that no plan section describes; it must say which channels it drops per owner and why that is acceptable (or record I1's fix).
+4. **Fix the referent rot in the M4 steps.** `plan.md:1485-1487` cites `resolve_login_provider` at a file:line deleted this window; `plan.md:1492-1495`/`:1540-1541` collapse distinct spec keys into identical commands — emit the command once and keep the enumeration of what it covers in prose.
+5. **De-duplicate the Integration table** (`plan.md:76` and `:82` are the same row).
+
+```findings
+dispose:
+  - id: BR-15
+    disposition: addressed
+    note: |
+      Five config sites dropped; get_cliproxy_strategy consults the source as a CORRECTION step with a documented five-step precedence and four new spec cases.
+  - id: BR-16
+    disposition: addressed
+    note: |
+      atlas/providers/cliproxy-managed.md:66-67 now names cliproxy_catalog.lua as the pure core; residual, the `## Pieces` inventory at :16-34 still lists only three modules.
+  - id: BR-17
+    disposition: not-addressed
+    note: |
+      init.lua:4339 and :1337 are still the same four-line registration with divergent clobber rules; no shared helper.
+  - id: BR-18
+    disposition: not-addressed
+    note: |
+      plan.md:1492-1495 still runs four identical commands, :1540-1541 two; no prose enumeration of what each step covers.
+  - id: BR-29
+    disposition: not-addressed
+    note: |
+      is_managed gate, repaint identity and the catalog_path mkdir are fixed; the chained GETs (cliproxy.lua:1722-1723) and pending() vs SKIP (conformance_spec:235,254) remain.
+  - id: BR-35
+    disposition: not-addressed
+    note: |
+      scope moved global to parley_buffer, so it renders under Buffer rather than Global; no agent_picker scope added and agent_picker_mappings is still absent from config.lua.
+  - id: BR-69
+    disposition: not-addressed
+    note: |
+      Two claims false at HEAD: plan.md:2255-2257 "0 stacked blocks remain, checked mechanically" (three remain) and :2158-2159 "annotated in place" (plan.md:1355 unannotated).
+  - id: BR-71
+    disposition: not-addressed
+    note: |
+      float_picker.lua:1706-1714 still carries both paragraphs.
+  - id: BR-72
+    disposition: not-addressed
+    note: |
+      MEASURED: moving `_force_stale = false` back to the top of _write_catalog leaves all 20 files under SPEC=providers/cliproxy-managed green. Write failure still unlogged (:1584) and the boolean still discarded at :1746.
+  - id: BR-80
+    disposition: not-addressed
+    note: |
+      MEASURED at HEAD: cliproxy.lua:494-514 (@param login/@param cb above credential_health_across), :645-665 (warm_catalog doubled), :1356-1371 (recover's superseded paragraph). The @param-vs-signature lint was not written.
+  - id: BR-87
+    disposition: not-addressed
+    note: |
+      plan.md:1355 still reads "the LEAST healthy candidate is the one that plausibly failed" with no annotation.
+  - id: BR-90
+    disposition: addressed
+    note: |
+      Rule stated at cliproxy_config.lua:186-191, contract in the @return at :203, and cliproxy_config_spec.lua:411-421 asserts native-first for every owner by iterating the enumeration.
+  - id: BR-91
+    disposition: not-addressed
+    note: |
+      The bare-name grep is gone and the stale resolve_login_provider row was caught, but the fourth alternative `%s *=` is not a definition form: `series` is satisfied by `m.series =` in cliproxy.lua:1566, `parse` by drill_in.lua, `Model` by exchange_model.lua. The guard also ignores the row's declared path.
+  - id: BR-93
+    disposition: addressed
+    note: |
+      _repair_budget_sec carries CURL_MAX_TIME * MAX_CANDIDATE_CHANNELS and recover truncates; budget spec green with 7s headroom. See the new finding on what the cap costs and that it is untested.
+  - id: BR-95
+    disposition: not-addressed
+    note: |
+      init.lua:4398 is still a bare error(); the seven sibling operator-facing raises use error(msg, 0).
+  - id: BR-96
+    disposition: not-addressed
+    note: |
+      cliproxy_recovery_e2e_spec.lua:109 still has the stray leading space; chat_respond_spec.lua:1296-1309 is still at column 0 inside the describe.
+findings:
+  - id: new
+    severity: Important
+    family: envelope-not-rederived
+    title: |
+      MAX_CANDIDATE_CHANNELS drops aistudio and antigravity from google diagnosis, its justifying comment is false for that owner, and no test reaches the path
+    detail: |
+      cliproxy.lua:1376-1378 truncates the preference list from the tail, so
+      OWNER_CHANNELS.google collapses to { gemini-cli, gemini }. An operator whose
+      google credential lives in aistudio and expires gets both survivors as
+      `missing`, could_have_served disqualifies both, and likeliest_culprit falls
+      through to readings[1] (cliproxy_auth.lua:237) reporting "gemini-cli: no
+      credential is loaded" for a credential that exists and failed — the wrong-state
+      diagnosis M4's Done-when forbids. The comment at :34-36 justifies the constant as
+      "the NATIVE channel first, with one cross-vendor fallback behind it", which is
+      untrue for google, the only owner with more than two natives and the one whose
+      four channels motivated the multiplier. No fixture drives a google-owned row
+      through recover (cliproxy_recovery_e2e_spec.lua:131 is anthropic), so deleting
+      the truncation changes no test outcome and cliproxy_budget_spec only sums the
+      declared table. This is the 2nd finding in family `envelope-not-rederived`; the
+      rule: when a budget is balanced by capping a list that other decisions read, the
+      cap is a behavioural change and needs its own test and its own revision entry,
+      not just a term in the arithmetic.
+  - id: new
+    severity: Minor
+    family: lesson-not-recorded
+    title: |
+      The close round's two Important findings each produced a reusable rule and workshop/lessons.md gained neither
+    detail: |
+      BR-90 ("a list whose order is read as a decision must declare that order as its
+      contract and assert it") and BR-93 ("a change that adds a repeated step to a
+      budgeted path must add the term in the same change") are both stated only in code
+      comments; commit 2acba1a does not touch workshop/lessons.md. This is the 3rd
+      finding in family `lesson-not-recorded` (AGENTS.md section 4).
+  - id: new
+    severity: Minor
+    family: atlas-not-updated-for-new-surface
+    title: |
+      atlas/providers/agents.md:6 still names Proxy-GPT5.4 and Claude-Code, neither of which exists in config.lua at HEAD
+    detail: |
+      The same file gained fourteen lines this window for the live-model section, so the
+      stale default-agent inventory directly above it was read past. This is the 5th
+      finding in family `atlas-not-updated-for-new-surface`; the rule: when a diff edits
+      an atlas file, the surrounding claims in that file are in scope for the same
+      verification as the added ones.
+```

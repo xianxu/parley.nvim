@@ -198,6 +198,30 @@ local OWNER_CHANNELS = {
     xai         = { "xai" },
 }
 
+--- Trim a candidate list to `max` while keeping the two most INFORMATIVE ones:
+--- the native channel (first, by preference order) and the cross-vendor
+--- re-server (last). Dropping from the tail looked right and silently removed
+--- antigravity for google — the very fallback the cap's rationale promised to
+--- keep, since google is the one owner with more than two candidates.
+---
+--- Pure, so the choice is testable without the recovery path around it.
+---@param channels string[] # in preference order
+---@param max number
+---@return string[]
+function M.bound_candidates(channels, max)
+    if #channels <= max then
+        return vim.deepcopy(channels)
+    end
+    local out = { channels[1] }
+    for i = #channels, 2, -1 do
+        if #out >= max then
+            break
+        end
+        out[#out + 1] = channels[i]
+    end
+    return out
+end
+
 --- Candidate channels for a catalog row's `owned_by`.
 ---@param owner string
 ---@return string[] # in PREFERENCE order (native channel first); empty when unknown
