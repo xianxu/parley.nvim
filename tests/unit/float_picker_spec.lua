@@ -1182,12 +1182,20 @@ describe("float_picker update selection", function()
     it("lands on the right row even with a query filtering the list", function()
         -- The bug this pins: sel_idx indexes the FILTERED list, so an index
         -- computed against the caller's full items list points somewhere else
-        -- entirely as soon as a query is active — the case where a background
-        -- repaint is most likely to move the cursor under the operator.
-        local h = open(items("aaa-one", "bbb-two", "aaa-three", "bbb-four"), "bbb")
-        h.update(items("new-row", "aaa-one", "bbb-two", "aaa-three", "bbb-four"),
-            nil, "bbb-four")
-        assert.equals("bbb-four", h.selected().value)
+        -- as soon as a query is active — the case where a background repaint is
+        -- most likely to move the cursor under the operator.
+        --
+        -- The target must NOT be the last filtered row: get_selected_item()
+        -- clamps with math.min(sel_idx, #filtered), so an out-of-range
+        -- items-space index lands on the last row anyway and the bug passes.
+        -- (It did exactly that on first writing — this test was claimed as
+        -- mutation-checked while an items-space implementation kept it green.)
+        -- Here `bbb-two` is filtered index 1 of 3, and its items-space index is
+        -- 3, so the two spaces cannot be confused.
+        local h = open(items("aaa-one", "bbb-two", "bbb-three", "aaa-four", "bbb-five"), "bbb")
+        h.update(items("new-row", "aaa-one", "bbb-two", "bbb-three", "aaa-four", "bbb-five"),
+            nil, "bbb-two")
+        assert.equals("bbb-two", h.selected().value)
         h.close()
     end)
 
@@ -1202,6 +1210,30 @@ describe("float_picker update selection", function()
         local h = open(items("alpha", "beta", "gamma"))
         h.update(items("alpha", "beta", "gamma"), nil, 3)
         assert.equals("gamma", h.selected().value)
+        h.close()
+    end)
+end)
+
+describe("float_picker update numeric selection space", function()
+    it("treats a number as an index into the caller's list, not the filtered one", function()
+        -- One meaning per value crossing the boundary. Before this, a number was
+        -- items-space at every caller and filtered-space inside the widget, so
+        -- it happened to work only while no query was active.
+        local function items(...)
+            local out = {}
+            for _, v in ipairs({ ... }) do out[#out + 1] = { display = v, value = v } end
+            return out
+        end
+        local h = float_picker.open({
+            title = "Num",
+            items = items("aaa-one", "bbb-two", "bbb-three", "aaa-four", "bbb-five"),
+            recall_id_fn = function(item) return item.value end,
+            initial_query = "bbb",
+        })
+        -- items-index 3 is "bbb-three"; in filtered space that index would be
+        -- "bbb-five". The caller means their own list.
+        h.update(items("aaa-one", "bbb-two", "bbb-three", "aaa-four", "bbb-five"), nil, 3)
+        assert.equals("bbb-three", h.selected().value)
         h.close()
     end)
 end)

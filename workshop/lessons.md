@@ -922,7 +922,11 @@ but the same four failures repeating, so the rules matter more than the fixes:
   process answered, one asserting containment where order was the point, and an
   arch guard whose allowance was below the real count. **Check: break the code on
   purpose and watch the test go red, before claiming the fix is covered.** State
-  the mutation in the close evidence.
+  the mutation in the close evidence — and make it the WRONG IMPLEMENTATION, not
+  merely deletion. #205 claimed a mutation check on a selection fix having only
+  deleted the block; the specific wrong version (resolving an index in the other
+  coordinate space) still passed, because the fixture's target was the last row
+  and the widget's clamp reached it from any out-of-range index.
 - **Fix the class, not the site.** A finding names one instance; the deliverable
   is the enumeration. `free_port` was "swept" onto a shared helper while eight
   copies remained; a boundary guard was added to one spec while three lacked it;

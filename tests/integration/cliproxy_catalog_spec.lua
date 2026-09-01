@@ -300,3 +300,35 @@ describe("cliproxy catalog side effects", function()
         cliproxy._set_data_dir(SPEC_DATA_DIR)
     end)
 end)
+
+describe("cliproxy catalog staleness clocks", function()
+    local cliproxy = require("parley.cliproxy")
+
+    before_each(function()
+        cliproxy._reset_catalog_clock()
+        os.remove(cliproxy._catalog_path())
+    end)
+
+    it("backs off briefly after a failure, not for the success TTL", function()
+        -- The regression this pins: keying a failure on the 10-minute success
+        -- TTL silences the picker for ten minutes — including right after the
+        -- operator logs in through the "(logged out)" row, which is exactly when
+        -- the catalog has just changed.
+        cliproxy._write_catalog({}, os.time() - 7200) -- cache long stale
+        assert.is_true(cliproxy.catalog_stale())
+
+        local done = false
+        cliproxy.fetch_catalog(function() done = true end) -- fails: no endpoint set here
+        vim.wait(8000, function() return done end, 20)
+
+        assert.is_false(cliproxy.catalog_stale(), "should back off right after a failure")
+        cliproxy._set_failed_attempt_at(os.time() - 60) -- 60s later
+        assert.is_true(cliproxy.catalog_stale(),
+            "a failure must not silence the picker for the whole success TTL")
+    end)
+
+    it("treats a fresh cache as fresh regardless of the attempt clock", function()
+        cliproxy._write_catalog({ { id = "x", owner = "openai" } }, os.time())
+        assert.is_false(cliproxy.catalog_stale())
+    end)
+end)

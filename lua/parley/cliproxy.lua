@@ -1147,6 +1147,10 @@ function M.run_login(provider, argv, on_done, timeout_ms)
         end
         if ok then
             M.credential_health_for_login(provider, function(health)
+                -- The catalog just changed: a login is exactly what registers a
+                -- channel's models. Drop any failure backoff so the next picker
+                -- open re-reads instead of waiting it out.
+                M._reset_catalog_clock()
                 settle(true, ("cliproxy: %s login succeeded%s"):format(provider,
                     health.account and (" (" .. health.account .. ")") or ""), vim.log.levels.INFO)
             end)
@@ -1373,7 +1377,8 @@ end
 -- reads that catalog instead of carrying model names in config.
 --------------------------------------------------------------------------------
 
-local CATALOG_TTL = 600 -- seconds; see the plan's operating envelope
+local CATALOG_TTL = 600 -- seconds a SUCCESSFUL catalog stays fresh
+local FAILED_ATTEMPT_BACKOFF = 30 -- seconds to back off after a FAILED attempt
 local _catalog_inflight = false
 local _last_attempt = nil -- when a refresh was last ATTEMPTED, accepted or not
 
@@ -1445,21 +1450,40 @@ function M._write_catalog(models, fetched_at)
     return true
 end
 
---- Is the cache old enough to be worth a background refresh?
----@return boolean
---- Is it worth another refresh? Keyed on the last ATTEMPT, not the last
---- success: a proxy that is down never updates the cache, so a success-only
---- clock leaves staleness permanently true and every picker open re-spawns two
---- curls that connection-refuse — an unbounded retry on a keystroke path.
---- Test seam: forget when a refresh was last attempted.
+--- Forget when a refresh was last attempted, so the next call re-reads.
+--- Called when a login completes — that is what registers a channel's models,
+--- so any failure backoff is stale the moment it lands — and by specs.
 function M._reset_catalog_clock()
     _last_attempt = nil
 end
 
+--- Test seam: pretend the last failed attempt happened at `t`, so a spec can
+--- cross the backoff without sleeping through it.
+function M._set_failed_attempt_at(t)
+    _last_attempt = t
+end
+
+--- Is it worth another refresh?
+---
+--- TWO clocks, because a success and a failure mean different things:
+---   * a fresh CACHE is good for CATALOG_TTL — models rarely move;
+---   * a failed ATTEMPT backs off for FAILED_ATTEMPT_BACKOFF only, seconds not
+---     minutes. Keying a failure on the success TTL silenced the picker for ten
+---     minutes, including immediately after the operator logged in through the
+---     `(logged out)` row — precisely when the catalog HAS just changed.
+--- Keying only on success is the opposite failure: the cache is never written
+--- while the proxy is down, so every picker open re-spawns two curls that
+--- connection-refuse, an unbounded retry on a keystroke path.
+---@return boolean
 function M.catalog_stale()
     local _, at = M.catalog_cached()
-    local last = math.max(at or 0, _last_attempt or 0)
-    return last == 0 or (os.time() - last) > CATALOG_TTL
+    if at and (os.time() - at) <= CATALOG_TTL then
+        return false -- the cache itself is fresh
+    end
+    if _last_attempt and (os.time() - _last_attempt) <= FAILED_ATTEMPT_BACKOFF then
+        return false -- tried very recently; do not hammer a dead proxy
+    end
+    return true
 end
 
 --- Refresh the catalog from a proxy that is ALREADY running.

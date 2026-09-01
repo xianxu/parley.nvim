@@ -1684,13 +1684,15 @@ function M.open(opts)
     -- new_tag_bar_tags: optional list of {label, enabled} to refresh the tag bar display.
     --- Replace the items in place.
     ---
-    --- `next_selection` is either a NUMBER — an index into the FILTERED list, the
-    --- widget's own coordinate space — or a STRING identity (as produced by
-    --- `recall_id_fn`), which is resolved against the filtered list AFTER
-    --- re-filtering. Callers refreshing asynchronously want the string: they know
-    --- the row the operator is on, not where it will land once a query is
-    --- applied, and an index computed against their own `items` list points at a
-    --- different row whenever a query is active.
+    --- `next_selection` names the row to land on, in the CALLER's terms either way:
+    ---   * a NUMBER is an index into `new_items` — the list the caller just passed;
+    ---   * a STRING is an identity as produced by `recall_id_fn`.
+    --- Both are resolved by the widget, after re-filtering, into its own
+    --- coordinate space (`sel_idx` indexes `filtered`, not `items`). That
+    --- conversion is the widget's job precisely because callers cannot know it:
+    --- an index that means one row in their list means a different row here the
+    --- moment a query is active, which is when an async repaint is most likely to
+    --- move the cursor under the operator.
     local function update(new_items, new_tag_bar_tags, next_selection)
         if closed then return end
         local next_identity
@@ -1701,6 +1703,12 @@ function M.open(opts)
             items = new_items
             set_status(nil)
             if type(next_selection) == "number" then
+                -- Translate the caller's items-index into an identity here, so
+                -- BOTH forms resolve through the same filtered-space lookup
+                -- below. Assigning it straight to sel_idx would silently mean a
+                -- different row whenever a query is active.
+                local row = items[math.max(1, math.floor(next_selection))]
+                next_identity = row and recall_id_fn(row) or nil
                 sel_idx = math.max(1, math.floor(next_selection))
             end
             if not opts.height then

@@ -65,6 +65,8 @@ from unticked boxes here.
 | `catalog_stale` | `lua/parley/cliproxy.lua` | new | clock + filesystem |
 | `register_live_agent` | `lua/parley/init.lua` | new | `state.json` |
 | `_select` | `lua/parley/agent_picker.lua` | new | `vim.cmd` / `vim.schedule` |
+| `selected` (handle) | `lua/parley/float_picker.lua` | new | picker window state |
+| `_reset_catalog_clock` / `_set_failed_attempt_at` | `lua/parley/cliproxy.lua` | new | the staleness clocks |
 | `agent_picker` live section | `lua/parley/agent_picker.lua` | modified | `float_picker` handle |
 | live-agent restore | `lua/parley/init.lua` | modified | `state.json` |
 | `/v1beta/models` route | `tests/fixtures/fake_cliproxy` | modified | the cliproxy binary |
@@ -1902,3 +1904,29 @@ fixed rather than as gate work.
   failures with the check that catches each; `*.parley-backup.*` is gitignored;
   and this plan now states that the issue file, not these checkboxes, is the
   record.
+
+### 2026-08-31 — M3 close review round 3 (BR-58..BR-63)
+
+Two of these are regressions from the previous round's own fixes.
+
+- **BR-58 (Critical).** The attempt-based staleness added for BR-53 silenced the
+  picker for the full ten-minute success TTL after a failure — including
+  immediately after the operator logs in through the `(logged out)` row, which is
+  exactly when the catalog HAS just changed. Two clocks now: a successful cache
+  is good for `CATALOG_TTL`, a failed attempt backs off for
+  `FAILED_ATTEMPT_BACKOFF` (30s), and a completed login clears the failure clock
+  outright.
+- **BR-59.** The BR-52 test passed with the bug reintroduced: its target was the
+  last filtered row, which `get_selected_item`'s clamp reaches from any
+  out-of-range index. The previous round CLAIMED it mutation-checked — and it had
+  been, but with the weaker mutation (deleting the block) rather than the
+  specific wrong implementation (resolving in items-space). **The mutation must
+  be the wrong implementation, not merely deletion**; the fixture now puts the
+  target at filtered index 1 of 3, and the items-space mutation fails it.
+- **BR-60.** `update`'s numeric argument meant items-space at callers and
+  filtered-space in the widget. Both forms are now stated in the caller's terms
+  and resolved by the widget in its own space.
+- **BR-61 / BR-62 / BR-63.** `atlas/ui/pickers.md` documents `selected()` and
+  `update`'s third argument; the arch spec sweeps code→table so a module-public
+  entity missing from Core concepts fails a test rather than a review; and the
+  stacked doc blocks above `catalog_stale` are untangled.

@@ -25,6 +25,38 @@ local function read(path)
 end
 
 describe("arch: single-source sweeps stay swept", function()
+    it("the plan's Core-concepts tables name every module-public entity", function()
+        -- The sweep runs table→code elsewhere; this is the other direction, the
+        -- one that kept missing entities. Every public function under lua/ that
+        -- this issue's modules expose must appear in a plan table row, in ANY
+        -- definition form — `function M.x(`, `M.x = function(`, `M.x = alias`.
+        local plan = vim.fn.glob("workshop/plans/000205-*-plan.md")
+        if plan == "" then
+            pending("plan not present")
+            return
+        end
+        local plan_body = read(plan)
+        local missing = {}
+        for _, path in ipairs({
+            "lua/parley/cliproxy_catalog.lua",
+            "lua/parley/agent_picker.lua",
+        }) do
+            local body = read(path)
+            for name in body:gmatch("function M%.([%w_]+)%(") do
+                if not plan_body:find("`" .. name .. "`", 1, true) then
+                    missing[#missing + 1] = path .. ":" .. name
+                end
+            end
+            for name in body:gmatch("M%.([%w_]+) = ") do
+                if not plan_body:find("`" .. name .. "`", 1, true) then
+                    missing[#missing + 1] = path .. ":" .. name
+                end
+            end
+        end
+        assert.same({}, missing,
+            "these ship but appear in no Core-concepts table row")
+    end)
+
     it("no spec re-defines free_port; they use tests/helpers/ready_port", function()
         local offenders = {}
         for _, path in ipairs(repo_files("ls tests/integration/*.lua tests/unit/*.lua 2>/dev/null")) do
