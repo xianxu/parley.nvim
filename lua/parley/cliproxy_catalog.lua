@@ -94,8 +94,18 @@ function M.rank_key(m)
     if type(m.created) == "number" and m.created > 0 then
         return m.created
     end
-    local n = tostring(m.display or ""):match("(%d+%.?%d*)")
-    return -1e9 + (tonumber(n) or 0)
+    -- Take the first number that could plausibly BE a version. Numbers >= 100 in
+    -- a display name are parameter counts, not versions ("GPT-OSS 120B (Medium)"),
+    -- and reading one as a version floats that row above every real release.
+    local version = 0
+    for n in tostring(m.display or ""):gmatch("%d+%.?%d*") do
+        local v = tonumber(n)
+        if v and v < 100 then
+            version = v
+            break
+        end
+    end
+    return -1e9 + version
 end
 
 --- Parse one `live_models.providers` entry: "<provider>[:<term>[,<term>…]]".
@@ -194,8 +204,8 @@ function M.build_agent(m, opts)
         name = m.id .. "*",
         model = {
             model = m.id,
-            web_search_strategy =
-                require("parley.providers").cliproxy_default_web_search_strategy(m.id),
+            web_search_strategy = require("parley.providers")
+                .cliproxy_default_web_search_strategy(m.id, m.owner),
         },
         system_prompt = opts.system_prompt or require("parley.defaults").chat_system_prompt,
         synthetic_system_prompt = true,

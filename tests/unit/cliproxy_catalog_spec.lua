@@ -153,9 +153,20 @@ describe("curate", function()
     end)
 
     it("matches displayName, not just id", function()
-        -- gemini-pro-agent's id carries no version; it displays as
-        -- "Gemini 3.1 Pro (High)". An id-only match makes antigravity unfilterable.
-        assert.is_true(vim.tbl_contains(ids("antigravity:pro"), "gemini-pro-agent"))
+        -- gemini-pro-agent's id carries no version and no "pro" version token; it
+        -- displays as "Gemini 3.1 Pro (High)". An id-only match would make
+        -- antigravity unfilterable. Asserted as the FULL render, not containment:
+        -- this is the one case exercising displayName matching and created-less
+        -- ranking together, so its ordering is part of what's under test.
+        assert.same({ "gemini-3.1-pro-low", "gemini-pro-agent" }, ids("antigravity:pro"))
+    end)
+
+    it("does not let a parameter count outrank a version", function()
+        -- "GPT-OSS 120B (Medium)" has no created, like every antigravity row. If
+        -- 120 were read as its version it would sort above every Gemini release.
+        local got = ids("antigravity", 3)
+        assert.is_false(vim.tbl_contains(got, "gpt-oss-120b-medium"),
+            "a 120B parameter count floated to the top of the provider")
     end)
 
     it("orders by term, so config expresses preference", function()
@@ -170,6 +181,50 @@ describe("curate", function()
         local before = vim.deepcopy(models)
         cat.curate(models, { providers = { "claude" }, per_provider = 3 })
         assert.same(before, models)
+    end)
+end)
+
+--------------------------------------------------------------------------------
+-- cliproxy_default_web_search_strategy (single source, lives in providers.lua)
+--------------------------------------------------------------------------------
+describe("cliproxy_default_web_search_strategy", function()
+    local providers = require("parley.providers")
+
+    it("routes claude models over the anthropic wire", function()
+        assert.equals("anthropic_tools_route",
+            providers.cliproxy_default_web_search_strategy("claude-opus-5"))
+    end)
+
+    it("keeps openai-family models on the openai tools route", function()
+        assert.equals("openai_tools_route",
+            providers.cliproxy_default_web_search_strategy("gpt-5.6-sol"))
+    end)
+
+    it("disables server-side search for gemini-family models", function()
+        -- Measured: {type="web_search"} makes gemini answer with
+        -- finish_reason="malformed_function_call" and no content.
+        assert.equals("none",
+            providers.cliproxy_default_web_search_strategy("gemini-3-flash"))
+    end)
+
+    it("disables it for anything antigravity serves, whatever the family", function()
+        -- gpt-oss-120b-medium is gpt-family by id but antigravity-owned; measured,
+        -- it answers without ever searching. A claude model served there is
+        -- unmeasured, so it is not claimed to work either.
+        assert.equals("none",
+            providers.cliproxy_default_web_search_strategy("gpt-oss-120b-medium", "antigravity"))
+        assert.equals("none",
+            providers.cliproxy_default_web_search_strategy("claude-opus-4-6-thinking", "antigravity"))
+    end)
+
+    it("reuses the canonical anthropic family test, code_execution included", function()
+        assert.equals("anthropic_tools_route",
+            providers.cliproxy_default_web_search_strategy("code_execution_claude"))
+    end)
+
+    it("falls back to the openai route for an unrecognized model", function()
+        assert.equals("openai_tools_route",
+            providers.cliproxy_default_web_search_strategy("mystery-1"))
     end)
 end)
 
@@ -205,9 +260,39 @@ describe("build_agent", function()
             cat.build_agent({ id = "claude-opus-5", owner = "anthropic" }).name)
     end)
 
-    it("routes an antigravity-served claude model over the anthropic wire", function()
-        -- owner is the display grouping; the WIRE follows the model family.
+    it("passes the owner through, so an antigravity-served claude gets none", function()
+        -- The family alone would say anthropic_tools_route; the owner overrides,
+        -- because server-side search does not survive antigravity's re-serving.
+        -- build_agent must therefore forward `owner`, not just the id.
         local a = cat.build_agent({ id = "claude-opus-4-6-thinking", owner = "antigravity" })
-        assert.equals("anthropic_tools_route", a.model.web_search_strategy)
+        assert.equals("none", a.model.web_search_strategy)
+    end)
+end)
+
+--------------------------------------------------------------------------------
+-- The strategy has to SURVIVE the resolver (boundary review BR-2)
+--------------------------------------------------------------------------------
+describe("a built agent's strategy survives get_cliproxy_strategy", function()
+    it("keeps `none` instead of falling back to the provider default", function()
+        -- The bug this pins: the resolver whitelisted only the three ACTIVE
+        -- strategies, so `none` fell through to providers.cliproxyapi's
+        -- openai_tools_route — and a gemini pick shipped the very web_search
+        -- payload build_agent chose "none" to avoid.
+        local parley = require("parley")
+        local saved = parley.dispatcher
+        -- The provider default must be set to an ACTIVE strategy, or the
+        -- fallback path returns "none" too and the test passes for the wrong
+        -- reason — which is exactly what it did on first writing.
+        parley.dispatcher = { providers = {
+            cliproxyapi = { web_search_strategy = "openai_tools_route" },
+        } }
+        local ok, strategy = pcall(function()
+            local agent = require("parley.cliproxy_catalog")
+                .build_agent({ id = "gemini-3-flash", owner = "antigravity" })
+            return require("parley.providers").cliproxy_strategy(agent.model)
+        end)
+        parley.dispatcher = saved
+        assert.is_true(ok, tostring(strategy))
+        assert.equals("none", strategy)
     end)
 end)

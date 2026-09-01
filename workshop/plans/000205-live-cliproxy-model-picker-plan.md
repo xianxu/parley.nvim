@@ -25,6 +25,8 @@
 | `parse_provider_spec` | `lua/parley/cliproxy_catalog.lua` | new |
 | `curate` | `lua/parley/cliproxy_catalog.lua` | new |
 | `build_agent` | `lua/parley/cliproxy_catalog.lua` | new |
+| `cliproxy_default_web_search_strategy` | `lua/parley/providers.lua` | new |
+| `get_cliproxy_strategy` | `lua/parley/providers.lua` | modified |
 | `resolve_channel` | `lua/parley/cliproxy_config.lua` | modified |
 | `_build_items` | `lua/parley/agent_picker.lua` | modified |
 
@@ -1486,3 +1488,32 @@ sdlc close --issue 205 --verified '<evidence>'
   A rationale sentence that justifies a design by naming existing machinery is
   covered too: either a step in that same task invokes it, or the sentence goes.
 - **The fixtures are the spec.** The four `curate` cases are real renders from the live catalog on 2026-08-31. If a change makes one fail, decide whether the catalog moved or the code broke — don't edit the expectation to match the code.
+
+## Revisions
+
+### 2026-08-31 — M1 boundary review (BR-2..BR-5 + two Minors)
+
+- **BR-2 (Critical).** `build_agent`'s `"none"` was discarded by
+  `get_cliproxy_strategy`, which whitelisted only the three ACTIVE strategies and
+  fell through to the provider default — so a gemini pick shipped the exact
+  `web_search` payload that "none" existed to avoid. `none` is now a recognized
+  model-level value, and the value set is single-sourced (`CLIPROXY_STRATEGIES`)
+  rather than spelled out twice. The regression test forces the provider default
+  to an active strategy first: written without that, it passed against the buggy
+  resolver, since the fallback also returns "none" in a bare unit environment.
+- **BR-3.** `cliproxy_default_web_search_strategy` now has six direct tests; Task
+  1.6's steps had been folded into build_agent's coverage rather than executed.
+- **BR-4.** `rank_key` read the first numeral in a display name as a version, so
+  "GPT-OSS 120B (Medium)" outranked every Gemini row in the created-less band. It
+  now takes the first number below 100 — above that it is a parameter count.
+- **BR-5.** The `antigravity:pro` render is asserted by equality; it is the one
+  case exercising displayName matching and created-less ranking together, so its
+  ordering is part of what is under test.
+- **Minor (entity table).** `providers.lua` was modified by M1 without appearing
+  in the Core concepts table, which is what would have made its missing test row
+  visible. Added, along with `get_cliproxy_strategy`.
+- **Minor (unmeasured branch).** `owned_by == "antigravity"` now yields "none"
+  regardless of family, and `build_agent` forwards the owner. Measured: gemini
+  breaks outright there, and `gpt-oss-120b-medium` answers while silently never
+  searching. A claude model served by antigravity stays unmeasured, so it is no
+  longer claimed to work.

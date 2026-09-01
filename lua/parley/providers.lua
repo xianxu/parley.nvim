@@ -97,10 +97,21 @@ local function pick_tool_detail_text(value)
     return nil
 end
 
+-- The recognized web-search strategies. `none` is a REAL model-level answer, not
+-- the absence of one: a model that breaks on the server-side tool must be able to
+-- say so and have that survive the provider default (#205). Single-sourced
+-- because the same set was previously spelled out twice below (ARCH-DRY).
+local CLIPROXY_STRATEGIES = {
+    openai_search_model = true,
+    openai_tools_route = true,
+    anthropic_tools_route = true,
+    none = true,
+}
+
 local function get_cliproxy_strategy(model_config)
     if type(model_config) == "table" then
         local model_strategy = model_config.web_search_strategy
-        if model_strategy == "openai_search_model" or model_strategy == "openai_tools_route" or model_strategy == "anthropic_tools_route" then
+        if CLIPROXY_STRATEGIES[model_strategy] then
             return model_strategy
         end
     end
@@ -112,7 +123,7 @@ local function get_cliproxy_strategy(model_config)
 
     local config = parley.dispatcher.providers.cliproxyapi or {}
     local strategy = config.web_search_strategy
-    if strategy == "openai_search_model" or strategy == "openai_tools_route" or strategy == "anthropic_tools_route" then
+    if CLIPROXY_STRATEGIES[strategy] then
         return strategy
     end
     return "none"
@@ -209,8 +220,20 @@ end
 --- Client-side function tools work on the OpenAI route for all three families,
 --- so this governs only the server-side search tool.
 ---@param model_name string
+---@param owner string|nil # the catalog row's owned_by, when known
 ---@return "anthropic_tools_route"|"openai_tools_route"|"none"
-function M.cliproxy_default_web_search_strategy(model_name)
+function M.cliproxy_default_web_search_strategy(model_name, owner)
+    -- Owner first, and only for antigravity: it re-serves other vendors' models
+    -- through Google's stack, where the server-side tool does not survive the
+    -- trip. Measured 2026-08-31: gemini-3-flash answers
+    -- finish_reason="malformed_function_call" with no content, and
+    -- gpt-oss-120b-medium answers but silently never searches (it returned a
+    -- wrong version from memory while saying it had no browsing). A
+    -- claude-family model served there is unmeasured, so it is not claimed to
+    -- work either. The family rules below still decide every native channel.
+    if owner == "antigravity" then
+        return "none"
+    end
     if is_cliproxy_anthropic_route_model(model_name) then
         return "anthropic_tools_route"
     end
