@@ -187,7 +187,7 @@ Two measured constraints:
 Durable design: `workshop/plans/000205-live-cliproxy-model-picker-plan.md`
 (authored via superpowers-writing-plans; per-task TDD steps live there).
 
-- [ ] M1 — pure catalog core: `parse` (join /v1/models + /v1beta/models), `series`,
+- [x] M1 — pure catalog core: `parse` (join /v1/models + /v1beta/models), `series`,
       `rank_key`, `parse_provider_spec`, `curate`, `build_agent`; real captured
       fixtures, no mocks (ARCH-PURE)
 - [ ] M2 — IO shell: `fetch_catalog` + disk cache + staleness; `fake_cliproxy`
@@ -201,6 +201,7 @@ Durable design: `workshop/plans/000205-live-cliproxy-model-picker-plan.md`
 ## Log
 
 ### 2026-08-31
+- 2026-08-31: closed M1 — cliproxy_catalog_spec 41/41 green (every documented Spec render pinned as an equality, derived from a table keyed by the spec string so a new row cannot skip a test); providers/cliproxy-managed mapping green, 0 failures. Round 3-4 findings addressed as RULES: rank_key uses a delimiter rule not a magnitude threshold (BR-13); unknown provider contributes nothing instead of pooling ownerless rows (BR-6); empty ids rejected at the parse boundary rather than defended per-consumer (BR-7); build_agent returns nil instead of raising into a picker callback (BR-8); plan referents and all 26 invalid SPEC keys swept, referent grep re-run clean (BR-1, BR-9). BR-12 resolved by measurement: an antigravity-served claude answers 200 on the anthropic wire, so family decides the transport and owner only reaches the search tool.; review verdict: FIX-THEN-SHIP
 
 - Brainstormed with operator. Verified against the live proxy: alias block is
   vestigial for routing; `/v1beta/models` carries displayName/description/version;

@@ -1048,12 +1048,50 @@ Expected: FAIL — live rows absent
 
 - [ ] **Step 3: Implement** — extend `_build_items(plugin, extra)` with a second, optional argument so every existing caller and test keeps working, and tag each row with `kind` (`"agent"` / `"live"` / `"login"`) so `on_select` can branch without re-parsing the display string.
 
-- [ ] **Step 4: Run it and watch it pass**
+- [ ] **Step 4: Write the failing test for the logged-out source**
+
+`extra.logged_out` has to come from somewhere, and that somewhere is a pure
+function in this same file — the picker must not make a management call on a UI
+path:
+
+```lua
+describe("agent_picker._providers_without_models", function()
+    local models = {
+        { id = "claude-opus-5", owner = "anthropic" },
+        { id = "gpt-5.6-sol", owner = "openai" },
+    }
+
+    it("names a configured provider the catalog advertises nothing for", function()
+        assert.same({ { provider = "antigravity" } },
+            agent_picker._providers_without_models(models, { "claude:opus", "antigravity" }))
+    end)
+
+    it("stays quiet when every configured provider has models", function()
+        assert.same({}, agent_picker._providers_without_models(models, { "claude", "codex" }))
+    end)
+
+    it("reads the provider out of a filtered spec", function()
+        assert.same({ { provider = "antigravity" } },
+            agent_picker._providers_without_models(models, { "antigravity:pro,flash" }))
+    end)
+end)
+```
+
+- [ ] **Step 5: Implement `_providers_without_models(models, providers)`**
+
+The catalog IS the signal: cliproxy registers a channel's models only once that
+channel has a credential, so a configured provider contributing nothing is one
+you are not logged into. Measured — antigravity's 13 models appeared the moment
+its auth file landed, no restart. That keeps the check synchronous, with no
+management call on a UI path. A credential that is loaded but DEAD still lists
+models; #197's dispatch-failure path owns that case, and the docstring says so.
+
+- [ ] **Step 6: Run both blocks and watch them pass**
 
 Run: `make test-spec SPEC=providers/cliproxy-managed`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add -u && git commit -m "#205 M3: agent picker renders live catalog and login rows"
@@ -1568,3 +1606,16 @@ needed. Recorded together because the pattern is the finding.
   `SPEC=unit/…` at twelve steps when `make test-spec` takes atlas feature keys
   (`SPEC=providers/cliproxy-managed`). Both swept across the whole plan, and the
   referent grep the Notes prescribe was actually run this time.
+
+### 2026-08-31 — M1 close round 5 (BR-1, BR-13)
+
+- **BR-13.** The delimiter rule was right but *unpinned*: restoring the `< 100`
+  threshold left all 41 tests passing, so nothing defended the rule. The new case
+  uses magnitudes that a threshold would wave through — "GPT-OSS 20B", "Llama
+  70B", "Ctx 32K", "Mixtral 8x7B" — and was confirmed to FAIL against the old
+  threshold before being kept. This is the second time on this issue that a fix
+  shipped with a test that could not fail; both times the check was the same one:
+  break the code on purpose and watch the test go red.
+- **BR-1.** Task 3.1 credited `_providers_without_models` without any step
+  creating or testing it. Steps 4-6 now do, including why the catalog is the
+  logged-out signal and what it deliberately does not cover.

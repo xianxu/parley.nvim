@@ -111,6 +111,19 @@ describe("rank_key", function()
                      > cat.rank_key({ display = "Gemini 3.1 Pro (Low)" }))
     end)
 
+    it("reads a magnitude as a magnitude, whatever its size", function()
+        -- The rule is DELIMITED-or-not, not big-or-small. A magnitude threshold
+        -- (the first attempt at this) only excludes the sizes that happen to be
+        -- large: under `< 100`, "GPT-OSS 20B" reads as version 20 and outranks
+        -- every real release. Each case below is a magnitude that would slip
+        -- through such a threshold.
+        local gemini = cat.rank_key({ display = "Gemini 3.7 Flash" })
+        for _, magnitude in ipairs({ "GPT-OSS 20B (Medium)", "Llama 70B", "Ctx 32K", "Mixtral 8x7B" }) do
+            assert.is_true(gemini > cat.rank_key({ display = magnitude }),
+                ("%q outranked a real version"):format(magnitude))
+        end
+    end)
+
     it("never ranks a created-less row above a dated one", function()
         -- The load-bearing case: version numbers and epoch seconds are different
         -- units, so the two must occupy disjoint bands rather than be compared.

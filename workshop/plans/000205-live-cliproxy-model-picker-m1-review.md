@@ -499,3 +499,179 @@ findings:
       bare-`antigravity` test currently pins as correct; decide that deliberately
       at M3 rather than by pattern accident.
 ```
+
+---
+
+## Re-review — 2026-08-31T21:10:30-07:00 (FIX-THEN-SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 205 — live cliproxy model picker; retire hardcoded model lists |
+| repo | parley.nvim |
+| issue file | workshop/issues/000205-live-cliproxy-model-picker.md |
+| boundary | milestone M1 |
+| milestone | M1 |
+| window | 42d72b9d2f12bad462d847d8e5b24876a1a6a63b..440ab17e237a196115ea56077148d77d7b76602f |
+| command | sdlc milestone-close --issue 205 --milestone M1 |
+| reviewer | claude |
+| timestamp | 2026-08-31T21:10:30-07:00 |
+| verdict | FIX-THEN-SHIP |
+
+## Review
+
+```verdict
+verdict: FIX-THEN-SHIP
+confidence: high
+```
+
+The M1 pure catalog core is real, correct and well-covered: I ran the full suite at HEAD (all specs PASS, luacheck 0 warnings / 0 errors across 342 files) and verified four of the six open findings by reverting each fix in a scratch worktree and watching the named test go red. What blocks a clean SHIP is not correctness but pinning and boundary hygiene: BR-13's delimiter rule is *right* (I measured `120B`/`20B`/`8B`/`32K` → all correctly rejected) but **nothing pins it** — I restored the old `< 100` threshold and all 41 catalog tests still passed, so the fix is exactly the "passes every suite while doing nothing" shape the claimed-fix check exists to catch. Separately, 38 lines of M3 Task 3.3 code (`register_live_agent` + the `refresh_state` restore) crossed the M1 boundary in `440ab17` with zero tests, zero call sites, and no mention in the commit message.
+
+## 1. Strengths
+
+- **`SPEC_RENDERS` is the right answer to BR-5.** `tests/unit/cliproxy_catalog_spec.lua:159-173` derives one equality test per documented Spec row from a table keyed by the spec string — a new Spec row cannot be added without a test. Verified load-bearing: restoring the round-1 naive `rank_key` turns `renders the documented row for "antigravity"` red. All five rows match `workshop/issues/000205-…:154-159` exactly, displayNames included.
+- **BR-2's regression test is written to fail for the right reason.** `cliproxy_catalog_spec.lua:336-340` deliberately sets the provider default to an *active* strategy first, with the comment recording that the test passed against the buggy resolver without it. That is the discipline this gate keeps asking for.
+- **The BR-11/BR-12 resolution is measured, not chosen.** `lua/parley/providers.lua:238-252`: family test first (so unstable `owned_by` can never move the wire), owner consulted only below it where every remaining family gets the openai wire anyway. `cliproxy_catalog_spec.lua:248-260` pins that the two owners of a shared id resolve identically.
+- **Guards placed at the boundary, not per-consumer.** BR-7 fixed in `parse` (`cliproxy_catalog.lua:72`) rather than in `series` — one guard instead of a defence in every caller — and the spec's `series` test title was corrected to stop overstating what it checks.
+- **`curate` copies before tagging** (`cliproxy_catalog.lua:186-191`), with a test that the input rows are unmutated. The disk cache will hand it the same tables on every repaint; this is the right call made before it could bite.
+
+## 2. Critical findings
+
+None.
+
+## 3. Important findings
+
+**(a) BR-13's rule is unpinned — measured, not asserted.** `lua/parley/cliproxy_catalog.lua:100-112`. I reverted the delimiter loop to the `< 100` threshold in a scratch worktree: **41/41 tests still pass.** The only assertion aimed at this (`cliproxy_catalog_spec.lua:191-200`) uses `120B`, and `120 ≥ 100` — so it passes under the broken rule too. The fixture was not extended with the sibling magnitude row BR-13 named. See §7 for the rule-level fix; this is the 3rd finding in `rank-key-version-extraction`.
+
+**(b) M3 code crossed the M1 boundary untested and unreachable.** `lua/parley/init.lua:1329-1343` and `4327-4348`. The plan places both at **Task 3.3 (M3)** with `tests/unit/live_agent_state_spec.lua` (`plan.md:1148-1149`); that spec does not exist at HEAD (`grep -rn live_agent tests/` → nothing). `register_live_agent` has no caller — `agent_picker` is not wired until M3 — and the `refresh_state` branch only fires when `_state.live_agent` is set, which only `register_live_agent` does. Every test passes with these 38 lines present or deleted. `440ab17`'s message covers only the catalog fixes and does not mention `init.lua` at all.
+
+**(c) ARCH-PURPOSE / ARCH-DRY: the new single source does not govern its pre-existing consumers.** Task 1.6's stated purpose is to single-source the family→strategy decision, but `get_cliproxy_strategy` (`providers.lua:111-129`) still resolves model→strategy from config alone and never consults `cliproxy_default_web_search_strategy`. Five sites in `lua/parley/config.lua` (239, 247, 259, 377, 384) hand-write `web_search_strategy = "anthropic_tools_route"` — a hand-maintained restatement of exactly what the new function derives. This is the shadow-sweep gap: the source exists, the consumers that motivated it don't derive. 2nd in `single-source-not-enforced`; see §7.
+
+**(d) Atlas gap for the new module.** `atlas/providers/cliproxy-managed.md` has a `## Pieces` section naming the feature's pure modules (`cliproxy_config.lua:18`, `cliproxy_auth.lua:33`); `cliproxy_catalog.lua` is absent, as are the `Model` row shape, `series`, and the two-band `rank_key`. Only `atlas/traceability.yaml` was touched (2 lines) — that is the file→spec mapping, not the map. README needs nothing at M1 (no config key or keybinding lands until M4).
+
+## 4. Minor findings
+
+- **BR-1 residual:** the referent sweep ran (name unified to `_providers_without_models`, `provider_states` row deleted, async `credential_health_for_login` read replaced by the synchronous catalog-derived check) — but the "defined nowhere" half stands: no Task step creates or tests it. `plan.md:1079` attributes it to Task 3.1, whose steps only extend `_build_items` and whose logged-out test feeds `logged_out` in directly.
+- **ARCH-DRY, diverged copy-paste:** `init.lua:4339-4342` and `1337-1340` are the same four-line "insert into `M.agents` + `M._agents` + sort" block with different clobber semantics (`= agent` vs `= M.agents[name] or agent`). A live pick replaces a same-named configured agent for the session but not after a restart.
+- **The BR-9 sweep destroyed information:** `plan.md:1391-1397` now runs `make test-spec SPEC=providers/cliproxy-managed` four identical times (two more at 1442-1446). The prior text named *which* four specs would catch an M4 regression.
+- Not raised as findings (cosmetic): `curate`'s `if #taken >= per then break end` exits only the inner loop, so the outer term loop re-enters and breaks again — free on 43 rows; and `rank_key` is the one function in the module without a type guard on its argument (only ever called with parsed rows, so no reachable failure — and `missing-input-guard` already has a finding, so this is a note, not a fix request).
+
+## 5. Test coverage notes
+
+Revert-verified this round (test goes red without the fix): BR-6 → `curate contributes nothing for a provider it does not know`; BR-7 → `series has nothing to return for an empty id, which parse never emits`; BR-8 → `build_agent returns nil for a row with no usable id`; BR-5 → `curate renders the documented row for "antigravity"`. Revert-verified as **unpinned**: BR-13. Uncovered entirely: `init.lua`'s live-agent registration and restore.
+
+The specs are genuinely mock-free — real captured fixtures, `require("parley")` only in the resolver test, which saves and restores `parley.dispatcher` around a `pcall`. ARCH-PURE passes for `cliproxy_catalog.lua`: every `require` is lazy and inside a function, and the whole spec runs with no exec, net, or mutable fs beyond reading two fixture files (the convention four other unit specs already follow).
+
+ARCH-MOCK is N/A at M1 (no external dependency is touched; the fake gains `/v1beta/models` at M2) — but note the fixtures currently have no conformance check binding them to the live proxy's shape. That is M2's `cliproxy_conformance_spec.lua` and should not be allowed to slip past M2's boundary the way Task 3.3 slipped past this one. ARCH-CONSTRAINTS passes: `curate` is O(n log n) on 43 rows, and nothing on a UI path does IO yet.
+
+## 6. Architectural notes for upcoming work
+
+- `build_agent` bypasses setup's agent normalization (`init.lua:749-775`). The two defaults it skips are harmless — `chat_respond.lua:1853-1854` and `tool_loop.lua:238/257` both re-apply `or defaults`. What it *also* skips is the `M.dispatcher.providers[provider]` gate at `init.lua:754`, so a restored live agent survives in `M.agents` even in a config with no `cliproxyapi` provider. Worth deciding at M3.
+- `providers.lua:238-252` keeps `anthropic_tools_route` for an antigravity-served claude model on the strength of a measured 200 on the anthropic wire. That measurement is about *transport*; whether server-side `web_search` actually returns results through that path is not measured. The trade-off (never let unstable `owned_by` move the wire) is right and documented — just don't let the comment harden into a claim that search works there.
+- `_state.live_agent` is a new persisted `state.json` field. It is additive and older state files simply lack it, so no migration is needed — but M3 should say so explicitly, since `refresh_state` reloads `_state` wholesale from disk when the disk copy is newer.
+
+## 7. Plan revision recommendations
+
+Two `## Revisions` entries, both stating a **rule** rather than patching the site — the escalation contract for a repeat family:
+
+- **`rank-key-version-extraction` (3rd).** Rounds 1-3 fixed the extraction; round 4 fixed it correctly and still shipped it unpinned. The rule: *a fix to a parsing heuristic is not delivered until a test fails without it, and the test must vary the SHAPE the heuristic keys on, not one value of it.* Enumeration: for `rank_key`, the shapes are `<digits><letter>` (magnitude: `20B`, `8B`, `120B`, `32K`) vs `<digits><delimiter>` (version: `3.7 `, `4.6 `, `3` at end-of-string). Assert one row per shape and confirm each goes red under the `< 100` threshold. BR-13's second half — that within the created-less band the scraped number is compared *across vendors*, so "Claude Opus 4.6" outranks "Gemini 3.7" on `4.6 > 3.7`, which `SPEC_RENDERS["antigravity"]` now pins as correct — still needs a deliberate decision at M3.
+- **`single-source-not-enforced` (2nd).** The rule: *every consumer of a newly single-sourced decision must derive from it in the same round, including consumers that predate the extraction; a hand-maintained restatement is a deferred consumer, not a finished one.* Enumeration for this one: `grep -n web_search_strategy lua/parley/config.lua` → 239, 247, 259, 377, 384, plus `get_cliproxy_strategy` at `providers.lua:111`. Note the fix is a real design choice, not a config edit — inserting the derived default into the chain changes what `providers.cliproxyapi.web_search_strategy` means, so decide the precedence (model-explicit → derived → provider-default, or model-explicit → provider-default → derived) and record it. If the pinned agents are meant to keep declaring their strategy, say so and why; that is a one-line revision and closes the finding just as well.
+
+Also worth folding into the plan's *Notes for the implementer*, since it is what let (b) through: **before `milestone-close`, run `git diff <base>..HEAD --name-only -- lua/` and name the test for every file listed; a file with no test row does not cross, and a file belonging to a later milestone does not cross at all.** At this boundary that check yields `cliproxy_catalog.lua` ✅, `providers.lua` ✅, `init.lua` ❌.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: not-addressed
+    note: |
+      Referent sweep verifiably ran, but no Task step still creates or tests `_providers_without_models`; plan.md:1079 credits Task 3.1, which does not produce it.
+  - id: BR-5
+    disposition: addressed
+    note: |
+      Verified by revert — SPEC_RENDERS["antigravity"] goes red under the naive rank_key; no tbl_contains remains as a behavioural assertion.
+  - id: BR-6
+    disposition: addressed
+    note: |
+      Verified by revert — "contributes nothing for a provider it does not know" goes red without the `owner and models or {}` guard.
+  - id: BR-7
+    disposition: addressed
+    note: |
+      Verified by revert — fixed at the parse boundary; the empty-id test goes red without it, and the test title no longer overstates the guard.
+  - id: BR-8
+    disposition: addressed
+    note: |
+      Verified by revert — build_agent returns nil; the test goes red without the guard, and both callers handle nil.
+  - id: BR-9
+    disposition: addressed
+    note: |
+      All 26 SPEC references now read providers/cliproxy-managed, which resolves in atlas/traceability.yaml and runs green.
+  - id: BR-13
+    disposition: not-addressed
+    note: |
+      Rule is correct but unpinned — restoring the `< 100` threshold leaves all 41 tests passing; the magnitude-SHAPE coverage the finding asked for was not added.
+findings:
+  - id: new
+    severity: Important
+    family: missing-test-for-shipped-behavior
+    title: |
+      M3 Task 3.3 code (register_live_agent + refresh_state restore) crossed the M1 boundary with no test and no caller
+    detail: |
+      init.lua:1329-1343 and 4327-4348 are Task 3.3 in the plan, whose named spec
+      tests/unit/live_agent_state_spec.lua does not exist at HEAD. register_live_agent has
+      zero call sites and the restore branch only fires on _state.live_agent, which only it
+      sets — so all 38 lines are unreachable and the suite passes identically with them
+      deleted. 440ab17's message does not mention init.lua. 2nd in family: do NOT just add
+      the one spec — adopt the covering rule in the plan's Notes, that before
+      milestone-close `git diff <base>..HEAD --name-only -- lua/` must name a test for every
+      file listed, and a file belonging to a later milestone does not cross at all. At this
+      boundary that check yields cliproxy_catalog.lua yes, providers.lua yes, init.lua no.
+  - id: new
+    severity: Important
+    family: single-source-not-enforced
+    title: |
+      cliproxy_default_web_search_strategy is not in the resolution chain; five config sites still hand-state what it derives
+    detail: |
+      2nd in family — do NOT patch the five sites. The rule: every consumer of a newly
+      single-sourced decision must derive from it in the same round, including consumers
+      that predate the extraction; a hand-maintained restatement is a deferred consumer.
+      Enumeration: config.lua:239, 247, 259, 377, 384 each hand-write
+      web_search_strategy = "anthropic_tools_route", and get_cliproxy_strategy
+      (providers.lua:111-129) resolves model to strategy from config without consulting the
+      new source. The fix is a precedence decision, not a config edit — inserting the
+      derived default changes what providers.cliproxyapi.web_search_strategy means. Either
+      decide and wire the chain, or record in the plan that the pinned agents deliberately
+      declare their own strategy and why the single source does not govern them.
+  - id: new
+    severity: Important
+    family: atlas-not-updated-for-new-surface
+    title: |
+      atlas/providers/cliproxy-managed.md gains no entry for cliproxy_catalog.lua, the third pure module of the feature it maps
+    detail: |
+      Its "## Pieces" section names cliproxy_config.lua (:18) and cliproxy_auth.lua (:33)
+      but not the new module, nor the Model row shape, `series`, or the two-band rank_key.
+      Only atlas/traceability.yaml was touched (2 lines) — that is the file-to-spec mapping,
+      not the map. README needs nothing at M1: no config key or keybinding lands until M4.
+  - id: new
+    severity: Minor
+    family: duplicated-logic-not-extracted
+    title: |
+      The agent-registration block is copy-pasted between register_live_agent and the refresh_state restore, and the copies already disagree
+    detail: |
+      init.lua:4339-4342 does `M.agents[name] = agent`; init.lua:1337-1340 does
+      `M.agents[name] = M.agents[name] or agent`. Same four-line operation, divergent
+      clobber semantics — a live pick replaces a same-named configured agent for the
+      session but not after a restart. ARCH-DRY: extract one M._register_agent(agent) and
+      make the clobber rule a single decision.
+  - id: new
+    severity: Minor
+    family: plan-command-does-not-run
+    title: |
+      The BR-9 referent sweep collapsed four distinct spec keys into four identical commands, destroying which surfaces the step covers
+    detail: |
+      2nd in family — do NOT edit the two blocks. The rule: a mechanical referent sweep must
+      preserve the distinction the old referents carried; when N distinct keys map to one
+      key, emit the command ONCE and keep the enumeration of what it covers in prose.
+      plan.md:1391-1397 now runs `make test-spec SPEC=providers/cliproxy-managed` four
+      identical times where it previously named unit/cliproxy_config, unit/cliproxy_auth,
+      unit/failure_notice and integration/cliproxy_recovery_e2e; plan.md:1442-1446 repeats
+      it twice.
+```
