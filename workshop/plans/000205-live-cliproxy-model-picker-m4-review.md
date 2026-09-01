@@ -974,3 +974,199 @@ findings:
       the TOOL_AGENT block and the following `local function open_simple_chat` to
       column 0 inside the enclosing describe.
 ```
+
+---
+
+## Re-review — 2026-09-01T12:22:54-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 205 — live cliproxy model picker; retire hardcoded model lists |
+| repo | parley.nvim |
+| issue file | workshop/issues/000205-live-cliproxy-model-picker.md |
+| boundary | milestone M4 |
+| milestone | M4 |
+| window | 44b9c0d0b9559c5d95f237aaf6a734097390f6b3..0624f00b1b5c8b6c60b93b54cbd53d71f6afe97e |
+| command | sdlc milestone-close --issue 205 --milestone M4 |
+| reviewer | claude |
+| timestamp | 2026-09-01T12:22:54-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+The only new work since round 23 is `0624f00`, the BR-88 fix. I verified it by mutation and by probing the production dispatch seam: it warms the catalog on the **managed** path (the shipped default), but the branch it adds at `cliproxy.lua:676` — the one its comment, its atlas paragraph and its only test all name as the `manage = false` bring-your-own case — is unreachable from a dispatch, because `providers.lua:1126` returns before `ensure_running` when `is_managed()` is false (probed: `manage=false → pre_query called ensure_running = false`). And deleting **both** reachable warms (`:654`, `:700`) leaves all fifteen cliproxy specs green — 320 assertions — so the half that works is entirely unpinned while the half that is pinned cannot run. BR-88 therefore stays `not-addressed`. Everything else on the open list is untouched by this commit and re-disposes `not-addressed` on re-measurement. The suite is green (0 failures, lint 0/0 across 345 files), but note that ran against the worktree, which still differs from the boundary by the 192-line `config.lua` roster deletion (BR-86) — the boundary's own verification signal is measured on a tree that is not the boundary.
+
+### 1. Strengths
+
+- `likeliest_culprit` / `could_have_served` / `healthiest` (`cliproxy_auth.lua:212-262`) are genuinely pure and driven by 15 unit cases with no IO, no clock, no seams. The `CULPRIT_RANK`-is-not-inverted-`HEALTH_RANK` reasoning in the comment is correct and the tests discriminate it (`prefers an errored credential over an unreadable one`).
+- Serializing the fan-out (`credential_health_across`, `:517-538`) is the right fix for the one-shot repair race, and `reads candidates SEQUENTIALLY, because the repair flag is one-shot` actually counts overlap rather than asserting the outcome.
+- `resolve_channels` (`cliproxy_config.lua:216`) is a clean pure seam, and `is NOT derived from PROVIDER_OWNED_BY, whose keys are logins` (`cliproxy_config_spec.lua:355-372`) asserts the axis invariant executably instead of commenting it.
+- The e2e case now runs with an *empty* alias block and asserts the account (`me@example.com`), which is the only thing that discriminates — the earlier `find("claude")` was satisfied by the model id.
+- `scripts/golden_fixture.lua` is correct single-sourcing, and pinning `opts.agent` outright removes the roster dependency that had goldens silently comparing a synthetic-system-prompt agent.
+
+### 2. Critical findings
+
+**BR-88 — `not-addressed`. `cliproxy.lua:638-700`, `providers.lua:1124-1130`, `tests/integration/cliproxy_catalog_spec.lua:423`**
+
+Two legs, both measured:
+
+- *The manage=false claim is false.* `warm_catalog()` at `cliproxy.lua:676` sits in `ensure_running`'s `not M.is_managed()` branch, commented "Bring-your-own proxy: still ours to READ". But `cliproxyapi.pre_query` (`providers.lua:1126`) returns `on_success()` *before* calling `ensure_running` whenever `is_managed()` is false. Probed directly: `manage=false: pre_query -> ensure_running = false`, `manage=true: pre_query -> ensure_running = true`. On the documented opt-out (`config.lua:115`, README), the only things that reach `ensure_running` are `:ParleyProxy models` and `:ParleyProxy restart` — so a bring-your-own operator who never opens a picker still gets `no cliproxy channel is configured` with no account and no login. The plan note ("including the `manage = false` bring-your-own path") and `atlas/providers/cliproxy-managed.md:90-95` both assert coverage that does not exist.
+- *The reachable half has no test.* Mutation: delete `warm_catalog()` at `:654` and `:700`, keep `:676`. Result — `cliproxy_catalog_spec` 19/19, and all fifteen `tests/{unit,integration}/cliproxy*.lua` green (320 assertions, 0 failures). The new cold-install case is green because it calls `cliproxy.ensure_running` *directly* with `manage = false`, a combination the dispatch path cannot produce. That is the same ARCH-MOCK gap BR-88 itself named ("the test seeds via a seam production never uses"), moved one level out rather than closed.
+
+Fix sketch, at the class rather than the site: the writer must sit on the seam every dispatch crosses, not on one it sometimes crosses. Either warm from `cliproxyapi.pre_query` before its `is_managed()` short-circuit, or make `ensure_running` the unconditional entry point and let it no-op on start when unmanaged. Then pin it at the *dispatch* site (`openai_tool_loop_spec.lua:76` already stubs `cliproxy.is_managed`, so driving `pre_query` under both values is the same shape), so deleting the warm reddens a test for `manage = true` as well as `false`.
+
+Residual worth stating even after that: the warm is fire-and-forget and races the request it precedes, so on a genuinely cold install the *first* failing dispatch can still read an empty catalog — an immediate local `auth_unavailable` beats two chained loopback GETs. If the intent is "the first failure names an account", the resolution needs to await the warm, not merely trigger it.
+
+**BR-75 — `not-addressed`, but the code leg is closed.** `could_have_served` is now stated over the whole enum via `CULPRIT_RANK` (`cliproxy_auth.lua:189`) and the behaviour is right. What remains is exactly what round 23 named: `cliproxy_auth_spec.lua:614-631` hardcodes two literal state lists instead of iterating `HEALTH_RANK`'s keys, so a new state can be added without being classified; and `atlas/providers/cliproxy-managed.md:107-117` still states eligibility over `missing` alone.
+
+### 3. Important findings
+
+All re-disposed `not-addressed` on re-measurement; none was touched by `0624f00`.
+
+- **BR-78** — `scripts/refresh_goldens.lua:21` still carries "Keep in sync with READONLY_TOOLS in tests/unit/parley_harness_golden_spec.lua", now *false* (both derive from `golden_fixture`), and `tests/unit/config_tools_spec.lua:22` still hand-syncs. The demanded sweep (`grep -rn "[Kk]eep in sync\|mirrors the .* in " lua/ tests/ scripts/`) returns 2 hits.
+- **BR-79** — the plan gained rows by hand, but `| resolve_login_provider | … | modified |` (`plan.md:39`) still tables a function that exists nowhere in `lua/`, and neither the §Notes recipe nor `single_source_sweeps_spec.lua:45` diffs `scripts/ tests/fixtures/`.
+- **BR-80** — both orphan blocks survive verbatim: `cliproxy.lua:478-486` (`credential_health_for_login`'s docstring, ending in `@param login`/`@param cb`, sitting above `credential_health_across`, whose own subject is 84 lines below at `:562`) and `cliproxy.lua:1337-1340` (the pre-M4 "fall back to resolving the model through oauth-model-alias" paragraph directly above its replacement). No lint added.
+- **BR-90** — `channels_for_owner`'s `@return string[] # sorted` (`cliproxy_config.lua:197`) still declares an arbitrary property while three sites read the order as a preference (`cliproxy.lua:1348` `candidates[1]`, the equal-rank tiebreak, and `likeliest_culprit`'s no-eligible fallback at `cliproxy_auth.lua:246-248`). Unchanged.
+- **BR-91** — `single_source_sweeps_spec.lua:100-105` still greps a bare name over `lua/ tests/`, so `resolve_login_provider` stays green solely on the comment at `cliproxy_config_spec.lua:271`.
+- **BR-93** — `M._repair_budget_sec` (`cliproxy.lua:359-367`) still carries one `auth_files` term while `credential_health_across_or_one` issues one `credential_health` per candidate; `OWNER_CHANNELS.google` has four.
+- **BR-94** — `atlas:107-117` and `cliproxy.lua:1427-1431` both still say "the least healthy is named", which `CULPRIT_RANK` does not implement (`{claude=unavailable, antigravity=error}` → doc says claude, code says antigravity); `atlas:207` still routes the expired-token 401 "via `resolve_login_provider`", deleted in this window.
+
+### 4. Minor findings
+
+- **BR-81** — `workshop/lessons.md:979-982` still asserts the struck claim ("deleting a SELECTED agent crashed every request"); the reachable empty-roster `error()` branch (`init.lua:4398`) has no test. The spec itself (`config_tools_spec.lua:387-404`) is now correctly scoped.
+- **BR-86** — worktree at the boundary head still carries `M lua/parley/config.lua` (192-line roster deletion) and `?? docs/parley.nvim.md`; no mechanical enforcement added.
+- **BR-87** — `plan.md:1354-1356` still presents "the LEAST healthy candidate is the one that plausibly failed" unannotated.
+- **BR-92** — `M.unhealthier` (`cliproxy_auth.lua:186`) still has zero call sites; `credential_health_across`'s `#channels == 0` branch (`:512-515`) is still unreachable (both callers pre-check).
+- **BR-95** — `init.lua:4398` still uses bare `error()`.
+- **BR-96** — `cliproxy_recovery_e2e_spec.lua:109` still has the stray leading space on `it(` (plus a double blank line at `:123-124`); `chat_respond_spec.lua:1296-1308` still de-indented to column 0.
+- *(new)* `config_tools_spec.lua:155-166` — `default_tool_agent()` returns the alphabetically-first tool-enabled agent, not "the default". At HEAD's roster that is **ToolFable** (seven qualify: ToolFable, ToolFable\*, ToolOpus, ToolOpus\*, ToolSol\*, ToolSonnet, ToolSonnet\*), while parley's actual default is `_agents[1]` = GPT5.4. The same edit dropped `assert.equals("anthropic", agent.provider)` for `assert.is_string(agent.provider)`.
+- *(new)* `workshop/lessons.md` — the two Criticals this window shipped and fixed (`eligibility before ranking`; `a replaced single source needs a writer on every path the original covered`) exist only in the commit messages and the plan's Revisions. The plan is per-issue; `lessons.md` is the cross-issue memory AGENTS.md §4 points at.
+
+### 5. Test coverage notes
+
+- Mutation-verified green: removing `cliproxy.lua:654` and `:700` leaves 15/15 cliproxy spec files passing. The BR-88 fix's effective half is unpinned.
+- The load-bearing e2e case still seeds the catalog with `cliproxy._write_catalog({...})` (`cliproxy_recovery_e2e_spec.lua:130`) — a test-only seam. With the warm now in place there is a production route to a populated catalog, and the e2e should take it so test flow and production flow share the boundary (ARCH-MOCK).
+- `could_have_served`'s two literal state lists should be `for state in pairs(HEALTH_RANK)` plus `nil`, so adding a state forces classification.
+- Full suite: green, 0 failures; `luacheck` 0 warnings / 0 errors across 345 files. Measured on the worktree, which is not the boundary (BR-86).
+
+### 6. Architectural notes
+
+- **ARCH-DRY — pass with flags.** `warm_catalog` is a correct shared helper for three call sites; `credential_health_across` is a real two-reducer/one-traversal consolidation; `golden_fixture.lua` is correct single-sourcing. Flags: `unhealthier` dead (BR-92), two surviving hand-sync comments (BR-78).
+- **ARCH-PURE — pass.** The diagnosis policy now lives entirely in `cliproxy_auth` and is unit-tested without any seam; `warm_catalog` is thin IO glue in the right layer.
+- **ARCH-PURPOSE — flag.** The shadow-sweep on the `oauth-model-alias` → catalog replacement: consumers derive (✓ `recover`, ✓ picker), but the *producer* set is still incomplete — `manage = false` has no dispatch-time writer (BR-88 leg 1). A source replaced without a writer on every path the original covered is the deferred point of the issue, not a follow-up.
+- **ARCH-MOCK — flag.** `fake_cliproxy` is the right stateful fake and the cold-install test uses it, but it enters through a seam production cannot reach. Production flow and test flow do not share the boundary for the branch under test.
+- **ARCH-CONSTRAINTS — flag.** BR-93: the declared envelope (`_repair_budget_sec`) was not re-derived when the fan-out became sequential. `warm_catalog` itself is bounded correctly (stale-gated, fire-and-forget, no added wall-clock).
+- Latent, not raised: `recover` carries two names for one concept — `login` (from `candidates[1]`, `cliproxy.lua:1349`) and `chosen_login` (from the health reducer, `:1434`). `execute`'s "No login offered" branch reads the *stale* one (`:1408`). Unreachable today only because every `OWNER_CHANNELS` value has a `CHANNEL_LOGIN` entry; adding a login-less channel (e.g. `vertex`) makes the message wrong. One variable, resolved after the reducer, removes the trap.
+
+### 7. Plan revision recommendations
+
+1. **"The manage=false warm is not on the dispatch path"** — correct the `2026-09-01 — M4 review round 23 (BR-88)` entry, which claims coverage "including the `manage = false` bring-your-own path". State the measurement (`pre_query` short-circuits at `providers.lua:1126`), what the fix actually covers, and which mutation reddens which test. Correct `atlas:90-95` in the same pass.
+2. **Core-concepts tables** — delete the `resolve_login_provider` row (deleted, not `modified`); resolve `unhealthier` (wire it or mark it deleted). Record in `## Notes` that the code→table recipe must diff `lua/ scripts/ tests/fixtures/` and the table→code direction must match a *definition* form (`function M.x(`, `M.x = `, `local function x(`), never a textual occurrence — and that the referent sweep runs on deletions as well as additions.
+3. **Task 4.1** — annotate the superseded "the LEAST healthy candidate is the one that plausibly failed" (`plan.md:1354-1356`) in place with a pointer to the C1/BR-75 revisions, since a reader hits Task 4.1 first.
+4. **Strike the `get_agent` claim in `lessons.md:979-982`** to match the correction already made in the plan and the spec.
+
+```findings
+dispose:
+  - id: BR-75
+    disposition: not-addressed
+    note: |
+      Code leg closed and discriminating; the atlas still states eligibility over `missing` alone and cliproxy_auth_spec:614-631 hardcodes two state lists instead of iterating HEALTH_RANK.
+  - id: BR-78
+    disposition: not-addressed
+    note: |
+      GOLDEN_AGENT is single-sourced, but the demanded sweep was the deliverable: refresh_goldens.lua:21 and config_tools_spec.lua:22 still hand-sync READONLY_TOOLS, and :21's comment is now false.
+  - id: BR-79
+    disposition: not-addressed
+    note: |
+      Rows still added by hand; the resolve_login_provider row says `modified` for a function absent from lua/, and neither the recipe nor single_source_sweeps_spec.lua:45 diffs scripts/ or tests/fixtures/.
+  - id: BR-80
+    disposition: not-addressed
+    note: |
+      Both orphan blocks survive verbatim at cliproxy.lua:478-486 and :1337-1340; no lint added.
+  - id: BR-81
+    disposition: not-addressed
+    note: |
+      The spec is correctly rescoped, but lessons.md:979-982 still carries the struck claim and the reachable empty-roster error branch at init.lua:4398 has no test.
+  - id: BR-86
+    disposition: not-addressed
+    note: |
+      Worktree at HEAD still carries the uncommitted 192-line config.lua roster deletion and untracked docs/parley.nvim.md; the green suite was measured on that tree, not on the boundary.
+  - id: BR-87
+    disposition: not-addressed
+    note: |
+      plan.md:1354-1356 is still unannotated.
+  - id: BR-88
+    disposition: not-addressed
+    note: |
+      Two legs measured. (1) The manage=false warm at cliproxy.lua:676 is unreachable from a dispatch — providers.lua:1126 returns before ensure_running when is_managed() is false (probed) — so the bring-your-own operator still gets "no cliproxy channel is configured", contradicting the comment, atlas:90-95 and the plan note. (2) The reachable half is unpinned: deleting warm_catalog() at :654 and :700 leaves all fifteen cliproxy spec files green (320 assertions), because the only new test calls ensure_running directly with manage=false.
+  - id: BR-90
+    disposition: not-addressed
+    note: |
+      channels_for_owner still documents order as "sorted" while cliproxy.lua:1348, the tiebreak and likeliest_culprit's no-eligible fallback all read it as a preference.
+  - id: BR-91
+    disposition: not-addressed
+    note: |
+      single_source_sweeps_spec.lua unchanged; both directions still match textual occurrences, and the code direction still diffs only lua/.
+  - id: BR-92
+    disposition: not-addressed
+    note: |
+      M.unhealthier still has zero call sites and credential_health_across's #channels == 0 branch is still unreachable.
+  - id: BR-93
+    disposition: not-addressed
+    note: |
+      _repair_budget_sec at cliproxy.lua:359-367 is unchanged and still carries one auth_files term for a path that now issues one read per candidate.
+  - id: BR-94
+    disposition: not-addressed
+    note: |
+      atlas:107-117 and cliproxy.lua:1427-1431 still state "the least healthy is named", which CULPRIT_RANK does not implement; atlas:207 still names the deleted resolve_login_provider.
+  - id: BR-95
+    disposition: not-addressed
+    note: |
+      init.lua:4398 still uses bare error().
+  - id: BR-96
+    disposition: not-addressed
+    note: |
+      cliproxy_recovery_e2e_spec.lua:109 still has the stray leading space (plus a new double blank line at :123); chat_respond_spec.lua:1296-1308 is still at column 0.
+findings:
+  - id: new
+    severity: Minor
+    family: test-title-overstates-guard
+    title: |
+      default_tool_agent() returns the alphabetically-first tool-enabled agent, not "the default", and the provider assertion was weakened to is_string
+    detail: |
+      config_tools_spec.lua:155-166. Seven agents qualify at HEAD (ToolFable,
+      ToolFable*, ToolOpus, ToolOpus*, ToolSol*, ToolSonnet, ToolSonnet*), so the
+      describe named "the default tool-enabled agent" measures ToolFable, while
+      parley's default is _agents[1] = GPT5.4. The same edit replaced
+      assert.equals("anthropic", agent.provider) with assert.is_string. It passes
+      today only because all seven share tools = {"@all"} and the default limits.
+      This is the 7th finding in family `test-title-overstates-guard`. Do NOT
+      rename this describe — the rule is that replacing a hardcoded borrowed
+      fixture with a DISCOVERED borrowed fixture is the same defect one level out:
+      a test about a default must construct that default, or resolve it through the
+      production accessor that defines it (parley._agents[1] / _state.agent), never
+      by sorting a filtered roster. Apply it to all eight call sites in this file.
+  - id: new
+    severity: Minor
+    family: lesson-not-recorded
+    title: |
+      The two Criticals this window shipped state their class only in commit messages and the plan's Revisions; workshop/lessons.md gained neither
+    detail: |
+      The window added two lessons entries (the fixture-ownership rule and the
+      fan-out/one-shot rule). Absent: "eligibility before ranking" (BR-75/C1 — the
+      same user-visible symptom reached by three different routes on this issue)
+      and "a replaced single source needs a writer on every path the original
+      covered" (BR-88), which 0624f00's own message names as "the class".
+      This is the 2nd finding in family `lesson-not-recorded`. Do NOT append two
+      entries — state the rule: a commit or plan Revisions entry that names a CLASS
+      must land that class in workshop/lessons.md in the same commit, because the
+      plan is per-issue memory and lessons.md is the cross-issue memory the next
+      issue actually reads. Enumeration: every "The class:" / "The rule:" /
+      "The pattern worth carrying:" paragraph in this window's commit messages and
+      plan Revisions.
+```

@@ -423,14 +423,15 @@ end)
 describe("cliproxy catalog cold install", function()
     local parley = require("parley")
     local cliproxy = require("parley.cliproxy")
+    local providers = require("parley.providers")
 
-    it("a dispatch populates the catalog, not only opening the picker", function()
-        -- BR-88: fetch_catalog's only production caller was the agent picker, so
-        -- a cold install had NO catalog — and after M4 the catalog is what
-        -- resolves model→channel, so an auth failure on a fresh machine reported
-        -- "no cliproxy channel is configured" with no account and no login
-        -- offered. That is worse than the oauth-model-alias block it replaced,
-        -- which at least shipped a mapping.
+    -- Driven through pre_query, the seam EVERY cliproxy request passes through.
+    -- An earlier version of this test called ensure_running directly with
+    -- manage=false — the one leg a dispatch can never reach, since pre_query
+    -- returns before ensure_running when the feature is off. So it pinned
+    -- nothing: deleting the warm from both reachable sites left all fifteen
+    -- cliproxy specs green.
+    local function cold_dispatch(manage)
         local dir = vim.fn.tempname()
         cliproxy._set_data_dir(dir)
         cliproxy._reset_catalog_clock()
@@ -448,17 +449,30 @@ describe("cliproxy catalog cold install", function()
         }
         require("parley.vault").add_secret("cliproxyapi", "testkey")
         local saved_config = parley.config
-        parley.config = { cliproxy = { manage = false } } -- reuse, don't spawn
+        parley.config = { cliproxy = { manage = manage, binary_path = FAKE } }
 
         local done = false
-        cliproxy.ensure_running(function() done = true end, function() done = true end)
+        providers.get("cliproxyapi").pre_query(function() done = true end,
+                                              function() done = true end)
         vim.wait(8000, function()
             return done and #cliproxy.catalog_cached() > 0
         end, 50)
+        local n = #cliproxy.catalog_cached()
         parley.config = saved_config
-
-        assert.is_true(#cliproxy.catalog_cached() > 0,
-            "a dispatch through cliproxy must leave a catalog behind")
         cliproxy._set_data_dir(SPEC_DATA_DIR)
+        return n
+    end
+
+    it("a managed dispatch leaves a catalog behind", function()
+        assert.is_true(cold_dispatch(true) > 0,
+            "a dispatch through cliproxy must populate the catalog")
+    end)
+
+    it("a bring-your-own dispatch leaves a catalog behind too", function()
+        -- manage=false means parley does not START the proxy, not that there is
+        -- none — and pre_query returns before ensure_running here, which is why
+        -- warming inside ensure_running never reached this operator.
+        assert.is_true(cold_dispatch(false) > 0,
+            "manage=false still reads a proxy that is already running")
     end)
 end)

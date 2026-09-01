@@ -2191,11 +2191,30 @@ configured", with no account named and no login offered. That is strictly worse
 than the block it replaced, which at least shipped a mapping: I removed a source
 of truth and left its replacement populated by an optional UI gesture.
 
-`ensure_running` now warms it, stale-gated and fire-and-forget, so any dispatch
-through cliproxy leaves a catalog behind — including the `manage = false`
-bring-your-own path, which is still ours to READ even when it is not ours to
-start. Pinned by a cold-install test that fails when the warm is removed.
+**Corrected in round 24:** warming inside `ensure_running` did NOT cover the
+bring-your-own path — `pre_query` returns before `ensure_running` when
+`manage = false`, so that operator still got nothing, while the comment, the
+atlas and this note all claimed otherwise. The warm lives in `pre_query`, the one
+seam every cliproxy request passes through. And the first test pinned the
+UNREACHABLE leg (it called `ensure_running` directly with `manage = false`), so
+deleting the warm from both reachable sites left all fifteen cliproxy specs
+green; it now drives `pre_query` for both modes, and removing the warm fails
+two.
 
 **The class:** when a single source of truth is replaced, the replacement needs
 a writer on every path the original covered — not just the one the new feature
 made convenient.
+
+### 2026-09-01 — M4 review round 24 (BR-88 again)
+
+Two legs, both mine, and the second is the recurring failure in its purest form:
+**the test exercised the one code path that cannot happen.** `pre_query` returns
+before `ensure_running` when the feature is off, so a test calling
+`ensure_running` with `manage = false` measured a branch no dispatch reaches —
+while both reachable call sites went unpinned and could be deleted with the whole
+suite green.
+
+The check that catches it is not "does a test exist" but "can this line be
+deleted with the suite green" — and it has to be aimed at the line PRODUCTION
+executes, which means knowing which path production takes before writing the
+test.

@@ -87,12 +87,15 @@ reads that catalog instead of carrying model names in Lua.
   instance answers the same GET. The refresh therefore runs either way; gating it
   on `manage` left those operators with an empty catalog and a picker claiming
   every configured provider was logged out.
-- **Any dispatch warms it, not just the picker.** `ensure_running` kicks a
-  stale-gated refresh, so a machine that has never opened an agent picker still
-  has a catalog — which matters because the catalog is what resolves
+- **Any dispatch warms it, not just the picker.** The adapter's `pre_query` hook
+  kicks a stale-gated refresh — the one seam EVERY cliproxy request passes
+  through, managed or bring-your-own — so a machine that has never opened an
+  agent picker still has a catalog — which matters because the catalog is what resolves
   model→channel for auth diagnosis. Its only writer used to be the picker, so a
   cold install reported "no cliproxy channel is configured" with no account and
-  no login offered: worse than the `oauth-model-alias` block it replaced.
+  no login offered: worse than the `oauth-model-alias` block it replaced. Warming
+  inside `ensure_running` is NOT enough — `pre_query` returns before it when
+  `manage = false`, so the bring-your-own operator never reached it.
 - **`fetch_catalog` never spawns the proxy.** It is a plain GET; a
   connection-refused is a no-op that leaves the cache in place. Opening a picker
   must not start a daemon — that is the dormancy contract from #131, pinned by a

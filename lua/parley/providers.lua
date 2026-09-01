@@ -1123,7 +1123,17 @@ end
 -- instead of hanging. No-op (immediate on_success) when not opted in.
 cliproxyapi.pre_query = function(on_success, on_error)
     local ok, cliproxy = pcall(require, "parley.cliproxy")
-    if not ok or not cliproxy.is_managed() then
+    if not ok then
+        return on_success()
+    end
+    -- Warm the model catalog HERE, at the dispatch seam, because this is the one
+    -- point every cliproxy request passes through. Putting it inside
+    -- ensure_running covered only the managed path — the `manage = false` branch
+    -- returns above, so a bring-your-own operator never reached it and still got
+    -- "no cliproxy channel is configured" on an auth failure. Stale-gated and
+    -- fire-and-forget: it never delays the request.
+    cliproxy.warm_catalog()
+    if not cliproxy.is_managed() then
         return on_success() -- bring-your-own / feature off
     end
     cliproxy.ensure_running(on_success, on_error or function() end)

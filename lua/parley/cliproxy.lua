@@ -635,7 +635,16 @@ local POLL_INTERVAL_MS = 250
 --- Fire-and-forget and stale-gated, so it costs one extra pair of loopback GETs
 --- per TTL on a path that is already talking to the proxy, and never delays the
 --- request.
-local function warm_catalog()
+--- Refresh the model catalog if it is stale. Fire-and-forget: never delays a
+--- caller, never spawns the proxy.
+---
+--- Called from the cliproxyapi adapter's `pre_query` — the one seam EVERY
+--- cliproxy request passes through, managed or bring-your-own. Its only writer
+--- used to be the agent picker, so a machine that never opened one had no
+--- catalog; and after M4 the catalog is what resolves model→channel, so an auth
+--- failure there reported "no cliproxy channel is configured" with no account
+--- and no login offered — worse than the `oauth-model-alias` block it replaced.
+function M.warm_catalog()
     if M.catalog_stale() then
         pcall(M.fetch_catalog, function() end)
     end
@@ -651,7 +660,6 @@ local function poll_until_healthy(host, port, secret, pid, callback, on_error)
         end
         M.health_probe(host, port, secret, function(state)
             if state == "healthy" or state == "needs_login" then
-                warm_catalog()
                 return callback()
             end
             if uv.now() >= deadline then
@@ -672,8 +680,6 @@ end
 function M.ensure_running(callback, on_error)
     on_error = on_error or function() end
     if not M.is_managed() then
-        -- Bring-your-own proxy: still ours to READ, just not to start.
-        warm_catalog()
         return callback()
     end
 
@@ -697,7 +703,6 @@ function M.ensure_running(callback, on_error)
             end)
         end
         if state == "healthy" or state == "needs_login" then
-            warm_catalog()
             return callback() -- reuse the already-running (brew service / other nvim)
         end
         if state == "client_key_mismatch" then

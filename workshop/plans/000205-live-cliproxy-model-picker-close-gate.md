@@ -1791,6 +1791,109 @@ rounds:
           round: 23
       boundary: M4
       blocked: true
+    - "n": 24
+      timestamp: "2026-09-01T12:22:54-07:00"
+      agent: claude
+      dispose:
+        - id: BR-75
+          disposition: not-addressed
+          note: Code leg closed and discriminating; the atlas still states eligibility over `missing` alone and cliproxy_auth_spec:614-631 hardcodes two state lists instead of iterating HEALTH_RANK.
+          round: 24
+        - id: BR-78
+          disposition: not-addressed
+          note: 'GOLDEN_AGENT is single-sourced, but the demanded sweep was the deliverable: refresh_goldens.lua:21 and config_tools_spec.lua:22 still hand-sync READONLY_TOOLS, and :21''s comment is now false.'
+          round: 24
+        - id: BR-79
+          disposition: not-addressed
+          note: Rows still added by hand; the resolve_login_provider row says `modified` for a function absent from lua/, and neither the recipe nor single_source_sweeps_spec.lua:45 diffs scripts/ or tests/fixtures/.
+          round: 24
+        - id: BR-80
+          disposition: not-addressed
+          note: Both orphan blocks survive verbatim at cliproxy.lua:478-486 and :1337-1340; no lint added.
+          round: 24
+        - id: BR-81
+          disposition: not-addressed
+          note: The spec is correctly rescoped, but lessons.md:979-982 still carries the struck claim and the reachable empty-roster error branch at init.lua:4398 has no test.
+          round: 24
+        - id: BR-86
+          disposition: not-addressed
+          note: Worktree at HEAD still carries the uncommitted 192-line config.lua roster deletion and untracked docs/parley.nvim.md; the green suite was measured on that tree, not on the boundary.
+          round: 24
+        - id: BR-87
+          disposition: not-addressed
+          note: plan.md:1354-1356 is still unannotated.
+          round: 24
+        - id: BR-88
+          disposition: not-addressed
+          note: 'Two legs measured. (1) The manage=false warm at cliproxy.lua:676 is unreachable from a dispatch — providers.lua:1126 returns before ensure_running when is_managed() is false (probed) — so the bring-your-own operator still gets "no cliproxy channel is configured", contradicting the comment, atlas:90-95 and the plan note. (2) The reachable half is unpinned: deleting warm_catalog() at :654 and :700 leaves all fifteen cliproxy spec files green (320 assertions), because the only new test calls ensure_running directly with manage=false.'
+          round: 24
+        - id: BR-90
+          disposition: not-addressed
+          note: channels_for_owner still documents order as "sorted" while cliproxy.lua:1348, the tiebreak and likeliest_culprit's no-eligible fallback all read it as a preference.
+          round: 24
+        - id: BR-91
+          disposition: not-addressed
+          note: single_source_sweeps_spec.lua unchanged; both directions still match textual occurrences, and the code direction still diffs only lua/.
+          round: 24
+        - id: BR-92
+          disposition: not-addressed
+          note: 'M.unhealthier still has zero call sites and credential_health_across''s #channels == 0 branch is still unreachable.'
+          round: 24
+        - id: BR-93
+          disposition: not-addressed
+          note: _repair_budget_sec at cliproxy.lua:359-367 is unchanged and still carries one auth_files term for a path that now issues one read per candidate.
+          round: 24
+        - id: BR-94
+          disposition: not-addressed
+          note: atlas:107-117 and cliproxy.lua:1427-1431 still state "the least healthy is named", which CULPRIT_RANK does not implement; atlas:207 still names the deleted resolve_login_provider.
+          round: 24
+        - id: BR-95
+          disposition: not-addressed
+          note: init.lua:4398 still uses bare error().
+          round: 24
+        - id: BR-96
+          disposition: not-addressed
+          note: cliproxy_recovery_e2e_spec.lua:109 still has the stray leading space (plus a new double blank line at :123); chat_respond_spec.lua:1296-1308 is still at column 0.
+          round: 24
+      findings:
+        - id: BR-97
+          severity: Minor
+          title: default_tool_agent() returns the alphabetically-first tool-enabled agent, not "the default", and the provider assertion was weakened to is_string
+          detail: |-
+            config_tools_spec.lua:155-166. Seven agents qualify at HEAD (ToolFable,
+            ToolFable*, ToolOpus, ToolOpus*, ToolSol*, ToolSonnet, ToolSonnet*), so the
+            describe named "the default tool-enabled agent" measures ToolFable, while
+            parley's default is _agents[1] = GPT5.4. The same edit replaced
+            assert.equals("anthropic", agent.provider) with assert.is_string. It passes
+            today only because all seven share tools = {"@all"} and the default limits.
+            This is the 7th finding in family `test-title-overstates-guard`. Do NOT
+            rename this describe — the rule is that replacing a hardcoded borrowed
+            fixture with a DISCOVERED borrowed fixture is the same defect one level out:
+            a test about a default must construct that default, or resolve it through the
+            production accessor that defines it (parley._agents[1] / _state.agent), never
+            by sorting a filtered roster. Apply it to all eight call sites in this file.
+          family: test-title-overstates-guard
+          round: 24
+        - id: BR-98
+          severity: Minor
+          title: The two Criticals this window shipped state their class only in commit messages and the plan's Revisions; workshop/lessons.md gained neither
+          detail: |-
+            The window added two lessons entries (the fixture-ownership rule and the
+            fan-out/one-shot rule). Absent: "eligibility before ranking" (BR-75/C1 — the
+            same user-visible symptom reached by three different routes on this issue)
+            and "a replaced single source needs a writer on every path the original
+            covered" (BR-88), which 0624f00's own message names as "the class".
+            This is the 2nd finding in family `lesson-not-recorded`. Do NOT append two
+            entries — state the rule: a commit or plan Revisions entry that names a CLASS
+            must land that class in workshop/lessons.md in the same commit, because the
+            plan is per-issue memory and lessons.md is the cross-issue memory the next
+            issue actually reads. Enumeration: every "The class:" / "The rule:" /
+            "The pattern worth carrying:" paragraph in this window's commit messages and
+            plan Revisions.
+          family: lesson-not-recorded
+          round: 24
+      boundary: M4
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#205 (boundary-review)
@@ -2627,6 +2730,55 @@ later rounds disposed of them. Generated — edit the gate, not this file.
   the TOOL_AGENT block and the following `local function open_simple_chat` to
   column 0 inside the enclosing describe.
 
+## Round 24 — 2026-09-01T12:22:54-07:00 (claude) — BLOCKED
+
+### Disposed
+
+- BR-75 — not-addressed — Code leg closed and discriminating; the atlas still states eligibility over `missing` alone and cliproxy_auth_spec:614-631 hardcodes two state lists instead of iterating HEALTH_RANK.
+- BR-78 — not-addressed — GOLDEN_AGENT is single-sourced, but the demanded sweep was the deliverable: refresh_goldens.lua:21 and config_tools_spec.lua:22 still hand-sync READONLY_TOOLS, and :21's comment is now false.
+- BR-79 — not-addressed — Rows still added by hand; the resolve_login_provider row says `modified` for a function absent from lua/, and neither the recipe nor single_source_sweeps_spec.lua:45 diffs scripts/ or tests/fixtures/.
+- BR-80 — not-addressed — Both orphan blocks survive verbatim at cliproxy.lua:478-486 and :1337-1340; no lint added.
+- BR-81 — not-addressed — The spec is correctly rescoped, but lessons.md:979-982 still carries the struck claim and the reachable empty-roster error branch at init.lua:4398 has no test.
+- BR-86 — not-addressed — Worktree at HEAD still carries the uncommitted 192-line config.lua roster deletion and untracked docs/parley.nvim.md; the green suite was measured on that tree, not on the boundary.
+- BR-87 — not-addressed — plan.md:1354-1356 is still unannotated.
+- BR-88 — not-addressed — Two legs measured. (1) The manage=false warm at cliproxy.lua:676 is unreachable from a dispatch — providers.lua:1126 returns before ensure_running when is_managed() is false (probed) — so the bring-your-own operator still gets "no cliproxy channel is configured", contradicting the comment, atlas:90-95 and the plan note. (2) The reachable half is unpinned: deleting warm_catalog() at :654 and :700 leaves all fifteen cliproxy spec files green (320 assertions), because the only new test calls ensure_running directly with manage=false.
+- BR-90 — not-addressed — channels_for_owner still documents order as "sorted" while cliproxy.lua:1348, the tiebreak and likeliest_culprit's no-eligible fallback all read it as a preference.
+- BR-91 — not-addressed — single_source_sweeps_spec.lua unchanged; both directions still match textual occurrences, and the code direction still diffs only lua/.
+- BR-92 — not-addressed — M.unhealthier still has zero call sites and credential_health_across's #channels == 0 branch is still unreachable.
+- BR-93 — not-addressed — _repair_budget_sec at cliproxy.lua:359-367 is unchanged and still carries one auth_files term for a path that now issues one read per candidate.
+- BR-94 — not-addressed — atlas:107-117 and cliproxy.lua:1427-1431 still state "the least healthy is named", which CULPRIT_RANK does not implement; atlas:207 still names the deleted resolve_login_provider.
+- BR-95 — not-addressed — init.lua:4398 still uses bare error().
+- BR-96 — not-addressed — cliproxy_recovery_e2e_spec.lua:109 still has the stray leading space (plus a new double blank line at :123); chat_respond_spec.lua:1296-1308 is still at column 0.
+
+### Raised
+
+- **BR-97** [Minor] `test-title-overstates-guard` default_tool_agent() returns the alphabetically-first tool-enabled agent, not "the default", and the provider assertion was weakened to is_string
+  config_tools_spec.lua:155-166. Seven agents qualify at HEAD (ToolFable,
+  ToolFable*, ToolOpus, ToolOpus*, ToolSol*, ToolSonnet, ToolSonnet*), so the
+  describe named "the default tool-enabled agent" measures ToolFable, while
+  parley's default is _agents[1] = GPT5.4. The same edit replaced
+  assert.equals("anthropic", agent.provider) with assert.is_string. It passes
+  today only because all seven share tools = {"@all"} and the default limits.
+  This is the 7th finding in family `test-title-overstates-guard`. Do NOT
+  rename this describe — the rule is that replacing a hardcoded borrowed
+  fixture with a DISCOVERED borrowed fixture is the same defect one level out:
+  a test about a default must construct that default, or resolve it through the
+  production accessor that defines it (parley._agents[1] / _state.agent), never
+  by sorting a filtered roster. Apply it to all eight call sites in this file.
+- **BR-98** [Minor] `lesson-not-recorded` The two Criticals this window shipped state their class only in commit messages and the plan's Revisions; workshop/lessons.md gained neither
+  The window added two lessons entries (the fixture-ownership rule and the
+  fan-out/one-shot rule). Absent: "eligibility before ranking" (BR-75/C1 — the
+  same user-visible symptom reached by three different routes on this issue)
+  and "a replaced single source needs a writer on every path the original
+  covered" (BR-88), which 0624f00's own message names as "the class".
+  This is the 2nd finding in family `lesson-not-recorded`. Do NOT append two
+  entries — state the rule: a commit or plan Revisions entry that names a CLASS
+  must land that class in workshop/lessons.md in the same commit, because the
+  plan is per-issue memory and lessons.md is the cross-issue memory the next
+  issue actually reads. Enumeration: every "The class:" / "The rule:" /
+  "The pattern worth carrying:" paragraph in this window's commit messages and
+  plan Revisions.
+
 ## Open findings
 
 - **BR-13** [Important] `rank-key-version-extraction` rank_key's `< 100` threshold answers the 120B instance, not the class: any parameter count below 100 still reads as a version
@@ -2668,3 +2820,5 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-94** [Important] `documented-render-not-pinned` The corrected atlas documents a ranking the code does not implement, and atlas:201 still routes via a function this range deleted
 - **BR-95** [Minor] `ui-path-log-level` get_agent's empty-roster raise uses bare error(), so the operator sees an init.lua:4398 source prefix
 - **BR-96** [Minor] `style-drift-in-diff` Two indentation regressions introduced by this window
+- **BR-97** [Minor] `test-title-overstates-guard` default_tool_agent() returns the alphabetically-first tool-enabled agent, not "the default", and the provider assertion was weakened to is_string
+- **BR-98** [Minor] `lesson-not-recorded` The two Criticals this window shipped state their class only in commit messages and the plan's Revisions; workshop/lessons.md gained neither
