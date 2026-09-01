@@ -495,20 +495,28 @@ end
 ---@param channels string[]
 ---@param prefer fun(a: table, b: table): boolean # true when `a` should win
 ---@param cb fun(health: table, channel: string|nil)
-function M.credential_health_across(channels, prefer, cb)
+--- Gather every channel's health, then let a PURE reducer choose.
+---
+--- The gathering is all this does. Choosing used to happen inline, one reading
+--- at a time, which put the policy in the IO shell where it could not be
+--- unit-tested — and the policy was wrong: it blamed whichever channel held no
+--- credential at all.
+---@param channels string[]
+---@param choose fun(readings: table[]): table|nil, string|nil
+---@param cb fun(health: table, channel: string|nil)
+function M.credential_health_across(channels, choose, cb)
     if #channels == 0 then
         return cb({ state = "unknown", reason = "no_channel",
             message = "no cliproxy channel could be resolved" }, nil)
     end
-    local best, best_channel, pending = nil, nil, #channels
+    local readings, pending = {}, #channels
     for _, channel in ipairs(channels) do
         M.credential_health(function(health)
-            if best == nil or prefer(health, best) then
-                best, best_channel = health, channel
-            end
+            readings[#readings + 1] = { health = health, channel = channel }
             pending = pending - 1
             if pending == 0 then
-                cb(best, best_channel)
+                local chosen, chosen_channel = choose(readings)
+                cb(chosen, chosen_channel)
             end
         end, channel)
     end
@@ -526,7 +534,10 @@ function M.credential_health_across_or_one(channels, cb)
             cb(health, channels[1], repaired)
         end, channels[1])
     end
-    M.credential_health_across(channels, ca.unhealthier, function(health, channel)
+    -- likeliest_culprit, not "unhealthiest": a channel with NO credential could
+    -- not have served the request, and it ranks worst — so an unhealthiest-wins
+    -- reducer names it every time.
+    M.credential_health_across(channels, ca.likeliest_culprit, function(health, channel)
         cb(health, channel, nil)
     end)
 end
@@ -536,7 +547,15 @@ function M.credential_health_for_login(login, cb)
     if #channels == 0 then
         return M.credential_health(cb, login) -- not a login-axis name; treat as a channel
     end
-    M.credential_health_across(channels, ca.healthier, function(health)
+    M.credential_health_across(channels, function(readings)
+        local best, ch
+        for _, r in ipairs(readings) do
+            if best == nil or ca.healthier(r.health, best) then
+                best, ch = r.health, r.channel
+            end
+        end
+        return best, ch
+    end, function(health)
         cb(health)
     end)
 end

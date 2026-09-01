@@ -108,9 +108,12 @@ reads that catalog instead of carrying model names in Lua.
   gemini and gpt-oss models alongside their native channels, so pinning is how you
   say which channel should serve a given id.
 - **Model → channel now resolves from the catalog**, and where several channels
-  could serve one id, CREDENTIAL HEALTH picks between them: the least healthy
-  candidate is the one that plausibly caused the failure, so that is the login the
-  diagnosis names. A pin still wins over both. If nothing resolves, parley says so
+  could serve one id, CREDENTIAL HEALTH picks between them — **eligibility first,
+  ranking second**. A channel holding NO credential cannot have served the
+  request, so it is not a candidate at all; among those that could have, the
+  least healthy is named. Getting that order wrong inverts the answer, because
+  `missing` ranks worst: an "unhealthiest wins" reducer names the channel you
+  have never logged into and leaves the credential that actually failed unnamed. A pin still wins over both. If nothing resolves, parley says so
   rather than naming an account at random.
 - **`owned_by` is a display grouping, not a channel.** The same id was reported
   under `anthropic` on one proxy start and `antigravity` on the next, so nothing

@@ -37,7 +37,7 @@ from unticked boxes here.
 | `resolve_channel` | `lua/parley/cliproxy_config.lua` | modified |
 | `resolve_channels` / `channels_for_owner` | `lua/parley/cliproxy_config.lua` | new |
 | `resolve_login_provider` | `lua/parley/cliproxy_config.lua` | modified |
-| `unhealthier` | `lua/parley/cliproxy_auth.lua` | new |
+| `unhealthier` / `could_have_served` / `likeliest_culprit` | `lua/parley/cliproxy_auth.lua` | new |
 | `_build_items` | `lua/parley/agent_picker.lua` | modified |
 | `_providers_without_models` | `lua/parley/agent_picker.lua` | new |
 | `_view_for` | `lua/parley/agent_picker.lua` | new |
@@ -2090,3 +2090,32 @@ Fixing them found a real bug and one repeated test smell.
 - The rule, added to the specs' comments: a test asserts a BEHAVIOUR, so it owns
   the agent that behaviour needs. Borrowing one from the shipped roster makes a
   product decision able to silently change what the test measures.
+
+### 2026-09-01 — M4 boundary review (C1, C2)
+
+- **C1 (Critical, a live regression I shipped).** With the alias block gone, the
+  candidate set for a `claude-*` model is `{antigravity, claude}` — and
+  `missing` ranks WORST, so "blame the unhealthiest" named **antigravity**: a
+  channel the operator may never have used, holding no credential, which
+  therefore cannot have served the request. Every auth failure under the shipped
+  config prompted `:ParleyProxy login antigravity` while the credential that
+  actually failed went unnamed — the exact wrong-account diagnosis #197 exists to
+  prevent, reintroduced by the deletion that removed the block short-circuiting
+  it.
+  The rule: **eligibility before ranking.** `could_have_served` and
+  `likeliest_culprit` are pure functions in `cliproxy_auth`, beside the ranking
+  they qualify, so the policy is unit-testable without the fan-out — it had been
+  hardcoded in the IO shell, which is how it shipped untested. The atlas
+  documented the broken rule verbatim and is corrected.
+  My regression test passed throughout: its fixture left the claude credential
+  HEALTHY, so there was no expired credential to name, and the `missing`
+  antigravity reading produced a plausible "no credential is loaded" message. The
+  fixture now models what the title claims, and asserts the ACCOUNT.
+- **C2.** The M4 commit also carried the operator's roster cleanup — 19 agents to
+  1 — contradicting the Spec ("keep the six configured cliproxyapi agents as
+  pinned favourites") and Task 4.2 ("removes `oauth-model-alias` and nothing
+  else"), and leaving `review_agent`/`skill_agent`, `scripts/refresh_goldens.lua`
+  and the atlas naming agents that no longer shipped. The roster is restored;
+  M4 now changes exactly two things in that file. The operator's cleanup is back
+  in the working tree as their own uncommitted change, where it needs a
+  reference sweep before it can land.

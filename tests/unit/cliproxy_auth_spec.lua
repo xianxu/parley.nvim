@@ -563,3 +563,59 @@ describe("_usage_has_flag", function()
         assert.is_false(cliproxy._usage_has_flag("", "-claude-login"))
     end)
 end)
+
+--------------------------------------------------------------------------------
+-- likeliest_culprit — eligibility before ranking (#205 M4 C1)
+--------------------------------------------------------------------------------
+describe("likeliest_culprit", function()
+    local function r(channel, state) return { channel = channel, health = { state = state } } end
+
+    it("never blames a channel that holds no credential", function()
+        -- The shipped bug: `missing` ranks WORST, so an unhealthiest-wins
+        -- reducer chose the channel with no credential at all — which cannot
+        -- have served the request — and told the operator to log into a channel
+        -- they may never have used, while the credential that actually failed
+        -- went unnamed.
+        local health, channel = ca.likeliest_culprit({
+            r("antigravity", "missing"),
+            r("claude", "error"),
+        })
+        assert.equals("claude", channel)
+        assert.equals("error", health.state)
+    end)
+
+    it("picks the least healthy among those that could have served it", function()
+        local _, channel = ca.likeliest_culprit({
+            r("claude", "healthy"),
+            r("antigravity", "unavailable"),
+        })
+        assert.equals("antigravity", channel)
+    end)
+
+    it("reports missing only when EVERY candidate is missing", function()
+        -- Then it is the honest answer: you are logged into none of these.
+        local health, channel = ca.likeliest_culprit({
+            r("antigravity", "missing"),
+            r("claude", "missing"),
+        })
+        assert.equals("missing", health.state)
+        assert.is_not_nil(channel)
+    end)
+
+    it("handles a single candidate and an empty set", function()
+        local _, channel = ca.likeliest_culprit({ r("claude", "error") })
+        assert.equals("claude", channel)
+        local h2, c2 = ca.likeliest_culprit({})
+        assert.is_nil(h2)
+        assert.is_nil(c2)
+    end)
+end)
+
+describe("could_have_served", function()
+    it("is false only for a channel with no credential", function()
+        assert.is_false(ca.could_have_served({ state = "missing" }))
+        for _, state in ipairs({ "healthy", "error", "unavailable", "disabled" }) do
+            assert.is_true(ca.could_have_served({ state = state }), state)
+        end
+    end)
+end)

@@ -130,7 +130,15 @@ describe("cliproxy recovery end to end", function()
         cliproxy._write_catalog({
             { id = "claude-opus-4-8", owner = "anthropic", display = "Claude Opus 4.8" },
         })
-        serve("expired", nil, {})   -- empty alias block
+        -- The claude credential must actually BE unhealthy in the store: this
+        -- case is "an EXPIRED token names the claude login", and with a healthy
+        -- store there is no expired credential to name. Before the eligibility
+        -- fix, a `missing` antigravity reading was chosen instead and produced a
+        -- plausible-looking "no credential is loaded" message — the test passed
+        -- while parley pointed the operator at the wrong channel.
+        serve("expired", { unavailable = true, status = "error",
+            status_message = "OAuth access token has expired. Re-authenticate to continue." },
+            {})   -- empty alias block
 
         local out = query()
 
@@ -144,8 +152,14 @@ describe("cliproxy recovery end to end", function()
             "channel resolution fell back to nothing without an alias block: " .. out.notice)
         assert.is_nil(out.notice:find("no cliproxy channel is configured", 1, true),
             "the catalog should have resolved the channel: " .. out.notice)
-        assert.is_true(out.notice:find("credential", 1, true) ~= nil,
-            "the diagnosis should report the credential state it read: " .. out.notice)
+        -- Names the CLAUDE account, not merely "a credential": the whole point
+        -- is which channel to re-authenticate. antigravity is the other
+        -- candidate for anthropic-owned models and holds no credential at all,
+        -- so it cannot have served this request.
+        assert.matches("me@example.com", out.notice)
+        assert.matches("expired", out.notice)
+        assert.is_nil(out.notice:find("antigravity", 1, true),
+            "blamed a channel that holds no credential: " .. out.notice)
         assert.is_nil(out.notice:find("Add it to", 1, true),
             "it must stop telling operators to add a key the config no longer ships")
     end)

@@ -1368,6 +1368,12 @@ rounds:
           round: 18
       boundary: M3
       blocked: false
+    - "n": 19
+      timestamp: "2026-09-01T10:42:56-07:00"
+      agent: claude
+      boundary: M4
+      blocked: false
+      protocol_error: no valid findings block
 ---
 
 # Gate ledger — parley.nvim#205 (boundary-review)
@@ -1968,6 +1974,10 @@ later rounds disposed of them. Generated — edit the gate, not this file.
   This is the 6th finding in family `plan-table-missing-entity`. Do NOT just add the row — the rule is that the guard must check what its message claims. tests/arch/single_source_sweeps_spec.lua:57-69 calls plan_body:find over the entire document while asserting "appear in no Core-concepts table row". Measured: `_on_login_success` (added this window as `function M._on_login_success`) appears only at plan.md:1966 and :1990, both inside `## Revisions` narrative, and the guard is green; stripping the backticks from those two prose mentions turns it red naming `_on_login_success`, proving the check never reaches the tables. Deleting the plan.md:70 row does fire, but only because those three names are not backticked elsewhere. Fix: slice plan_body from the `## Core concepts` heading to the next `^## ` and search only that slice, then add the missing row and re-run.
 - **BR-74** [Minor] `duplicated-logic-not-extracted` The two agent_picker repaint blocks are byte-identical and re-derive the picker's identity instead of using `recall_id_fn`
   This is the 5th finding in family `duplicated-logic-not-extracted`. Do NOT fix one site — the rule is that an identity has one derivation. agent_picker.lua:265-267 and :304-307 are the same three lines, and both hardcode `was.name` while recall_id_fn is declared at :278; a change to one silently desynchronises the other. Either let `update` accept the item (`handle.update(items, nil, handle.selected())`) or expose `handle.selected_id()` on the handle, so both call sites collapse to one line that cannot drift.
+
+## Round 19 — 2026-09-01T10:42:56-07:00 (claude) — passed
+
+**Protocol error:** no valid findings block — this round contributed no findings.
 
 ## Open findings
 

@@ -187,6 +187,51 @@ function M.unhealthier(a, b)
     return M.healthier(b, a)
 end
 
+--- Could this credential have served the request that just failed?
+---
+--- `missing` means the channel holds NO credential at all, and cliproxy only
+--- routes through a channel that has one — so such a channel cannot be the
+--- author of a 401. Treating it as a candidate is not merely imprecise, it
+--- INVERTS the answer: `missing` ranks worst, so an "unhealthiest candidate"
+--- reducer picks it every time and names a channel the operator may never have
+--- used, while the credential that actually failed goes unnamed. That is the
+--- #197 failure — a diagnosis about the wrong account — reintroduced.
+---@param health table|nil
+---@return boolean
+function M.could_have_served(health)
+    return (health or {}).state ~= "missing"
+end
+
+--- Which of several channel readings to blame for a failure.
+---
+--- Eligibility first, ranking second: only credentials that COULD have served
+--- the request are candidates, and among those the least healthy is the likeliest
+--- culprit. If none could have served it, the answer is the honest one — you are
+--- logged into none of these — so the whole set is ranked instead.
+---
+--- Pure, and separate from the fan-out that gathers the readings, so the policy
+--- is unit-testable without any IO (ARCH-PURE).
+---@param readings table[] # { { health = <table>, channel = <string> }, … }
+---@return table|nil health, string|nil channel
+function M.likeliest_culprit(readings)
+    local pool = {}
+    for _, r in ipairs(readings or {}) do
+        if M.could_have_served(r.health) then
+            pool[#pool + 1] = r
+        end
+    end
+    if #pool == 0 then
+        pool = readings or {}
+    end
+    local worst
+    for _, r in ipairs(pool) do
+        if worst == nil or M.unhealthier(r.health, worst.health) then
+            worst = r
+        end
+    end
+    return worst and worst.health or nil, worst and worst.channel or nil
+end
+
 --------------------------------------------------------------------------------
 -- Diagnosis (the sentence a human reads)
 --------------------------------------------------------------------------------
