@@ -501,34 +501,41 @@ function M.credential_health_across(channels, choose, cb)
         return cb({ state = "unknown", reason = "no_channel",
             message = "no cliproxy channel could be resolved" }, nil)
     end
-    local slots, pending, any_repaired = {}, #channels, false
-    for i, channel in ipairs(channels) do
-        M.credential_health(function(health, repaired)
-            -- Written to slot i, not appended: appending records ARRIVAL order,
-            -- which is async and unstable, so a tie in the reducer named a
-            -- different account run to run. The declared candidate order is the
-            -- tiebreak, so it has to survive the fan-out.
-            slots[i] = { health = health, channel = channel }
-            any_repaired = any_repaired or repaired == true
-            pending = pending - 1
-            if pending == 0 then
-                local readings = {}
-                for j = 1, #channels do
-                    if slots[j] then
-                        readings[#readings + 1] = slots[j]
-                    end
-                end
-                local chosen, chosen_channel = choose(readings)
+    -- SEQUENTIAL, not concurrent. `credential_health` carries module-global
+    -- one-shot state: the first 404 on the management route triggers a repair
+    -- and re-reads, and every later call short-circuits on
+    -- `_management_restart_done`. Issued concurrently, the reads race that flag —
+    -- one repairs while the others return a FABRICATED
+    -- {state="unknown", reason="no_management_route"} that is never re-measured.
+    -- An `unknown` is ineligible, so a real expired credential vanished from
+    -- candidacy and the diagnosis named the channel with no credential: the #197
+    -- wrong-account symptom, reached through concurrency rather than ranking.
+    --
+    -- The cost is small and bounded — at most four loopback reads, each capped by
+    -- CURL_MAX_TIME — and it is what makes the one-shot repair mean what its name
+    -- says.
+    local readings, any_repaired = {}, false
+    local function step(i)
+        if i > #channels then
+            local chosen, chosen_channel = choose(readings)
                 -- BR-76: `repaired` must survive the fan-out. Hardcoding nil
                 -- left `restarted_this_claim` permanently false on what is now
                 -- the DEFAULT path (every anthropic/openai model has two
                 -- candidates without the alias block), re-enabling the compound
                 -- repair-then-restart that credential_health's docstring says is
                 -- unreachable — ~36s, past the dispatcher's 25s backstop.
-                cb(chosen, chosen_channel, any_repaired)
-            end
+            return cb(chosen, chosen_channel, any_repaired)
+        end
+        local channel = channels[i]
+        M.credential_health(function(health, repaired)
+            -- Appended in ITERATION order, which is the declared candidate
+            -- order, so a tie in the reducer names the same account every run.
+            readings[#readings + 1] = { health = health, channel = channel }
+            any_repaired = any_repaired or repaired == true
+            step(i + 1)
         end, channel)
     end
+    step(1)
 end
 
 --- One candidate → the single read `recover` has always done, preserving its

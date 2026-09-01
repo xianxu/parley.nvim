@@ -709,6 +709,34 @@ describe("credential_health_across contract", function()
         assert.same({ "first", "second" }, got)
     end)
 
+    it("reads candidates SEQUENTIALLY, because the repair flag is one-shot", function()
+        -- BR-89: credential_health carries module-global one-shot repair state.
+        -- Issued concurrently, the reads race it: one repairs and re-reads while
+        -- the others return a fabricated {state="unknown"} that is never
+        -- re-measured — and an `unknown` is ineligible, so a real expired
+        -- credential dropped out of candidacy and the diagnosis named the
+        -- channel with no credential at all.
+        local saved = cliproxy.credential_health
+        local in_flight, max_in_flight = 0, 0
+        cliproxy.credential_health = function(cb, _channel)
+            in_flight = in_flight + 1
+            max_in_flight = math.max(max_in_flight, in_flight)
+            vim.defer_fn(function()
+                in_flight = in_flight - 1
+                cb({ state = "error" }, false)
+            end, 5)
+        end
+        local done = false
+        cliproxy.credential_health_across({ "a", "b", "c" },
+            require("parley.cliproxy_auth").likeliest_culprit,
+            function() done = true end)
+        vim.wait(3000, function() return done end, 5)
+        cliproxy.credential_health = saved
+        assert.is_true(done, "the chain never settled")
+        assert.equals(1, max_in_flight,
+            "reads overlapped; they share one-shot repair state and must not")
+    end)
+
     it("propagates `repaired` from any reading", function()
         -- BR-76: hardcoding nil left the one-restart-per-claim guard permanently
         -- false on what is now the default path, re-enabling a ~36s compound

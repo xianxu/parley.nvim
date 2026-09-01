@@ -2157,3 +2157,27 @@ Fixing them found a real bug and one repeated test smell.
   two inert guards removed from the e2e case (the channel name reaches only the
   stubbed `vim.ui.select`, so it could never fail); and Task 4.1's superseded
   "least healthy candidate" phrasing is annotated in place.
+
+### 2026-09-01 — M4 review round 22 (BR-89, Critical)
+
+`credential_health` carries module-global one-shot repair state: the first 404 on
+the management route triggers a restart and re-reads, and every later call
+short-circuits on `_management_restart_done`. My fan-out issued all candidates in
+one synchronous loop, so the reads RACED that flag — one repaired while the
+others returned a fabricated `{state="unknown", reason="no_management_route"}`
+that is never re-measured. An `unknown` is ineligible, so a genuinely expired
+credential dropped out of candidacy and the diagnosis named the channel with no
+credential at all: the #197 wrong-account symptom again, this time reached
+through concurrency rather than ranking. Eligibility could not save it, because
+the reading it needed had been fabricated before it ran.
+
+The reads are sequential now — at most four loopback calls, each capped by
+`CURL_MAX_TIME` — which is what makes a one-shot repair mean what its name says.
+Pinned by a test that counts overlap; restoring the concurrent loop fails two
+cases.
+
+**The pattern worth carrying:** shared one-shot state and a fan-out are
+incompatible by construction. Three separate defects on this issue produced the
+same user-visible symptom — the wrong account named — by three different routes
+(ranking, eligibility, concurrency), which is what a Done-when phrased as
+"names the RIGHT login" is for.

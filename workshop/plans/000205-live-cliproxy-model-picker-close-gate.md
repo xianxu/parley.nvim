@@ -1543,6 +1543,143 @@ rounds:
           round: 20
       boundary: M4
       blocked: true
+    - "n": 21
+      timestamp: "2026-09-01T11:28:25-07:00"
+      agent: claude
+      boundary: M4
+      blocked: true
+      protocol_error: no valid findings block
+    - "n": 22
+      timestamp: "2026-09-01T11:43:32-07:00"
+      agent: claude
+      dispose:
+        - id: BR-75
+          disposition: not-addressed
+          note: Code fix confirmed by mutation, but the atlas still states the rule over one value only and the enum is not pinned exhaustively.
+          round: 22
+        - id: BR-76
+          disposition: addressed
+          note: any_repaired threaded; reverting to nil reddens cliproxy_auth_spec.lua:611.
+          round: 22
+        - id: BR-77
+          disposition: addressed
+          note: slots[i] + compaction; reverting to append reddens cliproxy_auth_spec.lua:597.
+          round: 22
+        - id: BR-78
+          disposition: not-addressed
+          note: Instance single-sourced, but the demanded sweep was the deliverable and its own grep still returns two live hits.
+          round: 22
+        - id: BR-79
+          disposition: not-addressed
+          note: Rows added by hand; the recipe and the arch guard still diff only lua/, and the new resolve_login_provider row says modified for a deleted function.
+          round: 22
+        - id: BR-80
+          disposition: not-addressed
+          note: The duplicated recover paragraph and the orphan credential_health_for_login docstring both survive; no lint added.
+          round: 22
+        - id: BR-81
+          disposition: not-addressed
+          note: Title honest and fix mutation-verified, but the reachable empty-roster branch has no test and lessons.md still carries the struck claim.
+          round: 22
+        - id: BR-82
+          disposition: addressed
+          note: README:199 and atlas:94 now read claude:opus,sonnet,fable; a repo-wide grep finds no other stale hit.
+          round: 22
+        - id: BR-83
+          disposition: addressed
+          note: Both inert guards removed; the case now discriminates on the account.
+          round: 22
+        - id: BR-84
+          disposition: addressed
+          note: ca.healthiest extracted beside likeliest_culprit and unit-tested.
+          round: 22
+        - id: BR-85
+          disposition: addressed
+          note: resolve_login_provider deleted; the CHANNEL-vs-LOGIN invariant re-expressed the way recover derives it.
+          round: 22
+        - id: BR-86
+          disposition: not-addressed
+          note: Worktree still carries the 202-line uncommitted config.lua roster deletion and untracked docs/parley.nvim.md; no mechanical enforcement added.
+          round: 22
+        - id: BR-87
+          disposition: not-addressed
+          note: Plan line 1355 is unannotated while the Revisions entry at 2158 claims it was annotated in place.
+          round: 22
+      findings:
+        - id: BR-88
+          severity: Critical
+          title: The catalog that replaced oauth-model-alias has one production writer — opening the agent picker — so a cold install gets "no cliproxy channel is configured" with no account and no login offered
+          detail: |-
+            All four `expired` rows in FAILURES (cliproxy_auth.lua:33-36) capture no provider, so
+            resolve_channels(..., catalog_cached()) is the only resolver for the dominant 401.
+            catalog_cached() returns {} when the file is absent (cliproxy.lua:1490); the file is written
+            only by fetch_catalog (:1688), whose sole production caller is agent_picker.lua:308, and
+            catalog.json is new in this issue. Reproduced by deleting the _write_catalog seed from the new
+            e2e case: "could not read credential state (unknown_channel): no cliproxy channel is configured
+            for claude-opus-4-8", credential health never read. Also ARCH-MOCK: the test seeds via a seam
+            production never uses, so test and production flows do not share the boundary — which is why
+            the case passes while the path is broken. The regression test must start from a cold catalog.
+          family: source-without-producer
+          round: 22
+        - id: BR-89
+          severity: Critical
+          title: credential_health_across issues N concurrent reads over the module-global one-shot 404 repair flag; the loser's fabricated `unknown` is never re-measured and the diagnosis names antigravity
+          detail: |-
+            cliproxy.lua:499-534 issues all candidates in one synchronous loop. auth_files is async, so
+            both 404 callbacks land before the restart completes: one sets _management_restart_done and
+            re-reads, the other short-circuits at :458 and returns {state="unknown", reason=
+            "no_management_route"} for the rest of the claim. Probed with claude=error/me@example.com and
+            antigravity=missing: reads = {antigravity, claude, antigravity}. Both readings are then
+            ineligible, likeliest_culprit falls through to readings[1], and credential_action fires
+            prompt_login for antigravity while the expired credential is never measured — the #197
+            wrong-account symptom the M4 Done-when forbids. Eligibility does not save this case. Pre-flight
+            one read before fanning out, or gate the repair behind a single in-flight promise.
+          family: fanout-shares-one-shot-state
+          round: 22
+        - id: BR-90
+          severity: Important
+          title: OWNER_CHANNELS' order is documented as "sorted" but read as a preference ranking at three sites, so antigravity outranks the native channel for every owner it serves
+          detail: |-
+            channels_for_owner's `@return string[] # sorted` (cliproxy_config.lua:197) states an arbitrary
+            property while three decisions consume the order as a preference: candidates[1] becomes
+            channel/login before any health read (cliproxy.lua:1321), the equal-rank tiebreak, and the
+            no-eligible fallback. Alphabetical order puts antigravity first for anthropic, openai and
+            google, so a fresh install with no credentials gets ":ParleyProxy login antigravity" for a
+            claude-* failure; cliproxy_auth_spec.lua:625-632 asserts only is_not_nil(channel) and passes
+            either way. This is the 6th finding in family `one-value-two-decisions`. Do NOT reorder the two
+            rows — state the rule (a list whose order is read as a decision must declare that order as its
+            contract, and the contract must be asserted) and apply it to every OWNER_CHANNELS row plus the
+            docstring in one pass.
+          family: one-value-two-decisions
+          round: 22
+        - id: BR-91
+          severity: Important
+          title: The plan-to-code arch guard matches a textual occurrence, so a deleted function stays green because a spec comment mentions its name
+          detail: |-
+            tests/arch/single_source_sweeps_spec.lua:84-113 asserts symbols named in a Core-concepts table
+            "exist in the tree" by grepping lua/ tests/ for the bare name. resolve_login_provider was
+            deleted in this window and the guard is green solely because cliproxy_config_spec.lua:271
+            mentions it in a comment — which is why the plan can still table it as `modified`. This is the
+            6th finding in family `test-title-overstates-guard`. The rule: an executable agreement check
+            must match a DEFINITION form (`function M.x(`, `M.x = `, `local function x(`), never a textual
+            occurrence — apply it to both directions of this spec.
+          family: test-title-overstates-guard
+          round: 22
+        - id: BR-92
+          severity: Minor
+          title: M.unhealthier has zero call sites yet is tabled as `new`, and credential_health_across's empty-channels branch is unreachable
+          detail: |-
+            cliproxy_auth.lua:186 was introduced this window as the fan-out reducer, then orphaned by the
+            C1 fix that replaced it with likeliest_culprit; grep over lua/ tests/ scripts/ returns only the
+            definition. cliproxy.lua:501-503's `#channels == 0` branch cannot fire — credential_health_
+            across_or_one handles <=1 and credential_health_for_login checks ==0 first. This is the 2nd
+            finding in family `dead-api-extended`. Do NOT just delete these two — state the rule (every
+            M.x a window adds must have a non-defining, non-test caller in that same window, checked by
+            grepping the diff's added definition names) and run it over this range.
+          family: dead-api-extended
+          round: 22
+      boundary: M4
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#205 (boundary-review)
@@ -2251,6 +2388,78 @@ later rounds disposed of them. Generated — edit the gate, not this file.
   supersedes it, but a reader reaching Task 4.1 first gets the rule the code was fixed to stop
   implementing. Annotate in place with a pointer to the revision.
 
+## Round 21 — 2026-09-01T11:28:25-07:00 (claude) — BLOCKED
+
+**Protocol error:** no valid findings block — this round contributed no findings.
+
+## Round 22 — 2026-09-01T11:43:32-07:00 (claude) — BLOCKED
+
+### Disposed
+
+- BR-75 — not-addressed — Code fix confirmed by mutation, but the atlas still states the rule over one value only and the enum is not pinned exhaustively.
+- BR-76 — addressed — any_repaired threaded; reverting to nil reddens cliproxy_auth_spec.lua:611.
+- BR-77 — addressed — slots[i] + compaction; reverting to append reddens cliproxy_auth_spec.lua:597.
+- BR-78 — not-addressed — Instance single-sourced, but the demanded sweep was the deliverable and its own grep still returns two live hits.
+- BR-79 — not-addressed — Rows added by hand; the recipe and the arch guard still diff only lua/, and the new resolve_login_provider row says modified for a deleted function.
+- BR-80 — not-addressed — The duplicated recover paragraph and the orphan credential_health_for_login docstring both survive; no lint added.
+- BR-81 — not-addressed — Title honest and fix mutation-verified, but the reachable empty-roster branch has no test and lessons.md still carries the struck claim.
+- BR-82 — addressed — README:199 and atlas:94 now read claude:opus,sonnet,fable; a repo-wide grep finds no other stale hit.
+- BR-83 — addressed — Both inert guards removed; the case now discriminates on the account.
+- BR-84 — addressed — ca.healthiest extracted beside likeliest_culprit and unit-tested.
+- BR-85 — addressed — resolve_login_provider deleted; the CHANNEL-vs-LOGIN invariant re-expressed the way recover derives it.
+- BR-86 — not-addressed — Worktree still carries the 202-line uncommitted config.lua roster deletion and untracked docs/parley.nvim.md; no mechanical enforcement added.
+- BR-87 — not-addressed — Plan line 1355 is unannotated while the Revisions entry at 2158 claims it was annotated in place.
+
+### Raised
+
+- **BR-88** [Critical] `source-without-producer` The catalog that replaced oauth-model-alias has one production writer — opening the agent picker — so a cold install gets "no cliproxy channel is configured" with no account and no login offered
+  All four `expired` rows in FAILURES (cliproxy_auth.lua:33-36) capture no provider, so
+  resolve_channels(..., catalog_cached()) is the only resolver for the dominant 401.
+  catalog_cached() returns {} when the file is absent (cliproxy.lua:1490); the file is written
+  only by fetch_catalog (:1688), whose sole production caller is agent_picker.lua:308, and
+  catalog.json is new in this issue. Reproduced by deleting the _write_catalog seed from the new
+  e2e case: "could not read credential state (unknown_channel): no cliproxy channel is configured
+  for claude-opus-4-8", credential health never read. Also ARCH-MOCK: the test seeds via a seam
+  production never uses, so test and production flows do not share the boundary — which is why
+  the case passes while the path is broken. The regression test must start from a cold catalog.
+- **BR-89** [Critical] `fanout-shares-one-shot-state` credential_health_across issues N concurrent reads over the module-global one-shot 404 repair flag; the loser's fabricated `unknown` is never re-measured and the diagnosis names antigravity
+  cliproxy.lua:499-534 issues all candidates in one synchronous loop. auth_files is async, so
+  both 404 callbacks land before the restart completes: one sets _management_restart_done and
+  re-reads, the other short-circuits at :458 and returns {state="unknown", reason=
+  "no_management_route"} for the rest of the claim. Probed with claude=error/me@example.com and
+  antigravity=missing: reads = {antigravity, claude, antigravity}. Both readings are then
+  ineligible, likeliest_culprit falls through to readings[1], and credential_action fires
+  prompt_login for antigravity while the expired credential is never measured — the #197
+  wrong-account symptom the M4 Done-when forbids. Eligibility does not save this case. Pre-flight
+  one read before fanning out, or gate the repair behind a single in-flight promise.
+- **BR-90** [Important] `one-value-two-decisions` OWNER_CHANNELS' order is documented as "sorted" but read as a preference ranking at three sites, so antigravity outranks the native channel for every owner it serves
+  channels_for_owner's `@return string[] # sorted` (cliproxy_config.lua:197) states an arbitrary
+  property while three decisions consume the order as a preference: candidates[1] becomes
+  channel/login before any health read (cliproxy.lua:1321), the equal-rank tiebreak, and the
+  no-eligible fallback. Alphabetical order puts antigravity first for anthropic, openai and
+  google, so a fresh install with no credentials gets ":ParleyProxy login antigravity" for a
+  claude-* failure; cliproxy_auth_spec.lua:625-632 asserts only is_not_nil(channel) and passes
+  either way. This is the 6th finding in family `one-value-two-decisions`. Do NOT reorder the two
+  rows — state the rule (a list whose order is read as a decision must declare that order as its
+  contract, and the contract must be asserted) and apply it to every OWNER_CHANNELS row plus the
+  docstring in one pass.
+- **BR-91** [Important] `test-title-overstates-guard` The plan-to-code arch guard matches a textual occurrence, so a deleted function stays green because a spec comment mentions its name
+  tests/arch/single_source_sweeps_spec.lua:84-113 asserts symbols named in a Core-concepts table
+  "exist in the tree" by grepping lua/ tests/ for the bare name. resolve_login_provider was
+  deleted in this window and the guard is green solely because cliproxy_config_spec.lua:271
+  mentions it in a comment — which is why the plan can still table it as `modified`. This is the
+  6th finding in family `test-title-overstates-guard`. The rule: an executable agreement check
+  must match a DEFINITION form (`function M.x(`, `M.x = `, `local function x(`), never a textual
+  occurrence — apply it to both directions of this spec.
+- **BR-92** [Minor] `dead-api-extended` M.unhealthier has zero call sites yet is tabled as `new`, and credential_health_across's empty-channels branch is unreachable
+  cliproxy_auth.lua:186 was introduced this window as the fan-out reducer, then orphaned by the
+  C1 fix that replaced it with likeliest_culprit; grep over lua/ tests/ scripts/ returns only the
+  definition. cliproxy.lua:501-503's `#channels == 0` branch cannot fire — credential_health_
+  across_or_one handles <=1 and credential_health_for_login checks ==0 first. This is the 2nd
+  finding in family `dead-api-extended`. Do NOT just delete these two — state the rule (every
+  M.x a window adds must have a non-defining, non-test caller in that same window, checked by
+  grepping the diff's added definition names) and run it over this range.
+
 ## Open findings
 
 - **BR-13** [Important] `rank-key-version-extraction` rank_key's `< 100` threshold answers the 120B instance, not the class: any parameter count below 100 still reads as a version
@@ -2278,15 +2487,14 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-73** [Important] `plan-table-missing-entity` `_on_login_success` has no Core-concepts row, and the guard meant to catch that searches the whole plan instead of the tables
 - **BR-74** [Minor] `duplicated-logic-not-extracted` The two agent_picker repaint blocks are byte-identical and re-derive the picker's identity instead of using `recall_id_fn`
 - **BR-75** [Critical] `missing-input-guard` could_have_served excludes only `missing`; `unknown` and `disabled` still outrank a real failure and name the wrong account
-- **BR-76** [Important] `extracted-seam-drops-a-signal` credential_health_across_or_one hardcodes repaired=nil on the multi-candidate branch, defeating the one-restart-per-claim guard
-- **BR-77** [Important] `fanout-result-order-nondeterministic` readings are collected in callback-completion order, so a tie in likeliest_culprit names a random channel
 - **BR-78** [Important] `single-source-not-enforced` GOLDEN_AGENT is defined twice — once in the regenerator, once in the verifier — and must be kept equal by hand
 - **BR-79** [Important] `plan-table-missing-entity` scripts/parley_harness.lua / build_payload's new `opts.agent` option is in neither Core-concepts table
 - **BR-80** [Important] `docs-insert-orphans-section` Three stacked doc blocks precede credential_health_across, one documenting a `prefer` parameter that no longer exists
 - **BR-81** [Minor] `test-title-overstates-guard` The get_agent stale-selection test pins a state production cannot produce; the reachable variant is untested
-- **BR-82** [Minor] `atlas-not-updated-for-new-surface` README and atlas still show `claude:opus,sonnet` after the same range shipped `claude:opus,sonnet,fable`
-- **BR-83** [Minor] `test-title-overstates-guard` Two of the empty-alias e2e case's guards are inert — the notice can never contain "antigravity"
-- **BR-84** [Minor] `pure-decision-in-io-shell` credential_health_for_login's healthiest-wins reducer stays an inline closure in the IO shell while its twin was extracted
-- **BR-85** [Minor] `dead-api-extended` resolve_login_provider has zero production call sites yet gained a new parameter, and its @param sits after @return
 - **BR-86** [Minor] `close-stages-unreviewed-worktree` The worktree carries an uncommitted 192-line config.lua roster deletion and an untracked docs/parley.nvim.md at the boundary
 - **BR-87** [Minor] `stated-design-not-implemented` Plan Task 4.1 still presents "the LEAST healthy candidate is the one that plausibly failed" as the design
+- **BR-88** [Critical] `source-without-producer` The catalog that replaced oauth-model-alias has one production writer — opening the agent picker — so a cold install gets "no cliproxy channel is configured" with no account and no login offered
+- **BR-89** [Critical] `fanout-shares-one-shot-state` credential_health_across issues N concurrent reads over the module-global one-shot 404 repair flag; the loser's fabricated `unknown` is never re-measured and the diagnosis names antigravity
+- **BR-90** [Important] `one-value-two-decisions` OWNER_CHANNELS' order is documented as "sorted" but read as a preference ranking at three sites, so antigravity outranks the native channel for every owner it serves
+- **BR-91** [Important] `test-title-overstates-guard` The plan-to-code arch guard matches a textual occurrence, so a deleted function stays green because a spec comment mentions its name
+- **BR-92** [Minor] `dead-api-extended` M.unhealthier has zero call sites yet is tabled as `new`, and credential_health_across's empty-channels branch is unreachable

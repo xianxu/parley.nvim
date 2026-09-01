@@ -980,3 +980,15 @@ The same lookup hid a real bug: falling back to `_state.agent` is a no-op when
 `_state.agent` IS the missing name, so deleting a SELECTED agent crashed every
 request. A fallback that can resolve to the thing it is meant to replace is not
 a fallback.
+
+## A fan-out cannot share one-shot state (#205)
+
+`credential_health` repairs a missing management route once per session and
+short-circuits thereafter. Reading several channels concurrently raced that
+flag: one call repaired, the others returned a FABRICATED "unknown" that was
+never re-measured — and downstream logic treated the fabrication as evidence.
+
+**Check:** before issuing N concurrent calls to one function, ask what module
+state it mutates on first use. If any exists, serialize the calls or gate the
+one-shot behind a single in-flight promise. A fabricated reading is worse than a
+slow one: it looks like data.
