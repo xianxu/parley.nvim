@@ -335,6 +335,7 @@ end)
 
 describe("cliproxy catalog invalidation on login", function()
     local cliproxy = require("parley.cliproxy")
+    local parley = require("parley")
 
     it("forces a refresh even when the cache is fresh", function()
         -- The bug: catalog_stale short-circuits on a fresh CACHE before it
@@ -351,14 +352,27 @@ describe("cliproxy catalog invalidation on login", function()
             "a login must invalidate a fresh cache; that is when models appear")
     end)
 
-    it("clears the invalidation once a fetch serves it", function()
+    it("clears the invalidation once a fetch STORES something", function()
+        -- Not merely once one is attempted: an attempt can be declined, and
+        -- consuming the invalidation there loses it (see the declined-refresh
+        -- case below). So this drives a fetch against a live fake.
+        local port = ready_port.free_port()
+        local handle, pid = uv.spawn(FAKE, { args = { "--port", tostring(port) } }, function() end)
+        assert(handle)
+        table.insert(started, { handle = handle, pid = pid })
+        assert(ready_port.wait_listening(port))
+        parley.dispatcher.providers.cliproxyapi = {
+            endpoint = ("http://127.0.0.1:%d/v1/chat/completions"):format(port),
+        }
+        require("parley.vault").add_secret("cliproxyapi", "testkey")
+
         cliproxy._write_catalog({ { id = "x", owner = "openai" } }, os.time())
         cliproxy.invalidate_catalog()
         local done = false
         cliproxy.fetch_catalog(function() done = true end)
         vim.wait(8000, function() return done end, 20)
         assert.is_false(cliproxy.catalog_stale(),
-            "the invalidation should not persist past the refresh it triggered")
+            "a STORED refresh serves the invalidation")
     end)
 end)
 
@@ -373,5 +387,35 @@ describe("cliproxy login side effects", function()
         cliproxy._on_login_success("claude")
         assert.is_true(cliproxy.catalog_stale(),
             "the catalog must be refetched after a login registers new models")
+    end)
+end)
+
+describe("cliproxy login invalidation survives a failed refresh", function()
+    local cliproxy = require("parley.cliproxy")
+    local parley = require("parley")
+
+    it("keeps the catalog stale until a refresh actually stores something", function()
+        -- The residual in BR-58: clearing the invalidation at the START of an
+        -- attempt threw it away on the first DECLINED fetch. Sequence that bit:
+        -- log in → invalidate → picker opens → proxy briefly down → attempt
+        -- declined → invalidation gone → the operator waits out the full TTL
+        -- staring at the "(logged out)" row they just logged in through.
+        cliproxy._write_catalog({ { id = "x", owner = "openai" } }, os.time())
+        cliproxy._on_login_success("claude")
+        assert.is_true(cliproxy.catalog_stale(), "precondition: login invalidated it")
+
+        -- nothing listening: the fetch is declined
+        parley.dispatcher = parley.dispatcher or {}
+        parley.dispatcher.providers = parley.dispatcher.providers or {}
+        parley.dispatcher.providers.cliproxyapi = {
+            endpoint = ("http://127.0.0.1:%d/v1/chat/completions")
+                :format(ready_port.free_port()),
+        }
+        local done = false
+        cliproxy.fetch_catalog(function() done = true end)
+        vim.wait(8000, function() return done end, 20)
+
+        assert.is_true(cliproxy.catalog_stale(),
+            "a declined refresh must not consume the login's invalidation")
     end)
 end)

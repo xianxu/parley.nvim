@@ -1436,6 +1436,12 @@ end
 ---@param models table[]
 ---@param fetched_at number|nil
 function M._write_catalog(models, fetched_at)
+    -- Clearing the invalidation belongs HERE, on a stored result — not at the
+    -- start of an attempt. An attempt can be DECLINED (proxy down, 401, foreign
+    -- body), and clearing it there threw away a login's invalidation on the
+    -- first failed refresh, putting the operator right back in the case BR-58
+    -- exists to prevent.
+    _force_stale = false
     vim.fn.mkdir(data_root(), "p")
     local fd = io.open(catalog_path(), "w")
     if not fd then
@@ -1534,7 +1540,6 @@ function M.fetch_catalog(cb)
         return cb(M.catalog_cached())
     end
     _last_attempt = os.time()
-    _force_stale = false -- the invalidation is being served by this very fetch
     -- endpoint_opts(), NOT render_opts(): the latter gathers the whole
     -- write_rendered_config bundle, which MINTS a 0600 `management.key` as a
     -- side effect, and opening a picker must not create a credential file.

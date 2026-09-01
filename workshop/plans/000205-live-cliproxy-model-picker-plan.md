@@ -1981,3 +1981,25 @@ existing tests. Mutation-checked: removing the invalidation fails the new test.
 - **BR-64 / BR-66 / BR-55.** No `logger.error` on a picker-open path; the test
   title that described the old numeric contract is corrected; and the last commit
   recipe that swept `lua/ tests/` names its files.
+
+### 2026-09-01 — BR-58 round 17: the call site, and a residual I introduced
+
+Two gaps, both mine, both now mutation-checked against the exact deletion the
+reviewer measured rather than a convenient one.
+
+- **The CALL SITE was untested.** A spec calling `_on_login_success` directly
+  left the invocation inside the credential watch uncovered — deleting that line
+  kept every spec green, and the previous round's plan entry claimed otherwise.
+  `cliproxy_login_spec` now drives `run_login` against the fake and asserts the
+  catalog was invalidated; deleting the call fails it. Extraction made the
+  function reachable, which is necessary but is NOT the same as covering the wire
+  between it and its caller.
+- **A residual I introduced with the fix.** `_force_stale` was cleared at the
+  START of an attempt, so the first DECLINED refresh threw away a login's
+  invalidation — putting the operator straight back into BR-58's symptom by a new
+  route: log in, picker opens, proxy briefly down, invalidation gone, ten more
+  minutes of the `(logged out)` row. It is cleared on a STORED result instead.
+  Pinned by a test that logs in, declines a fetch, and asserts staleness holds.
+
+The pattern across both: an extraction or a flag is not a fix until the thing
+that *drives* it is exercised. "Deleting X keeps the suite green" is the check.
