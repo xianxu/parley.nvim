@@ -510,6 +510,73 @@ rounds:
           round: 7
       boundary: M2
       blocked: true
+    - "n": 8
+      timestamp: "2026-08-31T22:04:28-07:00"
+      agent: claude
+      dispose:
+        - id: BR-19
+          disposition: not-addressed
+          note: 'Re-measured at 28af157: deleting init.lua:1329-1343 leaves live_agent_state (3), picker_items (38), cliproxy_catalog unit (42) and integration (7) all green. M.agent_picker still has zero tests, Task 3.2 still has no Step-1 test block, and no per-task mutation check appears in `## Log`. Note the code sits in 440ab17, inside the M1 window — the check must run per TASK, not per commit range, or it keeps falling between boundaries.'
+          round: 8
+        - id: BR-20
+          disposition: not-addressed
+          note: 'Status capture is fixed and pinned. Still open: zero logger calls in fetch_catalog (cliproxy.lua:1420-1467) vs the envelope''s "logged at debug"; no in-memory cache (catalog_cached re-decodes + mkdirs 3-4x per open); curate(models, {}) still returns {} against the Spec''s "nil providers = every known provider"; _write_catalog''s false return discarded; _catalog_inflight has no release path if vim.system throws. Nothing struck in `## Revisions`.'
+          round: 8
+        - id: BR-21
+          disposition: not-addressed
+          note: 'Unchanged and measured at head: _providers_without_models(models,{''claud''}) and (models,{''anthropic''}) both emit actionable login rows; an ownerless catalog row still flips the answer to {}. The throw moved one step earlier — not_already_an_agent (agent_picker.lua:162) concatenates m.id before _build_items:105/:112 does, so a corrupt catalog.json crashes the <C-a> path outright. The four-boundary enumeration is unchanged.'
+          round: 8
+        - id: BR-22
+          disposition: not-addressed
+          note: 'The two sites the finding named are fixed with good comments. The class survives at two more in the same function: agent_picker.lua:174 lets `all` decide both "bypass curation" and "hide login rows", and :245 gates the background repaint on `#models > 0`, so the 200-plus-empty-registry case the write gate was just fixed to record never repaints. Gate repaint on fetch success; scope the expanded bypass to curation only.'
+          round: 8
+        - id: BR-23
+          disposition: addressed
+          note: '`grep -rn ''local function free_port|local function wait_listening'' tests/` returns nothing; 12 specs now require the helper, including two outside the plan''s Files list. Residue: ready_port.lua:66-69 still says "promoted from two files" when it was eight, and nothing guards against a ninth copy — folded into the new single-source-not-enforced finding.'
+          round: 8
+        - id: BR-25
+          disposition: addressed
+          note: The separator ships, picker_items_spec.lua:343-346 pins separator/live/current/login as full-string equalities keyed off a DOCUMENTED table, and the issue carries a `## Revisions` entry striking the em dash and the grouping claim with reasons. Code and Spec now agree.
+          round: 8
+        - id: BR-27
+          disposition: not-addressed
+          note: '`## Plan`''s M2 box is still unticked with no `## Log` entry, and plan.md:1471 still assigns `live_models` to Task 4.2 though it shipped in the M3 commit.'
+          round: 8
+        - id: BR-28
+          disposition: not-addressed
+          note: 'Worse this round: `m.id .. "*"` is now at agent_picker.lua:105 and :162, cliproxy_catalog.lua:220, and picker_items_spec.lua:444 — the BR-30 fix added a third production copy and a fourth in its own test.'
+          round: 8
+        - id: BR-29
+          disposition: not-addressed
+          note: is_managed() gate at agent_picker.lua:243, GETs still chained, pending() at conformance:235,254 vs five siblings printing "SKIP:", catalog_path still duplicating config_path's mkdir idiom.
+          round: 8
+        - id: BR-30
+          disposition: not-addressed
+          note: 'The code fix is correct; the test cannot fail. picker_items_spec.lua:441-447 re-implements the exclusion in the spec body and hands an already-filtered list to _build_items, which never had the bug. Measured: reverting agent_picker.lua:174 and :180 to the pre-fix expressions leaves the file 38/38 green. Blocker is structural — extract M._view_for(models, cfg, all) as a pure function so a test can call the production path.'
+          round: 8
+        - id: BR-31
+          disposition: addressed
+          note: 'The plan''s Notes now enumerate definition forms (function M.x(, M.x = function(, M.x = alias, local function) and referent kinds (functions, fixture modes, routes, files, flags). I ran both passes: the reverse surfaces all 7 M.* entities the window adds and each has a table row; the forward''s only unresolved names are historical mentions inside `## Revisions` and file paths. The phantom `catalog` fixture mode is gone from Task 2.1, and the plan''s stated mode list matches fake_cliproxy''s own Modes header exactly.'
+          round: 8
+        - id: BR-32
+          disposition: not-addressed
+          note: atlas/providers/cliproxy-managed.md:36-38 unchanged — `## Model catalog (#205)` still sits immediately after the `## Flow` heading, leaving Flow with an empty body and ~60 lines of flow narrative filed under the catalog section.
+          round: 8
+      findings:
+        - id: BR-33
+          severity: Important
+          title: The new <C-a> bypasses the keybinding registry, and this round's two consolidations have no executable guard
+          detail: '3rd in family — the rule, not the instance. agent_picker.lua:228 hardcodes <C-a> while every sibling picker key carries a help_only registry row with a config_key (keybinding_registry.lua:757, :822, :869 are all <C-a>), so the key is neither discoverable nor rebindable — and the mapping directly above it (:220-226) binds <C-g>? to the very help that omits it. Measured prevalence: 8 literal keys in float_picker mappings tables across agent_picker (1, new), root_dir_picker (3) and system_prompt_picker (4), none registered. The same rule covers this round''s correct-but-unguarded sweeps: nothing stops a ninth file-local free_port, and nothing stops the next tests/integration/cliproxy_*_spec.lua from omitting _set_data_dir — the omission that broke the operator''s live proxy. Rule: when a fix is "sweep every consumer onto the single source," the deliverable includes the guard that keeps them there. tests/arch/scratch_placement_spec.lua is the in-repo precedent; three greps in one arch spec cover all three invariants.'
+          family: single-source-not-enforced
+          round: 8
+        - id: BR-34
+          severity: Minor
+          title: The fake's two new /v1beta/models branches are unmeasured assumptions, and one now backs a test
+          detail: '2nd in family. fake_cliproxy:404-410 has needs_login serve the FULL CATALOG_V1BETA while /v1/models serves data:[] — a combination not measured against the real proxy — and client_key_mismatch answer 401. The conformance spec exercises /v1beta only on a healthy proxy, so neither branch is checked against the binary, and the new "records a genuinely empty catalog" case rides the first. Rule: a fake branch no live conformance check covers is an assumption and should be labelled as one at the branch, so a later reader does not mistake it for measured behaviour.'
+          family: unmeasured-family-branch
+          round: 8
+      boundary: M2
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#205 (boundary-review)
@@ -770,6 +837,30 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-32** [Minor] `docs-insert-orphans-section` The new atlas section was inserted between `## Flow` and its body, refiling 60 lines of flow narrative under the catalog heading
   atlas/providers/cliproxy-managed.md:36-38 — `## Model catalog (#205)` now sits immediately after the `## Flow` heading, leaving Flow with an empty body and putting the `setup{ cliproxy.manage = true }` → pre_query → ensure_running narrative (lines 39-98) under the catalog section. Move the new H2 after the Flow body or before `## Auth & secrets`.
 
+## Round 8 — 2026-08-31T22:04:28-07:00 (claude) — BLOCKED
+
+### Disposed
+
+- BR-19 — not-addressed — Re-measured at 28af157: deleting init.lua:1329-1343 leaves live_agent_state (3), picker_items (38), cliproxy_catalog unit (42) and integration (7) all green. M.agent_picker still has zero tests, Task 3.2 still has no Step-1 test block, and no per-task mutation check appears in `## Log`. Note the code sits in 440ab17, inside the M1 window — the check must run per TASK, not per commit range, or it keeps falling between boundaries.
+- BR-20 — not-addressed — Status capture is fixed and pinned. Still open: zero logger calls in fetch_catalog (cliproxy.lua:1420-1467) vs the envelope's "logged at debug"; no in-memory cache (catalog_cached re-decodes + mkdirs 3-4x per open); curate(models, {}) still returns {} against the Spec's "nil providers = every known provider"; _write_catalog's false return discarded; _catalog_inflight has no release path if vim.system throws. Nothing struck in `## Revisions`.
+- BR-21 — not-addressed — Unchanged and measured at head: _providers_without_models(models,{'claud'}) and (models,{'anthropic'}) both emit actionable login rows; an ownerless catalog row still flips the answer to {}. The throw moved one step earlier — not_already_an_agent (agent_picker.lua:162) concatenates m.id before _build_items:105/:112 does, so a corrupt catalog.json crashes the <C-a> path outright. The four-boundary enumeration is unchanged.
+- BR-22 — not-addressed — The two sites the finding named are fixed with good comments. The class survives at two more in the same function: agent_picker.lua:174 lets `all` decide both "bypass curation" and "hide login rows", and :245 gates the background repaint on `#models > 0`, so the 200-plus-empty-registry case the write gate was just fixed to record never repaints. Gate repaint on fetch success; scope the expanded bypass to curation only.
+- BR-23 — addressed — `grep -rn 'local function free_port|local function wait_listening' tests/` returns nothing; 12 specs now require the helper, including two outside the plan's Files list. Residue: ready_port.lua:66-69 still says "promoted from two files" when it was eight, and nothing guards against a ninth copy — folded into the new single-source-not-enforced finding.
+- BR-25 — addressed — The separator ships, picker_items_spec.lua:343-346 pins separator/live/current/login as full-string equalities keyed off a DOCUMENTED table, and the issue carries a `## Revisions` entry striking the em dash and the grouping claim with reasons. Code and Spec now agree.
+- BR-27 — not-addressed — `## Plan`'s M2 box is still unticked with no `## Log` entry, and plan.md:1471 still assigns `live_models` to Task 4.2 though it shipped in the M3 commit.
+- BR-28 — not-addressed — Worse this round: `m.id .. "*"` is now at agent_picker.lua:105 and :162, cliproxy_catalog.lua:220, and picker_items_spec.lua:444 — the BR-30 fix added a third production copy and a fourth in its own test.
+- BR-29 — not-addressed — is_managed() gate at agent_picker.lua:243, GETs still chained, pending() at conformance:235,254 vs five siblings printing "SKIP:", catalog_path still duplicating config_path's mkdir idiom.
+- BR-30 — not-addressed — The code fix is correct; the test cannot fail. picker_items_spec.lua:441-447 re-implements the exclusion in the spec body and hands an already-filtered list to _build_items, which never had the bug. Measured: reverting agent_picker.lua:174 and :180 to the pre-fix expressions leaves the file 38/38 green. Blocker is structural — extract M._view_for(models, cfg, all) as a pure function so a test can call the production path.
+- BR-31 — addressed — The plan's Notes now enumerate definition forms (function M.x(, M.x = function(, M.x = alias, local function) and referent kinds (functions, fixture modes, routes, files, flags). I ran both passes: the reverse surfaces all 7 M.* entities the window adds and each has a table row; the forward's only unresolved names are historical mentions inside `## Revisions` and file paths. The phantom `catalog` fixture mode is gone from Task 2.1, and the plan's stated mode list matches fake_cliproxy's own Modes header exactly.
+- BR-32 — not-addressed — atlas/providers/cliproxy-managed.md:36-38 unchanged — `## Model catalog (#205)` still sits immediately after the `## Flow` heading, leaving Flow with an empty body and ~60 lines of flow narrative filed under the catalog section.
+
+### Raised
+
+- **BR-33** [Important] `single-source-not-enforced` The new <C-a> bypasses the keybinding registry, and this round's two consolidations have no executable guard
+  3rd in family — the rule, not the instance. agent_picker.lua:228 hardcodes <C-a> while every sibling picker key carries a help_only registry row with a config_key (keybinding_registry.lua:757, :822, :869 are all <C-a>), so the key is neither discoverable nor rebindable — and the mapping directly above it (:220-226) binds <C-g>? to the very help that omits it. Measured prevalence: 8 literal keys in float_picker mappings tables across agent_picker (1, new), root_dir_picker (3) and system_prompt_picker (4), none registered. The same rule covers this round's correct-but-unguarded sweeps: nothing stops a ninth file-local free_port, and nothing stops the next tests/integration/cliproxy_*_spec.lua from omitting _set_data_dir — the omission that broke the operator's live proxy. Rule: when a fix is "sweep every consumer onto the single source," the deliverable includes the guard that keeps them there. tests/arch/scratch_placement_spec.lua is the in-repo precedent; three greps in one arch spec cover all three invariants.
+- **BR-34** [Minor] `unmeasured-family-branch` The fake's two new /v1beta/models branches are unmeasured assumptions, and one now backs a test
+  2nd in family. fake_cliproxy:404-410 has needs_login serve the FULL CATALOG_V1BETA while /v1/models serves data:[] — a combination not measured against the real proxy — and client_key_mismatch answer 401. The conformance spec exercises /v1beta only on a healthy proxy, so neither branch is checked against the binary, and the new "records a genuinely empty catalog" case rides the first. Rule: a fake branch no live conformance check covers is an assumption and should be labelled as one at the branch, so a later reader does not mistake it for measured behaviour.
+
 ## Open findings
 
 - **BR-13** [Important] `rank-key-version-extraction` rank_key's `< 100` threshold answers the 120B instance, not the class: any parameter count below 100 still reads as a version
@@ -782,11 +873,10 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-20** [Important] `stated-design-not-implemented` fetch_catalog logs nothing and discards the HTTP status; "cache in memory" and `providers = nil` are unimplemented
 - **BR-21** [Important] `missing-input-guard` BR-6/BR-7's boundary guards applied to one site while two new boundaries shipped without them
 - **BR-22** [Important] `one-value-two-decisions` The empty-catalog early return suppresses the logged-out rows that case exists for
-- **BR-23** [Important] `duplicated-logic-not-extracted` The ready_port promotion left three copies and its docstring claims the duplication was removed
-- **BR-25** [Important] `documented-render-not-pinned` The picker's documented rows drifted (em dash, separator, grouping) with only containment assertions
 - **BR-27** [Minor] `boundary-crossed-out-of-order` The M3 implementation commit sits inside the M2 review window
 - **BR-28** [Minor] `duplicated-logic-not-extracted` The `<id>*` live-agent naming convention is written in two modules
 - **BR-29** [Minor] `stated-design-not-implemented` Assorted envelope and idiom nits: is_managed gate, 4s chained budget, repaint-under-cursor, pending vs SKIP
 - **BR-30** [Critical] `section-merge-not-deduped` A picked live model renders twice in the picker, both rows checkmarked and sharing one recall key
-- **BR-31** [Important] `plan-table-missing-entity` The bidirectional referent check added this round has two syntactic blind spots and already misses a shipped entity
 - **BR-32** [Minor] `docs-insert-orphans-section` The new atlas section was inserted between `## Flow` and its body, refiling 60 lines of flow narrative under the catalog heading
+- **BR-33** [Important] `single-source-not-enforced` The new <C-a> bypasses the keybinding registry, and this round's two consolidations have no executable guard
+- **BR-34** [Minor] `unmeasured-family-branch` The fake's two new /v1beta/models branches are unmeasured assumptions, and one now backs a test

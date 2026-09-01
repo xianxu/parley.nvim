@@ -363,6 +363,7 @@ atlas:
   providers/agents:
     code:
       - lua/parley/agent_picker.lua
+      - lua/parley/keybinding_registry.lua
       - lua/parley/provider_params.lua
     tests:
       - tests/unit/provider_params_spec.lua
@@ -415,6 +416,7 @@ atlas:
       - tests/unit/cliproxy_auth_spec.lua
       - tests/unit/cliproxy_catalog_spec.lua
       - tests/unit/live_agent_state_spec.lua
+      - tests/arch/single_source_sweeps_spec.lua
       - tests/unit/picker_items_spec.lua
       - tests/unit/failure_notice_spec.lua
       - tests/unit/cliproxy_budget_spec.lua

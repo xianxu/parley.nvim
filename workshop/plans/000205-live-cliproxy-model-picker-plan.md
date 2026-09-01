@@ -30,6 +30,8 @@
 | `resolve_channel` | `lua/parley/cliproxy_config.lua` | modified |
 | `_build_items` | `lua/parley/agent_picker.lua` | modified |
 | `_providers_without_models` | `lua/parley/agent_picker.lua` | new |
+| `_view_for` | `lua/parley/agent_picker.lua` | new |
+| `key_for` | `lua/parley/keybinding_registry.lua` | new |
 
 - **Model** — one catalog row: `{ id, owner, created, display, description, series }`. The join of `/v1/models` (carries `created`) and `/v1beta/models` (carries `displayName`/`description`) on `id`.
   - **Relationships:** N:1 with provider (via `PROVIDER_OWNED_BY`); N:1 with series.
@@ -1725,3 +1727,27 @@ All three are second occurrences, so each is recorded as the rule it needed.
   modes, routes, files and flags escaped, including a `catalog` mode this plan
   named that never existed. The rule now enumerates definition FORMS and referent
   KINDS, and the fixture-mode reference is corrected to what shipped.
+
+### 2026-08-31 — M2/M3 review round 8 (BR-22, BR-30, BR-33)
+
+- **BR-30 (Critical, repeat).** The code fix was right; the TEST could not fail —
+  it re-implemented the exclusion in the spec body and handed `_build_items` an
+  already-filtered list, so reverting the fix left the file green. Third time on
+  this issue. The structural answer is `M._view_for(models, cfg, opts)`: a pure
+  function on the production path that a test can call directly. Both this fix
+  and BR-22's were then verified by reverting them and watching 3 and 1 tests go
+  red respectively.
+- **BR-22 (repeat).** The class survived two more sites in the same function:
+  `all` decided both "bypass curation" and "hide the login rows", and the
+  background repaint gated on `#models > 0`, so the 200-with-empty-registry case
+  the write gate had just been fixed to record never repainted. `all` now scopes
+  to curation alone, and the repaint keys on the fetch resolving.
+- **BR-33.** `<C-a>` was a literal while every sibling picker key carries a
+  registry row — so it appeared in no help screen and could not be rebound, and
+  the mapping immediately above it binds the help that omits it. It now resolves
+  through the new `keybinding_registry.key_for(id, config)`. The wider rule: a
+  sweep without a guard is a snapshot. `tests/arch/single_source_sweeps_spec.lua`
+  now guards all three of this issue's consolidations — no re-declared
+  `free_port`, no cliproxy spec without `_set_data_dir`, no new hardcoded picker
+  key (with the pre-existing seven listed as debt that may shrink, never grow).
+  Each guard was confirmed to fail when its invariant is violated.

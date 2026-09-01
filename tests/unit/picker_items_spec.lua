@@ -422,37 +422,78 @@ describe("agent_picker._providers_without_models", function()
     end)
 end)
 
+describe("agent_picker._view_for", function()
+    -- Drives the PRODUCTION path. The first attempt at these assertions
+    -- re-implemented the exclusion in the spec body and handed _build_items an
+    -- already-filtered list, so reverting the fix left the suite green — the
+    -- test could not fail. That is why _view_for exists as a pure function.
+    local CATALOG = {
+        { id = "claude-opus-5", display = "Claude Opus 5", owner = "anthropic",
+          series = "claude-opus", created = 3 },
+        { id = "claude-sonnet-5", display = "Claude Sonnet 5", owner = "anthropic",
+          series = "claude-sonnet", created = 2 },
+        { id = "gpt-5.6-sol", display = "GPT 5.6 Sol", owner = "openai",
+          series = "gpt-sol", created = 1 },
+    }
+    local CFG = { providers = { "claude", "codex" }, per_provider = 3 }
+
+    local function ids(view)
+        local out = {}
+        for _, m in ipairs(view.live) do out[#out + 1] = m.id end
+        return out
+    end
+
+    it("drops a model that is already a registered agent", function()
+        local view = agent_picker._view_for(CATALOG, CFG,
+            { agents = { ["claude-opus-5*"] = {} } })
+        assert.same({ "claude-sonnet-5", "gpt-5.6-sol" }, ids(view))
+    end)
+
+    it("drops it on the expanded path too", function()
+        -- The exclusion lives in _view_for precisely so <C-a> inherits it.
+        local view = agent_picker._view_for(CATALOG, CFG,
+            { all = true, agents = { ["claude-opus-5*"] = {} } })
+        assert.same({ "claude-sonnet-5", "gpt-5.6-sol" }, ids(view))
+    end)
+
+    it("expanding bypasses curation only, never the logged-out rows", function()
+        local cfg = { providers = { "claude", "antigravity" }, per_provider = 1 }
+        local curated = agent_picker._view_for(CATALOG, cfg, {})
+        local all = agent_picker._view_for(CATALOG, cfg, { all = true })
+        assert.equals(1, #curated.live)          -- per_provider caps it
+        assert.equals(#CATALOG, #all.live)       -- expansion lifts the cap
+        assert.same(curated.logged_out, all.logged_out)
+        assert.same({ { provider = "antigravity" } }, all.logged_out)
+    end)
+
+    it("still reports logged-out providers when the catalog is empty", function()
+        -- An empty catalog is exactly when every provider is logged out; an
+        -- early return here would suppress the only rows that say so.
+        local view = agent_picker._view_for({}, { providers = { "claude", "codex" } }, {})
+        assert.same({}, view.live)
+        assert.same({ { provider = "claude" }, { provider = "codex" } }, view.logged_out)
+    end)
+end)
+
 describe("agent_picker live/agent overlap", function()
-    -- The state a live pick creates: register_live_agent puts `<id>*` into
-    -- M.agents AND _agents, while the catalog still advertises the same model.
-    local function plugin_with_live_agent()
-        local p = make_plugin("claude-opus-5*")
-        p._agents = { "alpha", "claude-opus-5*" }
-        p.agents = {
+    it("renders no name twice and marks exactly one row current", function()
+        local plugin = make_plugin("claude-opus-5*")
+        plugin._agents = { "alpha", "claude-opus-5*" }
+        plugin.agents = {
             alpha = { provider = "openai", model = "gpt-4" },
             ["claude-opus-5*"] = { provider = "cliproxyapi", model = "claude-opus-5" },
         }
-        return p
-    end
-
-    it("never renders one model as both a configured agent and a live row", function()
-        local plugin = plugin_with_live_agent()
-        local live = { { id = "claude-opus-5", display = "Claude Opus 5", owner = "anthropic" } }
-        -- what view_for hands _build_items after the exclusion
-        local filtered = {}
-        for _, m in ipairs(live) do
-            if not plugin.agents[m.id .. "*"] then
-                filtered[#filtered + 1] = m
-            end
-        end
-        local items = agent_picker._build_items(plugin, { live = filtered })
-        local seen = {}
+        plugin.config = { cliproxy = { live_models = { providers = { "claude" }, per_provider = 3 } } }
+        local catalog = { { id = "claude-opus-5", display = "Claude Opus 5",
+                            owner = "anthropic", series = "claude-opus", created = 1 } }
+        -- production path end to end: view built by _view_for, rows by _build_items
+        local items = agent_picker._build_items(plugin,
+            agent_picker._view_for(catalog, plugin.config.cliproxy.live_models,
+                { agents = plugin.agents }))
+        local seen, checked = {}, 0
         for _, item in ipairs(items) do
             assert.is_nil(seen[item.name], ("%q rendered twice"):format(item.name))
             seen[item.name] = true
-        end
-        local checked = 0
-        for _, item in ipairs(items) do
             if item.is_current then checked = checked + 1 end
         end
         assert.equals(1, checked, "more than one row carries the current marker")

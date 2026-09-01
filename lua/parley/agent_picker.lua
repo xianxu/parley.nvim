@@ -126,9 +126,53 @@ function M._build_items(plugin, extra)
     return items
 end
 
+--- Build the picker's live section from a catalog. PURE — takes the catalog,
+--- the `live_models` config and the registered agents, returns what
+--- `_build_items` consumes.
+---
+--- Extracted so a test can drive the PRODUCTION path. The first version of the
+--- de-duplication below was tested by re-implementing it in the spec body and
+--- handing `_build_items` an already-filtered list, which meant reverting the
+--- fix left the suite green — the test could not fail.
+---@param models table[] # the full cached catalog
+---@param cfg table # cliproxy.live_models
+---@param opts table|nil # { all = boolean, agents = <plugin.agents> }
+---@return table # { live = …, logged_out = … }
+function M._view_for(models, cfg, opts)
+    opts = opts or {}
+    local agents = opts.agents or {}
+    local providers = (cfg or {}).providers or {}
+    local cat = require("parley.cliproxy_catalog")
+
+    -- Picking a live model registers it as `<id>*`, and the restart restore does
+    -- the same. Without this it renders TWICE on the next open — once from the
+    -- configured loop, once from the catalog — both checkmarked, both keyed the
+    -- same for `recall_id_fn`.
+    local function unregistered(rows)
+        local out = {}
+        for _, m in ipairs(rows) do
+            if not agents[m.id .. "*"] then
+                out[#out + 1] = m
+            end
+        end
+        return out
+    end
+
+    -- `all` scopes exactly one thing: the curation bypass. It is not a reason to
+    -- hide the logged-out rows, and an empty catalog is not either — an empty
+    -- catalog is precisely when every configured provider is logged out, which
+    -- is the case those rows exist to report.
+    local live = opts.all and models
+        or cat.curate(models, { providers = providers, per_provider = (cfg or {}).per_provider })
+
+    return {
+        live = unregistered(live),
+        logged_out = M._providers_without_models(models, providers),
+    }
+end
+
 -- Create a floating picker to select an LLM agent
 function M.agent_picker(plugin)
-    local cat = require("parley.cliproxy_catalog")
     local ok_proxy, cliproxy = pcall(require, "parley.cliproxy")
 
     -- Read the catalog off disk: synchronous, ~5 KB, no network on a UI path.
@@ -136,53 +180,13 @@ function M.agent_picker(plugin)
         if not ok_proxy then
             return {}
         end
-        local models = cliproxy.catalog_cached()
-        return models or {}
+        return cliproxy.catalog_cached() or {}
     end
 
-    local function live_config()
-        return ((plugin.config or {}).cliproxy or {}).live_models or {}
-    end
-
-    -- Two views the <C-a> toggle switches between: the curated default, and the
-    -- entire catalog with filter AND curation bypassed, so narrowing the config
-    -- never puts a model out of reach.
     local expanded = false
-
-    --- Drop catalog rows that are already registered agents.
-    ---
-    --- Picking a live model registers it under `<id>*`, and the restart restore
-    --- does the same — so without this the model appears TWICE on the next
-    --- open: once from the configured loop and once from the catalog, both
-    --- checkmarked, both keyed the same for `recall_id_fn`. Applied inside
-    --- view_for so the <C-a> path inherits it too.
-    local function not_already_an_agent(models)
-        local out = {}
-        for _, m in ipairs(models) do
-            if not plugin.agents[m.id .. "*"] then
-                out[#out + 1] = m
-            end
-        end
-        return out
-    end
-
     local function view_for(all)
-        local models = catalog()
-        local cfg = live_config()
-        local providers = cfg.providers or {}
-        if all then
-            return { live = not_already_an_agent(models), logged_out = {} }
-        end
-        -- No early return on an empty catalog: an empty catalog is precisely
-        -- when every configured provider is logged out, which is the case the
-        -- login rows exist to report.
-        return {
-            live = not_already_an_agent(cat.curate(models, {
-                providers = providers,
-                per_provider = cfg.per_provider,
-            })),
-            logged_out = M._providers_without_models(models, providers),
-        }
+        return M._view_for(catalog(), ((plugin.config or {}).cliproxy or {}).live_models or {},
+            { all = all, agents = plugin.agents })
     end
 
     local keybindings_key = (plugin.config.global_shortcut_keybindings or { shortcut = "<C-g>?" }).shortcut
@@ -226,8 +230,10 @@ function M.agent_picker(plugin)
             },
             {
                 -- Expand to the whole catalog. Curation decides the DEFAULT view,
-                -- never what is reachable.
-                key = "<C-a>",
+                -- never what is reachable. The key comes from the registry so it
+                -- is discoverable in <C-g>? and rebindable like every other one.
+                key = require("parley.keybinding_registry")
+                    .key_for("ap_expand_catalog", plugin.config) or "<C-a>",
                 fn = function()
                     expanded = not expanded
                     handle.update(M._build_items(plugin, view_for(expanded)))
@@ -242,7 +248,11 @@ function M.agent_picker(plugin)
     -- a picker cannot start a daemon (#131).
     if ok_proxy and cliproxy.is_managed() and cliproxy.catalog_stale() then
         cliproxy.fetch_catalog(function(models)
-            if models and #models > 0 and handle and not handle.is_closed() then
+            -- Repaint whenever the fetch RESOLVED, not only when it returned
+            -- rows: a proxy answering 200 with an empty registry is exactly the
+            -- case the login rows report, and gating on `#models > 0` would
+            -- leave the picker showing a stale list instead.
+            if models and handle and not handle.is_closed() then
                 handle.update(M._build_items(plugin, view_for(expanded)))
             end
         end)
