@@ -561,7 +561,10 @@ describe("cliproxy IO lifecycle", function()
                 end)
             end)
             assert.is_nil(r.err)
-            assert.same({ "claude-opus-4-8", "claude-sonnet-4-6" }, r.ids)
+            -- The fake's catalog grew in #205 to carry the shapes the model
+            -- catalog has to survive; what this case asserts is the OWNER
+            -- filter, so it lists every anthropic-owned row and no other.
+            assert.same({ "claude-opus-4-8", "claude-opus-5", "claude-sonnet-4-6" }, r.ids)
         end)
 
         it("discriminates: codex sees only the openai-owned model", function()
@@ -576,7 +579,7 @@ describe("cliproxy IO lifecycle", function()
                 end)
             end)
             assert.is_nil(r.err)
-            assert.same({ "gpt-5-codex" }, r.ids)
+            assert.same({ "gpt-5-codex", "gpt-5.6-sol" }, r.ids)
         end)
 
         it("returns an empty list when the provider isn't authenticated", function()

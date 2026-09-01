@@ -196,6 +196,39 @@ def run_login(login_mode, auth_store):
     sys.exit(0)
 
 
+# The catalog both model routes serve (#205). Deliberately carries the shapes
+# that break naive code, so a test meets them the way production does:
+#   - `created` is ABSENT on the antigravity rows (measured: all 13 real ones are)
+#   - an id whose display name it does not resemble (gemini-pro-agent)
+#   - one id claimed by a second owner, which the real proxy does across restarts
+CATALOG_V1 = [
+    {"id": "claude-opus-5", "owned_by": "anthropic", "created": 1784038800},
+    {"id": "claude-opus-4-8", "owned_by": "anthropic", "created": 1779984000},
+    {"id": "claude-sonnet-4-6", "owned_by": "anthropic", "created": 1771372800},
+    {"id": "gpt-5-codex", "owned_by": "openai", "created": 1770912000},
+    {"id": "gpt-5.6-sol", "owned_by": "openai", "created": 1783616400},
+    {"id": "gemini-pro-agent", "owned_by": "antigravity"},
+    {"id": "gpt-oss-120b-medium", "owned_by": "antigravity"},
+]
+
+CATALOG_V1BETA = [
+    {"name": "models/claude-opus-5", "displayName": "Claude Opus 5",
+     "description": "Latest premium model."},
+    {"name": "models/claude-opus-4-8", "displayName": "Claude Opus 4.8",
+     "description": "Premium model."},
+    {"name": "models/claude-sonnet-4-6", "displayName": "Claude Sonnet 4.6",
+     "description": "claude-sonnet-4-6"},
+    {"name": "models/gpt-5-codex", "displayName": "GPT 5 Codex",
+     "description": "Coding model."},
+    {"name": "models/gpt-5.6-sol", "displayName": "GPT 5.6 Sol",
+     "description": "Our most capable model yet."},
+    {"name": "models/gemini-pro-agent", "displayName": "Gemini 3.1 Pro (High)",
+     "description": "Gemini 3.1 Pro (High)"},
+    {"name": "models/gpt-oss-120b-medium", "displayName": "GPT-OSS 120B (Medium)",
+     "description": "GPT-OSS 120B (Medium)"},
+]
+
+
 def main():
     # `-h` is now part of the surface parley depends on: it validates a login
     # flag against the binary's own usage, because the flag set is
@@ -366,11 +399,15 @@ def main():
                     self._json(200, {"object": "list", "data": []})
                 else:  # healthy — a mixed-owner list so models-filtering is
                     # proven to discriminate (anthropic vs openai), not pass through
-                    self._json(200, {"object": "list", "data": [
-                        {"id": "claude-sonnet-4-6", "owned_by": "anthropic"},
-                        {"id": "claude-opus-4-8", "owned_by": "anthropic"},
-                        {"id": "gpt-5-codex", "owned_by": "openai"},
-                    ]})
+                    self._json(200, {"object": "list", "data": CATALOG_V1})
+                return
+            if self.path.startswith("/v1beta/models"):
+                # The naming half of the catalog (#205). parse() joins it onto
+                # /v1/models by id after stripping the `models/` prefix.
+                if mode == "client_key_mismatch":
+                    self._json(401, {"error": "unauthorized"})
+                else:
+                    self._json(200, {"models": CATALOG_V1BETA})
                 return
             self.send_response(404)
             self.end_headers()

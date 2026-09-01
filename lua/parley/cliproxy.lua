@@ -1353,6 +1353,105 @@ function M.list_models(provider, cb)
 end
 
 --------------------------------------------------------------------------------
+-- Model catalog (issue #205)
+--
+-- cliproxy already knows what it serves, and that set moves on its own — an
+-- antigravity login registered 13 new models mid-session, no restart. Parley
+-- reads that catalog instead of carrying model names in config.
+--------------------------------------------------------------------------------
+
+local CATALOG_TTL = 600 -- seconds; see the plan's operating envelope
+local _catalog_inflight = false
+
+local function catalog_path()
+    local dir = data_root()
+    vim.fn.mkdir(dir, "p")
+    return dir .. "/catalog.json"
+end
+
+M._catalog_path = catalog_path -- exposed for tests
+
+--- The last catalog we saw, straight off disk. Synchronous and small (~5 KB for
+--- today's 43 models) because the picker renders from it — the UI path never
+--- waits on the network.
+---@return table[] models, number|nil fetched_at
+function M.catalog_cached()
+    local fd = io.open(catalog_path(), "r")
+    if not fd then
+        return {}, nil
+    end
+    local body = fd:read("*a")
+    fd:close()
+    local ok, decoded = pcall(vim.json.decode, body)
+    if not ok or type(decoded) ~= "table" or type(decoded.models) ~= "table" then
+        return {}, nil
+    end
+    return decoded.models, tonumber(decoded.fetched_at)
+end
+
+--- Persist a catalog. Also the seam a spec uses to seed one without a live
+--- proxy (#205 Task 4.1 needs a catalog with no network).
+---@param models table[]
+---@param fetched_at number|nil
+function M._write_catalog(models, fetched_at)
+    local fd = io.open(catalog_path(), "w")
+    if not fd then
+        return false
+    end
+    fd:write(vim.json.encode({ models = models, fetched_at = fetched_at or os.time() }))
+    fd:close()
+    pcall(vim.fn.setfperm, catalog_path(), "rw-------")
+    return true
+end
+
+--- Is the cache old enough to be worth a background refresh?
+---@return boolean
+function M.catalog_stale()
+    local _, at = M.catalog_cached()
+    return not at or (os.time() - at) > CATALOG_TTL
+end
+
+--- Refresh the catalog from a proxy that is ALREADY running.
+---
+--- Deliberately NOT routed through ensure_running: opening a picker must never
+--- spawn a daemon (#131's dormancy contract). A connection-refused is a no-op
+--- that leaves the cached catalog in place, so the picker keeps rendering what
+--- it last knew.
+---
+--- Two routes because neither is sufficient: /v1/models carries `created`,
+--- /v1beta/models carries the display names.
+---@param cb fun(models: table[])|nil
+function M.fetch_catalog(cb)
+    if _catalog_inflight then
+        return
+    end
+    local opts = render_opts()
+    if not opts.host or not opts.port then
+        if cb then cb({}) end
+        return
+    end
+    _catalog_inflight = true
+    local function get(route, done)
+        vim.system(api_argv(opts.host, opts.port, opts.secret, route), { text = true },
+            function(obj)
+                done(obj.code == 0 and (split_status(obj.stdout) or obj.stdout) or nil)
+            end)
+    end
+    get("/v1/models", function(v1)
+        get("/v1beta/models", function(beta)
+            vim.schedule(function()
+                _catalog_inflight = false
+                local models = require("parley.cliproxy_catalog").parse(v1 or "", beta or "")
+                if #models > 0 then
+                    M._write_catalog(models)
+                end
+                if cb then cb(models) end
+            end)
+        end)
+    end)
+end
+
+--------------------------------------------------------------------------------
 -- M2: auto_download — fetch a pinned release, checksum-verify, extract
 --------------------------------------------------------------------------------
 

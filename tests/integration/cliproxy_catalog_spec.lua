@@ -1,0 +1,136 @@
+-- Integration tests for the model catalog IO seam (issue #205).
+-- Exercises fetch + cache against the process-level fake
+-- (tests/fixtures/fake_cliproxy), not function mocks — the join spans two HTTP
+-- routes, which a mock would assert rather than prove.
+
+local uv = vim.uv or vim.loop
+local ready_port = require("tests.helpers.ready_port")
+
+local FAKE = vim.fn.getcwd() .. "/tests/fixtures/fake_cliproxy"
+
+-- Redirect the derived-artifact dir so this spec never touches the operator's
+-- real ~/.local/share/nvim, even run bare.
+local SPEC_DATA_DIR = vim.fn.tempname()
+require("parley.cliproxy")._set_data_dir(SPEC_DATA_DIR)
+
+local started = {}
+
+local function start_fake(port)
+    local handle, pid = uv.spawn(FAKE, { args = { "--port", tostring(port) } }, function() end)
+    assert(handle, "failed to spawn fake_cliproxy")
+    table.insert(started, { handle = handle, pid = pid })
+    assert(ready_port.wait_listening(port), "fake never came up")
+    return pid
+end
+
+describe("cliproxy model catalog", function()
+    local parley = require("parley")
+    local cliproxy = require("parley.cliproxy")
+    local saved_providers, saved_path
+
+    local function set_endpoint(port)
+        parley.dispatcher = parley.dispatcher or {}
+        parley.dispatcher.providers = parley.dispatcher.providers or {}
+        parley.dispatcher.providers.cliproxyapi = {
+            endpoint = ("http://127.0.0.1:%d/v1/chat/completions"):format(port),
+        }
+        require("parley.vault").add_secret("cliproxyapi", "testkey")
+    end
+
+    local function fetch()
+        local models, done = nil, false
+        cliproxy.fetch_catalog(function(m)
+            models, done = m, true
+        end)
+        vim.wait(8000, function() return done end, 20)
+        assert(done, "fetch_catalog never resolved (hang!)")
+        return models
+    end
+
+    before_each(function()
+        saved_providers = parley.dispatcher and parley.dispatcher.providers
+        saved_path = vim.env.PATH
+        -- Without /opt/homebrew/bin, so nothing here can discover and spawn the
+        -- operator's REAL cliproxy against their live credential (#197).
+        vim.env.PATH = "/usr/bin:/bin:/usr/sbin:/sbin"
+        os.remove(cliproxy._catalog_path())
+    end)
+
+    after_each(function()
+        if parley.dispatcher then
+            parley.dispatcher.providers = saved_providers
+        end
+        vim.env.PATH = saved_path
+        for _, p in ipairs(started) do
+            pcall(function() uv.kill(p.pid, "sigkill") end)
+        end
+        started = {}
+    end)
+
+    it("joins both routes and caches the result to disk", function()
+        local port = ready_port.free_port()
+        start_fake(port)
+        set_endpoint(port)
+
+        local models = fetch()
+        assert.is_true(#models > 0)
+
+        local by_id = {}
+        for _, m in ipairs(models) do by_id[m.id] = m end
+        -- the join landed: display comes from /v1beta, created from /v1
+        assert.equals("Claude Opus 5", by_id["claude-opus-5"].display)
+        assert.equals(1784038800, by_id["claude-opus-5"].created)
+        -- and the created-less shape survives the round trip
+        assert.is_nil(by_id["gemini-pro-agent"].created)
+        assert.equals("Gemini 3.1 Pro (High)", by_id["gemini-pro-agent"].display)
+
+        assert.equals(1, vim.fn.filereadable(cliproxy._catalog_path()))
+    end)
+
+    it("serves the cached catalog with the proxy gone", function()
+        local port = ready_port.free_port()
+        start_fake(port)
+        set_endpoint(port)
+        fetch()
+
+        for _, p in ipairs(started) do pcall(function() uv.kill(p.pid, "sigkill") end) end
+        started = {}
+        vim.wait(300, function() return not ready_port.is_listening(port) end, 20)
+
+        local cached = cliproxy.catalog_cached()
+        assert.is_true(#cached > 0, "cache should outlive the proxy")
+    end)
+
+    it("does not start a proxy when none is running", function()
+        -- The #131 dormancy contract: opening a picker refreshes the catalog,
+        -- and that must never spawn a daemon. Point at a port nothing holds and
+        -- assert it is STILL free once the fetch settles.
+        local port = ready_port.free_port()
+        set_endpoint(port)
+
+        local models = fetch()
+        assert.same({}, models)
+        assert.is_false(ready_port.is_listening(port),
+            "fetch_catalog started a proxy — the dormancy contract is broken")
+    end)
+
+    it("leaves the existing cache intact when the proxy is unreachable", function()
+        local port = ready_port.free_port()
+        start_fake(port)
+        set_endpoint(port)
+        local warm = fetch()
+
+        for _, p in ipairs(started) do pcall(function() uv.kill(p.pid, "sigkill") end) end
+        started = {}
+        fetch() -- fails; must not blank the cache
+
+        assert.equals(#warm, #cliproxy.catalog_cached())
+    end)
+
+    it("reports staleness from the cache's own timestamp", function()
+        cliproxy._write_catalog({ { id = "x", owner = "openai" } }, os.time())
+        assert.is_false(cliproxy.catalog_stale())
+        cliproxy._write_catalog({ { id = "x", owner = "openai" } }, os.time() - 3600)
+        assert.is_true(cliproxy.catalog_stale())
+    end)
+end)

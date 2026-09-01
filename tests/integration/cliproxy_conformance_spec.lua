@@ -97,13 +97,13 @@ describe("cliproxyapi management API conformance", function()
         return port, mgmt_key
     end
 
-    local function get(bearer)
+    local function get(bearer, route)
         local body, code
         local ok = vim.wait(20000, function()
             local res = vim.system({
                 "curl", "-s", "-w", "\n%{http_code}", "--max-time", "2",
                 "-H", "Authorization: Bearer " .. bearer,
-                ("http://127.0.0.1:%d/v0/management/auth-files"):format(port),
+                ("http://127.0.0.1:%d%s"):format(port, route or "/v0/management/auth-files"),
             }, { text = true }):wait()
             body, code = (res.stdout or ""):match("^(.*)\n(%d+)%s*$")
             return code ~= nil and code ~= "000"
@@ -228,6 +228,50 @@ describe("cliproxyapi management API conformance", function()
         -- claude is the channel this issue is about; it must work everywhere.
         assert.is_truthy(cliproxy.login_argv("claude"),
             "the installed binary has no -claude-login flag")
+    end)
+
+    -- #205: the catalog's naming half. The fake and the unit fixtures both
+    -- assume `name: "models/<id>"` + `displayName`, and parse() strips that
+    -- prefix to join. If cliproxy ever emits a bare id instead, every join
+    -- misses, every row silently falls back to the raw id, and BOTH suites still
+    -- pass — the fixture is consistent with itself and the fake restates the
+    -- same assumption. Only the real binary can catch that.
+    it("serves /v1beta/models with the naming fields parse() joins on", function()
+        if not binary then
+            pending("cliproxyapi binary not available")
+            return
+        end
+        boot()
+        local ok, body, code = get("conformance", "/v1beta/models")
+        assert.is_true(ok, "no response from /v1beta/models")
+        assert.equals("200", code)
+        local decoded = vim.json.decode(body)
+        assert.is_table(decoded.models)
+        assert.is_true(#decoded.models > 0, "the real binary served an empty catalog")
+        local m = decoded.models[1]
+        assert.is_string(m.name)
+        assert.is_true(m.name:find("^models/") ~= nil,
+            "parse() strips a `models/` prefix; a bare id would break every join")
+        assert.is_string(m.displayName)
+    end)
+
+    it("joins its two model routes onto each other for real", function()
+        if not binary then
+            pending("cliproxyapi binary not available")
+            return
+        end
+        boot()
+        local _, v1 = get("conformance", "/v1/models")
+        local _, beta = get("conformance", "/v1beta/models")
+        local models = require("parley.cliproxy_catalog").parse(v1, beta)
+        assert.is_true(#models > 0, "parse() produced nothing from the real routes")
+        local joined = 0
+        for _, m in ipairs(models) do
+            if m.display ~= m.id then
+                joined = joined + 1
+            end
+        end
+        assert.is_true(joined > 0, "no row picked up a displayName — the join is broken")
     end)
 
     it("rejects the api-key bearer on the management route", function()
