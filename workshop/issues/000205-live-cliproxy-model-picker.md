@@ -191,7 +191,7 @@ Durable design: `workshop/plans/000205-live-cliproxy-model-picker-plan.md`
 - [x] M1 — pure catalog core: `parse` (join /v1/models + /v1beta/models), `series`,
       `rank_key`, `parse_provider_spec`, `curate`, `build_agent`; real captured
       fixtures, no mocks (ARCH-PURE)
-- [ ] M2 — IO shell: `fetch_catalog` + disk cache + staleness; `fake_cliproxy`
+- [x] M2 — IO shell: `fetch_catalog` + disk cache + staleness; `fake_cliproxy`
       gains /v1beta/models and the created-less row shape (ARCH-MOCK)
 - [ ] M3 — picker: live section, `(logged out)` login rows, `<C-a>` full catalog,
       background repaint, live agent registered + persisted across restart
@@ -202,6 +202,7 @@ Durable design: `workshop/plans/000205-live-cliproxy-model-picker-plan.md`
 ## Log
 
 ### 2026-08-31
+- 2026-08-31: closed M2 — providers/cliproxy-managed mapping green (0 failures), arch guards green, keybindings 24/24. Demoted backlog cleared, including three more live data-loss/crash paths measured and pinned: a foreign 200 on the endpoint wiped a warm catalog (the write now gates on classify(), the existing single source for cliproxy /v1/models contract, after #models>0, curl exit code and HTTP-200 each lost data in turn); fetch_catalog dropped its callback on the in-flight path so a picker opened during a refresh never repainted; catalog_cached re-read and re-mkdird on every keystroke-path open and `providers = nil` returned {} instead of every known provider as config.lua documents. Every fix mutation-checked by reverting it — including the foreign-200 test itself, which initially reused a just-killed port so the dying process answered and the revert stayed green. Also: id.."*" single-sourced as agent_name (3 sites that must agree or a model renders twice), the `or "<C-a>"` literal removed and the arch guard widened to the fallback forms, README documents live_models and <C-a>, atlas heading no longer orphans the flow narrative, keybinding scoped parley_buffer, fake v1beta branches mirror /v1/models.; review verdict: FIX-THEN-SHIP
 - 2026-08-31: closed M1 — cliproxy_catalog_spec 41/41 green (every documented Spec render pinned as an equality, derived from a table keyed by the spec string so a new row cannot skip a test); providers/cliproxy-managed mapping green, 0 failures. Round 3-4 findings addressed as RULES: rank_key uses a delimiter rule not a magnitude threshold (BR-13); unknown provider contributes nothing instead of pooling ownerless rows (BR-6); empty ids rejected at the parse boundary rather than defended per-consumer (BR-7); build_agent returns nil instead of raising into a picker callback (BR-8); plan referents and all 26 invalid SPEC keys swept, referent grep re-run clean (BR-1, BR-9). BR-12 resolved by measurement: an antigravity-served claude answers 200 on the anthropic wire, so family decides the transport and owner only reaches the search tool.; review verdict: FIX-THEN-SHIP
 
 - Brainstormed with operator. Verified against the live proxy: alias block is

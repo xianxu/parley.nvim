@@ -23,6 +23,10 @@ function M._providers_without_models(models, providers)
     for _, spec in ipairs(providers or {}) do
         local provider = cat.parse_provider_spec(spec).provider
         local owner = cc.provider_owned_by(provider)
+        -- Only a name parley can actually log into earns a login row. A typo
+        -- ("claud") or an OWNER name ("anthropic") resolves to no channel, and
+        -- offering `:ParleyProxy login claud` is an actionable-looking dead end.
+        local loggable = owner ~= nil and vim.tbl_contains(cc.providers(), provider)
         local found = false
         for _, m in ipairs(models or {}) do
             if m.owner == owner then
@@ -30,7 +34,7 @@ function M._providers_without_models(models, providers)
                 break
             end
         end
-        if not found and provider ~= "" then
+        if not found and loggable then
             out[#out + 1] = { provider = provider }
         end
     end
@@ -108,8 +112,11 @@ function M._build_items(plugin, extra)
             name = name,
             kind = "live",
             model = m,
+            -- `owner` is absent on a hand-edited or older-parley cache row;
+            -- rendering it raw prints a literal "(nil)" into the picker.
             display = (is_current and "✓ " or "  ")
-                .. m.display .. " - " .. m.id .. " (" .. tostring(m.owner) .. ")",
+                .. m.display .. " - " .. m.id
+                .. (m.owner and (" (" .. m.owner .. ")") or ""),
             is_current = is_current,
         }
     end
@@ -153,9 +160,15 @@ function M._view_for(models, cfg, opts)
     -- configured loop, once from the catalog — both checkmarked, both keyed the
     -- same for `recall_id_fn`.
     local function unregistered(rows)
-        local out = {}
+        local out, seen = {}, {}
         for _, m in ipairs(rows) do
-            if not agents[cat.agent_name(m.id)] then
+            -- Also dedupe BY ID: `providers = { "claude", "claude:opus" }` runs
+            -- curate twice over the same pool (its per-series memo resets per
+            -- entry), so the same model arrives twice — identical display, both
+            -- marked current, one shared recall key. Same symptom as the
+            -- registered-agent overlap, reached by a second route.
+            if not seen[m.id] and not agents[cat.agent_name(m.id)] then
+                seen[m.id] = true
                 out[#out + 1] = m
             end
         end

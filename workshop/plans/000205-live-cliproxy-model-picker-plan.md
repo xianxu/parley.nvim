@@ -25,13 +25,13 @@
 | `parse_provider_spec` | `lua/parley/cliproxy_catalog.lua` | new |
 | `curate` | `lua/parley/cliproxy_catalog.lua` | new |
 | `build_agent` | `lua/parley/cliproxy_catalog.lua` | new |
+| `agent_name` | `lua/parley/cliproxy_catalog.lua` | new |
 | `cliproxy_default_web_search_strategy` | `lua/parley/providers.lua` | new |
 | `get_cliproxy_strategy` | `lua/parley/providers.lua` | modified |
 | `resolve_channel` | `lua/parley/cliproxy_config.lua` | modified |
 | `_build_items` | `lua/parley/agent_picker.lua` | modified |
 | `_providers_without_models` | `lua/parley/agent_picker.lua` | new |
 | `_view_for` | `lua/parley/agent_picker.lua` | new |
-| `_select` | `lua/parley/agent_picker.lua` | new |
 | `key_for` | `lua/parley/keybinding_registry.lua` | new |
 
 - **Model** — one catalog row: `{ id, owner, created, display, description, series }`. The join of `/v1/models` (carries `created`) and `/v1beta/models` (carries `displayName`/`description`) on `id`.
@@ -59,6 +59,7 @@
 | `catalog_cached` / `_write_catalog` / `_catalog_path` | `lua/parley/cliproxy.lua` | new | filesystem (`stdpath('data')`) |
 | `catalog_stale` | `lua/parley/cliproxy.lua` | new | clock + filesystem |
 | `register_live_agent` | `lua/parley/init.lua` | new | `state.json` |
+| `_select` | `lua/parley/agent_picker.lua` | new | `vim.cmd` / `vim.schedule` |
 | `agent_picker` live section | `lua/parley/agent_picker.lua` | modified | `float_picker` handle |
 | live-agent restore | `lua/parley/init.lua` | modified | `state.json` |
 | `/v1beta/models` route | `tests/fixtures/fake_cliproxy` | modified | the cliproxy binary |
@@ -1473,18 +1474,13 @@ git add -u && git commit -m "#205 M4: channel candidates resolved by credential 
 **Files:**
 - Modify: `lua/parley/config.lua:130-152` (delete `oauth-model-alias`), add `cliproxy.live_models`
 
-- [ ] **Step 1: Delete the block and add the knob**
+- [ ] **Step 1: Delete the alias block**
 
-```lua
--- Which providers the agent picker offers live models for, and how many.
--- Entries are "<provider>[:<term>,…]" — the terms are substrings matched
--- against the model id AND its display name. This names providers and model
--- families, never versions, so it does not go stale as the catalog moves.
-live_models = {
-    providers = { "claude:opus,sonnet,fable", "codex:gpt-5.6", "antigravity" },
-    per_provider = 3,
-},
-```
+`live_models` already shipped in M3 — do NOT re-add it here. This step removes
+`oauth-model-alias` and nothing else.
+
+(the knob's shipped form lives in `lua/parley/config.lua`)
+
 
 - [ ] **Step 2: Verify routing still works without the alias block**
 
@@ -1804,3 +1800,31 @@ fixed rather than as gate work.
   keybinding row is scoped `parley_buffer` rather than Global; the fake's
   v1beta branches mirror /v1/models with the reason stated; and the plan records
   that `live_models` shipped in M3.
+
+### 2026-08-31 — M2 close (FIX-THEN-SHIP): BR-38..BR-41 and the BR-20/21 remainders
+
+- **BR-41.** `fetch_catalog` pulled `render_opts()`, whose bundle MINTS a 0600
+  `management.key` — so opening the agent picker created a credential file.
+  It now reads only host, port and secret. Pinned by a test asserting no
+  `management.key` exists after a refresh.
+- **BR-40.** `providers = { "claude", "claude:opus" }` rendered claude-opus-5
+  twice, both marked current, one shared recall key — BR-30's symptom reached by
+  a second route, because `curate` resets its per-series memo per entry. The live
+  list is deduped by id as well as against registered agents.
+- **BR-21 remainder.** An ownerless cache row printed a literal `(nil)`, and
+  `_providers_without_models` offered `:ParleyProxy login claud` for a typo and
+  for `anthropic` (an owner name, not a provider). Only names parley can
+  actually log into earn a login row.
+- **BR-20 remainder.** The "logged at debug" the operating envelope promised is
+  implemented, and `catalog_path()` no longer mkdirs on every read — only the
+  write needs the directory.
+- **BR-39.** The guard written last round claimed to count "any bracketed key
+  literal" while matching three specific forms, and its allowance for
+  `agent_picker.lua` was 0 while the file held one — a guard asserting a
+  measurable falsehood. Pattern widened to any `"<…>…"` literal, allowances set
+  from measurement, and `float_picker` excluded with the reason: it is the
+  widget, not a caller, and its built-in keys are deliberately not per-picker
+  rebindable.
+- **BR-38.** `agent_name` was missing from the tables the plan's own
+  bidirectional rule covers, and `_select` sat under Pure entities while calling
+  `vim.cmd` and `vim.schedule`. Moved to Integration points.

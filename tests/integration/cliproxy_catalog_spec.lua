@@ -255,3 +255,30 @@ describe("cliproxy model catalog", function()
         assert.is_true(cliproxy.catalog_stale())
     end)
 end)
+
+describe("cliproxy catalog side effects", function()
+    local parley = require("parley")
+    local cliproxy = require("parley.cliproxy")
+
+    it("does not mint a management key just to refresh the catalog", function()
+        -- render_opts() gathers the whole write_rendered_config bundle, which
+        -- creates a 0600 management.key. Opening a picker must not create a
+        -- credential file; fetch_catalog needs only host/port/secret.
+        local dir = vim.fn.tempname()
+        cliproxy._set_data_dir(dir)
+        parley.dispatcher = parley.dispatcher or {}
+        parley.dispatcher.providers = parley.dispatcher.providers or {}
+        parley.dispatcher.providers.cliproxyapi = {
+            endpoint = ("http://127.0.0.1:%d/v1/chat/completions")
+                :format(require("tests.helpers.ready_port").free_port()),
+        }
+
+        local done = false
+        cliproxy.fetch_catalog(function() done = true end)
+        vim.wait(8000, function() return done end, 20)
+
+        assert.equals(0, vim.fn.filereadable(dir .. "/management.key"),
+            "refreshing the catalog wrote a management key")
+        cliproxy._set_data_dir(SPEC_DATA_DIR)
+    end)
+end)

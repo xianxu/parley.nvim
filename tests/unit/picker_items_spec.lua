@@ -518,3 +518,40 @@ describe("agent_picker._view_for provider defaults", function()
         assert.same({ "claude-opus-5", "gpt-5.6-sol" }, ids)
     end)
 end)
+
+describe("agent_picker._view_for overlap and unknown providers", function()
+    local CATALOG = {
+        { id = "claude-opus-5", display = "Claude Opus 5", owner = "anthropic",
+          series = "claude-opus", created = 2 },
+        { id = "claude-sonnet-5", display = "Claude Sonnet 5", owner = "anthropic",
+          series = "claude-sonnet", created = 1 },
+    }
+
+    it("renders a model once when two provider entries overlap", function()
+        -- curate resets its per-series memo for each entry, so `claude` and
+        -- `claude:opus` both yield claude-opus-5 — identical display, both
+        -- marked current, one shared recall key. BR-30's symptom by another route.
+        local view = agent_picker._view_for(CATALOG,
+            { providers = { "claude", "claude:opus" }, per_provider = 3 }, {})
+        local ids = {}
+        for _, m in ipairs(view.live) do ids[#ids + 1] = m.id end
+        assert.same({ "claude-opus-5", "claude-sonnet-5" }, ids)
+    end)
+
+    it("offers a login only for a name that can actually be logged into", function()
+        -- A typo, and an OWNER name rather than a provider: neither resolves to
+        -- a channel, so `:ParleyProxy login <it>` is an actionable-looking dead
+        -- end.
+        local view = agent_picker._view_for(CATALOG,
+            { providers = { "claud", "anthropic", "antigravity" }, per_provider = 3 }, {})
+        assert.same({ { provider = "antigravity" } }, view.logged_out)
+    end)
+
+    it("renders an ownerless row without printing (nil)", function()
+        local rows = agent_picker._build_items(make_plugin("mango"),
+            { live = { { id = "orphan-1", display = "Orphan 1" } } })
+        local display = rows[#rows].display
+        assert.is_nil(display:find("nil", 1, true), "rendered a literal nil: " .. display)
+        assert.is_true(display:find("orphan-1", 1, true) ~= nil)
+    end)
+end)

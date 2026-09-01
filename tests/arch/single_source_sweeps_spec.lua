@@ -58,24 +58,34 @@ describe("arch: single-source sweeps stay swept", function()
         -- as known debt so the invariant can hold for new code without silently
         -- expanding this issue into two unrelated pickers: the list may shrink,
         -- never grow.
+        -- Measured allowances, not aspirational ones: an allowance below the
+        -- real count makes the guard assert a falsehood, which is how it passed
+        -- while three files restated the registry's `<C-g>?` default.
+        --   agent_picker         1  the <C-g>? help default (its <C-a> is registry-bound)
+        --   root_dir_picker      4  three picker keys + the same <C-g>? default
+        --   system_prompt_picker 5  four picker keys + the same <C-g>? default
+        -- The numbers may shrink, never grow.
         local LEGACY_UNREGISTERED = {
-            ["lua/parley/root_dir_picker.lua"] = 3,
-            ["lua/parley/system_prompt_picker.lua"] = 4,
+            ["lua/parley/agent_picker.lua"] = 1,
+            ["lua/parley/root_dir_picker.lua"] = 4,
+            ["lua/parley/system_prompt_picker.lua"] = 5,
         }
-        for _, path in ipairs(repo_files("ls lua/parley/*_picker.lua")) do
+        -- float_picker is the WIDGET, not a caller: its <CR>/<Esc>/<C-j> and
+        -- friends are its own built-in interaction, documented in its header and
+        -- deliberately not per-picker rebindable. The guard is about the keys a
+        -- picker passes IN through `mappings`.
+        for _, path in ipairs(repo_files("ls lua/parley/*_picker.lua | grep -v float_picker")) do
             -- Enumerate the FORMS the duplicated value can take, not one of
-            -- them: `key = "<C-a>"` and `key_for(...) or "<C-a>"` are the same
-            -- duplication, and a guard that sees only the first is why the
-            -- second shipped. Any bracketed key literal in the file counts.
+            -- them. Three forms have shipped in this repo already:
+            --   key = "<C-a>"                        a direct literal
+            --   key_for(...) or "<C-a>"              a fallback copy
+            --   (config.x or { shortcut = "<C-g>?" })  a default-table copy
+            -- and a guard that saw only the first two is why the third survived
+            -- a round whose comment claimed it counted "any bracketed literal".
+            -- Count every bracketed key literal in the file, whatever holds it.
             local body = read(path)
             local literals = 0
-            for _ in body:gmatch('key = "<[^"]+>"') do
-                literals = literals + 1
-            end
-            for _ in body:gmatch('key_for%b() or "<[^"]+>"') do
-                literals = literals + 1
-            end
-            for _ in body:gmatch('or "<[^"]+>"') do
+            for _ in body:gmatch('"<[^"]+>[^"]*"') do
                 literals = literals + 1
             end
             local allowed = LEGACY_UNREGISTERED[path] or 0

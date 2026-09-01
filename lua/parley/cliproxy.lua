@@ -1363,10 +1363,10 @@ end
 local CATALOG_TTL = 600 -- seconds; see the plan's operating envelope
 local _catalog_inflight = false
 
+-- No mkdir here: this is called on every picker open and every cache read, and
+-- only the WRITE needs the directory to exist.
 local function catalog_path()
-    local dir = data_root()
-    vim.fn.mkdir(dir, "p")
-    return dir .. "/catalog.json"
+    return data_root() .. "/catalog.json"
 end
 
 M._catalog_path = catalog_path -- exposed for tests
@@ -1419,6 +1419,7 @@ end
 ---@param models table[]
 ---@param fetched_at number|nil
 function M._write_catalog(models, fetched_at)
+    vim.fn.mkdir(data_root(), "p")
     local fd = io.open(catalog_path(), "w")
     if not fd then
         return false
@@ -1456,7 +1457,14 @@ function M.fetch_catalog(cb)
     if _catalog_inflight then
         return cb(M.catalog_cached())
     end
-    local opts = render_opts()
+    -- NOT render_opts(): that gathers the whole write_rendered_config bundle,
+    -- which mints and writes a 0600 `management.key` as a side effect. Opening a
+    -- picker must not create a credential file. Only host/port/secret are needed
+    -- here, and each is read directly.
+    local host, port = cc.parse_endpoint(endpoint())
+    local secret = require("parley.vault").get_secret(
+        require("parley.providers").get_secret_name("cliproxyapi"))
+    local opts = { host = host, port = port, secret = secret }
     if not opts.host or not opts.port then
         return cb(M.catalog_cached())
     end
@@ -1492,6 +1500,12 @@ function M.fetch_catalog(cb)
                 local shape = classify(0, (v1 or "") .. "\n" .. tostring(v1_status or 0))
                 if v1_status == 200 and (shape == "healthy" or shape == "needs_login") then
                     M._write_catalog(models)
+                else
+                    -- Debug, never a popup: this runs on a picker-open path and
+                    -- a proxy that is simply down is not an error the operator
+                    -- asked about. The cached catalog stays on screen.
+                    logger.debug(("cliproxy: catalog refresh declined (http=%s shape=%s) — "
+                        .. "keeping the cached catalog"):format(tostring(v1_status), tostring(shape)))
                 end
                 cb(models)
             end)

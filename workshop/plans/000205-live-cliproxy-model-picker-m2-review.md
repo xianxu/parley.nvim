@@ -965,3 +965,193 @@ findings:
       belongs to the earlier, possibly closed, picker. Rule: every exit path of a
       callback-taking async function resolves its callback exactly once.
 ```
+
+---
+
+## Re-review — 2026-08-31T22:54:26-07:00 (FIX-THEN-SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 205 — live cliproxy model picker; retire hardcoded model lists |
+| repo | parley.nvim |
+| issue file | workshop/issues/000205-live-cliproxy-model-picker.md |
+| boundary | milestone M2 |
+| milestone | M2 |
+| window | 45d9f28e131fc5b40f6f06743ecfe40fcdff9538..60b964b3512d99cb663b4888efaa5d383b11377b |
+| command | sdlc milestone-close --issue 205 --milestone M2 |
+| reviewer | claude |
+| timestamp | 2026-08-31T22:54:26-07:00 |
+| verdict | FIX-THEN-SHIP |
+
+## Review
+
+Review complete. Findings below.
+
+```verdict
+verdict: FIX-THEN-SHIP
+confidence: high
+```
+
+The M2/M3 window delivers a working live-catalog picker: `fetch_catalog` + disk cache + staleness, the fake serving both model routes, the picker's live/login/separator rows, `<C-a>` expansion, and live-agent registration surviving restart. I ran the full suite at the pinned HEAD in a clean worktree — **192 spec files, exit 0, lint included** — and mutation-verified four claimed fixes by reverting them in a scratch copy (BR-37's callback: 1 red; the `classify` write gate: 1 red; BR-36's key-literal guard: 1 red; BR-19's restart restore: 2 red). Those fixes are real and pinned. What blocks SHIP is that two Important findings from prior rounds are still measurably open — BR-20's envelope bullet ("logged at debug") is neither implemented nor struck, and BR-21's `(nil)` owner render and unknown-provider login rows both reproduce on the production path at HEAD despite round 10 recording them fixed. Neither crashes or loses data, so this is non-blocking at the gate, but the pattern of "recorded fixed, still reproduces" is the thing to close before M3.
+
+**1. Strengths**
+
+- `M._view_for` (`lua/parley/agent_picker.lua:141`) is the right structural answer to the "test re-implements the fix" failure — a pure function on the production path that a spec can call directly. Reverting the dedupe genuinely reddens tests now.
+- The write gate at `lua/parley/cliproxy.lua:1489` reuses the existing `classify` as the single source for "is this cliproxy's contract", and `tests/integration/cliproxy_catalog_spec.lua` pins all four sides (401, foreign 200, genuinely-empty 200, unreachable). Weakening it to HTTP-200-only goes red. Correct application of ARCH-DRY and ARCH-MOCK.
+- `tests/arch/single_source_sweeps_spec.lua` converts three one-off sweeps into fitness functions. The `free_port` and `_set_data_dir` guards are exactly right, and the `_set_data_dir` one encodes a real incident (`workshop/lessons.md`).
+- The picker's documented rows are pinned as full-string equalities (`tests/unit/picker_items_spec.lua:340`), not containment — BR-5's rule correctly generalized.
+- `cliproxy_catalog.agent_name` (`:203`) genuinely removes the three-site duplication; no `.. "*"` remains anywhere in `lua/`.
+
+**2. Critical findings** — none.
+
+**3. Important findings**
+
+- **BR-20 remainder** — `lua/parley/cliproxy.lua:1450-1500` contains zero logger calls, while the plan's operating envelope (`plan.md:85`) still claims "the failure is logged at debug — never a popup on a UI path". Measured: `grep -c logger` over the whole catalog block returns 0. Also `catalog_path()` (`:1366`) mkdirs on every call, including the memo-hit path at `:1384`, so the keystroke path still makes a syscall per read. Fix: log the non-200 / curl-failure case at debug, and drop the `mkdir` from the read path (only `_write_catalog` needs it).
+- **BR-21 remainder** — measured at HEAD via the production path (`_write_catalog` → `catalog_cached` → `_view_for{all=true}` → `_build_items`): an ownerless row renders `  Mystery - mystery-1 (nil)` (`agent_picker.lua:112`, `tostring(m.owner)`). `catalog_cached` sanitizes `id`/`display`/`series` but not `owner`. Separately `_providers_without_models(models, {"claud"})` and `(models, {"anthropic"})` both return an actionable `(logged out)` row while `curate` returns `{}` for the same input — the asymmetry BR-6 fixed in `curate` and never propagated to `agent_picker.lua:19`. (Impact is bounded: `login_argv` rejects an unknown provider with a clear message.)
+- **NEW — plan Core-concepts table contradicts the code, twice.** `agent_name` (new at `cliproxy_catalog.lua:203`, a module both tables name) appears in neither table, and `_select` is filed under **Pure entities** (`plan.md:34`) although it calls `vim.cmd`/`vim.schedule` and its spec has to monkeypatch `vim.cmd` (`live_agent_state_spec.lua:165`). Per the checklist a PURE row whose test needs mocks is a Critical contradiction; I'm rating it Important because the entity exists and is tested — the defect is the stale table, not the runtime.
+
+**4. Minor findings**
+
+- **BR-35 not fixed as stated** — `keybinding_registry.lua` moved the row from `global` to `parley_buffer`; measured `help_lines("chat", {})` now renders it under **Buffer**, still a context where `<C-a>` is Vim's increment. No `agent_picker` scope, label, or display-order entry was added, and `agent_picker_mappings` is still absent from `config.lua` though `:756` documents that config key.
+- **BR-29 untouched** — `is_managed()` still gates the refresh; the two GETs are still chained (2× `CURL_MAX_TIME`, not the envelope's 2s); `handle.update` still swaps rows under the cursor; `conformance_spec.lua:233,250` still use `pending()` where five siblings print `SKIP:`.
+- **BR-27 partial** — plan Task 4.2 (`:1471-1483`) still instructs "add `cliproxy.live_models`" with a stale code block (`"claude:opus,sonnet,fable"` vs the shipped `"claude:opus,sonnet"`), though it shipped in M3. Note the working tree also carries a 192-line uncommitted deletion in `config.lua` that makes `make test` fail 3 unit specs (`config_tools`, `parley_harness`, `parley_harness_golden`) — clean at the pinned HEAD, red in the tree the operator will run the gate from.
+- **NEW — arch guard's own comment overstates it** (`single_source_sweeps_spec.lua:69`): "Any bracketed key literal in the file counts", but `:72-80` matches three specific forms. `agent_picker.lua:221`, `root_dir_picker.lua:211` and `system_prompt_picker.lua:121` each restate `keybinding_registry` entry `help`'s `default_key = "<C-g>?"` in an `or { shortcut = "…" }` form none of them see, while the allowance for `agent_picker.lua` is 0.
+- **NEW — live rows are not deduped by id.** `providers = { "claude", "claude:opus" }` renders `claude-opus-5*` twice, both checkmarked, sharing one `recall_id_fn` key (measured). `curate` resets `seen[series]` per spec entry, and `_view_for`'s `unregistered` only excludes *registered* agents.
+- **NEW — `fetch_catalog` provisions state on a UI path.** `cliproxy.lua:1459` calls `render_opts()`, which read-or-creates `management.key` (0600) and mkdirs the data root. Measured: opening the picker with no proxy running creates both, for a function documented as "a plain GET; a connection-refused is a no-op".
+- Cosmetic: four specs left a double blank line where `free_port` was removed; `recall_id_fn` can restore the cursor onto `__live_separator__`.
+
+**5. Test coverage notes**
+
+New coverage is strong where it counts: `cliproxy_catalog_spec.lua` drives the process fake, not function mocks, and covers every write-gate branch; `_view_for`/`_select` are reachable seams; the restart case drives the real `refresh_state` from a persisted `state.json`. Gaps: the `/v1beta` live conformance check exists but cannot run here — no `cliproxyapi` binary is installed, so both new conformance cases report `Pending` and the fixture's `models/<id>` assumption is currently witnessed only by the fake. Nothing pins the `(nil)` owner render, the duplicate-row config, or the `or { shortcut = … }` guard form.
+
+**6. Architectural notes**
+
+- **ARCH-DRY** — flag: three restatements of `<C-g>?` invisible to the new guard; `catalog_path`/`config_path`/`management_key_path` repeat the mkdir idiom a third time. Pass elsewhere (`agent_name`, `api_argv`, `classify`, `free_port`).
+- **ARCH-PURE** — flag: `_select` is table-listed PURE but is a side-effecting dispatcher; extracting the decision (return an intent, let the caller run it) would make it genuinely pure and drop the `vim.cmd` monkeypatch. `catalog_cached`'s sanitizer would also be better as a pure `cliproxy_catalog.sanitize(rows)`. Pass for `_build_items`, `_view_for`, `_providers_without_models`, `key_for`.
+- **ARCH-PURPOSE** — flag: the shadow-sweep finds the plan's tables still hand-maintained (3rd consecutive round with a missing entity), so the "sweep the class" rule keeps being answered instance-by-instance. Otherwise the diff fulfills M2/M3's purpose rather than a subset.
+- **ARCH-MOCK** — pass: the fake serves both routes across all modes with a stated rationale, and a live conformance check exists for the shape parley depends on. Minor: the fake's comment claims "one id claimed by two owners" and `CATALOG_V1` has no duplicate id.
+- **ARCH-CONSTRAINTS** — flag: the declared envelope is not enforced (no debug log, chained GETs double the stated budget) and the read path still does a syscall per call; the catalog write on the UI path is an undeclared side effect. Pass on scale and on the never-spawn contract, which is pinned by a real free-port assertion.
+
+**7. Plan revision recommendations**
+
+- Add `agent_name` to the Pure entities table; move `_select` to Integration points (it wraps `vim.cmd`/`vim.schedule`) or split out its pure decision.
+- Strike or implement `plan.md:85`'s "logged at debug"; correct the stated latency budget to the chained worst case, or make the two GETs concurrent.
+- Rewrite Task 4.2 to record that `live_models` shipped in M3 and drop the stale `"claude:opus,sonnet,fable"` block.
+- Correct the `fake_cliproxy` bullet in Integration points: it does not model "one id claimed by two owners".
+
+```findings
+dispose:
+  - id: BR-20
+    disposition: not-addressed
+    note: |
+      Status capture, 401 coverage, mtime memo and providers=nil all fixed and pinned; still zero logger calls in the catalog block and plan.md:85's "logged at debug" is neither implemented nor struck, and catalog_path() mkdirs on the memo-hit path.
+  - id: BR-21
+    disposition: not-addressed
+    note: |
+      Measured at HEAD via _write_catalog -> catalog_cached -> _view_for{all=true} -> _build_items: an ownerless row still renders "(nil)"; _providers_without_models still emits actionable login rows for "claud" and "anthropic" where curate returns {}.
+  - id: BR-24
+    disposition: addressed
+    note: |
+      README.md, atlas/providers/agents.md and atlas/providers/cliproxy-managed.md all updated; docs steps dissolved into Tasks 1.7/2.2/3.3.
+  - id: BR-27
+    disposition: not-addressed
+    note: |
+      Structurally unfixable, but Task 4.2 still instructs adding live_models with a stale providers list, and the working tree's uncommitted M4 config.lua deletion fails 3 unit specs at the gate.
+  - id: BR-28
+    disposition: addressed
+    note: |
+      cliproxy_catalog.agent_name is the single source; no `.. "*"` remains anywhere under lua/.
+  - id: BR-29
+    disposition: not-addressed
+    note: |
+      All four unchanged: is_managed gate at agent_picker.lua:255, chained GETs, repaint-under-cursor, pending() at conformance_spec.lua:233,250; catalog_path still repeats the mkdir idiom.
+  - id: BR-32
+    disposition: addressed
+    note: |
+      "## Model catalog (#205)" now sits at cliproxy-managed.md:64, after the Flow body and before "## Auth & secrets".
+  - id: BR-34
+    disposition: addressed
+    note: |
+      The v1beta branches now mirror /v1/models with the inference stated at the branch; the 401 branch is entered by the new "does not erase a good catalog when the proxy answers 401" case.
+  - id: BR-35
+    disposition: not-addressed
+    note: |
+      Measured: help_lines("chat", {}) now renders the row under Buffer, still a context where parley binds nothing. No agent_picker scope/label/display-order added; no agent_picker_mappings in config.lua.
+  - id: BR-36
+    disposition: addressed
+    note: |
+      Literal removed and the guard enumerates two extra forms; re-adding `or "<C-a>"` in a scratch copy turns the arch spec red.
+  - id: BR-37
+    disposition: addressed
+    note: |
+      Mutation-verified: restoring the bare `return` on the in-flight path fails "resolves its callback on every exit path".
+findings:
+  - id: new
+    severity: Important
+    family: plan-table-missing-entity
+    title: |
+      Core concepts omits `agent_name` and files the side-effecting `_select` under Pure entities
+    detail: |
+      `agent_name` is new at cliproxy_catalog.lua:203, a module both tables name, yet appears in
+      neither table — the plan's own bidirectional rule ("every function the milestone's diff adds to
+      a module named in the tables must APPEAR in a table row") would have caught it. Separately
+      plan.md:34 lists `_select` as PURE while agent_picker.lua:183 calls vim.cmd and vim.schedule,
+      and live_agent_state_spec.lua:165 has to monkeypatch vim.cmd to drive it; per the review
+      checklist a PURE row whose test needs mocks is a table/code contradiction.
+      This is the 4th finding in family `plan-table-missing-entity`. Do NOT fix the instance. The rule:
+      three consecutive rounds have missed an entity because the referent sweep is PROSE in "Notes for
+      the implementer". Make it executable, as tests/arch/single_source_sweeps_spec.lua already did for
+      this issue's other consolidations — a spec that parses the two tables and asserts both directions
+      (no row names a nonexistent symbol; no `function M.x`/`M.x = function` in a listed module is
+      absent from a row). Then move `_select` to Integration points, or extract its pure decision so the
+      PURE label becomes true.
+  - id: new
+    severity: Minor
+    family: single-source-not-enforced
+    title: |
+      The new arch guard's comment claims it counts any bracketed key literal; it matches three forms and misses `or { shortcut = "<C-g>?" }`
+    detail: |
+      This is the 5th finding in family `single-source-not-enforced`. Do NOT fix the instance.
+      Measured: agent_picker.lua:221, root_dir_picker.lua:211 and system_prompt_picker.lua:121 each
+      restate keybinding_registry entry `help`'s `default_key = "<C-g>?"`, and all three pass
+      single_source_sweeps_spec.lua:72-80 — whose allowance for agent_picker.lua is 0, i.e. the guard
+      asserts a measurable falsehood while its own comment at :69 says "Any bracketed key literal in
+      the file counts". BR-31 and BR-36 both already stated "enumerate the FORMS", and enumerating
+      forms has now failed twice; the rule that covers the class is different: stop matching syntax
+      shapes and match the VALUE — count every `"<…` string literal in lua/parley/*_picker.lua
+      (measured: agent_picker 1, root_dir 4, system_prompt 5) and freeze that as the shrink-only debt,
+      or assert every such literal also appears as a `default_key` in keybinding_registry.entries.
+  - id: new
+    severity: Minor
+    family: section-merge-not-deduped
+    title: |
+      `_view_for` never dedupes the live list by id, so overlapping `providers` entries render one model twice, both checkmarked
+    detail: |
+      This is the 2nd finding in family `section-merge-not-deduped`. Measured: with
+      `providers = { "claude", "claude:opus" }`, _build_items emits `claude-opus-5*` twice — identical
+      display, both `is_current`, one shared `recall_id_fn` key. curate resets `seen[series]` per
+      provider entry, and _view_for's `unregistered` only excludes ALREADY-REGISTERED agents. This is
+      BR-30's symptom reached by a second route, and it is also the route a duplicate id in /v1/models
+      would take — a shape fake_cliproxy's own comment claims to model ("one id claimed by two
+      owners") while CATALOG_V1 contains no duplicate id. The rule: _view_for returns a live list
+      deduped by `cliproxy_catalog.agent_name(m.id)` in ONE pass that subsumes the registered-agent
+      exclusion, so no assembly of the live section can emit a name twice regardless of where the
+      duplicate came from. Pin it with an overlapping-provider-entry case, and either give the fake a
+      genuinely duplicated id or drop the claim from its comment and from plan.md's fake bullet.
+  - id: new
+    severity: Minor
+    family: stated-design-not-implemented
+    title: |
+      `fetch_catalog` calls `render_opts()`, so opening the agent picker generates and writes `management.key`
+    detail: |
+      This is the 4th finding in family `stated-design-not-implemented`. Measured: with a fresh data
+      dir and nothing listening, one fetch_catalog call creates `<data_root>/` and writes a 0600
+      `management.key`. cliproxy.lua:1459 pulls the whole render bundle when it needs only host, port
+      and secret; render_opts() is documented at :234 as the input gatherer for write_rendered_config /
+      config_drift / status, and it calls M.management_key(), which read-or-CREATES the key. A function
+      whose docstring says "a plain GET … a connection-refused is a no-op that leaves the cache in
+      place" should provision nothing. The rule covering this family: at each close, walk the block's
+      own docstrings and the plan's operating envelope bullet by bullet and either pin the claim with a
+      test or strike it in `## Revisions` — the same rule BR-20 wrote, still unapplied to the envelope's
+      logging bullet in this very module.
+```
