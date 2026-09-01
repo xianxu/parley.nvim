@@ -856,8 +856,9 @@ git commit -m "#205 M2: fake serves /v1beta/models; live conformance guards its 
 
 **Files:**
 - Modify: `lua/parley/cliproxy.lua` (beside `list_models`, reusing `api_argv`)
-- Modify: `tests/helpers/ready_port.lua` (promote `free_port` + `wait_listening` into it)
+- Modify: `tests/helpers/ready_port.lua` (promote `free_port` + `wait_listening`; add `is_listening`)
 - Modify: `tests/integration/cliproxy_lifecycle_spec.lua:17,50` (call the promoted helpers)
+- Modify: `tests/integration/cliproxy_recovery_e2e_spec.lua:18,26` (same — the second existing copy)
 - Test: `tests/integration/cliproxy_catalog_spec.lua`
 
 - [ ] **Step 1: Write the failing integration test**
@@ -887,18 +888,22 @@ it("does not start a proxy when one is not running", function()
     -- point the endpoint at it, call fetch_catalog, and assert the port is STILL
     -- free afterwards.
     --
-    -- `free_port` and `wait_listening` exist today only as file-locals in
-    -- tests/integration/cliproxy_lifecycle_spec.lua:17 and :50. This task PROMOTES
-    -- both into tests/helpers/ready_port.lua (which today exports only
-    -- wait_for_port) and rewrites the lifecycle spec to call them there — a second
-    -- consumer is exactly when a spec-local helper should become a shared one
-    -- (ARCH-DRY). Copying them into a third spec is the wrong fix.
+    -- `free_port` and `wait_listening` are ALREADY duplicated file-locals in two
+    -- specs: cliproxy_lifecycle_spec.lua:17,50 and cliproxy_recovery_e2e_spec.lua:18,26.
+    -- This task PROMOTES them into tests/helpers/ready_port.lua (which today
+    -- exports only wait_for_port) and rewrites both specs to call them there —
+    -- with this test they would have a third copy (ARCH-DRY).
+    --
+    -- The promotion also adds the negative predicate this assertion needs, since
+    -- neither existing copy has one:
+    --   function M.is_listening(port) -> boolean   (single connect attempt)
+    --   M.wait_listening(port)  is then a poll over M.is_listening
     local port = ready_port.free_port()
     -- …point providers.cliproxyapi.endpoint at 127.0.0.1:<port>…
     local settled = false
     cliproxy.fetch_catalog(function() settled = true end)
     vim.wait(3000, function() return settled end)
-    assert.is_false(port_is_listening(port))  -- #131 dormancy contract
+    assert.is_false(ready_port.is_listening(port))  -- #131 dormancy contract
 end)
 ```
 
@@ -994,14 +999,16 @@ sdlc milestone-close --issue 205 --milestone M2
 
 **Files:**
 - Modify: `lua/parley/agent_picker.lua`
-- Test: `tests/unit/agent_picker_spec.lua` (extend; create if absent)
+- Test: `tests/unit/picker_items_spec.lua` — `agent_picker._build_items` is already
+  covered there (`:44`) with a `make_plugin(current_agent)` helper at `:10`. Extend
+  that file and reuse `make_plugin`; do not start a new spec.
 
 - [ ] **Step 1: Write the failing test** — `_build_items` is already the pure seam, so this stays mock-free (ARCH-PURE)
 
 ```lua
 it("appends live catalog rows after the configured agents", function()
-    local plugin = fake_plugin()  -- existing helper shape
-    local items = ap._build_items(plugin, {
+    local plugin = make_plugin("mango")  -- picker_items_spec.lua:10
+    local items = agent_picker._build_items(plugin, {
         live = { { id = "claude-opus-5", display = "Claude Opus 5",
                    owner = "anthropic", provider = "claude" } },
     })
@@ -1012,7 +1019,7 @@ it("appends live catalog rows after the configured agents", function()
 end)
 
 it("renders a logged-out provider as a login row", function()
-    local items = ap._build_items(fake_plugin(), {
+    local items = agent_picker._build_items(make_plugin("mango"), {
         logged_out = { { provider = "antigravity" } },
     })
     local row = items[#items]
@@ -1021,21 +1028,21 @@ it("renders a logged-out provider as a login row", function()
 end)
 
 it("is unchanged when the catalog is empty", function()
-    assert.same(ap._build_items(fake_plugin()),
-                ap._build_items(fake_plugin(), { live = {}, logged_out = {} }))
+    assert.same(agent_picker._build_items(make_plugin("mango")),
+                agent_picker._build_items(make_plugin("mango"), { live = {}, logged_out = {} }))
 end)
 ```
 
 - [ ] **Step 2: Run it and watch it fail**
 
-Run: `make test-spec SPEC=unit/agent_picker`
+Run: `make test-spec SPEC=unit/picker_items`
 Expected: FAIL — live rows absent
 
 - [ ] **Step 3: Implement** — extend `_build_items(plugin, extra)` with a second, optional argument so every existing caller and test keeps working, and tag each row with `kind` (`"agent"` / `"live"` / `"login"`) so `on_select` can branch without re-parsing the display string.
 
 - [ ] **Step 4: Run it and watch it pass**
 
-Run: `make test-spec SPEC=unit/agent_picker`
+Run: `make test-spec SPEC=unit/picker_items`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
@@ -1054,10 +1061,21 @@ git add -u && git commit -m "#205 M3: agent picker renders live catalog and logi
 `float_picker.open` returns a handle (`{ update, set_status, set_title, close, is_closed }`) — capture it in a local so the `<C-a>` mapping and the async refresh can call `update` in place instead of reopening (no flash):
 
 ```lua
+-- Local to M.agent_picker: the two views the <C-a> toggle switches between.
+local expanded = false
+local function view_for(all)
+    local models = cliproxy.catalog_cached()
+    local cfg = (plugin.config.cliproxy or {}).live_models or {}
+    return {
+        live = all and models or cat.curate(models, cfg),
+        logged_out = M._logged_out_providers(plugin),  -- Task 3.1
+    }
+end
+
 local handle
 handle = float_picker.open({
     title = "🤖 Parley Agents",
-    items = M._build_items(plugin, view),
+    items = M._build_items(plugin, view_for(expanded)),
     -- …existing opts…
     on_select = function(item)
         if item.kind == "login" then
@@ -1211,6 +1229,9 @@ sdlc milestone-close --issue 205 --milestone M3
 - Modify: `lua/parley/cliproxy_config.lua` (`resolve_channel` → `resolve_channels`, `resolve_login_provider`)
 - Modify: `lua/parley/cliproxy.lua` (`credential_health_for_login:474-491`, `recover:1236`, the give_up text at `:1249`)
 - Test: `tests/unit/cliproxy_config_spec.lua`, `tests/integration/cliproxy_recovery_e2e_spec.lua`
+- Note: Task 2.2 must expose `cliproxy._write_catalog(models)` as the cache's test
+  seam (it already writes that file; this only names the entry point) so this spec
+  can seed a catalog without a live proxy.
 
 **Two rejected designs, so the third is understood.** Inverting
 `PROVIDER_OWNED_BY` is an axis error: its keys are login-shaped and
@@ -1257,10 +1278,12 @@ it("names the claude login for an expired token with NO alias block", function()
     -- cliproxy_recovery_e2e_spec.lua:74-77 builds its own oauth-model-alias, so
     -- it passes with or without Task 4.2's deletion. This case is the one that
     -- actually detects the regression.
-    set_cliproxy_config({ ["oauth-model-alias"] = {} })
-    seed_catalog({ { id = "claude-opus-5", owner = "anthropic" } })
-    seed_auth_files({ claude = "expired", antigravity = "active" })
-    local msg = run_failing_query("claude-opus-5", "401 authentication_error")
+    -- `serve(error_mode, overlay)` and `query()` are the spec's own helpers
+    -- (cliproxy_recovery_e2e_spec.lua:41 and :85); the overlay is where that
+    -- spec builds its oauth-model-alias today, so an empty one is the variation.
+    serve("expired", { ["oauth-model-alias"] = {} })
+    cliproxy._write_catalog({ { id = "claude-opus-5", owner = "anthropic" } })
+    local msg = query()
     assert.is_true(msg:find("claude", 1, true) ~= nil)
     assert.is_nil(msg:find("oauth-model-alias", 1, true),
         "the diagnosis must stop telling operators to add a key the config no longer has")
@@ -1273,6 +1296,46 @@ Run: `make test-spec SPEC=unit/cliproxy_config && make test-spec SPEC=integratio
 Expected: FAIL — `resolve_channels` is nil; the diagnosis still names the alias block
 
 - [ ] **Step 3: Extract the fan-out, then add the second reducer**
+
+```lua
+-- Which cliproxy CHANNELS can serve a model of a given catalog `owned_by`.
+-- THE SOURCE of the owner→channels relation — it exists nowhere else in the
+-- codebase and is not derivable: PROVIDER_OWNED_BY (cliproxy_config.lua:227-234)
+-- is the login axis, and a catalog row carries a single owner while antigravity
+-- demonstrably serves anthropic-, openai- and google-owned models alongside the
+-- native channels. Plural on purpose; Step 4 lets health decide between them.
+local OWNER_CHANNELS = {
+    anthropic   = { "antigravity", "claude" },
+    openai      = { "antigravity", "codex" },
+    google      = { "aistudio", "antigravity", "gemini", "gemini-cli" },
+    antigravity = { "antigravity" },
+    moonshot    = { "kimi" },
+    xai         = { "xai" },
+}
+
+---@param owner string # a catalog row's owned_by
+---@return string[] # sorted candidate channels; empty when the owner is unknown
+function M.channels_for_owner(owner)
+    return vim.deepcopy(OWNER_CHANNELS[owner] or {})
+end
+
+--- Alias pin first, else the owner's candidates from the catalog, else empty.
+---@return string[]
+function M.resolve_channels(model, oauth_model_alias, models)
+    local pinned = M.resolve_channel(model, oauth_model_alias)  -- existing fn, kept
+    if pinned then
+        return { pinned }
+    end
+    for _, m in ipairs(models or {}) do
+        if m.id == model then
+            return M.channels_for_owner(m.owner)
+        end
+    end
+    return {}
+end
+```
+
+and in `cliproxy.lua`:
 
 ```lua
 --- Read credential health across several channels and reduce to one.
@@ -1405,9 +1468,21 @@ sdlc close --issue 205 --verified '<evidence>'
 
 - **`sdlc change-code` first.** It owns the branch decision, the plan-quality gate, and the estimate. Don't start Task 1.1 before it.
 - **Do not run `superpowers-requesting-code-review` at the milestone boundaries.** `sdlc milestone-close` auto-dispatches the one mandatory fresh-context review (AGENTS.md §3).
-- **Every test helper must exist before you call it.** Two findings on this issue
-  named a test-only API that did not exist (`_spawned_pids`, then `free_port`).
-  The rule, not the instance: before a task's test block ships, grep each helper
-  it calls — it must resolve to a `file:line` that exists today, or appear in that
-  task's **Files** section as newly created or promoted.
+- **Every name must have a referent.** Three findings on this issue named
+  something that did not exist — `_spawned_pids`, `free_port`, then an
+  owner→channels relation with no source. The rule covers **any identifier or
+  relation** a code block, test block, or rationale sentence names, not just test
+  helpers: before a task ships, each one must resolve to a `file:line` that exists
+  today, be defined in that task's own code block, or appear in its **Files**
+  section as newly created. The mechanical check, run over the whole plan rather
+  than per finding:
+
+  ```bash
+  grep -oE '\b[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)+\s*\(' \
+    workshop/plans/000205-*-plan.md | sort -u
+  # for each leaf: grep -rn "<leaf>" lua/ tests/ — no hit means define it or cite it
+  ```
+
+  A rationale sentence that justifies a design by naming existing machinery is
+  covered too: either a step in that same task invokes it, or the sentence goes.
 - **The fixtures are the spec.** The four `curate` cases are real renders from the live catalog on 2026-08-31. If a change makes one fail, decide whether the catalog moved or the code broke — don't edit the expectation to match the code.

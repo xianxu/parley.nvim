@@ -183,6 +183,53 @@ rounds:
           family: test-strategy-not-enumeration
           round: 3
       blocked: true
+    - "n": 4
+      timestamp: "2026-08-31T19:54:01-07:00"
+      agent: claude
+      dispose:
+        - id: PQ-9
+          disposition: addressed
+          note: Task 2.2 Files now promotes free_port + wait_listening into tests/helpers/ready_port.lua and rewrites the lifecycle spec.
+          round: 4
+        - id: PQ-10
+          disposition: addressed
+          note: resolve_channels plural, credential_health_across extracted with an injected reducer, empty-alias proof spec, both give_up texts rewritten.
+          round: 4
+        - id: PQ-11
+          disposition: addressed
+          note: Task 1.2 carries a malformed-id invariant plus an id fallback, not seven more cases.
+          round: 4
+      findings:
+        - id: PQ-12
+          severity: Critical
+          title: resolve_channels' candidate set has no source; the owner-to-channels relation it asserts exists nowhere in code
+          detail: |-
+            Task 4.1 asserts resolve_channels("claude-opus-5", {}, {{id="claude-opus-5",
+            owner="anthropic"}}) returns {"antigravity","claude"}, but grep -rn
+            "channels_for_owner|OWNER_CHANNELS" lua/ tests/ finds nothing;
+            PROVIDER_OWNED_BY (cliproxy_config.lua:227-234) maps antigravity to
+            "antigravity" and the plan explicitly rejects inverting it; the one supplied
+            catalog row carries a single owner. No step defines the relation, so M4's
+            central function cannot be written from the plan.
+            3rd in family after PQ-4 and PQ-10. Do not patch this site. The plan already
+            states the covering rule in Notes for the implementer, scoped to test helpers:
+            generalize it to ANY identifier or relation a code block, test block, or
+            rationale sentence names, and run that grep once over the whole plan. That
+            sweep also catches port_is_listening.
+          family: stated-design-not-implemented
+          round: 4
+        - id: PQ-13
+          severity: Minor
+          title: Task 2.2's dormancy test calls port_is_listening, which exists nowhere and is not in the task's Files section
+          detail: |-
+            The task promotes free_port and wait_listening but the assertion needs a
+            negative predicate that neither provides; grep finds no port_is_listening in
+            lua/ or tests/. 3rd in family; measured prevalence is 3 of 3 test-only APIs
+            named on this issue that did not exist. Swept by the generalized
+            name-must-have-a-referent rule above, not by adding one more helper by hand.
+          family: invented-test-api
+          round: 4
+      blocked: true
 content_hash: c74c003dde4afff96c46c05e592c6e49f0daa6bb76328725d064a6147aa4cd65
 ---
 
@@ -293,8 +340,37 @@ later rounds disposed of them. Generated — edit the gate, not this file.
   test that series output is non-empty and that ids with distinct alphabetic
   stems stay distinct.
 
+## Round 4 — 2026-08-31T19:54:01-07:00 (claude) — BLOCKED
+
+### Disposed
+
+- PQ-9 — addressed — Task 2.2 Files now promotes free_port + wait_listening into tests/helpers/ready_port.lua and rewrites the lifecycle spec.
+- PQ-10 — addressed — resolve_channels plural, credential_health_across extracted with an injected reducer, empty-alias proof spec, both give_up texts rewritten.
+- PQ-11 — addressed — Task 1.2 carries a malformed-id invariant plus an id fallback, not seven more cases.
+
+### Raised
+
+- **PQ-12** [Critical] `stated-design-not-implemented` resolve_channels' candidate set has no source; the owner-to-channels relation it asserts exists nowhere in code
+  Task 4.1 asserts resolve_channels("claude-opus-5", {}, {{id="claude-opus-5",
+  owner="anthropic"}}) returns {"antigravity","claude"}, but grep -rn
+  "channels_for_owner|OWNER_CHANNELS" lua/ tests/ finds nothing;
+  PROVIDER_OWNED_BY (cliproxy_config.lua:227-234) maps antigravity to
+  "antigravity" and the plan explicitly rejects inverting it; the one supplied
+  catalog row carries a single owner. No step defines the relation, so M4's
+  central function cannot be written from the plan.
+  3rd in family after PQ-4 and PQ-10. Do not patch this site. The plan already
+  states the covering rule in Notes for the implementer, scoped to test helpers:
+  generalize it to ANY identifier or relation a code block, test block, or
+  rationale sentence names, and run that grep once over the whole plan. That
+  sweep also catches port_is_listening.
+- **PQ-13** [Minor] `invented-test-api` Task 2.2's dormancy test calls port_is_listening, which exists nowhere and is not in the task's Files section
+  The task promotes free_port and wait_listening but the assertion needs a
+  negative predicate that neither provides; grep finds no port_is_listening in
+  lua/ or tests/. 3rd in family; measured prevalence is 3 of 3 test-only APIs
+  named on this issue that did not exist. Swept by the generalized
+  name-must-have-a-referent rule above, not by adding one more helper by hand.
+
 ## Open findings
 
-- **PQ-9** [Minor] `invented-test-api` Task 2.2 calls ready_port.free_port() and port_is_listening(), neither of which exists
-- **PQ-10** [Critical] `stated-design-not-implemented` Catalog-derived resolve_channel returns nil for both providers the default config ships, and the named proof spec cannot detect it
-- **PQ-11** [Minor] `test-strategy-not-enumeration` No adversarial-input strategy named for series, the only pattern mangler over vendor-controlled ids
+- **PQ-12** [Critical] `stated-design-not-implemented` resolve_channels' candidate set has no source; the owner-to-channels relation it asserts exists nowhere in code
+- **PQ-13** [Minor] `invented-test-api` Task 2.2's dormancy test calls port_is_listening, which exists nowhere and is not in the task's Files section
