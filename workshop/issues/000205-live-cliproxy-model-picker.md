@@ -164,7 +164,19 @@ Two measured constraints:
 
 ## Plan
 
-- [ ]
+Durable design: `workshop/plans/000205-live-cliproxy-model-picker-plan.md`
+(authored via superpowers-writing-plans; per-task TDD steps live there).
+
+- [ ] M1 — pure catalog core: `parse` (join /v1/models + /v1beta/models), `series`,
+      `rank_key`, `parse_provider_spec`, `curate`, `build_agent`; real captured
+      fixtures, no mocks (ARCH-PURE)
+- [ ] M2 — IO shell: `fetch_catalog` + disk cache + staleness; `fake_cliproxy`
+      gains /v1beta/models and the created-less row shape (ARCH-MOCK)
+- [ ] M3 — picker: live section, `(logged out)` login rows, `<C-a>` full catalog,
+      background repaint, live agent registered + persisted across restart
+- [ ] M4 — retire the lists: `resolve_channel` derives from the catalog (alias
+      block becomes an override), delete `oauth-model-alias`, add `live_models`,
+      atlas + README
 
 ## Log
 

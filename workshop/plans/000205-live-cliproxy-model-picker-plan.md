@@ -1,0 +1,1113 @@
+# Live cliproxy model picker Implementation Plan
+
+> **For agentic workers:** Consult AGENTS.md Section 3 (Subagent Strategy) to determine the appropriate execution approach: use superpowers-subagent-driven-development (if subagents are suitable per AGENTS.md) or superpowers-executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Offer cliproxyapi's live model catalog in the agent picker so no cliproxyapi model is ever named in `config.lua` again.
+
+**Architecture:** A pure catalog core (`cliproxy_catalog.lua`) parses the proxy's two model routes, applies the operator's `provider:term,term` filters, and curates a short per-provider list. A thin IO shell in `cliproxy.lua` fetches and disk-caches that catalog; `agent_picker.lua` renders it as a live section and turns a selection into a session-registered cliproxyapi agent. Finally `oauth-model-alias` is deleted and model→channel resolution derives from the catalog.
+
+**Tech Stack:** Lua 5.1 / LuaJIT (Neovim), plenary.nvim busted specs, `vim.system` + curl for IO, the existing `tests/fixtures/fake_cliproxy` process fake.
+
+**Spec:** `workshop/issues/000205-live-cliproxy-model-picker.md`
+
+---
+
+## Core concepts
+
+### Pure entities (the conceptual core)
+
+| Name | Lives in | Status |
+|------|----------|--------|
+| `Model` (record) | `lua/parley/cliproxy_catalog.lua` | new |
+| `parse` | `lua/parley/cliproxy_catalog.lua` | new |
+| `series` | `lua/parley/cliproxy_catalog.lua` | new |
+| `rank_key` | `lua/parley/cliproxy_catalog.lua` | new |
+| `parse_provider_spec` | `lua/parley/cliproxy_catalog.lua` | new |
+| `curate` | `lua/parley/cliproxy_catalog.lua` | new |
+| `build_agent` | `lua/parley/cliproxy_catalog.lua` | new |
+| `resolve_channel` | `lua/parley/cliproxy_config.lua` | modified |
+| `_build_items` | `lua/parley/agent_picker.lua` | modified |
+
+- **Model** — one catalog row: `{ id, owner, created, display, description, series }`. The join of `/v1/models` (carries `created`) and `/v1beta/models` (carries `displayName`/`description`) on `id`.
+  - **Relationships:** N:1 with provider (via `PROVIDER_OWNED_BY`); N:1 with series.
+  - **DRY rationale:** One row shape for the picker, the curation, and the agent constructor. Without it each consumer re-reaches into raw JSON with a different idea of which field is authoritative.
+  - **Future extensions:** `input_token_limit` is already present for google rows; a context-window column widens here.
+
+- **series** — the id with version numerals stripped (`claude-opus-5` → `claude-opus`), so "newest of this line" is expressible. Falls back to the displayName-derived stem for providers whose ids are opaque.
+  - **DRY rationale:** Curation, dedupe and ordering all need the same notion of "same model line". First occurrence of a pattern that recurs the moment a second provider is added.
+
+- **rank_key** — recency for ordering: `created` when present, else the version parsed from `displayName`. Exists because **all 13 antigravity rows carry no `created`** (measured 2026-08-31); a `created`-only sort silently pins that provider's order to JSON order.
+
+- **parse_provider_spec** — `"claude:opus,sonnet"` → `{ provider = "claude", terms = { "opus", "sonnet" } }`. Split on `:` then `,`; empty filter means "no filter".
+
+- **curate** — filter → dedupe by series → rank → cap at `per_provider`. Term order is display order.
+  - **Future extensions:** a `min_created` cut, or per-provider `per_provider` overrides, widen the opts table.
+
+- **build_agent** — a `Model` plus config defaults → a parley agent table. Lives beside the catalog deliberately: it consumes a `Model` field-by-field, so the two change together (skill heuristic: files that change together live together).
+
+### Integration points (where pure meets the world)
+
+| Name | Lives in | Status | Wraps |
+|------|----------|--------|-------|
+| `fetch_catalog` | `lua/parley/cliproxy.lua` | new | HTTP GET on the proxy |
+| `catalog_cached` / `catalog_write` | `lua/parley/cliproxy.lua` | new | filesystem (`stdpath('data')`) |
+| `provider_states` | `lua/parley/cliproxy.lua` | new | `/v0/management/auth-files` |
+| `agent_picker` live section | `lua/parley/agent_picker.lua` | modified | `float_picker` handle |
+| live-agent restore | `lua/parley/init.lua` | modified | `state.json` |
+| `/v1beta/models` route | `tests/fixtures/fake_cliproxy` | modified | the cliproxy binary |
+
+- **fetch_catalog** — two GETs through the existing `api_argv` helper (ARCH-DRY: the same argv builder the health probe, `list_models` and the management reader already use), joined by `parse`.
+  - **Injected into:** nothing pure — it *produces* the input `curate` consumes. Specs drive `parse`/`curate` from fixtures with no IO.
+- **catalog_cached / catalog_write** — JSON at `<data_root>/catalog.json`, `data_root()` already test-redirected by `M._set_data_dir`.
+  - **Injected into:** the picker reads the cache synchronously; the network path only ever writes it.
+- **provider_states** — reuses `credential_health_for_login` (#197) to mark a configured provider `(logged out)`.
+- **fake_cliproxy** — the stateful process fake gains `/v1beta/models` plus a `catalog` mode serving the awkward shapes: rows without `created`, and one id claimed by two owners.
+
+### Operating envelope (ARCH-CONSTRAINTS)
+
+- **Interaction path:** picker open — UI response, keystroke-adjacent.
+- **Latency budget:** opening the picker does **zero network work on the main thread**. It reads one cached JSON (~5 KB for today's 43 models — measured) and renders. Basis: measured catalog size.
+- **Refresh:** async `vim.system`, `--max-time 2` (the existing `CURL_MAX_TIME`). Exactly 2 GETs, at most one refresh in flight (module-local guard). When it exceeds the budget or the proxy is down, the cached list stays on screen and the failure is logged at debug — never a popup on a UI path.
+- **Never spawns the proxy.** The refresh is a plain GET; a connection-refused is a no-op. It deliberately does **not** call `ensure_running`, so the "#131 dormant unless a cliproxyapi agent runs" contract holds.
+- **Staleness:** refresh when the cache is older than 10 min. Basis: operator choice, informed by a measured fact — an antigravity login registered 13 new models mid-session with no restart, so a long TTL would show a stale provider set.
+- **Scale:** catalog is O(50) rows; curation is O(n log n) on a list that small. N/A for memory, concurrency, disk.
+
+---
+
+## Chunk 1: M1 — the pure catalog core
+
+### Task 1.1: Capture real fixtures
+
+**Files:**
+- Create: `tests/fixtures/cliproxy_catalog_v1.json`, `tests/fixtures/cliproxy_catalog_v1beta.json`
+
+- [ ] **Step 1: Capture both routes from a running proxy**
+
+```bash
+KEY="${CLIPROXYAPI_API_KEY:-parley-local}"
+curl -s -H "Authorization: Bearer $KEY" http://127.0.0.1:8317/v1/models \
+  | python3 -m json.tool > tests/fixtures/cliproxy_catalog_v1.json
+curl -s -H "Authorization: Bearer $KEY" http://127.0.0.1:8317/v1beta/models \
+  | python3 -m json.tool > tests/fixtures/cliproxy_catalog_v1beta.json
+```
+
+- [ ] **Step 2: Verify the fixture keeps the awkward rows**
+
+The fixture is worthless without them — they are the cases the code exists to handle.
+
+```bash
+python3 -c "
+import json
+v1=json.load(open('tests/fixtures/cliproxy_catalog_v1.json'))['data']
+assert any('created' not in m for m in v1), 'need antigravity rows lacking created'
+assert any(m['owned_by']=='antigravity' for m in v1), 'need an antigravity owner'
+print('rows:', len(v1), '| no-created:', sum(1 for m in v1 if 'created' not in m))
+"
+```
+Expected: `rows: 43 | no-created: 13` (counts may drift; both must be non-zero)
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add tests/fixtures/cliproxy_catalog_v1.json tests/fixtures/cliproxy_catalog_v1beta.json
+git commit -m "#205 M1: capture real cliproxy catalog fixtures"
+```
+
+### Task 1.2: `series`
+
+**Files:**
+- Create: `lua/parley/cliproxy_catalog.lua`
+- Test: `tests/unit/cliproxy_catalog_spec.lua`
+
+- [ ] **Step 1: Write the failing test**
+
+```lua
+local cat = require("parley.cliproxy_catalog")
+
+describe("series", function()
+    it("strips version numerals to the model line", function()
+        assert.equals("claude-opus", cat.series("claude-opus-5"))
+        assert.equals("claude-opus", cat.series("claude-opus-4-8"))
+        assert.equals("claude-sonnet", cat.series("claude-sonnet-4-5-20250929"))
+        assert.equals("gpt-sol", cat.series("gpt-5.6-sol"))
+    end)
+
+    it("keeps distinct product lines apart", function()
+        assert.are_not.equals(cat.series("gpt-5.6-sol"), cat.series("gpt-5.6-luna"))
+    end)
+
+    it("returns a stable non-empty key for an all-numeric tail", function()
+        assert.equals("gpt-image", cat.series("gpt-image-2"))
+    end)
+end)
+```
+
+- [ ] **Step 2: Run it and watch it fail**
+
+Run: `make test-spec SPEC=unit/cliproxy_catalog`
+Expected: FAIL — `module 'parley.cliproxy_catalog' not found`
+
+- [ ] **Step 3: Implement**
+
+```lua
+--------------------------------------------------------------------------------
+-- Pure catalog core for cliproxyapi's advertised models (issue #205).
+--
+-- No IO: every function here is deterministic and unit-tested against real
+-- captured fixtures without mocks (ARCH-PURE). The fetch/cache shell lives in
+-- parley/cliproxy.lua.
+--------------------------------------------------------------------------------
+
+local M = {}
+
+--- The model LINE an id belongs to: the id with version numerals removed, so
+--- claude-opus-5 and claude-opus-4-8 collapse to one series and the newest can
+--- be picked. Sol/Luna/Terra stay distinct because their distinguishing token
+--- is a word, not a number.
+---@param id string
+---@return string
+function M.series(id)
+    if type(id) ~= "string" then
+        return ""
+    end
+    local s = id:gsub("%-?%d[%d%.%-]*", "-"):gsub("%-+", "-")
+    return (s:gsub("^%-", ""):gsub("%-$", ""))
+end
+
+return M
+```
+
+- [ ] **Step 4: Run it and watch it pass**
+
+Run: `make test-spec SPEC=unit/cliproxy_catalog`
+Expected: PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add lua/parley/cliproxy_catalog.lua tests/unit/cliproxy_catalog_spec.lua
+git commit -m "#205 M1: series key derives the model line from an id"
+```
+
+### Task 1.3: `parse` — join the two routes
+
+**Files:**
+- Modify: `lua/parley/cliproxy_catalog.lua`
+- Test: `tests/unit/cliproxy_catalog_spec.lua`
+
+- [ ] **Step 1: Write the failing test** (drive it from the real fixture, not a hand-written stub)
+
+```lua
+local function fixture(name)
+    local path = "tests/fixtures/" .. name
+    local fd = assert(io.open(path, "r"))
+    local body = fd:read("*a")
+    fd:close()
+    return body
+end
+
+describe("parse", function()
+    local models = cat.parse(fixture("cliproxy_catalog_v1.json"),
+                             fixture("cliproxy_catalog_v1beta.json"))
+
+    local function by_id(id)
+        for _, m in ipairs(models) do
+            if m.id == id then return m end
+        end
+    end
+
+    it("joins displayName from the v1beta route onto the v1 rows", function()
+        assert.equals("Claude Opus 5", by_id("claude-opus-5").display)
+        assert.equals("anthropic", by_id("claude-opus-5").owner)
+    end)
+
+    it("keeps rows that carry no created (antigravity)", function()
+        local m = by_id("gemini-pro-agent")
+        assert.is_not_nil(m)
+        assert.is_nil(m.created)
+        -- the id is an opaque handle; displayName is the truth for this provider
+        assert.equals("Gemini 3.1 Pro (High)", m.display)
+    end)
+
+    it("falls back to the id when v1beta has no row", function()
+        local only_v1 = [[{"data":[{"id":"mystery-1","owned_by":"openai","created":5}]}]]
+        local m = cat.parse(only_v1, [[{"models":[]}]])[1]
+        assert.equals("mystery-1", m.display)
+    end)
+
+    it("returns an empty list for undecodable input rather than raising", function()
+        assert.same({}, cat.parse("not json", "not json"))
+    end)
+end)
+```
+
+- [ ] **Step 2: Run it and watch it fail**
+
+Run: `make test-spec SPEC=unit/cliproxy_catalog`
+Expected: FAIL — `attempt to call field 'parse' (a nil value)`
+
+- [ ] **Step 3: Implement**
+
+```lua
+--- Join cliproxy's two model routes into one row list.
+---
+--- Both are needed and neither is sufficient: /v1/models carries `created`
+--- (the recency signal) and /v1beta/models carries `displayName` +
+--- `description` (the only human-readable naming — and for antigravity the
+--- only TRUTHFUL naming, since its ids are opaque handles).
+---@param v1_json string    # body of GET /v1/models
+---@param beta_json string  # body of GET /v1beta/models
+---@return table[] # { { id, owner, created?, display, description, series }, … }
+function M.parse(v1_json, beta_json)
+    local ok, v1 = pcall(vim.json.decode, v1_json or "")
+    if not ok or type(v1) ~= "table" or type(v1.data) ~= "table" then
+        return {}
+    end
+    local beta_by_id = {}
+    local beta_ok, beta = pcall(vim.json.decode, beta_json or "")
+    if beta_ok and type(beta) == "table" and type(beta.models) == "table" then
+        for _, m in ipairs(beta.models) do
+            if type(m) == "table" and type(m.name) == "string" then
+                beta_by_id[(m.name:gsub("^models/", ""))] = m
+            end
+        end
+    end
+    local out = {}
+    for _, m in ipairs(v1.data) do
+        if type(m) == "table" and type(m.id) == "string" then
+            local b = beta_by_id[m.id] or {}
+            out[#out + 1] = {
+                id = m.id,
+                owner = m.owned_by,
+                created = tonumber(m.created),
+                display = type(b.displayName) == "string" and b.displayName or m.id,
+                description = type(b.description) == "string" and b.description or "",
+                series = M.series(m.id),
+            }
+        end
+    end
+    return out
+end
+```
+
+- [ ] **Step 4: Run it and watch it pass**
+
+Run: `make test-spec SPEC=unit/cliproxy_catalog`
+Expected: PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add -u && git commit -m "#205 M1: parse joins /v1/models with /v1beta/models"
+```
+
+### Task 1.4: `rank_key` — order without `created`
+
+**Files:**
+- Modify: `lua/parley/cliproxy_catalog.lua`
+- Test: `tests/unit/cliproxy_catalog_spec.lua`
+
+- [ ] **Step 1: Write the failing test**
+
+```lua
+describe("rank_key", function()
+    it("prefers created when present", function()
+        local a = { created = 200, display = "X 1" }
+        local b = { created = 100, display = "X 9" }
+        assert.is_true(cat.rank_key(a) > cat.rank_key(b))
+    end)
+
+    it("orders created-less rows by the version in displayName", function()
+        local hi = { display = "Gemini 3.7 Flash" }
+        local lo = { display = "Gemini 3.1 Pro (Low)" }
+        assert.is_true(cat.rank_key(hi) > cat.rank_key(lo))
+    end)
+
+    it("never ranks a created-less row above a dated one", function()
+        local dated = { created = 1, display = "A 1" }
+        local undated = { display = "Gemini 999 Flash" }
+        assert.is_true(cat.rank_key(dated) > cat.rank_key(undated))
+    end)
+end)
+```
+
+The third case is the load-bearing one: version numbers and epoch seconds are
+different units, so they must occupy disjoint bands rather than being compared.
+
+- [ ] **Step 2: Run it and watch it fail**
+
+Run: `make test-spec SPEC=unit/cliproxy_catalog`
+Expected: FAIL — `attempt to call field 'rank_key' (a nil value)`
+
+- [ ] **Step 3: Implement**
+
+```lua
+--- Recency for ordering. Two disjoint bands, never mixed: a dated row ranks in
+--- epoch seconds; a row with no `created` (every antigravity model — measured
+--- 2026-08-31) ranks by the version parsed from its displayName, always BELOW
+--- any dated row. Comparing a version number against epoch seconds directly
+--- would put "Gemini 3.7" beneath every model ever dated.
+---@param m table # a parsed Model
+---@return number
+function M.rank_key(m)
+    if type(m.created) == "number" and m.created > 0 then
+        return m.created
+    end
+    local n = tostring(m.display or ""):match("(%d+%.?%d*)")
+    return -1000 + (tonumber(n) or 0)
+end
+```
+
+- [ ] **Step 4: Run it and watch it pass**
+
+Run: `make test-spec SPEC=unit/cliproxy_catalog`
+Expected: PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add -u && git commit -m "#205 M1: rank_key orders created-less rows in their own band"
+```
+
+### Task 1.5: `parse_provider_spec` + `curate`
+
+**Files:**
+- Modify: `lua/parley/cliproxy_catalog.lua`
+- Test: `tests/unit/cliproxy_catalog_spec.lua`
+
+- [ ] **Step 1: Write the failing test** — these four cases are real renders captured from the live catalog on 2026-08-31 and recorded in the spec
+
+```lua
+describe("parse_provider_spec", function()
+    it("splits provider from terms", function()
+        assert.same({ provider = "claude", terms = { "opus", "sonnet" } },
+            cat.parse_provider_spec("claude:opus,sonnet"))
+    end)
+
+    it("treats a bare provider as unfiltered", function()
+        assert.same({ provider = "claude", terms = {} },
+            cat.parse_provider_spec("claude"))
+    end)
+
+    it("ignores whitespace and empty terms", function()
+        assert.same({ provider = "codex", terms = { "gpt-5.6" } },
+            cat.parse_provider_spec("codex: gpt-5.6 , "))
+    end)
+end)
+
+describe("curate", function()
+    local models = cat.parse(fixture("cliproxy_catalog_v1.json"),
+                             fixture("cliproxy_catalog_v1beta.json"))
+    local function ids(spec)
+        local out = {}
+        for _, m in ipairs(cat.curate(models, { providers = { spec }, per_provider = 3 })) do
+            out[#out + 1] = m.id
+        end
+        return out
+    end
+
+    it("filters to the named families, newest of each", function()
+        assert.same({ "claude-opus-5", "claude-sonnet-5" }, ids("claude:opus,sonnet"))
+    end)
+
+    it("takes the newest per series when unfiltered", function()
+        assert.same({ "claude-opus-5", "claude-sonnet-5", "claude-fable-5" }, ids("claude"))
+    end)
+
+    it("keeps sibling variants of one release apart", function()
+        assert.same({ "gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra" }, ids("codex:gpt-5.6"))
+    end)
+
+    it("matches displayName, not just id", function()
+        -- gemini-pro-agent's id contains no version; it displays as
+        -- "Gemini 3.1 Pro (High)". An id-only match makes antigravity unfilterable.
+        assert.is_true(vim.tbl_contains(ids("antigravity:pro"), "gemini-pro-agent"))
+    end)
+
+    it("orders by term, so config expresses preference", function()
+        local got = ids("claude:sonnet,opus")
+        assert.equals("claude-sonnet-5", got[1])
+    end)
+
+    it("caps at per_provider", function()
+        assert.equals(2, #cat.curate(models,
+            { providers = { "claude" }, per_provider = 2 }))
+    end)
+end)
+```
+
+- [ ] **Step 2: Run it and watch it fail**
+
+Run: `make test-spec SPEC=unit/cliproxy_catalog`
+Expected: FAIL — `attempt to call field 'parse_provider_spec' (a nil value)`
+
+- [ ] **Step 3: Implement**
+
+```lua
+--- Parse one `live_models.providers` entry: "<provider>[:<term>[,<term>…]]".
+---@param spec string
+---@return table # { provider = string, terms = string[] }
+function M.parse_provider_spec(spec)
+    local provider, filter = tostring(spec or ""):match("^%s*([^:]-)%s*:?(.*)$")
+    local terms = {}
+    for term in tostring(filter or ""):gmatch("[^,]+") do
+        term = term:match("^%s*(.-)%s*$")
+        if term ~= "" then
+            terms[#terms + 1] = term:lower()
+        end
+    end
+    return { provider = provider, terms = terms }
+end
+
+local function matches(m, term)
+    return m.id:lower():find(term, 1, true) ~= nil
+        or tostring(m.display):lower():find(term, 1, true) ~= nil
+end
+
+--- The picker's default view: for each configured provider, the models matching
+--- its terms, one per series (the newest), capped at `per_provider`.
+---
+--- Term order is display order, so the config expresses preference.
+---@param models table[]  # from parse()
+---@param opts table      # { providers = {"claude:opus,sonnet", …}, per_provider = 3, owned_by = fn }
+---@return table[]
+function M.curate(models, opts)
+    opts = opts or {}
+    local per = opts.per_provider or 3
+    local owned_by = opts.owned_by or require("parley.cliproxy_config").provider_owned_by
+    local out = {}
+    for _, spec in ipairs(opts.providers or {}) do
+        local parsed = M.parse_provider_spec(spec)
+        local owner = owned_by(parsed.provider)
+        local pool = {}
+        for _, m in ipairs(models) do
+            if m.owner == owner then
+                pool[#pool + 1] = m
+            end
+        end
+        table.sort(pool, function(a, b)
+            local ra, rb = M.rank_key(a), M.rank_key(b)
+            if ra ~= rb then return ra > rb end
+            return a.id < b.id
+        end)
+        local taken, seen = {}, {}
+        for _, term in ipairs(#parsed.terms > 0 and parsed.terms or { "" }) do
+            for _, m in ipairs(pool) do
+                if #taken >= per then break end
+                if not seen[m.series] and (term == "" or matches(m, term)) then
+                    seen[m.series] = true
+                    taken[#taken + 1] = m
+                end
+            end
+        end
+        for _, m in ipairs(taken) do
+            m.provider = parsed.provider
+            out[#out + 1] = m
+        end
+    end
+    return out
+end
+```
+
+- [ ] **Step 4: Run it and watch it pass**
+
+Run: `make test-spec SPEC=unit/cliproxy_catalog`
+Expected: PASS — all six `curate` cases
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add -u && git commit -m "#205 M1: curate filters, dedupes by series, caps per provider"
+```
+
+### Task 1.6: `build_agent`
+
+**Files:**
+- Modify: `lua/parley/cliproxy_catalog.lua`
+- Test: `tests/unit/cliproxy_catalog_spec.lua`
+
+- [ ] **Step 1: Write the failing test**
+
+```lua
+describe("build_agent", function()
+    it("routes anthropic-owned models over the anthropic wire", function()
+        local a = cat.build_agent({ id = "claude-opus-5", owner = "anthropic",
+                                    display = "Claude Opus 5" })
+        assert.equals("cliproxyapi", a.provider)
+        assert.equals("claude-opus-5", a.model.model)
+        assert.equals("anthropic_tools_route", a.model.web_search_strategy)
+        assert.same({ "@all" }, a.tools)
+        assert.is_true(a.synthetic_system_prompt)
+    end)
+
+    it("leaves non-anthropic models on the provider default route", function()
+        local a = cat.build_agent({ id = "gpt-5.6-sol", owner = "openai",
+                                    display = "GPT 5.6 Sol" })
+        assert.is_nil(a.model.web_search_strategy)
+    end)
+
+    it("names the agent after the model with the cliproxy marker", function()
+        assert.equals("claude-opus-5*",
+            cat.build_agent({ id = "claude-opus-5", owner = "anthropic" }).name)
+    end)
+
+    it("routes an antigravity-served claude model over the anthropic wire", function()
+        -- owner is the display grouping; the WIRE follows the model family
+        local a = cat.build_agent({ id = "claude-opus-4-6-thinking", owner = "antigravity" })
+        assert.equals("anthropic_tools_route", a.model.web_search_strategy)
+    end)
+end)
+```
+
+The last case is why the wire is chosen from the id family and not from `owner`:
+a claude model served through antigravity still speaks the Anthropic wire.
+
+- [ ] **Step 2: Run it and watch it fail**
+
+Run: `make test-spec SPEC=unit/cliproxy_catalog`
+Expected: FAIL — `attempt to call field 'build_agent' (a nil value)`
+
+- [ ] **Step 3: Implement**
+
+```lua
+--- Turn a catalog row into a session agent. Tools and web search are ON: an
+--- ad-hoc pick is meant to be a working agent, not a stripped one.
+---
+--- The wire follows the MODEL FAMILY, never `owner`: owner is a display
+--- grouping that is not even stable (claude-sonnet-4-6 was reported under
+--- `anthropic` on one proxy start and `antigravity` on the next), while
+--- claude-* always speaks the Anthropic wire. Non-claude models inherit the
+--- provider-level default (openai_tools_route), which is what buys them
+--- server-side web search — see the ToolSol* note in config.lua.
+---@param m table # a parsed Model
+---@param opts table|nil # { system_prompt = string }
+---@return table # a parley agent
+function M.build_agent(m, opts)
+    opts = opts or {}
+    local anthropic_wire = type(m.id) == "string" and m.id:find("^claude%-") ~= nil
+    return {
+        provider = "cliproxyapi",
+        name = m.id .. "*",
+        model = {
+            model = m.id,
+            web_search_strategy = anthropic_wire and "anthropic_tools_route" or nil,
+        },
+        system_prompt = opts.system_prompt or require("parley.defaults").chat_system_prompt,
+        synthetic_system_prompt = true,
+        tools = { "@all" },
+    }
+end
+```
+
+- [ ] **Step 4: Run it and watch it pass**
+
+Run: `make test-spec SPEC=unit/cliproxy_catalog`
+Expected: PASS
+
+- [ ] **Step 5: Commit + close the milestone**
+
+```bash
+git add -u && git commit -m "#205 M1: build_agent turns a catalog row into a tool-enabled agent"
+make test
+sdlc milestone-close --issue 205 --milestone M1
+```
+
+---
+
+## Chunk 2: M2 — fetch, cache, and the fake
+
+### Task 2.1: Teach the fake to serve `/v1beta/models`
+
+**Files:**
+- Modify: `tests/fixtures/fake_cliproxy` (the `do_GET` dispatch, near the `/v1/models` branch)
+
+- [ ] **Step 1: Add the route and a catalog mode**
+
+Serve a small catalog carrying the two shapes that matter, so integration tests
+meet them the way production does (ARCH-MOCK — the fake models our current
+understanding of the dependency, not a happy path):
+
+```python
+CATALOG_V1 = {"object": "list", "data": [
+    {"id": "claude-opus-5",  "owned_by": "anthropic", "created": 1784038800},
+    {"id": "claude-opus-4-8", "owned_by": "anthropic", "created": 1779984000},
+    {"id": "gpt-5.6-sol",    "owned_by": "openai",    "created": 1783616400},
+    # no `created` — the antigravity shape
+    {"id": "gemini-pro-agent", "owned_by": "antigravity"},
+]}
+CATALOG_V1BETA = {"models": [
+    {"name": "models/claude-opus-5",   "displayName": "Claude Opus 5"},
+    {"name": "models/claude-opus-4-8", "displayName": "Claude Opus 4.8"},
+    {"name": "models/gpt-5.6-sol",     "displayName": "GPT 5.6 Sol"},
+    {"name": "models/gemini-pro-agent", "displayName": "Gemini 3.1 Pro (High)"},
+]}
+```
+
+Dispatch `/v1beta/models` to `CATALOG_V1BETA`; keep `/v1/models` answering the
+existing identity protocol, extended with `CATALOG_V1["data"]` in `healthy` mode.
+
+- [ ] **Step 2: Verify the fake by hand**
+
+```bash
+python3 tests/fixtures/fake_cliproxy --port 8321 &
+curl -s -H "Authorization: Bearer test" http://127.0.0.1:8321/v1beta/models
+kill %1
+```
+Expected: the four-model JSON above
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add tests/fixtures/fake_cliproxy
+git commit -m "#205 M2: fake_cliproxy serves /v1beta/models"
+```
+
+### Task 2.2: `fetch_catalog` + disk cache
+
+**Files:**
+- Modify: `lua/parley/cliproxy.lua` (beside `list_models`, reusing `api_argv`)
+- Test: `tests/integration/cliproxy_catalog_spec.lua`
+
+- [ ] **Step 1: Write the failing integration test**
+
+Drive it against the fake process, not a mock — `cliproxy_lifecycle_spec.lua`
+shows the spawn/teardown pattern to copy.
+
+```lua
+it("fetches both routes and caches the join to disk", function()
+    -- fake_cliproxy on a ready port; cliproxy._set_data_dir(tmp)
+    local done, models = false, nil
+    cliproxy.fetch_catalog(function(m) models, done = m, true end)
+    vim.wait(3000, function() return done end)
+    assert.is_true(#models > 0)
+    assert.equals("Claude Opus 5", models[1].display)
+    assert.equals(1, vim.fn.filereadable(tmp .. "/catalog.json"))
+end)
+
+it("returns the cached catalog with the proxy down, and never spawns it", function()
+    -- kill the fake, then:
+    local cached = cliproxy.catalog_cached()
+    assert.is_true(#cached > 0)
+    assert.equals(0, #cliproxy._spawned_pids())  -- no daemon started
+end)
+```
+
+- [ ] **Step 2: Run it and watch it fail**
+
+Run: `make test-spec SPEC=integration/cliproxy_catalog`
+Expected: FAIL — `attempt to call field 'fetch_catalog' (a nil value)`
+
+- [ ] **Step 3: Implement**
+
+```lua
+local CATALOG_TTL = 600 -- seconds; see the plan's operating envelope
+local _catalog_inflight = false
+
+local function catalog_path()
+    return data_root() .. "/catalog.json"
+end
+
+--- The last catalog we saw, straight off disk. Synchronous and tiny (~5 KB) —
+--- this is what the picker renders, so it never waits on the network.
+---@return table[] models, number|nil fetched_at
+function M.catalog_cached()
+    local fd = io.open(catalog_path(), "r")
+    if not fd then return {}, nil end
+    local body = fd:read("*a")
+    fd:close()
+    local ok, decoded = pcall(vim.json.decode, body)
+    if not ok or type(decoded) ~= "table" then return {}, nil end
+    return decoded.models or {}, decoded.fetched_at
+end
+
+--- Refresh the catalog from a proxy that is ALREADY running.
+---
+--- Deliberately not routed through ensure_running: opening a picker must never
+--- spawn a daemon (#131's dormancy contract). A connection-refused is a no-op
+--- that leaves the cache in place.
+---@param cb fun(models: table[])|nil
+function M.fetch_catalog(cb)
+    if _catalog_inflight then return end
+    local opts = render_opts()
+    if not opts.host or not opts.port then return end
+    _catalog_inflight = true
+    local function get(route, done)
+        vim.system(api_argv(opts.host, opts.port, opts.secret, route), { text = true },
+            function(obj)
+                done(obj.code == 0 and (split_status(obj.stdout) or obj.stdout) or nil)
+            end)
+    end
+    get("/v1/models", function(v1)
+        get("/v1beta/models", function(beta)
+            vim.schedule(function()
+                _catalog_inflight = false
+                local models = require("parley.cliproxy_catalog").parse(v1 or "", beta or "")
+                if #models > 0 then
+                    local fd = io.open(catalog_path(), "w")
+                    if fd then
+                        fd:write(vim.json.encode({ models = models, fetched_at = os.time() }))
+                        fd:close()
+                        vim.fn.setfperm(catalog_path(), "rw-------")
+                    end
+                end
+                if cb then cb(models) end
+            end)
+        end)
+    end)
+end
+
+--- Is the cache old enough to be worth a background refresh?
+function M.catalog_stale()
+    local _, at = M.catalog_cached()
+    return not at or (os.time() - at) > CATALOG_TTL
+end
+```
+
+- [ ] **Step 4: Run it and watch it pass**
+
+Run: `make test-spec SPEC=integration/cliproxy_catalog`
+Expected: PASS
+
+- [ ] **Step 5: Commit + close the milestone**
+
+```bash
+git add -u && git commit -m "#205 M2: fetch and disk-cache the live model catalog"
+make test
+sdlc milestone-close --issue 205 --milestone M2
+```
+
+---
+
+## Chunk 3: M3 — the picker
+
+### Task 3.1: Live rows in `_build_items`
+
+**Files:**
+- Modify: `lua/parley/agent_picker.lua`
+- Test: `tests/unit/agent_picker_spec.lua` (extend; create if absent)
+
+- [ ] **Step 1: Write the failing test** — `_build_items` is already the pure seam, so this stays mock-free (ARCH-PURE)
+
+```lua
+it("appends live catalog rows after the configured agents", function()
+    local plugin = fake_plugin()  -- existing helper shape
+    local items = ap._build_items(plugin, {
+        live = { { id = "claude-opus-5", display = "Claude Opus 5",
+                   owner = "anthropic", provider = "claude" } },
+    })
+    local last = items[#items]
+    assert.is_true(last.display:find("Claude Opus 5", 1, true) ~= nil)
+    assert.is_true(last.display:find("claude-opus-5", 1, true) ~= nil)
+    assert.equals("live", last.kind)
+end)
+
+it("renders a logged-out provider as a login row", function()
+    local items = ap._build_items(fake_plugin(), {
+        logged_out = { { provider = "antigravity" } },
+    })
+    local row = items[#items]
+    assert.is_true(row.display:find("(logged out)", 1, true) ~= nil)
+    assert.equals("login", row.kind)
+end)
+
+it("is unchanged when the catalog is empty", function()
+    assert.same(ap._build_items(fake_plugin()),
+                ap._build_items(fake_plugin(), { live = {}, logged_out = {} }))
+end)
+```
+
+- [ ] **Step 2: Run it and watch it fail**
+
+Run: `make test-spec SPEC=unit/agent_picker`
+Expected: FAIL — live rows absent
+
+- [ ] **Step 3: Implement** — extend `_build_items(plugin, extra)` with a second, optional argument so every existing caller and test keeps working, and tag each row with `kind` (`"agent"` / `"live"` / `"login"`) so `on_select` can branch without re-parsing the display string.
+
+- [ ] **Step 4: Run it and watch it pass**
+
+Run: `make test-spec SPEC=unit/agent_picker`
+Expected: PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add -u && git commit -m "#205 M3: agent picker renders live catalog and login rows"
+```
+
+### Task 3.2: Wire the picker — selection, `<C-a>`, async refresh
+
+**Files:**
+- Modify: `lua/parley/agent_picker.lua` (`M.agent_picker`)
+
+- [ ] **Step 1: Implement selection branching**
+
+`float_picker.open` returns a handle (`{ update, set_status, set_title, close, is_closed }`) — capture it in a local so the `<C-a>` mapping and the async refresh can call `update` in place instead of reopening (no flash):
+
+```lua
+local handle
+handle = float_picker.open({
+    title = "🤖 Parley Agents",
+    items = M._build_items(plugin, view),
+    -- …existing opts…
+    on_select = function(item)
+        if item.kind == "login" then
+            vim.cmd((plugin.config.cmd_prefix or "Parley") .. "Proxy login " .. item.provider)
+            return
+        end
+        if item.kind == "live" then
+            plugin.register_live_agent(item.model)  -- Task 3.3
+            return
+        end
+        plugin.refresh_state({ agent = item.name })
+        plugin.logger.info("Agent set to: " .. item.name)
+        vim.cmd("doautocmd User ParleyAgentChanged")
+    end,
+    mappings = {
+        -- …existing keybindings mapping…
+        {
+            key = "<C-a>",
+            fn = function()
+                expanded = not expanded
+                handle.update(M._build_items(plugin, view_for(expanded)))
+                handle.set_title(expanded and "🤖 Parley Agents — all models"
+                                          or "🤖 Parley Agents")
+            end,
+        },
+    },
+})
+```
+
+- [ ] **Step 2: Kick the background refresh**
+
+After `open`, refresh only when stale; repaint if the picker is still up:
+
+```lua
+if cliproxy.is_managed() and cliproxy.catalog_stale() then
+    cliproxy.fetch_catalog(function()
+        if not handle.is_closed() then
+            handle.update(M._build_items(plugin, view_for(expanded)))
+        end
+    end)
+end
+```
+
+- [ ] **Step 3: Verify by hand in a real editor**
+
+```
+:lua require('parley').setup()
+:ParleyAgent
+```
+Expected: configured agents, then the live rows; `<C-a>` expands to the full
+catalog and the title changes; picking `claude-opus-5` sets the agent.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add -u && git commit -m "#205 M3: live selection, <C-a> expansion, background refresh"
+```
+
+### Task 3.3: Register and persist the live agent
+
+**Files:**
+- Modify: `lua/parley/init.lua` (new `M.register_live_agent`; restore near `init.lua:1329`)
+- Test: `tests/unit/live_agent_state_spec.lua`
+
+- [ ] **Step 1: Write the failing test**
+
+```lua
+it("registers the agent and makes it selectable", function()
+    parley.register_live_agent({ id = "claude-opus-5", owner = "anthropic" })
+    assert.is_not_nil(parley.agents["claude-opus-5*"])
+    assert.is_true(vim.tbl_contains(parley._agents, "claude-opus-5*"))
+    assert.equals("claude-opus-5*", parley._state.agent)
+end)
+
+it("survives a restart instead of falling back to the first agent", function()
+    parley._state.live_agent = { id = "claude-opus-5", owner = "anthropic" }
+    parley._state.agent = "claude-opus-5*"
+    parley.setup({})                       -- re-entry, as on a fresh session
+    assert.equals("claude-opus-5*", parley._state.agent)
+end)
+```
+
+The second test is the whole point of this task: without the restore the
+`if not M.agents[M._state.agent]` guard at `init.lua:1329` silently resets the
+agent to `M._agents[1]` on every launch.
+
+- [ ] **Step 2: Run it and watch it fail**
+
+Run: `make test-spec SPEC=unit/live_agent_state`
+Expected: FAIL — agent reset to the first configured agent
+
+- [ ] **Step 3: Implement**
+
+```lua
+--- Register a catalog model as a session agent and select it.
+--- Persisted so the next session restores it rather than resetting.
+function M.register_live_agent(model)
+    local agent = require("parley.cliproxy_catalog").build_agent(model)
+    M.agents[agent.name] = agent
+    if not vim.tbl_contains(M._agents, agent.name) then
+        table.insert(M._agents, agent.name)
+        table.sort(M._agents)
+    end
+    M.refresh_state({ agent = agent.name, live_agent = model })
+    vim.cmd("doautocmd User ParleyAgentChanged")
+end
+```
+
+and, immediately **before** the fallback guard:
+
+```lua
+-- Re-register the last live pick before the guard below, or a catalog agent
+-- silently reverts to M._agents[1] on every restart.
+if type(M._state.live_agent) == "table" and M._state.live_agent.id then
+    local a = require("parley.cliproxy_catalog").build_agent(M._state.live_agent)
+    M.agents[a.name] = M.agents[a.name] or a
+    if not vim.tbl_contains(M._agents, a.name) then
+        table.insert(M._agents, a.name)
+        table.sort(M._agents)
+    end
+end
+```
+
+- [ ] **Step 4: Run it and watch it pass**
+
+Run: `make test-spec SPEC=unit/live_agent_state`
+Expected: PASS
+
+- [ ] **Step 5: End-to-end check against the real proxy**
+
+Pick `claude-opus-5` from the picker, send a message that needs a tool and a web
+lookup, and confirm from `:ParleyLog` that the request carried both the client
+tools and a `web_search` tool on the Anthropic wire. Record the evidence in
+`## Log` — this is the Done-when the spec names.
+
+- [ ] **Step 6: Commit + close the milestone**
+
+```bash
+git add -u && git commit -m "#205 M3: live agents register, persist, and survive restart"
+make test
+sdlc milestone-close --issue 205 --milestone M3
+```
+
+---
+
+## Chunk 4: M4 — retire the hardcoded lists
+
+### Task 4.1: Catalog-derived channel resolution
+
+**Files:**
+- Modify: `lua/parley/cliproxy_config.lua` (`resolve_channel`)
+- Test: `tests/unit/cliproxy_config_spec.lua`
+
+- [ ] **Step 1: Write the failing test**
+
+```lua
+it("resolves a channel from the catalog when no alias block lists the model", function()
+    local models = { { id = "claude-opus-5", owner = "anthropic" } }
+    assert.equals("claude", cc.resolve_channel("claude-opus-5", {}, models))
+end)
+
+it("still prefers an explicit alias entry (the override path)", function()
+    local alias = { codex = { { name = "claude-opus-5", alias = "claude-opus-5" } } }
+    assert.equals("codex", cc.resolve_channel("claude-opus-5", alias, {}))
+end)
+
+it("returns nil rather than guessing when neither knows the model", function()
+    assert.is_nil(cc.resolve_channel("who-knows-1", {}, {}))
+end)
+```
+
+The third case preserves an existing invariant from #197: reporting another
+account's health for the failing model is worse than admitting we don't know.
+
+- [ ] **Step 2: Run it and watch it fail**
+
+Run: `make test-spec SPEC=unit/cliproxy_config`
+Expected: FAIL — third argument ignored
+
+- [ ] **Step 3: Implement** — add an optional `models` argument; alias first, catalog second, nil last. Invert `PROVIDER_OWNED_BY` for owner → provider (ARCH-DRY: no second copy of that mapping).
+
+- [ ] **Step 4: Run it and watch it pass**, then update the one caller at `cliproxy.lua:1236` to pass `M.catalog_cached()`.
+
+Run: `make test-spec SPEC=unit/cliproxy_config && make test-spec SPEC=unit/cliproxy_auth`
+Expected: PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add -u && git commit -m "#205 M4: resolve_channel derives from the catalog, alias becomes an override"
+```
+
+### Task 4.2: Delete the model lists from the default config
+
+**Files:**
+- Modify: `lua/parley/config.lua:130-152` (delete `oauth-model-alias`), add `cliproxy.live_models`
+
+- [ ] **Step 1: Delete the block and add the knob**
+
+```lua
+-- Which providers the agent picker offers live models for, and how many.
+-- Entries are "<provider>[:<term>,…]" — the terms are substrings matched
+-- against the model id AND its display name. This names providers and model
+-- families, never versions, so it does not go stale as the catalog moves.
+live_models = {
+    providers = { "claude:opus,sonnet,fable", "codex:gpt-5.6", "antigravity" },
+    per_provider = 3,
+},
+```
+
+- [ ] **Step 2: Verify routing still works without the alias block**
+
+This is the claim the whole milestone rests on, so prove it rather than assume:
+
+```bash
+curl -s -H "Authorization: Bearer ${CLIPROXYAPI_API_KEY:-parley-local}" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"claude-opus-5","messages":[{"role":"user","content":"hi"}],"max_tokens":16}' \
+  http://127.0.0.1:8317/v1/chat/completions
+```
+Expected: a completion, not `unknown provider for model`
+
+- [ ] **Step 3: Verify the auth diagnosis still names the right login**
+
+Run the `#197` recovery spec, which is what would regress if channel resolution
+lost its source:
+
+```bash
+make test-spec SPEC=integration/cliproxy_recovery_e2e
+make test-spec SPEC=unit/failure_notice
+```
+Expected: PASS
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add -u && git commit -m "#205 M4: retire oauth-model-alias from the default config"
+```
+
+### Task 4.3: Atlas + docs
+
+**Files:**
+- Modify: `atlas/` (the cliproxy surface page + `atlas/index.md` if a new page is added)
+- Modify: `README.md` (the cliproxy section)
+
+- [ ] **Step 1: Document the live picker** — the `provider:term` syntax, `<C-a>`, the `(logged out)` row, and the fact that the catalog is cached and refreshed in the background.
+
+- [ ] **Step 2: Record the two measured facts** that future readers would otherwise re-derive the hard way: antigravity rows carry no `created`, and `owned_by` is not stable for an id served by two channels.
+
+- [ ] **Step 3: Full suite + close**
+
+```bash
+make test
+sdlc close --issue 205 --verified '<evidence>'
+```
+
+---
+
+## Notes for the implementer
+
+- **`sdlc change-code` first.** It owns the branch decision, the plan-quality gate, and the estimate. Don't start Task 1.1 before it.
+- **Do not run `superpowers-requesting-code-review` at the milestone boundaries.** `sdlc milestone-close` auto-dispatches the one mandatory fresh-context review (AGENTS.md §3).
+- **The fixtures are the spec.** The four `curate` cases are real renders from the live catalog on 2026-08-31. If a change makes one fail, decide whether the catalog moved or the code broke — don't edit the expectation to match the code.
