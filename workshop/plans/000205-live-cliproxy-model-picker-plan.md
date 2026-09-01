@@ -33,7 +33,7 @@
   - **DRY rationale:** One row shape for the picker, the curation, and the agent constructor. Without it each consumer re-reaches into raw JSON with a different idea of which field is authoritative.
   - **Future extensions:** `input_token_limit` is already present for google rows; a context-window column widens here.
 
-- **series** — the id with version numerals stripped (`claude-opus-5` → `claude-opus`), so "newest of this line" is expressible. Falls back to the displayName-derived stem for providers whose ids are opaque.
+- **series** — the id with version numerals stripped (`claude-opus-5` → `claude-opus`), so "newest of this line" is expressible.
   - **DRY rationale:** Curation, dedupe and ordering all need the same notion of "same model line". First occurrence of a pattern that recurs the moment a second provider is added.
 
 - **rank_key** — recency for ordering: `created` when present, else the version parsed from `displayName`. Exists because **all 13 antigravity rows carry no `created`** (measured 2026-08-31); a `created`-only sort silently pins that provider's order to JSON order.
@@ -164,6 +164,12 @@ local M = {}
 --- claude-opus-5 and claude-opus-4-8 collapse to one series and the newest can
 --- be picked. Sol/Luna/Terra stay distinct because their distinguishing token
 --- is a word, not a number.
+---
+--- Derived from the id alone, deliberately. An earlier draft also specified a
+--- displayName-derived stem for opaque-id providers; it was dropped because the
+--- id rule already produces the correct curation for every verified case,
+--- including antigravity's — "Gemini 3.1 Pro (Low)" and "(High)" are genuinely
+--- different offerings and SHOULD stay separate series.
 ---@param id string
 ---@return string
 function M.series(id)
@@ -354,7 +360,9 @@ function M.rank_key(m)
         return m.created
     end
     local n = tostring(m.display or ""):match("(%d+%.?%d*)")
-    return -1000 + (tonumber(n) or 0)
+    -- -1e9 not -1000: the bands must not overlap for ANY input. A parsed
+    -- display version only has to reach 1000 to outrank a small epoch value.
+    return -1e9 + (tonumber(n) or 0)
 end
 ```
 
@@ -501,8 +509,12 @@ function M.curate(models, opts)
             end
         end
         for _, m in ipairs(taken) do
-            m.provider = parsed.provider
-            out[#out + 1] = m
+            -- Copy before tagging: these rows are the disk cache's own tables,
+            -- re-curated on every <C-a> toggle and background repaint, and this
+            -- module promises to be side-effect-free (ARCH-PURE).
+            local row = vim.tbl_extend("force", {}, m)
+            row.provider = parsed.provider
+            out[#out + 1] = row
         end
     end
     return out
@@ -520,7 +532,121 @@ Expected: PASS — all six `curate` cases
 git add -u && git commit -m "#205 M1: curate filters, dedupes by series, caps per provider"
 ```
 
-### Task 1.6: `build_agent`
+### Task 1.6: Single-source the family → web-search-strategy decision
+
+**Files:**
+- Modify: `lua/parley/providers.lua` (beside `is_cliproxy_anthropic_route_model:142`)
+- Test: `tests/unit/provider_params_spec.lua` (or the nearest providers spec)
+
+**Why this task exists:** three families need three different answers, and the
+family test already has a canonical home. `providers.lua:170-179` records that
+`is_cliproxy_anthropic_route_model` was extracted *because* two call sites had
+drifted to two different tests. A fourth copy inside `build_agent` would
+re-open exactly that (ARCH-DRY).
+
+**Measured 2026-08-31 against the live proxy** — this is the whole reason the
+decision is three-way and not two-way:
+
+| family | server-side web search over cliproxy |
+|---|---|
+| `claude-*` | `anthropic_tools_route`; on the OpenAI route the response comes back empty |
+| `gpt-*` / codex-owned | `openai_tools_route` — verified, returns a cited answer |
+| gemini / antigravity | **neither.** `{type="web_search"}` makes `gemini-3-flash` answer with `finish_reason: "malformed_function_call"` and no content |
+
+Client-side function tools work on the OpenAI route for **all three**, so
+`tools = {"@all"}` stays unconditional; only the server-side search differs.
+
+- [ ] **Step 1: Write the failing test**
+
+```lua
+local providers = require("parley.providers")
+
+describe("cliproxy_default_web_search_strategy", function()
+    it("routes claude models over the anthropic wire", function()
+        assert.equals("anthropic_tools_route",
+            providers.cliproxy_default_web_search_strategy("claude-opus-5"))
+    end)
+
+    it("keeps openai-family models on the openai tools route", function()
+        assert.equals("openai_tools_route",
+            providers.cliproxy_default_web_search_strategy("gpt-5.6-sol"))
+    end)
+
+    it("disables server-side search for gemini-family models", function()
+        -- Measured: {type="web_search"} makes gemini answer with
+        -- finish_reason="malformed_function_call" and empty content. A live pick
+        -- that shipped the openai tool here would be a BROKEN agent, so the
+        -- honest default is no server-side search at all.
+        assert.equals("none",
+            providers.cliproxy_default_web_search_strategy("gemini-3-flash"))
+        assert.equals("none",
+            providers.cliproxy_default_web_search_strategy("gemini-pro-agent"))
+    end)
+
+    it("reuses the canonical anthropic family test, including code_execution", function()
+        assert.equals("anthropic_tools_route",
+            providers.cliproxy_default_web_search_strategy("code_execution_claude"))
+    end)
+
+    it("falls back to the openai route for an unrecognized model", function()
+        assert.equals("openai_tools_route",
+            providers.cliproxy_default_web_search_strategy("mystery-1"))
+    end)
+end)
+```
+
+- [ ] **Step 2: Run it and watch it fail**
+
+Run: `make test-spec SPEC=unit/provider_params`
+Expected: FAIL — `attempt to call field 'cliproxy_default_web_search_strategy'`
+
+- [ ] **Step 3: Implement in `providers.lua`, reusing the existing family test**
+
+```lua
+--- The server-side web-search strategy a model can actually USE over cliproxy.
+--- PURE. Single source for the three-way answer (ARCH-DRY) — the canonical
+--- anthropic family test is reused here, never re-written.
+---
+--- Verified against the live proxy 2026-08-31:
+---   claude-*  the OpenAI route returns an empty completion; the anthropic
+---             route is what makes server-side web_search fire.
+---   gpt-*     `{type="web_search"}` works and returns cited results.
+---   gemini-*  `{type="web_search"}` yields finish_reason
+---             "malformed_function_call" and NO content — it breaks the model.
+---             Google's own `{google_search={}}` on the gemini route does work,
+---             so a `google_tools_route` is a real future strategy; until it
+---             exists the honest answer is "none" rather than a broken agent.
+---@param model_name string
+---@return "anthropic_tools_route"|"openai_tools_route"|"none"
+function M.cliproxy_default_web_search_strategy(model_name)
+    if is_cliproxy_anthropic_route_model(model_name) then
+        return "anthropic_tools_route"
+    end
+    if type(model_name) == "string" and model_name:find("^gemini") then
+        return "none"
+    end
+    return "openai_tools_route"
+end
+```
+
+- [ ] **Step 4: Run it and watch it pass**
+
+Run: `make test-spec SPEC=unit/provider_params`
+Expected: PASS
+
+- [ ] **Step 5: Verify "none" actually suppresses the tool**
+
+`cliproxy_openai_payload` only attaches `{type="web_search"}` when the strategy
+is `openai_tools_route`, so "none" already falls through — confirm with a test
+that the payload for a gemini model carries no `tools` entry of that type.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add -u && git commit -m "#205 M1: single-source the cliproxy web-search strategy per model family"
+```
+
+### Task 1.7: `build_agent`
 
 **Files:**
 - Modify: `lua/parley/cliproxy_catalog.lua`
@@ -540,10 +666,16 @@ describe("build_agent", function()
         assert.is_true(a.synthetic_system_prompt)
     end)
 
-    it("leaves non-anthropic models on the provider default route", function()
+    it("leaves openai-family models on the openai tools route", function()
         local a = cat.build_agent({ id = "gpt-5.6-sol", owner = "openai",
                                     display = "GPT 5.6 Sol" })
-        assert.is_nil(a.model.web_search_strategy)
+        assert.equals("openai_tools_route", a.model.web_search_strategy)
+    end)
+
+    it("ships a gemini pick with server-side search off, not broken", function()
+        local a = cat.build_agent({ id = "gemini-3-flash", owner = "antigravity" })
+        assert.equals("none", a.model.web_search_strategy)
+        assert.same({ "@all" }, a.tools)  -- client tools DO work for gemini
     end)
 
     it("names the agent after the model with the cliproxy marker", function()
@@ -584,13 +716,16 @@ Expected: FAIL — `attempt to call field 'build_agent' (a nil value)`
 ---@return table # a parley agent
 function M.build_agent(m, opts)
     opts = opts or {}
-    local anthropic_wire = type(m.id) == "string" and m.id:find("^claude%-") ~= nil
     return {
         provider = "cliproxyapi",
         name = m.id .. "*",
         model = {
+            -- Single-sourced in providers.lua (Task 1.6). NEVER re-test the
+            -- family here: providers.lua:170-179 records that this exact
+            -- duplication had already drifted once.
             model = m.id,
-            web_search_strategy = anthropic_wire and "anthropic_tools_route" or nil,
+            web_search_strategy =
+                require("parley.providers").cliproxy_default_web_search_strategy(m.id),
         },
         system_prompt = opts.system_prompt or require("parley.defaults").chat_system_prompt,
         synthetic_system_prompt = true,
@@ -655,11 +790,46 @@ kill %1
 ```
 Expected: the four-model JSON above
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 3: Extend the LIVE conformance spec — the fake must not be the only witness**
+
+`tests/integration/cliproxy_conformance_spec.lua` (#197) is the seam that boots
+the REAL binary and asserts the fields parley reads still exist. Without a case
+there, the unit tests run on a fixture consistent with itself and the
+integration tests on a fake restating the same assumption — so if cliproxy ever
+emits a bare id instead of `models/<id>`, every join misses, every row silently
+falls back to the raw id, and both suites still pass.
+
+```lua
+it("/v1beta/models carries the naming fields parse() joins on", function()
+    -- against the real binary, skipped when it is unavailable like its siblings
+    local body = get("/v1beta/models")
+    local decoded = vim.json.decode(body)
+    assert.is_table(decoded.models)
+    local m = decoded.models[1]
+    assert.is_string(m.name)
+    assert.is_true(m.name:find("^models/") ~= nil,
+        "parse() strips a `models/` prefix; a bare id would silently break every join")
+    assert.is_string(m.displayName)
+end)
+
+it("the join actually lands against the real catalog", function()
+    local models = cat.parse(get("/v1/models"), get("/v1beta/models"))
+    local joined = 0
+    for _, m in ipairs(models) do
+        if m.display ~= m.id then joined = joined + 1 end
+    end
+    assert.is_true(joined > 0, "no row got a displayName — the join is broken")
+end)
+```
+
+Add the same "did the join land" assertion to Task 1.1 Step 2, so a re-captured
+fixture cannot silently lose its v1beta half.
+
+- [ ] **Step 4: Commit**
 
 ```bash
-git add tests/fixtures/fake_cliproxy
-git commit -m "#205 M2: fake_cliproxy serves /v1beta/models"
+git add tests/fixtures/fake_cliproxy tests/integration/cliproxy_conformance_spec.lua
+git commit -m "#205 M2: fake serves /v1beta/models; live conformance guards its shape"
 ```
 
 ### Task 2.2: `fetch_catalog` + disk cache
@@ -688,7 +858,18 @@ it("returns the cached catalog with the proxy down, and never spawns it", functi
     -- kill the fake, then:
     local cached = cliproxy.catalog_cached()
     assert.is_true(#cached > 0)
-    assert.equals(0, #cliproxy._spawned_pids())  -- no daemon started
+end)
+
+it("does not start a proxy when one is not running", function()
+    -- The observable, not an invented API: take a port nothing is listening on,
+    -- point the endpoint at it, call fetch_catalog, and assert the port is STILL
+    -- free afterwards. tests/helpers/ready_port.lua already owns port selection.
+    local port = require("tests.helpers.ready_port").free_port()
+    -- …point providers.cliproxyapi.endpoint at 127.0.0.1:<port>…
+    local settled = false
+    cliproxy.fetch_catalog(function() settled = true end)
+    vim.wait(3000, function() return settled end)
+    assert.is_false(port_is_listening(port))  -- #131 dormancy contract
 end)
 ```
 
@@ -995,49 +1176,135 @@ sdlc milestone-close --issue 205 --milestone M3
 
 ## Chunk 4: M4 — retire the hardcoded lists
 
-### Task 4.1: Catalog-derived channel resolution
+### Task 4.1: Catalog-derived channel CANDIDATES (not a channel)
 
 **Files:**
-- Modify: `lua/parley/cliproxy_config.lua` (`resolve_channel`)
+- Modify: `lua/parley/cliproxy_config.lua` (`resolve_channel`, `resolve_login_provider`)
+- Modify: `lua/parley/cliproxy.lua:1236` (the `recover` call site)
 - Test: `tests/unit/cliproxy_config_spec.lua`
+
+**Why this is not a one-line inversion.** An earlier draft proposed inverting
+`PROVIDER_OWNED_BY` to get a channel. That is wrong on the axis: its keys are
+login-shaped providers, and `CHANNEL_LOGIN` (`cliproxy_config.lua:140-149`) has
+no `google` key at all — google is three channels (`gemini`, `gemini-cli`,
+`aistudio`) behind one login, and the comment at `cliproxy_config.lua:154-158`
+records that querying credential health on the login axis "silently finds
+nothing". The Spec says the same thing from the other side: `owned_by` is
+"never a channel identifier" — measured, since one id was reported under
+`anthropic` on one proxy start and `antigravity` on the next.
+
+So the catalog cannot name **the** channel. It can honestly narrow to the
+**candidates**, and the health machinery already knows how to span several
+channels and pick the healthiest (`credential_health_for_login` + `healthier`).
 
 - [ ] **Step 1: Write the failing test**
 
 ```lua
-it("resolves a channel from the catalog when no alias block lists the model", function()
-    local models = { { id = "claude-opus-5", owner = "anthropic" } }
-    assert.equals("claude", cc.resolve_channel("claude-opus-5", {}, models))
+describe("channels_for_owner", function()
+    it("narrows an owner to its candidate channels, never one guess", function()
+        assert.same({ "antigravity", "claude" }, cc.channels_for_owner("anthropic"))
+        assert.same({ "antigravity", "codex" }, cc.channels_for_owner("openai"))
+    end)
+
+    it("keeps every google channel, because they share one login", function()
+        assert.same({ "aistudio", "antigravity", "gemini", "gemini-cli" },
+            cc.channels_for_owner("google"))
+    end)
+
+    it("returns empty for an owner it does not know", function()
+        assert.same({}, cc.channels_for_owner("who-knows"))
+    end)
 end)
 
-it("still prefers an explicit alias entry (the override path)", function()
-    local alias = { codex = { { name = "claude-opus-5", alias = "claude-opus-5" } } }
-    assert.equals("codex", cc.resolve_channel("claude-opus-5", alias, {}))
+describe("resolve_channel", function()
+    it("still prefers an explicit alias entry (the override path)", function()
+        local alias = { codex = { { name = "claude-opus-5", alias = "claude-opus-5" } } }
+        assert.equals("codex", cc.resolve_channel("claude-opus-5", alias, {}))
+    end)
+
+    it("resolves from the catalog when exactly one candidate is possible", function()
+        local models = { { id = "gemini-3-flash", owner = "antigravity" } }
+        assert.equals("antigravity", cc.resolve_channel("gemini-3-flash", {}, models))
+    end)
+
+    it("returns nil when the catalog leaves the channel ambiguous", function()
+        -- anthropic is served by BOTH claude and antigravity; naming one would
+        -- report another account's health for the failing model (#197's rule:
+        -- admitting we don't know beats guessing).
+        local models = { { id = "claude-opus-5", owner = "anthropic" } }
+        assert.is_nil(cc.resolve_channel("claude-opus-5", {}, models))
+    end)
 end)
 
-it("returns nil rather than guessing when neither knows the model", function()
-    assert.is_nil(cc.resolve_channel("who-knows-1", {}, {}))
+describe("resolve_login_provider", function()
+    it("is threaded with the catalog too, not just resolve_channel", function()
+        local models = { { id = "gemini-3-flash", owner = "antigravity" } }
+        assert.equals("antigravity",
+            cc.resolve_login_provider("gemini-3-flash", {}, models))
+    end)
 end)
 ```
-
-The third case preserves an existing invariant from #197: reporting another
-account's health for the failing model is worse than admitting we don't know.
 
 - [ ] **Step 2: Run it and watch it fail**
 
 Run: `make test-spec SPEC=unit/cliproxy_config`
-Expected: FAIL — third argument ignored
+Expected: FAIL — `channels_for_owner` is nil; the third argument is ignored
 
-- [ ] **Step 3: Implement** — add an optional `models` argument; alias first, catalog second, nil last. Invert `PROVIDER_OWNED_BY` for owner → provider (ARCH-DRY: no second copy of that mapping).
+- [ ] **Step 3: Implement**
 
-- [ ] **Step 4: Run it and watch it pass**, then update the one caller at `cliproxy.lua:1236` to pass `M.catalog_cached()`.
+```lua
+-- Which cliproxy CHANNELS can serve a model of a given catalog `owned_by`.
+-- Candidates, deliberately plural: antigravity serves claude, gemini AND
+-- gpt-oss models alongside the native channel, so an owner never implies one
+-- channel. Kept explicit rather than inverted out of PROVIDER_OWNED_BY, whose
+-- keys are login-shaped (`google`) and so are NOT channels.
+local OWNER_CHANNELS = {
+    anthropic   = { "antigravity", "claude" },
+    openai      = { "antigravity", "codex" },
+    google      = { "aistudio", "antigravity", "gemini", "gemini-cli" },
+    antigravity = { "antigravity" },
+    moonshot    = { "kimi" },
+    xai         = { "xai" },
+}
 
-Run: `make test-spec SPEC=unit/cliproxy_config && make test-spec SPEC=unit/cliproxy_auth`
-Expected: PASS
+---@param owner string # a catalog row's owned_by
+---@return string[] # sorted candidate channels; empty when unknown
+function M.channels_for_owner(owner)
+    return vim.deepcopy(OWNER_CHANNELS[owner] or {})
+end
+```
 
-- [ ] **Step 5: Commit**
+`resolve_channel(model, alias, models)` then reads: alias first (an operator's
+explicit pin always wins); else look the model up in the catalog and return its
+owner's single candidate **only when there is exactly one**; else nil, which the
+caller at `cliproxy.lua:1247` already renders as "no cliproxy channel is
+configured for X".
+
+- [ ] **Step 4: Sweep every caller — the enumeration, not just the site**
 
 ```bash
-git add -u && git commit -m "#205 M4: resolve_channel derives from the catalog, alias becomes an override"
+grep -rn "resolve_channel\|resolve_login_provider" lua/ tests/
+```
+Expected callers, all threaded with the catalog in this same commit:
+`cliproxy_config.lua:218` (`resolve_login_provider`), `cliproxy.lua:1236`
+(`recover`). `resolve_login_provider`'s own docstring promises it derives from
+`resolve_channel` "so there is one model to channel source (ARCH-DRY)" — leaving
+it unthreaded would make that comment false.
+
+- [ ] **Step 5: Run the specs that would catch a regression**
+
+```bash
+make test-spec SPEC=unit/cliproxy_config
+make test-spec SPEC=unit/cliproxy_auth
+make test-spec SPEC=unit/failure_notice
+make test-spec SPEC=integration/cliproxy_recovery_e2e
+```
+Expected: PASS
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add -u && git commit -m "#205 M4: resolve channel candidates from the catalog, alias stays the override"
 ```
 
 ### Task 4.2: Delete the model lists from the default config

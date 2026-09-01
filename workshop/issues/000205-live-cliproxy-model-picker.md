@@ -69,8 +69,7 @@ Two measured constraints:
      `displayName`, take `per_provider` (default 3) per provider.
    - `parse_provider_spec("claude:opus,sonnet")` → `{ provider = "claude",
      terms = { "opus", "sonnet" } }`. Split on `:`, then on `,`.
-   - Series is derived by stripping version numerals from the id, and from
-     `displayName` for owners whose ids are opaque.
+   - Series is derived by stripping version numerals from the id.
 
 2. **Catalog cache — IO shell in `cliproxy.lua`.** Fetch both routes through the
    existing `api_argv` seam (ARCH-DRY). Cache in memory; persist to
@@ -101,11 +100,26 @@ Two measured constraints:
 
 4. **Ad-hoc agent on selection** (pure constructor, unit-tested):
    `provider = cliproxyapi`, `tools = {"@all"}`, `synthetic_system_prompt = true`,
-   default chat system prompt, and `web_search_strategy` derived from the family —
-   anthropic-owned ids get `anthropic_tools_route`, everything else inherits the
-   provider default `openai_tools_route`. **Tools and web search are on by
+   default chat system prompt, and `web_search_strategy` derived from the model
+   family by a single source in `providers.lua`. **Tools and web search are on by
    default.** Registered into `M.agents` / `M._agents` for the session so the tool
    badge, header prefix, `:ParleyAgent <name>` and `get_agent` work unchanged.
+
+   **Server-side web search is enabled differently per family** — measured
+   against the live proxy 2026-08-31, and the reason the strategy is three-way:
+
+   | family | server-side web search |
+   |---|---|
+   | `claude-*` | `anthropic_tools_route`; the OpenAI route returns an empty completion |
+   | `gpt-*` / codex | `openai_tools_route` — returns a cited answer |
+   | gemini / antigravity | **neither**: `{type="web_search"}` makes the model answer with `finish_reason: "malformed_function_call"` and no content, so the strategy is `none` |
+
+   Client-side function tools work over the OpenAI route for **all three**
+   (verified), so `tools = {"@all"}` stays unconditional; only the server-side
+   search varies. Google's own `{google_search={}}` on the gemini route DOES work
+   through cliproxy, so a `google_tools_route` strategy is a real future
+   extension — out of scope here, and until it exists shipping `none` beats
+   shipping an agent that answers with nothing.
 
 5. **Survives restart.** `_state.live_agent` is re-registered at setup *before* the
    `M.agents[M._state.agent]` fallback at `init.lua:1329`; without that ordering a
@@ -193,3 +207,26 @@ Durable design: `workshop/plans/000205-live-cliproxy-model-picker-plan.md`
   against id AND displayName; tools + web search on by default for ad-hoc picks.
 - Filter syntax verified against the live catalog before speccing — the four rows
   in the Spec table are real renders, captured as the `curate` test cases.
+
+## Revisions
+
+### 2026-08-31 — three-way web-search strategy; series claim withdrawn
+
+**Reason:** operator flagged that server-side web search is enabled differently
+per family; probing the live proxy confirmed it and showed the original two-way
+rule would ship a broken gemini agent.
+
+**Delta:**
+- Component 4: `web_search_strategy` is three-way (`anthropic_tools_route` /
+  `openai_tools_route` / `none`), single-sourced in `providers.lua` beside the
+  existing canonical family test rather than re-implemented in the catalog
+  module. Evidence table added.
+- Components: withdrew the "series falls back to a displayName-derived stem"
+  claim. The id rule already yields the correct curation for every verified
+  case — including antigravity, where "Gemini 3.1 Pro (Low)" and "(High)" are
+  different offerings that SHOULD stay separate series. Specifying a fallback
+  nothing implemented was the actual defect (plan-gate PQ-4).
+- Component 6 / M4: catalog-derived channel resolution narrows to channel
+  CANDIDATES and returns a channel only when exactly one is possible; `owned_by`
+  is not a channel and antigravity serves several owners' models (plan-gate
+  PQ-1). The alias block stays the operator's explicit override.
