@@ -47,7 +47,19 @@ describe("arch: single-source sweeps stay swept", function()
             pending("git diff unavailable")
             return
         end
-        local plan_body = read(plan)
+        -- Only the Core-concepts TABLES, which is what the assertion message
+        -- claims. Searching the whole document let a name mentioned anywhere —
+        -- a Revisions entry, a commit recipe, a code block — satisfy a guard
+        -- about table rows.
+        local whole = read(plan)
+        local plan_body = whole:match("## Core concepts(.-)\n## ") or whole
+        local table_rows = {}
+        for line in plan_body:gmatch("[^\n]+") do
+            if line:match("^| ") then
+                table_rows[#table_rows + 1] = line
+            end
+        end
+        plan_body = table.concat(table_rows, "\n")
         local missing = {}
         for line in diff:gmatch("[^\n]+") do
             -- MODULE-public only: `function M.x(` and `M.x = …`. A bare
@@ -67,6 +79,40 @@ describe("arch: single-source sweeps stay swept", function()
         table.sort(names)
         assert.same({}, names,
             "these are added by this issue but appear in no Core-concepts table row")
+    end)
+
+    it("every symbol the Spec and plan tables name exists in the tree", function()
+        -- The plan→code direction. The other test walks code→table; this one
+        -- catches a document naming a function that was renamed or never
+        -- written, which happened three times on this issue (`catalog_write`,
+        -- `provider_states`, `M._logged_out_providers`).
+        local docs = {
+            vim.fn.glob("workshop/plans/000205-*-plan.md"),
+            vim.fn.glob("workshop/issues/000205-*.md"),
+        }
+        local missing = {}
+        for _, doc in ipairs(docs) do
+            if doc ~= "" then
+                local body = read(doc)
+                -- table rows only: prose may legitimately discuss removed names
+                for line in body:gmatch("[^\n]+") do
+                    if line:match("^| `") then
+                        for name in line:gmatch("`([%w_]+)`") do
+                            if #name > 3 and not name:match("^lua$") then
+                                local hit = vim.fn.systemlist(
+                                    ("grep -rl -- %s lua/ tests/ 2>/dev/null"):format(
+                                        vim.fn.shellescape(name)))
+                                if #hit == 0 then
+                                    missing[#missing + 1] = doc .. ": " .. name
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        assert.same({}, missing,
+            "these are named in a Core-concepts table but exist nowhere in the tree")
     end)
 
     it("no spec re-defines free_port; they use tests/helpers/ready_port", function()

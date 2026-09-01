@@ -1436,19 +1436,19 @@ end
 ---@param models table[]
 ---@param fetched_at number|nil
 function M._write_catalog(models, fetched_at)
-    -- Clearing the invalidation belongs HERE, on a stored result — not at the
-    -- start of an attempt. An attempt can be DECLINED (proxy down, 401, foreign
-    -- body), and clearing it there threw away a login's invalidation on the
-    -- first failed refresh, putting the operator right back in the case BR-58
-    -- exists to prevent.
-    _force_stale = false
     vim.fn.mkdir(data_root(), "p")
     local fd = io.open(catalog_path(), "w")
     if not fd then
-        return false
+        return false -- nothing was stored: the invalidation is still owed
     end
     fd:write(vim.json.encode({ models = models, fetched_at = fetched_at or os.time() }))
     fd:close()
+    -- AFTER the write succeeded, never before. An invalidation is consumed by a
+    -- STORED result; clearing it at the start of an attempt lost it on the first
+    -- declined refresh, and clearing it at the top of this function loses it just
+    -- as surely when the open fails. The rule both times: the flag clears where
+    -- the work it is paid for has actually happened.
+    _force_stale = false
     _catalog_memo = nil -- the file just changed; the next read re-stats it
     pcall(vim.fn.setfperm, catalog_path(), "rw-------")
     return true
@@ -1609,6 +1609,12 @@ function M.fetch_catalog(cb)
                     -- asked about. The cached catalog stays on screen.
                     logger.debug(("cliproxy: catalog refresh declined (http=%s shape=%s) — "
                         .. "keeping the cached catalog"):format(tostring(v1_status), tostring(shape)))
+                    -- Hand back what is actually IN the cache. `models` is the
+                    -- parse of a body we just refused to store (a 401 page, a
+                    -- foreign server), so resolving with it has the caller render
+                    -- rows the cache does not contain. Both declined branches —
+                    -- this one and the parse failure above — resolve the same way.
+                    return settle(M.catalog_cached())
                 end
                 settle(models)
             end)

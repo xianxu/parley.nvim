@@ -1311,6 +1311,63 @@ rounds:
           round: 17
       boundary: M3
       blocked: true
+    - "n": 18
+      timestamp: "2026-09-01T09:44:07-07:00"
+      agent: claude
+      dispose:
+        - id: BR-45
+          disposition: not-addressed
+          note: Instance restated in the Spec, which the finding forbade as the sole fix; no executable Spec-symbol sweep exists (the new guard runs code→plan, the opposite direction), and the new "unaffected by the shared-id instability" claim contradicts the Spec's own measurement at issue.md:58 while agent_picker.lua:31 compares the static map against the unstable m.owner. No fixture reattributes an id across owners — verified against cliproxy_catalog_v1.json.
+          round: 18
+        - id: BR-48
+          disposition: not-addressed
+          note: cliproxy.lua:1613 is still settle(models) on the declined-classify path; only the parse-failure branch resolves with the cache.
+          round: 18
+        - id: BR-58
+          disposition: addressed
+          note: Failure backoff, login invalidation and atlas cadence all land; deleting cliproxy.lua:1150 turns cliproxy_login_spec red — measured. Residual raised separately as N1.
+          round: 18
+        - id: BR-66
+          disposition: not-addressed
+          note: Test title corrected; float_picker.lua:1750's `selected` comment still says "`update` takes an INDEX", the second site the finding named, and no rule was recorded in lessons.md.
+          round: 18
+        - id: BR-68
+          disposition: not-addressed
+          note: Login site now pinned; both agent_picker sites are not — dropping the third argument at :266 and :306 leaves picker_items_spec (47) and float_picker_spec (77) green, measured at HEAD.
+          round: 18
+        - id: BR-69
+          disposition: not-addressed
+          note: The BR-58 half is corrected by the round-17 entry; plan.md:1974 still asserts BR-48 "resolves with the cache" against unchanged code.
+          round: 18
+        - id: BR-70
+          disposition: addressed
+          note: Reverting the clear to attempt-start turns "keeps the catalog stale until a refresh actually stores something" red — measured.
+          round: 18
+        - id: BR-71
+          disposition: not-addressed
+          note: float_picker.lua:1706-1714 still stacks both paragraphs verbatim.
+          round: 18
+      findings:
+        - id: BR-72
+          severity: Important
+          title: '`_force_stale` is cleared at the top of `_write_catalog`, before the write it is paid for can fail'
+          detail: 'This is the 4th finding in family `retry-not-rate-limited`. Do NOT just move the line — the rule was stated at BR-70 and re-broken one line off, so the deliverable is the enumeration plus a guard. cliproxy.lua:1444 sits above vim.fn.mkdir and io.open, and :1447 returns false for a failure the function already models; the comment directly above claims the clear happens "on a stored result". Failure scenario: operator logs in through the `(logged out)` row, invalidate_catalog fires, the fetch is accepted, io.open fails on an unwritable data dir — the invalidation is consumed, nothing is stored, catalog_cached() still returns the pre-login rows, and the operator waits out the full TTL. That is BR-58''s Critical symptom by a third route, and it is silent: nothing logs the write failure and the production caller at :1605 discards the boolean. Enumerate every "the world changed" flag clear (cliproxy.lua:1444, :1490, invalidate_catalog at :1479), put each on the success path after the observation completes, log the write failure, and pin it with a spec that points _set_data_dir at an unwritable path and asserts catalog_stale() stays true.'
+          family: retry-not-rate-limited
+          round: 18
+        - id: BR-73
+          severity: Important
+          title: '`_on_login_success` has no Core-concepts row, and the guard meant to catch that searches the whole plan instead of the tables'
+          detail: 'This is the 6th finding in family `plan-table-missing-entity`. Do NOT just add the row — the rule is that the guard must check what its message claims. tests/arch/single_source_sweeps_spec.lua:57-69 calls plan_body:find over the entire document while asserting "appear in no Core-concepts table row". Measured: `_on_login_success` (added this window as `function M._on_login_success`) appears only at plan.md:1966 and :1990, both inside `## Revisions` narrative, and the guard is green; stripping the backticks from those two prose mentions turns it red naming `_on_login_success`, proving the check never reaches the tables. Deleting the plan.md:70 row does fire, but only because those three names are not backticked elsewhere. Fix: slice plan_body from the `## Core concepts` heading to the next `^## ` and search only that slice, then add the missing row and re-run.'
+          family: plan-table-missing-entity
+          round: 18
+        - id: BR-74
+          severity: Minor
+          title: The two agent_picker repaint blocks are byte-identical and re-derive the picker's identity instead of using `recall_id_fn`
+          detail: This is the 5th finding in family `duplicated-logic-not-extracted`. Do NOT fix one site — the rule is that an identity has one derivation. agent_picker.lua:265-267 and :304-307 are the same three lines, and both hardcode `was.name` while recall_id_fn is declared at :278; a change to one silently desynchronises the other. Either let `update` accept the item (`handle.update(items, nil, handle.selected())`) or expose `handle.selected_id()` on the handle, so both call sites collapse to one line that cannot drift.
+          family: duplicated-logic-not-extracted
+          round: 18
+      boundary: M3
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#205 (boundary-review)
@@ -1890,6 +1947,28 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-71** [Minor] `documented-render-not-pinned` Two stacked comment paragraphs in `update`'s numeric branch say the same thing with contradictory framing
   float_picker.lua:1705-1715. The first paragraph explains the translation, the second explains the removed sel_idx write as if the first had not been written — leftover from the shadowed-upvalue rename. One paragraph.
 
+## Round 18 — 2026-09-01T09:44:07-07:00 (claude) — passed
+
+### Disposed
+
+- BR-45 — not-addressed — Instance restated in the Spec, which the finding forbade as the sole fix; no executable Spec-symbol sweep exists (the new guard runs code→plan, the opposite direction), and the new "unaffected by the shared-id instability" claim contradicts the Spec's own measurement at issue.md:58 while agent_picker.lua:31 compares the static map against the unstable m.owner. No fixture reattributes an id across owners — verified against cliproxy_catalog_v1.json.
+- BR-48 — not-addressed — cliproxy.lua:1613 is still settle(models) on the declined-classify path; only the parse-failure branch resolves with the cache.
+- BR-58 — addressed — Failure backoff, login invalidation and atlas cadence all land; deleting cliproxy.lua:1150 turns cliproxy_login_spec red — measured. Residual raised separately as N1.
+- BR-66 — not-addressed — Test title corrected; float_picker.lua:1750's `selected` comment still says "`update` takes an INDEX", the second site the finding named, and no rule was recorded in lessons.md.
+- BR-68 — not-addressed — Login site now pinned; both agent_picker sites are not — dropping the third argument at :266 and :306 leaves picker_items_spec (47) and float_picker_spec (77) green, measured at HEAD.
+- BR-69 — not-addressed — The BR-58 half is corrected by the round-17 entry; plan.md:1974 still asserts BR-48 "resolves with the cache" against unchanged code.
+- BR-70 — addressed — Reverting the clear to attempt-start turns "keeps the catalog stale until a refresh actually stores something" red — measured.
+- BR-71 — not-addressed — float_picker.lua:1706-1714 still stacks both paragraphs verbatim.
+
+### Raised
+
+- **BR-72** [Important] `retry-not-rate-limited` `_force_stale` is cleared at the top of `_write_catalog`, before the write it is paid for can fail
+  This is the 4th finding in family `retry-not-rate-limited`. Do NOT just move the line — the rule was stated at BR-70 and re-broken one line off, so the deliverable is the enumeration plus a guard. cliproxy.lua:1444 sits above vim.fn.mkdir and io.open, and :1447 returns false for a failure the function already models; the comment directly above claims the clear happens "on a stored result". Failure scenario: operator logs in through the `(logged out)` row, invalidate_catalog fires, the fetch is accepted, io.open fails on an unwritable data dir — the invalidation is consumed, nothing is stored, catalog_cached() still returns the pre-login rows, and the operator waits out the full TTL. That is BR-58's Critical symptom by a third route, and it is silent: nothing logs the write failure and the production caller at :1605 discards the boolean. Enumerate every "the world changed" flag clear (cliproxy.lua:1444, :1490, invalidate_catalog at :1479), put each on the success path after the observation completes, log the write failure, and pin it with a spec that points _set_data_dir at an unwritable path and asserts catalog_stale() stays true.
+- **BR-73** [Important] `plan-table-missing-entity` `_on_login_success` has no Core-concepts row, and the guard meant to catch that searches the whole plan instead of the tables
+  This is the 6th finding in family `plan-table-missing-entity`. Do NOT just add the row — the rule is that the guard must check what its message claims. tests/arch/single_source_sweeps_spec.lua:57-69 calls plan_body:find over the entire document while asserting "appear in no Core-concepts table row". Measured: `_on_login_success` (added this window as `function M._on_login_success`) appears only at plan.md:1966 and :1990, both inside `## Revisions` narrative, and the guard is green; stripping the backticks from those two prose mentions turns it red naming `_on_login_success`, proving the check never reaches the tables. Deleting the plan.md:70 row does fire, but only because those three names are not backticked elsewhere. Fix: slice plan_body from the `## Core concepts` heading to the next `^## ` and search only that slice, then add the missing row and re-run.
+- **BR-74** [Minor] `duplicated-logic-not-extracted` The two agent_picker repaint blocks are byte-identical and re-derive the picker's identity instead of using `recall_id_fn`
+  This is the 5th finding in family `duplicated-logic-not-extracted`. Do NOT fix one site — the rule is that an identity has one derivation. agent_picker.lua:265-267 and :304-307 are the same three lines, and both hardcode `was.name` while recall_id_fn is declared at :278; a change to one silently desynchronises the other. Either let `update` accept the item (`handle.update(items, nil, handle.selected())`) or expose `handle.selected_id()` on the handle, so both call sites collapse to one line that cannot drift.
+
 ## Open findings
 
 - **BR-13** [Important] `rank-key-version-extraction` rank_key's `< 100` threshold answers the 120B instance, not the class: any parameter count below 100 still reads as a version
@@ -1909,9 +1988,10 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-41** [Minor] `stated-design-not-implemented` `fetch_catalog` calls `render_opts()`, so opening the agent picker generates and writes `management.key`
 - **BR-45** [Important] `stated-design-not-implemented` Spec Component 3 names `cliproxy_auth.lua`/`channels_for_login` as the credential source and forbids `owned_by`; the code uses only `owned_by`
 - **BR-48** [Minor] `one-value-two-decisions` `fetch_catalog`'s callback argument means the cached catalog on one path and the freshly-parsed, possibly-rejected list on the other
-- **BR-58** [Critical] `retry-not-rate-limited` A failed catalog attempt silences the picker for the full 10-minute TTL, through the login it just launched
 - **BR-66** [Minor] `test-title-overstates-guard` A test title and a handle doc comment both describe behavior the same diff changed
 - **BR-68** [Important] `missing-test-for-shipped-behavior` A fix that lands as a call at a production site is pinned at the callee, never at the site — three instances, all green when the site is deleted
 - **BR-69** [Important] `stated-design-not-implemented` The plan's `## Revisions` asserts two fixes the code and tests do not deliver
-- **BR-70** [Minor] `retry-not-rate-limited` A login's catalog invalidation is consumed by an ATTEMPT, not by a successful refresh
 - **BR-71** [Minor] `documented-render-not-pinned` Two stacked comment paragraphs in `update`'s numeric branch say the same thing with contradictory framing
+- **BR-72** [Important] `retry-not-rate-limited` `_force_stale` is cleared at the top of `_write_catalog`, before the write it is paid for can fail
+- **BR-73** [Important] `plan-table-missing-entity` `_on_login_success` has no Core-concepts row, and the guard meant to catch that searches the whole plan instead of the tables
+- **BR-74** [Minor] `duplicated-logic-not-extracted` The two agent_picker repaint blocks are byte-identical and re-derive the picker's identity instead of using `recall_id_fn`

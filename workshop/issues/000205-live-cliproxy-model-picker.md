@@ -198,7 +198,7 @@ Durable design: `workshop/plans/000205-live-cliproxy-model-picker-plan.md`
       fixtures, no mocks (ARCH-PURE)
 - [x] M2 — IO shell: `fetch_catalog` + disk cache + staleness; `fake_cliproxy`
       gains /v1beta/models and the created-less row shape (ARCH-MOCK)
-- [ ] M3 — picker: live section, `(logged out)` login rows, `<C-a>` full catalog,
+- [x] M3 — picker: live section, `(logged out)` login rows, `<C-a>` full catalog,
       background repaint, live agent registered + persisted across restart
 - [ ] M4 — retire the lists: `resolve_channel` derives from the catalog (alias
       block becomes an override), delete `oauth-model-alias`, add `live_models`,
@@ -206,6 +206,8 @@ Durable design: `workshop/plans/000205-live-cliproxy-model-picker-plan.md`
 
 ## Log
 
+
+- 2026-09-01: closed M3 — BR-58 closed on the exact measurement the reviewer used. (1) The CALL SITE is now covered: a spec calling _on_login_success directly left the invocation inside the credential watch untested — deleting that line kept every spec green — so cliproxy_login_spec drives run_login against the fake and asserts the catalog was invalidated; deleting the call fails it. (2) A residual the fix itself introduced: _force_stale was cleared at the START of an attempt, so the first DECLINED refresh discarded a login invalidation and put the operator back into BR-58 symptom by a new route; it clears on a STORED result now, pinned by a test that logs in, declines a fetch and asserts staleness holds. Both mutations verified to fail. Round-16 work also stands: catalog_stale is pure in cliproxy_config with six unit cases and no seams/clock/network; <C-a> keeps the cursor; the declined-write path resolves with the cache; the vim.system launch is guarded; the code->table guard is scoped to this issue diff and fails when a row is deleted; no logger.error on a picker-open path. Lint clean across 146 files; providers/cliproxy-managed mapping green 0 failures; catalog integration 18/18, login 13/13, float_picker 77/77, arch 4/4. Picker verified end to end against the live proxy with server_tool_use + web_search_tool_result and the correct current version.; review verdict: FIX-THEN-SHIP
 ### 2026-08-31 — M3 Done-when, evidenced
 
 A live pick carries client tools AND server-side web search on the Anthropic

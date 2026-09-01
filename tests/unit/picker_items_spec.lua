@@ -1,4 +1,5 @@
 local agent_picker         = require("parley.agent_picker")
+local float_picker         = require("parley.float_picker")
 local system_prompt_picker = require("parley.system_prompt_picker")
 local outline              = require("parley.outline")
 local custom_prompts       = require("parley.custom_prompts")
@@ -583,5 +584,79 @@ describe("agent_picker refresh gating", function()
             saved_is_managed, saved_stale, saved_fetch
         assert.is_true(ok, tostring(err))
         assert.is_true(fetched, "a bring-your-own proxy never got its catalog refreshed")
+    end)
+end)
+
+describe("agent_picker repaint identity", function()
+    -- BR-68/BR-74: dropping the third argument at either repaint site used to
+    -- leave every spec green, and both sites hardcoded `.name` while
+    -- recall_id_fn declared what identity means for this picker.
+    it("derives a row's identity in one place", function()
+        assert.equals("claude-opus-5*",
+            agent_picker._identity({ name = "claude-opus-5*", kind = "live" }))
+        assert.is_nil(agent_picker._identity(nil))
+    end)
+
+    it("uses that identity for recall, so repaint and recall cannot disagree", function()
+        -- The picker hands _identity to float_picker as recall_id_fn AND uses it
+        -- to restore the cursor. A test that only checked one would let them
+        -- drift, which is the defect: a repaint keyed on `.name` while recall
+        -- keyed on something else silently stops restoring anything.
+        local seen
+        local saved = float_picker.open
+        float_picker.open = function(opts)
+            seen = opts.recall_id_fn
+            return { update = function() end, selected = function() end,
+                     set_title = function() end, is_closed = function() return true end,
+                     close = function() end }
+        end
+        local plugin = make_plugin("mango")
+        plugin.config = { cliproxy = { live_models = { providers = {} } } }
+        plugin.cmd = { KeyBindings = function() end }
+        pcall(agent_picker.agent_picker, plugin)
+        float_picker.open = saved
+        assert.equals(agent_picker._identity, seen,
+            "recall_id_fn must BE the identity function, not a second copy of it")
+    end)
+end)
+
+describe("agent_picker repaint passes the identity", function()
+    -- BR-68: dropping `update`'s third argument at either repaint site left
+    -- every spec green, because nothing drove the closure that passes it. This
+    -- drives the real <C-a> mapping and asserts what reached the widget.
+    local function drive_expand()
+        local captured = {}
+        local saved = float_picker.open
+        float_picker.open = function(opts)
+            captured.mappings = opts.mappings
+            captured.recall_id_fn = opts.recall_id_fn
+            local handle
+            handle = {
+                update = function(_items, _tags, sel) captured.selection = sel end,
+                selected = function() return { name = "claude-opus-5*", kind = "live" } end,
+                set_title = function() end,
+                is_closed = function() return true end,
+                close = function() end,
+            }
+            return handle
+        end
+        local plugin = make_plugin("mango")
+        plugin.config = { cliproxy = { live_models = { providers = {} } } }
+        plugin.cmd = { KeyBindings = function() end }
+        pcall(agent_picker.agent_picker, plugin)
+        float_picker.open = saved
+        return captured
+    end
+
+    it("hands the widget the identity of the row under the cursor", function()
+        local captured = drive_expand()
+        local expand
+        for _, m in ipairs(captured.mappings or {}) do
+            if m.key == "<C-a>" then expand = m end
+        end
+        assert.is_not_nil(expand, "the expand mapping should be registered")
+        expand.fn()
+        assert.equals("claude-opus-5*", captured.selection,
+            "the toggle must name the row to return to, or the cursor jumps")
     end)
 end)

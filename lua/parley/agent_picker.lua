@@ -133,6 +133,14 @@ function M._build_items(plugin, extra)
     return items
 end
 
+--- What identifies a picker row, for `recall_id_fn` and for restoring the
+--- cursor across a repaint. One function so the two cannot disagree.
+---@param item table
+---@return string|nil
+function M._identity(item)
+    return item and item.name or nil
+end
+
 --- Build the picker's live section from a catalog. PURE — takes the catalog,
 --- the `live_models` config and the registered agents, returns what
 --- `_build_items` consumes.
@@ -251,20 +259,26 @@ function M.agent_picker(plugin)
     }
 
     local handle
+
+    -- ONE derivation of "rewrite the rows, keep the cursor where it is". Both
+    -- callers (the <C-a> toggle and the background refresh) had their own
+    -- byte-identical copy, each hardcoding `.name` while `recall_id_fn` below
+    -- declares what identity means for this picker — so changing one silently
+    -- desynchronised the other.
+    local function repaint()
+        local was = handle.selected and handle.selected()
+        handle.update(M._build_items(plugin, view_for(expanded)), nil,
+            was and M._identity(was) or nil)
+    end
+
     if expand_key then
         table.insert(mappings, {
             -- Expand to the whole catalog. Curation decides the DEFAULT view,
             -- never what is reachable.
             key = expand_key,
             fn = function()
-                -- Keep the cursor on the row the operator is pointing at. The
-                -- toggle rewrites the whole list, so without this it jumps —
-                -- the same defect the background repaint had, at the sibling
-                -- site the BR-60 fix left untouched.
-                local was = handle.selected and handle.selected()
                 expanded = not expanded
-                handle.update(M._build_items(plugin, view_for(expanded)), nil,
-                    was and was.name or nil)
+                repaint()
                 handle.set_title(expanded and (title .. " — all models") or title)
             end,
         })
@@ -275,7 +289,7 @@ function M.agent_picker(plugin)
         items = M._build_items(plugin, view_for(expanded)),
         anchor = "top",
         recall_key = "parley.agent_picker",
-        recall_id_fn = function(item) return item.name end,
+        recall_id_fn = M._identity,
         on_select = function(item)
             M._select(plugin, item)
         end,
@@ -297,14 +311,7 @@ function M.agent_picker(plugin)
             -- case the login rows report, and gating on `#models > 0` would
             -- leave the picker showing a stale list instead.
             if models and handle and not handle.is_closed() then
-                -- Hand the widget the IDENTITY, not an index. sel_idx indexes
-                -- the FILTERED list; an index computed here against the full
-                -- items list points at a different row whenever a query is
-                -- active — which is exactly when a background repaint is most
-                -- likely to move the cursor under the operator.
-                local was = handle.selected and handle.selected()
-                handle.update(M._build_items(plugin, view_for(expanded)), nil,
-                    was and was.name or nil)
+                repaint()
             end
         end)
     end

@@ -945,3 +945,20 @@ And one for evidence: **a Done-when is recorded in `## Log` with the output that
 proves it**, not asserted in the close message. #205's live-pick e2e is the
 shape — the payload, the response block types, and the answer, where a *correct*
 answer distinguishes "the search ran" from "the request succeeded".
+
+## A doc comment and a test title are assertions — sweep them with the code (#205)
+
+Three findings on #205 were a comment or a test title still describing the
+contract the same diff had just changed: a handle doc saying `update` takes an
+INDEX after it started taking an identity, a test titled "addresses the filtered
+list" after the meaning moved to the caller's list, and stacked doc blocks that
+left the function below them undocumented.
+
+They read as pedantry and are not. A stale comment is the most trusted wrong
+answer in the file — the next reader believes it over the code, and the next
+reviewer measures the code against it and files a finding either way.
+
+**Check:** when a contract changes, `grep` the identifier across `lua/` and
+`tests/` and fix every comment and test TITLE that states the old behaviour, in
+the same commit as the change. An insertion goes after the preceding function's
+body, never between a doc block and the function it documents.

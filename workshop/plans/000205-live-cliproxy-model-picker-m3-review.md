@@ -992,3 +992,138 @@ findings:
     detail: |
       float_picker.lua:1705-1715. The first paragraph explains the translation, the second explains the removed sel_idx write as if the first had not been written — leftover from the shadowed-upvalue rename. One paragraph.
 ```
+
+---
+
+## Re-review — 2026-09-01T09:44:07-07:00 (FIX-THEN-SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 205 — live cliproxy model picker; retire hardcoded model lists |
+| repo | parley.nvim |
+| issue file | workshop/issues/000205-live-cliproxy-model-picker.md |
+| boundary | milestone M3 |
+| milestone | M3 |
+| window | 747c8ffc2be7f9e497d80307150f9c48856f96b8..cf22d59a082435a7cdbc4710f0168a65932d1c39 |
+| command | sdlc milestone-close --issue 205 --milestone M3 |
+| reviewer | claude |
+| timestamp | 2026-09-01T09:44:07-07:00 |
+| verdict | FIX-THEN-SHIP |
+
+## Review
+
+```verdict
+verdict: FIX-THEN-SHIP
+confidence: high
+```
+
+BR-58 — the one Critical carried into this round — is genuinely fixed this time, and I measured it rather than reading the commit message: `catalog_stale` is now pure arithmetic in `cliproxy_config.lua` over three inputs (fresh cache / 30s failure backoff / explicit invalidation), the login effect is reachable and pinned **at the call site** (deleting `cliproxy.lua:1150` turns `cliproxy login invalidates the catalog when a login actually completes` red), BR-70's declined-refresh residual is closed and mutation-verified, and `atlas/providers/cliproxy-managed.md` documents both escape hatches. `make lint` is 0/0 across 345 files and `make test` exits 0 at HEAD in a clean worktree, so the red-gate family does not recur. What holds this back from SHIP is that three of the eight open findings were answered at the instance the finding named while enumerable siblings of the same class stayed in the tree — I dropped the third argument at *both* `agent_picker` call sites and `picker_items_spec` (47) plus `float_picker_spec` (77) stayed green, so two thirds of BR-68 is still unpinned — plus one live residual the BR-70 fix itself introduced: `_force_stale` is cleared at the *top* of `_write_catalog`, before the write can fail, which is the same rule BR-70 stated, one line off.
+
+## 1. Strengths
+
+- **`cliproxy_config.catalog_stale(o)` is the right shape** (`lua/parley/cliproxy_config.lua:279-301`). Three inputs with three distinct meanings, six table-driven unit cases in `tests/unit/cliproxy_catalog_spec.lua:369-405` that run with no clock, no seams and no curl. This is what BR-67 asked for, delivered as a promotion rather than a patch. ARCH-PURE: pass.
+- **The login call site is now pinned, not just the callee.** `tests/integration/cliproxy_login_spec.lua:93-107` drives `run_login` against `fake_cliproxy` and asserts the invalidation landed. Measured: deleting `cliproxy.lua:1150` turns exactly that test red. That is the distinction BR-68 was about, and it is correctly drawn.
+- **BR-70's fix is mutation-checked against the real wrong implementation.** Moving `_force_stale = false` back to attempt-start turns `keeps the catalog stale until a refresh actually stores something` red — I verified it. Likewise the BR-59/BR-60 numeric-branch fix: replacing the translation with `sel_idx = math.max(1, math.floor(next_selection))` turns `treats a number as an index into the caller's list, not the filtered one` red. Both fixtures put the target where the clamp cannot reach it, which is the specific defect BR-59 named.
+- **`endpoint_opts` is the correct answer to BR-49** (`cliproxy.lua:237-253`): the side-effect-free half extracted and *composed* by `render_opts`, rather than the body inlined at the new call site. ARCH-DRY done as the finding asked.
+- **The `vim.system` launch guard names its own mechanism** (`cliproxy.lua:1562-1580`) — the pcall wraps the launch, not just the callbacks, and `done(nil, nil)` keeps the two-GET chain settling exactly once.
+
+## 2. Critical findings
+
+None.
+
+## 3. Important findings
+
+**N1 — `_force_stale` is cleared before the write it is supposed to be paid for can fail.** `lua/parley/cliproxy.lua:1444`. The comment three lines above says "Clearing the invalidation belongs HERE, **on a stored result**" — but the assignment sits above `vim.fn.mkdir` and `io.open`, and `if not fd then return false end` at `:1447` is a modeled failure the function already has a branch for. Failure scenario: operator logs in through `antigravity - (logged out)` → `invalidate_catalog()` → picker opens → fetch succeeds and is accepted → `_write_catalog` cannot open `catalog.json` (read-only data dir, full disk) → `_force_stale` is consumed, nothing is stored, `catalog_cached()` still returns the pre-login rows, and the operator stares at the row they just logged in through for the rest of the TTL. That is BR-58's Critical symptom by a third route. The write failure is also silent — no log, and the production caller at `:1605` ignores the return.
+> **This is the 4th finding in family `retry-not-rate-limited`.** Do NOT fix only this line. The rule was already stated at BR-70 and then re-broken one line off, so the deliverable is the enumeration and a guard, not the move: (a) every site that clears a "the world changed" flag must sit on the success path *after* the observation completes — enumerate them (`cliproxy.lua:1444`, `:1490`, and `invalidate_catalog` at `:1479`); (b) `_write_catalog` should log and its production caller should not discard the boolean; (c) pin it — a spec that points `_set_data_dir` at an unwritable path, logs in, fetches, and asserts `catalog_stale()` still true. Without (c) the next occurrence is invisible again.
+
+**N2 — `_on_login_success` is module-public, added by this window, and has no Core-concepts table row; the guard added to catch exactly that passes on a `## Revisions` prose mention.** `tests/arch/single_source_sweeps_spec.lua:57-69` searches `plan_body` — the whole document — while its own assertion message says "appear in no Core-concepts **table row**". Measured: `_on_login_success` appears only at `plan.md:1966` and `:1990`, both inside `## Revisions` narrative; strip the backticks from those two prose mentions and the guard goes red naming `_on_login_success`, which proves the check never reaches the tables. Conversely, deleting the `invalidate_catalog / _reset_catalog_clock / _set_failed_attempt_at` row at `plan.md:70` *does* fire — only because those names happen not to be backticked elsewhere, which is luck, not scope.
+> **This is the 6th finding in family `plan-table-missing-entity`.** Do NOT just add the row. The rule: the guard must be scoped to the region it names — slice `plan_body` from the `## Core concepts` heading to the next `^## `, and search only that slice. Then add the missing row (`_on_login_success` | `lua/parley/cliproxy.lua` | new | login watch callback) and re-run; the guard should have been the thing that told you it was missing.
+
+**N3 — BR-68's rule is implemented at one of three sites.** `lua/parley/agent_picker.lua:266-267` (`<C-a>`, added by *this* window) and `:306-307` (background repaint). Measured in a scratch worktree at HEAD: dropping the third argument at both leaves `tests/unit/picker_items_spec.lua` (47 pass) and `tests/unit/float_picker_spec.lua` (77 pass) green. The finding's own enumeration was "every production line this window added that is a call or a new argument", and the seam it pointed at already exists — `picker_items_spec.lua:565` stubs `fetch_catalog`, so stubbing `float_picker.open` to return a fake handle that records `update`'s third argument (and answers `selected()`) is the same shape. See BR-68 disposition below.
+
+**N4 — the plan still asserts a BR-48 fix the code does not contain.** `workshop/plans/000205-live-cliproxy-model-picker-plan.md:1974` says "It resolves with the cache"; `lua/parley/cliproxy.lua:1613` is unchanged `settle(models)` on the declined-classify path. The round-17 entry corrected the BR-58 overstatement and left this one standing. See BR-69 disposition.
+
+## 4. Minor findings
+
+- `lua/parley/agent_picker.lua:265-267` and `:304-307` are byte-identical three-line blocks, and both re-derive the picker's identity as `was.name` rather than through the `recall_id_fn` declared eight lines away at `:278`. **4th → 5th in `duplicated-logic-not-extracted`** — the rule is that an identity is derived in one place; either let `update` accept the item (`handle.update(items, nil, handle.selected())`) or expose `handle.selected_id()`, then both sites collapse to one line and cannot drift from `recall_id_fn`.
+- `update`'s third argument is a `number|string` union disambiguated by `type()` (`float_picker.lua:1697-1717`). Every current picker's identity is a string or a table, so it is safe today; a picker whose `recall_id_fn` returns a number would silently be read as an index. Worth one sentence in the doc comment, or an explicit `{ index = n }` / `{ id = s }` shape if the surface grows.
+- `M._on_login_success` fires inside `credential_health_for_login`'s callback (`cliproxy.lua:1149-1151`), so the invalidation is gated on a management-API round trip that can include a full `restart_managed`. The login is the event; the health probe is the report. Hoisting the invalidate above the health call would decouple them.
+
+## 5. Test coverage notes
+
+- `make test` exits 0 at HEAD (192 spec files, luacheck 0 warnings / 0 errors across 345 files), measured in a clean worktree at `cf22d59`. Two picker-spec failures on first run were my scratch harness missing the gitignored `construct/generated/vocabulary/`, not the code.
+- Mutation results this round: login call site → red ✓; `_force_stale` at attempt-start → red ✓; items-space `sel_idx` write → red ✓; Core-concepts row deletion → red ✓ (but see N2 for why that is weaker than it looks); `agent_picker` third argument dropped at both sites → **green** ✗.
+- Gap the diff could still ship: no fixture reattributes a model id across owners, so the Spec's own measured `owned_by` instability (`issue.md:58`) has zero executable coverage on the logged-out path. A `CATALOG_V1` variant where `claude-sonnet-4-6` carries `owned_by: "antigravity"` would decide, one way or the other, whether Component 3's new "unaffected by the shared-id instability" claim is true.
+
+## 6. Architectural notes for upcoming work
+
+- **ARCH-DRY** — pass with one flag: `endpoint_opts` is the model fix; the duplicated repaint blocks in `agent_picker` are the residue (Minor above).
+- **ARCH-PURE** — pass. `catalog_stale` promoted out of the IO shell; the shell now reads the clocks and calls it. Keep M4's `resolve_channels` reducer on the same side of that line.
+- **ARCH-PURPOSE** — flag. Three findings this round were answered at the site they named (a Spec restatement for BR-45, one call site of three for BR-68, one comment of two for BR-66) while the enumerable class stayed in the tree. The `feedback_fix_the_class_not_the_site` pattern is measurably still active on this issue.
+- **ARCH-MOCK** — pass. The new integration specs drive `fake_cliproxy` through the same `api_argv` boundary production uses, and the failure paths use a real closed port rather than a stub, so connection-refused is exercised for real.
+- **ARCH-CONSTRAINTS** — pass for the declared envelope: the 30s failure backoff has a budget, a basis and bounded behavior in both `plan.md:96-100` and `atlas/providers/cliproxy-managed.md:77-85`, and the keystroke path stays free of blocking work and popups. N1 is the one place the implementation can silently operate outside that envelope.
+
+## 7. Plan revision recommendations
+
+- A `## Revisions` entry correcting `plan.md:1974`: BR-48 is **not** fixed — `cliproxy.lua:1613` resolves with the parsed list on the declined path. Either change the line and pin it, or strike the claim and carry BR-48 openly.
+- A `## Revisions` entry recording that `_on_login_success` was added without a Core-concepts row, that the code→table guard is document-scoped rather than table-scoped, and what the scoping fix is.
+- A `## Revisions` entry for N1 naming the mutation (make `io.open` fail; assert `catalog_stale()` stays true) and the spec that goes red — per BR-69's own rule, which this round's entries now follow and should keep following.
+- `workshop/lessons.md` gained four rules this round and none of them is the comment/title sweep (BR-66) or the "clear the flag on the observation, not the attempt" rule (BR-70/N1). Both families are at 3–4 recurrences on this issue alone; they belong in the lessons file with the check that catches them.
+
+```findings
+dispose:
+  - id: BR-45
+    disposition: not-addressed
+    note: |
+      Instance restated in the Spec, which the finding forbade as the sole fix; no executable Spec-symbol sweep exists (the new guard runs code→plan, the opposite direction), and the new "unaffected by the shared-id instability" claim contradicts the Spec's own measurement at issue.md:58 while agent_picker.lua:31 compares the static map against the unstable m.owner. No fixture reattributes an id across owners — verified against cliproxy_catalog_v1.json.
+  - id: BR-48
+    disposition: not-addressed
+    note: |
+      cliproxy.lua:1613 is still settle(models) on the declined-classify path; only the parse-failure branch resolves with the cache.
+  - id: BR-58
+    disposition: addressed
+    note: |
+      Failure backoff, login invalidation and atlas cadence all land; deleting cliproxy.lua:1150 turns cliproxy_login_spec red — measured. Residual raised separately as N1.
+  - id: BR-66
+    disposition: not-addressed
+    note: |
+      Test title corrected; float_picker.lua:1750's `selected` comment still says "`update` takes an INDEX", the second site the finding named, and no rule was recorded in lessons.md.
+  - id: BR-68
+    disposition: not-addressed
+    note: |
+      Login site now pinned; both agent_picker sites are not — dropping the third argument at :266 and :306 leaves picker_items_spec (47) and float_picker_spec (77) green, measured at HEAD.
+  - id: BR-69
+    disposition: not-addressed
+    note: |
+      The BR-58 half is corrected by the round-17 entry; plan.md:1974 still asserts BR-48 "resolves with the cache" against unchanged code.
+  - id: BR-70
+    disposition: addressed
+    note: |
+      Reverting the clear to attempt-start turns "keeps the catalog stale until a refresh actually stores something" red — measured.
+  - id: BR-71
+    disposition: not-addressed
+    note: |
+      float_picker.lua:1706-1714 still stacks both paragraphs verbatim.
+findings:
+  - id: new
+    severity: Important
+    family: retry-not-rate-limited
+    title: |
+      `_force_stale` is cleared at the top of `_write_catalog`, before the write it is paid for can fail
+    detail: |
+      This is the 4th finding in family `retry-not-rate-limited`. Do NOT just move the line — the rule was stated at BR-70 and re-broken one line off, so the deliverable is the enumeration plus a guard. cliproxy.lua:1444 sits above vim.fn.mkdir and io.open, and :1447 returns false for a failure the function already models; the comment directly above claims the clear happens "on a stored result". Failure scenario: operator logs in through the `(logged out)` row, invalidate_catalog fires, the fetch is accepted, io.open fails on an unwritable data dir — the invalidation is consumed, nothing is stored, catalog_cached() still returns the pre-login rows, and the operator waits out the full TTL. That is BR-58's Critical symptom by a third route, and it is silent: nothing logs the write failure and the production caller at :1605 discards the boolean. Enumerate every "the world changed" flag clear (cliproxy.lua:1444, :1490, invalidate_catalog at :1479), put each on the success path after the observation completes, log the write failure, and pin it with a spec that points _set_data_dir at an unwritable path and asserts catalog_stale() stays true.
+  - id: new
+    severity: Important
+    family: plan-table-missing-entity
+    title: |
+      `_on_login_success` has no Core-concepts row, and the guard meant to catch that searches the whole plan instead of the tables
+    detail: |
+      This is the 6th finding in family `plan-table-missing-entity`. Do NOT just add the row — the rule is that the guard must check what its message claims. tests/arch/single_source_sweeps_spec.lua:57-69 calls plan_body:find over the entire document while asserting "appear in no Core-concepts table row". Measured: `_on_login_success` (added this window as `function M._on_login_success`) appears only at plan.md:1966 and :1990, both inside `## Revisions` narrative, and the guard is green; stripping the backticks from those two prose mentions turns it red naming `_on_login_success`, proving the check never reaches the tables. Deleting the plan.md:70 row does fire, but only because those three names are not backticked elsewhere. Fix: slice plan_body from the `## Core concepts` heading to the next `^## ` and search only that slice, then add the missing row and re-run.
+  - id: new
+    severity: Minor
+    family: duplicated-logic-not-extracted
+    title: |
+      The two agent_picker repaint blocks are byte-identical and re-derive the picker's identity instead of using `recall_id_fn`
+    detail: |
+      This is the 5th finding in family `duplicated-logic-not-extracted`. Do NOT fix one site — the rule is that an identity has one derivation. agent_picker.lua:265-267 and :304-307 are the same three lines, and both hardcode `was.name` while recall_id_fn is declared at :278; a change to one silently desynchronises the other. Either let `update` accept the item (`handle.update(items, nil, handle.selected())`) or expose `handle.selected_id()` on the handle, so both call sites collapse to one line that cannot drift.
+```

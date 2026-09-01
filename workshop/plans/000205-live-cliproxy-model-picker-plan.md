@@ -38,6 +38,7 @@ from unticked boxes here.
 | `_build_items` | `lua/parley/agent_picker.lua` | modified |
 | `_providers_without_models` | `lua/parley/agent_picker.lua` | new |
 | `_view_for` | `lua/parley/agent_picker.lua` | new |
+| `_identity` | `lua/parley/agent_picker.lua` | new |
 | `key_for` | `lua/parley/keybinding_registry.lua` | new |
 
 - **Model** — one catalog row: `{ id, owner, created, display, description, series }`. The join of `/v1/models` (carries `created`) and `/v1beta/models` (carries `displayName`/`description`) on `id`.
@@ -64,6 +65,9 @@ from unticked boxes here.
 | `fetch_catalog` | `lua/parley/cliproxy.lua` | new | HTTP GET on the proxy |
 | `catalog_cached` / `_write_catalog` / `_catalog_path` | `lua/parley/cliproxy.lua` | new | filesystem (`stdpath('data')`) |
 | `catalog_stale` | `lua/parley/cliproxy.lua` | new | clock + filesystem |
+| `_on_login_success` | `lua/parley/cliproxy.lua` | new | the login watch |
+| `invalidate_catalog` / `_reset_catalog_clock` / `_set_failed_attempt_at` | `lua/parley/cliproxy.lua` | new | the staleness clocks |
+| `endpoint_opts` | `lua/parley/cliproxy.lua` | new | provider endpoint + vault |
 | `register_live_agent` | `lua/parley/init.lua` | new | `state.json` |
 | `_select` | `lua/parley/agent_picker.lua` | new | `vim.cmd` / `vim.schedule` |
 | `selected` (handle) | `lua/parley/float_picker.lua` | new | picker window state |
@@ -1970,8 +1974,9 @@ existing tests. Mutation-checked: removing the invalidation fails the new test.
   `float_picker` still wrote an items-space `sel_idx` beside the translation
   meant to replace it. Both gone.
 - **BR-48.** On a declined write the callback resolved with the parse of the
-  body we had just refused to store, so a caller could render rows the cache does
-  not contain. It resolves with the cache.
+  body we had just refused to store. Fixed at the parse-failure branch first and
+  claimed complete; the declined-classify branch still did it, and the claim was
+  wrong until round 18.
 - **BR-50 remainder.** The `vim.system` LAUNCH is guarded now, not only its
   callbacks — that was the mechanism the finding named.
 - **BR-62 remainder.** The code→table guard listed two files and could not fire
@@ -2003,3 +2008,29 @@ reviewer measured rather than a convenient one.
 
 The pattern across both: an extraction or a flag is not a fix until the thing
 that *drives* it is exercised. "Deleting X keeps the suite green" is the check.
+
+### 2026-09-01 — M3 close bundle (FIX-THEN-SHIP): BR-45, BR-48, BR-66, BR-68, BR-71..BR-74
+
+- **BR-72.** `_force_stale` moved from the start of an ATTEMPT to the top of
+  `_write_catalog` — one line above the `io.open` that can fail, so a failed
+  write still consumed the invalidation. It clears after the write succeeds. The
+  rule, twice re-broken and now stated: a flag clears where the work it is paid
+  for has actually happened.
+- **BR-48.** The declined-CLASSIFY branch still resolved with the rejected parse;
+  only the parse-failure branch had been fixed, and the plan asserted otherwise.
+  Both branches resolve with the cache.
+- **BR-74 / BR-68.** The two repaint blocks were byte-identical and each
+  hardcoded `.name` while `recall_id_fn` declared identity separately. One
+  `_identity`, used for both, and a test that drives the real `<C-a>` closure —
+  dropping `update`'s third argument now fails, where it left the suite green.
+- **BR-73.** The code→table guard searched the WHOLE plan while asserting "appear
+  in no Core-concepts table row", so a name mentioned in a Revisions entry
+  satisfied it. Scoped to table rows — and it immediately caught
+  `_on_login_success`, the entity the finding named. (My first attempt to add
+  that row made the same whole-document mistake.)
+- **BR-45.** The plan→code direction now exists as a guard: every symbol named in
+  a Core-concepts table must exist in the tree, which is what would have caught
+  `catalog_write` and `provider_states`.
+- **BR-66 / BR-71.** The handle doc no longer describes the index contract it
+  outgrew, and `workshop/lessons.md` carries the rule: a doc comment and a test
+  title are assertions about the code, swept in the same commit as the contract.
