@@ -1170,3 +1170,165 @@ findings:
       "The pattern worth carrying:" paragraph in this window's commit messages and
       plan Revisions.
 ```
+
+---
+
+## Re-review — 2026-09-01T12:36:46-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 205 — live cliproxy model picker; retire hardcoded model lists |
+| repo | parley.nvim |
+| issue file | workshop/issues/000205-live-cliproxy-model-picker.md |
+| boundary | milestone M4 |
+| milestone | M4 |
+| window | 44b9c0d0b9559c5d95f237aaf6a734097390f6b3..89c813525440efe5fd5e58afdfebb5d0a44a9f58 |
+| command | sdlc milestone-close --issue 205 --milestone M4 |
+| reviewer | claude |
+| timestamp | 2026-09-01T12:36:46-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+The window's engineering core is sound — `likeliest_culprit`/`could_have_served`/`healthiest` are genuinely pure, injected as reducers into one shared traversal, and I confirmed by revert that the eligibility fix is pinned (4 tests go red). But the boundary cannot be crossed: **`make test` is RED at HEAD** in a clean worktree — the repo's own arch guard fails because `warm_catalog` appears in no Core-concepts table row — and **BR-88's symptom is still reproducible**. I probed it: on the ordinary cold path (proxy down, dispatch starts it), `pre_query` warms *before* `ensure_running`, the fetch connection-refuses, the 30s backoff latches, and the dispatch settles with **0 catalog rows** (a second warm with the proxy up yields 7). The two new tests pre-spawn the proxy, so they pin the leg where it is already running — the same "test the path production doesn't take" failure the head commit's own message names. Of 17 open findings, 16 are unchanged at HEAD: the last commit touched only BR-88.
+
+## 1. Strengths
+
+- `lua/parley/cliproxy_auth.lua:196-249` — `CULPRIT_RANK` as a *separate* ordering rather than an inverted `HEALTH_RANK`, with the reasoning for each excluded state written where the table is. I reverted it to a `missing`-only exclusion in a scratch copy: 4 tests go red. Genuinely pinned. (ARCH-PURE pass.)
+- `lua/parley/cliproxy.lua:497-537` — one traversal, two injected reducers (`ca.likeliest_culprit` / `ca.healthiest`). The `healthiest`-wins closure that used to live inline in the IO shell is now a pure function beside its twin. (ARCH-DRY, ARCH-PURE pass.)
+- The sequential-fan-out rationale at `cliproxy.lua:499-516` is pinned by an *overlap-counting* test (`cliproxy_auth_spec.lua:735-757`), not a comment — the right shape for a concurrency invariant.
+- `scripts/golden_fixture.lua` makes the regenerator↔verifier agreement executable rather than a comment.
+- `tests/integration/cliproxy_catalog_spec.lua:422-478` drives `pre_query`, the production seam. Deleting `cliproxy.warm_catalog()` reddens both cases — verified. The mechanism is right; only its ordering relative to `ensure_running` is wrong.
+
+## 2. Critical findings
+
+**`make test` is red at HEAD** — `tests/arch/single_source_sweeps_spec.lua:80`, measured in a clean worktree at `89c8135` with `construct/generated/` populated: `these are added by this issue but appear in no Core-concepts table row: {'warm_catalog'}`. `tests/arch` is in the standard `test-integration` fan-out, so this is the ordinary suite, not an opt-in check. Fix: add a `warm_catalog` row to the Integration table — but the *rule* is BR-79's (see below), since the guard already reported this and the boundary was crossed anyway.
+
+**BR-88 not addressed** — see disposition; reproduced with a probe spec.
+
+## 3. Important findings
+
+All carried in the dispositions below (BR-78/79/80/88/90/91/93/94). None are new this round.
+
+## 4. Minor findings
+
+- `warm_catalog` (`cliproxy.lua:626-646`) carries **two stacked near-duplicate docstrings**, introduced by `89c8135` — the same commit whose review round raised BR-80 about stacked doc blocks. Folded into BR-80's note as a 4th instance rather than a new id.
+- `credential_health_across_or_one({})` calls `credential_health(cb, nil)` and yields `"no credential for nil"`, while `credential_health_across({})` yields `{state="unknown", reason="no_channel"}` — two public entry points, two answers for the same input. Folded into BR-92.
+
+## 5. Test coverage notes
+
+- `could_have_served` is tested against two hardcoded state lists (`cliproxy_auth_spec.lua:614-631`), not by iterating `HEALTH_RANK`. Adding a state to `HEALTH_RANK` fails nothing. The allowlist shape does fail *safe* (a new state is simply never a candidate), which is better than the denylist BR-75 proposed — but it fails *silently*, which is what the enumeration was for.
+- No test covers `init.lua:4398`'s empty-roster `error()` branch.
+- No test enters `credential_health_across`'s `#channels == 0` branch — it is unreachable from both callers.
+- The cold-install tests cover "proxy already up" only; the cold-start path is unpinned (and broken).
+
+## 6. Architectural notes
+
+- **ARCH-DRY** — pass. One traversal, two reducers; `golden_fixture` single-sources the golden agent.
+- **ARCH-PURE** — pass. The diagnosis policy moved out of the IO shell into `cliproxy_auth`, unit-tested with no IO or mocks.
+- **ARCH-PURPOSE** — **flag.** The shadow-sweep of `oauth-model-alias` consumers is complete (`resolve_channel` is now internal to `resolve_channels`), but the replacement source has no writer on the path a cold install actually takes. A single source whose producer runs before the thing it reads from exists is a deferred consumer, not a finished one (BR-88).
+- **ARCH-MOCK** — mostly pass: the fan-out and the warm both run against the process-level `fake_cliproxy` through the same seam production uses. One gap: `OWNER_CHANNELS` models cliproxyapi's owner→channel relation with no live conformance check, so a new `owned_by` value degrades silently to "no cliproxy channel is configured". Noting, not raising.
+- **ARCH-CONSTRAINTS** — **flag.** `_repair_budget_sec` still carries one `auth_files` term for a path that now issues one read per candidate (BR-93). Measured with the shipped constants: 21s budget vs 30s backstop becomes 27s worst case for a google-owned model, below the 5s floor `cliproxy_budget_spec.lua:38-45` asserts — the guard measures a path production no longer takes. Separately, `warm_catalog`'s per-dispatch `catalog_stale()` (file read + JSON decode) is bounded and off the keystroke path; fine.
+
+## 7. Plan revision recommendations
+
+- Core-concepts Integration table: add `warm_catalog` (`lua/parley/cliproxy.lua`, new, wraps the catalog GET at the dispatch seam) — the suite is red until this lands.
+- Core-concepts Pure table: `resolve_login_provider | lua/parley/cliproxy_config.lua | modified` names a function this window **deleted**. Correct or remove the row; the plan→code guard passes only because `cliproxy_config_spec.lua:271` mentions the name in a comment.
+- Task 4.1 (`plan.md:1354-1357`) still presents "the LEAST healthy candidate is the one that plausibly failed" as the design; a reader reaching it first gets the rule the code was fixed to stop implementing. Annotate in place.
+- The "M4 landed" Revisions entry states the reducer is `ca.unhealthier`; it is `ca.likeliest_culprit`, and `ca.unhealthier` has zero call sites.
+- Add a `## Revisions` entry recording that BR-88's fix covers only the proxy-already-running leg, with the measured cold-start result.
+
+```findings
+dispose:
+  - id: BR-75
+    disposition: not-addressed
+    note: |
+      Code leg closed and verified by revert (4 tests red), but atlas:119-127 still states eligibility over `missing` alone and cliproxy_auth_spec:614-631 hardcodes two state lists instead of iterating HEALTH_RANK.
+  - id: BR-78
+    disposition: not-addressed
+    note: |
+      GOLDEN_AGENT is single-sourced, but the demanded sweep was the deliverable: refresh_goldens.lua:21 still says "Keep in sync with ... golden_spec" (now false), golden_spec:23-28 is an orphaned block describing a pin it no longer holds, and config_tools_spec.lua:22 still hand-mirrors a hoist that moved.
+  - id: BR-79
+    disposition: not-addressed
+    note: |
+      Rows added by hand again — `warm_catalog` is missing (the arch guard fails at HEAD, red suite), `resolve_login_provider` says `modified` for a deleted function, and both the §Notes recipe and single_source_sweeps_spec.lua:45 still diff only `lua/`.
+  - id: BR-80
+    disposition: not-addressed
+    note: |
+      Both orphans survive verbatim (cliproxy.lua:477-486, :1343-1349); no lint added; and 89c8135 added a fourth instance — warm_catalog at :626-646 carries two stacked near-duplicate docstrings.
+  - id: BR-81
+    disposition: not-addressed
+    note: |
+      The spec is correctly rescoped and names a reachable caller, but lessons.md:979-982 still asserts the struck "crashed every request" claim as fact, and the reachable empty-roster error branch at init.lua:4398 has no test.
+  - id: BR-86
+    disposition: not-addressed
+    note: |
+      The worktree at HEAD still carries the uncommitted 192-line config.lua roster deletion and untracked docs/parley.nvim.md.
+  - id: BR-87
+    disposition: not-addressed
+    note: |
+      plan.md:1354-1357 is still unannotated; the round-2 Revisions entry claiming it was "annotated in place" is false.
+  - id: BR-88
+    disposition: not-addressed
+    note: |
+      Reproduced at HEAD in a clean worktree. warm_catalog runs in pre_query BEFORE ensure_running, so on the cold path (proxy down, dispatch starts it) the fetch connection-refuses, _last_attempt latches the 30s backoff, and pre_query settles with err=nil, spawned_pids=1 and catalog_cached()=0 rows; a second warm with the proxy up yields 7. Both new tests pre-spawn the fake, so they pin the already-running leg only — the third round of "the test measures a path production does not take".
+  - id: BR-90
+    disposition: not-addressed
+    note: |
+      channels_for_owner still documents order as "sorted" while cliproxy.lua:1356, the strictly-greater tiebreak and likeliest_culprit's no-eligible fallback all read it as a preference; two equally-expired credentials on a claude-* model still name antigravity.
+  - id: BR-91
+    disposition: not-addressed
+    note: |
+      single_source_sweeps_spec.lua unchanged; the plan-to-code direction still greps a bare name, which is why the deleted resolve_login_provider stays green on a comment at cliproxy_config_spec.lua:271.
+  - id: BR-92
+    disposition: not-addressed
+    note: |
+      M.unhealthier still has zero non-defining call sites, and credential_health_across's #channels == 0 branch is still unreachable — while credential_health_across_or_one({}) reaches credential_health(cb, nil) and answers "no credential for nil" instead.
+  - id: BR-93
+    disposition: not-addressed
+    note: |
+      _repair_budget_sec at cliproxy.lua:359-367 is unchanged and still carries one auth_files term for a path that now issues one sequential read per candidate.
+  - id: BR-94
+    disposition: not-addressed
+    note: |
+      atlas:119-127 and cliproxy.lua:1429-1431 still say "the least healthy is named", which CULPRIT_RANK does not implement; atlas:210 still names the deleted resolve_login_provider.
+  - id: BR-95
+    disposition: not-addressed
+    note: |
+      init.lua:4398 still uses bare error().
+  - id: BR-96
+    disposition: not-addressed
+    note: |
+      cliproxy_recovery_e2e_spec.lua:109 still has the stray leading space; chat_respond_spec.lua:1296-1308 is still at column 0.
+  - id: BR-97
+    disposition: not-addressed
+    note: |
+      default_tool_agent() still sorts a filtered roster; six of the eight call sites still route through it and the provider assertion is still is_string. Two sites (VanillaTest, PlainTest) now construct their own fixtures, which is the right shape.
+  - id: BR-98
+    disposition: not-addressed
+    note: |
+      lessons.md gained no "eligibility before ranking" entry and no "a replaced single source needs a writer on every path the original covered" entry, though 0624f00's message names the latter as "the class".
+findings:
+  - id: new
+    severity: Critical
+    family: boundary-ships-red-gate
+    title: |
+      `make test` is RED at HEAD — the repo's own arch guard fails on `warm_catalog` and the boundary was crossed anyway
+    detail: |
+      Measured in a clean worktree at 89c8135 (with construct/generated/ populated so the
+      unrelated vocabulary loader passes): tests/arch/single_source_sweeps_spec.lua:80 fails
+      with "these are added by this issue but appear in no Core-concepts table row:
+      {'warm_catalog'}". tests/arch is part of the standard test-integration fan-out
+      (Makefile.parley:97), so this is the ordinary suite. Every other spec file passes.
+      This is the 2nd finding in family `boundary-ships-red-gate`. Do NOT just add the
+      table row — the guard already reported this defect and the milestone-close ran
+      regardless. The rule: the boundary command must run the suite on the COMMITTED tree
+      at HEAD (not the working tree, which BR-86 shows is dirty) and refuse on a nonzero
+      exit. The missing row itself belongs to BR-79's enumeration, which is why the row is
+      not the fix.
+```

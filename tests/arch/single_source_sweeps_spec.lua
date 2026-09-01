@@ -42,7 +42,12 @@ describe("arch: single-source sweeps stay swept", function()
             pending("issue base commit not found")
             return
         end
-        local diff = vim.fn.system(("git diff %s~1..HEAD -- lua/"):format(base))
+        -- `git diff <base>` — NOT `<base>..HEAD`. Diffing to HEAD ignores the
+        -- working tree, so a new entity was invisible until the commit AFTER it
+        -- appeared: `make test` passed pre-commit and the same run failed once
+        -- committed, which is a guard that reports one commit late. Comparing
+        -- against the working tree flags it while it is still being written.
+        local diff = vim.fn.system(("git diff %s~1 -- lua/ scripts/"):format(base))
         if vim.v.shell_error ~= 0 then
             pending("git diff unavailable")
             return
@@ -62,12 +67,15 @@ describe("arch: single-source sweeps stay swept", function()
         plan_body = table.concat(table_rows, "\n")
         local missing = {}
         for line in diff:gmatch("[^\n]+") do
-            -- MODULE-public only: `function M.x(` and `M.x = …`. A bare
-            -- `fn = function()` is a field in a local table literal (a picker
-            -- mapping), not exported surface, and matching it made the guard
-            -- demand a table row for a closure.
+            -- Public FUNCTIONS, in either definition form. Deliberately not
+            -- data: `M.AGENT = { … }` is a constant belonging to a module the
+            -- tables already name by path, and demanding a row per constant
+            -- floods the table without adding a check. A new FUNCTION in an
+            -- already-listed module still needs its row — that is the case the
+            -- guard exists for. A bare `fn = function()` is a field in a local
+            -- table literal (a picker mapping), not exported surface.
             local name = line:match("^%+function M%.([%w_]+)%(")
-                or line:match("^%+M%.([%w_]+) = ")
+                or line:match("^%+M%.([%w_]+) = function")
             if name and not plan_body:find("`" .. name .. "`", 1, true) then
                 missing[name] = true
             end

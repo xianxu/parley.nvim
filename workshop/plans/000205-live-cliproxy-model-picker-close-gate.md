@@ -1894,6 +1894,98 @@ rounds:
           round: 24
       boundary: M4
       blocked: true
+    - "n": 25
+      timestamp: "2026-09-01T12:36:46-07:00"
+      agent: claude
+      dispose:
+        - id: BR-75
+          disposition: not-addressed
+          note: Code leg closed and verified by revert (4 tests red), but atlas:119-127 still states eligibility over `missing` alone and cliproxy_auth_spec:614-631 hardcodes two state lists instead of iterating HEALTH_RANK.
+          round: 25
+        - id: BR-78
+          disposition: not-addressed
+          note: 'GOLDEN_AGENT is single-sourced, but the demanded sweep was the deliverable: refresh_goldens.lua:21 still says "Keep in sync with ... golden_spec" (now false), golden_spec:23-28 is an orphaned block describing a pin it no longer holds, and config_tools_spec.lua:22 still hand-mirrors a hoist that moved.'
+          round: 25
+        - id: BR-79
+          disposition: not-addressed
+          note: Rows added by hand again — `warm_catalog` is missing (the arch guard fails at HEAD, red suite), `resolve_login_provider` says `modified` for a deleted function, and both the §Notes recipe and single_source_sweeps_spec.lua:45 still diff only `lua/`.
+          round: 25
+        - id: BR-80
+          disposition: not-addressed
+          note: Both orphans survive verbatim (cliproxy.lua:477-486, :1343-1349); no lint added; and 89c8135 added a fourth instance — warm_catalog at :626-646 carries two stacked near-duplicate docstrings.
+          round: 25
+        - id: BR-81
+          disposition: not-addressed
+          note: The spec is correctly rescoped and names a reachable caller, but lessons.md:979-982 still asserts the struck "crashed every request" claim as fact, and the reachable empty-roster error branch at init.lua:4398 has no test.
+          round: 25
+        - id: BR-86
+          disposition: not-addressed
+          note: The worktree at HEAD still carries the uncommitted 192-line config.lua roster deletion and untracked docs/parley.nvim.md.
+          round: 25
+        - id: BR-87
+          disposition: not-addressed
+          note: plan.md:1354-1357 is still unannotated; the round-2 Revisions entry claiming it was "annotated in place" is false.
+          round: 25
+        - id: BR-88
+          disposition: not-addressed
+          note: Reproduced at HEAD in a clean worktree. warm_catalog runs in pre_query BEFORE ensure_running, so on the cold path (proxy down, dispatch starts it) the fetch connection-refuses, _last_attempt latches the 30s backoff, and pre_query settles with err=nil, spawned_pids=1 and catalog_cached()=0 rows; a second warm with the proxy up yields 7. Both new tests pre-spawn the fake, so they pin the already-running leg only — the third round of "the test measures a path production does not take".
+          round: 25
+        - id: BR-90
+          disposition: not-addressed
+          note: channels_for_owner still documents order as "sorted" while cliproxy.lua:1356, the strictly-greater tiebreak and likeliest_culprit's no-eligible fallback all read it as a preference; two equally-expired credentials on a claude-* model still name antigravity.
+          round: 25
+        - id: BR-91
+          disposition: not-addressed
+          note: single_source_sweeps_spec.lua unchanged; the plan-to-code direction still greps a bare name, which is why the deleted resolve_login_provider stays green on a comment at cliproxy_config_spec.lua:271.
+          round: 25
+        - id: BR-92
+          disposition: not-addressed
+          note: 'M.unhealthier still has zero non-defining call sites, and credential_health_across''s #channels == 0 branch is still unreachable — while credential_health_across_or_one({}) reaches credential_health(cb, nil) and answers "no credential for nil" instead.'
+          round: 25
+        - id: BR-93
+          disposition: not-addressed
+          note: _repair_budget_sec at cliproxy.lua:359-367 is unchanged and still carries one auth_files term for a path that now issues one sequential read per candidate.
+          round: 25
+        - id: BR-94
+          disposition: not-addressed
+          note: atlas:119-127 and cliproxy.lua:1429-1431 still say "the least healthy is named", which CULPRIT_RANK does not implement; atlas:210 still names the deleted resolve_login_provider.
+          round: 25
+        - id: BR-95
+          disposition: not-addressed
+          note: init.lua:4398 still uses bare error().
+          round: 25
+        - id: BR-96
+          disposition: not-addressed
+          note: cliproxy_recovery_e2e_spec.lua:109 still has the stray leading space; chat_respond_spec.lua:1296-1308 is still at column 0.
+          round: 25
+        - id: BR-97
+          disposition: not-addressed
+          note: default_tool_agent() still sorts a filtered roster; six of the eight call sites still route through it and the provider assertion is still is_string. Two sites (VanillaTest, PlainTest) now construct their own fixtures, which is the right shape.
+          round: 25
+        - id: BR-98
+          disposition: not-addressed
+          note: lessons.md gained no "eligibility before ranking" entry and no "a replaced single source needs a writer on every path the original covered" entry, though 0624f00's message names the latter as "the class".
+          round: 25
+      findings:
+        - id: BR-99
+          severity: Critical
+          title: '`make test` is RED at HEAD — the repo''s own arch guard fails on `warm_catalog` and the boundary was crossed anyway'
+          detail: |-
+            Measured in a clean worktree at 89c8135 (with construct/generated/ populated so the
+            unrelated vocabulary loader passes): tests/arch/single_source_sweeps_spec.lua:80 fails
+            with "these are added by this issue but appear in no Core-concepts table row:
+            {'warm_catalog'}". tests/arch is part of the standard test-integration fan-out
+            (Makefile.parley:97), so this is the ordinary suite. Every other spec file passes.
+            This is the 2nd finding in family `boundary-ships-red-gate`. Do NOT just add the
+            table row — the guard already reported this defect and the milestone-close ran
+            regardless. The rule: the boundary command must run the suite on the COMMITTED tree
+            at HEAD (not the working tree, which BR-86 shows is dirty) and refuse on a nonzero
+            exit. The missing row itself belongs to BR-79's enumeration, which is why the row is
+            not the fix.
+          family: boundary-ships-red-gate
+          round: 25
+      boundary: M4
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#205 (boundary-review)
@@ -2779,6 +2871,43 @@ later rounds disposed of them. Generated — edit the gate, not this file.
   "The pattern worth carrying:" paragraph in this window's commit messages and
   plan Revisions.
 
+## Round 25 — 2026-09-01T12:36:46-07:00 (claude) — BLOCKED
+
+### Disposed
+
+- BR-75 — not-addressed — Code leg closed and verified by revert (4 tests red), but atlas:119-127 still states eligibility over `missing` alone and cliproxy_auth_spec:614-631 hardcodes two state lists instead of iterating HEALTH_RANK.
+- BR-78 — not-addressed — GOLDEN_AGENT is single-sourced, but the demanded sweep was the deliverable: refresh_goldens.lua:21 still says "Keep in sync with ... golden_spec" (now false), golden_spec:23-28 is an orphaned block describing a pin it no longer holds, and config_tools_spec.lua:22 still hand-mirrors a hoist that moved.
+- BR-79 — not-addressed — Rows added by hand again — `warm_catalog` is missing (the arch guard fails at HEAD, red suite), `resolve_login_provider` says `modified` for a deleted function, and both the §Notes recipe and single_source_sweeps_spec.lua:45 still diff only `lua/`.
+- BR-80 — not-addressed — Both orphans survive verbatim (cliproxy.lua:477-486, :1343-1349); no lint added; and 89c8135 added a fourth instance — warm_catalog at :626-646 carries two stacked near-duplicate docstrings.
+- BR-81 — not-addressed — The spec is correctly rescoped and names a reachable caller, but lessons.md:979-982 still asserts the struck "crashed every request" claim as fact, and the reachable empty-roster error branch at init.lua:4398 has no test.
+- BR-86 — not-addressed — The worktree at HEAD still carries the uncommitted 192-line config.lua roster deletion and untracked docs/parley.nvim.md.
+- BR-87 — not-addressed — plan.md:1354-1357 is still unannotated; the round-2 Revisions entry claiming it was "annotated in place" is false.
+- BR-88 — not-addressed — Reproduced at HEAD in a clean worktree. warm_catalog runs in pre_query BEFORE ensure_running, so on the cold path (proxy down, dispatch starts it) the fetch connection-refuses, _last_attempt latches the 30s backoff, and pre_query settles with err=nil, spawned_pids=1 and catalog_cached()=0 rows; a second warm with the proxy up yields 7. Both new tests pre-spawn the fake, so they pin the already-running leg only — the third round of "the test measures a path production does not take".
+- BR-90 — not-addressed — channels_for_owner still documents order as "sorted" while cliproxy.lua:1356, the strictly-greater tiebreak and likeliest_culprit's no-eligible fallback all read it as a preference; two equally-expired credentials on a claude-* model still name antigravity.
+- BR-91 — not-addressed — single_source_sweeps_spec.lua unchanged; the plan-to-code direction still greps a bare name, which is why the deleted resolve_login_provider stays green on a comment at cliproxy_config_spec.lua:271.
+- BR-92 — not-addressed — M.unhealthier still has zero non-defining call sites, and credential_health_across's #channels == 0 branch is still unreachable — while credential_health_across_or_one({}) reaches credential_health(cb, nil) and answers "no credential for nil" instead.
+- BR-93 — not-addressed — _repair_budget_sec at cliproxy.lua:359-367 is unchanged and still carries one auth_files term for a path that now issues one sequential read per candidate.
+- BR-94 — not-addressed — atlas:119-127 and cliproxy.lua:1429-1431 still say "the least healthy is named", which CULPRIT_RANK does not implement; atlas:210 still names the deleted resolve_login_provider.
+- BR-95 — not-addressed — init.lua:4398 still uses bare error().
+- BR-96 — not-addressed — cliproxy_recovery_e2e_spec.lua:109 still has the stray leading space; chat_respond_spec.lua:1296-1308 is still at column 0.
+- BR-97 — not-addressed — default_tool_agent() still sorts a filtered roster; six of the eight call sites still route through it and the provider assertion is still is_string. Two sites (VanillaTest, PlainTest) now construct their own fixtures, which is the right shape.
+- BR-98 — not-addressed — lessons.md gained no "eligibility before ranking" entry and no "a replaced single source needs a writer on every path the original covered" entry, though 0624f00's message names the latter as "the class".
+
+### Raised
+
+- **BR-99** [Critical] `boundary-ships-red-gate` `make test` is RED at HEAD — the repo's own arch guard fails on `warm_catalog` and the boundary was crossed anyway
+  Measured in a clean worktree at 89c8135 (with construct/generated/ populated so the
+  unrelated vocabulary loader passes): tests/arch/single_source_sweeps_spec.lua:80 fails
+  with "these are added by this issue but appear in no Core-concepts table row:
+  {'warm_catalog'}". tests/arch is part of the standard test-integration fan-out
+  (Makefile.parley:97), so this is the ordinary suite. Every other spec file passes.
+  This is the 2nd finding in family `boundary-ships-red-gate`. Do NOT just add the
+  table row — the guard already reported this defect and the milestone-close ran
+  regardless. The rule: the boundary command must run the suite on the COMMITTED tree
+  at HEAD (not the working tree, which BR-86 shows is dirty) and refuse on a nonzero
+  exit. The missing row itself belongs to BR-79's enumeration, which is why the row is
+  not the fix.
+
 ## Open findings
 
 - **BR-13** [Important] `rank-key-version-extraction` rank_key's `< 100` threshold answers the 120B instance, not the class: any parameter count below 100 still reads as a version
@@ -2822,3 +2951,4 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-96** [Minor] `style-drift-in-diff` Two indentation regressions introduced by this window
 - **BR-97** [Minor] `test-title-overstates-guard` default_tool_agent() returns the alphabetically-first tool-enabled agent, not "the default", and the provider assertion was weakened to is_string
 - **BR-98** [Minor] `lesson-not-recorded` The two Criticals this window shipped state their class only in commit messages and the plan's Revisions; workshop/lessons.md gained neither
+- **BR-99** [Critical] `boundary-ships-red-gate` `make test` is RED at HEAD — the repo's own arch guard fails on `warm_catalog` and the boundary was crossed anyway

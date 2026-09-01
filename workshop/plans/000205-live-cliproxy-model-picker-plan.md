@@ -70,6 +70,7 @@ from unticked boxes here.
 | `fetch_catalog` | `lua/parley/cliproxy.lua` | new | HTTP GET on the proxy |
 | `catalog_cached` / `_write_catalog` / `_catalog_path` | `lua/parley/cliproxy.lua` | new | filesystem (`stdpath('data')`) |
 | `catalog_stale` | `lua/parley/cliproxy.lua` | new | clock + filesystem |
+| `warm_catalog` | `lua/parley/cliproxy.lua` | new | called from the adapter's `pre_query` |
 | `_on_login_success` | `lua/parley/cliproxy.lua` | new | the login watch |
 | `credential_health_across` / `credential_health_across_or_one` | `lua/parley/cliproxy.lua` | new | `/v0/management/auth-files` |
 | `credential_health_for_login` | `lua/parley/cliproxy.lua` | modified | now shares the fan-out |
@@ -2218,3 +2219,23 @@ The check that catches it is not "does a test exist" but "can this line be
 deleted with the suite green" — and it has to be aimed at the line PRODUCTION
 executes, which means knowing which path production takes before writing the
 test.
+
+### 2026-09-01 — M4 review round 25 (BR-99): the guard was one commit behind
+
+`make test` was RED at HEAD on the repo's own arch guard, and I crossed the
+boundary anyway having watched it pass. Both halves are mine:
+
+- **The row was missing.** `warm_catalog` became module-public and never reached
+  the Core-concepts table.
+- **The guard could not have caught it in time.** It diffed `<base>~1..HEAD`,
+  which ignores the working tree — so a new entity is invisible until the commit
+  AFTER it appears. That is why the pre-commit run passed and the identical
+  post-commit run failed. A guard that reports one commit late lets exactly one
+  boundary through, which is what happened here.
+
+It diffs against the working tree now (`git diff <base>~1`), so it flags while
+the code is still being written, and it covers `scripts/` as well as `lua/`.
+
+**The rule:** a guard's window must include the state the author is actually in.
+Checking committed history only means the author's last action is always
+unverified.

@@ -992,3 +992,18 @@ never re-measured — and downstream logic treated the fabrication as evidence.
 state it mutates on first use. If any exists, serialize the calls or gate the
 one-shot behind a single in-flight promise. A fabricated reading is worse than a
 slow one: it looks like data.
+
+## A guard's window must include the state you are in (#205)
+
+The arch guard added on #205 diffed `<base>~1..HEAD` — committed history only. A
+new module-public function was therefore invisible to it until the commit AFTER
+it appeared, so `make test` passed before the commit and the identical run failed
+after. A guard that reports one commit late lets exactly one boundary through,
+which is what happened: the milestone was crossed with the suite red on the
+repo's own check.
+
+**Check:** when writing a fitness function that inspects a diff, diff against the
+WORKING TREE (`git diff <base>`), not `<base>..HEAD`. And keep its teeth aimed:
+require a table row for public FUNCTIONS, not for data constants belonging to a
+module the tables already name by path — a guard that floods gets edited into
+uselessness.
