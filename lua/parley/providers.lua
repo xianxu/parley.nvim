@@ -108,7 +108,26 @@ local CLIPROXY_STRATEGIES = {
     none = true,
 }
 
+--- Resolve the strategy for a model: an explicit choice, else what the FAMILY
+--- supports, else the provider default.
+---
+--- The family step is what makes hand-stating the strategy per agent
+--- unnecessary. `cliproxy_default_web_search_strategy` is measured knowledge
+--- about what each family can actually do, and it existed as a single source
+--- while five config sites still spelled the same answer out by hand — a source
+--- of truth nothing consulted. An agent may still override; it just no longer
+--- has to restate the default to get correct behaviour.
 local function get_cliproxy_strategy(model_config)
+    -- PRECEDENCE, and each step is there for a reason:
+    --   1. the agent's own choice — an explicit override always wins;
+    --   2. a provider-level `none` — an operator turning server-side search OFF
+    --      globally, which derived family knowledge must not undo;
+    --   3. a CORRECTION when the configured strategy is one the family cannot
+    --      use — measured, single-sourced, and the reason an agent no longer has
+    --      to hand-state the obvious answer. It corrects; it never invents, so
+    --      an unconfigured setup still resolves to "none";
+    --   4. the provider default;
+    --   5. none.
     if type(model_config) == "table" then
         local model_strategy = model_config.web_search_strategy
         if CLIPROXY_STRATEGIES[model_strategy] then
@@ -120,9 +139,30 @@ local function get_cliproxy_strategy(model_config)
     if not ok or not parley or not parley.dispatcher or not parley.dispatcher.providers then
         return "none"
     end
-
     local config = parley.dispatcher.providers.cliproxyapi or {}
     local strategy = config.web_search_strategy
+    if strategy == "none" then
+        return "none" -- an explicit global off switch outranks derivation
+    end
+
+    -- Only CORRECT a configured strategy; never invent one. With nothing
+    -- configured the answer stays "none", as it always has — deriving here would
+    -- silently switch server-side search ON for a setup that never asked for it.
+    if type(model_config) == "table" and CLIPROXY_STRATEGIES[strategy] then
+        local derived = M.cliproxy_default_web_search_strategy(model_config.model)
+        if CLIPROXY_STRATEGIES[derived] then
+            -- Derivation CORRECTS a configured strategy the family cannot use;
+            -- it does not replace one that works. `openai_search_model` and
+            -- `openai_tools_route` are both openai-family answers, so a
+            -- configured search-model route survives for a gpt agent — while a
+            -- claude agent under either openai route is corrected, because
+            -- measurement says those come back empty there.
+            local family_ok = strategy == derived
+                or (derived == "openai_tools_route" and strategy == "openai_search_model")
+            return family_ok and strategy or derived
+        end
+    end
+
     if CLIPROXY_STRATEGIES[strategy] then
         return strategy
     end

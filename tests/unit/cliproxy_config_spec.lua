@@ -336,15 +336,18 @@ end)
 -- channels_for_owner / resolve_channels (issue #205 M4)
 --------------------------------------------------------------------------------
 describe("channels_for_owner", function()
-    it("narrows a catalog owner to the channels that can serve it", function()
+    it("narrows a catalog owner to the channels that can serve it, NATIVE first", function()
         -- Plural on purpose: antigravity re-serves other vendors' models
         -- alongside the native channel, so an owner never implies one channel.
-        assert.same({ "antigravity", "claude" }, cc.channels_for_owner("anthropic"))
-        assert.same({ "antigravity", "codex" }, cc.channels_for_owner("openai"))
+        -- Order is PREFERENCE, not alphabetical — callers read [1] as "the
+        -- channel" when only one can be probed, so a sorted list pointed the
+        -- operator at antigravity before any credential had been read.
+        assert.same({ "claude", "antigravity" }, cc.channels_for_owner("anthropic"))
+        assert.same({ "codex", "antigravity" }, cc.channels_for_owner("openai"))
     end)
 
     it("keeps every google channel, because they share one login", function()
-        assert.same({ "aistudio", "antigravity", "gemini", "gemini-cli" },
+        assert.same({ "gemini-cli", "gemini", "aistudio", "antigravity" },
             cc.channels_for_owner("google"))
     end)
 
@@ -386,7 +389,7 @@ describe("resolve_channels", function()
     end)
 
     it("falls back to the catalog owner's candidates", function()
-        assert.same({ "antigravity", "claude" },
+        assert.same({ "claude", "antigravity" },
             cc.resolve_channels("claude-opus-5", {}, CATALOG))
     end)
 
@@ -403,3 +406,21 @@ describe("resolve_channels", function()
     end)
 end)
 
+
+describe("channels_for_owner preference order", function()
+    it("puts the native channel ahead of the cross-vendor one, for every owner", function()
+        -- The bug: these lists were alphabetical, and callers read [1] as "the
+        -- channel" — `recover` derives its pre-flight login from it — so
+        -- `antigravity` outranked the native channel for every owner it
+        -- re-serves and the operator was pointed at a channel they may never
+        -- have used before any credential was read.
+        for owner, native in pairs({ anthropic = "claude", openai = "codex",
+                                     google = "gemini-cli" }) do
+            local channels = cc.channels_for_owner(owner)
+            assert.equals(native, channels[1],
+                owner .. " must prefer its native channel")
+            assert.equals("antigravity", channels[#channels],
+                owner .. " must keep the cross-vendor fallback last")
+        end
+    end)
+end)

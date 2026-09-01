@@ -254,7 +254,7 @@ local config = {
 		{
 			provider = "cliproxyapi",
 			name = "ToolSonnet*",
-			model = { model = "claude-sonnet-5", web_search_strategy = "anthropic_tools_route" },
+			model = { model = "claude-sonnet-5" },
 			system_prompt = require("parley.defaults").chat_system_prompt,
 			synthetic_system_prompt = true,
 			tools = { "@all"},
@@ -262,7 +262,7 @@ local config = {
 		{
 			provider = "cliproxyapi",
 			name = "ToolFable*",
-			model = { model = "claude-fable-5", web_search_strategy = "anthropic_tools_route" },
+			model = { model = "claude-fable-5" },
 			system_prompt = require("parley.defaults").chat_system_prompt,
 			synthetic_system_prompt = true,
 			tools = { "@all"},
@@ -274,7 +274,13 @@ local config = {
 			-- 8381829). For a read-only agent instead, set tools = {"@readonly"}.
 			provider = "cliproxyapi",
 			name = "ToolOpus*",
-			model = { model = "claude-opus-4-8", web_search_strategy = "anthropic_tools_route" },
+			-- No `web_search_strategy` here: it is DERIVED from the model family
+			-- (#205). claude-* needs the anthropic route, gpt-* the openai one,
+			-- and gemini-family models none at all — measured, single-sourced in
+			-- providers.cliproxy_default_web_search_strategy, and CORRECTED by
+			-- the resolution chain when the configured strategy cannot serve the
+			-- family. State it only to override that.
+			model = { model = "claude-opus-4-8" },
 			system_prompt = require("parley.defaults").chat_system_prompt,
 			synthetic_system_prompt = true,
 			tools = { "@all"},
@@ -392,14 +398,14 @@ local config = {
 			provider = "cliproxyapi",
 			name = "Claude-Sonnet*",
 			-- CLIProxy web-search tool access currently requires code_execution model family.
-			model = { model = "claude-sonnet-5", web_search_strategy = "anthropic_tools_route" },
+			model = { model = "claude-sonnet-5" },
 			system_prompt = require("parley.defaults").chat_system_prompt,
 		},
 		{
 			provider = "cliproxyapi",
 			name = "Claude-Opus*",
 			-- CLIProxy web-search tool access currently requires code_execution model family.
-			model = { model = "claude-opus-4-8", temperature = 0.8, web_search_strategy = "anthropic_tools_route" },
+			model = { model = "claude-opus-4-8", temperature = 0.8 },
 			system_prompt = require("parley.defaults").chat_system_prompt,
 		},
 	},

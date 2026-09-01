@@ -406,3 +406,114 @@ describe("catalog_stale", function()
         assert.is_true(stale({ cached_at = 999, forced = true }))
     end)
 end)
+
+--------------------------------------------------------------------------------
+-- the derived strategy reaches the resolution chain (#205 BR-15)
+--------------------------------------------------------------------------------
+describe("get_cliproxy_strategy derivation", function()
+    local providers = require("parley.providers")
+
+    local function with_provider_default(default, fn)
+        local parley = require("parley")
+        local saved = parley.dispatcher
+        parley.dispatcher = { providers = { cliproxyapi = { web_search_strategy = default } } }
+        local ok, err = pcall(fn)
+        parley.dispatcher = saved
+        assert.is_true(ok, tostring(err))
+    end
+
+    it("derives from the family when the agent states nothing", function()
+        -- The point of the single source: an agent should not have to restate
+        -- what the family already determines. Five config sites used to.
+        with_provider_default("openai_tools_route", function()
+            assert.equals("anthropic_tools_route",
+                providers.cliproxy_strategy({ model = "claude-opus-4-8" }))
+            assert.equals("none",
+                providers.cliproxy_strategy({ model = "gemini-3-flash" }))
+            assert.equals("openai_tools_route",
+                providers.cliproxy_strategy({ model = "gpt-5.6-sol" }))
+        end)
+    end)
+
+    it("still lets an agent override the derived answer", function()
+        with_provider_default("openai_tools_route", function()
+            assert.equals("none", providers.cliproxy_strategy({
+                model = "claude-opus-4-8", web_search_strategy = "none" }))
+        end)
+    end)
+end)
+
+describe("get_cliproxy_strategy precedence", function()
+    local providers = require("parley.providers")
+    local parley = require("parley")
+
+    local function with_default(default, fn)
+        local saved = parley.dispatcher
+        parley.dispatcher = { providers = { cliproxyapi = { web_search_strategy = default } } }
+        local ok, err = pcall(fn)
+        parley.dispatcher = saved
+        assert.is_true(ok, tostring(err))
+    end
+
+    it("lets a provider-level `none` turn search off, derivation notwithstanding", function()
+        -- An operator setting `none` on the provider is switching server-side
+        -- search OFF globally. Family knowledge is a DEFAULT, and a default must
+        -- not undo an explicit off switch — the first version of this derivation
+        -- did exactly that.
+        with_default("none", function()
+            assert.equals("none", providers.cliproxy_strategy({ model = "claude-opus-4-8" }))
+        end)
+    end)
+
+    it("still prefers the family over a provider default that is merely wrong for it", function()
+        with_default("openai_tools_route", function()
+            assert.equals("anthropic_tools_route",
+                providers.cliproxy_strategy({ model = "claude-opus-4-8" }))
+        end)
+    end)
+end)
+
+describe("get_cliproxy_strategy corrects rather than replaces", function()
+    local providers = require("parley.providers")
+    local parley = require("parley")
+
+    local function with_default(default, fn)
+        local saved = parley.dispatcher
+        parley.dispatcher = { providers = { cliproxyapi = { web_search_strategy = default } } }
+        local ok, err = pcall(fn)
+        parley.dispatcher = saved
+        assert.is_true(ok, tostring(err))
+    end
+
+    it("keeps a configured strategy the family CAN use", function()
+        -- openai_search_model and openai_tools_route are both openai-family
+        -- answers, so a configured search-model route survives for a gpt agent.
+        -- Replacing it would undo an operator's considered choice.
+        with_default("openai_search_model", function()
+            assert.equals("openai_search_model",
+                providers.cliproxy_strategy({ model = "gpt-5.4" }))
+        end)
+    end)
+
+    it("corrects one the family cannot", function()
+        -- Measured: a claude model on either openai route comes back empty.
+        with_default("openai_search_model", function()
+            assert.equals("anthropic_tools_route",
+                providers.cliproxy_strategy({ model = "claude-opus-4-8" }))
+        end)
+    end)
+end)
+
+describe("get_cliproxy_strategy never invents a strategy", function()
+    it("stays none when nothing is configured at all", function()
+        -- Correcting a wrong configured value is not the same as switching
+        -- server-side search on for a setup that never asked for it.
+        local parley = require("parley")
+        local saved = parley.dispatcher
+        parley.dispatcher = { providers = { cliproxyapi = {} } }
+        local strategy = require("parley.providers")
+            .cliproxy_strategy({ model = "claude-opus-4-8" })
+        parley.dispatcher = saved
+        assert.equals("none", strategy)
+    end)
+end)

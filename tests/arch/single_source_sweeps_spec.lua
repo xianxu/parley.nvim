@@ -116,11 +116,35 @@ describe("arch: single-source sweeps stay swept", function()
                 -- table rows only: prose may legitimately discuss removed names
                 for line in body:gmatch("[^\n]+") do
                     if line:match("^| `") then
+                        -- A row names either a SYMBOL or a MODULE. A module is
+                        -- checked as a file (its row carries the path in another
+                        -- cell); a symbol must have a DEFINITION, not a mention.
+                        local names = {}
                         for name in line:gmatch("`([%w_]+)`") do
+                            names[#names + 1] = name
+                        end
+                        local paths = {}
+                        for path in line:gmatch("`([%w_/%.%-]+%.lua)`") do
+                            paths[#paths + 1] = vim.fn.fnamemodify(path, ":t:r")
+                        end
+                        for _, modname in ipairs(paths) do
+                            for i = #names, 1, -1 do
+                                if names[i] == modname then
+                                    table.remove(names, i)
+                                end
+                            end
+                        end
+                        for _, name in ipairs(names) do
                             if #name > 3 and not name:match("^lua$") then
+                                -- A DEFINITION, not a mention. Grepping for the
+                                -- bare name let a spec comment keep a deleted
+                                -- function's table row green — the guard then
+                                -- certifies exactly the drift it exists to catch.
+                                local pattern = ("(function M\\.%s\\b|M\\.%s *=|local function %s\\b|%s *=)")
+                                    :format(name, name, name, name)
                                 local hit = vim.fn.systemlist(
-                                    ("grep -rl -- %s lua/ tests/ 2>/dev/null"):format(
-                                        vim.fn.shellescape(name)))
+                                    ("grep -rlE -- %s lua/ tests/ scripts/ 2>/dev/null"):format(
+                                        vim.fn.shellescape(pattern)))
                                 if #hit == 0 then
                                     missing[#missing + 1] = doc .. ": " .. name
                                 end

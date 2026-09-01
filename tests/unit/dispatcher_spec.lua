@@ -339,9 +339,14 @@ describe("prepare_payload: anthropic client-side tools (Task 1.5)", function()
     -- providers.cliproxy_route, so the tools always match the payload.
 
     it("cliproxyapi routing: tools follow the ROUTE, not the model family", function()
-        -- No strategy override → openai route → openai-shaped tools, matching
-        -- the openai-shaped payload format_payload builds for this model.
-        local payload = dispatcher.prepare_payload(msgs(user("hi")), model, "cliproxyapi", { "read_file" })
+        -- The invariant is that the tool SHAPE matches the payload shape. Which
+        -- route a model takes changed in #205: a claude model under a configured
+        -- openai strategy is now CORRECTED to the anthropic route, because
+        -- measurement showed claude returns an empty completion on the openai
+        -- route with web_search on. So this case uses an openai-family model,
+        -- where the configured strategy is one the family can actually use.
+        local openai_model = vim.tbl_extend("force", model, { model = "gpt-5.6-sol" })
+        local payload = dispatcher.prepare_payload(msgs(user("hi")), openai_model, "cliproxyapi", { "read_file" })
         assert.is_not_nil(payload.tools)
         local found
         for _, t in ipairs(payload.tools) do
@@ -513,17 +518,21 @@ describe("prepare_payload: openai-family message translation (#198 M2)", functio
                 "anthropic", nil)._parley_tool_wire)
         end)
 
-        it("survives the anthropic-route model whose bare name would mislead", function()
-            -- claude-sonnet-5 WITHOUT the strategy resolves to the openai
-            -- wire; WITH it, anthropic. A name-only re-derivation on the
-            -- response side cannot tell these apart.
-            local with = dispatcher.prepare_payload(msgs(user("hi")),
-                { model = "claude-sonnet-5", web_search_strategy = "anthropic_tools_route" },
-                "cliproxyapi", nil)
-            local without = dispatcher.prepare_payload(msgs(user("hi")),
+        it("survives a model whose bare name would mislead", function()
+            -- The invariant: the wire cannot be re-derived from the model NAME on
+            -- the response side, so the payload carries a stamp.
+            -- The SAME model on two different wires, decided by the agent's own
+            -- field: claude-sonnet-5 defaults to the anthropic route (corrected
+            -- from the configured openai strategy, #205) and drops to the openai
+            -- wire when the agent switches server-side search off. A response-side
+            -- re-derivation from the name would give one answer for both.
+            local routed = dispatcher.prepare_payload(msgs(user("hi")),
                 { model = "claude-sonnet-5" }, "cliproxyapi", nil)
-            assert.equals("anthropic", with._parley_tool_wire)
-            assert.equals("openai", without._parley_tool_wire)
+            local opted_out = dispatcher.prepare_payload(msgs(user("hi")),
+                { model = "claude-sonnet-5", web_search_strategy = "none" },
+                "cliproxyapi", nil)
+            assert.equals("anthropic", routed._parley_tool_wire)
+            assert.equals("openai", opted_out._parley_tool_wire)
         end)
 
         it("is nil for a provider with no wire", function()

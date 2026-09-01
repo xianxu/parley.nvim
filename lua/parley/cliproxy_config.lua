@@ -183,10 +183,16 @@ end
 -- one channel. Written out rather than inverted from PROVIDER_OWNED_BY, whose
 -- keys are LOGIN-shaped (`google`) and therefore not channels at all —
 -- CHANNEL_LOGIN has no `google` key, it has three channels that share that login.
+-- PREFERENCE ORDER, not alphabetical. Callers read [1] as "the channel" when
+-- only one can be probed, and `recover` derives its pre-flight login from it —
+-- so a sorted list put `antigravity` ahead of the NATIVE channel for every owner
+-- it re-serves, and the operator was pointed at a cross-vendor channel before
+-- any credential had been read. Native channels first; antigravity last,
+-- because it is the fallback that happens to also carry these models.
 local OWNER_CHANNELS = {
-    anthropic   = { "antigravity", "claude" },
-    openai      = { "antigravity", "codex" },
-    google      = { "aistudio", "antigravity", "gemini", "gemini-cli" },
+    anthropic   = { "claude", "antigravity" },
+    openai      = { "codex", "antigravity" },
+    google      = { "gemini-cli", "gemini", "aistudio", "antigravity" },
     antigravity = { "antigravity" },
     moonshot    = { "kimi" },
     xai         = { "xai" },
@@ -194,7 +200,7 @@ local OWNER_CHANNELS = {
 
 --- Candidate channels for a catalog row's `owned_by`.
 ---@param owner string
----@return string[] # sorted; empty when the owner is unknown
+---@return string[] # in PREFERENCE order (native channel first); empty when unknown
 function M.channels_for_owner(owner)
     return vim.deepcopy(OWNER_CHANNELS[owner] or {})
 end

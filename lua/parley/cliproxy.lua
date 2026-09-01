@@ -25,6 +25,16 @@ local M = {}
 local CURL_MAX_TIME = 2      -- seconds, --max-time on every probe
 local PORT_RELEASE_MS = 2000 -- wait_port_released deadline
 local POLL_BUDGET_MS = 5000  -- poll_until_healthy deadline
+-- The largest candidate set OWNER_CHANNELS produces (google: aistudio,
+-- antigravity, gemini, gemini-cli). Reads are sequential, so this multiplies the
+-- credential-read term of the repair budget.
+-- How many candidates the RECOVERY path reads. Bounded because the reads are
+-- sequential and sit inside the dispatcher's backstop: four google channels at
+-- CURL_MAX_TIME each would leave under 5s of headroom, which the budget spec
+-- rejects. Two is enough in practice — OWNER_CHANNELS lists the NATIVE channel
+-- first, so the credential most likely to have served the request is always
+-- read, with one cross-vendor fallback behind it.
+local MAX_CANDIDATE_CHANNELS = 2
 
 local _spawned = {}
 
@@ -357,9 +367,15 @@ local _management_restart_done = false
 -- Derived from the constants each step actually uses, NOT restated: CURL_MAX_TIME
 -- is the --max-time on every probe, and the two bounded polls check their
 -- deadline only AFTER a probe returns, so each can overrun by one full probe.
+--
+-- `auth_files` is multiplied by MAX_CANDIDATE_CHANNELS because the readings are
+-- SEQUENTIAL (they share one-shot repair state, so they cannot overlap), and a
+-- google-owned model has four candidate channels. Carrying a single term here
+-- while the code issues four reads is how a budget silently stops bounding
+-- anything.
 M._repair_budget_sec = {
     liveness_probe = CURL_MAX_TIME,
-    auth_files = CURL_MAX_TIME,
+    auth_files = CURL_MAX_TIME * MAX_CANDIDATE_CHANNELS,
     stop_identity_probe = CURL_MAX_TIME,
     port_release = PORT_RELEASE_MS / 1000 + CURL_MAX_TIME,
     ensure_probe = CURL_MAX_TIME,
@@ -1355,6 +1371,11 @@ function M.recover(failure, retry, give_up)
     -- guessing: naming the wrong account is worse than admitting we don't know.
     local candidates = verdict.provider and { verdict.provider }
         or cc.resolve_channels(verdict.model, alias_block() or {}, M.catalog_cached())
+    -- Bounded: see MAX_CANDIDATE_CHANNELS. The list is in preference order, so
+    -- truncating keeps the native channel.
+    while #candidates > MAX_CANDIDATE_CHANNELS do
+        table.remove(candidates)
+    end
     local channel = candidates[1]
     local login = cc.channel_login(channel)
     local attempt = failure.attempt or 0

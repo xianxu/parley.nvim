@@ -63,6 +63,14 @@ a process that actually answers as cliproxy. `restart` = `stop` + ensure.
 
 ## Model catalog (#205)
 
+Three modules, split by what they touch: **`cliproxy_catalog.lua`** is the pure
+core (parse the two model routes, derive a model's series, rank it, apply the
+operator's filters, build the agent a picked row implies) and is unit-tested
+against fixtures captured from a real proxy with no mocks;
+**`cliproxy.lua`** is the IO shell that fetches and caches it; and
+**`cliproxy_config.lua`** owns the channel relations the diagnosis path needs.
+
+
 cliproxyapi advertises what it serves, and that set moves without warning — an
 antigravity login registered 13 new models mid-session with no restart. Parley
 reads that catalog instead of carrying model names in Lua.
@@ -128,6 +136,15 @@ reads that catalog instead of carrying model names in Lua.
   under `anthropic` on one proxy start and `antigravity` on the next, so nothing
   durable keys off it — in particular the wire is chosen by model FAMILY, never
   by owner.
+- **The strategy is CORRECTED, not restated.** An agent need not carry
+  `web_search_strategy`: the resolution chain is agent override → a provider-level
+  `none` (a global off switch) → a correction when the configured strategy is one
+  the family cannot use → the provider default → none. It corrects and never
+  invents, so an unconfigured setup still resolves to `none`. **Behaviour change
+  (#205):** a claude model under the shipped `openai_tools_route` default now
+  takes the ANTHROPIC route by default, because measurement showed claude returns
+  an empty completion on the openai route with web_search on. Set
+  `web_search_strategy` on the agent to override.
 - **Server-side web search differs per family** (measured 2026-08-31): claude
   needs the anthropic route; gpt/codex works on `openai_tools_route`; gemini and
   anything antigravity re-serves gets `none`, because `{type="web_search"}` makes

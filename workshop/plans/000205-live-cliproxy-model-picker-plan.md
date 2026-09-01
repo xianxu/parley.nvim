@@ -36,7 +36,6 @@ from unticked boxes here.
 | `get_cliproxy_strategy` | `lua/parley/providers.lua` | modified |
 | `resolve_channel` | `lua/parley/cliproxy_config.lua` | modified |
 | `resolve_channels` / `channels_for_owner` | `lua/parley/cliproxy_config.lua` | new |
-| `resolve_login_provider` | `lua/parley/cliproxy_config.lua` | modified |
 | `could_have_served` / `likeliest_culprit` / `healthiest` | `lua/parley/cliproxy_auth.lua` | new |
 | `build_payload` (`opts.agent`) | `scripts/parley_harness.lua` | modified |
 | `golden_fixture` | `scripts/golden_fixture.lua` | new |
@@ -2264,3 +2263,31 @@ unverified.
   two rules missing from `lessons.md` — eligibility before ranking, and a
   replaced single source needs a writer on every path the original had — are
   written down.
+
+### 2026-09-01 — issue-close review (BR-15, BR-16, BR-90..BR-100)
+
+- **BR-90.** `OWNER_CHANNELS` was documented "sorted" and READ as a preference
+  ranking at three sites, so `antigravity` outranked the native channel for every
+  owner it re-serves and `recover`'s pre-flight login named a cross-vendor channel
+  before any credential was read. The lists are preference order now, native
+  first, and a test asserts that for every owner.
+- **BR-93.** Serializing the fan-out (the BR-89 fix) added up to four sequential
+  probes to a path inside the dispatcher's backstop, and `_repair_budget_sec`
+  gained no term — the budget stopped bounding anything. The budget carries the
+  multiplier AND the recovery path is capped at two candidates, which the
+  preference order makes safe: the native channel is always one of them.
+- **BR-15.** `cliproxy_default_web_search_strategy` was a single source nothing
+  consulted while config hand-stated the same answer. It is in the resolution
+  chain now — and the shape of that chain took three tries: deriving unconditionally
+  overrode an operator's global `none`, then overrode a perfectly good
+  `openai_search_model`, then invented a strategy where none was configured. It
+  CORRECTS a configured strategy the family cannot use, and does nothing
+  otherwise. **This is a behaviour change** — a claude cliproxy agent defaults to
+  the anthropic route now — and it is documented as one in the atlas rather than
+  smuggled in as a DRY cleanup.
+- **BR-91.** The plan→code guard matched a textual occurrence, so a deleted
+  function's row stayed green because a spec COMMENT mentioned it — the guard
+  certifying exactly the drift it exists to catch. It requires a definition now,
+  and immediately caught the stale `resolve_login_provider` row I had left.
+- **BR-92 / BR-16.** `unhealthier` deleted (no callers); the atlas now names
+  `cliproxy_catalog.lua`, the pure core it had never mentioned.
