@@ -41,3 +41,7 @@ bin/
 # agent scratch debug files
 .mdbg*
 /construct/generated/
+
+# parley writes these beside a doc when applying review edits; they are
+# scratch, and #205 saw an untracked one nearly swept into a milestone commit.
+*.parley-backup.*

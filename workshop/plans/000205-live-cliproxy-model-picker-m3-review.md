@@ -160,3 +160,161 @@ findings:
     detail: |
       workshop/plans/000205-live-cliproxy-model-picker-plan.md: Chunk 1 35 unticked, Chunk 2 10, Chunk 3 18, Chunk 4 13. The issue's `## Plan` milestone rows carry all the progress state, so the durable plan cannot be read as a record of what was done. Tick them, or state in the plan that the issue file is the record.
 ```
+
+---
+
+## Re-review — 2026-08-31T23:31:03-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 205 — live cliproxy model picker; retire hardcoded model lists |
+| repo | parley.nvim |
+| issue file | workshop/issues/000205-live-cliproxy-model-picker.md |
+| boundary | milestone M3 |
+| milestone | M3 |
+| window | 747c8ffc2be7f9e497d80307150f9c48856f96b8..604812f197dd9f5230feb360095bacb123b75549 |
+| command | sdlc milestone-close --issue 205 --milestone M3 |
+| reviewer | claude |
+| timestamp | 2026-08-31T23:31:03-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+This window has two commits and no test changes. It disposes ten prior findings, and the two that required *code* — BR-42 (`is_managed()` gating the catalog refresh) and BR-43 (repaint clobbering the selection) — landed as unpinned edits in a module the suite already drives headlessly. BR-42's edit is correct on inspection; BR-43's is not. I reproduced it against the production `float_picker`: `update`'s `next_selection_index` is written straight into `sel_idx`, which indexes `filtered`, while the new code at `agent_picker.lua:288-308` computes the index against the full `items` list. With a query typed — the picker's primary interaction — the operator pointing at `antigravity - (logged out)` lands on `antigravity-pro` after the refresh, which is precisely the "`<CR>` fires on a row you never pointed at" failure BR-43 exists to prevent, now deterministic rather than accidental. The artifact work in this window is genuinely good — the Spec restatement carries a proper `## Revisions` entry, the `git add -u` recipes are gone, and the M3 Done-when evidence is on the record with the response block types and the reasoning for why the answer is the evidence. But a boundary that ships a wrong fix for the finding it claims to close, with no test that could have caught it, is not a boundary to cross. Mapped suites are green (`providers/cliproxy-managed` 20 files / 0 failures; `modes/super_repo` 12 files / 0 failures) — which is the point: nothing in the suite touches this path.
+
+## 1. Strengths
+
+- **The `is_managed()` reasoning is right and the atlas says why.** `atlas/providers/cliproxy-managed.md:78-82` separates "parley will not START a proxy" from "there is no proxy," and notes the dormancy contract is untouched because `fetch_catalog` is a plain GET. That is the correct decomposition, and putting the *reason* in the atlas rather than only the code comment is what makes it survive.
+- **The Spec restatement is honest about what it does not cover.** `workshop/issues/000205-live-cliproxy-model-picker.md:95-105` names the uncovered case (a loaded-but-dead credential) and hands it to #197's dispatch-failure path, instead of quietly widening the claim. The `## Revisions` entry at :354 records the reason for the change rather than overwriting history — exactly the AGENTS.md §1 discipline.
+- **The M3 Done-when evidence is specific enough to be checkable.** The `## Log` entry records the strategy (`anthropic_tools_route`), the server tools in the payload, the response block types, and — the good part — *why the answer is the evidence*: the inert paths return a stale Neovim version from memory, so `v0.12.5` distinguishes "the search ran" from "the request succeeded."
+- **BR-46 verified closed by measurement, not by claim.** All eleven `git add -u` recipes are gone, the Notes carry the rule with its failure history, and neither window commit staged `lua/parley/config.lua` — `git status` still shows it modified and unstaged.
+
+## 2. Critical findings
+
+None.
+
+## 3. Important findings
+
+**I-1 — `next_selection_index` is `items`-space at every caller and `filtered`-space in the picker; the BR-43 fix is wrong under an active query.** `lua/parley/float_picker.lua:1690-1692` assigns `sel_idx = next_selection_index`, and `sel_idx` indexes `filtered` (`:1024`, `:1029`). `lua/parley/agent_picker.lua:299-306` computes the index by scanning the full `items` list. When a query is active, `apply_filter(false)` → `set_selection(sel_idx)` clamps that items-index into a much shorter `filtered`. Measured against the real picker (18 agents + separator + two `antigravity*` login rows, query `antigravity`): selected before = `antigravity`, index handed to `update` = 20, selected after = `antigravity-pro`.
+
+Fix in `float_picker`, not at the call site — there are two other consumers with the same latent defect (`finder_loader.lua:261` passes `result.initial_index`, computed against `items` by `chat_finder.resolve_finder_initial_index`; `agent_picker.lua:261`, the `<C-a>` expand repaint, passes nothing at all and so keeps a stale filtered index). Either accept an identity and resolve it *after* `apply_filter` — the picker already owns `recall_id_fn`, which is the same "find my row again" the new loop hand-rolls (ARCH-DRY) — or translate the items-index to its filtered position inside `update`. Then document the handle contract in `atlas/ui/pickers.md`, which owns the picker surface and was not updated for the new `selected()` method.
+
+**I-2 — a declined refresh records no attempt, so the 10-minute envelope never engages and every picker open re-spawns two `curl`s.** `fetch_catalog` writes the cache only on the accept path (`cliproxy.lua:1500-1502`); `catalog_cached` returns `{}, nil` with no file (`:1390-1391`); `catalog_stale` is `not at or …` (`:1438`). With no proxy answering, `at` is never set, so staleness never resets: every agent-picker open spawns two `vim.system` `curl` processes that connection-refuse, forever, with no backoff. `atlas/providers/cliproxy-managed.md:78` states "Refreshed on picker open when older than 10 minutes," which is not what happens for anyone without a live proxy — and this commit extends that population to the `manage = false` opt-out. Record the *attempt* (a `last_attempt_at`, or a timestamped empty cache marker) so the declared envelope actually bounds the work. ARCH-CONSTRAINTS.
+
+**I-3 — this is the 5th finding in family `missing-test-for-shipped-behavior`.** Earlier rounds fixed instances. Do NOT fix this instance — the rule is: **a boundary that changes runtime behavior must change a test file in the same window; if the diff touches `lua/` and touches no spec, the boundary does not close.** Measured prevalence on this issue: BR-3, BR-20, BR-31, BR-47, and now BR-42/BR-43 — six instances across twelve rounds, and this round is the first where the window contains *zero* test changes at all while claiming two behavior fixes. The excuse that these paths are untestable does not hold: `tests/unit/float_picker_spec.lua` drives `float_picker.open` headlessly today (76 tests, including keymap dispatch and async status transitions), `tests/unit/picker_items_spec.lua` already builds the `plugin` table `M.agent_picker` needs, and `tests/integration/openai_tool_loop_spec.lua:75-76` already stubs `cliproxy.is_managed` — the same seam stubs `fetch_catalog`. Both fixes were cheap to pin, and I-1 is what an unpinned fix costs.
+
+## 4. Minor findings
+
+- `git add <the files this task names>` (11 sites in the plan) is a placeholder, not a command — the recipes no longer run as written. 4th in family `plan-command-does-not-run`; the rule is that a fenced block in a plan is an *executable* recipe, so a constraint must be expressed as real paths, not as prose inside the command.
+- `docs/parley.nvim.md.parley-backup.1` is untracked and `*.parley-backup.*` is not in `.gitignore`; it will follow any future `git add -A`.
+- `workshop/lessons.md` gained nothing this round despite four families now at ≥4 recurrences, which AGENTS.md §4 asks for by name.
+
+## 5. Test coverage notes
+
+Zero test files changed. `make test-spec SPEC=providers/cliproxy-managed` → 20 files, 0 failures, 0 errors; `SPEC=modes/super_repo` (which carries `float_picker_spec`) → 12 files, 0 failures, 0 errors. Both stay green with I-1 present, which is the coverage statement: no spec constructs a picker, types a query, and repaints. The pure layer is well covered (`picker_items_spec` 46 tests over `_build_items`/`_view_for`/`_providers_without_models`), and `_view_for`'s own docstring records why it was extracted — the first dedupe was tested by re-implementing it in the spec body, so reverting the fix left the suite green. That lesson is exactly what I-3 is asking to apply one layer up.
+
+## 6. Architectural notes
+
+- **ARCH-DRY — flag.** BR-49 open (`render_opts`'s host/port/secret derivation duplicated at `cliproxy.lua:238-241` and `:1464-1466`). The new identity→index loop is a third hand-rolled "find my row again" next to `recall_id_fn` (I-1).
+- **ARCH-PURE — pass.** `_build_items`, `_view_for` and `_providers_without_models` are pure and tested without IO; `selected()` is a thin read on the shell.
+- **ARCH-PURPOSE — flag.** Five findings this round said "fix the rule, not the instance" (BR-44, BR-45, BR-47, BR-49, plus the family escalations). Every one moved only the instance. The sibling repaint site at `agent_picker.lua:261` is untouched by BR-43's fix — the class, not the site.
+- **ARCH-MOCK — flag.** `fake_cliproxy` is a real stateful subprocess fake serving both routes with the awkward shapes, which is right. But its own comment at `tests/fixtures/fake_cliproxy:203` claims "one id claimed by a second owner, which the real proxy does across restarts" and `CATALOG_V1` has seven ids each with exactly one owner. The fake cannot exercise the instability the Spec measured.
+- **ARCH-CONSTRAINTS — flag.** I-2. The plan declares an operating envelope for the picker-open path; the implementation does not enforce it on the failure path.
+
+## 7. Plan revision recommendations
+
+- Strike or correct the Integration-points bullet claiming `fake_cliproxy` carries "one id claimed by two owners" — it does not, and that shape is what the `(logged out)` signal's correctness turns on.
+- Add a row for `lua/parley/float_picker.lua` (`selected`, `modified`) to the Core-concepts tables; this window modified it and no table names it. 4th in family `plan-table-missing-entity` — the rule the plan's own bidirectional convention already implies is that a file appearing in a milestone's diff must appear in a table, which wants a check next to `tests/arch/single_source_sweeps_spec.lua` rather than another manual add.
+- Either tick the 76 step checkboxes or state in the plan that `## Plan` in the issue file is the record (BR-51).
+
+```findings
+dispose:
+  - id: BR-42
+    disposition: not-addressed
+    note: |
+      Gate correctly removed and the atlas explains why, but no test pins it — `M.agent_picker` is driven by zero specs, and `is_managed` is already stubbable (openai_tool_loop_spec.lua:76).
+  - id: BR-43
+    disposition: not-addressed
+    note: |
+      The fix restores by identity then converts to an index in the WRONG coordinate space; measured wrong under an active query (see I-1). Sibling site agent_picker.lua:261 untouched.
+  - id: BR-44
+    disposition: not-addressed
+    note: |
+      Instance documented in `## Log`; the rule was not implemented and no issue was filed against the repo that owns `sdlc` (no Go source in this tree).
+  - id: BR-45
+    disposition: not-addressed
+    note: |
+      Spec restated with a proper Revisions entry, but the demanded executable sweep was not built; and the new prose claims immunity via the static map while matching on `m.owner`, which is the wire's `owned_by` — the field this same Spec measures as unstable at :59. No fixture carries that shape.
+  - id: BR-46
+    disposition: addressed
+    note: |
+      Verified: 11 `git add -u` recipes replaced, Notes rule added, and neither window commit staged lua/parley/config.lua (still unstaged in the worktree).
+  - id: BR-47
+    disposition: addressed
+    note: |
+      Evidence is on the record with payload, server tools, response block types and why the answer is the tell. The unwritten rule is carried forward in the lessons.md Minor.
+  - id: BR-48
+    disposition: not-addressed
+    note: |
+      lua/parley/cliproxy.lua is untouched in this window; :1456 and :1509 still resolve with different meanings.
+  - id: BR-49
+    disposition: not-addressed
+    note: |
+      cliproxy.lua:238-241 and :1464-1466 are still byte-identical derivations; no `endpoint_opts()` extracted.
+  - id: BR-50
+    disposition: not-addressed
+    note: |
+      `_catalog_inflight` is still set before the first vim.system call with no pcall or failure-path clear; blast radius widened now that the is_managed gate is gone.
+  - id: BR-51
+    disposition: not-addressed
+    note: |
+      Measured on 604812f: 76 unticked checkboxes, 0 ticked, and no statement added that the issue file is the record.
+findings:
+  - id: new
+    severity: Important
+    family: one-value-two-decisions
+    title: |
+      `next_selection_index` is an items-index at every caller and a filtered-index in the picker, so the BR-43 repaint fix lands the cursor on the wrong row under an active query
+    detail: |
+      float_picker.lua:1690-1692 writes next_selection_index into sel_idx, which indexes `filtered` (:1024, :1029); agent_picker.lua:299-306 computes it against the full `items` list. Measured against the production picker with 18 agents + separator + two `antigravity*` login rows and query "antigravity": selected before = antigravity, index handed to update = 20, selected after = antigravity-pro. This is the 4th finding in family `one-value-two-decisions` — the rule is that a value must carry ONE meaning across every path and consumer, so fix it in float_picker (resolve an identity after apply_filter, reusing recall_id_fn) rather than at the call site. Two other consumers share the defect: finder_loader.lua:261 passes an items-space initial_index, and agent_picker.lua:261 (the <C-a> expand repaint) passes nothing and keeps a stale filtered index. Also document the new `selected()` handle method and the third-arg contract in atlas/ui/pickers.md, which owns the picker surface and was not updated.
+  - id: new
+    severity: Important
+    family: retry-not-rate-limited
+    title: |
+      A declined catalog refresh records no attempt, so `catalog_stale()` never resets and every agent-picker open re-spawns two curls with no backoff
+    detail: |
+      fetch_catalog writes the cache only on the accept path (cliproxy.lua:1500-1502); catalog_cached returns `{}, nil` with no file (:1390-1391); catalog_stale is `not at or ...` (:1438). With no proxy answering, the timestamp is never set, so staleness is permanently true and each picker open spawns two vim.system curls that connection-refuse. atlas/providers/cliproxy-managed.md:78 documents "Refreshed on picker open when older than 10 minutes" — a cadence that does not hold for anyone without a live proxy, a population this commit extends to the `manage = false` opt-out. Record the attempt (last_attempt_at, or a timestamped empty marker) so the declared envelope bounds the work. ARCH-CONSTRAINTS.
+  - id: new
+    severity: Important
+    family: missing-test-for-shipped-behavior
+    title: |
+      The window changes runtime behavior in two modules and contains zero test changes
+    detail: |
+      This is the 5th finding in family `missing-test-for-shipped-behavior`. Do NOT fix this instance — the rule is: a boundary whose diff touches `lua/` and touches no spec file does not close. Measured prevalence on this issue: BR-3, BR-20, BR-31, BR-47, and now BR-42/BR-43 — and this is the first round with no test change at all while claiming two behavior fixes. The paths are testable today: float_picker_spec.lua drives float_picker.open headlessly including keymaps and async status, picker_items_spec.lua already builds the plugin table M.agent_picker needs, and openai_tool_loop_spec.lua:76 already stubs cliproxy.is_managed (the same seam stubs fetch_catalog). The cost of skipping it is the other Important finding this round.
+  - id: new
+    severity: Minor
+    family: plan-command-does-not-run
+    title: |
+      `git add <the files this task names>` replaced `git add -u` at 11 sites, so the plan's commit recipes are no longer executable
+    detail: |
+      This is the 4th finding in family `plan-command-does-not-run`. The rule: a fenced command block in a plan is an executable recipe, so a constraint must be expressed as real paths, not as prose inside the command. BR-46's intent was right; name the files each task actually touches.
+  - id: new
+    severity: Minor
+    family: lesson-not-recorded
+    title: |
+      Four finding families are at four or more recurrences and `workshop/lessons.md` gained nothing this round
+    detail: |
+      AGENTS.md section 4 asks for a lessons.md rule per code review. stated-design-not-implemented (6), single-source-not-enforced (5), duplicated-logic-not-extracted (4) and missing-test-for-shipped-behavior (4) are exactly what the file exists to stop repeating; its only #205 entry is the M2 sandbox lesson. BR-47's unwritten rule — an EVIDENCE step is recorded in `## Log` or struck in `## Revisions`, because unlike a spec it leaves no trace when skipped — belongs there too.
+  - id: new
+    severity: Minor
+    family: close-stages-unreviewed-worktree
+    title: |
+      `docs/parley.nvim.md.parley-backup.1` is untracked and `*.parley-backup.*` is not gitignored
+    detail: |
+      This is the 2nd finding in family `close-stages-unreviewed-worktree`. Do NOT fix this instance — the rule BR-46 established covers it: stage named paths, never `-u`/`-A`. The addition here is that parley's own backup artifacts should be gitignored so they cannot be swept even by a slip.
+```

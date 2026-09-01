@@ -249,10 +249,28 @@ describe("cliproxy model catalog", function()
     end)
 
     it("reports staleness from the cache's own timestamp", function()
+        cliproxy._reset_catalog_clock()
         cliproxy._write_catalog({ { id = "x", owner = "openai" } }, os.time())
         assert.is_false(cliproxy.catalog_stale())
         cliproxy._write_catalog({ { id = "x", owner = "openai" } }, os.time() - 3600)
         assert.is_true(cliproxy.catalog_stale())
+    end)
+
+    it("does not re-poll a dead proxy on every picker open", function()
+        -- Staleness keyed on SUCCESS would never reset while the proxy is down:
+        -- the cache is never written, so every open re-spawns two curls that
+        -- connection-refuse. On a keystroke path that is an unbounded retry.
+        cliproxy._reset_catalog_clock()
+        os.remove(cliproxy._catalog_path())
+        set_endpoint(ready_port.free_port()) -- nothing listening
+
+        assert.is_true(cliproxy.catalog_stale(), "cold cache should invite one attempt")
+        local done = false
+        cliproxy.fetch_catalog(function() done = true end)
+        vim.wait(8000, function() return done end, 20)
+
+        assert.is_false(cliproxy.catalog_stale(),
+            "a failed attempt still counts as an attempt; otherwise every open re-polls")
     end)
 end)
 

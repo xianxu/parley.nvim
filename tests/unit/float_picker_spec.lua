@@ -1149,3 +1149,59 @@ describe("float_picker", function()
         end)
     end)
 end)
+
+-- ---------------------------------------------------------------------------
+-- update() identity-preserving selection (#205 BR-43/BR-52)
+-- ---------------------------------------------------------------------------
+describe("float_picker update selection", function()
+    local function open(items, query)
+        local handle = float_picker.open({
+            title = "Sel",
+            items = items,
+            recall_id_fn = function(item) return item.value end,
+            initial_query = query,
+        })
+        return handle
+    end
+
+    local function items(...)
+        local out = {}
+        for _, v in ipairs({ ... }) do
+            out[#out + 1] = { display = v, value = v }
+        end
+        return out
+    end
+
+    it("restores the selection by identity across a repaint", function()
+        local h = open(items("alpha", "beta", "gamma"))
+        h.update(items("zeta", "alpha", "beta", "gamma"), nil, "beta")
+        assert.equals("beta", h.selected().value)
+        h.close()
+    end)
+
+    it("lands on the right row even with a query filtering the list", function()
+        -- The bug this pins: sel_idx indexes the FILTERED list, so an index
+        -- computed against the caller's full items list points somewhere else
+        -- entirely as soon as a query is active — the case where a background
+        -- repaint is most likely to move the cursor under the operator.
+        local h = open(items("aaa-one", "bbb-two", "aaa-three", "bbb-four"), "bbb")
+        h.update(items("new-row", "aaa-one", "bbb-two", "aaa-three", "bbb-four"),
+            nil, "bbb-four")
+        assert.equals("bbb-four", h.selected().value)
+        h.close()
+    end)
+
+    it("leaves the selection alone when the identity is gone", function()
+        local h = open(items("alpha", "beta"))
+        h.update(items("alpha", "beta"), nil, "vanished")
+        assert.is_not_nil(h.selected())
+        h.close()
+    end)
+
+    it("still accepts a numeric index, which addresses the filtered list", function()
+        local h = open(items("alpha", "beta", "gamma"))
+        h.update(items("alpha", "beta", "gamma"), nil, 3)
+        assert.equals("gamma", h.selected().value)
+        h.close()
+    end)
+end)

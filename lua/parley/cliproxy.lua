@@ -234,16 +234,29 @@ end
 -- endpoint, auth_dir, vault-resolved client secret, raw config passthrough).
 -- Consumed by write_rendered_config, config_drift, and status (ARCH-DRY) — add
 -- a render field here and all three pick it up.
-local function render_opts()
+-- Just enough to ADDRESS the proxy: host, port, client bearer. Extracted because
+-- render_opts's first three fields are exactly this, and a second byte-identical
+-- derivation is a second place for the secret-name lookup to drift (ARCH-DRY).
+-- It also has NO side effects, which render_opts does: it mints a management
+-- key, and callers on a UI path must not.
+local function endpoint_opts()
     local host, port = cc.parse_endpoint(endpoint())
-    local c = cfg() or {}
-    local secret = require("parley.vault").get_secret(
-        require("parley.providers").get_secret_name("cliproxyapi"))
     return {
         host = host,
         port = port,
+        secret = require("parley.vault").get_secret(
+            require("parley.providers").get_secret_name("cliproxyapi")),
+    }
+end
+
+local function render_opts()
+    local base = endpoint_opts()
+    local c = cfg() or {}
+    return {
+        host = base.host,
+        port = base.port,
         auth_dir = c.auth_dir,
-        secret = secret,
+        secret = base.secret,
         config = c.config,
         management_key = M.management_key(),
     }
@@ -1362,6 +1375,7 @@ end
 
 local CATALOG_TTL = 600 -- seconds; see the plan's operating envelope
 local _catalog_inflight = false
+local _last_attempt = nil -- when a refresh was last ATTEMPTED, accepted or not
 
 -- No mkdir here: this is called on every picker open and every cache read, and
 -- only the WRITE needs the directory to exist.
@@ -1433,9 +1447,19 @@ end
 
 --- Is the cache old enough to be worth a background refresh?
 ---@return boolean
+--- Is it worth another refresh? Keyed on the last ATTEMPT, not the last
+--- success: a proxy that is down never updates the cache, so a success-only
+--- clock leaves staleness permanently true and every picker open re-spawns two
+--- curls that connection-refuse — an unbounded retry on a keystroke path.
+--- Test seam: forget when a refresh was last attempted.
+function M._reset_catalog_clock()
+    _last_attempt = nil
+end
+
 function M.catalog_stale()
     local _, at = M.catalog_cached()
-    return not at or (os.time() - at) > CATALOG_TTL
+    local last = math.max(at or 0, _last_attempt or 0)
+    return last == 0 or (os.time() - last) > CATALOG_TTL
 end
 
 --- Refresh the catalog from a proxy that is ALREADY running.
@@ -1457,18 +1481,22 @@ function M.fetch_catalog(cb)
     if _catalog_inflight then
         return cb(M.catalog_cached())
     end
-    -- NOT render_opts(): that gathers the whole write_rendered_config bundle,
-    -- which mints and writes a 0600 `management.key` as a side effect. Opening a
-    -- picker must not create a credential file. Only host/port/secret are needed
-    -- here, and each is read directly.
-    local host, port = cc.parse_endpoint(endpoint())
-    local secret = require("parley.vault").get_secret(
-        require("parley.providers").get_secret_name("cliproxyapi"))
-    local opts = { host = host, port = port, secret = secret }
+    _last_attempt = os.time()
+    -- endpoint_opts(), NOT render_opts(): the latter gathers the whole
+    -- write_rendered_config bundle, which MINTS a 0600 `management.key` as a
+    -- side effect, and opening a picker must not create a credential file.
+    local opts = endpoint_opts()
     if not opts.host or not opts.port then
         return cb(M.catalog_cached())
     end
     _catalog_inflight = true
+    -- Cleared on EVERY path. It is set before two vim.system calls, so an
+    -- uncaught error in either callback would strand it true for the rest of the
+    -- session — and a stranded flag means the catalog never refreshes again.
+    local function settle(models)
+        _catalog_inflight = false
+        cb(models)
+    end
     -- Both the body and the HTTP status: "curl exited 0" is NOT "the request
     -- succeeded". A 401 carries a perfectly readable body that parses to an
     -- empty model list, and writing that would erase a good catalog every time
@@ -1486,8 +1514,13 @@ function M.fetch_catalog(cb)
     get("/v1/models", function(v1, v1_status)
         get("/v1beta/models", function(beta, _beta_status)
             vim.schedule(function()
-                _catalog_inflight = false
-                local models = require("parley.cliproxy_catalog").parse(v1 or "", beta or "")
+                local ok, models = pcall(function()
+                    return require("parley.cliproxy_catalog").parse(v1 or "", beta or "")
+                end)
+                if not ok then
+                    logger.error("cliproxy: catalog parse failed: " .. tostring(models))
+                    return settle(M.catalog_cached())
+                end
                 -- Write only when the response is RECOGNISABLY cliproxy's model
                 -- list. Three weaker gates were tried and each lost data:
                 -- `#models > 0` conflated "nothing is authenticated" with "the
@@ -1507,7 +1540,7 @@ function M.fetch_catalog(cb)
                     logger.debug(("cliproxy: catalog refresh declined (http=%s shape=%s) — "
                         .. "keeping the cached catalog"):format(tostring(v1_status), tostring(shape)))
                 end
-                cb(models)
+                settle(models)
             end)
         end)
     end)

@@ -291,22 +291,14 @@ function M.agent_picker(plugin)
             -- case the login rows report, and gating on `#models > 0` would
             -- leave the picker showing a stale list instead.
             if models and handle and not handle.is_closed() then
-                -- Restore the selection by NAME, not by index: this lands while
-                -- the operator may already be pointing at a row, and the refresh
-                -- can insert or remove rows above it. Keeping the index would
-                -- silently move the cursor onto a different agent.
+                -- Hand the widget the IDENTITY, not an index. sel_idx indexes
+                -- the FILTERED list; an index computed here against the full
+                -- items list points at a different row whenever a query is
+                -- active — which is exactly when a background repaint is most
+                -- likely to move the cursor under the operator.
                 local was = handle.selected and handle.selected()
-                local items = M._build_items(plugin, view_for(expanded))
-                local index
-                if was and was.name then
-                    for i, item in ipairs(items) do
-                        if item.name == was.name then
-                            index = i
-                            break
-                        end
-                    end
-                end
-                handle.update(items, nil, index)
+                handle.update(M._build_items(plugin, view_for(expanded)), nil,
+                    was and was.name or nil)
             end
         end)
     end

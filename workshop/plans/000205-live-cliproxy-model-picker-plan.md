@@ -10,6 +10,11 @@
 
 **Spec:** `workshop/issues/000205-live-cliproxy-model-picker.md`
 
+**The issue file is the record of progress, not this plan's checkboxes.** The
+`- [ ]` boxes below are a reading aid; `## Plan` in the issue carries the milestone
+state that `sdlc` ticks and the close gate reads. Do not infer "nothing is done"
+from unticked boxes here.
+
 ---
 
 ## Core concepts
@@ -340,7 +345,8 @@ Expected: PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-git add <the files this task names> && git commit -m "#205 M1: parse joins /v1/models with /v1beta/models"
+git add lua/parley/cliproxy_catalog.lua tests/unit/cliproxy_catalog_spec.lua
+git commit -m "#205 M1: parse joins /v1/models with /v1beta/models"
 ```
 
 ### Task 1.4: `rank_key` — order without `created`
@@ -410,7 +416,8 @@ Expected: PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-git add <the files this task names> && git commit -m "#205 M1: rank_key orders created-less rows in their own band"
+git add lua/parley/cliproxy_catalog.lua tests/unit/cliproxy_catalog_spec.lua
+git commit -m "#205 M1: rank_key orders created-less rows in their own band"
 ```
 
 ### Task 1.5: `parse_provider_spec` + `curate`
@@ -565,7 +572,8 @@ Expected: PASS — all six `curate` cases
 - [ ] **Step 5: Commit**
 
 ```bash
-git add <the files this task names> && git commit -m "#205 M1: curate filters, dedupes by series, caps per provider"
+git add lua/parley/cliproxy_catalog.lua tests/unit/cliproxy_catalog_spec.lua
+git commit -m "#205 M1: curate filters, dedupes by series, caps per provider"
 ```
 
 ### Task 1.6: Single-source the family → web-search-strategy decision
@@ -679,7 +687,8 @@ that the payload for a gemini model carries no `tools` entry of that type.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add <the files this task names> && git commit -m "#205 M1: single-source the cliproxy web-search strategy per model family"
+git add lua/parley/providers.lua tests/unit/cliproxy_catalog_spec.lua
+git commit -m "#205 M1: single-source the cliproxy web-search strategy per model family"
 ```
 
 ### Task 1.7: `build_agent`
@@ -787,7 +796,8 @@ needed, and the per-family web-search table with its measurements.
 - [ ] **Step 6: Commit + close the milestone**
 
 ```bash
-git add <the files this task names> && git commit -m "#205 M1: build_agent turns a catalog row into a tool-enabled agent"
+git add lua/parley/cliproxy_catalog.lua tests/unit/cliproxy_catalog_spec.lua atlas/providers/cliproxy-managed.md
+git commit -m "#205 M1: build_agent turns a catalog row into a tool-enabled agent"
 make test
 sdlc milestone-close --issue 205 --milestone M1
 ```
@@ -1016,7 +1026,8 @@ list, the 10-minute refresh, and the never-spawns rule with the test that pins i
 - [ ] **Step 6: Commit + close the milestone**
 
 ```bash
-git add <the files this task names> && git commit -m "#205 M2: fetch and disk-cache the live model catalog"
+git add lua/parley/cliproxy.lua tests/helpers/ready_port.lua tests/integration/cliproxy_catalog_spec.lua tests/integration/cliproxy_lifecycle_spec.lua atlas/providers/cliproxy-managed.md
+git commit -m "#205 M2: fetch and disk-cache the live model catalog"
 make test
 sdlc milestone-close --issue 205 --milestone M2
 ```
@@ -1116,7 +1127,8 @@ Expected: PASS
 - [ ] **Step 7: Commit**
 
 ```bash
-git add <the files this task names> && git commit -m "#205 M3: agent picker renders live catalog and login rows"
+git add lua/parley/agent_picker.lua tests/unit/picker_items_spec.lua
+git commit -m "#205 M3: agent picker renders live catalog and login rows"
 ```
 
 ### Task 3.2: Wire the picker — selection, `<C-a>`, async refresh
@@ -1199,7 +1211,8 @@ catalog and the title changes; picking `claude-opus-5` sets the agent.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add <the files this task names> && git commit -m "#205 M3: live selection, <C-a> expansion, background refresh"
+git add lua/parley/agent_picker.lua lua/parley/keybinding_registry.lua
+git commit -m "#205 M3: live selection, <C-a> expansion, background refresh"
 ```
 
 ### Task 3.3: Register and persist the live agent
@@ -1287,7 +1300,8 @@ the `(logged out)` row, and the `<id>*` naming. `README.md` → `live_models`.
 - [ ] **Step 7: Commit + close the milestone**
 
 ```bash
-git add <the files this task names> && git commit -m "#205 M3: live agents register, persist, and survive restart"
+git add lua/parley/init.lua tests/unit/live_agent_state_spec.lua atlas/providers/agents.md README.md
+git commit -m "#205 M3: live agents register, persist, and survive restart"
 make test
 sdlc milestone-close --issue 205 --milestone M3
 ```
@@ -1466,7 +1480,8 @@ Expected: PASS, including the new empty-alias case
 - [ ] **Step 7: Commit**
 
 ```bash
-git add <the files this task names> && git commit -m "#205 M4: channel candidates resolved by credential health, not by guessing"
+git add tests/ lua/
+git commit -m "#205 M4: channel candidates resolved by credential health, not by guessing"
 ```
 
 ### Task 4.2: Delete the model lists from the default config
@@ -1510,7 +1525,8 @@ Expected: PASS
 - [ ] **Step 4: Commit**
 
 ```bash
-git add <the files this task names> && git commit -m "#205 M4: retire oauth-model-alias from the default config"
+git add lua/parley/config.lua
+git commit -m "#205 M4: retire oauth-model-alias from the default config"
 ```
 
 ### Task 4.3: Docs for M4's surface only
@@ -1858,3 +1874,31 @@ fixed rather than as gate work.
 - **BR-44.** Commit 747c8ff falls in no review window (M2's ended at 60b964b,
   M3's begins after it), so its content is ungated. Recorded in the Log for the
   issue-close review to take deliberately.
+
+### 2026-08-31 — M3 close review round 2 (BR-49..BR-57)
+
+- **BR-52.** The BR-43 fix was wrong in a way the finding measured: `sel_idx`
+  indexes the FILTERED list, and the repaint computed its index against the full
+  `items` list — so with a query active the cursor landed on a different row than
+  before, the exact failure BR-43 existed to stop. Fixed in the WIDGET, which
+  owns that coordinate space: `update` now accepts an identity string and
+  resolves it after filtering. Pinned by a test with an active query, verified to
+  fail without the fix.
+- **BR-53.** Staleness was keyed on the last SUCCESS, so a proxy that is down
+  never set the clock and every picker open re-spawned two curls — an unbounded
+  retry on a keystroke path. It keys on the last ATTEMPT now.
+- **BR-50.** `_catalog_inflight` was set before two `vim.system` calls with no
+  failure path clearing it; one uncaught error stranded it true and the catalog
+  never refreshed again that session. Every path settles through one function,
+  and the parse is guarded.
+- **BR-49.** The BR-41 fix introduced a second byte-identical host/port/secret
+  derivation; extracted as `endpoint_opts`, which `render_opts` now builds on.
+- **BR-42/BR-54.** The window changed runtime behaviour in two modules with zero
+  test changes — 5th in that family. Both behaviours are now pinned and
+  mutation-checked, and the RULE is in `workshop/lessons.md`: a boundary whose
+  diff touches `lua/` and no spec does not close.
+- **BR-55/BR-56/BR-57/BR-51.** Commit recipes name real paths again (BR-46's
+  prose made them unexecutable); `workshop/lessons.md` gained the four recurring
+  failures with the check that catches each; `*.parley-backup.*` is gitignored;
+  and this plan now states that the issue file, not these checkboxes, is the
+  record.

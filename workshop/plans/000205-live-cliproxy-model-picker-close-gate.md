@@ -896,6 +896,89 @@ rounds:
           round: 12
       boundary: M3
       blocked: true
+    - "n": 13
+      timestamp: "2026-08-31T23:31:03-07:00"
+      agent: claude
+      dispose:
+        - id: BR-42
+          disposition: not-addressed
+          note: Gate correctly removed and the atlas explains why, but no test pins it — `M.agent_picker` is driven by zero specs, and `is_managed` is already stubbable (openai_tool_loop_spec.lua:76).
+          round: 13
+        - id: BR-43
+          disposition: not-addressed
+          note: The fix restores by identity then converts to an index in the WRONG coordinate space; measured wrong under an active query (see I-1). Sibling site agent_picker.lua:261 untouched.
+          round: 13
+        - id: BR-44
+          disposition: not-addressed
+          note: Instance documented in `## Log`; the rule was not implemented and no issue was filed against the repo that owns `sdlc` (no Go source in this tree).
+          round: 13
+        - id: BR-45
+          disposition: not-addressed
+          note: Spec restated with a proper Revisions entry, but the demanded executable sweep was not built; and the new prose claims immunity via the static map while matching on `m.owner`, which is the wire's `owned_by` — the field this same Spec measures as unstable at :59. No fixture carries that shape.
+          round: 13
+        - id: BR-46
+          disposition: addressed
+          note: 'Verified: 11 `git add -u` recipes replaced, Notes rule added, and neither window commit staged lua/parley/config.lua (still unstaged in the worktree).'
+          round: 13
+        - id: BR-47
+          disposition: addressed
+          note: Evidence is on the record with payload, server tools, response block types and why the answer is the tell. The unwritten rule is carried forward in the lessons.md Minor.
+          round: 13
+        - id: BR-48
+          disposition: not-addressed
+          note: lua/parley/cliproxy.lua is untouched in this window; :1456 and :1509 still resolve with different meanings.
+          round: 13
+        - id: BR-49
+          disposition: not-addressed
+          note: cliproxy.lua:238-241 and :1464-1466 are still byte-identical derivations; no `endpoint_opts()` extracted.
+          round: 13
+        - id: BR-50
+          disposition: not-addressed
+          note: '`_catalog_inflight` is still set before the first vim.system call with no pcall or failure-path clear; blast radius widened now that the is_managed gate is gone.'
+          round: 13
+        - id: BR-51
+          disposition: not-addressed
+          note: 'Measured on 604812f: 76 unticked checkboxes, 0 ticked, and no statement added that the issue file is the record.'
+          round: 13
+      findings:
+        - id: BR-52
+          severity: Important
+          title: '`next_selection_index` is an items-index at every caller and a filtered-index in the picker, so the BR-43 repaint fix lands the cursor on the wrong row under an active query'
+          detail: 'float_picker.lua:1690-1692 writes next_selection_index into sel_idx, which indexes `filtered` (:1024, :1029); agent_picker.lua:299-306 computes it against the full `items` list. Measured against the production picker with 18 agents + separator + two `antigravity*` login rows and query "antigravity": selected before = antigravity, index handed to update = 20, selected after = antigravity-pro. This is the 4th finding in family `one-value-two-decisions` — the rule is that a value must carry ONE meaning across every path and consumer, so fix it in float_picker (resolve an identity after apply_filter, reusing recall_id_fn) rather than at the call site. Two other consumers share the defect: finder_loader.lua:261 passes an items-space initial_index, and agent_picker.lua:261 (the <C-a> expand repaint) passes nothing and keeps a stale filtered index. Also document the new `selected()` handle method and the third-arg contract in atlas/ui/pickers.md, which owns the picker surface and was not updated.'
+          family: one-value-two-decisions
+          round: 13
+        - id: BR-53
+          severity: Important
+          title: A declined catalog refresh records no attempt, so `catalog_stale()` never resets and every agent-picker open re-spawns two curls with no backoff
+          detail: fetch_catalog writes the cache only on the accept path (cliproxy.lua:1500-1502); catalog_cached returns `{}, nil` with no file (:1390-1391); catalog_stale is `not at or ...` (:1438). With no proxy answering, the timestamp is never set, so staleness is permanently true and each picker open spawns two vim.system curls that connection-refuse. atlas/providers/cliproxy-managed.md:78 documents "Refreshed on picker open when older than 10 minutes" — a cadence that does not hold for anyone without a live proxy, a population this commit extends to the `manage = false` opt-out. Record the attempt (last_attempt_at, or a timestamped empty marker) so the declared envelope bounds the work. ARCH-CONSTRAINTS.
+          family: retry-not-rate-limited
+          round: 13
+        - id: BR-54
+          severity: Important
+          title: The window changes runtime behavior in two modules and contains zero test changes
+          detail: 'This is the 5th finding in family `missing-test-for-shipped-behavior`. Do NOT fix this instance — the rule is: a boundary whose diff touches `lua/` and touches no spec file does not close. Measured prevalence on this issue: BR-3, BR-20, BR-31, BR-47, and now BR-42/BR-43 — and this is the first round with no test change at all while claiming two behavior fixes. The paths are testable today: float_picker_spec.lua drives float_picker.open headlessly including keymaps and async status, picker_items_spec.lua already builds the plugin table M.agent_picker needs, and openai_tool_loop_spec.lua:76 already stubs cliproxy.is_managed (the same seam stubs fetch_catalog). The cost of skipping it is the other Important finding this round.'
+          family: missing-test-for-shipped-behavior
+          round: 13
+        - id: BR-55
+          severity: Minor
+          title: '`git add <the files this task names>` replaced `git add -u` at 11 sites, so the plan''s commit recipes are no longer executable'
+          detail: 'This is the 4th finding in family `plan-command-does-not-run`. The rule: a fenced command block in a plan is an executable recipe, so a constraint must be expressed as real paths, not as prose inside the command. BR-46''s intent was right; name the files each task actually touches.'
+          family: plan-command-does-not-run
+          round: 13
+        - id: BR-56
+          severity: Minor
+          title: Four finding families are at four or more recurrences and `workshop/lessons.md` gained nothing this round
+          detail: 'AGENTS.md section 4 asks for a lessons.md rule per code review. stated-design-not-implemented (6), single-source-not-enforced (5), duplicated-logic-not-extracted (4) and missing-test-for-shipped-behavior (4) are exactly what the file exists to stop repeating; its only #205 entry is the M2 sandbox lesson. BR-47''s unwritten rule — an EVIDENCE step is recorded in `## Log` or struck in `## Revisions`, because unlike a spec it leaves no trace when skipped — belongs there too.'
+          family: lesson-not-recorded
+          round: 13
+        - id: BR-57
+          severity: Minor
+          title: '`docs/parley.nvim.md.parley-backup.1` is untracked and `*.parley-backup.*` is not gitignored'
+          detail: 'This is the 2nd finding in family `close-stages-unreviewed-worktree`. Do NOT fix this instance — the rule BR-46 established covers it: stage named paths, never `-u`/`-A`. The addition here is that parley''s own backup artifacts should be gitignored so they cannot be swept even by a slip.'
+          family: close-stages-unreviewed-worktree
+          round: 13
+      boundary: M3
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#205 (boundary-review)
@@ -1330,6 +1413,36 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-51** [Minor] `plan-command-does-not-run` The durable plan has 76 step checkboxes and none are ticked, including for the two closed milestones
   workshop/plans/000205-live-cliproxy-model-picker-plan.md: Chunk 1 35 unticked, Chunk 2 10, Chunk 3 18, Chunk 4 13. The issue's `## Plan` milestone rows carry all the progress state, so the durable plan cannot be read as a record of what was done. Tick them, or state in the plan that the issue file is the record.
 
+## Round 13 — 2026-08-31T23:31:03-07:00 (claude) — BLOCKED
+
+### Disposed
+
+- BR-42 — not-addressed — Gate correctly removed and the atlas explains why, but no test pins it — `M.agent_picker` is driven by zero specs, and `is_managed` is already stubbable (openai_tool_loop_spec.lua:76).
+- BR-43 — not-addressed — The fix restores by identity then converts to an index in the WRONG coordinate space; measured wrong under an active query (see I-1). Sibling site agent_picker.lua:261 untouched.
+- BR-44 — not-addressed — Instance documented in `## Log`; the rule was not implemented and no issue was filed against the repo that owns `sdlc` (no Go source in this tree).
+- BR-45 — not-addressed — Spec restated with a proper Revisions entry, but the demanded executable sweep was not built; and the new prose claims immunity via the static map while matching on `m.owner`, which is the wire's `owned_by` — the field this same Spec measures as unstable at :59. No fixture carries that shape.
+- BR-46 — addressed — Verified: 11 `git add -u` recipes replaced, Notes rule added, and neither window commit staged lua/parley/config.lua (still unstaged in the worktree).
+- BR-47 — addressed — Evidence is on the record with payload, server tools, response block types and why the answer is the tell. The unwritten rule is carried forward in the lessons.md Minor.
+- BR-48 — not-addressed — lua/parley/cliproxy.lua is untouched in this window; :1456 and :1509 still resolve with different meanings.
+- BR-49 — not-addressed — cliproxy.lua:238-241 and :1464-1466 are still byte-identical derivations; no `endpoint_opts()` extracted.
+- BR-50 — not-addressed — `_catalog_inflight` is still set before the first vim.system call with no pcall or failure-path clear; blast radius widened now that the is_managed gate is gone.
+- BR-51 — not-addressed — Measured on 604812f: 76 unticked checkboxes, 0 ticked, and no statement added that the issue file is the record.
+
+### Raised
+
+- **BR-52** [Important] `one-value-two-decisions` `next_selection_index` is an items-index at every caller and a filtered-index in the picker, so the BR-43 repaint fix lands the cursor on the wrong row under an active query
+  float_picker.lua:1690-1692 writes next_selection_index into sel_idx, which indexes `filtered` (:1024, :1029); agent_picker.lua:299-306 computes it against the full `items` list. Measured against the production picker with 18 agents + separator + two `antigravity*` login rows and query "antigravity": selected before = antigravity, index handed to update = 20, selected after = antigravity-pro. This is the 4th finding in family `one-value-two-decisions` — the rule is that a value must carry ONE meaning across every path and consumer, so fix it in float_picker (resolve an identity after apply_filter, reusing recall_id_fn) rather than at the call site. Two other consumers share the defect: finder_loader.lua:261 passes an items-space initial_index, and agent_picker.lua:261 (the <C-a> expand repaint) passes nothing and keeps a stale filtered index. Also document the new `selected()` handle method and the third-arg contract in atlas/ui/pickers.md, which owns the picker surface and was not updated.
+- **BR-53** [Important] `retry-not-rate-limited` A declined catalog refresh records no attempt, so `catalog_stale()` never resets and every agent-picker open re-spawns two curls with no backoff
+  fetch_catalog writes the cache only on the accept path (cliproxy.lua:1500-1502); catalog_cached returns `{}, nil` with no file (:1390-1391); catalog_stale is `not at or ...` (:1438). With no proxy answering, the timestamp is never set, so staleness is permanently true and each picker open spawns two vim.system curls that connection-refuse. atlas/providers/cliproxy-managed.md:78 documents "Refreshed on picker open when older than 10 minutes" — a cadence that does not hold for anyone without a live proxy, a population this commit extends to the `manage = false` opt-out. Record the attempt (last_attempt_at, or a timestamped empty marker) so the declared envelope bounds the work. ARCH-CONSTRAINTS.
+- **BR-54** [Important] `missing-test-for-shipped-behavior` The window changes runtime behavior in two modules and contains zero test changes
+  This is the 5th finding in family `missing-test-for-shipped-behavior`. Do NOT fix this instance — the rule is: a boundary whose diff touches `lua/` and touches no spec file does not close. Measured prevalence on this issue: BR-3, BR-20, BR-31, BR-47, and now BR-42/BR-43 — and this is the first round with no test change at all while claiming two behavior fixes. The paths are testable today: float_picker_spec.lua drives float_picker.open headlessly including keymaps and async status, picker_items_spec.lua already builds the plugin table M.agent_picker needs, and openai_tool_loop_spec.lua:76 already stubs cliproxy.is_managed (the same seam stubs fetch_catalog). The cost of skipping it is the other Important finding this round.
+- **BR-55** [Minor] `plan-command-does-not-run` `git add <the files this task names>` replaced `git add -u` at 11 sites, so the plan's commit recipes are no longer executable
+  This is the 4th finding in family `plan-command-does-not-run`. The rule: a fenced command block in a plan is an executable recipe, so a constraint must be expressed as real paths, not as prose inside the command. BR-46's intent was right; name the files each task actually touches.
+- **BR-56** [Minor] `lesson-not-recorded` Four finding families are at four or more recurrences and `workshop/lessons.md` gained nothing this round
+  AGENTS.md section 4 asks for a lessons.md rule per code review. stated-design-not-implemented (6), single-source-not-enforced (5), duplicated-logic-not-extracted (4) and missing-test-for-shipped-behavior (4) are exactly what the file exists to stop repeating; its only #205 entry is the M2 sandbox lesson. BR-47's unwritten rule — an EVIDENCE step is recorded in `## Log` or struck in `## Revisions`, because unlike a spec it leaves no trace when skipped — belongs there too.
+- **BR-57** [Minor] `close-stages-unreviewed-worktree` `docs/parley.nvim.md.parley-backup.1` is untracked and `*.parley-backup.*` is not gitignored
+  This is the 2nd finding in family `close-stages-unreviewed-worktree`. Do NOT fix this instance — the rule BR-46 established covers it: stage named paths, never `-u`/`-A`. The addition here is that parley's own backup artifacts should be gitignored so they cannot be swept even by a slip.
+
 ## Open findings
 
 - **BR-13** [Important] `rank-key-version-extraction` rank_key's `< 100` threshold answers the 120B instance, not the class: any parameter count below 100 still reads as a version
@@ -1351,9 +1464,13 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-43** [Important] `async-callback-not-resolved` The background repaint preserves the selection by index, so `<CR>` can fire on a row the user never pointed at
 - **BR-44** [Important] `boundary-crossed-out-of-order` The M3 window is empty and commit 747c8ff falls in no review window at all
 - **BR-45** [Important] `stated-design-not-implemented` Spec Component 3 names `cliproxy_auth.lua`/`channels_for_login` as the credential source and forbids `owned_by`; the code uses only `owned_by`
-- **BR-46** [Important] `close-stages-unreviewed-worktree` The working tree carries an uncommitted `config.lua` deleting every configured agent, and the plan's close recipe is `git add -u`
-- **BR-47** [Important] `missing-test-for-shipped-behavior` M3's own Done-when e2e — a live pick carrying tools plus web_search on the Anthropic wire, evidenced from `:ParleyLog` — is not recorded in `## Log`
 - **BR-48** [Minor] `one-value-two-decisions` `fetch_catalog`'s callback argument means the cached catalog on one path and the freshly-parsed, possibly-rejected list on the other
 - **BR-49** [Minor] `duplicated-logic-not-extracted` `render_opts`'s host/port/secret derivation is copied verbatim into `fetch_catalog`
 - **BR-50** [Minor] `missing-input-guard` `_catalog_inflight` is never cleared if `vim.system` raises synchronously, wedging refresh for the session
 - **BR-51** [Minor] `plan-command-does-not-run` The durable plan has 76 step checkboxes and none are ticked, including for the two closed milestones
+- **BR-52** [Important] `one-value-two-decisions` `next_selection_index` is an items-index at every caller and a filtered-index in the picker, so the BR-43 repaint fix lands the cursor on the wrong row under an active query
+- **BR-53** [Important] `retry-not-rate-limited` A declined catalog refresh records no attempt, so `catalog_stale()` never resets and every agent-picker open re-spawns two curls with no backoff
+- **BR-54** [Important] `missing-test-for-shipped-behavior` The window changes runtime behavior in two modules and contains zero test changes
+- **BR-55** [Minor] `plan-command-does-not-run` `git add <the files this task names>` replaced `git add -u` at 11 sites, so the plan's commit recipes are no longer executable
+- **BR-56** [Minor] `lesson-not-recorded` Four finding families are at four or more recurrences and `workshop/lessons.md` gained nothing this round
+- **BR-57** [Minor] `close-stages-unreviewed-worktree` `docs/parley.nvim.md.parley-backup.1` is untracked and `*.parley-backup.*` is not gitignored

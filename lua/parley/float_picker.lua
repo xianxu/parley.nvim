@@ -1682,13 +1682,26 @@ function M.open(opts)
 
     -- Update items and/or tag bar in-place (avoids close/reopen flash).
     -- new_tag_bar_tags: optional list of {label, enabled} to refresh the tag bar display.
-    local function update(new_items, new_tag_bar_tags, next_selection_index)
+    --- Replace the items in place.
+    ---
+    --- `next_selection` is either a NUMBER — an index into the FILTERED list, the
+    --- widget's own coordinate space — or a STRING identity (as produced by
+    --- `recall_id_fn`), which is resolved against the filtered list AFTER
+    --- re-filtering. Callers refreshing asynchronously want the string: they know
+    --- the row the operator is on, not where it will land once a query is
+    --- applied, and an index computed against their own `items` list points at a
+    --- different row whenever a query is active.
+    local function update(new_items, new_tag_bar_tags, next_selection)
         if closed then return end
+        local next_identity
+        if type(next_selection) == "string" then
+            next_identity = next_selection
+        end
         if new_items ~= nil then
             items = new_items
             set_status(nil)
-            if type(next_selection_index) == "number" then
-                sel_idx = math.max(1, math.floor(next_selection_index))
+            if type(next_selection) == "number" then
+                sel_idx = math.max(1, math.floor(next_selection))
             end
             if not opts.height then
                 desired_h = math.max(1, #items)
@@ -1704,6 +1717,14 @@ function M.open(opts)
         end
         if not reflow_picker() then return end
         apply_filter(false)
+        if next_identity then
+            for i, item in ipairs(filtered) do
+                if recall_id_fn(item) == next_identity then
+                    set_selection(i, { preserve_view = true })
+                    break
+                end
+            end
+        end
     end
 
     if initial_status then

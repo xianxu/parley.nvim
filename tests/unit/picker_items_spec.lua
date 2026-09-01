@@ -555,3 +555,33 @@ describe("agent_picker._view_for overlap and unknown providers", function()
         assert.is_true(display:find("orphan-1", 1, true) ~= nil)
     end)
 end)
+
+describe("agent_picker refresh gating", function()
+    -- BR-42: `manage = false` means parley does not START a proxy, not that
+    -- there is none. Gating the catalog refresh on it left bring-your-own
+    -- operators with an empty catalog and a picker claiming every configured
+    -- provider was logged out.
+    it("refreshes the catalog even when parley does not manage the proxy", function()
+        local cliproxy = require("parley.cliproxy")
+        local saved_is_managed, saved_stale, saved_fetch =
+            cliproxy.is_managed, cliproxy.catalog_stale, cliproxy.fetch_catalog
+        local fetched = false
+        cliproxy.is_managed = function() return false end
+        cliproxy.catalog_stale = function() return true end
+        cliproxy.fetch_catalog = function(cb) fetched = true; if cb then cb({}) end end
+
+        local plugin = make_plugin("mango")
+        plugin.config = { cliproxy = { manage = false,
+            live_models = { providers = { "claude" }, per_provider = 3 } } }
+        plugin.register_live_agent = function() end
+        plugin.logger = { info = function() end }
+        plugin.refresh_state = function() end
+        plugin.cmd = { KeyBindings = function() end }
+        local ok, err = pcall(require("parley.agent_picker").agent_picker, plugin)
+
+        cliproxy.is_managed, cliproxy.catalog_stale, cliproxy.fetch_catalog =
+            saved_is_managed, saved_stale, saved_fetch
+        assert.is_true(ok, tostring(err))
+        assert.is_true(fetched, "a bring-your-own proxy never got its catalog refreshed")
+    end)
+end)

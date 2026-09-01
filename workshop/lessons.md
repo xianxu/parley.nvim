@@ -909,3 +909,35 @@ Two rules, both needed:
 The tell that this has happened: parley suddenly reports `client api-key
 mismatch`, and the rendered config's `port`/`api-keys` do not match your setup.
 `cliproxy.ensure_running` re-renders the file, and the watcher reloads it.
+
+## Four recurring failures, and the checks that catch them (#205)
+
+#205's boundary reviews ran thirteen rounds. Most findings were not new defects
+but the same four failures repeating, so the rules matter more than the fixes:
+
+- **A test that cannot fail is not coverage.** Five times on that issue a fix
+  shipped green while the code it "covered" could be deleted or reverted with the
+  suite passing: a spec that re-implemented the logic in its own body, one that
+  stubbed the function under test, one that reused a just-killed port so a dying
+  process answered, one asserting containment where order was the point, and an
+  arch guard whose allowance was below the real count. **Check: break the code on
+  purpose and watch the test go red, before claiming the fix is covered.** State
+  the mutation in the close evidence.
+- **Fix the class, not the site.** A finding names one instance; the deliverable
+  is the enumeration. `free_port` was "swept" onto a shared helper while eight
+  copies remained; a boundary guard was added to one spec while three lacked it;
+  a referent check matched one definition form out of four. **Check: grep the
+  whole tree for siblings before calling a sweep done, and paste the count.**
+- **A sweep without a guard is a snapshot.** Two of that issue's consolidations
+  had regressed before the boundary closed. **Check: a consolidation ships with
+  an arch spec that fails when a new consumer diverges** —
+  `tests/arch/single_source_sweeps_spec.lua` is the pattern.
+- **A boundary whose diff touches `lua/` and no spec does not close.** Runtime
+  behaviour changed in two modules with zero test changes in the same window.
+  **Check: `git diff <boundary>..HEAD --stat -- lua/ tests/` before every
+  milestone-close; if `lua/` moved and `tests/` did not, that is the finding.**
+
+And one for evidence: **a Done-when is recorded in `## Log` with the output that
+proves it**, not asserted in the close message. #205's live-pick e2e is the
+shape — the payload, the response block types, and the answer, where a *correct*
+answer distinguishes "the search ran" from "the request succeeded".
