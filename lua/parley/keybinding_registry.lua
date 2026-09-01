@@ -756,7 +756,7 @@ M.entries = {
 		config_key = "agent_picker_mappings.expand_catalog",
 		default_key = "<C-a>",
 		default_modes = { "n", "i" },
-		scope = "global",
+		scope = "parley_buffer",
 		desc = "Agent picker: show every cliproxy model, not just the curated ones",
 		help_only = true, -- bound by agent_picker's float_picker mappings table
 	},

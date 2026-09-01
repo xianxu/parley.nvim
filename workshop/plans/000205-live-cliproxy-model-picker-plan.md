@@ -1771,3 +1771,36 @@ All three are second occurrences, so each is recorded as the rule it needed.
   persists between sessions and can be written by an older parley, so it is
   untrusted input. Sanitized at the single boundary every consumer reads
   through (`catalog_cached`), the way BR-7's empty id was fixed in `parse`.
+
+### 2026-08-31 — M2/M3 review round 10 (the demoted backlog, cleared)
+
+The gate had stopped blocking on these (round cap), so they are recorded as
+fixed rather than as gate work.
+
+- **BR-21.** Three more data-loss and crash paths, each measured: a *foreign*
+  200 on the endpoint wiped a warm catalog (HTTP status alone does not say the
+  body is cliproxy's), the picker rendered `(nil)` for an ownerless row, and
+  `_providers_without_models` was unguarded. The write now gates on `classify` —
+  the existing single source for "is this cliproxy's /v1/models contract" —
+  after three weaker gates each lost data in turn (`#models > 0`, curl exit
+  code, HTTP 200). The foreign test needed fixing too: it reused the just-killed
+  port, so the dying process answered and reverting the fix left it green.
+- **BR-37.** `fetch_catalog` returned without calling its callback on the
+  in-flight path, so a picker opened during a refresh never repainted. Every
+  exit path now resolves the callback exactly once.
+- **BR-20.** `catalog_cached` re-read and re-`mkdir`ed on every picker open,
+  toggle and repaint — a keystroke path. Memoized on the file's mtime. And
+  `providers = nil` returned `{}` rather than "every known provider" as
+  config.lua documents, which silently emptied the live section for anyone who
+  omitted the key.
+- **BR-36.** The `or "<C-a>"` fallback was a second copy of the registry's
+  default, invisible to the guard written one round earlier — the same
+  enumerate-the-forms rule BR-31 had already stated. The literal is gone (no key
+  ⇒ no mapping) and the guard now matches the fallback forms too.
+- **BR-28.** `id .. "*"` lived at three sites that must agree, or a model
+  renders twice again. Single-sourced as `cliproxy_catalog.agent_name`.
+- **BR-24 / BR-32 / BR-35 / BR-34 / BR-27.** README documents `live_models` and
+  `<C-a>`; the catalog section no longer orphans the flow narrative; the
+  keybinding row is scoped `parley_buffer` rather than Global; the fake's
+  v1beta branches mirror /v1/models with the reason stated; and the plan records
+  that `live_models` shipped in M3.

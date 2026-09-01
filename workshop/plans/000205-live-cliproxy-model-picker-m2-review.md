@@ -795,3 +795,173 @@ findings:
     detail: |
       keybinding_registry.lua:759 sets scope = "global" because the scope forest has no agent_picker entry; the three sibling <C-a> rows use chat_finder/note_finder/issue_finder. Rendered help_lines("chat", config) confirms the row appears under the Global heading in a chat buffer, where <C-a> is Vim's increment and parley binds nothing. keybindings_spec.lua:244 only asserts the scope is a valid label, never the right one. The rule: when a taxonomy has no correct value for a new row, add the value rather than filing it under the nearest wrong one — here, an agent_picker scope with a label and display-order entry, as the three finders already have. Also add agent_picker_mappings to config.lua so the documented config_key has an example, as the other *_mappings keys do.
 ```
+
+---
+
+## Re-review — 2026-08-31T22:35:42-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 205 — live cliproxy model picker; retire hardcoded model lists |
+| repo | parley.nvim |
+| issue file | workshop/issues/000205-live-cliproxy-model-picker.md |
+| boundary | milestone M2 |
+| milestone | M2 |
+| window | 45d9f28e131fc5b40f6f06743ecfe40fcdff9538..861f129bea1bf677837cf81502bfd4ae1ab059c3 |
+| command | sdlc milestone-close --issue 205 --milestone M2 |
+| reviewer | claude |
+| timestamp | 2026-08-31T22:35:42-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+The Critical this gate has been re-raising for four rounds is genuinely fixed, and I verified it by mutation rather than by reading the commit message: deleting `lua/parley/init.lua:1329-1343` now fails 2 tests, removing the `_select` live branch fails 1, removing the `_view_for` dedupe fails 3, removing `catalog_cached`'s sanitize fails 1, and hardcoding the `<C-a>` literal fails the arch guard. All 20 mapped `providers/cliproxy-managed` specs plus the three other touched specs are green. What blocks SHIP is M2's own headline deliverable: the `fetch_catalog` write gate keys on `v1_status == 200` alone, and I measured a `foreign`-mode proxy (HTTP 200, non-catalog body) wiping a warm 7-row catalog to 0 — after which every configured provider renders `(logged out)` for the full 10-minute TTL and clicking one starts a spurious login. That is the exact failure the gate's own comment argues against, applied to one of its three sibling boundaries; `_beta_status` is discarded by name, and `_providers_without_models` still lacks the nil-owner guard `curate` got in BR-6. This is BR-21's class, third round, and the enumeration is now written out below so the fix is one mechanical pass.
+
+## 1. Strengths
+
+- **The mutation discipline actually ran this round.** `tests/unit/live_agent_state_spec.lua:22-31` drives the *real* `refresh_state` from a persisted `state.json` — which is what a restart is — instead of stubbing it. I reverted the restore block and watched it go red. That is the structural answer to a failure that had recurred four times.
+- **`M._view_for` / `M._select` (`agent_picker.lua:141-217`)** are the right extraction. Pulling the branches out of the `agent_picker` closure made every one of them reachable from a test without a single mock (ARCH-PURE), and the docstrings say *why* the extraction exists rather than what it does.
+- **`tests/integration/cliproxy_catalog_spec.lua:126-148`** — the 401 case is proven against the real process fake in `client_key_mismatch` mode, with the warm catalog measured before and after. That is a genuine stateful-fake interaction test, not a mock restating the implementation (ARCH-MOCK).
+- **`tests/integration/cliproxy_conformance_spec.lua:228-269`** closes the fake↔fixture circularity: the `models/<id>` prefix and "did the join land" are asserted against the *real binary*, so a proxy that starts emitting bare ids can no longer pass both suites.
+- **`tests/arch/single_source_sweeps_spec.lua`** is the right shape of deliverable for a sweep — three fitness functions, each of which I confirmed fails when its invariant is violated. The `LEGACY_UNREGISTERED` "may shrink, never grow" allowance is a good way to hold a new invariant without dragging two unrelated pickers into this issue.
+
+## 2. Critical findings
+
+None open. BR-19 is disposed `addressed` on measured evidence.
+
+## 3. Important findings
+
+### BR-21 — `not-addressed` (3rd round). The guard reached one boundary; three siblings shipped without it
+
+Four sites, all measured on the production path against `861f129`:
+
+1. **`lua/parley/cliproxy.lua:1475`** — `if v1_status == 200 then M._write_catalog(models)`. I spawned the fake in `foreign` mode (200, `{"hello": "i am not cliproxy"}`) after a warm fetch: **7 rows → 0**. `parse` returns `{}` for a body it cannot read, and a 200 is not a catalog any more than a 401 is. The gate's own comment argues this case and then doesn't cover it.
+2. **`lua/parley/cliproxy.lua:1463`** — `_beta_status` is bound and discarded. A `/v1beta` 404 or 401 while `/v1` succeeds writes a catalog whose every `display` has silently fallen back to the raw id, over a good one.
+3. **`lua/parley/agent_picker.lua:25`** — `_providers_without_models` never got BR-6's guard. Measured: `(models, {"claud"})` → an actionable `claud - (logged out)` row that runs `:ParleyProxy login claud`, while `curate` returns `{}` for the same spec; add one ownerless catalog row and the answer flips to `{}`, which is BR-6's defect verbatim.
+4. **`lua/parley/agent_picker.lua:112`** — `tostring(m.owner)` renders `Mystery - mystery-noowner (nil)`. Reachable in production: `catalog_cached` sanitizes `id`/`display`/`series` but not `owner`, and the `<C-a>` path hands raw rows straight through. Confirmed by opening the picker with a seeded catalog.
+
+The rule, and the deliverable: **one guarded `provider → owner` helper that all callers share, and one shape-check applied at every entry boundary — enumerated, not spot-fixed.** The enumeration is exactly those four plus the two already done (`parse`, `catalog_cached`). Also worth noting for ARCH-PURE: putting the sanitize inside `catalog_cached` is why it only covers the disk path — a pure `cliproxy_catalog.sanitize(rows)` would be unit-testable and would cover the `<C-a>` and fetch paths too.
+
+### BR-20 — `not-addressed` (partially). Half fixed; three Spec/envelope claims still unimplemented and unstruck
+
+The HTTP-status half is genuinely fixed (`cliproxy.lua:1455-1461`). Still open:
+- **No logging anywhere in `fetch_catalog`**, though the plan's envelope says "the failure is logged at debug — never a popup on a UI path". `logger` is already required at `cliproxy.lua:15`.
+- **No in-memory cache.** Spec Component 2 says "Cache in memory; persist to …". `catalog_cached` re-opens, re-reads and re-decodes the file — and `catalog_path()` runs `vim.fn.mkdir` (`cliproxy.lua:1368`) on every call. That is **2 reads + 2 mkdirs per picker open** (`view_for` → `catalog()`, then `catalog_stale()`), plus one more per `<C-a>` toggle and per repaint, on a path the envelope calls keystroke-adjacent (ARCH-CONSTRAINTS).
+- **`providers = nil`** still yields `{}` (`curate` iterates `opts.providers or {}`), where the Spec documents "nil providers = every known provider, unfiltered". A fresh install that omits the knob renders no live section at all.
+
+Rule: walk the Spec's Components and the plan's Operating envelope bullet by bullet at each boundary — implement it, or strike it in `## Revisions`. Three rounds of this family means the walk isn't happening.
+
+### BR-24 — `not-addressed` (README half only)
+
+The atlas half is done and done well. `README.md` is untouched in the whole window, while the diff adds a keybinding (`<C-a>`) and a config key (`cliproxy.live_models`), and the plan's Task 3.3 Step 6 explicitly lists `README.md → live_models`. Mitigating: README deliberately defers advanced behavior to the atlas and already links `atlas/providers/cliproxy-managed.md` from its cliproxy bullet — so this is one sentence on line 197, not a section.
+
+## 4. Minor findings
+
+- **BR-27** `not-addressed` — structurally unfixable now (the M3 commit `c9e83d8` is inside this M2 window), but plan Task 4.2 still assigns `live_models` to M4 though it shipped in M3. Also: the working tree carries uncommitted M4 edits to `config.lua` deleting the default agent list, at an M2 gate.
+- **BR-28** `not-addressed` — the `<id>*` convention now has **three** sites, not two: `agent_picker.lua:105`, `agent_picker.lua:154`, `cliproxy_catalog.lua:220`.
+- **BR-29** `not-addressed` — all four unchanged: `is_managed()` gate at `agent_picker.lua:256`; chained GETs make the worst case 2×`CURL_MAX_TIME` against a stated 2s; `handle.update` swaps the list under a mid-type cursor; `pending()` at `cliproxy_conformance_spec.lua:235,254` vs the file's five `SKIP:` siblings.
+- **BR-32** `not-addressed` — `atlas/providers/cliproxy-managed.md:36-38`: `## Model catalog (#205)` still sits directly under `## Flow`, leaving Flow with an empty body and 60 lines of flow narrative filed under the catalog heading.
+- **BR-34** `not-addressed` — `fake_cliproxy:404-410` unchanged and unlabelled; `needs_login` serves the full v1beta catalog while `/v1/models` serves `data:[]`, a combination no live conformance check covers.
+- **BR-35** `not-addressed` — measured: `help_lines("chat", config)` renders the row as `[Global] <C-a> Agent picker: …`, in a buffer where `<C-a>` is Vim's increment. No `agent_picker` scope exists; no `agent_picker_mappings` example in `config.lua` though `keybinding_registry.lua:756` names that config key.
+- **New** — `agent_picker.lua:243`: `key_for(...) or "<C-a>"` is a second copy of the registry default (`keybinding_registry.lua:757`) that the arch guard cannot see, because it matches only the form `key = "<…>"`. Currently dead code (`resolve_keys` always falls back to `default_key`), so it's a blind spot, not a live bug.
+- **New** — `cliproxy.lua:1439-1445`: `fetch_catalog` drops `cb` entirely on the `_catalog_inflight` path while calling `cb({})` on the missing-endpoint path. A picker opened while a refresh is in flight never repaints.
+
+## 5. Test coverage notes
+
+Coverage is genuinely good now and I verified it by breaking things, not by reading it. Remaining gaps, in order of what they'd catch:
+
+- **No test covers the write gate's non-401 failure modes.** The 401 case is pinned; a 200-with-a-foreign-body and a `/v1beta` failure are not. My scratch spec for the first one failed against HEAD in ~2 seconds using the fake's existing `foreign` mode — this is cheap to add and would have caught the finding above.
+- **`_providers_without_models` has no unknown-provider or ownerless-row case**, which is why the guard `curate` got never propagated here.
+- **`catalog_cached`'s sanitize has no ownerless-row case** — the fixture at `cliproxy_catalog_spec.lua:170-176` covers missing `id` and missing `display` only.
+- **`_catalog_inflight` has no test.** Deleting it changes nothing that any suite observes.
+- The `<C-a>` closure itself (flipping `expanded`, the title change) and the `is_managed()`/`catalog_stale()` refresh gate remain untested. Thin glue, low priority now that `_view_for` and `_select` carry the semantics.
+
+## 6. Architectural notes
+
+- **ARCH-DRY — flag.** Three copies of `<id>*` (BR-28), two provider→owner lookups with different guards (BR-21), `catalog_path`'s mkdir idiom duplicating `config_path`'s (BR-29). The `free_port` promotion, by contrast, is exemplary and now guarded.
+- **ARCH-PURE — pass, with one note.** `_view_for`, `_select`, `_providers_without_models` and `_build_items` are pure and directly driven; the IO shell is thin. The note: `catalog_cached` mixes normalization into the file reader, which is precisely why the sanitize doesn't reach the `<C-a>` or fetch paths. Extract it as a pure `cliproxy_catalog` function.
+- **ARCH-PURPOSE — flag.** BR-21 is the finding-answering axis, third round: each round fixes the named site and leaves the enumerable siblings. The enumeration is written above; write it into the plan so the next round can't produce a fourth instance. The catalog-as-single-source sweep itself is on track — the picker and `build_agent` both derive; `resolve_channel` and the config lists are legitimately M4.
+- **ARCH-MOCK — pass, with BR-34 open.** The stateful process fake and the live conformance check are the right structure and the boundary is genuinely shared between production and test. The two unmeasured `/v1beta` branches remain assumptions presented as behavior.
+- **ARCH-CONSTRAINTS — flag.** The envelope declares "reads one cached JSON" and a 2s refresh; the code does 2 reads + 2 mkdirs per open and chains two 2s GETs. Neither the declared budget nor the in-memory cache is enforced (BR-20, BR-29).
+
+## 7. Plan revision recommendations
+
+- **`## Revisions` — "M2/M3 review round 10 (BR-21, BR-20)"**: record the *enumeration* — every entry boundary the catalog crosses (`parse`, `catalog_cached`, `fetch_catalog`'s write gate, `_beta_status`, `_providers_without_models`, the `<C-a>` raw path) — and state that a guard is applied to the whole list or the finding is not answered. Three rounds of instance-fixing is the evidence that the list was never written down.
+- **`## Revisions`** — for each of the three BR-20 claims, either record the implementation or strike the claim: the envelope's "logged at debug", Spec Component 2's "Cache in memory", and Spec Component 6's "nil providers = every known provider, unfiltered".
+- **Task 4.2** — move `live_models` out of M4's file list; it shipped in the M3 commit. Note the boundary crossing in `## Log` rather than leaving Task 4.2 claiming work already done.
+- **Operating envelope** — correct the refresh budget to 2×`CURL_MAX_TIME` (the GETs are chained), or make them concurrent and keep the stated 2s.
+
+```findings
+dispose:
+  - id: BR-19
+    disposition: addressed
+    note: |
+      Mutation-verified against HEAD: deleting init.lua:1329-1343 fails 2 specs; removing the _select live branch fails 1; removing the _view_for dedupe fails 3; removing catalog_cached's sanitize fails 1; hardcoding the picker key fails the arch guard.
+  - id: BR-20
+    disposition: not-addressed
+    note: |
+      Status half fixed. Still open: no logger call anywhere in fetch_catalog; no in-memory cache (2 reads + 2 mkdirs per picker open, more per toggle/repaint); providers=nil still yields {} against the Spec. None struck in Revisions.
+  - id: BR-21
+    disposition: not-addressed
+    note: |
+      Measured: a foreign-mode 200 wipes a warm 7-row catalog to 0 (cliproxy.lua:1475); _beta_status discarded (:1463); _providers_without_models still unguarded (agent_picker.lua:25); <C-a> renders "(nil)" for an ownerless row (:112).
+  - id: BR-24
+    disposition: not-addressed
+    note: |
+      Atlas half done and good. README.md is untouched in the whole window while the diff adds <C-a> and cliproxy.live_models; plan Task 3.3 Step 6 still names it.
+  - id: BR-27
+    disposition: not-addressed
+    note: |
+      Unfixable structurally, but plan Task 4.2 still assigns live_models to M4 though it shipped in M3; and the tree carries uncommitted M4 config.lua edits at an M2 gate.
+  - id: BR-28
+    disposition: not-addressed
+    note: |
+      Now three sites, not two: agent_picker.lua:105, agent_picker.lua:154, cliproxy_catalog.lua:220.
+  - id: BR-29
+    disposition: not-addressed
+    note: |
+      All four unchanged: is_managed gate at agent_picker.lua:256, chained 2x CURL_MAX_TIME, repaint-under-cursor, pending() at conformance_spec.lua:235,254.
+  - id: BR-32
+    disposition: not-addressed
+    note: |
+      atlas/providers/cliproxy-managed.md:36-38 unchanged; the H2 still sits directly under "## Flow", orphaning 60 lines of flow narrative.
+  - id: BR-34
+    disposition: not-addressed
+    note: |
+      fake_cliproxy:404-410 unchanged and still unlabelled; no live conformance covers the needs_login or client_key_mismatch v1beta branches.
+  - id: BR-35
+    disposition: not-addressed
+    note: |
+      Measured: help_lines("chat", config) renders the row under Global. No agent_picker scope added; no agent_picker_mappings example in config.lua.
+findings:
+  - id: new
+    severity: Minor
+    family: single-source-not-enforced
+    title: |
+      The arch guard matches one syntactic form, so the `or "<C-a>"` fallback is a second copy of the registry default it cannot see
+    detail: |
+      This is the 4th finding in family `single-source-not-enforced`. Do NOT fix the
+      instance. The rule: a syntactic single-source guard must enumerate the FORMS the
+      duplicated value can take — BR-31 already wrote that rule for the plan's referent
+      grep, and it is now recurring in tests/arch/single_source_sweeps_spec.lua, which
+      greps only `key = "<...>"`. agent_picker.lua:243 restates
+      keybinding_registry.lua:757's `<C-a>` in an `or` fallback that the guard misses.
+      Currently unreachable (resolve_keys always falls back to default_key), so it is
+      dead duplication rather than a live bug — which is exactly why no test notices it.
+  - id: new
+    severity: Minor
+    family: async-callback-not-resolved
+    title: |
+      fetch_catalog drops its callback on the in-flight path while calling it with {} on the missing-endpoint path
+    detail: |
+      cliproxy.lua:1439 returns without invoking cb when _catalog_inflight is set;
+      cliproxy.lua:1444 invokes cb({}) when host/port are missing. A picker opened while
+      a refresh is in flight therefore never repaints — the in-flight fetch's callback
+      belongs to the earlier, possibly closed, picker. Rule: every exit path of a
+      callback-taking async function resolves its callback exactly once.
+```

@@ -194,6 +194,16 @@ function M.curate(models, opts)
     return out
 end
 
+--- The agent name a catalog model registers under. Single source (ARCH-DRY):
+--- the picker's de-duplication, `_build_items` and `build_agent` all have to
+--- agree on it, and three copies of `id .. "*"` is three chances to drift — a
+--- mismatch would silently render the model twice again.
+---@param id string
+---@return string
+function M.agent_name(id)
+    return tostring(id) .. "*"
+end
+
 --- Turn a catalog row into a session agent. Tools and web search are ON: an
 --- ad-hoc pick is meant to be a working agent, not a stripped one.
 ---
@@ -217,7 +227,7 @@ function M.build_agent(m, opts)
     end
     return {
         provider = "cliproxyapi",
-        name = m.id .. "*",
+        name = M.agent_name(m.id),
         model = {
             model = m.id,
             web_search_strategy = require("parley.providers")

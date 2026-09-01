@@ -102,7 +102,7 @@ function M._build_items(plugin, extra)
         }
     end
     for _, m in ipairs(live) do
-        local name = m.id .. "*"
+        local name = require("parley.cliproxy_catalog").agent_name(m.id)
         local is_current = name == plugin._state.agent
         items[#items + 1] = {
             name = name,
@@ -141,7 +141,11 @@ end
 function M._view_for(models, cfg, opts)
     opts = opts or {}
     local agents = opts.agents or {}
-    local providers = (cfg or {}).providers or {}
+    -- `providers = nil` means every provider parley knows how to log into —
+    -- that is what config.lua documents, and returning {} instead made the whole
+    -- live section vanish for anyone who omitted the key.
+    local providers = (cfg or {}).providers
+        or require("parley.cliproxy_config").providers()
     local cat = require("parley.cliproxy_catalog")
 
     -- Picking a live model registers it as `<id>*`, and the restart restore does
@@ -151,7 +155,7 @@ function M._view_for(models, cfg, opts)
     local function unregistered(rows)
         local out = {}
         for _, m in ipairs(rows) do
-            if not agents[m.id .. "*"] then
+            if not agents[cat.agent_name(m.id)] then
                 out[#out + 1] = m
             end
         end
@@ -215,8 +219,38 @@ function M.agent_picker(plugin)
     end
 
     local keybindings_key = (plugin.config.global_shortcut_keybindings or { shortcut = "<C-g>?" }).shortcut
+    local expand_key = require("parley.keybinding_registry")
+        .key_for("ap_expand_catalog", plugin.config)
     local title = "🤖 Parley Agents"
+    -- The registry owns the expand key. No literal fallback here: a hardcoded
+    -- default would be a second copy of the registry's, invisible to the arch
+    -- guard and free to drift. If the id ever stops resolving, the mapping is
+    -- omitted rather than silently rebound to something else.
+    local mappings = {
+        {
+            key = keybindings_key,
+            fn = function(_, _)
+                vim.schedule(function()
+                    plugin.cmd.KeyBindings()
+                end)
+            end,
+        },
+    }
+
     local handle
+    if expand_key then
+        table.insert(mappings, {
+            -- Expand to the whole catalog. Curation decides the DEFAULT view,
+            -- never what is reachable.
+            key = expand_key,
+            fn = function()
+                expanded = not expanded
+                handle.update(M._build_items(plugin, view_for(expanded)))
+                handle.set_title(expanded and (title .. " — all models") or title)
+            end,
+        })
+    end
+
     handle = float_picker.open({
         title = title,
         items = M._build_items(plugin, view_for(expanded)),
@@ -226,28 +260,7 @@ function M.agent_picker(plugin)
         on_select = function(item)
             M._select(plugin, item)
         end,
-        mappings = {
-            {
-                key = keybindings_key,
-                fn = function(_, _)
-                    vim.schedule(function()
-                        plugin.cmd.KeyBindings()
-                    end)
-                end,
-            },
-            {
-                -- Expand to the whole catalog. Curation decides the DEFAULT view,
-                -- never what is reachable. The key comes from the registry so it
-                -- is discoverable in <C-g>? and rebindable like every other one.
-                key = require("parley.keybinding_registry")
-                    .key_for("ap_expand_catalog", plugin.config) or "<C-a>",
-                fn = function()
-                    expanded = not expanded
-                    handle.update(M._build_items(plugin, view_for(expanded)))
-                    handle.set_title(expanded and (title .. " — all models") or title)
-                end,
-            },
-        },
+        mappings = mappings,
     })
 
     -- Refresh in the background when the cache is cold or stale, and repaint if

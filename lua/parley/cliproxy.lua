@@ -1375,7 +1375,17 @@ M._catalog_path = catalog_path -- exposed for tests
 --- today's 43 models) because the picker renders from it — the UI path never
 --- waits on the network.
 ---@return table[] models, number|nil fetched_at
+local _catalog_memo = nil -- { models, fetched_at, mtime }
+
 function M.catalog_cached()
+    -- Memoized on the file's mtime: the picker reads this on open, on every
+    -- <C-a> toggle and on every repaint, and each miss was two file reads plus
+    -- two mkdir syscalls on a keystroke path.
+    local stat = vim.uv and vim.uv.fs_stat(catalog_path()) or nil
+    local mtime = stat and stat.mtime and (stat.mtime.sec or 0) .. "." .. (stat.mtime.nsec or 0)
+    if _catalog_memo and mtime and _catalog_memo.mtime == mtime then
+        return _catalog_memo.models, _catalog_memo.fetched_at
+    end
     local fd = io.open(catalog_path(), "r")
     if not fd then
         return {}, nil
@@ -1400,7 +1410,8 @@ function M.catalog_cached()
             rows[#rows + 1] = m
         end
     end
-    return rows, tonumber(decoded.fetched_at)
+    _catalog_memo = { models = rows, fetched_at = tonumber(decoded.fetched_at), mtime = mtime }
+    return rows, _catalog_memo.fetched_at
 end
 
 --- Persist a catalog. Also the seam a spec uses to seed one without a live
@@ -1414,6 +1425,7 @@ function M._write_catalog(models, fetched_at)
     end
     fd:write(vim.json.encode({ models = models, fetched_at = fetched_at or os.time() }))
     fd:close()
+    _catalog_memo = nil -- the file just changed; the next read re-stats it
     pcall(vim.fn.setfperm, catalog_path(), "rw-------")
     return true
 end
@@ -1436,13 +1448,17 @@ end
 --- /v1beta/models carries the display names.
 ---@param cb fun(models: table[])|nil
 function M.fetch_catalog(cb)
+    -- Every exit path resolves the callback exactly once. Returning silently
+    -- while a refresh is in flight strands the caller: a picker opened during
+    -- one would never repaint, because the in-flight fetch's callback belongs to
+    -- an earlier, possibly closed, picker.
+    cb = cb or function() end
     if _catalog_inflight then
-        return
+        return cb(M.catalog_cached())
     end
     local opts = render_opts()
     if not opts.host or not opts.port then
-        if cb then cb({}) end
-        return
+        return cb(M.catalog_cached())
     end
     _catalog_inflight = true
     -- Both the body and the HTTP status: "curl exited 0" is NOT "the request
@@ -1464,18 +1480,20 @@ function M.fetch_catalog(cb)
             vim.schedule(function()
                 _catalog_inflight = false
                 local models = require("parley.cliproxy_catalog").parse(v1 or "", beta or "")
-                -- Write on an HTTP-SUCCESSFUL request, even when the list is
-                -- empty — an empty catalog is real news (every channel logged
-                -- out) and the picker's login rows depend on seeing it. Gating
-                -- on `#models > 0` instead would conflate "nothing is
-                -- authenticated" with "the proxy is down" and keep serving
-                -- models that are no longer available. Gating on curl's exit
-                -- code alone is worse still: a 401 body parses to an empty list
-                -- and would erase a good catalog.
-                if v1_status == 200 then
+                -- Write only when the response is RECOGNISABLY cliproxy's model
+                -- list. Three weaker gates were tried and each lost data:
+                -- `#models > 0` conflated "nothing is authenticated" with "the
+                -- proxy is down"; curl's exit code let a 401 body parse to an
+                -- empty list and erase a good catalog; and HTTP 200 alone let
+                -- whatever else is listening on that port do the same. `classify`
+                -- is the existing single source for "is this cliproxy's /v1/models
+                -- contract" (ARCH-DRY) — `healthy` or `needs_login` are the two
+                -- shapes that ARE that contract, empty list included.
+                local shape = classify(0, (v1 or "") .. "\n" .. tostring(v1_status or 0))
+                if v1_status == 200 and (shape == "healthy" or shape == "needs_login") then
                     M._write_catalog(models)
                 end
-                if cb then cb(models) end
+                cb(models)
             end)
         end)
     end)

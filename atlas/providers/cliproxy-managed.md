@@ -35,6 +35,32 @@ fires) and cooperative for those who run their own (it reuses it). Set
 
 ## Flow
 
+`setup{ cliproxy.manage = true }` → on the first dispatch to a cliproxy-provider
+agent, the adapter's **`pre_query`** hook (the same seam copilot uses) calls
+`ensure_running`:
+
+1. parse host:port from `providers.cliproxyapi.endpoint`; render the config from
+   Lua + the vault-resolved secret; write it `0600` to
+   `stdpath('data')/parley/cliproxy/config.yaml` (a derived artifact — the
+   committed Lua is the source of truth).
+2. probe `/v1/models`. `healthy`/`needs_login` → proceed (reuse). `foreign`/
+   `client_key_mismatch` → abort. `down` → discover the binary, spawn it
+   detached, poll until healthy (≤5s) or abort.
+
+On any failure, `ensure_running` drives **`on_error`** → the dispatcher's
+**abort channel** (`D.query`'s trailing `on_abort`) → each caller's qid-free
+teardown (`chat_respond` collapses the empty answer + stops the spinner;
+`skill_invoke` clears its in-flight guard; `memory_prefs` advances its batch),
+so the request fails fast instead of hanging. **`:ParleyProxy stop` is transient**
+— every dispatch re-`ensure_running`s, so a dead/stopped proxy revives on next use.
+
+`stop` reaps **across sessions**: it kills this session's spawned PIDs *and* a
+leftover cliproxy on the managed port spawned by an earlier nvim (parley's
+proxies are detached + survive nvim exit, so `_spawned` alone can't reach them).
+It **identity-probes the port first** (the same `/v1/models` classifier as
+`health_probe`), so a *foreign* process holding the port is never killed — only
+a process that actually answers as cliproxy. `restart` = `stop` + ensure.
+
 ## Model catalog (#205)
 
 cliproxyapi advertises what it serves, and that set moves without warning — an
@@ -69,32 +95,6 @@ reads that catalog instead of carrying model names in Lua.
   anything antigravity re-serves gets `none`, because `{type="web_search"}` makes
   gemini answer `malformed_function_call` with no content. The decision is
   single-sourced in `providers.cliproxy_default_web_search_strategy`.
-
-`setup{ cliproxy.manage = true }` → on the first dispatch to a cliproxy-provider
-agent, the adapter's **`pre_query`** hook (the same seam copilot uses) calls
-`ensure_running`:
-
-1. parse host:port from `providers.cliproxyapi.endpoint`; render the config from
-   Lua + the vault-resolved secret; write it `0600` to
-   `stdpath('data')/parley/cliproxy/config.yaml` (a derived artifact — the
-   committed Lua is the source of truth).
-2. probe `/v1/models`. `healthy`/`needs_login` → proceed (reuse). `foreign`/
-   `client_key_mismatch` → abort. `down` → discover the binary, spawn it
-   detached, poll until healthy (≤5s) or abort.
-
-On any failure, `ensure_running` drives **`on_error`** → the dispatcher's
-**abort channel** (`D.query`'s trailing `on_abort`) → each caller's qid-free
-teardown (`chat_respond` collapses the empty answer + stops the spinner;
-`skill_invoke` clears its in-flight guard; `memory_prefs` advances its batch),
-so the request fails fast instead of hanging. **`:ParleyProxy stop` is transient**
-— every dispatch re-`ensure_running`s, so a dead/stopped proxy revives on next use.
-
-`stop` reaps **across sessions**: it kills this session's spawned PIDs *and* a
-leftover cliproxy on the managed port spawned by an earlier nvim (parley's
-proxies are detached + survive nvim exit, so `_spawned` alone can't reach them).
-It **identity-probes the port first** (the same `/v1/models` classifier as
-`health_probe`), so a *foreign* process holding the port is never killed — only
-a process that actually answers as cliproxy. `restart` = `stop` + ensure.
 
 ## Auth & secrets
 

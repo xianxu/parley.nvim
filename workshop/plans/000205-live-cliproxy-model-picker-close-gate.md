@@ -634,6 +634,78 @@ rounds:
           round: 9
       boundary: M2
       blocked: true
+    - "n": 10
+      timestamp: "2026-08-31T22:35:42-07:00"
+      agent: claude
+      dispose:
+        - id: BR-19
+          disposition: addressed
+          note: 'Mutation-verified against HEAD: deleting init.lua:1329-1343 fails 2 specs; removing the _select live branch fails 1; removing the _view_for dedupe fails 3; removing catalog_cached''s sanitize fails 1; hardcoding the picker key fails the arch guard.'
+          round: 10
+        - id: BR-20
+          disposition: not-addressed
+          note: 'Status half fixed. Still open: no logger call anywhere in fetch_catalog; no in-memory cache (2 reads + 2 mkdirs per picker open, more per toggle/repaint); providers=nil still yields {} against the Spec. None struck in Revisions.'
+          round: 10
+        - id: BR-21
+          disposition: not-addressed
+          note: 'Measured: a foreign-mode 200 wipes a warm 7-row catalog to 0 (cliproxy.lua:1475); _beta_status discarded (:1463); _providers_without_models still unguarded (agent_picker.lua:25); <C-a> renders "(nil)" for an ownerless row (:112).'
+          round: 10
+        - id: BR-24
+          disposition: not-addressed
+          note: Atlas half done and good. README.md is untouched in the whole window while the diff adds <C-a> and cliproxy.live_models; plan Task 3.3 Step 6 still names it.
+          round: 10
+        - id: BR-27
+          disposition: not-addressed
+          note: Unfixable structurally, but plan Task 4.2 still assigns live_models to M4 though it shipped in M3; and the tree carries uncommitted M4 config.lua edits at an M2 gate.
+          round: 10
+        - id: BR-28
+          disposition: not-addressed
+          note: 'Now three sites, not two: agent_picker.lua:105, agent_picker.lua:154, cliproxy_catalog.lua:220.'
+          round: 10
+        - id: BR-29
+          disposition: not-addressed
+          note: 'All four unchanged: is_managed gate at agent_picker.lua:256, chained 2x CURL_MAX_TIME, repaint-under-cursor, pending() at conformance_spec.lua:235,254.'
+          round: 10
+        - id: BR-32
+          disposition: not-addressed
+          note: atlas/providers/cliproxy-managed.md:36-38 unchanged; the H2 still sits directly under "## Flow", orphaning 60 lines of flow narrative.
+          round: 10
+        - id: BR-34
+          disposition: not-addressed
+          note: fake_cliproxy:404-410 unchanged and still unlabelled; no live conformance covers the needs_login or client_key_mismatch v1beta branches.
+          round: 10
+        - id: BR-35
+          disposition: not-addressed
+          note: 'Measured: help_lines("chat", config) renders the row under Global. No agent_picker scope added; no agent_picker_mappings example in config.lua.'
+          round: 10
+      findings:
+        - id: BR-36
+          severity: Minor
+          title: The arch guard matches one syntactic form, so the `or "<C-a>"` fallback is a second copy of the registry default it cannot see
+          detail: |-
+            This is the 4th finding in family `single-source-not-enforced`. Do NOT fix the
+            instance. The rule: a syntactic single-source guard must enumerate the FORMS the
+            duplicated value can take — BR-31 already wrote that rule for the plan's referent
+            grep, and it is now recurring in tests/arch/single_source_sweeps_spec.lua, which
+            greps only `key = "<...>"`. agent_picker.lua:243 restates
+            keybinding_registry.lua:757's `<C-a>` in an `or` fallback that the guard misses.
+            Currently unreachable (resolve_keys always falls back to default_key), so it is
+            dead duplication rather than a live bug — which is exactly why no test notices it.
+          family: single-source-not-enforced
+          round: 10
+        - id: BR-37
+          severity: Minor
+          title: fetch_catalog drops its callback on the in-flight path while calling it with {} on the missing-endpoint path
+          detail: |-
+            cliproxy.lua:1439 returns without invoking cb when _catalog_inflight is set;
+            cliproxy.lua:1444 invokes cb({}) when host/port are missing. A picker opened while
+            a refresh is in flight therefore never repaints — the in-flight fetch's callback
+            belongs to the earlier, possibly closed, picker. Rule: every exit path of a
+            callback-taking async function resolves its callback exactly once.
+          family: async-callback-not-resolved
+          round: 10
+      boundary: M2
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#205 (boundary-review)
@@ -939,6 +1011,39 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-35** [Minor] `wrong-taxonomy-value` The new <C-a> registry row declares scope "global", so it renders under Global in every help screen though it only works inside the agent picker
   keybinding_registry.lua:759 sets scope = "global" because the scope forest has no agent_picker entry; the three sibling <C-a> rows use chat_finder/note_finder/issue_finder. Rendered help_lines("chat", config) confirms the row appears under the Global heading in a chat buffer, where <C-a> is Vim's increment and parley binds nothing. keybindings_spec.lua:244 only asserts the scope is a valid label, never the right one. The rule: when a taxonomy has no correct value for a new row, add the value rather than filing it under the nearest wrong one — here, an agent_picker scope with a label and display-order entry, as the three finders already have. Also add agent_picker_mappings to config.lua so the documented config_key has an example, as the other *_mappings keys do.
 
+## Round 10 — 2026-08-31T22:35:42-07:00 (claude) — passed
+
+### Disposed
+
+- BR-19 — addressed — Mutation-verified against HEAD: deleting init.lua:1329-1343 fails 2 specs; removing the _select live branch fails 1; removing the _view_for dedupe fails 3; removing catalog_cached's sanitize fails 1; hardcoding the picker key fails the arch guard.
+- BR-20 — not-addressed — Status half fixed. Still open: no logger call anywhere in fetch_catalog; no in-memory cache (2 reads + 2 mkdirs per picker open, more per toggle/repaint); providers=nil still yields {} against the Spec. None struck in Revisions.
+- BR-21 — not-addressed — Measured: a foreign-mode 200 wipes a warm 7-row catalog to 0 (cliproxy.lua:1475); _beta_status discarded (:1463); _providers_without_models still unguarded (agent_picker.lua:25); <C-a> renders "(nil)" for an ownerless row (:112).
+- BR-24 — not-addressed — Atlas half done and good. README.md is untouched in the whole window while the diff adds <C-a> and cliproxy.live_models; plan Task 3.3 Step 6 still names it.
+- BR-27 — not-addressed — Unfixable structurally, but plan Task 4.2 still assigns live_models to M4 though it shipped in M3; and the tree carries uncommitted M4 config.lua edits at an M2 gate.
+- BR-28 — not-addressed — Now three sites, not two: agent_picker.lua:105, agent_picker.lua:154, cliproxy_catalog.lua:220.
+- BR-29 — not-addressed — All four unchanged: is_managed gate at agent_picker.lua:256, chained 2x CURL_MAX_TIME, repaint-under-cursor, pending() at conformance_spec.lua:235,254.
+- BR-32 — not-addressed — atlas/providers/cliproxy-managed.md:36-38 unchanged; the H2 still sits directly under "## Flow", orphaning 60 lines of flow narrative.
+- BR-34 — not-addressed — fake_cliproxy:404-410 unchanged and still unlabelled; no live conformance covers the needs_login or client_key_mismatch v1beta branches.
+- BR-35 — not-addressed — Measured: help_lines("chat", config) renders the row under Global. No agent_picker scope added; no agent_picker_mappings example in config.lua.
+
+### Raised
+
+- **BR-36** [Minor] `single-source-not-enforced` The arch guard matches one syntactic form, so the `or "<C-a>"` fallback is a second copy of the registry default it cannot see
+  This is the 4th finding in family `single-source-not-enforced`. Do NOT fix the
+  instance. The rule: a syntactic single-source guard must enumerate the FORMS the
+  duplicated value can take — BR-31 already wrote that rule for the plan's referent
+  grep, and it is now recurring in tests/arch/single_source_sweeps_spec.lua, which
+  greps only `key = "<...>"`. agent_picker.lua:243 restates
+  keybinding_registry.lua:757's `<C-a>` in an `or` fallback that the guard misses.
+  Currently unreachable (resolve_keys always falls back to default_key), so it is
+  dead duplication rather than a live bug — which is exactly why no test notices it.
+- **BR-37** [Minor] `async-callback-not-resolved` fetch_catalog drops its callback on the in-flight path while calling it with {} on the missing-endpoint path
+  cliproxy.lua:1439 returns without invoking cb when _catalog_inflight is set;
+  cliproxy.lua:1444 invokes cb({}) when host/port are missing. A picker opened while
+  a refresh is in flight therefore never repaints — the in-flight fetch's callback
+  belongs to the earlier, possibly closed, picker. Rule: every exit path of a
+  callback-taking async function resolves its callback exactly once.
+
 ## Open findings
 
 - **BR-13** [Important] `rank-key-version-extraction` rank_key's `< 100` threshold answers the 120B instance, not the class: any parameter count below 100 still reads as a version
@@ -947,12 +1052,14 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-16** [Important] `atlas-not-updated-for-new-surface` atlas/providers/cliproxy-managed.md gains no entry for cliproxy_catalog.lua, the third pure module of the feature it maps
 - **BR-17** [Minor] `duplicated-logic-not-extracted` The agent-registration block is copy-pasted between register_live_agent and the refresh_state restore, and the copies already disagree
 - **BR-18** [Minor] `plan-command-does-not-run` The BR-9 referent sweep collapsed four distinct spec keys into four identical commands, destroying which surfaces the step covers
-- **BR-19** [Critical] `missing-test-for-shipped-behavior` M3's restart-restore and the whole of Task 3.2 ship with no test that can fail
 - **BR-20** [Important] `stated-design-not-implemented` fetch_catalog logs nothing and discards the HTTP status; "cache in memory" and `providers = nil` are unimplemented
 - **BR-21** [Important] `missing-input-guard` BR-6/BR-7's boundary guards applied to one site while two new boundaries shipped without them
+- **BR-24** [Important] `atlas-not-updated-for-new-surface` No atlas or README update for live_models, the picker live/login sections, C-a, or catalog.json
 - **BR-27** [Minor] `boundary-crossed-out-of-order` The M3 implementation commit sits inside the M2 review window
 - **BR-28** [Minor] `duplicated-logic-not-extracted` The `<id>*` live-agent naming convention is written in two modules
 - **BR-29** [Minor] `stated-design-not-implemented` Assorted envelope and idiom nits: is_managed gate, 4s chained budget, repaint-under-cursor, pending vs SKIP
 - **BR-32** [Minor] `docs-insert-orphans-section` The new atlas section was inserted between `## Flow` and its body, refiling 60 lines of flow narrative under the catalog heading
 - **BR-34** [Minor] `unmeasured-family-branch` The fake's two new /v1beta/models branches are unmeasured assumptions, and one now backs a test
 - **BR-35** [Minor] `wrong-taxonomy-value` The new <C-a> registry row declares scope "global", so it renders under Global in every help screen though it only works inside the agent picker
+- **BR-36** [Minor] `single-source-not-enforced` The arch guard matches one syntactic form, so the `or "<C-a>"` fallback is a second copy of the registry default it cannot see
+- **BR-37** [Minor] `async-callback-not-resolved` fetch_catalog drops its callback on the in-flight path while calling it with {} on the missing-endpoint path

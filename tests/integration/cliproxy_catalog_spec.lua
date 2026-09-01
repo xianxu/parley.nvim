@@ -205,6 +205,49 @@ describe("cliproxy model catalog", function()
         end)
     end)
 
+    it("does not let a foreign 200 wipe a warm catalog", function()
+        -- Something else holding the port answers 200 with a body that is not
+        -- cliproxy's model list. It parses to an empty list, and an HTTP-200-only
+        -- gate would write that over a good catalog.
+        local port = ready_port.free_port()
+        start_fake(port)
+        set_endpoint(port)
+        local warm = fetch()
+        assert.is_true(#warm > 0)
+
+        -- A FRESH port: reusing the one just killed lets the dying process
+        -- answer the next probe, and the test then proves nothing. (It did
+        -- exactly that on first writing — reverting the fix left it green.)
+        local foreign_port = ready_port.free_port()
+        local handle, pid = uv.spawn(FAKE, {
+            args = { "--port", tostring(foreign_port), "--mode", "foreign" },
+        }, function() end)
+        assert(handle)
+        table.insert(started, { handle = handle, pid = pid })
+        assert(ready_port.wait_listening(foreign_port), "foreign fake never came up")
+        set_endpoint(foreign_port)
+
+        fetch()
+        assert.equals(#warm, #cliproxy.catalog_cached(), "a foreign 200 wiped the catalog")
+    end)
+
+    it("resolves its callback on every exit path", function()
+        -- A picker opened while a refresh is in flight must still repaint; the
+        -- in-flight fetch's callback belongs to an earlier, possibly closed one.
+        local port = ready_port.free_port()
+        start_fake(port)
+        set_endpoint(port)
+        fetch() -- warm the cache
+
+        local first, second = false, false
+        cliproxy.fetch_catalog(function() first = true end)
+        cliproxy.fetch_catalog(function(models)      -- lands on the in-flight path
+            second = models ~= nil
+        end)
+        vim.wait(8000, function() return first and second end, 20)
+        assert.is_true(second, "the second caller was never resolved")
+    end)
+
     it("reports staleness from the cache's own timestamp", function()
         cliproxy._write_catalog({ { id = "x", owner = "openai" } }, os.time())
         assert.is_false(cliproxy.catalog_stale())

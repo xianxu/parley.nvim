@@ -499,3 +499,22 @@ describe("agent_picker live/agent overlap", function()
         assert.equals(1, checked, "more than one row carries the current marker")
     end)
 end)
+
+describe("agent_picker._view_for provider defaults", function()
+    it("falls back to every known provider when none are configured", function()
+        -- config.lua documents `nil providers = every known provider`; returning
+        -- an empty list instead made the entire live section disappear for
+        -- anyone who omitted the key.
+        local catalog = {
+            { id = "claude-opus-5", display = "Claude Opus 5", owner = "anthropic",
+              series = "claude-opus", created = 2 },
+            { id = "gpt-5.6-sol", display = "GPT 5.6 Sol", owner = "openai",
+              series = "gpt-sol", created = 1 },
+        }
+        local view = agent_picker._view_for(catalog, { per_provider = 3 }, {})
+        local ids = {}
+        for _, m in ipairs(view.live) do ids[#ids + 1] = m.id end
+        table.sort(ids)
+        assert.same({ "claude-opus-5", "gpt-5.6-sol" }, ids)
+    end)
+end)

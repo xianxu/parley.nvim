@@ -404,8 +404,20 @@ def main():
             if self.path.startswith("/v1beta/models"):
                 # The naming half of the catalog (#205). parse() joins it onto
                 # /v1/models by id after stripping the `models/` prefix.
+                #
+                # The branches mirror /v1/models above, because parley reads the
+                # two routes in one breath and a mode that answered differently
+                # on each would model a proxy that cannot exist:
+                #   client_key_mismatch  401, same bearer rejection
+                #   needs_login          200 with an EMPTY list — the registry is
+                #                        empty, not the route missing
+                #   foreign              not cliproxy's shape at all
                 if mode == "client_key_mismatch":
                     self._json(401, {"error": "unauthorized"})
+                elif mode == "needs_login":
+                    self._json(200, {"models": []})
+                elif mode == "foreign":
+                    self._json(200, {"hello": "i am not cliproxy"})
                 else:
                     self._json(200, {"models": CATALOG_V1BETA})
                 return

@@ -63,8 +63,19 @@ describe("arch: single-source sweeps stay swept", function()
             ["lua/parley/system_prompt_picker.lua"] = 4,
         }
         for _, path in ipairs(repo_files("ls lua/parley/*_picker.lua")) do
+            -- Enumerate the FORMS the duplicated value can take, not one of
+            -- them: `key = "<C-a>"` and `key_for(...) or "<C-a>"` are the same
+            -- duplication, and a guard that sees only the first is why the
+            -- second shipped. Any bracketed key literal in the file counts.
+            local body = read(path)
             local literals = 0
-            for _ in read(path):gmatch('key = "<[^"]+>"') do
+            for _ in body:gmatch('key = "<[^"]+>"') do
+                literals = literals + 1
+            end
+            for _ in body:gmatch('key_for%b() or "<[^"]+>"') do
+                literals = literals + 1
+            end
+            for _ in body:gmatch('or "<[^"]+>"') do
                 literals = literals + 1
             end
             local allowed = LEGACY_UNREGISTERED[path] or 0
