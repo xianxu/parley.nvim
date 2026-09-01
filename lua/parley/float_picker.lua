@@ -1707,8 +1707,8 @@ function M.open(opts)
                 -- BOTH forms resolve through the same filtered-space lookup
                 -- below. Assigning it straight to sel_idx would silently mean a
                 -- different row whenever a query is active.
-                local row = items[math.max(1, math.floor(next_selection))]
-                next_identity = row and recall_id_fn(row) or nil
+                local picked = items[math.max(1, math.floor(next_selection))]
+                next_identity = picked and recall_id_fn(picked) or nil
                 sel_idx = math.max(1, math.floor(next_selection))
             end
             if not opts.height then
