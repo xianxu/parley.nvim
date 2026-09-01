@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-08-31
 updated: 2026-08-31
-estimate_hours: 3.92
+estimate_hours: 4.61
 started: 2026-08-31T18:19:21-07:00
 ---
 
@@ -213,18 +213,24 @@ Durable design: `workshop/plans/000205-live-cliproxy-model-picker-plan.md`
 
 ## Estimate
 
-Method A primitive decomposition. Step 3 spec-quality discount applied (x0.2 on
-design) — this issue has a dense Spec plus a 1,380-line plan with per-task TDD
-steps, so the design dialogue is front-loaded rather than pending. Step 2.5
+Method A primitive decomposition. Step 3 spec-quality discount (x0.2 on design)
+applied to the *implementation* primitives — this issue has a dense Spec plus a
+~1,490-line plan with per-task TDD steps, so their design dialogue is
+front-loaded. It is deliberately NOT applied to `issue-spec` (you cannot discount
+authoring a spec by that spec's own quality) or to `ux-rename-iteration` (operator
+feedback on a rendered UI is exactly what a spec cannot pre-empt). Step 2.5
 library-availability: N/A, no novel stack — every seam already exists in-repo
 (`api_argv`, `float_picker`'s update handle, the `fake_cliproxy` process fake).
-Per v3.1 the design buffer is +15% rather than +30% because of that plan doc,
-and `impl=` values are written at 40% of the v2 table.
+Per v3.1 the design buffer is +15% rather than +30% because of that plan doc, and
+`impl=` values are written at 40% of the v2 table.
 
-`milestone-review` covers four boundaries (M1-M4) at ~0.15 each.
-`real-api-discovery` is one external surface (cliproxy `/v1beta/models`) and is
-already partly spent: the routes, the created-less antigravity rows and the
-per-family web-search behavior were all probed live during design.
+`milestone-review` covers five boundaries at ~0.15 each: M1-M4 plus the review
+`sdlc close` dispatches on its own window. `real-api-discovery` is one external
+surface (cliproxy `/v1beta/models`) and is already partly spent — the routes, the
+created-less antigravity rows and the per-family web-search behavior were all
+probed live during design. `ux-rename-iteration` budgets one round on the picker's
+row format, grouping and `<C-a>` affordance, which are the parts that invite
+operator feedback once seen.
 
 ```estimate
 model: estimate-logic-v3.1
@@ -233,19 +239,27 @@ item: issue-spec              design=0.5  impl=0.1
 item: lua-neovim              design=0.3  impl=0.4
 item: lua-neovim              design=0.2  impl=0.3
 item: lua-neovim              design=0.3  impl=0.5
-item: cross-cutting-refactor  design=0.1  impl=0.15
+item: lua-neovim              design=0.2  impl=0.3
+item: ux-rename-iteration     design=0.15 impl=0.1
 item: real-api-discovery      design=0.0  impl=0.15
-item: milestone-review        design=0.0  impl=0.6
+item: milestone-review        design=0.0  impl=0.75
 item: atlas-docs              design=0.05 impl=0.05
 design-buffer: 0.15
-total: 3.92
+total: 4.61
 ```
 
 *Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against
 `baseline-v3.1.md`. Method A only.*
 
-The three `lua-neovim` items are, in order: the pure catalog core (M1), the
-fetch/cache IO shell (M2), and the picker integration (M3).
+**Re-derived 2026-08-31 after M4 grew.** The first derivation (3.92h) costed M4 as
+`cross-cutting-refactor` (0.25h) before the PQ-10/PQ-12 rounds rewrote Task 4.1
+into a behavioural change to credential diagnosis with a new shared reducer seam.
+That is a `lua-neovim` item, not a rename. Also added: one UX-iteration round and
+a fifth review boundary.
+
+The four `lua-neovim` items are, in order: the pure catalog core (M1), the
+fetch/cache IO shell (M2), the picker integration (M3), and M4's channel
+resolution rework.
 
 ## Revisions
 

@@ -230,7 +230,37 @@ rounds:
           family: invented-test-api
           round: 4
       blocked: true
-content_hash: c74c003dde4afff96c46c05e592c6e49f0daa6bb76328725d064a6147aa4cd65
+    - "n": 5
+      timestamp: "2026-08-31T19:57:13-07:00"
+      agent: claude
+      dispose:
+        - id: PQ-12
+          disposition: addressed
+          note: Task 4.1 Step 3 now defines OWNER_CHANNELS + channels_for_owner as the named source; the covering name-must-have-a-referent rule is in Notes for the implementer.
+          round: 5
+        - id: PQ-13
+          disposition: addressed
+          note: port_is_listening replaced by ready_port.is_listening, declared as new in Task 2.2's Files section; swept by the generalized rule, not patched per-site.
+          round: 5
+      findings:
+        - id: PQ-14
+          severity: Minor
+          title: The producer of the logged-out rows is named twice and defined nowhere; the plan's own referent sweep was stated but not run
+          detail: |-
+            Task 3.2 calls M._logged_out_providers(plugin) attributed to Task 3.1, but
+            Task 3.1 only extends _build_items and injects logged_out rows in its test;
+            the Integration-points table calls the same capability provider_states. No
+            step creates either. It also reads credential_health_for_login
+            (lua/parley/cliproxy.lua:474), which is callback-async, so a synchronous
+            call in view_for on picker-open contradicts the plan's own "zero network
+            work on the main thread" envelope. 4th in family (PQ-4, PQ-12, this;
+            3 of 3 in the sibling invented-test-api family). Do not patch this site —
+            the covering rule already exists in Notes for the implementer; run the
+            grep it prescribes once over the whole plan and dispose of its output.
+          family: stated-design-not-implemented
+          round: 5
+      blocked: false
+content_hash: e8f358c25f3f944d993a157e332c681f74c296a3a20a4b0bc207801dbd97ff1e
 ---
 
 # Gate ledger — parley.nvim#205 (plan-quality)
@@ -370,7 +400,27 @@ later rounds disposed of them. Generated — edit the gate, not this file.
   named on this issue that did not exist. Swept by the generalized
   name-must-have-a-referent rule above, not by adding one more helper by hand.
 
+## Round 5 — 2026-08-31T19:57:13-07:00 (claude) — passed
+
+### Disposed
+
+- PQ-12 — addressed — Task 4.1 Step 3 now defines OWNER_CHANNELS + channels_for_owner as the named source; the covering name-must-have-a-referent rule is in Notes for the implementer.
+- PQ-13 — addressed — port_is_listening replaced by ready_port.is_listening, declared as new in Task 2.2's Files section; swept by the generalized rule, not patched per-site.
+
+### Raised
+
+- **PQ-14** [Minor] `stated-design-not-implemented` The producer of the logged-out rows is named twice and defined nowhere; the plan's own referent sweep was stated but not run
+  Task 3.2 calls M._logged_out_providers(plugin) attributed to Task 3.1, but
+  Task 3.1 only extends _build_items and injects logged_out rows in its test;
+  the Integration-points table calls the same capability provider_states. No
+  step creates either. It also reads credential_health_for_login
+  (lua/parley/cliproxy.lua:474), which is callback-async, so a synchronous
+  call in view_for on picker-open contradicts the plan's own "zero network
+  work on the main thread" envelope. 4th in family (PQ-4, PQ-12, this;
+  3 of 3 in the sibling invented-test-api family). Do not patch this site —
+  the covering rule already exists in Notes for the implementer; run the
+  grep it prescribes once over the whole plan and dispose of its output.
+
 ## Open findings
 
-- **PQ-12** [Critical] `stated-design-not-implemented` resolve_channels' candidate set has no source; the owner-to-channels relation it asserts exists nowhere in code
-- **PQ-13** [Minor] `invented-test-api` Task 2.2's dormancy test calls port_is_listening, which exists nowhere and is not in the task's Files section
+- **PQ-14** [Minor] `stated-design-not-implemented` The producer of the logged-out rows is named twice and defined nowhere; the plan's own referent sweep was stated but not run
