@@ -1374,6 +1374,175 @@ rounds:
       boundary: M4
       blocked: false
       protocol_error: no valid findings block
+    - "n": 20
+      timestamp: "2026-09-01T11:06:28-07:00"
+      agent: claude
+      findings:
+        - id: BR-75
+          severity: Critical
+          title: could_have_served excludes only `missing`; `unknown` and `disabled` still outrank a real failure and name the wrong account
+          detail: |-
+            Measured against the shipped fan-out (stubbing only credential_health's single read):
+            an `unknown` reading (rank -1, the worst in HEALTH_RANK — six distinct auth_files read
+            failures produce it) beats an expired `error` credential and degrades credential_action
+            to `report`; a `disabled` reading (rank 1) beats it too and fires prompt_login naming
+            someone-else@x.com. The 404-repair path makes the `unknown` case deterministic: in a
+            2-channel fan-out the second read hits `if _management_restart_done then return cb(health)`
+            at cliproxy.lua:459 and returns unknown. This is the #197 wrong-account diagnosis the M4
+            Done-when targets, still live on the default multi-candidate path.
+            This is the 4th finding in family `missing-input-guard`. Do NOT patch the two states —
+            state the rule over the whole enum: a candidate is a reading that is EVIDENCE a credential
+            the proxy actually used failed, i.e. `HEALTH_RANK[state] ~= nil and not INELIGIBLE[state]`
+            with INELIGIBLE = { missing, disabled }; pin it with a test that iterates every key of
+            HEALTH_RANK plus nil, so a new state cannot be added without classifying it. Correct
+            atlas/providers/cliproxy-managed.md:110-117, which documents the one-value rule verbatim.
+          family: missing-input-guard
+          round: 20
+        - id: BR-76
+          severity: Important
+          title: credential_health_across_or_one hardcodes repaired=nil on the multi-candidate branch, defeating the one-restart-per-claim guard
+          detail: |-
+            cliproxy.lua:539 passes nil, so `restarted_this_claim` at :1391 is permanently false on
+            the fan-out path — now the DEFAULT path, since deleting the alias block gives every
+            anthropic/openai model two candidates. The guard at :1357 never fires, re-enabling the
+            compound repair-then-restart (~36s) that credential_health's docstring at :430-432 calls
+            "made UNREACHABLE rather than budgeted"; the operator gets "recovery timed out" instead of
+            the diagnosis parley computed. No test covers it. Thread `repaired` through the fan-out
+            (true if any reading repaired), or pre-flight one read before fanning out.
+          family: extracted-seam-drops-a-signal
+          round: 20
+        - id: BR-77
+          severity: Important
+          title: readings are collected in callback-completion order, so a tie in likeliest_culprit names a random channel
+          detail: |-
+            cliproxy.lua:511 appends inside each async callback. likeliest_culprit keeps the first of
+            equal-ranked readings, so two candidates in the same state (two `error` credentials) yield
+            a different named account run to run — an unreproducible user-visible diagnosis. Capture
+            the loop index and write readings[i], then compact, so the order is the declared candidate
+            order.
+          family: fanout-result-order-nondeterministic
+          round: 20
+        - id: BR-78
+          severity: Important
+          title: GOLDEN_AGENT is defined twice — once in the regenerator, once in the verifier — and must be kept equal by hand
+          detail: |-
+            scripts/refresh_goldens.lua:26-31 and tests/unit/parley_harness_golden_spec.lua:33-38 hold
+            verbatim copies, joining the pre-existing hand-synced READONLY_TOOLS ("Keep in sync with…").
+            The fix's own stated rule is that a golden must depend on nothing a product decision can
+            move; it now depends on two humans keeping two literals equal.
+            This is the 6th finding in family `single-source-not-enforced`. Do NOT fix this instance —
+            the rule is that agreement between two files must be EXECUTABLE (one definition both
+            require), never a comment. Sweep the enumeration in one pass:
+            `grep -rn "[Kk]eep in sync\|mirrors the .* in " lua/ tests/ scripts/`.
+          family: single-source-not-enforced
+          round: 20
+        - id: BR-79
+          severity: Important
+          title: scripts/parley_harness.lua / build_payload's new `opts.agent` option is in neither Core-concepts table
+          detail: |-
+            A new public option consumed by three spec files and the regenerator (parley_harness.lua:67-76);
+            neither the module nor the function appears in the plan's Pure or Integration tables.
+            This is the 7th finding in family `plan-table-missing-entity`. The rule was already STATED
+            last round — the table's input list must be `git diff --name-only <base> <head> -- lua/
+            scripts/ tests/fixtures/`, not the author's memory — and not implemented, which is why it
+            recurs. Do NOT add one row: wire that command into the plan's §Notes check and reconcile
+            every row in one pass.
+          family: plan-table-missing-entity
+          round: 20
+        - id: BR-80
+          severity: Important
+          title: Three stacked doc blocks precede credential_health_across, one documenting a `prefer` parameter that no longer exists
+          detail: |-
+            cliproxy.lua:478-504 — credential_health_for_login's docstring (still ending in @param login /
+            @param cb), then a block describing `prefer fun(a,b): boolean` (a signature deleted in this
+            same range), then the current @param choose block, all above one function;
+            credential_health_for_login at :532 has no docstring. Separately recover retains the pre-M4
+            paragraph "fall back to resolving the model through oauth-model-alias" (:1303-1306) directly
+            above its replacement (:1307-1312).
+            This is the 3rd finding in family `docs-insert-orphans-section`. The rule is already at
+            workshop/lessons.md:962-964 and was violated again by the range that appends to that file.
+            Restating it has failed twice — make it mechanical: lint any `function M.x(...)` whose
+            immediately-preceding ---@param block names an identifier absent from the signature.
+          family: docs-insert-orphans-section
+          round: 20
+        - id: BR-81
+          severity: Minor
+          title: The get_agent stale-selection test pins a state production cannot produce; the reachable variant is untested
+          detail: |-
+            refresh_state (init.lua:1345) resets _state.agent to _agents[1] whenever the persisted name
+            is absent, so a deleted-selected-agent never reaches get_agent. Probed: a state.json naming
+            a vanished agent yields "state.agent after setup = Claude-Fable", no crash, under the OLD
+            logic too — so the plan note's "crashed every request until the state file was hand-edited"
+            is unsupported. The genuinely reachable variant is _state.agent == nil (every agent disabled,
+            #_agents == 0), which the old code crashed on via string-concat and the new error() handles
+            cleanly, and which has no test.
+            This is the 4th finding in family `test-title-overstates-guard`. The rule: a regression test
+            must name the production caller that produces its input; if none exists, it is a defensive
+            guard and must be titled as one.
+          family: test-title-overstates-guard
+          round: 20
+        - id: BR-82
+          severity: Minor
+          title: README and atlas still show `claude:opus,sonnet` after the same range shipped `claude:opus,sonnet,fable`
+          detail: |-
+            README.md:199 and atlas/providers/cliproxy-managed.md:94 restate a default that config.lua:145
+            changed in this window.
+            This is the 4th finding in family `atlas-not-updated-for-new-surface`. The rule was stated
+            last round: for each literal the diff changes in lua/parley/config.lua, grep it across
+            README.md atlas/ docs/ and fix or strike every hit. Wire that grep into the docs step rather
+            than fixing these two lines.
+          family: atlas-not-updated-for-new-surface
+          round: 20
+        - id: BR-83
+          severity: Minor
+          title: Two of the empty-alias e2e case's guards are inert — the notice can never contain "antigravity"
+          detail: |-
+            tests/integration/cliproxy_recovery_e2e_spec.lua:158,163. Reverting the fix produced
+            'cliproxy for "claude-opus-4-8": no credential is loaded for this channel' — no channel name
+            (that reaches only vim.ui.select, which the spec stubs), and "Add it to" is a literal the
+            rewrite clears trivially while the key is still recommended. Only assert.matches("me@example.com")
+            discriminates. Assert on the vim.ui.select argument, or drop the two.
+          family: test-title-overstates-guard
+          round: 20
+        - id: BR-84
+          severity: Minor
+          title: credential_health_for_login's healthiest-wins reducer stays an inline closure in the IO shell while its twin was extracted
+          detail: |-
+            cliproxy.lua:485-495. This is the 2nd finding in family `pure-decision-in-io-shell`. The rule:
+            if a branch names a POLICY it belongs in the pure module even when its inputs arrive
+            asynchronously — apply it to both reducers, not the one the last finding named. Extract
+            `ca.healthiest` next to `likeliest_culprit`.
+          family: pure-decision-in-io-shell
+          round: 20
+        - id: BR-85
+          severity: Minor
+          title: resolve_login_provider has zero production call sites yet gained a new parameter, and its @param sits after @return
+          detail: |-
+            cliproxy_config.lua:265-271. Only tests call it. Either wire it into recover (it now derives
+            from the same source as resolve_channels) or delete it; and move @param models above @return
+            so the annotation block parses.
+          family: dead-api-extended
+          round: 20
+        - id: BR-86
+          severity: Minor
+          title: The worktree carries an uncommitted 192-line config.lua roster deletion and an untracked docs/parley.nvim.md at the boundary
+          detail: |-
+            Neither is in the review window. This is the 3rd finding in family
+            `close-stages-unreviewed-worktree`. The rule: build the close commit from an explicit path
+            list, never `git commit -a` — enforce it in the close step rather than re-checking by eye.
+          family: close-stages-unreviewed-worktree
+          round: 20
+        - id: BR-87
+          severity: Minor
+          title: Plan Task 4.1 still presents "the LEAST healthy candidate is the one that plausibly failed" as the design
+          detail: |-
+            workshop/plans/000205-live-cliproxy-model-picker-plan.md:1350-1354. The appended C1 note
+            supersedes it, but a reader reaching Task 4.1 first gets the rule the code was fixed to stop
+            implementing. Annotate in place with a pointer to the revision.
+          family: stated-design-not-implemented
+          round: 20
+      boundary: M4
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#205 (boundary-review)
@@ -1979,6 +2148,109 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 
 **Protocol error:** no valid findings block — this round contributed no findings.
 
+## Round 20 — 2026-09-01T11:06:28-07:00 (claude) — BLOCKED
+
+### Raised
+
+- **BR-75** [Critical] `missing-input-guard` could_have_served excludes only `missing`; `unknown` and `disabled` still outrank a real failure and name the wrong account
+  Measured against the shipped fan-out (stubbing only credential_health's single read):
+  an `unknown` reading (rank -1, the worst in HEALTH_RANK — six distinct auth_files read
+  failures produce it) beats an expired `error` credential and degrades credential_action
+  to `report`; a `disabled` reading (rank 1) beats it too and fires prompt_login naming
+  someone-else@x.com. The 404-repair path makes the `unknown` case deterministic: in a
+  2-channel fan-out the second read hits `if _management_restart_done then return cb(health)`
+  at cliproxy.lua:459 and returns unknown. This is the #197 wrong-account diagnosis the M4
+  Done-when targets, still live on the default multi-candidate path.
+  This is the 4th finding in family `missing-input-guard`. Do NOT patch the two states —
+  state the rule over the whole enum: a candidate is a reading that is EVIDENCE a credential
+  the proxy actually used failed, i.e. `HEALTH_RANK[state] ~= nil and not INELIGIBLE[state]`
+  with INELIGIBLE = { missing, disabled }; pin it with a test that iterates every key of
+  HEALTH_RANK plus nil, so a new state cannot be added without classifying it. Correct
+  atlas/providers/cliproxy-managed.md:110-117, which documents the one-value rule verbatim.
+- **BR-76** [Important] `extracted-seam-drops-a-signal` credential_health_across_or_one hardcodes repaired=nil on the multi-candidate branch, defeating the one-restart-per-claim guard
+  cliproxy.lua:539 passes nil, so `restarted_this_claim` at :1391 is permanently false on
+  the fan-out path — now the DEFAULT path, since deleting the alias block gives every
+  anthropic/openai model two candidates. The guard at :1357 never fires, re-enabling the
+  compound repair-then-restart (~36s) that credential_health's docstring at :430-432 calls
+  "made UNREACHABLE rather than budgeted"; the operator gets "recovery timed out" instead of
+  the diagnosis parley computed. No test covers it. Thread `repaired` through the fan-out
+  (true if any reading repaired), or pre-flight one read before fanning out.
+- **BR-77** [Important] `fanout-result-order-nondeterministic` readings are collected in callback-completion order, so a tie in likeliest_culprit names a random channel
+  cliproxy.lua:511 appends inside each async callback. likeliest_culprit keeps the first of
+  equal-ranked readings, so two candidates in the same state (two `error` credentials) yield
+  a different named account run to run — an unreproducible user-visible diagnosis. Capture
+  the loop index and write readings[i], then compact, so the order is the declared candidate
+  order.
+- **BR-78** [Important] `single-source-not-enforced` GOLDEN_AGENT is defined twice — once in the regenerator, once in the verifier — and must be kept equal by hand
+  scripts/refresh_goldens.lua:26-31 and tests/unit/parley_harness_golden_spec.lua:33-38 hold
+  verbatim copies, joining the pre-existing hand-synced READONLY_TOOLS ("Keep in sync with…").
+  The fix's own stated rule is that a golden must depend on nothing a product decision can
+  move; it now depends on two humans keeping two literals equal.
+  This is the 6th finding in family `single-source-not-enforced`. Do NOT fix this instance —
+  the rule is that agreement between two files must be EXECUTABLE (one definition both
+  require), never a comment. Sweep the enumeration in one pass:
+  `grep -rn "[Kk]eep in sync\|mirrors the .* in " lua/ tests/ scripts/`.
+- **BR-79** [Important] `plan-table-missing-entity` scripts/parley_harness.lua / build_payload's new `opts.agent` option is in neither Core-concepts table
+  A new public option consumed by three spec files and the regenerator (parley_harness.lua:67-76);
+  neither the module nor the function appears in the plan's Pure or Integration tables.
+  This is the 7th finding in family `plan-table-missing-entity`. The rule was already STATED
+  last round — the table's input list must be `git diff --name-only <base> <head> -- lua/
+  scripts/ tests/fixtures/`, not the author's memory — and not implemented, which is why it
+  recurs. Do NOT add one row: wire that command into the plan's §Notes check and reconcile
+  every row in one pass.
+- **BR-80** [Important] `docs-insert-orphans-section` Three stacked doc blocks precede credential_health_across, one documenting a `prefer` parameter that no longer exists
+  cliproxy.lua:478-504 — credential_health_for_login's docstring (still ending in @param login /
+  @param cb), then a block describing `prefer fun(a,b): boolean` (a signature deleted in this
+  same range), then the current @param choose block, all above one function;
+  credential_health_for_login at :532 has no docstring. Separately recover retains the pre-M4
+  paragraph "fall back to resolving the model through oauth-model-alias" (:1303-1306) directly
+  above its replacement (:1307-1312).
+  This is the 3rd finding in family `docs-insert-orphans-section`. The rule is already at
+  workshop/lessons.md:962-964 and was violated again by the range that appends to that file.
+  Restating it has failed twice — make it mechanical: lint any `function M.x(...)` whose
+  immediately-preceding ---@param block names an identifier absent from the signature.
+- **BR-81** [Minor] `test-title-overstates-guard` The get_agent stale-selection test pins a state production cannot produce; the reachable variant is untested
+  refresh_state (init.lua:1345) resets _state.agent to _agents[1] whenever the persisted name
+  is absent, so a deleted-selected-agent never reaches get_agent. Probed: a state.json naming
+  a vanished agent yields "state.agent after setup = Claude-Fable", no crash, under the OLD
+  logic too — so the plan note's "crashed every request until the state file was hand-edited"
+  is unsupported. The genuinely reachable variant is _state.agent == nil (every agent disabled,
+  #_agents == 0), which the old code crashed on via string-concat and the new error() handles
+  cleanly, and which has no test.
+  This is the 4th finding in family `test-title-overstates-guard`. The rule: a regression test
+  must name the production caller that produces its input; if none exists, it is a defensive
+  guard and must be titled as one.
+- **BR-82** [Minor] `atlas-not-updated-for-new-surface` README and atlas still show `claude:opus,sonnet` after the same range shipped `claude:opus,sonnet,fable`
+  README.md:199 and atlas/providers/cliproxy-managed.md:94 restate a default that config.lua:145
+  changed in this window.
+  This is the 4th finding in family `atlas-not-updated-for-new-surface`. The rule was stated
+  last round: for each literal the diff changes in lua/parley/config.lua, grep it across
+  README.md atlas/ docs/ and fix or strike every hit. Wire that grep into the docs step rather
+  than fixing these two lines.
+- **BR-83** [Minor] `test-title-overstates-guard` Two of the empty-alias e2e case's guards are inert — the notice can never contain "antigravity"
+  tests/integration/cliproxy_recovery_e2e_spec.lua:158,163. Reverting the fix produced
+  'cliproxy for "claude-opus-4-8": no credential is loaded for this channel' — no channel name
+  (that reaches only vim.ui.select, which the spec stubs), and "Add it to" is a literal the
+  rewrite clears trivially while the key is still recommended. Only assert.matches("me@example.com")
+  discriminates. Assert on the vim.ui.select argument, or drop the two.
+- **BR-84** [Minor] `pure-decision-in-io-shell` credential_health_for_login's healthiest-wins reducer stays an inline closure in the IO shell while its twin was extracted
+  cliproxy.lua:485-495. This is the 2nd finding in family `pure-decision-in-io-shell`. The rule:
+  if a branch names a POLICY it belongs in the pure module even when its inputs arrive
+  asynchronously — apply it to both reducers, not the one the last finding named. Extract
+  `ca.healthiest` next to `likeliest_culprit`.
+- **BR-85** [Minor] `dead-api-extended` resolve_login_provider has zero production call sites yet gained a new parameter, and its @param sits after @return
+  cliproxy_config.lua:265-271. Only tests call it. Either wire it into recover (it now derives
+  from the same source as resolve_channels) or delete it; and move @param models above @return
+  so the annotation block parses.
+- **BR-86** [Minor] `close-stages-unreviewed-worktree` The worktree carries an uncommitted 192-line config.lua roster deletion and an untracked docs/parley.nvim.md at the boundary
+  Neither is in the review window. This is the 3rd finding in family
+  `close-stages-unreviewed-worktree`. The rule: build the close commit from an explicit path
+  list, never `git commit -a` — enforce it in the close step rather than re-checking by eye.
+- **BR-87** [Minor] `stated-design-not-implemented` Plan Task 4.1 still presents "the LEAST healthy candidate is the one that plausibly failed" as the design
+  workshop/plans/000205-live-cliproxy-model-picker-plan.md:1350-1354. The appended C1 note
+  supersedes it, but a reader reaching Task 4.1 first gets the rule the code was fixed to stop
+  implementing. Annotate in place with a pointer to the revision.
+
 ## Open findings
 
 - **BR-13** [Important] `rank-key-version-extraction` rank_key's `< 100` threshold answers the 120B instance, not the class: any parameter count below 100 still reads as a version
@@ -2005,3 +2277,16 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-72** [Important] `retry-not-rate-limited` `_force_stale` is cleared at the top of `_write_catalog`, before the write it is paid for can fail
 - **BR-73** [Important] `plan-table-missing-entity` `_on_login_success` has no Core-concepts row, and the guard meant to catch that searches the whole plan instead of the tables
 - **BR-74** [Minor] `duplicated-logic-not-extracted` The two agent_picker repaint blocks are byte-identical and re-derive the picker's identity instead of using `recall_id_fn`
+- **BR-75** [Critical] `missing-input-guard` could_have_served excludes only `missing`; `unknown` and `disabled` still outrank a real failure and name the wrong account
+- **BR-76** [Important] `extracted-seam-drops-a-signal` credential_health_across_or_one hardcodes repaired=nil on the multi-candidate branch, defeating the one-restart-per-claim guard
+- **BR-77** [Important] `fanout-result-order-nondeterministic` readings are collected in callback-completion order, so a tie in likeliest_culprit names a random channel
+- **BR-78** [Important] `single-source-not-enforced` GOLDEN_AGENT is defined twice — once in the regenerator, once in the verifier — and must be kept equal by hand
+- **BR-79** [Important] `plan-table-missing-entity` scripts/parley_harness.lua / build_payload's new `opts.agent` option is in neither Core-concepts table
+- **BR-80** [Important] `docs-insert-orphans-section` Three stacked doc blocks precede credential_health_across, one documenting a `prefer` parameter that no longer exists
+- **BR-81** [Minor] `test-title-overstates-guard` The get_agent stale-selection test pins a state production cannot produce; the reachable variant is untested
+- **BR-82** [Minor] `atlas-not-updated-for-new-surface` README and atlas still show `claude:opus,sonnet` after the same range shipped `claude:opus,sonnet,fable`
+- **BR-83** [Minor] `test-title-overstates-guard` Two of the empty-alias e2e case's guards are inert — the notice can never contain "antigravity"
+- **BR-84** [Minor] `pure-decision-in-io-shell` credential_health_for_login's healthiest-wins reducer stays an inline closure in the IO shell while its twin was extracted
+- **BR-85** [Minor] `dead-api-extended` resolve_login_provider has zero production call sites yet gained a new parameter, and its @param sits after @return
+- **BR-86** [Minor] `close-stages-unreviewed-worktree` The worktree carries an uncommitted 192-line config.lua roster deletion and an untracked docs/parley.nvim.md at the boundary
+- **BR-87** [Minor] `stated-design-not-implemented` Plan Task 4.1 still presents "the LEAST healthy candidate is the one that plausibly failed" as the design

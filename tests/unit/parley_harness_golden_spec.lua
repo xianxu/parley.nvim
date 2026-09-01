@@ -5,6 +5,9 @@
 -- conscious re-capture. See Task 0.8 of #90.
 
 local harness = require("scripts.parley_harness")
+local golden = require("scripts.golden_fixture")
+local GOLDEN_AGENT = golden.AGENT
+local READONLY_TOOLS = golden.READONLY_TOOLS
 
 local FIXTURES = {
     "single-user",
@@ -22,20 +25,7 @@ local FIXTURES = {
 -- like `ack` when installed) — making the payload machine-dependent. Goldens
 -- must be deterministic and portable, so we fix a small read-only subset here
 -- (edit_file/write_file deliberately excluded to keep golden output stable).
-local READONLY_TOOLS = { "read_file", "ls", "find", "grep", "chat_history_search" }
 
--- The agent is PINNED here for the same reason, and it is the stronger version
--- of that rule. These goldens named `ToolSonnet`; when the shipped roster
--- changed, `get_agent` fell back with a warning to an agent carrying
--- `synthetic_system_prompt`, which injects an extra message pair — so the
--- goldens were suddenly comparing a different agent's payload. A golden must
--- depend on nothing that a product decision can move.
-local GOLDEN_AGENT = {
-    name = "GoldenAgent",
-    provider = "anthropic",
-    model = { model = "claude-sonnet-4-6" },
-    system_prompt = "You are a helpful assistant.",
-}
 
 -- Comparison is on DECODED tables, deliberately. vim.json.encode does not fix
 -- key order, so regenerating a golden yields a byte-different but semantically

@@ -208,36 +208,6 @@ end)
 -- to tests/unit/cliproxy_auth_spec.lua.
 --------------------------------------------------------------------------------
 
-describe("resolve_login_provider", function()
-    local alias = {
-        claude = {
-            { name = "claude-opus-4-8", alias = "claude-opus-4-8", fork = true },
-            { name = "claude-sonnet-4-6", alias = "claude-sonnet-4-6", fork = true },
-        },
-        codex = { { name = "gpt-5-codex", alias = "gpt-5-codex", fork = true } },
-    }
-    it("resolves a claude-channel model → claude login", function()
-        assert.equals("claude", cc.resolve_login_provider("claude-opus-4-8", alias))
-    end)
-    it("resolves a codex-channel model → codex login", function()
-        assert.equals("codex", cc.resolve_login_provider("gpt-5-codex", alias))
-    end)
-    it("matches by alias when it differs from the name", function()
-        local a = { claude = { { name = "claude-opus-4-8", alias = "opus", fork = true } } }
-        assert.equals("claude", cc.resolve_login_provider("opus", a))
-    end)
-    it("maps the gemini-cli channel → google login", function()
-        local a = { ["gemini-cli"] = { { name = "gemini-2.5-pro", alias = "g", fork = true } } }
-        assert.equals("google", cc.resolve_login_provider("gemini-2.5-pro", a))
-    end)
-    it("returns nil for a model not in any channel", function()
-        assert.is_nil(cc.resolve_login_provider("mystery-model", alias))
-    end)
-    it("returns nil for a channel with no OAuth login (vertex)", function()
-        local a = { vertex = { { name = "gemini-2.5-pro", alias = "g", fork = true } } }
-        assert.is_nil(cc.resolve_login_provider("gemini-2.5-pro", a))
-    end)
-end)
 
 describe("providers / provider_owned_by", function()
     it("lists the supported model-owning providers, sorted", function()
@@ -298,7 +268,15 @@ end)
 
 -- #197 C1: channel and login provider are DIFFERENT axes. They coincide for
 -- claude, which is why every test in M1 missed the confusion.
-describe("resolve_channel vs resolve_login_provider", function()
+-- The CHANNEL vs LOGIN axis distinction (#197). `resolve_login_provider` used to
+-- express it, but had no production callers, so it was deleted in #205 M4 and
+-- the invariant is asserted the way `recover` actually derives it:
+-- channel_login(resolve_channels(...)[1]).
+local function login_for(model, alias, models)
+    return cc.channel_login(cc.resolve_channels(model, alias, models)[1])
+end
+
+describe("resolve_channel vs the login it implies", function()
     local alias = {
         claude = { { name = "claude-opus-4-8", alias = "claude-opus-4-8" } },
         ["gemini-cli"] = { { name = "gemini-2.5-pro", alias = "gemini-2.5-pro" } },
@@ -312,21 +290,21 @@ describe("resolve_channel vs resolve_login_provider", function()
     end)
 
     it("collapses several channels onto one login provider", function()
-        assert.equals("google", cc.resolve_login_provider("gemini-2.5-pro", alias))
-        assert.equals("google", cc.resolve_login_provider("gemini-3-pro-preview", alias))
+        assert.equals("google", login_for("gemini-2.5-pro", alias))
+        assert.equals("google", login_for("gemini-3-pro-preview", alias))
         -- and the two axes differ for exactly those models
         assert.are_not.equals(cc.resolve_channel("gemini-2.5-pro", alias),
-            cc.resolve_login_provider("gemini-2.5-pro", alias))
+            login_for("gemini-2.5-pro", alias))
     end)
 
     it("coincides only for claude — the case that hid the bug", function()
         assert.equals(cc.resolve_channel("claude-opus-4-8", alias),
-            cc.resolve_login_provider("claude-opus-4-8", alias))
+            login_for("claude-opus-4-8", alias))
     end)
 
     it("returns nil for an unknown model rather than guessing", function()
         assert.is_nil(cc.resolve_channel("no-such-model", alias))
-        assert.is_nil(cc.resolve_login_provider("no-such-model", alias))
+        assert.is_nil(login_for("no-such-model", alias))
     end)
 end)
 
@@ -425,15 +403,3 @@ describe("resolve_channels", function()
     end)
 end)
 
-describe("resolve_login_provider", function()
-    it("is threaded with the catalog too, not just the alias block", function()
-        local models = { { id = "gemini-3-flash", owner = "antigravity" } }
-        assert.equals("antigravity",
-            cc.resolve_login_provider("gemini-3-flash", {}, models))
-    end)
-
-    it("still prefers an explicit pin", function()
-        local alias = { claude = { { name = "x-1", alias = "x-1" } } }
-        assert.equals("claude", cc.resolve_login_provider("x-1", alias, {}))
-    end)
-end)

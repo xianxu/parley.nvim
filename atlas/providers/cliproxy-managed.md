@@ -91,7 +91,7 @@ reads that catalog instead of carrying model names in Lua.
   connection-refused is a no-op that leaves the cache in place. Opening a picker
   must not start a daemon — that is the dormancy contract from #131, pinned by a
   test that points at a free port and asserts it stays free.
-- **`cliproxy.live_models`** — `{ providers = { "claude:opus,sonnet", … },
+- **`cliproxy.live_models`** — `{ providers = { "claude:opus,sonnet,fable", … },
   per_provider = 3 }`. An entry is `"<provider>[:<term>,…]"`; terms are
   case-insensitive substrings matched against the id **and** the display name
   (required, not cosmetic: antigravity's ids are unfilterable otherwise). Terms

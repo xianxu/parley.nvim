@@ -387,13 +387,17 @@ end)
 describe("get_agent with a stale selection", function()
     before_each(function() fresh_setup(nil) end)
 
-    it("survives a persisted agent name that no longer ships", function()
-        -- The real scenario: you delete an agent from your config that you had
-        -- selected. `_state.agent` still names it, so falling back to
-        -- `_state.agent` was a no-op and the next line indexed nil — every
-        -- request crashed until the state file was hand-edited.
+    it("survives a selection that is not in the roster", function()
+        -- Scope, honestly: `refresh_state` already resets `_state.agent` to
+        -- `_agents[1]` when the persisted name is absent, so a deleted-selected
+        -- agent does NOT reach get_agent through startup — an earlier note
+        -- claiming it "crashed every request" was unsupported and is struck.
+        -- What IS reachable is any caller passing a name while `_state.agent`
+        -- is itself unset or stale (config.review_agent / skill_agent name
+        -- agents an operator can remove), and there the fallback resolved to
+        -- the same missing name and the next line indexed nil.
         parley._state = parley._state or {}
-        parley._state.agent = "AgentThatWasDeleted"
+        parley._state.agent = "AlsoNotInTheRoster"
         local ok, agent = pcall(parley.get_agent, "AgentThatWasDeleted")
         assert.is_true(ok, "get_agent crashed on a stale selection: " .. tostring(agent))
         assert.is_not_nil(agent)

@@ -156,12 +156,12 @@ describe("cliproxy recovery end to end", function()
         -- is which channel to re-authenticate. antigravity is the other
         -- candidate for anthropic-owned models and holds no credential at all,
         -- so it cannot have served this request.
+        -- Only the ACCOUNT discriminates. The channel name reaches only
+        -- vim.ui.select (which this spec stubs), so an "antigravity" guard here
+        -- can never fail, and "Add it to" is a literal any rewrite clears while
+        -- still recommending the key — both were inert and are gone.
         assert.matches("me@example.com", out.notice)
         assert.matches("expired", out.notice)
-        assert.is_nil(out.notice:find("antigravity", 1, true),
-            "blamed a channel that holds no credential: " .. out.notice)
-        assert.is_nil(out.notice:find("Add it to", 1, true),
-            "it must stop telling operators to add a key the config no longer ships")
     end)
 
     it("repairs and completes a transient failure with no operator interaction", function()

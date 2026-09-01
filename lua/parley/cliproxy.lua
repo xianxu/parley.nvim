@@ -484,39 +484,48 @@ end
 --- finds nothing and fabricates "no credential" for a healthy account.
 ---@param login string
 ---@param cb fun(health: table)
---- Read credential health across several channels and reduce to one.
----
---- The traversal both callers share (ARCH-DRY). They want OPPOSITE reducers:
---- `credential_health_for_login` asks "is this account usable at all", so the
---- HEALTHIEST reading wins; diagnosis asks "which credential plausibly caused
---- this failure", so the LEAST healthy one does. One loop, injected comparator,
---- and the winning channel is returned alongside the health so a caller can name
---- the login to re-run.
----@param channels string[]
----@param prefer fun(a: table, b: table): boolean # true when `a` should win
----@param cb fun(health: table, channel: string|nil)
 --- Gather every channel's health, then let a PURE reducer choose.
 ---
 --- The gathering is all this does. Choosing used to happen inline, one reading
 --- at a time, which put the policy in the IO shell where it could not be
---- unit-tested — and the policy was wrong: it blamed whichever channel held no
---- credential at all.
+--- unit-tested — and the policy was wrong twice over: it blamed whichever
+--- channel held no credential, then whichever one we could not read.
+---
+--- Readings reach `choose` in DECLARED candidate order, so a tie is broken the
+--- same way every run.
 ---@param channels string[]
 ---@param choose fun(readings: table[]): table|nil, string|nil
----@param cb fun(health: table, channel: string|nil)
+---@param cb fun(health: table, channel: string|nil, repaired: boolean|nil)
 function M.credential_health_across(channels, choose, cb)
     if #channels == 0 then
         return cb({ state = "unknown", reason = "no_channel",
             message = "no cliproxy channel could be resolved" }, nil)
     end
-    local readings, pending = {}, #channels
-    for _, channel in ipairs(channels) do
-        M.credential_health(function(health)
-            readings[#readings + 1] = { health = health, channel = channel }
+    local slots, pending, any_repaired = {}, #channels, false
+    for i, channel in ipairs(channels) do
+        M.credential_health(function(health, repaired)
+            -- Written to slot i, not appended: appending records ARRIVAL order,
+            -- which is async and unstable, so a tie in the reducer named a
+            -- different account run to run. The declared candidate order is the
+            -- tiebreak, so it has to survive the fan-out.
+            slots[i] = { health = health, channel = channel }
+            any_repaired = any_repaired or repaired == true
             pending = pending - 1
             if pending == 0 then
+                local readings = {}
+                for j = 1, #channels do
+                    if slots[j] then
+                        readings[#readings + 1] = slots[j]
+                    end
+                end
                 local chosen, chosen_channel = choose(readings)
-                cb(chosen, chosen_channel)
+                -- BR-76: `repaired` must survive the fan-out. Hardcoding nil
+                -- left `restarted_this_claim` permanently false on what is now
+                -- the DEFAULT path (every anthropic/openai model has two
+                -- candidates without the alias block), re-enabling the compound
+                -- repair-then-restart that credential_health's docstring says is
+                -- unreachable — ~36s, past the dispatcher's 25s backstop.
+                cb(chosen, chosen_channel, any_repaired)
             end
         end, channel)
     end
@@ -537,25 +546,22 @@ function M.credential_health_across_or_one(channels, cb)
     -- likeliest_culprit, not "unhealthiest": a channel with NO credential could
     -- not have served the request, and it ranks worst — so an unhealthiest-wins
     -- reducer names it every time.
-    M.credential_health_across(channels, ca.likeliest_culprit, function(health, channel)
-        cb(health, channel, nil)
+    M.credential_health_across(channels, ca.likeliest_culprit, function(health, channel, repaired)
+        cb(health, channel, repaired)
     end)
 end
 
+--- The healthiest reading across every channel one login serves — "is this
+--- account usable at all". The twin of the diagnosis path above, sharing its
+--- traversal and differing only in the reducer.
+---@param login string
+---@param cb fun(health: table)
 function M.credential_health_for_login(login, cb)
     local channels = cc.channels_for_login(login)
     if #channels == 0 then
         return M.credential_health(cb, login) -- not a login-axis name; treat as a channel
     end
-    M.credential_health_across(channels, function(readings)
-        local best, ch
-        for _, r in ipairs(readings) do
-            if best == nil or ca.healthier(r.health, best) then
-                best, ch = r.health, r.channel
-            end
-        end
-        return best, ch
-    end, function(health)
+    M.credential_health_across(channels, ca.healthiest, function(health)
         cb(health)
     end)
 end

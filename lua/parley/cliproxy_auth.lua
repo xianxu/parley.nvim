@@ -187,49 +187,82 @@ function M.unhealthier(a, b)
     return M.healthier(b, a)
 end
 
+-- Which states can be BLAMED for a request that failed, and in what order.
+--
+-- A separate ordering from HEALTH_RANK, deliberately — the two answer different
+-- questions and inverting one does not produce the other:
+--   HEALTH_RANK  "is this account usable?"   → healthy is best, missing is worst
+--   CULPRIT_RANK "did this credential fail?" → an errored credential is the
+--                 likeliest author of a 401; a healthy one is a poor suspect but
+--                 still a possible one.
+-- States ABSENT here are not candidates at all:
+--   missing   no credential exists, so cliproxy never routed through it
+--   disabled  the operator turned it off, so it was not serving either
+--   unknown   we could not READ its state (six distinct auth_files failures
+--             produce this), which is not evidence of guilt — and it ranks
+--             below `missing` in HEALTH_RANK, so an inverted-rank reducer
+--             picked it over a genuinely expired credential.
+local CULPRIT_RANK = { error = 3, unavailable = 2, healthy = 1 }
+
 --- Could this credential have served the request that just failed?
 ---
---- `missing` means the channel holds NO credential at all, and cliproxy only
---- routes through a channel that has one — so such a channel cannot be the
---- author of a 401. Treating it as a candidate is not merely imprecise, it
---- INVERTS the answer: `missing` ranks worst, so an "unhealthiest candidate"
---- reducer picks it every time and names a channel the operator may never have
---- used, while the credential that actually failed goes unnamed. That is the
---- #197 failure — a diagnosis about the wrong account — reintroduced.
+--- Eligibility, not ranking. Excluding only `missing` was not enough: `unknown`
+--- (rank -1) and `disabled` (rank 1) both outrank a real `error` under an
+--- inverted HEALTH_RANK, so the diagnosis named an unreadable or switched-off
+--- channel and left the credential that actually failed unnamed — the #197
+--- wrong-account failure, one layer in.
 ---@param health table|nil
 ---@return boolean
 function M.could_have_served(health)
-    return (health or {}).state ~= "missing"
+    return CULPRIT_RANK[(health or {}).state] ~= nil
 end
 
 --- Which of several channel readings to blame for a failure.
 ---
---- Eligibility first, ranking second: only credentials that COULD have served
---- the request are candidates, and among those the least healthy is the likeliest
---- culprit. If none could have served it, the answer is the honest one — you are
---- logged into none of these — so the whole set is ranked instead.
+--- Eligibility first, then CULPRIT_RANK, then declared order. Pure and separate
+--- from the fan-out that gathers the readings, so the policy is unit-testable
+--- without any IO (ARCH-PURE) — it had been hardcoded in the IO shell, which is
+--- how the first version of this rule shipped untested.
 ---
---- Pure, and separate from the fan-out that gathers the readings, so the policy
---- is unit-testable without any IO (ARCH-PURE).
----@param readings table[] # { { health = <table>, channel = <string> }, … }
+--- With no eligible candidate the answer is the honest one — you are logged into
+--- none of these, or we could not read any of them — so the first reading in
+--- DECLARED order is returned rather than a state-ranked pick over readings that
+--- were all disqualified.
+---@param readings table[] # { { health = <table>, channel = <string> }, … } in candidate order
 ---@return table|nil health, string|nil channel
 function M.likeliest_culprit(readings)
-    local pool = {}
-    for _, r in ipairs(readings or {}) do
+    readings = readings or {}
+    local best
+    for _, r in ipairs(readings) do
         if M.could_have_served(r.health) then
-            pool[#pool + 1] = r
+            local rank = CULPRIT_RANK[r.health.state]
+            -- strictly greater: ties keep the FIRST, i.e. declared candidate
+            -- order, so the named account is reproducible run to run
+            if best == nil or rank > CULPRIT_RANK[best.health.state] then
+                best = r
+            end
         end
     end
-    if #pool == 0 then
-        pool = readings or {}
+    if best then
+        return best.health, best.channel
     end
-    local worst
-    for _, r in ipairs(pool) do
-        if worst == nil or M.unhealthier(r.health, worst.health) then
-            worst = r
+    local first = readings[1]
+    return first and first.health or nil, first and first.channel or nil
+end
+
+--- The healthiest of several readings — "is this account usable at all".
+--- Extracted beside its twin: a branch that names a POLICY belongs in the pure
+--- module even when its inputs arrive asynchronously.
+---@param readings table[]
+---@return table|nil health, string|nil channel
+function M.healthiest(readings)
+    local best
+    for _, r in ipairs(readings or {}) do
+        if best == nil or M.healthier(r.health, best.health) then
+            best = r
         end
     end
-    return worst and worst.health or nil, worst and worst.channel or nil
+    return best and best.health or nil, best and best.channel or nil
 end
 
 --------------------------------------------------------------------------------

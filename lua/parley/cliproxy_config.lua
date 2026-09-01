@@ -156,7 +156,7 @@ local CHANNEL_LOGIN = {
 --- `aistudio`, …). It is NOT the login-provider axis — several channels share
 --- one login (`gemini`/`gemini-cli`/`aistudio` all log in via `google`), so
 --- querying credential health with a login provider silently finds nothing.
---- Keep the two apart; `resolve_login_provider` derives from this one.
+--- Keep the two apart; the login is derived via `channel_login` on a resolved channel.
 ---@param model string
 ---@param oauth_model_alias table # the rendered config's oauth-model-alias block
 ---@return string|nil channel
@@ -260,18 +260,6 @@ function M.channels_for_login(login)
     return out
 end
 
---- Resolve which login a model needs. Derives from resolve_channel so there is
---- one model→channel source (ARCH-DRY).
----@param model string
----@param oauth_model_alias table
----@return string|nil login_provider
----@param models table[]|nil # the cached catalog, so this derives from the same
----   source as resolve_channels — its docstring has always promised one
----   model→channel source, and leaving it on the alias block alone made that false
-function M.resolve_login_provider(model, oauth_model_alias, models)
-    local channels = M.resolve_channels(model, oauth_model_alias, models)
-    return M.channel_login(channels[1])
-end
 
 -- Provider → the `owned_by` value its models carry in /v1/models (verified
 -- against the CLIProxyAPI catalog internal/registry/models/models.json). These

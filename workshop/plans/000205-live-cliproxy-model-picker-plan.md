@@ -37,7 +37,9 @@ from unticked boxes here.
 | `resolve_channel` | `lua/parley/cliproxy_config.lua` | modified |
 | `resolve_channels` / `channels_for_owner` | `lua/parley/cliproxy_config.lua` | new |
 | `resolve_login_provider` | `lua/parley/cliproxy_config.lua` | modified |
-| `unhealthier` / `could_have_served` / `likeliest_culprit` | `lua/parley/cliproxy_auth.lua` | new |
+| `unhealthier` / `could_have_served` / `likeliest_culprit` / `healthiest` | `lua/parley/cliproxy_auth.lua` | new |
+| `build_payload` (`opts.agent`) | `scripts/parley_harness.lua` | modified |
+| `golden_fixture` | `scripts/golden_fixture.lua` | new |
 | `_build_items` | `lua/parley/agent_picker.lua` | modified |
 | `_providers_without_models` | `lua/parley/agent_picker.lua` | new |
 | `_view_for` | `lua/parley/agent_picker.lua` | new |
@@ -2074,11 +2076,15 @@ the same file as the alias block), which turned three long-standing spec
 failures from "a local edit is dirty" into "the committed defaults changed".
 Fixing them found a real bug and one repeated test smell.
 
-- **`get_agent` crashed on a stale selection.** Falling back to `_state.agent` is
-  a no-op when `_state.agent` IS the missing name, and the next line indexed nil
-  — so deleting an agent you had SELECTED broke every request until the state
-  file was hand-edited. That is a user-facing bug reachable without any of this
-  issue's features. Fixed to fall back to a real agent, with a spec that fails
+- **`get_agent` could index nil on an unresolvable name.** Falling back to
+  `_state.agent` is a no-op when `_state.agent` is itself absent from the roster,
+  and the next line indexed nil. **Scope, corrected:** `refresh_state` already
+  resets `_state.agent` to `_agents[1]` when the persisted name is missing, so
+  the startup path does NOT reach it — an earlier note here claimed it "crashed
+  every request until the state file was hand-edited", which the review
+  disproved by probing. What remains reachable is a caller passing a name while
+  `_state.agent` is itself stale, e.g. `config.review_agent` / `skill_agent`
+  naming an agent an operator removed. Fixed to fall back to a real agent, with a spec that fails
   against the old code.
 - **Six specs named agents they did not own.** `ToolSonnet`, `ToolSol*`,
   `ClaudeAgentTools` — `get_agent` warns and falls back, so each ran against a
@@ -2119,3 +2125,35 @@ Fixing them found a real bug and one repeated test smell.
   M4 now changes exactly two things in that file. The operator's cleanup is back
   in the working tree as their own uncommitted change, where it needs a
   reference sweep before it can land.
+
+### 2026-09-01 — M4 review round 2 (BR-75..BR-87)
+
+- **BR-75 (Critical, my C1 fix was still wrong).** Excluding only `missing` left
+  `unknown` (rank -1, BELOW missing — six auth_files read failures produce it)
+  and `disabled` (rank 1) outranking a genuinely errored credential, so the
+  diagnosis still named an unreadable or switched-off channel. Eligibility is now
+  an explicit `CULPRIT_RANK` — a SEPARATE ordering from `HEALTH_RANK`, because
+  "is this account usable" and "did this credential fail" are different
+  questions and inverting one does not answer the other.
+- **BR-76.** `repaired` was hardcoded nil on the fan-out branch, so the
+  one-restart-per-claim guard was permanently false on what deleting the alias
+  block made the DEFAULT path — re-enabling the ~36s compound repair the
+  docstring calls unreachable. It propagates now, pinned by a test.
+- **BR-77.** Readings were appended in async ARRIVAL order, so a tie named a
+  different account run to run. Written by index and compacted, so declared
+  candidate order is the tiebreak.
+- **BR-78.** `GOLDEN_AGENT` was defined twice, in the regenerator and the
+  verifier, kept equal by hand — the very dependency the pin was introduced to
+  remove. Single-sourced in `scripts/golden_fixture.lua`.
+- **BR-81.** My own plan note claimed the `get_agent` crash broke "every request
+  until the state file was hand-edited". The review probed it: `refresh_state`
+  resets a missing selection first, so the startup path never reaches it. Claim
+  struck, scope stated honestly, test renamed to the reachable variant.
+- **BR-84 / BR-85.** The healthiest-wins reducer is extracted beside its twin, so
+  both policies live in the pure module; `resolve_login_provider` had zero
+  production callers and is deleted, with the CHANNEL-vs-LOGIN invariant it
+  documented now asserted the way `recover` actually derives it.
+- **BR-82 / BR-83 / BR-87.** README and atlas caught up with the `fable` default;
+  two inert guards removed from the e2e case (the channel name reaches only the
+  stubbed `vim.ui.select`, so it could never fail); and Task 4.1's superseded
+  "least healthy candidate" phrasing is annotated in place.
