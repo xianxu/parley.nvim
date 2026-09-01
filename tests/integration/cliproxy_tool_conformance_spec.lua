@@ -28,6 +28,13 @@
 local providers = require("parley.providers")
 local wire_openai = require("parley.tools.wire_openai")
 
+-- Redirect cliproxy's derived-artifact dir to a temp dir. Without this, a bare
+-- `PlenaryBustedFile` run (outside `make`, so no XDG_DATA_HOME redirect) writes
+-- the rendered config into the operator's REAL ~/.local/share/nvim — and the
+-- running proxy's file watcher reloads it, leaving their live proxy answering on
+-- a test port with a test api-key. That happened during #205.
+require("parley.cliproxy")._set_data_dir(vim.fn.tempname())
+
 -- Fields the decoder reads out of a streamed tool call. Losing any one of
 -- them upstream breaks assembly, so each is asserted individually rather than
 -- inferred from a successful decode.

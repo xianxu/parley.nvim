@@ -441,6 +441,75 @@ rounds:
           round: 6
       boundary: M2
       blocked: true
+    - "n": 7
+      timestamp: "2026-08-31T21:45:46-07:00"
+      agent: claude
+      dispose:
+        - id: BR-19
+          disposition: not-addressed
+          note: 'Re-measured at 4c79c45: deleting init.lua:1329-1343 leaves live_agent_state (3), picker_items (37) and cliproxy_catalog (42) all green, 0 failures; M.agent_picker still has zero tests and no mutation check was recorded in the Log.'
+          round: 7
+        - id: BR-20
+          disposition: not-addressed
+          note: 'cliproxy.lua untouched by the fix commit; status still discarded at :1437, no logger call, no in-memory cache, curate(models, {}) still {}. Also: _write_catalog''s false return is discarded and _catalog_inflight has no release path if vim.system throws.'
+          round: 7
+        - id: BR-21
+          disposition: not-addressed
+          note: 'Measured at head: _providers_without_models(models, {"claud"}) and {"anthropic"} both return a login row. Worse than reported — _build_items:112 THROWS "attempt to concatenate field ''display'' (a nil value)" on a shape-less row, which the <C-a> raw path can reach.'
+          round: 7
+        - id: BR-22
+          disposition: not-addressed
+          note: view_for's `#models == 0` early return (agent_picker.lua:154) and fetch_catalog's `#models > 0` write gate (cliproxy.lua:1445) are both unchanged.
+          round: 7
+        - id: BR-23
+          disposition: not-addressed
+          note: Prevalence is 8, not 3 — free_port is defined file-locally in cliproxy_lifecycle, recovery_e2e, conformance, dispatch, download, caller_teardown, auth_login and openai_tool_loop. Task 2.2's Files still names lifecycle:17,50 and recovery_e2e:18,26 as modify targets; neither was touched, and ready_port.lua:67-69 still claims the consolidation.
+          round: 7
+        - id: BR-24
+          disposition: addressed
+          note: atlas/providers/agents.md gained the live section, cliproxy-managed.md gained the routes/catalog.json/live_models, and terminal Task 4.3 was dissolved into per-milestone docs steps (1.7 S5, 2.2 S5, 3.3 S6) — the rule, not the instance. README live_models is now scheduled at M3's boundary and must land there. See new Minor on the heading placement.
+          round: 7
+        - id: BR-25
+          disposition: not-addressed
+          note: Separator and equality pinning landed, but agent_picker.lua:112,121 still render a hyphen while the Spec (issue lines 83, 90) documents an em dash, with no Revisions entry striking it; picker_items_spec.lua:343 now names the hyphen "DOCUMENTED" and this round's atlas page restates it a third time. Per-provider grouping is ordering-only.
+          round: 7
+        - id: BR-26
+          disposition: addressed
+          note: 'catalog_write is gone, _write_catalog/_catalog_path/catalog_stale/register_live_agent are in the tables, and the check now runs both directions — but see the new finding: both directions have syntactic blind spots that exempt the assignment form register_live_agent itself uses.'
+          round: 7
+        - id: BR-27
+          disposition: not-addressed
+          note: The issue file is unchanged across the whole window — M2 box unticked, no Log entry — and live_models is still assigned to Task 4.2 despite shipping in the M3 commit.
+          round: 7
+        - id: BR-28
+          disposition: not-addressed
+          note: '`m.id .. "*"` still at agent_picker.lua:105 and cliproxy_catalog.lua:220; the test still hardcodes the literal.'
+          round: 7
+        - id: BR-29
+          disposition: not-addressed
+          note: is_managed gate still at agent_picker.lua:224, GETs still chained, pending() still at conformance:241,260, catalog_path still duplicates the config_path mkdir idiom.
+          round: 7
+      findings:
+        - id: BR-30
+          severity: Critical
+          title: A picked live model renders twice in the picker, both rows checkmarked and sharing one recall key
+          detail: 'Measured at head: with `_agents = {"alpha","claude-opus-5*"}` and a live catalog row for claude-opus-5, `_build_items` emits 2 rows named `claude-opus-5*` — one from the configured loop (register_live_agent inserts the name at init.lua:4338, and the restart restore at :1336 does the same) and one from the live section at agent_picker.lua:105. Both carry is_current, and `recall_id_fn` keys on the duplicated name. Visible on the second `:ParleyAgent` after the first live pick, and on every restart after. `make_plugin` (picker_items_spec.lua:10) never holds a live agent, so no test reaches the state. Fix in `view_for` so the `<C-a>` path inherits the exclusion, and pin it with a make_plugin variant whose `_agents` contains the live name.'
+          family: section-merge-not-deduped
+          round: 7
+        - id: BR-31
+          severity: Important
+          title: The bidirectional referent check added this round has two syntactic blind spots and already misses a shipped entity
+          detail: '3rd in family — do not fix the instance, fix the rule. The reverse pass (plan:1568-1570) is `^\+function M\.`, which misses `M.register_live_agent = function(model)` (init.lua:4333) and `M._catalog_path = catalog_path` (cliproxy.lua:1372) — the assignment form used by the very entity BR-26 added. The forward pass still matches only backticked dotted call syntax, so non-function referents escape: plan:1584 and Task 2.1 Step 1 both name a `catalog` mode on fake_cliproxy that exists nowhere (grep finds only comments; the step body contradicts its own title by prescribing an extension of `healthy`, which is what shipped). The rule: enumerate every definition form the codebase uses and every referent KIND a plan cell can name (function, fixture mode, route, file, flag), and run both directions over that enumeration.'
+          family: plan-table-missing-entity
+          round: 7
+        - id: BR-32
+          severity: Minor
+          title: The new atlas section was inserted between `## Flow` and its body, refiling 60 lines of flow narrative under the catalog heading
+          detail: atlas/providers/cliproxy-managed.md:36-38 — `## Model catalog (#205)` now sits immediately after the `## Flow` heading, leaving Flow with an empty body and putting the `setup{ cliproxy.manage = true }` → pre_query → ensure_running narrative (lines 39-98) under the catalog section. Move the new H2 after the Flow body or before `## Auth & secrets`.
+          family: docs-insert-orphans-section
+          round: 7
+      boundary: M2
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#205 (boundary-review)
@@ -676,6 +745,31 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-29** [Minor] `stated-design-not-implemented` Assorted envelope and idiom nits: is_managed gate, 4s chained budget, repaint-under-cursor, pending vs SKIP
   agent_picker.lua:209 gates the refresh on is_managed(), so a self-managed running proxy never populates the catalog though fetch_catalog cannot spawn anything. The two GETs are chained, making the worst case 2x CURL_MAX_TIME rather than the stated 2s, and handle.update swaps the list under a user mid-type (sel_idx is preserved by index, not identity). cliproxy_conformance_spec.lua:241,260 use pending() where the file's five siblings print "SKIP:". catalog_path duplicates config_path's mkdir idiom.
 
+## Round 7 — 2026-08-31T21:45:46-07:00 (claude) — BLOCKED
+
+### Disposed
+
+- BR-19 — not-addressed — Re-measured at 4c79c45: deleting init.lua:1329-1343 leaves live_agent_state (3), picker_items (37) and cliproxy_catalog (42) all green, 0 failures; M.agent_picker still has zero tests and no mutation check was recorded in the Log.
+- BR-20 — not-addressed — cliproxy.lua untouched by the fix commit; status still discarded at :1437, no logger call, no in-memory cache, curate(models, {}) still {}. Also: _write_catalog's false return is discarded and _catalog_inflight has no release path if vim.system throws.
+- BR-21 — not-addressed — Measured at head: _providers_without_models(models, {"claud"}) and {"anthropic"} both return a login row. Worse than reported — _build_items:112 THROWS "attempt to concatenate field 'display' (a nil value)" on a shape-less row, which the <C-a> raw path can reach.
+- BR-22 — not-addressed — view_for's `#models == 0` early return (agent_picker.lua:154) and fetch_catalog's `#models > 0` write gate (cliproxy.lua:1445) are both unchanged.
+- BR-23 — not-addressed — Prevalence is 8, not 3 — free_port is defined file-locally in cliproxy_lifecycle, recovery_e2e, conformance, dispatch, download, caller_teardown, auth_login and openai_tool_loop. Task 2.2's Files still names lifecycle:17,50 and recovery_e2e:18,26 as modify targets; neither was touched, and ready_port.lua:67-69 still claims the consolidation.
+- BR-24 — addressed — atlas/providers/agents.md gained the live section, cliproxy-managed.md gained the routes/catalog.json/live_models, and terminal Task 4.3 was dissolved into per-milestone docs steps (1.7 S5, 2.2 S5, 3.3 S6) — the rule, not the instance. README live_models is now scheduled at M3's boundary and must land there. See new Minor on the heading placement.
+- BR-25 — not-addressed — Separator and equality pinning landed, but agent_picker.lua:112,121 still render a hyphen while the Spec (issue lines 83, 90) documents an em dash, with no Revisions entry striking it; picker_items_spec.lua:343 now names the hyphen "DOCUMENTED" and this round's atlas page restates it a third time. Per-provider grouping is ordering-only.
+- BR-26 — addressed — catalog_write is gone, _write_catalog/_catalog_path/catalog_stale/register_live_agent are in the tables, and the check now runs both directions — but see the new finding: both directions have syntactic blind spots that exempt the assignment form register_live_agent itself uses.
+- BR-27 — not-addressed — The issue file is unchanged across the whole window — M2 box unticked, no Log entry — and live_models is still assigned to Task 4.2 despite shipping in the M3 commit.
+- BR-28 — not-addressed — `m.id .. "*"` still at agent_picker.lua:105 and cliproxy_catalog.lua:220; the test still hardcodes the literal.
+- BR-29 — not-addressed — is_managed gate still at agent_picker.lua:224, GETs still chained, pending() still at conformance:241,260, catalog_path still duplicates the config_path mkdir idiom.
+
+### Raised
+
+- **BR-30** [Critical] `section-merge-not-deduped` A picked live model renders twice in the picker, both rows checkmarked and sharing one recall key
+  Measured at head: with `_agents = {"alpha","claude-opus-5*"}` and a live catalog row for claude-opus-5, `_build_items` emits 2 rows named `claude-opus-5*` — one from the configured loop (register_live_agent inserts the name at init.lua:4338, and the restart restore at :1336 does the same) and one from the live section at agent_picker.lua:105. Both carry is_current, and `recall_id_fn` keys on the duplicated name. Visible on the second `:ParleyAgent` after the first live pick, and on every restart after. `make_plugin` (picker_items_spec.lua:10) never holds a live agent, so no test reaches the state. Fix in `view_for` so the `<C-a>` path inherits the exclusion, and pin it with a make_plugin variant whose `_agents` contains the live name.
+- **BR-31** [Important] `plan-table-missing-entity` The bidirectional referent check added this round has two syntactic blind spots and already misses a shipped entity
+  3rd in family — do not fix the instance, fix the rule. The reverse pass (plan:1568-1570) is `^\+function M\.`, which misses `M.register_live_agent = function(model)` (init.lua:4333) and `M._catalog_path = catalog_path` (cliproxy.lua:1372) — the assignment form used by the very entity BR-26 added. The forward pass still matches only backticked dotted call syntax, so non-function referents escape: plan:1584 and Task 2.1 Step 1 both name a `catalog` mode on fake_cliproxy that exists nowhere (grep finds only comments; the step body contradicts its own title by prescribing an extension of `healthy`, which is what shipped). The rule: enumerate every definition form the codebase uses and every referent KIND a plan cell can name (function, fixture mode, route, file, flag), and run both directions over that enumeration.
+- **BR-32** [Minor] `docs-insert-orphans-section` The new atlas section was inserted between `## Flow` and its body, refiling 60 lines of flow narrative under the catalog heading
+  atlas/providers/cliproxy-managed.md:36-38 — `## Model catalog (#205)` now sits immediately after the `## Flow` heading, leaving Flow with an empty body and putting the `setup{ cliproxy.manage = true }` → pre_query → ensure_running narrative (lines 39-98) under the catalog section. Move the new H2 after the Flow body or before `## Auth & secrets`.
+
 ## Open findings
 
 - **BR-13** [Important] `rank-key-version-extraction` rank_key's `< 100` threshold answers the 120B instance, not the class: any parameter count below 100 still reads as a version
@@ -689,9 +783,10 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-21** [Important] `missing-input-guard` BR-6/BR-7's boundary guards applied to one site while two new boundaries shipped without them
 - **BR-22** [Important] `one-value-two-decisions` The empty-catalog early return suppresses the logged-out rows that case exists for
 - **BR-23** [Important] `duplicated-logic-not-extracted` The ready_port promotion left three copies and its docstring claims the duplication was removed
-- **BR-24** [Important] `atlas-not-updated-for-new-surface` No atlas or README update for live_models, the picker live/login sections, C-a, or catalog.json
 - **BR-25** [Important] `documented-render-not-pinned` The picker's documented rows drifted (em dash, separator, grouping) with only containment assertions
-- **BR-26** [Important] `plan-table-missing-entity` Core concepts names `catalog_write`, which exists nowhere; three new entities are absent from both tables
 - **BR-27** [Minor] `boundary-crossed-out-of-order` The M3 implementation commit sits inside the M2 review window
 - **BR-28** [Minor] `duplicated-logic-not-extracted` The `<id>*` live-agent naming convention is written in two modules
 - **BR-29** [Minor] `stated-design-not-implemented` Assorted envelope and idiom nits: is_managed gate, 4s chained budget, repaint-under-cursor, pending vs SKIP
+- **BR-30** [Critical] `section-merge-not-deduped` A picked live model renders twice in the picker, both rows checkmarked and sharing one recall key
+- **BR-31** [Important] `plan-table-missing-entity` The bidirectional referent check added this round has two syntactic blind spots and already misses a shipped entity
+- **BR-32** [Minor] `docs-insert-orphans-section` The new atlas section was inserted between `## Flow` and its body, refiling 60 lines of flow narrative under the catalog heading

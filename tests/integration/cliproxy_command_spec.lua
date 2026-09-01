@@ -4,6 +4,13 @@ local tmp_dir = vim.fn.tempname()
 vim.fn.mkdir(tmp_dir, "p")
 
 local parley = require("parley")
+
+-- Redirect cliproxy's derived-artifact dir to a temp dir. Without this, a bare
+-- `PlenaryBustedFile` run (outside `make`, so no XDG_DATA_HOME redirect) writes
+-- the rendered config into the operator's REAL ~/.local/share/nvim — and the
+-- running proxy's file watcher reloads it, leaving their live proxy answering on
+-- a test port with a test api-key. That happened during #205.
+require("parley.cliproxy")._set_data_dir(vim.fn.tempname())
 parley.setup({
     chat_dir = tmp_dir,
     state_dir = tmp_dir .. "/state",

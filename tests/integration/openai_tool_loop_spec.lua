@@ -17,6 +17,7 @@ local uv = vim.uv or vim.loop
 local FAKE = vim.fn.getcwd() .. "/tests/fixtures/fake_cliproxy"
 
 local dispatcher = require("parley.dispatcher")
+local ready_port = require("tests.helpers.ready_port")
 local tool_loop = require("parley.tool_loop")
 local registry = require("parley.tools")
 local vault = require("parley.vault")
@@ -24,13 +25,6 @@ local parley = require("parley")
 
 local started = {}
 
-local function free_port()
-    local s = uv.new_tcp()
-    s:bind("127.0.0.1", 0)
-    local port = s:getsockname().port
-    s:close()
-    return port
-end
 
 local function start_fake(port, response_mode, env)
     local handle, pid = uv.spawn(FAKE, {
@@ -70,7 +64,7 @@ describe("openai tool loop against a stateful fake (#198)", function()
         vim.fn.writefile({ "ALPHA-CONTENT" }, file_a)
         vim.fn.writefile({ "BETA-CONTENT" }, file_b)
 
-        port = free_port()
+        port = ready_port.free_port()
         saved_endpoint = dispatcher.providers.cliproxyapi
             and dispatcher.providers.cliproxyapi.endpoint
         dispatcher.providers.cliproxyapi = dispatcher.providers.cliproxyapi or {}

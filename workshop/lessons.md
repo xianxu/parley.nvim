@@ -884,3 +884,28 @@
   wrong. Rule: build the oracle's subject set from the rawest independent source
   available, and let it be cruder than the real grammar — cruder only means it
   checks more rows.
+
+## Never run an integration spec bare — `make` owns the sandbox (#205)
+
+`make test` / `make test-spec` export `HOME`, `XDG_*` and `TMPDIR` into a scratch
+tree; a raw `nvim --headless -c "PlenaryBustedFile <spec>"` does not. During #205
+that difference overwrote the operator's real
+`~/.local/share/nvim/parley/cliproxy/config.yaml` with a spec's port and
+`api-keys: ["testkey"]`. cliproxy watches that file, reloaded it, and the live
+proxy began 401-ing the operator's own bearer — a working setup broken by a test
+run, mid-session.
+
+Two rules, both needed:
+
+- **Run specs through `make`.** `make test-spec SPEC=<atlas-key>` (an atlas
+  feature key from `atlas/traceability.yaml`, NOT a spec path) or `make test`.
+  When a single file is genuinely faster to iterate on, export the same env
+  `make -n test-clean-env` prints.
+- **Every spec that can write a derived artifact redirects it itself**, e.g.
+  `require("parley.cliproxy")._set_data_dir(vim.fn.tempname())` at file scope.
+  Defence in depth: the harness redirect is the sandbox, the in-spec redirect is
+  the seatbelt. As of #205 all `tests/integration/cliproxy_*` specs carry it.
+
+The tell that this has happened: parley suddenly reports `client api-key
+mismatch`, and the rendered config's `port`/`api-keys` do not match your setup.
+`cliproxy.ensure_running` re-renders the file, and the watcher reloads it.

@@ -1431,18 +1431,34 @@ function M.fetch_catalog(cb)
         return
     end
     _catalog_inflight = true
+    -- Both the body and the HTTP status: "curl exited 0" is NOT "the request
+    -- succeeded". A 401 carries a perfectly readable body that parses to an
+    -- empty model list, and writing that would erase a good catalog every time
+    -- the client key drifted.
     local function get(route, done)
         vim.system(api_argv(opts.host, opts.port, opts.secret, route), { text = true },
             function(obj)
-                done(obj.code == 0 and (split_status(obj.stdout) or obj.stdout) or nil)
+                if obj.code ~= 0 then
+                    return done(nil, nil)
+                end
+                local body, http = split_status(obj.stdout)
+                done(body or obj.stdout, tonumber(http))
             end)
     end
-    get("/v1/models", function(v1)
-        get("/v1beta/models", function(beta)
+    get("/v1/models", function(v1, v1_status)
+        get("/v1beta/models", function(beta, _beta_status)
             vim.schedule(function()
                 _catalog_inflight = false
                 local models = require("parley.cliproxy_catalog").parse(v1 or "", beta or "")
-                if #models > 0 then
+                -- Write on an HTTP-SUCCESSFUL request, even when the list is
+                -- empty — an empty catalog is real news (every channel logged
+                -- out) and the picker's login rows depend on seeing it. Gating
+                -- on `#models > 0` instead would conflate "nothing is
+                -- authenticated" with "the proxy is down" and keep serving
+                -- models that are no longer available. Gating on curl's exit
+                -- code alone is worse still: a 401 body parses to an empty list
+                -- and would erase a good catalog.
+                if v1_status == 200 then
                     M._write_catalog(models)
                 end
                 if cb then cb(models) end

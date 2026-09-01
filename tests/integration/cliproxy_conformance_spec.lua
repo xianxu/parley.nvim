@@ -16,6 +16,7 @@
 
 local uv = vim.uv or vim.loop
 local cliproxy = require("parley.cliproxy")
+local ready_port = require("tests.helpers.ready_port")
 local ca = require("parley.cliproxy_auth")
 
 cliproxy._set_data_dir(vim.fn.tempname())
@@ -31,13 +32,6 @@ local REQUIRED_FIELDS = {
     "modtime", "updated_at",
 }
 
-local function free_port()
-    local s = uv.new_tcp()
-    s:bind("127.0.0.1", 0)
-    local port = s:getsockname().port
-    s:close()
-    return port
-end
 
 -- Resolved at load time: plenary's busted has no setup/teardown, only
 -- before_each/after_each.
@@ -77,7 +71,7 @@ describe("cliproxyapi management API conformance", function()
             disabled = false,
         }) }, auth_dir .. "/claude-conformance@example.invalid.json")
 
-        port = free_port()
+        port = ready_port.free_port()
         mgmt_key = cliproxy.management_key()
         local cfg_path = vim.fn.tempname() .. ".yaml"
         local conf = {

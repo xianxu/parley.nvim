@@ -4,29 +4,11 @@
 
 local uv = vim.uv or vim.loop
 local cliproxy = require("parley.cliproxy")
+local ready_port = require("tests.helpers.ready_port")
 cliproxy._set_data_dir(vim.fn.tempname()) -- never touch the real ~/.local/share/nvim
 local cc = require("parley.cliproxy_config")
 
-local function free_port()
-    local s = uv.new_tcp()
-    s:bind("127.0.0.1", 0)
-    local port = s:getsockname().port
-    s:close()
-    return port
-end
 
-local function wait_listening(port)
-    vim.wait(5000, function()
-        local ok = false
-        local c = uv.new_tcp()
-        c:connect("127.0.0.1", port, function(err)
-            ok = err == nil
-            c:close()
-        end)
-        vim.wait(100, function() return false end)
-        return ok
-    end, 50)
-end
 
 -- Fixture + HTTP server built once at file load (plenary busted has no setup()).
 local version = "9.9.9"
@@ -46,12 +28,12 @@ do
     good_sha = vim.trim(vim.fn.system({ "shasum", "-a", "256", asset_path })):match("^(%x+)")
     vim.fn.writefile({ good_sha .. "  " .. asset }, sums_path)
 
-    local port = free_port()
+    local port = ready_port.free_port()
     http_handle = uv.spawn("python3",
         { args = { "-m", "http.server", tostring(port) }, cwd = serve_dir }, function() end)
     assert(http_handle, "failed to start fixture http server")
     base_url = "http://127.0.0.1:" .. port
-    wait_listening(port)
+    ready_port.wait_listening(port)
     -- reap the server when this test nvim exits
     vim.api.nvim_create_autocmd("VimLeavePre", {
         callback = function()

@@ -78,16 +78,17 @@ Two measured constraints:
    proxy already answers** — opening a picker must never spawn the daemon, which
    preserves the "dormant unless a cliproxyapi agent runs" contract from #131.
 
-3. **Live section in the agent picker.** Configured agents, separator, then one
-   group per configured provider: curated live models rendered as
-   `Claude Opus 5 — claude-opus-5 (anthropic)`. `<C-a>` toggles the entire
-   catalog — filter and curation both bypassed — for the rest (haiku,
-   gpt-oss-120b, …).
+3. **Live section in the agent picker.** Configured agents, a
+   `── live · cliproxy ──` separator, then the curated live models in configured
+   provider order, rendered as `Claude Opus 5 - claude-opus-5 (anthropic)`.
+   `<C-a>` toggles the entire catalog — filter and curation both bypassed — for
+   the rest (haiku, gpt-oss-120b, …). A model already registered as an agent is
+   dropped from the live section, so it never appears twice.
 
    **Logged-out providers stay visible.** A provider named in config that has no
    healthy credential contributes no models to the catalog (measured: antigravity
    models appeared only once its auth file registered), so it would silently
-   vanish. Instead it gets one placeholder row — `antigravity — (logged out)` —
+   vanish. Instead it gets one placeholder row — `antigravity - (logged out)` —
    and selecting it runs `:ParleyProxy login <provider>`. The picker thus answers
    both "which model" and "why is my provider missing".
 
@@ -302,3 +303,18 @@ reducer so "healthiest" and "least healthy" share one implementation. The
 give_up texts that tell the operator to add an `oauth-model-alias` key are
 rewritten in the same pass, and Done-when now demands a proof that runs with an
 empty alias block.
+
+### 2026-08-31 — render corrected to what ships (BR-25)
+
+**Reason:** the Spec documented an em dash and "one group per configured
+provider"; the implementation renders a hyphen and expresses grouping as
+ordering. Left unstruck, the drift was restated a third time in the atlas.
+
+**Delta:** the Spec now documents the shipped render. The hyphen is deliberate —
+the configured-agent rows above are built by existing code as
+`<name> - <model> (<provider>)`, and a different dash on the live rows would make
+one list look like two conventions. Grouping is ordering rather than headers,
+because the separator already delimits the section and float_picker has no
+non-selectable row: every header would be a selectable, fuzzy-matchable item.
+Both are pinned as full-string equalities in picker_items_spec, so a future drift
+fails a test instead of accumulating another restatement.

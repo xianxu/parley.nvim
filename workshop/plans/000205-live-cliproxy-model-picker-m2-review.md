@@ -273,3 +273,165 @@ findings:
     detail: |
       agent_picker.lua:209 gates the refresh on is_managed(), so a self-managed running proxy never populates the catalog though fetch_catalog cannot spawn anything. The two GETs are chained, making the worst case 2x CURL_MAX_TIME rather than the stated 2s, and handle.update swaps the list under a user mid-type (sel_idx is preserved by index, not identity). cliproxy_conformance_spec.lua:241,260 use pending() where the file's five siblings print "SKIP:". catalog_path duplicates config_path's mkdir idiom.
 ```
+
+---
+
+## Re-review — 2026-08-31T21:45:46-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 205 — live cliproxy model picker; retire hardcoded model lists |
+| repo | parley.nvim |
+| issue file | workshop/issues/000205-live-cliproxy-model-picker.md |
+| boundary | milestone M2 |
+| milestone | M2 |
+| window | 45d9f28e131fc5b40f6f06743ecfe40fcdff9538..4c79c4566e52966425318e474efbeafffae5b8bd |
+| command | sdlc milestone-close --issue 205 --milestone M2 |
+| reviewer | claude |
+| timestamp | 2026-08-31T21:45:46-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+The fix commit `4c79c45` engaged three of the eleven open findings and fully resolved one (BR-26). The atlas work is real and good — `cliproxy-managed.md` now carries the two routes, `catalog.json`, the never-spawns rule and the `live_models` syntax, and the plan's terminal Task 4.3 was correctly dissolved into per-milestone docs steps, which is the rule BR-24 asked for rather than the instance. But BR-19 (Critical) was not touched at all: I re-ran the mutation at head — deleting `lua/parley/init.lua:1329-1343` leaves `live_agent_state_spec` (3), `picker_items_spec` (37) and `cliproxy_catalog_spec` (42) all green, 0 failures, and `M.agent_picker` still has zero tests. BR-20/21/22/23/27/28/29 saw no code change whatsoever. BR-25 landed the separator and the equality assertions but left the em-dash drift in place and then *certified* it: `picker_items_spec.lua:343` names `"  Claude Opus 5 - claude-opus-5 (anthropic)"` the `DOCUMENTED` render while the Spec at issue line 83 says `—`, and the atlas page written this round restates the hyphen a third time, with no `## Revisions` striking the em dash. On top of that I found a new Critical the diff ships on first use: after one live pick, the model renders **twice** in the picker (measured), because `register_live_agent` inserts `<id>*` into `plugin._agents` and the live section then re-emits the same catalog row. Full suite at the pinned head is green (191 spec files, 0 failures) — note the working tree is currently red from uncommitted M4 config work, unrelated to this range.
+
+### 1. Strengths
+
+- **ARCH-MOCK is done properly.** `tests/integration/cliproxy_catalog_spec.lua` drives the real fetch/cache path against the process-level `fake_cliproxy` (not function mocks), and `cliproxy_conformance_spec.lua:236-273` adds a *live* conformance pair against the real binary that catches exactly the drift the fake cannot — a bare id instead of `models/<id>` would make every join miss while both other suites stayed green. That reasoning is written down at the test site. This is the shape the principle asks for.
+- **The dormancy contract is pinned by a test that can actually fail** — `cliproxy_catalog_spec.lua:106-114` points at a free port and asserts it stays free after the fetch settles. That is a real negative assertion, not a comment.
+- **`fetch_catalog` reuses `api_argv`** (`cliproxy.lua:1435`) rather than rebuilding curl argv — the ARCH-DRY reuse the plan named, with the health probe and `list_models` as the existing consumers.
+- **The fake carries the awkward shapes deliberately** (`fake_cliproxy:199-230`): `created` absent on the antigravity rows, an id that does not resemble its display name. The two `list_models` assertions in `cliproxy_lifecycle_spec.lua` were updated with a comment saying *what* the case actually asserts, rather than silently re-baselined.
+- **`cliproxy_catalog.lua` is genuinely pure** — 42 unit assertions run with no IO and no mocks, and `curate` copies rows before tagging (`:189`) so re-curation on every `<C-a>` toggle stays side-effect-free.
+
+### 2. Critical findings
+
+**C1 — A picked live model renders twice, both rows checkmarked** (`lua/parley/agent_picker.lua:46-125`)
+
+Measured. `register_live_agent` (`init.lua:4338-4342`) inserts `claude-opus-5*` into `plugin._agents`, and the restart restore at `init.lua:1336-1341` does the same. `_build_items` then emits that name from the configured-agent loop *and* the live section emits the same catalog row:
+
+```
+1  agent      claude-opus-5*   ✓ claude-opus-5*[🔧🌎] - claude-opus-5 (cliproxyapi)
+2  agent      alpha              alpha - gpt-4 (openai)
+3  separator  __live_separator__ ── live · cliproxy ──
+4  live       claude-opus-5*   ✓ Claude Opus 5 - claude-opus-5 (anthropic)
+ROWS NAMED claude-opus-5*: 2
+```
+
+Two rows share one `name`, which is also `recall_id_fn`'s identity key. This is visible on the second `:ParleyAgent` after the very first live pick, and immediately on every restart thereafter. `make_plugin` in `picker_items_spec.lua:10-20` never contains a live agent, so no test reaches the state.
+
+Fix sketch: subtract already-registered names in the live section — `if plugin.agents[m.id .. "*"] then goto continue end` — or, better, derive the exclusion set once in `view_for` so the `<C-a>` path gets it too. Whichever site, pin it with a `make_plugin` variant whose `_agents` contains the live name.
+
+### 3. Important findings
+
+No new Important findings beyond the disposition of the eight still-open ones, plus one:
+
+**I1 — The bidirectional referent check the plan just codified has two syntactic blind spots** (`workshop/plans/000205-live-cliproxy-model-picker-plan.md:1558-1571`)
+
+**This is the 3rd finding in family `plan-table-missing-entity`.** Earlier rounds fixed instances. Do not fix this instance — the rule is what needs fixing.
+
+The reverse pass added this round is `grep -oE '^\+function M\.[A-Za-z0-9_]+'`. `register_live_agent` — the entity BR-26 asked to be added to the table — is defined as `M.register_live_agent = function(model)` (`init.lua:4333`), and `_catalog_path` as `M._catalog_path = catalog_path` (`cliproxy.lua:1372`). Neither form matches. The forward pass still only matches backticked dotted call syntax, so non-function referents escape too: the Integration bullet at plan:1584 says the fake "gains `/v1beta/models` plus a **`catalog` mode**", and Task 2.1 Step 1 is titled "Add the route and a catalog mode" — `grep -n catalog tests/fixtures/fake_cliproxy` finds only comments. No mode exists; the step's own body contradicts its title by saying to extend `healthy` instead, which is what the code did.
+
+The rule: the check must cover every *definition form* the codebase uses (`function M.x`, `M.x = function`, `local function` promoted to `M.x`) and must not be limited to functions — a plan cell naming a fixture mode, a route, a file or a flag is a referent too. State the enumeration of forms in the plan's Notes and run it over both directions, or the next non-existent entity escapes the same way this one did.
+
+### 4. Minor findings
+
+- **M1 — The new atlas section orphans `## Flow`** (`atlas/providers/cliproxy-managed.md:36-38`). `## Model catalog (#205)` was inserted immediately after the `## Flow` heading, so `## Flow` now has an empty body and the entire `setup{ cliproxy.manage = true } → pre_query → ensure_running` narrative (lines 39-98) reads as part of the model-catalog section. Move the new H2 to after the Flow body, or before `## Auth & secrets`.
+- The dirty working tree (uncommitted M4 deletion of the agent list in `config.lua`) currently fails `config_tools_spec` and `parley_harness_golden_spec`. Not in the review window — flagged so it isn't mistaken for a regression from this range.
+
+### 5. Test coverage notes
+
+- Full suite at `4c79c45` with a clean tree: **191 spec files PASS, 0 failures**; `make lint` clean, 0 warnings / 0 errors in 344 files.
+- The M2 IO seam is well covered (5 integration cases, all failing-capable). The M3 surface is not: `M.agent_picker` — catalog read, `view_for`, the `<C-a>` toggle, `on_select`'s three-way `kind` dispatch, the background repaint — has no test at all, and the `refresh_state` restore survives deletion. That is BR-19, unchanged.
+- The fake's new 401 branch (`fake_cliproxy:406`) is entered by no test; no spec drives `fetch_catalog` against a `client_key_mismatch` fake.
+- `_providers_without_models` has three cases, none of which is a negative-input case; the two shapes that misbehave (`"claud"`, `"anthropic"`) are exactly the ones untested.
+
+### 6. Architectural notes
+
+- **ARCH-DRY — flag.** Eight file-local `free_port` definitions remain across `tests/` (BR-23; the docstring at `ready_port.lua:67-69` claims a consolidation that grep contradicts). `<id>*` is built in two modules (BR-28). The picker's row string is now hand-restated in four places — code `agent_picker.lua:112`, test constant `picker_items_spec.lua:343`, `atlas/providers/agents.md:11`, and the Spec — and this round *added* one of them.
+- **ARCH-PURE — flag.** `cliproxy_catalog.lua`, `_build_items` and `_providers_without_models` are properly pure and directly unit-tested. But `M.agent_picker` fuses the disk read, the config read, the view decision, the toggle state and the async refresh into one untestable 100-line function. `view_for` is business logic ("which rows does this operator see") welded to `catalog()`'s IO. C1 lives precisely in that seam. Extract `view_for(models, cfg, registered, all)` as a pure function and let the thin caller supply `catalog_cached()`.
+- **ARCH-PURPOSE — flag.** Shadow-sweep on the picker render: one model, four hand-maintained restatements, none deriving, and they disagree. Separately, three Spec commitments remain unimplemented with no `## Revisions` striking them: `providers = nil` → every provider unfiltered, "cache in memory", and the failure "logged at debug". BR-25's answer fixed two of the four drifts it named and left two — the instance, not the class.
+- **ARCH-MOCK — mostly pass.** Production and test flow share the `api_argv` boundary; the fake is stateful and a live conformance check exists. Flagged: the plan's `catalog` mode does not exist (see I1), so the awkward shapes were merged into the default `healthy` response, which is why two unrelated `list_models` assertions had to move.
+- **ARCH-CONSTRAINTS — flag.** The declared envelope (plan:76-83) is only partly enforced. Not enforced: the debug log on failure; the 2s budget (the two GETs are chained, so worst case is 2×`CURL_MAX_TIME`); "reads one cached JSON" (`catalog_cached` re-opens, re-decodes and `mkdir`s 2–3× per picker open, on the UI path — repeated expensive work the principle names explicitly); and the 10-minute staleness rule, which never fires on an empty catalog because `fetch_catalog:1445` only writes when `#models > 0`, so every `:ParleyAgent` refires two curls forever. `_catalog_inflight` also has no release path if `vim.system` throws, latching the guard for the session.
+
+### 7. Plan revision recommendations
+
+- **`## Revisions` — the picker render.** Decide the em dash: either implement `—` at `agent_picker.lua:112` and `:121` and update the atlas + test constant, or record that the render is a hyphen and amend the Spec's two rows (issue lines 83, 90) plus `atlas/providers/agents.md:11`. Do not leave a test constant named `DOCUMENTED` asserting the opposite of the document. Say explicitly whether "one group per configured provider" is satisfied by `curate`'s per-provider ordering or still owes per-provider headers.
+- **`## Revisions` — Task 2.1.** Strike the `catalog` mode from the Integration-points bullet (plan:1584) and from Step 1's title; the step body already prescribes extending `healthy`, which is what shipped.
+- **`## Revisions` — the referent check.** Record the definition-form enumeration from I1, and note that the reverse grep as written would have missed `register_live_agent`, the very entity BR-26 added.
+- **`## Revisions` — Spec commitments not implemented.** For each of `providers = nil` unfiltered, in-memory caching, and debug logging: implement and pin, or strike with a reason. The plan's own Notes already prescribe "walk the Spec Components bullet by bullet at each close" (BR-20's rule) — it has not been run.
+- **Issue file.** `## Plan`'s M2 box is unticked and `## Log` has no M2 entry; `live_models` shipped in the M3 commit but is still assigned to Task 4.2 (M4). Reassign it to Task 3.2 or note the early landing.
+
+```findings
+dispose:
+  - id: BR-19
+    disposition: not-addressed
+    note: |
+      Re-measured at 4c79c45: deleting init.lua:1329-1343 leaves live_agent_state (3), picker_items (37) and cliproxy_catalog (42) all green, 0 failures; M.agent_picker still has zero tests and no mutation check was recorded in the Log.
+  - id: BR-20
+    disposition: not-addressed
+    note: |
+      cliproxy.lua untouched by the fix commit; status still discarded at :1437, no logger call, no in-memory cache, curate(models, {}) still {}. Also: _write_catalog's false return is discarded and _catalog_inflight has no release path if vim.system throws.
+  - id: BR-21
+    disposition: not-addressed
+    note: |
+      Measured at head: _providers_without_models(models, {"claud"}) and {"anthropic"} both return a login row. Worse than reported — _build_items:112 THROWS "attempt to concatenate field 'display' (a nil value)" on a shape-less row, which the <C-a> raw path can reach.
+  - id: BR-22
+    disposition: not-addressed
+    note: |
+      view_for's `#models == 0` early return (agent_picker.lua:154) and fetch_catalog's `#models > 0` write gate (cliproxy.lua:1445) are both unchanged.
+  - id: BR-23
+    disposition: not-addressed
+    note: |
+      Prevalence is 8, not 3 — free_port is defined file-locally in cliproxy_lifecycle, recovery_e2e, conformance, dispatch, download, caller_teardown, auth_login and openai_tool_loop. Task 2.2's Files still names lifecycle:17,50 and recovery_e2e:18,26 as modify targets; neither was touched, and ready_port.lua:67-69 still claims the consolidation.
+  - id: BR-24
+    disposition: addressed
+    note: |
+      atlas/providers/agents.md gained the live section, cliproxy-managed.md gained the routes/catalog.json/live_models, and terminal Task 4.3 was dissolved into per-milestone docs steps (1.7 S5, 2.2 S5, 3.3 S6) — the rule, not the instance. README live_models is now scheduled at M3's boundary and must land there. See new Minor on the heading placement.
+  - id: BR-25
+    disposition: not-addressed
+    note: |
+      Separator and equality pinning landed, but agent_picker.lua:112,121 still render a hyphen while the Spec (issue lines 83, 90) documents an em dash, with no Revisions entry striking it; picker_items_spec.lua:343 now names the hyphen "DOCUMENTED" and this round's atlas page restates it a third time. Per-provider grouping is ordering-only.
+  - id: BR-26
+    disposition: addressed
+    note: |
+      catalog_write is gone, _write_catalog/_catalog_path/catalog_stale/register_live_agent are in the tables, and the check now runs both directions — but see the new finding: both directions have syntactic blind spots that exempt the assignment form register_live_agent itself uses.
+  - id: BR-27
+    disposition: not-addressed
+    note: |
+      The issue file is unchanged across the whole window — M2 box unticked, no Log entry — and live_models is still assigned to Task 4.2 despite shipping in the M3 commit.
+  - id: BR-28
+    disposition: not-addressed
+    note: |
+      `m.id .. "*"` still at agent_picker.lua:105 and cliproxy_catalog.lua:220; the test still hardcodes the literal.
+  - id: BR-29
+    disposition: not-addressed
+    note: |
+      is_managed gate still at agent_picker.lua:224, GETs still chained, pending() still at conformance:241,260, catalog_path still duplicates the config_path mkdir idiom.
+findings:
+  - id: new
+    severity: Critical
+    family: section-merge-not-deduped
+    title: |
+      A picked live model renders twice in the picker, both rows checkmarked and sharing one recall key
+    detail: |
+      Measured at head: with `_agents = {"alpha","claude-opus-5*"}` and a live catalog row for claude-opus-5, `_build_items` emits 2 rows named `claude-opus-5*` — one from the configured loop (register_live_agent inserts the name at init.lua:4338, and the restart restore at :1336 does the same) and one from the live section at agent_picker.lua:105. Both carry is_current, and `recall_id_fn` keys on the duplicated name. Visible on the second `:ParleyAgent` after the first live pick, and on every restart after. `make_plugin` (picker_items_spec.lua:10) never holds a live agent, so no test reaches the state. Fix in `view_for` so the `<C-a>` path inherits the exclusion, and pin it with a make_plugin variant whose `_agents` contains the live name.
+  - id: new
+    severity: Important
+    family: plan-table-missing-entity
+    title: |
+      The bidirectional referent check added this round has two syntactic blind spots and already misses a shipped entity
+    detail: |
+      3rd in family — do not fix the instance, fix the rule. The reverse pass (plan:1568-1570) is `^\+function M\.`, which misses `M.register_live_agent = function(model)` (init.lua:4333) and `M._catalog_path = catalog_path` (cliproxy.lua:1372) — the assignment form used by the very entity BR-26 added. The forward pass still matches only backticked dotted call syntax, so non-function referents escape: plan:1584 and Task 2.1 Step 1 both name a `catalog` mode on fake_cliproxy that exists nowhere (grep finds only comments; the step body contradicts its own title by prescribing an extension of `healthy`, which is what shipped). The rule: enumerate every definition form the codebase uses and every referent KIND a plan cell can name (function, fixture mode, route, file, flag), and run both directions over that enumeration.
+  - id: new
+    severity: Minor
+    family: docs-insert-orphans-section
+    title: |
+      The new atlas section was inserted between `## Flow` and its body, refiling 60 lines of flow narrative under the catalog heading
+    detail: |
+      atlas/providers/cliproxy-managed.md:36-38 — `## Model catalog (#205)` now sits immediately after the `## Flow` heading, leaving Flow with an empty body and putting the `setup{ cliproxy.manage = true }` → pre_query → ensure_running narrative (lines 39-98) under the catalog section. Move the new H2 after the Flow body or before `## Auth & secrets`.
+```

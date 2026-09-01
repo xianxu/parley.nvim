@@ -148,21 +148,40 @@ function M.agent_picker(plugin)
     -- entire catalog with filter AND curation bypassed, so narrowing the config
     -- never puts a model out of reach.
     local expanded = false
+
+    --- Drop catalog rows that are already registered agents.
+    ---
+    --- Picking a live model registers it under `<id>*`, and the restart restore
+    --- does the same — so without this the model appears TWICE on the next
+    --- open: once from the configured loop and once from the catalog, both
+    --- checkmarked, both keyed the same for `recall_id_fn`. Applied inside
+    --- view_for so the <C-a> path inherits it too.
+    local function not_already_an_agent(models)
+        local out = {}
+        for _, m in ipairs(models) do
+            if not plugin.agents[m.id .. "*"] then
+                out[#out + 1] = m
+            end
+        end
+        return out
+    end
+
     local function view_for(all)
         local models = catalog()
         local cfg = live_config()
-        if #models == 0 then
-            return {}
-        end
+        local providers = cfg.providers or {}
         if all then
-            return { live = models, logged_out = {} }
+            return { live = not_already_an_agent(models), logged_out = {} }
         end
+        -- No early return on an empty catalog: an empty catalog is precisely
+        -- when every configured provider is logged out, which is the case the
+        -- login rows exist to report.
         return {
-            live = cat.curate(models, {
-                providers = cfg.providers or {},
+            live = not_already_an_agent(cat.curate(models, {
+                providers = providers,
                 per_provider = cfg.per_provider,
-            }),
-            logged_out = M._providers_without_models(models, cfg.providers or {}),
+            })),
+            logged_out = M._providers_without_models(models, providers),
         }
     end
 

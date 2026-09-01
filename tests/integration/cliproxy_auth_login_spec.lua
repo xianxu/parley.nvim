@@ -7,6 +7,7 @@
 
 local uv = vim.uv or vim.loop
 local parley = require("parley")
+local ready_port = require("tests.helpers.ready_port")
 local cliproxy = require("parley.cliproxy")
 local FAKE = vim.fn.getcwd() .. "/tests/fixtures/fake_cliproxy"
 
@@ -36,31 +37,12 @@ local NO_AUTH = '{"type":"error","error":{"type":"api_error","message":"auth_una
 describe("cliproxy.recover", function()
     local saved_config, saved_select, saved_path, started
 
-    local function free_port()
-        local s = uv.new_tcp()
-        s:bind("127.0.0.1", 0)
-        local port = s:getsockname().port
-        s:close()
-        return port
-    end
 
-    local function wait_listening(port)
-        vim.wait(5000, function()
-            local ok = false
-            local c = uv.new_tcp()
-            c:connect("127.0.0.1", port, function(err)
-                ok = err == nil
-                c:close()
-            end)
-            vim.wait(100, function() return false end)
-            return ok
-        end, 50)
-    end
 
     -- Start the fake with a credential store, optionally overlaying a broken
     -- state onto the claude channel, and point parley's endpoint at it.
     local function serve(overlays)
-        local port = free_port()
+        local port = ready_port.free_port()
         local store = vim.fn.tempname()
         vim.fn.mkdir(store, "p")
         vim.fn.writefile({ vim.json.encode({ type = "claude", email = "me@example.com" }) },
@@ -79,7 +61,7 @@ describe("cliproxy.recover", function()
         local handle, pid = uv.spawn(FAKE, { args = { "-config", cfg_file } }, function() end)
         assert(handle, "failed to spawn fake_cliproxy")
         table.insert(started, { handle = handle, pid = pid })
-        wait_listening(port)
+        ready_port.wait_listening(port)
         parley.dispatcher = parley.dispatcher or {}
         parley.dispatcher.providers = parley.dispatcher.providers or {}
         parley.dispatcher.providers.cliproxyapi = {
@@ -401,7 +383,7 @@ describe("cliproxy.recover", function()
         -- M2: nothing listening ⇒ the repair is to start the proxy, not to
         -- lecture the operator about credentials.
         parley.dispatcher.providers.cliproxyapi = {
-            endpoint = ("http://127.0.0.1:%d/v1/chat/completions"):format(free_port()),
+            endpoint = ("http://127.0.0.1:%d/v1/chat/completions"):format(ready_port.free_port()),
         }
         require("parley.vault").add_secret("cliproxyapi", "testkey")
         local out = run({ http_status = 503, body = NO_AUTH, model = "claude-opus-4-8",
@@ -412,7 +394,7 @@ describe("cliproxy.recover", function()
 
     it("settles rather than hanging when the proxy cannot be started", function()
         parley.dispatcher.providers.cliproxyapi = {
-            endpoint = ("http://127.0.0.1:%d/v1/chat/completions"):format(free_port()),
+            endpoint = ("http://127.0.0.1:%d/v1/chat/completions"):format(ready_port.free_port()),
         }
         require("parley.vault").add_secret("cliproxyapi", "testkey")
         parley.config.cliproxy.binary_path = "/no/such/bin"

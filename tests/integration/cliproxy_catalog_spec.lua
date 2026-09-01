@@ -127,6 +127,49 @@ describe("cliproxy model catalog", function()
         assert.equals(#warm, #cliproxy.catalog_cached())
     end)
 
+    it("does not erase a good catalog when the proxy answers 401", function()
+        -- The failure this pins: a rejected bearer returns a perfectly readable
+        -- body that parses to an EMPTY model list. Gating the write on curl's
+        -- exit code (or on the body being non-nil) writes that empty list over
+        -- a good catalog, and every provider then renders "(logged out)".
+        local port = ready_port.free_port()
+        start_fake(port)
+        set_endpoint(port)
+        local warm = fetch()
+        assert.is_true(#warm > 0)
+
+        for _, p in ipairs(started) do pcall(function() uv.kill(p.pid, "sigkill") end) end
+        started = {}
+        local handle, pid = uv.spawn(FAKE, {
+            args = { "--port", tostring(port), "--mode", "client_key_mismatch" },
+        }, function() end)
+        assert(handle, "failed to spawn the fake in 401 mode")
+        table.insert(started, { handle = handle, pid = pid })
+        assert(ready_port.wait_listening(port), "401-mode fake never came up")
+
+        fetch()
+        assert.equals(#warm, #cliproxy.catalog_cached(),
+            "a 401 wiped the cached catalog")
+    end)
+
+    it("records a genuinely empty catalog, which is real news", function()
+        -- The other side of the same gate: when the proxy answers 200 with an
+        -- empty registry (nothing authenticated), that MUST reach the cache —
+        -- the picker's logged-out rows are derived from it.
+        local port = ready_port.free_port()
+        local handle, pid = uv.spawn(FAKE, {
+            args = { "--port", tostring(port), "--mode", "needs_login" },
+        }, function() end)
+        assert(handle)
+        table.insert(started, { handle = handle, pid = pid })
+        assert(ready_port.wait_listening(port))
+        set_endpoint(port)
+        cliproxy._write_catalog({ { id = "stale-1", owner = "openai" } })
+
+        fetch()
+        assert.same({}, cliproxy.catalog_cached())
+    end)
+
     it("reports staleness from the cache's own timestamp", function()
         cliproxy._write_catalog({ { id = "x", owner = "openai" } }, os.time())
         assert.is_false(cliproxy.catalog_stale())

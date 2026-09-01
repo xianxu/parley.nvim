@@ -8,7 +8,9 @@
 - **Live cliproxy models (#205).** Below the configured agents the picker shows a
   `── live · cliproxy ──` section built from the proxy's own catalog, so a model
   never has to be written into `config.lua` to be usable. Rows read
-  `Claude Opus 5 - claude-opus-5 (anthropic)`; picking one registers a
+  `Claude Opus 5 - claude-opus-5 (anthropic)` — the same `<name> - <model>` shape
+  the configured rows above use, and once picked a model leaves the live section
+  so it never shows twice; picking one registers a
   cliproxyapi agent named `<id>*` with `@all` tools and the web-search strategy
   its family supports, and persists it (`_state.live_agent`) so it survives a
   restart. `<C-a>` toggles the whole catalog, bypassing both the configured

@@ -13,6 +13,7 @@ local uv = vim.uv or vim.loop
 local FAKE = vim.fn.getcwd() .. "/tests/fixtures/fake_cliproxy"
 
 local dispatcher = require("parley.dispatcher")
+local ready_port = require("tests.helpers.ready_port")
 local cliproxy = require("parley.cliproxy")
 cliproxy._set_data_dir(vim.fn.tempname()) -- never touch the real ~/.local/share/nvim
 local vault = require("parley.vault")
@@ -21,13 +22,6 @@ local parley = require("parley")
 
 local started = {}
 
-local function free_port()
-    local s = uv.new_tcp()
-    s:bind("127.0.0.1", 0)
-    local port = s:getsockname().port
-    s:close()
-    return port
-end
 
 local function start_fake(port, mode)
     local handle, pid = uv.spawn(FAKE, { args = { "--port", tostring(port), "--mode", mode } }, function() end)
@@ -94,7 +88,7 @@ describe("managed cliproxy dispatch (e2e)", function()
     end
 
     it("aborts the dispatch (no hang) when the managed proxy is foreign", function()
-        local port = free_port()
+        local port = ready_port.free_port()
         start_fake(port, "foreign")
         parley.config = { cliproxy = { manage = true, binary_path = FAKE } }
         local outcome = dispatch(port)
@@ -105,7 +99,7 @@ describe("managed cliproxy dispatch (e2e)", function()
     end)
 
     it("proceeds to the query when the managed proxy is healthy", function()
-        local port = free_port()
+        local port = ready_port.free_port()
         start_fake(port, "healthy")
         parley.config = { cliproxy = { manage = true, binary_path = FAKE } }
         local outcome = dispatch(port)
@@ -115,7 +109,7 @@ describe("managed cliproxy dispatch (e2e)", function()
     end)
 
     it("cold-starts then proceeds, and after stop re-spawns (transient stop)", function()
-        local port = free_port()
+        local port = ready_port.free_port()
         vim.env.PARLEY_FAKE_MODE = "healthy"
         parley.config = { cliproxy = { manage = true, binary_path = FAKE } }
         -- nothing listening → ensure_running spawns the fake, then proceeds

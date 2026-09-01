@@ -5,6 +5,7 @@
 
 local uv = vim.uv or vim.loop
 local parley = require("parley")
+local ready_port = require("tests.helpers.ready_port")
 local dispatcher = require("parley.dispatcher")
 local cliproxy = require("parley.cliproxy")
 local chat_respond = require("parley.chat_respond")
@@ -15,31 +16,12 @@ cliproxy._set_data_dir(vim.fn.tempname())
 describe("cliproxy recovery end to end", function()
     local saved_config, saved_providers, saved_path, started
 
-    local function free_port()
-        local s = uv.new_tcp()
-        s:bind("127.0.0.1", 0)
-        local port = s:getsockname().port
-        s:close()
-        return port
-    end
 
-    local function wait_listening(port)
-        vim.wait(5000, function()
-            local ok = false
-            local c = uv.new_tcp()
-            c:connect("127.0.0.1", port, function(err)
-                ok = err == nil
-                c:close()
-            end)
-            vim.wait(100, function() return false end)
-            return ok
-        end, 50)
-    end
 
     -- Boot the fake serving `error_mode` on /v1/chat/completions, with a
     -- credential store whose claude channel carries `overlay`.
     local function serve(error_mode, overlay)
-        local port = free_port()
+        local port = ready_port.free_port()
         local store = vim.fn.tempname()
         vim.fn.mkdir(store, "p")
         vim.fn.writefile({ vim.json.encode({ type = "claude", email = "me@example.com" }) },
@@ -59,7 +41,7 @@ describe("cliproxy recovery end to end", function()
         }, function() end)
         assert(handle, "failed to spawn fake_cliproxy")
         table.insert(started, { handle = handle, pid = pid })
-        wait_listening(port)
+        ready_port.wait_listening(port)
 
         dispatcher.providers.cliproxyapi = {
             endpoint = ("http://127.0.0.1:%d/v1/chat/completions"):format(port),

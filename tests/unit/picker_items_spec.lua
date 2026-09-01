@@ -421,3 +421,40 @@ describe("agent_picker._providers_without_models", function()
             agent_picker._providers_without_models(models, { "antigravity:pro,flash" }))
     end)
 end)
+
+describe("agent_picker live/agent overlap", function()
+    -- The state a live pick creates: register_live_agent puts `<id>*` into
+    -- M.agents AND _agents, while the catalog still advertises the same model.
+    local function plugin_with_live_agent()
+        local p = make_plugin("claude-opus-5*")
+        p._agents = { "alpha", "claude-opus-5*" }
+        p.agents = {
+            alpha = { provider = "openai", model = "gpt-4" },
+            ["claude-opus-5*"] = { provider = "cliproxyapi", model = "claude-opus-5" },
+        }
+        return p
+    end
+
+    it("never renders one model as both a configured agent and a live row", function()
+        local plugin = plugin_with_live_agent()
+        local live = { { id = "claude-opus-5", display = "Claude Opus 5", owner = "anthropic" } }
+        -- what view_for hands _build_items after the exclusion
+        local filtered = {}
+        for _, m in ipairs(live) do
+            if not plugin.agents[m.id .. "*"] then
+                filtered[#filtered + 1] = m
+            end
+        end
+        local items = agent_picker._build_items(plugin, { live = filtered })
+        local seen = {}
+        for _, item in ipairs(items) do
+            assert.is_nil(seen[item.name], ("%q rendered twice"):format(item.name))
+            seen[item.name] = true
+        end
+        local checked = 0
+        for _, item in ipairs(items) do
+            if item.is_current then checked = checked + 1 end
+        end
+        assert.equals(1, checked, "more than one row carries the current marker")
+    end)
+end)

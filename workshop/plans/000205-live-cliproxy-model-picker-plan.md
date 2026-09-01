@@ -71,7 +71,9 @@
   the check synchronous on a UI path and needs no management call. A credential
   that is loaded but DEAD still lists models; #197's dispatch-failure path owns
   that case.
-- **fake_cliproxy** — the stateful process fake gains `/v1beta/models` plus a `catalog` mode serving the awkward shapes: rows without `created`, and one id claimed by two owners.
+- **fake_cliproxy** — the stateful process fake gains `/v1beta/models` extending its existing `healthy` mode with the awkward shapes (no new mode:
+the fixture's mode list is `healthy|needs_login|client_key_mismatch|foreign|slow|crash`,
+and the catalog is a property of a healthy proxy, not a sixth behaviour): rows without `created`, and one id claimed by two owners.
 
 ### Operating envelope (ARCH-CONSTRAINTS)
 
@@ -790,7 +792,7 @@ sdlc milestone-close --issue 205 --milestone M1
 
 ## Chunk 2: M2 — fetch, cache, and the fake
 
-### Task 2.1: Teach the fake to serve `/v1beta/models`
+### Task 2.1: Teach the fake to serve `/v1beta/models` (extending its `healthy` mode)
 
 **Files:**
 - Modify: `tests/fixtures/fake_cliproxy` (the `do_GET` dispatch, near the `/v1/models` branch)
@@ -1562,11 +1564,27 @@ sdlc close --issue 205 --verified '<evidence>'
   direction: every function the milestone's diff adds to a module named in the
   tables must APPEAR in a table row.
 
+  The check must enumerate **every definition form this codebase uses** and
+  **every referent KIND a plan cell can name** — a regex covering one form of one
+  kind is how a non-existent entity survived a round reported clean, twice.
+
+  Definition forms: `function M.x(`, `M.x = function(`, `M.x = <expr>` (the alias
+  form `M._catalog_path = catalog_path`), and `local function x(`.
+  Referent kinds a plan names: functions, fixture MODES (`--mode <name>` on
+  fake_cliproxy), HTTP routes, file paths, and config flags — none of which the
+  dotted-call regex can see.
+
   ```bash
-  # names in tables that no longer exist
-  grep -oE '`[A-Za-z_][A-Za-z0-9_.]*`' workshop/plans/000205-*-plan.md | tr -d '`' | sort -u
-  # public functions the diff added, which must appear above
-  git diff <boundary>..HEAD -- lua/ | grep -oE '^\+function M\.[A-Za-z0-9_]+' | sort -u
+  PLAN=workshop/plans/000205-*-plan.md
+  # reverse: every entity the diff adds, in any definition form, must appear in a table
+  git diff <boundary>..HEAD -- lua/ \
+    | grep -oE '^\+\s*(function M\.[A-Za-z0-9_]+|M\.[A-Za-z0-9_]+ = )' \
+    | grep -oE 'M\.[A-Za-z0-9_]+' | sort -u
+  # forward: every backticked name in the plan must resolve somewhere real
+  grep -oE '`[A-Za-z_][A-Za-z0-9_./-]*`' $PLAN | tr -d '`' | sort -u \
+    | while read -r n; do grep -rqs "$n" lua/ tests/ || echo "NO REFERENT: $n"; done
+  # fixture modes named in the plan must exist in the fixture's own mode list
+  grep -oE 'mode[s]? [`"][a-z_]+[`"]' $PLAN | grep -oE '[a-z_]+"?$' | sort -u
   ```
 - **The fixtures are the spec.** The four `curate` cases are real renders from the live catalog on 2026-08-31. If a change makes one fail, decide whether the catalog moved or the code broke — don't edit the expectation to match the code.
 
@@ -1679,3 +1697,31 @@ All three are second occurrences, so each is recorded as the rule it needed.
   `register_live_agent`. The referent grep matched dotted call syntax only, so
   bare table cells were exempt from the check meant to keep names honest. It now
   runs in both directions.
+
+### 2026-08-31 — M2/M3 review round 7 (BR-30 Critical, BR-22, BR-23, BR-25, BR-31)
+
+- **BR-30 (Critical).** A picked live model rendered twice — once from the
+  configured loop (`register_live_agent` inserts `<id>*`, and the restart restore
+  does the same) and once from the catalog — both checkmarked, both keyed
+  identically for `recall_id_fn`. The exclusion lives in `view_for` so the
+  `<C-a>` path inherits it, and the test builds the state a live pick actually
+  creates, which `make_plugin` never reached. It was visible in smoke-test output
+  I had already read.
+- **BR-22.** `view_for` returned early on an empty catalog, suppressing the
+  logged-out rows in exactly the case they exist for; and `fetch_catalog` gated
+  its write on `#models > 0`, conflating "every channel logged out" with "the
+  proxy is down". The write now keys on request success, not list length.
+- **BR-23.** The promotion left the duplication in place: `free_port` was
+  file-local in EIGHT specs, not the three named. All eight now call the shared
+  helper, and the docstring's claim is true.
+- **BR-25.** Spec and code disagreed on the dash and on grouping, and the atlas
+  restated the code's version a third time. The Spec now documents what ships,
+  with the reason: a different dash on the live rows would make one list look
+  like two conventions, and float_picker has no non-selectable row, so group
+  headers would each be a selectable, fuzzy-matchable item.
+- **BR-31.** The bidirectional check I added had blind spots on both passes — the
+  reverse matched only `function M.x(`, missing the `M.x = function` and
+  `M.x = alias` forms; the forward matched only dotted call syntax, so fixture
+  modes, routes, files and flags escaped, including a `catalog` mode this plan
+  named that never existed. The rule now enumerates definition FORMS and referent
+  KINDS, and the fixture-mode reference is corrected to what shipped.
