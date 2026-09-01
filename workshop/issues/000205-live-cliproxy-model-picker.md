@@ -159,6 +159,7 @@ Two measured constraints:
    | entry | renders |
    |---|---|
    | `claude:opus,sonnet` | Claude Opus 5, Claude Sonnet 5 |
+   | `claude:opus,sonnet,fable` | Claude Opus 5, Claude Sonnet 5, Claude Fable 5 — the shipped default |
    | `claude` | Claude Opus 5, Claude Sonnet 5, Claude Fable 5 |
    | `codex:gpt-5.6` | GPT 5.6 Luna, GPT 5.6 Sol, GPT 5.6 Terra |
    | `antigravity:pro,flash` | Gemini 3.1 Pro (Low), Gemini 3.1 Pro (High), Gemini 3.7 Flash |

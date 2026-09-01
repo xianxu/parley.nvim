@@ -484,23 +484,61 @@ end
 --- finds nothing and fabricates "no credential" for a healthy account.
 ---@param login string
 ---@param cb fun(health: table)
+--- Read credential health across several channels and reduce to one.
+---
+--- The traversal both callers share (ARCH-DRY). They want OPPOSITE reducers:
+--- `credential_health_for_login` asks "is this account usable at all", so the
+--- HEALTHIEST reading wins; diagnosis asks "which credential plausibly caused
+--- this failure", so the LEAST healthy one does. One loop, injected comparator,
+--- and the winning channel is returned alongside the health so a caller can name
+--- the login to re-run.
+---@param channels string[]
+---@param prefer fun(a: table, b: table): boolean # true when `a` should win
+---@param cb fun(health: table, channel: string|nil)
+function M.credential_health_across(channels, prefer, cb)
+    if #channels == 0 then
+        return cb({ state = "unknown", reason = "no_channel",
+            message = "no cliproxy channel could be resolved" }, nil)
+    end
+    local best, best_channel, pending = nil, nil, #channels
+    for _, channel in ipairs(channels) do
+        M.credential_health(function(health)
+            if best == nil or prefer(health, best) then
+                best, best_channel = health, channel
+            end
+            pending = pending - 1
+            if pending == 0 then
+                cb(best, best_channel)
+            end
+        end, channel)
+    end
+end
+
+--- One candidate → the single read `recover` has always done, preserving its
+--- `repaired` flag (the 404 management-route repair). Several → the fan-out with
+--- the diagnosis reducer. Split out so `recover` states its intent once instead
+--- of branching inline.
+---@param channels string[]
+---@param cb fun(health: table, channel: string|nil, repaired: boolean|nil)
+function M.credential_health_across_or_one(channels, cb)
+    if #channels <= 1 then
+        return M.credential_health(function(health, repaired)
+            cb(health, channels[1], repaired)
+        end, channels[1])
+    end
+    M.credential_health_across(channels, ca.unhealthier, function(health, channel)
+        cb(health, channel, nil)
+    end)
+end
+
 function M.credential_health_for_login(login, cb)
     local channels = cc.channels_for_login(login)
     if #channels == 0 then
         return M.credential_health(cb, login) -- not a login-axis name; treat as a channel
     end
-    local best, pending = nil, #channels
-    for _, channel in ipairs(channels) do
-        M.credential_health(function(health)
-            if best == nil or ca.healthier(health, best) then
-                best = health
-            end
-            pending = pending - 1
-            if pending == 0 then
-                cb(best)
-            end
-        end, channel)
-    end
+    M.credential_health_across(channels, ca.healthier, function(health)
+        cb(health)
+    end)
 end
 
 --------------------------------------------------------------------------------
@@ -1247,7 +1285,15 @@ function M.recover(failure, retry, give_up)
     -- back to resolving the model through oauth-model-alias. If neither
     -- resolves, do NOT guess a channel — reporting another account's health for
     -- the failing model is worse than admitting we don't know.
-    local channel = verdict.provider or cc.resolve_channel(verdict.model, alias_block() or {})
+    -- The failure body's `providers=` field IS the channel when present, so it
+    -- wins. Otherwise the alias block (an explicit operator pin) and then the
+    -- catalog narrow it to CANDIDATES — plural, because antigravity re-serves
+    -- other vendors' models and an owner implies no single channel. Where
+    -- several remain, credential health decides below rather than this code
+    -- guessing: naming the wrong account is worse than admitting we don't know.
+    local candidates = verdict.provider and { verdict.provider }
+        or cc.resolve_channels(verdict.model, alias_block() or {}, M.catalog_cached())
+    local channel = candidates[1]
     local login = cc.channel_login(channel)
     local attempt = failure.attempt or 0
     -- Per-claim, because credential_health CLEARS _management_restart_done on a
@@ -1260,8 +1306,13 @@ function M.recover(failure, retry, give_up)
     if not channel then
         local health = { state = "unknown", reason = "unknown_channel",
             message = ("no cliproxy channel is configured for \"%s\""):format(tostring(verdict.model)) }
-        give_up(ca.diagnosis(verdict, health) .. "\nAdd it to "
-            .. "cliproxy.config['oauth-model-alias'], or run :ParleyProxy login <provider>.")
+        -- No longer "add it to oauth-model-alias": that block is not required for
+        -- routing and no longer ships in the default config. What the operator
+        -- can act on is logging in, or pinning the model if several channels
+        -- could serve it.
+        give_up(ca.diagnosis(verdict, health)
+            .. "\nRun `:ParleyProxy login <provider>`, or pin the model with "
+            .. "cliproxy.config['oauth-model-alias'] if several channels serve it.")
         return true
     end
 
@@ -1301,9 +1352,10 @@ function M.recover(failure, retry, give_up)
         end
         local message = decision.message
         if health and health.state == "missing" and not login then
-            message = message .. ("\nNo login offered: \"%s\" is in no "):format(tostring(verdict.model))
-                .. "cliproxy.config['oauth-model-alias'] channel. Add it there, or run "
-                .. ":ParleyProxy login <provider>."
+            message = message .. ("\nNo login offered: no cliproxy channel resolves for \"%s\". ")
+                :format(tostring(verdict.model))
+                .. "Run `:ParleyProxy login <provider>`, or pin it with "
+                .. "cliproxy.config['oauth-model-alias']."
         end
         give_up(message)
     end
@@ -1318,12 +1370,18 @@ function M.recover(failure, retry, give_up)
                 message = "the proxy is not running" }
             return execute(ca.decide(verdict, health, { running = false }, attempt, login), health)
         end
-        M.credential_health(function(health, repaired)
+        -- Where several channels could serve this model, ask ALL of them and
+        -- name the least healthy — that is the credential that plausibly caused
+        -- the failure. Reporting the healthiest account that happens to share
+        -- the model would send the operator to re-log-in a credential that is
+        -- fine. With one candidate this is the single read it always was.
+        M.credential_health_across_or_one(candidates, function(health, chosen, repaired)
             restarted_this_claim = repaired == true
+            local chosen_login = cc.channel_login(chosen) or login
             -- Staleness is decided entirely inside the record now (modtime vs
             -- updated_at), so proxy_state carries only liveness.
-            execute(ca.decide(verdict, health, { running = true }, attempt, login), health)
-        end, channel)
+            execute(ca.decide(verdict, health, { running = true }, attempt, chosen_login), health)
+        end)
     end)
     return true
 end

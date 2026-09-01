@@ -98,6 +98,20 @@ reads that catalog instead of carrying model names in Lua.
   narrow, then the newest of each model line is kept, capped at `per_provider`.
   Term order is display order. It names providers and families, never versions,
   so it does not go stale.
+- **No `oauth-model-alias` is required (#205).** cliproxyapi exposes an OAuth
+  channel's models automatically once that channel has a credential — verified
+  against a live proxy: models absent from any alias block answer normally, and a
+  login registers its channel's models with no restart. The block parley used to
+  ship claimed routing needed it (true of 7.1.71, not since) and went stale the
+  moment a new model appeared. It is still HONORED as an explicit channel PIN,
+  which is the one thing the catalog cannot decide: antigravity re-serves claude,
+  gemini and gpt-oss models alongside their native channels, so pinning is how you
+  say which channel should serve a given id.
+- **Model → channel now resolves from the catalog**, and where several channels
+  could serve one id, CREDENTIAL HEALTH picks between them: the least healthy
+  candidate is the one that plausibly caused the failure, so that is the login the
+  diagnosis names. A pin still wins over both. If nothing resolves, parley says so
+  rather than naming an account at random.
 - **`owned_by` is a display grouping, not a channel.** The same id was reported
   under `anthropic` on one proxy start and `antigravity` on the next, so nothing
   durable keys off it — in particular the wire is chosen by model FAMILY, never

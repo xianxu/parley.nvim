@@ -171,6 +171,9 @@ describe("curate", function()
     -- the expectation should be edited to match the code.
     local SPEC_RENDERS = {
         ["claude:opus,sonnet"] = { "claude-opus-5", "claude-sonnet-5" },
+        -- the shipped default in config.lua; documented so the default view is
+        -- covered by the same rule as every other row
+        ["claude:opus,sonnet,fable"] = { "claude-opus-5", "claude-sonnet-5", "claude-fable-5" },
         ["claude"] = { "claude-opus-5", "claude-sonnet-5", "claude-fable-5" },
         ["codex:gpt-5.6"] = { "gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra" },
         ["antigravity:pro,flash"] = { "gemini-3.1-pro-low", "gemini-pro-agent",

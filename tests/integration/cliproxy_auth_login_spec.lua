@@ -204,11 +204,15 @@ describe("cliproxy.recover", function()
     end)
 
     it("tells the operator WHY no login was offered when nothing names a channel", function()
-        -- Regression for guidance the old check_auth_failure gave. Note the
-        -- BODY here carries no `providers=` field (the 401 form), so the only
-        -- possible source of a channel is oauth-model-alias — and it's empty.
+        -- Regression for guidance the old check_auth_failure gave. The BODY here
+        -- carries no `providers=` field (the 401 form), so a channel could only
+        -- come from an explicit pin or the CATALOG (#205) — both emptied below,
+        -- which is what makes "nothing names a channel" true rather than
+        -- accidental. Before #205 the alias block was the only source and this
+        -- comment said so; the catalog is now the second one.
         serve()
         parley.config.cliproxy.config["oauth-model-alias"] = {}
+        require("parley.cliproxy")._write_catalog({})
         local prompted = false
         vim.ui.select = function() prompted = true end
         local out = run({ http_status = 401,

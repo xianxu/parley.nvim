@@ -35,6 +35,8 @@ from unticked boxes here.
 | `cliproxy_default_web_search_strategy` | `lua/parley/providers.lua` | new |
 | `get_cliproxy_strategy` | `lua/parley/providers.lua` | modified |
 | `resolve_channel` | `lua/parley/cliproxy_config.lua` | modified |
+| `resolve_channels` / `channels_for_owner` | `lua/parley/cliproxy_config.lua` | new |
+| `unhealthier` | `lua/parley/cliproxy_auth.lua` | new |
 | `_build_items` | `lua/parley/agent_picker.lua` | modified |
 | `_providers_without_models` | `lua/parley/agent_picker.lua` | new |
 | `_view_for` | `lua/parley/agent_picker.lua` | new |
@@ -66,6 +68,7 @@ from unticked boxes here.
 | `catalog_cached` / `_write_catalog` / `_catalog_path` | `lua/parley/cliproxy.lua` | new | filesystem (`stdpath('data')`) |
 | `catalog_stale` | `lua/parley/cliproxy.lua` | new | clock + filesystem |
 | `_on_login_success` | `lua/parley/cliproxy.lua` | new | the login watch |
+| `credential_health_across` / `credential_health_across_or_one` | `lua/parley/cliproxy.lua` | new | `/v0/management/auth-files` |
 | `invalidate_catalog` / `_reset_catalog_clock` / `_set_failed_attempt_at` | `lua/parley/cliproxy.lua` | new | the staleness clocks |
 | `endpoint_opts` | `lua/parley/cliproxy.lua` | new | provider endpoint + vault |
 | `register_live_agent` | `lua/parley/init.lua` | new | `state.json` |
@@ -2034,3 +2037,29 @@ that *drives* it is exercised. "Deleting X keeps the suite green" is the check.
 - **BR-66 / BR-71.** The handle doc no longer describes the index contract it
   outgrew, and `workshop/lessons.md` carries the rule: a doc comment and a test
   title are assertions about the code, swept in the same commit as the contract.
+
+### 2026-09-01 — M4 landed
+
+- `oauth-model-alias` is gone from the shipped config, **proven on a live proxy**:
+  parley re-rendered its real config without the block, the proxy reloaded it
+  (`oauth-model-alias: ABSENT`), and `claude-opus-4-8`, `claude-opus-5` and
+  `gpt-5.6-sol` all still answer — including the two the block used to pin.
+- The block is still HONORED as an explicit channel pin, which is the case the
+  catalog cannot decide: antigravity re-serves claude, gemini and gpt-oss models
+  alongside their native channels.
+- Model → channel is now `resolve_channels` (plural), and where several
+  candidates remain, credential health picks the LEAST healthy one — the
+  credential that plausibly failed — via `credential_health_across` with
+  `ca.unhealthier`. `credential_health_for_login` shares that traversal with the
+  opposite reducer, so the two cannot drift.
+- The load-bearing regression test runs with an EMPTY alias block and asserts on
+  what actually distinguishes the two worlds: with the catalog fallback removed
+  the diagnosis degrades to `unknown_channel`. A first version asserted the
+  message contained "claude", which the MODEL ID satisfies — it passed with the
+  fallback deleted.
+- `cliproxy_auth_login_spec`'s "nothing names a channel" case had a premise that
+  went stale the moment the catalog became a second source; it now empties the
+  catalog too, and fails if the catalog can resolve.
+- Operator request, same session: `fable` added to the shipped claude filter, and
+  the resulting default (`claude:opus,sonnet,fable`) documented in the Spec's
+  render table and pinned in `SPEC_RENDERS` like every other row.

@@ -20,7 +20,7 @@ describe("cliproxy recovery end to end", function()
 
     -- Boot the fake serving `error_mode` on /v1/chat/completions, with a
     -- credential store whose claude channel carries `overlay`.
-    local function serve(error_mode, overlay)
+    local function serve(error_mode, overlay, alias)
         local port = ready_port.free_port()
         local store = vim.fn.tempname()
         vim.fn.mkdir(store, "p")
@@ -54,7 +54,11 @@ describe("cliproxy recovery end to end", function()
                 binary_path = FAKE,
                 auth_dir = store,
                 config = {
-                    ["oauth-model-alias"] = {
+                    -- Parameterised so a case can run with an EMPTY block, which
+                    -- is what the default config ships after #205 M4. A spec that
+                    -- always builds its own pin passes whether or not channel
+                    -- resolution still works without one.
+                    ["oauth-model-alias"] = alias ~= nil and alias or {
                         claude = { { name = "claude-opus-4-8", alias = "claude-opus-4-8" } },
                     },
                 },
@@ -102,7 +106,7 @@ describe("cliproxy recovery end to end", function()
         cliproxy._reset_spawned()
     end)
 
-    it("turns the #197 503 into a diagnosis naming the credential and its real state", function()
+     it("turns the #197 503 into a diagnosis naming the credential and its real state", function()
         serve("no_auth", { unavailable = true, status = "error",
             status_message = "OAuth access token has expired. Re-authenticate to continue." })
         local out = query()
@@ -114,6 +118,36 @@ describe("cliproxy recovery end to end", function()
         assert.matches("me@example.com", out.notice)
         assert.matches("expired", out.notice)
         assert.is_nil(out.notice:find("body_bytes", 1, true))
+    end)
+
+
+    it("names the claude login for an expired token with NO alias block", function()
+        -- The load-bearing case for M4. Every other case here builds its own
+        -- oauth-model-alias, so they pass whether or not the block is required —
+        -- which is exactly why deleting it from the default config needs a case
+        -- that runs WITHOUT one. Channel resolution must come from the catalog.
+        local cliproxy = require("parley.cliproxy")
+        cliproxy._write_catalog({
+            { id = "claude-opus-4-8", owner = "anthropic", display = "Claude Opus 4.8" },
+        })
+        serve("expired", nil, {})   -- empty alias block
+
+        local out = query()
+
+        assert.is_string(out.notice)
+        -- NOT `find("claude")`: the MODEL ID contains "claude", so that passes
+        -- even when resolution fails completely. What distinguishes the two is
+        -- whether a channel resolved at all — with the catalog fallback removed
+        -- the diagnosis degrades to "unknown_channel: no cliproxy channel is
+        -- configured", which is precisely the M4 regression.
+        assert.is_nil(out.notice:find("unknown_channel", 1, true),
+            "channel resolution fell back to nothing without an alias block: " .. out.notice)
+        assert.is_nil(out.notice:find("no cliproxy channel is configured", 1, true),
+            "the catalog should have resolved the channel: " .. out.notice)
+        assert.is_true(out.notice:find("credential", 1, true) ~= nil,
+            "the diagnosis should report the credential state it read: " .. out.notice)
+        assert.is_nil(out.notice:find("Add it to", 1, true),
+            "it must stop telling operators to add a key the config no longer ships")
     end)
 
     it("repairs and completes a transient failure with no operator interaction", function()

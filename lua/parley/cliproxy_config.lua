@@ -176,6 +176,56 @@ function M.resolve_channel(model, oauth_model_alias)
     return nil
 end
 
+-- Which cliproxy CHANNELS can serve a model of a given catalog `owned_by`.
+--
+-- Candidates, deliberately PLURAL: antigravity re-serves anthropic-, openai- and
+-- google-owned models alongside each native channel, so an owner never implies
+-- one channel. Written out rather than inverted from PROVIDER_OWNED_BY, whose
+-- keys are LOGIN-shaped (`google`) and therefore not channels at all —
+-- CHANNEL_LOGIN has no `google` key, it has three channels that share that login.
+local OWNER_CHANNELS = {
+    anthropic   = { "antigravity", "claude" },
+    openai      = { "antigravity", "codex" },
+    google      = { "aistudio", "antigravity", "gemini", "gemini-cli" },
+    antigravity = { "antigravity" },
+    moonshot    = { "kimi" },
+    xai         = { "xai" },
+}
+
+--- Candidate channels for a catalog row's `owned_by`.
+---@param owner string
+---@return string[] # sorted; empty when the owner is unknown
+function M.channels_for_owner(owner)
+    return vim.deepcopy(OWNER_CHANNELS[owner] or {})
+end
+
+--- Which channels could serve `model`: the operator's explicit pin if there is
+--- one, else the candidates implied by the catalog, else nothing.
+---
+--- Plural because the honest answer often is. cliproxyapi exposes a channel's
+--- models automatically once it has a credential, so parley no longer needs a
+--- hand-written model list to ROUTE (verified against a live proxy: models absent
+--- from `oauth-model-alias` answer normally). What it still needs is "which login
+--- does this model need" when a credential dies — and where several channels
+--- could serve one id, credential health decides between them rather than this
+--- function guessing.
+---@param model string
+---@param oauth_model_alias table # the operator's pins; wins when it names the model
+---@param models table[]|nil # the cached catalog
+---@return string[]
+function M.resolve_channels(model, oauth_model_alias, models)
+    local pinned = M.resolve_channel(model, oauth_model_alias)
+    if pinned then
+        return { pinned }
+    end
+    for _, m in ipairs(models or {}) do
+        if m.id == model then
+            return M.channels_for_owner(m.owner)
+        end
+    end
+    return {}
+end
+
 --- The login a channel needs, or nil for a channel with no OAuth login
 --- (vertex uses a service account).
 ---@param channel string|nil
@@ -215,8 +265,12 @@ end
 ---@param model string
 ---@param oauth_model_alias table
 ---@return string|nil login_provider
-function M.resolve_login_provider(model, oauth_model_alias)
-    return M.channel_login(M.resolve_channel(model, oauth_model_alias))
+---@param models table[]|nil # the cached catalog, so this derives from the same
+---   source as resolve_channels — its docstring has always promised one
+---   model→channel source, and leaving it on the alias block alone made that false
+function M.resolve_login_provider(model, oauth_model_alias, models)
+    local channels = M.resolve_channels(model, oauth_model_alias, models)
+    return M.channel_login(channels[1])
 end
 
 -- Provider → the `owned_by` value its models carry in /v1/models (verified

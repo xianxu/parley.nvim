@@ -353,3 +353,87 @@ describe("every login provider resolves to at least one channel", function()
         assert.same({ "codex" }, cc.channels_for_login("codex-device"))
     end)
 end)
+
+--------------------------------------------------------------------------------
+-- channels_for_owner / resolve_channels (issue #205 M4)
+--------------------------------------------------------------------------------
+describe("channels_for_owner", function()
+    it("narrows a catalog owner to the channels that can serve it", function()
+        -- Plural on purpose: antigravity re-serves other vendors' models
+        -- alongside the native channel, so an owner never implies one channel.
+        assert.same({ "antigravity", "claude" }, cc.channels_for_owner("anthropic"))
+        assert.same({ "antigravity", "codex" }, cc.channels_for_owner("openai"))
+    end)
+
+    it("keeps every google channel, because they share one login", function()
+        assert.same({ "aistudio", "antigravity", "gemini", "gemini-cli" },
+            cc.channels_for_owner("google"))
+    end)
+
+    it("returns empty for an owner it does not know", function()
+        assert.same({}, cc.channels_for_owner("who-knows"))
+    end)
+
+    it("is NOT derived from PROVIDER_OWNED_BY, whose keys are logins", function()
+        -- The axis error this exists to avoid: CHANNEL_LOGIN has no `google`
+        -- key — that login is three channels — so inverting the login-shaped
+        -- map would yield a name that is not a channel at all.
+        assert.is_nil(cc.channel_login("google"))
+        -- Every candidate is a real CHANNEL, i.e. it has a login.
+        for _, ch in ipairs(cc.channels_for_owner("google")) do
+            assert.is_not_nil(cc.channel_login(ch), ch .. " is not a channel")
+        end
+        -- The native ones log in via google; antigravity is a cross-vendor
+        -- server that appears as a candidate for several owners and logs in as
+        -- itself — which is exactly why the owner→channel relation cannot be an
+        -- inversion of anything.
+        assert.equals("google", cc.channel_login("gemini-cli"))
+        assert.equals("antigravity", cc.channel_login("antigravity"))
+        assert.is_true(vim.tbl_contains(cc.channels_for_owner("anthropic"), "antigravity"))
+        assert.is_true(vim.tbl_contains(cc.channels_for_owner("google"), "antigravity"))
+    end)
+end)
+
+describe("resolve_channels", function()
+    local CATALOG = {
+        { id = "claude-opus-5", owner = "anthropic" },
+        { id = "gemini-3-flash", owner = "antigravity" },
+    }
+
+    it("returns the operator's explicit pin alone", function()
+        -- The alias block stays an override: it is the only way to say "serve
+        -- this id from THAT channel" when several could.
+        local alias = { codex = { { name = "claude-opus-5", alias = "claude-opus-5" } } }
+        assert.same({ "codex" }, cc.resolve_channels("claude-opus-5", alias, CATALOG))
+    end)
+
+    it("falls back to the catalog owner's candidates", function()
+        assert.same({ "antigravity", "claude" },
+            cc.resolve_channels("claude-opus-5", {}, CATALOG))
+    end)
+
+    it("returns a single candidate when the owner has only one", function()
+        assert.same({ "antigravity" }, cc.resolve_channels("gemini-3-flash", {}, CATALOG))
+    end)
+
+    it("returns empty when neither the alias block nor the catalog knows it", function()
+        assert.same({}, cc.resolve_channels("who-knows-1", {}, CATALOG))
+    end)
+
+    it("tolerates a nil catalog", function()
+        assert.same({}, cc.resolve_channels("claude-opus-5", {}, nil))
+    end)
+end)
+
+describe("resolve_login_provider", function()
+    it("is threaded with the catalog too, not just the alias block", function()
+        local models = { { id = "gemini-3-flash", owner = "antigravity" } }
+        assert.equals("antigravity",
+            cc.resolve_login_provider("gemini-3-flash", {}, models))
+    end)
+
+    it("still prefers an explicit pin", function()
+        local alias = { claude = { { name = "x-1", alias = "x-1" } } }
+        assert.equals("claude", cc.resolve_login_provider("x-1", alias, {}))
+    end)
+end)
