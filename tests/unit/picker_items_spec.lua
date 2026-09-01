@@ -322,3 +322,64 @@ describe("outline picker item building", function()
         assert.equals(4, items[2].value.lnum)
     end)
 end)
+
+-- ---------------------------------------------------------------------------
+-- agent_picker live catalog section (#205)
+-- ---------------------------------------------------------------------------
+describe("agent_picker live section", function()
+    local function live_row()
+        return { id = "claude-opus-5", display = "Claude Opus 5",
+                 owner = "anthropic", provider = "claude" }
+    end
+
+    it("appends live catalog rows after the configured agents", function()
+        local items = agent_picker._build_items(make_plugin("mango"), { live = { live_row() } })
+        local last = items[#items]
+        assert.equals("live", last.kind)
+        assert.is_true(last.display:find("Claude Opus 5", 1, true) ~= nil)
+        assert.is_true(last.display:find("claude-opus-5", 1, true) ~= nil)
+        -- configured agents keep their own ordering ahead of the section
+        assert.equals("agent", items[1].kind)
+    end)
+
+    it("renders a provider with no models as a login row", function()
+        local items = agent_picker._build_items(make_plugin("mango"),
+            { logged_out = { { provider = "antigravity" } } })
+        local row = items[#items]
+        assert.equals("login", row.kind)
+        assert.equals("antigravity", row.provider)
+        assert.is_true(row.display:find("(logged out)", 1, true) ~= nil)
+    end)
+
+    it("marks a live row current when it is the active agent", function()
+        local plugin = make_plugin("claude-opus-5*")
+        local items = agent_picker._build_items(plugin, { live = { live_row() } })
+        assert.is_true(items[#items].is_current)
+    end)
+
+    it("is unchanged when there is no catalog", function()
+        assert.same(agent_picker._build_items(make_plugin("mango")),
+                    agent_picker._build_items(make_plugin("mango"), { live = {}, logged_out = {} }))
+    end)
+end)
+
+describe("agent_picker._providers_without_models", function()
+    local models = {
+        { id = "claude-opus-5", owner = "anthropic" },
+        { id = "gpt-5.6-sol", owner = "openai" },
+    }
+
+    it("names a configured provider the catalog advertises nothing for", function()
+        assert.same({ { provider = "antigravity" } },
+            agent_picker._providers_without_models(models, { "claude:opus", "antigravity" }))
+    end)
+
+    it("stays quiet when every configured provider has models", function()
+        assert.same({}, agent_picker._providers_without_models(models, { "claude", "codex" }))
+    end)
+
+    it("reads the provider out of a filtered spec", function()
+        assert.same({ { provider = "antigravity" } },
+            agent_picker._providers_without_models(models, { "antigravity:pro,flash" }))
+    end)
+end)

@@ -123,6 +123,28 @@ local config = {
 		--   decision — a general distribution may prefer to comment this out (the
 		--   original opt-in default; see issue #131 spec). `:ParleyProxy update`
 		--   re-fetches; `download_version` overrides the pin.
+		-- Which providers the agent picker offers LIVE models for (#205), and how
+		-- many of each. cliproxyapi already advertises its catalog and that set
+		-- moves on its own — an antigravity login registered 13 new models with
+		-- no restart — so parley reads it instead of carrying model names here.
+		--
+		-- Entry syntax: "<provider>[:<term>,…]". The provider is the thing you log
+		-- into; the optional terms are case-insensitive substrings matched against
+		-- the model id AND its display name. Matching the display name is
+		-- required, not a nicety: antigravity's ids are opaque handles
+		-- (`gemini-pro-agent` displays as "Gemini 3.1 Pro (High)"), so an id-only
+		-- match would leave that provider unfilterable.
+		--
+		-- Terms narrow; the picker then keeps the newest of each model line and
+		-- caps at per_provider. Term order is display order. <C-a> in the picker
+		-- bypasses filter AND curation, so narrowing this never puts a model out
+		-- of reach. Nothing here names a model version, so nothing here goes
+		-- stale. A configured provider you are not logged into shows as
+		-- "(logged out)" and selecting it starts its login.
+		live_models = {
+			providers = { "claude:opus,sonnet", "codex:gpt-5.6", "antigravity" },
+			per_provider = 3,
+		},
 		-- Raw cliproxyapi config, rendered into the proxy's config.yaml. This is
 		-- where parley drives cliproxyapi as a wrapped dependency — tinker here in
 		-- Lua instead of hand-editing /opt/homebrew/etc/cliproxyapi.conf.
