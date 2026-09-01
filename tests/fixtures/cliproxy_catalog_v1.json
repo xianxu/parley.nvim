@@ -1,0 +1,250 @@
+{
+    "data": [
+        {
+            "created": 1770912000,
+            "id": "gpt-5.3-codex-spark",
+            "object": "model",
+            "owned_by": "openai"
+        },
+        {
+            "created": 1773705600,
+            "id": "gpt-5.4-mini",
+            "object": "model",
+            "owned_by": "openai"
+        },
+        {
+            "created": 1783616400,
+            "id": "gpt-5.6-sol",
+            "object": "model",
+            "owned_by": "openai"
+        },
+        {
+            "id": "gemini-3-flash",
+            "object": "model",
+            "owned_by": "antigravity"
+        },
+        {
+            "created": 1771459200,
+            "id": "gemini-3.1-pro-preview",
+            "object": "model",
+            "owned_by": "google"
+        },
+        {
+            "created": 1776288000,
+            "id": "gemini-3.1-flash-lite-preview",
+            "object": "model",
+            "owned_by": "google"
+        },
+        {
+            "id": "claude-opus-4-6-thinking",
+            "object": "model",
+            "owned_by": "antigravity"
+        },
+        {
+            "id": "gemini-3.7-flash-high",
+            "object": "model",
+            "owned_by": "antigravity"
+        },
+        {
+            "created": 1715644800,
+            "id": "claude-sonnet-4-20250514",
+            "object": "model",
+            "owned_by": "anthropic"
+        },
+        {
+            "created": 1729555200,
+            "id": "claude-3-5-haiku-20241022",
+            "object": "model",
+            "owned_by": "anthropic"
+        },
+        {
+            "created": 1783616400,
+            "id": "gpt-5.6-terra",
+            "object": "model",
+            "owned_by": "openai"
+        },
+        {
+            "created": 1704067200,
+            "id": "gpt-image-2",
+            "object": "model",
+            "owned_by": "openai"
+        },
+        {
+            "created": 1750118400,
+            "id": "gemini-2.5-pro",
+            "object": "model",
+            "owned_by": "google"
+        },
+        {
+            "created": 1750118400,
+            "id": "gemini-2.5-flash",
+            "object": "model",
+            "owned_by": "google"
+        },
+        {
+            "id": "gemini-3.6-flash-high",
+            "object": "model",
+            "owned_by": "antigravity"
+        },
+        {
+            "id": "gemini-3-flash-agent",
+            "object": "model",
+            "owned_by": "antigravity"
+        },
+        {
+            "id": "gemini-3.1-flash-lite",
+            "object": "model",
+            "owned_by": "antigravity"
+        },
+        {
+            "created": 1770318000,
+            "id": "claude-opus-4-6",
+            "object": "model",
+            "owned_by": "anthropic"
+        },
+        {
+            "created": 1776297600,
+            "id": "claude-opus-4-7",
+            "object": "model",
+            "owned_by": "anthropic"
+        },
+        {
+            "created": 1784038800,
+            "id": "claude-opus-5",
+            "object": "model",
+            "owned_by": "anthropic"
+        },
+        {
+            "created": 1782777600,
+            "id": "claude-sonnet-5",
+            "object": "model",
+            "owned_by": "anthropic"
+        },
+        {
+            "created": 1715644800,
+            "id": "claude-opus-4-20250514",
+            "object": "model",
+            "owned_by": "anthropic"
+        },
+        {
+            "created": 1776902400,
+            "id": "gpt-5.5",
+            "object": "model",
+            "owned_by": "openai"
+        },
+        {
+            "id": "gemini-3.1-pro-low",
+            "object": "model",
+            "owned_by": "antigravity"
+        },
+        {
+            "created": 1765929600,
+            "id": "gemini-3-flash-preview",
+            "object": "model",
+            "owned_by": "google"
+        },
+        {
+            "created": 1759104000,
+            "id": "claude-sonnet-4-5-20250929",
+            "object": "model",
+            "owned_by": "anthropic"
+        },
+        {
+            "created": 1761955200,
+            "id": "claude-opus-4-5-20251101",
+            "object": "model",
+            "owned_by": "anthropic"
+        },
+        {
+            "created": 1737158400,
+            "id": "gemini-3-pro-preview",
+            "object": "model",
+            "owned_by": "google"
+        },
+        {
+            "id": "gemini-3.1-flash-image",
+            "object": "model",
+            "owned_by": "antigravity"
+        },
+        {
+            "id": "gemini-3.5-flash-extra-low",
+            "object": "model",
+            "owned_by": "antigravity"
+        },
+        {
+            "created": 1759276800,
+            "id": "claude-haiku-4-5-20251001",
+            "object": "model",
+            "owned_by": "anthropic"
+        },
+        {
+            "id": "claude-sonnet-4-6",
+            "object": "model",
+            "owned_by": "antigravity"
+        },
+        {
+            "created": 1781049600,
+            "id": "claude-fable-5",
+            "object": "model",
+            "owned_by": "anthropic"
+        },
+        {
+            "created": 1772668800,
+            "id": "gpt-5.4",
+            "object": "model",
+            "owned_by": "openai"
+        },
+        {
+            "created": 1783616400,
+            "id": "gpt-5.6-luna",
+            "object": "model",
+            "owned_by": "openai"
+        },
+        {
+            "created": 1722945600,
+            "id": "claude-opus-4-1-20250805",
+            "object": "model",
+            "owned_by": "anthropic"
+        },
+        {
+            "created": 1776902400,
+            "id": "codex-auto-review",
+            "object": "model",
+            "owned_by": "openai"
+        },
+        {
+            "id": "gemini-pro-agent",
+            "object": "model",
+            "owned_by": "antigravity"
+        },
+        {
+            "created": 1753142400,
+            "id": "gemini-2.5-flash-lite",
+            "object": "model",
+            "owned_by": "google"
+        },
+        {
+            "id": "gpt-oss-120b-medium",
+            "object": "model",
+            "owned_by": "antigravity"
+        },
+        {
+            "id": "gemini-3.5-flash-low",
+            "object": "model",
+            "owned_by": "antigravity"
+        },
+        {
+            "created": 1779984000,
+            "id": "claude-opus-4-8",
+            "object": "model",
+            "owned_by": "anthropic"
+        },
+        {
+            "created": 1708300800,
+            "id": "claude-3-7-sonnet-20250219",
+            "object": "model",
+            "owned_by": "anthropic"
+        }
+    ],
+    "object": "list"
+}

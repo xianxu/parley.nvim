@@ -401,6 +401,7 @@ atlas:
     code:
       - lua/parley/cliproxy_config.lua
       - lua/parley/cliproxy_auth.lua
+      - lua/parley/cliproxy_catalog.lua
       - lua/parley/cliproxy.lua
       - lua/parley/providers.lua
       - lua/parley/dispatcher.lua
@@ -411,6 +412,7 @@ atlas:
     tests:
       - tests/unit/cliproxy_config_spec.lua
       - tests/unit/cliproxy_auth_spec.lua
+      - tests/unit/cliproxy_catalog_spec.lua
       - tests/unit/failure_notice_spec.lua
       - tests/unit/cliproxy_budget_spec.lua
       - tests/unit/providers_pre_query_spec.lua

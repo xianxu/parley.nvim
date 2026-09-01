@@ -1,0 +1,717 @@
+{
+    "models": [
+        {
+            "description": "Premium model combining maximum intelligence with practical performance",
+            "displayName": "Claude 4.6 Opus",
+            "name": "models/claude-opus-4-6",
+            "supportedGenerationMethods": [
+                "generateContent"
+            ],
+            "supportedInputModalities": [
+                "text",
+                "image"
+            ],
+            "supportedOutputModalities": [
+                "text"
+            ]
+        },
+        {
+            "description": "Premium model combining maximum intelligence with practical performance",
+            "displayName": "Claude Opus 4.7",
+            "name": "models/claude-opus-4-7",
+            "supportedGenerationMethods": [
+                "generateContent"
+            ],
+            "supportedInputModalities": [
+                "text",
+                "image"
+            ],
+            "supportedOutputModalities": [
+                "text"
+            ]
+        },
+        {
+            "description": "Latest premium model combining maximum intelligence with practical performance",
+            "displayName": "Claude Opus 5",
+            "name": "models/claude-opus-5",
+            "supportedGenerationMethods": [
+                "generateContent"
+            ],
+            "supportedInputModalities": [
+                "text",
+                "image"
+            ],
+            "supportedOutputModalities": [
+                "text"
+            ]
+        },
+        {
+            "description": "Anthropic's agentic Sonnet model for coding, tool use, and enterprise workflows",
+            "displayName": "Claude Sonnet 5",
+            "name": "models/claude-sonnet-5",
+            "supportedGenerationMethods": [
+                "generateContent"
+            ],
+            "supportedInputModalities": [
+                "text",
+                "image"
+            ],
+            "supportedOutputModalities": [
+                "text"
+            ]
+        },
+        {
+            "description": "claude-opus-4-20250514",
+            "displayName": "Claude 4 Opus",
+            "name": "models/claude-opus-4-20250514",
+            "supportedGenerationMethods": [
+                "generateContent"
+            ],
+            "supportedInputModalities": [
+                "text",
+                "image"
+            ],
+            "supportedOutputModalities": [
+                "text"
+            ]
+        },
+        {
+            "description": "Frontier model for complex coding, research, and real-world work.",
+            "displayName": "GPT 5.5",
+            "name": "models/gpt-5.5",
+            "supportedGenerationMethods": [
+                "generateContent"
+            ],
+            "supportedInputModalities": [
+                "text",
+                "image"
+            ],
+            "supportedOutputModalities": [
+                "text"
+            ],
+            "version": "gpt-5.5"
+        },
+        {
+            "description": "Gemini 3.1 Pro (Low)",
+            "displayName": "Gemini 3.1 Pro (Low)",
+            "name": "models/gemini-3.1-pro-low",
+            "supportedGenerationMethods": [
+                "generateContent"
+            ],
+            "supportedInputModalities": [
+                "text",
+                "image",
+                "audio",
+                "video"
+            ],
+            "supportedOutputModalities": [
+                "text"
+            ]
+        },
+        {
+            "description": "Our most intelligent model built for speed, combining frontier intelligence with superior search and grounding.",
+            "displayName": "Gemini 3 Flash Preview",
+            "inputTokenLimit": 1048576,
+            "name": "models/gemini-3-flash-preview",
+            "outputTokenLimit": 65536,
+            "supportedGenerationMethods": [
+                "generateContent",
+                "countTokens",
+                "createCachedContent",
+                "batchGenerateContent"
+            ],
+            "supportedInputModalities": [
+                "text",
+                "image",
+                "audio",
+                "video"
+            ],
+            "supportedOutputModalities": [
+                "text"
+            ],
+            "version": "3.0"
+        },
+        {
+            "description": "claude-sonnet-4-5-20250929",
+            "displayName": "Claude 4.5 Sonnet",
+            "name": "models/claude-sonnet-4-5-20250929",
+            "supportedGenerationMethods": [
+                "generateContent"
+            ],
+            "supportedInputModalities": [
+                "text",
+                "image"
+            ],
+            "supportedOutputModalities": [
+                "text"
+            ]
+        },
+        {
+            "description": "Premium model combining maximum intelligence with practical performance",
+            "displayName": "Claude 4.5 Opus",
+            "name": "models/claude-opus-4-5-20251101",
+            "supportedGenerationMethods": [
+                "generateContent"
+            ],
+            "supportedInputModalities": [
+                "text",
+                "image"
+            ],
+            "supportedOutputModalities": [
+                "text"
+            ]
+        },
+        {
+            "description": "Our most intelligent model with SOTA reasoning and multimodal understanding, and powerful agentic and vibe coding capabilities",
+            "displayName": "Gemini 3 Pro Preview",
+            "inputTokenLimit": 1048576,
+            "name": "models/gemini-3-pro-preview",
+            "outputTokenLimit": 65536,
+            "supportedGenerationMethods": [
+                "generateContent",
+                "countTokens",
+                "createCachedContent",
+                "batchGenerateContent"
+            ],
+            "supportedInputModalities": [
+                "text",
+                "image",
+                "audio",
+                "video"
+            ],
+            "supportedOutputModalities": [
+                "text"
+            ],
+            "version": "3.0"
+        },
+        {
+            "description": "Gemini 3.1 Flash Image",
+            "displayName": "Gemini 3.1 Flash Image",
+            "name": "models/gemini-3.1-flash-image",
+            "supportedGenerationMethods": [
+                "generateContent"
+            ],
+            "supportedInputModalities": [
+                "text",
+                "image"
+            ],
+            "supportedOutputModalities": [
+                "text",
+                "image"
+            ]
+        },
+        {
+            "description": "Gemini 3.5 Flash (Low)",
+            "displayName": "Gemini 3.5 Flash (Low)",
+            "name": "models/gemini-3.5-flash-extra-low",
+            "supportedGenerationMethods": [
+                "generateContent"
+            ],
+            "supportedInputModalities": [
+                "text",
+                "image",
+                "audio",
+                "video"
+            ],
+            "supportedOutputModalities": [
+                "text"
+            ]
+        },
+        {
+            "description": "claude-haiku-4-5-20251001",
+            "displayName": "Claude 4.5 Haiku",
+            "name": "models/claude-haiku-4-5-20251001",
+            "supportedGenerationMethods": [
+                "generateContent"
+            ],
+            "supportedInputModalities": [
+                "text",
+                "image"
+            ],
+            "supportedOutputModalities": [
+                "text"
+            ]
+        },
+        {
+            "description": "Claude Sonnet 4.6 (Thinking)",
+            "displayName": "Claude Sonnet 4.6 (Thinking)",
+            "name": "models/claude-sonnet-4-6",
+            "supportedGenerationMethods": [
+                "generateContent"
+            ],
+            "supportedInputModalities": [
+                "text",
+                "image"
+            ],
+            "supportedOutputModalities": [
+                "text"
+            ]
+        },
+        {
+            "description": "Anthropic's most capable widely released model, for the most demanding reasoning and long-horizon agentic work",
+            "displayName": "Claude Fable 5",
+            "name": "models/claude-fable-5",
+            "supportedGenerationMethods": [
+                "generateContent"
+            ],
+            "supportedInputModalities": [
+                "text",
+                "image"
+            ],
+            "supportedOutputModalities": [
+                "text"
+            ]
+        },
+        {
+            "description": "Stable version of GPT 5.4",
+            "displayName": "GPT 5.4",
+            "name": "models/gpt-5.4",
+            "supportedGenerationMethods": [
+                "generateContent"
+            ],
+            "supportedInputModalities": [
+                "text",
+                "image"
+            ],
+            "supportedOutputModalities": [
+                "text"
+            ],
+            "version": "gpt-5.4"
+        },
+        {
+            "description": "Fast and affordable agentic coding model.",
+            "displayName": "GPT 5.6 Luna",
+            "name": "models/gpt-5.6-luna",
+            "supportedGenerationMethods": [
+                "generateContent"
+            ],
+            "supportedInputModalities": [
+                "text",
+                "image"
+            ],
+            "supportedOutputModalities": [
+                "text"
+            ],
+            "version": "gpt-5.6"
+        },
+        {
+            "description": "claude-opus-4-1-20250805",
+            "displayName": "Claude 4.1 Opus",
+            "name": "models/claude-opus-4-1-20250805",
+            "supportedGenerationMethods": [
+                "generateContent"
+            ],
+            "supportedInputModalities": [
+                "text",
+                "image"
+            ],
+            "supportedOutputModalities": [
+                "text"
+            ]
+        },
+        {
+            "description": "Automatic approval review model for Codex.",
+            "displayName": "Codex Auto Review",
+            "name": "models/codex-auto-review",
+            "supportedGenerationMethods": [
+                "generateContent"
+            ],
+            "supportedInputModalities": [
+                "text",
+                "image"
+            ],
+            "supportedOutputModalities": [
+                "text"
+            ],
+            "version": "Codex Auto Review"
+        },
+        {
+            "description": "Gemini 3.1 Pro (High)",
+            "displayName": "Gemini 3.1 Pro (High)",
+            "name": "models/gemini-pro-agent",
+            "supportedGenerationMethods": [
+                "generateContent"
+            ],
+            "supportedInputModalities": [
+                "text",
+                "image",
+                "audio",
+                "video"
+            ],
+            "supportedOutputModalities": [
+                "text"
+            ]
+        },
+        {
+            "description": "Our smallest and most cost effective model, built for at scale usage.",
+            "displayName": "Gemini 2.5 Flash Lite",
+            "inputTokenLimit": 1048576,
+            "name": "models/gemini-2.5-flash-lite",
+            "outputTokenLimit": 65536,
+            "supportedGenerationMethods": [
+                "generateContent",
+                "countTokens",
+                "createCachedContent",
+                "batchGenerateContent"
+            ],
+            "supportedInputModalities": [
+                "text",
+                "image",
+                "audio",
+                "video"
+            ],
+            "supportedOutputModalities": [
+                "text"
+            ],
+            "version": "2.5"
+        },
+        {
+            "description": "GPT-OSS 120B (Medium)",
+            "displayName": "GPT-OSS 120B (Medium)",
+            "name": "models/gpt-oss-120b-medium",
+            "supportedGenerationMethods": [
+                "generateContent"
+            ],
+            "supportedInputModalities": [
+                "text"
+            ],
+            "supportedOutputModalities": [
+                "text"
+            ]
+        },
+        {
+            "description": "Gemini 3.5 Flash (Medium)",
+            "displayName": "Gemini 3.5 Flash (Medium)",
+            "name": "models/gemini-3.5-flash-low",
+            "supportedGenerationMethods": [
+                "generateContent"
+            ],
+            "supportedInputModalities": [
+                "text",
+                "image",
+                "audio",
+                "video"
+            ],
+            "supportedOutputModalities": [
+                "text"
+            ]
+        },
+        {
+            "description": "Premium model combining maximum intelligence with practical performance",
+            "displayName": "Claude Opus 4.8",
+            "name": "models/claude-opus-4-8",
+            "supportedGenerationMethods": [
+                "generateContent"
+            ],
+            "supportedInputModalities": [
+                "text",
+                "image"
+            ],
+            "supportedOutputModalities": [
+                "text"
+            ]
+        },
+        {
+            "description": "claude-3-7-sonnet-20250219",
+            "displayName": "Claude 3.7 Sonnet",
+            "name": "models/claude-3-7-sonnet-20250219",
+            "supportedGenerationMethods": [
+                "generateContent"
+            ],
+            "supportedInputModalities": [
+                "text",
+                "image"
+            ],
+            "supportedOutputModalities": [
+                "text"
+            ]
+        },
+        {
+            "description": "Ultra-fast coding model.",
+            "displayName": "GPT 5.3 Codex Spark",
+            "name": "models/gpt-5.3-codex-spark",
+            "supportedGenerationMethods": [
+                "generateContent"
+            ],
+            "supportedInputModalities": [
+                "text"
+            ],
+            "supportedOutputModalities": [
+                "text"
+            ],
+            "version": "gpt-5.3"
+        },
+        {
+            "description": "GPT-5.4 mini brings the strengths of GPT-5.4 to a faster, more efficient model designed for high-volume workloads.",
+            "displayName": "GPT 5.4 Mini",
+            "name": "models/gpt-5.4-mini",
+            "supportedGenerationMethods": [
+                "generateContent"
+            ],
+            "supportedInputModalities": [
+                "text",
+                "image"
+            ],
+            "supportedOutputModalities": [
+                "text"
+            ],
+            "version": "gpt-5.4-mini"
+        },
+        {
+            "description": "Our most capable model yet. GPT-5.6 Sol can tackle complex code changes, dig into research, produce polished documents, and take on your most ambitious work. Sol is highly capable at lower reasoning efforts\u2014try starting lower, then turn it up for harder jobs.",
+            "displayName": "GPT 5.6 Sol",
+            "name": "models/gpt-5.6-sol",
+            "supportedGenerationMethods": [
+                "generateContent"
+            ],
+            "supportedInputModalities": [
+                "text",
+                "image"
+            ],
+            "supportedOutputModalities": [
+                "text"
+            ],
+            "version": "gpt-5.6"
+        },
+        {
+            "description": "Gemini 3 Flash",
+            "displayName": "Gemini 3 Flash",
+            "name": "models/gemini-3-flash",
+            "supportedGenerationMethods": [
+                "generateContent"
+            ],
+            "supportedInputModalities": [
+                "text",
+                "image",
+                "audio",
+                "video"
+            ],
+            "supportedOutputModalities": [
+                "text"
+            ]
+        },
+        {
+            "description": "Gemini 3.1 Pro Preview",
+            "displayName": "Gemini 3.1 Pro Preview",
+            "inputTokenLimit": 1048576,
+            "name": "models/gemini-3.1-pro-preview",
+            "outputTokenLimit": 65536,
+            "supportedGenerationMethods": [
+                "generateContent",
+                "countTokens",
+                "createCachedContent",
+                "batchGenerateContent"
+            ],
+            "supportedInputModalities": [
+                "text",
+                "image",
+                "audio",
+                "video"
+            ],
+            "supportedOutputModalities": [
+                "text"
+            ],
+            "version": "3.1"
+        },
+        {
+            "description": "Our smallest and most cost effective model, built for at scale usage.",
+            "displayName": "Gemini 3.1 Flash Lite Preview",
+            "inputTokenLimit": 1048576,
+            "name": "models/gemini-3.1-flash-lite-preview",
+            "outputTokenLimit": 65536,
+            "supportedGenerationMethods": [
+                "generateContent",
+                "countTokens",
+                "createCachedContent",
+                "batchGenerateContent"
+            ],
+            "supportedInputModalities": [
+                "text",
+                "image",
+                "audio",
+                "video"
+            ],
+            "supportedOutputModalities": [
+                "text"
+            ],
+            "version": "3.1"
+        },
+        {
+            "description": "Claude Opus 4.6 (Thinking)",
+            "displayName": "Claude Opus 4.6 (Thinking)",
+            "name": "models/claude-opus-4-6-thinking",
+            "supportedGenerationMethods": [
+                "generateContent"
+            ],
+            "supportedInputModalities": [
+                "text",
+                "image"
+            ],
+            "supportedOutputModalities": [
+                "text"
+            ]
+        },
+        {
+            "description": "Gemini 3.7 Flash (High)",
+            "displayName": "Gemini 3.7 Flash",
+            "name": "models/gemini-3.7-flash-high",
+            "supportedGenerationMethods": [
+                "generateContent"
+            ],
+            "supportedInputModalities": [
+                "text",
+                "image",
+                "audio",
+                "video"
+            ],
+            "supportedOutputModalities": [
+                "text"
+            ]
+        },
+        {
+            "description": "claude-sonnet-4-20250514",
+            "displayName": "Claude 4 Sonnet",
+            "name": "models/claude-sonnet-4-20250514",
+            "supportedGenerationMethods": [
+                "generateContent"
+            ],
+            "supportedInputModalities": [
+                "text",
+                "image"
+            ],
+            "supportedOutputModalities": [
+                "text"
+            ]
+        },
+        {
+            "description": "claude-3-5-haiku-20241022",
+            "displayName": "Claude 3.5 Haiku",
+            "name": "models/claude-3-5-haiku-20241022",
+            "supportedGenerationMethods": [
+                "generateContent"
+            ]
+        },
+        {
+            "description": "Balanced agentic coding model for everyday work.",
+            "displayName": "GPT 5.6 Terra",
+            "name": "models/gpt-5.6-terra",
+            "supportedGenerationMethods": [
+                "generateContent"
+            ],
+            "supportedInputModalities": [
+                "text",
+                "image"
+            ],
+            "supportedOutputModalities": [
+                "text"
+            ],
+            "version": "gpt-5.6"
+        },
+        {
+            "description": "gpt-image-2",
+            "displayName": "GPT Image 2",
+            "name": "models/gpt-image-2",
+            "supportedGenerationMethods": [
+                "generateContent"
+            ],
+            "version": "gpt-image-2"
+        },
+        {
+            "description": "Stable release (June 17th, 2025) of Gemini 2.5 Pro",
+            "displayName": "Gemini 2.5 Pro",
+            "inputTokenLimit": 1048576,
+            "name": "models/gemini-2.5-pro",
+            "outputTokenLimit": 65536,
+            "supportedGenerationMethods": [
+                "generateContent",
+                "countTokens",
+                "createCachedContent",
+                "batchGenerateContent"
+            ],
+            "supportedInputModalities": [
+                "text",
+                "image",
+                "audio",
+                "video"
+            ],
+            "supportedOutputModalities": [
+                "text"
+            ],
+            "version": "2.5"
+        },
+        {
+            "description": "Stable version of Gemini 2.5 Flash, our mid-size multimodal model that supports up to 1 million tokens, released in June of 2025.",
+            "displayName": "Gemini 2.5 Flash",
+            "inputTokenLimit": 1048576,
+            "name": "models/gemini-2.5-flash",
+            "outputTokenLimit": 65536,
+            "supportedGenerationMethods": [
+                "generateContent",
+                "countTokens",
+                "createCachedContent",
+                "batchGenerateContent"
+            ],
+            "supportedInputModalities": [
+                "text",
+                "image",
+                "audio",
+                "video"
+            ],
+            "supportedOutputModalities": [
+                "text"
+            ],
+            "version": "001"
+        },
+        {
+            "description": "Gemini 3.6 Flash (High)",
+            "displayName": "Gemini 3.6 Flash",
+            "name": "models/gemini-3.6-flash-high",
+            "supportedGenerationMethods": [
+                "generateContent"
+            ],
+            "supportedInputModalities": [
+                "text",
+                "image",
+                "audio",
+                "video"
+            ],
+            "supportedOutputModalities": [
+                "text"
+            ]
+        },
+        {
+            "description": "Gemini 3.5 Flash (High)",
+            "displayName": "Gemini 3.5 Flash (High)",
+            "name": "models/gemini-3-flash-agent",
+            "supportedGenerationMethods": [
+                "generateContent"
+            ],
+            "supportedInputModalities": [
+                "text",
+                "image",
+                "audio",
+                "video"
+            ],
+            "supportedOutputModalities": [
+                "text"
+            ]
+        },
+        {
+            "description": "Gemini 3.1 Flash Lite",
+            "displayName": "Gemini 3.1 Flash Lite",
+            "name": "models/gemini-3.1-flash-lite",
+            "supportedGenerationMethods": [
+                "generateContent"
+            ],
+            "supportedInputModalities": [
+                "text",
+                "image",
+                "audio",
+                "video"
+            ],
+            "supportedOutputModalities": [
+                "text"
+            ]
+        }
+    ]
+}

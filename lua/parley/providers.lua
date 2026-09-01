@@ -190,6 +190,36 @@ function M.cliproxy_route(model_name, strategy)
     return "openai"
 end
 
+--- The server-side web-search strategy a model can actually USE over cliproxy.
+--- PURE. Single source for the three-way answer (ARCH-DRY) — the canonical
+--- anthropic family test above is reused here, never re-written. A fourth copy
+--- of that test is exactly the drift the extraction note at cliproxy_route
+--- exists to prevent.
+---
+--- Verified against a live proxy 2026-08-31 (issue #205):
+---   claude-*  the OpenAI route returns an empty completion; the anthropic route
+---             is what makes server-side web_search actually fire.
+---   gpt-*     `{type="web_search"}` works and comes back with cited results.
+---   gemini-*  `{type="web_search"}` yields finish_reason
+---             "malformed_function_call" and NO content — it BREAKS the model.
+---             Google's own `{google_search={}}` on the gemini route does work
+---             through cliproxy, so a `google_tools_route` is a real future
+---             strategy; until it exists, "none" beats shipping a broken agent.
+---
+--- Client-side function tools work on the OpenAI route for all three families,
+--- so this governs only the server-side search tool.
+---@param model_name string
+---@return "anthropic_tools_route"|"openai_tools_route"|"none"
+function M.cliproxy_default_web_search_strategy(model_name)
+    if is_cliproxy_anthropic_route_model(model_name) then
+        return "anthropic_tools_route"
+    end
+    if type(model_name) == "string" and model_name:find("^gemini") then
+        return "none"
+    end
+    return "openai_tools_route"
+end
+
 --------------------------------------------------------------------------------
 -- OpenAI adapter (base for copilot, azure, ollama)
 --------------------------------------------------------------------------------
