@@ -1007,3 +1007,29 @@ WORKING TREE (`git diff <base>`), not `<base>..HEAD`. And keep its teeth aimed:
 require a table row for public FUNCTIONS, not for data constants belonging to a
 module the tables already name by path — a guard that floods gets edited into
 uselessness.
+
+## Eligibility before ranking (#205)
+
+Choosing "the worst of N" is two decisions, and doing them in one step inverts
+the answer. Picking which credential to blame for an auth failure ranked
+`missing` — no credential at all — as the worst, so the diagnosis named a channel
+that could not possibly have served the request, three times in a row as the
+predicate was widened (`missing`, then `unknown`, then `disabled`).
+
+**Check:** when a reducer picks the extreme of a set, ask first which members are
+ELIGIBLE. And when the ranking you invert was written for a different question
+("is this usable?" vs "did this fail?"), write a second explicit ordering rather
+than reusing the first backwards.
+
+## A replaced single source needs a writer on every path the original had (#205)
+
+`oauth-model-alias` shipped in config and was therefore always present. Its
+replacement — a cached catalog — was written by exactly one caller, opening the
+agent picker. A machine that never opened one had no mapping at all, so the
+feature that replaced it was strictly worse on a cold install.
+
+**Check:** when replacing a source of truth, enumerate where the ORIGINAL was
+populated and make sure the replacement is written on each of those paths. Then
+verify the fix reaches the path production takes: warming inside `ensure_running`
+looked right and never ran for `manage = false`, because the caller returns
+before it.

@@ -75,7 +75,18 @@ describe("arch: single-source sweeps stay swept", function()
             -- guard exists for. A bare `fn = function()` is a field in a local
             -- table literal (a picker mapping), not exported surface.
             local name = line:match("^%+function M%.([%w_]+)%(")
-                or line:match("^%+M%.([%w_]+) = function")
+            if not name then
+                -- `M.x = <rhs>`: an export, in any of the forms this repo uses.
+                -- Narrowing this to `= function` (the first attempt) dropped the
+                -- 41-site `M._x = local_fn` seam-export idiom — excluding by
+                -- SYNTAX rather than by what the right-hand side actually is.
+                -- Data constants are what should be excluded, and they are
+                -- literals: a table, a string, a number.
+                local n, rhs = line:match("^%+M%.([%w_]+) = (.+)$")
+                if n and rhs and not rhs:match('^[{"\'%d]') then
+                    name = n
+                end
+            end
             if name and not plan_body:find("`" .. name .. "`", 1, true) then
                 missing[name] = true
             end

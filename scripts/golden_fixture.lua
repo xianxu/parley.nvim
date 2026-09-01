@@ -23,4 +23,23 @@ M.AGENT = {
 -- machine-dependent.
 M.READONLY_TOOLS = { "read_file", "ls", "find", "grep", "chat_history_search" }
 
+-- The transcripts both the regenerator and the verifier walk. Duplicating this
+-- list was the other half of the same hand-sync it replaced.
+M.FIXTURES = {
+    "single-user",
+    "simple-chat",
+    "one-round-tool-use",
+    "two-round-tool-use",
+    "mixed-text-and-tools",
+    "tool-error",
+    "dynamic-fence-stress",
+}
+
+M.OPENAI_FIXTURES = {
+    "one-round-tool-use",
+    "two-round-tool-use",
+    "tool-error",
+    "mixed-text-and-tools",
+}
+
 return M

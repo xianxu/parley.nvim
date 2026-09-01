@@ -37,7 +37,7 @@ from unticked boxes here.
 | `resolve_channel` | `lua/parley/cliproxy_config.lua` | modified |
 | `resolve_channels` / `channels_for_owner` | `lua/parley/cliproxy_config.lua` | new |
 | `resolve_login_provider` | `lua/parley/cliproxy_config.lua` | modified |
-| `unhealthier` / `could_have_served` / `likeliest_culprit` / `healthiest` | `lua/parley/cliproxy_auth.lua` | new |
+| `could_have_served` / `likeliest_culprit` / `healthiest` | `lua/parley/cliproxy_auth.lua` | new |
 | `build_payload` (`opts.agent`) | `scripts/parley_harness.lua` | modified |
 | `golden_fixture` | `scripts/golden_fixture.lua` | new |
 | `_build_items` | `lua/parley/agent_picker.lua` | modified |
@@ -2239,3 +2239,28 @@ the code is still being written, and it covers `scripts/` as well as `lua/`.
 **The rule:** a guard's window must include the state the author is actually in.
 Checking committed history only means the author's last action is always
 unverified.
+
+### 2026-09-01 — M4 close bundle (BR-78, BR-80, BR-91..BR-100)
+
+- **BR-100.** The narrowing that fixed BR-99 excluded by SYNTAX (`= function`)
+  rather than by what the right-hand side IS, so the repo's 41-site
+  `M._x = local_fn` seam-export idiom became invisible to the guard one commit
+  after it was tightened. It now treats any `M.x = <non-literal>` as an export
+  and only literals as data — verified both ways: injecting a seam export fails
+  it, adding a data constant does not.
+- **BR-92 / BR-94.** `unhealthier` had no callers left once `likeliest_culprit`
+  replaced it, so it is deleted (and the plan→code guard caught its stale table
+  row immediately, which is the guard doing its job). The superseded "least
+  healthy" phrasing is gone from the code comments and the atlas, and the atlas
+  no longer routes through the deleted `resolve_login_provider`.
+- **BR-80 (4th).** Every stacked doc block is collapsed — 0 remain across the
+  three cliproxy modules, checked mechanically rather than by eye. The cause each
+  time was inserting a new block ABOVE an existing one instead of replacing it.
+- **BR-78.** `FIXTURES` and `OPENAI_FIXTURES` were the other half of the
+  hand-synced duplication; both now live in `scripts/golden_fixture.lua` with the
+  agent and the tool list.
+- **BR-97 / BR-98.** `default_tool_agent` states why it sorts (a different agent
+  per run makes a failure unreproducible) and asserts its precondition; and the
+  two rules missing from `lessons.md` — eligibility before ranking, and a
+  replaced single source needs a writer on every path the original had — are
+  written down.

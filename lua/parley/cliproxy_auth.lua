@@ -174,18 +174,6 @@ function M.healthier(a, b)
     return (HEALTH_RANK[(a or {}).state] or -1) > (HEALTH_RANK[(b or {}).state] or -1)
 end
 
---- The inverse of `healthier`: which of two readings is the more BROKEN one.
----
---- Diagnosis needs this. When several channels could serve the failing model,
---- the one to name is the credential that plausibly caused the failure, not the
---- healthiest account that happens to share the model. Defined here, next to the
---- ranking it inverts, so the two cannot drift apart.
----@param a table|nil
----@param b table|nil
----@return boolean # true when `a` is the worse reading
-function M.unhealthier(a, b)
-    return M.healthier(b, a)
-end
 
 -- Which states can be BLAMED for a request that failed, and in what order.
 --

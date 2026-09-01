@@ -9,15 +9,7 @@ local golden = require("scripts.golden_fixture")
 local GOLDEN_AGENT = golden.AGENT
 local READONLY_TOOLS = golden.READONLY_TOOLS
 
-local FIXTURES = {
-    "single-user",
-    "simple-chat",
-    "one-round-tool-use",
-    "two-round-tool-use",
-    "mixed-text-and-tools",
-    "tool-error",
-    "dynamic-fence-stress",
-}
+local FIXTURES = golden.FIXTURES
 
 -- Pin the client-side tool list explicitly rather than inheriting it from
 -- the shipped ToolSonnet agent. ToolSonnet ships the `@all` sentinel, which
@@ -57,12 +49,7 @@ end)
 -- result, `function` tool envelopes). Provider and model are pinned explicitly
 -- rather than named via a shipped agent, for the same machine-independence
 -- reason READONLY_TOOLS exists.
-local OPENAI_FIXTURES = {
-    "one-round-tool-use",
-    "two-round-tool-use",
-    "tool-error",
-    "mixed-text-and-tools",
-}
+local OPENAI_FIXTURES = golden.OPENAI_FIXTURES
 
 describe("parley_harness golden round-trip (openai wire)", function()
     for _, name in ipairs(OPENAI_FIXTURES) do

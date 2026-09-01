@@ -497,6 +497,9 @@ end
 ---@param choose fun(readings: table[]): table|nil, string|nil
 ---@param cb fun(health: table, channel: string|nil, repaired: boolean|nil)
 function M.credential_health_across(channels, choose, cb)
+    -- Callers reach here only with a non-empty candidate list (`recover` returns
+    -- earlier when nothing resolves), but an empty list must still settle the
+    -- callback rather than strand it — every exit path resolves exactly once.
     if #channels == 0 then
         return cb({ state = "unknown", reason = "no_channel",
             message = "no cliproxy channel could be resolved" }, nil)
@@ -1430,7 +1433,7 @@ function M.recover(failure, retry, give_up)
             return execute(ca.decide(verdict, health, { running = false }, attempt, login), health)
         end
         -- Where several channels could serve this model, ask ALL of them and
-        -- name the least healthy — that is the credential that plausibly caused
+        -- name the likeliest culprit — that is the credential that plausibly caused
         -- the failure. Reporting the healthiest account that happens to share
         -- the model would send the operator to re-log-in a credential that is
         -- fine. With one candidate this is the single read it always was.

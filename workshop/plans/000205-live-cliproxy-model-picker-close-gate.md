@@ -1986,6 +1986,106 @@ rounds:
           round: 25
       boundary: M4
       blocked: true
+    - "n": 26
+      timestamp: "2026-09-01T12:50:29-07:00"
+      agent: claude
+      dispose:
+        - id: BR-75
+          disposition: addressed
+          note: CULPRIT_RANK allowlist; verified red-on-revert (4 tests) — but the test's two state lists are hardcoded, not derived from HEALTH_RANK's keys as the finding asked.
+          round: 26
+        - id: BR-76
+          disposition: addressed
+          round: 26
+        - id: BR-77
+          disposition: addressed
+          round: 26
+        - id: BR-78
+          disposition: not-addressed
+          note: Instance fixed, but the finding's own grep still hits scripts/refresh_goldens.lua:21, and FIXTURES stays duplicated across the same two files.
+          round: 26
+        - id: BR-79
+          disposition: addressed
+          note: Rows landed and the arch guard now mechanizes the code→table direction over lua/ + scripts/ — a stronger form than the plan-note command asked for.
+          round: 26
+        - id: BR-80
+          disposition: not-addressed
+          note: Both named sites verbatim at cliproxy.lua:478-486 and :1338-1347, and 89c8135 added a fourth by stacking a second doc block on warm_catalog (:626-647).
+          round: 26
+        - id: BR-81
+          disposition: addressed
+          note: Claim struck and scope stated; the untested error() branch it points at is BR-95's line.
+          round: 26
+        - id: BR-86
+          disposition: not-addressed
+          note: Worktree still carries the 192-line config.lua deletion and untracked docs/parley.nvim.md at HEAD; no explicit-path-list enforcement added.
+          round: 26
+        - id: BR-87
+          disposition: not-addressed
+          round: 26
+        - id: BR-88
+          disposition: addressed
+          note: Warm moved to pre_query; verified red-on-revert (2 tests in cliproxy_catalog_spec.lua, both modes).
+          round: 26
+        - id: BR-90
+          disposition: not-addressed
+          round: 26
+        - id: BR-91
+          disposition: not-addressed
+          note: Second `it` untouched; confirmed resolve_login_provider is text-only (sole hit is the comment at cliproxy_config_spec.lua:271).
+          round: 26
+        - id: BR-92
+          disposition: not-addressed
+          note: 'M.unhealthier still has zero non-defining callers; the #channels == 0 branch is still unreachable.'
+          round: 26
+        - id: BR-93
+          disposition: not-addressed
+          round: 26
+        - id: BR-94
+          disposition: not-addressed
+          note: atlas:107-117 and cliproxy.lua:1432-1434 still say "least healthy"; atlas:210 still routes via the deleted resolve_login_provider.
+          round: 26
+        - id: BR-95
+          disposition: not-addressed
+          round: 26
+        - id: BR-96
+          disposition: not-addressed
+          note: Both sites unchanged; this range added five more double-blank-line deletion residues.
+          round: 26
+        - id: BR-97
+          disposition: not-addressed
+          note: Two sites now construct their fixture, but default_tool_agent() still sorts a filtered roster and six sites read it.
+          round: 26
+        - id: BR-98
+          disposition: not-addressed
+          note: A third lessons entry landed (guard window), but neither "eligibility before ranking" nor "a replaced single source needs a writer on every path".
+          round: 26
+        - id: BR-99
+          disposition: addressed
+          note: make test EXIT=0 on a clean checkout of HEAD; 192 spec files pass.
+          round: 26
+      findings:
+        - id: BR-100
+          severity: Important
+          title: The arch guard's matcher was narrowed to `M.x = function`, so the repo's 41-site `M.x = <local_fn>` seam-export form is now invisible to it
+          detail: |-
+            tests/arch/single_source_sweeps_spec.lua:78-79 changed `^%+M%.([%w_]+) = ` to
+            `^%+M%.([%w_]+) = function` in the same commit that fixed BR-99. The stated aim was to
+            exclude data constants, but the chosen regex excludes by SYNTACTIC FORM, not by what the
+            RHS is — so it also drops the "exposed for tests" alias idiom, which appears 41 times in
+            lua/ including `M._catalog_path = catalog_path` (cliproxy.lua:1506) inside this issue's own
+            diff. Probed: appending `M._brand_new_seam = catalog_path` to cliproxy.lua leaves all five
+            arch cases green; the pre-5418342 pattern would have flagged it.
+            This is the 8th finding in family `test-title-overstates-guard` — the assertion message
+            claims to enumerate "these are added by this issue" while under-enumerating. Do NOT
+            re-widen this one regex. The rule: a matcher that enumerates DEFINITIONS must key on what
+            is being defined (RHS is `function`, or a bare identifier = an alias), never on a
+            sub-form of the assignment; apply it to both directions of this spec in one pass, since
+            the plan→code `it` has the mirror-image defect (BR-91).
+          family: test-title-overstates-guard
+          round: 26
+      boundary: M4
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#205 (boundary-review)
@@ -2908,6 +3008,48 @@ later rounds disposed of them. Generated — edit the gate, not this file.
   exit. The missing row itself belongs to BR-79's enumeration, which is why the row is
   not the fix.
 
+## Round 26 — 2026-09-01T12:50:29-07:00 (claude) — passed
+
+### Disposed
+
+- BR-75 — addressed — CULPRIT_RANK allowlist; verified red-on-revert (4 tests) — but the test's two state lists are hardcoded, not derived from HEALTH_RANK's keys as the finding asked.
+- BR-76 — addressed
+- BR-77 — addressed
+- BR-78 — not-addressed — Instance fixed, but the finding's own grep still hits scripts/refresh_goldens.lua:21, and FIXTURES stays duplicated across the same two files.
+- BR-79 — addressed — Rows landed and the arch guard now mechanizes the code→table direction over lua/ + scripts/ — a stronger form than the plan-note command asked for.
+- BR-80 — not-addressed — Both named sites verbatim at cliproxy.lua:478-486 and :1338-1347, and 89c8135 added a fourth by stacking a second doc block on warm_catalog (:626-647).
+- BR-81 — addressed — Claim struck and scope stated; the untested error() branch it points at is BR-95's line.
+- BR-86 — not-addressed — Worktree still carries the 192-line config.lua deletion and untracked docs/parley.nvim.md at HEAD; no explicit-path-list enforcement added.
+- BR-87 — not-addressed
+- BR-88 — addressed — Warm moved to pre_query; verified red-on-revert (2 tests in cliproxy_catalog_spec.lua, both modes).
+- BR-90 — not-addressed
+- BR-91 — not-addressed — Second `it` untouched; confirmed resolve_login_provider is text-only (sole hit is the comment at cliproxy_config_spec.lua:271).
+- BR-92 — not-addressed — M.unhealthier still has zero non-defining callers; the #channels == 0 branch is still unreachable.
+- BR-93 — not-addressed
+- BR-94 — not-addressed — atlas:107-117 and cliproxy.lua:1432-1434 still say "least healthy"; atlas:210 still routes via the deleted resolve_login_provider.
+- BR-95 — not-addressed
+- BR-96 — not-addressed — Both sites unchanged; this range added five more double-blank-line deletion residues.
+- BR-97 — not-addressed — Two sites now construct their fixture, but default_tool_agent() still sorts a filtered roster and six sites read it.
+- BR-98 — not-addressed — A third lessons entry landed (guard window), but neither "eligibility before ranking" nor "a replaced single source needs a writer on every path".
+- BR-99 — addressed — make test EXIT=0 on a clean checkout of HEAD; 192 spec files pass.
+
+### Raised
+
+- **BR-100** [Important] `test-title-overstates-guard` The arch guard's matcher was narrowed to `M.x = function`, so the repo's 41-site `M.x = <local_fn>` seam-export form is now invisible to it
+  tests/arch/single_source_sweeps_spec.lua:78-79 changed `^%+M%.([%w_]+) = ` to
+  `^%+M%.([%w_]+) = function` in the same commit that fixed BR-99. The stated aim was to
+  exclude data constants, but the chosen regex excludes by SYNTACTIC FORM, not by what the
+  RHS is — so it also drops the "exposed for tests" alias idiom, which appears 41 times in
+  lua/ including `M._catalog_path = catalog_path` (cliproxy.lua:1506) inside this issue's own
+  diff. Probed: appending `M._brand_new_seam = catalog_path` to cliproxy.lua leaves all five
+  arch cases green; the pre-5418342 pattern would have flagged it.
+  This is the 8th finding in family `test-title-overstates-guard` — the assertion message
+  claims to enumerate "these are added by this issue" while under-enumerating. Do NOT
+  re-widen this one regex. The rule: a matcher that enumerates DEFINITIONS must key on what
+  is being defined (RHS is `function`, or a bare identifier = an alias), never on a
+  sub-form of the assignment; apply it to both directions of this spec in one pass, since
+  the plan→code `it` has the mirror-image defect (BR-91).
+
 ## Open findings
 
 - **BR-13** [Important] `rank-key-version-extraction` rank_key's `< 100` threshold answers the 120B instance, not the class: any parameter count below 100 still reads as a version
@@ -2934,14 +3076,10 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-72** [Important] `retry-not-rate-limited` `_force_stale` is cleared at the top of `_write_catalog`, before the write it is paid for can fail
 - **BR-73** [Important] `plan-table-missing-entity` `_on_login_success` has no Core-concepts row, and the guard meant to catch that searches the whole plan instead of the tables
 - **BR-74** [Minor] `duplicated-logic-not-extracted` The two agent_picker repaint blocks are byte-identical and re-derive the picker's identity instead of using `recall_id_fn`
-- **BR-75** [Critical] `missing-input-guard` could_have_served excludes only `missing`; `unknown` and `disabled` still outrank a real failure and name the wrong account
 - **BR-78** [Important] `single-source-not-enforced` GOLDEN_AGENT is defined twice — once in the regenerator, once in the verifier — and must be kept equal by hand
-- **BR-79** [Important] `plan-table-missing-entity` scripts/parley_harness.lua / build_payload's new `opts.agent` option is in neither Core-concepts table
 - **BR-80** [Important] `docs-insert-orphans-section` Three stacked doc blocks precede credential_health_across, one documenting a `prefer` parameter that no longer exists
-- **BR-81** [Minor] `test-title-overstates-guard` The get_agent stale-selection test pins a state production cannot produce; the reachable variant is untested
 - **BR-86** [Minor] `close-stages-unreviewed-worktree` The worktree carries an uncommitted 192-line config.lua roster deletion and an untracked docs/parley.nvim.md at the boundary
 - **BR-87** [Minor] `stated-design-not-implemented` Plan Task 4.1 still presents "the LEAST healthy candidate is the one that plausibly failed" as the design
-- **BR-88** [Critical] `source-without-producer` The catalog that replaced oauth-model-alias has one production writer — opening the agent picker — so a cold install gets "no cliproxy channel is configured" with no account and no login offered
 - **BR-90** [Important] `one-value-two-decisions` OWNER_CHANNELS' order is documented as "sorted" but read as a preference ranking at three sites, so antigravity outranks the native channel for every owner it serves
 - **BR-91** [Important] `test-title-overstates-guard` The plan-to-code arch guard matches a textual occurrence, so a deleted function stays green because a spec comment mentions its name
 - **BR-92** [Minor] `dead-api-extended` M.unhealthier has zero call sites yet is tabled as `new`, and credential_health_across's empty-channels branch is unreachable
@@ -2951,4 +3089,4 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-96** [Minor] `style-drift-in-diff` Two indentation regressions introduced by this window
 - **BR-97** [Minor] `test-title-overstates-guard` default_tool_agent() returns the alphabetically-first tool-enabled agent, not "the default", and the provider assertion was weakened to is_string
 - **BR-98** [Minor] `lesson-not-recorded` The two Criticals this window shipped state their class only in commit messages and the plan's Revisions; workshop/lessons.md gained neither
-- **BR-99** [Critical] `boundary-ships-red-gate` `make test` is RED at HEAD — the repo's own arch guard fails on `warm_catalog` and the boundary was crossed anyway
+- **BR-100** [Important] `test-title-overstates-guard` The arch guard's matcher was narrowed to `M.x = function`, so the repo's 41-site `M.x = <local_fn>` seam-export form is now invisible to it

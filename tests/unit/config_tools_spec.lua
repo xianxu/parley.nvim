@@ -159,7 +159,12 @@ local function default_tool_agent()
             names[#names + 1] = name
         end
     end
+    -- Sorted, so the choice is deterministic rather than pairs()-order: these
+    -- assertions are about what a tool-enabled DEFAULT carries, and a different
+    -- agent per run would make a failure unreproducible. Which one it picks is
+    -- deliberately not asserted anywhere.
     table.sort(names)
+    assert(names[1], "no tool-enabled agent ships in the default config")
     return parley.agents[names[1]], names[1]
 end
 

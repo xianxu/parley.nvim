@@ -120,7 +120,7 @@ reads that catalog instead of carrying model names in Lua.
   could serve one id, CREDENTIAL HEALTH picks between them — **eligibility first,
   ranking second**. A channel holding NO credential cannot have served the
   request, so it is not a candidate at all; among those that could have, the
-  least healthy is named. Getting that order wrong inverts the answer, because
+  likeliest culprit is named. Getting that order wrong inverts the answer, because
   `missing` ranks worst: an "unhealthiest wins" reducer names the channel you
   have never logged into and leaves the credential that actually failed unnamed. A pin still wins over both. If nothing resolves, parley says so
   rather than naming an account at random.
@@ -207,7 +207,7 @@ cliproxy claims only when: a verdict exists, `attempt == 0`, and nothing has
 streamed (`failure.streamed`) — a retry after partial content would duplicate
 text. `failure.model` carries `payload.model`, the only path by which the
 expired-token 401 (which names neither provider nor model) resolves to a channel
-via `resolve_login_provider`.
+via `channel_login on a resolved channel`.
 
 ### The recovery ladder
 

@@ -8,18 +8,10 @@ local golden = require("scripts.golden_fixture")
 local GOLDEN_AGENT = golden.AGENT
 local READONLY_TOOLS = golden.READONLY_TOOLS
 
-local FIXTURES = {
-    "single-user",
-    "simple-chat",
-    "one-round-tool-use",
-    "two-round-tool-use",
-    "mixed-text-and-tools",
-    "tool-error",
-    "dynamic-fence-stress",
-}
+local FIXTURES = golden.FIXTURES
 
 -- Keep in sync with READONLY_TOOLS in tests/unit/parley_harness_golden_spec.lua.
--- Pinned explicitly so goldens stay deterministic and portable (ToolSonnet now
+-- Pinned explicitly so goldens stay deterministic and portable (the shipped roster now
 -- uses the `@readonly` sentinel, which would pull in optional tools like `ack`).
 
 
