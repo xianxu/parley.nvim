@@ -75,6 +75,11 @@ reads that catalog instead of carrying model names in Lua.
   `stdpath('data')/parley/cliproxy/`, written `0600`. The picker renders from it
   synchronously, so a cold start is instant and a dead proxy still lists models.
   Refreshed on picker open when older than 10 minutes.
+- **The catalog does not depend on `manage`.** `cliproxy.manage = false` means
+  parley will not START a proxy, not that there is no proxy — a bring-your-own
+  instance answers the same GET. The refresh therefore runs either way; gating it
+  on `manage` left those operators with an empty catalog and a picker claiming
+  every configured provider was logged out.
 - **`fetch_catalog` never spawns the proxy.** It is a plain GET; a
   connection-refused is a no-op that leaves the cache in place. Opening a picker
   must not start a daemon — that is the dormancy contract from #131, pinned by a
