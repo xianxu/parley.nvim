@@ -223,19 +223,26 @@ end
 ---@param owner string|nil # the catalog row's owned_by, when known
 ---@return "anthropic_tools_route"|"openai_tools_route"|"none"
 function M.cliproxy_default_web_search_strategy(model_name, owner)
-    -- Owner first, and only for antigravity: it re-serves other vendors' models
-    -- through Google's stack, where the server-side tool does not survive the
-    -- trip. Measured 2026-08-31: gemini-3-flash answers
-    -- finish_reason="malformed_function_call" with no content, and
-    -- gpt-oss-120b-medium answers but silently never searches (it returned a
-    -- wrong version from memory while saying it had no browsing). A
-    -- claude-family model served there is unmeasured, so it is not claimed to
-    -- work either. The family rules below still decide every native channel.
-    if owner == "antigravity" then
-        return "none"
-    end
+    -- FAMILY FIRST, and deliberately so: this value also selects the WIRE
+    -- (cliproxy_route returns "anthropic" only for anthropic_tools_route), and
+    -- `owner` is a display grouping that is not stable — claude-sonnet-4-6 was
+    -- reported under `anthropic` on one proxy start and `antigravity` on the
+    -- next. Letting owner reach the wire would mean the same model speaking a
+    -- different protocol on different days. Measured 2026-08-31:
+    -- claude-opus-4-6-thinking, served by antigravity, answers 200 on the
+    -- anthropic wire — the transport is fine there.
     if is_cliproxy_anthropic_route_model(model_name) then
         return "anthropic_tools_route"
+    end
+    -- Below here the wire is "openai" whatever we return, so owner can safely
+    -- decide the SEARCH TOOL alone. Antigravity re-serves other vendors through
+    -- Google's stack and the server-side tool does not survive the trip:
+    -- gemini-3-flash answers finish_reason="malformed_function_call" with no
+    -- content at all, and gpt-oss-120b-medium answers while silently never
+    -- searching (it returned a stale version from memory). Sending it is at best
+    -- inert and at worst fatal, so it is not sent.
+    if owner == "antigravity" then
+        return "none"
     end
     if type(model_name) == "string" and model_name:find("^gemini") then
         return "none"

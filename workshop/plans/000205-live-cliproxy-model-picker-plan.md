@@ -1517,3 +1517,20 @@ sdlc close --issue 205 --verified '<evidence>'
   breaks outright there, and `gpt-oss-120b-medium` answers while silently never
   searching. A claude model served by antigravity stays unmeasured, so it is no
   longer claimed to work.
+
+### 2026-08-31 — M1 boundary review round 2 (BR-5, BR-12)
+
+- **BR-12 (Important, and a real design error).** `web_search_strategy` also
+  selects the WIRE — `cliproxy_route` returns "anthropic" only for
+  `anthropic_tools_route` — so round 1's "antigravity ⇒ none" rule let an
+  UNSTABLE `owned_by` decide the transport: the same claude-sonnet-4-6 would
+  have spoken Anthropic or OpenAI depending on which owner that proxy start
+  reported. Resolved by measurement rather than by choosing: an
+  antigravity-served `claude-opus-4-6-thinking` answers 200 on the anthropic
+  wire, so the family test runs FIRST and owner is consulted only below it,
+  where every remaining family gets the openai wire either way and owner can
+  therefore only affect the search tool. Two tests pin it, one asserting that
+  the two owners of a shared id resolve identically.
+- **BR-5 (repeat).** The remaining `tbl_contains` — in the rank-band test added
+  in round 1 — is now a full-render equality. Order is what that case exists to
+  check, and containment cannot see order. No `tbl_contains` remains in the spec.

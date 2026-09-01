@@ -192,8 +192,10 @@ end
 --- The wire follows the MODEL FAMILY, never `owner`: owner is a display
 --- grouping that is not even stable (claude-sonnet-4-6 was reported under
 --- `anthropic` on one proxy start and `antigravity` on the next), while a
---- claude model speaks the Anthropic wire whichever channel serves it. The
---- decision itself is single-sourced in providers.lua.
+--- claude model speaks the Anthropic wire whichever channel serves it —
+--- measured through antigravity, 200 OK. `owner` is forwarded because it
+--- decides the SEARCH TOOL for the families whose wire it cannot affect; the
+--- whole decision is single-sourced in providers.lua.
 ---@param m table # a parsed Model
 ---@param opts table|nil # { system_prompt = string }
 ---@return table # a parley agent

@@ -164,9 +164,10 @@ describe("curate", function()
     it("does not let a parameter count outrank a version", function()
         -- "GPT-OSS 120B (Medium)" has no created, like every antigravity row. If
         -- 120 were read as its version it would sort above every Gemini release.
-        local got = ids("antigravity", 3)
-        assert.is_false(vim.tbl_contains(got, "gpt-oss-120b-medium"),
-            "a 120B parameter count floated to the top of the provider")
+        -- Asserted as the full render: what is under test is the ORDER, and a
+        -- containment check cannot see order.
+        assert.same({ "claude-opus-4-6-thinking", "claude-sonnet-4-6",
+                      "gemini-3.7-flash-high" }, ids("antigravity", 3))
     end)
 
     it("orders by term, so config expresses preference", function()
@@ -207,14 +208,25 @@ describe("cliproxy_default_web_search_strategy", function()
             providers.cliproxy_default_web_search_strategy("gemini-3-flash"))
     end)
 
-    it("disables it for anything antigravity serves, whatever the family", function()
+    it("disables it for what antigravity serves — except where that would move the wire", function()
         -- gpt-oss-120b-medium is gpt-family by id but antigravity-owned; measured,
-        -- it answers without ever searching. A claude model served there is
-        -- unmeasured, so it is not claimed to work either.
+        -- it answers while never actually searching, so the tool is not sent.
         assert.equals("none",
             providers.cliproxy_default_web_search_strategy("gpt-oss-120b-medium", "antigravity"))
-        assert.equals("none",
+    end)
+
+    it("never lets owner reach the wire decision", function()
+        -- This value also selects the transport, and `owner` is unstable for a
+        -- shared id — claude-sonnet-4-6 was reported under `anthropic` on one
+        -- proxy start and `antigravity` on the next. If owner could win here,
+        -- the same model would speak a different protocol on different days.
+        -- Measured: claude-opus-4-6-thinking answers 200 on the anthropic wire
+        -- through antigravity, so family wins and the wire stays put.
+        assert.equals("anthropic_tools_route",
             providers.cliproxy_default_web_search_strategy("claude-opus-4-6-thinking", "antigravity"))
+        assert.equals(
+            providers.cliproxy_default_web_search_strategy("claude-sonnet-4-6", "anthropic"),
+            providers.cliproxy_default_web_search_strategy("claude-sonnet-4-6", "antigravity"))
     end)
 
     it("reuses the canonical anthropic family test, code_execution included", function()
@@ -260,12 +272,14 @@ describe("build_agent", function()
             cat.build_agent({ id = "claude-opus-5", owner = "anthropic" }).name)
     end)
 
-    it("passes the owner through, so an antigravity-served claude gets none", function()
-        -- The family alone would say anthropic_tools_route; the owner overrides,
-        -- because server-side search does not survive antigravity's re-serving.
-        -- build_agent must therefore forward `owner`, not just the id.
+    it("forwards the owner, without letting it move a claude model's wire", function()
+        -- build_agent must pass `owner` (it decides the search tool for gemini
+        -- and gpt-oss rows), but a claude model keeps the anthropic wire whoever
+        -- serves it — otherwise an unstable owner would change the transport.
         local a = cat.build_agent({ id = "claude-opus-4-6-thinking", owner = "antigravity" })
-        assert.equals("none", a.model.web_search_strategy)
+        assert.equals("anthropic_tools_route", a.model.web_search_strategy)
+        local b = cat.build_agent({ id = "gpt-oss-120b-medium", owner = "antigravity" })
+        assert.equals("none", b.model.web_search_strategy)
     end)
 end)
 
