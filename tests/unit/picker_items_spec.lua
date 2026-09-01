@@ -325,41 +325,79 @@ end)
 
 -- ---------------------------------------------------------------------------
 -- agent_picker live catalog section (#205)
+--
+-- Same rule BR-5 settled for curate, applied here: every row the Spec documents
+-- is pinned as an EQUALITY on its full display string. Containment let four
+-- separate drifts (dash style, missing separator, grouping, ordering) pass
+-- unnoticed, because `find(..., plain)` cannot see what is absent.
 -- ---------------------------------------------------------------------------
 describe("agent_picker live section", function()
-    local function live_row()
-        return { id = "claude-opus-5", display = "Claude Opus 5",
-                 owner = "anthropic", provider = "claude" }
+    local function live_row(id, display, owner)
+        return { id = id, display = display, owner = owner, provider = "claude" }
     end
 
-    it("appends live catalog rows after the configured agents", function()
-        local items = agent_picker._build_items(make_plugin("mango"), { live = { live_row() } })
-        local last = items[#items]
-        assert.equals("live", last.kind)
-        assert.is_true(last.display:find("Claude Opus 5", 1, true) ~= nil)
-        assert.is_true(last.display:find("claude-opus-5", 1, true) ~= nil)
-        -- configured agents keep their own ordering ahead of the section
-        assert.equals("agent", items[1].kind)
+    local OPUS = live_row("claude-opus-5", "Claude Opus 5", "anthropic")
+    local SONNET = live_row("claude-sonnet-5", "Claude Sonnet 5", "anthropic")
+
+    -- The documented render, row for row.
+    local DOCUMENTED = {
+        separator = "── live · cliproxy ──",
+        live_opus = "  Claude Opus 5 - claude-opus-5 (anthropic)",
+        live_current = "✓ Claude Opus 5 - claude-opus-5 (anthropic)",
+        login = "  antigravity - (logged out)",
+    }
+
+    it("renders the live section exactly as documented", function()
+        local items = agent_picker._build_items(make_plugin("mango"),
+            { live = { OPUS, SONNET }, logged_out = { { provider = "antigravity" } } })
+        local tail = {}
+        for i = #items - 3, #items do
+            tail[#tail + 1] = items[i].display
+        end
+        assert.same({
+            DOCUMENTED.separator,
+            DOCUMENTED.live_opus,
+            "  Claude Sonnet 5 - claude-sonnet-5 (anthropic)",
+            DOCUMENTED.login,
+        }, tail)
     end)
 
-    it("renders a provider with no models as a login row", function()
+    it("orders the section: separator, then live, then logged-out", function()
         local items = agent_picker._build_items(make_plugin("mango"),
-            { logged_out = { { provider = "antigravity" } } })
-        local row = items[#items]
-        assert.equals("login", row.kind)
-        assert.equals("antigravity", row.provider)
-        assert.is_true(row.display:find("(logged out)", 1, true) ~= nil)
+            { live = { OPUS }, logged_out = { { provider = "antigravity" } } })
+        local kinds = {}
+        for i = #items - 2, #items do
+            kinds[#kinds + 1] = items[i].kind
+        end
+        assert.same({ "separator", "live", "login" }, kinds)
+    end)
+
+    it("keeps configured agents ahead of the separator", function()
+        local items = agent_picker._build_items(make_plugin("mango"), { live = { OPUS } })
+        assert.equals("agent", items[1].kind)
+        for i = 1, #items do
+            if items[i].kind == "separator" then
+                assert.equals("agent", items[i - 1].kind)
+                return
+            end
+        end
+        error("no separator emitted")
     end)
 
     it("marks a live row current when it is the active agent", function()
-        local plugin = make_plugin("claude-opus-5*")
-        local items = agent_picker._build_items(plugin, { live = { live_row() } })
+        local items = agent_picker._build_items(make_plugin("claude-opus-5*"), { live = { OPUS } })
+        assert.equals(DOCUMENTED.live_current, items[#items].display)
         assert.is_true(items[#items].is_current)
     end)
 
-    it("is unchanged when there is no catalog", function()
+    it("emits no separator when there is no catalog", function()
         assert.same(agent_picker._build_items(make_plugin("mango")),
                     agent_picker._build_items(make_plugin("mango"), { live = {}, logged_out = {} }))
+    end)
+
+    it("carries the model row on a live item, so selection needs no re-parsing", function()
+        local items = agent_picker._build_items(make_plugin("mango"), { live = { OPUS } })
+        assert.same(OPUS, items[#items].model)
     end)
 end)
 

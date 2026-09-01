@@ -87,9 +87,21 @@ function M._build_items(plugin, extra)
     end)
 
     -- Live section, appended AFTER the sort so it stays a section rather than
-    -- interleaving with the configured agents.
+    -- interleaving with the configured agents. A separator carries that
+    -- distinction visually; it is inert (`on_select` ignores it) because
+    -- float_picker has no notion of a non-selectable row.
     extra = extra or {}
-    for _, m in ipairs(extra.live or {}) do
+    local live = extra.live or {}
+    local logged_out = extra.logged_out or {}
+    if #live > 0 or #logged_out > 0 then
+        items[#items + 1] = {
+            name = "__live_separator__",
+            kind = "separator",
+            display = "── live · cliproxy ──",
+            is_current = false,
+        }
+    end
+    for _, m in ipairs(live) do
         local name = m.id .. "*"
         local is_current = name == plugin._state.agent
         items[#items + 1] = {
@@ -101,7 +113,7 @@ function M._build_items(plugin, extra)
             is_current = is_current,
         }
     end
-    for _, p in ipairs(extra.logged_out or {}) do
+    for _, p in ipairs(logged_out) do
         items[#items + 1] = {
             name = p.provider,
             kind = "login",
@@ -164,6 +176,9 @@ function M.agent_picker(plugin)
         recall_key = "parley.agent_picker",
         recall_id_fn = function(item) return item.name end,
         on_select = function(item)
+            if item.kind == "separator" then
+                return
+            end
             if item.kind == "login" then
                 -- The picker doubles as the login surface: a provider you are
                 -- not logged into is exactly where you notice it.

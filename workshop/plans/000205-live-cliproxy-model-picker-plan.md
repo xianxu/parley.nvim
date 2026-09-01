@@ -53,14 +53,16 @@
 | Name | Lives in | Status | Wraps |
 |------|----------|--------|-------|
 | `fetch_catalog` | `lua/parley/cliproxy.lua` | new | HTTP GET on the proxy |
-| `catalog_cached` / `catalog_write` | `lua/parley/cliproxy.lua` | new | filesystem (`stdpath('data')`) |
+| `catalog_cached` / `_write_catalog` / `_catalog_path` | `lua/parley/cliproxy.lua` | new | filesystem (`stdpath('data')`) |
+| `catalog_stale` | `lua/parley/cliproxy.lua` | new | clock + filesystem |
+| `register_live_agent` | `lua/parley/init.lua` | new | `state.json` |
 | `agent_picker` live section | `lua/parley/agent_picker.lua` | modified | `float_picker` handle |
 | live-agent restore | `lua/parley/init.lua` | modified | `state.json` |
 | `/v1beta/models` route | `tests/fixtures/fake_cliproxy` | modified | the cliproxy binary |
 
 - **fetch_catalog** — two GETs through the existing `api_argv` helper (ARCH-DRY: the same argv builder the health probe, `list_models` and the management reader already use), joined by `parse`.
   - **Injected into:** nothing pure — it *produces* the input `curate` consumes. Specs drive `parse`/`curate` from fixtures with no IO.
-- **catalog_cached / catalog_write** — JSON at `<data_root>/catalog.json`, `data_root()` already test-redirected by `M._set_data_dir`.
+- **catalog_cached / _write_catalog** — JSON at `<data_root>/catalog.json`, `data_root()` already test-redirected by `M._set_data_dir`.
   - **Injected into:** the picker reads the cache synchronously; the network path only ever writes it.
 - **_providers_without_models** (pure, in `agent_picker.lua`) — a configured
   provider the catalog advertises nothing for is one you are not logged into:
@@ -767,7 +769,16 @@ end
 Run: `make test-spec SPEC=providers/cliproxy-managed`
 Expected: PASS
 
-- [ ] **Step 5: Commit + close the milestone**
+- [ ] **Step 5: Document THIS milestone's surface, before the boundary**
+
+AGENTS.md §8 wants the atlas updated at each milestone close, not swept up at the
+end. A terminal docs task structurally guarantees every earlier boundary is
+crossed undocumented, which is exactly what happened here.
+
+`atlas/providers/cliproxy-managed.md` → the catalog's two routes, why both are
+needed, and the per-family web-search table with its measurements.
+
+- [ ] **Step 6: Commit + close the milestone**
 
 ```bash
 git add -u && git commit -m "#205 M1: build_agent turns a catalog row into a tool-enabled agent"
@@ -991,7 +1002,12 @@ end
 Run: `make test-spec SPEC=providers/cliproxy-managed`
 Expected: PASS
 
-- [ ] **Step 5: Commit + close the milestone**
+- [ ] **Step 5: Document THIS milestone's surface, before the boundary**
+
+`atlas/providers/cliproxy-managed.md` → `catalog.json` in the derived-artifact
+list, the 10-minute refresh, and the never-spawns rule with the test that pins it.
+
+- [ ] **Step 6: Commit + close the milestone**
 
 ```bash
 git add -u && git commit -m "#205 M2: fetch and disk-cache the live model catalog"
@@ -1257,7 +1273,12 @@ lookup, and confirm from `:ParleyLog` that the request carried both the client
 tools and a `web_search` tool on the Anthropic wire. Record the evidence in
 `## Log` — this is the Done-when the spec names.
 
-- [ ] **Step 6: Commit + close the milestone**
+- [ ] **Step 6: Document THIS milestone's surface, before the boundary**
+
+`atlas/providers/agents.md` → the live section, its exact row format, `<C-a>`,
+the `(logged out)` row, and the `<id>*` naming. `README.md` → `live_models`.
+
+- [ ] **Step 7: Commit + close the milestone**
 
 ```bash
 git add -u && git commit -m "#205 M3: live agents register, persist, and survive restart"
@@ -1491,17 +1512,20 @@ Expected: PASS
 git add -u && git commit -m "#205 M4: retire oauth-model-alias from the default config"
 ```
 
-### Task 4.3: Atlas + docs
+### Task 4.3: Docs for M4's surface only
 
 **Files:**
-- Modify: `atlas/` (the cliproxy surface page + `atlas/index.md` if a new page is added)
+- Modify: `atlas/providers/cliproxy-managed.md` (the alias block's retirement)
 - Modify: `README.md` (the cliproxy section)
 
-- [ ] **Step 1: Document the live picker** — the `provider:term` syntax, `<C-a>`, the `(logged out)` row, and the fact that the catalog is cached and refreshed in the background.
+Every earlier milestone documents its OWN surface at its own boundary — see the
+docs step inside Tasks 1.7, 2.2 and 3.3. This task carries only what M4 changes.
 
-- [ ] **Step 2: Record the two measured facts** that future readers would otherwise re-derive the hard way: antigravity rows carry no `created`, and `owned_by` is not stable for an id served by two channels.
+- [ ] **Step 1: Record that `oauth-model-alias` is no longer required** for
+  routing, that it survives as an explicit channel pin, and how model→channel
+  now resolves (candidates from the catalog, disambiguated by credential health).
 
-- [ ] **Step 3: Full suite + close**
+- [ ] **Step 2: Full suite + close**
 
 ```bash
 make test
@@ -1531,6 +1555,19 @@ sdlc close --issue 205 --verified '<evidence>'
 
   A rationale sentence that justifies a design by naming existing machinery is
   covered too: either a step in that same task invokes it, or the sentence goes.
+
+  **Run it in BOTH directions.** The grep above matches dotted call syntax only,
+  so a bare table cell (`catalog_write`) is structurally exempt — which is how a
+  non-existent entity survived a round that reported the sweep clean. The second
+  direction: every function the milestone's diff adds to a module named in the
+  tables must APPEAR in a table row.
+
+  ```bash
+  # names in tables that no longer exist
+  grep -oE '`[A-Za-z_][A-Za-z0-9_.]*`' workshop/plans/000205-*-plan.md | tr -d '`' | sort -u
+  # public functions the diff added, which must appear above
+  git diff <boundary>..HEAD -- lua/ | grep -oE '^\+function M\.[A-Za-z0-9_]+' | sort -u
+  ```
 - **The fixtures are the spec.** The four `curate` cases are real renders from the live catalog on 2026-08-31. If a change makes one fail, decide whether the catalog moved or the code broke — don't edit the expectation to match the code.
 
 ## Revisions
@@ -1619,3 +1656,26 @@ needed. Recorded together because the pattern is the finding.
 - **BR-1.** Task 3.1 credited `_providers_without_models` without any step
   creating or testing it. Steps 4-6 now do, including why the catalog is the
   logged-out signal and what it deliberately does not cover.
+
+### 2026-08-31 — M2/M3 boundary review (BR-24, BR-25, BR-26)
+
+All three are second occurrences, so each is recorded as the rule it needed.
+
+- **BR-24.** No atlas entry existed for any of the new surface. The instance was
+  not the fix: docs were lumped into a terminal Task 4.3, which structurally
+  guarantees every earlier milestone crosses its boundary undocumented, contra
+  AGENTS.md §8. Dissolved into a docs step inside each milestone naming the file
+  and section; 4.3 now carries only M4's own surface.
+- **BR-25.** The picker's rows drifted from the documented render — hyphen for
+  em dash, no separator, no grouping — and the tests only used
+  `find(..., plain)`, which cannot see what is absent. BR-5 had already settled
+  "equality, not containment" for `curate`; the picker's rows are documented
+  renders in the same Spec and did not inherit the rule. They are now pinned as
+  full-string equalities, and the `── live · cliproxy ──` separator the Spec
+  documents is implemented (inert: `on_select` ignores it, since float_picker has
+  no non-selectable row).
+- **BR-26.** The Integration table named `catalog_write`, which never existed
+  (`_write_catalog` ships), and omitted `catalog_stale`, `_catalog_path` and
+  `register_live_agent`. The referent grep matched dotted call syntax only, so
+  bare table cells were exempt from the check meant to keep names honest. It now
+  runs in both directions.

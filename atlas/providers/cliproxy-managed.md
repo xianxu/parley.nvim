@@ -35,6 +35,41 @@ fires) and cooperative for those who run their own (it reuses it). Set
 
 ## Flow
 
+## Model catalog (#205)
+
+cliproxyapi advertises what it serves, and that set moves without warning — an
+antigravity login registered 13 new models mid-session with no restart. Parley
+reads that catalog instead of carrying model names in Lua.
+
+- **Two routes, joined on id.** `/v1/models` carries `created` (the recency
+  signal); `/v1beta/models` carries `displayName` + `description`. Neither is
+  sufficient: for antigravity the display name is the only truthful naming, since
+  its ids are opaque handles (`gemini-pro-agent` is "Gemini 3.1 Pro (High)").
+- **`catalog.json`** — a derived artifact beside `config.yaml` under
+  `stdpath('data')/parley/cliproxy/`, written `0600`. The picker renders from it
+  synchronously, so a cold start is instant and a dead proxy still lists models.
+  Refreshed on picker open when older than 10 minutes.
+- **`fetch_catalog` never spawns the proxy.** It is a plain GET; a
+  connection-refused is a no-op that leaves the cache in place. Opening a picker
+  must not start a daemon — that is the dormancy contract from #131, pinned by a
+  test that points at a free port and asserts it stays free.
+- **`cliproxy.live_models`** — `{ providers = { "claude:opus,sonnet", … },
+  per_provider = 3 }`. An entry is `"<provider>[:<term>,…]"`; terms are
+  case-insensitive substrings matched against the id **and** the display name
+  (required, not cosmetic: antigravity's ids are unfilterable otherwise). Terms
+  narrow, then the newest of each model line is kept, capped at `per_provider`.
+  Term order is display order. It names providers and families, never versions,
+  so it does not go stale.
+- **`owned_by` is a display grouping, not a channel.** The same id was reported
+  under `anthropic` on one proxy start and `antigravity` on the next, so nothing
+  durable keys off it — in particular the wire is chosen by model FAMILY, never
+  by owner.
+- **Server-side web search differs per family** (measured 2026-08-31): claude
+  needs the anthropic route; gpt/codex works on `openai_tools_route`; gemini and
+  anything antigravity re-serves gets `none`, because `{type="web_search"}` makes
+  gemini answer `malformed_function_call` with no content. The decision is
+  single-sourced in `providers.cliproxy_default_web_search_strategy`.
+
 `setup{ cliproxy.manage = true }` → on the first dispatch to a cliproxy-provider
 agent, the adapter's **`pre_query`** hook (the same seam copilot uses) calls
 `ensure_running`:
