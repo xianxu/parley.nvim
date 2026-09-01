@@ -92,12 +92,17 @@ Two measured constraints:
    and selecting it runs `:ParleyProxy login <provider>`. The picker thus answers
    both "which model" and "why is my provider missing".
 
-   Credential state comes from parley's existing `/v0/management/auth-files`
-   reader (`cliproxy_auth.lua`, #197), keyed by CHANNEL via `channels_for_login`,
-   never by `owned_by`. Catalog rows are attached to a provider through the
-   existing `PROVIDER_OWNED_BY` map (claude→anthropic, codex→openai,
-   antigravity→antigravity, google→google), which is a static map and so is
-   unaffected by the shared-id instability noted above.
+   **The catalog is the logged-out signal, not the management API.** cliproxy
+   registers a channel's models only once that channel has a credential —
+   measured: antigravity's 13 models appeared the moment its auth file landed,
+   with no restart — so a configured provider contributing no rows is one you are
+   not logged into. That keeps the check synchronous on a keystroke path, where a
+   `/v0/management/auth-files` round trip does not belong. Catalog rows attach to
+   a provider through the static `PROVIDER_OWNED_BY` map, which is unaffected by
+   the shared-id instability above, and only a name parley can actually log into
+   earns a row. The case this deliberately does NOT cover is a credential that is
+   loaded but dead: the registry keeps listing its models (#197 established
+   exactly that), and the dispatch-failure path owns that diagnosis.
 
 4. **Ad-hoc agent on selection** (pure constructor, unit-tested):
    `provider = cliproxyapi`, `tools = {"@all"}`, `synthetic_system_prompt = true`,
@@ -200,6 +205,32 @@ Durable design: `workshop/plans/000205-live-cliproxy-model-picker-plan.md`
       atlas + README
 
 ## Log
+
+### 2026-08-31 — M3 Done-when, evidenced
+
+A live pick carries client tools AND server-side web search on the Anthropic
+wire. Verified by building the payload through the production path
+(`register_live_agent` → `get_agent` → `cliproxyapi.format_payload`) and POSTing
+those exact bytes to the live proxy:
+
+```
+agent=claude-opus-5* provider=cliproxyapi model=claude-opus-5
+  strategy=anthropic_tools_route tools={ "@all" }   (10 client tools selected)
+wire route = anthropic
+server tools in payload: web_search, web_fetch
+→ response block types: thinking, server_tool_use, web_search_tool_result, text
+→ text: "Neovim v0.12.5"   (stop_reason=end_turn)
+```
+
+The answer is the tell: the paths where the tool is inert returned v0.11.x from
+memory, so a correct current version is evidence the search actually ran rather
+than that the request merely succeeded.
+
+**Review-window gap (BR-44).** Commit 747c8ff — M2's FIX-THEN-SHIP bundle — falls
+in no boundary window: M2's window ended at 60b964b and M3's begins after
+747c8ff. Its content (BR-38..BR-41 fixes) is therefore unreviewed by any gate.
+Recorded here so the issue-close review can take it deliberately rather than
+inherit the gap silently.
 
 ### 2026-08-31
 - 2026-08-31: closed M2 — providers/cliproxy-managed mapping green (0 failures), arch guards green, keybindings 24/24. Demoted backlog cleared, including three more live data-loss/crash paths measured and pinned: a foreign 200 on the endpoint wiped a warm catalog (the write now gates on classify(), the existing single source for cliproxy /v1/models contract, after #models>0, curl exit code and HTTP-200 each lost data in turn); fetch_catalog dropped its callback on the in-flight path so a picker opened during a refresh never repainted; catalog_cached re-read and re-mkdird on every keystroke-path open and `providers = nil` returned {} instead of every known provider as config.lua documents. Every fix mutation-checked by reverting it — including the foreign-200 test itself, which initially reused a just-killed port so the dying process answered and the revert stayed green. Also: id.."*" single-sourced as agent_name (3 sites that must agree or a model renders twice), the `or "<C-a>"` literal removed and the arch guard widened to the fallback forms, README documents live_models and <C-a>, atlas heading no longer orphans the flow narrative, keybinding scoped parley_buffer, fake v1beta branches mirror /v1/models.; review verdict: FIX-THEN-SHIP
@@ -319,3 +350,14 @@ because the separator already delimits the section and float_picker has no
 non-selectable row: every header would be a selectable, fuzzy-matchable item.
 Both are pinned as full-string equalities in picker_items_spec, so a future drift
 fails a test instead of accumulating another restatement.
+
+### 2026-08-31 — logged-out source restated to match the code (BR-45)
+
+**Reason:** Component 3 named `cliproxy_auth.lua` / `channels_for_login` as the
+credential source and forbade `owned_by`, while the implementation derives the
+signal from the catalog. The Spec was describing a design that was reconsidered
+during M3 and never restated.
+
+**Delta:** Component 3 now documents the catalog heuristic, why it is preferred
+on a keystroke path, and the case it deliberately does not cover (a loaded but
+dead credential, which #197's dispatch-failure path owns).

@@ -825,6 +825,77 @@ rounds:
           round: 11
       boundary: M2
       blocked: false
+    - "n": 12
+      timestamp: "2026-08-31T23:15:14-07:00"
+      agent: claude
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: '`_providers_without_models` is defined at agent_picker.lua:19 and appears in the plan''s Core-concepts table; I re-ran the referent sweep across both tables and every named symbol resolves.'
+          round: 12
+      findings:
+        - id: BR-42
+          severity: Important
+          title: '`is_managed()` gates the catalog refresh, so `manage = false` never populates the catalog and the picker shows six false `(logged out)` rows'
+          detail: agent_picker.lua:282. fetch_catalog has exactly one production caller and it sits behind cliproxy.is_managed(). With manage=false — documented at config.lua:115 as the supported opt-out — _write_catalog is never reached, catalog_cached() returns {} forever, _view_for falls back to cc.providers() (all six) and every one renders `(logged out)`. The dormancy contract this gate claims to protect is already pinned independently by cliproxy_catalog_spec.lua:103-113; the Spec's condition was "only if the proxy already answers", not "only when managed". This is BR-29's first leg, carried not-addressed for six rounds and then omitted from the round-10 "backlog cleared" revision. ARCH-PURPOSE.
+          family: stated-design-not-implemented
+          round: 12
+        - id: BR-43
+          severity: Important
+          title: The background repaint preserves the selection by index, so `<CR>` can fire on a row the user never pointed at
+          detail: 'agent_picker.lua:283-291 calls handle.update with no next_selection_index; float_picker.lua:1685-1707 keeps sel_idx as an integer and only clamps it. Cold catalog: the picker opens with N agents + separator + 6 `(logged out)` rows; the user arrows onto `antigravity - (logged out)` to start a login; ~200ms later the refresh lands and the tail becomes ~9 live model rows at the same indices; `<CR>` registers a model agent instead of running the login. Fix by capturing recall_id_fn(selected) before update and passing the re-derived index — the picker already owns that identity function. BR-29''s third leg.'
+          family: async-callback-not-resolved
+          round: 12
+        - id: BR-44
+          severity: Important
+          title: The M3 window is empty and commit 747c8ff falls in no review window at all
+          detail: 'This is the 2nd finding in family `boundary-crossed-out-of-order`. Do NOT fix this instance — fix the rule. The rule: sdlc must refuse a milestone-close whose window is empty, and refuse a close for Mx whose window contains commits whose subject claims M(x+1); both are mechanical git log --grep checks. Measured: seven M3 commits (c9e83d8 plus five "M2/M3" commits) landed before M2''s close, and 747c8ff — which changed fetch_catalog, _view_for, _providers_without_models, _build_items and the arch guard — sits outside M2''s window (ended 60b964b3) and outside M3''s (starts at 747c8ff). The #174 "bundle fixes into the close commit so the anchor is HEAD" convention creates the hole by construction; the next window must open at the previous boundary''s PARENT, or close commits must carry no code. The same leak silently dropped BR-29, whose two live legs are the two findings above. I closed this round''s gap by hand: I reviewed 60b964b..747c8ff and revert-verified all four of its fixes go red without them.'
+          family: boundary-crossed-out-of-order
+          round: 12
+        - id: BR-45
+          severity: Important
+          title: Spec Component 3 names `cliproxy_auth.lua`/`channels_for_login` as the credential source and forbids `owned_by`; the code uses only `owned_by`
+          detail: 'This is the 5th finding in family `stated-design-not-implemented`. Do NOT fix this instance — fix the rule. The rule: every repo symbol the Spec names in backticks must be swept EXECUTABLY, the way tests/arch/single_source_sweeps_spec.lua already sweeps this issue''s other consolidations — a spec that parses the issue `## Spec` and the plan''s Core-concepts tables and asserts each named symbol is required/referenced by the milestone''s code or struck in `## Revisions`. BR-1 established this for the plan; the Spec was never brought under it and prose sweeps have now failed five times. Instance: agent_picker.lua never requires cliproxy_auth; _providers_without_models keys on provider_owned_by (agent_picker.lua:25,32), which Component 3 explicitly forbids. Not cosmetic — the Spec''s own measurement (claude-sonnet-4-6 under `anthropic` on one start, `antigravity` on the next) means that with only antigravity logged in, `claude` reads as logged IN and its `(logged out)` row never appears, contradicting the Done-when. No fixture reattributes an id across owners.'
+          family: stated-design-not-implemented
+          round: 12
+        - id: BR-46
+          severity: Important
+          title: The working tree carries an uncommitted `config.lua` deleting every configured agent, and the plan's close recipe is `git add -u`
+          detail: 'git status shows ` M lua/parley/config.lua`: a local edit stripping all 18 agents to one ToolOpus* plus two commented stubs. Plan Task 3.3 Step 7 closes with `git add -u && git commit`, which stages exactly that into the M3 close commit. Stash or revert before the close, and name explicit paths in the recipe instead of `git add -u`.'
+          family: close-stages-unreviewed-worktree
+          round: 12
+        - id: BR-47
+          severity: Important
+          title: M3's own Done-when e2e — a live pick carrying tools plus web_search on the Anthropic wire, evidenced from `:ParleyLog` — is not recorded in `## Log`
+          detail: 'This is the 4th finding in family `missing-test-for-shipped-behavior`. Do NOT fix this instance — fix the rule. The rule: a plan step whose deliverable is EVIDENCE (a manual e2e, a live probe) must be treated like a test at the boundary — recorded in `## Log` with its observation, or struck in `## Revisions` with the reason — because unlike a spec file it leaves no trace when skipped, so the gate cannot tell "done" from "forgotten". Instance: plan Task 3.3 Step 5 demands picking claude-opus-5 and confirming from :ParleyLog that the request carried both the client tools and a web_search tool; `## Log` has M1-close and M2-close entries only. The gap is narrow — build_agent''s three-way strategy is unit-pinned at cliproxy_catalog_spec.lua:289-360 — but it is the Spec''s stated Done-when.'
+          family: missing-test-for-shipped-behavior
+          round: 12
+        - id: BR-48
+          severity: Minor
+          title: '`fetch_catalog`''s callback argument means the cached catalog on one path and the freshly-parsed, possibly-rejected list on the other'
+          detail: cliproxy.lua:1456 resolves with M.catalog_cached() on the in-flight path; :1509 resolves with the parsed list even when the classify() gate declined the write, so a caller that trusts the argument gets {} whenever the proxy is down. Today's sole consumer re-reads the cache and ignores it, but the surface is new. `cb(M.catalog_cached())` in the else branch makes it uniformly "the catalog you should render".
+          family: one-value-two-decisions
+          round: 12
+        - id: BR-49
+          severity: Minor
+          title: '`render_opts`''s host/port/secret derivation is copied verbatim into `fetch_catalog`'
+          detail: 'This is the 4th finding in family `duplicated-logic-not-extracted`. Do NOT fix this instance — fix the rule. The rule: when a helper is avoided because of a side effect, SPLIT the helper rather than inlining its body at the new call site — extract a side-effect-free `endpoint_opts()` that render_opts composes. Instance: cliproxy.lua:238-241 and :1464-1466 are byte-identical derivations that must now stay in sync; BR-41 correctly removed the management.key minting but paid for it with a copy.'
+          family: duplicated-logic-not-extracted
+          round: 12
+        - id: BR-50
+          severity: Minor
+          title: '`_catalog_inflight` is never cleared if `vim.system` raises synchronously, wedging refresh for the session'
+          detail: cliproxy.lua:1471 sets the flag before the first vim.system call; a synchronous raise (missing curl) leaves it true and every later fetch short-circuits to the cache for the rest of the session. A pcall around the launch, or clearing the flag on the failure path, closes it.
+          family: missing-input-guard
+          round: 12
+        - id: BR-51
+          severity: Minor
+          title: The durable plan has 76 step checkboxes and none are ticked, including for the two closed milestones
+          detail: 'workshop/plans/000205-live-cliproxy-model-picker-plan.md: Chunk 1 35 unticked, Chunk 2 10, Chunk 3 18, Chunk 4 13. The issue''s `## Plan` milestone rows carry all the progress state, so the durable plan cannot be read as a record of what was done. Tick them, or state in the plan that the issue file is the record.'
+          family: plan-command-does-not-run
+          round: 12
+      boundary: M3
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#205 (boundary-review)
@@ -1230,6 +1301,35 @@ later rounds disposed of them. Generated — edit the gate, not this file.
   test or strike it in `## Revisions` — the same rule BR-20 wrote, still unapplied to the envelope's
   logging bullet in this very module.
 
+## Round 12 — 2026-08-31T23:15:14-07:00 (claude) — BLOCKED
+
+### Disposed
+
+- BR-1 — addressed — `_providers_without_models` is defined at agent_picker.lua:19 and appears in the plan's Core-concepts table; I re-ran the referent sweep across both tables and every named symbol resolves.
+
+### Raised
+
+- **BR-42** [Important] `stated-design-not-implemented` `is_managed()` gates the catalog refresh, so `manage = false` never populates the catalog and the picker shows six false `(logged out)` rows
+  agent_picker.lua:282. fetch_catalog has exactly one production caller and it sits behind cliproxy.is_managed(). With manage=false — documented at config.lua:115 as the supported opt-out — _write_catalog is never reached, catalog_cached() returns {} forever, _view_for falls back to cc.providers() (all six) and every one renders `(logged out)`. The dormancy contract this gate claims to protect is already pinned independently by cliproxy_catalog_spec.lua:103-113; the Spec's condition was "only if the proxy already answers", not "only when managed". This is BR-29's first leg, carried not-addressed for six rounds and then omitted from the round-10 "backlog cleared" revision. ARCH-PURPOSE.
+- **BR-43** [Important] `async-callback-not-resolved` The background repaint preserves the selection by index, so `<CR>` can fire on a row the user never pointed at
+  agent_picker.lua:283-291 calls handle.update with no next_selection_index; float_picker.lua:1685-1707 keeps sel_idx as an integer and only clamps it. Cold catalog: the picker opens with N agents + separator + 6 `(logged out)` rows; the user arrows onto `antigravity - (logged out)` to start a login; ~200ms later the refresh lands and the tail becomes ~9 live model rows at the same indices; `<CR>` registers a model agent instead of running the login. Fix by capturing recall_id_fn(selected) before update and passing the re-derived index — the picker already owns that identity function. BR-29's third leg.
+- **BR-44** [Important] `boundary-crossed-out-of-order` The M3 window is empty and commit 747c8ff falls in no review window at all
+  This is the 2nd finding in family `boundary-crossed-out-of-order`. Do NOT fix this instance — fix the rule. The rule: sdlc must refuse a milestone-close whose window is empty, and refuse a close for Mx whose window contains commits whose subject claims M(x+1); both are mechanical git log --grep checks. Measured: seven M3 commits (c9e83d8 plus five "M2/M3" commits) landed before M2's close, and 747c8ff — which changed fetch_catalog, _view_for, _providers_without_models, _build_items and the arch guard — sits outside M2's window (ended 60b964b3) and outside M3's (starts at 747c8ff). The #174 "bundle fixes into the close commit so the anchor is HEAD" convention creates the hole by construction; the next window must open at the previous boundary's PARENT, or close commits must carry no code. The same leak silently dropped BR-29, whose two live legs are the two findings above. I closed this round's gap by hand: I reviewed 60b964b..747c8ff and revert-verified all four of its fixes go red without them.
+- **BR-45** [Important] `stated-design-not-implemented` Spec Component 3 names `cliproxy_auth.lua`/`channels_for_login` as the credential source and forbids `owned_by`; the code uses only `owned_by`
+  This is the 5th finding in family `stated-design-not-implemented`. Do NOT fix this instance — fix the rule. The rule: every repo symbol the Spec names in backticks must be swept EXECUTABLY, the way tests/arch/single_source_sweeps_spec.lua already sweeps this issue's other consolidations — a spec that parses the issue `## Spec` and the plan's Core-concepts tables and asserts each named symbol is required/referenced by the milestone's code or struck in `## Revisions`. BR-1 established this for the plan; the Spec was never brought under it and prose sweeps have now failed five times. Instance: agent_picker.lua never requires cliproxy_auth; _providers_without_models keys on provider_owned_by (agent_picker.lua:25,32), which Component 3 explicitly forbids. Not cosmetic — the Spec's own measurement (claude-sonnet-4-6 under `anthropic` on one start, `antigravity` on the next) means that with only antigravity logged in, `claude` reads as logged IN and its `(logged out)` row never appears, contradicting the Done-when. No fixture reattributes an id across owners.
+- **BR-46** [Important] `close-stages-unreviewed-worktree` The working tree carries an uncommitted `config.lua` deleting every configured agent, and the plan's close recipe is `git add -u`
+  git status shows ` M lua/parley/config.lua`: a local edit stripping all 18 agents to one ToolOpus* plus two commented stubs. Plan Task 3.3 Step 7 closes with `git add -u && git commit`, which stages exactly that into the M3 close commit. Stash or revert before the close, and name explicit paths in the recipe instead of `git add -u`.
+- **BR-47** [Important] `missing-test-for-shipped-behavior` M3's own Done-when e2e — a live pick carrying tools plus web_search on the Anthropic wire, evidenced from `:ParleyLog` — is not recorded in `## Log`
+  This is the 4th finding in family `missing-test-for-shipped-behavior`. Do NOT fix this instance — fix the rule. The rule: a plan step whose deliverable is EVIDENCE (a manual e2e, a live probe) must be treated like a test at the boundary — recorded in `## Log` with its observation, or struck in `## Revisions` with the reason — because unlike a spec file it leaves no trace when skipped, so the gate cannot tell "done" from "forgotten". Instance: plan Task 3.3 Step 5 demands picking claude-opus-5 and confirming from :ParleyLog that the request carried both the client tools and a web_search tool; `## Log` has M1-close and M2-close entries only. The gap is narrow — build_agent's three-way strategy is unit-pinned at cliproxy_catalog_spec.lua:289-360 — but it is the Spec's stated Done-when.
+- **BR-48** [Minor] `one-value-two-decisions` `fetch_catalog`'s callback argument means the cached catalog on one path and the freshly-parsed, possibly-rejected list on the other
+  cliproxy.lua:1456 resolves with M.catalog_cached() on the in-flight path; :1509 resolves with the parsed list even when the classify() gate declined the write, so a caller that trusts the argument gets {} whenever the proxy is down. Today's sole consumer re-reads the cache and ignores it, but the surface is new. `cb(M.catalog_cached())` in the else branch makes it uniformly "the catalog you should render".
+- **BR-49** [Minor] `duplicated-logic-not-extracted` `render_opts`'s host/port/secret derivation is copied verbatim into `fetch_catalog`
+  This is the 4th finding in family `duplicated-logic-not-extracted`. Do NOT fix this instance — fix the rule. The rule: when a helper is avoided because of a side effect, SPLIT the helper rather than inlining its body at the new call site — extract a side-effect-free `endpoint_opts()` that render_opts composes. Instance: cliproxy.lua:238-241 and :1464-1466 are byte-identical derivations that must now stay in sync; BR-41 correctly removed the management.key minting but paid for it with a copy.
+- **BR-50** [Minor] `missing-input-guard` `_catalog_inflight` is never cleared if `vim.system` raises synchronously, wedging refresh for the session
+  cliproxy.lua:1471 sets the flag before the first vim.system call; a synchronous raise (missing curl) leaves it true and every later fetch short-circuits to the cache for the rest of the session. A pcall around the launch, or clearing the flag on the failure path, closes it.
+- **BR-51** [Minor] `plan-command-does-not-run` The durable plan has 76 step checkboxes and none are ticked, including for the two closed milestones
+  workshop/plans/000205-live-cliproxy-model-picker-plan.md: Chunk 1 35 unticked, Chunk 2 10, Chunk 3 18, Chunk 4 13. The issue's `## Plan` milestone rows carry all the progress state, so the durable plan cannot be read as a record of what was done. Tick them, or state in the plan that the issue file is the record.
+
 ## Open findings
 
 - **BR-13** [Important] `rank-key-version-extraction` rank_key's `< 100` threshold answers the 120B instance, not the class: any parameter count below 100 still reads as a version
@@ -1247,3 +1347,13 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-39** [Minor] `single-source-not-enforced` The new arch guard's comment claims it counts any bracketed key literal; it matches three forms and misses `or { shortcut = "<C-g>?" }`
 - **BR-40** [Minor] `section-merge-not-deduped` `_view_for` never dedupes the live list by id, so overlapping `providers` entries render one model twice, both checkmarked
 - **BR-41** [Minor] `stated-design-not-implemented` `fetch_catalog` calls `render_opts()`, so opening the agent picker generates and writes `management.key`
+- **BR-42** [Important] `stated-design-not-implemented` `is_managed()` gates the catalog refresh, so `manage = false` never populates the catalog and the picker shows six false `(logged out)` rows
+- **BR-43** [Important] `async-callback-not-resolved` The background repaint preserves the selection by index, so `<CR>` can fire on a row the user never pointed at
+- **BR-44** [Important] `boundary-crossed-out-of-order` The M3 window is empty and commit 747c8ff falls in no review window at all
+- **BR-45** [Important] `stated-design-not-implemented` Spec Component 3 names `cliproxy_auth.lua`/`channels_for_login` as the credential source and forbids `owned_by`; the code uses only `owned_by`
+- **BR-46** [Important] `close-stages-unreviewed-worktree` The working tree carries an uncommitted `config.lua` deleting every configured agent, and the plan's close recipe is `git add -u`
+- **BR-47** [Important] `missing-test-for-shipped-behavior` M3's own Done-when e2e — a live pick carrying tools plus web_search on the Anthropic wire, evidenced from `:ParleyLog` — is not recorded in `## Log`
+- **BR-48** [Minor] `one-value-two-decisions` `fetch_catalog`'s callback argument means the cached catalog on one path and the freshly-parsed, possibly-rejected list on the other
+- **BR-49** [Minor] `duplicated-logic-not-extracted` `render_opts`'s host/port/secret derivation is copied verbatim into `fetch_catalog`
+- **BR-50** [Minor] `missing-input-guard` `_catalog_inflight` is never cleared if `vim.system` raises synchronously, wedging refresh for the session
+- **BR-51** [Minor] `plan-command-does-not-run` The durable plan has 76 step checkboxes and none are ticked, including for the two closed milestones

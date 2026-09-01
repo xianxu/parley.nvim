@@ -279,14 +279,34 @@ function M.agent_picker(plugin)
     -- Refresh in the background when the cache is cold or stale, and repaint if
     -- the picker is still open. fetch_catalog never spawns the proxy, so opening
     -- a picker cannot start a daemon (#131).
-    if ok_proxy and cliproxy.is_managed() and cliproxy.catalog_stale() then
+    -- NOT gated on is_managed(): `manage = false` means parley does not START
+    -- the proxy, not that there is no proxy — a bring-your-own instance answers
+    -- the same GET. Gating here left those operators with an empty catalog and a
+    -- picker claiming every provider was logged out. fetch_catalog never spawns
+    -- anything, so the dormancy contract is unaffected either way.
+    if ok_proxy and cliproxy.catalog_stale() then
         cliproxy.fetch_catalog(function(models)
             -- Repaint whenever the fetch RESOLVED, not only when it returned
             -- rows: a proxy answering 200 with an empty registry is exactly the
             -- case the login rows report, and gating on `#models > 0` would
             -- leave the picker showing a stale list instead.
             if models and handle and not handle.is_closed() then
-                handle.update(M._build_items(plugin, view_for(expanded)))
+                -- Restore the selection by NAME, not by index: this lands while
+                -- the operator may already be pointing at a row, and the refresh
+                -- can insert or remove rows above it. Keeping the index would
+                -- silently move the cursor onto a different agent.
+                local was = handle.selected and handle.selected()
+                local items = M._build_items(plugin, view_for(expanded))
+                local index
+                if was and was.name then
+                    for i, item in ipairs(items) do
+                        if item.name == was.name then
+                            index = i
+                            break
+                        end
+                    end
+                end
+                handle.update(items, nil, index)
             end
         end)
     end

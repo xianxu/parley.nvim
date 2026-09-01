@@ -340,7 +340,7 @@ Expected: PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-git add -u && git commit -m "#205 M1: parse joins /v1/models with /v1beta/models"
+git add <the files this task names> && git commit -m "#205 M1: parse joins /v1/models with /v1beta/models"
 ```
 
 ### Task 1.4: `rank_key` — order without `created`
@@ -410,7 +410,7 @@ Expected: PASS
 - [ ] **Step 5: Commit**
 
 ```bash
-git add -u && git commit -m "#205 M1: rank_key orders created-less rows in their own band"
+git add <the files this task names> && git commit -m "#205 M1: rank_key orders created-less rows in their own band"
 ```
 
 ### Task 1.5: `parse_provider_spec` + `curate`
@@ -565,7 +565,7 @@ Expected: PASS — all six `curate` cases
 - [ ] **Step 5: Commit**
 
 ```bash
-git add -u && git commit -m "#205 M1: curate filters, dedupes by series, caps per provider"
+git add <the files this task names> && git commit -m "#205 M1: curate filters, dedupes by series, caps per provider"
 ```
 
 ### Task 1.6: Single-source the family → web-search-strategy decision
@@ -679,7 +679,7 @@ that the payload for a gemini model carries no `tools` entry of that type.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add -u && git commit -m "#205 M1: single-source the cliproxy web-search strategy per model family"
+git add <the files this task names> && git commit -m "#205 M1: single-source the cliproxy web-search strategy per model family"
 ```
 
 ### Task 1.7: `build_agent`
@@ -787,7 +787,7 @@ needed, and the per-family web-search table with its measurements.
 - [ ] **Step 6: Commit + close the milestone**
 
 ```bash
-git add -u && git commit -m "#205 M1: build_agent turns a catalog row into a tool-enabled agent"
+git add <the files this task names> && git commit -m "#205 M1: build_agent turns a catalog row into a tool-enabled agent"
 make test
 sdlc milestone-close --issue 205 --milestone M1
 ```
@@ -1016,7 +1016,7 @@ list, the 10-minute refresh, and the never-spawns rule with the test that pins i
 - [ ] **Step 6: Commit + close the milestone**
 
 ```bash
-git add -u && git commit -m "#205 M2: fetch and disk-cache the live model catalog"
+git add <the files this task names> && git commit -m "#205 M2: fetch and disk-cache the live model catalog"
 make test
 sdlc milestone-close --issue 205 --milestone M2
 ```
@@ -1116,7 +1116,7 @@ Expected: PASS
 - [ ] **Step 7: Commit**
 
 ```bash
-git add -u && git commit -m "#205 M3: agent picker renders live catalog and login rows"
+git add <the files this task names> && git commit -m "#205 M3: agent picker renders live catalog and login rows"
 ```
 
 ### Task 3.2: Wire the picker — selection, `<C-a>`, async refresh
@@ -1199,7 +1199,7 @@ catalog and the title changes; picking `claude-opus-5` sets the agent.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add -u && git commit -m "#205 M3: live selection, <C-a> expansion, background refresh"
+git add <the files this task names> && git commit -m "#205 M3: live selection, <C-a> expansion, background refresh"
 ```
 
 ### Task 3.3: Register and persist the live agent
@@ -1287,7 +1287,7 @@ the `(logged out)` row, and the `<id>*` naming. `README.md` → `live_models`.
 - [ ] **Step 7: Commit + close the milestone**
 
 ```bash
-git add -u && git commit -m "#205 M3: live agents register, persist, and survive restart"
+git add <the files this task names> && git commit -m "#205 M3: live agents register, persist, and survive restart"
 make test
 sdlc milestone-close --issue 205 --milestone M3
 ```
@@ -1466,7 +1466,7 @@ Expected: PASS, including the new empty-alias case
 - [ ] **Step 7: Commit**
 
 ```bash
-git add -u && git commit -m "#205 M4: channel candidates resolved by credential health, not by guessing"
+git add <the files this task names> && git commit -m "#205 M4: channel candidates resolved by credential health, not by guessing"
 ```
 
 ### Task 4.2: Delete the model lists from the default config
@@ -1510,7 +1510,7 @@ Expected: PASS
 - [ ] **Step 4: Commit**
 
 ```bash
-git add -u && git commit -m "#205 M4: retire oauth-model-alias from the default config"
+git add <the files this task names> && git commit -m "#205 M4: retire oauth-model-alias from the default config"
 ```
 
 ### Task 4.3: Docs for M4's surface only
@@ -1585,6 +1585,11 @@ sdlc close --issue 205 --verified '<evidence>'
   # fixture modes named in the plan must exist in the fixture's own mode list
   grep -oE 'mode[s]? [`"][a-z_]+[`"]' $PLAN | grep -oE '[a-z_]+"?$' | sort -u
   ```
+- **Never `git add -u` or `git add -A` on this issue.** The working tree carries
+  an operator-owned `config.lua` cleanup that deletes configured agents; sweeping
+  it into a milestone commit happened twice on this issue, and once put a spec's
+  test port and api-key into the operator's live proxy config. Stage the files a
+  task names, explicitly. `git status --short` before every commit.
 - **The fixtures are the spec.** The four `curate` cases are real renders from the live catalog on 2026-08-31. If a change makes one fail, decide whether the catalog moved or the code broke — don't edit the expectation to match the code.
 
 ## Revisions
@@ -1828,3 +1833,28 @@ fixed rather than as gate work.
 - **BR-38.** `agent_name` was missing from the tables the plan's own
   bidirectional rule covers, and `_select` sat under Pure entities while calling
   `vim.cmd` and `vim.schedule`. Moved to Integration points.
+
+### 2026-08-31 — M3 close review (BR-42..BR-47)
+
+- **BR-42.** `is_managed()` gated the catalog refresh, so an operator running
+  their own cliproxy (`manage = false`) got an empty catalog and a picker
+  claiming every configured provider was logged out. `manage` governs whether
+  parley STARTS a proxy, not whether one exists; `fetch_catalog` spawns nothing,
+  so the dormancy contract is untouched by dropping the gate.
+- **BR-43.** The background repaint restored the selection by INDEX, and a
+  refresh that inserts or removes rows moves what that index points at — so
+  `<CR>` could fire on a row the operator never pointed at. `float_picker`'s
+  handle now exposes `selected()`, and the repaint restores by name.
+- **BR-45.** Spec Component 3 named the management API as the logged-out source
+  while the code reads the catalog; the design was reconsidered during M3 and the
+  Spec never restated. Corrected, with the case it does not cover named.
+- **BR-46.** The plan's close recipe swept the whole tree, which carries the
+  operator's uncommitted `config.lua`. That exact sweep happened twice on this
+  issue, once putting a spec's port and api-key into their live proxy config. The
+  recipe now names files, and the Notes carry the rule.
+- **BR-47.** M3's Done-when is recorded in `## Log` with the payload, the
+  response block types and the answer — the answer being the evidence, since the
+  inert paths return a stale version rather than an error.
+- **BR-44.** Commit 747c8ff falls in no review window (M2's ended at 60b964b,
+  M3's begins after it), so its content is ungated. Recorded in the Log for the
+  issue-close review to take deliberately.

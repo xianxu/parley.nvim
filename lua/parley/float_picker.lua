@@ -1712,6 +1712,14 @@ function M.open(opts)
     focus_prompt()
     return {
         update = update,
+        -- The item under the cursor right now. Exposed so a caller repainting
+        -- asynchronously can restore the selection by IDENTITY: `update` takes
+        -- an INDEX, and a background refresh that inserts or removes rows moves
+        -- what that index points at — so <CR> could fire on a row the user never
+        -- pointed at.
+        selected = function()
+            return get_selected_item()
+        end,
         set_status = set_status,
         set_title = set_title,
         current_query = current_query_from_buffer,
