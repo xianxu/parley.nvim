@@ -156,8 +156,11 @@ Two measured constraints:
    | `claude` | Claude Opus 5, Claude Sonnet 5, Claude Fable 5 |
    | `codex:gpt-5.6` | GPT 5.6 Luna, GPT 5.6 Sol, GPT 5.6 Terra |
    | `antigravity:pro,flash` | Gemini 3.1 Pro (Low), Gemini 3.1 Pro (High), Gemini 3.7 Flash |
+   | `antigravity` | Claude Opus 4.6 (Thinking), Claude Sonnet 4.6 (Thinking), Gemini 3.7 Flash |
 
-   These rows are the unit-test cases for `curate`.
+   Every row here is a `curate` equality test keyed by its exact spec string —
+   the spec derives its cases from this table, so a row cannot be added without a
+   test. Equality, not containment: order is part of the render.
 
    The knob names providers and families, never model versions, so it does not go
    stale against the catalog. A listed provider that is logged out shows as

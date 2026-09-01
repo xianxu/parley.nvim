@@ -66,7 +66,10 @@ function M.parse(v1_json, beta_json)
     end
     local out = {}
     for _, m in ipairs(v1.data) do
-        if type(m) == "table" and type(m.id) == "string" then
+        -- An empty id is not a model: it would collide with every other empty id
+        -- in `series` and let curate drop real rows. Rejected here, at the
+        -- boundary, rather than defended against in every consumer.
+        if type(m) == "table" and type(m.id) == "string" and m.id ~= "" then
             local b = beta_by_id[m.id] or {}
             out[#out + 1] = {
                 id = m.id,
@@ -94,14 +97,15 @@ function M.rank_key(m)
     if type(m.created) == "number" and m.created > 0 then
         return m.created
     end
-    -- Take the first number that could plausibly BE a version. Numbers >= 100 in
-    -- a display name are parameter counts, not versions ("GPT-OSS 120B (Medium)"),
-    -- and reading one as a version floats that row above every real release.
+    -- A numeral scraped from a free-text display name is a VERSION only when it
+    -- is delimited — not glued to a letter. "120B", "20B", "70B", "32K" are
+    -- magnitudes with unit suffixes, and reading one as a version floats that
+    -- row above every real release. A magnitude threshold would only have
+    -- excluded the sizes that happen to be large.
     local version = 0
-    for n in tostring(m.display or ""):gmatch("%d+%.?%d*") do
-        local v = tonumber(n)
-        if v and v < 100 then
-            version = v
+    for n, next_char in tostring(m.display or ""):gmatch("(%d+%.?%d*)(.?)") do
+        if not next_char:match("%a") then
+            version = tonumber(n) or 0
             break
         end
     end
@@ -150,7 +154,11 @@ function M.curate(models, opts)
         local parsed = M.parse_provider_spec(spec)
         local owner = owned_by(parsed.provider)
         local pool = {}
-        for _, m in ipairs(models or {}) do
+        -- A provider name we don't know (a typo like "claud") yields owner=nil,
+        -- and `m.owner == owner` would then match every row whose owned_by is
+        -- ABSENT — silently offering unrelated models under that heading. An
+        -- unknown provider contributes nothing instead.
+        for _, m in ipairs(owner and models or {}) do
             if m.owner == owner then
                 pool[#pool + 1] = m
             end
@@ -201,6 +209,12 @@ end
 ---@return table # a parley agent
 function M.build_agent(m, opts)
     opts = opts or {}
+    -- Returns nil rather than raising: the callers are a picker callback and a
+    -- session restore, where an error would surface as a stack trace over the
+    -- UI or abort setup. A row with no id cannot name an agent.
+    if type(m) ~= "table" or type(m.id) ~= "string" or m.id == "" then
+        return nil
+    end
     return {
         provider = "cliproxyapi",
         name = m.id .. "*",

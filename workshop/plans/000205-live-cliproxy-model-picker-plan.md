@@ -29,6 +29,7 @@
 | `get_cliproxy_strategy` | `lua/parley/providers.lua` | modified |
 | `resolve_channel` | `lua/parley/cliproxy_config.lua` | modified |
 | `_build_items` | `lua/parley/agent_picker.lua` | modified |
+| `_providers_without_models` | `lua/parley/agent_picker.lua` | new |
 
 - **Model** — one catalog row: `{ id, owner, created, display, description, series }`. The join of `/v1/models` (carries `created`) and `/v1beta/models` (carries `displayName`/`description`) on `id`.
   - **Relationships:** N:1 with provider (via `PROVIDER_OWNED_BY`); N:1 with series.
@@ -53,7 +54,6 @@
 |------|----------|--------|-------|
 | `fetch_catalog` | `lua/parley/cliproxy.lua` | new | HTTP GET on the proxy |
 | `catalog_cached` / `catalog_write` | `lua/parley/cliproxy.lua` | new | filesystem (`stdpath('data')`) |
-| `provider_states` | `lua/parley/cliproxy.lua` | new | `/v0/management/auth-files` |
 | `agent_picker` live section | `lua/parley/agent_picker.lua` | modified | `float_picker` handle |
 | live-agent restore | `lua/parley/init.lua` | modified | `state.json` |
 | `/v1beta/models` route | `tests/fixtures/fake_cliproxy` | modified | the cliproxy binary |
@@ -62,7 +62,13 @@
   - **Injected into:** nothing pure — it *produces* the input `curate` consumes. Specs drive `parse`/`curate` from fixtures with no IO.
 - **catalog_cached / catalog_write** — JSON at `<data_root>/catalog.json`, `data_root()` already test-redirected by `M._set_data_dir`.
   - **Injected into:** the picker reads the cache synchronously; the network path only ever writes it.
-- **provider_states** — reuses `credential_health_for_login` (#197) to mark a configured provider `(logged out)`.
+- **_providers_without_models** (pure, in `agent_picker.lua`) — a configured
+  provider the catalog advertises nothing for is one you are not logged into:
+  cliproxy registers a channel's models only once it has a credential (measured —
+  antigravity's 13 models appeared the moment its auth file landed). That keeps
+  the check synchronous on a UI path and needs no management call. A credential
+  that is loaded but DEAD still lists models; #197's dispatch-failure path owns
+  that case.
 - **fake_cliproxy** — the stateful process fake gains `/v1beta/models` plus a `catalog` mode serving the awkward shapes: rows without `created`, and one id claimed by two owners.
 
 ### Operating envelope (ARCH-CONSTRAINTS)
@@ -159,7 +165,7 @@ end)
 
 - [ ] **Step 2: Run it and watch it fail**
 
-Run: `make test-spec SPEC=unit/cliproxy_catalog`
+Run: `make test-spec SPEC=providers/cliproxy-managed`
 Expected: FAIL — `module 'parley.cliproxy_catalog' not found`
 
 - [ ] **Step 3: Implement**
@@ -207,7 +213,7 @@ return M
 
 - [ ] **Step 4: Run it and watch it pass**
 
-Run: `make test-spec SPEC=unit/cliproxy_catalog`
+Run: `make test-spec SPEC=providers/cliproxy-managed`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
@@ -271,7 +277,7 @@ end)
 
 - [ ] **Step 2: Run it and watch it fail**
 
-Run: `make test-spec SPEC=unit/cliproxy_catalog`
+Run: `make test-spec SPEC=providers/cliproxy-managed`
 Expected: FAIL — `attempt to call field 'parse' (a nil value)`
 
 - [ ] **Step 3: Implement**
@@ -320,7 +326,7 @@ end
 
 - [ ] **Step 4: Run it and watch it pass**
 
-Run: `make test-spec SPEC=unit/cliproxy_catalog`
+Run: `make test-spec SPEC=providers/cliproxy-managed`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
@@ -364,7 +370,7 @@ different units, so they must occupy disjoint bands rather than being compared.
 
 - [ ] **Step 2: Run it and watch it fail**
 
-Run: `make test-spec SPEC=unit/cliproxy_catalog`
+Run: `make test-spec SPEC=providers/cliproxy-managed`
 Expected: FAIL — `attempt to call field 'rank_key' (a nil value)`
 
 - [ ] **Step 3: Implement**
@@ -390,7 +396,7 @@ end
 
 - [ ] **Step 4: Run it and watch it pass**
 
-Run: `make test-spec SPEC=unit/cliproxy_catalog`
+Run: `make test-spec SPEC=providers/cliproxy-managed`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
@@ -468,7 +474,7 @@ end)
 
 - [ ] **Step 2: Run it and watch it fail**
 
-Run: `make test-spec SPEC=unit/cliproxy_catalog`
+Run: `make test-spec SPEC=providers/cliproxy-managed`
 Expected: FAIL — `attempt to call field 'parse_provider_spec' (a nil value)`
 
 - [ ] **Step 3: Implement**
@@ -545,7 +551,7 @@ end
 
 - [ ] **Step 4: Run it and watch it pass**
 
-Run: `make test-spec SPEC=unit/cliproxy_catalog`
+Run: `make test-spec SPEC=providers/cliproxy-managed`
 Expected: PASS — all six `curate` cases
 
 - [ ] **Step 5: Commit**
@@ -619,7 +625,7 @@ end)
 
 - [ ] **Step 2: Run it and watch it fail**
 
-Run: `make test-spec SPEC=unit/provider_params`
+Run: `make test-spec SPEC=providers/cliproxy-managed`
 Expected: FAIL — `attempt to call field 'cliproxy_default_web_search_strategy'`
 
 - [ ] **Step 3: Implement in `providers.lua`, reusing the existing family test**
@@ -653,7 +659,7 @@ end
 
 - [ ] **Step 4: Run it and watch it pass**
 
-Run: `make test-spec SPEC=unit/provider_params`
+Run: `make test-spec SPEC=providers/cliproxy-managed`
 Expected: PASS
 
 - [ ] **Step 5: Verify "none" actually suppresses the tool**
@@ -718,7 +724,7 @@ a claude model served through antigravity still speaks the Anthropic wire.
 
 - [ ] **Step 2: Run it and watch it fail**
 
-Run: `make test-spec SPEC=unit/cliproxy_catalog`
+Run: `make test-spec SPEC=providers/cliproxy-managed`
 Expected: FAIL — `attempt to call field 'build_agent' (a nil value)`
 
 - [ ] **Step 3: Implement**
@@ -758,7 +764,7 @@ end
 
 - [ ] **Step 4: Run it and watch it pass**
 
-Run: `make test-spec SPEC=unit/cliproxy_catalog`
+Run: `make test-spec SPEC=providers/cliproxy-managed`
 Expected: PASS
 
 - [ ] **Step 5: Commit + close the milestone**
@@ -911,7 +917,7 @@ end)
 
 - [ ] **Step 2: Run it and watch it fail**
 
-Run: `make test-spec SPEC=integration/cliproxy_catalog`
+Run: `make test-spec SPEC=providers/cliproxy-managed`
 Expected: FAIL — `attempt to call field 'fetch_catalog' (a nil value)`
 
 - [ ] **Step 3: Implement**
@@ -982,7 +988,7 @@ end
 
 - [ ] **Step 4: Run it and watch it pass**
 
-Run: `make test-spec SPEC=integration/cliproxy_catalog`
+Run: `make test-spec SPEC=providers/cliproxy-managed`
 Expected: PASS
 
 - [ ] **Step 5: Commit + close the milestone**
@@ -1037,14 +1043,14 @@ end)
 
 - [ ] **Step 2: Run it and watch it fail**
 
-Run: `make test-spec SPEC=unit/picker_items`
+Run: `make test-spec SPEC=providers/cliproxy-managed`
 Expected: FAIL — live rows absent
 
 - [ ] **Step 3: Implement** — extend `_build_items(plugin, extra)` with a second, optional argument so every existing caller and test keeps working, and tag each row with `kind` (`"agent"` / `"live"` / `"login"`) so `on_select` can branch without re-parsing the display string.
 
 - [ ] **Step 4: Run it and watch it pass**
 
-Run: `make test-spec SPEC=unit/picker_items`
+Run: `make test-spec SPEC=providers/cliproxy-managed`
 Expected: PASS
 
 - [ ] **Step 5: Commit**
@@ -1070,7 +1076,7 @@ local function view_for(all)
     local cfg = (plugin.config.cliproxy or {}).live_models or {}
     return {
         live = all and models or cat.curate(models, cfg),
-        logged_out = M._logged_out_providers(plugin),  -- Task 3.1
+        logged_out = M._providers_without_models(models, cfg.providers or {}),  -- Task 3.1
     }
 end
 
@@ -1166,7 +1172,7 @@ agent to `M._agents[1]` on every launch.
 
 - [ ] **Step 2: Run it and watch it fail**
 
-Run: `make test-spec SPEC=unit/live_agent_state`
+Run: `make test-spec SPEC=providers/cliproxy-managed`
 Expected: FAIL — agent reset to the first configured agent
 
 - [ ] **Step 3: Implement**
@@ -1203,7 +1209,7 @@ end
 
 - [ ] **Step 4: Run it and watch it pass**
 
-Run: `make test-spec SPEC=unit/live_agent_state`
+Run: `make test-spec SPEC=providers/cliproxy-managed`
 Expected: PASS
 
 - [ ] **Step 5: End-to-end check against the real proxy**
@@ -1294,7 +1300,7 @@ end)
 
 - [ ] **Step 2: Run them and watch them fail**
 
-Run: `make test-spec SPEC=unit/cliproxy_config && make test-spec SPEC=integration/cliproxy_recovery_e2e`
+Run: `make test-spec SPEC=providers/cliproxy-managed`
 Expected: FAIL — `resolve_channels` is nil; the diagnosis still names the alias block
 
 - [ ] **Step 3: Extract the fan-out, then add the second reducer**
@@ -1385,10 +1391,10 @@ source), `recover` (`cliproxy.lua:1236`), and both give_up texts.
 - [ ] **Step 6: Run the specs that would catch a regression**
 
 ```bash
-make test-spec SPEC=unit/cliproxy_config
-make test-spec SPEC=unit/cliproxy_auth
-make test-spec SPEC=unit/failure_notice
-make test-spec SPEC=integration/cliproxy_recovery_e2e
+make test-spec SPEC=providers/cliproxy-managed
+make test-spec SPEC=providers/cliproxy-managed
+make test-spec SPEC=providers/cliproxy-managed
+make test-spec SPEC=providers/cliproxy-managed
 ```
 Expected: PASS, including the new empty-alias case
 
@@ -1436,8 +1442,8 @@ recovery spec — that one builds its own `oauth-model-alias`
 deletion regresses anything.
 
 ```bash
-make test-spec SPEC=integration/cliproxy_recovery_e2e   # incl. the empty-alias case
-make test-spec SPEC=unit/failure_notice
+make test-spec SPEC=providers/cliproxy-managed   # incl. the empty-alias case
+make test-spec SPEC=providers/cliproxy-managed
 ```
 Expected: PASS
 
@@ -1534,3 +1540,31 @@ sdlc close --issue 205 --verified '<evidence>'
 - **BR-5 (repeat).** The remaining `tbl_contains` — in the rank-band test added
   in round 1 — is now a full-render equality. Order is what that case exists to
   check, and containment cannot see order. No `tbl_contains` remains in the spec.
+
+### 2026-08-31 — M1 boundary review rounds 3-4 (BR-1, BR-5..BR-9, BR-13)
+
+Six of these are one failure repeated: an instance was patched where a rule was
+needed. Recorded together because the pattern is the finding.
+
+- **BR-13.** `rank_key` guarded against parameter counts with a `< 100`
+  threshold, which only excludes the sizes that happen to be large — "GPT-OSS
+  20B" would still have read as version 20. The rule the code needed: a numeral
+  in free text is a version only when DELIMITED, never when glued to a letter.
+- **BR-5.** Pinning one more render was not the fix either. The spec now derives
+  its cases from a `SPEC_RENDERS` table keyed by the documented spec string, so
+  every row in the Spec's table is an equality by construction and a new row
+  cannot be added without a test.
+- **BR-6.** An unknown provider resolved to `owner = nil`, and `m.owner == owner`
+  then pooled every row whose `owned_by` was absent. Unknown providers now
+  contribute nothing.
+- **BR-7.** `series("")` returned "". Fixed at the boundary rather than in
+  `series`: a row with no id is not a model, so `parse` drops it — one guard
+  instead of a defence in every consumer.
+- **BR-8.** `build_agent` raised on a row without an id. It returns nil now; its
+  callers are a picker callback and a session restore, where raising means a
+  stack trace over the UI or an aborted setup.
+- **BR-1 / BR-9.** The plan named `M._logged_out_providers` and `provider_states`
+  for a capability implemented as `_providers_without_models`, and repeated
+  `SPEC=unit/…` at twelve steps when `make test-spec` takes atlas feature keys
+  (`SPEC=providers/cliproxy-managed`). Both swept across the whole plan, and the
+  referent grep the Notes prescribe was actually run this time.

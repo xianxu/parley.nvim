@@ -1326,6 +1326,22 @@ M.refresh_state = function(update)
 		end
 	end
 
+	-- Re-register the last live cliproxy pick BEFORE the guard below. Without
+	-- this ordering the guard finds the name absent from M.agents and resets to
+	-- M._agents[1], so a live pick would silently evaporate on every restart.
+	if type(M._state.live_agent) == "table" and type(M._state.live_agent.id) == "string" then
+		local ok, agent = pcall(function()
+			return require("parley.cliproxy_catalog").build_agent(M._state.live_agent)
+		end)
+		if ok and agent and agent.name then
+			M.agents[agent.name] = M.agents[agent.name] or agent
+			if not vim.tbl_contains(M._agents, agent.name) then
+				table.insert(M._agents, agent.name)
+				table.sort(M._agents)
+			end
+		end
+	end
+
 	if not M._state.agent or not M.agents[M._state.agent] then
 		M._state.agent = M._agents[1]
 	end
@@ -4305,6 +4321,28 @@ M.cmd.Agent = function(params)
 
 	M.refresh_state({ agent = agent_name })
 	M.logger.info("Agent set to: " .. M._state.agent)
+	vim.cmd("doautocmd User ParleyAgentChanged")
+end
+
+--- Register a live cliproxy catalog model as a session agent and select it.
+---
+--- Persisted as `_state.live_agent` so the choice survives a restart: without
+--- the matching restore in refresh_state, the guard there would find the name
+--- missing from M.agents and silently reset to the first configured agent.
+---@param model table # a parsed catalog row { id, owner, display, … }
+M.register_live_agent = function(model)
+	local agent = require("parley.cliproxy_catalog").build_agent(model)
+	if not agent then
+		M.logger.warning("cliproxy: catalog row has no usable model id; not registering")
+		return
+	end
+	M.agents[agent.name] = agent
+	if not vim.tbl_contains(M._agents, agent.name) then
+		table.insert(M._agents, agent.name)
+		table.sort(M._agents)
+	end
+	M.refresh_state({ agent = agent.name, live_agent = model })
+	M.logger.info("Agent set to: " .. agent.name)
 	vim.cmd("doautocmd User ParleyAgentChanged")
 end
 

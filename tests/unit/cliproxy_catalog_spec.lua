@@ -37,11 +37,23 @@ describe("series", function()
 
     -- Strategy for the malformed class, not more examples: ids are
     -- vendor-controlled and series() is the only pattern mangler over them.
-    it("never returns an empty key, whatever the id", function()
-        for _, id in ipairs({ "2026", "1.2.3", "-", "5-5-5" }) do
+    it("never collapses a non-empty id to an empty key", function()
+        for _, id in ipairs({ "2026", "1.2.3", "-", "5-5-5", "8x7" }) do
             assert.is_true(#cat.series(id) > 0,
                 ("series(%q) collapsed to empty"):format(id))
         end
+    end)
+
+    it("has nothing to return for an empty id, which parse never emits", function()
+        -- The empty id is handled at the boundary instead: a row with no id is
+        -- not a model, so parse drops it rather than letting every such row
+        -- share one empty series key.
+        assert.equals("", cat.series(""))
+        local dropped = cat.parse(
+            [[{"data":[{"id":"","owned_by":"openai"},{"id":"real-1","owned_by":"openai"}]}]],
+            [[{"models":[]}]])
+        assert.equals(1, #dropped)
+        assert.equals("real-1", dropped[1].id)
     end)
 
     it("keeps distinct alphabetic stems distinct", function()
@@ -137,37 +149,35 @@ describe("curate", function()
         return out
     end
 
-    -- These expectations are real renders captured from the live catalog on
-    -- 2026-08-31. If one fails, decide whether the catalog moved or the code
-    -- broke — don't edit the expectation to match the code.
-    it("filters to the named families, newest of each", function()
-        assert.same({ "claude-opus-5", "claude-sonnet-5" }, ids("claude:opus,sonnet"))
-    end)
+    -- THE RULE, not four examples: every row in the Spec's render table is
+    -- pinned here as an EQUALITY on that row's exact spec string. Equality, not
+    -- containment — order is part of the render, and a containment check is how
+    -- the rank_key ordering defect stayed invisible through two rounds. A new
+    -- Spec row means a new entry here; these are captured from the live catalog,
+    -- so a failure means either the catalog moved or the code broke — never that
+    -- the expectation should be edited to match the code.
+    local SPEC_RENDERS = {
+        ["claude:opus,sonnet"] = { "claude-opus-5", "claude-sonnet-5" },
+        ["claude"] = { "claude-opus-5", "claude-sonnet-5", "claude-fable-5" },
+        ["codex:gpt-5.6"] = { "gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra" },
+        ["antigravity:pro,flash"] = { "gemini-3.1-pro-low", "gemini-pro-agent",
+                                      "gemini-3.7-flash-high" },
+        ["antigravity"] = { "claude-opus-4-6-thinking", "claude-sonnet-4-6",
+                            "gemini-3.7-flash-high" },
+    }
 
-    it("takes the newest per series when unfiltered", function()
-        assert.same({ "claude-opus-5", "claude-sonnet-5", "claude-fable-5" }, ids("claude"))
-    end)
-
-    it("keeps sibling variants of one release apart", function()
-        assert.same({ "gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra" }, ids("codex:gpt-5.6"))
-    end)
+    for spec, expected in pairs(SPEC_RENDERS) do
+        it(("renders the documented row for %q"):format(spec), function()
+            assert.same(expected, ids(spec))
+        end)
+    end
 
     it("matches displayName, not just id", function()
-        -- gemini-pro-agent's id carries no version and no "pro" version token; it
+        -- gemini-pro-agent's id carries no "pro" version token at all; it
         -- displays as "Gemini 3.1 Pro (High)". An id-only match would make
-        -- antigravity unfilterable. Asserted as the FULL render, not containment:
-        -- this is the one case exercising displayName matching and created-less
-        -- ranking together, so its ordering is part of what's under test.
-        assert.same({ "gemini-3.1-pro-low", "gemini-pro-agent" }, ids("antigravity:pro"))
-    end)
-
-    it("does not let a parameter count outrank a version", function()
-        -- "GPT-OSS 120B (Medium)" has no created, like every antigravity row. If
-        -- 120 were read as its version it would sort above every Gemini release.
-        -- Asserted as the full render: what is under test is the ORDER, and a
-        -- containment check cannot see order.
-        assert.same({ "claude-opus-4-6-thinking", "claude-sonnet-4-6",
-                      "gemini-3.7-flash-high" }, ids("antigravity", 3))
+        -- antigravity unfilterable — and it is in the documented row above.
+        assert.is_true(vim.tbl_contains(SPEC_RENDERS["antigravity:pro,flash"],
+            "gemini-pro-agent"))
     end)
 
     it("orders by term, so config expresses preference", function()
@@ -176,6 +186,26 @@ describe("curate", function()
 
     it("caps at per_provider", function()
         assert.equals(2, #ids("claude", 2))
+    end)
+
+    it("does not let a parameter count outrank a version", function()
+        -- "GPT-OSS 120B (Medium)" has no `created`, like every antigravity row.
+        -- If 120 were read as its version it would sort above every Gemini
+        -- release. Covered by the documented "antigravity" row above; asserted
+        -- here directly so the reason is legible.
+        local cat_local = require("parley.cliproxy_catalog")
+        assert.is_true(
+            cat_local.rank_key({ display = "Gemini 3.7 Flash" })
+            > cat_local.rank_key({ display = "GPT-OSS 120B (Medium)" }))
+    end)
+
+    it("contributes nothing for a provider it does not know", function()
+        -- A typo like "claud" resolves to owner=nil, and `m.owner == owner`
+        -- would then pool every row whose owned_by is ABSENT — offering
+        -- unrelated models under a heading the operator mistyped.
+        local models_with_ownerless = { { id = "orphan-1", series = "orphan" } }
+        assert.same({}, cat.curate(models_with_ownerless,
+            { providers = { "claud" }, per_provider = 3 }))
     end)
 
     it("does not mutate the rows it was given", function()
@@ -265,6 +295,14 @@ describe("build_agent", function()
         local a = cat.build_agent({ id = "gemini-3-flash", owner = "antigravity" })
         assert.equals("none", a.model.web_search_strategy)
         assert.same({ "@all" }, a.tools) -- client tools DO work for gemini
+    end)
+
+    it("returns nil for a row with no usable id, instead of raising", function()
+        -- The callers are a picker callback and a session restore; an error
+        -- there surfaces as a stack trace over the UI or aborts setup.
+        assert.is_nil(cat.build_agent({ owner = "anthropic" }))
+        assert.is_nil(cat.build_agent({ id = "", owner = "anthropic" }))
+        assert.is_nil(cat.build_agent(nil))
     end)
 
     it("names the agent after the model with the cliproxy marker", function()
