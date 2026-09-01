@@ -31,6 +31,7 @@
 | `_build_items` | `lua/parley/agent_picker.lua` | modified |
 | `_providers_without_models` | `lua/parley/agent_picker.lua` | new |
 | `_view_for` | `lua/parley/agent_picker.lua` | new |
+| `_select` | `lua/parley/agent_picker.lua` | new |
 | `key_for` | `lua/parley/keybinding_registry.lua` | new |
 
 - **Model** — one catalog row: `{ id, owner, created, display, description, series }`. The join of `/v1/models` (carries `created`) and `/v1beta/models` (carries `displayName`/`description`) on `id`.
@@ -1751,3 +1752,22 @@ All three are second occurrences, so each is recorded as the rule it needed.
   `free_port`, no cliproxy spec without `_set_data_dir`, no new hardcoded picker
   key (with the pre-existing seven listed as debt that may shrink, never grow).
   Each guard was confirmed to fail when its invariant is violated.
+
+### 2026-08-31 — M2/M3 review round 9 (BR-19 Critical, BR-21)
+
+- **BR-19.** Deleting the restart-restore left every spec green: the persistence
+  test stubbed `refresh_state`, so it never reached the code it claimed to cover,
+  and `M.agent_picker`'s selection branches had no test at all. Fourth instance
+  of the same failure on this issue. Two structural changes, matching `_view_for`:
+  the spec now drives the REAL `refresh_state` from a persisted `state.json` —
+  which is what a restart actually is, and what exposed that `_state` is reloaded
+  from disk — and the selection branches are extracted as `M._select(plugin,
+  item)` so each is reachable. **Every fix in this round was mutation-checked**:
+  deleting the restore block fails 2, removing the live branch fails 1, removing
+  the cache guard fails 1.
+- **BR-21.** Not merely a missing guard — two live throws: `_view_for`
+  concatenated a nil id and `_build_items` rendered a nil display, so a corrupt
+  or hand-edited `catalog.json` crashed the agent picker on open. That file
+  persists between sessions and can be written by an older parley, so it is
+  untrusted input. Sanitized at the single boundary every consumer reads
+  through (`catalog_cached`), the way BR-7's empty id was fixed in `parse`.

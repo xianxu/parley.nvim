@@ -171,6 +171,31 @@ function M._view_for(models, cfg, opts)
     }
 end
 
+--- What a picker selection DOES, by row kind. Split out of the closure so each
+--- branch is reachable from a test — the branches are the whole behaviour of the
+--- live section, and inside `agent_picker` none of them could be driven.
+---@param plugin table
+---@param item table # a row from _build_items
+function M._select(plugin, item)
+    if type(item) ~= "table" or item.kind == "separator" then
+        return -- the separator is inert; float_picker has no non-selectable row
+    end
+    if item.kind == "login" then
+        -- The picker doubles as the login surface: a provider you are not
+        -- logged into is exactly where you notice it.
+        local prefix = (plugin.config or {}).cmd_prefix or "Parley"
+        return vim.schedule(function()
+            vim.cmd(prefix .. "Proxy login " .. item.provider)
+        end)
+    end
+    if item.kind == "live" then
+        return plugin.register_live_agent(item.model)
+    end
+    plugin.refresh_state({ agent = item.name })
+    plugin.logger.info("Agent set to: " .. item.name)
+    vim.cmd("doautocmd User ParleyAgentChanged")
+end
+
 -- Create a floating picker to select an LLM agent
 function M.agent_picker(plugin)
     local ok_proxy, cliproxy = pcall(require, "parley.cliproxy")
@@ -199,25 +224,7 @@ function M.agent_picker(plugin)
         recall_key = "parley.agent_picker",
         recall_id_fn = function(item) return item.name end,
         on_select = function(item)
-            if item.kind == "separator" then
-                return
-            end
-            if item.kind == "login" then
-                -- The picker doubles as the login surface: a provider you are
-                -- not logged into is exactly where you notice it.
-                local prefix = plugin.config.cmd_prefix or "Parley"
-                vim.schedule(function()
-                    vim.cmd(prefix .. "Proxy login " .. item.provider)
-                end)
-                return
-            end
-            if item.kind == "live" then
-                plugin.register_live_agent(item.model)
-                return
-            end
-            plugin.refresh_state({ agent = item.name })
-            plugin.logger.info("Agent set to: " .. item.name)
-            vim.cmd("doautocmd User ParleyAgentChanged")
+            M._select(plugin, item)
         end,
         mappings = {
             {

@@ -577,6 +577,63 @@ rounds:
           round: 8
       boundary: M2
       blocked: true
+    - "n": 9
+      timestamp: "2026-08-31T22:19:51-07:00"
+      agent: claude
+      dispose:
+        - id: BR-19
+          disposition: not-addressed
+          note: 'Re-measured at a568ddf — deleted init.lua:1329-1343 in a scratch copy and ran every unit/integration/arch spec: 0 new failures vs baseline. M.agent_picker and the new key_for have zero tests; no mutation check recorded in the Log.'
+          round: 9
+        - id: BR-20
+          disposition: not-addressed
+          note: Status capture fixed and pinned; zero logger calls in fetch_catalog, no in-memory cache (mkdir+decode 2-3x per open), curate(models, {}) still {} — all measured, none struck in Revisions.
+          round: 9
+        - id: BR-21
+          disposition: not-addressed
+          note: All four reproduced at head, including two live throws — _view_for concatenates a nil id and _build_items a nil display, so a corrupt catalog.json crashes the picker.
+          round: 9
+        - id: BR-22
+          disposition: addressed
+          note: Verified by reverting the empty-catalog early return in a scratch copy — picker_items_spec goes 41/1 red. The write gate keys on HTTP 200 with both sides pinned.
+          round: 9
+        - id: BR-27
+          disposition: not-addressed
+          note: M2 box unticked, no Log entry, plan.md:1473 still assigns live_models to Task 4.2; and the tree carries a 192-line uncommitted deletion in config.lua at the boundary.
+          round: 9
+        - id: BR-28
+          disposition: not-addressed
+          note: Three production sites now — cliproxy_catalog.lua:220, agent_picker.lua:105 and agent_picker.lua:154.
+          round: 9
+        - id: BR-29
+          disposition: not-addressed
+          note: is_managed gate at agent_picker.lua:249, GETs still chained, pending() at conformance:231,249, catalog_path still duplicating config_path's mkdir idiom.
+          round: 9
+        - id: BR-30
+          disposition: addressed
+          note: Verified by reverting the exclusion in _view_for — picker_items_spec goes 39/3 red. _view_for is the right structural answer; the test now drives the production path.
+          round: 9
+        - id: BR-32
+          disposition: not-addressed
+          note: cliproxy-managed.md:36-38 unchanged; Flow still has an empty body with its narrative filed under the catalog heading.
+          round: 9
+        - id: BR-33
+          disposition: addressed
+          note: Registry row + key_for + arch spec; I violated each of the three invariants in a scratch copy and each guard went red. See the new Minor on the row's scope value.
+          round: 9
+        - id: BR-34
+          disposition: not-addressed
+          note: Both branches unchanged at fake_cliproxy:399-410, still exercised by no conformance check and still unlabelled as assumptions.
+          round: 9
+      findings:
+        - id: BR-35
+          severity: Minor
+          title: The new <C-a> registry row declares scope "global", so it renders under Global in every help screen though it only works inside the agent picker
+          detail: 'keybinding_registry.lua:759 sets scope = "global" because the scope forest has no agent_picker entry; the three sibling <C-a> rows use chat_finder/note_finder/issue_finder. Rendered help_lines("chat", config) confirms the row appears under the Global heading in a chat buffer, where <C-a> is Vim''s increment and parley binds nothing. keybindings_spec.lua:244 only asserts the scope is a valid label, never the right one. The rule: when a taxonomy has no correct value for a new row, add the value rather than filing it under the nearest wrong one — here, an agent_picker scope with a label and display-order entry, as the three finders already have. Also add agent_picker_mappings to config.lua so the documented config_key has an example, as the other *_mappings keys do.'
+          family: wrong-taxonomy-value
+          round: 9
+      boundary: M2
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#205 (boundary-review)
@@ -861,6 +918,27 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-34** [Minor] `unmeasured-family-branch` The fake's two new /v1beta/models branches are unmeasured assumptions, and one now backs a test
   2nd in family. fake_cliproxy:404-410 has needs_login serve the FULL CATALOG_V1BETA while /v1/models serves data:[] — a combination not measured against the real proxy — and client_key_mismatch answer 401. The conformance spec exercises /v1beta only on a healthy proxy, so neither branch is checked against the binary, and the new "records a genuinely empty catalog" case rides the first. Rule: a fake branch no live conformance check covers is an assumption and should be labelled as one at the branch, so a later reader does not mistake it for measured behaviour.
 
+## Round 9 — 2026-08-31T22:19:51-07:00 (claude) — BLOCKED
+
+### Disposed
+
+- BR-19 — not-addressed — Re-measured at a568ddf — deleted init.lua:1329-1343 in a scratch copy and ran every unit/integration/arch spec: 0 new failures vs baseline. M.agent_picker and the new key_for have zero tests; no mutation check recorded in the Log.
+- BR-20 — not-addressed — Status capture fixed and pinned; zero logger calls in fetch_catalog, no in-memory cache (mkdir+decode 2-3x per open), curate(models, {}) still {} — all measured, none struck in Revisions.
+- BR-21 — not-addressed — All four reproduced at head, including two live throws — _view_for concatenates a nil id and _build_items a nil display, so a corrupt catalog.json crashes the picker.
+- BR-22 — addressed — Verified by reverting the empty-catalog early return in a scratch copy — picker_items_spec goes 41/1 red. The write gate keys on HTTP 200 with both sides pinned.
+- BR-27 — not-addressed — M2 box unticked, no Log entry, plan.md:1473 still assigns live_models to Task 4.2; and the tree carries a 192-line uncommitted deletion in config.lua at the boundary.
+- BR-28 — not-addressed — Three production sites now — cliproxy_catalog.lua:220, agent_picker.lua:105 and agent_picker.lua:154.
+- BR-29 — not-addressed — is_managed gate at agent_picker.lua:249, GETs still chained, pending() at conformance:231,249, catalog_path still duplicating config_path's mkdir idiom.
+- BR-30 — addressed — Verified by reverting the exclusion in _view_for — picker_items_spec goes 39/3 red. _view_for is the right structural answer; the test now drives the production path.
+- BR-32 — not-addressed — cliproxy-managed.md:36-38 unchanged; Flow still has an empty body with its narrative filed under the catalog heading.
+- BR-33 — addressed — Registry row + key_for + arch spec; I violated each of the three invariants in a scratch copy and each guard went red. See the new Minor on the row's scope value.
+- BR-34 — not-addressed — Both branches unchanged at fake_cliproxy:399-410, still exercised by no conformance check and still unlabelled as assumptions.
+
+### Raised
+
+- **BR-35** [Minor] `wrong-taxonomy-value` The new <C-a> registry row declares scope "global", so it renders under Global in every help screen though it only works inside the agent picker
+  keybinding_registry.lua:759 sets scope = "global" because the scope forest has no agent_picker entry; the three sibling <C-a> rows use chat_finder/note_finder/issue_finder. Rendered help_lines("chat", config) confirms the row appears under the Global heading in a chat buffer, where <C-a> is Vim's increment and parley binds nothing. keybindings_spec.lua:244 only asserts the scope is a valid label, never the right one. The rule: when a taxonomy has no correct value for a new row, add the value rather than filing it under the nearest wrong one — here, an agent_picker scope with a label and display-order entry, as the three finders already have. Also add agent_picker_mappings to config.lua so the documented config_key has an example, as the other *_mappings keys do.
+
 ## Open findings
 
 - **BR-13** [Important] `rank-key-version-extraction` rank_key's `< 100` threshold answers the 120B instance, not the class: any parameter count below 100 still reads as a version
@@ -872,11 +950,9 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-19** [Critical] `missing-test-for-shipped-behavior` M3's restart-restore and the whole of Task 3.2 ship with no test that can fail
 - **BR-20** [Important] `stated-design-not-implemented` fetch_catalog logs nothing and discards the HTTP status; "cache in memory" and `providers = nil` are unimplemented
 - **BR-21** [Important] `missing-input-guard` BR-6/BR-7's boundary guards applied to one site while two new boundaries shipped without them
-- **BR-22** [Important] `one-value-two-decisions` The empty-catalog early return suppresses the logged-out rows that case exists for
 - **BR-27** [Minor] `boundary-crossed-out-of-order` The M3 implementation commit sits inside the M2 review window
 - **BR-28** [Minor] `duplicated-logic-not-extracted` The `<id>*` live-agent naming convention is written in two modules
 - **BR-29** [Minor] `stated-design-not-implemented` Assorted envelope and idiom nits: is_managed gate, 4s chained budget, repaint-under-cursor, pending vs SKIP
-- **BR-30** [Critical] `section-merge-not-deduped` A picked live model renders twice in the picker, both rows checkmarked and sharing one recall key
 - **BR-32** [Minor] `docs-insert-orphans-section` The new atlas section was inserted between `## Flow` and its body, refiling 60 lines of flow narrative under the catalog heading
-- **BR-33** [Important] `single-source-not-enforced` The new <C-a> bypasses the keybinding registry, and this round's two consolidations have no executable guard
 - **BR-34** [Minor] `unmeasured-family-branch` The fake's two new /v1beta/models branches are unmeasured assumptions, and one now backs a test
+- **BR-35** [Minor] `wrong-taxonomy-value` The new <C-a> registry row declares scope "global", so it renders under Global in every help screen though it only works inside the agent picker

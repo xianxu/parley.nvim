@@ -1386,7 +1386,21 @@ function M.catalog_cached()
     if not ok or type(decoded) ~= "table" or type(decoded.models) ~= "table" then
         return {}, nil
     end
-    return decoded.models, tonumber(decoded.fetched_at)
+    -- Sanitize HERE, at the one boundary every consumer reads through. This file
+    -- is on disk between sessions and can be truncated, hand-edited or written by
+    -- an older parley; a row without a string id makes `_view_for` concatenate
+    -- nil and `_build_items` render nil, i.e. the agent picker throws on open.
+    -- One guard rather than a nil-check in each consumer.
+    local rows = {}
+    for _, m in ipairs(decoded.models) do
+        if type(m) == "table" and type(m.id) == "string" and m.id ~= "" then
+            m.display = type(m.display) == "string" and m.display or m.id
+            m.series = type(m.series) == "string" and m.series or
+                require("parley.cliproxy_catalog").series(m.id)
+            rows[#rows + 1] = m
+        end
+    end
+    return rows, tonumber(decoded.fetched_at)
 end
 
 --- Persist a catalog. Also the seam a spec uses to seed one without a live

@@ -170,6 +170,41 @@ describe("cliproxy model catalog", function()
         assert.same({}, cliproxy.catalog_cached())
     end)
 
+    it("drops malformed rows so a corrupt cache cannot crash the picker", function()
+        -- catalog.json sits on disk between sessions: it can be truncated,
+        -- hand-edited, or written by an older parley. A row without a string id
+        -- makes _view_for concatenate nil and _build_items render nil — i.e. the
+        -- agent picker throws on open. Sanitized at this one boundary, which
+        -- every consumer reads through.
+        local fd = assert(io.open(cliproxy._catalog_path(), "w"))
+        fd:write(vim.json.encode({ fetched_at = os.time(), models = {
+            { id = "good-1", owner = "openai", display = "Good 1" },
+            { owner = "openai", display = "no id at all" },
+            { id = "", owner = "openai" },
+            { id = "no-display", owner = "openai" },
+            "not even a table",
+        } }))
+        fd:close()
+
+        local rows = cliproxy.catalog_cached()
+        assert.equals(2, #rows)
+        assert.equals("good-1", rows[1].id)
+        -- a missing display falls back to the id rather than staying nil
+        assert.equals("no-display", rows[2].display)
+        for _, m in ipairs(rows) do
+            assert.is_string(m.id)
+            assert.is_string(m.display)
+            assert.is_string(m.series)
+        end
+
+        -- and the picker survives it end to end
+        local ap = require("parley.agent_picker")
+        assert.has_no.errors(function()
+            ap._build_items({ _agents = {}, agents = {}, _state = { agent = "x" } },
+                ap._view_for(rows, { providers = { "codex" }, per_provider = 3 }, {}))
+        end)
+    end)
+
     it("reports staleness from the cache's own timestamp", function()
         cliproxy._write_catalog({ { id = "x", owner = "openai" } }, os.time())
         assert.is_false(cliproxy.catalog_stale())
