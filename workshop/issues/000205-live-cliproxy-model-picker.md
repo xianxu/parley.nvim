@@ -64,9 +64,11 @@ Two measured constraints:
 1. **`lua/parley/cliproxy_catalog.lua` — pure core** (ARCH-PURE, no IO).
    - `parse(v1_json, v1beta_json)` joins the two endpoints on id →
      `{ id, owner, created, display, description, series }`.
-   - `curate(models, opts)` → the default view: dedupe by series, rank by `created`
-     falling back to a version parsed from `displayName`, take `per_owner` (default
-     3) per owner, honoring an owner allowlist.
+   - `curate(models, opts)` → the default view: apply each provider's model filter,
+     dedupe by series, rank by `created` falling back to a version parsed from
+     `displayName`, take `per_provider` (default 3) per provider.
+   - `parse_provider_spec("claude:opus,sonnet")` → `{ provider = "claude",
+     terms = { "opus", "sonnet" } }`. Split on `:`, then on `,`.
    - Series is derived by stripping version numerals from the id, and from
      `displayName` for owners whose ids are opaque.
 
@@ -79,8 +81,9 @@ Two measured constraints:
 
 3. **Live section in the agent picker.** Configured agents, separator, then one
    group per configured provider: curated live models rendered as
-   `Claude Opus 5 — claude-opus-5 (anthropic)`. `<C-a>` toggles the full catalog
-   for the uncurated rest (haiku, gpt-oss-120b, …).
+   `Claude Opus 5 — claude-opus-5 (anthropic)`. `<C-a>` toggles the entire
+   catalog — filter and curation both bypassed — for the rest (haiku,
+   gpt-oss-120b, …).
 
    **Logged-out providers stay visible.** A provider named in config that has no
    healthy credential contributes no models to the catalog (measured: antigravity
@@ -116,15 +119,36 @@ Two measured constraints:
    ```lua
    cliproxy = {
      live_models = {
-       providers = { "claude", "codex", "antigravity" },  -- nil = every known provider
-       per_provider = 3,
+       providers = { "claude:opus,sonnet", "codex:gpt-5.6", "antigravity" },
+       per_provider = 3,   -- nil providers = every known provider, unfiltered
      },
    },
    ```
 
-   It names providers — the things you log into — never model versions, so it
-   never goes stale against the catalog. A listed provider that is logged out
-   shows as `(logged out)` rather than disappearing.
+   **Entry syntax: `"<provider>[:<term>[,<term>…]]"`.** The provider is the thing
+   you log into; the optional terms are case-insensitive substrings matched
+   against **both the model id and its displayName**. Matching displayName is
+   required, not a nicety: antigravity's ids are opaque handles
+   (`gemini-pro-agent` is "Gemini 3.1 Pro (High)"), so an id-only match would make
+   that provider unfilterable.
+
+   The terms narrow; the curation above then picks the newest per series and caps
+   at `per_provider`. **Term order is display order**, so the config expresses
+   preference. Verified against the live 43-model catalog on 2026-08-31:
+
+   | entry | renders |
+   |---|---|
+   | `claude:opus,sonnet` | Claude Opus 5, Claude Sonnet 5 |
+   | `claude` | Claude Opus 5, Claude Sonnet 5, Claude Fable 5 |
+   | `codex:gpt-5.6` | GPT 5.6 Luna, GPT 5.6 Sol, GPT 5.6 Terra |
+   | `antigravity:pro,flash` | Gemini 3.1 Pro (Low), Gemini 3.1 Pro (High), Gemini 3.7 Flash |
+
+   These rows are the unit-test cases for `curate`.
+
+   The knob names providers and families, never model versions, so it does not go
+   stale against the catalog. A listed provider that is logged out shows as
+   `(logged out)` rather than disappearing. `<C-a>` bypasses both filter and
+   curation and shows the entire catalog — the escape hatch stays total.
 
 ## Done when
 
@@ -153,5 +177,7 @@ Two measured constraints:
   — it makes no difference; the 30 vs 43 model gap was registration timing.
 - Design decisions: live picker only (configured agents untouched); `<C-a>` toggle
   for the full catalog; a configured PROVIDER list (not owners) that also drives
-  `(logged out)` placeholder rows; tools + web search on by default for ad-hoc
-  picks.
+  `(logged out)` placeholder rows; `provider:term,term` model filters matched
+  against id AND displayName; tools + web search on by default for ad-hoc picks.
+- Filter syntax verified against the live catalog before speccing — the four rows
+  in the Spec table are real renders, captured as the `curate` test cases.
