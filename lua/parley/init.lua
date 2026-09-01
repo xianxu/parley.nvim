@@ -4381,12 +4381,22 @@ end
 M.get_agent = function(name)
 	name = name or M._state.agent
 	if M.agents[name] == nil then
-		M.logger.warning("Agent " .. name .. " not found, using " .. M._state.agent)
-		name = M._state.agent
+		-- Falling back to _state.agent is a no-op when _state.agent IS the
+		-- missing name — which is exactly what happens when an agent you had
+		-- selected stops shipping (you edit it out of your config, or a default
+		-- roster changes under a persisted selection). That path used to
+		-- dereference nil one line below and crash the whole request.
+		local fallback = M.agents[M._state.agent] and M._state.agent or M._agents[1]
+		M.logger.warning("Agent " .. tostring(name) .. " not found, using " .. tostring(fallback))
+		name = fallback
 	end
 	local template = M.config.command_prompt_prefix_template
 	local cmd_prefix = M.render.template(template, { ["{{agent}}"] = name })
 	local agent_rec = M.agents[name]
+	if agent_rec == nil then
+		-- No agents at all: say so instead of indexing nil.
+		error("parley: no agents are configured — check your setup{} agents list")
+	end
 	local model = agent_rec.model
 	local system_prompt = agent_rec.system_prompt
 	local provider = agent_rec.provider

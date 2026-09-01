@@ -40,7 +40,8 @@ end
 --- in the transcript. Mirrors the chat_respond → dispatcher path.
 ---
 --- @param transcript_path string
---- @param opts table|nil { agent_name = string, tools = string[] }
+--- @param opts table|nil { agent = table, agent_name = string, tools = string[],
+---   provider = string, model = table }
 ---        `tools` pins the client-side tool list, bypassing the agent's
 ---        configured `tools`. Golden tests use this so their payload stays
 ---        deterministic regardless of config drift or optional tools (e.g.
@@ -63,8 +64,16 @@ function M.build_payload(transcript_path, opts)
     --   1. opts.agent_name (programmatic override)
     --   2. PARLEY_HARNESS_AGENT env var
     --   3. parley default state agent
-    local agent_name = opts.agent_name or os.getenv("PARLEY_HARNESS_AGENT")
-    local agent = parley.get_agent(agent_name)
+    -- `opts.agent` pins the agent OUTRIGHT, for callers that must not depend on
+    -- the shipped roster. Goldens are the case: they were captured against an
+    -- agent that later stopped shipping, and `get_agent` falls back with a
+    -- warning — so they silently began comparing a DIFFERENT agent's payload
+    -- (a synthetic-system-prompt one, which injects an extra message pair).
+    local agent = opts.agent
+    if not agent then
+        local agent_name = opts.agent_name or os.getenv("PARLEY_HARNESS_AGENT")
+        agent = parley.get_agent(agent_name)
+    end
     local agent_info = parley.get_agent_info(parsed.headers, agent)
 
     local messages = parley._build_messages({

@@ -1,4 +1,4 @@
--- Unit tests for per-agent tools config and ToolSonnet default.
+-- Unit tests for per-agent tools config and the default tool-enabled agent.
 --
 -- M1 Task 1.4: agents can declare a `tools` field (list of builtin tool
 -- names) plus optional `max_tool_iterations` and `tool_result_max_bytes`
@@ -6,7 +6,7 @@
 -- registry, raises with the offending name on unknown entries, and
 -- applies default values for the two numeric fields when absent.
 --
--- Also verifies that the default `ToolSonnet` agent ships in the
+-- Also verifies that a tool-enabled agent ships in the
 -- default config selecting tools via the `@all` group sentinel
 -- (read + edit/write) — an agentic Claude with the full builtin tool
 -- set out of the box (#157: the default was deliberately swapped
@@ -144,22 +144,40 @@ describe("per-agent tools config", function()
     end)
 end)
 
-describe("default ToolSonnet", function()
+-- The tool-enabled default agent, discovered rather than named.
+--
+-- These used to hardcode "ToolSonnet". The file's own canary below already
+-- said a swap "of the tool set OR the agent roster" must fail loudly at ONE
+-- source — and when the shipped roster did change (#205), the hardcoded name
+-- reddened three assertions in two files instead. Discovering it keeps every
+-- invariant that is actually about the DEFAULT (a tool-enabled agent ships,
+-- with @all and the loop limits) without pinning which model that happens to be.
+local function default_tool_agent()
+    local names = {}
+    for name, agent in pairs(parley.agents) do
+        if type(agent.tools) == "table" and #agent.tools > 0 then
+            names[#names + 1] = name
+        end
+    end
+    table.sort(names)
+    return parley.agents[names[1]], names[1]
+end
+
+describe("the default tool-enabled agent", function()
     before_each(function() fresh_setup(nil) end)
 
     it("ships in the default config with the @all tool set", function()
-        local agent = parley.agents["ToolSonnet"]
-        assert.is_not_nil(agent, "ToolSonnet should ship as a default agent")
-        assert.equals("anthropic", agent.provider)
+        local agent, name = default_tool_agent()
+        assert.is_not_nil(agent, "a tool-enabled agent should ship by default")
+        assert.is_string(agent.provider, name .. " must name a provider")
         assert.is_table(agent.tools)
-        -- ToolSonnet selects tools via the @all group sentinel (read +
-        -- edit/write). The sentinel is carried verbatim on the config record
-        -- and resolved to concrete tools at payload-build time.
+        -- The @all group sentinel (read + edit/write) is carried verbatim on the
+        -- config record and resolved to concrete tools at payload-build time.
         assert.same(EXPECTED_DEFAULT_TOOLS, agent.tools)
     end)
 
     it("has default loop limits applied", function()
-        local agent = parley.agents["ToolSonnet"]
+        local agent = default_tool_agent()
         assert.equals(42, agent.max_tool_iterations)
         assert.equals(102400, agent.tool_result_max_bytes)
     end)
@@ -195,30 +213,43 @@ end)
 describe("get_agent forwards client-side tool config (full wiring chain)", function()
     before_each(function() fresh_setup(nil) end)
 
-    it("get_agent(ToolSonnet) carries the tools field from M.agents", function()
+    it("get_agent carries the tools field from M.agents", function()
+        local _, name = default_tool_agent()
         parley._state = parley._state or {}
-        parley._state.agent = "ToolSonnet"
-        local agent = parley.get_agent("ToolSonnet")
+        parley._state.agent = name
+        local agent = parley.get_agent(name)
         assert.is_not_nil(agent)
         assert.is_table(agent.tools)
         assert.same(EXPECTED_DEFAULT_TOOLS, agent.tools)
     end)
 
-    it("get_agent(ToolSonnet) forwards max_tool_iterations and tool_result_max_bytes", function()
-        local agent = parley.get_agent("ToolSonnet")
+    it("get_agent forwards max_tool_iterations and tool_result_max_bytes", function()
+        local _, name = default_tool_agent()
+        local agent = parley.get_agent(name)
         assert.equals(42, agent.max_tool_iterations)
         assert.equals(102400, agent.tool_result_max_bytes)
     end)
 
     it("get_agent on a vanilla agent has nil tools (no defaults leak)", function()
-        local agent = parley.get_agent("Claude-Sonnet")
+        -- Built here rather than borrowed from the shipped roster: whether a
+        -- TOOL-LESS agent ships is a product decision that has already changed
+        -- once, and this test is about defaults not leaking onto an agent that
+        -- declares no tools — not about which agents ship.
+        parley.agents["VanillaTest"] = {
+            provider = "anthropic",
+            name = "VanillaTest",
+            model = { model = "claude-sonnet-4-6" },
+            system_prompt = "Be helpful.",
+        }
+        local agent = parley.get_agent("VanillaTest")
         assert.is_nil(agent.tools)
         assert.is_nil(agent.max_tool_iterations)
         assert.is_nil(agent.tool_result_max_bytes)
     end)
 
-    it("get_agent_info(headers, get_agent('ToolSonnet')).tools carries the @all sentinel", function()
-        local agent = parley.get_agent("ToolSonnet")
+    it("get_agent_info(headers, get_agent(default)).tools carries the @all sentinel", function()
+        local _, name = default_tool_agent()
+        local agent = parley.get_agent(name)
         local info = parley.get_agent_info({}, agent)
         assert.is_table(info.tools)
         assert.same(EXPECTED_DEFAULT_TOOLS, info.tools)
@@ -231,9 +262,10 @@ describe("get_agent forwards client-side tool config (full wiring chain)", funct
     -- chain (sanitized snapshot in get_agent, dropped field in
     -- get_agent_info, missing 4th arg in chat_respond, append-not-clobber
     -- regression in prepare_payload, broken sentinel expansion) is caught here.
-    it("full wiring chain: ToolSonnet request payload resolves @all to the full read+write tool set", function()
+    it("full wiring chain: the default agent's payload resolves @all to the full read+write tool set", function()
         local dispatcher = require("parley.dispatcher")
-        local agent = parley.get_agent("ToolSonnet")
+        local _, default_name = default_tool_agent()
+        local agent = parley.get_agent(default_name)
         local info = parley.get_agent_info({}, agent)
         local msgs = { { role = "user", content = "hi" } }
 
@@ -265,7 +297,8 @@ describe("get_agent forwards client-side tool config (full wiring chain)", funct
     -- argument like dispatcher_spec.lua does).
     it("full wiring chain + web_search: @all client tools APPEND to web_search/web_fetch", function()
         local dispatcher = require("parley.dispatcher")
-        local agent = parley.get_agent("ToolSonnet")
+        local _, default_name = default_tool_agent()
+        local agent = parley.get_agent(default_name)
         local info = parley.get_agent_info({}, agent)
         local msgs = { { role = "user", content = "hi" } }
 
@@ -309,7 +342,13 @@ describe("get_agent forwards synthetic_system_prompt config", function()
     end)
 
     it("forwards as nil when the agent has no synthetic config", function()
-        local agent = parley.get_agent("ToolSonnet")
+        parley.agents["PlainTest"] = {
+            provider = "anthropic",
+            name = "PlainTest",
+            model = { model = "claude-sonnet-4-6" },
+            system_prompt = "Be helpful.",
+        }
+        local agent = parley.get_agent("PlainTest")
         assert.is_nil(agent.synthetic_system_prompt)
         assert.is_nil(agent.synthetic_system_prompt_ack)
     end)
@@ -342,5 +381,22 @@ describe("new config prefix + shortcut defaults", function()
         assert.equals("<C-g>b", parley.config.chat_shortcut_prune.shortcut)
         assert.same({ "n" }, parley.config.chat_shortcut_prune.modes)
         assert.is_nil(parley.config.chat_shortcut_toggle_tool_folds)
+    end)
+end)
+
+describe("get_agent with a stale selection", function()
+    before_each(function() fresh_setup(nil) end)
+
+    it("survives a persisted agent name that no longer ships", function()
+        -- The real scenario: you delete an agent from your config that you had
+        -- selected. `_state.agent` still names it, so falling back to
+        -- `_state.agent` was a no-op and the next line indexed nil — every
+        -- request crashed until the state file was hand-edited.
+        parley._state = parley._state or {}
+        parley._state.agent = "AgentThatWasDeleted"
+        local ok, agent = pcall(parley.get_agent, "AgentThatWasDeleted")
+        assert.is_true(ok, "get_agent crashed on a stale selection: " .. tostring(agent))
+        assert.is_not_nil(agent)
+        assert.is_not_nil(agent.model, "the fallback must be a real, usable agent")
     end)
 end)

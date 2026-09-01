@@ -36,6 +36,7 @@ from unticked boxes here.
 | `get_cliproxy_strategy` | `lua/parley/providers.lua` | modified |
 | `resolve_channel` | `lua/parley/cliproxy_config.lua` | modified |
 | `resolve_channels` / `channels_for_owner` | `lua/parley/cliproxy_config.lua` | new |
+| `resolve_login_provider` | `lua/parley/cliproxy_config.lua` | modified |
 | `unhealthier` | `lua/parley/cliproxy_auth.lua` | new |
 | `_build_items` | `lua/parley/agent_picker.lua` | modified |
 | `_providers_without_models` | `lua/parley/agent_picker.lua` | new |
@@ -69,9 +70,11 @@ from unticked boxes here.
 | `catalog_stale` | `lua/parley/cliproxy.lua` | new | clock + filesystem |
 | `_on_login_success` | `lua/parley/cliproxy.lua` | new | the login watch |
 | `credential_health_across` / `credential_health_across_or_one` | `lua/parley/cliproxy.lua` | new | `/v0/management/auth-files` |
+| `credential_health_for_login` | `lua/parley/cliproxy.lua` | modified | now shares the fan-out |
 | `invalidate_catalog` / `_reset_catalog_clock` / `_set_failed_attempt_at` | `lua/parley/cliproxy.lua` | new | the staleness clocks |
 | `endpoint_opts` | `lua/parley/cliproxy.lua` | new | provider endpoint + vault |
 | `register_live_agent` | `lua/parley/init.lua` | new | `state.json` |
+| `get_agent` | `lua/parley/init.lua` | modified | stale-selection fallback |
 | `_select` | `lua/parley/agent_picker.lua` | new | `vim.cmd` / `vim.schedule` |
 | `selected` (handle) | `lua/parley/float_picker.lua` | new | picker window state |
 | `invalidate_catalog` / `_reset_catalog_clock` / `_set_failed_attempt_at` | `lua/parley/cliproxy.lua` | new | the staleness clocks |
@@ -2063,3 +2066,27 @@ that *drives* it is exercised. "Deleting X keeps the suite green" is the check.
 - Operator request, same session: `fable` added to the shipped claude filter, and
   the resulting default (`claude:opus,sonnet,fable`) documented in the Spec's
   render table and pinned in `SPEC_RENDERS` like every other row.
+
+### 2026-09-01 — the roster change, and a crash it exposed
+
+Committing M4 also landed the operator's own `config.lua` cleanup (it lives in
+the same file as the alias block), which turned three long-standing spec
+failures from "a local edit is dirty" into "the committed defaults changed".
+Fixing them found a real bug and one repeated test smell.
+
+- **`get_agent` crashed on a stale selection.** Falling back to `_state.agent` is
+  a no-op when `_state.agent` IS the missing name, and the next line indexed nil
+  — so deleting an agent you had SELECTED broke every request until the state
+  file was hand-edited. That is a user-facing bug reachable without any of this
+  issue's features. Fixed to fall back to a real agent, with a spec that fails
+  against the old code.
+- **Six specs named agents they did not own.** `ToolSonnet`, `ToolSol*`,
+  `ClaudeAgentTools` — `get_agent` warns and falls back, so each ran against a
+  DIFFERENT agent than it named. Two golden payloads had silently begun comparing
+  a synthetic-system-prompt agent's output; the "pre-existing" harness failures
+  I had attributed to something else were this same cause. Every one now
+  registers or pins the agent it needs. The goldens matched with no regeneration,
+  which is the evidence the pin is faithful.
+- The rule, added to the specs' comments: a test asserts a BEHAVIOUR, so it owns
+  the agent that behaviour needs. Borrowing one from the shipped roster makes a
+  product decision able to silently change what the test measures.

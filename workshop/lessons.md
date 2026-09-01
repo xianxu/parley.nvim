@@ -962,3 +962,21 @@ reviewer measures the code against it and files a finding either way.
 `tests/` and fix every comment and test TITLE that states the old behaviour, in
 the same commit as the change. An insertion goes after the preceding function's
 body, never between a doc block and the function it documents.
+
+## A test owns the fixtures its behaviour needs (#205)
+
+Six specs named agents from the shipped default config. When that roster changed,
+`get_agent` warned and fell back — so each test kept passing while measuring a
+DIFFERENT agent than it named. Two golden payloads quietly began comparing a
+synthetic-system-prompt agent's output, and the resulting failures read as
+payload bugs rather than what they were.
+
+**Check:** if a test names a fixture it does not create — an agent, a provider, a
+model — ask what happens when that fixture stops shipping. If the answer is
+"something else is silently substituted", the test measures nothing it claims.
+Register or pin what the behaviour needs; borrow only what the test is *about*.
+
+The same lookup hid a real bug: falling back to `_state.agent` is a no-op when
+`_state.agent` IS the missing name, so deleting a SELECTED agent crashed every
+request. A fallback that can resolve to the thing it is meant to replace is not
+a fallback.

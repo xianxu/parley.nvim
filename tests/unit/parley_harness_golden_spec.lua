@@ -24,6 +24,19 @@ local FIXTURES = {
 -- (edit_file/write_file deliberately excluded to keep golden output stable).
 local READONLY_TOOLS = { "read_file", "ls", "find", "grep", "chat_history_search" }
 
+-- The agent is PINNED here for the same reason, and it is the stronger version
+-- of that rule. These goldens named `ToolSonnet`; when the shipped roster
+-- changed, `get_agent` fell back with a warning to an agent carrying
+-- `synthetic_system_prompt`, which injects an extra message pair — so the
+-- goldens were suddenly comparing a different agent's payload. A golden must
+-- depend on nothing that a product decision can move.
+local GOLDEN_AGENT = {
+    name = "GoldenAgent",
+    provider = "anthropic",
+    model = { model = "claude-sonnet-4-6" },
+    system_prompt = "You are a helpful assistant.",
+}
+
 -- Comparison is on DECODED tables, deliberately. vim.json.encode does not fix
 -- key order, so regenerating a golden yields a byte-different but semantically
 -- identical file. Never "tighten" this into a string compare — it would flake
@@ -40,7 +53,7 @@ describe("parley_harness golden round-trip", function()
         it("payload for " .. name .. " matches golden", function()
             local payload = harness.build_payload(
                 "tests/fixtures/transcripts/" .. name .. ".md",
-                { agent_name = "ToolSonnet", tools = READONLY_TOOLS }
+                { agent = GOLDEN_AGENT, tools = READONLY_TOOLS }
             )
             local golden = read_json("tests/fixtures/golden_payloads/" .. name .. ".json")
             assert.same(golden, payload)
@@ -67,7 +80,7 @@ describe("parley_harness golden round-trip (openai wire)", function()
             local payload = harness.build_payload(
                 "tests/fixtures/transcripts/" .. name .. ".md",
                 {
-                    agent_name = "ToolSonnet",
+                    agent = GOLDEN_AGENT,
                     tools = READONLY_TOOLS,
                     provider = "cliproxyapi",
                     model = { model = "gpt-5.6-sol" },
