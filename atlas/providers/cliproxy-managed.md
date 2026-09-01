@@ -74,7 +74,14 @@ reads that catalog instead of carrying model names in Lua.
 - **`catalog.json`** — a derived artifact beside `config.yaml` under
   `stdpath('data')/parley/cliproxy/`, written `0600`. The picker renders from it
   synchronously, so a cold start is instant and a dead proxy still lists models.
-  Refreshed on picker open when older than 10 minutes.
+  Refreshed on picker open when older than 10 minutes — but that cadence has two
+  escape hatches, because a plain TTL is wrong in both directions. A FAILED
+  attempt backs off only ~30s (keying failures on the 10-minute clock silenced
+  the picker while the proxy came back), and a completed login INVALIDATES the
+  cache outright: a login is what registers a channel's models, and a
+  `(logged out)` row exists precisely because a successful fetch lacked them — so
+  the cache is fresh, and without the invalidation the operator kept seeing the
+  row they had just logged in through.
 - **The catalog does not depend on `manage`.** `cliproxy.manage = false` means
   parley will not START a proxy, not that there is no proxy — a bring-your-own
   instance answers the same GET. The refresh therefore runs either way; gating it

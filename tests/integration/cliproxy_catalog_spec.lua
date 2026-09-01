@@ -332,3 +332,32 @@ describe("cliproxy catalog staleness clocks", function()
         assert.is_false(cliproxy.catalog_stale())
     end)
 end)
+
+describe("cliproxy catalog invalidation on login", function()
+    local cliproxy = require("parley.cliproxy")
+
+    it("forces a refresh even when the cache is fresh", function()
+        -- The bug: catalog_stale short-circuits on a fresh CACHE before it
+        -- consults the attempt clock, so clearing only that clock was inert in
+        -- the exact case that matters. A "(logged out)" row exists BECAUSE a
+        -- successful fetch lacked that provider's models — so the cache is fresh
+        -- — and the operator kept seeing the row they had just logged in
+        -- through for up to the full TTL.
+        cliproxy._write_catalog({ { id = "x", owner = "openai" } }, os.time())
+        assert.is_false(cliproxy.catalog_stale(), "a fresh cache is fresh")
+
+        cliproxy.invalidate_catalog() -- what a completed login calls
+        assert.is_true(cliproxy.catalog_stale(),
+            "a login must invalidate a fresh cache; that is when models appear")
+    end)
+
+    it("clears the invalidation once a fetch serves it", function()
+        cliproxy._write_catalog({ { id = "x", owner = "openai" } }, os.time())
+        cliproxy.invalidate_catalog()
+        local done = false
+        cliproxy.fetch_catalog(function() done = true end)
+        vim.wait(8000, function() return done end, 20)
+        assert.is_false(cliproxy.catalog_stale(),
+            "the invalidation should not persist past the refresh it triggered")
+    end)
+end)

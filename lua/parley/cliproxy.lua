@@ -1150,7 +1150,7 @@ function M.run_login(provider, argv, on_done, timeout_ms)
                 -- The catalog just changed: a login is exactly what registers a
                 -- channel's models. Drop any failure backoff so the next picker
                 -- open re-reads instead of waiting it out.
-                M._reset_catalog_clock()
+                M.invalidate_catalog()
                 settle(true, ("cliproxy: %s login succeeded%s"):format(provider,
                     health.account and (" (" .. health.account .. ")") or ""), vim.log.levels.INFO)
             end)
@@ -1381,6 +1381,7 @@ local CATALOG_TTL = 600 -- seconds a SUCCESSFUL catalog stays fresh
 local FAILED_ATTEMPT_BACKOFF = 30 -- seconds to back off after a FAILED attempt
 local _catalog_inflight = false
 local _last_attempt = nil -- when a refresh was last ATTEMPTED, accepted or not
+local _force_stale = false -- set when something invalidates BOTH clocks (a login)
 
 -- No mkdir here: this is called on every picker open and every cache read, and
 -- only the WRITE needs the directory to exist.
@@ -1450,11 +1451,27 @@ function M._write_catalog(models, fetched_at)
     return true
 end
 
---- Forget when a refresh was last attempted, so the next call re-reads.
---- Called when a login completes — that is what registers a channel's models,
---- so any failure backoff is stale the moment it lands — and by specs.
+--- Force the next staleness check to say "refresh", whatever either clock says.
+---
+--- Called when a login completes. Clearing only the failure clock is NOT enough,
+--- and that was the bug: `catalog_stale` short-circuits on a fresh CACHE before
+--- it ever consults the attempt clock, and a `(logged out)` row exists precisely
+--- because a SUCCESSFUL fetch lacked that provider's models — so the common case
+--- HAS a fresh cache, and the operator kept seeing the row they had just logged
+--- in through for up to the full TTL.
+function M.invalidate_catalog()
+    _last_attempt = nil
+    _force_stale = true
+end
+
+--- Test seam: put both clocks back to "never tried", WITHOUT forcing a refresh.
+--- Deliberately distinct from `invalidate_catalog` — a spec setting up a clean
+--- clock is not the same act as a login announcing the catalog just changed, and
+--- one function doing both made every spec that reset the clock see everything
+--- as stale.
 function M._reset_catalog_clock()
     _last_attempt = nil
+    _force_stale = false
 end
 
 --- Test seam: pretend the last failed attempt happened at `t`, so a spec can
@@ -1476,6 +1493,9 @@ end
 --- connection-refuse, an unbounded retry on a keystroke path.
 ---@return boolean
 function M.catalog_stale()
+    if _force_stale then
+        return true -- an explicit invalidation outranks both clocks
+    end
     local _, at = M.catalog_cached()
     if at and (os.time() - at) <= CATALOG_TTL then
         return false -- the cache itself is fresh
@@ -1506,6 +1526,7 @@ function M.fetch_catalog(cb)
         return cb(M.catalog_cached())
     end
     _last_attempt = os.time()
+    _force_stale = false -- the invalidation is being served by this very fetch
     -- endpoint_opts(), NOT render_opts(): the latter gathers the whole
     -- write_rendered_config bundle, which MINTS a 0600 `management.key` as a
     -- side effect, and opening a picker must not create a credential file.

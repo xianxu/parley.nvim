@@ -66,7 +66,7 @@ from unticked boxes here.
 | `register_live_agent` | `lua/parley/init.lua` | new | `state.json` |
 | `_select` | `lua/parley/agent_picker.lua` | new | `vim.cmd` / `vim.schedule` |
 | `selected` (handle) | `lua/parley/float_picker.lua` | new | picker window state |
-| `_reset_catalog_clock` / `_set_failed_attempt_at` | `lua/parley/cliproxy.lua` | new | the staleness clocks |
+| `invalidate_catalog` / `_reset_catalog_clock` / `_set_failed_attempt_at` | `lua/parley/cliproxy.lua` | new | the staleness clocks |
 | `agent_picker` live section | `lua/parley/agent_picker.lua` | modified | `float_picker` handle |
 | live-agent restore | `lua/parley/init.lua` | modified | `state.json` |
 | `/v1beta/models` route | `tests/fixtures/fake_cliproxy` | modified | the cliproxy binary |
@@ -92,7 +92,11 @@ and the catalog is a property of a healthy proxy, not a sixth behaviour): rows w
 - **Latency budget:** opening the picker does **zero network work on the main thread**. It reads one cached JSON (~5 KB for today's 43 models — measured) and renders. Basis: measured catalog size.
 - **Refresh:** async `vim.system`, `--max-time 2` (the existing `CURL_MAX_TIME`). Exactly 2 GETs, at most one refresh in flight (module-local guard). When it exceeds the budget or the proxy is down, the cached list stays on screen and the failure is logged at debug — never a popup on a UI path.
 - **Never spawns the proxy.** The refresh is a plain GET; a connection-refused is a no-op. It deliberately does **not** call `ensure_running`, so the "#131 dormant unless a cliproxyapi agent runs" contract holds.
-- **Staleness:** refresh when the cache is older than 10 min. Basis: operator choice, informed by a measured fact — an antigravity login registered 13 new models mid-session with no restart, so a long TTL would show a stale provider set.
+- **Staleness:** three inputs, not one clock — a successful cache is fresh for
+  10 min; a FAILED attempt backs off ~30s (a failure keyed on the success TTL
+  silences the picker while the proxy recovers); and a completed login
+  invalidates outright, since `catalog_stale` short-circuits on a fresh cache and
+  a `(logged out)` row exists exactly when the cache IS fresh. Basis: operator choice, informed by a measured fact — an antigravity login registered 13 new models mid-session with no restart, so a long TTL would show a stale provider set.
 - **Scale:** catalog is O(50) rows; curation is O(n log n) on a list that small. N/A for memory, concurrency, disk.
 
 ---
@@ -1930,3 +1934,19 @@ Two of these are regressions from the previous round's own fixes.
   `update`'s third argument; the arch spec sweeps code→table so a module-public
   entity missing from Core concepts fails a test rather than a review; and the
   stacked doc blocks above `catalog_stale` are untangled.
+
+### 2026-09-01 — BR-58's login half (the part the previous round got wrong)
+
+The failure-backoff half was fixed and revert-verified. The LOGIN half was not,
+and was reported as fixed: `catalog_stale` short-circuits on a fresh cache
+before it consults the attempt clock, so clearing that clock was inert in the
+one case that matters — a `(logged out)` row exists BECAUSE a successful fetch
+lacked that provider's models, which means the cache is fresh. An operator
+logging in through the row kept seeing it for up to the full TTL.
+
+An explicit `invalidate_catalog()` now outranks both clocks, and the login path
+calls that rather than the clock reset. The two acts are separate functions on
+purpose: a spec setting up a clean clock is not a login announcing that the
+catalog changed, and one function serving both made every spec that reset the
+clock see everything as stale — which is how the first attempt broke two
+existing tests. Mutation-checked: removing the invalidation fails the new test.

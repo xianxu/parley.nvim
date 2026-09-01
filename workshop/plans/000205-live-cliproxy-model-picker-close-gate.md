@@ -1078,6 +1078,107 @@ rounds:
           round: 14
       boundary: M3
       blocked: true
+    - "n": 15
+      timestamp: "2026-09-01T00:02:49-07:00"
+      agent: claude
+      dispose:
+        - id: BR-42
+          disposition: addressed
+          note: 'Revert-verified: reintroducing `cliproxy.is_managed()` into agent_picker.lua:287 turns picker_items_spec red (46 pass / 1 fail).'
+          round: 15
+        - id: BR-43
+          disposition: addressed
+          note: Superseded by the BR-52 widget fix, which is revert-verified with the wrong-implementation mutation.
+          round: 15
+        - id: BR-44
+          disposition: addressed
+          note: This window is non-empty and contains only M3-subject commits; the 747c8ff gap is recorded in the issue Log for the close review. The RULE still has no home — no ariadne issue was filed for the empty-window / out-of-order-milestone git-log guard. File one before merge.
+          round: 15
+        - id: BR-45
+          disposition: not-addressed
+          note: The Spec was restated (the instance), but the RULE — an executable sweep of the Spec's backticked symbols — was not written; the new arch test sweeps the PLAN's Core-concepts, not the Spec. And the restatement asserts "the static PROVIDER_OWNED_BY map is unaffected by the shared-id instability", while agent_picker.lua:31 joins on `m.owner`, which is `owned_by` (cliproxy_catalog.lua:76) — the field the Spec measures as unstable. Still no fixture reattributes an id across owners.
+          round: 15
+        - id: BR-46
+          disposition: addressed
+          note: Eleven recipes now name paths and the Notes rule is recorded; the one remaining directory-wide add is charged to BR-55.
+          round: 15
+        - id: BR-47
+          disposition: addressed
+          note: The issue Log carries the payload, the response block types and the answer, with the version as the discriminator.
+          round: 15
+        - id: BR-48
+          disposition: not-addressed
+          note: cliproxy.lua:1566 still settles with the parsed list on the declined path while every other exit resolves with catalog_cached(); additionally :1506 and :1512 pass `cb(M.catalog_cached())`, which forwards TWO values (models, at) to a one-arg callback. Third round untouched.
+          round: 15
+        - id: BR-49
+          disposition: addressed
+          note: endpoint_opts extracted; render_opts builds on it; behaviour unchanged.
+          round: 15
+        - id: BR-50
+          disposition: not-addressed
+          note: 'Measured at HEAD in a scratch worktree: stub vim.system to raise, call fetch_catalog under pcall (it raises), then call fetch_catalog again — the second call spawns no process and resolves immediately from cache. `_catalog_inflight` is stranded true for the session. settle() covers only the callbacks; the flag is still set at :1514 before the launch, under a comment claiming "Cleared on EVERY path". Wrap the launch in pcall or clear the flag on the raise path.'
+          round: 15
+        - id: BR-51
+          disposition: addressed
+          note: The plan now states that the issue file, not these checkboxes, is the record of progress.
+          round: 15
+        - id: BR-52
+          disposition: addressed
+          note: Fixed in the widget as the rule required; finder_loader.lua:261 is now correct by construction; atlas/ui/pickers.md documents selected() and the third-argument contract. The unswept agent_picker.lua:261 leg is charged to BR-60.
+          round: 15
+        - id: BR-53
+          disposition: addressed
+          note: Superseded and refined by BR-58's two-clock split; the dead-proxy no-re-poll case is pinned and revert-verified.
+          round: 15
+        - id: BR-54
+          disposition: addressed
+          note: This window changes lua/ and tests/ together, and the rule is recorded in workshop/lessons.md.
+          round: 15
+        - id: BR-55
+          disposition: not-addressed
+          note: plan.md:1485 is still `git add tests/ lua/` — a directory-wide add that stages the operator's uncommitted lua/parley/config.lua (still modified in the tree at HEAD), the exact hazard the plan's own Notes rule at :1606 forbids. Second consecutive round disposed not-addressed. Name the files Task 4.1 touches.
+          round: 15
+        - id: BR-56
+          disposition: addressed
+          note: lessons.md:912-947 records four families with counts and a mechanical check each.
+          round: 15
+        - id: BR-57
+          disposition: addressed
+          note: '`*.parley-backup.*` is gitignored with the reason.'
+          round: 15
+        - id: BR-58
+          disposition: not-addressed
+          note: 'The failure-backoff half is fixed and revert-verified (mutating FAILED_ATTEMPT_BACKOFF to CATALOG_TTL turns the new clock spec red). The login half is NOT: catalog_stale() returns false on the fresh-cache branch before it ever consults _last_attempt, so M._reset_catalog_clock() at cliproxy.lua:1153 is inert whenever the last fetch SUCCEEDED — measured: write a catalog at os.time(), call _reset_catalog_clock(), catalog_stale() is false. That is the common shape (a `(logged out)` row exists precisely because a successful fetch lacked that provider''s models), so an operator who logs in through the row still sees it for up to ten minutes. The call has zero tests; deleting it leaves the suite green. Also still outstanding from this finding: plan.md:95 and atlas/providers/cliproxy-managed.md:78 document only the success cadence.'
+          round: 15
+        - id: BR-59
+          disposition: addressed
+          note: 'Revert-verified with the wrong implementation: changing float_picker.lua:1729 from ipairs(filtered) to ipairs(items) turns two cases red. Leftover: the older test at float_picker_spec.lua:1229 is still titled "which addresses the filtered list", now the opposite of the shipped contract — rename it.'
+          round: 15
+        - id: BR-60
+          disposition: not-addressed
+          note: 'The numeric branch''s meaning is fixed and pinned, but the sweep the finding demanded did not run. agent_picker.lua:261 (the <C-a> repaint) still passes nothing and keeps a stale filtered index across a wholesale item swap, and chat_finder.lua:677, markdown_finder.lua:361 and issue_finder.lua:457 share that shape — four sites, not one. The rule-level fix is in the widget: when next_selection is nil, update() should preserve the CURRENT selection''s identity by default. Residual in the numeric branch too: float_picker.lua:1712 still assigns sel_idx in items-space, so when the named row is filtered out the number is silently reinterpreted in filtered space — the documented contract says the widget resolves it, and no test covers numeric + identity-miss.'
+          round: 15
+        - id: BR-61
+          disposition: addressed
+          note: atlas/ui/pickers.md:102-120 documents the handle, selected() and update()'s third argument with the reason the conversion belongs to the widget.
+          round: 15
+        - id: BR-62
+          disposition: not-addressed
+          note: 'Measured: delete BOTH Core-concepts rows this round added (`selected` and `_reset_catalog_clock`/`_set_failed_attempt_at`) and tests/arch/single_source_sweeps_spec.lua stays green, 4/4. The new code-to-table sweep lists only cliproxy_catalog.lua and agent_picker.lua, whose twelve publics were already tabled; cliproxy.lua and float_picker.lua — where all three named instances live — are excluded, and handle-literal keys are not swept at all. A guard that cannot go red for the finding that produced it is the instance, not the rule. Making it diff-aware (sweep `function M.<name>` and returned-handle keys ADDED in the milestone window) is what the rule asked for.'
+          round: 15
+        - id: BR-63
+          disposition: addressed
+          note: cliproxy.lua:1452-1477 — each of _reset_catalog_clock, _set_failed_attempt_at and catalog_stale now carries its own doc block.
+          round: 15
+      findings:
+        - id: BR-64
+          severity: Minor
+          title: The new parse-failure branch pops a notification on the picker-open path the same function forbids popups on
+          detail: 'cliproxy.lua:1543 calls logger.error, which reaches vim.notify (logger.lua:100), from inside fetch_catalog''s scheduled callback. Twenty lines below, the declined-refresh branch documents the opposite rule for the same path: "Debug, never a popup: this runs on a picker-open path and a proxy that is simply down is not an error the operator asked about." The rule is that the surfacing level is a property of the PATH, not of the severity; a keystroke-adjacent failure reports at debug and leaves the cached catalog on screen. If a parse raise genuinely warrants louder handling, say so in the comment rather than leaving two contradictory conventions eight lines apart.'
+          family: ui-path-log-level
+          round: 15
+      boundary: M3
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#205 (boundary-review)
@@ -1576,6 +1677,38 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-63** [Minor] `docs-insert-orphans-section` catalog_stale's doc comment now annotates _reset_catalog_clock, and catalog_stale has none
   This is the 2nd finding in family `docs-insert-orphans-section`. cliproxy.lua:1448-1449 ("Is the cache old enough to be worth a background refresh?" + `---@return boolean`) sits above the newly inserted M._reset_catalog_clock at :1455; M.catalog_stale at :1459 has no doc block. The rule: an insertion point is after the preceding function's doc block AND body, never between a doc comment and the definition it annotates — verify by reading both neighbours' rendered docs after any insert.
 
+## Round 15 — 2026-09-01T00:02:49-07:00 (claude) — BLOCKED
+
+### Disposed
+
+- BR-42 — addressed — Revert-verified: reintroducing `cliproxy.is_managed()` into agent_picker.lua:287 turns picker_items_spec red (46 pass / 1 fail).
+- BR-43 — addressed — Superseded by the BR-52 widget fix, which is revert-verified with the wrong-implementation mutation.
+- BR-44 — addressed — This window is non-empty and contains only M3-subject commits; the 747c8ff gap is recorded in the issue Log for the close review. The RULE still has no home — no ariadne issue was filed for the empty-window / out-of-order-milestone git-log guard. File one before merge.
+- BR-45 — not-addressed — The Spec was restated (the instance), but the RULE — an executable sweep of the Spec's backticked symbols — was not written; the new arch test sweeps the PLAN's Core-concepts, not the Spec. And the restatement asserts "the static PROVIDER_OWNED_BY map is unaffected by the shared-id instability", while agent_picker.lua:31 joins on `m.owner`, which is `owned_by` (cliproxy_catalog.lua:76) — the field the Spec measures as unstable. Still no fixture reattributes an id across owners.
+- BR-46 — addressed — Eleven recipes now name paths and the Notes rule is recorded; the one remaining directory-wide add is charged to BR-55.
+- BR-47 — addressed — The issue Log carries the payload, the response block types and the answer, with the version as the discriminator.
+- BR-48 — not-addressed — cliproxy.lua:1566 still settles with the parsed list on the declined path while every other exit resolves with catalog_cached(); additionally :1506 and :1512 pass `cb(M.catalog_cached())`, which forwards TWO values (models, at) to a one-arg callback. Third round untouched.
+- BR-49 — addressed — endpoint_opts extracted; render_opts builds on it; behaviour unchanged.
+- BR-50 — not-addressed — Measured at HEAD in a scratch worktree: stub vim.system to raise, call fetch_catalog under pcall (it raises), then call fetch_catalog again — the second call spawns no process and resolves immediately from cache. `_catalog_inflight` is stranded true for the session. settle() covers only the callbacks; the flag is still set at :1514 before the launch, under a comment claiming "Cleared on EVERY path". Wrap the launch in pcall or clear the flag on the raise path.
+- BR-51 — addressed — The plan now states that the issue file, not these checkboxes, is the record of progress.
+- BR-52 — addressed — Fixed in the widget as the rule required; finder_loader.lua:261 is now correct by construction; atlas/ui/pickers.md documents selected() and the third-argument contract. The unswept agent_picker.lua:261 leg is charged to BR-60.
+- BR-53 — addressed — Superseded and refined by BR-58's two-clock split; the dead-proxy no-re-poll case is pinned and revert-verified.
+- BR-54 — addressed — This window changes lua/ and tests/ together, and the rule is recorded in workshop/lessons.md.
+- BR-55 — not-addressed — plan.md:1485 is still `git add tests/ lua/` — a directory-wide add that stages the operator's uncommitted lua/parley/config.lua (still modified in the tree at HEAD), the exact hazard the plan's own Notes rule at :1606 forbids. Second consecutive round disposed not-addressed. Name the files Task 4.1 touches.
+- BR-56 — addressed — lessons.md:912-947 records four families with counts and a mechanical check each.
+- BR-57 — addressed — `*.parley-backup.*` is gitignored with the reason.
+- BR-58 — not-addressed — The failure-backoff half is fixed and revert-verified (mutating FAILED_ATTEMPT_BACKOFF to CATALOG_TTL turns the new clock spec red). The login half is NOT: catalog_stale() returns false on the fresh-cache branch before it ever consults _last_attempt, so M._reset_catalog_clock() at cliproxy.lua:1153 is inert whenever the last fetch SUCCEEDED — measured: write a catalog at os.time(), call _reset_catalog_clock(), catalog_stale() is false. That is the common shape (a `(logged out)` row exists precisely because a successful fetch lacked that provider's models), so an operator who logs in through the row still sees it for up to ten minutes. The call has zero tests; deleting it leaves the suite green. Also still outstanding from this finding: plan.md:95 and atlas/providers/cliproxy-managed.md:78 document only the success cadence.
+- BR-59 — addressed — Revert-verified with the wrong implementation: changing float_picker.lua:1729 from ipairs(filtered) to ipairs(items) turns two cases red. Leftover: the older test at float_picker_spec.lua:1229 is still titled "which addresses the filtered list", now the opposite of the shipped contract — rename it.
+- BR-60 — not-addressed — The numeric branch's meaning is fixed and pinned, but the sweep the finding demanded did not run. agent_picker.lua:261 (the <C-a> repaint) still passes nothing and keeps a stale filtered index across a wholesale item swap, and chat_finder.lua:677, markdown_finder.lua:361 and issue_finder.lua:457 share that shape — four sites, not one. The rule-level fix is in the widget: when next_selection is nil, update() should preserve the CURRENT selection's identity by default. Residual in the numeric branch too: float_picker.lua:1712 still assigns sel_idx in items-space, so when the named row is filtered out the number is silently reinterpreted in filtered space — the documented contract says the widget resolves it, and no test covers numeric + identity-miss.
+- BR-61 — addressed — atlas/ui/pickers.md:102-120 documents the handle, selected() and update()'s third argument with the reason the conversion belongs to the widget.
+- BR-62 — not-addressed — Measured: delete BOTH Core-concepts rows this round added (`selected` and `_reset_catalog_clock`/`_set_failed_attempt_at`) and tests/arch/single_source_sweeps_spec.lua stays green, 4/4. The new code-to-table sweep lists only cliproxy_catalog.lua and agent_picker.lua, whose twelve publics were already tabled; cliproxy.lua and float_picker.lua — where all three named instances live — are excluded, and handle-literal keys are not swept at all. A guard that cannot go red for the finding that produced it is the instance, not the rule. Making it diff-aware (sweep `function M.<name>` and returned-handle keys ADDED in the milestone window) is what the rule asked for.
+- BR-63 — addressed — cliproxy.lua:1452-1477 — each of _reset_catalog_clock, _set_failed_attempt_at and catalog_stale now carries its own doc block.
+
+### Raised
+
+- **BR-64** [Minor] `ui-path-log-level` The new parse-failure branch pops a notification on the picker-open path the same function forbids popups on
+  cliproxy.lua:1543 calls logger.error, which reaches vim.notify (logger.lua:100), from inside fetch_catalog's scheduled callback. Twenty lines below, the declined-refresh branch documents the opposite rule for the same path: "Debug, never a popup: this runs on a picker-open path and a proxy that is simply down is not an error the operator asked about." The rule is that the surfacing level is a property of the PATH, not of the severity; a keystroke-adjacent failure reports at debug and leaves the cached catalog on screen. If a parse raise genuinely warrants louder handling, say so in the comment rather than leaving two contradictory conventions eight lines apart.
+
 ## Open findings
 
 - **BR-13** [Important] `rank-key-version-extraction` rank_key's `< 100` threshold answers the 120B instance, not the class: any parameter count below 100 still reads as a version
@@ -1593,15 +1726,11 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-39** [Minor] `single-source-not-enforced` The new arch guard's comment claims it counts any bracketed key literal; it matches three forms and misses `or { shortcut = "<C-g>?" }`
 - **BR-40** [Minor] `section-merge-not-deduped` `_view_for` never dedupes the live list by id, so overlapping `providers` entries render one model twice, both checkmarked
 - **BR-41** [Minor] `stated-design-not-implemented` `fetch_catalog` calls `render_opts()`, so opening the agent picker generates and writes `management.key`
-- **BR-44** [Important] `boundary-crossed-out-of-order` The M3 window is empty and commit 747c8ff falls in no review window at all
 - **BR-45** [Important] `stated-design-not-implemented` Spec Component 3 names `cliproxy_auth.lua`/`channels_for_login` as the credential source and forbids `owned_by`; the code uses only `owned_by`
 - **BR-48** [Minor] `one-value-two-decisions` `fetch_catalog`'s callback argument means the cached catalog on one path and the freshly-parsed, possibly-rejected list on the other
 - **BR-50** [Minor] `missing-input-guard` `_catalog_inflight` is never cleared if `vim.system` raises synchronously, wedging refresh for the session
-- **BR-52** [Important] `one-value-two-decisions` `next_selection_index` is an items-index at every caller and a filtered-index in the picker, so the BR-43 repaint fix lands the cursor on the wrong row under an active query
 - **BR-55** [Minor] `plan-command-does-not-run` `git add <the files this task names>` replaced `git add -u` at 11 sites, so the plan's commit recipes are no longer executable
 - **BR-58** [Critical] `retry-not-rate-limited` A failed catalog attempt silences the picker for the full 10-minute TTL, through the login it just launched
-- **BR-59** [Important] `test-title-overstates-guard` The BR-52 test passes with the bug reintroduced — the fixture's target is the last filtered row, which the selection clamp reaches anyway
 - **BR-60** [Important] `one-value-two-decisions` update()'s numeric branch still means items-space at its callers and filtered-space in the widget
-- **BR-61** [Important] `atlas-not-updated-for-new-surface` atlas/ui/pickers.md gained nothing for the new selected() handle method and update()'s third-argument contract
 - **BR-62** [Important] `plan-table-missing-entity` The plan's Core-concepts tables gained no rows for this window's new module-public surface
-- **BR-63** [Minor] `docs-insert-orphans-section` catalog_stale's doc comment now annotates _reset_catalog_clock, and catalog_stale has none
+- **BR-64** [Minor] `ui-path-log-level` The new parse-failure branch pops a notification on the picker-open path the same function forbids popups on
