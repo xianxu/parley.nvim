@@ -2181,3 +2181,21 @@ incompatible by construction. Three separate defects on this issue produced the
 same user-visible symptom — the wrong account named — by three different routes
 (ranking, eligibility, concurrency), which is what a Done-when phrased as
 "names the RIGHT login" is for.
+
+### 2026-09-01 — M4 review round 23 (BR-88, Critical)
+
+The catalog replaced `oauth-model-alias` as the model→channel source, but its
+only production WRITER was the agent picker. So a cold install — never opened a
+picker — had no catalog, and an auth failure reported "no cliproxy channel is
+configured", with no account named and no login offered. That is strictly worse
+than the block it replaced, which at least shipped a mapping: I removed a source
+of truth and left its replacement populated by an optional UI gesture.
+
+`ensure_running` now warms it, stale-gated and fire-and-forget, so any dispatch
+through cliproxy leaves a catalog behind — including the `manage = false`
+bring-your-own path, which is still ours to READ even when it is not ours to
+start. Pinned by a cold-install test that fails when the warm is removed.
+
+**The class:** when a single source of truth is replaced, the replacement needs
+a writer on every path the original covered — not just the one the new feature
+made convenient.

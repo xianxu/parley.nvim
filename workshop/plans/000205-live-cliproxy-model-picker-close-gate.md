@@ -1680,6 +1680,117 @@ rounds:
           round: 22
       boundary: M4
       blocked: true
+    - "n": 23
+      timestamp: "2026-09-01T11:54:14-07:00"
+      agent: claude
+      dispose:
+        - id: BR-75
+          disposition: not-addressed
+          note: Code fix confirmed and discriminating; the atlas still states eligibility over `missing` alone and the enum is still not pinned exhaustively.
+          round: 23
+        - id: BR-78
+          disposition: not-addressed
+          note: GOLDEN_AGENT single-sourced correctly, but the demanded sweep was the deliverable and its own grep still returns four hits, one now false.
+          round: 23
+        - id: BR-79
+          disposition: not-addressed
+          note: Rows added by hand; the recipe and the arch guard still diff only lua/, and the resolve_login_provider row still says modified for a deleted function.
+          round: 23
+        - id: BR-80
+          disposition: not-addressed
+          note: Both orphan blocks survive verbatim at cliproxy.lua:476-486 and :1316-1319; no lint added.
+          round: 23
+        - id: BR-81
+          disposition: not-addressed
+          note: lessons.md:977-980 still carries the struck claim and the reachable empty-roster error branch has no test.
+          round: 23
+        - id: BR-86
+          disposition: not-addressed
+          note: Worktree at the boundary head still carries the uncommitted config.lua roster deletion and untracked docs/parley.nvim.md; no mechanical enforcement.
+          round: 23
+        - id: BR-87
+          disposition: not-addressed
+          note: Plan line 1355 is unannotated while the Revisions entry at 2159 claims it was annotated in place.
+          round: 23
+        - id: BR-88
+          disposition: not-addressed
+          note: Untouched; fetch_catalog's only production caller is still agent_picker.lua:308 and catalog_cached returns empty on a cold install.
+          round: 23
+        - id: BR-89
+          disposition: addressed
+          note: Reads are sequential; restoring the concurrent loop reddens the max_in_flight guard, mutation-verified in a scratch spec.
+          round: 23
+        - id: BR-90
+          disposition: not-addressed
+          note: channels_for_owner still documents order as "sorted" while three sites consume it as a preference; no contract, no assertion.
+          round: 23
+        - id: BR-91
+          disposition: not-addressed
+          note: tests/arch/single_source_sweeps_spec.lua is unchanged in this range; both directions still match textual occurrences over lua/ only.
+          round: 23
+        - id: BR-92
+          disposition: not-addressed
+          note: 'M.unhealthier still has zero call sites and the #channels == 0 branch is still unreachable.'
+          round: 23
+      findings:
+        - id: BR-93
+          severity: Important
+          title: Serializing the fan-out added up to three probes to the budgeted recovery path, and M._repair_budget_sec gained no term
+          detail: |-
+            M._repair_budget_sec (cliproxy.lua:360) carries one `auth_files = CURL_MAX_TIME`
+            term and its docstring claims the table "cannot be right while the code is
+            wrong". credential_health_across_or_one now issues one credential_health per
+            candidate sequentially; OWNER_CHANNELS.google has four channels, so a
+            google-owned model costs +3 x CURL_MAX_TIME = 6s. Measured with the shipped
+            constants: budget 21s vs recovery_timeout_ms 30000 (headroom 9s) becomes a real
+            worst case of 27s (headroom 3s), below the 5s floor cliproxy_budget_spec.lua:38-45
+            asserts. The rule: when a change adds a repeated step to a path bounded by a
+            declared budget, the budget's term list must gain that step in the same change,
+            or the guard measures a path that no longer exists.
+          family: envelope-not-rederived
+          round: 23
+        - id: BR-94
+          severity: Important
+          title: The corrected atlas documents a ranking the code does not implement, and atlas:201 still routes via a function this range deleted
+          detail: |-
+            atlas/providers/cliproxy-managed.md:107-117 and the recover comment at
+            cliproxy.lua:1366-1368 both say "among those that could have served, the least
+            healthy is named". CULPRIT_RANK is not an inverted HEALTH_RANK: for
+            {claude=unavailable, antigravity=error} the documented rule names claude and the
+            code names antigravity. atlas:201 still says the expired-token 401 "resolves to a
+            channel via resolve_login_provider", deleted in this window.
+            This is the 4th finding in family `documented-render-not-pinned`. Do NOT fix the
+            three sites — state the rule: a behavioural ordering stated in atlas/README/doc
+            comments must either be pinned by a named test or replaced by a pointer to the
+            test that owns it, and the referent sweep must run on DELETIONS as well as
+            additions. Here that means the atlas cites cliproxy_auth_spec's
+            "likeliest_culprit ranking" block instead of restating an order in prose.
+          family: documented-render-not-pinned
+          round: 23
+        - id: BR-95
+          severity: Minor
+          title: get_agent's empty-roster raise uses bare error(), so the operator sees an init.lua:4398 source prefix
+          detail: |-
+            lua/parley/init.lua:4398. Every other operator-facing raise in lua/parley/ uses
+            error(msg, 0) (7 sites: buffer_lifecycle, chat_pending, line_reader, tasker,
+            tool_folds). This is the 2nd finding in family `ui-path-log-level`. The rule: a
+            string written to be read by the operator must be emitted through the
+            user-facing reporter or with error(msg, 0), never with the default level —
+            sweep `grep -rn 'error("' lua/parley/` for raises whose message is prose.
+          family: ui-path-log-level
+          round: 23
+        - id: BR-96
+          severity: Minor
+          title: Two indentation regressions introduced by this window
+          detail: |-
+            tests/integration/cliproxy_recovery_e2e_spec.lua:109 gained a stray leading space
+            on the `it(` line; tests/integration/chat_respond_spec.lua:1296-1308 de-indented
+            the TOOL_AGENT block and the following `local function open_simple_chat` to
+            column 0 inside the enclosing describe.
+          family: style-drift-in-diff
+          round: 23
+      boundary: M4
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#205 (boundary-review)
@@ -2460,6 +2571,62 @@ later rounds disposed of them. Generated — edit the gate, not this file.
   M.x a window adds must have a non-defining, non-test caller in that same window, checked by
   grepping the diff's added definition names) and run it over this range.
 
+## Round 23 — 2026-09-01T11:54:14-07:00 (claude) — BLOCKED
+
+### Disposed
+
+- BR-75 — not-addressed — Code fix confirmed and discriminating; the atlas still states eligibility over `missing` alone and the enum is still not pinned exhaustively.
+- BR-78 — not-addressed — GOLDEN_AGENT single-sourced correctly, but the demanded sweep was the deliverable and its own grep still returns four hits, one now false.
+- BR-79 — not-addressed — Rows added by hand; the recipe and the arch guard still diff only lua/, and the resolve_login_provider row still says modified for a deleted function.
+- BR-80 — not-addressed — Both orphan blocks survive verbatim at cliproxy.lua:476-486 and :1316-1319; no lint added.
+- BR-81 — not-addressed — lessons.md:977-980 still carries the struck claim and the reachable empty-roster error branch has no test.
+- BR-86 — not-addressed — Worktree at the boundary head still carries the uncommitted config.lua roster deletion and untracked docs/parley.nvim.md; no mechanical enforcement.
+- BR-87 — not-addressed — Plan line 1355 is unannotated while the Revisions entry at 2159 claims it was annotated in place.
+- BR-88 — not-addressed — Untouched; fetch_catalog's only production caller is still agent_picker.lua:308 and catalog_cached returns empty on a cold install.
+- BR-89 — addressed — Reads are sequential; restoring the concurrent loop reddens the max_in_flight guard, mutation-verified in a scratch spec.
+- BR-90 — not-addressed — channels_for_owner still documents order as "sorted" while three sites consume it as a preference; no contract, no assertion.
+- BR-91 — not-addressed — tests/arch/single_source_sweeps_spec.lua is unchanged in this range; both directions still match textual occurrences over lua/ only.
+- BR-92 — not-addressed — M.unhealthier still has zero call sites and the #channels == 0 branch is still unreachable.
+
+### Raised
+
+- **BR-93** [Important] `envelope-not-rederived` Serializing the fan-out added up to three probes to the budgeted recovery path, and M._repair_budget_sec gained no term
+  M._repair_budget_sec (cliproxy.lua:360) carries one `auth_files = CURL_MAX_TIME`
+  term and its docstring claims the table "cannot be right while the code is
+  wrong". credential_health_across_or_one now issues one credential_health per
+  candidate sequentially; OWNER_CHANNELS.google has four channels, so a
+  google-owned model costs +3 x CURL_MAX_TIME = 6s. Measured with the shipped
+  constants: budget 21s vs recovery_timeout_ms 30000 (headroom 9s) becomes a real
+  worst case of 27s (headroom 3s), below the 5s floor cliproxy_budget_spec.lua:38-45
+  asserts. The rule: when a change adds a repeated step to a path bounded by a
+  declared budget, the budget's term list must gain that step in the same change,
+  or the guard measures a path that no longer exists.
+- **BR-94** [Important] `documented-render-not-pinned` The corrected atlas documents a ranking the code does not implement, and atlas:201 still routes via a function this range deleted
+  atlas/providers/cliproxy-managed.md:107-117 and the recover comment at
+  cliproxy.lua:1366-1368 both say "among those that could have served, the least
+  healthy is named". CULPRIT_RANK is not an inverted HEALTH_RANK: for
+  {claude=unavailable, antigravity=error} the documented rule names claude and the
+  code names antigravity. atlas:201 still says the expired-token 401 "resolves to a
+  channel via resolve_login_provider", deleted in this window.
+  This is the 4th finding in family `documented-render-not-pinned`. Do NOT fix the
+  three sites — state the rule: a behavioural ordering stated in atlas/README/doc
+  comments must either be pinned by a named test or replaced by a pointer to the
+  test that owns it, and the referent sweep must run on DELETIONS as well as
+  additions. Here that means the atlas cites cliproxy_auth_spec's
+  "likeliest_culprit ranking" block instead of restating an order in prose.
+- **BR-95** [Minor] `ui-path-log-level` get_agent's empty-roster raise uses bare error(), so the operator sees an init.lua:4398 source prefix
+  lua/parley/init.lua:4398. Every other operator-facing raise in lua/parley/ uses
+  error(msg, 0) (7 sites: buffer_lifecycle, chat_pending, line_reader, tasker,
+  tool_folds). This is the 2nd finding in family `ui-path-log-level`. The rule: a
+  string written to be read by the operator must be emitted through the
+  user-facing reporter or with error(msg, 0), never with the default level —
+  sweep `grep -rn 'error("' lua/parley/` for raises whose message is prose.
+- **BR-96** [Minor] `style-drift-in-diff` Two indentation regressions introduced by this window
+  tests/integration/cliproxy_recovery_e2e_spec.lua:109 gained a stray leading space
+  on the `it(` line; tests/integration/chat_respond_spec.lua:1296-1308 de-indented
+  the TOOL_AGENT block and the following `local function open_simple_chat` to
+  column 0 inside the enclosing describe.
+
 ## Open findings
 
 - **BR-13** [Important] `rank-key-version-extraction` rank_key's `< 100` threshold answers the 120B instance, not the class: any parameter count below 100 still reads as a version
@@ -2494,7 +2661,10 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-86** [Minor] `close-stages-unreviewed-worktree` The worktree carries an uncommitted 192-line config.lua roster deletion and an untracked docs/parley.nvim.md at the boundary
 - **BR-87** [Minor] `stated-design-not-implemented` Plan Task 4.1 still presents "the LEAST healthy candidate is the one that plausibly failed" as the design
 - **BR-88** [Critical] `source-without-producer` The catalog that replaced oauth-model-alias has one production writer — opening the agent picker — so a cold install gets "no cliproxy channel is configured" with no account and no login offered
-- **BR-89** [Critical] `fanout-shares-one-shot-state` credential_health_across issues N concurrent reads over the module-global one-shot 404 repair flag; the loser's fabricated `unknown` is never re-measured and the diagnosis names antigravity
 - **BR-90** [Important] `one-value-two-decisions` OWNER_CHANNELS' order is documented as "sorted" but read as a preference ranking at three sites, so antigravity outranks the native channel for every owner it serves
 - **BR-91** [Important] `test-title-overstates-guard` The plan-to-code arch guard matches a textual occurrence, so a deleted function stays green because a spec comment mentions its name
 - **BR-92** [Minor] `dead-api-extended` M.unhealthier has zero call sites yet is tabled as `new`, and credential_health_across's empty-channels branch is unreachable
+- **BR-93** [Important] `envelope-not-rederived` Serializing the fan-out added up to three probes to the budgeted recovery path, and M._repair_budget_sec gained no term
+- **BR-94** [Important] `documented-render-not-pinned` The corrected atlas documents a ranking the code does not implement, and atlas:201 still routes via a function this range deleted
+- **BR-95** [Minor] `ui-path-log-level` get_agent's empty-roster raise uses bare error(), so the operator sees an init.lua:4398 source prefix
+- **BR-96** [Minor] `style-drift-in-diff` Two indentation regressions introduced by this window

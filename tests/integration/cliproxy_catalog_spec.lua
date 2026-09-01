@@ -419,3 +419,46 @@ describe("cliproxy login invalidation survives a failed refresh", function()
             "a declined refresh must not consume the login's invalidation")
     end)
 end)
+
+describe("cliproxy catalog cold install", function()
+    local parley = require("parley")
+    local cliproxy = require("parley.cliproxy")
+
+    it("a dispatch populates the catalog, not only opening the picker", function()
+        -- BR-88: fetch_catalog's only production caller was the agent picker, so
+        -- a cold install had NO catalog — and after M4 the catalog is what
+        -- resolves model→channel, so an auth failure on a fresh machine reported
+        -- "no cliproxy channel is configured" with no account and no login
+        -- offered. That is worse than the oauth-model-alias block it replaced,
+        -- which at least shipped a mapping.
+        local dir = vim.fn.tempname()
+        cliproxy._set_data_dir(dir)
+        cliproxy._reset_catalog_clock()
+        assert.same({}, cliproxy.catalog_cached(), "precondition: cold install")
+
+        local port = ready_port.free_port()
+        local handle, pid = uv.spawn(FAKE, { args = { "--port", tostring(port) } }, function() end)
+        assert(handle)
+        table.insert(started, { handle = handle, pid = pid })
+        assert(ready_port.wait_listening(port))
+        parley.dispatcher = parley.dispatcher or {}
+        parley.dispatcher.providers = parley.dispatcher.providers or {}
+        parley.dispatcher.providers.cliproxyapi = {
+            endpoint = ("http://127.0.0.1:%d/v1/chat/completions"):format(port),
+        }
+        require("parley.vault").add_secret("cliproxyapi", "testkey")
+        local saved_config = parley.config
+        parley.config = { cliproxy = { manage = false } } -- reuse, don't spawn
+
+        local done = false
+        cliproxy.ensure_running(function() done = true end, function() done = true end)
+        vim.wait(8000, function()
+            return done and #cliproxy.catalog_cached() > 0
+        end, 50)
+        parley.config = saved_config
+
+        assert.is_true(#cliproxy.catalog_cached() > 0,
+            "a dispatch through cliproxy must leave a catalog behind")
+        cliproxy._set_data_dir(SPEC_DATA_DIR)
+    end)
+end)
