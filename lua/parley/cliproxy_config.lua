@@ -276,6 +276,33 @@ function M.filter_models_by_owner(models_json, owned_by)
     return out
 end
 
+--- Is a cached catalog stale enough to be worth refetching? PURE arithmetic
+--- over four values, so it is unit-testable without test seams, without a clock
+--- and without spawning curl at a dead port — which is what pinning it cost
+--- while it lived in the IO shell.
+---
+--- THREE inputs, because "stale" has three different answers:
+---   * `forced`       an explicit invalidation (a completed login) outranks both
+---                    clocks — the catalog demonstrably just changed;
+---   * `cached_at`    a SUCCESSFUL fetch is good for `ttl`;
+---   * `last_attempt` a FAILED one backs off for `backoff` only. Keying failures
+---                    on `ttl` silences the picker while a proxy recovers;
+---                    keying only on success re-polls a dead proxy on every open.
+---@param o table # { now, cached_at?, last_attempt?, forced?, ttl, backoff }
+---@return boolean
+function M.catalog_stale(o)
+    if o.forced then
+        return true
+    end
+    if o.cached_at and (o.now - o.cached_at) <= o.ttl then
+        return false
+    end
+    if o.last_attempt and (o.now - o.last_attempt) <= o.backoff then
+        return false
+    end
+    return true
+end
+
 --- Pull the sha256 for `asset` out of a checksums.txt body
 --- ("<sha256>  <filename>" per line). Returns nil if absent.
 ---@param text string

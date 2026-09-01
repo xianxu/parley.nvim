@@ -1179,6 +1179,63 @@ rounds:
           round: 15
       boundary: M3
       blocked: true
+    - "n": 16
+      timestamp: "2026-09-01T09:09:02-07:00"
+      agent: claude
+      dispose:
+        - id: BR-45
+          disposition: not-addressed
+          note: Instance fixed via a Spec restatement; the requested executable Spec-symbol sweep does not exist and no fixture reattributes an id across owners.
+          round: 16
+        - id: BR-48
+          disposition: not-addressed
+          note: cliproxy.lua:1588 still resolves with the parsed list on the declined-write path.
+          round: 16
+        - id: BR-50
+          disposition: not-addressed
+          note: settle() covers the callback paths; the vim.system launch at cliproxy.lua:1537 is still unguarded, which was the named mechanism.
+          round: 16
+        - id: BR-55
+          disposition: not-addressed
+          note: Ten of eleven recipes fixed; plan.md:1489 is `git add tests/ lua/`, which sweeps the operator's uncommitted config.lua.
+          round: 16
+        - id: BR-58
+          disposition: not-addressed
+          note: Behavior implemented and looks right; the run_login wiring has zero test coverage, so deleting cliproxy.lua:1153 keeps the suite green.
+          round: 16
+        - id: BR-60
+          disposition: not-addressed
+          note: Widget rule fixed and pinned; agent_picker.lua:261 (<C-a>) still passes no selection, and float_picker.lua:1712 keeps the items-space sel_idx fallback.
+          round: 16
+        - id: BR-62
+          disposition: not-addressed
+          note: Guard added but its file list excludes cliproxy.lua and float_picker.lua, so it cannot fire on any instance the finding named; endpoint_opts still untabled.
+          round: 16
+        - id: BR-64
+          disposition: not-addressed
+          note: cliproxy.lua:1564 still calls logger.error on the picker-open path, now also contradicting plan.md:95's "never a popup on a UI path".
+          round: 16
+      findings:
+        - id: BR-65
+          severity: Critical
+          title: '`make test` fails at HEAD — luacheck flags this window''s own float_picker change, and lint runs before any spec'
+          detail: '`lua/parley/float_picker.lua:1710:23: shadowing upvalue row on line 624` — the `local row = items[...]` added by the BR-60 fix shadows the layout `row` bound at :624. Makefile.parley:59-63 runs lint before test-unit/test-integration, so `make test` exits 2 without executing a single spec; the plan''s close recipe is `make test && sdlc milestone-close`. Rename to `target_row`, re-run, and record the green result in `## Log` — no line there currently claims the suite ran at this HEAD.'
+          family: boundary-ships-red-gate
+          round: 16
+        - id: BR-66
+          severity: Minor
+          title: A test title and a handle doc comment both describe behavior the same diff changed
+          detail: 'This is the 3rd finding in family `test-title-overstates-guard`. Do NOT fix the two sites — the rule is that a test title and a doc comment are assertions about the code and must be swept whenever the contract they describe changes, in the same commit. Instances: float_picker_spec.lua:1210''s title says a number "addresses the filtered list" while its own assertion, the contract at float_picker.lua:1688 and the next test all say the caller''s list; float_picker.lua:1745-1748''s `selected` comment still says "`update` takes an INDEX" after this diff made it take an identity too. The enumeration is every comment and title within the changed function''s block.'
+          family: test-title-overstates-guard
+          round: 16
+        - id: BR-67
+          severity: Minor
+          title: '`catalog_stale`''s decision is pure arithmetic over three values but lives in the IO module, so pinning it needs test seams and real curls'
+          detail: cliproxy.lua:1495-1507 decides from `now`, `cached_at`, `last_attempt` and a flag — no IO. Because it sits in the IO shell it needs `_reset_catalog_clock` / `_set_failed_attempt_at` seams and specs that spawn curl at dead ports with `vim.wait(8000, ...)` (cliproxy_catalog_spec.lua:259-273, 311-327). A `catalog_freshness(now, cached_at, last_attempt, forced)` in cliproxy_catalog.lua would be a table-driven unit test with no IO and no wall-clock, and the shell would read the clocks and call it. ARCH-PURE.
+          family: pure-decision-in-io-shell
+          round: 16
+      boundary: M3
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#205 (boundary-review)
@@ -1709,6 +1766,28 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-64** [Minor] `ui-path-log-level` The new parse-failure branch pops a notification on the picker-open path the same function forbids popups on
   cliproxy.lua:1543 calls logger.error, which reaches vim.notify (logger.lua:100), from inside fetch_catalog's scheduled callback. Twenty lines below, the declined-refresh branch documents the opposite rule for the same path: "Debug, never a popup: this runs on a picker-open path and a proxy that is simply down is not an error the operator asked about." The rule is that the surfacing level is a property of the PATH, not of the severity; a keystroke-adjacent failure reports at debug and leaves the cached catalog on screen. If a parse raise genuinely warrants louder handling, say so in the comment rather than leaving two contradictory conventions eight lines apart.
 
+## Round 16 — 2026-09-01T09:09:02-07:00 (claude) — BLOCKED
+
+### Disposed
+
+- BR-45 — not-addressed — Instance fixed via a Spec restatement; the requested executable Spec-symbol sweep does not exist and no fixture reattributes an id across owners.
+- BR-48 — not-addressed — cliproxy.lua:1588 still resolves with the parsed list on the declined-write path.
+- BR-50 — not-addressed — settle() covers the callback paths; the vim.system launch at cliproxy.lua:1537 is still unguarded, which was the named mechanism.
+- BR-55 — not-addressed — Ten of eleven recipes fixed; plan.md:1489 is `git add tests/ lua/`, which sweeps the operator's uncommitted config.lua.
+- BR-58 — not-addressed — Behavior implemented and looks right; the run_login wiring has zero test coverage, so deleting cliproxy.lua:1153 keeps the suite green.
+- BR-60 — not-addressed — Widget rule fixed and pinned; agent_picker.lua:261 (<C-a>) still passes no selection, and float_picker.lua:1712 keeps the items-space sel_idx fallback.
+- BR-62 — not-addressed — Guard added but its file list excludes cliproxy.lua and float_picker.lua, so it cannot fire on any instance the finding named; endpoint_opts still untabled.
+- BR-64 — not-addressed — cliproxy.lua:1564 still calls logger.error on the picker-open path, now also contradicting plan.md:95's "never a popup on a UI path".
+
+### Raised
+
+- **BR-65** [Critical] `boundary-ships-red-gate` `make test` fails at HEAD — luacheck flags this window's own float_picker change, and lint runs before any spec
+  `lua/parley/float_picker.lua:1710:23: shadowing upvalue row on line 624` — the `local row = items[...]` added by the BR-60 fix shadows the layout `row` bound at :624. Makefile.parley:59-63 runs lint before test-unit/test-integration, so `make test` exits 2 without executing a single spec; the plan's close recipe is `make test && sdlc milestone-close`. Rename to `target_row`, re-run, and record the green result in `## Log` — no line there currently claims the suite ran at this HEAD.
+- **BR-66** [Minor] `test-title-overstates-guard` A test title and a handle doc comment both describe behavior the same diff changed
+  This is the 3rd finding in family `test-title-overstates-guard`. Do NOT fix the two sites — the rule is that a test title and a doc comment are assertions about the code and must be swept whenever the contract they describe changes, in the same commit. Instances: float_picker_spec.lua:1210's title says a number "addresses the filtered list" while its own assertion, the contract at float_picker.lua:1688 and the next test all say the caller's list; float_picker.lua:1745-1748's `selected` comment still says "`update` takes an INDEX" after this diff made it take an identity too. The enumeration is every comment and title within the changed function's block.
+- **BR-67** [Minor] `pure-decision-in-io-shell` `catalog_stale`'s decision is pure arithmetic over three values but lives in the IO module, so pinning it needs test seams and real curls
+  cliproxy.lua:1495-1507 decides from `now`, `cached_at`, `last_attempt` and a flag — no IO. Because it sits in the IO shell it needs `_reset_catalog_clock` / `_set_failed_attempt_at` seams and specs that spawn curl at dead ports with `vim.wait(8000, ...)` (cliproxy_catalog_spec.lua:259-273, 311-327). A `catalog_freshness(now, cached_at, last_attempt, forced)` in cliproxy_catalog.lua would be a table-driven unit test with no IO and no wall-clock, and the shell would read the clocks and call it. ARCH-PURE.
+
 ## Open findings
 
 - **BR-13** [Important] `rank-key-version-extraction` rank_key's `< 100` threshold answers the 120B instance, not the class: any parameter count below 100 still reads as a version
@@ -1734,3 +1813,6 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-60** [Important] `one-value-two-decisions` update()'s numeric branch still means items-space at its callers and filtered-space in the widget
 - **BR-62** [Important] `plan-table-missing-entity` The plan's Core-concepts tables gained no rows for this window's new module-public surface
 - **BR-64** [Minor] `ui-path-log-level` The new parse-failure branch pops a notification on the picker-open path the same function forbids popups on
+- **BR-65** [Critical] `boundary-ships-red-gate` `make test` fails at HEAD — luacheck flags this window's own float_picker change, and lint runs before any spec
+- **BR-66** [Minor] `test-title-overstates-guard` A test title and a handle doc comment both describe behavior the same diff changed
+- **BR-67** [Minor] `pure-decision-in-io-shell` `catalog_stale`'s decision is pure arithmetic over three values but lives in the IO module, so pinning it needs test seams and real curls

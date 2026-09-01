@@ -29,6 +29,7 @@ from unticked boxes here.
 | `rank_key` | `lua/parley/cliproxy_catalog.lua` | new |
 | `parse_provider_spec` | `lua/parley/cliproxy_catalog.lua` | new |
 | `curate` | `lua/parley/cliproxy_catalog.lua` | new |
+| `catalog_stale` | `lua/parley/cliproxy_config.lua` | new |
 | `build_agent` | `lua/parley/cliproxy_catalog.lua` | new |
 | `agent_name` | `lua/parley/cliproxy_catalog.lua` | new |
 | `cliproxy_default_web_search_strategy` | `lua/parley/providers.lua` | new |
@@ -1486,7 +1487,8 @@ Expected: PASS, including the new empty-alias case
 - [ ] **Step 7: Commit**
 
 ```bash
-git add tests/ lua/
+git add lua/parley/cliproxy_config.lua lua/parley/cliproxy.lua \
+  tests/unit/cliproxy_config_spec.lua tests/integration/cliproxy_recovery_e2e_spec.lua
 git commit -m "#205 M4: channel candidates resolved by credential health, not by guessing"
 ```
 
@@ -1950,3 +1952,32 @@ purpose: a spec setting up a clean clock is not a login announcing that the
 catalog changed, and one function serving both made every spec that reset the
 clock see everything as stale — which is how the first attempt broke two
 existing tests. Mutation-checked: removing the invalidation fails the new test.
+
+### 2026-09-01 — M3 close review round 16 (BR-45..BR-67 remainders)
+
+- **BR-65 (Critical).** `luacheck` flagged a shadowed upvalue in the BR-60 fix,
+  and `make test` runs lint FIRST — so the whole suite exited without running a
+  spec. Fixed before this round's review window opened.
+- **BR-67.** `catalog_stale` was pure arithmetic living in the IO module, so
+  pinning it cost two test seams and specs that spawn curl at dead ports. Moved
+  to `cliproxy_config.catalog_stale(o)`; six unit cases now cover it with no
+  clock, no seams and no network (ARCH-PURE).
+- **BR-58 remainder.** The login wiring had zero coverage — deleting the call
+  left the suite green. Extracted as `_on_login_success`, and the mutation now
+  fails a test.
+- **BR-60 remainder.** `<C-a>` passed no selection, so the toggle jumped the
+  cursor — the same defect at the sibling site the first fix left alone — and
+  `float_picker` still wrote an items-space `sel_idx` beside the translation
+  meant to replace it. Both gone.
+- **BR-48.** On a declined write the callback resolved with the parse of the
+  body we had just refused to store, so a caller could render rows the cache does
+  not contain. It resolves with the cache.
+- **BR-50 remainder.** The `vim.system` LAUNCH is guarded now, not only its
+  callbacks — that was the mechanism the finding named.
+- **BR-62 remainder.** The code→table guard listed two files and could not fire
+  on the named instances; widening it to four made it fire on every entity those
+  modules had ever exported. It is now scoped to the entities THIS ISSUE's diff
+  adds, and verified to fail when a table row is deleted.
+- **BR-64 / BR-66 / BR-55.** No `logger.error` on a picker-open path; the test
+  title that described the old numeric contract is corrected; and the last commit
+  recipe that swept `lua/ tests/` names its files.

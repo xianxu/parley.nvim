@@ -361,3 +361,45 @@ describe("a built agent's strategy survives get_cliproxy_strategy", function()
         assert.equals("none", strategy)
     end)
 end)
+
+--------------------------------------------------------------------------------
+-- catalog_stale: pure, so it needs no clock, no seams and no curl (#205 BR-67)
+--------------------------------------------------------------------------------
+describe("catalog_stale", function()
+    local cc = require("parley.cliproxy_config")
+    local BASE = { now = 1000, ttl = 600, backoff = 30 }
+
+    local function stale(over)
+        return cc.catalog_stale(vim.tbl_extend("force", BASE, over))
+    end
+
+    it("is stale with nothing cached and nothing tried", function()
+        assert.is_true(stale({}))
+    end)
+
+    it("is fresh while the cache is inside the TTL", function()
+        assert.is_false(stale({ cached_at = 500 }))   -- 500s old, ttl 600
+    end)
+
+    it("is stale once the cache passes the TTL", function()
+        assert.is_true(stale({ cached_at = 300 }))    -- 700s old
+    end)
+
+    it("backs off briefly after a failed attempt", function()
+        assert.is_false(stale({ last_attempt = 980 })) -- 20s ago, backoff 30
+    end)
+
+    it("does not let a failure back off for the whole success TTL", function()
+        -- The regression this pins: a failure keyed on `ttl` silenced the picker
+        -- for ten minutes, including right after a login through a
+        -- "(logged out)" row.
+        assert.is_true(stale({ last_attempt = 900 }))  -- 100s ago: past backoff
+    end)
+
+    it("lets an explicit invalidation outrank a fresh cache", function()
+        -- A "(logged out)" row exists BECAUSE a successful fetch lacked that
+        -- provider's models, so the cache IS fresh at the moment of login.
+        assert.is_false(stale({ cached_at = 999 }))
+        assert.is_true(stale({ cached_at = 999, forced = true }))
+    end)
+end)

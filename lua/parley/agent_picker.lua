@@ -257,8 +257,14 @@ function M.agent_picker(plugin)
             -- never what is reachable.
             key = expand_key,
             fn = function()
+                -- Keep the cursor on the row the operator is pointing at. The
+                -- toggle rewrites the whole list, so without this it jumps —
+                -- the same defect the background repaint had, at the sibling
+                -- site the BR-60 fix left untouched.
+                local was = handle.selected and handle.selected()
                 expanded = not expanded
-                handle.update(M._build_items(plugin, view_for(expanded)))
+                handle.update(M._build_items(plugin, view_for(expanded)), nil,
+                    was and was.name or nil)
                 handle.set_title(expanded and (title .. " — all models") or title)
             end,
         })

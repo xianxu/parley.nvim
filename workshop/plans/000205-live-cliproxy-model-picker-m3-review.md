@@ -673,3 +673,164 @@ findings:
     detail: |
       cliproxy.lua:1543 calls logger.error, which reaches vim.notify (logger.lua:100), from inside fetch_catalog's scheduled callback. Twenty lines below, the declined-refresh branch documents the opposite rule for the same path: "Debug, never a popup: this runs on a picker-open path and a proxy that is simply down is not an error the operator asked about." The rule is that the surfacing level is a property of the PATH, not of the severity; a keystroke-adjacent failure reports at debug and leaves the cached catalog on screen. If a parse raise genuinely warrants louder handling, say so in the comment rather than leaving two contradictory conventions eight lines apart.
 ```
+
+---
+
+## Re-review — 2026-09-01T09:09:02-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 205 — live cliproxy model picker; retire hardcoded model lists |
+| repo | parley.nvim |
+| issue file | workshop/issues/000205-live-cliproxy-model-picker.md |
+| boundary | milestone M3 |
+| milestone | M3 |
+| window | 747c8ffc2be7f9e497d80307150f9c48856f96b8..43da911fb4fe459edf9fefaf2d0f672369e76917 |
+| command | sdlc milestone-close --issue 205 --milestone M3 |
+| reviewer | claude |
+| timestamp | 2026-09-01T09:09:02-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+`make test` is **red at the pinned HEAD**: `make lint` runs first and `luacheck` reports `lua/parley/float_picker.lua:1710:23: shadowing upvalue row on line 624` — introduced by this window's own `update()` fix — so `make test` exits before a single spec runs. The plan's own milestone-close recipe is `make test && sdlc milestone-close`, and it cannot pass. Beyond that, the substance of this round is genuinely good work — the `update()` identity contract is fixed at the correct layer, the two-clock staleness model is clean, and the `invalidate_catalog` / `_reset_catalog_clock` split is the right distinction — but seven of the eight open findings are only partially disposed: BR-58's login wiring is implemented and **unpinned** (no test references `run_login` and catalog staleness together, so deleting `cliproxy.lua:1153` breaks nothing), BR-62's new arch guard scans only `cliproxy_catalog.lua` and `agent_picker.lua` and therefore cannot fire on **any** of the four instances the finding named, BR-45's requested executable Spec-symbol sweep does not exist, BR-55's last recipe is `git add tests/ lua/` (which sweeps the operator's uncommitted `config.lua` — the exact hazard the Notes rule 120 lines later forbids), and BR-48/BR-50/BR-60/BR-64 are untouched or half-swept.
+
+### 1. Strengths
+
+- **`float_picker.lua:1696-1735`** — the BR-52/BR-60 fix is at the right layer. The widget owns `sel_idx`'s coordinate space, so both the numeric and identity forms are resolved *after* `apply_filter`, and callers get to speak in their own terms. This is the correct generalization, not a patch at the call site.
+- **`tests/unit/float_picker_spec.lua:1181-1200`** — BR-59's lesson is visibly applied: the fixture puts the target at filtered index 1 of 3 with items-space index 3, so `get_selected_item`'s `math.min` clamp cannot reach it from the wrong space. I re-read this specifically for the "test written from the same mental model" failure and it survives.
+- **`cliproxy.lua:1462-1474`** — separating `invalidate_catalog` (a login happened) from `_reset_catalog_clock` (a spec is setting up) is the right call, and the comment records *why* collapsing them broke two existing specs. That is the kind of note that stops the next agent re-collapsing them.
+- **`cliproxy.lua:1541-1544`** — one `settle()` funnel for every callback exit; `cliproxy.lua:242-262` — `endpoint_opts` extraction removes the duplicated secret lookup and documents the side-effect distinction from `render_opts`. **ARCH-DRY: pass** for this window.
+- **`workshop/lessons.md:912-947`** — four transferable rules, each with the *check* that catches it, not a restatement of the incident. The "make the mutation the WRONG IMPLEMENTATION, not deletion" rule is exactly the lesson BR-59 taught.
+
+### 2. Critical findings
+
+**`make test` fails at HEAD — `lua/parley/float_picker.lua:1710`**
+
+```
+$ make lint
+lua/parley/float_picker.lua:1710:23: shadowing upvalue row on line 624
+Total: 1 warning / 0 errors in 345 files
+make: *** [lint] Error 1
+$ make test
+... make[1]: *** [lint] Error 1 ; make: *** [test] Error 2
+```
+
+`Makefile.parley:59-63` runs `test-clean-env → lint → test-unit → test-integration` serially, so the lint failure aborts before any spec executes. `float_picker.lua:624` binds `row` from `compute_layout`; the new `local row = items[...]` inside `update` shadows it. Fix: rename to `local target_row` (or `picked`). Then re-run `make test` and record the result — the current `## Log` has no line saying the suite ran green at this HEAD.
+
+*(Note: three unit specs — `config_tools`, `parley_harness`, `parley_harness_golden` — also fail in the working tree, but I verified those come from the uncommitted M4 `lua/parley/config.lua` deleting the configured agents ("Agent ToolSonnet not found"), not from the committed range. Not a finding against this window.)*
+
+### 3. Important findings
+
+**BR-58's login wiring is implemented but reachable-yet-unpinned — `lua/parley/cliproxy.lua:1153`**
+
+`M.invalidate_catalog()` has exactly one production call site, inside `credential_health_for_login`'s callback in `run_login`. `grep -rn "invalidate_catalog" tests/` returns only the two direct calls in `cliproxy_catalog_spec.lua:349,356`, which exercise the *function*, never the *wiring*. No spec calls `run_login` and then reads `catalog_stale()`. Deleting line 1153 leaves the suite green — which is precisely the shape the last round got wrong ("the part I reported as fixed and was not"). `tests/integration/cliproxy_login_spec.lua:81-89` already drives a successful login against the stateful `fake_cliproxy` (**ARCH-MOCK: the seam exists and is simply unused**), so the fix is ~3 lines: `_write_catalog({...}, os.time())` before, `assert.is_true(cliproxy.catalog_stale())` after.
+
+**BR-62's guard cannot fire on any instance the finding named — `tests/arch/single_source_sweeps_spec.lua:38-41`**
+
+The file list is `{ "lua/parley/cliproxy_catalog.lua", "lua/parley/agent_picker.lua" }`. BR-62's instances were `M._reset_catalog_clock` (**`cliproxy.lua`**), the `selected()` handle method (**`float_picker.lua`**), and `endpoint_opts` (**`cliproxy.lua`**) — none of those files are scanned. Adding a `function M.foo(` to `cliproxy.lua` keeps this spec green. Two further gaps: the match is `plan_body:find("`name`")` anywhere in the plan, so a mention in a `## Revisions` paragraph satisfies a *Core-concepts table* requirement; and the "every added key in a returned handle literal" half is not implemented at all, so `update`'s materially changed third-argument contract is in no table row. `endpoint_opts` is still in neither table.
+
+**BR-60's enumeration is one site short — `lua/parley/agent_picker.lua:261`**
+
+The `<C-a>` toggle still calls `handle.update(M._build_items(plugin, view_for(expanded)))` with no third argument, so `sel_idx` survives a wholesale curated↔full-catalog swap. Operator is on filtered row 5 (`antigravity - (logged out)`), presses `<C-a>`, the list becomes ~45 rows, `<CR>` fires on whatever now sits at filtered row 5 — BR-43's exact failure, on the one path the sweep skipped. Second residual, in the widget: `float_picker.lua:1712` still assigns `sel_idx = <items-space index>` as the fallback when the identity is not found in `filtered`, so the two-meanings defect survives on that branch (reachable from `finder_loader.lua:261` whenever `initial_index` names a row the live query filters out).
+
+**BR-55's last recipe re-introduces the hazard the Notes rule forbids — `workshop/plans/000205-live-cliproxy-model-picker-plan.md:1489`**
+
+Ten of eleven recipes now name real paths. Task 4.1 is `git add tests/ lua/`, which stages `lua/parley/config.lua` — the operator's in-flight M4 cleanup, which Task 4.2 (`:1534`) is supposed to commit separately. That is functionally `git add -u`, contradicting the rule added at `:1610` ("Never `git add -u` or `git add -A` on this issue… Stage the files a task names, explicitly"). Name Task 4.1's real files.
+
+**BR-45's rule was never built — no executable Spec-symbol sweep exists**
+
+The instance was fixed correctly (the issue's `## Revisions` restates Component 3, and `PROVIDER_OWNED_BY` / `provider_owned_by` are real symbols at `cliproxy_config.lua:227,251` — I verified). But the finding said *do not fix the instance, fix the rule*, and `tests/arch/` contains no spec that parses the issue's `## Spec` for backticked repo symbols. The measurement gap it named also remains: `tests/unit/picker_items_spec.lua:404-423` still has no fixture reattributing an id across owners (e.g. `{ id = "claude-sonnet-4-6", owner = "antigravity" }` with nothing under `anthropic`, asserting `claude` shows `(logged out)` and `antigravity` does not).
+
+### 4. Minor findings
+
+- **BR-64 now contradicts the plan's own declared envelope.** `cliproxy.lua:1564` calls `logger.error` → `logger.lua:99` → `vim.notify`, on the picker-open path, eight lines above a comment stating the opposite rule — and `plan.md:95` declares "the failure is logged at debug — **never a popup on a UI path**". **ARCH-CONSTRAINTS.**
+- **BR-50's named mechanism is still open.** `cliproxy.lua:1537` sets `_catalog_inflight = true` before two `vim.system` launches with no `pcall` around the launch; a synchronous spawn raise (missing `curl`) strands the flag for the session. The `settle()` funnel covers the callback paths only.
+- **BR-48 unchanged.** `cliproxy.lua:1588` still resolves `settle(models)` with the parsed list even when the `classify()` gate declined the write, so a caller trusting the argument gets `{}` whenever the proxy is down.
+- **`tests/unit/float_picker_spec.lua:1210`** — title says "still accepts a numeric index, **which addresses the filtered list**"; the assertion, the doc contract at `float_picker.lua:1688`, and the very next test all say it addresses the *caller's* list. Sibling instance of the same class: `float_picker.lua:1745-1748`'s `selected` comment still says "`update` takes an INDEX", which this diff made untrue.
+- **ARCH-PURE.** The staleness decision (`catalog_stale`, `cliproxy.lua:1495-1507`) is pure arithmetic over three values — `now`, `cached_at`, `last_attempt`, plus a flag — buried in the IO module. Consequence: pinning it needs `_set_failed_attempt_at`/`_reset_catalog_clock` test seams plus real curls at dead ports with `vim.wait(8000, …)` (`cliproxy_catalog_spec.lua:259-273, 311-327`). A `catalog_freshness(now, cached_at, last_attempt, forced)` in the pure catalog module would be a table-driven unit test with no IO and no wall-clock.
+
+### 5. Test coverage notes
+
+New coverage is real and reachable where it exists: `float_picker_spec.lua:1181-1200` genuinely fails against an items-space implementation, `picker_items_spec.lua:559-586` genuinely fails if the `is_managed()` gate returns, and the three staleness specs genuinely fail if either clock is collapsed. I ran them: `float_picker_spec` 77/77, `picker_items_spec` 47/47, `cliproxy_catalog_spec` 16/16, `single_source_sweeps_spec` 4/4 — all green. The gaps are the two above: the `run_login → invalidate_catalog` wiring, and the arch guard's file list. The `<C-a>` repaint path has no test at all, which is why BR-60's second instance survived the sweep.
+
+### 6. Architectural notes
+
+- **ARCH-DRY — pass.** `endpoint_opts` consolidates the duplicated derivation; `classify()` remains the single source for the `/v1/models` contract.
+- **ARCH-PURE — flag.** See the staleness note above. `_view_for` / `_providers_without_models` / `_build_items` / `_select` remain properly pure and driven from the production path.
+- **ARCH-PURPOSE — flag.** The round's purpose was disposing eight findings; five are disposed as instances while their stated *classes* remain (BR-45's rule, BR-62's guard scope, BR-60's enumeration, BR-55's last site). The `## Revisions` block asserts several of these as complete, which is the more expensive problem: the plan now claims what the code doesn't deliver.
+- **ARCH-MOCK — pass with one unused seam.** `fake_cliproxy` models login state via `PARLEY_FAKE_LOGIN_MODE` and `/v1beta/models`; the new failure specs correctly use a dead port for "unreachable". The login-invalidation test should run against the fake rather than being skipped.
+- **ARCH-CONSTRAINTS — flag.** The envelope gained the three-input staleness model, but `FAILED_ATTEMPT_BACKOFF = 30` has no basis of its own (the stated basis belongs to the 10-minute TTL), and the "never a popup on a UI path" clause is now violated by `cliproxy.lua:1564`. I checked the `is_managed()` removal against the envelope: `manage` defaults to `true` (`config.lua:106-114`), so dropping the gate only widens behavior for operators who explicitly opted out — no new fan-out for the default population. That fix is sound.
+
+### 7. Plan revision recommendations
+
+Add a `## Revisions` entry that corrects three claims the round-3 and 2026-09-01 entries currently overstate:
+
+1. **BR-62** — "the arch spec sweeps code→table so a module-public entity missing from Core concepts fails a test" is not yet true: the sweep covers two files and none of the four instances the finding named. State the actual scope, or widen the file list to `cliproxy.lua` and `float_picker.lua` and add the handle-literal half.
+2. **BR-55** — "Commit recipes name real paths again" is not yet true at Task 4.1 (`git add tests/ lua/`).
+3. **BR-58** — "Mutation-checked: removing the invalidation fails the new test" is true of `invalidate_catalog`'s own behavior, not of the `run_login` call site; removing `cliproxy.lua:1153` fails nothing. Say which half is pinned.
+
+Also add `endpoint_opts` and `update`'s changed third-argument contract as Core-concepts rows (Integration points, `lua/parley/cliproxy.lua` / `lua/parley/float_picker.lua`, new / modified), and give `FAILED_ATTEMPT_BACKOFF` its own basis line in the operating envelope.
+
+```findings
+dispose:
+  - id: BR-45
+    disposition: not-addressed
+    note: |
+      Instance fixed via a Spec restatement; the requested executable Spec-symbol sweep does not exist and no fixture reattributes an id across owners.
+  - id: BR-48
+    disposition: not-addressed
+    note: |
+      cliproxy.lua:1588 still resolves with the parsed list on the declined-write path.
+  - id: BR-50
+    disposition: not-addressed
+    note: |
+      settle() covers the callback paths; the vim.system launch at cliproxy.lua:1537 is still unguarded, which was the named mechanism.
+  - id: BR-55
+    disposition: not-addressed
+    note: |
+      Ten of eleven recipes fixed; plan.md:1489 is `git add tests/ lua/`, which sweeps the operator's uncommitted config.lua.
+  - id: BR-58
+    disposition: not-addressed
+    note: |
+      Behavior implemented and looks right; the run_login wiring has zero test coverage, so deleting cliproxy.lua:1153 keeps the suite green.
+  - id: BR-60
+    disposition: not-addressed
+    note: |
+      Widget rule fixed and pinned; agent_picker.lua:261 (<C-a>) still passes no selection, and float_picker.lua:1712 keeps the items-space sel_idx fallback.
+  - id: BR-62
+    disposition: not-addressed
+    note: |
+      Guard added but its file list excludes cliproxy.lua and float_picker.lua, so it cannot fire on any instance the finding named; endpoint_opts still untabled.
+  - id: BR-64
+    disposition: not-addressed
+    note: |
+      cliproxy.lua:1564 still calls logger.error on the picker-open path, now also contradicting plan.md:95's "never a popup on a UI path".
+findings:
+  - id: new
+    severity: Critical
+    family: boundary-ships-red-gate
+    title: |
+      `make test` fails at HEAD — luacheck flags this window's own float_picker change, and lint runs before any spec
+    detail: |
+      `lua/parley/float_picker.lua:1710:23: shadowing upvalue row on line 624` — the `local row = items[...]` added by the BR-60 fix shadows the layout `row` bound at :624. Makefile.parley:59-63 runs lint before test-unit/test-integration, so `make test` exits 2 without executing a single spec; the plan's close recipe is `make test && sdlc milestone-close`. Rename to `target_row`, re-run, and record the green result in `## Log` — no line there currently claims the suite ran at this HEAD.
+  - id: new
+    severity: Minor
+    family: test-title-overstates-guard
+    title: |
+      A test title and a handle doc comment both describe behavior the same diff changed
+    detail: |
+      This is the 3rd finding in family `test-title-overstates-guard`. Do NOT fix the two sites — the rule is that a test title and a doc comment are assertions about the code and must be swept whenever the contract they describe changes, in the same commit. Instances: float_picker_spec.lua:1210's title says a number "addresses the filtered list" while its own assertion, the contract at float_picker.lua:1688 and the next test all say the caller's list; float_picker.lua:1745-1748's `selected` comment still says "`update` takes an INDEX" after this diff made it take an identity too. The enumeration is every comment and title within the changed function's block.
+  - id: new
+    severity: Minor
+    family: pure-decision-in-io-shell
+    title: |
+      `catalog_stale`'s decision is pure arithmetic over three values but lives in the IO module, so pinning it needs test seams and real curls
+    detail: |
+      cliproxy.lua:1495-1507 decides from `now`, `cached_at`, `last_attempt` and a flag — no IO. Because it sits in the IO shell it needs `_reset_catalog_clock` / `_set_failed_attempt_at` seams and specs that spawn curl at dead ports with `vim.wait(8000, ...)` (cliproxy_catalog_spec.lua:259-273, 311-327). A `catalog_freshness(now, cached_at, last_attempt, forced)` in cliproxy_catalog.lua would be a table-driven unit test with no IO and no wall-clock, and the shell would read the clocks and call it. ARCH-PURE.
+```

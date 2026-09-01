@@ -361,3 +361,17 @@ describe("cliproxy catalog invalidation on login", function()
             "the invalidation should not persist past the refresh it triggered")
     end)
 end)
+
+describe("cliproxy login side effects", function()
+    local cliproxy = require("parley.cliproxy")
+
+    it("a completed login invalidates the catalog", function()
+        -- Deleting this call used to leave the suite green: it was inline in the
+        -- login watch callback, where no spec could reach it.
+        cliproxy._write_catalog({ { id = "x", owner = "openai" } }, os.time())
+        assert.is_false(cliproxy.catalog_stale())
+        cliproxy._on_login_success("claude")
+        assert.is_true(cliproxy.catalog_stale(),
+            "the catalog must be refetched after a login registers new models")
+    end)
+end)

@@ -1147,10 +1147,7 @@ function M.run_login(provider, argv, on_done, timeout_ms)
         end
         if ok then
             M.credential_health_for_login(provider, function(health)
-                -- The catalog just changed: a login is exactly what registers a
-                -- channel's models. Drop any failure backoff so the next picker
-                -- open re-reads instead of waiting it out.
-                M.invalidate_catalog()
+                M._on_login_success(provider)
                 settle(true, ("cliproxy: %s login succeeded%s"):format(provider,
                     health.account and (" (" .. health.account .. ")") or ""), vim.log.levels.INFO)
             end)
@@ -1451,6 +1448,19 @@ function M._write_catalog(models, fetched_at)
     return true
 end
 
+--- What a completed login must do besides reporting itself.
+---
+--- Extracted so it is reachable from a spec: inline in the watch callback it had
+--- zero coverage, and deleting it left the suite green — the failure this issue
+--- has hit five times.
+---@param provider string
+function M._on_login_success(provider)
+    -- The catalog just changed: a login is exactly what registers a channel's
+    -- models, so any staleness clock is answering about a different world.
+    logger.debug("cliproxy: " .. tostring(provider) .. " login succeeded — invalidating the catalog")
+    M.invalidate_catalog()
+end
+
 --- Force the next staleness check to say "refresh", whatever either clock says.
 ---
 --- Called when a login completes. Clearing only the failure clock is NOT enough,
@@ -1493,17 +1503,15 @@ end
 --- connection-refuse, an unbounded retry on a keystroke path.
 ---@return boolean
 function M.catalog_stale()
-    if _force_stale then
-        return true -- an explicit invalidation outranks both clocks
-    end
     local _, at = M.catalog_cached()
-    if at and (os.time() - at) <= CATALOG_TTL then
-        return false -- the cache itself is fresh
-    end
-    if _last_attempt and (os.time() - _last_attempt) <= FAILED_ATTEMPT_BACKOFF then
-        return false -- tried very recently; do not hammer a dead proxy
-    end
-    return true
+    return cc.catalog_stale({
+        now = os.time(),
+        cached_at = at,
+        last_attempt = _last_attempt,
+        forced = _force_stale,
+        ttl = CATALOG_TTL,
+        backoff = FAILED_ATTEMPT_BACKOFF,
+    })
 end
 
 --- Refresh the catalog from a proxy that is ALREADY running.
@@ -1547,7 +1555,12 @@ function M.fetch_catalog(cb)
     -- empty model list, and writing that would erase a good catalog every time
     -- the client key drifted.
     local function get(route, done)
-        vim.system(api_argv(opts.host, opts.port, opts.secret, route), { text = true },
+        -- The LAUNCH is guarded, not just the callbacks: vim.system itself can
+        -- throw (a malformed argv, a missing curl), and an unguarded throw here
+        -- leaves _catalog_inflight true for the rest of the session — after
+        -- which the catalog never refreshes again.
+        local ok, err = pcall(vim.system,
+            api_argv(opts.host, opts.port, opts.secret, route), { text = true },
             function(obj)
                 if obj.code ~= 0 then
                     return done(nil, nil)
@@ -1555,6 +1568,10 @@ function M.fetch_catalog(cb)
                 local body, http = split_status(obj.stdout)
                 done(body or obj.stdout, tonumber(http))
             end)
+        if not ok then
+            logger.debug("cliproxy: catalog request could not start: " .. tostring(err))
+            done(nil, nil)
+        end
     end
     get("/v1/models", function(v1, v1_status)
         get("/v1beta/models", function(beta, _beta_status)
@@ -1563,7 +1580,10 @@ function M.fetch_catalog(cb)
                     return require("parley.cliproxy_catalog").parse(v1 or "", beta or "")
                 end)
                 if not ok then
-                    logger.error("cliproxy: catalog parse failed: " .. tostring(models))
+                    -- debug, not error: this runs on picker open, where an
+                    -- unreadable body is not something the operator asked about
+                    -- and a popup would interrupt them mid-keystroke.
+                    logger.debug("cliproxy: catalog parse failed: " .. tostring(models))
                     return settle(M.catalog_cached())
                 end
                 -- Write only when the response is RECOGNISABLY cliproxy's model

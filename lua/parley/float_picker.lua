@@ -1707,9 +1707,13 @@ function M.open(opts)
                 -- BOTH forms resolve through the same filtered-space lookup
                 -- below. Assigning it straight to sel_idx would silently mean a
                 -- different row whenever a query is active.
+                -- Translated to an identity and resolved below, in the ONE
+                -- coordinate space this widget has. No sel_idx assignment here:
+                -- that was the items-space write the translation exists to
+                -- replace, and leaving it meant a wrong row whenever the
+                -- identity could not be found.
                 local picked = items[math.max(1, math.floor(next_selection))]
                 next_identity = picked and recall_id_fn(picked) or nil
-                sel_idx = math.max(1, math.floor(next_selection))
             end
             if not opts.height then
                 desired_h = math.max(1, #items)

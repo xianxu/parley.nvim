@@ -1206,7 +1206,7 @@ describe("float_picker update selection", function()
         h.close()
     end)
 
-    it("still accepts a numeric index, which addresses the filtered list", function()
+    it("still accepts a numeric index, which addresses the caller's list", function()
         local h = open(items("alpha", "beta", "gamma"))
         h.update(items("alpha", "beta", "gamma"), nil, 3)
         assert.equals("gamma", h.selected().value)

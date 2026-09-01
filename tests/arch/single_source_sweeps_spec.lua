@@ -25,36 +25,48 @@ local function read(path)
 end
 
 describe("arch: single-source sweeps stay swept", function()
-    it("the plan's Core-concepts tables name every module-public entity", function()
-        -- The sweep runs table→code elsewhere; this is the other direction, the
-        -- one that kept missing entities. Every public function under lua/ that
-        -- this issue's modules expose must appear in a plan table row, in ANY
-        -- definition form — `function M.x(`, `M.x = function(`, `M.x = alias`.
+    it("the plan's Core-concepts tables name every entity THIS issue added", function()
+        -- The other direction of the referent sweep, and scoped to the issue's
+        -- own diff. A first version listed two files and could not fire on the
+        -- instances the finding named; a second listed four and fired on
+        -- everything those modules had ever exported. What must be tabled is the
+        -- surface this issue ADDS, in any definition form.
         local plan = vim.fn.glob("workshop/plans/000205-*-plan.md")
         if plan == "" then
             pending("plan not present")
             return
         end
+        local base = vim.fn.systemlist(
+            "git log --grep '^#205' --reverse --format=%H -- workshop/issues | head -1")[1]
+        if not base or base == "" then
+            pending("issue base commit not found")
+            return
+        end
+        local diff = vim.fn.system(("git diff %s~1..HEAD -- lua/"):format(base))
+        if vim.v.shell_error ~= 0 then
+            pending("git diff unavailable")
+            return
+        end
         local plan_body = read(plan)
         local missing = {}
-        for _, path in ipairs({
-            "lua/parley/cliproxy_catalog.lua",
-            "lua/parley/agent_picker.lua",
-        }) do
-            local body = read(path)
-            for name in body:gmatch("function M%.([%w_]+)%(") do
-                if not plan_body:find("`" .. name .. "`", 1, true) then
-                    missing[#missing + 1] = path .. ":" .. name
-                end
-            end
-            for name in body:gmatch("M%.([%w_]+) = ") do
-                if not plan_body:find("`" .. name .. "`", 1, true) then
-                    missing[#missing + 1] = path .. ":" .. name
-                end
+        for line in diff:gmatch("[^\n]+") do
+            -- MODULE-public only: `function M.x(` and `M.x = …`. A bare
+            -- `fn = function()` is a field in a local table literal (a picker
+            -- mapping), not exported surface, and matching it made the guard
+            -- demand a table row for a closure.
+            local name = line:match("^%+function M%.([%w_]+)%(")
+                or line:match("^%+M%.([%w_]+) = ")
+            if name and not plan_body:find("`" .. name .. "`", 1, true) then
+                missing[name] = true
             end
         end
-        assert.same({}, missing,
-            "these ship but appear in no Core-concepts table row")
+        local names = {}
+        for name in pairs(missing) do
+            names[#names + 1] = name
+        end
+        table.sort(names)
+        assert.same({}, names,
+            "these are added by this issue but appear in no Core-concepts table row")
     end)
 
     it("no spec re-defines free_port; they use tests/helpers/ready_port", function()
