@@ -836,6 +836,8 @@ git commit -m "#205 M2: fake serves /v1beta/models; live conformance guards its 
 
 **Files:**
 - Modify: `lua/parley/cliproxy.lua` (beside `list_models`, reusing `api_argv`)
+- Modify: `tests/helpers/ready_port.lua` (promote `free_port` + `wait_listening` into it)
+- Modify: `tests/integration/cliproxy_lifecycle_spec.lua:17,50` (call the promoted helpers)
 - Test: `tests/integration/cliproxy_catalog_spec.lua`
 
 - [ ] **Step 1: Write the failing integration test**
@@ -863,8 +865,15 @@ end)
 it("does not start a proxy when one is not running", function()
     -- The observable, not an invented API: take a port nothing is listening on,
     -- point the endpoint at it, call fetch_catalog, and assert the port is STILL
-    -- free afterwards. tests/helpers/ready_port.lua already owns port selection.
-    local port = require("tests.helpers.ready_port").free_port()
+    -- free afterwards.
+    --
+    -- `free_port` and `wait_listening` exist today only as file-locals in
+    -- tests/integration/cliproxy_lifecycle_spec.lua:17 and :50. This task PROMOTES
+    -- both into tests/helpers/ready_port.lua (which today exports only
+    -- wait_for_port) and rewrites the lifecycle spec to call them there — a second
+    -- consumer is exactly when a spec-local helper should become a shared one
+    -- (ARCH-DRY). Copying them into a third spec is the wrong fix.
+    local port = ready_port.free_port()
     -- …point providers.cliproxyapi.endpoint at 127.0.0.1:<port>…
     local settled = false
     cliproxy.fetch_catalog(function() settled = true end)
@@ -1377,4 +1386,9 @@ sdlc close --issue 205 --verified '<evidence>'
 
 - **`sdlc change-code` first.** It owns the branch decision, the plan-quality gate, and the estimate. Don't start Task 1.1 before it.
 - **Do not run `superpowers-requesting-code-review` at the milestone boundaries.** `sdlc milestone-close` auto-dispatches the one mandatory fresh-context review (AGENTS.md §3).
+- **Every test helper must exist before you call it.** Two findings on this issue
+  named a test-only API that did not exist (`_spawned_pids`, then `free_port`).
+  The rule, not the instance: before a task's test block ships, grep each helper
+  it calls — it must resolve to a `file:line` that exists today, or appear in that
+  task's **Files** section as newly created or promoted.
 - **The fixtures are the spec.** The four `curate` cases are real renders from the live catalog on 2026-08-31. If a change makes one fail, decide whether the catalog moved or the code broke — don't edit the expectation to match the code.

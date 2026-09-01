@@ -89,6 +89,57 @@ rounds:
           family: rank-band-not-disjoint
           round: 1
       blocked: true
+    - "n": 2
+      timestamp: "2026-08-31T19:42:05-07:00"
+      agent: claude
+      dispose:
+        - id: PQ-1
+          disposition: addressed
+          note: OWNER_CHANNELS returns candidates; resolve_channel answers only when exactly one.
+          round: 2
+        - id: PQ-2
+          disposition: addressed
+          note: Task 1.6 puts the three-way strategy in providers.lua reusing the local family test.
+          round: 2
+        - id: PQ-3
+          disposition: addressed
+          note: Step 4 enumerates both callers and threads them in the same commit.
+          round: 2
+        - id: PQ-4
+          disposition: addressed
+          note: Claim withdrawn from Spec, concepts table, and the series docstring.
+          round: 2
+        - id: PQ-5
+          disposition: addressed
+          note: Two cases added to the real-binary conformance spec plus a join check in Task 1.1.
+          round: 2
+        - id: PQ-6
+          disposition: addressed
+          note: Replaced with a port-observable; see the new invented-test-api finding on its helper.
+          round: 2
+        - id: PQ-7
+          disposition: addressed
+          note: curate shallow-copies each row before tagging provider.
+          round: 2
+        - id: PQ-8
+          disposition: addressed
+          note: Band base is now -1e9, disjoint for any parsed version.
+          round: 2
+      findings:
+        - id: PQ-9
+          severity: Minor
+          title: Task 2.2 calls ready_port.free_port() and port_is_listening(), neither of which exists
+          detail: |-
+            2nd in family. tests/helpers/ready_port.lua exports only wait_for_port; free_port
+            and wait_listening are spec-local at tests/integration/cliproxy_lifecycle_spec.lua:17
+            and :50, so the dormancy test would die on a nil call. Rule, not instance: every
+            helper a test block calls must carry a file:line where it exists today or appear in
+            the task's Files section as newly created. Run that grep once over all proposed test
+            blocks; 2 of 2 named test-only APIs on this issue have now been non-existent.
+          family: invented-test-api
+          round: 2
+      blocked: false
+content_hash: c74c003dde4afff96c46c05e592c6e49f0daa6bb76328725d064a6147aa4cd65
 ---
 
 # Gate ledger — parley.nvim#205 (plan-quality)
@@ -142,13 +193,29 @@ later rounds disposed of them. Generated — edit the gate, not this file.
   -1000 + version exceeds a small positive `created` once a parsed display version reaches
   1000. The invariant the third test case exists to protect is not actually guaranteed.
 
+## Round 2 — 2026-08-31T19:42:05-07:00 (claude) — passed
+
+### Disposed
+
+- PQ-1 — addressed — OWNER_CHANNELS returns candidates; resolve_channel answers only when exactly one.
+- PQ-2 — addressed — Task 1.6 puts the three-way strategy in providers.lua reusing the local family test.
+- PQ-3 — addressed — Step 4 enumerates both callers and threads them in the same commit.
+- PQ-4 — addressed — Claim withdrawn from Spec, concepts table, and the series docstring.
+- PQ-5 — addressed — Two cases added to the real-binary conformance spec plus a join check in Task 1.1.
+- PQ-6 — addressed — Replaced with a port-observable; see the new invented-test-api finding on its helper.
+- PQ-7 — addressed — curate shallow-copies each row before tagging provider.
+- PQ-8 — addressed — Band base is now -1e9, disjoint for any parsed version.
+
+### Raised
+
+- **PQ-9** [Minor] `invented-test-api` Task 2.2 calls ready_port.free_port() and port_is_listening(), neither of which exists
+  2nd in family. tests/helpers/ready_port.lua exports only wait_for_port; free_port
+  and wait_listening are spec-local at tests/integration/cliproxy_lifecycle_spec.lua:17
+  and :50, so the dormancy test would die on a nil call. Rule, not instance: every
+  helper a test block calls must carry a file:line where it exists today or appear in
+  the task's Files section as newly created. Run that grep once over all proposed test
+  blocks; 2 of 2 named test-only APIs on this issue have now been non-existent.
+
 ## Open findings
 
-- **PQ-1** [Critical] `channel-axis-collapse` Catalog-derived resolve_channel returns a provider where a channel is required
-- **PQ-2** [Important] `single-source-wire-decision` build_agent re-implements the anthropic-family test that providers.lua already single-sources
-- **PQ-3** [Important] `caller-sweep-incomplete` resolve_channel's second caller resolve_login_provider is not threaded with the catalog
-- **PQ-4** [Important] `stated-design-not-implemented` The displayName-derived series fallback is specified in two places and implemented in neither
-- **PQ-5** [Important] `fake-without-conformance` M2 models /v1beta/models in the fake with no live conformance check on the assumed shape
-- **PQ-6** [Important] `invented-test-api` Task 2.2's never-spawns assertion calls cliproxy._spawned_pids(), which does not exist
-- **PQ-7** [Minor] `pure-fn-mutates-input` curate writes provider onto the caller's rows in a module declared side-effect-free
-- **PQ-8** [Minor] `rank-band-not-disjoint` rank_key's -1000 + version band overlaps the epoch band its comment says it never touches
+- **PQ-9** [Minor] `invented-test-api` Task 2.2 calls ready_port.free_port() and port_is_listening(), neither of which exists
