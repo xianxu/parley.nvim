@@ -9,6 +9,19 @@ local harness = require("scripts.parley_harness")
 local tmp = (os.getenv("TMPDIR") or "/tmp") .. "/claude/parley-harness-test-" .. os.time()
 vim.fn.mkdir(tmp, "p")
 
+-- Pinned, not borrowed from the shipped roster. These asserted message COUNTS
+-- while letting `get_agent` pick the default: when the shipped default became a
+-- synthetic-system-prompt agent, it injected an extra pair and both counts went
+-- wrong — a failure that reads as a payload bug and is really a roster change.
+-- (`ClaudeAgentTools`, named below, does not ship either; get_agent warns and
+-- falls back, so the name was decorative.)
+local PLAIN_AGENT = {
+    name = "HarnessAgent",
+    provider = "anthropic",
+    model = { model = "claude-sonnet-4-6" },
+    system_prompt = "You are a helpful assistant.",
+}
+
 local function write_transcript(name, lines)
     local p = tmp .. "/" .. name
     vim.fn.writefile(lines, p)
@@ -27,7 +40,7 @@ describe("parley_harness", function()
             "",
             "💬: hello",
         })
-        local payload = harness.build_payload(p)
+        local payload = harness.build_payload(p, { agent = PLAIN_AGENT })
         assert.is_table(payload)
         assert.is_table(payload.messages)
         assert.equals(1, #payload.messages)
@@ -56,7 +69,7 @@ describe("parley_harness", function()
             "    1  hi",
             "````",
         })
-        local payload = harness.build_payload(p, { agent_name = "ClaudeAgentTools" })
+        local payload = harness.build_payload(p, { agent = PLAIN_AGENT })
         assert.equals(3, #payload.messages)
         assert.equals("user", payload.messages[1].role)
         assert.equals("assistant", payload.messages[2].role)

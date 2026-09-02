@@ -94,6 +94,33 @@ via `PARLEY_PUBLISH_DELAY` and asserts the ready path is never observable
 incomplete — and asserts the delay was honored, so the hook cannot be deleted to
 make it pass. Neither has a race to win.
 
+## Comment drift
+
+`tests/arch/superseded_comment_spec.lua` fails on two paragraphs in ONE
+contiguous comment run that share a verbatim six-word span — the signature of
+rewriting a comment by writing the new paragraph and leaving the old one above
+it. Four close-gate rounds on #205 each fixed the site a reviewer named; the rule
+was only written on the fifth, and it immediately found six instances, four of
+them in files (`chat_respond.lua`, `tool_folds.lua`, `skill_edits.lua`) no
+reviewer had touched.
+
+Two design choices are load-bearing:
+
+- **An LSP annotation block is excluded.** `---@param col number # 0-indexed byte
+  position` is MEANT to restate the prose that explained `col`; comparing the two
+  registers measures nothing, and `spell.lua` was the detector's only false
+  positive before the exclusion.
+- **It catches verbatim overlap, not paraphrase.** `float_picker`'s "Translate
+  the caller's items-index…" above "Translated to an identity…" shares no
+  six-gram and is invisible to it. The guard's own docstring says so — a guard
+  whose message overstates its reach is the finding family
+  `test-title-overstates-guard`, which reached nine instances on the same issue.
+  The paraphrase half lives in `workshop/lessons.md` as a human check.
+
+The detector runs on the file's lines, and its three injection cases drive it on
+synthetic input, so it is shown to fire AND to stay silent independently of what
+the tree currently holds.
+
 ## Related
 
 - [Linting](linting.md) — `make lint`, which `make test` runs first.

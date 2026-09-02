@@ -97,10 +97,60 @@ local function pick_tool_detail_text(value)
     return nil
 end
 
-local function get_cliproxy_strategy(model_config)
+-- The recognized web-search strategies. `none` is a REAL model-level answer, not
+-- the absence of one: a model that breaks on the server-side tool must be able to
+-- say so and have that survive the provider default (#205). Single-sourced
+-- because the same set was previously spelled out twice below (ARCH-DRY).
+local CLIPROXY_STRATEGIES = {
+    openai_search_model = true,
+    openai_tools_route = true,
+    anthropic_tools_route = true,
+    none = true,
+}
+
+--- Resolve the strategy for a model: an explicit choice, else what the FAMILY
+--- supports, else the provider default.
+---
+--- The family step is what makes hand-stating the strategy per agent
+--- unnecessary. `cliproxy_default_web_search_strategy` is measured knowledge
+--- about what each family can actually do, and it existed as a single source
+--- while five config sites still spelled the same answer out by hand — a source
+--- of truth nothing consulted. An agent may still override; it just no longer
+--- has to restate the default to get correct behaviour.
+--- A model config in either documented shape → the table form.
+---
+--- `model` is documented as "string with model name OR table with model name and
+--- parameters", and both shapes reach the strategy resolver — through
+--- `tools/wire.lua`, which passed a string through as nil. Normalizing once here
+--- beats gating on `type(...) == "table"` at each use, which is what silently
+--- excluded the string form from derivation AND from overriding it.
+---@param model_config table|string|nil
+---@return table|nil
+local function as_model_table(model_config)
+    if type(model_config) == "string" then
+        return { model = model_config }
+    end
     if type(model_config) == "table" then
+        return model_config
+    end
+    return nil
+end
+
+local function get_cliproxy_strategy(model_config)
+    model_config = as_model_table(model_config)
+    -- PRECEDENCE, and each step is there for a reason:
+    --   1. the agent's own choice — an explicit override always wins;
+    --   2. a provider-level `none` — an operator turning server-side search OFF
+    --      globally, which derived family knowledge must not undo;
+    --   3. a CORRECTION when the configured strategy is one the family cannot
+    --      use — measured, single-sourced, and the reason an agent no longer has
+    --      to hand-state the obvious answer. It corrects; it never invents, so
+    --      an unconfigured setup still resolves to "none";
+    --   4. the provider default;
+    --   5. none.
+    if model_config then
         local model_strategy = model_config.web_search_strategy
-        if model_strategy == "openai_search_model" or model_strategy == "openai_tools_route" or model_strategy == "anthropic_tools_route" then
+        if CLIPROXY_STRATEGIES[model_strategy] then
             return model_strategy
         end
     end
@@ -109,10 +159,31 @@ local function get_cliproxy_strategy(model_config)
     if not ok or not parley or not parley.dispatcher or not parley.dispatcher.providers then
         return "none"
     end
-
     local config = parley.dispatcher.providers.cliproxyapi or {}
     local strategy = config.web_search_strategy
-    if strategy == "openai_search_model" or strategy == "openai_tools_route" or strategy == "anthropic_tools_route" then
+    if strategy == "none" then
+        return "none" -- an explicit global off switch outranks derivation
+    end
+
+    -- Only CORRECT a configured strategy; never invent one. With nothing
+    -- configured the answer stays "none", as it always has — deriving here would
+    -- silently switch server-side search ON for a setup that never asked for it.
+    if model_config and CLIPROXY_STRATEGIES[strategy] then
+        local derived = M.cliproxy_default_web_search_strategy(model_config.model)
+        if CLIPROXY_STRATEGIES[derived] then
+            -- Derivation CORRECTS a configured strategy the family cannot use;
+            -- it does not replace one that works. `openai_search_model` and
+            -- `openai_tools_route` are both openai-family answers, so a
+            -- configured search-model route survives for a gpt agent — while a
+            -- claude agent under either openai route is corrected, because
+            -- measurement says those come back empty there.
+            local family_ok = strategy == derived
+                or (derived == "openai_tools_route" and strategy == "openai_search_model")
+            return family_ok and strategy or derived
+        end
+    end
+
+    if CLIPROXY_STRATEGIES[strategy] then
         return strategy
     end
     return "none"
@@ -188,6 +259,55 @@ function M.cliproxy_route(model_name, strategy)
         return "anthropic"
     end
     return "openai"
+end
+
+--- The server-side web-search strategy a model can actually USE over cliproxy.
+--- PURE. Single source for the three-way answer (ARCH-DRY) — the canonical
+--- anthropic family test above is reused here, never re-written. A fourth copy
+--- of that test is exactly the drift the extraction note at cliproxy_route
+--- exists to prevent.
+---
+--- Verified against a live proxy 2026-08-31 (issue #205):
+---   claude-*  the OpenAI route returns an empty completion; the anthropic route
+---             is what makes server-side web_search actually fire.
+---   gpt-*     `{type="web_search"}` works and comes back with cited results.
+---   gemini-*  `{type="web_search"}` yields finish_reason
+---             "malformed_function_call" and NO content — it BREAKS the model.
+---             Google's own `{google_search={}}` on the gemini route does work
+---             through cliproxy, so a `google_tools_route` is a real future
+---             strategy; until it exists, "none" beats shipping a broken agent.
+---
+--- Client-side function tools work on the OpenAI route for all three families,
+--- so this governs only the server-side search tool.
+---@param model_name string
+---@param owner string|nil # the catalog row's owned_by, when known
+---@return "anthropic_tools_route"|"openai_tools_route"|"none"
+function M.cliproxy_default_web_search_strategy(model_name, owner)
+    -- FAMILY FIRST, and deliberately so: this value also selects the WIRE
+    -- (cliproxy_route returns "anthropic" only for anthropic_tools_route), and
+    -- `owner` is a display grouping that is not stable — claude-sonnet-4-6 was
+    -- reported under `anthropic` on one proxy start and `antigravity` on the
+    -- next. Letting owner reach the wire would mean the same model speaking a
+    -- different protocol on different days. Measured 2026-08-31:
+    -- claude-opus-4-6-thinking, served by antigravity, answers 200 on the
+    -- anthropic wire — the transport is fine there.
+    if is_cliproxy_anthropic_route_model(model_name) then
+        return "anthropic_tools_route"
+    end
+    -- Below here the wire is "openai" whatever we return, so owner can safely
+    -- decide the SEARCH TOOL alone. Antigravity re-serves other vendors through
+    -- Google's stack and the server-side tool does not survive the trip:
+    -- gemini-3-flash answers finish_reason="malformed_function_call" with no
+    -- content at all, and gpt-oss-120b-medium answers while silently never
+    -- searching (it returned a stale version from memory). Sending it is at best
+    -- inert and at worst fatal, so it is not sent.
+    if owner == "antigravity" then
+        return "none"
+    end
+    if type(model_name) == "string" and model_name:find("^gemini") then
+        return "none"
+    end
+    return "openai_tools_route"
 end
 
 --------------------------------------------------------------------------------
@@ -1063,7 +1183,17 @@ end
 -- instead of hanging. No-op (immediate on_success) when not opted in.
 cliproxyapi.pre_query = function(on_success, on_error)
     local ok, cliproxy = pcall(require, "parley.cliproxy")
-    if not ok or not cliproxy.is_managed() then
+    if not ok then
+        return on_success()
+    end
+    -- Warm the model catalog HERE, at the dispatch seam, because this is the one
+    -- point every cliproxy request passes through. Putting it inside
+    -- ensure_running covered only the managed path — the `manage = false` branch
+    -- returns above, so a bring-your-own operator never reached it and still got
+    -- "no cliproxy channel is configured" on an auth failure. Stale-gated and
+    -- fire-and-forget: it never delays the request.
+    cliproxy.warm_catalog()
+    if not cliproxy.is_managed() then
         return on_success() -- bring-your-own / feature off
     end
     cliproxy.ensure_running(on_success, on_error or function() end)

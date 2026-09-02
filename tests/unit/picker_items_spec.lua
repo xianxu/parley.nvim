@@ -1,4 +1,5 @@
 local agent_picker         = require("parley.agent_picker")
+local float_picker         = require("parley.float_picker")
 local system_prompt_picker = require("parley.system_prompt_picker")
 local outline              = require("parley.outline")
 local custom_prompts       = require("parley.custom_prompts")
@@ -320,5 +321,342 @@ describe("outline picker item building", function()
         local items = outline._build_picker_items(bufnr, config)
         assert.equals(2, items[1].value.lnum)
         assert.equals(4, items[2].value.lnum)
+    end)
+end)
+
+-- ---------------------------------------------------------------------------
+-- agent_picker live catalog section (#205)
+--
+-- Same rule BR-5 settled for curate, applied here: every row the Spec documents
+-- is pinned as an EQUALITY on its full display string. Containment let four
+-- separate drifts (dash style, missing separator, grouping, ordering) pass
+-- unnoticed, because `find(..., plain)` cannot see what is absent.
+-- ---------------------------------------------------------------------------
+describe("agent_picker live section", function()
+    local function live_row(id, display, owner)
+        return { id = id, display = display, owner = owner, provider = "claude" }
+    end
+
+    local OPUS = live_row("claude-opus-5", "Claude Opus 5", "anthropic")
+    local SONNET = live_row("claude-sonnet-5", "Claude Sonnet 5", "anthropic")
+
+    -- The documented render, row for row.
+    local DOCUMENTED = {
+        separator = "── live · cliproxy ──",
+        live_opus = "  Claude Opus 5 - claude-opus-5 (anthropic)",
+        live_current = "✓ Claude Opus 5 - claude-opus-5 (anthropic)",
+        login = "  antigravity - (logged out)",
+    }
+
+    it("renders the live section exactly as documented", function()
+        local items = agent_picker._build_items(make_plugin("mango"),
+            { live = { OPUS, SONNET }, logged_out = { { provider = "antigravity" } } })
+        local tail = {}
+        for i = #items - 3, #items do
+            tail[#tail + 1] = items[i].display
+        end
+        assert.same({
+            DOCUMENTED.separator,
+            DOCUMENTED.live_opus,
+            "  Claude Sonnet 5 - claude-sonnet-5 (anthropic)",
+            DOCUMENTED.login,
+        }, tail)
+    end)
+
+    it("orders the section: separator, then live, then logged-out", function()
+        local items = agent_picker._build_items(make_plugin("mango"),
+            { live = { OPUS }, logged_out = { { provider = "antigravity" } } })
+        local kinds = {}
+        for i = #items - 2, #items do
+            kinds[#kinds + 1] = items[i].kind
+        end
+        assert.same({ "separator", "live", "login" }, kinds)
+    end)
+
+    it("keeps configured agents ahead of the separator", function()
+        local items = agent_picker._build_items(make_plugin("mango"), { live = { OPUS } })
+        assert.equals("agent", items[1].kind)
+        for i = 1, #items do
+            if items[i].kind == "separator" then
+                assert.equals("agent", items[i - 1].kind)
+                return
+            end
+        end
+        error("no separator emitted")
+    end)
+
+    it("marks a live row current when it is the active agent", function()
+        local items = agent_picker._build_items(make_plugin("claude-opus-5*"), { live = { OPUS } })
+        assert.equals(DOCUMENTED.live_current, items[#items].display)
+        assert.is_true(items[#items].is_current)
+    end)
+
+    it("emits no separator when there is no catalog", function()
+        assert.same(agent_picker._build_items(make_plugin("mango")),
+                    agent_picker._build_items(make_plugin("mango"), { live = {}, logged_out = {} }))
+    end)
+
+    it("carries the model row on a live item, so selection needs no re-parsing", function()
+        local items = agent_picker._build_items(make_plugin("mango"), { live = { OPUS } })
+        assert.same(OPUS, items[#items].model)
+    end)
+end)
+
+describe("agent_picker._providers_without_models", function()
+    local models = {
+        { id = "claude-opus-5", owner = "anthropic" },
+        { id = "gpt-5.6-sol", owner = "openai" },
+    }
+
+    it("names a configured provider the catalog advertises nothing for", function()
+        assert.same({ { provider = "antigravity" } },
+            agent_picker._providers_without_models(models, { "claude:opus", "antigravity" }))
+    end)
+
+    it("stays quiet when every configured provider has models", function()
+        assert.same({}, agent_picker._providers_without_models(models, { "claude", "codex" }))
+    end)
+
+    it("reads the provider out of a filtered spec", function()
+        assert.same({ { provider = "antigravity" } },
+            agent_picker._providers_without_models(models, { "antigravity:pro,flash" }))
+    end)
+end)
+
+describe("agent_picker._view_for", function()
+    -- Drives the PRODUCTION path. The first attempt at these assertions
+    -- re-implemented the exclusion in the spec body and handed _build_items an
+    -- already-filtered list, so reverting the fix left the suite green — the
+    -- test could not fail. That is why _view_for exists as a pure function.
+    local CATALOG = {
+        { id = "claude-opus-5", display = "Claude Opus 5", owner = "anthropic",
+          series = "claude-opus", created = 3 },
+        { id = "claude-sonnet-5", display = "Claude Sonnet 5", owner = "anthropic",
+          series = "claude-sonnet", created = 2 },
+        { id = "gpt-5.6-sol", display = "GPT 5.6 Sol", owner = "openai",
+          series = "gpt-sol", created = 1 },
+    }
+    local CFG = { providers = { "claude", "codex" }, per_provider = 3 }
+
+    local function ids(view)
+        local out = {}
+        for _, m in ipairs(view.live) do out[#out + 1] = m.id end
+        return out
+    end
+
+    it("drops a model that is already a registered agent", function()
+        local view = agent_picker._view_for(CATALOG, CFG,
+            { agents = { ["claude-opus-5*"] = {} } })
+        assert.same({ "claude-sonnet-5", "gpt-5.6-sol" }, ids(view))
+    end)
+
+    it("drops it on the expanded path too", function()
+        -- The exclusion lives in _view_for precisely so <C-a> inherits it.
+        local view = agent_picker._view_for(CATALOG, CFG,
+            { all = true, agents = { ["claude-opus-5*"] = {} } })
+        assert.same({ "claude-sonnet-5", "gpt-5.6-sol" }, ids(view))
+    end)
+
+    it("expanding bypasses curation only, never the logged-out rows", function()
+        local cfg = { providers = { "claude", "antigravity" }, per_provider = 1 }
+        local curated = agent_picker._view_for(CATALOG, cfg, {})
+        local all = agent_picker._view_for(CATALOG, cfg, { all = true })
+        assert.equals(1, #curated.live)          -- per_provider caps it
+        assert.equals(#CATALOG, #all.live)       -- expansion lifts the cap
+        assert.same(curated.logged_out, all.logged_out)
+        assert.same({ { provider = "antigravity" } }, all.logged_out)
+    end)
+
+    it("still reports logged-out providers when the catalog is empty", function()
+        -- An empty catalog is exactly when every provider is logged out; an
+        -- early return here would suppress the only rows that say so.
+        local view = agent_picker._view_for({}, { providers = { "claude", "codex" } }, {})
+        assert.same({}, view.live)
+        assert.same({ { provider = "claude" }, { provider = "codex" } }, view.logged_out)
+    end)
+end)
+
+describe("agent_picker live/agent overlap", function()
+    it("renders no name twice and marks exactly one row current", function()
+        local plugin = make_plugin("claude-opus-5*")
+        plugin._agents = { "alpha", "claude-opus-5*" }
+        plugin.agents = {
+            alpha = { provider = "openai", model = "gpt-4" },
+            ["claude-opus-5*"] = { provider = "cliproxyapi", model = "claude-opus-5" },
+        }
+        plugin.config = { cliproxy = { live_models = { providers = { "claude" }, per_provider = 3 } } }
+        local catalog = { { id = "claude-opus-5", display = "Claude Opus 5",
+                            owner = "anthropic", series = "claude-opus", created = 1 } }
+        -- production path end to end: view built by _view_for, rows by _build_items
+        local items = agent_picker._build_items(plugin,
+            agent_picker._view_for(catalog, plugin.config.cliproxy.live_models,
+                { agents = plugin.agents }))
+        local seen, checked = {}, 0
+        for _, item in ipairs(items) do
+            assert.is_nil(seen[item.name], ("%q rendered twice"):format(item.name))
+            seen[item.name] = true
+            if item.is_current then checked = checked + 1 end
+        end
+        assert.equals(1, checked, "more than one row carries the current marker")
+    end)
+end)
+
+describe("agent_picker._view_for provider defaults", function()
+    it("falls back to every known provider when none are configured", function()
+        -- config.lua documents `nil providers = every known provider`; returning
+        -- an empty list instead made the entire live section disappear for
+        -- anyone who omitted the key.
+        local catalog = {
+            { id = "claude-opus-5", display = "Claude Opus 5", owner = "anthropic",
+              series = "claude-opus", created = 2 },
+            { id = "gpt-5.6-sol", display = "GPT 5.6 Sol", owner = "openai",
+              series = "gpt-sol", created = 1 },
+        }
+        local view = agent_picker._view_for(catalog, { per_provider = 3 }, {})
+        local ids = {}
+        for _, m in ipairs(view.live) do ids[#ids + 1] = m.id end
+        table.sort(ids)
+        assert.same({ "claude-opus-5", "gpt-5.6-sol" }, ids)
+    end)
+end)
+
+describe("agent_picker._view_for overlap and unknown providers", function()
+    local CATALOG = {
+        { id = "claude-opus-5", display = "Claude Opus 5", owner = "anthropic",
+          series = "claude-opus", created = 2 },
+        { id = "claude-sonnet-5", display = "Claude Sonnet 5", owner = "anthropic",
+          series = "claude-sonnet", created = 1 },
+    }
+
+    it("renders a model once when two provider entries overlap", function()
+        -- curate resets its per-series memo for each entry, so `claude` and
+        -- `claude:opus` both yield claude-opus-5 — identical display, both
+        -- marked current, one shared recall key. BR-30's symptom by another route.
+        local view = agent_picker._view_for(CATALOG,
+            { providers = { "claude", "claude:opus" }, per_provider = 3 }, {})
+        local ids = {}
+        for _, m in ipairs(view.live) do ids[#ids + 1] = m.id end
+        assert.same({ "claude-opus-5", "claude-sonnet-5" }, ids)
+    end)
+
+    it("offers a login only for a name that can actually be logged into", function()
+        -- A typo, and an OWNER name rather than a provider: neither resolves to
+        -- a channel, so `:ParleyProxy login <it>` is an actionable-looking dead
+        -- end.
+        local view = agent_picker._view_for(CATALOG,
+            { providers = { "claud", "anthropic", "antigravity" }, per_provider = 3 }, {})
+        assert.same({ { provider = "antigravity" } }, view.logged_out)
+    end)
+
+    it("renders an ownerless row without printing (nil)", function()
+        local rows = agent_picker._build_items(make_plugin("mango"),
+            { live = { { id = "orphan-1", display = "Orphan 1" } } })
+        local display = rows[#rows].display
+        assert.is_nil(display:find("nil", 1, true), "rendered a literal nil: " .. display)
+        assert.is_true(display:find("orphan-1", 1, true) ~= nil)
+    end)
+end)
+
+describe("agent_picker refresh gating", function()
+    -- BR-42: `manage = false` means parley does not START a proxy, not that
+    -- there is none. Gating the catalog refresh on it left bring-your-own
+    -- operators with an empty catalog and a picker claiming every configured
+    -- provider was logged out.
+    it("refreshes the catalog even when parley does not manage the proxy", function()
+        local cliproxy = require("parley.cliproxy")
+        local saved_is_managed, saved_stale, saved_fetch =
+            cliproxy.is_managed, cliproxy.catalog_stale, cliproxy.fetch_catalog
+        local fetched = false
+        cliproxy.is_managed = function() return false end
+        cliproxy.catalog_stale = function() return true end
+        cliproxy.fetch_catalog = function(cb) fetched = true; if cb then cb({}) end end
+
+        local plugin = make_plugin("mango")
+        plugin.config = { cliproxy = { manage = false,
+            live_models = { providers = { "claude" }, per_provider = 3 } } }
+        plugin.register_live_agent = function() end
+        plugin.logger = { info = function() end }
+        plugin.refresh_state = function() end
+        plugin.cmd = { KeyBindings = function() end }
+        local ok, err = pcall(require("parley.agent_picker").agent_picker, plugin)
+
+        cliproxy.is_managed, cliproxy.catalog_stale, cliproxy.fetch_catalog =
+            saved_is_managed, saved_stale, saved_fetch
+        assert.is_true(ok, tostring(err))
+        assert.is_true(fetched, "a bring-your-own proxy never got its catalog refreshed")
+    end)
+end)
+
+describe("agent_picker repaint identity", function()
+    -- BR-68/BR-74: dropping the third argument at either repaint site used to
+    -- leave every spec green, and both sites hardcoded `.name` while
+    -- recall_id_fn declared what identity means for this picker.
+    it("derives a row's identity in one place", function()
+        assert.equals("claude-opus-5*",
+            agent_picker._identity({ name = "claude-opus-5*", kind = "live" }))
+        assert.is_nil(agent_picker._identity(nil))
+    end)
+
+    it("uses that identity for recall, so repaint and recall cannot disagree", function()
+        -- The picker hands _identity to float_picker as recall_id_fn AND uses it
+        -- to restore the cursor. A test that only checked one would let them
+        -- drift, which is the defect: a repaint keyed on `.name` while recall
+        -- keyed on something else silently stops restoring anything.
+        local seen
+        local saved = float_picker.open
+        float_picker.open = function(opts)
+            seen = opts.recall_id_fn
+            return { update = function() end, selected = function() end,
+                     set_title = function() end, is_closed = function() return true end,
+                     close = function() end }
+        end
+        local plugin = make_plugin("mango")
+        plugin.config = { cliproxy = { live_models = { providers = {} } } }
+        plugin.cmd = { KeyBindings = function() end }
+        pcall(agent_picker.agent_picker, plugin)
+        float_picker.open = saved
+        assert.equals(agent_picker._identity, seen,
+            "recall_id_fn must BE the identity function, not a second copy of it")
+    end)
+end)
+
+describe("agent_picker repaint passes the identity", function()
+    -- BR-68: dropping `update`'s third argument at either repaint site left
+    -- every spec green, because nothing drove the closure that passes it. This
+    -- drives the real <C-a> mapping and asserts what reached the widget.
+    local function drive_expand()
+        local captured = {}
+        local saved = float_picker.open
+        float_picker.open = function(opts)
+            captured.mappings = opts.mappings
+            captured.recall_id_fn = opts.recall_id_fn
+            local handle
+            handle = {
+                update = function(_items, _tags, sel) captured.selection = sel end,
+                selected = function() return { name = "claude-opus-5*", kind = "live" } end,
+                set_title = function() end,
+                is_closed = function() return true end,
+                close = function() end,
+            }
+            return handle
+        end
+        local plugin = make_plugin("mango")
+        plugin.config = { cliproxy = { live_models = { providers = {} } } }
+        plugin.cmd = { KeyBindings = function() end }
+        pcall(agent_picker.agent_picker, plugin)
+        float_picker.open = saved
+        return captured
+    end
+
+    it("hands the widget the identity of the row under the cursor", function()
+        local captured = drive_expand()
+        local expand
+        for _, m in ipairs(captured.mappings or {}) do
+            if m.key == "<C-a>" then expand = m end
+        end
+        assert.is_not_nil(expand, "the expand mapping should be registered")
+        expand.fn()
+        assert.equals("claude-opus-5*", captured.selection,
+            "the toggle must name the row to return to, or the cursor jumps")
     end)
 end)

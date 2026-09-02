@@ -1237,6 +1237,39 @@ M.persist_state = function()
 	return M.helpers.table_to_file_atomic(persist_state, state_file)
 end
 
+--- Put a built agent into the roster. One writer for the mechanics; the two
+--- call sites keep their DIFFERENT collision semantics, because the difference
+--- is real and collapsing it was a regression (BR-109):
+---
+---   * **Selecting** a live row is the user naming this model right now, so it
+---     wins. In practice the picker drops a model that is already an agent, so
+---     a collision here is only reachable via `:ParleyAgent`-style re-entry.
+---   * **Restoring** a persisted pick at startup must NOT win. `setup()` builds
+---     `M.agents` from config and only then calls `refresh_state`, so keeping
+---     would let a stale `<id>*` session pick clobber a configured agent of the
+---     same name on every launch. Config is authoritative; the persisted pick is
+---     a session convenience.
+---
+--- Collapsing both onto overwrite left no test able to tell: reverting the
+--- assignment to the keep form kept the whole suite green.
+---@param agent table|nil
+---@param keep_existing boolean|nil # true = a configured entry of this name wins
+---@return string|nil name
+local function adopt_agent(agent, keep_existing)
+	if not agent or not agent.name then
+		return nil
+	end
+	if not (keep_existing and M.agents[agent.name]) then
+		M.agents[agent.name] = agent
+	end
+	if not vim.tbl_contains(M._agents, agent.name) then
+		table.insert(M._agents, agent.name)
+		table.sort(M._agents)
+	end
+	return agent.name
+end
+
+--- Reconcile in-memory state with what is on disk, apply `update`, persist.
 ---@param update table | nil # table with options
 M.refresh_state = function(update)
 	local state_file = M.config.state_dir .. "/state.json"
@@ -1326,6 +1359,18 @@ M.refresh_state = function(update)
 		end
 	end
 
+	-- Re-register the last live cliproxy pick BEFORE the guard below. Without
+	-- this ordering the guard finds the name absent from M.agents and resets to
+	-- M._agents[1], so a live pick would silently evaporate on every restart.
+	if type(M._state.live_agent) == "table" and type(M._state.live_agent.id) == "string" then
+		local ok, agent = pcall(function()
+			return require("parley.cliproxy_catalog").build_agent(M._state.live_agent)
+		end)
+		if ok then
+			adopt_agent(agent, true) -- config wins over a persisted pick
+		end
+	end
+
 	if not M._state.agent or not M.agents[M._state.agent] then
 		M._state.agent = M._agents[1]
 	end
@@ -1374,7 +1419,7 @@ M._format_missing_remote_reference_cache_content = function(u) return chat_respo
 
 -- stop receiving responses for all processes and clean the handles
 ---@param signal number | nil # signal to send to the process
-M.cmd.Stop = function(s) chat_respond.cmd_stop(s) end
+M.cmd.Stop = function(signal) chat_respond.cmd_stop(signal) end
 
 --------------------------------------------------------------------------------
 -- Keybinding help (driven by keybinding_registry)
@@ -4308,6 +4353,23 @@ M.cmd.Agent = function(params)
 	vim.cmd("doautocmd User ParleyAgentChanged")
 end
 
+--- Register a live cliproxy catalog model as a session agent and select it.
+---
+--- Persisted as `_state.live_agent` so the choice survives a restart: without
+--- the matching restore in refresh_state, the guard there would find the name
+--- missing from M.agents and silently reset to the first configured agent.
+---@param model table # a parsed catalog row { id, owner, display, … }
+M.register_live_agent = function(model)
+	local agent = require("parley.cliproxy_catalog").build_agent(model)
+	if not adopt_agent(agent) then
+		M.logger.warning("cliproxy: catalog row has no usable model id; not registering")
+		return
+	end
+	M.refresh_state({ agent = agent.name, live_agent = model })
+	M.logger.info("Agent set to: " .. agent.name)
+	vim.cmd("doautocmd User ParleyAgentChanged")
+end
+
 M.cmd.NextAgent = function()
 	M.agent_picker.agent_picker(M)
 end
@@ -4343,12 +4405,26 @@ end
 M.get_agent = function(name)
 	name = name or M._state.agent
 	if M.agents[name] == nil then
-		M.logger.warning("Agent " .. name .. " not found, using " .. M._state.agent)
-		name = M._state.agent
+		-- Falling back to _state.agent is a no-op when _state.agent IS the
+		-- missing name — which is exactly what happens when an agent you had
+		-- selected stops shipping (you edit it out of your config, or a default
+		-- roster changes under a persisted selection). That path used to
+		-- dereference nil one line below and crash the whole request.
+		local fallback = M.agents[M._state.agent] and M._state.agent or M._agents[1]
+		M.logger.warning("Agent " .. tostring(name) .. " not found, using " .. tostring(fallback))
+		name = fallback
 	end
 	local template = M.config.command_prompt_prefix_template
 	local cmd_prefix = M.render.template(template, { ["{{agent}}"] = name })
 	local agent_rec = M.agents[name]
+	if agent_rec == nil then
+		-- No agents at all. `error` here reaches the user as a stack trace over
+		-- whatever they were doing; the message has to carry the next action on
+		-- its own, since nothing downstream will add one.
+		error("parley: no agents are configured. Add at least one to the `agents` "
+			.. "list in your setup{}, or remove `agents = {}` if you meant to keep "
+			.. "the defaults.")
+	end
 	local model = agent_rec.model
 	local system_prompt = agent_rec.system_prompt
 	local provider = agent_rec.provider

@@ -156,7 +156,7 @@ local CHANNEL_LOGIN = {
 --- `aistudio`, …). It is NOT the login-provider axis — several channels share
 --- one login (`gemini`/`gemini-cli`/`aistudio` all log in via `google`), so
 --- querying credential health with a login provider silently finds nothing.
---- Keep the two apart; `resolve_login_provider` derives from this one.
+--- Keep the two apart; the login is derived via `channel_login` on a resolved channel.
 ---@param model string
 ---@param oauth_model_alias table # the rendered config's oauth-model-alias block
 ---@return string|nil channel
@@ -174,6 +174,92 @@ function M.resolve_channel(model, oauth_model_alias)
         end
     end
     return nil
+end
+
+-- Which cliproxy CHANNELS can serve a model of a given catalog `owned_by`.
+--
+-- Candidates, deliberately PLURAL: antigravity re-serves anthropic-, openai- and
+-- google-owned models alongside each native channel, so an owner never implies
+-- one channel. Written out rather than inverted from PROVIDER_OWNED_BY, whose
+-- keys are LOGIN-shaped (`google`) and therefore not channels at all —
+-- CHANNEL_LOGIN has no `google` key, it has three channels that share that login.
+-- PREFERENCE ORDER, not alphabetical. Callers read [1] as "the channel" when
+-- only one can be probed, and `recover` derives its pre-flight login from it —
+-- so a sorted list put `antigravity` ahead of the NATIVE channel for every owner
+-- it re-serves, and the operator was pointed at a cross-vendor channel before
+-- any credential had been read. Native channels first; antigravity last,
+-- because it is the fallback that happens to also carry these models.
+local OWNER_CHANNELS = {
+    anthropic   = { "claude", "antigravity" },
+    openai      = { "codex", "antigravity" },
+    google      = { "gemini-cli", "gemini", "aistudio", "antigravity" },
+    antigravity = { "antigravity" },
+    moonshot    = { "kimi" },
+    xai         = { "xai" },
+}
+
+--- Trim a candidate list to `max` while keeping the two most INFORMATIVE ones:
+--- the native channel (first, by preference order) and the cross-vendor
+--- re-server (last). Dropping from the tail looked right and silently removed
+--- antigravity for google — the very fallback the cap's rationale promised to
+--- keep, since google is the one owner with more than two candidates.
+---
+--- Output stays in PREFERENCE ORDER, which is a contract two things depend on:
+--- this function's own `@param`, and `credential_health_across`'s guarantee that
+--- readings reach the reducer in declared order so ties break the same way every
+--- run. Filling the tail by walking backwards satisfied max = 2 by accident and
+--- returned {c1, cN, cN-1} for max = 3 — latent until the cap rises.
+---
+--- Pure, so the choice is testable without the recovery path around it.
+---@param channels string[] # in preference order
+---@param max number
+---@return string[] # a subsequence of `channels`, order preserved
+function M.bound_candidates(channels, max)
+    if #channels <= max or max < 1 then
+        return vim.deepcopy(channels)
+    end
+    -- The head (native channels, by preference) plus the last (the cross-vendor
+    -- re-server), emitted in the original relative order.
+    local out = {}
+    for i = 1, max - 1 do
+        out[#out + 1] = channels[i]
+    end
+    out[#out + 1] = channels[#channels]
+    return out
+end
+
+--- Candidate channels for a catalog row's `owned_by`.
+---@param owner string
+---@return string[] # in PREFERENCE order (native channel first); empty when unknown
+function M.channels_for_owner(owner)
+    return vim.deepcopy(OWNER_CHANNELS[owner] or {})
+end
+
+--- Which channels could serve `model`: the operator's explicit pin if there is
+--- one, else the candidates implied by the catalog, else nothing.
+---
+--- Plural because the honest answer often is. cliproxyapi exposes a channel's
+--- models automatically once it has a credential, so parley no longer needs a
+--- hand-written model list to ROUTE (verified against a live proxy: models absent
+--- from `oauth-model-alias` answer normally). What it still needs is "which login
+--- does this model need" when a credential dies — and where several channels
+--- could serve one id, credential health decides between them rather than this
+--- function guessing.
+---@param model string
+---@param oauth_model_alias table # the operator's pins; wins when it names the model
+---@param models table[]|nil # the cached catalog
+---@return string[]
+function M.resolve_channels(model, oauth_model_alias, models)
+    local pinned = M.resolve_channel(model, oauth_model_alias)
+    if pinned then
+        return { pinned }
+    end
+    for _, m in ipairs(models or {}) do
+        if m.id == model then
+            return M.channels_for_owner(m.owner)
+        end
+    end
+    return {}
 end
 
 --- The login a channel needs, or nil for a channel with no OAuth login
@@ -210,14 +296,6 @@ function M.channels_for_login(login)
     return out
 end
 
---- Resolve which login a model needs. Derives from resolve_channel so there is
---- one model→channel source (ARCH-DRY).
----@param model string
----@param oauth_model_alias table
----@return string|nil login_provider
-function M.resolve_login_provider(model, oauth_model_alias)
-    return M.channel_login(M.resolve_channel(model, oauth_model_alias))
-end
 
 -- Provider → the `owned_by` value its models carry in /v1/models (verified
 -- against the CLIProxyAPI catalog internal/registry/models/models.json). These
@@ -274,6 +352,33 @@ function M.filter_models_by_owner(models_json, owned_by)
     end
     table.sort(out)
     return out
+end
+
+--- Is a cached catalog stale enough to be worth refetching? PURE arithmetic
+--- over four values, so it is unit-testable without test seams, without a clock
+--- and without spawning curl at a dead port — which is what pinning it cost
+--- while it lived in the IO shell.
+---
+--- THREE inputs, because "stale" has three different answers:
+---   * `forced`       an explicit invalidation (a completed login) outranks both
+---                    clocks — the catalog demonstrably just changed;
+---   * `cached_at`    a SUCCESSFUL fetch is good for `ttl`;
+---   * `last_attempt` a FAILED one backs off for `backoff` only. Keying failures
+---                    on `ttl` silences the picker while a proxy recovers;
+---                    keying only on success re-polls a dead proxy on every open.
+---@param o table # { now, cached_at?, last_attempt?, forced?, ttl, backoff }
+---@return boolean
+function M.catalog_stale(o)
+    if o.forced then
+        return true
+    end
+    if o.cached_at and (o.now - o.cached_at) <= o.ttl then
+        return false
+    end
+    if o.last_attempt and (o.now - o.last_attempt) <= o.backoff then
+        return false
+    end
+    return true
 end
 
 --- Pull the sha256 for `asset` out of a checksums.txt body

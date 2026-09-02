@@ -884,3 +884,300 @@
   wrong. Rule: build the oracle's subject set from the rawest independent source
   available, and let it be cruder than the real grammar — cruder only means it
   checks more rows.
+
+## Never run an integration spec bare — `make` owns the sandbox (#205)
+
+`make test` / `make test-spec` export `HOME`, `XDG_*` and `TMPDIR` into a scratch
+tree; a raw `nvim --headless -c "PlenaryBustedFile <spec>"` does not. During #205
+that difference overwrote the operator's real
+`~/.local/share/nvim/parley/cliproxy/config.yaml` with a spec's port and
+`api-keys: ["testkey"]`. cliproxy watches that file, reloaded it, and the live
+proxy began 401-ing the operator's own bearer — a working setup broken by a test
+run, mid-session.
+
+Two rules, both needed:
+
+- **Run specs through `make`.** `make test-spec SPEC=<atlas-key>` (an atlas
+  feature key from `atlas/traceability.yaml`, NOT a spec path) or `make test`.
+  When a single file is genuinely faster to iterate on, export the same env
+  `make -n test-clean-env` prints.
+- **Every spec that can write a derived artifact redirects it itself**, e.g.
+  `require("parley.cliproxy")._set_data_dir(vim.fn.tempname())` at file scope.
+  Defence in depth: the harness redirect is the sandbox, the in-spec redirect is
+  the seatbelt. As of #205 all `tests/integration/cliproxy_*` specs carry it.
+
+The tell that this has happened: parley suddenly reports `client api-key
+mismatch`, and the rendered config's `port`/`api-keys` do not match your setup.
+`cliproxy.ensure_running` re-renders the file, and the watcher reloads it.
+
+## Four recurring failures, and the checks that catch them (#205)
+
+#205's boundary reviews ran thirteen rounds. Most findings were not new defects
+but the same four failures repeating, so the rules matter more than the fixes:
+
+- **A test that cannot fail is not coverage.** Five times on that issue a fix
+  shipped green while the code it "covered" could be deleted or reverted with the
+  suite passing: a spec that re-implemented the logic in its own body, one that
+  stubbed the function under test, one that reused a just-killed port so a dying
+  process answered, one asserting containment where order was the point, and an
+  arch guard whose allowance was below the real count. **Check: break the code on
+  purpose and watch the test go red, before claiming the fix is covered.** State
+  the mutation in the close evidence — and make it the WRONG IMPLEMENTATION, not
+  merely deletion. #205 claimed a mutation check on a selection fix having only
+  deleted the block; the specific wrong version (resolving an index in the other
+  coordinate space) still passed, because the fixture's target was the last row
+  and the widget's clamp reached it from any out-of-range index.
+- **Fix the class, not the site.** A finding names one instance; the deliverable
+  is the enumeration. `free_port` was "swept" onto a shared helper while eight
+  copies remained; a boundary guard was added to one spec while three lacked it;
+  a referent check matched one definition form out of four. **Check: grep the
+  whole tree for siblings before calling a sweep done, and paste the count.**
+- **A sweep without a guard is a snapshot.** Two of that issue's consolidations
+  had regressed before the boundary closed. **Check: a consolidation ships with
+  an arch spec that fails when a new consumer diverges** —
+  `tests/arch/single_source_sweeps_spec.lua` is the pattern.
+- **A boundary whose diff touches `lua/` and no spec does not close.** Runtime
+  behaviour changed in two modules with zero test changes in the same window.
+  **Check: `git diff <boundary>..HEAD --stat -- lua/ tests/` before every
+  milestone-close; if `lua/` moved and `tests/` did not, that is the finding.**
+
+And one for evidence: **a Done-when is recorded in `## Log` with the output that
+proves it**, not asserted in the close message. #205's live-pick e2e is the
+shape — the payload, the response block types, and the answer, where a *correct*
+answer distinguishes "the search ran" from "the request succeeded".
+
+## A doc comment and a test title are assertions — sweep them with the code (#205)
+
+Three findings on #205 were a comment or a test title still describing the
+contract the same diff had just changed: a handle doc saying `update` takes an
+INDEX after it started taking an identity, a test titled "addresses the filtered
+list" after the meaning moved to the caller's list, and stacked doc blocks that
+left the function below them undocumented.
+
+They read as pedantry and are not. A stale comment is the most trusted wrong
+answer in the file — the next reader believes it over the code, and the next
+reviewer measures the code against it and files a finding either way.
+
+**Check:** when a contract changes, `grep` the identifier across `lua/` and
+`tests/` and fix every comment and test TITLE that states the old behaviour, in
+the same commit as the change. An insertion goes after the preceding function's
+body, never between a doc block and the function it documents.
+
+## A test owns the fixtures its behaviour needs (#205)
+
+Six specs named agents from the shipped default config. When that roster changed,
+`get_agent` warned and fell back — so each test kept passing while measuring a
+DIFFERENT agent than it named. Two golden payloads quietly began comparing a
+synthetic-system-prompt agent's output, and the resulting failures read as
+payload bugs rather than what they were.
+
+**Check:** if a test names a fixture it does not create — an agent, a provider, a
+model — ask what happens when that fixture stops shipping. If the answer is
+"something else is silently substituted", the test measures nothing it claims.
+Register or pin what the behaviour needs; borrow only what the test is *about*.
+
+The same lookup hid a real bug: falling back to `_state.agent` is a no-op when
+`_state.agent` IS the missing name, so deleting a SELECTED agent crashed every
+request. A fallback that can resolve to the thing it is meant to replace is not
+a fallback.
+
+## A fan-out cannot share one-shot state (#205)
+
+`credential_health` repairs a missing management route once per session and
+short-circuits thereafter. Reading several channels concurrently raced that
+flag: one call repaired, the others returned a FABRICATED "unknown" that was
+never re-measured — and downstream logic treated the fabrication as evidence.
+
+**Check:** before issuing N concurrent calls to one function, ask what module
+state it mutates on first use. If any exists, serialize the calls or gate the
+one-shot behind a single in-flight promise. A fabricated reading is worse than a
+slow one: it looks like data.
+
+## A guard's window must include the state you are in (#205)
+
+The arch guard added on #205 diffed `<base>~1..HEAD` — committed history only. A
+new module-public function was therefore invisible to it until the commit AFTER
+it appeared, so `make test` passed before the commit and the identical run failed
+after. A guard that reports one commit late lets exactly one boundary through,
+which is what happened: the milestone was crossed with the suite red on the
+repo's own check.
+
+**Check:** when writing a fitness function that inspects a diff, diff against the
+WORKING TREE (`git diff <base>`), not `<base>..HEAD`. And keep its teeth aimed:
+require a table row for public FUNCTIONS, not for data constants belonging to a
+module the tables already name by path — a guard that floods gets edited into
+uselessness.
+
+## Eligibility before ranking (#205)
+
+Choosing "the worst of N" is two decisions, and doing them in one step inverts
+the answer. Picking which credential to blame for an auth failure ranked
+`missing` — no credential at all — as the worst, so the diagnosis named a channel
+that could not possibly have served the request, three times in a row as the
+predicate was widened (`missing`, then `unknown`, then `disabled`).
+
+**Check:** when a reducer picks the extreme of a set, ask first which members are
+ELIGIBLE. And when the ranking you invert was written for a different question
+("is this usable?" vs "did this fail?"), write a second explicit ordering rather
+than reusing the first backwards.
+
+## A replaced single source needs a writer on every path the original had (#205)
+
+`oauth-model-alias` shipped in config and was therefore always present. Its
+replacement — a cached catalog — was written by exactly one caller, opening the
+agent picker. A machine that never opened one had no mapping at all, so the
+feature that replaced it was strictly worse on a cold install.
+
+**Check:** when replacing a source of truth, enumerate where the ORIGINAL was
+populated and make sure the replacement is written on each of those paths. Then
+verify the fix reaches the path production takes: warming inside `ensure_running`
+looked right and never ran for `manage = false`, because the caller returns
+before it.
+
+## An order that is read as a ranking must BE a ranking (#205)
+
+`OWNER_CHANNELS` listed each owner's channels alphabetically and documented them
+as "sorted". Three call sites read `[1]` as *the* channel, so `antigravity`
+outranked every native channel it re-serves and the auth diagnosis pointed the
+operator at a cross-vendor account before reading any credential.
+
+**Check:** when a list is consumed by index, its ORDER is a contract. Say which
+order it is in the declaration, and assert it — "sorted" and "preferred first"
+look identical in a literal and mean opposite things at the call site.
+
+## A bound must count what the code actually does (#205)
+
+Serializing a fan-out turned one credential read into up to four, inside a path
+with a deadline — while the budget that proves the deadline is met still counted
+one. The budget was not wrong by a little; it had stopped bounding anything.
+When the budget was made honest its own spec failed, which is the signal that the
+CODE had to get cheaper (the fan-out is capped at two candidates now).
+
+**Check:** when you change how many times something runs, grep for the constant
+that bounds it in the same edit. A budget derived from constants is only true
+while the code still matches the constants.
+
+## Trim from the end you can afford to lose (#205)
+
+Capping that same candidate list kept the first N — which for google kept two
+native channels and dropped the cross-vendor fallback the cap's own comment
+promised to retain. Google was the only owner with more than two candidates, so
+the rationale was false exactly where it applied, and no test reached the path.
+
+**Check:** when a cap's justification names what it keeps, assert that for every
+input shape that can reach it — especially the one shape that made the cap
+necessary.
+
+## Rewriting a comment means deleting the one it replaces (#205)
+
+Four close-gate findings across four rounds were one authoring failure: rewrite a
+comment by WRITING the new paragraph, forget to DELETE the old one. The file then
+documents two states of the world, and the stale half is indistinguishable from
+the live half to the next reader — `cliproxy.lua` shipped a comment stating the
+alphabetical channel order that the same commit pair had just replaced with
+preference order. Each round fixed the site the reviewer named; the fix for the
+third round ADDED the fourth instance.
+
+The remedy proposed in round two — "lint `---@param` blocks naming absent
+identifiers" — is why it kept recurring: it was scoped to where the first
+instance happened to sit. When a rule is finally written, five of the seven live
+instances were plain `--` stacks and four did not precede a function at all, in
+`chat_respond.lua`, `tool_folds.lua`, `skill_edits.lua` and `float_picker.lua` —
+files no reviewer had ever named.
+
+**Check:** `tests/arch/superseded_comment_spec.lua` now fails on two paragraphs
+in one comment run that share a verbatim six-word span — the signature of
+copy-then-edit. It cannot see a fully paraphrased restatement, which is the half
+you still have to hold: after editing a comment, re-read the whole run and delete
+what the new text replaced.
+
+## A guard's comment is a claim, and claims get checked (#205)
+
+The fix for "this matcher is too loose" carried the sentence "Both directions are
+covered by injection tests." There were no injection tests. That sentence is the
+same defect as the finding it was answering — an assertion about coverage with
+nothing behind it — written into the fix for that defect.
+
+**Check:** if a guard's comment says it is tested against something, that test
+must exist in the same commit. And test the matcher against a deliberately
+planted FALSE POSITIVE — a shape it must REJECT — not only against shapes it must
+find; a matcher asserted in one direction only cannot be shown to reject anything.
+
+## Don't restate a list the code owns (#205)
+
+`atlas/providers/agents.md` carried a copy of `config.lua`'s agent roster. Three
+different rosters were written there during this issue and every one named agents
+the config had stopped shipping, because a copy of a list drifts the moment the
+list moves. The atlas's job is the SHAPE — what an agent is, what the `*` suffix
+means — not the current contents.
+
+**Check:** when documenting a collection the code defines, link to the definition
+and describe its invariants. If you catch yourself typing the elements, you are
+writing something that will be wrong by the next commit.
+
+## Pin the half production traverses, not the half that is easy to call (#205)
+
+A fix landed at two sites: a normalizer in `providers.lua` and the argument at
+its call site in `tools/wire.lua`. Tests were written against `cliproxy_strategy`
+directly, so reverting the *call site* left the entire suite green — the half the
+production path actually traverses (`wire.resolve` → `cliproxy_strategy` →
+`cliproxy_route`) was unpinned, while the half that was trivially callable was
+covered twice. Sweeping the class found a second live instance: deleting the
+`bound_candidates` call from `recover` also left everything green, so the cap the
+repair budget's arithmetic depends on could be removed unnoticed.
+
+This is the BR-68 rule — "a fix that lands as a call, or a new argument at an
+existing call, must be pinned AT THAT SITE" — re-broken by the very commit that
+closed the round which restated it. Restating a rule is not applying it.
+
+**Check:** after fixing a call site, revert *that line* and run the suite. If it
+stays green the fix is unpinned, however well the callee is tested. Assert
+through the entry point production uses, and derive any bound from the constant
+rather than restating the number.
+
+## A guard's exclusion is a hole where the family lives (#205)
+
+The prose lint written for the stacked-comment family excludes `---@param`
+blocks, because an annotation legitimately restates the sentence above it. That
+exclusion was correct *and* it was a hole exactly where this family most often
+lands: the commit that shipped the guard created two new instances and left the
+original one, all three invisible to it by construction. Both are annotation
+stacks — a docstring separated from its function by hoisting code in between.
+
+The earlier proposal ("lint `---@param` blocks naming absent identifiers") had
+been rejected as too narrow. It was too narrow *alone*; it was never wrong. The
+two lints are complementary, and shipping one while rejecting the other left the
+family's most common shape uncovered while the plan claimed the class was swept.
+
+**Check:** when a guard needs an exclusion to stay quiet, ask what the excluded
+region can hide, and write the second guard for it in the same commit. "All
+instances swept" is only true of the shapes something can still see.
+
+## Consolidating two copies means pinning the distinction, not picking a winner (#205)
+
+Two copies of "put this agent in the roster" had diverged: the selection path
+overwrote an existing entry, the restore path kept it. The consolidation chose
+overwrite and pinned neither, so reverting the assignment to the keep form left
+the entire suite green. The divergence was not sloppiness — it was two real
+semantics. Config must beat a persisted session pick at startup; a user picking a
+model right now must beat what is there. Collapsing them let a stale pick clobber
+a configured agent on every launch.
+
+**Check:** before merging two implementations that differ, name what the
+difference does. Either keep it (parameterized, with a test per branch that
+reddens under the *other* implementation) or state in the commit why erasing it
+is safe. And note the mutation that matters here is the WRONG IMPLEMENTATION, not
+deletion — deleting the line often reddens something when substituting the rival
+semantics does not.
+
+## A default the user never types is still surface they receive (#205)
+
+Trimming the shipped `agents` list changed what a fresh install can do — it now
+requires cliproxyapi before the first question lands — while README still framed
+the proxy as "dormant" and the issue Spec still promised six agents. Nothing new
+was added: no command, no keybinding, no config key. The docs gate looks for
+those, so it stayed quiet.
+
+**Check:** treat a change to `config.lua`'s shipped defaults as user-facing
+surface. Ask what a brand-new install can no longer do, and say that where the
+reader first meets the subject.

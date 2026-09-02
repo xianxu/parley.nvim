@@ -100,7 +100,11 @@ function M.resolve(provider, model)
         -- public cliproxyapi_encode_tools. Treating the name as a name is the
         -- more useful of the two behaviours, so it is kept deliberately.
         local model_name = type(model) == "table" and model.model or model
-        local strategy = providers.cliproxy_strategy(type(model) == "table" and model or nil)
+        -- Pass the model THROUGH in whichever documented shape it arrives:
+        -- cliproxy_strategy normalizes a bare string now. Dropping it to nil
+        -- here meant a string-configured model got neither the derived strategy
+        -- nor the chance to override it.
+        local strategy = providers.cliproxy_strategy(model)
         if providers.cliproxy_route(model_name, strategy) == "anthropic" then
             return wire_anthropic
         end

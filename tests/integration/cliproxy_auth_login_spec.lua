@@ -7,6 +7,7 @@
 
 local uv = vim.uv or vim.loop
 local parley = require("parley")
+local ready_port = require("tests.helpers.ready_port")
 local cliproxy = require("parley.cliproxy")
 local FAKE = vim.fn.getcwd() .. "/tests/fixtures/fake_cliproxy"
 
@@ -36,31 +37,12 @@ local NO_AUTH = '{"type":"error","error":{"type":"api_error","message":"auth_una
 describe("cliproxy.recover", function()
     local saved_config, saved_select, saved_path, started
 
-    local function free_port()
-        local s = uv.new_tcp()
-        s:bind("127.0.0.1", 0)
-        local port = s:getsockname().port
-        s:close()
-        return port
-    end
 
-    local function wait_listening(port)
-        vim.wait(5000, function()
-            local ok = false
-            local c = uv.new_tcp()
-            c:connect("127.0.0.1", port, function(err)
-                ok = err == nil
-                c:close()
-            end)
-            vim.wait(100, function() return false end)
-            return ok
-        end, 50)
-    end
 
     -- Start the fake with a credential store, optionally overlaying a broken
     -- state onto the claude channel, and point parley's endpoint at it.
     local function serve(overlays)
-        local port = free_port()
+        local port = ready_port.free_port()
         local store = vim.fn.tempname()
         vim.fn.mkdir(store, "p")
         vim.fn.writefile({ vim.json.encode({ type = "claude", email = "me@example.com" }) },
@@ -79,7 +61,7 @@ describe("cliproxy.recover", function()
         local handle, pid = uv.spawn(FAKE, { args = { "-config", cfg_file } }, function() end)
         assert(handle, "failed to spawn fake_cliproxy")
         table.insert(started, { handle = handle, pid = pid })
-        wait_listening(port)
+        ready_port.wait_listening(port)
         parley.dispatcher = parley.dispatcher or {}
         parley.dispatcher.providers = parley.dispatcher.providers or {}
         parley.dispatcher.providers.cliproxyapi = {
@@ -163,6 +145,47 @@ describe("cliproxy.recover", function()
         assert.is_truthy(prompt)
     end)
 
+    it("reads at most MAX_CANDIDATE_CHANNELS credentials for a google-owned model", function()
+        -- BR-107's class (BR-68's rule): a fix that lands as a CALL must be
+        -- pinned AT THAT SITE. Deleting `cc.bound_candidates(...)` from
+        -- `recover` left the entire suite green — the cap that the repair
+        -- budget's arithmetic depends on could be removed and nothing noticed.
+        --
+        -- google is the ONLY owner with more than two channels
+        -- ({gemini-cli, gemini, aistudio, antigravity}), so it is the single
+        -- shape that can distinguish a bounded fan-out from an unbounded one.
+        -- The reads are sequential, so an unbounded four costs 4x CURL_MAX_TIME
+        -- and blows the dispatcher's backstop.
+        serve({ ["gemini-cli"] = { unavailable = true, status_message = "dead" } })
+        vim.ui.select = function(_items, _opts, cb) cb(nil, 2) end
+
+        -- The catalog, not the alias block, is what must resolve the owner here:
+        -- a pin would return a single channel and the cap would never engage.
+        cliproxy._write_catalog({ { id = "gemini-3-pro", owner = "google" } })
+
+        local reads, real = 0, cliproxy.credential_health
+        cliproxy.credential_health = function(cb, channel)
+            reads = reads + 1
+            return real(cb, channel)
+        end
+        local ok, err = pcall(run, {
+            http_status = 503,
+            body = '{"type":"error","error":{"type":"api_error","message":'
+                .. '"auth_unavailable: no auth available (model=gemini-3-pro)"}}',
+            model = "gemini-3-pro", streamed = false, attempt = 0,
+        })
+        cliproxy.credential_health = real
+        assert.is_true(ok, tostring(err))
+
+        -- Derived from the budget the cap feeds, never restated: a literal here
+        -- would keep passing if MAX_CANDIDATE_CHANNELS changed under it.
+        local budget = cliproxy._repair_budget_sec
+        local bound = budget.auth_files / budget.liveness_probe
+        assert.is_true(reads > 0, "the fan-out never ran, so this pins nothing")
+        assert.is_true(reads <= bound,
+            ("recover read %d credentials; the budget bounds it at %d"):format(reads, bound))
+    end)
+
     ----------------------------------------------------------------------------
     -- What it must NOT do (the PQ-2 regression and friends)
     ----------------------------------------------------------------------------
@@ -222,11 +245,15 @@ describe("cliproxy.recover", function()
     end)
 
     it("tells the operator WHY no login was offered when nothing names a channel", function()
-        -- Regression for guidance the old check_auth_failure gave. Note the
-        -- BODY here carries no `providers=` field (the 401 form), so the only
-        -- possible source of a channel is oauth-model-alias — and it's empty.
+        -- Regression for guidance the old check_auth_failure gave. The BODY here
+        -- carries no `providers=` field (the 401 form), so a channel could only
+        -- come from an explicit pin or the CATALOG (#205) — both emptied below,
+        -- which is what makes "nothing names a channel" true rather than
+        -- accidental. Before #205 the alias block was the only source and this
+        -- comment said so; the catalog is now the second one.
         serve()
         parley.config.cliproxy.config["oauth-model-alias"] = {}
+        require("parley.cliproxy")._write_catalog({})
         local prompted = false
         vim.ui.select = function() prompted = true end
         local out = run({ http_status = 401,
@@ -401,7 +428,7 @@ describe("cliproxy.recover", function()
         -- M2: nothing listening ⇒ the repair is to start the proxy, not to
         -- lecture the operator about credentials.
         parley.dispatcher.providers.cliproxyapi = {
-            endpoint = ("http://127.0.0.1:%d/v1/chat/completions"):format(free_port()),
+            endpoint = ("http://127.0.0.1:%d/v1/chat/completions"):format(ready_port.free_port()),
         }
         require("parley.vault").add_secret("cliproxyapi", "testkey")
         local out = run({ http_status = 503, body = NO_AUTH, model = "claude-opus-4-8",
@@ -412,7 +439,7 @@ describe("cliproxy.recover", function()
 
     it("settles rather than hanging when the proxy cannot be started", function()
         parley.dispatcher.providers.cliproxyapi = {
-            endpoint = ("http://127.0.0.1:%d/v1/chat/completions"):format(free_port()),
+            endpoint = ("http://127.0.0.1:%d/v1/chat/completions"):format(ready_port.free_port()),
         }
         require("parley.vault").add_secret("cliproxyapi", "testkey")
         parley.config.cliproxy.binary_path = "/no/such/bin"

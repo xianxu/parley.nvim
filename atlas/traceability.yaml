@@ -269,6 +269,7 @@ atlas:
     tests:
       - tests/arch/scratch_placement_spec.lua
       - tests/arch/destructive_recipe_spec.lua
+      - tests/arch/superseded_comment_spec.lua
       - tests/unit/ready_port_spec.lua
       - tests/integration/fixture_ready_publish_spec.lua
       - tests/integration/chat_progress_process_spec.lua
@@ -363,6 +364,7 @@ atlas:
   providers/agents:
     code:
       - lua/parley/agent_picker.lua
+      - lua/parley/keybinding_registry.lua
       - lua/parley/provider_params.lua
     tests:
       - tests/unit/provider_params_spec.lua
@@ -401,6 +403,8 @@ atlas:
     code:
       - lua/parley/cliproxy_config.lua
       - lua/parley/cliproxy_auth.lua
+      - lua/parley/cliproxy_catalog.lua
+      - lua/parley/agent_picker.lua
       - lua/parley/cliproxy.lua
       - lua/parley/providers.lua
       - lua/parley/dispatcher.lua
@@ -411,6 +415,10 @@ atlas:
     tests:
       - tests/unit/cliproxy_config_spec.lua
       - tests/unit/cliproxy_auth_spec.lua
+      - tests/unit/cliproxy_catalog_spec.lua
+      - tests/unit/live_agent_state_spec.lua
+      - tests/arch/single_source_sweeps_spec.lua
+      - tests/unit/picker_items_spec.lua
       - tests/unit/failure_notice_spec.lua
       - tests/unit/cliproxy_budget_spec.lua
       - tests/unit/providers_pre_query_spec.lua
@@ -423,6 +431,7 @@ atlas:
       - tests/integration/cliproxy_auth_login_spec.lua
       - tests/integration/cliproxy_conformance_spec.lua
       - tests/integration/cliproxy_recovery_e2e_spec.lua
+      - tests/integration/cliproxy_catalog_spec.lua
       - tests/integration/cliproxy_login_spec.lua
 
   providers/anthropic:

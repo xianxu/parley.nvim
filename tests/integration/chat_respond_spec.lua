@@ -1293,7 +1293,20 @@ describe("chat_respond: pending request transcript drift", function()
         parley.tasker._uv = original_tasker_uv
     end)
 
-    local function open_simple_chat(topic, path, extra_header)
+    -- A tool-enabled agent this file OWNS. These cases named `ToolSonnet`, which
+    -- stopped shipping; get_agent then warned and fell back, so each test ran
+    -- against a different agent than it named — passing, but not for the reason
+    -- it claimed. What they actually need is "a tool-enabled anthropic-wire agent".
+    local TOOL_AGENT = {
+        provider = "cliproxyapi",
+        name = "ToolAgentTest",
+        model = { model = "claude-sonnet-5", web_search_strategy = "anthropic_tools_route" },
+        system_prompt = "Be helpful.",
+        synthetic_system_prompt = true,
+        tools = { "@all" },
+    }
+
+local function open_simple_chat(topic, path, extra_header)
         path = path or test_file
         local chat_content = string.format([[
 # topic: %s
@@ -1533,7 +1546,8 @@ describe("chat_respond: pending request transcript drift", function()
     end
 
     local function start_two_folded_tool_rounds(buf, runtime)
-        parley._state.agent = "ToolSonnet"
+        parley.agents[TOOL_AGENT.name] = TOOL_AGENT
+        parley._state.agent = TOOL_AGENT.name
         require("parley.tool_loop").reset(buf)
         require("parley.chat_pending").start = function(opts)
             opts.clock, opts.scheduler = runtime.clock, runtime.scheduler
@@ -1610,7 +1624,20 @@ describe("chat_respond: pending request transcript drift", function()
 
     it("threads provider/model to the tool loop so an openai-family agent recurses", function()
         local buf = open_simple_chat()
-        parley._state.agent = "ToolSol*"
+        -- Registered here, not borrowed: what this asserts is that an
+        -- OPENAI-FAMILY agent recurses, and borrowing one from the shipped
+        -- roster made the test silently depend on such an agent shipping. When
+        -- the roster changed, get_agent fell back to an anthropic-family one and
+        -- the premise evaporated while the failure read as a tool-loop bug.
+        parley.agents["OpenAiFamilyTest"] = {
+            provider = "cliproxyapi",
+            name = "OpenAiFamilyTest",
+            model = { model = "gpt-5.6-sol" },
+            system_prompt = "Be helpful.",
+            synthetic_system_prompt = true,
+            tools = { "@all" },
+        }
+        parley._state.agent = "OpenAiFamilyTest"
         require("parley.tool_loop").reset(buf)
 
         local legs = 0
@@ -1646,7 +1673,8 @@ describe("chat_respond: pending request transcript drift", function()
 
     it("runs a tool-only completion immediately before playful reveal", function()
         local buf = open_simple_chat()
-        parley._state.agent = "ToolSonnet"
+        parley.agents[TOOL_AGENT.name] = TOOL_AGENT
+        parley._state.agent = TOOL_AGENT.name
         local completion
         local qid = "qid_tool_before_reveal"
         parley.dispatcher.query = function(buf_arg, _provider, _payload, _handler, on_exit)
@@ -1810,7 +1838,8 @@ describe("chat_respond: pending request transcript drift", function()
 
     it("hides a shown leg before its local tool and starts recursion with a fresh verb", function()
         local buf = open_simple_chat()
-        parley._state.agent = "ToolSonnet"
+        parley.agents[TOOL_AGENT.name] = TOOL_AGENT
+        parley._state.agent = TOOL_AGENT.name
         local pending = require("parley.chat_pending")
         local original_start = pending.start
         local starts = 0
@@ -2181,7 +2210,8 @@ describe("chat_respond: pending request transcript drift", function()
 
     it("does not append tool blocks when undo invalidates before tool-loop processing", function()
         local buf = open_simple_chat()
-        parley._state.agent = "ToolSonnet"
+        parley.agents[TOOL_AGENT.name] = TOOL_AGENT
+        parley._state.agent = TOOL_AGENT.name
         local captured_completion
         local qid = "qid_tool_after_undo"
 
@@ -2214,7 +2244,8 @@ describe("chat_respond: pending request transcript drift", function()
             return original_finalize(...)
         end
         local buf = open_simple_chat()
-        parley._state.agent = "ToolSonnet"
+        parley.agents[TOOL_AGENT.name] = TOOL_AGENT
+        parley._state.agent = TOOL_AGENT.name
         local scheduled = {}
         vim.schedule = function(fn)
             table.insert(scheduled, fn)
@@ -2264,7 +2295,8 @@ describe("chat_respond: pending request transcript drift", function()
         end
         local buf = open_simple_chat()
         lifecycle.setup(buf)
-        parley._state.agent = "ToolSonnet"
+        parley.agents[TOOL_AGENT.name] = TOOL_AGENT
+        parley._state.agent = TOOL_AGENT.name
         local scheduled = {}
         vim.schedule = function(fn)
             table.insert(scheduled, fn)

@@ -11,6 +11,7 @@ local tmp_dir = (os.getenv("TMPDIR") or "/tmp") .. "/parley-cliproxy-teardown-" 
 vim.fn.mkdir(tmp_dir, "p")
 
 local parley = require("parley")
+local ready_port = require("tests.helpers.ready_port")
 parley.setup({
     chat_dir = tmp_dir,
     state_dir = tmp_dir .. "/state",
@@ -21,15 +22,15 @@ parley.setup({
 local cliproxy = require("parley.cliproxy")
 local vault = require("parley.vault")
 
+-- Redirect cliproxy's derived-artifact dir to a temp dir. Without this, a bare
+-- `PlenaryBustedFile` run (outside `make`, so no XDG_DATA_HOME redirect) writes
+-- the rendered config into the operator's REAL ~/.local/share/nvim — and the
+-- running proxy's file watcher reloads it, leaving their live proxy answering on
+-- a test port with a test api-key. That happened during #205.
+require("parley.cliproxy")._set_data_dir(vim.fn.tempname())
+
 local started = {}
 
-local function free_port()
-    local s = uv.new_tcp()
-    s:bind("127.0.0.1", 0)
-    local port = s:getsockname().port
-    s:close()
-    return port
-end
 
 local function start_fake(port, mode)
     local handle, pid = uv.spawn(FAKE, { args = { "--port", tostring(port), "--mode", mode } }, function() end)
@@ -64,7 +65,7 @@ describe("cliproxy on_abort teardown per caller", function()
     -- memory_prefs: real chain — a foreign proxy aborts each tag, process_next
     -- must keep the batch moving so the callback still fires (no stall).
     it("memory_prefs advances the batch past aborted tags", function()
-        local port = free_port()
+        local port = ready_port.free_port()
         start_fake(port, "foreign")
         parley.dispatcher.providers.cliproxyapi = {
             endpoint = ("http://127.0.0.1:%d/v1/chat/completions"):format(port),

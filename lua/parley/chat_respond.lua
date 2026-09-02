@@ -1253,14 +1253,11 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
         "chat_respond: exchange_idx and component under cursor " .. tostring(exchange_idx) .. " " .. tostring(component)
     )
 
-    -- Drill-in pre-processing: when this is a *new turn* (not a resubmit and
-    -- not a range request), gather every ready 🤖...[U] marker buffer-wide
-    -- (with or without a `<T>` quoted body — see #123) and append them as
-    -- quote+question blocks to the next user turn, then strip the markers in
-    -- place. Markers with `<T>` collapse to plain T inline; markers without
-    -- `<T>` are removed entirely. Re-parse afterwards so the rest of the
-    -- pipeline sees the modified state.
-    -- Drill-in handling, two paths:
+    -- Drill-in handling, two paths. Either way a ready 🤖...[U] marker (with
+    -- or without a `<T>` quoted body — see #123) becomes a quote+question block
+    -- and is stripped in place: markers with `<T>` collapse to plain T inline,
+    -- markers without it are removed entirely. Re-parse afterwards so the rest
+    -- of the pipeline sees the modified state.
     --
     -- (A) Branch path — when the cursor sits inside an existing exchange that
     --     contains ready 🤖...[U] markers, treat each marker as a follow-up
@@ -1526,10 +1523,6 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
         tool_loop_mod.register_live_model(buf, model, target_idx)
 
         -- Compute response_start_line using the model.
-        --
-        -- Every visible element is a block in the model. The model
-        -- handles margins between non-empty blocks automatically.
-        -- We just add blocks and ask for positions.
         --
         -- Every visible element is a block in the model. The model
         -- handles margins between non-empty blocks automatically.

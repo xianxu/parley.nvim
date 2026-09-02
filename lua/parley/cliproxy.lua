@@ -25,6 +25,17 @@ local M = {}
 local CURL_MAX_TIME = 2      -- seconds, --max-time on every probe
 local PORT_RELEASE_MS = 2000 -- wait_port_released deadline
 local POLL_BUDGET_MS = 5000  -- poll_until_healthy deadline
+-- How many candidates the RECOVERY path reads, and the multiplier on the
+-- credential-read term of the repair budget (the reads are sequential).
+--
+-- The largest set OWNER_CHANNELS produces is google's four, in PREFERENCE order:
+-- gemini-cli, gemini, aistudio, antigravity. Bounded because the reads are
+-- sequential and sit inside the dispatcher's backstop: four google channels at
+-- CURL_MAX_TIME each would leave under 5s of headroom, which the budget spec
+-- rejects. Two is enough in practice — OWNER_CHANNELS lists the NATIVE channel
+-- first, so the credential most likely to have served the request is always
+-- read, with one cross-vendor fallback behind it.
+local MAX_CANDIDATE_CHANNELS = 2
 
 local _spawned = {}
 
@@ -234,16 +245,29 @@ end
 -- endpoint, auth_dir, vault-resolved client secret, raw config passthrough).
 -- Consumed by write_rendered_config, config_drift, and status (ARCH-DRY) — add
 -- a render field here and all three pick it up.
-local function render_opts()
+-- Just enough to ADDRESS the proxy: host, port, client bearer. Extracted because
+-- render_opts's first three fields are exactly this, and a second byte-identical
+-- derivation is a second place for the secret-name lookup to drift (ARCH-DRY).
+-- It also has NO side effects, which render_opts does: it mints a management
+-- key, and callers on a UI path must not.
+local function endpoint_opts()
     local host, port = cc.parse_endpoint(endpoint())
-    local c = cfg() or {}
-    local secret = require("parley.vault").get_secret(
-        require("parley.providers").get_secret_name("cliproxyapi"))
     return {
         host = host,
         port = port,
+        secret = require("parley.vault").get_secret(
+            require("parley.providers").get_secret_name("cliproxyapi")),
+    }
+end
+
+local function render_opts()
+    local base = endpoint_opts()
+    local c = cfg() or {}
+    return {
+        host = base.host,
+        port = base.port,
         auth_dir = c.auth_dir,
-        secret = secret,
+        secret = base.secret,
         config = c.config,
         management_key = M.management_key(),
     }
@@ -344,9 +368,16 @@ local _management_restart_done = false
 -- Derived from the constants each step actually uses, NOT restated: CURL_MAX_TIME
 -- is the --max-time on every probe, and the two bounded polls check their
 -- deadline only AFTER a probe returns, so each can overrun by one full probe.
+--
+-- `auth_files` is multiplied by MAX_CANDIDATE_CHANNELS because the readings are
+-- SEQUENTIAL (they share one-shot repair state, so they cannot overlap). The
+-- multiplier is derived from the constant, never restated: google's four
+-- candidate channels are capped to MAX_CANDIDATE_CHANNELS before any read, and
+-- a term that names its own fixed count is how a budget silently stops bounding
+-- anything when that count changes.
 M._repair_budget_sec = {
     liveness_probe = CURL_MAX_TIME,
-    auth_files = CURL_MAX_TIME,
+    auth_files = CURL_MAX_TIME * MAX_CANDIDATE_CHANNELS,
     stop_identity_probe = CURL_MAX_TIME,
     port_release = PORT_RELEASE_MS / 1000 + CURL_MAX_TIME,
     ensure_probe = CURL_MAX_TIME,
@@ -462,13 +493,87 @@ function M.credential_health(cb, channel)
     end, channel)
 end
 
---- Credential health for a LOGIN PROVIDER (`google`), by reading every cliproxy
---- channel that login serves and keeping the healthiest.
+--- Gather every channel's health, then let a PURE reducer choose.
 ---
---- The third axis: `:ParleyProxy models` names providers on the model-owning
---- axis, credential health is keyed by channel, and only five of six coincide —
---- `google` covers gemini / gemini-cli / aistudio. Reading health under "google"
---- finds nothing and fabricates "no credential" for a healthy account.
+--- The gathering is all this does. Choosing used to happen inline, one reading
+--- at a time, which put the policy in the IO shell where it could not be
+--- unit-tested — and the policy was wrong twice over: it blamed whichever
+--- channel held no credential, then whichever one we could not read.
+---
+--- Readings reach `choose` in DECLARED candidate order, so a tie is broken the
+--- same way every run.
+---@param channels string[]
+---@param choose fun(readings: table[]): table|nil, string|nil
+---@param cb fun(health: table, channel: string|nil, repaired: boolean|nil)
+function M.credential_health_across(channels, choose, cb)
+    -- Callers reach here only with a non-empty candidate list (`recover` returns
+    -- earlier when nothing resolves), but an empty list must still settle the
+    -- callback rather than strand it — every exit path resolves exactly once.
+    if #channels == 0 then
+        return cb({ state = "unknown", reason = "no_channel",
+            message = "no cliproxy channel could be resolved" }, nil)
+    end
+    -- SEQUENTIAL, not concurrent. `credential_health` carries module-global
+    -- one-shot state: the first 404 on the management route triggers a repair
+    -- and re-reads, and every later call short-circuits on
+    -- `_management_restart_done`. Issued concurrently, the reads race that flag —
+    -- one repairs while the others return a FABRICATED
+    -- {state="unknown", reason="no_management_route"} that is never re-measured.
+    -- An `unknown` is ineligible, so a real expired credential vanished from
+    -- candidacy and the diagnosis named the channel with no credential: the #197
+    -- wrong-account symptom, reached through concurrency rather than ranking.
+    --
+    -- The cost is small and bounded — one loopback read per channel, each capped
+    -- by CURL_MAX_TIME, and `recover` caps the list at MAX_CANDIDATE_CHANNELS
+    -- before calling here. Deliberately not restating that count: it was written
+    -- as "four" and stayed wrong from the commit that capped it at two.
+    local readings, any_repaired = {}, false
+    local function step(i)
+        if i > #channels then
+            local chosen, chosen_channel = choose(readings)
+                -- BR-76: `repaired` must survive the fan-out. Hardcoding nil
+                -- left `restarted_this_claim` permanently false on what is now
+                -- the DEFAULT path (every anthropic/openai model has two
+                -- candidates without the alias block), re-enabling the compound
+                -- repair-then-restart that credential_health's docstring says is
+                -- unreachable — ~36s, past the dispatcher's 25s backstop.
+            return cb(chosen, chosen_channel, any_repaired)
+        end
+        local channel = channels[i]
+        M.credential_health(function(health, repaired)
+            -- Appended in ITERATION order, which is the declared candidate
+            -- order, so a tie in the reducer names the same account every run.
+            readings[#readings + 1] = { health = health, channel = channel }
+            any_repaired = any_repaired or repaired == true
+            step(i + 1)
+        end, channel)
+    end
+    step(1)
+end
+
+--- One candidate → the single read `recover` has always done, preserving its
+--- `repaired` flag (the 404 management-route repair). Several → the fan-out with
+--- the diagnosis reducer. Split out so `recover` states its intent once instead
+--- of branching inline.
+---@param channels string[]
+---@param cb fun(health: table, channel: string|nil, repaired: boolean|nil)
+function M.credential_health_across_or_one(channels, cb)
+    if #channels <= 1 then
+        return M.credential_health(function(health, repaired)
+            cb(health, channels[1], repaired)
+        end, channels[1])
+    end
+    -- likeliest_culprit, not "unhealthiest": a channel with NO credential could
+    -- not have served the request, and it ranks worst — so an unhealthiest-wins
+    -- reducer names it every time.
+    M.credential_health_across(channels, ca.likeliest_culprit, function(health, channel, repaired)
+        cb(health, channel, repaired)
+    end)
+end
+
+--- The healthiest reading across every channel one login serves — "is this
+--- account usable at all". The twin of the diagnosis path above, sharing its
+--- traversal and differing only in the reducer.
 ---@param login string
 ---@param cb fun(health: table)
 function M.credential_health_for_login(login, cb)
@@ -476,18 +581,9 @@ function M.credential_health_for_login(login, cb)
     if #channels == 0 then
         return M.credential_health(cb, login) -- not a login-axis name; treat as a channel
     end
-    local best, pending = nil, #channels
-    for _, channel in ipairs(channels) do
-        M.credential_health(function(health)
-            if best == nil or ca.healthier(health, best) then
-                best = health
-            end
-            pending = pending - 1
-            if pending == 0 then
-                cb(best)
-            end
-        end, channel)
-    end
+    M.credential_health_across(channels, ca.healthiest, function(health)
+        cb(health)
+    end)
 end
 
 --------------------------------------------------------------------------------
@@ -539,6 +635,24 @@ end
 --------------------------------------------------------------------------------
 
 local POLL_INTERVAL_MS = 250
+
+--- Warm the catalog off the back of a dispatch: refresh it if it is stale.
+---
+--- Called from the cliproxyapi adapter's `pre_query` — the one seam EVERY
+--- cliproxy request passes through, managed or bring-your-own. Its only writer
+--- used to be the agent picker, so a machine that never opened one had no
+--- catalog; and after M4 the catalog is what resolves model→channel, so an auth
+--- failure there reported "no cliproxy channel is configured" with no account
+--- and no login offered — worse than the `oauth-model-alias` block it replaced.
+---
+--- Fire-and-forget and stale-gated, so it costs one extra pair of loopback GETs
+--- per TTL on a path that is already talking to the proxy, never delays the
+--- request, and never spawns the proxy.
+function M.warm_catalog()
+    if M.catalog_stale() then
+        pcall(M.fetch_catalog, function() end)
+    end
+end
 
 local function poll_until_healthy(host, port, secret, pid, callback, on_error)
     local deadline = uv.now() + POLL_BUDGET_MS
@@ -1011,9 +1125,9 @@ function M.callback_port_blocked(provider)
         :format(port, port)
 end
 
---- Watch the auth-dir for a credential appearing/refreshing for `provider`,
---- so a login's outcome is observed rather than assumed.
----@param channel string
+--- Watch the auth-dir for a credential appearing/refreshing for `login`, so a
+--- login's outcome is observed rather than assumed.
+---@param login string
 ---@param since number|nil # epoch seconds; a file newer than this counts
 ---@param timeout_ms number
 ---@param cb fun(ok: boolean)
@@ -1134,6 +1248,7 @@ function M.run_login(provider, argv, on_done, timeout_ms)
         end
         if ok then
             M.credential_health_for_login(provider, function(health)
+                M._on_login_success(provider)
                 settle(true, ("cliproxy: %s login succeeded%s"):format(provider,
                     health.account and (" (" .. health.account .. ")") or ""), vim.log.levels.INFO)
             end)
@@ -1229,11 +1344,20 @@ function M.recover(failure, retry, give_up)
     -- querying health with a login provider silently finds nothing and
     -- fabricates "no credential is loaded".
     --
-    -- The failure body's `providers=` field IS the channel, so prefer it; fall
-    -- back to resolving the model through oauth-model-alias. If neither
-    -- resolves, do NOT guess a channel — reporting another account's health for
-    -- the failing model is worse than admitting we don't know.
-    local channel = verdict.provider or cc.resolve_channel(verdict.model, alias_block() or {})
+    -- The failure body's `providers=` field IS the channel when present, so it
+    -- wins. Otherwise the alias block (an explicit operator pin) and then the
+    -- catalog narrow it to CANDIDATES — plural, because antigravity re-serves
+    -- other vendors' models and an owner implies no single channel. Where
+    -- several remain, credential health decides below rather than this code
+    -- guessing: naming the wrong account is worse than admitting we don't know.
+    local candidates = verdict.provider and { verdict.provider }
+        or cc.resolve_channels(verdict.model, alias_block() or {}, M.catalog_cached())
+    -- Bounded: see MAX_CANDIDATE_CHANNELS. Keeps the NATIVE channel and the
+    -- cross-vendor re-server, which is what the budget rationale promises —
+    -- trimming from the tail instead dropped antigravity for google, the only
+    -- owner with more than two candidates.
+    candidates = cc.bound_candidates(candidates, MAX_CANDIDATE_CHANNELS)
+    local channel = candidates[1]
     local login = cc.channel_login(channel)
     local attempt = failure.attempt or 0
     -- Per-claim, because credential_health CLEARS _management_restart_done on a
@@ -1246,8 +1370,13 @@ function M.recover(failure, retry, give_up)
     if not channel then
         local health = { state = "unknown", reason = "unknown_channel",
             message = ("no cliproxy channel is configured for \"%s\""):format(tostring(verdict.model)) }
-        give_up(ca.diagnosis(verdict, health) .. "\nAdd it to "
-            .. "cliproxy.config['oauth-model-alias'], or run :ParleyProxy login <provider>.")
+        -- No longer "add it to oauth-model-alias": that block is not required for
+        -- routing and no longer ships in the default config. What the operator
+        -- can act on is logging in, or pinning the model if several channels
+        -- could serve it.
+        give_up(ca.diagnosis(verdict, health)
+            .. "\nRun `:ParleyProxy login <provider>`, or pin the model with "
+            .. "cliproxy.config['oauth-model-alias'] if several channels serve it.")
         return true
     end
 
@@ -1287,9 +1416,10 @@ function M.recover(failure, retry, give_up)
         end
         local message = decision.message
         if health and health.state == "missing" and not login then
-            message = message .. ("\nNo login offered: \"%s\" is in no "):format(tostring(verdict.model))
-                .. "cliproxy.config['oauth-model-alias'] channel. Add it there, or run "
-                .. ":ParleyProxy login <provider>."
+            message = message .. ("\nNo login offered: no cliproxy channel resolves for \"%s\". ")
+                :format(tostring(verdict.model))
+                .. "Run `:ParleyProxy login <provider>`, or pin it with "
+                .. "cliproxy.config['oauth-model-alias']."
         end
         give_up(message)
     end
@@ -1304,12 +1434,18 @@ function M.recover(failure, retry, give_up)
                 message = "the proxy is not running" }
             return execute(ca.decide(verdict, health, { running = false }, attempt, login), health)
         end
-        M.credential_health(function(health, repaired)
+        -- Where several channels could serve this model, ask ALL of them and
+        -- name the likeliest culprit — that is the credential that plausibly caused
+        -- the failure. Reporting the healthiest account that happens to share
+        -- the model would send the operator to re-log-in a credential that is
+        -- fine. With one candidate this is the single read it always was.
+        M.credential_health_across_or_one(candidates, function(health, chosen, repaired)
             restarted_this_claim = repaired == true
+            local chosen_login = cc.channel_login(chosen) or login
             -- Staleness is decided entirely inside the record now (modtime vs
             -- updated_at), so proxy_state carries only liveness.
-            execute(ca.decide(verdict, health, { running = true }, attempt, login), health)
-        end, channel)
+            execute(ca.decide(verdict, health, { running = true }, attempt, chosen_login), health)
+        end)
     end)
     return true
 end
@@ -1349,6 +1485,272 @@ function M.list_models(provider, cb)
         end)
     end, function(err)
         cb(nil, err)
+    end)
+end
+
+--------------------------------------------------------------------------------
+-- Model catalog (issue #205)
+--
+-- cliproxy already knows what it serves, and that set moves on its own — an
+-- antigravity login registered 13 new models mid-session, no restart. Parley
+-- reads that catalog instead of carrying model names in config.
+--------------------------------------------------------------------------------
+
+local CATALOG_TTL = 600 -- seconds a SUCCESSFUL catalog stays fresh
+local FAILED_ATTEMPT_BACKOFF = 30 -- seconds to back off after a FAILED attempt
+local _catalog_inflight = false
+local _last_attempt = nil -- when a refresh was last ATTEMPTED, accepted or not
+local _force_stale = false -- set when something invalidates BOTH clocks (a login)
+
+-- No mkdir here: this is called on every picker open and every cache read, and
+-- only the WRITE needs the directory to exist.
+local function catalog_path()
+    return data_root() .. "/catalog.json"
+end
+
+M._catalog_path = catalog_path -- exposed for tests
+
+--- The last catalog we saw, straight off disk. Synchronous and small (~5 KB for
+--- today's 43 models) because the picker renders from it — the UI path never
+--- waits on the network.
+---@return table[] models, number|nil fetched_at
+local _catalog_memo = nil -- { models, fetched_at, mtime }
+
+function M.catalog_cached()
+    -- Memoized on the file's mtime: the picker reads this on open, on every
+    -- <C-a> toggle and on every repaint, and each miss was two file reads plus
+    -- two mkdir syscalls on a keystroke path.
+    local stat = vim.uv and vim.uv.fs_stat(catalog_path()) or nil
+    local mtime = stat and stat.mtime and (stat.mtime.sec or 0) .. "." .. (stat.mtime.nsec or 0)
+    if _catalog_memo and mtime and _catalog_memo.mtime == mtime then
+        return _catalog_memo.models, _catalog_memo.fetched_at
+    end
+    local fd = io.open(catalog_path(), "r")
+    if not fd then
+        return {}, nil
+    end
+    local body = fd:read("*a")
+    fd:close()
+    local ok, decoded = pcall(vim.json.decode, body)
+    if not ok or type(decoded) ~= "table" or type(decoded.models) ~= "table" then
+        return {}, nil
+    end
+    -- Sanitize HERE, at the one boundary every consumer reads through. This file
+    -- is on disk between sessions and can be truncated, hand-edited or written by
+    -- an older parley; a row without a string id makes `_view_for` concatenate
+    -- nil and `_build_items` render nil, i.e. the agent picker throws on open.
+    -- One guard rather than a nil-check in each consumer.
+    local rows = {}
+    for _, m in ipairs(decoded.models) do
+        if type(m) == "table" and type(m.id) == "string" and m.id ~= "" then
+            m.display = type(m.display) == "string" and m.display or m.id
+            m.series = type(m.series) == "string" and m.series or
+                require("parley.cliproxy_catalog").series(m.id)
+            rows[#rows + 1] = m
+        end
+    end
+    _catalog_memo = { models = rows, fetched_at = tonumber(decoded.fetched_at), mtime = mtime }
+    return rows, _catalog_memo.fetched_at
+end
+
+--- Persist a catalog. Also the seam a spec uses to seed one without a live
+--- proxy (#205 Task 4.1 needs a catalog with no network).
+---@param models table[]
+---@param fetched_at number|nil
+function M._write_catalog(models, fetched_at)
+    vim.fn.mkdir(data_root(), "p")
+    local fd = io.open(catalog_path(), "w")
+    if not fd then
+        -- Debug, not error: this runs on a picker-open path. But it must be
+        -- SAID — a silent write failure looks exactly like a successful one to
+        -- everything downstream, and the invalidation is still owed.
+        logger.debug("cliproxy: could not write the catalog cache at " .. catalog_path())
+        return false
+    end
+    fd:write(vim.json.encode({ models = models, fetched_at = fetched_at or os.time() }))
+    fd:close()
+    -- AFTER the write succeeded, never before. An invalidation is consumed by a
+    -- STORED result; clearing it at the start of an attempt lost it on the first
+    -- declined refresh, and clearing it at the top of this function loses it just
+    -- as surely when the open fails. The rule both times: the flag clears where
+    -- the work it is paid for has actually happened.
+    _force_stale = false
+    _catalog_memo = nil -- the file just changed; the next read re-stats it
+    pcall(vim.fn.setfperm, catalog_path(), "rw-------")
+    return true
+end
+
+--- What a completed login must do besides reporting itself.
+---
+--- Extracted so it is reachable from a spec: inline in the watch callback it had
+--- zero coverage, and deleting it left the suite green — the failure this issue
+--- has hit five times.
+---@param provider string
+function M._on_login_success(provider)
+    -- The catalog just changed: a login is exactly what registers a channel's
+    -- models, so any staleness clock is answering about a different world.
+    logger.debug("cliproxy: " .. tostring(provider) .. " login succeeded — invalidating the catalog")
+    M.invalidate_catalog()
+end
+
+--- Force the next staleness check to say "refresh", whatever either clock says.
+---
+--- Called when a login completes. Clearing only the failure clock is NOT enough,
+--- and that was the bug: `catalog_stale` short-circuits on a fresh CACHE before
+--- it ever consults the attempt clock, and a `(logged out)` row exists precisely
+--- because a SUCCESSFUL fetch lacked that provider's models — so the common case
+--- HAS a fresh cache, and the operator kept seeing the row they had just logged
+--- in through for up to the full TTL.
+function M.invalidate_catalog()
+    _last_attempt = nil
+    _force_stale = true
+end
+
+--- Test seam: put both clocks back to "never tried", WITHOUT forcing a refresh.
+--- Deliberately distinct from `invalidate_catalog` — a spec setting up a clean
+--- clock is not the same act as a login announcing the catalog just changed, and
+--- one function doing both made every spec that reset the clock see everything
+--- as stale.
+function M._reset_catalog_clock()
+    _last_attempt = nil
+    _force_stale = false
+end
+
+--- Test seam: pretend the last failed attempt happened at `t`, so a spec can
+--- cross the backoff without sleeping through it.
+function M._set_failed_attempt_at(t)
+    _last_attempt = t
+end
+
+--- Is it worth another refresh?
+---
+--- TWO clocks, because a success and a failure mean different things:
+---   * a fresh CACHE is good for CATALOG_TTL — models rarely move;
+---   * a failed ATTEMPT backs off for FAILED_ATTEMPT_BACKOFF only, seconds not
+---     minutes. Keying a failure on the success TTL silenced the picker for ten
+---     minutes, including immediately after the operator logged in through the
+---     `(logged out)` row — precisely when the catalog HAS just changed.
+--- Keying only on success is the opposite failure: the cache is never written
+--- while the proxy is down, so every picker open re-spawns two curls that
+--- connection-refuse, an unbounded retry on a keystroke path.
+---@return boolean
+function M.catalog_stale()
+    local _, at = M.catalog_cached()
+    return cc.catalog_stale({
+        now = os.time(),
+        cached_at = at,
+        last_attempt = _last_attempt,
+        forced = _force_stale,
+        ttl = CATALOG_TTL,
+        backoff = FAILED_ATTEMPT_BACKOFF,
+    })
+end
+
+--- Refresh the catalog from a proxy that is ALREADY running.
+---
+--- Deliberately NOT routed through ensure_running: opening a picker must never
+--- spawn a daemon (#131's dormancy contract). A connection-refused is a no-op
+--- that leaves the cached catalog in place, so the picker keeps rendering what
+--- it last knew.
+---
+--- Two routes because neither is sufficient: /v1/models carries `created`,
+--- /v1beta/models carries the display names.
+---@param cb fun(models: table[])|nil
+function M.fetch_catalog(cb)
+    -- Every exit path resolves the callback exactly once. Returning silently
+    -- while a refresh is in flight strands the caller: a picker opened during
+    -- one would never repaint, because the in-flight fetch's callback belongs to
+    -- an earlier, possibly closed, picker.
+    cb = cb or function() end
+    if _catalog_inflight then
+        return cb(M.catalog_cached())
+    end
+    _last_attempt = os.time()
+    -- endpoint_opts(), NOT render_opts(): the latter gathers the whole
+    -- write_rendered_config bundle, which MINTS a 0600 `management.key` as a
+    -- side effect, and opening a picker must not create a credential file.
+    local opts = endpoint_opts()
+    if not opts.host or not opts.port then
+        return cb(M.catalog_cached())
+    end
+    _catalog_inflight = true
+    -- Cleared on EVERY path. It is set before two vim.system calls, so an
+    -- uncaught error in either callback would strand it true for the rest of the
+    -- session — and a stranded flag means the catalog never refreshes again.
+    local function settle(models)
+        _catalog_inflight = false
+        cb(models)
+    end
+    -- Both the body and the HTTP status: "curl exited 0" is NOT "the request
+    -- succeeded". A 401 carries a perfectly readable body that parses to an
+    -- empty model list, and writing that would erase a good catalog every time
+    -- the client key drifted.
+    local function get(route, done)
+        -- The LAUNCH is guarded, not just the callbacks: vim.system itself can
+        -- throw (a malformed argv, a missing curl), and an unguarded throw here
+        -- leaves _catalog_inflight true for the rest of the session — after
+        -- which the catalog never refreshes again.
+        local ok, err = pcall(vim.system,
+            api_argv(opts.host, opts.port, opts.secret, route), { text = true },
+            function(obj)
+                if obj.code ~= 0 then
+                    return done(nil, nil)
+                end
+                local body, http = split_status(obj.stdout)
+                done(body or obj.stdout, tonumber(http))
+            end)
+        if not ok then
+            logger.debug("cliproxy: catalog request could not start: " .. tostring(err))
+            done(nil, nil)
+        end
+    end
+    get("/v1/models", function(v1, v1_status)
+        get("/v1beta/models", function(beta, _beta_status)
+            vim.schedule(function()
+                local ok, models = pcall(function()
+                    return require("parley.cliproxy_catalog").parse(v1 or "", beta or "")
+                end)
+                if not ok then
+                    -- debug, not error: this runs on picker open, where an
+                    -- unreadable body is not something the operator asked about
+                    -- and a popup would interrupt them mid-keystroke.
+                    logger.debug("cliproxy: catalog parse failed: " .. tostring(models))
+                    return settle(M.catalog_cached())
+                end
+                -- Write only when the response is RECOGNISABLY cliproxy's model
+                -- list. Three weaker gates were tried and each lost data:
+                -- `#models > 0` conflated "nothing is authenticated" with "the
+                -- proxy is down"; curl's exit code let a 401 body parse to an
+                -- empty list and erase a good catalog; and HTTP 200 alone let
+                -- whatever else is listening on that port do the same. `classify`
+                -- is the existing single source for "is this cliproxy's /v1/models
+                -- contract" (ARCH-DRY) — `healthy` or `needs_login` are the two
+                -- shapes that ARE that contract, empty list included.
+                local shape = classify(0, (v1 or "") .. "\n" .. tostring(v1_status or 0))
+                if v1_status == 200 and (shape == "healthy" or shape == "needs_login") then
+                    if not M._write_catalog(models) then
+                        -- The write said no. Returning the parsed models anyway
+                        -- would have the caller render rows the cache does not
+                        -- hold, and the next staleness check would disagree with
+                        -- what is on disk.
+                        return settle(M.catalog_cached())
+                    end
+                else
+                    -- Debug, never a popup: this runs on a picker-open path and
+                    -- a proxy that is simply down is not an error the operator
+                    -- asked about. The cached catalog stays on screen.
+                    logger.debug(("cliproxy: catalog refresh declined (http=%s shape=%s) — "
+                        .. "keeping the cached catalog"):format(tostring(v1_status), tostring(shape)))
+                    -- Hand back what is actually IN the cache. `models` is the
+                    -- parse of a body we just refused to store (a 401 page, a
+                    -- foreign server), so resolving with it has the caller render
+                    -- rows the cache does not contain. Both declined branches —
+                    -- this one and the parse failure above — resolve the same way.
+                    return settle(M.catalog_cached())
+                end
+                settle(models)
+            end)
+        end)
     end)
 end
 

@@ -203,13 +203,12 @@ M.unpack_inline_branch_links = function(line, branch_prefix)
 	return line:gsub(prefix_pattern, "%1")
 end
 
----@param lines table        # array of strings (all lines of the chat file)
----@param header_end number  # index of the "---" separator line
----@param config table       # parley config table (or a minimal stub for tests)
----@return table             # parsed_chat structure described above
 --- Find which exchange (1-indexed) contains the given buffer line.
 --- Returns nil if the line is outside any exchange (e.g. in the header).
 --- #90 Task 1.2.
+---@param parsed table        # a parsed_chat structure
+---@param line_no number      # 1-indexed buffer line
+---@return number|nil         # exchange index, or nil outside any exchange
 function M.find_exchange_at_line(parsed, line_no)
 	for i, ex in ipairs(parsed.exchanges or {}) do
 		local q_start = ex.question and ex.question.line_start or math.huge

@@ -61,6 +61,96 @@ It **identity-probes the port first** (the same `/v1/models` classifier as
 `health_probe`), so a *foreign* process holding the port is never killed — only
 a process that actually answers as cliproxy. `restart` = `stop` + ensure.
 
+## Model catalog (#205)
+
+Three modules, split by what they touch: **`cliproxy_catalog.lua`** is the pure
+core (parse the two model routes, derive a model's series, rank it, apply the
+operator's filters, build the agent a picked row implies) and is unit-tested
+against fixtures captured from a real proxy with no mocks;
+**`cliproxy.lua`** is the IO shell that fetches and caches it; and
+**`cliproxy_config.lua`** owns the channel relations the diagnosis path needs.
+
+
+cliproxyapi advertises what it serves, and that set moves without warning — an
+antigravity login registered 13 new models mid-session with no restart. Parley
+reads that catalog instead of carrying model names in Lua.
+
+- **Two routes, joined on id.** `/v1/models` carries `created` (the recency
+  signal); `/v1beta/models` carries `displayName` + `description`. Neither is
+  sufficient: for antigravity the display name is the only truthful naming, since
+  its ids are opaque handles (`gemini-pro-agent` is "Gemini 3.1 Pro (High)").
+- **`catalog.json`** — a derived artifact beside `config.yaml` under
+  `stdpath('data')/parley/cliproxy/`, written `0600`. The picker renders from it
+  synchronously, so a cold start is instant and a dead proxy still lists models.
+  Refreshed on picker open when older than 10 minutes — but that cadence has two
+  escape hatches, because a plain TTL is wrong in both directions. A FAILED
+  attempt backs off only ~30s (keying failures on the 10-minute clock silenced
+  the picker while the proxy came back), and a completed login INVALIDATES the
+  cache outright: a login is what registers a channel's models, and a
+  `(logged out)` row exists precisely because a successful fetch lacked them — so
+  the cache is fresh, and without the invalidation the operator kept seeing the
+  row they had just logged in through.
+- **The catalog does not depend on `manage`.** `cliproxy.manage = false` means
+  parley will not START a proxy, not that there is no proxy — a bring-your-own
+  instance answers the same GET. The refresh therefore runs either way; gating it
+  on `manage` left those operators with an empty catalog and a picker claiming
+  every configured provider was logged out.
+- **Any dispatch warms it, not just the picker.** The adapter's `pre_query` hook
+  kicks a stale-gated refresh — the one seam EVERY cliproxy request passes
+  through, managed or bring-your-own — so a machine that has never opened an
+  agent picker still has a catalog — which matters because the catalog is what resolves
+  model→channel for auth diagnosis. Its only writer used to be the picker, so a
+  cold install reported "no cliproxy channel is configured" with no account and
+  no login offered: worse than the `oauth-model-alias` block it replaced. Warming
+  inside `ensure_running` is NOT enough — `pre_query` returns before it when
+  `manage = false`, so the bring-your-own operator never reached it.
+- **`fetch_catalog` never spawns the proxy.** It is a plain GET; a
+  connection-refused is a no-op that leaves the cache in place. Opening a picker
+  must not start a daemon — that is the dormancy contract from #131, pinned by a
+  test that points at a free port and asserts it stays free.
+- **`cliproxy.live_models`** — `{ providers = { "claude:opus,sonnet,fable", … },
+  per_provider = 3 }`. An entry is `"<provider>[:<term>,…]"`; terms are
+  case-insensitive substrings matched against the id **and** the display name
+  (required, not cosmetic: antigravity's ids are unfilterable otherwise). Terms
+  narrow, then the newest of each model line is kept, capped at `per_provider`.
+  Term order is display order. It names providers and families, never versions,
+  so it does not go stale.
+- **No `oauth-model-alias` is required (#205).** cliproxyapi exposes an OAuth
+  channel's models automatically once that channel has a credential — verified
+  against a live proxy: models absent from any alias block answer normally, and a
+  login registers its channel's models with no restart. The block parley used to
+  ship claimed routing needed it (true of 7.1.71, not since) and went stale the
+  moment a new model appeared. It is still HONORED as an explicit channel PIN,
+  which is the one thing the catalog cannot decide: antigravity re-serves claude,
+  gemini and gpt-oss models alongside their native channels, so pinning is how you
+  say which channel should serve a given id.
+- **Model → channel now resolves from the catalog**, and where several channels
+  could serve one id, CREDENTIAL HEALTH picks between them — **eligibility first,
+  ranking second**. A channel holding NO credential cannot have served the
+  request, so it is not a candidate at all; among those that could have, the
+  likeliest culprit is named. Getting that order wrong inverts the answer, because
+  `missing` ranks worst: an "unhealthiest wins" reducer names the channel you
+  have never logged into and leaves the credential that actually failed unnamed. A pin still wins over both. If nothing resolves, parley says so
+  rather than naming an account at random.
+- **`owned_by` is a display grouping, not a channel.** The same id was reported
+  under `anthropic` on one proxy start and `antigravity` on the next, so nothing
+  durable keys off it — in particular the wire is chosen by model FAMILY, never
+  by owner.
+- **The strategy is CORRECTED, not restated.** An agent need not carry
+  `web_search_strategy`: the resolution chain is agent override → a provider-level
+  `none` (a global off switch) → a correction when the configured strategy is one
+  the family cannot use → the provider default → none. It corrects and never
+  invents, so an unconfigured setup still resolves to `none`. **Behaviour change
+  (#205):** a claude model under the shipped `openai_tools_route` default now
+  takes the ANTHROPIC route by default, because measurement showed claude returns
+  an empty completion on the openai route with web_search on. Set
+  `web_search_strategy` on the agent to override.
+- **Server-side web search differs per family** (measured 2026-08-31): claude
+  needs the anthropic route; gpt/codex works on `openai_tools_route`; gemini and
+  anything antigravity re-serves gets `none`, because `{type="web_search"}` makes
+  gemini answer `malformed_function_call` with no content. The decision is
+  single-sourced in `providers.cliproxy_default_web_search_strategy`.
+
 ## Auth & secrets
 
 - The **client token** (`api_keys.cliproxyapi`) is resolved through the vault and
@@ -134,7 +224,7 @@ cliproxy claims only when: a verdict exists, `attempt == 0`, and nothing has
 streamed (`failure.streamed`) — a retry after partial content would duplicate
 text. `failure.model` carries `payload.model`, the only path by which the
 expired-token 401 (which names neither provider nor model) resolves to a channel
-via `resolve_login_provider`.
+via `channel_login on a resolved channel`.
 
 ### The recovery ladder
 

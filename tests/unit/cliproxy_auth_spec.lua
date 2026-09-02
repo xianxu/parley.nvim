@@ -563,3 +563,194 @@ describe("_usage_has_flag", function()
         assert.is_false(cliproxy._usage_has_flag("", "-claude-login"))
     end)
 end)
+
+--------------------------------------------------------------------------------
+-- likeliest_culprit — eligibility before ranking (#205 M4 C1)
+--------------------------------------------------------------------------------
+describe("likeliest_culprit", function()
+    local function r(channel, state) return { channel = channel, health = { state = state } } end
+
+    it("never blames a channel that holds no credential", function()
+        -- The shipped bug: `missing` ranks WORST, so an unhealthiest-wins
+        -- reducer chose the channel with no credential at all — which cannot
+        -- have served the request — and told the operator to log into a channel
+        -- they may never have used, while the credential that actually failed
+        -- went unnamed.
+        local health, channel = ca.likeliest_culprit({
+            r("antigravity", "missing"),
+            r("claude", "error"),
+        })
+        assert.equals("claude", channel)
+        assert.equals("error", health.state)
+    end)
+
+    it("picks the least healthy among those that could have served it", function()
+        local _, channel = ca.likeliest_culprit({
+            r("claude", "healthy"),
+            r("antigravity", "unavailable"),
+        })
+        assert.equals("antigravity", channel)
+    end)
+
+    it("reports missing only when EVERY candidate is missing", function()
+        -- Then it is the honest answer: you are logged into none of these.
+        local health, channel = ca.likeliest_culprit({
+            r("antigravity", "missing"),
+            r("claude", "missing"),
+        })
+        assert.equals("missing", health.state)
+        assert.is_not_nil(channel)
+    end)
+
+    it("handles a single candidate and an empty set", function()
+        local _, channel = ca.likeliest_culprit({ r("claude", "error") })
+        assert.equals("claude", channel)
+        local h2, c2 = ca.likeliest_culprit({})
+        assert.is_nil(h2)
+        assert.is_nil(c2)
+    end)
+end)
+
+describe("could_have_served", function()
+    it("admits only states that could have served the request", function()
+        for _, state in ipairs({ "healthy", "error", "unavailable" }) do
+            assert.is_true(ca.could_have_served({ state = state }), state)
+        end
+    end)
+
+    it("rejects the three states that are not evidence of guilt", function()
+        -- missing:  no credential exists, so cliproxy never routed through it
+        -- disabled: the operator switched it off, so it was not serving
+        -- unknown:  we could not READ it — not evidence, and it ranks BELOW
+        --           missing, so an inverted-rank reducer picked it over a
+        --           genuinely expired credential
+        for _, state in ipairs({ "missing", "disabled", "unknown" }) do
+            assert.is_false(ca.could_have_served({ state = state }), state)
+        end
+        assert.is_false(ca.could_have_served(nil))
+    end)
+end)
+
+describe("likeliest_culprit ranking", function()
+    local function r(channel, state) return { channel = channel, health = { state = state } } end
+
+    it("prefers an errored credential over an unreadable one", function()
+        -- The shipped bug, one layer in: `unknown` ranks -1 under HEALTH_RANK —
+        -- below `missing` — so excluding only `missing` still let an unreadable
+        -- channel outrank the credential that actually expired.
+        local _, channel = ca.likeliest_culprit({ r("antigravity", "unknown"), r("claude", "error") })
+        assert.equals("claude", channel)
+    end)
+
+    it("prefers an errored credential over a disabled one", function()
+        local _, channel = ca.likeliest_culprit({ r("antigravity", "disabled"), r("claude", "error") })
+        assert.equals("claude", channel)
+    end)
+
+    it("prefers error over unavailable over healthy", function()
+        local _, c1 = ca.likeliest_culprit({ r("a", "healthy"), r("b", "unavailable"), r("c", "error") })
+        assert.equals("c", c1)
+        local _, c2 = ca.likeliest_culprit({ r("a", "healthy"), r("b", "unavailable") })
+        assert.equals("b", c2)
+    end)
+
+    it("breaks ties by declared candidate order, not arrival order", function()
+        -- Two equally-suspect credentials must name the same account every run;
+        -- the fan-out collects asynchronously, so arrival order is not stable.
+        for _ = 1, 5 do
+            local _, channel = ca.likeliest_culprit({ r("first", "error"), r("second", "error") })
+            assert.equals("first", channel)
+        end
+    end)
+
+    it("falls back to the first reading when nothing is eligible", function()
+        local health, channel = ca.likeliest_culprit({ r("antigravity", "missing"), r("claude", "unknown") })
+        assert.equals("antigravity", channel)
+        assert.equals("missing", health.state)
+    end)
+end)
+
+describe("healthiest", function()
+    local function r(channel, state) return { channel = channel, health = { state = state } } end
+
+    it("answers the opposite question from likeliest_culprit", function()
+        local readings = { r("antigravity", "missing"), r("claude", "healthy") }
+        local _, best = ca.healthiest(readings)
+        local _, blamed = ca.likeliest_culprit(readings)
+        assert.equals("claude", best)
+        assert.equals("claude", blamed) -- the only eligible one here
+        local _, best2 = ca.healthiest({ r("a", "error"), r("b", "healthy") })
+        local _, blamed2 = ca.likeliest_culprit({ r("a", "error"), r("b", "healthy") })
+        assert.equals("b", best2)
+        assert.equals("a", blamed2)
+    end)
+end)
+
+describe("credential_health_across contract", function()
+    local cliproxy = require("parley.cliproxy")
+
+    it("hands the reducer readings in DECLARED order, whatever the arrival order", function()
+        -- BR-77: the fan-out is async, so appending recorded ARRIVAL order and a
+        -- tie named a different account run to run.
+        local saved = cliproxy.credential_health
+        cliproxy.credential_health = function(cb, channel)
+            -- deliberately resolve out of order: the second channel first
+            vim.defer_fn(function()
+                cb({ state = "error" }, false)
+            end, channel == "first" and 30 or 1)
+        end
+        local got
+        cliproxy.credential_health_across({ "first", "second" }, function(readings)
+            got = { readings[1].channel, readings[2].channel }
+            return readings[1].health, readings[1].channel
+        end, function() end)
+        vim.wait(2000, function() return got ~= nil end, 10)
+        cliproxy.credential_health = saved
+        assert.same({ "first", "second" }, got)
+    end)
+
+    it("reads candidates SEQUENTIALLY, because the repair flag is one-shot", function()
+        -- BR-89: credential_health carries module-global one-shot repair state.
+        -- Issued concurrently, the reads race it: one repairs and re-reads while
+        -- the others return a fabricated {state="unknown"} that is never
+        -- re-measured — and an `unknown` is ineligible, so a real expired
+        -- credential dropped out of candidacy and the diagnosis named the
+        -- channel with no credential at all.
+        local saved = cliproxy.credential_health
+        local in_flight, max_in_flight = 0, 0
+        cliproxy.credential_health = function(cb, _channel)
+            in_flight = in_flight + 1
+            max_in_flight = math.max(max_in_flight, in_flight)
+            vim.defer_fn(function()
+                in_flight = in_flight - 1
+                cb({ state = "error" }, false)
+            end, 5)
+        end
+        local done = false
+        cliproxy.credential_health_across({ "a", "b", "c" },
+            require("parley.cliproxy_auth").likeliest_culprit,
+            function() done = true end)
+        vim.wait(3000, function() return done end, 5)
+        cliproxy.credential_health = saved
+        assert.is_true(done, "the chain never settled")
+        assert.equals(1, max_in_flight,
+            "reads overlapped; they share one-shot repair state and must not")
+    end)
+
+    it("propagates `repaired` from any reading", function()
+        -- BR-76: hardcoding nil left the one-restart-per-claim guard permanently
+        -- false on what is now the default path, re-enabling a ~36s compound
+        -- repair past the dispatcher's backstop.
+        local saved = cliproxy.credential_health
+        cliproxy.credential_health = function(cb, channel)
+            cb({ state = "error" }, channel == "second")
+        end
+        local seen
+        cliproxy.credential_health_across({ "first", "second" },
+            require("parley.cliproxy_auth").likeliest_culprit,
+            function(_h, _c, repaired) seen = repaired end)
+        vim.wait(2000, function() return seen ~= nil end, 10)
+        cliproxy.credential_health = saved
+        assert.is_true(seen, "a repair on any candidate must reach the caller")
+    end)
+end)

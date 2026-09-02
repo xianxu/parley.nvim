@@ -1,0 +1,2471 @@
+# Live cliproxy model picker Implementation Plan
+
+> **For agentic workers:** Consult AGENTS.md Section 3 (Subagent Strategy) to determine the appropriate execution approach: use superpowers-subagent-driven-development (if subagents are suitable per AGENTS.md) or superpowers-executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Offer cliproxyapi's live model catalog in the agent picker so no cliproxyapi model is ever named in `config.lua` again.
+
+**Architecture:** A pure catalog core (`cliproxy_catalog.lua`) parses the proxy's two model routes, applies the operator's `provider:term,term` filters, and curates a short per-provider list. A thin IO shell in `cliproxy.lua` fetches and disk-caches that catalog; `agent_picker.lua` renders it as a live section and turns a selection into a session-registered cliproxyapi agent. Finally `oauth-model-alias` is deleted and model→channel resolution derives from the catalog.
+
+**Tech Stack:** Lua 5.1 / LuaJIT (Neovim), plenary.nvim busted specs, `vim.system` + curl for IO, the existing `tests/fixtures/fake_cliproxy` process fake.
+
+**Spec:** `workshop/issues/000205-live-cliproxy-model-picker.md`
+
+**The issue file is the record of progress, not this plan's checkboxes.** The
+`- [ ]` boxes below are a reading aid; `## Plan` in the issue carries the milestone
+state that `sdlc` ticks and the close gate reads. Do not infer "nothing is done"
+from unticked boxes here.
+
+---
+
+## Core concepts
+
+### Pure entities (the conceptual core)
+
+| Name | Lives in | Status |
+|------|----------|--------|
+| `Model` (record) | `lua/parley/cliproxy_catalog.lua` | new |
+| `parse` | `lua/parley/cliproxy_catalog.lua` | new |
+| `series` | `lua/parley/cliproxy_catalog.lua` | new |
+| `rank_key` | `lua/parley/cliproxy_catalog.lua` | new |
+| `parse_provider_spec` | `lua/parley/cliproxy_catalog.lua` | new |
+| `curate` | `lua/parley/cliproxy_catalog.lua` | new |
+| `catalog_stale` | `lua/parley/cliproxy_config.lua` | new |
+| `build_agent` | `lua/parley/cliproxy_catalog.lua` | new |
+| `agent_name` | `lua/parley/cliproxy_catalog.lua` | new |
+| `cliproxy_default_web_search_strategy` | `lua/parley/providers.lua` | new |
+| `get_cliproxy_strategy` | `lua/parley/providers.lua` | modified |
+| `resolve_channel` | `lua/parley/cliproxy_config.lua` | modified |
+| `resolve_channels` / `channels_for_owner` / `bound_candidates` | `lua/parley/cliproxy_config.lua` | new |
+| `could_have_served` / `likeliest_culprit` / `healthiest` | `lua/parley/cliproxy_auth.lua` | new |
+| `build_payload` (`opts.agent`) | `scripts/parley_harness.lua` | modified |
+| `golden_fixture` | `scripts/golden_fixture.lua` | new |
+| `_build_items` | `lua/parley/agent_picker.lua` | modified |
+| `_providers_without_models` | `lua/parley/agent_picker.lua` | new |
+| `_view_for` | `lua/parley/agent_picker.lua` | new |
+| `_identity` | `lua/parley/agent_picker.lua` | new |
+| `key_for` | `lua/parley/keybinding_registry.lua` | new |
+
+- **Model** — one catalog row: `{ id, owner, created, display, description, series }`. The join of `/v1/models` (carries `created`) and `/v1beta/models` (carries `displayName`/`description`) on `id`.
+  - **Relationships:** N:1 with provider (via `PROVIDER_OWNED_BY`); N:1 with series.
+  - **DRY rationale:** One row shape for the picker, the curation, and the agent constructor. Without it each consumer re-reaches into raw JSON with a different idea of which field is authoritative.
+  - **Future extensions:** `input_token_limit` is already present for google rows; a context-window column widens here.
+
+- **series** — the id with version numerals stripped (`claude-opus-5` → `claude-opus`), so "newest of this line" is expressible.
+  - **DRY rationale:** Curation, dedupe and ordering all need the same notion of "same model line". First occurrence of a pattern that recurs the moment a second provider is added.
+
+- **rank_key** — recency for ordering: `created` when present, else the version parsed from `displayName`. Exists because **all 13 antigravity rows carry no `created`** (measured 2026-08-31); a `created`-only sort silently pins that provider's order to JSON order.
+
+- **parse_provider_spec** — `"claude:opus,sonnet"` → `{ provider = "claude", terms = { "opus", "sonnet" } }`. Split on `:` then `,`; empty filter means "no filter".
+
+- **curate** — filter → dedupe by series → rank → cap at `per_provider`. Term order is display order.
+  - **Future extensions:** a `min_created` cut, or per-provider `per_provider` overrides, widen the opts table.
+
+- **build_agent** — a `Model` plus config defaults → a parley agent table. Lives beside the catalog deliberately: it consumes a `Model` field-by-field, so the two change together (skill heuristic: files that change together live together).
+
+### Integration points (where pure meets the world)
+
+| Name | Lives in | Status | Wraps |
+|------|----------|--------|-------|
+| `fetch_catalog` | `lua/parley/cliproxy.lua` | new | HTTP GET on the proxy |
+| `catalog_cached` / `_write_catalog` / `_catalog_path` | `lua/parley/cliproxy.lua` | new | filesystem (`stdpath('data')`) |
+| `catalog_stale` | `lua/parley/cliproxy.lua` | new | clock + filesystem |
+| `warm_catalog` | `lua/parley/cliproxy.lua` | new | called from the adapter's `pre_query` |
+| `_on_login_success` | `lua/parley/cliproxy.lua` | new | the login watch |
+| `credential_health_across` / `credential_health_across_or_one` | `lua/parley/cliproxy.lua` | new | `/v0/management/auth-files` |
+| `credential_health_for_login` | `lua/parley/cliproxy.lua` | modified | now shares the fan-out |
+| `invalidate_catalog` / `_reset_catalog_clock` / `_set_failed_attempt_at` | `lua/parley/cliproxy.lua` | new | the staleness clocks |
+| `endpoint_opts` | `lua/parley/cliproxy.lua` | new | provider endpoint + vault |
+| `register_live_agent` | `lua/parley/init.lua` | new | `state.json` |
+| `get_agent` | `lua/parley/init.lua` | modified | stale-selection fallback |
+| `_select` | `lua/parley/agent_picker.lua` | new | `vim.cmd` / `vim.schedule` |
+| `selected` (handle) | `lua/parley/float_picker.lua` | new | picker window state |
+| `invalidate_catalog` / `_reset_catalog_clock` / `_set_failed_attempt_at` | `lua/parley/cliproxy.lua` | new | the staleness clocks |
+| `agent_picker` live section | `lua/parley/agent_picker.lua` | modified | `float_picker` handle |
+| live-agent restore | `lua/parley/init.lua` | modified | `state.json` |
+| `/v1beta/models` route | `tests/fixtures/fake_cliproxy` | modified | the cliproxy binary |
+
+- **fetch_catalog** — two GETs through the existing `api_argv` helper (ARCH-DRY: the same argv builder the health probe, `list_models` and the management reader already use), joined by `parse`.
+  - **Injected into:** nothing pure — it *produces* the input `curate` consumes. Specs drive `parse`/`curate` from fixtures with no IO.
+- **catalog_cached / _write_catalog** — JSON at `<data_root>/catalog.json`, `data_root()` already test-redirected by `M._set_data_dir`.
+  - **Injected into:** the picker reads the cache synchronously; the network path only ever writes it.
+- **_providers_without_models** (pure, in `agent_picker.lua`) — a configured
+  provider the catalog advertises nothing for is one you are not logged into:
+  cliproxy registers a channel's models only once it has a credential (measured —
+  antigravity's 13 models appeared the moment its auth file landed). That keeps
+  the check synchronous on a UI path and needs no management call. A credential
+  that is loaded but DEAD still lists models; #197's dispatch-failure path owns
+  that case.
+- **fake_cliproxy** — the stateful process fake gains `/v1beta/models` extending its existing `healthy` mode with the awkward shapes (no new mode:
+the fixture's mode list is `healthy|needs_login|client_key_mismatch|foreign|slow|crash`,
+and the catalog is a property of a healthy proxy, not a sixth behaviour): rows without `created`, and one id claimed by two owners.
+
+### Operating envelope (ARCH-CONSTRAINTS)
+
+- **Interaction path:** picker open — UI response, keystroke-adjacent.
+- **Latency budget:** opening the picker does **zero network work on the main thread**. It reads one cached JSON (~5 KB for today's 43 models — measured) and renders. Basis: measured catalog size.
+- **Refresh:** async `vim.system`, `--max-time 2` (the existing `CURL_MAX_TIME`). Exactly 2 GETs, at most one refresh in flight (module-local guard). When it exceeds the budget or the proxy is down, the cached list stays on screen and the failure is logged at debug — never a popup on a UI path.
+- **Never spawns the proxy.** The refresh is a plain GET; a connection-refused is a no-op. It deliberately does **not** call `ensure_running`, so the "#131 dormant unless a cliproxyapi agent runs" contract holds.
+- **Staleness:** three inputs, not one clock — a successful cache is fresh for
+  10 min; a FAILED attempt backs off ~30s (a failure keyed on the success TTL
+  silences the picker while the proxy recovers); and a completed login
+  invalidates outright, since `catalog_stale` short-circuits on a fresh cache and
+  a `(logged out)` row exists exactly when the cache IS fresh. Basis: operator choice, informed by a measured fact — an antigravity login registered 13 new models mid-session with no restart, so a long TTL would show a stale provider set.
+- **Scale:** catalog is O(50) rows; curation is O(n log n) on a list that small. N/A for memory, concurrency, disk.
+
+---
+
+## Chunk 1: M1 — the pure catalog core
+
+### Task 1.1: Capture real fixtures
+
+**Files:**
+- Create: `tests/fixtures/cliproxy_catalog_v1.json`, `tests/fixtures/cliproxy_catalog_v1beta.json`
+
+- [ ] **Step 1: Capture both routes from a running proxy**
+
+```bash
+KEY="${CLIPROXYAPI_API_KEY:-parley-local}"
+curl -s -H "Authorization: Bearer $KEY" http://127.0.0.1:8317/v1/models \
+  | python3 -m json.tool > tests/fixtures/cliproxy_catalog_v1.json
+curl -s -H "Authorization: Bearer $KEY" http://127.0.0.1:8317/v1beta/models \
+  | python3 -m json.tool > tests/fixtures/cliproxy_catalog_v1beta.json
+```
+
+- [ ] **Step 2: Verify the fixture keeps the awkward rows**
+
+The fixture is worthless without them — they are the cases the code exists to handle.
+
+```bash
+python3 -c "
+import json
+v1=json.load(open('tests/fixtures/cliproxy_catalog_v1.json'))['data']
+assert any('created' not in m for m in v1), 'need antigravity rows lacking created'
+assert any(m['owned_by']=='antigravity' for m in v1), 'need an antigravity owner'
+print('rows:', len(v1), '| no-created:', sum(1 for m in v1 if 'created' not in m))
+"
+```
+Expected: `rows: 43 | no-created: 13` (counts may drift; both must be non-zero)
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add tests/fixtures/cliproxy_catalog_v1.json tests/fixtures/cliproxy_catalog_v1beta.json
+git commit -m "#205 M1: capture real cliproxy catalog fixtures"
+```
+
+### Task 1.2: `series`
+
+**Files:**
+- Create: `lua/parley/cliproxy_catalog.lua`
+- Test: `tests/unit/cliproxy_catalog_spec.lua`
+
+- [ ] **Step 1: Write the failing test**
+
+```lua
+local cat = require("parley.cliproxy_catalog")
+
+describe("series", function()
+    it("strips version numerals to the model line", function()
+        assert.equals("claude-opus", cat.series("claude-opus-5"))
+        assert.equals("claude-opus", cat.series("claude-opus-4-8"))
+        assert.equals("claude-sonnet", cat.series("claude-sonnet-4-5-20250929"))
+        assert.equals("gpt-sol", cat.series("gpt-5.6-sol"))
+    end)
+
+    it("keeps distinct product lines apart", function()
+        assert.are_not.equals(cat.series("gpt-5.6-sol"), cat.series("gpt-5.6-luna"))
+    end)
+
+    it("returns a stable non-empty key for an all-numeric tail", function()
+        assert.equals("gpt-image", cat.series("gpt-image-2"))
+    end)
+
+    -- Strategy for the malformed class, not seven more examples: ids are
+    -- vendor-controlled and series() is the only pattern mangler over them.
+    it("never returns an empty key, whatever the id", function()
+        for _, id in ipairs({ "2026", "1.2.3", "-", "5-5-5", "" }) do
+            assert.is_true(#cat.series(id) > 0 or id == "",
+                ("series(%q) collapsed to empty"):format(id))
+        end
+    end)
+
+    it("keeps distinct alphabetic stems distinct", function()
+        assert.are_not.equals(cat.series("alpha-1"), cat.series("beta-1"))
+    end)
+end)
+```
+
+- [ ] **Step 2: Run it and watch it fail**
+
+Run: `make test-spec SPEC=providers/cliproxy-managed`
+Expected: FAIL — `module 'parley.cliproxy_catalog' not found`
+
+- [ ] **Step 3: Implement**
+
+```lua
+--------------------------------------------------------------------------------
+-- Pure catalog core for cliproxyapi's advertised models (issue #205).
+--
+-- No IO: every function here is deterministic and unit-tested against real
+-- captured fixtures without mocks (ARCH-PURE). The fetch/cache shell lives in
+-- parley/cliproxy.lua.
+--------------------------------------------------------------------------------
+
+local M = {}
+
+--- The model LINE an id belongs to: the id with version numerals removed, so
+--- claude-opus-5 and claude-opus-4-8 collapse to one series and the newest can
+--- be picked. Sol/Luna/Terra stay distinct because their distinguishing token
+--- is a word, not a number.
+---
+--- Derived from the id alone, deliberately. An earlier draft also specified a
+--- displayName-derived stem for opaque-id providers; it was dropped because the
+--- id rule already produces the correct curation for every verified case,
+--- including antigravity's — "Gemini 3.1 Pro (Low)" and "(High)" are genuinely
+--- different offerings and SHOULD stay separate series.
+---@param id string
+---@return string
+function M.series(id)
+    if type(id) ~= "string" then
+        return ""
+    end
+    local s = id:gsub("%-?%d[%d%.%-]*", "-"):gsub("%-+", "-")
+    s = s:gsub("^%-", ""):gsub("%-$", "")
+    -- An all-numeral id strips to "", which would collapse every such model into
+    -- one series and let curate drop all but one. Vendor-controlled input: fall
+    -- back to the id itself rather than emit a colliding empty key.
+    if s == "" then
+        return id
+    end
+    return s
+end
+
+return M
+```
+
+- [ ] **Step 4: Run it and watch it pass**
+
+Run: `make test-spec SPEC=providers/cliproxy-managed`
+Expected: PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add lua/parley/cliproxy_catalog.lua tests/unit/cliproxy_catalog_spec.lua
+git commit -m "#205 M1: series key derives the model line from an id"
+```
+
+### Task 1.3: `parse` — join the two routes
+
+**Files:**
+- Modify: `lua/parley/cliproxy_catalog.lua`
+- Test: `tests/unit/cliproxy_catalog_spec.lua`
+
+- [ ] **Step 1: Write the failing test** (drive it from the real fixture, not a hand-written stub)
+
+```lua
+local function fixture(name)
+    local path = "tests/fixtures/" .. name
+    local fd = assert(io.open(path, "r"))
+    local body = fd:read("*a")
+    fd:close()
+    return body
+end
+
+describe("parse", function()
+    local models = cat.parse(fixture("cliproxy_catalog_v1.json"),
+                             fixture("cliproxy_catalog_v1beta.json"))
+
+    local function by_id(id)
+        for _, m in ipairs(models) do
+            if m.id == id then return m end
+        end
+    end
+
+    it("joins displayName from the v1beta route onto the v1 rows", function()
+        assert.equals("Claude Opus 5", by_id("claude-opus-5").display)
+        assert.equals("anthropic", by_id("claude-opus-5").owner)
+    end)
+
+    it("keeps rows that carry no created (antigravity)", function()
+        local m = by_id("gemini-pro-agent")
+        assert.is_not_nil(m)
+        assert.is_nil(m.created)
+        -- the id is an opaque handle; displayName is the truth for this provider
+        assert.equals("Gemini 3.1 Pro (High)", m.display)
+    end)
+
+    it("falls back to the id when v1beta has no row", function()
+        local only_v1 = [[{"data":[{"id":"mystery-1","owned_by":"openai","created":5}]}]]
+        local m = cat.parse(only_v1, [[{"models":[]}]])[1]
+        assert.equals("mystery-1", m.display)
+    end)
+
+    it("returns an empty list for undecodable input rather than raising", function()
+        assert.same({}, cat.parse("not json", "not json"))
+    end)
+end)
+```
+
+- [ ] **Step 2: Run it and watch it fail**
+
+Run: `make test-spec SPEC=providers/cliproxy-managed`
+Expected: FAIL — `attempt to call field 'parse' (a nil value)`
+
+- [ ] **Step 3: Implement**
+
+```lua
+--- Join cliproxy's two model routes into one row list.
+---
+--- Both are needed and neither is sufficient: /v1/models carries `created`
+--- (the recency signal) and /v1beta/models carries `displayName` +
+--- `description` (the only human-readable naming — and for antigravity the
+--- only TRUTHFUL naming, since its ids are opaque handles).
+---@param v1_json string    # body of GET /v1/models
+---@param beta_json string  # body of GET /v1beta/models
+---@return table[] # { { id, owner, created?, display, description, series }, … }
+function M.parse(v1_json, beta_json)
+    local ok, v1 = pcall(vim.json.decode, v1_json or "")
+    if not ok or type(v1) ~= "table" or type(v1.data) ~= "table" then
+        return {}
+    end
+    local beta_by_id = {}
+    local beta_ok, beta = pcall(vim.json.decode, beta_json or "")
+    if beta_ok and type(beta) == "table" and type(beta.models) == "table" then
+        for _, m in ipairs(beta.models) do
+            if type(m) == "table" and type(m.name) == "string" then
+                beta_by_id[(m.name:gsub("^models/", ""))] = m
+            end
+        end
+    end
+    local out = {}
+    for _, m in ipairs(v1.data) do
+        if type(m) == "table" and type(m.id) == "string" then
+            local b = beta_by_id[m.id] or {}
+            out[#out + 1] = {
+                id = m.id,
+                owner = m.owned_by,
+                created = tonumber(m.created),
+                display = type(b.displayName) == "string" and b.displayName or m.id,
+                description = type(b.description) == "string" and b.description or "",
+                series = M.series(m.id),
+            }
+        end
+    end
+    return out
+end
+```
+
+- [ ] **Step 4: Run it and watch it pass**
+
+Run: `make test-spec SPEC=providers/cliproxy-managed`
+Expected: PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add lua/parley/cliproxy_catalog.lua tests/unit/cliproxy_catalog_spec.lua
+git commit -m "#205 M1: parse joins /v1/models with /v1beta/models"
+```
+
+### Task 1.4: `rank_key` — order without `created`
+
+**Files:**
+- Modify: `lua/parley/cliproxy_catalog.lua`
+- Test: `tests/unit/cliproxy_catalog_spec.lua`
+
+- [ ] **Step 1: Write the failing test**
+
+```lua
+describe("rank_key", function()
+    it("prefers created when present", function()
+        local a = { created = 200, display = "X 1" }
+        local b = { created = 100, display = "X 9" }
+        assert.is_true(cat.rank_key(a) > cat.rank_key(b))
+    end)
+
+    it("orders created-less rows by the version in displayName", function()
+        local hi = { display = "Gemini 3.7 Flash" }
+        local lo = { display = "Gemini 3.1 Pro (Low)" }
+        assert.is_true(cat.rank_key(hi) > cat.rank_key(lo))
+    end)
+
+    it("never ranks a created-less row above a dated one", function()
+        local dated = { created = 1, display = "A 1" }
+        local undated = { display = "Gemini 999 Flash" }
+        assert.is_true(cat.rank_key(dated) > cat.rank_key(undated))
+    end)
+end)
+```
+
+The third case is the load-bearing one: version numbers and epoch seconds are
+different units, so they must occupy disjoint bands rather than being compared.
+
+- [ ] **Step 2: Run it and watch it fail**
+
+Run: `make test-spec SPEC=providers/cliproxy-managed`
+Expected: FAIL — `attempt to call field 'rank_key' (a nil value)`
+
+- [ ] **Step 3: Implement**
+
+```lua
+--- Recency for ordering. Two disjoint bands, never mixed: a dated row ranks in
+--- epoch seconds; a row with no `created` (every antigravity model — measured
+--- 2026-08-31) ranks by the version parsed from its displayName, always BELOW
+--- any dated row. Comparing a version number against epoch seconds directly
+--- would put "Gemini 3.7" beneath every model ever dated.
+---@param m table # a parsed Model
+---@return number
+function M.rank_key(m)
+    if type(m.created) == "number" and m.created > 0 then
+        return m.created
+    end
+    local n = tostring(m.display or ""):match("(%d+%.?%d*)")
+    -- -1e9 not -1000: the bands must not overlap for ANY input. A parsed
+    -- display version only has to reach 1000 to outrank a small epoch value.
+    return -1e9 + (tonumber(n) or 0)
+end
+```
+
+- [ ] **Step 4: Run it and watch it pass**
+
+Run: `make test-spec SPEC=providers/cliproxy-managed`
+Expected: PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add lua/parley/cliproxy_catalog.lua tests/unit/cliproxy_catalog_spec.lua
+git commit -m "#205 M1: rank_key orders created-less rows in their own band"
+```
+
+### Task 1.5: `parse_provider_spec` + `curate`
+
+**Files:**
+- Modify: `lua/parley/cliproxy_catalog.lua`
+- Test: `tests/unit/cliproxy_catalog_spec.lua`
+
+- [ ] **Step 1: Write the failing test** — these four cases are real renders captured from the live catalog on 2026-08-31 and recorded in the spec
+
+```lua
+describe("parse_provider_spec", function()
+    it("splits provider from terms", function()
+        assert.same({ provider = "claude", terms = { "opus", "sonnet" } },
+            cat.parse_provider_spec("claude:opus,sonnet"))
+    end)
+
+    it("treats a bare provider as unfiltered", function()
+        assert.same({ provider = "claude", terms = {} },
+            cat.parse_provider_spec("claude"))
+    end)
+
+    it("ignores whitespace and empty terms", function()
+        assert.same({ provider = "codex", terms = { "gpt-5.6" } },
+            cat.parse_provider_spec("codex: gpt-5.6 , "))
+    end)
+end)
+
+describe("curate", function()
+    local models = cat.parse(fixture("cliproxy_catalog_v1.json"),
+                             fixture("cliproxy_catalog_v1beta.json"))
+    local function ids(spec)
+        local out = {}
+        for _, m in ipairs(cat.curate(models, { providers = { spec }, per_provider = 3 })) do
+            out[#out + 1] = m.id
+        end
+        return out
+    end
+
+    it("filters to the named families, newest of each", function()
+        assert.same({ "claude-opus-5", "claude-sonnet-5" }, ids("claude:opus,sonnet"))
+    end)
+
+    it("takes the newest per series when unfiltered", function()
+        assert.same({ "claude-opus-5", "claude-sonnet-5", "claude-fable-5" }, ids("claude"))
+    end)
+
+    it("keeps sibling variants of one release apart", function()
+        assert.same({ "gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra" }, ids("codex:gpt-5.6"))
+    end)
+
+    it("matches displayName, not just id", function()
+        -- gemini-pro-agent's id contains no version; it displays as
+        -- "Gemini 3.1 Pro (High)". An id-only match makes antigravity unfilterable.
+        assert.is_true(vim.tbl_contains(ids("antigravity:pro"), "gemini-pro-agent"))
+    end)
+
+    it("orders by term, so config expresses preference", function()
+        local got = ids("claude:sonnet,opus")
+        assert.equals("claude-sonnet-5", got[1])
+    end)
+
+    it("caps at per_provider", function()
+        assert.equals(2, #cat.curate(models,
+            { providers = { "claude" }, per_provider = 2 }))
+    end)
+end)
+```
+
+- [ ] **Step 2: Run it and watch it fail**
+
+Run: `make test-spec SPEC=providers/cliproxy-managed`
+Expected: FAIL — `attempt to call field 'parse_provider_spec' (a nil value)`
+
+- [ ] **Step 3: Implement**
+
+```lua
+--- Parse one `live_models.providers` entry: "<provider>[:<term>[,<term>…]]".
+---@param spec string
+---@return table # { provider = string, terms = string[] }
+function M.parse_provider_spec(spec)
+    local provider, filter = tostring(spec or ""):match("^%s*([^:]-)%s*:?(.*)$")
+    local terms = {}
+    for term in tostring(filter or ""):gmatch("[^,]+") do
+        term = term:match("^%s*(.-)%s*$")
+        if term ~= "" then
+            terms[#terms + 1] = term:lower()
+        end
+    end
+    return { provider = provider, terms = terms }
+end
+
+local function matches(m, term)
+    return m.id:lower():find(term, 1, true) ~= nil
+        or tostring(m.display):lower():find(term, 1, true) ~= nil
+end
+
+--- The picker's default view: for each configured provider, the models matching
+--- its terms, one per series (the newest), capped at `per_provider`.
+---
+--- Term order is display order, so the config expresses preference.
+---@param models table[]  # from parse()
+---@param opts table      # { providers = {"claude:opus,sonnet", …}, per_provider = 3, owned_by = fn }
+---@return table[]
+function M.curate(models, opts)
+    opts = opts or {}
+    local per = opts.per_provider or 3
+    local owned_by = opts.owned_by or require("parley.cliproxy_config").provider_owned_by
+    local out = {}
+    for _, spec in ipairs(opts.providers or {}) do
+        local parsed = M.parse_provider_spec(spec)
+        local owner = owned_by(parsed.provider)
+        local pool = {}
+        for _, m in ipairs(models) do
+            if m.owner == owner then
+                pool[#pool + 1] = m
+            end
+        end
+        table.sort(pool, function(a, b)
+            local ra, rb = M.rank_key(a), M.rank_key(b)
+            if ra ~= rb then return ra > rb end
+            return a.id < b.id
+        end)
+        local taken, seen = {}, {}
+        for _, term in ipairs(#parsed.terms > 0 and parsed.terms or { "" }) do
+            for _, m in ipairs(pool) do
+                if #taken >= per then break end
+                if not seen[m.series] and (term == "" or matches(m, term)) then
+                    seen[m.series] = true
+                    taken[#taken + 1] = m
+                end
+            end
+        end
+        for _, m in ipairs(taken) do
+            -- Copy before tagging: these rows are the disk cache's own tables,
+            -- re-curated on every <C-a> toggle and background repaint, and this
+            -- module promises to be side-effect-free (ARCH-PURE).
+            local row = vim.tbl_extend("force", {}, m)
+            row.provider = parsed.provider
+            out[#out + 1] = row
+        end
+    end
+    return out
+end
+```
+
+- [ ] **Step 4: Run it and watch it pass**
+
+Run: `make test-spec SPEC=providers/cliproxy-managed`
+Expected: PASS — all six `curate` cases
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add lua/parley/cliproxy_catalog.lua tests/unit/cliproxy_catalog_spec.lua
+git commit -m "#205 M1: curate filters, dedupes by series, caps per provider"
+```
+
+### Task 1.6: Single-source the family → web-search-strategy decision
+
+**Files:**
+- Modify: `lua/parley/providers.lua` (beside `is_cliproxy_anthropic_route_model:142`)
+- Test: `tests/unit/provider_params_spec.lua` (or the nearest providers spec)
+
+**Why this task exists:** three families need three different answers, and the
+family test already has a canonical home. `providers.lua:170-179` records that
+`is_cliproxy_anthropic_route_model` was extracted *because* two call sites had
+drifted to two different tests. A fourth copy inside `build_agent` would
+re-open exactly that (ARCH-DRY).
+
+**Measured 2026-08-31 against the live proxy** — this is the whole reason the
+decision is three-way and not two-way:
+
+| family | server-side web search over cliproxy |
+|---|---|
+| `claude-*` | `anthropic_tools_route`; on the OpenAI route the response comes back empty |
+| `gpt-*` / codex-owned | `openai_tools_route` — verified, returns a cited answer |
+| gemini / antigravity | **neither.** `{type="web_search"}` makes `gemini-3-flash` answer with `finish_reason: "malformed_function_call"` and no content |
+
+Client-side function tools work on the OpenAI route for **all three**, so
+`tools = {"@all"}` stays unconditional; only the server-side search differs.
+
+- [ ] **Step 1: Write the failing test**
+
+```lua
+local providers = require("parley.providers")
+
+describe("cliproxy_default_web_search_strategy", function()
+    it("routes claude models over the anthropic wire", function()
+        assert.equals("anthropic_tools_route",
+            providers.cliproxy_default_web_search_strategy("claude-opus-5"))
+    end)
+
+    it("keeps openai-family models on the openai tools route", function()
+        assert.equals("openai_tools_route",
+            providers.cliproxy_default_web_search_strategy("gpt-5.6-sol"))
+    end)
+
+    it("disables server-side search for gemini-family models", function()
+        -- Measured: {type="web_search"} makes gemini answer with
+        -- finish_reason="malformed_function_call" and empty content. A live pick
+        -- that shipped the openai tool here would be a BROKEN agent, so the
+        -- honest default is no server-side search at all.
+        assert.equals("none",
+            providers.cliproxy_default_web_search_strategy("gemini-3-flash"))
+        assert.equals("none",
+            providers.cliproxy_default_web_search_strategy("gemini-pro-agent"))
+    end)
+
+    it("reuses the canonical anthropic family test, including code_execution", function()
+        assert.equals("anthropic_tools_route",
+            providers.cliproxy_default_web_search_strategy("code_execution_claude"))
+    end)
+
+    it("falls back to the openai route for an unrecognized model", function()
+        assert.equals("openai_tools_route",
+            providers.cliproxy_default_web_search_strategy("mystery-1"))
+    end)
+end)
+```
+
+- [ ] **Step 2: Run it and watch it fail**
+
+Run: `make test-spec SPEC=providers/cliproxy-managed`
+Expected: FAIL — `attempt to call field 'cliproxy_default_web_search_strategy'`
+
+- [ ] **Step 3: Implement in `providers.lua`, reusing the existing family test**
+
+```lua
+--- The server-side web-search strategy a model can actually USE over cliproxy.
+--- PURE. Single source for the three-way answer (ARCH-DRY) — the canonical
+--- anthropic family test is reused here, never re-written.
+---
+--- Verified against the live proxy 2026-08-31:
+---   claude-*  the OpenAI route returns an empty completion; the anthropic
+---             route is what makes server-side web_search fire.
+---   gpt-*     `{type="web_search"}` works and returns cited results.
+---   gemini-*  `{type="web_search"}` yields finish_reason
+---             "malformed_function_call" and NO content — it breaks the model.
+---             Google's own `{google_search={}}` on the gemini route does work,
+---             so a `google_tools_route` is a real future strategy; until it
+---             exists the honest answer is "none" rather than a broken agent.
+---@param model_name string
+---@return "anthropic_tools_route"|"openai_tools_route"|"none"
+function M.cliproxy_default_web_search_strategy(model_name)
+    if is_cliproxy_anthropic_route_model(model_name) then
+        return "anthropic_tools_route"
+    end
+    if type(model_name) == "string" and model_name:find("^gemini") then
+        return "none"
+    end
+    return "openai_tools_route"
+end
+```
+
+- [ ] **Step 4: Run it and watch it pass**
+
+Run: `make test-spec SPEC=providers/cliproxy-managed`
+Expected: PASS
+
+- [ ] **Step 5: Verify "none" actually suppresses the tool**
+
+`cliproxy_openai_payload` only attaches `{type="web_search"}` when the strategy
+is `openai_tools_route`, so "none" already falls through — confirm with a test
+that the payload for a gemini model carries no `tools` entry of that type.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add lua/parley/providers.lua tests/unit/cliproxy_catalog_spec.lua
+git commit -m "#205 M1: single-source the cliproxy web-search strategy per model family"
+```
+
+### Task 1.7: `build_agent`
+
+**Files:**
+- Modify: `lua/parley/cliproxy_catalog.lua`
+- Test: `tests/unit/cliproxy_catalog_spec.lua`
+
+- [ ] **Step 1: Write the failing test**
+
+```lua
+describe("build_agent", function()
+    it("routes anthropic-owned models over the anthropic wire", function()
+        local a = cat.build_agent({ id = "claude-opus-5", owner = "anthropic",
+                                    display = "Claude Opus 5" })
+        assert.equals("cliproxyapi", a.provider)
+        assert.equals("claude-opus-5", a.model.model)
+        assert.equals("anthropic_tools_route", a.model.web_search_strategy)
+        assert.same({ "@all" }, a.tools)
+        assert.is_true(a.synthetic_system_prompt)
+    end)
+
+    it("leaves openai-family models on the openai tools route", function()
+        local a = cat.build_agent({ id = "gpt-5.6-sol", owner = "openai",
+                                    display = "GPT 5.6 Sol" })
+        assert.equals("openai_tools_route", a.model.web_search_strategy)
+    end)
+
+    it("ships a gemini pick with server-side search off, not broken", function()
+        local a = cat.build_agent({ id = "gemini-3-flash", owner = "antigravity" })
+        assert.equals("none", a.model.web_search_strategy)
+        assert.same({ "@all" }, a.tools)  -- client tools DO work for gemini
+    end)
+
+    it("names the agent after the model with the cliproxy marker", function()
+        assert.equals("claude-opus-5*",
+            cat.build_agent({ id = "claude-opus-5", owner = "anthropic" }).name)
+    end)
+
+    it("routes an antigravity-served claude model over the anthropic wire", function()
+        -- owner is the display grouping; the WIRE follows the model family
+        local a = cat.build_agent({ id = "claude-opus-4-6-thinking", owner = "antigravity" })
+        assert.equals("anthropic_tools_route", a.model.web_search_strategy)
+    end)
+end)
+```
+
+The last case is why the wire is chosen from the id family and not from `owner`:
+a claude model served through antigravity still speaks the Anthropic wire.
+
+- [ ] **Step 2: Run it and watch it fail**
+
+Run: `make test-spec SPEC=providers/cliproxy-managed`
+Expected: FAIL — `attempt to call field 'build_agent' (a nil value)`
+
+- [ ] **Step 3: Implement**
+
+```lua
+--- Turn a catalog row into a session agent. Tools and web search are ON: an
+--- ad-hoc pick is meant to be a working agent, not a stripped one.
+---
+--- The wire follows the MODEL FAMILY, never `owner`: owner is a display
+--- grouping that is not even stable (claude-sonnet-4-6 was reported under
+--- `anthropic` on one proxy start and `antigravity` on the next), while
+--- claude-* always speaks the Anthropic wire. Non-claude models inherit the
+--- provider-level default (openai_tools_route), which is what buys them
+--- server-side web search — see the ToolSol* note in config.lua.
+---@param m table # a parsed Model
+---@param opts table|nil # { system_prompt = string }
+---@return table # a parley agent
+function M.build_agent(m, opts)
+    opts = opts or {}
+    return {
+        provider = "cliproxyapi",
+        name = m.id .. "*",
+        model = {
+            -- Single-sourced in providers.lua (Task 1.6). NEVER re-test the
+            -- family here: providers.lua:170-179 records that this exact
+            -- duplication had already drifted once.
+            model = m.id,
+            web_search_strategy =
+                require("parley.providers").cliproxy_default_web_search_strategy(m.id),
+        },
+        system_prompt = opts.system_prompt or require("parley.defaults").chat_system_prompt,
+        synthetic_system_prompt = true,
+        tools = { "@all" },
+    }
+end
+```
+
+- [ ] **Step 4: Run it and watch it pass**
+
+Run: `make test-spec SPEC=providers/cliproxy-managed`
+Expected: PASS
+
+- [ ] **Step 5: Document THIS milestone's surface, before the boundary**
+
+AGENTS.md §8 wants the atlas updated at each milestone close, not swept up at the
+end. A terminal docs task structurally guarantees every earlier boundary is
+crossed undocumented, which is exactly what happened here.
+
+`atlas/providers/cliproxy-managed.md` → the catalog's two routes, why both are
+needed, and the per-family web-search table with its measurements.
+
+- [ ] **Step 6: Commit + close the milestone**
+
+```bash
+git add lua/parley/cliproxy_catalog.lua tests/unit/cliproxy_catalog_spec.lua atlas/providers/cliproxy-managed.md
+git commit -m "#205 M1: build_agent turns a catalog row into a tool-enabled agent"
+make test
+sdlc milestone-close --issue 205 --milestone M1
+```
+
+---
+
+## Chunk 2: M2 — fetch, cache, and the fake
+
+### Task 2.1: Teach the fake to serve `/v1beta/models` (extending its `healthy` mode)
+
+**Files:**
+- Modify: `tests/fixtures/fake_cliproxy` (the `do_GET` dispatch, near the `/v1/models` branch)
+
+- [ ] **Step 1: Add the route and a catalog mode**
+
+Serve a small catalog carrying the two shapes that matter, so integration tests
+meet them the way production does (ARCH-MOCK — the fake models our current
+understanding of the dependency, not a happy path):
+
+```python
+CATALOG_V1 = {"object": "list", "data": [
+    {"id": "claude-opus-5",  "owned_by": "anthropic", "created": 1784038800},
+    {"id": "claude-opus-4-8", "owned_by": "anthropic", "created": 1779984000},
+    {"id": "gpt-5.6-sol",    "owned_by": "openai",    "created": 1783616400},
+    # no `created` — the antigravity shape
+    {"id": "gemini-pro-agent", "owned_by": "antigravity"},
+]}
+CATALOG_V1BETA = {"models": [
+    {"name": "models/claude-opus-5",   "displayName": "Claude Opus 5"},
+    {"name": "models/claude-opus-4-8", "displayName": "Claude Opus 4.8"},
+    {"name": "models/gpt-5.6-sol",     "displayName": "GPT 5.6 Sol"},
+    {"name": "models/gemini-pro-agent", "displayName": "Gemini 3.1 Pro (High)"},
+]}
+```
+
+Dispatch `/v1beta/models` to `CATALOG_V1BETA`; keep `/v1/models` answering the
+existing identity protocol, extended with `CATALOG_V1["data"]` in `healthy` mode.
+
+- [ ] **Step 2: Verify the fake by hand**
+
+```bash
+python3 tests/fixtures/fake_cliproxy --port 8321 &
+curl -s -H "Authorization: Bearer test" http://127.0.0.1:8321/v1beta/models
+kill %1
+```
+Expected: the four-model JSON above
+
+- [ ] **Step 3: Extend the LIVE conformance spec — the fake must not be the only witness**
+
+`tests/integration/cliproxy_conformance_spec.lua` (#197) is the seam that boots
+the REAL binary and asserts the fields parley reads still exist. Without a case
+there, the unit tests run on a fixture consistent with itself and the
+integration tests on a fake restating the same assumption — so if cliproxy ever
+emits a bare id instead of `models/<id>`, every join misses, every row silently
+falls back to the raw id, and both suites still pass.
+
+```lua
+it("/v1beta/models carries the naming fields parse() joins on", function()
+    -- against the real binary, skipped when it is unavailable like its siblings
+    local body = get("/v1beta/models")
+    local decoded = vim.json.decode(body)
+    assert.is_table(decoded.models)
+    local m = decoded.models[1]
+    assert.is_string(m.name)
+    assert.is_true(m.name:find("^models/") ~= nil,
+        "parse() strips a `models/` prefix; a bare id would silently break every join")
+    assert.is_string(m.displayName)
+end)
+
+it("the join actually lands against the real catalog", function()
+    local models = cat.parse(get("/v1/models"), get("/v1beta/models"))
+    local joined = 0
+    for _, m in ipairs(models) do
+        if m.display ~= m.id then joined = joined + 1 end
+    end
+    assert.is_true(joined > 0, "no row got a displayName — the join is broken")
+end)
+```
+
+Add the same "did the join land" assertion to Task 1.1 Step 2, so a re-captured
+fixture cannot silently lose its v1beta half.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add tests/fixtures/fake_cliproxy tests/integration/cliproxy_conformance_spec.lua
+git commit -m "#205 M2: fake serves /v1beta/models; live conformance guards its shape"
+```
+
+### Task 2.2: `fetch_catalog` + disk cache
+
+**Files:**
+- Modify: `lua/parley/cliproxy.lua` (beside `list_models`, reusing `api_argv`)
+- Modify: `tests/helpers/ready_port.lua` (promote `free_port` + `wait_listening`; add `is_listening`)
+- Modify: `tests/integration/cliproxy_lifecycle_spec.lua:17,50` (call the promoted helpers)
+- Modify: `tests/integration/cliproxy_recovery_e2e_spec.lua:18,26` (same — the second existing copy)
+- Test: `tests/integration/cliproxy_catalog_spec.lua`
+
+- [ ] **Step 1: Write the failing integration test**
+
+Drive it against the fake process, not a mock — `cliproxy_lifecycle_spec.lua`
+shows the spawn/teardown pattern to copy.
+
+```lua
+it("fetches both routes and caches the join to disk", function()
+    -- fake_cliproxy on a ready port; cliproxy._set_data_dir(tmp)
+    local done, models = false, nil
+    cliproxy.fetch_catalog(function(m) models, done = m, true end)
+    vim.wait(3000, function() return done end)
+    assert.is_true(#models > 0)
+    assert.equals("Claude Opus 5", models[1].display)
+    assert.equals(1, vim.fn.filereadable(tmp .. "/catalog.json"))
+end)
+
+it("returns the cached catalog with the proxy down, and never spawns it", function()
+    -- kill the fake, then:
+    local cached = cliproxy.catalog_cached()
+    assert.is_true(#cached > 0)
+end)
+
+it("does not start a proxy when one is not running", function()
+    -- The observable, not an invented API: take a port nothing is listening on,
+    -- point the endpoint at it, call fetch_catalog, and assert the port is STILL
+    -- free afterwards.
+    --
+    -- `free_port` and `wait_listening` are ALREADY duplicated file-locals in two
+    -- specs: cliproxy_lifecycle_spec.lua:17,50 and cliproxy_recovery_e2e_spec.lua:18,26.
+    -- This task PROMOTES them into tests/helpers/ready_port.lua (which today
+    -- exports only wait_for_port) and rewrites both specs to call them there —
+    -- with this test they would have a third copy (ARCH-DRY).
+    --
+    -- The promotion also adds the negative predicate this assertion needs, since
+    -- neither existing copy has one:
+    --   function M.is_listening(port) -> boolean   (single connect attempt)
+    --   M.wait_listening(port)  is then a poll over M.is_listening
+    local port = ready_port.free_port()
+    -- …point providers.cliproxyapi.endpoint at 127.0.0.1:<port>…
+    local settled = false
+    cliproxy.fetch_catalog(function() settled = true end)
+    vim.wait(3000, function() return settled end)
+    assert.is_false(ready_port.is_listening(port))  -- #131 dormancy contract
+end)
+```
+
+- [ ] **Step 2: Run it and watch it fail**
+
+Run: `make test-spec SPEC=providers/cliproxy-managed`
+Expected: FAIL — `attempt to call field 'fetch_catalog' (a nil value)`
+
+- [ ] **Step 3: Implement**
+
+```lua
+local CATALOG_TTL = 600 -- seconds; see the plan's operating envelope
+local _catalog_inflight = false
+
+local function catalog_path()
+    return data_root() .. "/catalog.json"
+end
+
+--- The last catalog we saw, straight off disk. Synchronous and tiny (~5 KB) —
+--- this is what the picker renders, so it never waits on the network.
+---@return table[] models, number|nil fetched_at
+function M.catalog_cached()
+    local fd = io.open(catalog_path(), "r")
+    if not fd then return {}, nil end
+    local body = fd:read("*a")
+    fd:close()
+    local ok, decoded = pcall(vim.json.decode, body)
+    if not ok or type(decoded) ~= "table" then return {}, nil end
+    return decoded.models or {}, decoded.fetched_at
+end
+
+--- Refresh the catalog from a proxy that is ALREADY running.
+---
+--- Deliberately not routed through ensure_running: opening a picker must never
+--- spawn a daemon (#131's dormancy contract). A connection-refused is a no-op
+--- that leaves the cache in place.
+---@param cb fun(models: table[])|nil
+function M.fetch_catalog(cb)
+    if _catalog_inflight then return end
+    local opts = render_opts()
+    if not opts.host or not opts.port then return end
+    _catalog_inflight = true
+    local function get(route, done)
+        vim.system(api_argv(opts.host, opts.port, opts.secret, route), { text = true },
+            function(obj)
+                done(obj.code == 0 and (split_status(obj.stdout) or obj.stdout) or nil)
+            end)
+    end
+    get("/v1/models", function(v1)
+        get("/v1beta/models", function(beta)
+            vim.schedule(function()
+                _catalog_inflight = false
+                local models = require("parley.cliproxy_catalog").parse(v1 or "", beta or "")
+                if #models > 0 then
+                    local fd = io.open(catalog_path(), "w")
+                    if fd then
+                        fd:write(vim.json.encode({ models = models, fetched_at = os.time() }))
+                        fd:close()
+                        vim.fn.setfperm(catalog_path(), "rw-------")
+                    end
+                end
+                if cb then cb(models) end
+            end)
+        end)
+    end)
+end
+
+--- Is the cache old enough to be worth a background refresh?
+function M.catalog_stale()
+    local _, at = M.catalog_cached()
+    return not at or (os.time() - at) > CATALOG_TTL
+end
+```
+
+- [ ] **Step 4: Run it and watch it pass**
+
+Run: `make test-spec SPEC=providers/cliproxy-managed`
+Expected: PASS
+
+- [ ] **Step 5: Document THIS milestone's surface, before the boundary**
+
+`atlas/providers/cliproxy-managed.md` → `catalog.json` in the derived-artifact
+list, the 10-minute refresh, and the never-spawns rule with the test that pins it.
+
+- [ ] **Step 6: Commit + close the milestone**
+
+```bash
+git add lua/parley/cliproxy.lua tests/helpers/ready_port.lua tests/integration/cliproxy_catalog_spec.lua tests/integration/cliproxy_lifecycle_spec.lua atlas/providers/cliproxy-managed.md
+git commit -m "#205 M2: fetch and disk-cache the live model catalog"
+make test
+sdlc milestone-close --issue 205 --milestone M2
+```
+
+---
+
+## Chunk 3: M3 — the picker
+
+### Task 3.1: Live rows in `_build_items`
+
+**Files:**
+- Modify: `lua/parley/agent_picker.lua`
+- Test: `tests/unit/picker_items_spec.lua` — `agent_picker._build_items` is already
+  covered there (`:44`) with a `make_plugin(current_agent)` helper at `:10`. Extend
+  that file and reuse `make_plugin`; do not start a new spec.
+
+- [ ] **Step 1: Write the failing test** — `_build_items` is already the pure seam, so this stays mock-free (ARCH-PURE)
+
+```lua
+it("appends live catalog rows after the configured agents", function()
+    local plugin = make_plugin("mango")  -- picker_items_spec.lua:10
+    local items = agent_picker._build_items(plugin, {
+        live = { { id = "claude-opus-5", display = "Claude Opus 5",
+                   owner = "anthropic", provider = "claude" } },
+    })
+    local last = items[#items]
+    assert.is_true(last.display:find("Claude Opus 5", 1, true) ~= nil)
+    assert.is_true(last.display:find("claude-opus-5", 1, true) ~= nil)
+    assert.equals("live", last.kind)
+end)
+
+it("renders a logged-out provider as a login row", function()
+    local items = agent_picker._build_items(make_plugin("mango"), {
+        logged_out = { { provider = "antigravity" } },
+    })
+    local row = items[#items]
+    assert.is_true(row.display:find("(logged out)", 1, true) ~= nil)
+    assert.equals("login", row.kind)
+end)
+
+it("is unchanged when the catalog is empty", function()
+    assert.same(agent_picker._build_items(make_plugin("mango")),
+                agent_picker._build_items(make_plugin("mango"), { live = {}, logged_out = {} }))
+end)
+```
+
+- [ ] **Step 2: Run it and watch it fail**
+
+Run: `make test-spec SPEC=providers/cliproxy-managed`
+Expected: FAIL — live rows absent
+
+- [ ] **Step 3: Implement** — extend `_build_items(plugin, extra)` with a second, optional argument so every existing caller and test keeps working, and tag each row with `kind` (`"agent"` / `"live"` / `"login"`) so `on_select` can branch without re-parsing the display string.
+
+- [ ] **Step 4: Write the failing test for the logged-out source**
+
+`extra.logged_out` has to come from somewhere, and that somewhere is a pure
+function in this same file — the picker must not make a management call on a UI
+path:
+
+```lua
+describe("agent_picker._providers_without_models", function()
+    local models = {
+        { id = "claude-opus-5", owner = "anthropic" },
+        { id = "gpt-5.6-sol", owner = "openai" },
+    }
+
+    it("names a configured provider the catalog advertises nothing for", function()
+        assert.same({ { provider = "antigravity" } },
+            agent_picker._providers_without_models(models, { "claude:opus", "antigravity" }))
+    end)
+
+    it("stays quiet when every configured provider has models", function()
+        assert.same({}, agent_picker._providers_without_models(models, { "claude", "codex" }))
+    end)
+
+    it("reads the provider out of a filtered spec", function()
+        assert.same({ { provider = "antigravity" } },
+            agent_picker._providers_without_models(models, { "antigravity:pro,flash" }))
+    end)
+end)
+```
+
+- [ ] **Step 5: Implement `_providers_without_models(models, providers)`**
+
+The catalog IS the signal: cliproxy registers a channel's models only once that
+channel has a credential, so a configured provider contributing nothing is one
+you are not logged into. Measured — antigravity's 13 models appeared the moment
+its auth file landed, no restart. That keeps the check synchronous, with no
+management call on a UI path. A credential that is loaded but DEAD still lists
+models; #197's dispatch-failure path owns that case, and the docstring says so.
+
+- [ ] **Step 6: Run both blocks and watch them pass**
+
+Run: `make test-spec SPEC=providers/cliproxy-managed`
+Expected: PASS
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add lua/parley/agent_picker.lua tests/unit/picker_items_spec.lua
+git commit -m "#205 M3: agent picker renders live catalog and login rows"
+```
+
+### Task 3.2: Wire the picker — selection, `<C-a>`, async refresh
+
+**Files:**
+- Modify: `lua/parley/agent_picker.lua` (`M.agent_picker`)
+
+- [ ] **Step 1: Implement selection branching**
+
+`float_picker.open` returns a handle (`{ update, set_status, set_title, close, is_closed }`) — capture it in a local so the `<C-a>` mapping and the async refresh can call `update` in place instead of reopening (no flash):
+
+```lua
+-- Local to M.agent_picker: the two views the <C-a> toggle switches between.
+local expanded = false
+local function view_for(all)
+    local models = cliproxy.catalog_cached()
+    local cfg = (plugin.config.cliproxy or {}).live_models or {}
+    return {
+        live = all and models or cat.curate(models, cfg),
+        logged_out = M._providers_without_models(models, cfg.providers or {}),  -- Task 3.1
+    }
+end
+
+local handle
+handle = float_picker.open({
+    title = "🤖 Parley Agents",
+    items = M._build_items(plugin, view_for(expanded)),
+    -- …existing opts…
+    on_select = function(item)
+        if item.kind == "login" then
+            vim.cmd((plugin.config.cmd_prefix or "Parley") .. "Proxy login " .. item.provider)
+            return
+        end
+        if item.kind == "live" then
+            plugin.register_live_agent(item.model)  -- Task 3.3
+            return
+        end
+        plugin.refresh_state({ agent = item.name })
+        plugin.logger.info("Agent set to: " .. item.name)
+        vim.cmd("doautocmd User ParleyAgentChanged")
+    end,
+    mappings = {
+        -- …existing keybindings mapping…
+        {
+            key = "<C-a>",
+            fn = function()
+                expanded = not expanded
+                handle.update(M._build_items(plugin, view_for(expanded)))
+                handle.set_title(expanded and "🤖 Parley Agents — all models"
+                                          or "🤖 Parley Agents")
+            end,
+        },
+    },
+})
+```
+
+- [ ] **Step 2: Kick the background refresh**
+
+After `open`, refresh only when stale; repaint if the picker is still up:
+
+```lua
+if cliproxy.is_managed() and cliproxy.catalog_stale() then
+    cliproxy.fetch_catalog(function()
+        if not handle.is_closed() then
+            handle.update(M._build_items(plugin, view_for(expanded)))
+        end
+    end)
+end
+```
+
+- [ ] **Step 3: Verify by hand in a real editor**
+
+```
+:lua require('parley').setup()
+:ParleyAgent
+```
+Expected: configured agents, then the live rows; `<C-a>` expands to the full
+catalog and the title changes; picking `claude-opus-5` sets the agent.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add lua/parley/agent_picker.lua lua/parley/keybinding_registry.lua
+git commit -m "#205 M3: live selection, <C-a> expansion, background refresh"
+```
+
+### Task 3.3: Register and persist the live agent
+
+**Files:**
+- Modify: `lua/parley/init.lua` (new `M.register_live_agent`; restore near `init.lua:1329`)
+- Test: `tests/unit/live_agent_state_spec.lua`
+
+- [ ] **Step 1: Write the failing test**
+
+```lua
+it("registers the agent and makes it selectable", function()
+    parley.register_live_agent({ id = "claude-opus-5", owner = "anthropic" })
+    assert.is_not_nil(parley.agents["claude-opus-5*"])
+    assert.is_true(vim.tbl_contains(parley._agents, "claude-opus-5*"))
+    assert.equals("claude-opus-5*", parley._state.agent)
+end)
+
+it("survives a restart instead of falling back to the first agent", function()
+    parley._state.live_agent = { id = "claude-opus-5", owner = "anthropic" }
+    parley._state.agent = "claude-opus-5*"
+    parley.setup({})                       -- re-entry, as on a fresh session
+    assert.equals("claude-opus-5*", parley._state.agent)
+end)
+```
+
+The second test is the whole point of this task: without the restore the
+`if not M.agents[M._state.agent]` guard at `init.lua:1329` silently resets the
+agent to `M._agents[1]` on every launch.
+
+- [ ] **Step 2: Run it and watch it fail**
+
+Run: `make test-spec SPEC=providers/cliproxy-managed`
+Expected: FAIL — agent reset to the first configured agent
+
+- [ ] **Step 3: Implement**
+
+```lua
+--- Register a catalog model as a session agent and select it.
+--- Persisted so the next session restores it rather than resetting.
+function M.register_live_agent(model)
+    local agent = require("parley.cliproxy_catalog").build_agent(model)
+    M.agents[agent.name] = agent
+    if not vim.tbl_contains(M._agents, agent.name) then
+        table.insert(M._agents, agent.name)
+        table.sort(M._agents)
+    end
+    M.refresh_state({ agent = agent.name, live_agent = model })
+    vim.cmd("doautocmd User ParleyAgentChanged")
+end
+```
+
+and, immediately **before** the fallback guard:
+
+```lua
+-- Re-register the last live pick before the guard below, or a catalog agent
+-- silently reverts to M._agents[1] on every restart.
+if type(M._state.live_agent) == "table" and M._state.live_agent.id then
+    local a = require("parley.cliproxy_catalog").build_agent(M._state.live_agent)
+    M.agents[a.name] = M.agents[a.name] or a
+    if not vim.tbl_contains(M._agents, a.name) then
+        table.insert(M._agents, a.name)
+        table.sort(M._agents)
+    end
+end
+```
+
+- [ ] **Step 4: Run it and watch it pass**
+
+Run: `make test-spec SPEC=providers/cliproxy-managed`
+Expected: PASS
+
+- [ ] **Step 5: End-to-end check against the real proxy**
+
+Pick `claude-opus-5` from the picker, send a message that needs a tool and a web
+lookup, and confirm from `:ParleyLog` that the request carried both the client
+tools and a `web_search` tool on the Anthropic wire. Record the evidence in
+`## Log` — this is the Done-when the spec names.
+
+- [ ] **Step 6: Document THIS milestone's surface, before the boundary**
+
+`atlas/providers/agents.md` → the live section, its exact row format, `<C-a>`,
+the `(logged out)` row, and the `<id>*` naming. `README.md` → `live_models`.
+
+- [ ] **Step 7: Commit + close the milestone**
+
+```bash
+git add lua/parley/init.lua tests/unit/live_agent_state_spec.lua atlas/providers/agents.md README.md
+git commit -m "#205 M3: live agents register, persist, and survive restart"
+make test
+sdlc milestone-close --issue 205 --milestone M3
+```
+
+---
+
+## Chunk 4: M4 — retire the hardcoded lists
+
+### Task 4.1: Resolve channel CANDIDATES and let health pick among them
+
+**Files:**
+- Modify: `lua/parley/cliproxy_config.lua` (`resolve_channel` → `resolve_channels`, `resolve_login_provider`)
+- Modify: `lua/parley/cliproxy.lua` (`credential_health_for_login:474-491`, `recover:1236`, the give_up text at `:1249`)
+- Test: `tests/unit/cliproxy_config_spec.lua`, `tests/integration/cliproxy_recovery_e2e_spec.lua`
+- Note: Task 2.2 must expose `cliproxy._write_catalog(models)` as the cache's test
+  seam (it already writes that file; this only names the entry point) so this spec
+  can seed a catalog without a live proxy.
+
+**Two rejected designs, so the third is understood.** Inverting
+`PROVIDER_OWNED_BY` is an axis error: its keys are login-shaped and
+`CHANNEL_LOGIN:140-149` has no `google` — that login is three channels. But
+narrowing to candidates and returning nil when several remain is *worse*: both
+providers the default config ships (`claude` → {claude, antigravity},
+`codex` → {codex, antigravity}) are ambiguous, so every diagnosis would degrade
+to "no cliproxy channel is configured" precisely where it works today. The
+`expired` kinds a dead Claude token produces (`cliproxy_auth.lua:31-34`) capture
+no `provider`, so with the alias block deleted there would be no resolver left.
+
+The resolution is that **ambiguity is not the end of the answer** — health
+decides it. `credential_health_for_login` already fans out across the channels
+of one login and reduces with `ca.healthier`. Diagnosis needs the same fan-out
+with the opposite reducer: ~~the LEAST healthy candidate is the one that
+plausibly failed~~. So the fan-out gets extracted once and both callers share it
+(ARCH-DRY).
+
+> **Superseded during M4 (BR-87).** "Least healthy wins" is the rule the code was
+> fixed to STOP implementing: it ranked `missing`, `disabled` and `unknown` ABOVE
+> a real failure, so diagnosis blamed the empty channel instead of the credential
+> that actually failed. What ships is **eligibility before ranking** —
+> `could_have_served` first excludes the channels that could not have served the
+> request at all, and only then `likeliest_culprit` orders what remains, with ties
+> broken by declared order for reproducibility. Both reducers are pure and
+> injected into the one shared fan-out, so the ARCH-DRY half of this paragraph
+> stands; only the reducer's rule changed.
+
+- [ ] **Step 1: Write the failing tests**
+
+```lua
+describe("resolve_channels", function()
+    it("returns the operator's explicit pin alone", function()
+        local alias = { codex = { { name = "claude-opus-5", alias = "claude-opus-5" } } }
+        assert.same({ "codex" }, cc.resolve_channels("claude-opus-5", alias, {}))
+    end)
+
+    it("returns every candidate that can serve the owner", function()
+        local models = { { id = "claude-opus-5", owner = "anthropic" } }
+        assert.same({ "antigravity", "claude" },
+            cc.resolve_channels("claude-opus-5", {}, models))
+    end)
+
+    it("returns empty when neither alias nor catalog knows the model", function()
+        assert.same({}, cc.resolve_channels("who-knows-1", {}, {}))
+    end)
+end)
+```
+
+and the regression test that the CURRENT proof spec cannot express — note it
+passes an **empty** alias block, which is what the default config will ship:
+
+```lua
+it("names the claude login for an expired token with NO alias block", function()
+    -- cliproxy_recovery_e2e_spec.lua:74-77 builds its own oauth-model-alias, so
+    -- it passes with or without Task 4.2's deletion. This case is the one that
+    -- actually detects the regression.
+    -- `serve(error_mode, overlay)` and `query()` are the spec's own helpers
+    -- (cliproxy_recovery_e2e_spec.lua:41 and :85); the overlay is where that
+    -- spec builds its oauth-model-alias today, so an empty one is the variation.
+    serve("expired", { ["oauth-model-alias"] = {} })
+    cliproxy._write_catalog({ { id = "claude-opus-5", owner = "anthropic" } })
+    local msg = query()
+    assert.is_true(msg:find("claude", 1, true) ~= nil)
+    assert.is_nil(msg:find("oauth-model-alias", 1, true),
+        "the diagnosis must stop telling operators to add a key the config no longer has")
+end)
+```
+
+- [ ] **Step 2: Run them and watch them fail**
+
+Run: `make test-spec SPEC=providers/cliproxy-managed`
+Expected: FAIL — `resolve_channels` is nil; the diagnosis still names the alias block
+
+- [ ] **Step 3: Extract the fan-out, then add the second reducer**
+
+```lua
+-- Which cliproxy CHANNELS can serve a model of a given catalog `owned_by`.
+-- THE SOURCE of the owner→channels relation — it exists nowhere else in the
+-- codebase and is not derivable: PROVIDER_OWNED_BY (cliproxy_config.lua:227-234)
+-- is the login axis, and a catalog row carries a single owner while antigravity
+-- demonstrably serves anthropic-, openai- and google-owned models alongside the
+-- native channels. Plural on purpose; Step 4 lets health decide between them.
+local OWNER_CHANNELS = {
+    anthropic   = { "antigravity", "claude" },
+    openai      = { "antigravity", "codex" },
+    google      = { "aistudio", "antigravity", "gemini", "gemini-cli" },
+    antigravity = { "antigravity" },
+    moonshot    = { "kimi" },
+    xai         = { "xai" },
+}
+
+---@param owner string # a catalog row's owned_by
+---@return string[] # sorted candidate channels; empty when the owner is unknown
+function M.channels_for_owner(owner)
+    return vim.deepcopy(OWNER_CHANNELS[owner] or {})
+end
+
+--- Alias pin first, else the owner's candidates from the catalog, else empty.
+---@return string[]
+function M.resolve_channels(model, oauth_model_alias, models)
+    local pinned = M.resolve_channel(model, oauth_model_alias)  -- existing fn, kept
+    if pinned then
+        return { pinned }
+    end
+    for _, m in ipairs(models or {}) do
+        if m.id == model then
+            return M.channels_for_owner(m.owner)
+        end
+    end
+    return {}
+end
+```
+
+and in `cliproxy.lua`:
+
+```lua
+--- Read credential health across several channels and reduce to one.
+--- The fan-out both callers share: `credential_health_for_login` wants the
+--- HEALTHIEST reading (is this account usable at all), diagnosis wants the
+--- LEAST healthy (which credential plausibly caused this failure). One
+--- traversal, injected comparator (ARCH-DRY).
+---@param channels string[]
+---@param prefer fun(a: table, b: table): boolean # true when `a` should win
+---@param cb fun(health: table, channel: string|nil)
+function M.credential_health_across(channels, prefer, cb)
+    -- …the existing loop from credential_health_for_login, tracking the winning
+    -- channel alongside the winning health so the caller can name the login…
+end
+```
+
+`credential_health_for_login` becomes a two-line caller with `ca.healthier`;
+`recover` calls it with the inverse and gets back both the health AND the channel
+that owns it.
+
+- [ ] **Step 4: Rewire `recover`**
+
+```lua
+local channels = verdict.provider and { verdict.provider }
+    or cc.resolve_channels(verdict.model, alias_block() or {}, M.catalog_cached())
+```
+
+- `#channels == 0` → today's give_up, with the message rewritten: it must stop
+  instructing the operator to add an `oauth-model-alias` key (`cliproxy.lua:1249`
+  and the second copy at `:1291`), since Task 4.2 removes that block from the
+  default config. Both copies, not one — grep `oauth-model-alias` under `lua/`.
+- `#channels == 1` → today's path, unchanged.
+- `#channels > 1` → `credential_health_across(channels, least_healthy)`; the
+  diagnosis names the login of the channel it returns.
+
+- [ ] **Step 5: Sweep every caller**
+
+```bash
+grep -rn "resolve_channel\|resolve_login_provider\|oauth-model-alias" lua/ tests/
+```
+All of them threaded in this commit: `resolve_login_provider`
+(`cliproxy_config.lua:218`, whose docstring promises it derives from the same
+source), `recover` (`cliproxy.lua:1236`), and both give_up texts.
+
+- [ ] **Step 6: Run the specs that would catch a regression**
+
+```bash
+make test-spec SPEC=providers/cliproxy-managed
+make test-spec SPEC=providers/cliproxy-managed
+make test-spec SPEC=providers/cliproxy-managed
+make test-spec SPEC=providers/cliproxy-managed
+```
+Expected: PASS, including the new empty-alias case
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add lua/parley/cliproxy_config.lua lua/parley/cliproxy.lua \
+  tests/unit/cliproxy_config_spec.lua tests/integration/cliproxy_recovery_e2e_spec.lua
+git commit -m "#205 M4: channel candidates resolved by credential health, not by guessing"
+```
+
+### Task 4.2: Delete the model lists from the default config
+
+**Files:**
+- Modify: `lua/parley/config.lua:130-152` (delete `oauth-model-alias`), add `cliproxy.live_models`
+
+- [ ] **Step 1: Delete the alias block**
+
+`live_models` already shipped in M3 — do NOT re-add it here. This step removes
+`oauth-model-alias` and nothing else.
+
+(the knob's shipped form lives in `lua/parley/config.lua`)
+
+
+- [ ] **Step 2: Verify routing still works without the alias block**
+
+This is the claim the whole milestone rests on, so prove it rather than assume:
+
+```bash
+curl -s -H "Authorization: Bearer ${CLIPROXYAPI_API_KEY:-parley-local}" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"claude-opus-5","messages":[{"role":"user","content":"hi"}],"max_tokens":16}' \
+  http://127.0.0.1:8317/v1/chat/completions
+```
+Expected: a completion, not `unknown provider for model`
+
+- [ ] **Step 3: Verify the auth diagnosis still names the right login**
+
+The load-bearing case is Task 4.1's empty-alias test, NOT the pre-existing
+recovery spec — that one builds its own `oauth-model-alias`
+(`cliproxy_recovery_e2e_spec.lua:74-77`) and so passes whether or not this
+deletion regresses anything.
+
+```bash
+make test-spec SPEC=providers/cliproxy-managed   # incl. the empty-alias case
+make test-spec SPEC=providers/cliproxy-managed
+```
+Expected: PASS
+
+- [ ] **Step 4: Commit**
+
+```bash
+# The alias block ONLY. `config.lua` also carries an operator-owned agent-roster
+# cleanup that must not ship — see "Never `git add -u`" below, which this recipe
+# contradicted for four rounds by staging the whole file. Check the diff first:
+git diff lua/parley/config.lua        # expect: the alias block, nothing else
+git add -p lua/parley/config.lua
+git commit -m "#205 M4: retire oauth-model-alias from the default config"
+```
+
+### Task 4.3: Docs for M4's surface only
+
+**Files:**
+- Modify: `atlas/providers/cliproxy-managed.md` (the alias block's retirement)
+- Modify: `README.md` (the cliproxy section)
+
+Every earlier milestone documents its OWN surface at its own boundary — see the
+docs step inside Tasks 1.7, 2.2 and 3.3. This task carries only what M4 changes.
+
+- [ ] **Step 1: Record that `oauth-model-alias` is no longer required** for
+  routing, that it survives as an explicit channel pin, and how model→channel
+  now resolves (candidates from the catalog, disambiguated by credential health).
+
+- [ ] **Step 2: Full suite + close**
+
+```bash
+make test
+sdlc close --issue 205 --verified '<evidence>'
+```
+
+---
+
+## Notes for the implementer
+
+- **`sdlc change-code` first.** It owns the branch decision, the plan-quality gate, and the estimate. Don't start Task 1.1 before it.
+- **Do not run `superpowers-requesting-code-review` at the milestone boundaries.** `sdlc milestone-close` auto-dispatches the one mandatory fresh-context review (AGENTS.md §3).
+- **Every name must have a referent.** Three findings on this issue named
+  something that did not exist — `_spawned_pids`, `free_port`, then an
+  owner→channels relation with no source. The rule covers **any identifier or
+  relation** a code block, test block, or rationale sentence names, not just test
+  helpers: before a task ships, each one must resolve to a `file:line` that exists
+  today, be defined in that task's own code block, or appear in its **Files**
+  section as newly created. The mechanical check, run over the whole plan rather
+  than per finding:
+
+  ```bash
+  grep -oE '\b[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)+\s*\(' \
+    workshop/plans/000205-*-plan.md | sort -u
+  # for each leaf: grep -rn "<leaf>" lua/ tests/ — no hit means define it or cite it
+  ```
+
+  A rationale sentence that justifies a design by naming existing machinery is
+  covered too: either a step in that same task invokes it, or the sentence goes.
+
+  **Run it in BOTH directions.** The grep above matches dotted call syntax only,
+  so a bare table cell (`catalog_write`) is structurally exempt — which is how a
+  non-existent entity survived a round that reported the sweep clean. The second
+  direction: every function the milestone's diff adds to a module named in the
+  tables must APPEAR in a table row.
+
+  The check must enumerate **every definition form this codebase uses** and
+  **every referent KIND a plan cell can name** — a regex covering one form of one
+  kind is how a non-existent entity survived a round reported clean, twice.
+
+  Definition forms: `function M.x(`, `M.x = function(`, `M.x = <expr>` (the alias
+  form `M._catalog_path = catalog_path`), and `local function x(`.
+  Referent kinds a plan names: functions, fixture MODES (`--mode <name>` on
+  fake_cliproxy), HTTP routes, file paths, and config flags — none of which the
+  dotted-call regex can see.
+
+  ```bash
+  PLAN=workshop/plans/000205-*-plan.md
+  # reverse: every entity the diff adds, in any definition form, must appear in a table
+  git diff <boundary>..HEAD -- lua/ \
+    | grep -oE '^\+\s*(function M\.[A-Za-z0-9_]+|M\.[A-Za-z0-9_]+ = )' \
+    | grep -oE 'M\.[A-Za-z0-9_]+' | sort -u
+  # forward: every backticked name in the plan must resolve somewhere real
+  grep -oE '`[A-Za-z_][A-Za-z0-9_./-]*`' $PLAN | tr -d '`' | sort -u \
+    | while read -r n; do grep -rqs "$n" lua/ tests/ || echo "NO REFERENT: $n"; done
+  # fixture modes named in the plan must exist in the fixture's own mode list
+  grep -oE 'mode[s]? [`"][a-z_]+[`"]' $PLAN | grep -oE '[a-z_]+"?$' | sort -u
+  ```
+- **Never `git add -u` or `git add -A` on this issue.** The working tree carries
+  an operator-owned `config.lua` cleanup that deletes configured agents; sweeping
+  it into a milestone commit happened twice on this issue, and once put a spec's
+  test port and api-key into the operator's live proxy config. Stage the files a
+  task names, explicitly. `git status --short` before every commit.
+- **The fixtures are the spec.** The four `curate` cases are real renders from the live catalog on 2026-08-31. If a change makes one fail, decide whether the catalog moved or the code broke — don't edit the expectation to match the code.
+
+## Revisions
+
+### 2026-08-31 — M1 boundary review (BR-2..BR-5 + two Minors)
+
+- **BR-2 (Critical).** `build_agent`'s `"none"` was discarded by
+  `get_cliproxy_strategy`, which whitelisted only the three ACTIVE strategies and
+  fell through to the provider default — so a gemini pick shipped the exact
+  `web_search` payload that "none" existed to avoid. `none` is now a recognized
+  model-level value, and the value set is single-sourced (`CLIPROXY_STRATEGIES`)
+  rather than spelled out twice. The regression test forces the provider default
+  to an active strategy first: written without that, it passed against the buggy
+  resolver, since the fallback also returns "none" in a bare unit environment.
+- **BR-3.** `cliproxy_default_web_search_strategy` now has six direct tests; Task
+  1.6's steps had been folded into build_agent's coverage rather than executed.
+- **BR-4.** `rank_key` read the first numeral in a display name as a version, so
+  "GPT-OSS 120B (Medium)" outranked every Gemini row in the created-less band. It
+  now takes the first number below 100 — above that it is a parameter count.
+- **BR-5.** The `antigravity:pro` render is asserted by equality; it is the one
+  case exercising displayName matching and created-less ranking together, so its
+  ordering is part of what is under test.
+- **Minor (entity table).** `providers.lua` was modified by M1 without appearing
+  in the Core concepts table, which is what would have made its missing test row
+  visible. Added, along with `get_cliproxy_strategy`.
+- **Minor (unmeasured branch).** `owned_by == "antigravity"` now yields "none"
+  regardless of family, and `build_agent` forwards the owner. Measured: gemini
+  breaks outright there, and `gpt-oss-120b-medium` answers while silently never
+  searching. A claude model served by antigravity stays unmeasured, so it is no
+  longer claimed to work.
+
+### 2026-08-31 — M1 boundary review round 2 (BR-5, BR-12)
+
+- **BR-12 (Important, and a real design error).** `web_search_strategy` also
+  selects the WIRE — `cliproxy_route` returns "anthropic" only for
+  `anthropic_tools_route` — so round 1's "antigravity ⇒ none" rule let an
+  UNSTABLE `owned_by` decide the transport: the same claude-sonnet-4-6 would
+  have spoken Anthropic or OpenAI depending on which owner that proxy start
+  reported. Resolved by measurement rather than by choosing: an
+  antigravity-served `claude-opus-4-6-thinking` answers 200 on the anthropic
+  wire, so the family test runs FIRST and owner is consulted only below it,
+  where every remaining family gets the openai wire either way and owner can
+  therefore only affect the search tool. Two tests pin it, one asserting that
+  the two owners of a shared id resolve identically.
+- **BR-5 (repeat).** The remaining `tbl_contains` — in the rank-band test added
+  in round 1 — is now a full-render equality. Order is what that case exists to
+  check, and containment cannot see order. No `tbl_contains` remains in the spec.
+
+### 2026-08-31 — M1 boundary review rounds 3-4 (BR-1, BR-5..BR-9, BR-13)
+
+Six of these are one failure repeated: an instance was patched where a rule was
+needed. Recorded together because the pattern is the finding.
+
+- **BR-13.** `rank_key` guarded against parameter counts with a `< 100`
+  threshold, which only excludes the sizes that happen to be large — "GPT-OSS
+  20B" would still have read as version 20. The rule the code needed: a numeral
+  in free text is a version only when DELIMITED, never when glued to a letter.
+- **BR-5.** Pinning one more render was not the fix either. The spec now derives
+  its cases from a `SPEC_RENDERS` table keyed by the documented spec string, so
+  every row in the Spec's table is an equality by construction and a new row
+  cannot be added without a test.
+- **BR-6.** An unknown provider resolved to `owner = nil`, and `m.owner == owner`
+  then pooled every row whose `owned_by` was absent. Unknown providers now
+  contribute nothing.
+- **BR-7.** `series("")` returned "". Fixed at the boundary rather than in
+  `series`: a row with no id is not a model, so `parse` drops it — one guard
+  instead of a defence in every consumer.
+- **BR-8.** `build_agent` raised on a row without an id. It returns nil now; its
+  callers are a picker callback and a session restore, where raising means a
+  stack trace over the UI or an aborted setup.
+- **BR-1 / BR-9.** The plan named `M._logged_out_providers` and `provider_states`
+  for a capability implemented as `_providers_without_models`, and repeated
+  `SPEC=unit/…` at twelve steps when `make test-spec` takes atlas feature keys
+  (`SPEC=providers/cliproxy-managed`). Both swept across the whole plan, and the
+  referent grep the Notes prescribe was actually run this time.
+
+### 2026-08-31 — M1 close round 5 (BR-1, BR-13)
+
+- **BR-13.** The delimiter rule was right but *unpinned*: restoring the `< 100`
+  threshold left all 41 tests passing, so nothing defended the rule. The new case
+  uses magnitudes that a threshold would wave through — "GPT-OSS 20B", "Llama
+  70B", "Ctx 32K", "Mixtral 8x7B" — and was confirmed to FAIL against the old
+  threshold before being kept. This is the second time on this issue that a fix
+  shipped with a test that could not fail; both times the check was the same one:
+  break the code on purpose and watch the test go red.
+- **BR-1.** Task 3.1 credited `_providers_without_models` without any step
+  creating or testing it. Steps 4-6 now do, including why the catalog is the
+  logged-out signal and what it deliberately does not cover.
+
+### 2026-08-31 — M2/M3 boundary review (BR-24, BR-25, BR-26)
+
+All three are second occurrences, so each is recorded as the rule it needed.
+
+- **BR-24.** No atlas entry existed for any of the new surface. The instance was
+  not the fix: docs were lumped into a terminal Task 4.3, which structurally
+  guarantees every earlier milestone crosses its boundary undocumented, contra
+  AGENTS.md §8. Dissolved into a docs step inside each milestone naming the file
+  and section; 4.3 now carries only M4's own surface.
+- **BR-25.** The picker's rows drifted from the documented render — hyphen for
+  em dash, no separator, no grouping — and the tests only used
+  `find(..., plain)`, which cannot see what is absent. BR-5 had already settled
+  "equality, not containment" for `curate`; the picker's rows are documented
+  renders in the same Spec and did not inherit the rule. They are now pinned as
+  full-string equalities, and the `── live · cliproxy ──` separator the Spec
+  documents is implemented (inert: `on_select` ignores it, since float_picker has
+  no non-selectable row).
+- **BR-26.** The Integration table named `catalog_write`, which never existed
+  (`_write_catalog` ships), and omitted `catalog_stale`, `_catalog_path` and
+  `register_live_agent`. The referent grep matched dotted call syntax only, so
+  bare table cells were exempt from the check meant to keep names honest. It now
+  runs in both directions.
+
+### 2026-08-31 — M2/M3 review round 7 (BR-30 Critical, BR-22, BR-23, BR-25, BR-31)
+
+- **BR-30 (Critical).** A picked live model rendered twice — once from the
+  configured loop (`register_live_agent` inserts `<id>*`, and the restart restore
+  does the same) and once from the catalog — both checkmarked, both keyed
+  identically for `recall_id_fn`. The exclusion lives in `view_for` so the
+  `<C-a>` path inherits it, and the test builds the state a live pick actually
+  creates, which `make_plugin` never reached. It was visible in smoke-test output
+  I had already read.
+- **BR-22.** `view_for` returned early on an empty catalog, suppressing the
+  logged-out rows in exactly the case they exist for; and `fetch_catalog` gated
+  its write on `#models > 0`, conflating "every channel logged out" with "the
+  proxy is down". The write now keys on request success, not list length.
+- **BR-23.** The promotion left the duplication in place: `free_port` was
+  file-local in EIGHT specs, not the three named. All eight now call the shared
+  helper, and the docstring's claim is true.
+- **BR-25.** Spec and code disagreed on the dash and on grouping, and the atlas
+  restated the code's version a third time. The Spec now documents what ships,
+  with the reason: a different dash on the live rows would make one list look
+  like two conventions, and float_picker has no non-selectable row, so group
+  headers would each be a selectable, fuzzy-matchable item.
+- **BR-31.** The bidirectional check I added had blind spots on both passes — the
+  reverse matched only `function M.x(`, missing the `M.x = function` and
+  `M.x = alias` forms; the forward matched only dotted call syntax, so fixture
+  modes, routes, files and flags escaped, including a `catalog` mode this plan
+  named that never existed. The rule now enumerates definition FORMS and referent
+  KINDS, and the fixture-mode reference is corrected to what shipped.
+
+### 2026-08-31 — M2/M3 review round 8 (BR-22, BR-30, BR-33)
+
+- **BR-30 (Critical, repeat).** The code fix was right; the TEST could not fail —
+  it re-implemented the exclusion in the spec body and handed `_build_items` an
+  already-filtered list, so reverting the fix left the file green. Third time on
+  this issue. The structural answer is `M._view_for(models, cfg, opts)`: a pure
+  function on the production path that a test can call directly. Both this fix
+  and BR-22's were then verified by reverting them and watching 3 and 1 tests go
+  red respectively.
+- **BR-22 (repeat).** The class survived two more sites in the same function:
+  `all` decided both "bypass curation" and "hide the login rows", and the
+  background repaint gated on `#models > 0`, so the 200-with-empty-registry case
+  the write gate had just been fixed to record never repainted. `all` now scopes
+  to curation alone, and the repaint keys on the fetch resolving.
+- **BR-33.** `<C-a>` was a literal while every sibling picker key carries a
+  registry row — so it appeared in no help screen and could not be rebound, and
+  the mapping immediately above it binds the help that omits it. It now resolves
+  through the new `keybinding_registry.key_for(id, config)`. The wider rule: a
+  sweep without a guard is a snapshot. `tests/arch/single_source_sweeps_spec.lua`
+  now guards all three of this issue's consolidations — no re-declared
+  `free_port`, no cliproxy spec without `_set_data_dir`, no new hardcoded picker
+  key (with the pre-existing seven listed as debt that may shrink, never grow).
+  Each guard was confirmed to fail when its invariant is violated.
+
+### 2026-08-31 — M2/M3 review round 9 (BR-19 Critical, BR-21)
+
+- **BR-19.** Deleting the restart-restore left every spec green: the persistence
+  test stubbed `refresh_state`, so it never reached the code it claimed to cover,
+  and `M.agent_picker`'s selection branches had no test at all. Fourth instance
+  of the same failure on this issue. Two structural changes, matching `_view_for`:
+  the spec now drives the REAL `refresh_state` from a persisted `state.json` —
+  which is what a restart actually is, and what exposed that `_state` is reloaded
+  from disk — and the selection branches are extracted as `M._select(plugin,
+  item)` so each is reachable. **Every fix in this round was mutation-checked**:
+  deleting the restore block fails 2, removing the live branch fails 1, removing
+  the cache guard fails 1.
+- **BR-21.** Not merely a missing guard — two live throws: `_view_for`
+  concatenated a nil id and `_build_items` rendered a nil display, so a corrupt
+  or hand-edited `catalog.json` crashed the agent picker on open. That file
+  persists between sessions and can be written by an older parley, so it is
+  untrusted input. Sanitized at the single boundary every consumer reads
+  through (`catalog_cached`), the way BR-7's empty id was fixed in `parse`.
+
+### 2026-08-31 — M2/M3 review round 10 (the demoted backlog, cleared)
+
+The gate had stopped blocking on these (round cap), so they are recorded as
+fixed rather than as gate work.
+
+- **BR-21.** Three more data-loss and crash paths, each measured: a *foreign*
+  200 on the endpoint wiped a warm catalog (HTTP status alone does not say the
+  body is cliproxy's), the picker rendered `(nil)` for an ownerless row, and
+  `_providers_without_models` was unguarded. The write now gates on `classify` —
+  the existing single source for "is this cliproxy's /v1/models contract" —
+  after three weaker gates each lost data in turn (`#models > 0`, curl exit
+  code, HTTP 200). The foreign test needed fixing too: it reused the just-killed
+  port, so the dying process answered and reverting the fix left it green.
+- **BR-37.** `fetch_catalog` returned without calling its callback on the
+  in-flight path, so a picker opened during a refresh never repainted. Every
+  exit path now resolves the callback exactly once.
+- **BR-20.** `catalog_cached` re-read and re-`mkdir`ed on every picker open,
+  toggle and repaint — a keystroke path. Memoized on the file's mtime. And
+  `providers = nil` returned `{}` rather than "every known provider" as
+  config.lua documents, which silently emptied the live section for anyone who
+  omitted the key.
+- **BR-36.** The `or "<C-a>"` fallback was a second copy of the registry's
+  default, invisible to the guard written one round earlier — the same
+  enumerate-the-forms rule BR-31 had already stated. The literal is gone (no key
+  ⇒ no mapping) and the guard now matches the fallback forms too.
+- **BR-28.** `id .. "*"` lived at three sites that must agree, or a model
+  renders twice again. Single-sourced as `cliproxy_catalog.agent_name`.
+- **BR-24 / BR-32 / BR-35 / BR-34 / BR-27.** README documents `live_models` and
+  `<C-a>`; the catalog section no longer orphans the flow narrative; the
+  keybinding row is scoped `parley_buffer` rather than Global; the fake's
+  v1beta branches mirror /v1/models with the reason stated; and the plan records
+  that `live_models` shipped in M3.
+
+### 2026-08-31 — M2 close (FIX-THEN-SHIP): BR-38..BR-41 and the BR-20/21 remainders
+
+- **BR-41.** `fetch_catalog` pulled `render_opts()`, whose bundle MINTS a 0600
+  `management.key` — so opening the agent picker created a credential file.
+  It now reads only host, port and secret. Pinned by a test asserting no
+  `management.key` exists after a refresh.
+- **BR-40.** `providers = { "claude", "claude:opus" }` rendered claude-opus-5
+  twice, both marked current, one shared recall key — BR-30's symptom reached by
+  a second route, because `curate` resets its per-series memo per entry. The live
+  list is deduped by id as well as against registered agents.
+- **BR-21 remainder.** An ownerless cache row printed a literal `(nil)`, and
+  `_providers_without_models` offered `:ParleyProxy login claud` for a typo and
+  for `anthropic` (an owner name, not a provider). Only names parley can
+  actually log into earn a login row.
+- **BR-20 remainder.** The "logged at debug" the operating envelope promised is
+  implemented, and `catalog_path()` no longer mkdirs on every read — only the
+  write needs the directory.
+- **BR-39.** The guard written last round claimed to count "any bracketed key
+  literal" while matching three specific forms, and its allowance for
+  `agent_picker.lua` was 0 while the file held one — a guard asserting a
+  measurable falsehood. Pattern widened to any `"<…>…"` literal, allowances set
+  from measurement, and `float_picker` excluded with the reason: it is the
+  widget, not a caller, and its built-in keys are deliberately not per-picker
+  rebindable.
+- **BR-38.** `agent_name` was missing from the tables the plan's own
+  bidirectional rule covers, and `_select` sat under Pure entities while calling
+  `vim.cmd` and `vim.schedule`. Moved to Integration points.
+
+### 2026-08-31 — M3 close review (BR-42..BR-47)
+
+- **BR-42.** `is_managed()` gated the catalog refresh, so an operator running
+  their own cliproxy (`manage = false`) got an empty catalog and a picker
+  claiming every configured provider was logged out. `manage` governs whether
+  parley STARTS a proxy, not whether one exists; `fetch_catalog` spawns nothing,
+  so the dormancy contract is untouched by dropping the gate.
+- **BR-43.** The background repaint restored the selection by INDEX, and a
+  refresh that inserts or removes rows moves what that index points at — so
+  `<CR>` could fire on a row the operator never pointed at. `float_picker`'s
+  handle now exposes `selected()`, and the repaint restores by name.
+- **BR-45.** Spec Component 3 named the management API as the logged-out source
+  while the code reads the catalog; the design was reconsidered during M3 and the
+  Spec never restated. Corrected, with the case it does not cover named.
+- **BR-46.** The plan's close recipe swept the whole tree, which carries the
+  operator's uncommitted `config.lua`. That exact sweep happened twice on this
+  issue, once putting a spec's port and api-key into their live proxy config. The
+  recipe now names files, and the Notes carry the rule.
+- **BR-47.** M3's Done-when is recorded in `## Log` with the payload, the
+  response block types and the answer — the answer being the evidence, since the
+  inert paths return a stale version rather than an error.
+- **BR-44.** Commit 747c8ff falls in no review window (M2's ended at 60b964b,
+  M3's begins after it), so its content is ungated. Recorded in the Log for the
+  issue-close review to take deliberately.
+
+### 2026-08-31 — M3 close review round 2 (BR-49..BR-57)
+
+- **BR-52.** The BR-43 fix was wrong in a way the finding measured: `sel_idx`
+  indexes the FILTERED list, and the repaint computed its index against the full
+  `items` list — so with a query active the cursor landed on a different row than
+  before, the exact failure BR-43 existed to stop. Fixed in the WIDGET, which
+  owns that coordinate space: `update` now accepts an identity string and
+  resolves it after filtering. Pinned by a test with an active query, verified to
+  fail without the fix.
+- **BR-53.** Staleness was keyed on the last SUCCESS, so a proxy that is down
+  never set the clock and every picker open re-spawned two curls — an unbounded
+  retry on a keystroke path. It keys on the last ATTEMPT now.
+- **BR-50.** `_catalog_inflight` was set before two `vim.system` calls with no
+  failure path clearing it; one uncaught error stranded it true and the catalog
+  never refreshed again that session. Every path settles through one function,
+  and the parse is guarded.
+- **BR-49.** The BR-41 fix introduced a second byte-identical host/port/secret
+  derivation; extracted as `endpoint_opts`, which `render_opts` now builds on.
+- **BR-42/BR-54.** The window changed runtime behaviour in two modules with zero
+  test changes — 5th in that family. Both behaviours are now pinned and
+  mutation-checked, and the RULE is in `workshop/lessons.md`: a boundary whose
+  diff touches `lua/` and no spec does not close.
+- **BR-55/BR-56/BR-57/BR-51.** Commit recipes name real paths again (BR-46's
+  prose made them unexecutable); `workshop/lessons.md` gained the four recurring
+  failures with the check that catches each; `*.parley-backup.*` is gitignored;
+  and this plan now states that the issue file, not these checkboxes, is the
+  record.
+
+### 2026-08-31 — M3 close review round 3 (BR-58..BR-63)
+
+Two of these are regressions from the previous round's own fixes.
+
+- **BR-58 (Critical).** The attempt-based staleness added for BR-53 silenced the
+  picker for the full ten-minute success TTL after a failure — including
+  immediately after the operator logs in through the `(logged out)` row, which is
+  exactly when the catalog HAS just changed. Two clocks now: a successful cache
+  is good for `CATALOG_TTL`, a failed attempt backs off for
+  `FAILED_ATTEMPT_BACKOFF` (30s), and a completed login clears the failure clock
+  outright.
+- **BR-59.** The BR-52 test passed with the bug reintroduced: its target was the
+  last filtered row, which `get_selected_item`'s clamp reaches from any
+  out-of-range index. The previous round CLAIMED it mutation-checked — and it had
+  been, but with the weaker mutation (deleting the block) rather than the
+  specific wrong implementation (resolving in items-space). **The mutation must
+  be the wrong implementation, not merely deletion**; the fixture now puts the
+  target at filtered index 1 of 3, and the items-space mutation fails it.
+- **BR-60.** `update`'s numeric argument meant items-space at callers and
+  filtered-space in the widget. Both forms are now stated in the caller's terms
+  and resolved by the widget in its own space.
+- **BR-61 / BR-62 / BR-63.** `atlas/ui/pickers.md` documents `selected()` and
+  `update`'s third argument; the arch spec sweeps code→table so a module-public
+  entity missing from Core concepts fails a test rather than a review; and the
+  stacked doc blocks above `catalog_stale` are untangled.
+
+### 2026-09-01 — BR-58's login half (the part the previous round got wrong)
+
+The failure-backoff half was fixed and revert-verified. The LOGIN half was not,
+and was reported as fixed: `catalog_stale` short-circuits on a fresh cache
+before it consults the attempt clock, so clearing that clock was inert in the
+one case that matters — a `(logged out)` row exists BECAUSE a successful fetch
+lacked that provider's models, which means the cache is fresh. An operator
+logging in through the row kept seeing it for up to the full TTL.
+
+An explicit `invalidate_catalog()` now outranks both clocks, and the login path
+calls that rather than the clock reset. The two acts are separate functions on
+purpose: a spec setting up a clean clock is not a login announcing that the
+catalog changed, and one function serving both made every spec that reset the
+clock see everything as stale — which is how the first attempt broke two
+existing tests. Mutation-checked: removing the invalidation fails the new test.
+
+### 2026-09-01 — M3 close review round 16 (BR-45..BR-67 remainders)
+
+- **BR-65 (Critical).** `luacheck` flagged a shadowed upvalue in the BR-60 fix,
+  and `make test` runs lint FIRST — so the whole suite exited without running a
+  spec. Fixed before this round's review window opened.
+- **BR-67.** `catalog_stale` was pure arithmetic living in the IO module, so
+  pinning it cost two test seams and specs that spawn curl at dead ports. Moved
+  to `cliproxy_config.catalog_stale(o)`; six unit cases now cover it with no
+  clock, no seams and no network (ARCH-PURE).
+- **BR-58 remainder.** The login wiring had zero coverage — deleting the call
+  left the suite green. Extracted as `_on_login_success`, and the mutation now
+  fails a test.
+- **BR-60 remainder.** `<C-a>` passed no selection, so the toggle jumped the
+  cursor — the same defect at the sibling site the first fix left alone — and
+  `float_picker` still wrote an items-space `sel_idx` beside the translation
+  meant to replace it. Both gone.
+- **BR-48.** On a declined write the callback resolved with the parse of the
+  body we had just refused to store. Fixed at the parse-failure branch first and
+  claimed complete; the declined-classify branch still did it, and the claim was
+  wrong until round 18.
+- **BR-50 remainder.** The `vim.system` LAUNCH is guarded now, not only its
+  callbacks — that was the mechanism the finding named.
+- **BR-62 remainder.** The code→table guard listed two files and could not fire
+  on the named instances; widening it to four made it fire on every entity those
+  modules had ever exported. It is now scoped to the entities THIS ISSUE's diff
+  adds, and verified to fail when a table row is deleted.
+- **BR-64 / BR-66 / BR-55.** No `logger.error` on a picker-open path; the test
+  title that described the old numeric contract is corrected; and the last commit
+  recipe that swept `lua/ tests/` names its files.
+
+### 2026-09-01 — BR-58 round 17: the call site, and a residual I introduced
+
+Two gaps, both mine, both now mutation-checked against the exact deletion the
+reviewer measured rather than a convenient one.
+
+- **The CALL SITE was untested.** A spec calling `_on_login_success` directly
+  left the invocation inside the credential watch uncovered — deleting that line
+  kept every spec green, and the previous round's plan entry claimed otherwise.
+  `cliproxy_login_spec` now drives `run_login` against the fake and asserts the
+  catalog was invalidated; deleting the call fails it. Extraction made the
+  function reachable, which is necessary but is NOT the same as covering the wire
+  between it and its caller.
+- **A residual I introduced with the fix.** `_force_stale` was cleared at the
+  START of an attempt, so the first DECLINED refresh threw away a login's
+  invalidation — putting the operator straight back into BR-58's symptom by a new
+  route: log in, picker opens, proxy briefly down, invalidation gone, ten more
+  minutes of the `(logged out)` row. It is cleared on a STORED result instead.
+  Pinned by a test that logs in, declines a fetch, and asserts staleness holds.
+
+The pattern across both: an extraction or a flag is not a fix until the thing
+that *drives* it is exercised. "Deleting X keeps the suite green" is the check.
+
+### 2026-09-01 — M3 close bundle (FIX-THEN-SHIP): BR-45, BR-48, BR-66, BR-68, BR-71..BR-74
+
+- **BR-72.** `_force_stale` moved from the start of an ATTEMPT to the top of
+  `_write_catalog` — one line above the `io.open` that can fail, so a failed
+  write still consumed the invalidation. It clears after the write succeeds. The
+  rule, twice re-broken and now stated: a flag clears where the work it is paid
+  for has actually happened.
+- **BR-48.** The declined-CLASSIFY branch still resolved with the rejected parse;
+  only the parse-failure branch had been fixed, and the plan asserted otherwise.
+  Both branches resolve with the cache.
+- **BR-74 / BR-68.** The two repaint blocks were byte-identical and each
+  hardcoded `.name` while `recall_id_fn` declared identity separately. One
+  `_identity`, used for both, and a test that drives the real `<C-a>` closure —
+  dropping `update`'s third argument now fails, where it left the suite green.
+- **BR-73.** The code→table guard searched the WHOLE plan while asserting "appear
+  in no Core-concepts table row", so a name mentioned in a Revisions entry
+  satisfied it. Scoped to table rows — and it immediately caught
+  `_on_login_success`, the entity the finding named. (My first attempt to add
+  that row made the same whole-document mistake.)
+- **BR-45.** The plan→code direction now exists as a guard: every symbol named in
+  a Core-concepts table must exist in the tree, which is what would have caught
+  `catalog_write` and `provider_states`.
+- **BR-66 / BR-71.** The handle doc no longer describes the index contract it
+  outgrew, and `workshop/lessons.md` carries the rule: a doc comment and a test
+  title are assertions about the code, swept in the same commit as the contract.
+
+### 2026-09-01 — M4 landed
+
+- `oauth-model-alias` is gone from the shipped config, **proven on a live proxy**:
+  parley re-rendered its real config without the block, the proxy reloaded it
+  (`oauth-model-alias: ABSENT`), and `claude-opus-4-8`, `claude-opus-5` and
+  `gpt-5.6-sol` all still answer — including the two the block used to pin.
+- The block is still HONORED as an explicit channel pin, which is the case the
+  catalog cannot decide: antigravity re-serves claude, gemini and gpt-oss models
+  alongside their native channels.
+- Model → channel is now `resolve_channels` (plural), and where several
+  candidates remain, credential health picks the LEAST healthy one — the
+  credential that plausibly failed — via `credential_health_across` with
+  `ca.unhealthier`. `credential_health_for_login` shares that traversal with the
+  opposite reducer, so the two cannot drift.
+- The load-bearing regression test runs with an EMPTY alias block and asserts on
+  what actually distinguishes the two worlds: with the catalog fallback removed
+  the diagnosis degrades to `unknown_channel`. A first version asserted the
+  message contained "claude", which the MODEL ID satisfies — it passed with the
+  fallback deleted.
+- `cliproxy_auth_login_spec`'s "nothing names a channel" case had a premise that
+  went stale the moment the catalog became a second source; it now empties the
+  catalog too, and fails if the catalog can resolve.
+- Operator request, same session: `fable` added to the shipped claude filter, and
+  the resulting default (`claude:opus,sonnet,fable`) documented in the Spec's
+  render table and pinned in `SPEC_RENDERS` like every other row.
+
+### 2026-09-01 — the roster change, and a crash it exposed
+
+Committing M4 also landed the operator's own `config.lua` cleanup (it lives in
+the same file as the alias block), which turned three long-standing spec
+failures from "a local edit is dirty" into "the committed defaults changed".
+Fixing them found a real bug and one repeated test smell.
+
+- **`get_agent` could index nil on an unresolvable name.** Falling back to
+  `_state.agent` is a no-op when `_state.agent` is itself absent from the roster,
+  and the next line indexed nil. **Scope, corrected:** `refresh_state` already
+  resets `_state.agent` to `_agents[1]` when the persisted name is missing, so
+  the startup path does NOT reach it — an earlier note here claimed it "crashed
+  every request until the state file was hand-edited", which the review
+  disproved by probing. What remains reachable is a caller passing a name while
+  `_state.agent` is itself stale, e.g. `config.review_agent` / `skill_agent`
+  naming an agent an operator removed. Fixed to fall back to a real agent, with a spec that fails
+  against the old code.
+- **Six specs named agents they did not own.** `ToolSonnet`, `ToolSol*`,
+  `ClaudeAgentTools` — `get_agent` warns and falls back, so each ran against a
+  DIFFERENT agent than it named. Two golden payloads had silently begun comparing
+  a synthetic-system-prompt agent's output; the "pre-existing" harness failures
+  I had attributed to something else were this same cause. Every one now
+  registers or pins the agent it needs. The goldens matched with no regeneration,
+  which is the evidence the pin is faithful.
+- The rule, added to the specs' comments: a test asserts a BEHAVIOUR, so it owns
+  the agent that behaviour needs. Borrowing one from the shipped roster makes a
+  product decision able to silently change what the test measures.
+
+### 2026-09-01 — M4 boundary review (C1, C2)
+
+- **C1 (Critical, a live regression I shipped).** With the alias block gone, the
+  candidate set for a `claude-*` model is `{antigravity, claude}` — and
+  `missing` ranks WORST, so "blame the unhealthiest" named **antigravity**: a
+  channel the operator may never have used, holding no credential, which
+  therefore cannot have served the request. Every auth failure under the shipped
+  config prompted `:ParleyProxy login antigravity` while the credential that
+  actually failed went unnamed — the exact wrong-account diagnosis #197 exists to
+  prevent, reintroduced by the deletion that removed the block short-circuiting
+  it.
+  The rule: **eligibility before ranking.** `could_have_served` and
+  `likeliest_culprit` are pure functions in `cliproxy_auth`, beside the ranking
+  they qualify, so the policy is unit-testable without the fan-out — it had been
+  hardcoded in the IO shell, which is how it shipped untested. The atlas
+  documented the broken rule verbatim and is corrected.
+  My regression test passed throughout: its fixture left the claude credential
+  HEALTHY, so there was no expired credential to name, and the `missing`
+  antigravity reading produced a plausible "no credential is loaded" message. The
+  fixture now models what the title claims, and asserts the ACCOUNT.
+- **C2.** The M4 commit also carried the operator's roster cleanup — 19 agents to
+  1 — contradicting the Spec ("keep the six configured cliproxyapi agents as
+  pinned favourites") and Task 4.2 ("removes `oauth-model-alias` and nothing
+  else"), and leaving `review_agent`/`skill_agent`, `scripts/refresh_goldens.lua`
+  and the atlas naming agents that no longer shipped. The roster is restored;
+  M4 now changes exactly two things in that file. The operator's cleanup is back
+  in the working tree as their own uncommitted change, where it needs a
+  reference sweep before it can land.
+
+### 2026-09-01 — M4 review round 2 (BR-75..BR-87)
+
+- **BR-75 (Critical, my C1 fix was still wrong).** Excluding only `missing` left
+  `unknown` (rank -1, BELOW missing — six auth_files read failures produce it)
+  and `disabled` (rank 1) outranking a genuinely errored credential, so the
+  diagnosis still named an unreadable or switched-off channel. Eligibility is now
+  an explicit `CULPRIT_RANK` — a SEPARATE ordering from `HEALTH_RANK`, because
+  "is this account usable" and "did this credential fail" are different
+  questions and inverting one does not answer the other.
+- **BR-76.** `repaired` was hardcoded nil on the fan-out branch, so the
+  one-restart-per-claim guard was permanently false on what deleting the alias
+  block made the DEFAULT path — re-enabling the ~36s compound repair the
+  docstring calls unreachable. It propagates now, pinned by a test.
+- **BR-77.** Readings were appended in async ARRIVAL order, so a tie named a
+  different account run to run. Written by index and compacted, so declared
+  candidate order is the tiebreak.
+- **BR-78.** `GOLDEN_AGENT` was defined twice, in the regenerator and the
+  verifier, kept equal by hand — the very dependency the pin was introduced to
+  remove. Single-sourced in `scripts/golden_fixture.lua`.
+- **BR-81.** My own plan note claimed the `get_agent` crash broke "every request
+  until the state file was hand-edited". The review probed it: `refresh_state`
+  resets a missing selection first, so the startup path never reaches it. Claim
+  struck, scope stated honestly, test renamed to the reachable variant.
+- **BR-84 / BR-85.** The healthiest-wins reducer is extracted beside its twin, so
+  both policies live in the pure module; `resolve_login_provider` had zero
+  production callers and is deleted, with the CHANNEL-vs-LOGIN invariant it
+  documented now asserted the way `recover` actually derives it.
+- **BR-82 / BR-83 / BR-87.** README and atlas caught up with the `fable` default;
+  two inert guards removed from the e2e case (the channel name reaches only the
+  stubbed `vim.ui.select`, so it could never fail); and Task 4.1's superseded
+  "least healthy candidate" phrasing is annotated in place.
+
+### 2026-09-01 — M4 review round 22 (BR-89, Critical)
+
+`credential_health` carries module-global one-shot repair state: the first 404 on
+the management route triggers a restart and re-reads, and every later call
+short-circuits on `_management_restart_done`. My fan-out issued all candidates in
+one synchronous loop, so the reads RACED that flag — one repaired while the
+others returned a fabricated `{state="unknown", reason="no_management_route"}`
+that is never re-measured. An `unknown` is ineligible, so a genuinely expired
+credential dropped out of candidacy and the diagnosis named the channel with no
+credential at all: the #197 wrong-account symptom again, this time reached
+through concurrency rather than ranking. Eligibility could not save it, because
+the reading it needed had been fabricated before it ran.
+
+The reads are sequential now — at most four loopback calls, each capped by
+`CURL_MAX_TIME` — which is what makes a one-shot repair mean what its name says.
+Pinned by a test that counts overlap; restoring the concurrent loop fails two
+cases.
+
+**The pattern worth carrying:** shared one-shot state and a fan-out are
+incompatible by construction. Three separate defects on this issue produced the
+same user-visible symptom — the wrong account named — by three different routes
+(ranking, eligibility, concurrency), which is what a Done-when phrased as
+"names the RIGHT login" is for.
+
+### 2026-09-01 — M4 review round 23 (BR-88, Critical)
+
+The catalog replaced `oauth-model-alias` as the model→channel source, but its
+only production WRITER was the agent picker. So a cold install — never opened a
+picker — had no catalog, and an auth failure reported "no cliproxy channel is
+configured", with no account named and no login offered. That is strictly worse
+than the block it replaced, which at least shipped a mapping: I removed a source
+of truth and left its replacement populated by an optional UI gesture.
+
+**Corrected in round 24:** warming inside `ensure_running` did NOT cover the
+bring-your-own path — `pre_query` returns before `ensure_running` when
+`manage = false`, so that operator still got nothing, while the comment, the
+atlas and this note all claimed otherwise. The warm lives in `pre_query`, the one
+seam every cliproxy request passes through. And the first test pinned the
+UNREACHABLE leg (it called `ensure_running` directly with `manage = false`), so
+deleting the warm from both reachable sites left all fifteen cliproxy specs
+green; it now drives `pre_query` for both modes, and removing the warm fails
+two.
+
+**The class:** when a single source of truth is replaced, the replacement needs
+a writer on every path the original covered — not just the one the new feature
+made convenient.
+
+### 2026-09-01 — M4 review round 24 (BR-88 again)
+
+Two legs, both mine, and the second is the recurring failure in its purest form:
+**the test exercised the one code path that cannot happen.** `pre_query` returns
+before `ensure_running` when the feature is off, so a test calling
+`ensure_running` with `manage = false` measured a branch no dispatch reaches —
+while both reachable call sites went unpinned and could be deleted with the whole
+suite green.
+
+The check that catches it is not "does a test exist" but "can this line be
+deleted with the suite green" — and it has to be aimed at the line PRODUCTION
+executes, which means knowing which path production takes before writing the
+test.
+
+### 2026-09-01 — M4 review round 25 (BR-99): the guard was one commit behind
+
+`make test` was RED at HEAD on the repo's own arch guard, and I crossed the
+boundary anyway having watched it pass. Both halves are mine:
+
+- **The row was missing.** `warm_catalog` became module-public and never reached
+  the Core-concepts table.
+- **The guard could not have caught it in time.** It diffed `<base>~1..HEAD`,
+  which ignores the working tree — so a new entity is invisible until the commit
+  AFTER it appears. That is why the pre-commit run passed and the identical
+  post-commit run failed. A guard that reports one commit late lets exactly one
+  boundary through, which is what happened here.
+
+It diffs against the working tree now (`git diff <base>~1`), so it flags while
+the code is still being written, and it covers `scripts/` as well as `lua/`.
+
+**The rule:** a guard's window must include the state the author is actually in.
+Checking committed history only means the author's last action is always
+unverified.
+
+### 2026-09-01 — M4 close bundle (BR-78, BR-80, BR-91..BR-100)
+
+- **BR-100.** The narrowing that fixed BR-99 excluded by SYNTAX (`= function`)
+  rather than by what the right-hand side IS, so the repo's 41-site
+  `M._x = local_fn` seam-export idiom became invisible to the guard one commit
+  after it was tightened. It now treats any `M.x = <non-literal>` as an export
+  and only literals as data — verified both ways: injecting a seam export fails
+  it, adding a data constant does not.
+- **BR-92 / BR-94.** `unhealthier` had no callers left once `likeliest_culprit`
+  replaced it, so it is deleted (and the plan→code guard caught its stale table
+  row immediately, which is the guard doing its job). The superseded "least
+  healthy" phrasing is gone from the code comments and the atlas, and the atlas
+  no longer routes through the deleted `resolve_login_provider`.
+- **BR-80 (4th).** Every stacked doc block is collapsed — 0 remain across the
+  three cliproxy modules, checked mechanically rather than by eye. The cause each
+  time was inserting a new block ABOVE an existing one instead of replacing it.
+- **BR-78.** `FIXTURES` and `OPENAI_FIXTURES` were the other half of the
+  hand-synced duplication; both now live in `scripts/golden_fixture.lua` with the
+  agent and the tool list.
+- **BR-97 / BR-98.** `default_tool_agent` states why it sorts (a different agent
+  per run makes a failure unreproducible) and asserts its precondition; and the
+  two rules missing from `lessons.md` — eligibility before ranking, and a
+  replaced single source needs a writer on every path the original had — are
+  written down.
+
+### 2026-09-01 — issue-close review (BR-15, BR-16, BR-90..BR-100)
+
+- **BR-87.** Task 4.1's "the LEAST healthy candidate is the one that plausibly
+  failed" is annotated in place — it is superseded twice over (eligibility first,
+  then `CULPRIT_RANK`), and a reader reaching the task before the revisions was
+  getting the rule the code was fixed to stop implementing.
+- **BR-90.** `OWNER_CHANNELS` was documented "sorted" and READ as a preference
+  ranking at three sites, so `antigravity` outranked the native channel for every
+  owner it re-serves and `recover`'s pre-flight login named a cross-vendor channel
+  before any credential was read. The lists are preference order now, native
+  first, and a test asserts that for every owner.
+- **BR-93.** Serializing the fan-out (the BR-89 fix) added up to four sequential
+  probes to a path inside the dispatcher's backstop, and `_repair_budget_sec`
+  gained no term — the budget stopped bounding anything. The budget carries the
+  multiplier AND the recovery path is capped at two candidates, which the
+  preference order makes safe: the native channel is always one of them.
+- **BR-15.** `cliproxy_default_web_search_strategy` was a single source nothing
+  consulted while config hand-stated the same answer. It is in the resolution
+  chain now — and the shape of that chain took three tries: deriving unconditionally
+  overrode an operator's global `none`, then overrode a perfectly good
+  `openai_search_model`, then invented a strategy where none was configured. It
+  CORRECTS a configured strategy the family cannot use, and does nothing
+  otherwise. **This is a behaviour change** — a claude cliproxy agent defaults to
+  the anthropic route now — and it is documented as one in the atlas rather than
+  smuggled in as a DRY cleanup.
+- **BR-91.** The plan→code guard matched a textual occurrence, so a deleted
+  function's row stayed green because a spec COMMENT mentioned it — the guard
+  certifying exactly the drift it exists to catch. It requires a definition now,
+  and immediately caught the stale `resolve_login_provider` row I had left.
+- **BR-92 / BR-16.** `unhealthier` deleted (no callers); the atlas now names
+  `cliproxy_catalog.lua`, the pure core it had never mentioned.
+
+### 2026-09-01 — issue close round 2 (BR-101)
+
+The candidate cap trimmed from the TAIL, which for google kept
+`{gemini-cli, gemini}` and dropped `antigravity` — the cross-vendor fallback the
+cap's own rationale promised to keep, and google is the only owner with more than
+two candidates, so the claim was false exactly where it mattered. `bound_candidates`
+keeps the native channel and the re-server, lives in the pure module so the choice
+is testable without the recovery path, and is verified by reverting to a tail trim.
+
+**One of those claims was false, and the next round proved it.** I asserted
+BR-72, BR-80 and BR-91 were "verified fixed at HEAD by direct measurement". For
+BR-80 I had measured `credential_health_across` and `@param prefer` — but the
+finding also named `recover`, where the superseded paragraph was still sitting
+above its replacement, and I had ADDED a fourth instance above
+`MAX_CANDIDATE_CHANNELS` in the same window. And BR-72's fix, though correctly
+placed, was unpinned: reverting it left the whole mapping green.
+
+The failure is measuring the part I had in mind rather than the part the finding
+named. Both are fixed and pinned now — the write-failure test discriminates only
+because the cache is fresh first, which is what makes the two placements differ.
+
+### 2026-09-01 — issue close bundle (BR-17, BR-72, BR-80, BR-95..BR-106)
+
+- **BR-104 (Important).** `model` is documented as "string OR table", and both
+  shapes reach the strategy resolver — but derivation was gated on
+  `type(...) == "table"` at two sites, and `tools/wire.lua` passed a string
+  through as `nil`. A string-configured model got neither the derived strategy
+  nor the ability to override it. Normalized once at the entry
+  (`as_model_table`) instead of gated at each use.
+- **BR-17.** Two copies of "put this agent in the roster" had already diverged —
+  the selection path overwrote an existing entry, the restore path kept it. One
+  `adopt_agent` writer now. (Hoisted above `refresh_state` after the first
+  attempt defined it 3000 lines below its first caller — the same
+  declaration-order slip as `warm_catalog`, which is worth noticing as a pattern
+  rather than a typo.)
+- **BR-72 / BR-80 / BR-105.** The write-failure path now logs and its boolean is
+  honoured; the superseded `recover` paragraph is gone; and the comment I added
+  above `MAX_CANDIDATE_CHANNELS` — which restated the OLD alphabetical channel
+  order the same commit pair had replaced — is corrected, so the file no longer
+  contradicts itself.
+- **BR-106.** The guard pattern went through both failure modes in one sitting:
+  `%s *=` matched `x == y` and `t.x = 1` (a mention satisfied it), then
+  tightening to `M.` only missed `cliproxyapi.pre_query = function` and string
+  VALUES like `anthropic_tools_route` that a table cell may legitimately name.
+  The definition forms are enumerated now, and both directions are injection-tested.
+- **BR-95, scope.** My own new `error()` carries its next action. The six other
+  prose raises the finding names live in `tools/init.lua`, `tools/wire.lua` and
+  `timezone_diagnostics.lua` — they predate this issue and belong to other
+  features, so sweeping them here would be scope creep. Recorded as a decision,
+  not an omission; worth its own issue if the pattern matters.
+- **BR-96, BR-102, BR-103.** Whitespace regressions removed; `lessons.md` gains
+  the three rules this round earned (an order read as a ranking must BE one; a
+  bound must count what the code does; trim from the end you can afford to lose);
+  `atlas/providers/agents.md` no longer names agents that stopped shipping.
+
+### 2026-09-01 — post-close sweep: the comment family got a rule (BR-71, BR-86, BR-87, BR-96, BR-103, BR-105)
+
+The close bundle fixed the sites the round-30 review named. This entry covers the
+classes those sites belonged to, which it did not.
+
+- **`docs-insert-orphans-section` (4th finding) now has a machine.**
+  `tests/arch/superseded_comment_spec.lua` fails on two paragraphs in one
+  contiguous comment run sharing a verbatim six-word span. Round two's proposed
+  remedy — lint `---@param` blocks naming absent identifiers — is why the family
+  kept recurring: it was scoped to where the first instance happened to sit. The
+  written rule immediately found **six** live instances, four in files no reviewer
+  had named (`chat_respond.lua` ×2, `tool_folds.lua`, `skill_edits.lua`), plus
+  `float_picker.lua`'s (BR-71), which is paraphrased and which the guard's own
+  docstring admits it cannot see. All seven swept.
+- **BR-105's second half.** `_repair_budget_sec` still justified itself with "a
+  google-owned model has four candidate channels… while the code issues four
+  reads" one commit after the cap made it two. The comment now derives the
+  multiplier from `MAX_CANDIDATE_CHANNELS` instead of naming a count.
+- **BR-106's fix carried an unbacked claim.** It said "Both directions are covered
+  by injection tests"; there were none. The matcher is extracted to
+  `definition_pattern` and driven by `defines()` over synthetic text, with four
+  planted FALSE POSITIVES (a comment, a comparison, a like-named key, a call site)
+  and five definition forms. Reverting the pattern to the loose pre-fix form fails
+  two of those cases.
+- **BR-103.** `atlas/providers/agents.md` restated `config.lua`'s roster; three
+  different rosters were written there during this issue and every one named
+  agents the config had stopped shipping. It now describes the shape and points
+  at the source.
+- **BR-96.** The column-0 comment and `TOOL_AGENT` table in `chat_respond_spec`
+  are re-indented into their enclosing block.
+- **BR-86.** Task 4.2's recipe staged `lua/parley/config.lua` wholesale, which is
+  the exact file the "Never `git add -u`" Note protects — the recipe contradicted
+  the guardrail for four rounds. It stages the alias hunk explicitly now. The
+  operator's agent-roster trim and the untracked `docs/parley.nvim.md` remain
+  UNCOMMITTED, deliberately; they are not this issue's deliverable.
+
+### 2026-09-01 — BR-107 and its second instance: pinning the half production traverses
+
+The round-31 review measured what the round-30 bundle asserted: reverting
+`tools/wire.lua`'s argument back to `type(model) == "table" and model or nil`
+left the ENTIRE suite green. BR-104's tests call `providers.cliproxy_strategy`
+directly, so the normalizer was pinned twice and the call site — the half
+`wire.resolve → cliproxy_strategy → cliproxy_route` actually traverses in
+production — not at all.
+
+This is BR-68's rule ("a fix that lands as a call, or a new argument at an
+existing call, must be pinned AT THAT SITE") re-broken by the commit that closed
+the round which restated it. Restating a rule is not applying it, so this time the
+class was swept rather than the site patched:
+
+- **BR-107 itself.** `wire.name_for("cliproxyapi", "claude-opus-5")` must resolve
+  to the anthropic wire, and both documented shapes must agree. Reverting the
+  argument reddens it.
+- **The second live instance, found by sweeping.** Deleting
+  `cc.bound_candidates(candidates, MAX_CANDIDATE_CHANNELS)` from `recover` also
+  left everything green — the cap the repair budget's arithmetic depends on could
+  be removed unnoticed. Now pinned in `cliproxy_auth_login_spec` by driving
+  `recover` against the fake with a **google-owned** model, the only owner with
+  more than two channels and therefore the only shape that can tell a bounded
+  fan-out from an unbounded one. It counts real `credential_health` reads and
+  bounds them by `_repair_budget_sec.auth_files / .liveness_probe` — derived from
+  the constant the budget uses, never a literal. Deleting the call reddens it with
+  "recover read 4 credentials; the budget bounds it at 2".
+- **One more stale count.** `credential_health_across` still said "at most four
+  loopback reads" — same defect as `_repair_budget_sec`'s, wrong since the cap
+  landed. It no longer restates a number.
+
+### 2026-09-01 — round 32: the guard's own exclusion, and a consolidation that erased a distinction (BR-108..BR-113)
+
+- **BR-108 (Important).** The prose lint shipped in 56f0df3 excludes annotation
+  blocks — correct, and a hole exactly where this family lives. That same commit
+  created two new instances and left BR-80's own, all three invisible to it by
+  construction. The `@param`-absent lint rejected as "why the family recurred" was
+  too narrow *alone*, never wrong: the two are COMPLEMENTARY and both now ship in
+  `superseded_comment_spec.lua`. `annotation_drift` flags an `@param` the
+  following signature does not take, and a blank line severing a block from its
+  function; it excludes the `_name` unused-argument convention (six real sites), and
+  that exclusion has its own planted false-positive case. It found **seven**
+  orphans tree-wide plus one severed block — `chat_parser.lua`, `cliproxy.lua` ×2,
+  `init.lua` ×2 — all fixed. `refresh_state` got back the docstring the hoist took.
+- **BR-109 (Important).** `adopt_agent` consolidated two copies that had diverged
+  and picked overwrite, pinning neither: reverting to the keep form left the whole
+  suite green. The divergence was real — config must beat a persisted pick at
+  startup (`setup()` builds `M.agents` then calls `refresh_state`), while a user
+  picking a row now must beat what is there. Restored as an explicit
+  `keep_existing` flag, one branch per call site, and mutation-checked against
+  BOTH rival implementations rather than against deletion: collapsing onto
+  overwrite reddens one case, collapsing onto keep reddens the other.
+- **BR-110 (Important).** b218ae7 made cliproxyapi mandatory out of the box while
+  README called the proxy "dormant" and the Spec still promised six agents. Both
+  corrected, and a `## Revisions` entry now records the out-of-box consequence
+  rather than leaving it in a commit body. The rule: a shipped default is user
+  surface even though the user never types it.
+- **BR-111 (Minor).** `bound_candidates` walked the tail BACKWARDS, satisfying
+  max = 2 by accident and returning `{c1, cN, cN-1}` for max = 3 — reverse
+  preference order, contradicting its own `@param` and
+  `credential_health_across`'s declared-order guarantee. It returns a subsequence
+  now, pinned at every max from 1 to 5.
+- **BR-112 (Minor).** Six `super_repo_spec` sites named an agent the roster
+  stopped shipping; `init.lua` silently substitutes `M._agents[1]`, so they passed
+  under a name that resolved to nothing.
+- **BR-113 (Minor).** The sole shipped default pinned `claude-opus-4-8` — the
+  exact staleness this issue's Problem statement opens with. Now `claude-opus-5`.

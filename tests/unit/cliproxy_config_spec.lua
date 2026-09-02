@@ -208,36 +208,6 @@ end)
 -- to tests/unit/cliproxy_auth_spec.lua.
 --------------------------------------------------------------------------------
 
-describe("resolve_login_provider", function()
-    local alias = {
-        claude = {
-            { name = "claude-opus-4-8", alias = "claude-opus-4-8", fork = true },
-            { name = "claude-sonnet-4-6", alias = "claude-sonnet-4-6", fork = true },
-        },
-        codex = { { name = "gpt-5-codex", alias = "gpt-5-codex", fork = true } },
-    }
-    it("resolves a claude-channel model → claude login", function()
-        assert.equals("claude", cc.resolve_login_provider("claude-opus-4-8", alias))
-    end)
-    it("resolves a codex-channel model → codex login", function()
-        assert.equals("codex", cc.resolve_login_provider("gpt-5-codex", alias))
-    end)
-    it("matches by alias when it differs from the name", function()
-        local a = { claude = { { name = "claude-opus-4-8", alias = "opus", fork = true } } }
-        assert.equals("claude", cc.resolve_login_provider("opus", a))
-    end)
-    it("maps the gemini-cli channel → google login", function()
-        local a = { ["gemini-cli"] = { { name = "gemini-2.5-pro", alias = "g", fork = true } } }
-        assert.equals("google", cc.resolve_login_provider("gemini-2.5-pro", a))
-    end)
-    it("returns nil for a model not in any channel", function()
-        assert.is_nil(cc.resolve_login_provider("mystery-model", alias))
-    end)
-    it("returns nil for a channel with no OAuth login (vertex)", function()
-        local a = { vertex = { { name = "gemini-2.5-pro", alias = "g", fork = true } } }
-        assert.is_nil(cc.resolve_login_provider("gemini-2.5-pro", a))
-    end)
-end)
 
 describe("providers / provider_owned_by", function()
     it("lists the supported model-owning providers, sorted", function()
@@ -298,7 +268,15 @@ end)
 
 -- #197 C1: channel and login provider are DIFFERENT axes. They coincide for
 -- claude, which is why every test in M1 missed the confusion.
-describe("resolve_channel vs resolve_login_provider", function()
+-- The CHANNEL vs LOGIN axis distinction (#197). `resolve_login_provider` used to
+-- express it, but had no production callers, so it was deleted in #205 M4 and
+-- the invariant is asserted the way `recover` actually derives it:
+-- channel_login(resolve_channels(...)[1]).
+local function login_for(model, alias, models)
+    return cc.channel_login(cc.resolve_channels(model, alias, models)[1])
+end
+
+describe("resolve_channel vs the login it implies", function()
     local alias = {
         claude = { { name = "claude-opus-4-8", alias = "claude-opus-4-8" } },
         ["gemini-cli"] = { { name = "gemini-2.5-pro", alias = "gemini-2.5-pro" } },
@@ -312,21 +290,21 @@ describe("resolve_channel vs resolve_login_provider", function()
     end)
 
     it("collapses several channels onto one login provider", function()
-        assert.equals("google", cc.resolve_login_provider("gemini-2.5-pro", alias))
-        assert.equals("google", cc.resolve_login_provider("gemini-3-pro-preview", alias))
+        assert.equals("google", login_for("gemini-2.5-pro", alias))
+        assert.equals("google", login_for("gemini-3-pro-preview", alias))
         -- and the two axes differ for exactly those models
         assert.are_not.equals(cc.resolve_channel("gemini-2.5-pro", alias),
-            cc.resolve_login_provider("gemini-2.5-pro", alias))
+            login_for("gemini-2.5-pro", alias))
     end)
 
     it("coincides only for claude — the case that hid the bug", function()
         assert.equals(cc.resolve_channel("claude-opus-4-8", alias),
-            cc.resolve_login_provider("claude-opus-4-8", alias))
+            login_for("claude-opus-4-8", alias))
     end)
 
     it("returns nil for an unknown model rather than guessing", function()
         assert.is_nil(cc.resolve_channel("no-such-model", alias))
-        assert.is_nil(cc.resolve_login_provider("no-such-model", alias))
+        assert.is_nil(login_for("no-such-model", alias))
     end)
 end)
 
@@ -351,5 +329,152 @@ describe("every login provider resolves to at least one channel", function()
 
     it("maps the device-code flow onto the channel it logs into", function()
         assert.same({ "codex" }, cc.channels_for_login("codex-device"))
+    end)
+end)
+
+--------------------------------------------------------------------------------
+-- channels_for_owner / resolve_channels (issue #205 M4)
+--------------------------------------------------------------------------------
+describe("channels_for_owner", function()
+    it("narrows a catalog owner to the channels that can serve it, NATIVE first", function()
+        -- Plural on purpose: antigravity re-serves other vendors' models
+        -- alongside the native channel, so an owner never implies one channel.
+        -- Order is PREFERENCE, not alphabetical — callers read [1] as "the
+        -- channel" when only one can be probed, so a sorted list pointed the
+        -- operator at antigravity before any credential had been read.
+        assert.same({ "claude", "antigravity" }, cc.channels_for_owner("anthropic"))
+        assert.same({ "codex", "antigravity" }, cc.channels_for_owner("openai"))
+    end)
+
+    it("keeps every google channel, because they share one login", function()
+        assert.same({ "gemini-cli", "gemini", "aistudio", "antigravity" },
+            cc.channels_for_owner("google"))
+    end)
+
+    it("returns empty for an owner it does not know", function()
+        assert.same({}, cc.channels_for_owner("who-knows"))
+    end)
+
+    it("is NOT derived from PROVIDER_OWNED_BY, whose keys are logins", function()
+        -- The axis error this exists to avoid: CHANNEL_LOGIN has no `google`
+        -- key — that login is three channels — so inverting the login-shaped
+        -- map would yield a name that is not a channel at all.
+        assert.is_nil(cc.channel_login("google"))
+        -- Every candidate is a real CHANNEL, i.e. it has a login.
+        for _, ch in ipairs(cc.channels_for_owner("google")) do
+            assert.is_not_nil(cc.channel_login(ch), ch .. " is not a channel")
+        end
+        -- The native ones log in via google; antigravity is a cross-vendor
+        -- server that appears as a candidate for several owners and logs in as
+        -- itself — which is exactly why the owner→channel relation cannot be an
+        -- inversion of anything.
+        assert.equals("google", cc.channel_login("gemini-cli"))
+        assert.equals("antigravity", cc.channel_login("antigravity"))
+        assert.is_true(vim.tbl_contains(cc.channels_for_owner("anthropic"), "antigravity"))
+        assert.is_true(vim.tbl_contains(cc.channels_for_owner("google"), "antigravity"))
+    end)
+end)
+
+describe("resolve_channels", function()
+    local CATALOG = {
+        { id = "claude-opus-5", owner = "anthropic" },
+        { id = "gemini-3-flash", owner = "antigravity" },
+    }
+
+    it("returns the operator's explicit pin alone", function()
+        -- The alias block stays an override: it is the only way to say "serve
+        -- this id from THAT channel" when several could.
+        local alias = { codex = { { name = "claude-opus-5", alias = "claude-opus-5" } } }
+        assert.same({ "codex" }, cc.resolve_channels("claude-opus-5", alias, CATALOG))
+    end)
+
+    it("falls back to the catalog owner's candidates", function()
+        assert.same({ "claude", "antigravity" },
+            cc.resolve_channels("claude-opus-5", {}, CATALOG))
+    end)
+
+    it("returns a single candidate when the owner has only one", function()
+        assert.same({ "antigravity" }, cc.resolve_channels("gemini-3-flash", {}, CATALOG))
+    end)
+
+    it("returns empty when neither the alias block nor the catalog knows it", function()
+        assert.same({}, cc.resolve_channels("who-knows-1", {}, CATALOG))
+    end)
+
+    it("tolerates a nil catalog", function()
+        assert.same({}, cc.resolve_channels("claude-opus-5", {}, nil))
+    end)
+end)
+
+
+describe("channels_for_owner preference order", function()
+    it("puts the native channel ahead of the cross-vendor one, for every owner", function()
+        -- The bug: these lists were alphabetical, and callers read [1] as "the
+        -- channel" — `recover` derives its pre-flight login from it — so
+        -- `antigravity` outranked the native channel for every owner it
+        -- re-serves and the operator was pointed at a channel they may never
+        -- have used before any credential was read.
+        for owner, native in pairs({ anthropic = "claude", openai = "codex",
+                                     google = "gemini-cli" }) do
+            local channels = cc.channels_for_owner(owner)
+            assert.equals(native, channels[1],
+                owner .. " must prefer its native channel")
+            assert.equals("antigravity", channels[#channels],
+                owner .. " must keep the cross-vendor fallback last")
+        end
+    end)
+end)
+
+describe("bound_candidates", function()
+    it("keeps the native channel and the cross-vendor re-server", function()
+        -- The cap must keep what its rationale promises. Trimming from the tail
+        -- kept {gemini-cli, gemini} for google and dropped antigravity — the
+        -- fallback the comment claimed was always retained.
+        assert.same({ "gemini-cli", "antigravity" },
+            cc.bound_candidates({ "gemini-cli", "gemini", "aistudio", "antigravity" }, 2))
+    end)
+
+    it("is a no-op when the list already fits", function()
+        assert.same({ "claude", "antigravity" },
+            cc.bound_candidates({ "claude", "antigravity" }, 2))
+        assert.same({ "kimi" }, cc.bound_candidates({ "kimi" }, 2))
+    end)
+
+    it("does not mutate the caller's list", function()
+        local input = { "gemini-cli", "gemini", "aistudio", "antigravity" }
+        cc.bound_candidates(input, 2)
+        assert.equals(4, #input)
+    end)
+
+    it("bounds every owner to the native channel plus the re-server", function()
+        for _, owner in ipairs({ "anthropic", "openai", "google" }) do
+            local bounded = cc.bound_candidates(cc.channels_for_owner(owner), 2)
+            assert.equals(cc.channels_for_owner(owner)[1], bounded[1], owner)
+            assert.equals("antigravity", bounded[#bounded], owner)
+        end
+    end)
+
+    it("keeps preference order at every max, not just the shipped one", function()
+        -- BR-111: filling the tail by walking backwards satisfied max = 2 by
+        -- accident and returned {c1, cN, cN-1} for max = 3 — reverse preference
+        -- order, contradicting this function's own @param AND
+        -- credential_health_across's "readings reach `choose` in DECLARED order,
+        -- so a tie is broken the same way every run". Unreachable at
+        -- MAX_CANDIDATE_CHANNELS = 2 and a trap the moment the cap rises.
+        local google = { "gemini-cli", "gemini", "aistudio", "antigravity" }
+        assert.same({ "gemini-cli", "gemini", "antigravity" },
+            cc.bound_candidates(google, 3))
+        -- The result must always be a SUBSEQUENCE of the input.
+        for max = 1, 5 do
+            local out, at = cc.bound_candidates(google, max), 0
+            for _, ch in ipairs(out) do
+                local found
+                for i = at + 1, #google do
+                    if google[i] == ch then found = i break end
+                end
+                assert.is_truthy(found, ("max=%d reordered %s"):format(max, ch))
+                at = found
+            end
+        end
     end)
 end)

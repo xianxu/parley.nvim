@@ -63,4 +63,45 @@ function M.wait_for_port(path, timeout_ms)
     return port
 end
 
+--- Bind port 0, read back what the OS gave us, release it.
+--- Promoted from file-local copies in cliproxy_lifecycle_spec.lua and
+--- cliproxy_recovery_e2e_spec.lua; a third consumer (#205's dormancy test) is
+--- what made the duplication worth removing (ARCH-DRY).
+--- @return number port
+function M.free_port()
+    local uv = vim.uv or vim.loop
+    local s = uv.new_tcp()
+    s:bind("127.0.0.1", 0)
+    local port = s:getsockname().port
+    s:close()
+    return port
+end
+
+--- Is something accepting connections on this port right now? One attempt, no
+--- polling — the negative predicate a dormancy assertion needs.
+--- @param port number
+--- @return boolean
+function M.is_listening(port)
+    local uv = vim.uv or vim.loop
+    local ok, done = false, false
+    local c = uv.new_tcp()
+    c:connect("127.0.0.1", port, function(err)
+        ok = err == nil
+        done = true
+        pcall(function() c:close() end)
+    end)
+    vim.wait(500, function() return done end)
+    return ok
+end
+
+--- Poll until something is listening on `port`, so probes don't race startup.
+--- @param port number
+--- @param timeout_ms number|nil
+--- @return boolean listening
+function M.wait_listening(port, timeout_ms)
+    return vim.wait(timeout_ms or 5000, function()
+        return M.is_listening(port)
+    end, 50) or false
+end
+
 return M

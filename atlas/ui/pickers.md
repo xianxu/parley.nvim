@@ -98,3 +98,23 @@ remain.
 - **Issue Finder** (`:ParleyIssueFinder` / `<C-y>f`): asynchronously browse current issues or history with vocabulary ordering, verbatim query persistence, and contextual repository facets
 - **Vision Finder** (`:ParleyVisionShow` / `<C-j>f`): asynchronously browse project initiatives from YAML bundles and jump to exact source lines
 - **Outline** (`:ParleySearchChat` / `:ParleyOutline`): jump to headings and turns
+
+## The handle `float_picker.open` returns
+
+`open()` returns a controller the caller keeps: `update`, `selected`,
+`set_status`, `set_title`, `current_query`, `close`, `is_closed`. Two parts of
+its contract are easy to get wrong and are therefore stated here:
+
+- **`selected()`** returns the item under the cursor right now — the row a `<CR>`
+  would confirm. A caller repainting asynchronously reads it BEFORE updating so
+  it can put the cursor back where the operator left it.
+- **`update(items, tag_bar_tags, next_selection)`** replaces the rows in place
+  (no close/reopen flash). `next_selection` names the row to land on in the
+  CALLER's terms — a number is an index into the `items` just passed, a string is
+  an identity as produced by `recall_id_fn` — and the widget resolves either into
+  its own space after re-filtering. That conversion belongs to the widget because
+  `sel_idx` indexes the FILTERED list: an index meaning one row in the caller's
+  list means a different row here the moment a query is active, which is exactly
+  when a background repaint would otherwise move the cursor under the operator
+  and let `<CR>` fire on a row they never pointed at (#205).
+

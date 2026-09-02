@@ -1682,13 +1682,34 @@ function M.open(opts)
 
     -- Update items and/or tag bar in-place (avoids close/reopen flash).
     -- new_tag_bar_tags: optional list of {label, enabled} to refresh the tag bar display.
-    local function update(new_items, new_tag_bar_tags, next_selection_index)
+    --- Replace the items in place.
+    ---
+    --- `next_selection` names the row to land on, in the CALLER's terms either way:
+    ---   * a NUMBER is an index into `new_items` — the list the caller just passed;
+    ---   * a STRING is an identity as produced by `recall_id_fn`.
+    --- Both are resolved by the widget, after re-filtering, into its own
+    --- coordinate space (`sel_idx` indexes `filtered`, not `items`). That
+    --- conversion is the widget's job precisely because callers cannot know it:
+    --- an index that means one row in their list means a different row here the
+    --- moment a query is active, which is when an async repaint is most likely to
+    --- move the cursor under the operator.
+    local function update(new_items, new_tag_bar_tags, next_selection)
         if closed then return end
+        local next_identity
+        if type(next_selection) == "string" then
+            next_identity = next_selection
+        end
         if new_items ~= nil then
             items = new_items
             set_status(nil)
-            if type(next_selection_index) == "number" then
-                sel_idx = math.max(1, math.floor(next_selection_index))
+            if type(next_selection) == "number" then
+                -- Translate the caller's items-index into an identity here, so
+                -- BOTH forms resolve below in the ONE coordinate space this
+                -- widget has. No sel_idx assignment: that was the items-space
+                -- write this translation exists to replace, and it silently
+                -- meant a different row whenever a query was active.
+                local picked = items[math.max(1, math.floor(next_selection))]
+                next_identity = picked and recall_id_fn(picked) or nil
             end
             if not opts.height then
                 desired_h = math.max(1, #items)
@@ -1704,6 +1725,14 @@ function M.open(opts)
         end
         if not reflow_picker() then return end
         apply_filter(false)
+        if next_identity then
+            for i, item in ipairs(filtered) do
+                if recall_id_fn(item) == next_identity then
+                    set_selection(i, { preserve_view = true })
+                    break
+                end
+            end
+        end
     end
 
     if initial_status then
@@ -1712,6 +1741,15 @@ function M.open(opts)
     focus_prompt()
     return {
         update = update,
+        -- The item under the cursor right now. Exposed so a caller repainting
+        -- asynchronously can name the row to return to: it passes this item's
+        -- identity back as `update`'s third argument, and the widget resolves it
+        -- after re-filtering. Without that, a refresh which inserts or removes
+        -- rows moves the cursor under the operator and <CR> fires on a row they
+        -- never pointed at.
+        selected = function()
+            return get_selected_item()
+        end,
         set_status = set_status,
         set_title = set_title,
         current_query = current_query_from_buffer,

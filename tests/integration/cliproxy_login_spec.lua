@@ -90,6 +90,22 @@ describe("cliproxy login", function()
         assert.matches("login succeeded", all_notices())
     end)
 
+    it("invalidates the catalog when a login actually completes", function()
+        -- The call SITE, not the function. A spec calling _on_login_success
+        -- directly left cliproxy.lua's invocation inside the credential watch
+        -- untested — deleting that line kept every spec green. This drives
+        -- run_login against the fake and asserts the effect landed.
+        cliproxy._write_catalog({ { id = "x", owner = "openai" } }, os.time())
+        assert.is_false(cliproxy.catalog_stale(), "precondition: a fresh cache")
+
+        local settled = await(function(done)
+            cliproxy.run_login("claude", (cliproxy.login_argv("claude")), done)
+        end)
+        assert.is_true(settled, "the fake login should have written a credential")
+        assert.is_true(cliproxy.catalog_stale(),
+            "a completed login must invalidate the catalog — it is what registers models")
+    end)
+
     it("reports a login that dies instead of failing silently", function()
         -- The #197 failure mode exactly.
         vim.env.PARLEY_FAKE_LOGIN_MODE = "dies_early"

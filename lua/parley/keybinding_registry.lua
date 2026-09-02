@@ -750,6 +750,17 @@ M.entries = {
 		help_only = true, -- registered by review skill (#133)
 	},
 
+	-- ── Picker: Agent ───────────────────────────────────────────────────
+	{
+		id = "ap_expand_catalog",
+		config_key = "agent_picker_mappings.expand_catalog",
+		default_key = "<C-a>",
+		default_modes = { "n", "i" },
+		scope = "parley_buffer",
+		desc = "Agent picker: show every cliproxy model, not just the curated ones",
+		help_only = true, -- bound by agent_picker's float_picker mappings table
+	},
+
 	-- ── Finder: Chat ────────────────────────────────────────────────────
 	{
 		id = "cf_next_recency",
@@ -901,6 +912,23 @@ end
 -------------------------------------------------------------------
 -- Config resolution
 -------------------------------------------------------------------
+
+--- The key bound to a registry entry id, honoring config overrides.
+---
+--- Exists so a caller can ask for "the key for this action" without holding the
+--- entry table — and, more to the point, without hardcoding a literal that the
+--- help screen then fails to mention (#205).
+--- @param id string
+--- @param config table
+--- @return string|nil key
+function M.key_for(id, config)
+	for _, entry in ipairs(M.entries) do
+		if entry.id == id then
+			return (M.resolve_key(entry, config))
+		end
+	end
+	return nil
+end
 
 --- Resolve the key and modes for an entry, checking config overrides.
 --- Handles both flat config keys (e.g. "global_shortcut_new") and
