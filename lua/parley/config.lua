@@ -200,213 +200,30 @@ local config = {
 	-- to remove some default agent completely set it like:
 	-- agents = {  { name = "ChatGPT3-5", disable = true, }, ... },
 	agents = {
+		-- {
+		-- 	provider = "openai",
+		-- 	name = "GPT5.5",
+		-- 	model = { model = "gpt-5.5", temperature = 0.8, top_p = 1, search_model = "gpt-5-search-api" },
+		-- 	system_prompt = require("parley.defaults").chat_system_prompt,
+		-- },
+		-- {
+		-- 	provider = "anthropic",
+		-- 	name = "Opus",
+		-- 	model = { model = "claude-opus-5", temperature = 0.8 },
+		-- 	system_prompt = require("parley.defaults").chat_system_prompt,
+		-- },
 		{
-			provider = "openai",
-			name = "GPT5.4",
-			-- string with model name or table with model name and parameters
-			-- search_model: when web_search is enabled, swap to this model
-			model = { model = "gpt-5.4", temperature = 0.8, top_p = 1, search_model = "gpt-5-search-api" },
-			-- system prompt (use this to specify the persona/role of the AI)
-			system_prompt = require("parley.defaults").chat_system_prompt,
-		},
-		{
-			provider = "openai",
-			name = "GPT5.4-pro",
-			-- string with model name or table with model name and parameters
-			-- search_model: when web_search is enabled, swap to this model
-			model = { model = "gpt-5.4-pro", temperature = 0.8, top_p = 1, search_model = "gpt-5-search-api" },
-			-- system prompt (use this to specify the persona/role of the AI)
-			system_prompt = require("parley.defaults").chat_system_prompt,
-		},
-		{
-			provider = "openai",
-			name = "GPT5-mini",
-			-- string with model name or table with model name and parameters
-			-- search_model: when web_search is enabled, swap to this model
-			model = { model = "gpt-5-mini", temperature = 0.8, top_p = 1, search_model = "gpt-5-search-api" },
-			-- system prompt (use this to specify the persona/role of the AI)
-			system_prompt = require("parley.defaults").chat_system_prompt,
-		},
-		{
-			provider = "anthropic",
-			name = "Claude-Opus",
-			-- string with model name or table with model name and parameters
-			model = { model = "claude-opus-4-8", temperature = 0.8 },
-			-- system prompt (use this to specify the persona/role of the AI)
-			system_prompt = require("parley.defaults").chat_system_prompt,
-		},
-		{
-			provider = "anthropic",
-			name = "Claude-Sonnet",
-			-- string with model name or table with model name and parameters
-			model = { model = "claude-sonnet-5"},
-			-- system prompt (use this to specify the persona/role of the AI)
-			system_prompt = require("parley.defaults").chat_system_prompt,
-		},
-		{
-			provider = "anthropic",
-			name = "Claude-Fable",
-			-- string with model name or table with model name and parameters
-			model = { model = "claude-fable-5"},
-			-- system prompt (use this to specify the persona/role of the AI)
-			system_prompt = require("parley.defaults").chat_system_prompt,
-		},
-		{
-			provider = "cliproxyapi",
-			name = "ToolSonnet*",
-			model = { model = "claude-sonnet-5" },
-			system_prompt = require("parley.defaults").chat_system_prompt,
-			synthetic_system_prompt = true,
-			tools = { "@all"},
-		},
-		{
-			provider = "cliproxyapi",
-			name = "ToolFable*",
-			model = { model = "claude-fable-5" },
-			system_prompt = require("parley.defaults").chat_system_prompt,
-			synthetic_system_prompt = true,
-			tools = { "@all"},
-		},
-		{
-			-- Agentic Claude: the default is a full coding assistant, so it
-			-- gets the @all tool set — read/search AND edit/write inside the
-			-- working directory (was @readonly through #81 M1; swapped in
-			-- 8381829). For a read-only agent instead, set tools = {"@readonly"}.
 			provider = "cliproxyapi",
 			name = "ToolOpus*",
 			-- No `web_search_strategy` here: it is DERIVED from the model family
 			-- (#205). claude-* needs the anthropic route, gpt-* the openai one,
 			-- and gemini-family models none at all — measured, single-sourced in
-			-- providers.cliproxy_default_web_search_strategy, and CORRECTED by
-			-- the resolution chain when the configured strategy cannot serve the
-			-- family. State it only to override that.
+			-- providers.cliproxy_default_web_search_strategy, and consulted by
+			-- the resolution chain. State it only to override that.
 			model = { model = "claude-opus-4-8" },
 			system_prompt = require("parley.defaults").chat_system_prompt,
 			synthetic_system_prompt = true,
 			tools = { "@all"},
-		},
-		{
-			-- The first non-Anthropic Tool agent, on the codex channel. No
-			-- `web_search_strategy` override: providers.cliproxyapi already defaults to
-			-- `openai_tools_route`, which is the right route for an OpenAI-family model
-			-- -- the Claude entries above override it precisely because they are not.
-			-- Verified against cliproxyapi 7.2.110: generates, calls tools with parseable
-			-- arguments, returns `reasoning_content`, and caches ~93% of a repeated prefix.
-			--
-			-- Client-side tools work here because parley speaks the OpenAI
-			-- function-calling wire natively (#198) — encode, streamed decode, and the
-			-- content-block → tool_calls/role:"tool" message translation all live in
-			-- lua/parley/tools/wire_openai.lua behind the wire registry.
-			--
-			-- Staying on the OpenAI route is what BUYS web search. cliproxy will happily
-			-- translate an Anthropic-shaped tool request to codex, but server-side
-			-- web_search/web_fetch go inert on that cross-family path (no
-			-- `server_tool_use` blocks at all). On this route `{type="web_search"}` and
-			-- the client function tools coexist in one `tools` array and both fire —
-			-- verified end to end: two sequential read_file rounds plus a cited web
-			-- result in a single turn.
-			provider = "cliproxyapi",
-			name = "ToolSol*",
-			model = { model = "gpt-5.6-sol" },
-			system_prompt = require("parley.defaults").chat_system_prompt,
-			synthetic_system_prompt = true,
-			tools = { "@all"},
-		},
-		{
-			provider = "anthropic",
-			name = "ToolSonnet",
-			model = { model = "claude-sonnet-5" },
-			system_prompt = require("parley.defaults").chat_system_prompt,
-			tools = {"@all"},
-		},
-		{
-			provider = "anthropic",
-			name = "ToolFable",
-			model = { model = "claude-fable-5" },
-			system_prompt = require("parley.defaults").chat_system_prompt,
-			tools = {"@all"},
-		},
-		{
-			provider = "anthropic",
-			name = "ToolOpus",
-			model = { model = "claude-opus-4-8" },
-			system_prompt = require("parley.defaults").chat_system_prompt,
-			tools = {"@all"},
-			-- Optional: defaults applied at setup time when absent
-			-- max_tool_iterations = 42,
-			-- tool_result_max_bytes = 102400,
-		},
-		-- {
-		-- 	provider = "anthropic",
-		-- 	name = "Claude-Haiku",
-		-- 	-- string with model name or table with model name and parameters
-		-- 	model = { model = "claude-haiku-4-5", temperature = 0.8 },
-		-- 	-- system prompt (use this to specify the persona/role of the AI)
-		-- 	system_prompt = require("parley.defaults").chat_system_prompt,
-		-- },
-		-- {
-		-- 	provider = "ollama",
-		-- 	name = "ChatOllamaLlama3.1-8B",
-		-- 	-- string with model name or table with model name and parameters
-		-- 	model = {
-		-- 		model = "llama3.1",
-		-- 		temperature = 0.6,
-		-- 		top_p = 1,
-		-- 		min_p = 0.05,
-		-- 	},
-		-- 	-- system prompt (use this to specify the persona/role of the AI)
-		-- 	system_prompt = require("parley.defaults").chat_system_prompt,
-		-- 	disable = true,
-		-- },
-		{
-			provider = "googleai",
-			name = "Gemini3.1-Pro",
-			-- model list: https://cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/2-5-flash
-			-- string with model name or table with model name and parameters
-			model = { model = "gemini-3.1-pro-preview", temperature = 1.1, top_p = 1 },
-			-- system prompt (use this to specify the persona/role of the AI)
-			system_prompt = require("parley.defaults").chat_system_prompt,
-		},
-		{
-			provider = "googleai",
-			name = "Gemini2.5-Pro",
-			-- model list: https://cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/2-5-flash
-			-- string with model name or table with model name and parameters
-			model = { model = "gemini-2.5-pro", temperature = 1.1, top_p = 1 },
-			-- system prompt (use this to specify the persona/role of the AI)
-			system_prompt = require("parley.defaults").chat_system_prompt,
-		},
-		{
-			provider = "googleai",
-			name = "Gemini3-Flash",
-			-- model list: https://cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/2-5-flash
-			-- string with model name or table with model name and parameters
-			model = { model = "gemini-3-flash-preview", temperature = 1.1, top_p = 1 },
-			-- system prompt (use this to specify the persona/role of the AI)
-			system_prompt = require("parley.defaults").chat_system_prompt,
-		},
-		{
-			provider = "googleai",
-			name = "Gemini2.5-Flash",
-			-- model list: https://cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/2-5-flash
-			-- string with model name or table with model name and parameters
-			model = { model = "gemini-2.5-flash", temperature = 1.1, top_p = 1 },
-			-- system prompt (use this to specify the persona/role of the AI)
-			system_prompt = require("parley.defaults").chat_system_prompt,
-		},
-		{
-			provider = "cliproxyapi",
-			name = "Claude-Sonnet*",
-			-- CLIProxy web-search tool access currently requires code_execution model family.
-			model = { model = "claude-sonnet-5" },
-			system_prompt = require("parley.defaults").chat_system_prompt,
-		},
-		{
-			provider = "cliproxyapi",
-			name = "Claude-Opus*",
-			-- CLIProxy web-search tool access currently requires code_execution model family.
-			model = { model = "claude-opus-4-8", temperature = 0.8 },
-			system_prompt = require("parley.defaults").chat_system_prompt,
 		},
 	},
 
