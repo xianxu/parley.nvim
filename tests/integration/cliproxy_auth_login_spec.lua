@@ -145,6 +145,47 @@ describe("cliproxy.recover", function()
         assert.is_truthy(prompt)
     end)
 
+    it("reads at most MAX_CANDIDATE_CHANNELS credentials for a google-owned model", function()
+        -- BR-107's class (BR-68's rule): a fix that lands as a CALL must be
+        -- pinned AT THAT SITE. Deleting `cc.bound_candidates(...)` from
+        -- `recover` left the entire suite green — the cap that the repair
+        -- budget's arithmetic depends on could be removed and nothing noticed.
+        --
+        -- google is the ONLY owner with more than two channels
+        -- ({gemini-cli, gemini, aistudio, antigravity}), so it is the single
+        -- shape that can distinguish a bounded fan-out from an unbounded one.
+        -- The reads are sequential, so an unbounded four costs 4x CURL_MAX_TIME
+        -- and blows the dispatcher's backstop.
+        serve({ ["gemini-cli"] = { unavailable = true, status_message = "dead" } })
+        vim.ui.select = function(_items, _opts, cb) cb(nil, 2) end
+
+        -- The catalog, not the alias block, is what must resolve the owner here:
+        -- a pin would return a single channel and the cap would never engage.
+        cliproxy._write_catalog({ { id = "gemini-3-pro", owner = "google" } })
+
+        local reads, real = 0, cliproxy.credential_health
+        cliproxy.credential_health = function(cb, channel)
+            reads = reads + 1
+            return real(cb, channel)
+        end
+        local ok, err = pcall(run, {
+            http_status = 503,
+            body = '{"type":"error","error":{"type":"api_error","message":'
+                .. '"auth_unavailable: no auth available (model=gemini-3-pro)"}}',
+            model = "gemini-3-pro", streamed = false, attempt = 0,
+        })
+        cliproxy.credential_health = real
+        assert.is_true(ok, tostring(err))
+
+        -- Derived from the budget the cap feeds, never restated: a literal here
+        -- would keep passing if MAX_CANDIDATE_CHANNELS changed under it.
+        local budget = cliproxy._repair_budget_sec
+        local bound = budget.auth_files / budget.liveness_probe
+        assert.is_true(reads > 0, "the fan-out never ran, so this pins nothing")
+        assert.is_true(reads <= bound,
+            ("recover read %d credentials; the budget bounds it at %d"):format(reads, bound))
+    end)
+
     ----------------------------------------------------------------------------
     -- What it must NOT do (the PQ-2 regression and friends)
     ----------------------------------------------------------------------------

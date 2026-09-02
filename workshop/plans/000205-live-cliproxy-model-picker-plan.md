@@ -2401,3 +2401,34 @@ classes those sites belonged to, which it did not.
   the guardrail for four rounds. It stages the alias hunk explicitly now. The
   operator's agent-roster trim and the untracked `docs/parley.nvim.md` remain
   UNCOMMITTED, deliberately; they are not this issue's deliverable.
+
+### 2026-09-01 — BR-107 and its second instance: pinning the half production traverses
+
+The round-31 review measured what the round-30 bundle asserted: reverting
+`tools/wire.lua`'s argument back to `type(model) == "table" and model or nil`
+left the ENTIRE suite green. BR-104's tests call `providers.cliproxy_strategy`
+directly, so the normalizer was pinned twice and the call site — the half
+`wire.resolve → cliproxy_strategy → cliproxy_route` actually traverses in
+production — not at all.
+
+This is BR-68's rule ("a fix that lands as a call, or a new argument at an
+existing call, must be pinned AT THAT SITE") re-broken by the commit that closed
+the round which restated it. Restating a rule is not applying it, so this time the
+class was swept rather than the site patched:
+
+- **BR-107 itself.** `wire.name_for("cliproxyapi", "claude-opus-5")` must resolve
+  to the anthropic wire, and both documented shapes must agree. Reverting the
+  argument reddens it.
+- **The second live instance, found by sweeping.** Deleting
+  `cc.bound_candidates(candidates, MAX_CANDIDATE_CHANNELS)` from `recover` also
+  left everything green — the cap the repair budget's arithmetic depends on could
+  be removed unnoticed. Now pinned in `cliproxy_auth_login_spec` by driving
+  `recover` against the fake with a **google-owned** model, the only owner with
+  more than two channels and therefore the only shape that can tell a bounded
+  fan-out from an unbounded one. It counts real `credential_health` reads and
+  bounds them by `_repair_budget_sec.auth_files / .liveness_probe` — derived from
+  the constant the budget uses, never a literal. Deleting the call reddens it with
+  "recover read 4 credentials; the budget bounds it at 2".
+- **One more stale count.** `credential_health_across` still said "at most four
+  loopback reads" — same defect as `_repair_budget_sec`'s, wrong since the cap
+  landed. It no longer restates a number.

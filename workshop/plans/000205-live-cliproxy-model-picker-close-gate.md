@@ -2536,6 +2536,102 @@ rounds:
           family: test-title-overstates-guard
           round: 30
       blocked: false
+    - "n": 31
+      timestamp: "2026-09-01T18:44:52-07:00"
+      agent: claude
+      dispose:
+        - id: BR-17
+          disposition: addressed
+          note: adopt_agent (init.lua:1247) is the one writer; both paths route through it. The chosen clobber rule itself is unpinned, but the DRY ask is delivered.
+          round: 31
+        - id: BR-18
+          disposition: not-addressed
+          note: plan.md:1502-1506 still emits the identical command four times and :1551-1552 twice; the "emit once, enumerate in prose" rule was not applied.
+          round: 31
+        - id: BR-29
+          disposition: not-addressed
+          note: is_managed gate and repaint-under-cursor fixed; cliproxy_conformance_spec.lua:235,254 still use pending() where five siblings print "SKIP:".
+          round: 31
+        - id: BR-35
+          disposition: not-addressed
+          note: keybinding_registry.lua:759 moved global -> parley_buffer, which is an ancestor of chat, so the row still renders in a chat buffer's help under "Buffer" where <C-a> is Vim's increment. No agent_picker scope was added and agent_picker_mappings is still absent from config.lua.
+          round: 31
+        - id: BR-69
+          disposition: addressed
+          note: 'Both named claims now match the code: cliproxy.lua:1726/1744/1757 resolve declined branches with catalog_cached(), and the BR-58 call-site test reddens on deletion.'
+          round: 31
+        - id: BR-71
+          disposition: addressed
+          note: float_picker.lua:1706-1710 is one paragraph now.
+          round: 31
+        - id: BR-72
+          disposition: addressed
+          note: 'Mutation-verified: moving _force_stale = false back above io.open reddens "keeps an invalidation owed when the write fails" and nothing else. Write failure logs and the boolean is honoured at cliproxy.lua:1739.'
+          round: 31
+        - id: BR-80
+          disposition: not-addressed
+          note: 'cliproxy.lua:496-504 still stacks credential_health_for_login''s docstring (ending @param login / @param cb) above credential_health_across(channels, choose, cb) at :517, and that function has a second block of its own. The @param prefer half is gone; this half is the site the finding opened with. Two NEW instances shipped in the fix commits: init.lua:1240 leaves refresh_state''s "@param update" orphaned above adopt_agent''s block (refresh_state at :1259 now has no doc), and init.lua:4346-4348 inserts a blank line between register_live_agent''s @param model and its definition. superseded_comment_spec cannot see any of the three: is_annotation() drops every paragraph containing an @ line, and none share a six-gram. The @param-vs-signature lint the finding asked for is complementary to the span guard, not replaced by it.'
+          round: 31
+        - id: BR-86
+          disposition: addressed
+          note: Task 4.2 stages the alias hunk by path; *.parley-backup.* is gitignored. The operator's config.lua trim and docs/parley.nvim.md remain uncommitted by declared choice and are outside this issue's deliverable.
+          round: 31
+        - id: BR-87
+          disposition: addressed
+          note: plan.md:1355 strikes the phrase and :1358-1367 carries the superseding callout in place.
+          round: 31
+        - id: BR-95
+          disposition: not-addressed
+          note: 'init.lua:4410 improved the message but is still a bare error(...), so the operator still gets an "init.lua:4410:" prefix — the defect the finding named. The Revisions entry scopes the sweep out, which is a defensible decision, but it does not close this site: error(msg, 0) here costs one token.'
+          round: 31
+        - id: BR-96
+          disposition: not-addressed
+          note: The recovery_e2e stray space and the TOOL_AGENT block are fixed, but chat_respond_spec.lua:1309 "local function open_simple_chat" is still at column 0; the base at 42d72b9 had it at 4. The finding named both halves.
+          round: 31
+        - id: BR-102
+          disposition: addressed
+          note: lessons.md:1037-1116 records the BR-90 and BR-93 rules plus four more, each with measured prevalence.
+          round: 31
+        - id: BR-103
+          disposition: addressed
+          note: atlas/providers/agents.md:6-11 stops restating the roster and points at config.lua as the source.
+          round: 31
+        - id: BR-104
+          disposition: not-addressed
+          note: "The resolver half is delivered and pinned (reverting as_model_table reddens two unit cases). The RULE the finding stated — \"normalize model_config once at the resolver's entry ... instead of type-guarding at each consumer\" — was not swept: providers.lua:1106 (cliproxyapi.format_payload) and providers.lua:1359 (has_feature) still do `type(model_config) == \"table\" and model_config.model or nil` in the same file. One of them REGRESSED as a result. Measured headlessly at HEAD vs. with as_model_table reverted: has_feature(\"cliproxyapi\", \"web_search\", \"claude-opus-5\") returns FALSE at HEAD and returned TRUE before commit 6cda59a, while the table form returns true both times. highlighter.lua:456-457 passes the raw agent.model, so a string-configured cliproxy claude agent now renders the \"web search unsupported\" badge (\U0001F30E?) in the picker, the buffer-top extmark and lualine — for a model the same commit just routed to the wire where search works. The enumeration is `grep -n 'type(model[_a-z]*) == \"table\"' lua/parley/providers.lua lua/parley/tools/wire.lua`; sweep it in one round."
+          round: 31
+        - id: BR-105
+          disposition: addressed
+          note: cliproxy.lua:31-37 states preference order and matches OWNER_CHANNELS; :372-380 derives the multiplier from MAX_CANDIDATE_CHANNELS instead of naming a count.
+          round: 31
+        - id: BR-106
+          disposition: addressed
+          note: definition_pattern is extracted and driven through real grep -E over synthetic text with four planted false positives (comment, comparison, like-named key, call site) and five definition forms.
+          round: 31
+      findings:
+        - id: BR-107
+          severity: Important
+          title: The tools/wire.lua half of the BR-104 fix is unpinned — reverting it leaves the ENTIRE suite green
+          detail: |-
+            This is the 7th finding in family `missing-test-for-shipped-behavior`, and it is
+            specifically the BR-68 rule ("a fix that lands as a call, or a new argument at an
+            existing call, must be pinned AT THAT SITE") re-broken by the commit that closed the
+            round which restated it. Measured, not asserted: I replaced
+            `providers.cliproxy_strategy(model)` at tools/wire.lua:107 with the pre-fix
+            `providers.cliproxy_strategy(type(model) == "table" and model or nil)` and ran the
+            full `make test` in a clean worktree — exit 0, all 193 specs pass, including
+            tests/unit/cliproxy_catalog_spec.lua, which is where the fix's tests live. Those
+            tests call `providers.cliproxy_strategy` directly; nothing exercises `wire.resolve` /
+            `wire.name_for` with a bare-string model, which is the production wiring the change
+            exists for. By contrast the providers.lua half IS pinned — reverting `as_model_table`
+            reddens "derives for a bare string model" and "treats the two shapes identically",
+            which is what makes the asymmetry legible. Cheapest close: one assertion beside the
+            existing shape cases — `assert.equals("anthropic", wire.name_for("cliproxyapi",
+            "claude-opus-5"))` under the same `with_default("openai_tools_route", …)` — and
+            confirm it reddens on revert before recording it as fixed.
+          family: missing-test-for-shipped-behavior
+          round: 31
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#205 (boundary-review)
@@ -3693,22 +3789,55 @@ in workshop/lessons.md.
   planted FALSE POSITIVE — a table row whose only tree occurrence is a mention —
   not only against a planted false negative.
 
+## Round 31 — 2026-09-01T18:44:52-07:00 (claude) — passed
+
+### Disposed
+
+- BR-17 — addressed — adopt_agent (init.lua:1247) is the one writer; both paths route through it. The chosen clobber rule itself is unpinned, but the DRY ask is delivered.
+- BR-18 — not-addressed — plan.md:1502-1506 still emits the identical command four times and :1551-1552 twice; the "emit once, enumerate in prose" rule was not applied.
+- BR-29 — not-addressed — is_managed gate and repaint-under-cursor fixed; cliproxy_conformance_spec.lua:235,254 still use pending() where five siblings print "SKIP:".
+- BR-35 — not-addressed — keybinding_registry.lua:759 moved global -> parley_buffer, which is an ancestor of chat, so the row still renders in a chat buffer's help under "Buffer" where <C-a> is Vim's increment. No agent_picker scope was added and agent_picker_mappings is still absent from config.lua.
+- BR-69 — addressed — Both named claims now match the code: cliproxy.lua:1726/1744/1757 resolve declined branches with catalog_cached(), and the BR-58 call-site test reddens on deletion.
+- BR-71 — addressed — float_picker.lua:1706-1710 is one paragraph now.
+- BR-72 — addressed — Mutation-verified: moving _force_stale = false back above io.open reddens "keeps an invalidation owed when the write fails" and nothing else. Write failure logs and the boolean is honoured at cliproxy.lua:1739.
+- BR-80 — not-addressed — cliproxy.lua:496-504 still stacks credential_health_for_login's docstring (ending @param login / @param cb) above credential_health_across(channels, choose, cb) at :517, and that function has a second block of its own. The @param prefer half is gone; this half is the site the finding opened with. Two NEW instances shipped in the fix commits: init.lua:1240 leaves refresh_state's "@param update" orphaned above adopt_agent's block (refresh_state at :1259 now has no doc), and init.lua:4346-4348 inserts a blank line between register_live_agent's @param model and its definition. superseded_comment_spec cannot see any of the three: is_annotation() drops every paragraph containing an @ line, and none share a six-gram. The @param-vs-signature lint the finding asked for is complementary to the span guard, not replaced by it.
+- BR-86 — addressed — Task 4.2 stages the alias hunk by path; *.parley-backup.* is gitignored. The operator's config.lua trim and docs/parley.nvim.md remain uncommitted by declared choice and are outside this issue's deliverable.
+- BR-87 — addressed — plan.md:1355 strikes the phrase and :1358-1367 carries the superseding callout in place.
+- BR-95 — not-addressed — init.lua:4410 improved the message but is still a bare error(...), so the operator still gets an "init.lua:4410:" prefix — the defect the finding named. The Revisions entry scopes the sweep out, which is a defensible decision, but it does not close this site: error(msg, 0) here costs one token.
+- BR-96 — not-addressed — The recovery_e2e stray space and the TOOL_AGENT block are fixed, but chat_respond_spec.lua:1309 "local function open_simple_chat" is still at column 0; the base at 42d72b9 had it at 4. The finding named both halves.
+- BR-102 — addressed — lessons.md:1037-1116 records the BR-90 and BR-93 rules plus four more, each with measured prevalence.
+- BR-103 — addressed — atlas/providers/agents.md:6-11 stops restating the roster and points at config.lua as the source.
+- BR-104 — not-addressed — The resolver half is delivered and pinned (reverting as_model_table reddens two unit cases). The RULE the finding stated — "normalize model_config once at the resolver's entry ... instead of type-guarding at each consumer" — was not swept: providers.lua:1106 (cliproxyapi.format_payload) and providers.lua:1359 (has_feature) still do `type(model_config) == "table" and model_config.model or nil` in the same file. One of them REGRESSED as a result. Measured headlessly at HEAD vs. with as_model_table reverted: has_feature("cliproxyapi", "web_search", "claude-opus-5") returns FALSE at HEAD and returned TRUE before commit 6cda59a, while the table form returns true both times. highlighter.lua:456-457 passes the raw agent.model, so a string-configured cliproxy claude agent now renders the "web search unsupported" badge (🌎?) in the picker, the buffer-top extmark and lualine — for a model the same commit just routed to the wire where search works. The enumeration is `grep -n 'type(model[_a-z]*) == "table"' lua/parley/providers.lua lua/parley/tools/wire.lua`; sweep it in one round.
+- BR-105 — addressed — cliproxy.lua:31-37 states preference order and matches OWNER_CHANNELS; :372-380 derives the multiplier from MAX_CANDIDATE_CHANNELS instead of naming a count.
+- BR-106 — addressed — definition_pattern is extracted and driven through real grep -E over synthetic text with four planted false positives (comment, comparison, like-named key, call site) and five definition forms.
+
+### Raised
+
+- **BR-107** [Important] `missing-test-for-shipped-behavior` The tools/wire.lua half of the BR-104 fix is unpinned — reverting it leaves the ENTIRE suite green
+  This is the 7th finding in family `missing-test-for-shipped-behavior`, and it is
+  specifically the BR-68 rule ("a fix that lands as a call, or a new argument at an
+  existing call, must be pinned AT THAT SITE") re-broken by the commit that closed the
+  round which restated it. Measured, not asserted: I replaced
+  `providers.cliproxy_strategy(model)` at tools/wire.lua:107 with the pre-fix
+  `providers.cliproxy_strategy(type(model) == "table" and model or nil)` and ran the
+  full `make test` in a clean worktree — exit 0, all 193 specs pass, including
+  tests/unit/cliproxy_catalog_spec.lua, which is where the fix's tests live. Those
+  tests call `providers.cliproxy_strategy` directly; nothing exercises `wire.resolve` /
+  `wire.name_for` with a bare-string model, which is the production wiring the change
+  exists for. By contrast the providers.lua half IS pinned — reverting `as_model_table`
+  reddens "derives for a bare string model" and "treats the two shapes identically",
+  which is what makes the asymmetry legible. Cheapest close: one assertion beside the
+  existing shape cases — `assert.equals("anthropic", wire.name_for("cliproxyapi",
+  "claude-opus-5"))` under the same `with_default("openai_tools_route", …)` — and
+  confirm it reddens on revert before recording it as fixed.
+
 ## Open findings
 
-- **BR-17** [Minor] `duplicated-logic-not-extracted` The agent-registration block is copy-pasted between register_live_agent and the refresh_state restore, and the copies already disagree
 - **BR-18** [Minor] `plan-command-does-not-run` The BR-9 referent sweep collapsed four distinct spec keys into four identical commands, destroying which surfaces the step covers
 - **BR-29** [Minor] `stated-design-not-implemented` Assorted envelope and idiom nits: is_managed gate, 4s chained budget, repaint-under-cursor, pending vs SKIP
 - **BR-35** [Minor] `wrong-taxonomy-value` The new <C-a> registry row declares scope "global", so it renders under Global in every help screen though it only works inside the agent picker
-- **BR-69** [Important] `stated-design-not-implemented` The plan's `## Revisions` asserts two fixes the code and tests do not deliver
-- **BR-71** [Minor] `documented-render-not-pinned` Two stacked comment paragraphs in `update`'s numeric branch say the same thing with contradictory framing
-- **BR-72** [Important] `retry-not-rate-limited` `_force_stale` is cleared at the top of `_write_catalog`, before the write it is paid for can fail
 - **BR-80** [Important] `docs-insert-orphans-section` Three stacked doc blocks precede credential_health_across, one documenting a `prefer` parameter that no longer exists
-- **BR-86** [Minor] `close-stages-unreviewed-worktree` The worktree carries an uncommitted 192-line config.lua roster deletion and an untracked docs/parley.nvim.md at the boundary
-- **BR-87** [Minor] `stated-design-not-implemented` Plan Task 4.1 still presents "the LEAST healthy candidate is the one that plausibly failed" as the design
 - **BR-95** [Minor] `ui-path-log-level` get_agent's empty-roster raise uses bare error(), so the operator sees an init.lua:4398 source prefix
 - **BR-96** [Minor] `style-drift-in-diff` Two indentation regressions introduced by this window
-- **BR-102** [Minor] `lesson-not-recorded` The close round's two Important findings each produced a reusable rule and workshop/lessons.md gained neither
-- **BR-103** [Minor] `atlas-not-updated-for-new-surface` atlas/providers/agents.md:6 still names Proxy-GPT5.4 and Claude-Code, neither of which exists in config.lua at HEAD
 - **BR-104** [Important] `single-source-not-enforced` The derived web-search strategy never reaches a string `model` config, and that shape cannot override it either
-- **BR-105** [Minor] `docs-insert-orphans-section` Two new superseded comment paragraphs shipped this window, and one restates the channel order the same commit pair replaced
-- **BR-106** [Minor] `test-title-overstates-guard` The plan-to-code guard's "definition, not a mention" pattern includes a bare `%s *=` alternative that also matches comparisons and table fields
+- **BR-107** [Important] `missing-test-for-shipped-behavior` The tools/wire.lua half of the BR-104 fix is unpinned — reverting it leaves the ENTIRE suite green

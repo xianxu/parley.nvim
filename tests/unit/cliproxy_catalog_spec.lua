@@ -547,4 +547,22 @@ describe("get_cliproxy_strategy accepts both documented model shapes", function(
                           providers.cliproxy_strategy("claude-opus-4-8"))
         end)
     end)
+
+    it("picks the wire from a bare string at the production call site", function()
+        -- BR-107 / the BR-68 rule: a fix that lands as a CALL must be pinned AT
+        -- THAT SITE. The two cases above call `cliproxy_strategy` directly, so
+        -- reverting `tools/wire.lua`'s argument to the pre-fix
+        -- `type(model) == "table" and model or nil` left the ENTIRE suite green
+        -- — the half of the fix that production actually traverses was unpinned.
+        -- `wire.name_for` is that traversal: resolve -> cliproxy_strategy ->
+        -- cliproxy_route.
+        local wire = require("parley.tools.wire")
+        with_default("openai_tools_route", function()
+            assert.equals("anthropic", wire.name_for("cliproxyapi", "claude-opus-5"),
+                "a string-configured claude model must still reach the anthropic wire")
+            assert.equals(wire.name_for("cliproxyapi", { model = "claude-opus-5" }),
+                          wire.name_for("cliproxyapi", "claude-opus-5"),
+                "the two documented shapes must resolve to the same wire")
+        end)
+    end)
 end)

@@ -532,9 +532,10 @@ function M.credential_health_across(channels, choose, cb)
     -- candidacy and the diagnosis named the channel with no credential: the #197
     -- wrong-account symptom, reached through concurrency rather than ranking.
     --
-    -- The cost is small and bounded — at most four loopback reads, each capped by
-    -- CURL_MAX_TIME — and it is what makes the one-shot repair mean what its name
-    -- says.
+    -- The cost is small and bounded — one loopback read per channel, each capped
+    -- by CURL_MAX_TIME, and `recover` caps the list at MAX_CANDIDATE_CHANNELS
+    -- before calling here. Deliberately not restating that count: it was written
+    -- as "four" and stayed wrong from the commit that capped it at two.
     local readings, any_repaired = {}, false
     local function step(i)
         if i > #channels then

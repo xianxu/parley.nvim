@@ -1114,3 +1114,23 @@ means — not the current contents.
 **Check:** when documenting a collection the code defines, link to the definition
 and describe its invariants. If you catch yourself typing the elements, you are
 writing something that will be wrong by the next commit.
+
+## Pin the half production traverses, not the half that is easy to call (#205)
+
+A fix landed at two sites: a normalizer in `providers.lua` and the argument at
+its call site in `tools/wire.lua`. Tests were written against `cliproxy_strategy`
+directly, so reverting the *call site* left the entire suite green — the half the
+production path actually traverses (`wire.resolve` → `cliproxy_strategy` →
+`cliproxy_route`) was unpinned, while the half that was trivially callable was
+covered twice. Sweeping the class found a second live instance: deleting the
+`bound_candidates` call from `recover` also left everything green, so the cap the
+repair budget's arithmetic depends on could be removed unnoticed.
+
+This is the BR-68 rule — "a fix that lands as a call, or a new argument at an
+existing call, must be pinned AT THAT SITE" — re-broken by the very commit that
+closed the round which restated it. Restating a rule is not applying it.
+
+**Check:** after fixing a call site, revert *that line* and run the suite. If it
+stays green the fix is unpinned, however well the callee is tested. Assert
+through the entry point production uses, and derive any bound from the constant
+rather than restating the number.
