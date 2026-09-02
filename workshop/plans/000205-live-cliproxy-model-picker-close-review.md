@@ -471,3 +471,219 @@ findings:
       an atlas file, the surrounding claims in that file are in scope for the same
       verification as the added ones.
 ```
+
+---
+
+## Re-review — 2026-09-01T13:44:54-07:00 (unknown)
+
+| field | value |
+|-------|-------|
+| issue | 205 — live cliproxy model picker; retire hardcoded model lists |
+| repo | parley.nvim |
+| issue file | workshop/issues/000205-live-cliproxy-model-picker.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 42d72b9d2f12bad462d847d8e5b24876a1a6a63b..404f5e8219bd5aa4c8db48da4beed34b84f7e5af |
+| command | sdlc close --issue 205 |
+| reviewer | claude |
+| timestamp | 2026-09-01T13:44:54-07:00 |
+| verdict | unknown |
+
+## Review
+
+Failed to authenticate. API Error: 401 OAuth access token has been revoked.
+
+---
+
+## Re-review — 2026-09-01T18:08:46-07:00 (FIX-THEN-SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 205 — live cliproxy model picker; retire hardcoded model lists |
+| repo | parley.nvim |
+| issue file | workshop/issues/000205-live-cliproxy-model-picker.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 42d72b9d2f12bad462d847d8e5b24876a1a6a63b..404f5e8219bd5aa4c8db48da4beed34b84f7e5af |
+| command | sdlc close --issue 205 |
+| reviewer | claude |
+| timestamp | 2026-09-01T18:08:46-07:00 |
+| verdict | FIX-THEN-SHIP |
+
+## Review
+
+```verdict
+verdict: FIX-THEN-SHIP
+confidence: high
+```
+
+The feature is delivered and the gate is green: `make test` passes at a clean HEAD (lint 0/0 across 345 files, every unit/integration/arch spec PASS — I stashed the operator's local worktree edits, ran it, and restored), and every `## Done when` line is satisfied — `oauth-model-alias` is gone from `config.lua:154-174`, live rows come from the catalog, `<C-a>` expands it, a pick persists via `_state.live_agent`, `(logged out)` rows launch the login, and `fetch_catalog` never routes through `ensure_running`. This round's two commits are both real fixes: `bound_candidates` (`cliproxy_config.lua:211`) keeps the native channel *and* the re-server with four unit cases pinning it, and `OWNER_CHANNELS` is preference-ordered with a per-owner assertion. What stops SHIP is not a correctness bug but the gate's own honesty: the plan's `## Revisions` asserts that BR-72/BR-80/BR-91 are "verified fixed at HEAD by direct measurement," and two of those three are not — BR-80's `recover` half is untouched at `cliproxy.lua:1361-1365` (and this window added a *new* stacked paragraph at `cliproxy.lua:28-30`), and BR-72's fix is unpinned, which I confirmed by reverting it and watching the whole `providers/cliproxy-managed` mapping stay green (50/50, 0 failures). Eleven prior findings remain open, three families are repeating without their rules reaching `lessons.md`, and one new Important gap exists in the single source the issue exists to establish.
+
+## 1. Strengths
+
+- **`bound_candidates` is the right shape for the fix it answers** (`cliproxy_config.lua:211-228`). The choice was pulled into the pure module rather than inlined at `cliproxy.lua:1378`, so the head+tail rule is testable without the recovery path — and `cliproxy_config_spec.lua:428-455` pins it four ways, including a per-owner loop that fails if any owner loses its native channel or its re-server. Reverting to a tail trim genuinely goes red.
+- **`likeliest_culprit` / `could_have_served` finally separate eligibility from ranking** (`cliproxy_auth.lua:178-206`). Two explicit orderings with the reasoning for *why* `missing`/`disabled`/`unknown` are absent, ties resolved by declared order for reproducibility, and both reducers pure and injected into one shared fan-out. This is the ARCH-PURE win of the issue.
+- **ARCH-MOCK is properly closed.** `cliproxy_conformance_spec.lua:233-268` runs the *real* binary against `/v1beta/models` and asserts the `models/<id>` prefix that `parse()` joins on, plus a case that joins both live routes and requires at least one row to pick up a `displayName`. That is exactly the drift a fixture-plus-fake pair cannot catch by itself.
+- **The picker's coordinate-space contract is now documented where the caller reads it** (`atlas/ui/pickers.md:101-120`), and `update()`'s `next_selection` resolves identity-first in one place.
+- **`.gitignore:44-47`** closes BR-57 with the reason recorded inline.
+
+## 2. Critical findings
+
+None.
+
+## 3. Important findings
+
+**a. The derived web-search strategy is unreachable for a string `model` config** — `lua/parley/providers.lua:151`, `lua/parley/tools/wire.lua:103`.
+
+`config.lua:206` documents `model` as "string with model name or table with model name and parameters." The derivation step is gated on `type(model_config) == "table"`, and `wire.lua:103` passes `type(model) == "table" and model or nil` — so an agent written `{ provider = "cliproxyapi", model = "claude-opus-5" }` never consults `cliproxy_default_web_search_strategy`, falls to the shipped `openai_tools_route` default (`config.lua:101`), and **cannot override it**, because a string model config has nowhere to put `web_search_strategy`. With web search on it ships the `{type="web_search"}` payload that this issue's own measurement says returns an empty completion for claude. This is the 7th finding in family `single-source-not-enforced`. Per the escalation rule, do not patch the two sites — the rule is: *a derivation keyed on a model NAME must accept every documented shape that carries a model name*; write the enumeration of `model_config` shapes the config accepts, and make the resolver normalize once at its entry rather than type-guarding at each consumer.
+
+**b. BR-72's fix is real but unpinned, and the write failure is still silent** — `lua/parley/cliproxy.lua:1579-1596`.
+
+The clear is correctly placed after the write now. But I verified by reverting: moving `_force_stale = false` back above `vim.fn.mkdir` leaves `make test-spec SPEC=providers/cliproxy-managed` at 50/50, 0 failures — no spec drives `io.open` to fail. The finding also asked for the failure to be logged; `:1583` still returns `false` with no `logger`, and the production caller at `:1758` discards the boolean.
+
+**c. The plan's `## Revisions` again claims completion the tree does not show** — `workshop/plans/000205-live-cliproxy-model-picker-plan.md:2293-2297`. Detail under BR-69 below.
+
+## 4. Minor findings
+
+- `cliproxy.lua:28-30` — a superseded comment paragraph stacked directly above its replacement, and it states the **old alphabetical** channel order (`aistudio, antigravity, gemini, gemini-cli`) that the same commit pair replaced with preference order. The file now documents both orders.
+- `cliproxy.lua:371-375` — `_repair_budget_sec`'s justification still says "a google-owned model has four candidate channels… while the code issues four reads"; the cap made it two, one commit later.
+- `providers.lua:200-207` — `M.cliproxy_strategy`'s public docstring still describes a two-step chain ("falls back to module-global config") after the resolver grew the family-correction step.
+- `tests/arch/single_source_sweeps_spec.lua:145` — the "definition, not a mention" pattern includes a bare `%s *=` alternative, which also matches `name ==` and any table-field assignment. It caught the real drift, but it is looser than the comment claims. (9th in family `test-title-overstates-guard` — the rule, not this instance: an agreement check's matcher must be asserted against a *deliberately planted* false positive, not only a false negative.)
+- `atlas/providers/cliproxy-managed.md:66` — the new three-module paragraph was inserted between the `## Model catalog (#205)` heading and that section's own opening paragraph, leaving a doubled blank line at `:71`.
+
+## 5. Test coverage notes
+
+- Coverage of the pure core is strong: `cliproxy_catalog_spec` derives its `curate` cases from a table keyed by the documented spec string, so a Spec row cannot ship without an equality assertion; `catalog_stale` is six pure cases with no clock or seam.
+- The new derivation has four describe blocks covering precedence, correction-not-replacement, and override — good.
+- Gaps, in priority order: (1) no test drives `_write_catalog` through a failing `io.open`, so BR-72's fix is revertible green (measured); (2) no fixture drives a **string** `model` config through `cliproxyapi.format_payload`, which is why finding 3a is invisible to the suite; (3) `bound_candidates` is pinned at the callee only — no fixture drives a google-owned row through `recover`, so deleting the call at `cliproxy.lua:1378` changes no test outcome (the BR-68 shape, though the unit pin is what the finding asked for).
+
+## 6. Architectural notes
+
+- **ARCH-DRY — flag.** The agent-registration block is still copy-pasted with divergent clobber semantics (`init.lua:4339` vs `:1337`); see BR-17. Everything else consolidated well this window (`golden_fixture.lua`, `ready_port.lua`, `CLIPROXY_STRATEGIES`, `credential_health_across`).
+- **ARCH-PURE — pass.** `cliproxy_catalog.lua` and `cliproxy_config.lua` hold parse/rank/curate/`catalog_stale`/`likeliest_culprit`/`healthiest`/`bound_candidates` as pure functions tested without IO; `cliproxy.lua` is the shell. The one ambient read (`get_cliproxy_strategy` → `parley.dispatcher.providers`) is documented as deliberate and is the reason consumers must not re-implement the fallback.
+- **ARCH-PURPOSE — flag.** The shadow-sweep over `cliproxy_default_web_search_strategy` finds one consumer shape that still cannot derive (finding 3a). Separately, three families are being answered instance-by-instance again this round rather than by the rule they imply.
+- **ARCH-MOCK — pass.** Stateful fake behind the same seam, plus live conformance for both catalog routes and their join.
+- **ARCH-CONSTRAINTS — flag.** The two catalog GETs are still chained (`cliproxy.lua:1722-1723`), so picker-open worst case is 2×`CURL_MAX_TIME` = 4s, not the 2s the plan states. The budget arithmetic itself is now sound: `auth_files = CURL_MAX_TIME * MAX_CANDIDATE_CHANNELS` matches the ≤2 sequential reads `credential_health_across_or_one` issues, and `credential_health_for_login`'s unbounded fan-out sits after a 180s interactive login, outside the backstop — so no budget term is missing.
+
+## 7. Plan revision recommendations
+
+1. Correct `plan.md:2293-2297`: BR-80 is **not** fixed at HEAD, and the "zero stacked doc blocks" measurement was scoped to `---@param` blocks only, which is why it missed `recover`'s and `float_picker`'s plain-comment stacks. State which half of BR-72 is pinned (none of it) and which is not.
+2. Annotate `plan.md:1354-1356` in place — "the LEAST healthy candidate is the one that plausibly failed" is the rule the code was fixed to stop implementing (BR-87).
+3. Annotate or strike `plan.md:1335` and `:1483-1485`, which still table and describe `resolve_login_provider` as modified; it was deleted.
+4. Reconcile `plan.md:1548` (`git add lua/parley/config.lua`) with the Note at `:1624` forbidding sweeping the operator's `config.lua` cleanup — the recipe stages exactly the file the Note protects.
+
+```findings
+dispose:
+  - id: BR-17
+    disposition: not-addressed
+    note: |
+      init.lua:4339 `M.agents[agent.name] = agent` vs :1337 `= M.agents[agent.name] or agent`; still two copies, still divergent.
+  - id: BR-18
+    disposition: not-addressed
+    note: |
+      plan.md:1492-1495 still four identical commands, :1540-1541 two; no prose enumeration of what the one key covers.
+  - id: BR-29
+    disposition: not-addressed
+    note: |
+      is_managed gate and catalog_path mkdir are fixed; the chained 2x CURL_MAX_TIME and cliproxy_conformance_spec.lua:235,254 pending()-vs-SKIP remain.
+  - id: BR-35
+    disposition: not-addressed
+    note: |
+      scope moved global -> parley_buffer (keybinding_registry.lua:759), still the nearest wrong bucket — no agent_picker scope/label/display-order added, and config.lua still has no agent_picker_mappings.
+  - id: BR-69
+    disposition: not-addressed
+    note: |
+      7th in family. plan.md:2293-2297 asserts BR-80 "verified fixed at HEAD" while cliproxy.lua:1361-1365 is untouched; the BR-72 bullet names neither mutation nor spec.
+  - id: BR-71
+    disposition: not-addressed
+    note: |
+      float_picker.lua:1706-1715 still carries both stacked paragraphs.
+  - id: BR-72
+    disposition: not-addressed
+    note: |
+      Clear is correctly placed, but measured: reverting it to the top of _write_catalog leaves providers/cliproxy-managed at 50/50, 0 failures. Write failure still unlogged; boolean discarded at cliproxy.lua:1758.
+  - id: BR-80
+    disposition: not-addressed
+    note: |
+      The recover half named in the finding is unfixed at cliproxy.lua:1361-1365, and cliproxy.lua:28-30 added a new instance in the same window.
+  - id: BR-86
+    disposition: not-addressed
+    note: |
+      Worktree at the close boundary again carries an uncommitted 211-line config.lua roster deletion plus untracked docs/parley.nvim.md; plan.md:1548 stages that exact file wholesale, contradicting the Note at :1624.
+  - id: BR-87
+    disposition: not-addressed
+    note: |
+      plan.md:1354-1356 still unannotated.
+  - id: BR-91
+    disposition: addressed
+    note: |
+      single_source_sweeps_spec.lua:141-149 requires a definition form; the cliproxy_config_spec.lua:271 comment no longer satisfies it.
+  - id: BR-95
+    disposition: not-addressed
+    note: |
+      init.lua:4398 still bare error(); the named sweep still finds 6 more prose raises (tools/init.lua:62,104,147; tools/wire.lua:126,140; timezone_diagnostics.lua:90).
+  - id: BR-96
+    disposition: not-addressed
+    note: |
+      Both regressions present: cliproxy_recovery_e2e_spec.lua:109 stray leading space; chat_respond_spec.lua:1295-1308 at column 0.
+  - id: BR-101
+    disposition: addressed
+    note: |
+      bound_candidates keeps head+tail, lives in the pure module, and cliproxy_config_spec.lua:428-455 pins it four ways including per-owner.
+  - id: BR-102
+    disposition: not-addressed
+    note: |
+      lessons.md untouched since 031cf82; commits 2acba1a and 404f5e8 recorded none of the BR-90, BR-93 or BR-101 rules.
+  - id: BR-103
+    disposition: not-addressed
+    note: |
+      atlas/providers/agents.md:6 still lists Proxy-GPT5.4 and Claude-Code; neither is in config.lua at HEAD.
+findings:
+  - id: new
+    severity: Important
+    family: single-source-not-enforced
+    title: |
+      The derived web-search strategy never reaches a string `model` config, and that shape cannot override it either
+    detail: |
+      This is the 7th finding in family `single-source-not-enforced`. Do NOT fix the
+      two sites. providers.lua:151 gates derivation on `type(model_config) == "table"`
+      and tools/wire.lua:103 passes `type(model) == "table" and model or nil`, while
+      config.lua:206 documents `model` as "string with model name or table". So
+      `{ provider = "cliproxyapi", model = "claude-opus-5" }` falls to the shipped
+      `openai_tools_route` default (config.lua:101) and ships the `{type="web_search"}`
+      payload this issue measured as returning an empty completion for claude — with no
+      override available, since a string cannot carry `web_search_strategy`. The rule:
+      a derivation keyed on a model NAME must accept every documented shape that
+      carries one; normalize `model_config` once at the resolver's entry and enumerate
+      the accepted shapes, instead of type-guarding at each consumer.
+  - id: new
+    severity: Minor
+    family: docs-insert-orphans-section
+    title: |
+      Two new superseded comment paragraphs shipped this window, and one restates the channel order the same commit pair replaced
+    detail: |
+      This is the 4th finding in family `docs-insert-orphans-section`. Do NOT fix the
+      two sites. cliproxy.lua:28-30 sits directly above its replacement at :31-37 and
+      states the OLD alphabetical order (aistudio, antigravity, gemini, gemini-cli)
+      that 2acba1a changed to preference order, so the file documents both;
+      cliproxy.lua:371-375 still justifies the budget with "the code issues four reads"
+      after 404f5e8 capped it at two. BR-80's stated remedy — lint `---@param` blocks
+      naming absent identifiers — is why this recurred: both new instances are plain
+      `--` comment stacks and neither precedes a function. The rule the lint must
+      express: flag any run of two or more comment paragraphs whose opening clauses
+      restate the same subject, wherever it sits, not only in `---@param` position.
+  - id: new
+    severity: Minor
+    family: test-title-overstates-guard
+    title: |
+      The plan-to-code guard's "definition, not a mention" pattern includes a bare `%s *=` alternative that also matches comparisons and table fields
+    detail: |
+      This is the 9th finding in family `test-title-overstates-guard`. Do NOT fix the
+      pattern in isolation. single_source_sweeps_spec.lua:145 builds
+      `(function M\.x\b|M\.x *=|local function x\b|x *=)`; the last alternative matches
+      `x == y`, `t.x = 1` and `local x = 1`, so the guard is weaker than the comment
+      above it claims. It did catch the real drift, which is exactly the trap. The
+      rule: an agreement check's matcher must be asserted against a deliberately
+      planted FALSE POSITIVE — a table row whose only tree occurrence is a mention —
+      not only against a planted false negative.
+```

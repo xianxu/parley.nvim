@@ -2,7 +2,7 @@
 
 - An agent = provider + model + system prompt
 - Config fields: `name`, `provider`, `model` (string or object), `system_prompt`, `disable` (bool), `tools` (list of builtin tool names — or group sentinels `@all` / `@readonly`, see `providers/tool_use.md` — for client-side tool use; empty/absent = no tools; #81, anthropic-family only at present), `max_tool_iterations` (default 42, single-sourced in `defaults.lua`), `tool_result_max_bytes` (default 102400)
-- Default agents: GPT5.4 (openai), Claude-Sonnet (anthropic), ToolSonnet (anthropic, all 7 builtin tools), ToolOpus (anthropic, all 7 builtin tools), Gemini2.5-Pro (googleai), Proxy-GPT5.4 (cliproxyapi), Claude-Code (cliproxyapi/code_execution_20260120)
+- Default agents: GPT5.4 (openai), Claude-Sonnet (anthropic), ToolSonnet (anthropic, all 7 builtin tools), ToolOpus (anthropic, all 7 builtin tools), Gemini2.5-Pro (googleai), `ToolOpus*` (cliproxyapi), `Claude-Opus` (cliproxyapi/code_execution_20260120)
 - `Proxy-*` variants included for all major model families via cliproxyapi
 - Selection: `:ParleyAgent [name]` (picker or explicit), `:ParleyNextAgent` (`<C-g>a`) cycles
 - **Live cliproxy models (#205).** Below the configured agents the picker shows a

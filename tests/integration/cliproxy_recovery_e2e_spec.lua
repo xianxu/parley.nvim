@@ -16,8 +16,6 @@ cliproxy._set_data_dir(vim.fn.tempname())
 describe("cliproxy recovery end to end", function()
     local saved_config, saved_providers, saved_path, started
 
-
-
     -- Boot the fake serving `error_mode` on /v1/chat/completions, with a
     -- credential store whose claude channel carries `overlay`.
     local function serve(error_mode, overlay, alias)
@@ -106,7 +104,7 @@ describe("cliproxy recovery end to end", function()
         cliproxy._reset_spawned()
     end)
 
-     it("turns the #197 503 into a diagnosis naming the credential and its real state", function()
+    it("turns the #197 503 into a diagnosis naming the credential and its real state", function()
         serve("no_auth", { unavailable = true, status = "error",
             status_message = "OAuth access token has expired. Re-authenticate to continue." })
         local out = query()
@@ -119,7 +117,6 @@ describe("cliproxy recovery end to end", function()
         assert.matches("expired", out.notice)
         assert.is_nil(out.notice:find("body_bytes", 1, true))
     end)
-
 
     it("names the claude login for an expired token with NO alias block", function()
         -- The load-bearing case for M4. Every other case here builds its own

@@ -2266,6 +2266,10 @@ unverified.
 
 ### 2026-09-01 — issue-close review (BR-15, BR-16, BR-90..BR-100)
 
+- **BR-87.** Task 4.1's "the LEAST healthy candidate is the one that plausibly
+  failed" is annotated in place — it is superseded twice over (eligibility first,
+  then `CULPRIT_RANK`), and a reader reaching the task before the revisions was
+  getting the rule the code was fixed to stop implementing.
 - **BR-90.** `OWNER_CHANNELS` was documented "sorted" and READ as a preference
   ranking at three sites, so `antigravity` outranked the native channel for every
   owner it re-serves and `recover`'s pre-flight login named a cross-vendor channel
@@ -2301,8 +2305,48 @@ two candidates, so the claim was false exactly where it mattered. `bound_candida
 keeps the native channel and the re-server, lives in the pure module so the choice
 is testable without the recovery path, and is verified by reverting to a tail trim.
 
-Three findings still listed by the ledger — BR-72, BR-80, BR-91 — are verified
-fixed at HEAD by direct measurement (`_force_stale` clears after the write and
-after its failure return; zero stacked doc blocks and zero `@param prefer`; the
-guard requires a definition and caught a stale row when it was tightened). They
-are carried dispositions, not live defects.
+**One of those claims was false, and the next round proved it.** I asserted
+BR-72, BR-80 and BR-91 were "verified fixed at HEAD by direct measurement". For
+BR-80 I had measured `credential_health_across` and `@param prefer` — but the
+finding also named `recover`, where the superseded paragraph was still sitting
+above its replacement, and I had ADDED a fourth instance above
+`MAX_CANDIDATE_CHANNELS` in the same window. And BR-72's fix, though correctly
+placed, was unpinned: reverting it left the whole mapping green.
+
+The failure is measuring the part I had in mind rather than the part the finding
+named. Both are fixed and pinned now — the write-failure test discriminates only
+because the cache is fresh first, which is what makes the two placements differ.
+
+### 2026-09-01 — issue close bundle (BR-17, BR-72, BR-80, BR-95..BR-106)
+
+- **BR-104 (Important).** `model` is documented as "string OR table", and both
+  shapes reach the strategy resolver — but derivation was gated on
+  `type(...) == "table"` at two sites, and `tools/wire.lua` passed a string
+  through as `nil`. A string-configured model got neither the derived strategy
+  nor the ability to override it. Normalized once at the entry
+  (`as_model_table`) instead of gated at each use.
+- **BR-17.** Two copies of "put this agent in the roster" had already diverged —
+  the selection path overwrote an existing entry, the restore path kept it. One
+  `adopt_agent` writer now. (Hoisted above `refresh_state` after the first
+  attempt defined it 3000 lines below its first caller — the same
+  declaration-order slip as `warm_catalog`, which is worth noticing as a pattern
+  rather than a typo.)
+- **BR-72 / BR-80 / BR-105.** The write-failure path now logs and its boolean is
+  honoured; the superseded `recover` paragraph is gone; and the comment I added
+  above `MAX_CANDIDATE_CHANNELS` — which restated the OLD alphabetical channel
+  order the same commit pair had replaced — is corrected, so the file no longer
+  contradicts itself.
+- **BR-106.** The guard pattern went through both failure modes in one sitting:
+  `%s *=` matched `x == y` and `t.x = 1` (a mention satisfied it), then
+  tightening to `M.` only missed `cliproxyapi.pre_query = function` and string
+  VALUES like `anthropic_tools_route` that a table cell may legitimately name.
+  The definition forms are enumerated now, and both directions are injection-tested.
+- **BR-95, scope.** My own new `error()` carries its next action. The six other
+  prose raises the finding names live in `tools/init.lua`, `tools/wire.lua` and
+  `timezone_diagnostics.lua` — they predate this issue and belong to other
+  features, so sweeping them here would be scope creep. Recorded as a decision,
+  not an omission; worth its own issue if the pattern matters.
+- **BR-96, BR-102, BR-103.** Whitespace regressions removed; `lessons.md` gains
+  the three rules this round earned (an order read as a ranking must BE one; a
+  bound must count what the code does; trim from the end you can afford to lose);
+  `atlas/providers/agents.md` no longer names agents that stopped shipping.

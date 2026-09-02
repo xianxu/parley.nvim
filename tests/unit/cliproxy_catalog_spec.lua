@@ -517,3 +517,34 @@ describe("get_cliproxy_strategy never invents a strategy", function()
         assert.equals("none", strategy)
     end)
 end)
+
+describe("get_cliproxy_strategy accepts both documented model shapes", function()
+    local providers = require("parley.providers")
+    local parley = require("parley")
+
+    local function with_default(default, fn)
+        local saved = parley.dispatcher
+        parley.dispatcher = { providers = { cliproxyapi = { web_search_strategy = default } } }
+        local ok, err = pcall(fn)
+        parley.dispatcher = saved
+        assert.is_true(ok, tostring(err))
+    end
+
+    it("derives for a bare string model, which config.lua documents", function()
+        -- `model` is "string with model name OR table with model name and
+        -- parameters". Gating derivation on `type(...) == "table"` excluded the
+        -- string form from BOTH the correction and the ability to override it.
+        with_default("openai_tools_route", function()
+            assert.equals("anthropic_tools_route",
+                providers.cliproxy_strategy("claude-opus-4-8"))
+            assert.equals("none", providers.cliproxy_strategy("gemini-3-flash"))
+        end)
+    end)
+
+    it("treats the two shapes identically", function()
+        with_default("openai_tools_route", function()
+            assert.equals(providers.cliproxy_strategy({ model = "claude-opus-4-8" }),
+                          providers.cliproxy_strategy("claude-opus-4-8"))
+        end)
+    end)
+end)

@@ -25,10 +25,11 @@ local M = {}
 local CURL_MAX_TIME = 2      -- seconds, --max-time on every probe
 local PORT_RELEASE_MS = 2000 -- wait_port_released deadline
 local POLL_BUDGET_MS = 5000  -- poll_until_healthy deadline
--- The largest candidate set OWNER_CHANNELS produces (google: aistudio,
--- antigravity, gemini, gemini-cli). Reads are sequential, so this multiplies the
--- credential-read term of the repair budget.
--- How many candidates the RECOVERY path reads. Bounded because the reads are
+-- How many candidates the RECOVERY path reads, and the multiplier on the
+-- credential-read term of the repair budget (the reads are sequential).
+--
+-- The largest set OWNER_CHANNELS produces is google's four, in PREFERENCE order:
+-- gemini-cli, gemini, aistudio, antigravity. Bounded because the reads are
 -- sequential and sit inside the dispatcher's backstop: four google channels at
 -- CURL_MAX_TIME each would leave under 5s of headroom, which the budget spec
 -- rejects. Two is enough in practice — OWNER_CHANNELS lists the NATIVE channel
@@ -1359,10 +1360,6 @@ function M.recover(failure, retry, give_up)
     -- querying health with a login provider silently finds nothing and
     -- fabricates "no credential is loaded".
     --
-    -- The failure body's `providers=` field IS the channel, so prefer it; fall
-    -- back to resolving the model through oauth-model-alias. If neither
-    -- resolves, do NOT guess a channel — reporting another account's health for
-    -- the failing model is worse than admitting we don't know.
     -- The failure body's `providers=` field IS the channel when present, so it
     -- wins. Otherwise the alias block (an explicit operator pin) and then the
     -- catalog narrow it to CANDIDATES — plural, because antigravity re-serves
@@ -1580,7 +1577,11 @@ function M._write_catalog(models, fetched_at)
     vim.fn.mkdir(data_root(), "p")
     local fd = io.open(catalog_path(), "w")
     if not fd then
-        return false -- nothing was stored: the invalidation is still owed
+        -- Debug, not error: this runs on a picker-open path. But it must be
+        -- SAID — a silent write failure looks exactly like a successful one to
+        -- everything downstream, and the invalidation is still owed.
+        logger.debug("cliproxy: could not write the catalog cache at " .. catalog_path())
+        return false
     end
     fd:write(vim.json.encode({ models = models, fetched_at = fetched_at or os.time() }))
     fd:close()
@@ -1743,7 +1744,13 @@ function M.fetch_catalog(cb)
                 -- shapes that ARE that contract, empty list included.
                 local shape = classify(0, (v1 or "") .. "\n" .. tostring(v1_status or 0))
                 if v1_status == 200 and (shape == "healthy" or shape == "needs_login") then
-                    M._write_catalog(models)
+                    if not M._write_catalog(models) then
+                        -- The write said no. Returning the parsed models anyway
+                        -- would have the caller render rows the cache does not
+                        -- hold, and the next staleness check would disagree with
+                        -- what is on disk.
+                        return settle(M.catalog_cached())
+                    end
                 else
                     -- Debug, never a popup: this runs on a picker-open path and
                     -- a proxy that is simply down is not an error the operator

@@ -1033,3 +1033,37 @@ populated and make sure the replacement is written on each of those paths. Then
 verify the fix reaches the path production takes: warming inside `ensure_running`
 looked right and never ran for `manage = false`, because the caller returns
 before it.
+
+## An order that is read as a ranking must BE a ranking (#205)
+
+`OWNER_CHANNELS` listed each owner's channels alphabetically and documented them
+as "sorted". Three call sites read `[1]` as *the* channel, so `antigravity`
+outranked every native channel it re-serves and the auth diagnosis pointed the
+operator at a cross-vendor account before reading any credential.
+
+**Check:** when a list is consumed by index, its ORDER is a contract. Say which
+order it is in the declaration, and assert it — "sorted" and "preferred first"
+look identical in a literal and mean opposite things at the call site.
+
+## A bound must count what the code actually does (#205)
+
+Serializing a fan-out turned one credential read into up to four, inside a path
+with a deadline — while the budget that proves the deadline is met still counted
+one. The budget was not wrong by a little; it had stopped bounding anything.
+When the budget was made honest its own spec failed, which is the signal that the
+CODE had to get cheaper (the fan-out is capped at two candidates now).
+
+**Check:** when you change how many times something runs, grep for the constant
+that bounds it in the same edit. A budget derived from constants is only true
+while the code still matches the constants.
+
+## Trim from the end you can afford to lose (#205)
+
+Capping that same candidate list kept the first N — which for google kept two
+native channels and dropped the cross-vendor fallback the cap's own comment
+promised to retain. Google was the only owner with more than two candidates, so
+the rationale was false exactly where it applied, and no test reached the path.
+
+**Check:** when a cap's justification names what it keeps, assert that for every
+input shape that can reach it — especially the one shape that made the cap
+necessary.

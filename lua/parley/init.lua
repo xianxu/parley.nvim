@@ -1238,6 +1238,24 @@ M.persist_state = function()
 end
 
 ---@param update table | nil # table with options
+--- Put a built agent into the roster. One writer, because the two copies had
+--- already diverged: the selection path overwrote an existing entry while the
+--- restart path kept it (`= agent` vs `= M.agents[name] or agent`), so a live
+--- pick and a restore could disagree about the same agent.
+---@param agent table|nil
+---@return string|nil name
+local function adopt_agent(agent)
+	if not agent or not agent.name then
+		return nil
+	end
+	M.agents[agent.name] = agent
+	if not vim.tbl_contains(M._agents, agent.name) then
+		table.insert(M._agents, agent.name)
+		table.sort(M._agents)
+	end
+	return agent.name
+end
+
 M.refresh_state = function(update)
 	local state_file = M.config.state_dir .. "/state.json"
 	update = update or {}
@@ -1333,12 +1351,8 @@ M.refresh_state = function(update)
 		local ok, agent = pcall(function()
 			return require("parley.cliproxy_catalog").build_agent(M._state.live_agent)
 		end)
-		if ok and agent and agent.name then
-			M.agents[agent.name] = M.agents[agent.name] or agent
-			if not vim.tbl_contains(M._agents, agent.name) then
-				table.insert(M._agents, agent.name)
-				table.sort(M._agents)
-			end
+		if ok then
+			adopt_agent(agent)
 		end
 	end
 
@@ -4330,16 +4344,12 @@ end
 --- the matching restore in refresh_state, the guard there would find the name
 --- missing from M.agents and silently reset to the first configured agent.
 ---@param model table # a parsed catalog row { id, owner, display, … }
+
 M.register_live_agent = function(model)
 	local agent = require("parley.cliproxy_catalog").build_agent(model)
-	if not agent then
+	if not adopt_agent(agent) then
 		M.logger.warning("cliproxy: catalog row has no usable model id; not registering")
 		return
-	end
-	M.agents[agent.name] = agent
-	if not vim.tbl_contains(M._agents, agent.name) then
-		table.insert(M._agents, agent.name)
-		table.sort(M._agents)
 	end
 	M.refresh_state({ agent = agent.name, live_agent = model })
 	M.logger.info("Agent set to: " .. agent.name)
@@ -4394,8 +4404,12 @@ M.get_agent = function(name)
 	local cmd_prefix = M.render.template(template, { ["{{agent}}"] = name })
 	local agent_rec = M.agents[name]
 	if agent_rec == nil then
-		-- No agents at all: say so instead of indexing nil.
-		error("parley: no agents are configured — check your setup{} agents list")
+		-- No agents at all. `error` here reaches the user as a stack trace over
+		-- whatever they were doing; the message has to carry the next action on
+		-- its own, since nothing downstream will add one.
+		error("parley: no agents are configured. Add at least one to the `agents` "
+			.. "list in your setup{}, or remove `agents = {}` if you meant to keep "
+			.. "the defaults.")
 	end
 	local model = agent_rec.model
 	local system_prompt = agent_rec.system_prompt

@@ -117,7 +117,27 @@ local CLIPROXY_STRATEGIES = {
 --- while five config sites still spelled the same answer out by hand — a source
 --- of truth nothing consulted. An agent may still override; it just no longer
 --- has to restate the default to get correct behaviour.
+--- A model config in either documented shape → the table form.
+---
+--- `model` is documented as "string with model name OR table with model name and
+--- parameters", and both shapes reach the strategy resolver — through
+--- `tools/wire.lua`, which passed a string through as nil. Normalizing once here
+--- beats gating on `type(...) == "table"` at each use, which is what silently
+--- excluded the string form from derivation AND from overriding it.
+---@param model_config table|string|nil
+---@return table|nil
+local function as_model_table(model_config)
+    if type(model_config) == "string" then
+        return { model = model_config }
+    end
+    if type(model_config) == "table" then
+        return model_config
+    end
+    return nil
+end
+
 local function get_cliproxy_strategy(model_config)
+    model_config = as_model_table(model_config)
     -- PRECEDENCE, and each step is there for a reason:
     --   1. the agent's own choice — an explicit override always wins;
     --   2. a provider-level `none` — an operator turning server-side search OFF
@@ -128,7 +148,7 @@ local function get_cliproxy_strategy(model_config)
     --      an unconfigured setup still resolves to "none";
     --   4. the provider default;
     --   5. none.
-    if type(model_config) == "table" then
+    if model_config then
         local model_strategy = model_config.web_search_strategy
         if CLIPROXY_STRATEGIES[model_strategy] then
             return model_strategy
@@ -148,7 +168,7 @@ local function get_cliproxy_strategy(model_config)
     -- Only CORRECT a configured strategy; never invent one. With nothing
     -- configured the answer stays "none", as it always has — deriving here would
     -- silently switch server-side search ON for a setup that never asked for it.
-    if type(model_config) == "table" and CLIPROXY_STRATEGIES[strategy] then
+    if model_config and CLIPROXY_STRATEGIES[strategy] then
         local derived = M.cliproxy_default_web_search_strategy(model_config.model)
         if CLIPROXY_STRATEGIES[derived] then
             -- Derivation CORRECTS a configured strategy the family cannot use;

@@ -140,8 +140,28 @@ describe("arch: single-source sweeps stay swept", function()
                                 -- bare name let a spec comment keep a deleted
                                 -- function's table row green — the guard then
                                 -- certifies exactly the drift it exists to catch.
-                                local pattern = ("(function M\\.%s\\b|M\\.%s *=|local function %s\\b|%s *=)")
-                                    :format(name, name, name, name)
+                                -- Definition forms ONLY. A bare `%s *=`
+                                -- alternative (the first attempt) also matched
+                                -- `x == y`, `t.x = 1` and `local x = 1`, so the
+                                -- guard was weaker than its message claimed —
+                                -- a mention could still satisfy it.
+                                -- What makes a name REAL, enumerated: a
+                                -- module function, a table-field function (the
+                                -- adapter form, `cliproxyapi.pre_query = …`), a
+                                -- local, or a quoted string — a table cell may
+                                -- legitimately name a VALUE like a strategy
+                                -- rather than a symbol.
+                                --
+                                -- A bare `%s *=` alternative (the first attempt)
+                                -- also matched `x == y` and `t.x = 1`, so a mere
+                                -- mention satisfied the guard; tightening to
+                                -- `M.` only then missed both forms above. Both
+                                -- directions are covered by injection tests.
+                                -- ERE, not Lua patterns: this string goes to
+                                -- `grep -E`, where `[%%w_]` is the literal
+                                -- characters % and w.
+                                local pattern = ("(function [A-Za-z0-9_.]*%s\\b|[A-Za-z0-9_.]*[.]%s *=[^=]|local function %s\\b|local %s *=[^=]|\"%s\")")
+                                    :format(name, name, name, name, name)
                                 local hit = vim.fn.systemlist(
                                     ("grep -rlE -- %s lua/ tests/ scripts/ 2>/dev/null"):format(
                                         vim.fn.shellescape(pattern)))

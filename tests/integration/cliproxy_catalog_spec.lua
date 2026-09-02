@@ -476,3 +476,49 @@ describe("cliproxy catalog cold install", function()
             "manage=false still reads a proxy that is already running")
     end)
 end)
+
+describe("cliproxy catalog write failures", function()
+    local cliproxy = require("parley.cliproxy")
+
+    it("says no when the cache cannot be written", function()
+        -- BR-72: reverting the _force_stale placement left the whole mapping
+        -- green, so the fix was unpinned. This exercises the failing-write path
+        -- directly: a directory where the file should be makes io.open fail.
+        local dir = vim.fn.tempname()
+        cliproxy._set_data_dir(dir)
+        vim.fn.mkdir(cliproxy._catalog_path(), "p") -- a DIRECTORY at the file path
+        assert.is_false(cliproxy._write_catalog({ { id = "x", owner = "openai" } }),
+            "a failed write must report false, not pretend it stored something")
+        cliproxy._set_data_dir(SPEC_DATA_DIR)
+    end)
+
+    it("keeps an invalidation owed when the write fails", function()
+        -- The invalidation is paid for by a STORED result. If the write fails,
+        -- the catalog on disk is unchanged, so the refresh is still due.
+        --
+        -- The discriminating setup: a catalog that is otherwise FRESH. Clearing
+        -- `_force_stale` at the top of _write_catalog then reports "not stale"
+        -- off the fresh cache even though nothing new was stored; clearing it
+        -- after a successful write keeps the invalidation owed. Without the
+        -- fresh cache both placements say "stale" and the test proves nothing —
+        -- which is how the first version of it passed either way.
+        local dir = vim.fn.tempname()
+        cliproxy._set_data_dir(dir)
+        cliproxy._reset_catalog_clock()
+        assert.is_true(cliproxy._write_catalog({ { id = "x", owner = "openai" } }))
+        assert.is_false(cliproxy.catalog_stale(), "precondition: a fresh cache")
+
+        cliproxy.invalidate_catalog()
+        -- Make the NEXT write fail while leaving that fresh cache READABLE:
+        -- read-only permissions on the file itself. (Stubbing _catalog_path does
+        -- not work — it is a module local, and the M._ export is only a view of
+        -- it, so _write_catalog keeps using the real one.)
+        vim.fn.setfperm(cliproxy._catalog_path(), "r--r--r--")
+        assert.is_false(cliproxy._write_catalog({ { id = "y", owner = "openai" } }))
+        vim.fn.setfperm(cliproxy._catalog_path(), "rw-------")
+
+        assert.is_true(cliproxy.catalog_stale(),
+            "a failed write consumed an invalidation it never earned")
+        cliproxy._set_data_dir(SPEC_DATA_DIR)
+    end)
+end)
