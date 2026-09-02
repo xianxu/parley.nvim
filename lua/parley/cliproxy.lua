@@ -370,10 +370,11 @@ local _management_restart_done = false
 -- deadline only AFTER a probe returns, so each can overrun by one full probe.
 --
 -- `auth_files` is multiplied by MAX_CANDIDATE_CHANNELS because the readings are
--- SEQUENTIAL (they share one-shot repair state, so they cannot overlap), and a
--- google-owned model has four candidate channels. Carrying a single term here
--- while the code issues four reads is how a budget silently stops bounding
--- anything.
+-- SEQUENTIAL (they share one-shot repair state, so they cannot overlap). The
+-- multiplier is derived from the constant, never restated: google's four
+-- candidate channels are capped to MAX_CANDIDATE_CHANNELS before any read, and
+-- a term that names its own fixed count is how a budget silently stops bounding
+-- anything when that count changes.
 M._repair_budget_sec = {
     liveness_probe = CURL_MAX_TIME,
     auth_files = CURL_MAX_TIME * MAX_CANDIDATE_CHANNELS,
@@ -643,20 +644,7 @@ end
 
 local POLL_INTERVAL_MS = 250
 
---- Warm the catalog off the back of a dispatch.
----
---- Its only writer used to be the agent picker, so a cold install had NO catalog
---- until someone opened one — and after M4 the catalog is what resolves
---- model→channel, so an auth failure on a fresh machine reported "no cliproxy
---- channel is configured", with no account and no login offered. That is worse
---- than the `oauth-model-alias` block it replaced, which at least shipped a
---- mapping. Any dispatch through cliproxy now populates it.
----
---- Fire-and-forget and stale-gated, so it costs one extra pair of loopback GETs
---- per TTL on a path that is already talking to the proxy, and never delays the
---- request.
---- Refresh the model catalog if it is stale. Fire-and-forget: never delays a
---- caller, never spawns the proxy.
+--- Warm the catalog off the back of a dispatch: refresh it if it is stale.
 ---
 --- Called from the cliproxyapi adapter's `pre_query` — the one seam EVERY
 --- cliproxy request passes through, managed or bring-your-own. Its only writer
@@ -664,6 +652,10 @@ local POLL_INTERVAL_MS = 250
 --- catalog; and after M4 the catalog is what resolves model→channel, so an auth
 --- failure there reported "no cliproxy channel is configured" with no account
 --- and no login offered — worse than the `oauth-model-alias` block it replaced.
+---
+--- Fire-and-forget and stale-gated, so it costs one extra pair of loopback GETs
+--- per TTL on a path that is already talking to the proxy, never delays the
+--- request, and never spawns the proxy.
 function M.warm_catalog()
     if M.catalog_stale() then
         pcall(M.fetch_catalog, function() end)

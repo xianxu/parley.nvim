@@ -2,8 +2,13 @@
 
 - An agent = provider + model + system prompt
 - Config fields: `name`, `provider`, `model` (string or object), `system_prompt`, `disable` (bool), `tools` (list of builtin tool names — or group sentinels `@all` / `@readonly`, see `providers/tool_use.md` — for client-side tool use; empty/absent = no tools; #81, anthropic-family only at present), `max_tool_iterations` (default 42, single-sourced in `defaults.lua`), `tool_result_max_bytes` (default 102400)
-- Default agents: GPT5.4 (openai), Claude-Sonnet (anthropic), ToolSonnet (anthropic, all 7 builtin tools), ToolOpus (anthropic, all 7 builtin tools), Gemini2.5-Pro (googleai), `ToolOpus*` (cliproxyapi), `Claude-Opus` (cliproxyapi/code_execution_20260120)
-- `Proxy-*` variants included for all major model families via cliproxyapi
+- Default agents: read `config.lua`'s `agents` list — it is the source, and this
+  file deliberately does NOT restate it. Three rosters were listed here across
+  #205 and every one of them named agents the config had stopped shipping
+  (`Proxy-GPT5.4`, `Claude-Code`, `ToolSonnet`), because a copy of a list drifts
+  the moment the list moves. The SHAPE is what is stable and worth writing down:
+  a `*` suffix marks a cliproxyapi-routed agent, and since #205 the roster no
+  longer has to name a model for it to be reachable — see the live section below.
 - Selection: `:ParleyAgent [name]` (picker or explicit), `:ParleyNextAgent` (`<C-g>a`) cycles
 - **Live cliproxy models (#205).** Below the configured agents the picker shows a
   `── live · cliproxy ──` section built from the proxy's own catalog, so a model

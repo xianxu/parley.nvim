@@ -1,8 +1,8 @@
 -- parley.skill_edits — the single source of the batch-edit transform.
 --
 -- PURE: validate + apply a list of {old_string, new_string, explain} edits to a
--- content string. The single source of the batch-edit transform; the
--- propose_edits tool handler (IO wrapper) is its one caller (ARCH-DRY).
+-- content string. The propose_edits tool handler (IO wrapper) is its one
+-- caller (ARCH-DRY).
 
 local M = {}
 

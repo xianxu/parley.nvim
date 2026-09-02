@@ -1067,3 +1067,50 @@ the rationale was false exactly where it applied, and no test reached the path.
 **Check:** when a cap's justification names what it keeps, assert that for every
 input shape that can reach it — especially the one shape that made the cap
 necessary.
+
+## Rewriting a comment means deleting the one it replaces (#205)
+
+Four close-gate findings across four rounds were one authoring failure: rewrite a
+comment by WRITING the new paragraph, forget to DELETE the old one. The file then
+documents two states of the world, and the stale half is indistinguishable from
+the live half to the next reader — `cliproxy.lua` shipped a comment stating the
+alphabetical channel order that the same commit pair had just replaced with
+preference order. Each round fixed the site the reviewer named; the fix for the
+third round ADDED the fourth instance.
+
+The remedy proposed in round two — "lint `---@param` blocks naming absent
+identifiers" — is why it kept recurring: it was scoped to where the first
+instance happened to sit. When a rule is finally written, five of the seven live
+instances were plain `--` stacks and four did not precede a function at all, in
+`chat_respond.lua`, `tool_folds.lua`, `skill_edits.lua` and `float_picker.lua` —
+files no reviewer had ever named.
+
+**Check:** `tests/arch/superseded_comment_spec.lua` now fails on two paragraphs
+in one comment run that share a verbatim six-word span — the signature of
+copy-then-edit. It cannot see a fully paraphrased restatement, which is the half
+you still have to hold: after editing a comment, re-read the whole run and delete
+what the new text replaced.
+
+## A guard's comment is a claim, and claims get checked (#205)
+
+The fix for "this matcher is too loose" carried the sentence "Both directions are
+covered by injection tests." There were no injection tests. That sentence is the
+same defect as the finding it was answering — an assertion about coverage with
+nothing behind it — written into the fix for that defect.
+
+**Check:** if a guard's comment says it is tested against something, that test
+must exist in the same commit. And test the matcher against a deliberately
+planted FALSE POSITIVE — a shape it must REJECT — not only against shapes it must
+find; a matcher asserted in one direction only cannot be shown to reject anything.
+
+## Don't restate a list the code owns (#205)
+
+`atlas/providers/agents.md` carried a copy of `config.lua`'s agent roster. Three
+different rosters were written there during this issue and every one named agents
+the config had stopped shipping, because a copy of a list drifts the moment the
+list moves. The atlas's job is the SHAPE — what an agent is, what the `*` suffix
+means — not the current contents.
+
+**Check:** when documenting a collection the code defines, link to the definition
+and describe its invariants. If you catch yourself typing the elements, you are
+writing something that will be wrong by the next commit.

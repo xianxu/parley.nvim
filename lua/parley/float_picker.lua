@@ -1704,14 +1704,10 @@ function M.open(opts)
             set_status(nil)
             if type(next_selection) == "number" then
                 -- Translate the caller's items-index into an identity here, so
-                -- BOTH forms resolve through the same filtered-space lookup
-                -- below. Assigning it straight to sel_idx would silently mean a
-                -- different row whenever a query is active.
-                -- Translated to an identity and resolved below, in the ONE
-                -- coordinate space this widget has. No sel_idx assignment here:
-                -- that was the items-space write the translation exists to
-                -- replace, and leaving it meant a wrong row whenever the
-                -- identity could not be found.
+                -- BOTH forms resolve below in the ONE coordinate space this
+                -- widget has. No sel_idx assignment: that was the items-space
+                -- write this translation exists to replace, and it silently
+                -- meant a different row whenever a query was active.
                 local picked = items[math.max(1, math.floor(next_selection))]
                 next_identity = picked and recall_id_fn(picked) or nil
             end

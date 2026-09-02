@@ -24,6 +24,39 @@ local function read(path)
     return body
 end
 
+--- ERE matching a DEFINITION of `name`, never a mention.
+---
+--- Grepping for the bare name let a spec COMMENT keep a deleted function's
+--- table row green — the guard then certifies exactly the drift it exists to
+--- catch. The two failure modes were hit in one sitting: a `%s *=` alternative
+--- also matched `x == y` and `t.x = 1`, so a mention satisfied it; tightening
+--- to `M.` only then missed the adapter form and string values.
+---
+--- What makes a name REAL, enumerated: a module function, a table-field
+--- function (the adapter form, `cliproxyapi.pre_query = …`), a local, or a
+--- quoted string — a table cell may legitimately name a VALUE like a strategy
+--- rather than a symbol.
+---
+--- ERE, not Lua patterns: this string goes to `grep -E`, where `[%%w_]` would
+--- be the literal characters % and w.
+local function definition_pattern(name)
+    return ("(function [A-Za-z0-9_.]*%s\\b|[A-Za-z0-9_.]*[.]%s *=[^=]|local function %s\\b|local %s *=[^=]|\"%s\")")
+        :format(name, name, name, name, name)
+end
+
+--- Run the real matcher over synthetic text, so the injection cases below
+--- exercise `grep -E` rather than a re-implementation of it.
+local function defines(name, text)
+    local tmp = vim.fn.tempname()
+    local fd = assert(io.open(tmp, "w"))
+    fd:write(text .. "\n")
+    fd:close()
+    local hit = vim.fn.systemlist(("grep -lE -- %s %s 2>/dev/null"):format(
+        vim.fn.shellescape(definition_pattern(name)), vim.fn.shellescape(tmp)))
+    os.remove(tmp)
+    return #hit > 0
+end
+
 describe("arch: single-source sweeps stay swept", function()
     it("the plan's Core-concepts tables name every entity THIS issue added", function()
         -- The other direction of the referent sweep, and scoped to the issue's
@@ -136,35 +169,9 @@ describe("arch: single-source sweeps stay swept", function()
                         end
                         for _, name in ipairs(names) do
                             if #name > 3 and not name:match("^lua$") then
-                                -- A DEFINITION, not a mention. Grepping for the
-                                -- bare name let a spec comment keep a deleted
-                                -- function's table row green — the guard then
-                                -- certifies exactly the drift it exists to catch.
-                                -- Definition forms ONLY. A bare `%s *=`
-                                -- alternative (the first attempt) also matched
-                                -- `x == y`, `t.x = 1` and `local x = 1`, so the
-                                -- guard was weaker than its message claimed —
-                                -- a mention could still satisfy it.
-                                -- What makes a name REAL, enumerated: a
-                                -- module function, a table-field function (the
-                                -- adapter form, `cliproxyapi.pre_query = …`), a
-                                -- local, or a quoted string — a table cell may
-                                -- legitimately name a VALUE like a strategy
-                                -- rather than a symbol.
-                                --
-                                -- A bare `%s *=` alternative (the first attempt)
-                                -- also matched `x == y` and `t.x = 1`, so a mere
-                                -- mention satisfied the guard; tightening to
-                                -- `M.` only then missed both forms above. Both
-                                -- directions are covered by injection tests.
-                                -- ERE, not Lua patterns: this string goes to
-                                -- `grep -E`, where `[%%w_]` is the literal
-                                -- characters % and w.
-                                local pattern = ("(function [A-Za-z0-9_.]*%s\\b|[A-Za-z0-9_.]*[.]%s *=[^=]|local function %s\\b|local %s *=[^=]|\"%s\")")
-                                    :format(name, name, name, name, name)
                                 local hit = vim.fn.systemlist(
                                     ("grep -rlE -- %s lua/ tests/ scripts/ 2>/dev/null"):format(
-                                        vim.fn.shellescape(pattern)))
+                                        vim.fn.shellescape(definition_pattern(name))))
                                 if #hit == 0 then
                                     missing[#missing + 1] = doc .. ": " .. name
                                 end
@@ -176,6 +183,35 @@ describe("arch: single-source sweeps stay swept", function()
         end
         assert.same({}, missing,
             "these are named in a Core-concepts table but exist nowhere in the tree")
+    end)
+
+    it("the definition matcher accepts every real definition form", function()
+        assert.is_true(defines("warm_catalog", "function M.warm_catalog()"),
+            "module function")
+        assert.is_true(defines("pre_query", "cliproxyapi.pre_query = function() end"),
+            "table-field function — the adapter form")
+        assert.is_true(defines("bound_candidates", "local function bound_candidates(t)"),
+            "file-local function")
+        assert.is_true(defines("healthiest", "local healthiest = reduce"),
+            "file-local value")
+        assert.is_true(defines("anthropic_tools_route", 'strategy = "anthropic_tools_route",'),
+            "a quoted string — a table cell may name a VALUE, not a symbol")
+    end)
+
+    it("the definition matcher rejects a mere mention (planted false positive)", function()
+        -- The direction that actually matters. A guard asserted only against
+        -- shapes it SHOULD find cannot be shown to reject anything, and this one
+        -- shipped twice with a matcher loose enough to certify the drift it
+        -- exists to catch.
+        assert.is_false(defines("resolve_login_provider",
+            "-- resolve_login_provider used to answer this"),
+            "a comment naming the symbol is not a definition")
+        assert.is_false(defines("resolve_channel", "if resolve_channel == nil then"),
+            "a comparison is not a definition")
+        assert.is_false(defines("catalog_stale", "local t = { catalog_stale = other }"),
+            "binding some OTHER value to a like-named key is not a definition")
+        assert.is_false(defines("warm_catalog", "cliproxy.warm_catalog()"),
+            "a call site is not a definition")
     end)
 
     it("no spec re-defines free_port; they use tests/helpers/ready_port", function()

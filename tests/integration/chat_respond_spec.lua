@@ -1294,17 +1294,17 @@ describe("chat_respond: pending request transcript drift", function()
     end)
 
     -- A tool-enabled agent this file OWNS. These cases named `ToolSonnet`, which
--- stopped shipping; get_agent then warned and fell back, so each test ran
--- against a different agent than it named — passing, but not for the reason it
--- claimed. What they actually need is "a tool-enabled anthropic-wire agent".
-local TOOL_AGENT = {
-    provider = "cliproxyapi",
-    name = "ToolAgentTest",
-    model = { model = "claude-sonnet-5", web_search_strategy = "anthropic_tools_route" },
-    system_prompt = "Be helpful.",
-    synthetic_system_prompt = true,
-    tools = { "@all" },
-}
+    -- stopped shipping; get_agent then warned and fell back, so each test ran
+    -- against a different agent than it named — passing, but not for the reason
+    -- it claimed. What they actually need is "a tool-enabled anthropic-wire agent".
+    local TOOL_AGENT = {
+        provider = "cliproxyapi",
+        name = "ToolAgentTest",
+        model = { model = "claude-sonnet-5", web_search_strategy = "anthropic_tools_route" },
+        system_prompt = "Be helpful.",
+        synthetic_system_prompt = true,
+        tools = { "@all" },
+    }
 
 local function open_simple_chat(topic, path, extra_header)
         path = path or test_file

@@ -1352,8 +1352,19 @@ no `provider`, so with the alias block deleted there would be no resolver left.
 The resolution is that **ambiguity is not the end of the answer** — health
 decides it. `credential_health_for_login` already fans out across the channels
 of one login and reduces with `ca.healthier`. Diagnosis needs the same fan-out
-with the opposite reducer: the LEAST healthy candidate is the one that plausibly
-failed. So the fan-out gets extracted once and both callers share it (ARCH-DRY).
+with the opposite reducer: ~~the LEAST healthy candidate is the one that
+plausibly failed~~. So the fan-out gets extracted once and both callers share it
+(ARCH-DRY).
+
+> **Superseded during M4 (BR-87).** "Least healthy wins" is the rule the code was
+> fixed to STOP implementing: it ranked `missing`, `disabled` and `unknown` ABOVE
+> a real failure, so diagnosis blamed the empty channel instead of the credential
+> that actually failed. What ships is **eligibility before ranking** —
+> `could_have_served` first excludes the channels that could not have served the
+> request at all, and only then `likeliest_culprit` orders what remains, with ties
+> broken by declared order for reproducibility. Both reducers are pure and
+> injected into the one shared fan-out, so the ARCH-DRY half of this paragraph
+> stands; only the reducer's rule changed.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1545,7 +1556,11 @@ Expected: PASS
 - [ ] **Step 4: Commit**
 
 ```bash
-git add lua/parley/config.lua
+# The alias block ONLY. `config.lua` also carries an operator-owned agent-roster
+# cleanup that must not ship — see "Never `git add -u`" below, which this recipe
+# contradicted for four rounds by staging the whole file. Check the diff first:
+git diff lua/parley/config.lua        # expect: the alias block, nothing else
+git add -p lua/parley/config.lua
 git commit -m "#205 M4: retire oauth-model-alias from the default config"
 ```
 
@@ -2350,3 +2365,39 @@ because the cache is fresh first, which is what makes the two placements differ.
   the three rules this round earned (an order read as a ranking must BE one; a
   bound must count what the code does; trim from the end you can afford to lose);
   `atlas/providers/agents.md` no longer names agents that stopped shipping.
+
+### 2026-09-01 — post-close sweep: the comment family got a rule (BR-71, BR-86, BR-87, BR-96, BR-103, BR-105)
+
+The close bundle fixed the sites the round-30 review named. This entry covers the
+classes those sites belonged to, which it did not.
+
+- **`docs-insert-orphans-section` (4th finding) now has a machine.**
+  `tests/arch/superseded_comment_spec.lua` fails on two paragraphs in one
+  contiguous comment run sharing a verbatim six-word span. Round two's proposed
+  remedy — lint `---@param` blocks naming absent identifiers — is why the family
+  kept recurring: it was scoped to where the first instance happened to sit. The
+  written rule immediately found **six** live instances, four in files no reviewer
+  had named (`chat_respond.lua` ×2, `tool_folds.lua`, `skill_edits.lua`), plus
+  `float_picker.lua`'s (BR-71), which is paraphrased and which the guard's own
+  docstring admits it cannot see. All seven swept.
+- **BR-105's second half.** `_repair_budget_sec` still justified itself with "a
+  google-owned model has four candidate channels… while the code issues four
+  reads" one commit after the cap made it two. The comment now derives the
+  multiplier from `MAX_CANDIDATE_CHANNELS` instead of naming a count.
+- **BR-106's fix carried an unbacked claim.** It said "Both directions are covered
+  by injection tests"; there were none. The matcher is extracted to
+  `definition_pattern` and driven by `defines()` over synthetic text, with four
+  planted FALSE POSITIVES (a comment, a comparison, a like-named key, a call site)
+  and five definition forms. Reverting the pattern to the loose pre-fix form fails
+  two of those cases.
+- **BR-103.** `atlas/providers/agents.md` restated `config.lua`'s roster; three
+  different rosters were written there during this issue and every one named
+  agents the config had stopped shipping. It now describes the shape and points
+  at the source.
+- **BR-96.** The column-0 comment and `TOOL_AGENT` table in `chat_respond_spec`
+  are re-indented into their enclosing block.
+- **BR-86.** Task 4.2's recipe staged `lua/parley/config.lua` wholesale, which is
+  the exact file the "Never `git add -u`" Note protects — the recipe contradicted
+  the guardrail for four rounds. It stages the alias hunk explicitly now. The
+  operator's agent-roster trim and the untracked `docs/parley.nvim.md` remain
+  UNCOMMITTED, deliberately; they are not this issue's deliverable.

@@ -351,11 +351,9 @@ function M.prepare_exchange_update(buf, model, exchange_index)
     local first_0, last_0
     local patterns = require("parley.highlight_structure").patterns(require("parley.config"))
     -- Same destructive operation as reconcile, so the same rule: clear only
-    -- rows this exchange can be shown to own. A stale span here would clear a
-    -- neighbour's folds before the mutation even runs, and finalize would not
-    -- recreate them (#200 C1).
-    -- Destructive, so the same rule as reconcile: clear only rows this exchange
-    -- can be shown to own, and never let an untrusted model define that. When
+    -- rows this exchange can be shown to own, and never let an untrusted model
+    -- define that. A stale span here would clear a neighbour's folds before the
+    -- mutation even runs, and finalize would not recreate them (#200 C1). When
     -- identity declines there is nothing safe to clear — say so rather than
     -- clearing silently.
     first_0, last_0 = owned_span(buf, model, exchange_index, patterns, false)
