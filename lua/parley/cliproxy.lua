@@ -493,15 +493,6 @@ function M.credential_health(cb, channel)
     end, channel)
 end
 
---- Credential health for a LOGIN PROVIDER (`google`), by reading every cliproxy
---- channel that login serves and keeping the healthiest.
----
---- The third axis: `:ParleyProxy models` names providers on the model-owning
---- axis, credential health is keyed by channel, and only five of six coincide —
---- `google` covers gemini / gemini-cli / aistudio. Reading health under "google"
---- finds nothing and fabricates "no credential" for a healthy account.
----@param login string
----@param cb fun(health: table)
 --- Gather every channel's health, then let a PURE reducer choose.
 ---
 --- The gathering is all this does. Choosing used to happen inline, one reading
@@ -1134,9 +1125,9 @@ function M.callback_port_blocked(provider)
         :format(port, port)
 end
 
---- Watch the auth-dir for a credential appearing/refreshing for `provider`,
---- so a login's outcome is observed rather than assumed.
----@param channel string
+--- Watch the auth-dir for a credential appearing/refreshing for `login`, so a
+--- login's outcome is observed rather than assumed.
+---@param login string
 ---@param since number|nil # epoch seconds; a file newer than this counts
 ---@param timeout_ms number
 ---@param cb fun(ok: boolean)

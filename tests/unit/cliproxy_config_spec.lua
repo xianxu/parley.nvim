@@ -453,4 +453,28 @@ describe("bound_candidates", function()
             assert.equals("antigravity", bounded[#bounded], owner)
         end
     end)
+
+    it("keeps preference order at every max, not just the shipped one", function()
+        -- BR-111: filling the tail by walking backwards satisfied max = 2 by
+        -- accident and returned {c1, cN, cN-1} for max = 3 — reverse preference
+        -- order, contradicting this function's own @param AND
+        -- credential_health_across's "readings reach `choose` in DECLARED order,
+        -- so a tie is broken the same way every run". Unreachable at
+        -- MAX_CANDIDATE_CHANNELS = 2 and a trap the moment the cap rises.
+        local google = { "gemini-cli", "gemini", "aistudio", "antigravity" }
+        assert.same({ "gemini-cli", "gemini", "antigravity" },
+            cc.bound_candidates(google, 3))
+        -- The result must always be a SUBSEQUENCE of the input.
+        for max = 1, 5 do
+            local out, at = cc.bound_candidates(google, max), 0
+            for _, ch in ipairs(out) do
+                local found
+                for i = at + 1, #google do
+                    if google[i] == ch then found = i break end
+                end
+                assert.is_truthy(found, ("max=%d reordered %s"):format(max, ch))
+                at = found
+            end
+        end
+    end)
 end)

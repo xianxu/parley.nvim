@@ -2432,3 +2432,40 @@ class was swept rather than the site patched:
 - **One more stale count.** `credential_health_across` still said "at most four
   loopback reads" — same defect as `_repair_budget_sec`'s, wrong since the cap
   landed. It no longer restates a number.
+
+### 2026-09-01 — round 32: the guard's own exclusion, and a consolidation that erased a distinction (BR-108..BR-113)
+
+- **BR-108 (Important).** The prose lint shipped in 56f0df3 excludes annotation
+  blocks — correct, and a hole exactly where this family lives. That same commit
+  created two new instances and left BR-80's own, all three invisible to it by
+  construction. The `@param`-absent lint rejected as "why the family recurred" was
+  too narrow *alone*, never wrong: the two are COMPLEMENTARY and both now ship in
+  `superseded_comment_spec.lua`. `annotation_drift` flags an `@param` the
+  following signature does not take, and a blank line severing a block from its
+  function; it excludes the `_name` unused-argument convention (six real sites), and
+  that exclusion has its own planted false-positive case. It found **seven**
+  orphans tree-wide plus one severed block — `chat_parser.lua`, `cliproxy.lua` ×2,
+  `init.lua` ×2 — all fixed. `refresh_state` got back the docstring the hoist took.
+- **BR-109 (Important).** `adopt_agent` consolidated two copies that had diverged
+  and picked overwrite, pinning neither: reverting to the keep form left the whole
+  suite green. The divergence was real — config must beat a persisted pick at
+  startup (`setup()` builds `M.agents` then calls `refresh_state`), while a user
+  picking a row now must beat what is there. Restored as an explicit
+  `keep_existing` flag, one branch per call site, and mutation-checked against
+  BOTH rival implementations rather than against deletion: collapsing onto
+  overwrite reddens one case, collapsing onto keep reddens the other.
+- **BR-110 (Important).** b218ae7 made cliproxyapi mandatory out of the box while
+  README called the proxy "dormant" and the Spec still promised six agents. Both
+  corrected, and a `## Revisions` entry now records the out-of-box consequence
+  rather than leaving it in a commit body. The rule: a shipped default is user
+  surface even though the user never types it.
+- **BR-111 (Minor).** `bound_candidates` walked the tail BACKWARDS, satisfying
+  max = 2 by accident and returning `{c1, cN, cN-1}` for max = 3 — reverse
+  preference order, contradicting its own `@param` and
+  `credential_health_across`'s declared-order guarantee. It returns a subsequence
+  now, pinned at every max from 1 to 5.
+- **BR-112 (Minor).** Six `super_repo_spec` sites named an agent the roster
+  stopped shipping; `init.lua` silently substitutes `M._agents[1]`, so they passed
+  under a name that resolved to nothing.
+- **BR-113 (Minor).** The sole shipped default pinned `claude-opus-4-8` — the
+  exact staleness this issue's Problem statement opens with. Now `claude-opus-5`.

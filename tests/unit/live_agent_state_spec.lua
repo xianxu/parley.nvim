@@ -17,18 +17,19 @@ local SPEC_STATE_DIR = vim.fn.tempname()
 vim.fn.mkdir(SPEC_STATE_DIR, "p")
 parley.setup({ state_dir = SPEC_STATE_DIR })
 
+-- refresh_state reloads _state FROM DISK, which is exactly what a restart does —
+-- so the persisted file is where a restart scenario has to start. Module scope
+-- because more than one describe needs a restart.
+local function persist(state)
+    state.updated = os.time()
+    local fd = assert(io.open(SPEC_STATE_DIR .. "/state.json", "w"))
+    fd:write(vim.json.encode(state))
+    fd:close()
+    parley._state = {}
+end
+
 describe("live agent state", function()
     local saved = {}
-
-    -- refresh_state reloads _state FROM DISK, which is exactly what a restart
-    -- does — so the persisted file is where a restart scenario has to start.
-    local function persist(state)
-        state.updated = os.time()
-        local fd = assert(io.open(SPEC_STATE_DIR .. "/state.json", "w"))
-        fd:write(vim.json.encode(state))
-        fd:close()
-        parley._state = {}
-    end
 
     before_each(function()
         saved.agents = parley.agents
@@ -120,6 +121,52 @@ describe("register_live_agent", function()
             parley.register_live_agent({ owner = "anthropic" })
         end)
         assert.equals("alpha", parley._state.agent)
+    end)
+
+    it("a live PICK overwrites a same-named agent", function()
+        -- BR-109: the two adoption sites had different collision semantics and
+        -- collapsing them onto one left nothing able to tell. This pins the
+        -- selection half — the user naming a model right now wins.
+        parley.agents["claude-opus-5*"] = { provider = "openai", model = { model = "stale" },
+                                            system_prompt = "x" }
+        parley._agents = { "alpha", "claude-opus-5*" }
+        parley.register_live_agent({ id = "claude-opus-5", owner = "anthropic",
+                                     display = "Claude Opus 5" })
+        assert.equals("cliproxyapi", parley.agents["claude-opus-5*"].provider,
+            "selecting a live row must replace a same-named entry, not defer to it")
+    end)
+end)
+
+describe("restoring a persisted live pick", function()
+    local saved = {}
+
+    before_each(function()
+        saved.agents, saved.list, saved.state =
+            parley.agents, parley._agents, parley._state
+    end)
+
+    after_each(function()
+        parley.agents, parley._agents, parley._state =
+            saved.agents, saved.list, saved.state
+        os.remove(SPEC_STATE_DIR .. "/state.json")
+    end)
+
+    it("does NOT clobber a configured agent of the same name", function()
+        -- The other half of BR-109, and the one that actually bites: setup()
+        -- builds M.agents from config and only THEN calls refresh_state, so
+        -- overwriting here lets a stale session pick beat the config on every
+        -- launch. Config is authoritative.
+        parley.agents = { alpha = { provider = "openai", model = { model = "gpt-4" },
+                                    system_prompt = "x" },
+                          ["claude-opus-5*"] = { provider = "anthropic",
+                                                 model = { model = "configured" },
+                                                 system_prompt = "x" } }
+        parley._agents = { "alpha", "claude-opus-5*" }
+        persist({ agent = "alpha", live_agent = { id = "claude-opus-5", owner = "anthropic" } })
+        parley.refresh_state()
+        assert.equals("anthropic", parley.agents["claude-opus-5*"].provider,
+            "a persisted live pick must not overwrite a configured agent")
+        assert.equals("configured", parley.agents["claude-opus-5*"].model.model)
     end)
 end)
 

@@ -24,6 +24,15 @@
 -- to an identity and resolved below" shares no 6-gram and is invisible here. The
 -- human half of the rule lives in workshop/lessons.md; this guard is the half a
 -- machine can hold.
+--
+-- TWO LINTS, NOT ONE (BR-108). The prose lint below EXCLUDES annotation blocks,
+-- because an `---@param` legitimately restates the sentence above it — and that
+-- exclusion is a hole exactly where this family most often lands. Shipping it
+-- alone created two new instances and left BR-80's own, all three invisible to
+-- it by construction. So the second half lives here too: an annotation block
+-- must document the function it precedes. It catches what the first cannot, and
+-- the first catches the plain `--` stacks that made scoping to `---@param` the
+-- wrong remedy in the first place. Complementary, not alternatives.
 
 local MIN_SHARED_WORDS = 6
 
@@ -134,6 +143,64 @@ local function superseded_paragraphs(lines)
     return found
 end
 
+
+--- Does an `---@param` block document the function it precedes?
+---
+--- Two failure shapes, both from hoisting code between a docstring and its
+--- function: the block is ORPHANED (it names parameters the following signature
+--- does not take) or SEVERED (a blank line divides them, so no tooling ties them
+--- together at all).
+---
+--- `_name` in a signature is luacheck's mark for a deliberately unused argument
+--- and the docstring names it without the underscore. That is convention, not
+--- drift, so the underscore is stripped before comparing.
+local function annotation_drift(lines)
+    local found = {}
+    local i = 1
+    while i <= #lines do
+        if lines[i]:match("^%s*%-%-%-") then
+            local start = i
+            local params = {}
+            while i <= #lines and lines[i]:match("^%s*%-%-%-") do
+                local name = lines[i]:match("^%s*%-%-%-%s*@param%s+([%w_.]+)")
+                if name then params[#params + 1] = name:gsub("%..*", "") end
+                i = i + 1
+            end
+            if #params > 0 then
+                local j, blanks = i, 0
+                while j <= #lines and lines[j]:match("^%s*$") do
+                    blanks = blanks + 1
+                    j = j + 1
+                end
+                local sig = lines[j] and (lines[j]:match("^%s*local function [%w_.:]*%(([^)]*)%)")
+                    or lines[j]:match("^%s*function [%w_.:]*%(([^)]*)%)")
+                    or lines[j]:match("^%s*local [%w_.]+%s*=%s*function%s*%(([^)]*)%)")
+                    or lines[j]:match("^%s*[%w_.]+%s*=%s*function%s*%(([^)]*)%)"))
+                if sig then
+                    local actual = {}
+                    for a in sig:gmatch("[^,]+") do
+                        actual[(a:match("^%s*(.-)%s*$"):gsub("^_", ""))] = true
+                    end
+                    if blanks > 0 then
+                        found[#found + 1] = { line = j, why =
+                            ("a blank line separates the @param block from %s"):format(
+                                vim.trim(lines[j]):sub(1, 48)) }
+                    end
+                    for _, name in ipairs(params) do
+                        if not actual[(name:gsub("^_", ""))] then
+                            found[#found + 1] = { line = start, why =
+                                ("@param %s, but the signature is (%s)"):format(name, vim.trim(sig)) }
+                        end
+                    end
+                end
+            end
+        else
+            i = i + 1
+        end
+    end
+    return found
+end
+
 describe("arch: a rewritten comment deletes the paragraph it replaces", function()
     it("fires on a stacked restatement (planted false negative)", function()
         local planted = {
@@ -169,6 +236,64 @@ describe("arch: a rewritten comment deletes the paragraph it replaces", function
             "local y = 2",
         }
         assert.equals(0, #superseded_paragraphs(planted))
+    end)
+
+
+    it("fires on an @param the signature does not take (planted false negative)", function()
+        local planted = {
+            "---@param update table | nil # table with options",
+            "local function adopt_agent(agent)",
+        }
+        assert.equals(1, #annotation_drift(planted))
+    end)
+
+    it("fires on a blank line severing the block from its function", function()
+        local planted = {
+            "---@param model table # a parsed catalog row",
+            "",
+            "M.register_live_agent = function(model)",
+        }
+        assert.equals(1, #annotation_drift(planted))
+    end)
+
+    it("accepts an underscore-marked unused argument (planted false positive)", function()
+        -- `_account` is luacheck's mark for a deliberately unused parameter and
+        -- the docstring names it without the underscore. Six real sites in this
+        -- tree have that shape; flagging them would make the guard noise.
+        local planted = {
+            "---@param provider string",
+            "---@param account string",
+            "function M.forget(provider, _account)",
+        }
+        assert.equals(0, #annotation_drift(planted))
+    end)
+
+    it("accepts a block that documents its own function", function()
+        local planted = {
+            "---@param channels string[]",
+            "---@param cb fun(health: table)",
+            "function M.credential_health_across(channels, choose, cb)",
+        }
+        assert.equals(0, #annotation_drift(planted))
+    end)
+
+    it("every @param block in the tree documents the function it precedes", function()
+        local offenders = {}
+        for _, path in ipairs(repo_files()) do
+            local fd = io.open(path, "r")
+            if fd then
+                local lines = {}
+                for line in fd:lines() do lines[#lines + 1] = line end
+                fd:close()
+                for _, hit in ipairs(annotation_drift(lines)) do
+                    offenders[#offenders + 1] = ("%s:%d — %s"):format(path, hit.line, hit.why)
+                end
+            end
+        end
+        assert.equals(0, #offenders,
+            "an annotation block was separated from the function it documents — "
+            .. "usually by hoisting code between them:\n  "
+            .. table.concat(offenders, "\n  "))
     end)
 
     it("no comment run in the tree stacks a paragraph on its replacement", function()

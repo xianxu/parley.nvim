@@ -220,7 +220,7 @@ local config = {
 			-- and gemini-family models none at all — measured, single-sourced in
 			-- providers.cliproxy_default_web_search_strategy, and consulted by
 			-- the resolution chain. State it only to override that.
-			model = { model = "claude-opus-4-8" },
+			model = { model = "claude-opus-5" },
 			system_prompt = require("parley.defaults").chat_system_prompt,
 			synthetic_system_prompt = true,
 			tools = { "@all"},

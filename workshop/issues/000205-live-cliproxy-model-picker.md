@@ -7,7 +7,7 @@ created: 2026-08-31
 updated: 2026-09-01
 estimate_hours: 4.61
 started: 2026-08-31T18:19:21-07:00
-actual_hours: 14.86
+actual_hours: 15.44
 ---
 
 # live cliproxy model picker; retire hardcoded model lists
@@ -40,7 +40,7 @@ rendered config — wrong bearer → 401, `parley-local` → 200):
 ## Spec
 
 Stop enumerating models in config. Read the live catalog and offer it in the agent
-picker; keep the six configured cliproxyapi agents as pinned favorites.
+picker; keep the ~~six~~ configured cliproxyapi agents as pinned favorites.
 
 ### Catalog metadata (what the proxy actually offers)
 
@@ -212,6 +212,8 @@ Durable design: `workshop/plans/000205-live-cliproxy-model-picker-plan.md`
 
 
 
+
+- 2026-09-01: closed — Re-review of the post-close delta: one side-quest commit (b218ae7) trimming the shipped agent roster in lua/parley/config.lua to a single cliproxyapi entry, ToolOpus*, plus two commented openai/anthropic examples. Committed at the operator explicit direction after I flagged the trade-off: this was previously their local-only cleanup that the plan Never git add -u Note protects, and shipping it changes the out-of-box experience — an installer with only an OPENAI_API_KEY now starts with one agent they cannot dispatch until cliproxyapi is set up, where the previous roster covered openai, anthropic and googleai directly. The commented entries are the documented recovery path. It is coherent with what #205 delivered: the live catalog section plus <C-a> is now how models are reached, so the default config no longer has to enumerate a roster to make them available. Recorded in the commit body rather than buried, including a follow-up note that the one remaining entry still pins claude-opus-4-8 — the exact staleness this issue Problem statement opens with, now much lower stakes because the picker reaches the live catalog. Verified: make test green across THREE consecutive clean runs at this HEAD, exit 0 each time, lint 0 warnings/0 errors across 346 files, every unit, integration and arch spec passing. Also in this window and already reviewed at anchor 2bc549e: BR-107 and the second instance of its class both pinned and mutation-checked.; review verdict: FIX-THEN-SHIP
 - 2026-09-01: closed — Post-close class sweep for the findings round 30 raised, verified green at HEAD (make test: lint 0 warnings/0 errors across 346 files; every unit, integration and arch spec passing). The deliverable this round is the RULE for docs-insert-orphans-section, a family that reached its 4th finding without one: tests/arch/superseded_comment_spec.lua fails on two paragraphs in one contiguous comment run sharing a verbatim six-word span. Round two proposed scoping the lint to ---@param blocks, which is why it recurred — five of seven live instances were plain -- stacks and four did not precede a function. Written properly it found SIX instances immediately, four in chat_respond.lua, tool_folds.lua and skill_edits.lua that no reviewer had named; all seven swept including float_pickers paraphrased one (BR-71), which the guard cannot see and whose docstring says so rather than overstating reach. Both new guards mutation-checked in BOTH directions: removing the annotation-register exclusion fails the planted false-positive case, restoring one swept stack fails the tree case. BR-106s fix had claimed "Both directions are covered by injection tests" with none existing — the matcher is extracted and driven over synthetic text by four planted FALSE POSITIVES (comment, comparison, like-named key, call site) plus five definition forms, and reverting to the loose pre-fix pattern fails two. BR-105 half two: _repair_budget_sec argued from "four reads" one commit after the cap made it two; it derives from MAX_CANDIDATE_CHANNELS now. BR-103: the atlas restated config.lua roster and all three rosters written there named agents the config had stopped shipping; it describes the shape and points at the source. BR-86: Task 4.2 recipe staged config.lua wholesale, the exact file its own "Never git add -u" Note protects — it stages the alias hunk explicitly now, and the operator roster trim plus untracked docs/parley.nvim.md remain deliberately uncommitted. Also BR-87 and BR-96. Three rules recorded in workshop/lessons.md.; review verdict: FIX-THEN-SHIP
 - 2026-09-01: closed — Live cliproxy model picker shipped; all four milestones closed; FULL SUITE GREEN at HEAD and with the operator uncommitted config cleanup applied. Feature evidence: the picker offers models from cliproxy own catalog with NO model named in config.lua (<C-g>a renders the live section, <C-a> expands to the full catalog, a logged-out provider offers its login, a pick registers a tool-enabled agent that survives restart); the Done-when was proven against the live proxy — the payload built through the production path returned server_tool_use + web_search_tool_result and the CORRECT current version, where the inert paths return a stale one; oauth-model-alias is retired and proven (parley re-rendered its real config without the block, the proxy reloaded it, and the previously-pinned models still answer), surviving only as an explicit channel pin. Last round findings: BR-101 fixed and mutation-checked (the recovery candidate cap trimmed from the TAIL, so google kept {gemini-cli, gemini} and lost antigravity — the cross-vendor re-server the cap own rationale promised to keep, and google is the only owner with more than two candidates, so the claim was false exactly where it applied; bound_candidates keeps the native channel and the re-server, lives in the pure module, and reverting to a tail trim fails two tests). BR-72/BR-80/BR-91 verified fixed at HEAD by direct measurement rather than assertion: _force_stale clears AFTER the write and after its failure return, zero stacked doc blocks and zero @param prefer remain, and the plan-to-code guard requires a DEFINITION not a mention — it caught a stale resolve_login_provider row the moment it was tightened. Every behaviour change on this issue was mutation-checked by reverting it; the seven rules the reviews earned are recorded in workshop/lessons.md.; review verdict: FIX-THEN-SHIP
 - 2026-09-01: closed M4 — BR-99 fixed on both halves. (1) warm_catalog reached module-public without a Core-concepts row. (2) The guard could not have caught it in time: it diffed <base>~1..HEAD, ignoring the WORKING TREE, so a new entity was invisible until the commit AFTER it appeared — which is exactly why `make test` passed pre-commit and the identical run failed post-commit, and why a boundary was crossed red. It diffs against the working tree now, covers scripts/ as well as lua/, and keeps its teeth on public FUNCTIONS rather than data constants of a module the tables already name; deleting a function row still fails it. Rule recorded in lessons.md: a guard window must include the state the author is in. BR-88 fixed on both legs — the warm lives at cliproxyapi.pre_query (the seam every request passes through, managed or bring-your-own; warming inside ensure_running never reached manage=false because pre_query returns first), and the test drives pre_query for BOTH modes where it previously pinned the unreachable leg. BR-89 fixed: sequential reads, because the fan-out raced credential_health module-global one-shot repair flag and fabricated an `unknown` that named the empty channel. Round-20 work stands. VERIFIED GREEN AT HEAD: make test passes (lint + unit + integration) at the commit being closed.; review verdict: FIX-THEN-SHIP
@@ -371,3 +373,27 @@ during M3 and never restated.
 **Delta:** Component 3 now documents the catalog heuristic, why it is preferred
 on a keystroke path, and the case it deliberately does not cover (a loaded but
 dead credential, which #197's dispatch-failure path owns).
+
+### 2026-09-01 — the shipped roster is one agent, not six (BR-110)
+
+**Reason:** operator-directed, after the close. `lua/parley/config.lua`'s
+agent list was trimmed to a single pinned favorite (`ToolOpus*`) plus commented
+openai and anthropic examples, in commit b218ae7.
+
+**Delta:** the Spec above said "keep the six configured cliproxyapi agents as
+pinned favorites"; what ships is one. The mechanism is unchanged — configured
+agents are still pinned above the live section and still suppress their own live
+row — but the COUNT was a description of the roster, not of the design, and it
+had gone stale in the same way `atlas/providers/agents.md` had (BR-103).
+
+The consequence is a real change to the out-of-box experience and is recorded
+here rather than only in the commit: a fresh install can no longer dispatch
+anything without cliproxyapi, where the previous roster reached openai, anthropic
+and googleai directly. README's proxy paragraph now says so at the point the
+reader first meets the proxy, instead of describing it as "dormant" — literally
+true of the manager, but misleading about what a new user must set up. The
+commented entries in `config.lua` are the documented way back.
+
+The one remaining agent also pinned `claude-opus-4-8` — the exact staleness this
+issue's Problem statement opens with, and a defect in a shipped default rather
+than a preference (BR-113). It pins `claude-opus-5` now.

@@ -2632,6 +2632,143 @@ rounds:
           family: missing-test-for-shipped-behavior
           round: 31
       blocked: false
+    - "n": 32
+      timestamp: "2026-09-01T19:44:16-07:00"
+      agent: claude
+      dispose:
+        - id: BR-18
+          disposition: not-addressed
+          note: plan.md:1503-1506 still runs the same command four times and 1551-1552 twice; no rule recorded in lessons.md or the plan's Revisions.
+          round: 32
+        - id: BR-29
+          disposition: not-addressed
+          note: is_managed gate, repaint identity and catalog_path mkdir are all fixed; pending()-vs-SKIP (conformance_spec:235,254) and the chained 2x CURL_MAX_TIME envelope remain.
+          round: 32
+        - id: BR-35
+          disposition: not-addressed
+          note: scope moved global -> parley_buffer, still a scope where <C-a> does nothing; no agent_picker scope added and agent_picker_mappings is still absent from config.lua.
+          round: 32
+        - id: BR-80
+          disposition: not-addressed
+          note: The prefer block and the recover paragraph are gone, but the orphan the finding's first sentence names — credential_health_for_login's old docstring with @param login — is still at cliproxy.lua:496-504, above credential_health_across(channels, choose, cb).
+          round: 32
+        - id: BR-95
+          disposition: not-addressed
+          note: init.lua:4410 still raises at the default level, so the operator sees an init.lua:4410 prefix; the scope decision for the six pre-existing sites is reasonable and recorded.
+          round: 32
+        - id: BR-96
+          disposition: not-addressed
+          note: recovery_e2e_spec's stray space and the TOOL_AGENT block are fixed; chat_respond_spec.lua:1309's open_simple_chat is still at column 0 with its body at column 8.
+          round: 32
+        - id: BR-104
+          disposition: addressed
+          note: as_model_table normalizes at the resolver entry (providers.lua:127-137) and wire.lua passes the model through in either shape; both pinned.
+          round: 32
+        - id: BR-107
+          disposition: addressed
+          note: 'Mutation-verified both halves in a scratch worktree: reverting wire.lua:107 and deleting cc.bound_candidates at cliproxy.lua:1368 each redden a specific new test.'
+          round: 32
+      findings:
+        - id: BR-108
+          severity: Important
+          title: The commit that shipped the family's guard created two new instances and left BR-80's own — all three invisible to that guard by construction
+          detail: |-
+            This is the 5th finding in family `docs-insert-orphans-section`. Do NOT fix the
+            three sites — fix the rule. init.lua:1240: 6cda59a hoisted `adopt_agent` between
+            `---@param update table | nil` and the `M.refresh_state = function(update)` it
+            documented, so adopt_agent is preceded by a param it does not take and
+            refresh_state has no docstring. init.lua:4347: the same commit inserted a blank
+            line between `---@param model table` and `M.register_live_agent`, severing the
+            block. cliproxy.lua:496-504: BR-80's own instance, still present. All three are
+            annotation-register stacks, which superseded_comment_spec.lua's `is_annotation`
+            excludes by design — so the family's new machine cannot see its most common
+            shape. The `@param`-absent lint BR-80 proposed and 56f0df3 rejected catches two
+            of the three and enumerates seven tree-wide in ~30 lines of Lua (chat_parser.lua
+            206-208, cliproxy.lua 503/1139/1332, init.lua 1240). The rule: the two lints are
+            COMPLEMENTARY, not alternatives — add the signature lint alongside the 6-gram
+            prose lint, and add the blank-line rule lessons.md:964 already states in prose
+            and 6cda59a broke in the same window that wrote it. ARCH-PURPOSE: the plan's
+            "All seven swept" is the easy subset asserted as the class.
+          family: docs-insert-orphans-section
+          round: 32
+        - id: BR-109
+          severity: Important
+          title: BR-17's adopt_agent consolidation picked a winner between two diverging semantics and pinned neither — reverting it leaves the entire suite green
+          detail: |-
+            This is the 8th finding in family `missing-test-for-shipped-behavior`. Do NOT
+            just add the one assertion. init.lua:1251. The restore path was
+            `M.agents[name] = M.agents[name] or agent` (KEEP); the selection path was
+            `= agent` (OVERWRITE); adopt_agent chose overwrite. Measured, not asserted: I
+            reverted line 1251 to the keep form in a clean worktree and ran the full suite —
+            exit 0, all 193 specs pass. live_agent_state_spec.lua drives both call sites and
+            asserts nothing that discriminates. Reachable: setup() builds M.agents from
+            config (init.lua:750-776) then calls refresh_state() (init.lua:813), so a
+            configured agent colliding with a persisted `<id>*` live pick is now clobbered
+            where it previously survived. The family's rule already exists at
+            lessons.md:922-925 (the mutation must be the WRONG IMPLEMENTATION, not
+            deletion); what failed is that the issue Log states "Every behaviour change on
+            this issue was mutation-checked by reverting it" as a universal. The
+            deliverable is the ENUMERATION: list every behavior-changing hunk in the close
+            window and record the spec that reddens for each; a hunk with none is the
+            finding. ARCH-PURPOSE.
+          family: missing-test-for-shipped-behavior
+          round: 32
+        - id: BR-110
+          severity: Important
+          title: b218ae7 makes cliproxyapi mandatory out of the box; README, atlas and the issue Spec all still describe the old default roster
+          detail: |-
+            This is the 6th finding in family `atlas-not-updated-for-new-surface`. Do NOT
+            fix only the README line — state the rule. config.lua:200-230 now ships one
+            agent, provider = "cliproxyapi". README.md:197 still frames proxy management as
+            "On by default but dormant — only acts when a cliproxyapi-provider agent runs";
+            literally true, but a fresh install can no longer dispatch anything without
+            cliproxyapi, which the sentence invites the reader to skip. The issue Spec at
+            000205-live-cliproxy-model-picker.md:43 still says "keep the six configured
+            cliproxyapi agents as pinned favorites", with no ## Revisions entry recording
+            the operator-directed trim. The rule: the README/atlas gate must trigger on
+            changes to lua/parley/config.lua's SHIPPED DEFAULTS, not only on new commands,
+            keybindings and config keys — a default the user never types is still surface
+            they receive. (atlas/providers/agents.md is correctly decoupled and needs
+            nothing; that half of BR-103 held.)
+          family: atlas-not-updated-for-new-surface
+          round: 32
+        - id: BR-111
+          severity: Minor
+          title: bound_candidates returns the tail in reverse preference order for max >= 3, contradicting its own @param and credential_health_across's ordering guarantee
+          detail: |-
+            cliproxy_config.lua:210-218 builds `{ channels[1] }` then walks the input
+            BACKWARDS, so for max=3 it returns {c1, cN, cN-1}. Its own docstring declares
+            `@param channels string[] # in preference order` and cliproxy.lua:512-513
+            states "Readings reach `choose` in DECLARED candidate order, so a tie is broken
+            the same way every run" — both false once max exceeds 2. Unreachable and
+            untested at MAX_CANDIDATE_CHANNELS = 2; a latent trap if the cap rises.
+          family: helper-violates-declared-contract
+          round: 32
+        - id: BR-112
+          severity: Minor
+          title: Six super_repo_spec sites pass default_agent = "GPT5.4", an agent b218ae7 stopped shipping, and init.lua silently substitutes M._agents[1]
+          detail: |-
+            tests/unit/super_repo_spec.lua:721,738,749,757,762,781. init.lua:1359-1360
+            resolves an unknown _state.agent to M._agents[1] with no warning. These cases
+            are about super-repo mode rather than the agent, so they still measure what
+            they claim — but this is exactly the shape lessons.md:971-984 was written
+            about, in the same window, and the name now resolves to nothing.
+          family: test-borrows-unowned-fixture
+          round: 32
+        - id: BR-113
+          severity: Minor
+          title: The sole shipped default agent pins claude-opus-4-8 — the exact staleness the issue's Problem statement opens with
+          detail: |-
+            config.lua:223. The issue's Problem paragraph names this pin as the motivating
+            defect ("pins claude-opus-4-8 while the proxy advertises claude-opus-5"), and
+            tests/fixtures/cliproxy_catalog_v1.json confirms claude-opus-5 is served.
+            b218ae7's own message flags it as worth a look. The live picker does deliver
+            the visible signal the issue promised, which is why this is Minor rather than
+            a purpose failure — but it is a one-word change in the only agent a new
+            install receives.
+          family: stated-design-not-implemented
+          round: 32
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#205 (boundary-review)
@@ -3831,6 +3968,91 @@ in workshop/lessons.md.
   "claude-opus-5"))` under the same `with_default("openai_tools_route", …)` — and
   confirm it reddens on revert before recording it as fixed.
 
+## Round 32 — 2026-09-01T19:44:16-07:00 (claude) — passed
+
+### Disposed
+
+- BR-18 — not-addressed — plan.md:1503-1506 still runs the same command four times and 1551-1552 twice; no rule recorded in lessons.md or the plan's Revisions.
+- BR-29 — not-addressed — is_managed gate, repaint identity and catalog_path mkdir are all fixed; pending()-vs-SKIP (conformance_spec:235,254) and the chained 2x CURL_MAX_TIME envelope remain.
+- BR-35 — not-addressed — scope moved global -> parley_buffer, still a scope where <C-a> does nothing; no agent_picker scope added and agent_picker_mappings is still absent from config.lua.
+- BR-80 — not-addressed — The prefer block and the recover paragraph are gone, but the orphan the finding's first sentence names — credential_health_for_login's old docstring with @param login — is still at cliproxy.lua:496-504, above credential_health_across(channels, choose, cb).
+- BR-95 — not-addressed — init.lua:4410 still raises at the default level, so the operator sees an init.lua:4410 prefix; the scope decision for the six pre-existing sites is reasonable and recorded.
+- BR-96 — not-addressed — recovery_e2e_spec's stray space and the TOOL_AGENT block are fixed; chat_respond_spec.lua:1309's open_simple_chat is still at column 0 with its body at column 8.
+- BR-104 — addressed — as_model_table normalizes at the resolver entry (providers.lua:127-137) and wire.lua passes the model through in either shape; both pinned.
+- BR-107 — addressed — Mutation-verified both halves in a scratch worktree: reverting wire.lua:107 and deleting cc.bound_candidates at cliproxy.lua:1368 each redden a specific new test.
+
+### Raised
+
+- **BR-108** [Important] `docs-insert-orphans-section` The commit that shipped the family's guard created two new instances and left BR-80's own — all three invisible to that guard by construction
+  This is the 5th finding in family `docs-insert-orphans-section`. Do NOT fix the
+  three sites — fix the rule. init.lua:1240: 6cda59a hoisted `adopt_agent` between
+  `---@param update table | nil` and the `M.refresh_state = function(update)` it
+  documented, so adopt_agent is preceded by a param it does not take and
+  refresh_state has no docstring. init.lua:4347: the same commit inserted a blank
+  line between `---@param model table` and `M.register_live_agent`, severing the
+  block. cliproxy.lua:496-504: BR-80's own instance, still present. All three are
+  annotation-register stacks, which superseded_comment_spec.lua's `is_annotation`
+  excludes by design — so the family's new machine cannot see its most common
+  shape. The `@param`-absent lint BR-80 proposed and 56f0df3 rejected catches two
+  of the three and enumerates seven tree-wide in ~30 lines of Lua (chat_parser.lua
+  206-208, cliproxy.lua 503/1139/1332, init.lua 1240). The rule: the two lints are
+  COMPLEMENTARY, not alternatives — add the signature lint alongside the 6-gram
+  prose lint, and add the blank-line rule lessons.md:964 already states in prose
+  and 6cda59a broke in the same window that wrote it. ARCH-PURPOSE: the plan's
+  "All seven swept" is the easy subset asserted as the class.
+- **BR-109** [Important] `missing-test-for-shipped-behavior` BR-17's adopt_agent consolidation picked a winner between two diverging semantics and pinned neither — reverting it leaves the entire suite green
+  This is the 8th finding in family `missing-test-for-shipped-behavior`. Do NOT
+  just add the one assertion. init.lua:1251. The restore path was
+  `M.agents[name] = M.agents[name] or agent` (KEEP); the selection path was
+  `= agent` (OVERWRITE); adopt_agent chose overwrite. Measured, not asserted: I
+  reverted line 1251 to the keep form in a clean worktree and ran the full suite —
+  exit 0, all 193 specs pass. live_agent_state_spec.lua drives both call sites and
+  asserts nothing that discriminates. Reachable: setup() builds M.agents from
+  config (init.lua:750-776) then calls refresh_state() (init.lua:813), so a
+  configured agent colliding with a persisted `<id>*` live pick is now clobbered
+  where it previously survived. The family's rule already exists at
+  lessons.md:922-925 (the mutation must be the WRONG IMPLEMENTATION, not
+  deletion); what failed is that the issue Log states "Every behaviour change on
+  this issue was mutation-checked by reverting it" as a universal. The
+  deliverable is the ENUMERATION: list every behavior-changing hunk in the close
+  window and record the spec that reddens for each; a hunk with none is the
+  finding. ARCH-PURPOSE.
+- **BR-110** [Important] `atlas-not-updated-for-new-surface` b218ae7 makes cliproxyapi mandatory out of the box; README, atlas and the issue Spec all still describe the old default roster
+  This is the 6th finding in family `atlas-not-updated-for-new-surface`. Do NOT
+  fix only the README line — state the rule. config.lua:200-230 now ships one
+  agent, provider = "cliproxyapi". README.md:197 still frames proxy management as
+  "On by default but dormant — only acts when a cliproxyapi-provider agent runs";
+  literally true, but a fresh install can no longer dispatch anything without
+  cliproxyapi, which the sentence invites the reader to skip. The issue Spec at
+  000205-live-cliproxy-model-picker.md:43 still says "keep the six configured
+  cliproxyapi agents as pinned favorites", with no ## Revisions entry recording
+  the operator-directed trim. The rule: the README/atlas gate must trigger on
+  changes to lua/parley/config.lua's SHIPPED DEFAULTS, not only on new commands,
+  keybindings and config keys — a default the user never types is still surface
+  they receive. (atlas/providers/agents.md is correctly decoupled and needs
+  nothing; that half of BR-103 held.)
+- **BR-111** [Minor] `helper-violates-declared-contract` bound_candidates returns the tail in reverse preference order for max >= 3, contradicting its own @param and credential_health_across's ordering guarantee
+  cliproxy_config.lua:210-218 builds `{ channels[1] }` then walks the input
+  BACKWARDS, so for max=3 it returns {c1, cN, cN-1}. Its own docstring declares
+  `@param channels string[] # in preference order` and cliproxy.lua:512-513
+  states "Readings reach `choose` in DECLARED candidate order, so a tie is broken
+  the same way every run" — both false once max exceeds 2. Unreachable and
+  untested at MAX_CANDIDATE_CHANNELS = 2; a latent trap if the cap rises.
+- **BR-112** [Minor] `test-borrows-unowned-fixture` Six super_repo_spec sites pass default_agent = "GPT5.4", an agent b218ae7 stopped shipping, and init.lua silently substitutes M._agents[1]
+  tests/unit/super_repo_spec.lua:721,738,749,757,762,781. init.lua:1359-1360
+  resolves an unknown _state.agent to M._agents[1] with no warning. These cases
+  are about super-repo mode rather than the agent, so they still measure what
+  they claim — but this is exactly the shape lessons.md:971-984 was written
+  about, in the same window, and the name now resolves to nothing.
+- **BR-113** [Minor] `stated-design-not-implemented` The sole shipped default agent pins claude-opus-4-8 — the exact staleness the issue's Problem statement opens with
+  config.lua:223. The issue's Problem paragraph names this pin as the motivating
+  defect ("pins claude-opus-4-8 while the proxy advertises claude-opus-5"), and
+  tests/fixtures/cliproxy_catalog_v1.json confirms claude-opus-5 is served.
+  b218ae7's own message flags it as worth a look. The live picker does deliver
+  the visible signal the issue promised, which is why this is Minor rather than
+  a purpose failure — but it is a one-word change in the only agent a new
+  install receives.
+
 ## Open findings
 
 - **BR-18** [Minor] `plan-command-does-not-run` The BR-9 referent sweep collapsed four distinct spec keys into four identical commands, destroying which surfaces the step covers
@@ -3839,5 +4061,9 @@ in workshop/lessons.md.
 - **BR-80** [Important] `docs-insert-orphans-section` Three stacked doc blocks precede credential_health_across, one documenting a `prefer` parameter that no longer exists
 - **BR-95** [Minor] `ui-path-log-level` get_agent's empty-roster raise uses bare error(), so the operator sees an init.lua:4398 source prefix
 - **BR-96** [Minor] `style-drift-in-diff` Two indentation regressions introduced by this window
-- **BR-104** [Important] `single-source-not-enforced` The derived web-search strategy never reaches a string `model` config, and that shape cannot override it either
-- **BR-107** [Important] `missing-test-for-shipped-behavior` The tools/wire.lua half of the BR-104 fix is unpinned — reverting it leaves the ENTIRE suite green
+- **BR-108** [Important] `docs-insert-orphans-section` The commit that shipped the family's guard created two new instances and left BR-80's own — all three invisible to that guard by construction
+- **BR-109** [Important] `missing-test-for-shipped-behavior` BR-17's adopt_agent consolidation picked a winner between two diverging semantics and pinned neither — reverting it leaves the entire suite green
+- **BR-110** [Important] `atlas-not-updated-for-new-surface` b218ae7 makes cliproxyapi mandatory out of the box; README, atlas and the issue Spec all still describe the old default roster
+- **BR-111** [Minor] `helper-violates-declared-contract` bound_candidates returns the tail in reverse preference order for max >= 3, contradicting its own @param and credential_health_across's ordering guarantee
+- **BR-112** [Minor] `test-borrows-unowned-fixture` Six super_repo_spec sites pass default_agent = "GPT5.4", an agent b218ae7 stopped shipping, and init.lua silently substitutes M._agents[1]
+- **BR-113** [Minor] `stated-design-not-implemented` The sole shipped default agent pins claude-opus-4-8 — the exact staleness the issue's Problem statement opens with

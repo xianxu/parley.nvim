@@ -718,7 +718,7 @@ describe("super_repo startup restoration", function()
 				return original_writer(snapshot, path, adapter)
 			end
 
-			parley.setup({ state_dir = ctx.state_dir, default_agent = "GPT5.4", api_keys = {} })
+			parley.setup({ state_dir = ctx.state_dir, default_agent = "ToolOpus*", api_keys = {} })
 			parley.helpers.table_to_file_atomic = original_writer
 
 			assert.equals(2, #writes)
@@ -735,7 +735,7 @@ describe("super_repo startup restoration", function()
 
 	it("leaves unsaved brain repositories in ordinary mode after VimEnter", function()
 		run_case(nil, function(ctx)
-			parley.setup({ state_dir = ctx.state_dir, default_agent = "GPT5.4", api_keys = {} })
+			parley.setup({ state_dir = ctx.state_dir, default_agent = "ToolOpus*", api_keys = {} })
 
 			assert.is_false(parley.is_super_repo_active())
 			vim.api.nvim_exec_autocmds("VimEnter", {})
@@ -746,7 +746,7 @@ describe("super_repo startup restoration", function()
 	it("ignores invalid preferences and honors an explicit repo preference", function()
 		for _, saved in ipairs({ "invalid", "repo" }) do
 			run_case(function(ctx) return { [resolve(ctx.current)] = saved } end, function(ctx)
-				parley.setup({ state_dir = ctx.state_dir, default_agent = "GPT5.4", api_keys = {} })
+				parley.setup({ state_dir = ctx.state_dir, default_agent = "ToolOpus*", api_keys = {} })
 				assert.is_false(parley.is_super_repo_active())
 			end, { brain = true })
 		end
@@ -754,12 +754,12 @@ describe("super_repo startup restoration", function()
 
 	it("uses canonical roots and isolates another repository's saved choice", function()
 		run_case(function(ctx) return { [resolve(ctx.current)] = "super_repo" } end, function(ctx)
-			parley.setup({ state_dir = ctx.state_dir, default_agent = "GPT5.4", api_keys = {} })
+			parley.setup({ state_dir = ctx.state_dir, default_agent = "ToolOpus*", api_keys = {} })
 			assert.is_true(parley.is_super_repo_active())
 		end, { symlink = true })
 
 		run_case(function(ctx) return { [resolve(ctx.sibling)] = "super_repo" } end, function(ctx)
-			parley.setup({ state_dir = ctx.state_dir, default_agent = "GPT5.4", api_keys = {} })
+			parley.setup({ state_dir = ctx.state_dir, default_agent = "ToolOpus*", api_keys = {} })
 			assert.is_false(parley.is_super_repo_active())
 		end)
 	end)
@@ -778,7 +778,7 @@ describe("super_repo startup restoration", function()
 				return original_writer(snapshot, path, adapter)
 			end
 
-			parley.setup({ state_dir = ctx.state_dir, default_agent = "GPT5.4", api_keys = {} })
+			parley.setup({ state_dir = ctx.state_dir, default_agent = "ToolOpus*", api_keys = {} })
 			parley.super_repo.compute_members = original_compute
 			parley.logger.warning = original_warning
 			parley.helpers.table_to_file_atomic = original_writer

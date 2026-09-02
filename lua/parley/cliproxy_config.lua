@@ -204,21 +204,27 @@ local OWNER_CHANNELS = {
 --- antigravity for google — the very fallback the cap's rationale promised to
 --- keep, since google is the one owner with more than two candidates.
 ---
+--- Output stays in PREFERENCE ORDER, which is a contract two things depend on:
+--- this function's own `@param`, and `credential_health_across`'s guarantee that
+--- readings reach the reducer in declared order so ties break the same way every
+--- run. Filling the tail by walking backwards satisfied max = 2 by accident and
+--- returned {c1, cN, cN-1} for max = 3 — latent until the cap rises.
+---
 --- Pure, so the choice is testable without the recovery path around it.
 ---@param channels string[] # in preference order
 ---@param max number
----@return string[]
+---@return string[] # a subsequence of `channels`, order preserved
 function M.bound_candidates(channels, max)
-    if #channels <= max then
+    if #channels <= max or max < 1 then
         return vim.deepcopy(channels)
     end
-    local out = { channels[1] }
-    for i = #channels, 2, -1 do
-        if #out >= max then
-            break
-        end
+    -- The head (native channels, by preference) plus the last (the cross-vendor
+    -- re-server), emitted in the original relative order.
+    local out = {}
+    for i = 1, max - 1 do
         out[#out + 1] = channels[i]
     end
+    out[#out + 1] = channels[#channels]
     return out
 end
 

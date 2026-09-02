@@ -1237,18 +1237,31 @@ M.persist_state = function()
 	return M.helpers.table_to_file_atomic(persist_state, state_file)
 end
 
----@param update table | nil # table with options
---- Put a built agent into the roster. One writer, because the two copies had
---- already diverged: the selection path overwrote an existing entry while the
---- restart path kept it (`= agent` vs `= M.agents[name] or agent`), so a live
---- pick and a restore could disagree about the same agent.
+--- Put a built agent into the roster. One writer for the mechanics; the two
+--- call sites keep their DIFFERENT collision semantics, because the difference
+--- is real and collapsing it was a regression (BR-109):
+---
+---   * **Selecting** a live row is the user naming this model right now, so it
+---     wins. In practice the picker drops a model that is already an agent, so
+---     a collision here is only reachable via `:ParleyAgent`-style re-entry.
+---   * **Restoring** a persisted pick at startup must NOT win. `setup()` builds
+---     `M.agents` from config and only then calls `refresh_state`, so keeping
+---     would let a stale `<id>*` session pick clobber a configured agent of the
+---     same name on every launch. Config is authoritative; the persisted pick is
+---     a session convenience.
+---
+--- Collapsing both onto overwrite left no test able to tell: reverting the
+--- assignment to the keep form kept the whole suite green.
 ---@param agent table|nil
+---@param keep_existing boolean|nil # true = a configured entry of this name wins
 ---@return string|nil name
-local function adopt_agent(agent)
+local function adopt_agent(agent, keep_existing)
 	if not agent or not agent.name then
 		return nil
 	end
-	M.agents[agent.name] = agent
+	if not (keep_existing and M.agents[agent.name]) then
+		M.agents[agent.name] = agent
+	end
 	if not vim.tbl_contains(M._agents, agent.name) then
 		table.insert(M._agents, agent.name)
 		table.sort(M._agents)
@@ -1256,6 +1269,8 @@ local function adopt_agent(agent)
 	return agent.name
 end
 
+--- Reconcile in-memory state with what is on disk, apply `update`, persist.
+---@param update table | nil # table with options
 M.refresh_state = function(update)
 	local state_file = M.config.state_dir .. "/state.json"
 	update = update or {}
@@ -1352,7 +1367,7 @@ M.refresh_state = function(update)
 			return require("parley.cliproxy_catalog").build_agent(M._state.live_agent)
 		end)
 		if ok then
-			adopt_agent(agent)
+			adopt_agent(agent, true) -- config wins over a persisted pick
 		end
 	end
 
@@ -1404,7 +1419,7 @@ M._format_missing_remote_reference_cache_content = function(u) return chat_respo
 
 -- stop receiving responses for all processes and clean the handles
 ---@param signal number | nil # signal to send to the process
-M.cmd.Stop = function(s) chat_respond.cmd_stop(s) end
+M.cmd.Stop = function(signal) chat_respond.cmd_stop(signal) end
 
 --------------------------------------------------------------------------------
 -- Keybinding help (driven by keybinding_registry)
@@ -4344,7 +4359,6 @@ end
 --- the matching restore in refresh_state, the guard there would find the name
 --- missing from M.agents and silently reset to the first configured agent.
 ---@param model table # a parsed catalog row { id, owner, display, … }
-
 M.register_live_agent = function(model)
 	local agent = require("parley.cliproxy_catalog").build_agent(model)
 	if not adopt_agent(agent) then

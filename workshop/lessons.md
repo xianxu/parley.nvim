@@ -1134,3 +1134,50 @@ closed the round which restated it. Restating a rule is not applying it.
 stays green the fix is unpinned, however well the callee is tested. Assert
 through the entry point production uses, and derive any bound from the constant
 rather than restating the number.
+
+## A guard's exclusion is a hole where the family lives (#205)
+
+The prose lint written for the stacked-comment family excludes `---@param`
+blocks, because an annotation legitimately restates the sentence above it. That
+exclusion was correct *and* it was a hole exactly where this family most often
+lands: the commit that shipped the guard created two new instances and left the
+original one, all three invisible to it by construction. Both are annotation
+stacks — a docstring separated from its function by hoisting code in between.
+
+The earlier proposal ("lint `---@param` blocks naming absent identifiers") had
+been rejected as too narrow. It was too narrow *alone*; it was never wrong. The
+two lints are complementary, and shipping one while rejecting the other left the
+family's most common shape uncovered while the plan claimed the class was swept.
+
+**Check:** when a guard needs an exclusion to stay quiet, ask what the excluded
+region can hide, and write the second guard for it in the same commit. "All
+instances swept" is only true of the shapes something can still see.
+
+## Consolidating two copies means pinning the distinction, not picking a winner (#205)
+
+Two copies of "put this agent in the roster" had diverged: the selection path
+overwrote an existing entry, the restore path kept it. The consolidation chose
+overwrite and pinned neither, so reverting the assignment to the keep form left
+the entire suite green. The divergence was not sloppiness — it was two real
+semantics. Config must beat a persisted session pick at startup; a user picking a
+model right now must beat what is there. Collapsing them let a stale pick clobber
+a configured agent on every launch.
+
+**Check:** before merging two implementations that differ, name what the
+difference does. Either keep it (parameterized, with a test per branch that
+reddens under the *other* implementation) or state in the commit why erasing it
+is safe. And note the mutation that matters here is the WRONG IMPLEMENTATION, not
+deletion — deleting the line often reddens something when substituting the rival
+semantics does not.
+
+## A default the user never types is still surface they receive (#205)
+
+Trimming the shipped `agents` list changed what a fresh install can do — it now
+requires cliproxyapi before the first question lands — while README still framed
+the proxy as "dormant" and the issue Spec still promised six agents. Nothing new
+was added: no command, no keybinding, no config key. The docs gate looks for
+those, so it stayed quiet.
+
+**Check:** treat a change to `config.lua`'s shipped defaults as user-facing
+surface. Ask what a brand-new install can no longer do, and say that where the
+reader first meets the subject.
