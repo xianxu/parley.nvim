@@ -193,65 +193,119 @@ end)
 -- #215: a skill turn must follow the transcript it is invoked from. The failure
 -- this guards produced a definition from a model the user had not chosen, with
 -- no visible sign it had happened.
-describe("define: transcript agent drives the skill turn (#215)", function()
+--
+-- These drive the REAL seam (skill_invoke.invoke → not_chat → find_header_end →
+-- parse_header_metadata → get_agent_info) and capture the `current_agent` the
+-- cascade receives. Asserting on resolve_agent with a hand-built current_agent
+-- pins nothing: the close review for #215 scratch-reverted the whole deliverable
+-- and every such test stayed green.
+describe("define: transcript agent reaches the cascade (#215)", function()
     local parley = require("parley")
     local assembly = require("parley.skill_assembly")
+    local tasker = require("parley.tasker")
+    local tmpdir, path, buf, captured_deps, orig_resolve, orig_query, saved_dirs
 
-    local function manifest() return require("parley.skills.define") end
+    -- not_chat requires: a configured chat root, a timestamped basename, >=5
+    -- lines, and topic:/file: headers. Anything less and the seam correctly
+    -- refuses to read headers at all.
+    local function chat_lines(extra)
+        local l = { "---", "topic: t", "file: f" }
+        for _, e in ipairs(extra or {}) do table.insert(l, e) end
+        vim.list_extend(l, { "---", "", "💬: define me", "", "🤖: sure" })
+        return l
+    end
+
+    local function write_chat(extra)
+        vim.fn.writefile(chat_lines(extra), path)
+        vim.cmd("edit! " .. vim.fn.fnameescape(path))
+        buf = vim.api.nvim_get_current_buf()
+    end
+
+    before_each(function()
+        require("parley.tools").register_builtins()
+        tmpdir = vim.fn.tempname()
+        vim.fn.mkdir(tmpdir, "p")
+        -- timestamped basename, inside a configured chat root
+        path = tmpdir .. "/2026-09-04.10-00-00.000_transcript.md"
+        -- Register a real chat root: not_chat resolves against the root
+        -- MANAGER (chat_dirs), not config.chat_dir — setting the config field
+        -- alone leaves the resolved roots untouched and the buffer is judged
+        -- "not in configured chat roots", silently skipping the header merge.
+        saved_dirs = parley.get_chat_dirs()
+        parley.set_chat_dirs({ tmpdir }, false)
+        captured_deps = nil
+
+        orig_resolve = assembly.resolve_agent
+        assembly.resolve_agent = function(_m, deps)
+            captured_deps = deps
+            return { model = "m", provider = "anthropic" }
+        end
+        orig_query = parley.dispatcher.query
+        parley.dispatcher.query = function(_b, _p, _payload, _h, on_exit)
+            tasker.set_query("qid_215", { raw_response = emit_definition_sse("T", "D.") })
+            vim.schedule(function() on_exit("qid_215") end)
+        end
+    end)
+
+    after_each(function()
+        parley.dispatcher.query = orig_query
+        assembly.resolve_agent = orig_resolve
+        parley.set_chat_dirs(saved_dirs, false)
+        pcall(function() require("parley.progress").stop() end)
+        vim.fn.delete(tmpdir, "rf")
+    end)
+
+    local function invoke_and_capture()
+        require("parley.skill_invoke").invoke(buf, require("parley.skills.define"),
+            { phrase = "x" }, { document = "doc", no_reload = true, detached_progress = false })
+        vim.wait(500, function() return captured_deps ~= nil end)
+        return captured_deps
+    end
 
     it("the shipped skill_agent/review_agent defaults no longer name a missing agent", function()
-        -- Load defaults directly: a live parley.config may carry user overrides.
         local defaults = dofile("lua/parley/config.lua")
         assert.is_nil(defaults.skill_agent)
         assert.is_nil(defaults.review_agent)
     end)
 
-    it("resolves the transcript agent when no config tier claims the turn", function()
-        local transcript = {
-            name = "pinned", provider = "anthropic", model = { model = "claude-opus-5" },
-        }
-        local agent = assembly.resolve_agent(manifest(), {
-            config = { skills = {}, review_agent = nil, skill_agent = nil },
-            get_agent = function() return transcript end,
-            agent_names = { "other" },
-            agents = { other = { provider = "openai", model = { model = "gpt-5.6" } } },
-            current_agent = transcript,
-        })
-        -- the roster's openai agent is listed and capable; the transcript wins
-        assert.are.equal("pinned", agent.name)
-        assert.are.equal("claude-opus-5", agent.model.model)
+    it("carries the chat's provider:/model: headers into deps.current_agent", function()
+        write_chat({ "provider: anthropic", "model: claude-opus-5-pinned" })
+        local deps = invoke_and_capture()
+        assert.is_not_nil(deps)
+        assert.is_not_nil(deps.current_agent)
+        assert.are.equal("anthropic", deps.current_agent.provider)
+        local m = deps.current_agent.model
+        assert.are.equal("claude-opus-5-pinned", type(m) == "table" and m.model or m)
     end)
 
-    -- Hand-edited frontmatter is untrusted input crossing a persistence
-    -- boundary (ARCH-SECURE). A provider with no wire must degrade to the
-    -- roster rather than reach the skill and fail as "no tool call".
-    it("degrades to the roster when the pinned provider has no tool wire", function()
-        local agent = assembly.resolve_agent(manifest(), {
-            config = { skills = {}, review_agent = nil, skill_agent = nil },
-            get_agent = function() return nil end,
-            agent_names = { "ok" },
-            agents = { ok = { provider = "anthropic", model = { model = "claude-sonnet-5" } } },
-            current_agent = {
-                name = "pinned", provider = "googleai", model = { model = "gemini-3-pro-preview" },
-            },
-        })
-        assert.are.equal("anthropic", agent.provider)
+    it("passes the bare selection when the chat pins nothing", function()
+        write_chat()
+        local deps = invoke_and_capture()
+        assert.is_not_nil(deps.current_agent)
+        assert.is_not_nil(deps.current_agent.provider)
     end)
 
-    -- A malformed `model:` reaches agent_info.resolve as a raw string
-    -- (agent_info.lua:73-85 warns and passes it through). cliproxyapi still
-    -- resolves a wire for a bare string, so the turn proceeds rather than
-    -- silently producing nothing.
-    it("survives a model: header that failed JSON decode (raw string passthrough)", function()
-        local agent = assembly.resolve_agent(manifest(), {
-            config = { skills = {}, review_agent = nil, skill_agent = nil },
-            get_agent = function() return nil end,
-            agent_names = {},
-            agents = {},
-            current_agent = { name = "pinned", provider = "cliproxyapi", model = "{bad json" },
-        })
-        assert.is_not_nil(agent)
-        assert.are.equal("cliproxyapi", agent.provider)
+    -- ARCH-SECURE: review/voice_apply run on arbitrary markdown. A plain
+    -- document's own frontmatter must not steer which vendor receives it.
+    it("ignores frontmatter in a NON-chat buffer (not_chat guards the merge)", function()
+        local plain = tmpdir .. "/plain-notes.md" -- no timestamp → not a chat
+        vim.fn.writefile({ "---", "provider: googleai", "model: gemini-3-pro-preview",
+            "---", "", "body", "" }, plain)
+        vim.cmd("edit! " .. vim.fn.fnameescape(plain))
+        buf = vim.api.nvim_get_current_buf()
+        local deps = invoke_and_capture()
+        assert.is_not_nil(deps.current_agent)
+        assert.are_not.equal("googleai", deps.current_agent.provider)
+    end)
+
+    -- A `model:` that looks like JSON but does not decode reaches
+    -- agent_info.lua:73-85, which warns and passes the raw string through.
+    -- The turn must still resolve rather than fail at the wire.
+    it("survives a model: header that looks like JSON and fails to decode", function()
+        write_chat({ 'model: {bad json}' })
+        local deps = invoke_and_capture()
+        assert.is_not_nil(deps.current_agent)
+        assert.is_not_nil(deps.current_agent.model)
     end)
 end)
 

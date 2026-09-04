@@ -140,22 +140,22 @@ Derivation notes:
 
 ## Plan
 
-- [ ] Correct the `get_agent` test double in `tests/unit/skill_assembly_spec.lua:68-72`
+- [x] Correct the `get_agent` test double in `tests/unit/skill_assembly_spec.lua:68-72`
       to match production: never nil, unknown name falls back to the selection.
       The current strict-lookup double would pass green over the real behavior
-- [ ] Failing unit tests: tier 5 fires and applies header overrides; explicit
+- [x] Failing unit tests: tier 5 fires and applies header overrides; explicit
       `skill_agent` still outranks it; a wireless agent falls through from every
       tier
-- [ ] Add the `deps.current_agent` tier + the per-tier capability test to
+- [x] Add the `deps.current_agent` tier + the per-tier capability test to
       `skill_assembly.resolve_agent`
-- [ ] Compute `current_agent` at the `skill_invoke` seam via `agent_info.resolve`,
+- [x] Compute `current_agent` at the `skill_invoke` seam via `agent_info.resolve`,
       taking provider+model only
-- [ ] Nil the `"Claude-Sonnet"` defaults for `skill_agent` / `review_agent`
-- [ ] Integration coverage in `tests/integration/define_spec.lua`: header-override
+- [x] Nil the `"Claude-Sonnet"` defaults for `skill_agent` / `review_agent`
+- [x] Integration coverage in `tests/integration/define_spec.lua`: header-override
       path + malformed-frontmatter degradation
-- [ ] Update `atlas/skills/skill-system.md:97` and `atlas/modes/review.md:195` —
+- [x] Update `atlas/skills/skill-system.md:97` and `atlas/modes/review.md:195` —
       both hand-restate the cascade and the default this issue changes
-- [ ] Full suite green
+- [x] Full suite green
 
 ## Log
 
@@ -196,3 +196,35 @@ Delta:
   lookup — the inverse of production, so the planned tests would have passed
   green over the behavior they were meant to guard.
 - Plan step added for the two atlas files that hand-restate the cascade.
+
+### 2026-09-04 — implemented
+
+Commit `3d70331`. Full suite green: **193 spec files, 0 failures**, verified
+against `make`'s own exit status (a first run reported green through a
+`| tail -25` pipe, which returns *tail's* status — the pipeline hid whether
+`make` had failed at all).
+
+**The plan's first step found a second member of its own class.** Correcting the
+`get_agent` double to production semantics passed immediately; enforcing
+capability at every tier then broke **6 existing tier assertions**, because the
+fixture agents were bare `{ name = "A1" }` with no provider, so `wire.resolve`
+rejected them. Same defect as the double — a stub shaped like nothing
+`init.lua:4405-4451` can build — in a second form the gate's finding did not
+name. Fixed by giving the fixtures providers, not by weakening the predicate:
+the tests were wrong, the code was right.
+
+**Atlas had nothing to correct, only something missing.** `resolve_agent` was
+referenced in three places but the cascade order was documented nowhere. Added
+an "Agent resolution cascade" section recording the tier order, the
+capability-at-every-tier rule, and the two traps that cost two plan rounds here
+(`get_agent` never returns nil; tier 5 is unreachable while `skill_agent` is
+set).
+
+**Behavior change worth flagging beyond the reported bug:** an explicitly
+configured but wireless agent now falls through instead of being returned. The
+approved Spec committed to this, and a skill cannot work without its tool — but
+a misconfigured `skill_agent` now fails quietly rather than loudly.
+
+**Not fixed here:** this does NOT make `define` work. The reported symptom was
+#216 (model skips `emit_definition` under `tool_choice: auto`); #215 removes the
+spurious warning, honors the transcript, and closes the unvetted-agent hole.

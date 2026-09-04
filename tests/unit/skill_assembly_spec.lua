@@ -96,16 +96,16 @@ describe("skill_assembly.resolve_agent (pure, injected deps)", function()
         assert.are.equal("A1", assembly.resolve_agent(manifest(), d).name)
     end)
 
-    it("tier 1b: legacy review_agent for the review skill", function()
+    it("tier 2: legacy review_agent for the review skill", function()
         local d = deps({ config = { skills = {}, review_agent = "RA" } })
         assert.are.equal("RA", assembly.resolve_agent(manifest(), d).name)
     end)
 
-    it("tier 2: manifest.agent default", function()
+    it("tier 3: manifest.agent default", function()
         assert.are.equal("MA", assembly.resolve_agent(manifest({ agent = "MA" }), deps()).name)
     end)
 
-    it("tier 3: global skill_agent", function()
+    it("tier 4: global skill_agent", function()
         local d = deps({ config = { skills = {}, skill_agent = "SA" } })
         assert.are.equal("SA", assembly.resolve_agent(manifest({ name = "other" }), d).name)
     end)
@@ -115,17 +115,17 @@ describe("skill_assembly.resolve_agent (pure, injected deps)", function()
     -- follows the conversation instead of roster position.
     local TRANSCRIPT = { name = "TR", provider = "anthropic", model = { model = "claude-opus-5" } }
 
-    it("tier 4: the transcript agent, when no config tier claims the turn", function()
+    it("tier 5: the transcript agent, when no config tier claims the turn", function()
         local d = deps({ current_agent = TRANSCRIPT })
         assert.are.equal("TR", assembly.resolve_agent(manifest({ name = "other" }), d).name)
     end)
 
-    it("tier 4: explicit skill_agent still OUTRANKS the transcript", function()
+    it("tier 5: explicit skill_agent still OUTRANKS the transcript", function()
         local d = deps({ config = { skills = {}, skill_agent = "SA" }, current_agent = TRANSCRIPT })
         assert.are.equal("SA", assembly.resolve_agent(manifest({ name = "other" }), d).name)
     end)
 
-    it("tier 4: a per-skill override still outranks the transcript", function()
+    it("tier 5: a per-skill override still outranks the transcript", function()
         local d = deps({
             config = { skills = { { name = "other", agent = "A1" } } },
             current_agent = TRANSCRIPT,
@@ -136,7 +136,7 @@ describe("skill_assembly.resolve_agent (pure, injected deps)", function()
     -- The transcript is ambient, not asked-for: a chat pinned to a provider with
     -- no tool wire must not hand `define` an agent that can never call
     -- emit_definition. Descend to the roster instead.
-    it("tier 4: a wireless transcript agent falls through to the roster scan", function()
+    it("tier 5: a wireless transcript agent falls through to the roster scan", function()
         local d = deps({
             current_agent = { name = "TR", provider = "googleai", model = { model = "gemini-3-pro-preview" } },
         })
@@ -159,11 +159,11 @@ describe("skill_assembly.resolve_agent (pure, injected deps)", function()
     -- #198 widened "tool-capable" from a hardcoded anthropic/cliproxyapi pair
     -- to "has a tool wire". This fixture lists openai FIRST precisely because
     -- it used to be skipped; now it is a legitimate answer.
-    it("tier 4: first tool-capable agent, which now includes openai", function()
+    it("tier 6: first tool-capable agent, which now includes openai", function()
         assert.are.equal("openai", assembly.resolve_agent(manifest({ name = "other" }), deps()).provider)
     end)
 
-    it("tier 4: skips agents whose provider has no tool wire", function()
+    it("tier 6: skips agents whose provider has no tool wire", function()
         local d = deps({
             agent_names = { "g", "y" },
             agents = {
@@ -174,7 +174,7 @@ describe("skill_assembly.resolve_agent (pure, injected deps)", function()
         assert.are.equal("anthropic", assembly.resolve_agent(manifest({ name = "other" }), d).provider)
     end)
 
-    it("tier 4: accepts cliproxyapi on either route", function()
+    it("tier 6: accepts cliproxyapi on either route", function()
         for _, model in ipairs({
             { model = "gpt-5.6-sol" },
             { model = "claude-opus-4-8", web_search_strategy = "anthropic_tools_route" },

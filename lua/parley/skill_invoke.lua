@@ -204,22 +204,49 @@ function M.invoke(buf, manifest, args, opts)
     -- owns its own system prompt via source(ctx), so inheriting the chat's would
     -- double-apply a prompt the skill never asked for.
     local function transcript_agent()
+        -- EVERYTHING here is inside the pcall, deliberately: p.get_agent()
+        -- raises when no agents are configured (init.lua:4420-4425) and
+        -- not_chat touches buffer + root state. This is an OPTIONAL enrichment
+        -- of the cascade — it must never be able to take down the skill turn
+        -- that would otherwise have worked.
         local ok, resolved = pcall(function()
             local selected = p.get_agent()
+            -- Header overrides are honoured for CHAT buffers only. `not_chat`
+            -- is the codebase's canonical predicate (configured chat root +
+            -- timestamped name + topic:/file: headers); a bare "has a --- line"
+            -- test would let any markdown artifact's own frontmatter steer
+            -- which vendor receives it, and review/voice_apply run on arbitrary
+            -- documents (ARCH-SECURE).
+            if p.not_chat(buf, artifact_path) then
+                return selected
+            end
             local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
             local header_end = p.chat_parser.find_header_end(lines)
-            if not header_end then return selected end -- not a chat buffer
-            local parsed = p.parse_chat(lines, header_end)
-            local info = p.get_agent_info(parsed and parsed.headers, selected)
+            if not header_end then return selected end
+            -- parse_header_metadata, NOT parse_chat: `parsed.headers` is exactly
+            -- this call (chat_parser.lua:258) and everything else parse_chat
+            -- builds would be discarded. This runs on the <M-CR> keystroke path,
+            -- where init.lua has already parsed the same buffer once
+            -- (ARCH-CONSTRAINTS).
+            local headers = p.chat_parser.parse_header_metadata(lines, header_end)
+            local info = p.get_agent_info(headers, selected)
             if not info then return selected end
+            -- No `or selected.*` fallbacks: agent_info.resolve always returns a
+            -- coerced provider+model, and even if one were nil the key would
+            -- simply be absent here and tbl_extend would leave the selection's
+            -- value standing. The `or` was dead either way.
             return vim.tbl_extend("force", selected, {
-                provider = info.provider or selected.provider,
-                model = info.model or selected.model,
+                provider = info.provider,
+                model = info.model,
             })
         end)
         if not ok then
-            p.logger.debug("skill " .. tostring(manifest.name)
-                .. ": transcript agent unavailable, falling back to the selection")
+            -- Loud, not silent: a break here restores the exact pre-#215 defect
+            -- (a skill answering from an agent the transcript never chose), and
+            -- logger.debug never reaches vim.notify (logger.lua:94-96).
+            p.logger.warning("skill " .. tostring(manifest.name)
+                .. ": transcript agent unavailable (" .. tostring(resolved)
+                .. "); falling back to the cascade")
             return nil
         end
         return resolved

@@ -64,6 +64,7 @@ end
 ---
 --- Cascade: per-skill config → legacy review_agent → manifest default →
 --- global skill_agent → CURRENT TRANSCRIPT AGENT → first tool-capable.
+--- Tiers are numbered 1..6 here, in the atlas, and in the issue Spec — one scheme.
 ---
 --- #215. Two things this function used to get wrong:
 ---
@@ -102,32 +103,32 @@ function M.resolve_agent(manifest, deps)
         end
     end
 
-    -- 1b: legacy review_agent fallback (review skill only)
+    -- 2: legacy review_agent fallback (review skill only)
     if manifest.name == "review" and config.review_agent then
         local agent = capable(get_agent(config.review_agent))
         if agent then return agent end
     end
 
-    -- 2: manifest default
+    -- 3: manifest default
     if manifest.agent then
         local agent = capable(get_agent(manifest.agent))
         if agent then return agent end
     end
 
-    -- 3: global skill_agent config. Nil by default since #215 — when it IS set
+    -- 4: global skill_agent config. Nil by default since #215 — when it IS set
     -- the user asked for it explicitly, so it still outranks the transcript.
     if config.skill_agent then
         local agent = capable(get_agent(config.skill_agent))
         if agent then return agent end
     end
 
-    -- 4: the agent this buffer is actually talking to. Ambient context beats
+    -- 5: the agent this buffer is actually talking to. Ambient context beats
     -- roster position: defining a term inside a chat pinned to one model should
     -- not silently answer from another.
     local current = capable(deps.current_agent)
     if current then return current end
 
-    -- 5: first tool-capable agent. "Tool-capable" is now "has a tool wire"
+    -- 6: first tool-capable agent. "Tool-capable" is now "has a tool wire"
     -- rather than a hardcoded provider pair (#198) — openai, copilot, azure
     -- and ollama qualify too. cliproxyapi resolves on either route, so the
     -- model matters only for picking WHICH wire, not whether one exists.
