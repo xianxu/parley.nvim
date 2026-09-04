@@ -255,11 +255,17 @@ describe("define: transcript agent reaches the cascade (#215)", function()
         vim.fn.delete(tmpdir, "rf")
     end)
 
+    -- current_agent is passed as a THUNK (#215 BR-3: tiers 1-4 must not pay for
+    -- the buffer read + header parse). Resolve it here so the assertions below
+    -- read the value the cascade would actually see at tier 5.
     local function invoke_and_capture()
         require("parley.skill_invoke").invoke(buf, require("parley.skills.define"),
             { phrase = "x" }, { document = "doc", no_reload = true, detached_progress = false })
         vim.wait(500, function() return captured_deps ~= nil end)
-        return captured_deps
+        if not captured_deps then return nil end
+        local cur = captured_deps.current_agent
+        assert.are.equal("function", type(cur), "current_agent must reach the cascade lazily")
+        return { current_agent = cur() }
     end
 
     it("the shipped skill_agent/review_agent defaults no longer name a missing agent", function()

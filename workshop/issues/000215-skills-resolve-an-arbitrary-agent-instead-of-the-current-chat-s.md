@@ -228,3 +228,44 @@ a misconfigured `skill_agent` now fails quietly rather than loudly.
 **Not fixed here:** this does NOT make `define` work. The reported symptom was
 #216 (model skips `emit_definition` under `tool_choice: auto`); #215 removes the
 spurious warning, honors the transcript, and closes the unvetted-agent hole.
+
+### 2026-09-04 — close review: FIX-THEN-SHIP, 4 Important addressed
+
+Commit `39ae27e`. The boundary review did the check I should have run myself:
+it scratch-reverted `current_agent = transcript_agent()` to `nil` — disabling
+the entire deliverable — and **all 64 tests still passed**. The plan item
+`[x] Integration coverage … header-override path` was ticked for three calls
+into the *pure resolver* with hand-built `current_agent` tables; nothing in the
+suite touched `find_header_end` / `parse_chat` / `get_agent_info`. ARCH-PURPOSE
+at the level of the plan item rather than the feature.
+
+- **I1** — real seam tests: drive `skill_invoke.invoke` against a registered
+  chat root, capture `deps.current_agent`. **4 now go red** under that revert.
+- **I2** — `logger.warning`, not `debug` (`logger.lua:94-96` never reaches
+  `vim.notify`), and the pcall's discarded error object is now in the message.
+- **I3** — `parse_header_metadata` instead of `parse_chat`: `parsed.headers` IS
+  that call (`chat_parser.lua:258`); 4.84ms → 0.003ms on a keystroke path that
+  had already parsed the same buffer once (ARCH-CONSTRAINTS).
+- **I4** — `p.not_chat` instead of "buffer contains a `---`". `find_header_end`
+  matches the first horizontal rule in any prose, and review/voice_apply run on
+  arbitrary markdown, so a document's own frontmatter could steer which vendor
+  received it (ARCH-SECURE). Latent — no `workshop/**/*.md` carries `provider:`.
+
+**Two self-inflicted breaks, caught before re-closing.** The first seam test set
+`config.chat_dir`, but `not_chat` resolves against the root *manager* — so it
+silently exercised the non-chat path while claiming to test headers. And
+hoisting `p.get_agent()` out of the pcall for I4 broke **14** `skill_invoke_spec`
+tests, since it raises with no agents configured. The pcall now wraps the whole
+tier: optional enrichment must never take down a turn that would otherwise work.
+
+Minors cleared: one 1..6 tier scheme across code/tests/atlas/issue (it had
+drifted four ways); dead `or selected.*` fallbacks removed; `define_spec` mapped
+in `traceability.yaml`. Also fixed a fixture whose comment claimed to exercise
+`agent_info.lua:73-85` — `"{bad json"` never matches `{.*}`, so the branch was
+never entered; `{bad json}` does, and the log now shows the warning firing.
+
+Deferred to a follow-up, per the review's forward-looking note: `get_agent`'s
+never-nil contract is *documented* in three places but not *enforced*. A
+`deps.lookup_agent` returning nil on a miss would make tiers 1-4 fall through on
+a typo'd name — today a typo yields the selection **without** header overrides,
+strictly worse than tier 5's selection **with** them.

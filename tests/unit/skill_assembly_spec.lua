@@ -147,13 +147,71 @@ describe("skill_assembly.resolve_agent (pure, injected deps)", function()
     -- Before this, a configured-but-wireless agent was returned unvetted and
     -- surfaced as "model returned no tool call" at the far end of the request.
     it("capability is enforced on the configured tiers too, not just the scan", function()
+        -- The override must honour the SAME never-nil contract the shared deps()
+        -- helper encodes; hand-rolling `... or nil` here would reintroduce the
+        -- very inversion this file corrected a few lines above. Unknown names
+        -- fall back to the selection, exactly as production does.
         local wireless = { name = "SA", provider = "googleai", model = { model = "gemini-3-pro-preview" } }
         local d = deps({
             config = { skills = {}, skill_agent = "SA" },
-            get_agent = function(name) return name == "SA" and wireless or nil end,
+            get_agent = function(name)
+                if name == "SA" then return wireless end
+                return SELECTION
+            end,
         })
         -- falls past the wireless skill_agent, lands on the roster's openai
         assert.are.equal("openai", assembly.resolve_agent(manifest({ name = "other" }), d).provider)
+    end)
+
+    -- #215 round 2: dropping a user-configured agent must not be silent.
+    it("reports a dropped agent for a CONFIGURED tier", function()
+        local wireless = { name = "SA", provider = "googleai", model = { model = "gemini-3-pro-preview" } }
+        local seen = {}
+        local d = deps({
+            config = { skills = {}, skill_agent = "SA" },
+            get_agent = function(name)
+                if name == "SA" then return wireless end
+                return SELECTION
+            end,
+            on_dropped = function(source, agent) table.insert(seen, source .. ":" .. agent.provider) end,
+        })
+        assert.are.equal("openai", assembly.resolve_agent(manifest({ name = "other" }), d).provider)
+        assert.are.same({ "skill_agent:googleai" }, seen)
+    end)
+
+    -- Ambient tiers stay quiet: nobody asked for the transcript or the roster.
+    it("stays silent when the dropped agent is the AMBIENT transcript", function()
+        local seen = {}
+        local d = deps({
+            current_agent = { name = "TR", provider = "googleai", model = { model = "gemini-3-pro-preview" } },
+            on_dropped = function(source, agent) table.insert(seen, source .. ":" .. agent.provider) end,
+        })
+        assert.are.equal("openai", assembly.resolve_agent(manifest({ name = "other" }), d).provider)
+        assert.are.same({}, seen)
+    end)
+
+    -- BR-3: the transcript tier costs a buffer read + header parse, so the shell
+    -- passes a thunk. It must not be called when an earlier tier wins.
+    it("does not evaluate the transcript thunk when an earlier tier wins", function()
+        local calls = 0
+        local d = deps({
+            config = { skills = {}, skill_agent = "SA" },
+            current_agent = function() calls = calls + 1; return nil end,
+        })
+        assert.are.equal("SA", assembly.resolve_agent(manifest({ name = "other" }), d).name)
+        assert.are.equal(0, calls)
+    end)
+
+    it("evaluates the transcript thunk when it is the tier that answers", function()
+        local calls = 0
+        local d = deps({
+            current_agent = function()
+                calls = calls + 1
+                return { name = "TR", provider = "anthropic", model = { model = "claude-opus-5" } }
+            end,
+        })
+        assert.are.equal("TR", assembly.resolve_agent(manifest({ name = "other" }), d).name)
+        assert.are.equal(1, calls)
     end)
 
     -- #198 widened "tool-capable" from a hardcoded anthropic/cliproxyapi pair

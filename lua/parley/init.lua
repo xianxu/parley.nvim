@@ -208,19 +208,14 @@ local function parse_chat_headers(lines)
 	if not header_end then
 		return nil, nil
 	end
-	local cfg = M.config or {}
-	local parse_config = {
-		chat_user_prefix = cfg.chat_user_prefix or "💬:",
-		chat_local_prefix = cfg.chat_local_prefix or "🔒:",
-		chat_assistant_prefix = cfg.chat_assistant_prefix or { "🤖:" },
-		chat_memory = cfg.chat_memory or {
-			enable = true,
-			summary_prefix = "📝:",
-			reasoning_prefix = "🧠:",
-		},
-	}
-	local parsed = M.chat_parser.parse_chat(lines, header_end, parse_config)
-	return parsed.headers, header_end
+	-- headers ONLY: `parsed.headers` is literally
+	-- `parse_header_metadata(lines, header_end)` (chat_parser.lua:258), and every
+	-- exchange/block/fold structure parse_chat builds here was discarded. That
+	-- made `not_chat` — 15+ call sites, several on keystroke paths — pay a full
+	-- parse to read four header lines: measured 3.07ms @ 1005 lines and 14.02ms
+	-- @ 5005 vs 0.003ms. Identical return value, and parse_config is not even an
+	-- input to header parsing. #215 (ARCH-CONSTRAINTS, ARCH-DRY).
+	return M.chat_parser.parse_header_metadata(lines, header_end), header_end
 end
 
 -- Passthroughs to chat_dirs module (see lua/parley/chat_dirs.lua)

@@ -169,3 +169,173 @@ findings:
       agent_info.resolve coerces info.model to a string or table before returning
       (agent_info.lua:128-137), so it is never nil.
 ```
+
+---
+
+## Re-review — 2026-09-04T16:37:52-07:00 (FIX-THEN-SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 215 — Skills resolve an arbitrary agent instead of the current chat's |
+| repo | parley.nvim |
+| issue file | workshop/issues/000215-skills-resolve-an-arbitrary-agent-instead-of-the-current-chat-s.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | b7d4595d3aca461494593fc6daebf8b131c0246f..39ae27e432e74da0098fc5920639009009ee3a17 |
+| command | sdlc close --issue 215 |
+| reviewer | claude |
+| timestamp | 2026-09-04T16:37:52-07:00 |
+| verdict | FIX-THEN-SHIP |
+
+## Review
+
+```verdict
+verdict: FIX-THEN-SHIP
+confidence: high
+```
+
+The deliverable is real and now genuinely pinned: I scratch-reverted `current_agent = transcript_agent()` to `nil` and 4 of the 5 new `define_spec` tests went red; finer reverts (disabling only the header merge, and removing only the `not_chat` guard) each turned exactly one test red, and reverting the per-tier `capable()` calls turned 2 unit tests red. The full suite is green (`make test-unit test-integration`, exit 0). One prior finding does not survive: **BR-3 is not-addressed** — swapping `parse_chat` for `parse_header_metadata` at `skill_invoke.lua:231` removed the named call, but the `not_chat` guard added two lines above for BR-4 runs `parse_chat_headers` → `chat_parser.parse_chat` internally (`init.lua:206-222`), so the full parse is still on the path. I measured it: **3.07 ms at 1005 lines, 14.02 ms at 5005 lines**, versus 0.003 ms for `parse_header_metadata`. The `<M-CR>` define path now runs `parse_chat` twice (once at `init.lua:1810`, once inside `not_chat`) — the same count as before the fix. Nothing here blocks the gate: the residual cost precedes a ~30 s network call, and the two new Minor findings are latent. The one Important finding is an observability gap the issue Log already flagged but did not close.
+
+## 1. Strengths
+
+- **The revert check was run and it worked.** `define_spec.lua:196-203` documents *why* asserting on `resolve_agent` with a hand-built `current_agent` pins nothing, and the tests it replaced them with drive the real chain. This is the single most valuable thing in the diff.
+- **`not_chat` was the right predicate, and the test knows why it's hard.** `define_spec.lua:229-234` records that `config.chat_dir` alone leaves the resolved roots untouched, so the first attempt silently exercised the non-chat path while claiming to test headers. That comment will save the next person an hour.
+- **ARCH-PURPOSE shadow-sweep passes.** `resolve_agent` has exactly one call site (`skill_invoke.lua:255`), and all four consumers — define (`init.lua:1816`), review (`skills/review/init.lua:611`), voice_apply and disk-discovered skills (`skill_picker.lua:26`) — route through `skill_invoke.invoke`. No consumer hand-maintains its own cascade.
+- **ARCH-DRY at the merge.** Reusing `agent_info.resolve` rather than re-decoding `model:` JSON means the skill path and the chat path (`chat_respond.lua:744`) cannot drift on model shape. I confirmed there is no `headers.agent` support anywhere, so "selection + provider/model headers" really is the transcript's effective agent.
+- **`traceability.yaml:726` verified working** — `scripts/spec_test_map.sh list-tests skills/skill-system` now returns `tests/integration/define_spec.lua`.
+
+## 2. Critical findings
+
+None.
+
+## 3. Important findings
+
+**An explicitly configured agent that lacks a tool wire is now skipped with no user-visible signal** — `lua/parley/skill_assembly.lua:100-123`. `capable()` is correct per the Spec's Done-when, but a user who sets `skills = {{ name = "review", agent = "MyGemini" }}` or `skill_agent = "MyGemini"` now gets a *different* agent silently. `get_agent` still warns on an unknown *name*, so only the known-but-wireless case is silent — precisely the C1 defect this issue exists to fix ("the configured tier is a lie"), inverted. See the findings block for the rule.
+
+## 4. Minor findings
+
+- `lua/parley/skill_invoke.lua:225,233` — two nil-guards that cannot fire (`not_chat` returning nil already guarantees `find_header_end`; `agent_info.resolve` always returns a table).
+- `tests/unit/skill_assembly_spec.lua:153` — a strict-lookup `get_agent` double, the exact shape the same commit's Plan item 1 removed from the shared `deps()` helper.
+- `skill_assembly.lua:96` still defaults `deps.get_agent` to `function() return nil end` while the docstring six lines above says it is "NEVER nil". Harmless, but the two disagree.
+- `define_spec.lua:265` (`dofile("lua/parley/config.lua")`) is cwd-relative and needs none of the `before_each` chat-root scaffolding it sits inside.
+
+## 5. Test coverage notes
+
+- Coverage is now genuinely load-bearing at both levels: the pure resolver covers all six tiers plus capability-at-every-tier, and the seam covers header merge, bare selection, non-chat rejection, and malformed-JSON degradation. I verified each by targeted revert rather than by reading.
+- The Done-when clause "the chat's `system_prompt` does not leak into the skill turn" has no test — deliberately not raised as a finding, because it is structurally unreachable twice over: the merge copies only two keys, and `agent` is consumed downstream only as `.model`/`.provider` (`skill_invoke.lua:268,275,289`). A test would assert something the code cannot express.
+- `p.logger.warning` at the seam has no assertion, but I confirmed the path is reachable — it fires 16+ times in `skill_invoke_spec` output with the error object attached.
+
+## 6. Architectural notes for upcoming work
+
+- **ARCH-DRY** — flag (folded into BR-3's re-raise): `not_chat` computes `headers, header_end` via a *module-local* `parse_chat_headers` and discards both; the caller immediately re-derives them. Exposing what `not_chat` already knows (or a `chat_headers(buf, path) -> headers|nil` helper) would collapse three full-buffer reads and two header parses into one, and would serve the 15+ existing `not_chat` call sites too.
+- **ARCH-PURE** — pass. `resolve_agent` is pure and driven by injected deps; the transcript computation lives entirely in the IO shell. The unit spec runs with no IO.
+- **ARCH-PURPOSE** — pass on the feature (shadow-sweep above), flag on one fix: BR-3's benefit was cancelled inside the same commit.
+- **ARCH-MOCK** — pass for this window. No new external binary or service; the dispatcher is stubbed through the existing `parley.dispatcher.query` seam with real SSE fixtures.
+- **ARCH-CONSTRAINTS** — flag, see BR-3. The keystroke path's parse count is unchanged from pre-fix.
+- **ARCH-SECURE** — pass, and improved. The `not_chat` guard closes untrusted-frontmatter steering, pinned by a test that goes red when the guard is removed. Chat files inside a configured root remain trusted to set provider/model, which matches the trust `chat_respond` already grants.
+- **Forward:** the deferred `deps.lookup_agent` item in the Log is the right next move. `get_agent`'s never-nil contract is now documented in four places (`skill_assembly.lua:70-77`, the atlas, the unit-spec comment, the issue) and enforced in none — which is what let the strict-lookup double reappear at `skill_assembly_spec.lua:153`. Enforcing it at the seam would make all four restatements derive rather than restate.
+
+## 7. Plan revision recommendations
+
+One `## Revisions` entry, correcting the close-review log entry for I3:
+
+> **2026-09-04 — I3's measured benefit does not hold end-to-end.** The Log records "4.84ms → 0.003ms on a keystroke path". That is true of `skill_invoke.lua:231` in isolation, but the `p.not_chat` guard added for I4 in the same commit calls `parse_chat_headers` (`init.lua:206`), which runs the full `chat_parser.parse_chat`. Re-measured on this branch: `parse_chat` = 3.07 ms at 1005 lines, 14.02 ms at 5005 lines; `parse_header_metadata` = 0.003 ms. The define path therefore still runs `parse_chat` twice (`init.lua:1810` + inside `not_chat`) — the same count as before the fix. The tier is also still evaluated eagerly at `skill_invoke.lua:260`, so a user who sets `skill_agent` pays both parses for a tier that never fires. Strike the ARCH-CONSTRAINTS claim or requalify it as "the explicit second parse was removed; an implicit one inside `not_chat` remains".
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Verified by revert — current_agent=nil turns 4 of the 5 new define_spec tests red; finer reverts pin the header merge and the not_chat guard individually.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      logger.warning (notifies; logger.lua:94-96 only returns at DEBUG and below) and the pcall error object is in the message; path observed firing in skill_invoke_spec output.
+  - id: BR-3
+    disposition: not-addressed
+    note: |
+      Line 231 no longer calls parse_chat, but the not_chat guard added two lines above calls it via parse_chat_headers (init.lua:206-222). Re-measured on this branch — parse_chat 3.07ms at 1005 lines / 14.02ms at 5005 vs 0.003ms for parse_header_metadata — and the define path still runs it twice (init.lua:1810 plus not_chat), the same count as before the fix. The tier is also still eagerly evaluated at skill_invoke.lua:260, so a user with skill_agent set pays both parses for a tier that cannot fire. Impact is modest on this one-shot path, so this is Minor-grade in practice; the deliverable is the Log correction plus, if cheap, threading the headers not_chat already computed out to the caller.
+  - id: BR-4
+    disposition: addressed
+    note: |
+      p.not_chat now guards the merge; removing the guard in a scratch copy turns the NON-chat-buffer test red.
+  - id: BR-5
+    disposition: addressed
+    note: |
+      One 1..6 scheme across skill_assembly.lua, the unit spec, atlas/skills/skill-system.md and the issue Spec.
+  - id: BR-6
+    disposition: addressed
+    note: |
+      scripts/spec_test_map.sh list-tests skills/skill-system now returns tests/integration/define_spec.lua.
+  - id: BR-7
+    disposition: addressed
+    note: |
+      Fixture is now "{bad json}" and the decode branch is entered — run output shows "Parley.nvim: Failed to parse model JSON: {bad json}".
+  - id: BR-8
+    disposition: addressed
+    note: |
+      The `or selected.*` fallbacks are gone; the comment at skill_invoke.lua:234-237 states the tbl_extend reasoning correctly.
+findings:
+  - id: new
+    severity: Important
+    family: debug-level-silent-degrade
+    title: |
+      A configured-but-wireless agent is skipped at tiers 1-4 with nothing logged, so an explicit setting is silently overridden
+    detail: |
+      This is the 2nd finding in family `debug-level-silent-degrade`. Do NOT
+      fix this instance alone. The rule that covers both: when a fallback
+      overrides something the USER asked for explicitly, the override must
+      reach the user at notify level with its reason — never nothing, never
+      debug. Enumeration on this diff: skill_assembly.lua:100-123 has four
+      tiers (per-skill config, review_agent, manifest.agent, skill_agent) that
+      now drop an agent via capable() with no signal; tier 6's silence is
+      correct because nobody asked for it, and tier 5's is correct because the
+      transcript is ambient. So the enumeration is exactly the four config
+      tiers. Failure scenario: a user sets skills = {{name="review",
+      agent="MyGemini"}}; get_agent returns the real agent (no name warning),
+      wire.resolve("googleai", ...) is nil, and review runs on an entirely
+      different agent forever with no line anywhere. That is issue #215's own
+      C1 defect ("the configured tier is a lie") re-created in the opposite
+      direction. resolve_agent is pure and cannot log, so the shape of the fix
+      is to return the skipped explicit names alongside the agent and have
+      skill_invoke warn — which also keeps ARCH-PURE intact. The issue Log
+      flags this behavior change but does not close it.
+  - id: new
+    severity: Minor
+    family: dead-defensive-branch
+    title: |
+      Two unreachable nil-guards inside the transcript tier, both added by the commit that cleared BR-8
+    detail: |
+      This is the 2nd finding in family `dead-defensive-branch`. Do NOT fix
+      this instance alone. The rule: before writing a nil-guard, check the
+      callee's contract on THIS path; if it cannot return nil here, the guard
+      is dead code that reads as protection. Enumeration — the four guards in
+      transcript_agent (skill_invoke.lua:206-253): `if p.not_chat(...)` (live),
+      `if not header_end` at :225 (DEAD — not_chat returning nil already
+      required find_chat_header_end, which IS chat_parser.find_header_end
+      (init.lua:201-210), to succeed on the same buffer in the same tick), `if
+      not info` at :233 (DEAD — agent_info.resolve unconditionally `return
+      info` at agent_info.lua:140), and capable()'s `if not agent`
+      (skill_assembly.lua:101, live). Two of four. BR-8 removed one dead
+      fallback in this same function and these two survived the sweep, which is
+      the class-vs-instance pattern the family exists to catch.
+  - id: new
+    severity: Minor
+    family: double-contradicts-production-contract
+    title: |
+      A strict-lookup get_agent double reappears at skill_assembly_spec.lua:153, the exact shape Plan item 1 removed from the shared helper
+    detail: |
+      `get_agent = function(name) return name == "SA" and wireless or nil end`
+      returns nil on a miss; production (init.lua:4405-4451) never does — it
+      warns and falls back to the selection. The shared deps() helper was
+      corrected for exactly this (and the fix is documented at
+      skill_assembly_spec.lua:65-70), then the same commit introduced a fresh
+      violation in a per-test override. Latent today: with manifest {name =
+      "other"} and no skills/manifest.agent, tiers 1-3 never call the double,
+      so nothing fails. It becomes a false pass the moment someone adds a
+      manifest.agent or a skills entry to that fixture — the double would fall
+      through where the real cascade resolves. Rule: a test double stands in
+      for a production contract; if it can return a value production cannot,
+      it is not a double, and the correction belongs in the shared fixture
+      rather than being re-hand-rolled per test.
+```

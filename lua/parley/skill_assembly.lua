@@ -61,6 +61,14 @@ end
 ---   deps.current_agent = the agent the BUFFER is using — the selection with the
 ---                        chat's provider:/model: header overrides applied. The
 ---                        IO shell computes it (skill_invoke); this stays pure.
+---                        MAY be a thunk: computing it costs a buffer read and a
+---                        header parse, which is waste when tiers 1-4 win, so the
+---                        shell passes a function and we call it only on arrival.
+---   deps.on_dropped    = optional fun(source, agent) — invoked when a tier the
+---                        USER configured names an agent that cannot call tools.
+---                        Silently substituting something else there overrides an
+---                        explicit instruction; the shell turns this into a
+---                        user-visible warning. Ambient tiers do not report.
 ---
 --- Cascade: per-skill config → legacy review_agent → manifest default →
 --- global skill_agent → CURRENT TRANSCRIPT AGENT → first tool-capable.
@@ -95,37 +103,55 @@ function M.resolve_agent(manifest, deps)
         return agent
     end
 
+    -- Tiers 1-4 are things the USER asked for by name. Dropping one for being
+    -- wireless is correct — a skill cannot work without its tool — but doing it
+    -- silently means an explicit setting is overridden with no signal, which is
+    -- the same defect class as the seam's old debug-level swallow. Tiers 5 and 6
+    -- stay silent on purpose: the transcript is ambient and the roster scan is
+    -- nobody's instruction.
+    local function configured(agent, source)
+        if not agent then return nil end
+        local ok = capable(agent)
+        if not ok and deps.on_dropped then
+            deps.on_dropped(source, agent)
+        end
+        return ok
+    end
+
     -- 1: per-skill config override
     for _, cfg in ipairs(config.skills or {}) do
         if cfg.name == manifest.name and cfg.agent then
-            local agent = capable(get_agent(cfg.agent))
+            local agent = configured(get_agent(cfg.agent), "skills[" .. tostring(cfg.name) .. "].agent")
             if agent then return agent end
         end
     end
 
     -- 2: legacy review_agent fallback (review skill only)
     if manifest.name == "review" and config.review_agent then
-        local agent = capable(get_agent(config.review_agent))
+        local agent = configured(get_agent(config.review_agent), "review_agent")
         if agent then return agent end
     end
 
     -- 3: manifest default
     if manifest.agent then
-        local agent = capable(get_agent(manifest.agent))
+        local agent = configured(get_agent(manifest.agent), "manifest.agent")
         if agent then return agent end
     end
 
     -- 4: global skill_agent config. Nil by default since #215 — when it IS set
     -- the user asked for it explicitly, so it still outranks the transcript.
     if config.skill_agent then
-        local agent = capable(get_agent(config.skill_agent))
+        local agent = configured(get_agent(config.skill_agent), "skill_agent")
         if agent then return agent end
     end
 
     -- 5: the agent this buffer is actually talking to. Ambient context beats
     -- roster position: defining a term inside a chat pinned to one model should
     -- not silently answer from another.
-    local current = capable(deps.current_agent)
+    -- Thunk or value: only now is the buffer read + header parse actually needed.
+    local cur = deps.current_agent
+    if type(cur) == "function" then cur = cur() end
+    local current = capable(cur)
     if current then return current end
 
     -- 6: first tool-capable agent. "Tool-capable" is now "has a tool wire"

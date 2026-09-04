@@ -257,7 +257,18 @@ function M.invoke(buf, manifest, args, opts)
         get_agent = p.get_agent,
         agent_names = p._agents,
         agents = p.agents,
-        current_agent = transcript_agent(),
+        -- Passed as a THUNK, not a value: it costs a buffer read plus not_chat's
+        -- header parse, and tiers 1-4 win without ever needing it.
+        current_agent = transcript_agent,
+        -- An explicitly configured agent that cannot call tools gets substituted
+        -- away; say so, at warning level. Silent override of a user's own
+        -- setting is what BR-2 was, one tier further down.
+        on_dropped = function(source, dropped)
+            p.logger.warning("skill " .. tostring(manifest.name) .. ": configured agent '"
+                .. tostring(dropped.name or dropped.provider) .. "' (" .. source
+                .. ") has no tool wire for provider '" .. tostring(dropped.provider)
+                .. "'; falling through to the next tier")
+        end,
     })
     if not agent then
         p.logger.warning("skill " .. tostring(manifest.name) .. ": no tool-capable agent resolved")
