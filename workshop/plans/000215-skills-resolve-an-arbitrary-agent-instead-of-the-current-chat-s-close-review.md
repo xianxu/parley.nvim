@@ -339,3 +339,161 @@ findings:
       it is not a double, and the correction belongs in the shared fixture
       rather than being re-hand-rolled per test.
 ```
+
+---
+
+## Re-review — 2026-09-04T16:52:07-07:00 (FIX-THEN-SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 215 — Skills resolve an arbitrary agent instead of the current chat's |
+| repo | parley.nvim |
+| issue file | workshop/issues/000215-skills-resolve-an-arbitrary-agent-instead-of-the-current-chat-s.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | b7d4595d3aca461494593fc6daebf8b131c0246f..14c62008a3fdbd1097290745a113554c098abe4c |
+| command | sdlc close --issue 215 |
+| reviewer | claude |
+| timestamp | 2026-09-04T16:52:07-07:00 |
+| verdict | FIX-THEN-SHIP |
+
+## Review
+
+```verdict
+verdict: FIX-THEN-SHIP
+confidence: high
+```
+
+The deliverable is real and, this round, mostly pinned: I scratch-reverted each claimed fix in a throwaway worktree and measured red/green rather than reading commit messages. Nilling `current_agent` turns 4 tests red; making the tier eager turns 4 red; removing the `p.not_chat` guard turns 1 red; removing `on_dropped` from the pure resolver turns 1 red. Full suite is genuinely green (193 spec files, `make test` exit 0, verified without a pipe). What blocks SHIP is one class-level gap: the **shell half** of this issue's own last two rounds is unpinned — deleting `skill_invoke`'s `on_dropped` callback (the entire user-visible half of BR-9) leaves the suite green, as does downgrading the pcall's `logger.warning` back to `debug` (BR-2's fix), as does the Done-when "the chat's `system_prompt` does not leak." Each of the last three rounds fixed the pure core and asserted the shell in a comment; that is the third instance of `seam-untested-by-pure-double` and it needs the rule fixed, not the site. BR-10's two dead guards were never touched and are disposed `not-addressed`.
+
+## 1. Strengths
+
+- **`capable()` extracted once and applied at all six tiers** (`lua/parley/skill_assembly.lua:100-104`) rather than six copies — C3 closed structurally, and the roster scan's old inline `wire.resolve` collapsed into it. Clean ARCH-DRY win.
+- **The thunk is the right shape and is pinned twice**, at the pure boundary (`tests/unit/skill_assembly_spec.lua`, "does not evaluate the transcript thunk when an earlier tier wins" → 0 calls) and at the seam (`tests/integration/define_spec.lua:84-88` asserts `type(cur) == "function"`). Making the tier eager turns 4 integration tests red — I checked.
+- **The BR-3 class fix landed where the class lives**, not at the seam: `parse_chat_headers` (`lua/parley/init.lua:206-219`) now calls `parse_header_metadata` directly. I verified equivalence — `parse_chat` sets `headers` once at `chat_parser.lua:258` and never mutates it, and all three callers (`init.lua:1621, 2376, 2641`) read headers only. That's a real speedup for every `not_chat` call site, not just this diff.
+- **ARCH-SECURE guard is tested, not asserted.** Removing `p.not_chat(buf, artifact_path)` (`skill_invoke.lua:220`) turns "ignores frontmatter in a NON-chat buffer" red. The whole enrichment sits inside one pcall so a malformed buffer cannot take down a turn that would otherwise work.
+- **Atlas gained the section that never existed** (`atlas/skills/skill-system.md:93-118`) — tier order, capability-at-every-tier, and both traps that cost two plan rounds. `define_spec` is now mapped in `traceability.yaml`. README needs nothing: it only links to `config.lua` (the `README_REFERENCE_MARKER_*` pair is vestigial, no embedded copy).
+
+## 2. Critical findings
+
+None.
+
+## 3. Important findings
+
+**`lua/parley/skill_invoke.lua:266` — the shell half of the seam is unpinned; two of the last three rounds' fixes are deletable with the suite still green.** (3rd in `seam-untested-by-pure-double`.) Measured on this diff by reverting each supply individually:
+
+| shell behavior | revert result |
+|---|---|
+| `current_agent = transcript_agent` (:262) | **4 red** ✔ |
+| `p.not_chat` guard (:220) | **1 red** ✔ |
+| `on_dropped = … p.logger.warning(…)` (:266-272) | **0 red** ✘ |
+| pcall failure → `p.logger.warning` (:247) | **0 red** ✘ |
+| chat `system_prompt` not copied (:255-258) | **no test at all** ✘ |
+
+BR-9's finding was "the override must reach the user at **notify** level." `resolve_agent` reporting to a callback is not that — the notify is what the user gets, and it is exactly the half nothing exercises. Same for BR-2: `logger.warning` vs `logger.debug` is a user-visible/invisible distinction, and `logger.debug` passes every test. Fix sketch: `tests/integration/skill_invoke_spec.lua` already stubs `assembly.resolve_agent`; add three cases that stub `p.logger.warning` into a capture table — (a) a configured-but-wireless `skill_agent`, asserting the message names the source and provider; (b) `p.get_agent` stubbed to raise, asserting the pcall path warns and the turn still resolves; (c) a chat carrying a `system_prompt:` header, asserting `deps.current_agent().system_prompt` is the selection's and not the chat's.
+
+## 4. Minor findings
+
+- **`lua/parley/skill_invoke.lua:225,233` — BR-10's two dead guards are still there** (disposed `not-addressed` below). Re-verified statically: `not_chat` returning nil already required `find_chat_header_end` to succeed on the same buffer in the same tick (`init.lua:1604-1635`), and `agent_info.resolve` unconditionally `return info` (`agent_info.lua:143`).
+- **`lua/parley/skill_invoke.lua:224-231` — the tier re-reads and re-parses what `not_chat` just did** (3rd in `redundant-buffer-reparse`; rule stated in the block below). One extra whole-buffer `nvim_buf_get_lines` per skill invocation, and `init.lua:206-219` already owns those three lines as `parse_chat_headers`. Exporting it and calling it here also deletes the dead `if not header_end` guard above — one change, two Minors.
+- **`lua/parley/skill_invoke.lua:267` — the drop warning can name an agent the user never configured.** `get_agent` never returns nil, so `dropped.name` is the *selection* when the configured name is unknown; the message then reads "configured agent 'SEL' (skill_agent) has no tool wire". Narrow (needs an unknown name *and* a wireless selection), and `get_agent`'s own "Agent X not found" line precedes it. Passing `cfg.agent` as part of `source` would make it self-describing.
+- **`tests/integration/define_spec.lua:113` — `dofile("lua/parley/config.lua")`** depends on cwd being the repo root; it is also a pure config assertion sitting inside a transcript-seam `describe` that stubs the dispatcher and registers chat roots it doesn't need.
+- `lua/parley/skill_assembly.lua:123-125` — the tier-1 loop can call `on_dropped` once per matching `skills[]` entry.
+
+## 5. Test coverage notes
+
+- The plan item "a wireless agent falls through from **every** tier" is asserted at tier 4 and tier 5 only. Defensible — `configured()`/`capable()` is one shared path — but tiers 1, 2 and 3 have no wireless case.
+- `review` and `voice_apply` have no transcript-agent test of their own. Acceptable: `resolve_agent` has exactly one call site (`skill_invoke.lua:255`) and all three skills route through `skill_invoke.invoke`, so `define_spec`'s seam tests cover the shared path.
+- BR-11's correction is inherently unpinnable by a red test (it is a fixture contract), and the fixture is latent — `manifest {name="other"}` with no `skills`/`manifest.agent` never reaches tiers 1-3. The reasoning is now in the file, which is the right durable form.
+
+## 6. Architectural notes
+
+- **ARCH-DRY — flag (Minor).** `capable()` consolidation is a win; the seam's hand-rolled `find_header_end` + `parse_header_metadata` restates `init.lua:206-219`.
+- **ARCH-PURE — pass.** `resolve_agent` reads nothing ambient except the `wire` module (pre-existing, documented at `skill_assembly.lua:10`); the buffer read, `get_agent`, and all logging live at the seam and arrive as injected deps. The `on_dropped` callback is the right way to keep a notify out of a pure function.
+- **ARCH-PURPOSE — flag.** The shadow-sweep is clean at the *code* level: one resolver, one call site, all four skills derive, `config.lua` nil'd, atlas restates rather than duplicates. The flag is on the *fix*: BR-9's class was swept across the four configured tiers inside the pure core, but the enumeration stopped at the module boundary, leaving the user-facing half unenforced. That's the same instance-vs-class shape the family exists to catch, one layer out.
+- **ARCH-MOCK — pass.** No new external binary/service. The `get_agent` double now matches the production contract it stands in for, which is the point of the principle.
+- **ARCH-CONSTRAINTS — pass with a note.** The `parse_chat_headers` fix is a measured ~1000× reduction on a predicate with 15+ call sites, several on keystroke paths; `perf_chat_typing_spec` passes. The thunk means tiers 1-4 pay nothing. Residual is the duplicate buffer read above, on a path that then makes an HTTP request — not hot.
+- **ARCH-SECURE — pass with a forward note.** For upcoming work: `agent_info.resolve` passes a failed-decode `model:` string *through* rather than rejecting it, and tier 5's `capable()` validates only the provider's wire, never the model name. So `model: {bad json}` now reaches the vendor as a bogus model name on a skill turn — a surface that did not exist before #215, since skills never read headers. The Spec explicitly adopted this ("degrades as `agent_info.resolve` already defines it") and it matches chat behavior, so it is not a finding here; but "parse into a typed value at the boundary" would argue for rejecting the header and falling to tier 6 instead of forwarding a fabricated model name.
+
+## 7. Plan revision recommendations
+
+None. The Plan, the Spec's six-tier cascade, `resolve_agent`, the unit tests, and `atlas/skills/skill-system.md` all use the same 1..6 numbering, every checklist item is delivered, and the three Revisions entries already record the scope changes honestly — including the two self-inflicted breaks and the `get_agent` never-nil deferral.
+
+```findings
+dispose:
+  - id: BR-3
+    disposition: addressed
+    note: |
+      Class fix landed in parse_chat_headers (init.lua:206-219), not the seam; equivalence verified (parse_chat sets headers once at chat_parser.lua:258, never mutates); laziness pinned — eager revert turns 4 integration tests red.
+  - id: BR-9
+    disposition: addressed
+    note: |
+      configured() covers exactly the four config tiers; removing the on_dropped call turns 1 unit test red. The shell's warning half is untested — raised as a new class finding rather than re-opening this.
+  - id: BR-10
+    disposition: not-addressed
+    note: |
+      Both guards are still at skill_invoke.lua:225 and :233; round 2 touched neither and the issue Log does not mention BR-10. Re-verified the unreachability claim statically.
+  - id: BR-11
+    disposition: addressed
+    note: |
+      Both per-test get_agent overrides now `return SELECTION` on a miss, and the contract is documented in-file at the override site.
+findings:
+  - id: new
+    severity: Important
+    family: seam-untested-by-pure-double
+    title: |
+      The shell half of the seam is unpinned — deleting BR-9's warning, or reverting BR-2's warning to debug, leaves the whole suite green
+    detail: |
+      This is the 3rd finding in family `seam-untested-by-pure-double`. Do NOT fix
+      this instance alone. The rule covering all three: when a finding demands a
+      behavior the USER observes, the test must pin it where the user observes it —
+      at the shell — not at the pure core's injected boundary; a callback firing is
+      not a notify happening. Enumeration by revert on this diff, measured in a
+      scratch worktree at HEAD: `current_agent = transcript_agent`
+      (skill_invoke.lua:262) → 4 red; the `p.not_chat` guard (:220) → 1 red;
+      `on_dropped = … p.logger.warning(…)` (:266-272) → 0 red; the pcall's
+      `p.logger.warning` (:247, BR-2's entire fix) → 0 red; and the Done-when
+      "the chat's system_prompt does not leak into the skill turn" has no test at
+      all. Three of five unenforced, and the two zero-red ones are precisely the
+      user-visible halves of the last two rounds' Important findings. Failure
+      scenario: someone simplifies the on_dropped block away, or a future refactor
+      restores logger.debug, and the suite stays green while a user's explicit
+      skill_agent is silently overridden — the exact defect BR-2 and BR-9 were
+      raised for. skill_invoke_spec.lua already stubs assembly.resolve_agent, so
+      the fix is three cases that stub p.logger.warning into a capture table:
+      wireless configured skill_agent, a raising p.get_agent, and a chat carrying a
+      system_prompt: header.
+  - id: new
+    severity: Minor
+    family: redundant-buffer-reparse
+    title: |
+      The transcript tier re-reads the buffer and re-parses headers that not_chat parsed one line earlier in the same tick
+    detail: |
+      This is the 3rd finding in family `redundant-buffer-reparse`. Do NOT fix this
+      instance alone. The rule covering all three: before reading or parsing a
+      buffer at a seam, check whether the call immediately above already did it,
+      and whether the codebase already owns that computation as a named helper —
+      reuse it rather than restating its body. Enumeration on this diff is one
+      site: skill_invoke.lua:220 calls p.not_chat, which does
+      nvim_buf_get_lines + find_header_end + parse_header_metadata
+      (init.lua:1617-1621); lines 223-231 then do all three again. init.lua:206-219
+      is that exact sequence as `parse_chat_headers`, currently file-local.
+      Exporting it and calling it here removes the duplication and simultaneously
+      deletes BR-10's dead `if not header_end` guard at :225. Cost today is one
+      extra whole-buffer read per skill invocation on a path that then makes an
+      HTTP request — small, which is why this is Minor rather than a repeat of
+      BR-3's severity.
+  - id: new
+    severity: Minor
+    family: misattributed-diagnostic
+    title: |
+      The new drop warning can name an agent the user never configured
+    detail: |
+      skill_invoke.lua:267 reports `dropped.name`, but get_agent never returns nil —
+      an unknown configured name yields the live selection, so with
+      skill_agent = "Typo" and a wireless selection the message reads "configured
+      agent 'SEL' (skill_agent) has no tool wire", naming an agent the user did not
+      set. Narrow (needs both conditions) and get_agent's own "Agent Typo not found,
+      using SEL" precedes it, so it is traceable. Passing the configured name into
+      `source` would make the line self-describing.
+```

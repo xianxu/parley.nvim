@@ -176,7 +176,7 @@ describe("skill_assembly.resolve_agent (pure, injected deps)", function()
             on_dropped = function(source, agent) table.insert(seen, source .. ":" .. agent.provider) end,
         })
         assert.are.equal("openai", assembly.resolve_agent(manifest({ name = "other" }), d).provider)
-        assert.are.same({ "skill_agent:googleai" }, seen)
+        assert.are.same({ "skill_agent=SA:googleai" }, seen)
     end)
 
     -- Ambient tiers stay quiet: nobody asked for the transcript or the roster.

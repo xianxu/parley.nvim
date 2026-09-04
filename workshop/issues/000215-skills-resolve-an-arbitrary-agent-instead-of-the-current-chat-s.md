@@ -269,3 +269,38 @@ never-nil contract is *documented* in three places but not *enforced*. A
 `deps.lookup_agent` returning nil on a miss would make tiers 1-4 fall through on
 a typo'd name — today a typo yields the selection **without** header overrides,
 strictly worse than tier 5's selection **with** them.
+
+### 2026-09-04 — close review round 2: repeat families, both self-inflicted
+
+Commit `14c6200`. Round 2 disposed 8 of 8 prior findings but opened 2 repeat
+families — "not converging: fix rules, not instances."
+
+- **BR-3 (`redundant-buffer-reparse`) came back because the BR-4 fix
+  reintroduced it.** `p.not_chat` is the right predicate, but it reaches
+  `parse_chat_headers`, which ran a **full `parse_chat`** to read four header
+  lines. I removed one full parse, added another, and asserted BR-3 was fixed.
+  The class fix was never in the seam: `parsed.headers` **is**
+  `parse_header_metadata(lines, header_end)` (`chat_parser.lua:258`) and
+  `parse_config` is not an input to header parsing — so `parse_chat_headers`
+  now calls it directly. Identical output, ~1000× cheaper, and it lands for
+  **all 15+ `not_chat` call sites**, not just this diff. The tier is also a
+  thunk now, so tiers 1-4 pay nothing.
+- **BR-9 is the second member of `debug-level-silent-degrade`**, the family BR-2
+  opened — which I had fixed only at the site BR-2 named. The rule covering
+  both: *a fallback that overrides something the user asked for explicitly must
+  reach them with its reason.* Enumeration = the four **configured** tiers;
+  tiers 5-6 stay silent because the transcript is ambient and the roster is
+  nobody's instruction. `resolve_agent` stays pure; the shell injects
+  `on_dropped`. This is the behavior change I flagged in the previous Log entry
+  and did not act on.
+- **The shared `get_agent` double was corrected — then re-violated three tests
+  below the fix**, in the same commit, by hand-rolling `... or nil` in a
+  per-test override. Latent only because that fixture never reaches tiers 1-3.
+  The reviewer's rule now sits in the file: a double stands in for a production
+  contract; if it can return a value production cannot, it is not a double, and
+  the correction belongs in the shared fixture.
+
+Standing lesson from this issue, worth `workshop/lessons.md`: **I twice reported
+a finding as fixed after fixing the instance it named.** The cheap check that
+would have caught the coverage claim — disable the deliverable, confirm
+something goes red — is one command, and the reviewer ran it when I did not.

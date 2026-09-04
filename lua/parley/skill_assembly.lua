@@ -121,27 +121,27 @@ function M.resolve_agent(manifest, deps)
     -- 1: per-skill config override
     for _, cfg in ipairs(config.skills or {}) do
         if cfg.name == manifest.name and cfg.agent then
-            local agent = configured(get_agent(cfg.agent), "skills[" .. tostring(cfg.name) .. "].agent")
+            local agent = configured(get_agent(cfg.agent), "skills[" .. tostring(cfg.name) .. "].agent=" .. tostring(cfg.agent))
             if agent then return agent end
         end
     end
 
     -- 2: legacy review_agent fallback (review skill only)
     if manifest.name == "review" and config.review_agent then
-        local agent = configured(get_agent(config.review_agent), "review_agent")
+        local agent = configured(get_agent(config.review_agent), "review_agent=" .. tostring(config.review_agent))
         if agent then return agent end
     end
 
     -- 3: manifest default
     if manifest.agent then
-        local agent = configured(get_agent(manifest.agent), "manifest.agent")
+        local agent = configured(get_agent(manifest.agent), "manifest.agent=" .. tostring(manifest.agent))
         if agent then return agent end
     end
 
     -- 4: global skill_agent config. Nil by default since #215 — when it IS set
     -- the user asked for it explicitly, so it still outranks the transcript.
     if config.skill_agent then
-        local agent = configured(get_agent(config.skill_agent), "skill_agent")
+        local agent = configured(get_agent(config.skill_agent), "skill_agent=" .. tostring(config.skill_agent))
         if agent then return agent end
     end
 

@@ -264,9 +264,13 @@ function M.invoke(buf, manifest, args, opts)
         -- away; say so, at warning level. Silent override of a user's own
         -- setting is what BR-2 was, one tier further down.
         on_dropped = function(source, dropped)
-            p.logger.warning("skill " .. tostring(manifest.name) .. ": configured agent '"
-                .. tostring(dropped.name or dropped.provider) .. "' (" .. source
-                .. ") has no tool wire for provider '" .. tostring(dropped.provider)
+            -- `source` carries the CONFIGURED name and `dropped.name` what it
+            -- actually resolved to; get_agent substitutes the selection for an
+            -- unknown name, so reporting only the latter would name an agent the
+            -- user never set.
+            p.logger.warning("skill " .. tostring(manifest.name) .. ": " .. source
+                .. " resolved to agent '" .. tostring(dropped.name or "?")
+                .. "', which has no tool wire for provider '" .. tostring(dropped.provider)
                 .. "'; falling through to the next tier")
         end,
     })

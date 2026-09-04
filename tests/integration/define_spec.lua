@@ -268,6 +268,65 @@ describe("define: transcript agent reaches the cascade (#215)", function()
         return { current_agent = cur() }
     end
 
+    -- BR-12: the SHELL half of the seam. Both user-visible warnings this issue
+    -- added live in skill_invoke, not in the pure resolver — deleting either one
+    -- previously left the entire suite green. The enumeration is exactly these
+    -- two: the transcript-merge failure (BR-2) and the dropped configured agent
+    -- (BR-9). Each test must go red if its warning is removed or demoted.
+    local function capture_warnings(fn)
+        local seen = {}
+        local orig = parley.logger.warning
+        parley.logger.warning = function(msg) table.insert(seen, tostring(msg)) end
+        local ok, err = pcall(fn)
+        parley.logger.warning = orig
+        if not ok then error(err) end
+        return seen
+    end
+
+    local function joined(t) return table.concat(t, "\n") end
+
+    it("BR-2: warns (not debug-swallows) when the transcript merge fails", function()
+        write_chat({ "provider: anthropic", "model: claude-opus-5-pinned" })
+        local orig_get = parley.get_agent
+        local seen = capture_warnings(function()
+            parley.get_agent = function() error("boom: agent registry unavailable") end
+            require("parley.skill_invoke").invoke(buf, require("parley.skills.define"),
+                { phrase = "x" }, { document = "doc", no_reload = true, detached_progress = false })
+            vim.wait(500, function() return captured_deps ~= nil end)
+            -- the tier is a thunk; the failure happens when the cascade pulls it
+            if captured_deps and type(captured_deps.current_agent) == "function" then
+                captured_deps.current_agent()
+            end
+            parley.get_agent = orig_get
+        end)
+        parley.get_agent = orig_get
+        local all = joined(seen)
+        assert.is_truthy(all:match("transcript agent unavailable"),
+            "expected a WARNING naming the failed transcript merge, got: " .. all)
+        assert.is_truthy(all:match("boom"),
+            "the warning must carry the underlying error, got: " .. all)
+    end)
+
+    it("BR-9: warns when a configured agent is dropped for having no tool wire", function()
+        write_chat()
+        local seen = capture_warnings(function()
+            require("parley.skill_invoke").invoke(buf, require("parley.skills.define"),
+                { phrase = "x" }, { document = "doc", no_reload = true, detached_progress = false })
+            vim.wait(500, function() return captured_deps ~= nil end)
+            -- drive the real on_dropped the shell injected
+            assert.is_truthy(captured_deps and captured_deps.on_dropped,
+                "shell must inject on_dropped so an explicit setting is never silently overridden")
+            captured_deps.on_dropped("skill_agent=Typo",
+                { name = "SEL", provider = "googleai", model = { model = "g" } })
+        end)
+        local all = joined(seen)
+        assert.is_truthy(all:match("skill_agent=Typo"),
+            "the warning must name what the USER configured, got: " .. all)
+        assert.is_truthy(all:match("SEL"),
+            "and what it actually resolved to, got: " .. all)
+        assert.is_truthy(all:match("googleai"), "and the wireless provider, got: " .. all)
+    end)
+
     it("the shipped skill_agent/review_agent defaults no longer name a missing agent", function()
         local defaults = dofile("lua/parley/config.lua")
         assert.is_nil(defaults.skill_agent)
