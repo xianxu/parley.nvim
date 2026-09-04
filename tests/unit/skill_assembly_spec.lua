@@ -62,12 +62,29 @@ end)
 describe("skill_assembly.resolve_agent (pure, injected deps)", function()
     -- deps inject what v1 read from the parley module: config fields + the
     -- agent resolver/registry. No global reads → pure.
+    -- The get_agent double MUST mirror production (init.lua:4405-4451), which
+    -- NEVER returns nil: an unknown name logs a warning and falls back to
+    -- M._state.agent (the live <C-g>a selection); it only error()s on an empty
+    -- roster. A strict-lookup double is the INVERSE of that, and every tier
+    -- assertion below would pass green over behavior the real cascade does not
+    -- have — tier 3 in particular can never fall through in production. #215.
+    local SELECTION = { name = "SEL", provider = "cliproxyapi", model = { model = "claude-opus-5" } }
     local function deps(over)
         return vim.tbl_extend("force", {
             config = { skills = {}, review_agent = nil, skill_agent = nil },
             get_agent = function(name)
-                local known = { A1 = { name = "A1" }, RA = { name = "RA" }, MA = { name = "MA" }, SA = { name = "SA" } }
-                return known[name]
+                -- Every fixture agent carries a provider+model, because every
+                -- REAL agent does (init.lua:4405-4451 builds them from
+                -- agent_rec). Bare {name=…} stubs passed only while capability
+                -- was tested on the roster scan alone; #215 tests it at every
+                -- tier, and a provider-less stub is not a shape production can
+                -- produce.
+                local function A(n)
+                    return { name = n, provider = "anthropic", model = { model = "claude-opus-5" } }
+                end
+                local known = { A1 = A("A1"), RA = A("RA"), MA = A("MA"), SA = A("SA") }
+                -- unknown name → the selection, exactly as production does
+                return known[name] or SELECTION
             end,
             agent_names = { "x", "y" },
             agents = { x = { provider = "openai" }, y = { provider = "anthropic" } },
@@ -91,6 +108,52 @@ describe("skill_assembly.resolve_agent (pure, injected deps)", function()
     it("tier 3: global skill_agent", function()
         local d = deps({ config = { skills = {}, skill_agent = "SA" } })
         assert.are.equal("SA", assembly.resolve_agent(manifest({ name = "other" }), d).name)
+    end)
+
+    -- #215: the transcript tier. Sits BELOW explicit config (a user who sets
+    -- skill_agent still gets it) and ABOVE the roster scan, so the default path
+    -- follows the conversation instead of roster position.
+    local TRANSCRIPT = { name = "TR", provider = "anthropic", model = { model = "claude-opus-5" } }
+
+    it("tier 4: the transcript agent, when no config tier claims the turn", function()
+        local d = deps({ current_agent = TRANSCRIPT })
+        assert.are.equal("TR", assembly.resolve_agent(manifest({ name = "other" }), d).name)
+    end)
+
+    it("tier 4: explicit skill_agent still OUTRANKS the transcript", function()
+        local d = deps({ config = { skills = {}, skill_agent = "SA" }, current_agent = TRANSCRIPT })
+        assert.are.equal("SA", assembly.resolve_agent(manifest({ name = "other" }), d).name)
+    end)
+
+    it("tier 4: a per-skill override still outranks the transcript", function()
+        local d = deps({
+            config = { skills = { { name = "other", agent = "A1" } } },
+            current_agent = TRANSCRIPT,
+        })
+        assert.are.equal("A1", assembly.resolve_agent(manifest({ name = "other" }), d).name)
+    end)
+
+    -- The transcript is ambient, not asked-for: a chat pinned to a provider with
+    -- no tool wire must not hand `define` an agent that can never call
+    -- emit_definition. Descend to the roster instead.
+    it("tier 4: a wireless transcript agent falls through to the roster scan", function()
+        local d = deps({
+            current_agent = { name = "TR", provider = "googleai", model = { model = "gemini-3-pro-preview" } },
+        })
+        assert.are.equal("openai", assembly.resolve_agent(manifest({ name = "other" }), d).provider)
+    end)
+
+    -- #215: capability is now tested at EVERY tier, not only the roster scan.
+    -- Before this, a configured-but-wireless agent was returned unvetted and
+    -- surfaced as "model returned no tool call" at the far end of the request.
+    it("capability is enforced on the configured tiers too, not just the scan", function()
+        local wireless = { name = "SA", provider = "googleai", model = { model = "gemini-3-pro-preview" } }
+        local d = deps({
+            config = { skills = {}, skill_agent = "SA" },
+            get_agent = function(name) return name == "SA" and wireless or nil end,
+        })
+        -- falls past the wireless skill_agent, lands on the roster's openai
+        assert.are.equal("openai", assembly.resolve_agent(manifest({ name = "other" }), d).provider)
     end)
 
     -- #198 widened "tool-capable" from a hardcoded anthropic/cliproxyapi pair

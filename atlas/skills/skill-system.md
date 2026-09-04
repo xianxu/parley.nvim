@@ -90,11 +90,38 @@ completable picker arguments (`{ name, description, complete }`).
 - **review** — edit document based on 🤖 markers (light edit / heavy revision); marker-aware resubmit loop
 - **voice-apply** — rewrite to match a personal writing voice from `~/.personal/<slug>-writing-style.md`
 
+## Agent resolution cascade
+
+`skill_assembly.resolve_agent` picks the agent for a skill turn. Pure — the IO
+shell (`skill_invoke`) injects config, the agent registry, and the transcript
+agent. First capable tier wins:
+
+1. per-skill override — `config.skills[].agent`
+2. legacy `review_agent` (review skill only)
+3. `manifest.agent`
+4. global `config.skill_agent`
+5. **the transcript agent** — the `<C-g>a` selection with the chat's
+   frontmatter `provider:`/`model:` overrides applied (via `agent_info.resolve`,
+   provider+model only; the chat's `system_prompt` is deliberately not
+   inherited, since a skill owns its prompt through `source(ctx)`)
+6. first agent in roster order with a tool wire
+
+Explicit configuration outranks ambient context; ambient context outranks roster
+position. **Capability is tested at every tier** — an agent with no tool wire is
+skipped rather than returned, because a skill without its tool fails at the far
+end of the request as "model returned no tool call".
+
+Two traps this encodes (#215): `get_agent` **never returns nil** — an unknown
+name warns and falls back to the selection (`init.lua:4405-4451`), so a tier
+naming a missing agent does not fall through, it silently resolves. And while
+`skill_agent` is set, tier 5 is unreachable — which is why the shipped defaults
+are `nil`.
+
 ## Config
 
 ```lua
 skill_shortcut = { modes = { "n" }, shortcut = "<C-g>s" },
-skill_agent = "Claude-Sonnet",   -- global default agent
+skill_agent = nil,                -- optional global pin; nil by default (#215)
 skills = {},                      -- per-skill overrides: { { name = "review", agent = "..." }, { name = "...", disable = true } }
 ```
 

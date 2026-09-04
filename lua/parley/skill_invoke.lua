@@ -193,11 +193,44 @@ function M.invoke(buf, manifest, args, opts)
     -- exchange) instead of the whole buffer; defaults to the buffer content.
     local inv = assembly.build_invocation(manifest, { body = body, document = opts.document or original, manual = manual })
 
+    -- #215: the agent the BUFFER is using, for the cascade's transcript tier.
+    -- Reuses agent_info.resolve (ARCH-DRY) rather than re-reading headers here:
+    -- it already owns the `model:` JSON decode and the string→table coercion
+    -- that prepare_payload depends on, and a second hand-rolled merge would
+    -- drift into a model-shape mismatch at the wire.
+    --
+    -- Only provider+model are taken onto a COPY of the agent record. The chat's
+    -- system_prompt and memory-pref folding are deliberately dropped: a skill
+    -- owns its own system prompt via source(ctx), so inheriting the chat's would
+    -- double-apply a prompt the skill never asked for.
+    local function transcript_agent()
+        local ok, resolved = pcall(function()
+            local selected = p.get_agent()
+            local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+            local header_end = p.chat_parser.find_header_end(lines)
+            if not header_end then return selected end -- not a chat buffer
+            local parsed = p.parse_chat(lines, header_end)
+            local info = p.get_agent_info(parsed and parsed.headers, selected)
+            if not info then return selected end
+            return vim.tbl_extend("force", selected, {
+                provider = info.provider or selected.provider,
+                model = info.model or selected.model,
+            })
+        end)
+        if not ok then
+            p.logger.debug("skill " .. tostring(manifest.name)
+                .. ": transcript agent unavailable, falling back to the selection")
+            return nil
+        end
+        return resolved
+    end
+
     local agent = assembly.resolve_agent(manifest, {
         config = p.config,
         get_agent = p.get_agent,
         agent_names = p._agents,
         agents = p.agents,
+        current_agent = transcript_agent(),
     })
     if not agent then
         p.logger.warning("skill " .. tostring(manifest.name) .. ": no tool-capable agent resolved")

@@ -190,6 +190,71 @@ describe("define: web-toggle payload (#161)", function()
     end)
 end)
 
+-- #215: a skill turn must follow the transcript it is invoked from. The failure
+-- this guards produced a definition from a model the user had not chosen, with
+-- no visible sign it had happened.
+describe("define: transcript agent drives the skill turn (#215)", function()
+    local parley = require("parley")
+    local assembly = require("parley.skill_assembly")
+
+    local function manifest() return require("parley.skills.define") end
+
+    it("the shipped skill_agent/review_agent defaults no longer name a missing agent", function()
+        -- Load defaults directly: a live parley.config may carry user overrides.
+        local defaults = dofile("lua/parley/config.lua")
+        assert.is_nil(defaults.skill_agent)
+        assert.is_nil(defaults.review_agent)
+    end)
+
+    it("resolves the transcript agent when no config tier claims the turn", function()
+        local transcript = {
+            name = "pinned", provider = "anthropic", model = { model = "claude-opus-5" },
+        }
+        local agent = assembly.resolve_agent(manifest(), {
+            config = { skills = {}, review_agent = nil, skill_agent = nil },
+            get_agent = function() return transcript end,
+            agent_names = { "other" },
+            agents = { other = { provider = "openai", model = { model = "gpt-5.6" } } },
+            current_agent = transcript,
+        })
+        -- the roster's openai agent is listed and capable; the transcript wins
+        assert.are.equal("pinned", agent.name)
+        assert.are.equal("claude-opus-5", agent.model.model)
+    end)
+
+    -- Hand-edited frontmatter is untrusted input crossing a persistence
+    -- boundary (ARCH-SECURE). A provider with no wire must degrade to the
+    -- roster rather than reach the skill and fail as "no tool call".
+    it("degrades to the roster when the pinned provider has no tool wire", function()
+        local agent = assembly.resolve_agent(manifest(), {
+            config = { skills = {}, review_agent = nil, skill_agent = nil },
+            get_agent = function() return nil end,
+            agent_names = { "ok" },
+            agents = { ok = { provider = "anthropic", model = { model = "claude-sonnet-5" } } },
+            current_agent = {
+                name = "pinned", provider = "googleai", model = { model = "gemini-3-pro-preview" },
+            },
+        })
+        assert.are.equal("anthropic", agent.provider)
+    end)
+
+    -- A malformed `model:` reaches agent_info.resolve as a raw string
+    -- (agent_info.lua:73-85 warns and passes it through). cliproxyapi still
+    -- resolves a wire for a bare string, so the turn proceeds rather than
+    -- silently producing nothing.
+    it("survives a model: header that failed JSON decode (raw string passthrough)", function()
+        local agent = assembly.resolve_agent(manifest(), {
+            config = { skills = {}, review_agent = nil, skill_agent = nil },
+            get_agent = function() return nil end,
+            agent_names = {},
+            agents = {},
+            current_agent = { name = "pinned", provider = "cliproxyapi", model = "{bad json" },
+        })
+        assert.is_not_nil(agent)
+        assert.are.equal("cliproxyapi", agent.provider)
+    end)
+end)
+
 describe("define_visual + render_definition (#161)", function()
     local parley = require("parley")
     local tasker = require("parley.tasker")
