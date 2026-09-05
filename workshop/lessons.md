@@ -1181,3 +1181,35 @@ those, so it stayed quiet.
 **Check:** treat a change to `config.lua`'s shipped defaults as user-facing
 surface. Ask what a brand-new install can no longer do, and say that where the
 reader first meets the subject.
+
+## Remove the behaviour, confirm something goes red (#215, 2026-09-04)
+
+**What went wrong.** Three consecutive close-review rounds on #215 each caught
+the same shape: a behaviour was reported as covered while the test exercised
+something *adjacent* to it.
+
+- Round 1 — the issue's whole deliverable (the transcript seam) had no test.
+  The reviewer reverted `current_agent = transcript_agent()` to `nil` and all
+  **64 tests still passed**. The "integration coverage" called the pure resolver
+  with hand-built inputs and never touched the seam.
+- Round 2 — the fix for BR-4 (`use p.not_chat`) reintroduced BR-3, because
+  `not_chat` internally ran a full `parse_chat`. One full parse removed, another
+  added, and BR-3 reported fixed.
+- Round 3 — the *warnings added in round 2* were themselves unpinned. Deleting
+  either left the suite green.
+
+**Rules.**
+
+1. **Before claiming a behaviour is covered, delete or disable it and confirm a
+   test goes red.** One command. It is the only thing that distinguishes a
+   ticked plan box from a tested feature, and it caught all three rounds above.
+2. **After fixing finding A, re-check every other open finding against the new
+   code.** Fixes interact. A disposition claimed from memory of intent is not a
+   disposition — re-read the code you just changed.
+3. **When a finding names a site, the enumeration usually lives one level up.**
+   BR-3's real fix was in `parse_chat_headers` (shared by 15+ `not_chat`
+   callers), not in the diff that triggered it.
+4. **A test double stands in for a production contract.** If it can return a
+   value production cannot, it is not a double. Correct it in the *shared*
+   fixture — a per-test override that re-hand-rolls the contract reintroduces
+   the bug next to its own fix.

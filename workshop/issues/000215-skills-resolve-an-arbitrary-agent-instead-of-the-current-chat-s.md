@@ -1,12 +1,13 @@
 ---
 id: 000215
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-09-04
 updated: 2026-09-04
 estimate_hours: 2.23
 started: 2026-09-04T15:29:51-07:00
+actual_hours: 1.67
 ---
 
 # Skills resolve an arbitrary agent instead of the current chat's
@@ -160,6 +161,7 @@ Derivation notes:
 ## Log
 
 ### 2026-09-04
+- 2026-09-04: closed — make test: 193 spec files, 0 failures, MAKE_EXIT=0 (verified against make status, not a pipeline exit). luacheck clean, 346 files. Three boundary rounds, all findings addressed at CLASS level. Round 3 BR-12: both user-visible warnings this diff added live in the shell (skill_invoke), and neither was pinned -- the pure resolvers on_dropped callback had coverage but the logger.warning the user actually sees did not. Enumeration is exactly those two observables; both now tested and verified BY MUTATION, not asserted: demoting the BR-2 warning to debug fails 1, removing on_dropped fails 1, restored fails 0. Round 3 minor fixed: the dropped-agent message named dropped.name, but since get_agent never returns nil a typod skill_agent resolves to the SELECTION, so the warning would have named an agent the user never set; source now carries the configured name. Adequacy for the deliverable itself: 4 tests go red when current_agent is reverted to nil. Lessons recorded in workshop/lessons.md (remove the behaviour and confirm red; re-check open findings after each fix; the enumeration usually lives one level up; a double that returns what production cannot is not a double). NOT verified live against a provider: this is agent RESOLUTION. Operator has separately confirmed define now works on gpt-5.6-luna and claude-opus-5 post-215, though tool_choice remains auto so that is nondeterministic -- tracked as #216, which operator has asked to re-spec around KEEPING web_search rather than forcing the tool.; review verdict: FIX-THEN-SHIP
 
 Filed from the #206 shipping-surface shakedown (see
 `workshop/projects/parley-v1-release.md`). Operator walked the Tier 1 inventory
@@ -304,3 +306,33 @@ Standing lesson from this issue, worth `workshop/lessons.md`: **I twice reported
 a finding as fixed after fixing the instance it named.** The cheap check that
 would have caught the coverage claim — disable the deliverable, confirm
 something goes red — is one command, and the reviewer ran it when I did not.
+
+### 2026-09-04 — close review round 3: the fixes for round 2 were themselves unpinned
+
+Commit `4dbc9e9`. **BR-12** — the two warnings added for BR-2 and BR-9 both live
+in `skill_invoke`, and neither had a test. Deleting either left the whole suite
+green: the *pure resolver's* `on_dropped` callback had coverage; the *shell's*
+`logger.warning` — the part a user actually sees — had none.
+
+Enumeration = every user-visible behaviour this diff added at the shell, which
+is exactly two. Both now pinned, and verified by mutation rather than asserted:
+
+| mutation | result |
+|---|---|
+| BR-2 warning demoted to `debug` | 1 failed |
+| BR-9 `on_dropped` removed | 1 failed |
+| restored | 0 failed |
+
+Round-3 minor worth keeping: the dropped-agent message reported `dropped.name`,
+but `get_agent` never returns nil — a typo'd `skill_agent = "Typo"` resolves to
+the **selection**, so the warning would have read `configured agent 'SEL' … has
+no tool wire`, naming an agent the user never set. `source` now carries the
+configured name, separating what was asked for from what it resolved to. That
+is the same never-nil contract biting a third time, in a third place.
+
+**The pattern across all three rounds was one thing:** verifying the adjacent
+mechanism and reporting the real one as done. Round 1 — the deliverable had no
+test (reverting it left 64/64 green). Round 2 — the BR-4 fix reintroduced BR-3,
+and BR-9 was BR-2's family unswept. Round 3 — the round-2 fixes were unpinned.
+The antidote is one command: remove the behaviour, confirm something goes red.
+Recorded in `workshop/lessons.md`.

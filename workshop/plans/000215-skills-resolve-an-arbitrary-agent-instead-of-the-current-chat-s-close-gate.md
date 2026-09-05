@@ -273,6 +273,43 @@ rounds:
           family: misattributed-diagnostic
           round: 3
       blocked: true
+    - "n": 4
+      timestamp: "2026-09-04T17:04:33-07:00"
+      agent: claude
+      dispose:
+        - id: BR-10
+          disposition: not-addressed
+          note: Both guards remain at skill_invoke.lua:225 and :233, untouched by round 3; re-verified statically that not_chat (init.lua:1604-1634) already required find_header_end to succeed and agent_info.resolve unconditionally returns info (agent_info.lua:143).
+          round: 4
+        - id: BR-12
+          disposition: addressed
+          note: 'Both user-observable halves pinned and verified by mutation in a scratch worktree (warning→debug = 1 red; on_dropped removed = 1 red; restored = 0). The third enumerated item is withdrawn on inspection: nothing in the skill path reads agent.system_prompt, so that Done-when has no observable failure mode to pin.'
+          round: 4
+        - id: BR-13
+          disposition: not-addressed
+          note: skill_invoke.lua:224-231 still re-reads the buffer and re-runs find_header_end + parse_header_metadata after p.not_chat did all three; init.lua:206-219 remains file-local and unexported.
+          round: 4
+        - id: BR-14
+          disposition: addressed
+          note: source now carries the configured name at all four tiers; reverting skill_assembly.lua:144 to the bare "skill_agent" string turns skill_assembly_spec.lua:179 red.
+          round: 4
+      findings:
+        - id: BR-15
+          severity: Minor
+          title: The BR-2 test restores its parley.get_agent stub only on the happy path, so one raise poisons every later test in the file
+          detail: |-
+            define_spec.lua:309 restores parley.get_agent as the last statement inside
+            the captured block, and again at :311 after capture_warnings returns — but
+            capture_warnings re-raises with `error(err)` at :288 before either runs, and
+            after_each does not restore it. Demonstrated by injecting one error() into
+            the captured block in a scratch worktree at HEAD: 5 tests fail instead of 1,
+            the four extras with a cause unrelated to the injected fault. The rule: a
+            test that replaces module-level state must restore it on every exit path —
+            in after_each, or inside the same pcall-guarded wrapper that already does
+            this correctly for logger.warning ten lines above (define_spec.lua:283-291).
+          family: stub-outlives-its-test
+          round: 4
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#215 (boundary-review)
@@ -448,9 +485,30 @@ later rounds disposed of them. Generated — edit the gate, not this file.
   using SEL" precedes it, so it is traceable. Passing the configured name into
   `source` would make the line self-describing.
 
+## Round 4 — 2026-09-04T17:04:33-07:00 (claude) — passed
+
+### Disposed
+
+- BR-10 — not-addressed — Both guards remain at skill_invoke.lua:225 and :233, untouched by round 3; re-verified statically that not_chat (init.lua:1604-1634) already required find_header_end to succeed and agent_info.resolve unconditionally returns info (agent_info.lua:143).
+- BR-12 — addressed — Both user-observable halves pinned and verified by mutation in a scratch worktree (warning→debug = 1 red; on_dropped removed = 1 red; restored = 0). The third enumerated item is withdrawn on inspection: nothing in the skill path reads agent.system_prompt, so that Done-when has no observable failure mode to pin.
+- BR-13 — not-addressed — skill_invoke.lua:224-231 still re-reads the buffer and re-runs find_header_end + parse_header_metadata after p.not_chat did all three; init.lua:206-219 remains file-local and unexported.
+- BR-14 — addressed — source now carries the configured name at all four tiers; reverting skill_assembly.lua:144 to the bare "skill_agent" string turns skill_assembly_spec.lua:179 red.
+
+### Raised
+
+- **BR-15** [Minor] `stub-outlives-its-test` The BR-2 test restores its parley.get_agent stub only on the happy path, so one raise poisons every later test in the file
+  define_spec.lua:309 restores parley.get_agent as the last statement inside
+  the captured block, and again at :311 after capture_warnings returns — but
+  capture_warnings re-raises with `error(err)` at :288 before either runs, and
+  after_each does not restore it. Demonstrated by injecting one error() into
+  the captured block in a scratch worktree at HEAD: 5 tests fail instead of 1,
+  the four extras with a cause unrelated to the injected fault. The rule: a
+  test that replaces module-level state must restore it on every exit path —
+  in after_each, or inside the same pcall-guarded wrapper that already does
+  this correctly for logger.warning ten lines above (define_spec.lua:283-291).
+
 ## Open findings
 
 - **BR-10** [Minor] `dead-defensive-branch` Two unreachable nil-guards inside the transcript tier, both added by the commit that cleared BR-8
-- **BR-12** [Important] `seam-untested-by-pure-double` The shell half of the seam is unpinned — deleting BR-9's warning, or reverting BR-2's warning to debug, leaves the whole suite green
 - **BR-13** [Minor] `redundant-buffer-reparse` The transcript tier re-reads the buffer and re-parses headers that not_chat parsed one line earlier in the same tick
-- **BR-14** [Minor] `misattributed-diagnostic` The new drop warning can name an agent the user never configured
+- **BR-15** [Minor] `stub-outlives-its-test` The BR-2 test restores its parley.get_agent stub only on the happy path, so one raise poisons every later test in the file
