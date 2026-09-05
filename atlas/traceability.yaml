@@ -720,6 +720,10 @@ atlas:
       - tests/integration/voice_apply_spec.lua
       - tests/unit/skill_picker_spec.lua
       - tests/unit/skill_render_spec.lua
+      # define_spec holds the cascade's IO-seam tests (#215): a chat's
+      # provider:/model: headers reaching deps.current_agent. Mapped here so an
+      # edit to skills/skill-system.md runs them via `make test-changed`.
+      - tests/integration/define_spec.lua
 
   discovery/registry:
     code:

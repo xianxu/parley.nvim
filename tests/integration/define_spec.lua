@@ -190,6 +190,190 @@ describe("define: web-toggle payload (#161)", function()
     end)
 end)
 
+-- #215: a skill turn must follow the transcript it is invoked from. The failure
+-- this guards produced a definition from a model the user had not chosen, with
+-- no visible sign it had happened.
+--
+-- These drive the REAL seam (skill_invoke.invoke → not_chat → find_header_end →
+-- parse_header_metadata → get_agent_info) and capture the `current_agent` the
+-- cascade receives. Asserting on resolve_agent with a hand-built current_agent
+-- pins nothing: the close review for #215 scratch-reverted the whole deliverable
+-- and every such test stayed green.
+describe("define: transcript agent reaches the cascade (#215)", function()
+    local parley = require("parley")
+    local assembly = require("parley.skill_assembly")
+    local tasker = require("parley.tasker")
+    local tmpdir, path, buf, captured_deps, orig_resolve, orig_query, saved_dirs
+
+    -- not_chat requires: a configured chat root, a timestamped basename, >=5
+    -- lines, and topic:/file: headers. Anything less and the seam correctly
+    -- refuses to read headers at all.
+    local function chat_lines(extra)
+        local l = { "---", "topic: t", "file: f" }
+        for _, e in ipairs(extra or {}) do table.insert(l, e) end
+        vim.list_extend(l, { "---", "", "💬: define me", "", "🤖: sure" })
+        return l
+    end
+
+    local function write_chat(extra)
+        vim.fn.writefile(chat_lines(extra), path)
+        vim.cmd("edit! " .. vim.fn.fnameescape(path))
+        buf = vim.api.nvim_get_current_buf()
+    end
+
+    before_each(function()
+        require("parley.tools").register_builtins()
+        tmpdir = vim.fn.tempname()
+        vim.fn.mkdir(tmpdir, "p")
+        -- timestamped basename, inside a configured chat root
+        path = tmpdir .. "/2026-09-04.10-00-00.000_transcript.md"
+        -- Register a real chat root: not_chat resolves against the root
+        -- MANAGER (chat_dirs), not config.chat_dir — setting the config field
+        -- alone leaves the resolved roots untouched and the buffer is judged
+        -- "not in configured chat roots", silently skipping the header merge.
+        saved_dirs = parley.get_chat_dirs()
+        parley.set_chat_dirs({ tmpdir }, false)
+        captured_deps = nil
+
+        orig_resolve = assembly.resolve_agent
+        assembly.resolve_agent = function(_m, deps)
+            captured_deps = deps
+            return { model = "m", provider = "anthropic" }
+        end
+        orig_query = parley.dispatcher.query
+        parley.dispatcher.query = function(_b, _p, _payload, _h, on_exit)
+            tasker.set_query("qid_215", { raw_response = emit_definition_sse("T", "D.") })
+            vim.schedule(function() on_exit("qid_215") end)
+        end
+    end)
+
+    after_each(function()
+        parley.dispatcher.query = orig_query
+        assembly.resolve_agent = orig_resolve
+        parley.set_chat_dirs(saved_dirs, false)
+        pcall(function() require("parley.progress").stop() end)
+        vim.fn.delete(tmpdir, "rf")
+    end)
+
+    -- current_agent is passed as a THUNK (#215 BR-3: tiers 1-4 must not pay for
+    -- the buffer read + header parse). Resolve it here so the assertions below
+    -- read the value the cascade would actually see at tier 5.
+    local function invoke_and_capture()
+        require("parley.skill_invoke").invoke(buf, require("parley.skills.define"),
+            { phrase = "x" }, { document = "doc", no_reload = true, detached_progress = false })
+        vim.wait(500, function() return captured_deps ~= nil end)
+        if not captured_deps then return nil end
+        local cur = captured_deps.current_agent
+        assert.are.equal("function", type(cur), "current_agent must reach the cascade lazily")
+        return { current_agent = cur() }
+    end
+
+    -- BR-12: the SHELL half of the seam. Both user-visible warnings this issue
+    -- added live in skill_invoke, not in the pure resolver — deleting either one
+    -- previously left the entire suite green. The enumeration is exactly these
+    -- two: the transcript-merge failure (BR-2) and the dropped configured agent
+    -- (BR-9). Each test must go red if its warning is removed or demoted.
+    local function capture_warnings(fn)
+        local seen = {}
+        local orig = parley.logger.warning
+        parley.logger.warning = function(msg) table.insert(seen, tostring(msg)) end
+        local ok, err = pcall(fn)
+        parley.logger.warning = orig
+        if not ok then error(err) end
+        return seen
+    end
+
+    local function joined(t) return table.concat(t, "\n") end
+
+    it("BR-2: warns (not debug-swallows) when the transcript merge fails", function()
+        write_chat({ "provider: anthropic", "model: claude-opus-5-pinned" })
+        local orig_get = parley.get_agent
+        local seen = capture_warnings(function()
+            parley.get_agent = function() error("boom: agent registry unavailable") end
+            require("parley.skill_invoke").invoke(buf, require("parley.skills.define"),
+                { phrase = "x" }, { document = "doc", no_reload = true, detached_progress = false })
+            vim.wait(500, function() return captured_deps ~= nil end)
+            -- the tier is a thunk; the failure happens when the cascade pulls it
+            if captured_deps and type(captured_deps.current_agent) == "function" then
+                captured_deps.current_agent()
+            end
+            parley.get_agent = orig_get
+        end)
+        parley.get_agent = orig_get
+        local all = joined(seen)
+        assert.is_truthy(all:match("transcript agent unavailable"),
+            "expected a WARNING naming the failed transcript merge, got: " .. all)
+        assert.is_truthy(all:match("boom"),
+            "the warning must carry the underlying error, got: " .. all)
+    end)
+
+    it("BR-9: warns when a configured agent is dropped for having no tool wire", function()
+        write_chat()
+        local seen = capture_warnings(function()
+            require("parley.skill_invoke").invoke(buf, require("parley.skills.define"),
+                { phrase = "x" }, { document = "doc", no_reload = true, detached_progress = false })
+            vim.wait(500, function() return captured_deps ~= nil end)
+            -- drive the real on_dropped the shell injected
+            assert.is_truthy(captured_deps and captured_deps.on_dropped,
+                "shell must inject on_dropped so an explicit setting is never silently overridden")
+            captured_deps.on_dropped("skill_agent=Typo",
+                { name = "SEL", provider = "googleai", model = { model = "g" } })
+        end)
+        local all = joined(seen)
+        assert.is_truthy(all:match("skill_agent=Typo"),
+            "the warning must name what the USER configured, got: " .. all)
+        assert.is_truthy(all:match("SEL"),
+            "and what it actually resolved to, got: " .. all)
+        assert.is_truthy(all:match("googleai"), "and the wireless provider, got: " .. all)
+    end)
+
+    it("the shipped skill_agent/review_agent defaults no longer name a missing agent", function()
+        local defaults = dofile("lua/parley/config.lua")
+        assert.is_nil(defaults.skill_agent)
+        assert.is_nil(defaults.review_agent)
+    end)
+
+    it("carries the chat's provider:/model: headers into deps.current_agent", function()
+        write_chat({ "provider: anthropic", "model: claude-opus-5-pinned" })
+        local deps = invoke_and_capture()
+        assert.is_not_nil(deps)
+        assert.is_not_nil(deps.current_agent)
+        assert.are.equal("anthropic", deps.current_agent.provider)
+        local m = deps.current_agent.model
+        assert.are.equal("claude-opus-5-pinned", type(m) == "table" and m.model or m)
+    end)
+
+    it("passes the bare selection when the chat pins nothing", function()
+        write_chat()
+        local deps = invoke_and_capture()
+        assert.is_not_nil(deps.current_agent)
+        assert.is_not_nil(deps.current_agent.provider)
+    end)
+
+    -- ARCH-SECURE: review/voice_apply run on arbitrary markdown. A plain
+    -- document's own frontmatter must not steer which vendor receives it.
+    it("ignores frontmatter in a NON-chat buffer (not_chat guards the merge)", function()
+        local plain = tmpdir .. "/plain-notes.md" -- no timestamp → not a chat
+        vim.fn.writefile({ "---", "provider: googleai", "model: gemini-3-pro-preview",
+            "---", "", "body", "" }, plain)
+        vim.cmd("edit! " .. vim.fn.fnameescape(plain))
+        buf = vim.api.nvim_get_current_buf()
+        local deps = invoke_and_capture()
+        assert.is_not_nil(deps.current_agent)
+        assert.are_not.equal("googleai", deps.current_agent.provider)
+    end)
+
+    -- A `model:` that looks like JSON but does not decode reaches
+    -- agent_info.lua:73-85, which warns and passes the raw string through.
+    -- The turn must still resolve rather than fail at the wire.
+    it("survives a model: header that looks like JSON and fails to decode", function()
+        write_chat({ 'model: {bad json}' })
+        local deps = invoke_and_capture()
+        assert.is_not_nil(deps.current_agent)
+        assert.is_not_nil(deps.current_agent.model)
+    end)
+end)
+
 describe("define_visual + render_definition (#161)", function()
     local parley = require("parley")
     local tasker = require("parley.tasker")

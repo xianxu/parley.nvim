@@ -381,13 +381,20 @@ local config = {
 	-- chat-buffer-only.) `review_shortcut_menu` is the skill-picker alias here.
 	review_shortcut_menu = { modes = { "n" }, shortcut = "<M-o>" },
 	review_shortcut_next = { modes = { "n", "i" }, shortcut = "<M-CR>" },
-	-- agent to use for document review (defaults to Claude-Sonnet)
-	review_agent = "Claude-Sonnet",
+	-- Agent for document review. NIL by default (#215): it used to name
+	-- "Claude-Sonnet", which is absent from the shipped roster — and since
+	-- get_agent never returns nil, that did not fall through, it silently
+	-- resolved to whatever agent was selected while logging a warning naming a
+	-- model parley does not ship. Left unset, the cascade reaches the agent the
+	-- transcript is actually using. Set it to pin reviews to one agent.
+	review_agent = nil,
 	-- how long review edit highlights persist (ms)
 	review_highlight_duration = 2000,
 	-- Skill system
 	skill_shortcut = { modes = { "n" }, shortcut = "<C-g>s" },
-	skill_agent = "Claude-Sonnet",
+	-- Agent for skills. NIL by default — see review_agent above (#215). While
+	-- this is set, the cascade's transcript tier is unreachable.
+	skill_agent = nil,
 	skills = {},
 	-- default search term when using :ParleyChatFinder
 	chat_finder_pattern = "",

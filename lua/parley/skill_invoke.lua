@@ -193,11 +193,86 @@ function M.invoke(buf, manifest, args, opts)
     -- exchange) instead of the whole buffer; defaults to the buffer content.
     local inv = assembly.build_invocation(manifest, { body = body, document = opts.document or original, manual = manual })
 
+    -- #215: the agent the BUFFER is using, for the cascade's transcript tier.
+    -- Reuses agent_info.resolve (ARCH-DRY) rather than re-reading headers here:
+    -- it already owns the `model:` JSON decode and the string→table coercion
+    -- that prepare_payload depends on, and a second hand-rolled merge would
+    -- drift into a model-shape mismatch at the wire.
+    --
+    -- Only provider+model are taken onto a COPY of the agent record. The chat's
+    -- system_prompt and memory-pref folding are deliberately dropped: a skill
+    -- owns its own system prompt via source(ctx), so inheriting the chat's would
+    -- double-apply a prompt the skill never asked for.
+    local function transcript_agent()
+        -- EVERYTHING here is inside the pcall, deliberately: p.get_agent()
+        -- raises when no agents are configured (init.lua:4420-4425) and
+        -- not_chat touches buffer + root state. This is an OPTIONAL enrichment
+        -- of the cascade — it must never be able to take down the skill turn
+        -- that would otherwise have worked.
+        local ok, resolved = pcall(function()
+            local selected = p.get_agent()
+            -- Header overrides are honoured for CHAT buffers only. `not_chat`
+            -- is the codebase's canonical predicate (configured chat root +
+            -- timestamped name + topic:/file: headers); a bare "has a --- line"
+            -- test would let any markdown artifact's own frontmatter steer
+            -- which vendor receives it, and review/voice_apply run on arbitrary
+            -- documents (ARCH-SECURE).
+            if p.not_chat(buf, artifact_path) then
+                return selected
+            end
+            local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+            local header_end = p.chat_parser.find_header_end(lines)
+            if not header_end then return selected end
+            -- parse_header_metadata, NOT parse_chat: `parsed.headers` is exactly
+            -- this call (chat_parser.lua:258) and everything else parse_chat
+            -- builds would be discarded. This runs on the <M-CR> keystroke path,
+            -- where init.lua has already parsed the same buffer once
+            -- (ARCH-CONSTRAINTS).
+            local headers = p.chat_parser.parse_header_metadata(lines, header_end)
+            local info = p.get_agent_info(headers, selected)
+            if not info then return selected end
+            -- No `or selected.*` fallbacks: agent_info.resolve always returns a
+            -- coerced provider+model, and even if one were nil the key would
+            -- simply be absent here and tbl_extend would leave the selection's
+            -- value standing. The `or` was dead either way.
+            return vim.tbl_extend("force", selected, {
+                provider = info.provider,
+                model = info.model,
+            })
+        end)
+        if not ok then
+            -- Loud, not silent: a break here restores the exact pre-#215 defect
+            -- (a skill answering from an agent the transcript never chose), and
+            -- logger.debug never reaches vim.notify (logger.lua:94-96).
+            p.logger.warning("skill " .. tostring(manifest.name)
+                .. ": transcript agent unavailable (" .. tostring(resolved)
+                .. "); falling back to the cascade")
+            return nil
+        end
+        return resolved
+    end
+
     local agent = assembly.resolve_agent(manifest, {
         config = p.config,
         get_agent = p.get_agent,
         agent_names = p._agents,
         agents = p.agents,
+        -- Passed as a THUNK, not a value: it costs a buffer read plus not_chat's
+        -- header parse, and tiers 1-4 win without ever needing it.
+        current_agent = transcript_agent,
+        -- An explicitly configured agent that cannot call tools gets substituted
+        -- away; say so, at warning level. Silent override of a user's own
+        -- setting is what BR-2 was, one tier further down.
+        on_dropped = function(source, dropped)
+            -- `source` carries the CONFIGURED name and `dropped.name` what it
+            -- actually resolved to; get_agent substitutes the selection for an
+            -- unknown name, so reporting only the latter would name an agent the
+            -- user never set.
+            p.logger.warning("skill " .. tostring(manifest.name) .. ": " .. source
+                .. " resolved to agent '" .. tostring(dropped.name or "?")
+                .. "', which has no tool wire for provider '" .. tostring(dropped.provider)
+                .. "'; falling through to the next tier")
+        end,
     })
     if not agent then
         p.logger.warning("skill " .. tostring(manifest.name) .. ": no tool-capable agent resolved")

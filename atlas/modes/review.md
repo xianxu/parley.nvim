@@ -192,7 +192,7 @@ kill-or-cancel prompt (no two concurrent rounds).
 ## Config
 
 ```lua
-review_agent = "",              -- agent name (deprecated; use skills config)
+review_agent = nil,             -- optional pin (deprecated; use skills config). nil by default (#215)
 review_highlight_duration = 2000, -- highlight fade time in ms
 review_shortcut_edit   = { modes = { "n" }, shortcut = "<C-g>ve" },
 review_shortcut_finder = { modes = { "n", "i" }, shortcut = "<C-g>vf" },

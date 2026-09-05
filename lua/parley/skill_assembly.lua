@@ -54,55 +54,113 @@ function M.build_invocation(manifest, opts)
 end
 
 --- Resolve the agent for a skill via the salvaged cascade. PURE given `deps`:
----   deps.config       = { skills = {...}, review_agent = name?, skill_agent = name? }
----   deps.get_agent    = function(name) -> agent|nil
----   deps.agent_names  = ordered list of agent names (for the tool-capable scan)
----   deps.agents       = name -> agent table
+---   deps.config        = { skills = {...}, review_agent = name?, skill_agent = name? }
+---   deps.get_agent     = function(name) -> agent   (NEVER nil; see note below)
+---   deps.agent_names   = ordered list of agent names (for the tool-capable scan)
+---   deps.agents        = name -> agent table
+---   deps.current_agent = the agent the BUFFER is using — the selection with the
+---                        chat's provider:/model: header overrides applied. The
+---                        IO shell computes it (skill_invoke); this stays pure.
+---                        MAY be a thunk: computing it costs a buffer read and a
+---                        header parse, which is waste when tiers 1-4 win, so the
+---                        shell passes a function and we call it only on arrival.
+---   deps.on_dropped    = optional fun(source, agent) — invoked when a tier the
+---                        USER configured names an agent that cannot call tools.
+---                        Silently substituting something else there overrides an
+---                        explicit instruction; the shell turns this into a
+---                        user-visible warning. Ambient tiers do not report.
+---
 --- Cascade: per-skill config → legacy review_agent → manifest default →
---- global skill_agent → first tool-capable (anthropic|cliproxyapi).
+--- global skill_agent → CURRENT TRANSCRIPT AGENT → first tool-capable.
+--- Tiers are numbered 1..6 here, in the atlas, and in the issue Spec — one scheme.
+---
+--- #215. Two things this function used to get wrong:
+---
+---  1. It treated `get_agent` as a lookup that returns nil on a miss. Production
+---     (`init.lua:4405-4451`) never returns nil — an unknown name warns and
+---     falls back to `M._state.agent`. So a stale `config.skill_agent` did not
+---     "fall through"; it silently resolved to the selection and made the roster
+---     scan below unreachable. Nilling those defaults (`config.lua`) is what
+---     makes the transcript tier observable at all.
+---  2. Only the roster scan tested tool capability. Every earlier tier returned
+---     `get_agent`'s result unvetted, so an agent with no tool wire could reach
+---     a skill whose entire purpose is its tool — surfacing as the maximally
+---     unhelpful "model returned no tool call". One predicate now guards them all.
 --- @param manifest table SkillManifest
 --- @param deps table injected config + agent registry
 --- @return table|nil agent
 function M.resolve_agent(manifest, deps)
     local config = deps.config or {}
     local get_agent = deps.get_agent or function() return nil end
+    local wire = require("parley.tools.wire")
+
+    -- A skill cannot do its job through an agent that cannot call tools, so a
+    -- wireless agent is not an answer at ANY tier — better to keep descending
+    -- than to hand `define` an agent that can never emit `emit_definition`.
+    local function capable(agent)
+        if not agent then return nil end
+        if wire.resolve(agent.provider, agent.model) == nil then return nil end
+        return agent
+    end
+
+    -- Tiers 1-4 are things the USER asked for by name. Dropping one for being
+    -- wireless is correct — a skill cannot work without its tool — but doing it
+    -- silently means an explicit setting is overridden with no signal, which is
+    -- the same defect class as the seam's old debug-level swallow. Tiers 5 and 6
+    -- stay silent on purpose: the transcript is ambient and the roster scan is
+    -- nobody's instruction.
+    local function configured(agent, source)
+        if not agent then return nil end
+        local ok = capable(agent)
+        if not ok and deps.on_dropped then
+            deps.on_dropped(source, agent)
+        end
+        return ok
+    end
 
     -- 1: per-skill config override
     for _, cfg in ipairs(config.skills or {}) do
         if cfg.name == manifest.name and cfg.agent then
-            local agent = get_agent(cfg.agent)
+            local agent = configured(get_agent(cfg.agent), "skills[" .. tostring(cfg.name) .. "].agent=" .. tostring(cfg.agent))
             if agent then return agent end
         end
     end
 
-    -- 1b: legacy review_agent fallback (review skill only)
+    -- 2: legacy review_agent fallback (review skill only)
     if manifest.name == "review" and config.review_agent then
-        local agent = get_agent(config.review_agent)
+        local agent = configured(get_agent(config.review_agent), "review_agent=" .. tostring(config.review_agent))
         if agent then return agent end
     end
 
-    -- 2: manifest default
+    -- 3: manifest default
     if manifest.agent then
-        local agent = get_agent(manifest.agent)
+        local agent = configured(get_agent(manifest.agent), "manifest.agent=" .. tostring(manifest.agent))
         if agent then return agent end
     end
 
-    -- 3: global skill_agent config
+    -- 4: global skill_agent config. Nil by default since #215 — when it IS set
+    -- the user asked for it explicitly, so it still outranks the transcript.
     if config.skill_agent then
-        local agent = get_agent(config.skill_agent)
+        local agent = configured(get_agent(config.skill_agent), "skill_agent=" .. tostring(config.skill_agent))
         if agent then return agent end
     end
 
-    -- 4: first tool-capable agent. "Tool-capable" is now "has a tool wire"
+    -- 5: the agent this buffer is actually talking to. Ambient context beats
+    -- roster position: defining a term inside a chat pinned to one model should
+    -- not silently answer from another.
+    -- Thunk or value: only now is the buffer read + header parse actually needed.
+    local cur = deps.current_agent
+    if type(cur) == "function" then cur = cur() end
+    local current = capable(cur)
+    if current then return current end
+
+    -- 6: first tool-capable agent. "Tool-capable" is now "has a tool wire"
     -- rather than a hardcoded provider pair (#198) — openai, copilot, azure
     -- and ollama qualify too. cliproxyapi resolves on either route, so the
     -- model matters only for picking WHICH wire, not whether one exists.
-    local wire = require("parley.tools.wire")
     for _, name in ipairs(deps.agent_names or {}) do
-        local agent = (deps.agents or {})[name]
-        if agent and wire.resolve(agent.provider, agent.model) ~= nil then
-            return agent
-        end
+        local agent = capable((deps.agents or {})[name])
+        if agent then return agent end
     end
 
     return nil
