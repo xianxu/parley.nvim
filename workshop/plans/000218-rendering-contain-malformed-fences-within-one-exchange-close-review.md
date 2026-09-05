@@ -239,3 +239,245 @@ findings:
       story now that a column-zero turn marker ends the fence. lua/parley/outline.lua
       changed in this window; its atlas page did not.
 ```
+
+---
+
+## Re-review — 2026-09-05T13:55:49-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 218 — Rendering: contain malformed fences within one exchange |
+| repo | parley.nvim |
+| issue file | workshop/issues/000218-rendering-contain-malformed-fences-within-one-exchange.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | a543542b28895f85656513a27f9b66ac262f3049..ebc9bef2f195e98404ed876d9f0184f477beb909 |
+| command | sdlc close --issue 218 |
+| reviewer | claude |
+| timestamp | 2026-09-05T13:55:49-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+The rework is substantially real: I reproduced red-on-revert for BR-1 (tree-outline memo), BR-2's outline half, BR-3 and BR-4; the six hand-rolled fence walks really are consolidated into `is_partition` / `is_fence_delim` / `code_block_memo`; the convention is single-sourced as `defaults.fence_indent_convention`; `OPENAI_WIRE` is shared; traceability now maps the containment spec. Full suite green (194 spec files, `make test` exit 0), luacheck clean across 347 files. What blocks SHIP is that the class is *still* one instance short, and this time the diff caused the breakage rather than inheriting it: `lua/parley/exporter.lua:352` pairs fences with a whole-document `gsub` whose closer must be at column zero, so the two-space convention this very window added to all five shipped system prompts makes the HTML exporter swallow the closing fence, the following prose, and the next two turns into one `<pre><code>` block. I reproduced that against the real pattern. Secondarily, three of this round's own fixes revert green — the same Done-when the round claimed to have satisfied.
+
+## 1. Strengths
+
+- **The consolidation is genuine and mutation-confirmed.** Restoring the private third memo in `build_file_outline_items` turns `picker_items_spec` red on exactly one test; reverting `patterns(config)` → `patterns()` at `outline.lua:17,265` turns the custom-prefix test red; reverting the partition branch at `skills/review/init.lua:175` and swapping `is_fence_delim` back to `^```` each turn `review_spec` red on exactly the intended case. Four independent reverts, four correct reds.
+- **`highlight_structure.lua:146-256` is the right shape.** `advance` / `reset_partition` / `is_partition` / `is_fence_delim` / `code_block_memo` are pure over plain tables; `code_block_memo` takes `lines`, not a `bufnr`, so outline's IO stays in its own `build_code_block_memo` wrapper. External consumers all read `.kind`, never `.token`, so widening the fence token to `c3`/`c4` drifted nothing (`fold_projection.lua:102`, `chat_parser.lua:539,755`, `chat_respond.lua:1679` all verified).
+- **The BR-3 recurrence was caught by actually running the check.** The Log's admission that the BR-2 config fix came back green on the first mutation pass, and needed its own outline-level test, is the correct failure mode to have found and recorded.
+- **`golden_fixture.lua:38` `M.OPENAI_WIRE`** cleanly closes BR-6, and the shadowing `local golden = read_json(...)` at `parley_harness_golden_spec.lua:65` is legal Lua (the outer `golden` is what `:62-63` binds) — I checked, it is not the bug it looks like.
+- **The default prompt's convention is incidentally pinned** by the twelve regenerated golden payloads, which is why BR-5's *default* half cannot silently regress.
+
+## 2. Critical findings
+
+**C1 — `lua/parley/exporter.lua:352`: the two-space convention this window introduced breaks HTML export; a seventh fence pairing was never enumerated.**
+
+`html:gsub("```([^\n]*)\n(.-)\n```", …)` requires the closing run to sit immediately after a newline, so an indented closer never matches and the scan runs on to the next flush-left fence anywhere in the document. Reproduced against the real pattern on the shape the prompt now asks for:
+
+```
+input:  🤖: answer one / "  ```lua" / "  local x = 1" / "  ```" /
+        "Prose that must NOT be inside a code block." / 💬: next question /
+        🤖: answer two / "```" / "flush block" / "```"
+
+output: <CODE lang=lua>  local x = 1
+          ```
+        Prose that must NOT be inside a code block.
+        💬: next question
+        🤖: answer two</CODE>
+        flush block            ← left bare, its own fence consumed
+```
+
+`tests/unit/pure_functions_spec.lua:163,170` cover only flush-left fences, so nothing goes red. It is also a cross-exchange pairing with no partition bound — the identical shape as BR-12's `copy.lua`, which this round *did* fix.
+
+**This is the 3rd finding in family `instance-not-class-sweep`.** Rounds 1 and 2 fixed instances: the plan gate named one tracker, implementation found a fifth, close review found a sixth and seventh, and here is an eighth. Do NOT fix only `exporter.lua:352`. State the rule and enforce it: *a triple-backtick predicate may exist only in `highlight_structure.is_fence_delim` (prose) and `fence.lua` (tool bodies); every other consumer derives from one of those.* This repo already owns the mechanism — `tests/arch/single_source_sweeps_spec.lua` exists precisely because "a sweep without a guard is a snapshot: it says nothing about the ninth copy," and it got no `#218` entry. Measured prevalence after this round: `grep -rn '\`\`\`' lua/` leaves `exporter.lua:352` and `chat_respond.lua:811` as hand-rolled matchers outside the two sanctioned modules; `exporter.lua` is already mapped in `atlas/traceability.yaml` (three entries), so a guard there runs today.
+
+## 3. Important findings
+
+**I1 — three of this round's fixes revert green, measured.** The Done-when says "each new test is verified by mutation — reverting its change turns it red." I reverted each of this round's changes and ran the mapped specs:
+
+| change | revert result |
+|---|---|
+| `skills/review/init.lua:169` live-config threading (BR-2's review half) | `review_spec` 47 ok / 0 fail — **green** |
+| `copy.lua:15-16,20,39` partition bound (BR-12) | no `copy` spec exists anywhere in `tests/`; nothing to run |
+| `config.lua:242,247,252,257` convention on four prompts (BR-5) | stripped all four; `custom_prompts_spec`, `config_tools_spec`, `build_messages_spec`, `picker_items_spec`, `pure_functions_spec` all **green** |
+
+**This is the 2nd finding in family `fix-without-failing-test`.** Do not spot-add one test for the review skill. The rule that covers all three: *the mutation ledger must be generated from the round's own diff hunks, not from the list of changes the author remembers making* — enumerate every behavioural hunk in `git diff <round-base>..HEAD -- lua/`, revert each, and record the ones with no red. The two cheap guards that fall out: a `parse_markers` case driven through a configured `chat_user_prefix`, and an arch assertion that every entry in `config.system_prompts` contains `defaults.fence_indent_convention` (which also guards the sixth prompt someone adds later).
+
+## 4. Minor findings
+
+- `lua/parley/config.lua:242,247,252,257` — the convention is concatenated straight onto a sentence-final `.` with no separator, so `creative`/`concise`/`teacher`/`code_reviewer` ship "…in your responses.Indent every fenced code block…". The `default` prompt is fine only because `defaults.lua:46` happens to end in `\n\n`.
+- `lua/parley/copy.lua:2` still reads "Pure utility module — no parley module dependencies", which this diff made false (`require("parley.highlight_structure")`, `require("parley").config`). Relatedly the atlas table at `atlas/ui/highlights.md:35` presents `code_block_memo`'s grammar as CommonMark ">= closer", but `code_block_memo` is a plain boolean toggle — only `advance` implements the width rule. **This is the 2nd finding in family `doc-overstates-implementation`** (BR-10 is still open below): the rule is that a comment or atlas row asserting a code property needs a grep-able referent, and the three live instances (atlas:35, atlas:45, copy.lua:2) should be swept together rather than patched one at a time.
+- `lua/parley/copy.lua` appears in no `atlas/traceability.yaml` `code:` list, so `make test-changed` can never reach the containment fix it received. **This is the 2nd finding in family `traceability-unmapped`.** Prevalence measured: 22 of 146 `lua/` modules are unmapped, so the rule-level answer is either an arch guard requiring every module to appear in exactly one `code:` list, or an explicit allowlist — not a one-line addition for `copy.lua`.
+- `lua/parley/highlight_structure.lua:180,219` — `is_partition(line, patterns or M.patterns())` silently substitutes default prefixes when `patterns` is nil, and `code_block_memo`'s docstring says patterns "MUST come from the live config" while nothing enforces it. **This is the 2nd finding in family `config-ignored-at-new-seam`**: the rule is to make the invalid state unrepresentable at the seam (`assert(patterns, …)`) rather than to fix each caller, which is what BR-2 already had to do twice.
+
+## 5. Test coverage notes
+
+- Mutation reproduction for BR-1, BR-2(outline), BR-3, BR-4: **all four confirmed red**, one test each, no collateral.
+- The new `highlight_structure_spec` block (`:195-309`) is the strongest addition — the property test, the CommonMark shorter-run case, the width-invalidation `replace` case, and the two `code_block_memo` cases including the configured-prefix one.
+- `tests/integration/fence_containment_spec.lua` drives `rebuild_structure` → `highlight_question_block` and reads real extmarks; its second test guards against the fix degenerating into a no-op. Good.
+- Gaps: `lua/parley/copy.lua` has **zero** test coverage in the tree; `exporter.lua`'s fence tests cover only flush-left; no test asserts any shipped `system_prompts` entry carries the convention; still no `M.replace`-vs-rebuild equivalence test over a *sequence* of edits (round 1 noted this; unchanged).
+
+## 6. Architectural notes
+
+- **ARCH-DRY** — flag (C1). Six copies became one shared predicate, which is the right move; the seventh survived because the sweep has no fitness guard, and `tests/arch/single_source_sweeps_spec.lua` is the file that exists to hold one.
+- **ARCH-PURE** — pass. `advance`, `reset_partition`, `is_partition`, `is_fence_delim`, `code_block_memo` are deterministic over plain tables; IO stays in the outline/highlighter/copy shells; the render test drives the real seam, not a mock.
+- **ARCH-PURPOSE** — flag (C1, I1). The purpose is *the class*, and the class enumeration is still being discovered by the reviewer rather than written down by the plan.
+- **ARCH-MOCK** — N/A. No new external binary or service; the golden regenerator is offline over file fixtures and now shares `OPENAI_WIRE` with the verifier.
+- **ARCH-CONSTRAINTS** — pass with a note. `code_block_memo` runs a full `classify` (≈12 patterns plus a `require("parley.define")`) per line where the old loop ran two `line:match`es; every caller (`find_nearest_outline_line`, `_build_picker_items`, `build_file_outline_items`) is a user-triggered picker/jump path, and `perf_chat_typing_spec` is green. The render path still pays BR-8's double `classify` (`highlighter.lua:148` and `:192`) and BR-9's per-line `walk` allocation (`:155`).
+- **ARCH-SECURE** — pass. Malformed model output is the untrusted input and containment makes the failure local and visible; `is_fence_delim` type-guards non-strings, `classify` nil-guards, `tonumber(token:sub(2)) or 0` degrades to "closes" rather than crashing, and the `pcall` at `skills/review/init.lua:169` degrades to defaults. No credentials in scope. The one soft spot is the nil-`patterns` default noted above.
+- **ARCH-ORDER** — pass on the state model, flag on the oracle (unchanged from round 1). The width-carrying fingerprint closes the real cross-event staleness hole and is mutation-confirmed; the missing seam is a multi-edit `replace`-vs-rebuild equivalence test, which would observe more than one interleaving.
+
+## 7. Plan revision recommendations
+
+Append a `## Revisions` section to `workshop/issues/000218-…md` (the corrections currently live only as narrative in `## Log`, where the ledger cannot read them):
+
+1. **The enumeration is eight, not six.** `## Problem`'s table still says four. Add `exporter.lua:352` (whole-document `gsub`, column-zero closer, no partition bound) and restate the class as *"every fence predicate in `lua/` derives from `highlight_structure.is_fence_delim` or `fence.lua`"*, with the fitness guard as the deliverable rather than another site fix.
+2. **Done-when "each new test is verified by mutation" is still not met.** Name the three changes that revert green (review-skill live config, `copy.lua`, the four non-default prompts) and record how the mutation ledger will be derived from the diff rather than from recall.
+3. **The two-space convention has a breaking consumer.** The Log presents the convention as verified in code; record that it regressed HTML export and that the convention's introduction needs a consumer sweep of its own.
+4. **The two-grammar table is aspirational for `code_block_memo`.** `atlas/ui/highlights.md:35` describes a CommonMark ">= closer" rule that only `advance` implements; either implement it in `code_block_memo` or narrow the atlas row.
+
+Prior-round dispositions and this round's new findings:
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      All three outline memos now call highlight_structure.code_block_memo; restoring the private build turns the tree-outline test red.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      Both sites thread live config; outline half is mutation-red, review half is correct in code but unpinned (see I1).
+  - id: BR-3
+    disposition: addressed
+    note: |
+      review_spec now has three containment cases; reverting the partition branch turns one red.
+  - id: BR-4
+    disposition: addressed
+    note: |
+      is_fence_delim is shared and the indented-fence case goes red when swapped back to a column-zero match.
+  - id: BR-5
+    disposition: addressed
+    note: |
+      Convention single-sourced onto all five prompts; code is right but nothing pins it (see I1) and the concatenation lacks a separator.
+  - id: BR-6
+    disposition: addressed
+    note: |
+      golden_fixture.M.OPENAI_WIRE is consumed by both the regenerator and the verifier.
+  - id: BR-7
+    disposition: addressed
+    note: |
+      ui/highlights now lists highlight_structure.lua plus both specs.
+  - id: BR-8
+    disposition: not-addressed
+    note: |
+      classify is still computed at highlighter.lua:148 and recomputed at :192.
+  - id: BR-9
+    disposition: not-addressed
+    note: |
+      The per-line walk table at highlighter.lua:155 is unchanged and the comment still overstates field ownership.
+  - id: BR-10
+    disposition: not-addressed
+    note: |
+      defaults.lua was qualified, but atlas/ui/highlights.md was not touched by f1818ee; :35 still claims a 3-space limit and :45 the unqualified four-space claim.
+  - id: BR-11
+    disposition: addressed
+    note: |
+      The lazy fallback is gone; is_in_code_block is now a pure memo read.
+  - id: BR-12
+    disposition: addressed
+    note: |
+      Both copy.lua scans break at a partition — though nothing tests copy.lua at all (see I1).
+  - id: BR-13
+    disposition: not-addressed
+    note: |
+      atlas/ui/outline.md:13 still states the pre-218 rule; the file is unchanged in this window.
+findings:
+  - id: new
+    severity: Critical
+    family: instance-not-class-sweep
+    title: |
+      The new two-space convention breaks HTML export — exporter.lua pairs fences across turns and only closes at column zero
+    detail: |
+      lua/parley/exporter.lua:352 does html:gsub("```([^\n]*)\n(.-)\n```", ...). The
+      closer must follow a newline directly, so an indented closer never matches and the
+      scan runs to the next flush-left fence anywhere in the document. Reproduced against
+      the real pattern: an indented block plus following prose, the next 💬: question and
+      the next 🤖: answer are all swallowed into one code block, and the following
+      flush-left block is left bare. tests/unit/pure_functions_spec.lua:163,170 cover only
+      flush-left fences so nothing goes red. This is also a cross-exchange pairing with no
+      partition bound — the same shape as BR-12's copy.lua. THIRD finding in this family:
+      do not patch only this site. State the rule (a triple-backtick predicate may exist
+      only in highlight_structure.is_fence_delim for prose and fence.lua for tool bodies)
+      and enforce it in tests/arch/single_source_sweeps_spec.lua, which exists for exactly
+      this and received no 218 entry. Prevalence after this round: exporter.lua:352 and
+      chat_respond.lua:811 are the remaining hand-rolled matchers in lua/.
+  - id: new
+    severity: Important
+    family: fix-without-failing-test
+    title: |
+      Three of this round's own fixes revert green — the mutation ledger was built from recall, not from the diff
+    detail: |
+      Measured by revert: skills/review/init.lua:169 live-config threading leaves
+      review_spec at 47 ok / 0 fail; copy.lua's partition bound has no spec anywhere in
+      tests/; stripping fence_indent_convention from all four non-default prompts in
+      config.lua:242,247,252,257 leaves custom_prompts_spec, config_tools_spec,
+      build_messages_spec, picker_items_spec and pure_functions_spec green. SECOND finding
+      in this family — do not spot-add one test. The rule: generate the mutation ledger
+      from the round's own behavioural hunks (git diff round-base..HEAD -- lua/), revert
+      each, and record the ones with no red. Two cheap guards fall out: a parse_markers
+      case driven through a configured chat_user_prefix, and an arch assertion that every
+      config.system_prompts entry contains defaults.fence_indent_convention.
+  - id: new
+    severity: Minor
+    family: shared-fragment-missing-separator
+    title: |
+      The convention is concatenated onto a sentence-final period in four of five prompts
+    detail: |
+      config.lua:242,247,252,257 append fence_indent_convention directly after "...in your
+      responses." with no separator, producing "responses.Indent every fenced code block".
+      The default prompt escapes this only because defaults.lua:46 ends in a double
+      newline. Give the fragment a leading "\n\n" or add the separator at each seam.
+  - id: new
+    severity: Minor
+    family: doc-overstates-implementation
+    title: |
+      copy.lua's header now contradicts the file, and the atlas grammar table overstates code_block_memo
+    detail: |
+      copy.lua:2 still reads "Pure utility module — no parley module dependencies" after
+      the diff added require("parley.highlight_structure") and require("parley").config.
+      atlas/ui/highlights.md:35 attributes a CommonMark ">= closer" rule to
+      highlight_structure, but only M.advance implements it — M.code_block_memo (the
+      helper outline, review and copy all use) is a plain boolean toggle. SECOND finding
+      in this family, with BR-10 still open: the rule is that any comment or atlas row
+      asserting a code property needs a grep-able referent, and the three live instances
+      (atlas:35, atlas:45, copy.lua:2) should be swept together.
+  - id: new
+    severity: Minor
+    family: traceability-unmapped
+    title: |
+      lua/parley/copy.lua changed in this window and is in no traceability code list
+    detail: |
+      make test-changed can never reach copy.lua's containment fix — it is in no atlas
+      entry and has no spec. SECOND finding in this family. Measured prevalence: 22 of 146
+      lua/ modules are unmapped, so the rule-level answer is an arch guard requiring every
+      module to appear in exactly one code: list (or an explicit allowlist), not a one-line
+      addition for copy.lua.
+  - id: new
+    severity: Minor
+    family: config-ignored-at-new-seam
+    title: |
+      is_partition and code_block_memo still silently substitute default prefixes when patterns is nil
+    detail: |
+      highlight_structure.lua:180 does patterns or M.patterns(), and :219's docstring says
+      patterns "MUST come from the live config" while nothing enforces it — the exact state
+      BR-2 was about is still representable at the seam. SECOND finding in this family: the
+      rule is to make it unrepresentable (assert on nil at the seam) rather than to audit
+      each caller, which BR-2 already had to do twice.
+```

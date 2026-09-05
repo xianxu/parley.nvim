@@ -437,3 +437,33 @@ describe("parse_markers fence containment (#218)", function()
         assert.equals(0, #markers, "an indented fence must shield like a flush one")
     end)
 end)
+
+-- #218 BR-15: threading live config into compute_fence_ranges reverted GREEN —
+-- review_spec passed 47/0 with it removed. Containment must work for a custom
+-- chat_user_prefix, not only the shipped default.
+describe("parse_markers honours configured prefixes (#218)", function()
+    local parley = require("parley")
+    local saved
+
+    before_each(function()
+        saved = parley.config
+        parley.config = vim.tbl_extend("force", {}, saved or {}, {
+            chat_user_prefix = "U:", chat_assistant_prefix = "A:",
+        })
+    end)
+    after_each(function() parley.config = saved end)
+
+    it("a stray fence is closed by a CUSTOM turn prefix", function()
+        local markers = review.parse_markers({
+            "A: first answer",
+            "```lua",                 -- opened, never closed
+            "local x = 1",
+            "U: next question",
+            "A: second answer",
+            "needs 🤖[a fix] here",
+        })
+        assert.equals(1, #markers,
+            "with a custom prefix the fence never closed, so the marker was "
+            .. "treated as fenced content and dropped")
+    end)
+end)

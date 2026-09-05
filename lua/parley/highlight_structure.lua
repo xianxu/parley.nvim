@@ -178,7 +178,14 @@ end
 --- @param patterns table|nil
 --- @return boolean
 function M.is_partition(line, patterns)
-    local token = M.classify(line, patterns or M.patterns()).token
+    -- No `patterns or M.patterns()` default. Silently falling back to the
+    -- shipped prefixes is exactly BR-2: containment looked fixed and did nothing
+    -- for anyone with a custom chat_user_prefix, at two call sites, twice. An
+    -- assert makes that state unrepresentable instead of auditable.
+    assert(type(patterns) == "table",
+        "is_partition requires patterns from the LIVE config — "
+        .. "highlight_structure.patterns(config)")
+    local token = M.classify(line, patterns).token
     return token == TOKENS.user or token == TOKENS.assistant
         or token == TOKENS["local"] or token == TOKENS.branch
 end
