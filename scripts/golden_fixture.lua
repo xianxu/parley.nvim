@@ -35,6 +35,11 @@ M.FIXTURES = {
     "dynamic-fence-stress",
 }
 
+-- The openai-wire pinning. Both the regenerator and the verifier need it and
+-- were hand-syncing it — the same duplication this module exists to end
+-- ("a golden must depend on nothing a person has to remember").
+M.OPENAI_WIRE = { provider = "cliproxyapi", model = { model = "gpt-5.6-sol" } }
+
 M.OPENAI_FIXTURES = {
     "one-round-tool-use",
     "two-round-tool-use",

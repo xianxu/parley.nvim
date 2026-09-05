@@ -1,0 +1,241 @@
+# Boundary Review — parley.nvim#218 (whole-issue close)
+
+| field | value |
+|-------|-------|
+| issue | 218 — Rendering: contain malformed fences within one exchange |
+| repo | parley.nvim |
+| issue file | workshop/issues/000218-rendering-contain-malformed-fences-within-one-exchange.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | a543542b28895f85656513a27f9b66ac262f3049..a2c192f9ba3dd8fb3e213dd77dfbc6c35368d635 |
+| command | sdlc close --issue 218 |
+| reviewer | claude |
+| timestamp | 2026-09-05T13:36:15-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+The core of #218 is well built and genuinely verified: I reproduced all four mutations the Log claims (drop `in_code` reset → 3 red; fence token loses width → 3 red; `>=` → any-closer → 1 red; highlighter skips `reset_partition` → 1 red), the full suite is green (194 spec files, `make test` exit 0), and luacheck is clean across 347 files. What blocks SHIP is that the enumeration is still an instance, not the class: `lua/parley/outline.lua:293` holds a **third** fence tracker in that same file — the tree-outline picker — that was never swept, and I reproduced the original #218 bug through it live (a stray fence swallows every later `💬:`; the buffer picker returns 3 items on the same document, the tree picker returns 1). Two of the five claimed sites also carry no failing test: reverting the entire `skills/review` containment change leaves all eight review specs green, and both new `is_partition` call sites hardcode default `💬:`/`🤖:` prefixes, so with `chat_user_prefix = 'U:'` the outline containment does not fire at all — I reproduced that too.
+
+## 1. Strengths
+
+- **`M.advance` / `M.reset_partition` / `M.is_partition` is the right decomposition.** Pure functions over a plain state table, no IO, injected into two different callers with different phase needs (`highlight_structure.lua:146`, `highlighter.lua:160-161`). PQ-1's phase split is not just asserted in a comment — the pre-snapshot reset at `highlight_structure.lua:255` and the post-snapshot `advance` at `:270` do disagree exactly where they should, and `highlight_structure_spec.lua:52` still passes.
+- **The fingerprint-carries-width fix (PQ-2) is real and reachable.** `classify` returns `"c3"`/`"c4"` (`highlight_structure.lua:105`), `M.replace`'s fast path rejects a width edit, and mutating the token back to a bare `TOKENS.fence` turns three tests red. This is the one that would have been easiest to ship as decoration.
+- **`tests/integration/fence_containment_spec.lua` pins the render seam, not a mock.** It drives `rebuild_structure` → `highlight_question_block` and reads real extmarks; removing `reset_partition` from `highlighter.lua:160` turns it red while every unit test stays green. That is exactly the site PQ-5 warned would otherwise ship untested.
+- **The second test in that spec guards against the fix becoming a no-op** — "a well-formed fence still suppresses question highlighting inside it." Good instinct.
+- **The `refresh_goldens.lua` side-quest is correct** and the diff regenerates all ten goldens consistently; the golden spec passes.
+
+## 2. Critical findings
+
+**C1 — `lua/parley/outline.lua:293-300`: a third, unswept fence tracker; the issue's own bug is still live in the tree-outline picker.**
+
+`build_file_outline_items` builds its own `code_memo` with the same boolean toggle and no partition reset, then gates question items on it at `:320`. The Log claims outline had "two fence scans, not one … Final count: five" — it is three, and six overall. Reproduced on a real chat file:
+
+```
+tree picker  (_build_tree_outline_items) → 📋 c.md, 💬: first question            [COUNT=2]
+buffer picker (_build_picker_items)      → first / second / third question        [COUNT=3]
+```
+
+Same document, two outline paths, two answers. Fix: hoist the memo build to one shared helper (the `build_code_block_memo` at `:10` is already the right shape) and have `build_file_outline_items` call it over `file_lines`. ARCH-PURPOSE, ARCH-DRY; family `instance-not-class-sweep` — the same family PQ-4 raised, recurring for the third time, which is the ledger telling you the enumeration was never actually written down.
+
+**C2 — `lua/parley/outline.lua:15,39` and `lua/parley/skills/review/init.lua:166`: containment is hardcoded to the default prefixes and silently does nothing under a custom `chat_user_prefix`.**
+
+Both sites call `highlight_structure.patterns()` with no config, while `highlight_structure.build` is driven with `patterns(_parley.config)` from `highlighter.lua:127`. `_build_picker_items(bufnr, config, opts)` has `config` in hand two lines above the memo build. Reproduced with `setup({ chat_user_prefix = 'U:', chat_assistant_prefix = 'A:' })`: the stray-fence document yields `COUNT=1` — the pre-#218 behaviour, unfixed. Fix: thread `config` into `build_code_block_memo` / `is_in_code_block`, and use `get_parley().config` in `compute_fence_ranges`.
+
+## 3. Important findings
+
+**I1 — `lua/parley/skills/review/init.lua:171-176`: site #4 ships with no test at all.** I reverted the whole partition branch and ran `review_spec`, `review_journal_spec`, `review_mode_spec`, `review_diag_display_spec`, `review_projection_spec`, `review_menu_spec`, `skill_invoke_review_spec`, `review_journal_io_spec` — 103 assertions, 0 failures. The Done-when says "each new test is verified by mutation — reverting its change turns it red"; there is no test to revert. The Log even flags this as a **behaviour change** ("markers move in malformed documents") — that is precisely what needs pinning. A `parse_markers` unit case (stray ``` in one answer, a `🤖{…}` marker in the next) costs three lines.
+
+**I2 — `lua/parley/skills/review/init.lua:176`: `^```` now systematically misses the fences the new prompt tells models to indent.** `defaults.lua:31` instructs the model to indent every fence by two spaces; `compute_fence_ranges` matches only column-zero backticks. Every other fence scan in the tree uses `^%s*```` . Net effect: brackets inside model-authored code fences stop being excluded from marker parsing, regressing #125's guarantee for the now-normal output shape. The diff created a shared `is_partition` but left its sibling — the fence-open predicate — in six hand-maintained copies (`highlight_structure.lua:86`, `outline.lua:22,44,296`, `review/init.lua:176`, plus `copy.lua:16,32`). Export one predicate and derive them. ARCH-DRY.
+
+**I3 — `lua/parley/config.lua:234-255`: the indentation convention lands in one of five shipped system prompts.** Only `default` derives from `defaults.chat_system_prompt`; `creative`, `concise`, `teacher`, `code_reviewer` are one `<C-g>P` away and carry no convention, so switching prompt silently changes how malformed output renders. Shadow-sweep: the convention is a hand-maintained restatement in one consumer. Fix: name it once (`defaults.fence_indent_convention`) and append it to every shipped prompt, or concatenate it at the seam that assembles the system prompt. ARCH-PURPOSE.
+
+**I4 — `scripts/refresh_goldens.lua:38-44`: reintroduces the exact hand-sync `scripts/golden_fixture.lua` exists to abolish.** `provider = "cliproxyapi"` / `model = { model = "gpt-5.6-sol" }` is now duplicated against `tests/unit/parley_harness_golden_spec.lua:62-63`, with a comment that says so out loud ("pinned exactly as the verifier pins them"). `golden_fixture.lua`'s own header: "a golden must depend on nothing a person has to remember." Add `M.OPENAI_WIRE = { provider = …, model = … }` there and have both sides consume it. ARCH-DRY.
+
+**I5 — `atlas/traceability.yaml:599-608`: the new spec is registered nowhere.** `tests/integration/fence_containment_spec.lua` appears in no mapping, and `ui/highlights` lists `highlighter.lua` but not `highlight_structure.lua`. So `make test-changed` after editing `atlas/ui/highlights.md` — the file this very diff edited — does not run the containment spec. Add both to `ui/highlights`.
+
+## 4. Minor findings
+
+- `lua/parley/highlighter.lua:148` + `:192` — `classify` is now called twice per line per redraw; reuse `classified`. ARCH-CONSTRAINTS (decoration path).
+- `lua/parley/highlighter.lua:155-161` — the `walk` table is allocated per line per redraw, and `advance` writes `in_question`/`in_reasoning` into it which the caller discards while maintaining its own copies at `:245-252`. The comment "Both now go through the ONE transition function" overstates: only three of six fields do. Hoist the table out of the loop and say in the comment which fields the caller owns.
+- `atlas/ui/highlights.md:35` — "CommonMark: up to 3 spaces of indent" is not what the code does; `^%s*```` accepts any run of whitespace including tabs and ≥4 spaces. Relatedly `defaults.lua:33` tells the model that four spaces makes the markers "literal visible text" — true in a CommonMark renderer, not in parley's own highlighter.
+- `lua/parley/outline.lua:36-49` — the lazy fallback's containment fix is effectively unreachable: `build_code_block_memo` populates every line, and both callers pre-build it. Reverting it turns nothing red. Either drop the fallback or note it as dead.
+- `lua/parley/copy.lua:16,32` — `copy_code_fence` scans up/down for the nearest ``` with no partition bound, so it can pair an opener from the previous exchange with a closer in this one. Different shape from the trackers, lower blast radius, but the same class.
+
+## 5. Test coverage notes
+
+- Mutation verification of the four claimed changes **reproduces exactly** — the Log's table is accurate for what it covers.
+- Two of five sites are unpinned: `skills/review` (I1, mutation-green across all eight review specs) and the outline lazy fallback (mutation-green across `picker_items_spec` + `outline_spec`). C1's site has no test because it has no fix.
+- The property test at `highlight_structure_spec.lua:200` is deterministic (`randomseed(218)`) and does go red under mutation, but its invariant — `in_code == false` at partition rows — is what `reset_partition` guarantees by construction. It generates only 💬:/🤖:, never 🔒:/🌿:, and never indented fences. A stronger invariant would be "state at row N equals a from-scratch build of the turn containing N."
+- ARCH-ORDER: no test compares the incremental `M.replace` path against a full rebuild over a *sequence* of edits. The width-invalidation test observes one interleaving. The fingerprint argument makes this sound, but the seam to inject an edit sequence is cheap and would pin it.
+
+## 6. Architectural notes
+
+- **ARCH-DRY** — flag (I2, I4, and the double `classify`). The diff correctly extracted `is_partition`, then stopped one predicate short of the one that actually differs across the six sites.
+- **ARCH-PURE** — pass. `advance`/`reset_partition`/`is_partition` are deterministic over a state table; IO stays in the highlighter and outline shells; the render test drives the real seam rather than a mock.
+- **ARCH-PURPOSE** — flag (C1, I3). Two shadow-sweeps left incomplete, both of which the plan-quality gate had already named as the failure mode.
+- **ARCH-MOCK** — N/A. No new external binary or service; the golden regenerator is offline against file fixtures.
+- **ARCH-CONSTRAINTS** — pass with a Minor. `perf_chat_typing_spec`'s structural bounds gates are green. `is_partition` → full `classify` per line makes the outline memo ~6× more pattern-matching than before; not on the keystroke path, but worth a cheap prefix-only predicate if the tree picker grows.
+- **ARCH-SECURE** — pass. Malformed model output is the untrusted input, and containment makes the failure local and visible rather than fabricating downstream state; `tonumber(token:sub(2)) or 0` degrades to "closes", not a crash. No credentials in scope.
+- **ARCH-ORDER** — pass on the fix, Minor on the oracle. The width-carrying fingerprint closes the real cross-event staleness hole (mutation-confirmed); the gap is the missing multi-edit equivalence test noted above.
+
+## 7. Plan revision recommendations
+
+Append a `## Revisions` entry to `workshop/issues/000218-…md` recording:
+
+1. **The enumeration is six, not five.** `outline.lua` has **three** fence scans (`:10`, `:36`, `:293`), not two; `copy.lua:16,32` is a fourth shape. The 2026-09-05 "implemented" Log entry states five and must be corrected — it is the claim that let C1 through.
+2. **Two of the swept sites are unpinned.** The mutation table lists four reverts; sites #4 (`skills/review`) and the outline lazy fallback were not among them and stay green when reverted. The Done-when "each new test is verified by mutation" is not met as written.
+3. **Containment is config-blind.** Both `is_partition` call sites use default prefixes; the Done-when "all trackers reset at partitions" holds only for unconfigured `chat_user_prefix`/`chat_assistant_prefix`.
+4. **The test-plan row cites the wrong file.** The Plan names `tests/unit/highlighter_spec.lua` for the render seam; it landed as `tests/integration/fence_containment_spec.lua` (a better choice — record it, and register it in `atlas/traceability.yaml`).
+5. **The two-space convention has four non-deriving consumers.** The Log presents it as resolved by the `defaults.lua` change; the other four shipped `system_prompts` entries do not carry it.
+
+```findings
+findings:
+  - id: new
+    severity: Critical
+    family: instance-not-class-sweep
+    title: |
+      outline.lua has a THIRD unswept fence tracker; #218's bug is live in the tree-outline picker
+    detail: |
+      build_file_outline_items builds its own code_memo at lua/parley/outline.lua:293-300
+      with the same boolean toggle and no partition reset, gating question items at :320.
+      Reproduced: on one chat file with a stray fence, the tree picker returns 2 items
+      (topic + first question) while the fixed buffer picker returns 3. The Log's claim
+      that outline had "two fence scans, not one" and that the final count is five is
+      wrong — outline has three, and copy.lua carries a fourth shape. ARCH-PURPOSE,
+      ARCH-DRY. Hoist the memo build into one shared helper both outline paths call.
+  - id: new
+    severity: Critical
+    family: config-ignored-at-new-seam
+    title: |
+      Both new is_partition call sites hardcode default prefixes, so containment does nothing under a custom chat_user_prefix
+    detail: |
+      outline.lua:15,39 and skills/review/init.lua:166 call highlight_structure.patterns()
+      with no config, while highlight_structure.build is driven with patterns(_parley.config).
+      Reproduced with setup({chat_user_prefix='U:', chat_assistant_prefix='A:'}): the
+      stray-fence document yields COUNT=1, i.e. the pre-218 bug, unfixed. config is
+      already in hand at _build_picker_items(bufnr, config, opts) and via
+      get_parley().config in the review skill.
+  - id: new
+    severity: Important
+    family: fix-without-failing-test
+    title: |
+      The skills/review containment change ships with no test — reverting it leaves all eight review specs green
+    detail: |
+      Reverting the entire partition branch at skills/review/init.lua:171-176 and running
+      review_spec, review_journal_spec, review_mode_spec, review_diag_display_spec,
+      review_projection_spec, review_menu_spec, skill_invoke_review_spec and
+      review_journal_io_spec gives 103 assertions, 0 failures. The issue's Done-when
+      requires every change be mutation-verified, and the Log itself calls this a
+      behaviour change ("markers move in malformed documents") — the exact thing that
+      needs pinning. A parse_markers case with a stray fence in one answer and a marker
+      in the next costs three lines.
+  - id: new
+    severity: Important
+    family: single-source-bypassed
+    title: |
+      compute_fence_ranges matches only ^``` , so it misses every fence the new prompt convention tells models to indent
+    detail: |
+      defaults.lua:31 now instructs the model to indent every fence by two spaces, while
+      skills/review/init.lua:176 matches only column-zero backticks; every other fence
+      scan in the tree uses ^%s*```. Brackets inside model-authored code fences therefore
+      stop being excluded from marker parsing, regressing #125 for the now-normal output
+      shape. The diff created a shared is_partition but left the sibling fence-open
+      predicate in six hand-maintained copies (highlight_structure.lua:86,
+      outline.lua:22,44,296, review/init.lua:176, copy.lua:16,32). ARCH-DRY.
+  - id: new
+    severity: Important
+    family: convention-not-derived-by-consumers
+    title: |
+      The two-space fence convention lands in one of five shipped system prompts
+    detail: |
+      config.lua:234-255 ships default, creative, concise, teacher and code_reviewer;
+      only default derives from defaults.chat_system_prompt. The others are one
+      ParleySystemPrompt away and carry no convention, so switching prompt silently
+      changes how malformed output renders. Name the convention once and append it to
+      every shipped prompt, or concatenate it where the system prompt is assembled.
+      ARCH-PURPOSE shadow-sweep.
+  - id: new
+    severity: Important
+    family: single-source-bypassed
+    title: |
+      refresh_goldens.lua re-hardcodes the openai provider/model that golden_fixture.lua exists to single-source
+    detail: |
+      scripts/refresh_goldens.lua:41-42 duplicates provider="cliproxyapi" and
+      model={model="gpt-5.6-sol"} against tests/unit/parley_harness_golden_spec.lua:62-63,
+      with a comment saying so ("pinned exactly as the verifier pins them").
+      golden_fixture.lua's header condemns exactly this ("a golden must depend on nothing
+      a person has to remember"). Add M.OPENAI_WIRE there and consume it on both sides.
+  - id: new
+    severity: Important
+    family: traceability-unmapped
+    title: |
+      The new containment spec is registered in no atlas/traceability.yaml entry
+    detail: |
+      tests/integration/fence_containment_spec.lua appears nowhere in traceability.yaml,
+      and ui/highlights (:599-608) lists highlighter.lua but not highlight_structure.lua.
+      So `make test-changed` after editing atlas/ui/highlights.md — the file this diff
+      edited — does not run the spec that pins this issue.
+  - id: new
+    severity: Minor
+    family: redundant-recompute-on-render-path
+    title: |
+      classify is called twice per line per redraw in compute_chat_highlights
+    detail: |
+      highlighter.lua:148 computes `classified` and :192 recomputes the same thing as
+      `classification`. Reuse the first. ARCH-CONSTRAINTS, decoration path.
+  - id: new
+    severity: Minor
+    family: shared-transition-partial-ownership
+    title: |
+      advance writes in_question/in_reasoning into the highlighter's walk table and the caller discards them
+    detail: |
+      highlighter.lua:155-161 allocates a walk table per line per redraw and copies back
+      only in_code, code_fence_len and in_tool; in_question/in_reasoning stay owned by the
+      loop at :245-252. The comment's claim that "Both now go through the ONE transition
+      function" holds for three of six fields. Hoist the table out of the loop and state
+      which fields the caller owns.
+  - id: new
+    severity: Minor
+    family: doc-overstates-implementation
+    title: |
+      atlas claims a 3-space CommonMark indent limit the code does not enforce
+    detail: |
+      atlas/ui/highlights.md:35 says "up to 3 spaces of indent", but ^%s*``` accepts any
+      whitespace run including tabs and four-plus spaces. Relatedly defaults.lua:33 tells
+      the model four spaces makes the markers literal text — true in a CommonMark renderer,
+      not in parley's highlighter.
+  - id: new
+    severity: Minor
+    family: unreachable-guard
+    title: |
+      The outline lazy-fallback containment fix is unreachable and pins nothing
+    detail: |
+      outline.lua:36-49 only runs when memo[line_number] is nil, but build_code_block_memo
+      populates every line and both callers pre-build it. Reverting the :42 partition reset
+      turns nothing red. Either drop the fallback or record it as dead.
+  - id: new
+    severity: Minor
+    family: instance-not-class-sweep
+    title: |
+      copy_code_fence pairs fences across a turn boundary
+    detail: |
+      copy.lua:16,32 scans up then down for the nearest ``` with no partition bound, so a
+      stray opener in the previous exchange can pair with a closer in this one. Different
+      shape from the accumulating trackers and much lower blast radius, but the same class
+      and it belongs in the enumeration.
+  - id: new
+    severity: Minor
+    family: atlas-stale-for-changed-surface
+    title: |
+      atlas/ui/outline.md still states the pre-218 rule
+    detail: |
+      ":13 Lines inside code blocks (``` / ~~~) are excluded" no longer tells the whole
+      story now that a column-zero turn marker ends the fence. lua/parley/outline.lua
+      changed in this window; its atlas page did not.
+```

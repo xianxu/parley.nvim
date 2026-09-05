@@ -38,8 +38,8 @@ for _, name in ipairs(golden.OPENAI_FIXTURES) do
         {
             agent = GOLDEN_AGENT,
             tools = READONLY_TOOLS,
-            provider = "cliproxyapi",
-            model = { model = "gpt-5.6-sol" },
+            provider = golden.OPENAI_WIRE.provider,
+            model = golden.OPENAI_WIRE.model,
         }
     )
     local path = "tests/fixtures/golden_payloads/openai-" .. name .. ".json"

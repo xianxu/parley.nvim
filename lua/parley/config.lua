@@ -238,19 +238,23 @@ local config = {
 		},
 		{
 			name = "creative",
-			system_prompt = "You are a creative and imaginative assistant. Think outside the box, offer unique perspectives, and help with creative problem-solving. Be expressive and engaging in your responses.",
+			system_prompt = "You are a creative and imaginative assistant. Think outside the box, offer unique perspectives, and help with creative problem-solving. Be expressive and engaging in your responses."
+				.. require("parley.defaults").fence_indent_convention,
 		},
 		{
 			name = "concise",
-			system_prompt = "You are a concise assistant. Provide brief, direct answers. No unnecessary explanations unless specifically requested. Get straight to the point.",
+			system_prompt = "You are a concise assistant. Provide brief, direct answers. No unnecessary explanations unless specifically requested. Get straight to the point."
+				.. require("parley.defaults").fence_indent_convention,
 		},
 		{
 			name = "teacher",
-			system_prompt = "You are a patient teacher. Break down complex concepts into simple explanations. Use examples and analogies when helpful. Encourage questions and learning.",
+			system_prompt = "You are a patient teacher. Break down complex concepts into simple explanations. Use examples and analogies when helpful. Encourage questions and learning."
+				.. require("parley.defaults").fence_indent_convention,
 		},
 		{
 			name = "code_reviewer",
-			system_prompt = "You are a code reviewer focused on best practices, performance, security, and maintainability. Provide constructive feedback with specific improvement suggestions.",
+			system_prompt = "You are a code reviewer focused on best practices, performance, security, and maintainability. Provide constructive feedback with specific improvement suggestions."
+				.. require("parley.defaults").fence_indent_convention,
 		},
 	},
 

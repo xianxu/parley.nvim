@@ -265,3 +265,45 @@ describe("fence containment across exchange partitions (#218)", function()
         assert.is_false(structure.is_partition("prose", P))
     end)
 end)
+
+-- #218 BR-3/BR-4: the review skill and outline carry their own fence walks. The
+-- close review found the review change reverting GREEN across all eight review
+-- specs, and outline's third tracker still exhibiting the bug. Both are pinned
+-- here against the shared helpers they now use.
+describe("shared fence helpers (#218)", function()
+    it("is_fence_delim accepts indented fences — the shape the prompt asks for", function()
+        assert.are.equal(3, structure.is_fence_delim("```"))
+        assert.are.equal(3, structure.is_fence_delim("  ```lua"))
+        assert.are.equal(4, structure.is_fence_delim("  ````"))
+        assert.is_nil(structure.is_fence_delim("``"))
+        assert.is_nil(structure.is_fence_delim("prose ```"))
+        -- tildes only when asked (outline's grammar, not the render path's)
+        assert.is_nil(structure.is_fence_delim("~~~"))
+        assert.are.equal(3, structure.is_fence_delim("~~~", true))
+    end)
+
+    it("code_block_memo contains an unmatched fence at the partition", function()
+        local P = structure.patterns()
+        local memo = structure.code_block_memo({
+            "🤖: a", "```", "code", "💬: q", "not code",
+        }, P)
+        assert.is_true(memo[3], "inside the open fence")
+        assert.is_false(memo[4], "partition clears it")
+        assert.is_false(memo[5], "and stays clear")
+    end)
+
+    it("code_block_memo honours CONFIGURED prefixes, not just defaults", function()
+        -- BR-2: patterns() with no config silently disabled containment for
+        -- anyone with a custom chat_user_prefix.
+        local custom = structure.patterns({
+            chat_user_prefix = "U:", chat_assistant_prefix = "A:",
+        })
+        local lines = { "A: answer", "```", "code", "U: question", "after" }
+        local memo = structure.code_block_memo(lines, custom)
+        assert.is_false(memo[4], "custom prefix must end the fence")
+        assert.is_false(memo[5])
+        -- and with default patterns the custom prefix is NOT a partition
+        local memo_default = structure.code_block_memo(lines, structure.patterns())
+        assert.is_true(memo_default[4], "sanity: defaults do not recognise U:")
+    end)
+end)

@@ -5,53 +5,23 @@ local M = {}
 
 local highlight_structure = require("parley.highlight_structure")
 
--- Build a code block state table for all lines in the buffer with a single bulk read.
--- Returns a table mapping 1-based line numbers to boolean (true = inside code block).
-local function build_code_block_memo(bufnr)
+-- Code-block memo for a buffer. Delegates to highlight_structure so the fence
+-- grammar and the #218 partition containment have ONE definition — outline used
+-- to carry three independent copies of this loop, and the close review found the
+-- bug still live in the one that had been missed.
+--
+-- `config` is REQUIRED: patterns() without it uses default prefixes, which
+-- silently disables containment for anyone who set chat_user_prefix.
+local function build_code_block_memo(bufnr, config)
   local all_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-  local memo = {}
-  local in_block = false
-
-  local patterns = highlight_structure.patterns()
-  for i, line_content in ipairs(all_lines) do
-    -- #218: a 💬:/🤖: partition ends any open fence. Without this an unmatched
-    -- fence in one answer marks every later line "in code" and silently drops
-    -- the rest of the document out of the outline.
-    if highlight_structure.is_partition(line_content, patterns) then
-      in_block = false
-    elseif line_content:match("^%s*```") or line_content:match("^%s*~~~") then
-      in_block = not in_block
-    end
-    memo[i] = in_block
-  end
-
-  return memo
+  return highlight_structure.code_block_memo(
+    all_lines, highlight_structure.patterns(config), true)
 end
 
--- Compatibility wrapper used by is_outline_item and exposed for testing.
-local function is_in_code_block(bufnr, line_number, memo)
-  if memo[line_number] ~= nil then
-    return memo[line_number]
-  end
-  -- Fallback: compute lazily (should rarely happen when memo is pre-built)
-  local all_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-  local in_block = false
-  local patterns = highlight_structure.patterns()
-  for i = 1, line_number do
-    local lc = all_lines[i] or ""
-    if highlight_structure.is_partition(lc, patterns) then -- #218, as above
-      in_block = false
-    elseif lc:match("^%s*```") or lc:match("^%s*~~~") then
-      in_block = not in_block
-    end
-    memo[i] = in_block
-  end
+local function is_in_code_block(_bufnr, line_number, memo)
   return memo[line_number] or false
 end
 
--- Function to check if a line should be included in the outline
--- Returns: boolean (should be included), string (type), string (formatted content)
--- Optional all_lines parameter avoids per-line buffer reads when bulk lines are available.
 local function is_outline_item(bufnr, line_number, config, code_block_memo, all_lines, opts)
   opts = opts or {}
   -- Get the line content (use pre-fetched lines if available)
@@ -98,7 +68,7 @@ local function find_nearest_outline_line(target_buf, lnum, config)
   local line_count = vim.api.nvim_buf_line_count(target_buf)
   local safe_lnum = math.min(lnum, line_count)
   local all_lines = vim.api.nvim_buf_get_lines(target_buf, 0, -1, false)
-  local code_block_memo = build_code_block_memo(target_buf)
+  local code_block_memo = build_code_block_memo(target_buf, config)
   local is_valid_line = is_outline_item(target_buf, safe_lnum, config, code_block_memo, all_lines)
 
   if is_valid_line then
@@ -205,7 +175,7 @@ M._jump_to_outline_location = jump_to_outline_location
 -- Returns items in document order: { display: string, value: { lnum: number } }
 function M._build_picker_items(bufnr, config, opts)
   local all_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-  local code_block_memo = build_code_block_memo(bufnr)
+  local code_block_memo = build_code_block_memo(bufnr, config)
   local items = {}
   for i = 1, #all_lines do
     local is_item, item_type, formatted_line = is_outline_item(bufnr, i, config, code_block_memo, all_lines, opts)
@@ -289,15 +259,11 @@ local function build_file_outline_items(file_path, config, depth)
     branch_at_line[branch.line] = branch
   end
 
-  -- Code block memo
-  local code_memo = {}
-  local in_block = false
-  for i, line in ipairs(file_lines) do
-    if line:match("^%s*```") or line:match("^%s*~~~") then
-      in_block = not in_block
-    end
-    code_memo[i] = in_block
-  end
+  -- Code block memo — the SAME helper the buffer paths use. This third copy is
+  -- the one #218 originally missed: the tree picker still exhibited the bug
+  -- after the other two were fixed (BR-1).
+  local code_memo = highlight_structure.code_block_memo(
+    file_lines, highlight_structure.patterns(config), true)
 
   local user_prefix = config.chat_user_prefix
   for i = header_end + 1, #file_lines do

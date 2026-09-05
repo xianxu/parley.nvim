@@ -395,3 +395,45 @@ describe("parse_markers multi-line (#000125)", function()
         assert.equals("second", markers[2].sections[1].text)
     end)
 end)
+
+-- #218 BR-3: this containment change shipped with no test — reverting the
+-- partition branch left all eight review specs green, while the issue's
+-- Done-when required every change be mutation-verified.
+describe("parse_markers fence containment (#218)", function()
+    it("a stray fence in one answer does not suppress markers in the next", function()
+        local markers = review.parse_markers({
+            "🤖: first answer",
+            "```lua",                 -- opened, never closed
+            "local x = 1",
+            "💬: next question",
+            "🤖: second answer",
+            "needs 🤖[a fix] here",
+        })
+        assert.equals(1, #markers, "the marker after the partition must still parse")
+        assert.equals(5, markers[1].line)
+    end)
+
+    it("a marker inside a properly closed fence is still excluded", function()
+        -- The guard must not become a no-op: real fenced content still shields
+        -- brackets from marker parsing (#125).
+        local markers = review.parse_markers({
+            "🤖: answer",
+            "```",
+            "not 🤖[a marker] in code",
+            "```",
+        })
+        assert.equals(0, #markers)
+    end)
+
+    it("an INDENTED fence also shields its content — the prompt convention shape", function()
+        -- BR-4: the predicate matched only column-zero backticks, so it missed
+        -- every fence the default system prompt now asks models to indent.
+        local markers = review.parse_markers({
+            "🤖: answer",
+            "  ```",
+            "  not 🤖[a marker] in code",
+            "  ```",
+        })
+        assert.equals(0, #markers, "an indented fence must shield like a flush one")
+    end)
+end)

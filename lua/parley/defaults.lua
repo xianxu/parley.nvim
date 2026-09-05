@@ -1,4 +1,20 @@
 local M = {}
+
+-- The fenced-code indentation convention (#218). Named once and appended to
+-- every shipped system prompt in config.lua — not a style preference but the
+-- thing that lets a quoted transcript nest inside a fence: parley matches turn
+-- markers at column zero, so indented content cannot be mistaken for a turn.
+-- A prompt that omits it silently changes how malformed model output renders.
+M.fence_indent_convention =
+	"Indent every fenced code block by exactly two spaces: the opening ```, "
+	.. "the closing ```, and every line between them.\n\n"
+	.. "Use two spaces, never four or more — in standard Markdown four spaces makes "
+	.. "the block an indented code block instead, and the ``` markers become "
+	.. "literal visible text.\n\n"
+	.. "This matters because my turn markers are lines beginning with 💬: or 🤖: at "
+	.. "column zero. Indenting your code keeps those unambiguous even when a code "
+	.. "sample or quoted transcript contains them.\n\n"
+
 M.chat_system_prompt = "A conversation between You and Me. \n\n"
 	.. "We collaboratively seek knowledge, truth and learn together. \n\n"
 	.. "We are peers, we should be serious, transparent and critical in our discussion. \n\n"
@@ -28,13 +44,7 @@ M.chat_system_prompt = "A conversation between You and Me. \n\n"
 	.. "Leave an empty line between the main answer, and summary line (📝:)\n\n"
 	.. "When you write code, consider also generating test cases and commands for user to manually test.\n\n"
 	.. "Enclose those in markdown code block ```\n\n"
-	.. "Indent every fenced code block by exactly two spaces: the opening ```, "
-	.. "the closing ```, and every line between them.\n\n"
-	.. "Use two spaces, never four or more — four turns the block into an indented "
-	.. "code block and the ``` markers become literal visible text.\n\n"
-	.. "This matters because my turn markers are lines beginning with 💬: or 🤖: at "
-	.. "column zero. Indenting your code keeps those unambiguous even when a code "
-	.. "sample or quoted transcript contains them.\n\n"
+	.. M.fence_indent_convention
     .. "When you did web_search, or web_fetch, generate reference your answer is based on.\n\n"
     .. "Format your reference as links in markdown, around key phrases only, such as [issue x](link), or [more details](link)\n\n"
 	.. "When you have tools available, use the minimum number of tool calls needed to answer. "

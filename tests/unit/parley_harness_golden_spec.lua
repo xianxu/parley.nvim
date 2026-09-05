@@ -59,8 +59,8 @@ describe("parley_harness golden round-trip (openai wire)", function()
                 {
                     agent = GOLDEN_AGENT,
                     tools = READONLY_TOOLS,
-                    provider = "cliproxyapi",
-                    model = { model = "gpt-5.6-sol" },
+                    provider = golden.OPENAI_WIRE.provider,
+                    model = golden.OPENAI_WIRE.model,
                 }
             )
             local golden = read_json("tests/fixtures/golden_payloads/openai-" .. name .. ".json")

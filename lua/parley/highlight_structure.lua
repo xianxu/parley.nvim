@@ -83,7 +83,7 @@ function M.classify(line, patterns)
     if require("parley.define").is_footnote_line(line) then kind = "footnote"
     elseif label == "end" then kind = "draft_end"
     elseif label then kind = "draft_open"
-    elseif line:match("^%s*```") then
+    elseif M.is_fence_delim(line) then
         kind = "fence"
         -- Width matters: a closer shorter than its opener does not close it
         -- (CommonMark). It rides in the TOKEN because M.replace's fast path
@@ -181,6 +181,53 @@ function M.is_partition(line, patterns)
     local token = M.classify(line, patterns or M.patterns()).token
     return token == TOKENS.user or token == TOKENS.assistant
         or token == TOKENS["local"] or token == TOKENS.branch
+end
+
+--- Does this line open or close a fence? Returns the backtick run length, or
+--- nil. `tildes` also accepts `~~~` (outline's grammar; the render path does
+--- not treat tildes as fences).
+---
+--- Exists because the fence-open predicate was hand-copied into six places
+--- (this file, three in outline, the review skill, copy.lua) and they had
+--- already drifted: the review skill matched `^```` with no leading whitespace,
+--- so it missed every fence the default prompt now asks models to indent (#218).
+--- @param line string
+--- @param tildes boolean|nil
+--- @return integer|nil
+function M.is_fence_delim(line, tildes)
+    if type(line) ~= "string" then return nil end
+    local ticks = line:match("^%s*(`+)")
+    if ticks and #ticks >= 3 then return #ticks end
+    if tildes then
+        local tl = line:match("^%s*(~+)")
+        if tl and #tl >= 3 then return #tl end
+    end
+    return nil
+end
+
+--- Build a 1-indexed "is this line inside a code block" memo, with #218
+--- containment: a column-zero turn marker ends any open fence.
+---
+--- One helper rather than a copy per caller — outline had THREE independent
+--- builds of this loop and the close review found the bug still live in the one
+--- it had missed. `patterns` MUST come from the live config; defaults would
+--- silently disable containment for anyone with a custom chat_user_prefix.
+--- @param lines string[]
+--- @param patterns table from M.patterns(config)
+--- @param tildes boolean|nil treat `~~~` as a fence too
+--- @return boolean[] memo
+function M.code_block_memo(lines, patterns, tildes)
+    local memo = {}
+    local in_block = false
+    for i, line in ipairs(lines or {}) do
+        if M.is_partition(line, patterns) then
+            in_block = false
+        elseif M.is_fence_delim(line, tildes) then
+            in_block = not in_block
+        end
+        memo[i] = in_block
+    end
+    return memo
 end
 
 --- Clear the state a 💬:/🤖: partition terminates. Runs PRE-snapshot.
