@@ -361,7 +361,7 @@ M.simple_markdown_to_html = function(markdown)
 	-- partitions so an unmatched opener cannot consume later exchanges.
 	html = (function(text)
 		local hs = require("parley.highlight_structure")
-		local patterns = hs.patterns(require("parley").config)
+		local patterns = hs.patterns(_parley and _parley.config or nil)
 		local out, open_at, body = {}, nil, nil
 		for line in (text .. "\n"):gmatch("([^\n]*)\n") do
 			if open_at and hs.is_partition(line, patterns) then
@@ -374,8 +374,16 @@ M.simple_markdown_to_html = function(markdown)
 				if open_at then
 					local lang = open_at:match("^%s*`+%s*([%w_+-]*)") or ""
 					local class_attr = lang ~= "" and (' class="language-' .. lang .. '"') or ""
+					-- Blank line either side: the old gsub emitted "\n<div…</div>\n"
+					-- and the later `<p[^>]*>%s*<div` / `</div>%s*</p>` cleanups
+					-- depend on it. Without them a code block nests inside a
+					-- paragraph — and 175 of 256 fence delimiters in this repo's
+					-- own transcripts follow a non-blank line, so that is the
+					-- majority shape, not an edge case (BR-20).
+					out[#out + 1] = ""
 					out[#out + 1] = '<div class="code-block"><pre><code' .. class_attr .. ">"
 						.. table.concat(body, "\n") .. "</code></pre></div>"
+					out[#out + 1] = ""
 					open_at, body = nil, nil
 				else
 					open_at, body = line, {}

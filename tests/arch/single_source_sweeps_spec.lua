@@ -290,20 +290,36 @@ describe("arch: single-source sweeps stay swept", function()
     -- #218 BR-15: the convention is only load-bearing if EVERY shipped prompt
     -- carries it. Stripping it from the four non-default prompts left five
     -- specs green.
-    it("every shipped system prompt carries the fence indentation convention", function()
+    -- The rule, not the instance: EVERY prompt string in shipped config that
+    -- agent_info.resolve can select must carry the convention, enumerated FROM
+    -- config rather than hand-picked. resolve falls back to agent.system_prompt
+    -- (agent_info.lua:48-50) and config.lua calls that field mandatory, so a
+    -- guard over config.system_prompts alone covered one of two arms (BR-21).
+    --
+    -- The third arm is not enforceable here: a user-merged system_prompts entry
+    -- or a chat header `system_prompt:` replaces the prompt wholesale. That is
+    -- documented in README instead — see "Custom system prompts".
+    it("every selectable shipped prompt carries the fence indentation convention", function()
         local defaults = dofile("lua/parley/defaults.lua")
         local config = dofile("lua/parley/config.lua")
         assert.is_truthy(defaults.fence_indent_convention)
         local missing = {}
-        for _, entry in ipairs(config.system_prompts or {}) do
-            local prompt = entry.system_prompt or ""
-            if not prompt:find(defaults.fence_indent_convention, 1, true) then
-                missing[#missing + 1] = entry.name
+        local function check(label, prompt)
+            if type(prompt) == "string" and prompt ~= ""
+                and not prompt:find(defaults.fence_indent_convention, 1, true) then
+                missing[#missing + 1] = label
             end
         end
+        for _, entry in ipairs(config.system_prompts or {}) do
+            check("system_prompts:" .. tostring(entry.name), entry.system_prompt)
+        end
+        for _, agent in ipairs(config.agents or {}) do
+            check("agents:" .. tostring(agent.name), agent.system_prompt)
+        end
         assert.are.same({}, missing,
-            "system prompt(s) missing defaults.fence_indent_convention — switching "
-            .. "prompt would silently change how malformed output renders (#218)")
+            "selectable prompt(s) missing defaults.fence_indent_convention — "
+            .. "switching prompt or agent would silently change how malformed "
+            .. "output renders (#218)")
     end)
 
     it("picker keys come from the keybinding registry, not literals", function()

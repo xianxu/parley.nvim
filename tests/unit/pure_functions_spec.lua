@@ -411,6 +411,28 @@ describe("simple_markdown_to_html fence handling (#218)", function()
         assert.is_truthy(html:find("a later answer", 1, true))
     end)
 
+    -- BR-20: the rewrite dropped the blank lines the old gsub emitted, so the
+    -- later <p>…<div cleanups stopped firing and code blocks began nesting
+    -- inside paragraphs. The other tests here only assert text survives, which
+    -- is why that regression shipped green.
+    it("a code block after prose is NOT nested inside a paragraph", function()
+        local html = exporter.simple_markdown_to_html(table.concat({
+            "some prose directly above",
+            "```lua",
+            "local x = 1",
+            "```",
+        }, "\n"))
+        local div_at = html:find('<div class="code%-block"')
+        assert.is_truthy(div_at, "expected a code block")
+        local before = html:sub(1, div_at - 1)
+        -- the last paragraph opened before the div must already be closed
+        local last_open = select(2, before:gsub("<p[^>]*>", ""))
+        local last_close = select(2, before:gsub("</p>", ""))
+        assert.are.equal(last_open, last_close,
+            "the code block sits inside an unclosed <p> — the blank-line "
+            .. "guarantee the old gsub provided was dropped")
+    end)
+
     it("still converts a well-formed flush-left block", function()
         local html = exporter.simple_markdown_to_html("```lua\nlocal y = 2\n```")
         assert.is_truthy(html:find('class="language%-lua"'))

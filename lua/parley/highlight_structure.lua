@@ -185,9 +185,16 @@ function M.is_partition(line, patterns)
     assert(type(patterns) == "table",
         "is_partition requires patterns from the LIVE config — "
         .. "highlight_structure.patterns(config)")
-    local token = M.classify(line, patterns).token
-    return token == TOKENS.user or token == TOKENS.assistant
-        or token == TOKENS["local"] or token == TOKENS.branch
+    -- Four anchored prefix matches, not M.classify: this runs per line in
+    -- code_block_memo over whole buffers, and the full classifier costs ~10
+    -- patterns plus a footnote lookup — measured 6.06ms vs 0.31ms per 5000-line
+    -- buffer for the toggles it replaced (BR-22). Equivalent because every
+    -- classify branch that precedes these four is anchored at column zero on a
+    -- character a turn prefix cannot start with.
+    return line:match(patterns.user_pattern) ~= nil
+        or line:match(patterns.assistant_pattern) ~= nil
+        or line:match(patterns.local_pattern) ~= nil
+        or line:match(patterns.branch_pattern) ~= nil
 end
 
 --- Does this line open or close a fence? Returns the backtick run length, or

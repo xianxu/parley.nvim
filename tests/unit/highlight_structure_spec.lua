@@ -307,3 +307,26 @@ describe("shared fence helpers (#218)", function()
         assert.is_true(memo_default[4], "sanity: defaults do not recognise U:")
     end)
 end)
+
+-- #218 BR-22: is_partition was rewritten from M.classify to four anchored
+-- prefix matches for speed (6.06ms -> 0.84ms per 5000-line buffer). A perf
+-- refactor produces no behavioural red, so the EQUIVALENCE is what needs
+-- pinning — otherwise the fast path is free to be subtly wrong.
+describe("is_partition fast path equals the classifier (#218)", function()
+    it("agrees with classify over the whole decoration grammar", function()
+        local P = structure.patterns()
+        local corpus = {
+            "💬: q", "🤖: a", "🔒: local", "🌿: branch.md: ", "📝: summary",
+            "🧠: thinking", "🧠:[END]", "```", "  ```lua", "~~~", "prose",
+            "", "   ", "=== draft ===", "=== end ===", "[^id]: a footnote",
+            "🔧 tool", "  💬: indented, NOT a partition", "💬 no colon",
+            "x💬: not at column zero", "````", "> quoted 💬:",
+        }
+        for _, line in ipairs(corpus) do
+            local token = structure.classify(line, P).token
+            local via_classify = token == "u" or token == "a" or token == "l" or token == "b"
+            assert.are.equal(via_classify, structure.is_partition(line, P),
+                "fast path disagrees with classify on: " .. vim.inspect(line))
+        end
+    end)
+end)

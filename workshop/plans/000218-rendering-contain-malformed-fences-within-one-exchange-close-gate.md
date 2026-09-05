@@ -276,6 +276,119 @@ rounds:
           family: config-ignored-at-new-seam
           round: 2
       blocked: true
+    - "n": 3
+      timestamp: "2026-09-05T14:17:11-07:00"
+      agent: claude
+      dispose:
+        - id: BR-8
+          disposition: not-addressed
+          note: highlighter.lua:148 `classified` and :192 `classification` still both call classify.
+          round: 3
+        - id: BR-9
+          disposition: not-addressed
+          note: walk table still allocated per line at highlighter.lua:155-161; only 3 of 6 fields copied back.
+          round: 3
+        - id: BR-10
+          disposition: not-addressed
+          note: atlas/ui/highlights.md:35 still says "up to 3 spaces of indent"; is_fence_delim uses ^%s* (any run, tabs included).
+          round: 3
+        - id: BR-13
+          disposition: not-addressed
+          note: atlas/ui/outline.md:13 unchanged and still omits partition containment.
+          round: 3
+        - id: BR-14
+          disposition: addressed
+          note: 'Verified by revert: base exporter.lua turns pure_functions_spec and the arch spec red. See new finding on the paragraph regression the rewrite introduced.'
+          round: 3
+        - id: BR-15
+          disposition: addressed
+          note: 'All three reverts independently red: review live-config 1F, copy.lua 2 specs, four stripped prompts 1F.'
+          round: 3
+        - id: BR-16
+          disposition: not-addressed
+          note: 'Measured seam: "aging in your responses.Indent ev" in all four non-default prompts; the new arch guard uses a plain substring find so it cannot see this.'
+          round: 3
+        - id: BR-17
+          disposition: not-addressed
+          note: copy.lua:2 still claims "no parley module dependencies"; atlas:35 still attributes the >= closer rule to a grammar code_block_memo does not implement.
+          round: 3
+        - id: BR-18
+          disposition: not-addressed
+          note: 'Re-measured: 22 of 146 lua modules are in no code: list, copy.lua and copy_fence_spec.lua among them.'
+          round: 3
+        - id: BR-19
+          disposition: addressed
+          note: Assert verified reachable — is_partition and code_block_memo both raise on nil patterns; only the empty-lines call is vacuous.
+          round: 3
+      findings:
+        - id: BR-20
+          severity: Important
+          title: The BR-14 exporter rewrite drops the blank lines the old gsub guaranteed, so code blocks now nest inside <p>
+          detail: |-
+            exporter.lua:361-392 joins `out` with single newlines, so the emitted
+            <div class="code-block"> is no longer surrounded by \n\n and the later
+            `<p[^>]*>%s*<div` / `</div>%s*</p>` cleanups stop firing. Reproduced against
+            the base implementation on identical input: before, the div was a sibling of
+            <p>; after, it sits inside one and the following prose loses .paragraph.
+            175 of 256 fence delimiters in this repo's own chats and transcripts are
+            preceded by a non-blank line, so this is the majority shape. The three new
+            exporter tests assert only that text survives, so nothing goes red. Fix:
+            emit an empty entry before and after the div, and assert the div is not
+            inside a paragraph.
+          family: rewrite-drops-incidental-guarantee
+          round: 3
+        - id: BR-21
+          severity: Important
+          title: The convention guard enumerates config.system_prompts only, not config.agents system_prompt or user overrides
+          detail: |-
+            This is the 2nd finding in family convention-not-derived-by-consumers. Do
+            not fix this instance — state the rule: every prompt string in shipped
+            config that agent_info.resolve can select must contain
+            defaults.fence_indent_convention, derived from config rather than
+            hand-picked. agent_info.lua:48-50 falls back to agent.system_prompt;
+            config.lua:199 calls it mandatory and :224 supplies one, so the guard at
+            single_source_sweeps_spec.lua:290 is green while covering one of two arms.
+            The non-enforceable arm is user-supplied prompts — README.md:214 documents
+            merging system_prompts by name, and a chat header system_prompt: replaces
+            the prompt wholesale; neither carries the convention and no doc says why
+            that matters. Docs gate: README update missing for that surface.
+          family: convention-not-derived-by-consumers
+          round: 3
+        - id: BR-22
+          severity: Minor
+          title: code_block_memo costs about 20x the inline toggles it replaced and no perf run was recorded
+          detail: |-
+            Measured 6.06 ms vs 0.31 ms per 5000-line buffer, because is_partition runs
+            the full classifier (~10 patterns plus a footnote lookup) per line.
+            fold_projection.lua:111 documents deliberately avoiding exactly this cost on
+            its own path. On-demand picker only, so not urgent, but the consolidation
+            changed the per-line cost class and make perf was not run for this window.
+            A prefix pre-check before classify recovers it. ARCH-CONSTRAINTS.
+          family: shared-helper-unmeasured-cost
+          round: 3
+        - id: BR-23
+          severity: Minor
+          title: The fence-matcher arch guard only fires when the triple backtick and the match call share a line
+          detail: |-
+            This is the 3rd finding in family single-source-bypassed. Do not patch the
+            heuristic for one shape — state the rule the guard is meant to enforce and
+            make the guard match it: a hoisted pattern constant, or any backtick-run
+            pattern with no literal triple, evades detection entirely.
+            exporter.lua:375's "^%s*`+%s*([%w_+-]*)" is already invisible to it (benign
+            here — lang extraction, not a predicate). Measured live evasions in lua/: 0
+            predicates, 1 non-predicate.
+          family: single-source-bypassed
+          round: 3
+        - id: BR-24
+          severity: Minor
+          title: exporter.lua reaches for require("parley").config although the module already holds the injected _parley handle
+          detail: |-
+            exporter.lua:363 uses require("parley").config while the same file declares
+            _parley at :2 and uses it at :37, :693 and :750. Two ways into the same
+            dependency in one module; the injected handle is the seam.
+          family: injected-seam-bypassed
+          round: 3
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#218 (boundary-review)
@@ -437,15 +550,77 @@ later rounds disposed of them. Generated — edit the gate, not this file.
   rule is to make it unrepresentable (assert on nil at the seam) rather than to audit
   each caller, which BR-2 already had to do twice.
 
+## Round 3 — 2026-09-05T14:17:11-07:00 (claude) — BLOCKED
+
+### Disposed
+
+- BR-8 — not-addressed — highlighter.lua:148 `classified` and :192 `classification` still both call classify.
+- BR-9 — not-addressed — walk table still allocated per line at highlighter.lua:155-161; only 3 of 6 fields copied back.
+- BR-10 — not-addressed — atlas/ui/highlights.md:35 still says "up to 3 spaces of indent"; is_fence_delim uses ^%s* (any run, tabs included).
+- BR-13 — not-addressed — atlas/ui/outline.md:13 unchanged and still omits partition containment.
+- BR-14 — addressed — Verified by revert: base exporter.lua turns pure_functions_spec and the arch spec red. See new finding on the paragraph regression the rewrite introduced.
+- BR-15 — addressed — All three reverts independently red: review live-config 1F, copy.lua 2 specs, four stripped prompts 1F.
+- BR-16 — not-addressed — Measured seam: "aging in your responses.Indent ev" in all four non-default prompts; the new arch guard uses a plain substring find so it cannot see this.
+- BR-17 — not-addressed — copy.lua:2 still claims "no parley module dependencies"; atlas:35 still attributes the >= closer rule to a grammar code_block_memo does not implement.
+- BR-18 — not-addressed — Re-measured: 22 of 146 lua modules are in no code: list, copy.lua and copy_fence_spec.lua among them.
+- BR-19 — addressed — Assert verified reachable — is_partition and code_block_memo both raise on nil patterns; only the empty-lines call is vacuous.
+
+### Raised
+
+- **BR-20** [Important] `rewrite-drops-incidental-guarantee` The BR-14 exporter rewrite drops the blank lines the old gsub guaranteed, so code blocks now nest inside <p>
+  exporter.lua:361-392 joins `out` with single newlines, so the emitted
+  <div class="code-block"> is no longer surrounded by \n\n and the later
+  `<p[^>]*>%s*<div` / `</div>%s*</p>` cleanups stop firing. Reproduced against
+  the base implementation on identical input: before, the div was a sibling of
+  <p>; after, it sits inside one and the following prose loses .paragraph.
+  175 of 256 fence delimiters in this repo's own chats and transcripts are
+  preceded by a non-blank line, so this is the majority shape. The three new
+  exporter tests assert only that text survives, so nothing goes red. Fix:
+  emit an empty entry before and after the div, and assert the div is not
+  inside a paragraph.
+- **BR-21** [Important] `convention-not-derived-by-consumers` The convention guard enumerates config.system_prompts only, not config.agents system_prompt or user overrides
+  This is the 2nd finding in family convention-not-derived-by-consumers. Do
+  not fix this instance — state the rule: every prompt string in shipped
+  config that agent_info.resolve can select must contain
+  defaults.fence_indent_convention, derived from config rather than
+  hand-picked. agent_info.lua:48-50 falls back to agent.system_prompt;
+  config.lua:199 calls it mandatory and :224 supplies one, so the guard at
+  single_source_sweeps_spec.lua:290 is green while covering one of two arms.
+  The non-enforceable arm is user-supplied prompts — README.md:214 documents
+  merging system_prompts by name, and a chat header system_prompt: replaces
+  the prompt wholesale; neither carries the convention and no doc says why
+  that matters. Docs gate: README update missing for that surface.
+- **BR-22** [Minor] `shared-helper-unmeasured-cost` code_block_memo costs about 20x the inline toggles it replaced and no perf run was recorded
+  Measured 6.06 ms vs 0.31 ms per 5000-line buffer, because is_partition runs
+  the full classifier (~10 patterns plus a footnote lookup) per line.
+  fold_projection.lua:111 documents deliberately avoiding exactly this cost on
+  its own path. On-demand picker only, so not urgent, but the consolidation
+  changed the per-line cost class and make perf was not run for this window.
+  A prefix pre-check before classify recovers it. ARCH-CONSTRAINTS.
+- **BR-23** [Minor] `single-source-bypassed` The fence-matcher arch guard only fires when the triple backtick and the match call share a line
+  This is the 3rd finding in family single-source-bypassed. Do not patch the
+  heuristic for one shape — state the rule the guard is meant to enforce and
+  make the guard match it: a hoisted pattern constant, or any backtick-run
+  pattern with no literal triple, evades detection entirely.
+  exporter.lua:375's "^%s*`+%s*([%w_+-]*)" is already invisible to it (benign
+  here — lang extraction, not a predicate). Measured live evasions in lua/: 0
+  predicates, 1 non-predicate.
+- **BR-24** [Minor] `injected-seam-bypassed` exporter.lua reaches for require("parley").config although the module already holds the injected _parley handle
+  exporter.lua:363 uses require("parley").config while the same file declares
+  _parley at :2 and uses it at :37, :693 and :750. Two ways into the same
+  dependency in one module; the injected handle is the seam.
+
 ## Open findings
 
 - **BR-8** [Minor] `redundant-recompute-on-render-path` classify is called twice per line per redraw in compute_chat_highlights
 - **BR-9** [Minor] `shared-transition-partial-ownership` advance writes in_question/in_reasoning into the highlighter's walk table and the caller discards them
 - **BR-10** [Minor] `doc-overstates-implementation` atlas claims a 3-space CommonMark indent limit the code does not enforce
 - **BR-13** [Minor] `atlas-stale-for-changed-surface` atlas/ui/outline.md still states the pre-218 rule
-- **BR-14** [Critical] `instance-not-class-sweep` The new two-space convention breaks HTML export — exporter.lua pairs fences across turns and only closes at column zero
-- **BR-15** [Important] `fix-without-failing-test` Three of this round's own fixes revert green — the mutation ledger was built from recall, not from the diff
 - **BR-16** [Minor] `shared-fragment-missing-separator` The convention is concatenated onto a sentence-final period in four of five prompts
 - **BR-17** [Minor] `doc-overstates-implementation` copy.lua's header now contradicts the file, and the atlas grammar table overstates code_block_memo
 - **BR-18** [Minor] `traceability-unmapped` lua/parley/copy.lua changed in this window and is in no traceability code list
-- **BR-19** [Minor] `config-ignored-at-new-seam` is_partition and code_block_memo still silently substitute default prefixes when patterns is nil
+- **BR-20** [Important] `rewrite-drops-incidental-guarantee` The BR-14 exporter rewrite drops the blank lines the old gsub guaranteed, so code blocks now nest inside <p>
+- **BR-21** [Important] `convention-not-derived-by-consumers` The convention guard enumerates config.system_prompts only, not config.agents system_prompt or user overrides
+- **BR-22** [Minor] `shared-helper-unmeasured-cost` code_block_memo costs about 20x the inline toggles it replaced and no perf run was recorded
+- **BR-23** [Minor] `single-source-bypassed` The fence-matcher arch guard only fires when the triple backtick and the match call share a line
+- **BR-24** [Minor] `injected-seam-bypassed` exporter.lua reaches for require("parley").config although the module already holds the injected _parley handle
