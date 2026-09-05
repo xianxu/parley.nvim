@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-09-05
 updated: 2026-09-05
-estimate_hours:
+estimate_hours: 1.96
 started: 2026-09-05T12:12:38-07:00
 ---
 
@@ -15,16 +15,12 @@ started: 2026-09-05T12:12:38-07:00
 
 Surfaced in the #206 release shakedown (#217 gap 10). When a model returns an
 unmatched ``` fence, the damage does not stay in that answer — the rest of the
-document renders as code. `<M-q>` quoted text is also sometimes wrapped in a
-fence incorrectly, likely the same root cause.
+document renders as code.
 
-The operator's diagnosis was right and the code confirms it: **the render path
-does not consult the exchange boundary that `exchange_model` already owns.**
-
-### Two defects, both in `lua/parley/highlight_structure.lua`
-
-**D1 — `in_code` is never reset at an exchange boundary.** The state machine
-resets sibling state at every partition but leaves the fence flag standing:
+The operator's diagnosis was right: **the render path does not honour the
+exchange boundary that the structure already tracks.** `highlight_structure`
+resets `in_question` and `in_reasoning` at every `💬:`/`🤖:` partition and never
+`in_code`:
 
 ```lua
 if token == TOKENS.user then
@@ -35,121 +31,165 @@ elseif token == TOKENS.assistant or token == TOKENS["local"] or token == TOKENS.
     state.in_reasoning = false          -- reset
 ```
 
-Neither branch touches `state.in_code`. So one unmatched fence flips it and it
-stays flipped for **every subsequent question and answer in the file**. The
-footer guard has the same shape — it resets `in_question` and `in_reasoning`
-past `footer_start0`, not `in_code`.
+### The class: four independent fence trackers, none of which reset
 
-**D2 — the fence predicate is a fifth, non-derived implementation.** #200
-consolidated the fenced-block grammar into `lua/parley/fence.lua` precisely
-because it "had three independent implementations", and pointed four consumers
-at it: `fold_projection`, `chat_parser`, `answer_structure`, `tools/serialize`.
-`highlight_structure` was missed. It still matches loosely:
+| # | site | shape | resets at partition? |
+|---|---|---|---|
+| 1 | `highlight_structure.lua:85,173` | boolean toggle on `^%s*```` | no |
+| 2 | `highlighter.lua:148-153` | **duplicate** of #1, re-derived per window | no |
+| 3 | `outline.lua:31-33` | boolean toggle, also `~~~` | no |
+| 4 | `skills/review/init.lua:166-172` | fence-range pairing | no |
 
-```lua
-elseif line:match("^%s*```") then kind = "fence"
-...
-if token == TOKENS.fence then
-    state.in_code = not state.in_code   -- naked toggle
-```
-
-A bare toggle on any >=3-backtick run has no same-length closing rule, so a
-nested or longer fence desyncs it — the exact failure `fence.lua`'s header
-warns about ("every consumer downstream shifts by one fence"). ARCH-DRY: the
-module exists, this consumer does not derive from it.
+#2 is byte-identical logic to #1, seeded from it and then advanced privately —
+so fixing #1 alone repairs the *seed* and leaves the in-window walk leaking.
 
 ## Spec
 
-**`💬:` / `🤖:` at line start are hard partitions.** Fence state resets at every
-boundary, so a malformed answer can corrupt at most its own section. This is
-containment by *position*, not by fence-matching — which is the point: ``` may
-legitimately appear inside a question when the user is asking about fences, so
-no amount of smarter fence-matching can substitute for the boundary reset.
+`💬:`/`🤖:` at line start are hard partitions: fence state resets at every
+boundary, so a malformed answer corrupts at most its own section. Containment is
+**positional**, not fence-matching — ``` is legitimate content inside a question
+asking about fences, so no smarter matcher substitutes for the reset.
 
-Two changes:
+### Phase is explicit (PQ-1)
 
-1. Reset `state.in_code` (and `state.in_tool`, which rides on it) on every
-   partition token — `user`, `assistant`, `local`, `branch` — and past the
-   footer, alongside the resets already there.
-2. Point `highlight_structure` at `parley.fence` so all five consumers derive
-   the grammar from one source, completing #200.
+`state_before[row]` is written **before** the row's transitions
+(`highlight_structure.lua:161`), while `highlighter.lua:149` toggles **before
+use**. They therefore disagree on every fence-delimiter row — pinned today by
+`highlight_structure_spec.lua:52`. Naively reading `state_before` per row would
+invert the fence line's own render (`highlighter.lua:247`) and dim every tool
+body's closing fence (`:223`).
 
-**Explicitly rejected: a zero-width space after `💬:`.** It was considered to
-make the marker more unique. It costs the property Tier 1 leads with — the
-transcript is plain markdown the user can freely edit — since a hand-typed
-`💬:` would carry no ZWSP and the parser must accept both anyway. No uniqueness
-gained, editability spent. The positional reset achieves the containment alone.
+Decisions:
 
-**`exchange_model` already has the boundary** — it is documented as "the
-size-based positional model, single source of truth for buffer layout;
-everything is a block". This issue is not adding a boundary, it is making the
-render path honour the one that exists. Confirm during planning whether
-`highlight_structure` should consume `exchange_model` directly or just reset on
-the same tokens; the latter is smaller and may be sufficient.
+- **Partition resets run BEFORE the snapshot**, unlike `in_question`, which is
+  set after. Rationale: a `💬:`/`🤖:` line is itself not inside code, so
+  `state_before[partition_row].in_code` must already be false. This matches the
+  footer guard, which also runs pre-snapshot.
+- **Deduplicate by extracting the transition, not by swapping the phase.**
+  `highlight_structure` exports `M.advance(state, token, …)`; the builder and
+  `highlighter` both call it. One transition function, no private copy, and the
+  phase each caller wants stays its own choice. This replaces the earlier plan
+  to have `highlighter` read `state_before` per row, which was phase-wrong.
+
+### `in_code` stays boolean; the open length rides alongside (PQ-2, Minor)
+
+Exposed state keeps `in_code` as a boolean — `highlight_structure_spec.lua:14,52,54`
+assert against booleans with `assert.are.same`, so the earlier claim that
+`highlighter.lua:140` was the only reader was wrong. The open fence's length
+lives beside it as `code_fence_len` (nil when closed) so a closer shorter than
+its opener does not close it.
+
+**The fingerprint must encode the length.** `M.replace`
+(`highlight_structure.lua:206-228`) takes a fast path on fingerprint equality and
+reuses `structure.state_before` **verbatim**; it runs per keystroke via
+`highlighter.lua:926`. `TOKENS.fence = "c"` is one token for every width, so
+editing ``` to ```` in place keeps the fingerprint identical and serves stale
+state for the rest of the buffer. Fence fingerprints become `"c" .. n`, so a
+width edit invalidates correctly (ARCH-ORDER). The `token == TOKENS.fence`
+equality test at `:173` becomes a prefix test.
+
+### `parley.fence` is NOT adopted (PQ-3)
+
+The earlier plan said deriving from `parley.fence` would "complete #200's sweep".
+**That was wrong on both halves.** `fence.lua`'s own first line scopes it to
+*tool bodies*: `open_len` matches `^(`+)([^`]*)$` — no leading whitespace — and
+it closes only on an exactly-equal run. Prose needs CommonMark: indented fences
+are legal inside list items, and a closer must be **at least** as long as its
+opener, not exactly. Adopting it would silently stop recognising indented fences
+and impose a tool-body rule on prose.
+
+So the two grammars stay separate and the difference is documented at both ends.
+Render-side tracking follows CommonMark; `fence.lua` keeps owning tool bodies.
 
 ## Done when
 
-- an unmatched fence in one answer leaves every later exchange rendering
-  correctly
-- a question containing a literal ``` renders correctly, and does not corrupt
-  the answer after it
-- `highlight_structure` derives its fence predicate from `parley.fence`
-- a fixture suite of deliberately malformed transcripts asserts containment
-  per-exchange, not merely "the file still parses"
-- **at least one** unbalanced fence per exchange is contained (see scope note)
+- an unmatched fence in one answer leaves every later exchange rendering clean
+- a question containing a literal ``` renders correctly and does not corrupt the
+  answer after it
+- editing a fence's width in place does not serve stale state (the `M.replace`
+  fast path invalidates)
+- all four trackers reset at partitions, or say in-issue why they do not
+- **each new test is verified by mutation** — reverting its change turns it red.
+  A test that stays green with the fix reverted pins nothing (#215 lesson,
+  `workshop/lessons.md`)
+
+## Estimate
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: lua-neovim         design=0.5  impl=0.6
+item: lua-neovim         design=0.15 impl=0.2
+item: atlas-docs         design=0.05 impl=0.05
+item: milestone-review   design=0.0  impl=0.2
+design-buffer: 0.30
+total: 1.96
+```
+
+*Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against
+`baseline-v3.1.md`. Method A only.* Calibration doc reported **stale** by
+`sdlc estimate-source` (ariadne#127); hours provisional.
+
+- Raised from 1.57 after plan-quality round 1 grew the scope from one tracker to
+  **four**, added the fingerprint change, and replaced the phase-wrong
+  deduplication with an extracted `advance()`.
+- **Two `lua-neovim` items**, split by risk: the structure/highlighter core
+  (phase, transition extraction, fingerprint) versus the `outline` +
+  `skills/review` containment sweep, which is mechanical.
+- **design=0.5 on the core** follows #215's calibration: its judge measured
+  design=1.2 at ~2× the observed time and it closed 1.67 against 2.23. The
+  design here is settled by this revision.
+- **`milestone-review` impl=0.2** above the 0.14 midpoint — #215 needed four
+  boundary rounds, and this plan has already burned one.
 
 ## Plan
 
-- [ ] Fixture suite: unmatched opener in an answer; unmatched closer; a literal
-      ``` inside a question; nested/longer fences; a fence opened in a tool
-      body and never closed. Each asserts the NEXT exchange renders clean
-- [ ] Reset `in_code`/`in_tool` on partition tokens and past the footer
-- [ ] Point `highlight_structure` at `parley.fence` (completes #200's sweep)
-- [ ] ~~Re-test `<M-q>` quoting~~ — **split out**, unrelated (see Revisions)
-- [ ] Check whether `fold_projection` and `outline` share the containment gap —
-      they consume the same structure and would show the same symptom
-- [ ] Atlas: record the partition rule wherever buffer layout is described
-
-## Scope note — one mismatch per exchange is enough
-
-Containment does **not** require resolving arbitrary nesting. Operator's call:
-patching a single unbalanced fence per exchange already removes the observed
-damage, and the combinatorics of multiple mismatches are not worth chasing.
-
-The boundary reset gives this for free — whatever `in_code` depth a section ends
-in, the next partition clears it. So "N mismatches" is not a separate case at
-the render layer; it only matters for a future *write-time sanitizer*, which is
-a different issue. Fixtures should still include a multi-mismatch case, but only
-to assert **containment**, not correct interpretation of the broken section
-itself. A malformed answer is allowed to render wrong; it is not allowed to make
-the next one render wrong.
+- [ ] Fence fingerprint carries width (`"c"..n`); `:173`'s equality test becomes
+      a prefix test — do this FIRST, the `M.replace` fast path depends on it
+- [ ] Extract `M.advance(state, token, …)`; builder calls it, `highlighter`
+      calls it instead of its private walk at `:148-153`
+- [ ] Reset `in_code`/`code_fence_len`/`in_tool` at partition tokens,
+      **pre-snapshot**, alongside the footer guard
+- [ ] CommonMark closer rule: `code_fence_len` tracked, closer must be >= opener
+- [ ] Sweep `outline.lua:31-33` and `skills/review/init.lua:166-172` for the same
+      containment gap; fix or record why not
+- [ ] Tests by function, one strategy line each:
+      `highlight_structure.build` — property/fuzz over arbitrary fence-run
+      interleavings, invariant `in_code == false` at every partition row;
+      `highlight_structure.replace` — fence-width-edit input class (PQ-2);
+      the highlighter render seam via `tests/unit/highlighter_spec.lua` — without
+      it site #2 ships untested
+- [ ] Verify by mutation: revert each change in turn, confirm a test goes red
+- [ ] Atlas: record the partition rule and the two-grammar split
+- [ ] Full suite green
 
 ## Log
 
 ### 2026-09-04
 
 Filed from #217 gap 10. Operator proposed the hard-partition rule and correctly
-predicted the render path was ignoring `exchange_model`'s boundary; reading the
-state machine confirmed it and turned up D2 as well — #200 consolidated four
-fence consumers onto `fence.lua` and left the fifth behind.
+predicted the render path was ignoring the boundary the structure already
+tracks.
 
-Containment must be positional because ``` is legitimate content inside a
-question. That is also why the ZWSP marker idea is recorded as rejected rather
-than deferred: it addresses uniqueness, which is not the failing property.
+### 2026-09-04 — plan-quality round 1: 2 Critical, 3 Important
 
-## Revisions
+The gate reversed two parts of the plan and tripled the enumeration.
 
-### 2026-09-04 — `<M-q>` fence copying split out; it is not this bug
-
-The Problem section originally guessed the `<M-q>` mis-fencing shared this root
-cause. **It does not.** Operator described it precisely — the quote *copies the
-fence lines themselves* into the quoted text — and the cause is in
-`lua/parley/drill_in.lua`, not the render layer:
-
-`paragraph_top` scans backwards for the enclosing prose block and stops only on
-`is_blank` or `is_boundary_line` (a configured turn prefix). A ```` ``` ```` line
-is neither, so the scan walks straight through it and the fence delimiters land
-inside the snippet. Nothing to do with `in_code` or `highlight_structure`.
-
-Tracked as #217 item 12. Fixing it here would have coupled two unrelated modules
-behind one verdict.
+- **PQ-1** — deduplicating by having `highlighter` read `state_before` per row
+  was **phase-wrong**: the snapshot is pre-transition, the accumulator
+  post-transition, so they disagree on every fence-delimiter row. Replaced with
+  an extracted `advance()`, and the reset's own phase is now stated.
+- **PQ-2** — length-typed `in_code` would have made `M.replace`'s per-keystroke
+  fast path serve stale state, since `TOKENS.fence` is one token for every
+  width. Fingerprint now carries the width.
+- **PQ-3** — `parley.fence` is scoped to *tool bodies* and is stricter than the
+  render predicate (no leading whitespace, exact-length close). Adopting it
+  would have dropped indented fences. **The "completes #200's sweep" framing was
+  simply wrong**; the two grammars are now deliberately separate.
+- **PQ-4** — the sweep named one site; `outline.lua` and `skills/review` carry
+  their own non-derived trackers. Enumeration is four.
+- **PQ-5** — the test plan was five prose cases naming no function under test.
+  Now three functions with a strategy line each, including the render seam that
+  pins the very site the plan calls "the one a site-level fix would miss".
+- Minor — `highlighter.lua:140` was **not** the only `in_code` reader; the spec
+  asserts booleans, which is why the exposed type stays boolean.
