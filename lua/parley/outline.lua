@@ -3,6 +3,8 @@
 
 local M = {}
 
+local highlight_structure = require("parley.highlight_structure")
+
 -- Build a code block state table for all lines in the buffer with a single bulk read.
 -- Returns a table mapping 1-based line numbers to boolean (true = inside code block).
 local function build_code_block_memo(bufnr)
@@ -10,8 +12,14 @@ local function build_code_block_memo(bufnr)
   local memo = {}
   local in_block = false
 
+  local patterns = highlight_structure.patterns()
   for i, line_content in ipairs(all_lines) do
-    if line_content:match("^%s*```") or line_content:match("^%s*~~~") then
+    -- #218: a 💬:/🤖: partition ends any open fence. Without this an unmatched
+    -- fence in one answer marks every later line "in code" and silently drops
+    -- the rest of the document out of the outline.
+    if highlight_structure.is_partition(line_content, patterns) then
+      in_block = false
+    elseif line_content:match("^%s*```") or line_content:match("^%s*~~~") then
       in_block = not in_block
     end
     memo[i] = in_block
@@ -28,9 +36,12 @@ local function is_in_code_block(bufnr, line_number, memo)
   -- Fallback: compute lazily (should rarely happen when memo is pre-built)
   local all_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
   local in_block = false
+  local patterns = highlight_structure.patterns()
   for i = 1, line_number do
     local lc = all_lines[i] or ""
-    if lc:match("^%s*```") or lc:match("^%s*~~~") then
+    if highlight_structure.is_partition(lc, patterns) then -- #218, as above
+      in_block = false
+    elseif lc:match("^%s*```") or lc:match("^%s*~~~") then
       in_block = not in_block
     end
     memo[i] = in_block

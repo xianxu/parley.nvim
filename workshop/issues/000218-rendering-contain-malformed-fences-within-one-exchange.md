@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-09-05
 updated: 2026-09-05
-estimate_hours: 1.96
+estimate_hours: 1.86
 started: 2026-09-05T12:12:38-07:00
 ---
 
@@ -122,8 +122,8 @@ item: lua-neovim         design=0.5  impl=0.6
 item: lua-neovim         design=0.15 impl=0.2
 item: atlas-docs         design=0.05 impl=0.05
 item: milestone-review   design=0.0  impl=0.2
-design-buffer: 0.30
-total: 1.96
+design-buffer: 0.15
+total: 1.86
 ```
 
 *Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against
@@ -133,14 +133,30 @@ total: 1.96
 - Raised from 1.57 after plan-quality round 1 grew the scope from one tracker to
   **four**, added the fingerprint change, and replaced the phase-wrong
   deduplication with an extracted `advance()`.
+- **design-buffer 0.15, not 0.30** — corrected after estimate-quality round 1.
+  v3.1 step 4 grants +15% "when the issue has a thorough plan doc", and this
+  Spec qualifies (three named decisions, a four-row site enumeration, an 8-row
+  Plan that survived a review round). More decisively, `baseline-v3.1.md`
+  computes its whole calibration column with `est_design * 1.15` — using 1.30
+  would price this row on a different multiplier than the baseline it claims to
+  calibrate against. Same error was made on #215; the rule is baseline
+  consistency, not whether a separate `workshop/plans/` file exists.
 - **Two `lua-neovim` items**, split by risk: the structure/highlighter core
   (phase, transition extraction, fingerprint) versus the `outline` +
   `skills/review` containment sweep, which is mechanical.
-- **design=0.5 on the core** follows #215's calibration: its judge measured
-  design=1.2 at ~2× the observed time and it closed 1.67 against 2.23. The
-  design here is settled by this revision.
-- **`milestone-review` impl=0.2** above the 0.14 midpoint — #215 needed four
-  boundary rounds, and this plan has already burned one.
+- **design=0.5 on the core** sits inside v2.1 Step 3's discounted band: a spec
+  that pre-resolves decisions takes ×0.2 on design, and ×0.2 of Lua/Neovim's
+  1–3 is 0.2–0.6. It is at the *top* of that band, which #215's calibration
+  supports (its judge measured design=1.2 at ~2× observed, closing 1.67 against
+  2.23) — but the band, not the bespoke adjustment, is the justification.
+- **`milestone-review` impl=0.2 is the scaled CEILING**, not "above the
+  midpoint" as an earlier draft said: the table row is 0.2–0.5, which at ×0.40
+  is 0.08–0.20. There is no headroom left in this item, so a close review that
+  returns a Critical will overrun it. Recorded deliberately — #215 needed four
+  boundary rounds and this plan has already burned one.
+- **`impl=0.6` on the core is also at its scaled ceiling** (0.5–1.5 × 0.40) and
+  must absorb both the property/fuzz suite and a serial revert/run/restore
+  mutation loop over ~5 changes. That is the likeliest overrun.
 
 ## Plan
 
@@ -165,13 +181,13 @@ total: 1.96
 
 ## Log
 
-### 2026-09-04
+### 2026-09-05
 
 Filed from #217 gap 10. Operator proposed the hard-partition rule and correctly
 predicted the render path was ignoring the boundary the structure already
 tracks.
 
-### 2026-09-04 — plan-quality round 1: 2 Critical, 3 Important
+### 2026-09-05 — plan-quality round 1: 2 Critical, 3 Important
 
 The gate reversed two parts of the plan and tripled the enumeration.
 
@@ -193,3 +209,17 @@ The gate reversed two parts of the plan and tripled the enumeration.
   pins the very site the plan calls "the one a site-level fix would miss".
 - Minor — `highlighter.lua:140` was **not** the only `in_code` reader; the spec
   asserts booleans, which is why the exposed type stays boolean.
+
+### 2026-09-05 — measurement-window caveat, carry this to close
+
+**`sdlc actual` will under-report this issue for window reasons, not primitive
+drift.** The claim commit (`499c227`, 12:12:38) opened the window, but the issue
+was filed at 11:13 and the whole spec/plan — including the plan-quality round-1
+revision that *raised the estimate from 1.57 to 1.86* — landed at 12:08. Design
+is 0.805 of the 1.86 total (**43%**), and roughly an hour of it sits outside the
+measured window.
+
+This is AGENTS.md §2's "claim early" in miniature: the claim landed after the
+design instead of at the start of it. Note it in the close `## Log` so this row
+is not read as evidence for another downward recalibration of the design
+column.

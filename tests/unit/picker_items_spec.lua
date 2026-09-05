@@ -293,11 +293,31 @@ describe("outline picker item building", function()
         assert.truthy(items[1].display:find("💬:", 1, true))
     end)
 
-    it("skips lines inside code blocks", function()
+    -- #218: a 💬:/🤖: at column zero now ENDS any open fence, so an unmatched
+    -- fence in one answer can no longer mark the rest of the document as code.
+    -- The trade: a turn marker written flush-left inside a fence is read as a
+    -- turn. That is why the default system prompt asks the model to indent every
+    -- fenced block by two spaces (lua/parley/defaults.lua) — indented content
+    -- does not match the column-zero prefix patterns, so a properly formatted
+    -- quoted transcript still nests cleanly. This fixture is the unindented,
+    -- convention-violating shape.
+    it("treats a column-zero turn marker inside a fence as a turn (containment)", function()
         local bufnr = make_buf({
             "```",
             "💬: Not a question",
             "```",
+            "💬: Real question",
+        })
+        local items = outline._build_picker_items(bufnr, config)
+        assert.equals(2, #items)
+        assert.truthy(items[2].display:find("Real question", 1, true))
+    end)
+
+    it("skips lines inside a fence when the block is indented per the convention", function()
+        local bufnr = make_buf({
+            "  ```",
+            "  💬: Not a question",
+            "  ```",
             "💬: Real question",
         })
         local items = outline._build_picker_items(bufnr, config)

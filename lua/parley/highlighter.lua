@@ -138,20 +138,28 @@ local function compute_chat_highlights(buf, start_line, end_line, reader, struct
     local initial = highlight_structure.state_before(structure, start_line - 1, { streaming = streaming })
     local in_block = initial.in_question
     local in_code_block = initial.in_code
+    local code_fence_len = initial.code_fence_len
     local in_reasoning_block = initial.in_reasoning
     local in_reasoning_explicit_end = initial.reasoning_explicit_end
     local in_tool_block = initial.in_tool
 
     for offset, line in ipairs(lines) do
         local line_nr = start_line + offset - 1
-        local line_kind = highlight_structure.classify(line, patterns).kind
-        if line_kind == "fence" then
-            in_code_block = not in_code_block
-            -- Exiting a code block while in a tool region ends the tool region
-            if not in_code_block and in_tool_block then
-                in_tool_block = false
-            end
-        end
+        local classified = highlight_structure.classify(line, patterns)
+        -- #218: this used to keep a private copy of the structure's fence
+        -- toggle — byte-identical logic, drifting independently, and neither
+        -- copy reset at a 💬:/🤖: partition. Both now go through the ONE
+        -- transition function. Phase is preserved: `advance` runs before the
+        -- row is rendered, exactly as the old inline toggle did, so the fence
+        -- delimiter still renders as part of its own block.
+        local walk = {
+            in_question = in_block, in_code = in_code_block,
+            code_fence_len = code_fence_len, in_reasoning = in_reasoning_block,
+            reasoning_explicit_end = in_reasoning_explicit_end, in_tool = in_tool_block,
+        }
+        highlight_structure.reset_partition(walk, classified.token)
+        highlight_structure.advance(walk, classified.token, classified.fence_len)
+        in_code_block, code_fence_len, in_tool_block = walk.in_code, walk.code_fence_len, walk.in_tool
 
         local highlighted_regions = {}
         local row = line_nr - 1

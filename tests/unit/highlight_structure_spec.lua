@@ -8,10 +8,15 @@ local patterns = structure.patterns({
     chat_memory = { enable = true, reasoning_prefix = "🧠:", summary_prefix = "📝:" },
 })
 
-local function state(question, code, reasoning, explicit_end, tool)
+-- `fence_len` is the width of the OPEN fence, nil when closed (#218). It is
+-- asserted explicitly rather than allowed to float: the whole state table is
+-- compared with assert.are.same, and a state that claims in_code with no width
+-- cannot match a closer correctly.
+local function state(question, code, reasoning, explicit_end, tool, fence_len)
     return {
         in_question = question,
         in_code = code,
+        code_fence_len = fence_len or (code and 3 or nil),
         in_reasoning = reasoning,
         reasoning_explicit_end = explicit_end,
         in_tool = tool,
@@ -185,5 +190,78 @@ describe("STRUCTURAL_KINDS (#203)", function()
             assert.message(kind .. " is in STRUCTURAL_KINDS but no marker classifies as it")
                 .is_true(produced[kind] == true)
         end
+    end)
+end)
+
+-- #218 — fence containment. The invariant, stated once: a 💬:/🤖: partition
+-- terminates any open fence, so malformed output corrupts at most its own
+-- exchange. Verified by mutation: removing reset_partition's in_code line turns
+-- the property test red.
+describe("fence containment across exchange partitions (#218)", function()
+    local P = structure.patterns()
+
+    it("build: in_code is false entering EVERY partition row, over random fence runs", function()
+        -- Property/fuzz: arbitrary interleavings of fence runs (3-5 ticks),
+        -- prose and partitions. No matter how unbalanced, a partition row must
+        -- never be entered while in code.
+        math.randomseed(218)
+        for _ = 1, 200 do
+            local lines, partition_rows = {}, {}
+            for _ = 1, math.random(6, 30) do
+                local r = math.random(4)
+                if r == 1 then
+                    lines[#lines + 1] = string.rep("`", math.random(3, 5))
+                elseif r == 2 then
+                    lines[#lines + 1] = "💬: q"
+                    partition_rows[#lines] = true
+                elseif r == 3 then
+                    lines[#lines + 1] = "🤖: a"
+                    partition_rows[#lines] = true
+                else
+                    lines[#lines + 1] = "prose"
+                end
+            end
+            local built = structure.build(lines, P)
+            for row1 in pairs(partition_rows) do
+                local st = structure.state_before(built, row1 - 1)
+                assert.is_false(st.in_code,
+                    "partition at row " .. row1 .. " entered while in_code; lines:\n"
+                    .. table.concat(lines, "\n"))
+            end
+        end
+    end)
+
+    it("build: an unmatched fence does not leak past the next partition", function()
+        local lines = { "💬: q", "```lua", "code", "🤖: a", "plain answer", "💬: q2", "more" }
+        local built = structure.build(lines, P)
+        assert.is_true(structure.state_before(built, 2).in_code)   -- inside the run
+        assert.is_false(structure.state_before(built, 3).in_code)  -- 🤖: clears it
+        assert.is_false(structure.state_before(built, 4).in_code)
+        assert.is_false(structure.state_before(built, 6).in_code)
+    end)
+
+    it("build: a shorter run does not close a longer fence (CommonMark)", function()
+        local lines = { "🤖: a", "````", "```", "still inside", "````", "outside" }
+        local built = structure.build(lines, P)
+        assert.is_true(structure.state_before(built, 2).in_code, "``` must not close ````")
+        assert.is_true(structure.state_before(built, 3).in_code)
+        assert.is_false(structure.state_before(built, 5).in_code, "```` closes ````")
+    end)
+
+    it("replace: editing a fence's WIDTH invalidates the fast path", function()
+        -- PQ-2. TOKENS.fence used to be one token for every width, so this edit
+        -- kept an identical fingerprint and M.replace served stale state for the
+        -- rest of the buffer.
+        local lines = { "🤖: a", "```", "body", "```", "after" }
+        local built = structure.build(lines, P)
+        local out = structure.replace(built, 1, 2, { "````" }, P)
+        assert.is_nil(out, "a width edit must force a rebuild, not reuse state_before")
+    end)
+
+    it("is_partition recognises the turn prefixes and nothing else", function()
+        assert.is_true(structure.is_partition("💬: q", P))
+        assert.is_true(structure.is_partition("🤖: a", P))
+        assert.is_false(structure.is_partition("```", P))
+        assert.is_false(structure.is_partition("prose", P))
     end)
 end)
