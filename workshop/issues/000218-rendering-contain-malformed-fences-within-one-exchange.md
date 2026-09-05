@@ -1,11 +1,12 @@
 ---
 id: 000218
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-09-05
 updated: 2026-09-05
 estimate_hours:
+started: 2026-09-05T12:12:38-07:00
 ---
 
 # Rendering: contain malformed fences within one exchange
