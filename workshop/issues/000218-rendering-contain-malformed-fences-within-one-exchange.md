@@ -284,3 +284,39 @@ work — the same shape of error as ticking a coverage box for an untested seam 
 function and its deliberate phase split, `is_partition` as the shared predicate,
 the width-carrying fingerprint, the two separate fence grammars, and the
 two-space indentation convention with the reason it is safe to degrade.
+
+### 2026-09-05 — close review round 1: REWORK, 7 blocking
+
+Commit `f1818ee`. Suite green: **194 spec files, MAKE_EXIT=0**; `luacheck lua
+tests` clean across 347.
+
+**The enumeration was wrong twice more.** This issue has now mis-counted its own
+class three times: filed naming one tracker, self-review found a second, the
+plan gate found the third and fourth, implementation found a fifth — and the
+close review found a **sixth and seventh**. `outline.lua` had a *third* memo
+build in `build_file_outline_items`, and the reviewer **reproduced the bug still
+live in the tree picker** after the other two were fixed. `copy.lua` carried a
+fourth shape. The lesson is not "count more carefully" — it is that a
+copy-per-caller predicate cannot be swept by inspection. There is now one
+`code_block_memo` and one `is_fence_delim`.
+
+**The fix did nothing for configured prefixes (BR-2, Critical).** Both new
+`is_partition` call sites passed `patterns()` with no config, so containment
+disabled itself for any custom `chat_user_prefix` — reproduced by the reviewer.
+`config` was already in scope at both sites.
+
+**The convention broke its own enforcement (BR-4).** The review skill matched
+`^```` at column zero, so it missed every fence the new prompt asks models to
+indent. One commit added a convention and broke the code required to honour it.
+
+**BR-3 recurred inside the rework for BR-3.** The review change had shipped with
+no test — reverting it left all eight review specs green, despite mutation
+verification being this issue's own Done-when. After fixing BR-2 I ran the
+mutation check and the config fix came back **green**: unpinned in exactly the
+way BR-3 described. Caught only by running the check rather than assuming it.
+Eight mutations now verify.
+
+Also: convention single-sourced across all five shipped prompts (BR-5),
+`OPENAI_WIRE` shared by regenerator and verifier (BR-6), traceability mapped so
+editing the atlas page runs the spec (BR-7), the atlas 3-space overclaim
+corrected (BR-10), and outline's unreachable lazy fallback removed (BR-11).
