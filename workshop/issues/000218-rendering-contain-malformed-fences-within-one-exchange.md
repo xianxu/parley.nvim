@@ -364,3 +364,38 @@ impossible on its face.
 Also taken, same family a second time: `is_partition` no longer defaults to
 `patterns()`, it **asserts**. BR-2's silent no-op under a custom
 `chat_user_prefix` is now unrepresentable rather than each caller's duty.
+
+### 2026-09-05 — close review round 3: FIX-THEN-SHIP, 2 blocking
+
+Commit `dd5cb4e`. Suite green: **195 spec files, MAKE_EXIT=0**; luacheck clean.
+
+Both blocking findings were **regressions introduced while fixing round 2** —
+a different failure mode from the unswept-instance pattern that dominated
+rounds 1-2.
+
+- **BR-20** — the BR-14 exporter rewrite dropped a guarantee the old gsub gave
+  *incidentally*: it returned `"\n<div…</div>\n"`, and the line pass joined with
+  single newlines, so the later `<p>…<div` cleanups stopped firing and code
+  blocks nested inside paragraphs. The reviewer measured **175 of 256** fence
+  delimiters in this repo's own transcripts as following a non-blank line — the
+  majority shape. My three exporter tests asserted only that text survived.
+  *Lesson: when replacing an implementation, enumerate what the old one
+  guaranteed by side effect, not just what it was for.*
+- **BR-21** — the convention guard covered one of two arms;
+  `agent_info.resolve` falls back to `agent.system_prompt`. Now enumerated from
+  config across both, with the unenforceable third arm (user-merged prompts,
+  chat-header `system_prompt:`) documented in README with the reason.
+- **BR-22** (Minor, but a real regression) — `code_block_memo` cost ~20× the
+  toggles it replaced because `is_partition` ran the full classifier per line.
+  Four anchored prefix matches: **6.06ms → 0.84ms** per 5000 lines. A perf
+  refactor yields no behavioural red, so the thing needing a pin was the
+  **equivalence** — a property test now compares the fast path to `classify`
+  across the grammar, including indented, mid-line and quoted turn markers.
+- **BR-24** — exporter reached for `require("parley")` despite the module's
+  injected `_parley` handle.
+
+**One full-suite run failed and was NOT this diff.** `helper.prepare_dir` is
+check-then-act around `mkdir`, so concurrent `setup()` calls race and the loser
+raises E739. The spec passed in isolation, the path existed and was a directory,
+and a clean re-run was green. Filed as **#219** rather than dismissed — "re-run
+until green" is how a real race gets normalised.
