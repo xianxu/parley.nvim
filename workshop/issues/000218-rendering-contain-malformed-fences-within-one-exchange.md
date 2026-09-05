@@ -160,24 +160,24 @@ total: 1.86
 
 ## Plan
 
-- [ ] Fence fingerprint carries width (`"c"..n`); `:173`'s equality test becomes
+- [x] Fence fingerprint carries width (`"c"..n`); `:173`'s equality test becomes
       a prefix test — do this FIRST, the `M.replace` fast path depends on it
-- [ ] Extract `M.advance(state, token, …)`; builder calls it, `highlighter`
+- [x] Extract `M.advance(state, token, …)`; builder calls it, `highlighter`
       calls it instead of its private walk at `:148-153`
-- [ ] Reset `in_code`/`code_fence_len`/`in_tool` at partition tokens,
+- [x] Reset `in_code`/`code_fence_len`/`in_tool` at partition tokens,
       **pre-snapshot**, alongside the footer guard
-- [ ] CommonMark closer rule: `code_fence_len` tracked, closer must be >= opener
-- [ ] Sweep `outline.lua:31-33` and `skills/review/init.lua:166-172` for the same
+- [x] CommonMark closer rule: `code_fence_len` tracked, closer must be >= opener
+- [x] Sweep `outline.lua:31-33` and `skills/review/init.lua:166-172` for the same
       containment gap; fix or record why not
-- [ ] Tests by function, one strategy line each:
+- [x] Tests by function, one strategy line each:
       `highlight_structure.build` — property/fuzz over arbitrary fence-run
       interleavings, invariant `in_code == false` at every partition row;
       `highlight_structure.replace` — fence-width-edit input class (PQ-2);
       the highlighter render seam via `tests/unit/highlighter_spec.lua` — without
       it site #2 ships untested
-- [ ] Verify by mutation: revert each change in turn, confirm a test goes red
-- [ ] Atlas: record the partition rule and the two-grammar split
-- [ ] Full suite green
+- [x] Verify by mutation: revert each change in turn, confirm a test goes red
+- [x] Atlas: record the partition rule and the two-grammar split
+- [x] Full suite green
 
 ## Log
 
@@ -223,3 +223,64 @@ This is AGENTS.md §2's "claim early" in miniature: the claim landed after the
 design instead of at the start of it. Note it in the close `## Log` so this row
 is not read as evidence for another downward recalibration of the design
 column.
+
+### 2026-09-05 — implemented
+
+Commit `8274437`. Full suite green: **194 spec files, 0 failures, MAKE_EXIT=0**
+(verified against `make`'s own status); luacheck clean across 347 files.
+
+**The enumeration grew twice more during implementation.** The issue named one
+tracker; self-review before the gate found the second (`highlighter`'s duplicate
+walk); the gate found the third and fourth; and `outline.lua` turned out to have
+**two** fence scans, not one — `build_code_block_memo` at `:8` as well as the
+lazy fallback at `:31`. Final count: five. `is_partition()` is now exported so
+the two outsiders share one definition rather than adding a fifth and sixth.
+
+**Mutation-verified**, per the #215 lesson — each change reverted in turn:
+
+| mutation | red |
+|---|---|
+| drop `in_code` reset in `reset_partition` | 2 |
+| fence token loses its width (PQ-2) | 3 |
+| CommonMark `>=` becomes "any closer" | 1 |
+| `highlighter` skips `reset_partition` (site #2) | 1 |
+| restored | 0 |
+
+**The A/B/C fork was dissolved rather than decided.** A `💬:` inside a fence and
+a partition that always wins are strictly incompatible — `picker_items_spec`
+encoded the opposite decision deliberately. The operator's resolution was better
+than any of the three options: ask the model to indent fenced blocks by two
+spaces. The partition patterns are already anchored at column zero
+(`user_pattern = "^" .. escape_pattern(user)`), so indented content never
+matches and a properly formatted quoted transcript still nests. Two spaces, not
+four — four makes it an indented code block and the ``` markers become literal.
+Both paths are pinned: the unindented shape reads as a turn, the indented shape
+nests. The convention is verified in code, not just requested in a prompt.
+
+**Behaviour change worth calling out at review:** `skills/review`'s fence ranges
+now close at turn boundaries, so a stray ``` no longer suppresses every review
+marker to end-of-file. A fix, but it moves where markers appear in malformed
+documents.
+
+**side-quest — `refresh_goldens.lua` regenerated only half the goldens.** #198
+added openai-wire goldens and a spec that verifies them without extending the
+regenerator, so any prompt change refreshed `FIXTURES`, left `OPENAI_FIXTURES`
+stale, and failed the suite with no supported fix but hand-editing JSON. Latent
+until this issue touched the system prompt.
+
+**Measurement caveat, as predicted at estimate time:** `sdlc actual` attributes
+this window across #167, #217 and #218 together, and ~1h of the design landed
+before the claim commit opened the window. Read the ratio with that in mind
+rather than as primitive-table drift.
+
+### 2026-09-05 — close refused: atlas
+
+`sdlc close` refused with "no atlas/ changes", correctly. The Plan's atlas row
+had been ticked by a bulk regex over the checkboxes rather than by doing the
+work — the same shape of error as ticking a coverage box for an untested seam in
+#215, and caught by a gate rather than by me.
+
+`atlas/ui/highlights.md` now documents the partition rule, the single transition
+function and its deliberate phase split, `is_partition` as the shared predicate,
+the width-carrying fingerprint, the two separate fence grammars, and the
+two-space indentation convention with the reason it is safe to degrade.

@@ -46,7 +46,7 @@ This index provides a central directory for all atlas entries of the `parley.nvi
 - [Key Bindings Help](ui/keybindings.md): Shortcut reference command and default mapping.
 - [Outline Navigation](ui/outline.md): Buffer navigation and outline logic.
 - [Lualine Integration](ui/lualine.md): Statusline component and indicators.
-- [Syntax Highlighting](ui/highlights.md): Highlighting groups and rules.
+- [Syntax Highlighting](ui/highlights.md): Highlighting groups and rules; exchange partitions contain fence state (`advance`/`reset_partition`/`is_partition`), and the two deliberately-separate fence grammars — `fence.lua` for tool bodies, CommonMark for prose.
 
 ## 7. Infrastructure & Security
 - [Repo Mode](infra/repo_mode.md): Marker-file detection for parley-enabled repos with auto-created local directories.
