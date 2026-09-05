@@ -320,3 +320,47 @@ Also: convention single-sourced across all five shipped prompts (BR-5),
 `OPENAI_WIRE` shared by regenerator and verifier (BR-6), traceability mapped so
 editing the atlas page runs the spec (BR-7), the atlas 3-space overclaim
 corrected (BR-10), and outline's unreachable lazy fallback removed (BR-11).
+
+### 2026-09-05 — close review round 2: REWORK, 2 blocking
+
+Commit `bd92325`. Suite green: **195 spec files, MAKE_EXIT=0**; `luacheck lua
+tests` clean.
+
+**BR-14 (Critical) — the convention broke HTML export.** `exporter.lua` paired
+fences with a document-wide gsub whose closer had to follow a newline directly,
+so an indented closer never matched and the scan ran to the next flush-left
+fence, swallowing the turns between. Reproduced by the reviewer. That is the
+**second time in this issue** a convention this diff introduced broke code
+required to honour it (the first was the review skill's column-zero predicate).
+
+The demanded fix was the *rule*, and the home for it already existed:
+`tests/arch/single_source_sweeps_spec.lua` now asserts a triple-backtick
+**matcher** may live only in `is_fence_delim` (prose) or `fence.lua` (tool
+bodies). My first version flagged seven files by also catching fence *emitters* —
+writing fences is normal, hand-matching them is the defect.
+
+**BR-15 — the mutation ledger was built from recall.** Three fixes reverted
+green. The rule is to generate the ledger from the diff, which now happens:
+
+| reverted | red |
+|---|---|
+| `config.lua` | 1 |
+| `copy.lua` | 2 |
+| `defaults.lua` | 8 |
+| `exporter.lua` | 2 |
+| `highlight_structure.lua` | 82 |
+| `outline.lua` | 3 |
+| `skills/review/init.lua` | 3 |
+
+**The ledger itself nearly repeated the finding.** Three attempts reported
+**all zeros** before I noticed: zsh does not word-split an unquoted `$SPECS`, so
+every run passed seven paths as one filename and measured nothing. Zero was also
+the result I wanted. The "sanity: nothing reverted → 0 red" control was useless
+precisely because zero was the broken output too — a control that cannot
+distinguish *passing* from *not running* is not a control. What caught it was
+noticing that a whole-file revert of `highlight_structure` returning 0 is
+impossible on its face.
+
+Also taken, same family a second time: `is_partition` no longer defaults to
+`patterns()`, it **asserts**. BR-2's silent no-op under a custom
+`chat_user_prefix` is now unrepresentable rather than each caller's duty.
