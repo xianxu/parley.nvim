@@ -167,8 +167,10 @@ describe("key bindings help", function()
         setup_parley()
 
         local lines = parley._keybinding_help_lines("chat")
-        assert.is_true(has_line(lines, "<C-g>b", "Prune"))
-        assert.is_false(has_line(lines, "<C-g>b", "Toggle tool folds"))
+        -- #214: prune moved to the alt family as <M-p>, keeping <C-g>b as a
+        -- legacy alias. The help shows the PRIMARY, so it now reads <M-p>.
+        assert.is_true(has_line(lines, "<M-p>", "Prune"))
+        assert.is_false(has_line(lines, "<M-p>", "Toggle tool folds"))
         assert.is_false(has_line(lines, "", "Toggle tool folds"))
     end)
 
@@ -261,14 +263,18 @@ describe("keybinding registry", function()
         local by_id = {}
         for _, entry in ipairs(reg.entries) do by_id[entry.id] = entry end
 
+        -- #214: `keys` is the FULL resolved list. chat_prune gained <M-p> with
+        -- <C-g>b kept as a legacy alias, so this asserts the list, not a single
+        -- key — an assertion that took only keys[1] would have stayed green
+        -- while the alias silently vanished.
         for _, expected in ipairs({
-            { id = "super_repo_toggle", key = "<C-g>p", modes = { "n", "i" } },
-            { id = "chat_prune", key = "<C-g>b", modes = { "n" } },
+            { id = "super_repo_toggle", keys = { "<C-g>p" }, modes = { "n", "i" } },
+            { id = "chat_prune", keys = { "<M-p>", "<C-g>b" }, modes = { "n" } },
         }) do
             local entry = by_id[expected.id]
             assert.is_nil(entry.default_key)
             local keys, modes = reg.resolve_keys(entry, parley.config)
-            assert.same({ expected.key }, keys)
+            assert.same(expected.keys, keys)
             assert.same(expected.modes, modes)
         end
 
@@ -276,7 +282,7 @@ describe("keybinding registry", function()
         local tool_keys = reg.resolve_keys(by_id.chat_toggle_tool_folds, parley.config)
         assert.is_nil(tool_keys)
         assert.is_true(has_line(parley._keybinding_help_lines("other"), "<C-g>p", "super-repo"))
-        assert.is_true(has_line(parley._keybinding_help_lines("chat"), "<C-g>b", "Prune"))
+        assert.is_true(has_line(parley._keybinding_help_lines("chat"), "<M-p>", "Prune"))
     end)
 
     it("registers tool folds only when a non-empty shortcut is configured", function()
@@ -294,5 +300,46 @@ describe("keybinding registry", function()
             chat_shortcut_toggle_tool_folds = { modes = { "n" }, shortcut = "<leader>tf" },
         }, callbacks, set_keymap)
         assert.same({ { mode = "n", key = "<leader>tf" } }, calls)
+    end)
+end)
+
+-- #214 M1. The chords live in config.lua, not in the registry's default_key:
+-- resolve_keys returns the config `shortcut` and ignores default_key entirely
+-- once a config_key exists, so a registry-side edit would have been inert for
+-- chat_prune and revoked later for branch_ref.
+describe("branch/prune chords (#214 M1)", function()
+    local parley = require("parley")
+    local reg = require("parley.keybinding_registry")
+
+    local function entry(id)
+        for _, e in ipairs(reg.entries) do if e.id == id then return e end end
+    end
+
+    before_each(function() parley.setup({}) end)
+
+    it("branch_ref resolves the portable key FIRST, then mnemonic, then legacy", function()
+        local keys = reg.resolve_keys(entry("branch_ref"), parley.config)
+        assert.same({ "<M-i>", "<M-S-CR>", "<C-g>i" }, keys)
+    end)
+
+    it("the help float advertises a key that works in a plain terminal", function()
+        -- <C-g>? renders only keys[1]. Leading with <M-S-CR> would advertise a
+        -- chord most terminals cannot distinguish from <CR>.
+        local lines = parley._keybinding_help_lines("chat")
+        local shown
+        for _, l in ipairs(lines) do
+            if l:find("branch", 1, true) or l:find("Insert branch", 1, true) then shown = l end
+        end
+        assert.is_truthy(shown, "branch_ref missing from the chat help")
+        assert.is_falsy(shown:find("<M-S-CR>", 1, true),
+            "help leads with the non-portable chord: " .. tostring(shown))
+    end)
+
+    it("prune keeps <C-g>b as a legacy alias alongside <M-p>", function()
+        assert.same({ "<M-p>", "<C-g>b" }, reg.resolve_keys(entry("chat_prune"), parley.config))
+    end)
+
+    it("branch_ref has a config_key, so M2 cannot revoke these chords", function()
+        assert.are.equal("chat_shortcut_branch_ref", entry("branch_ref").config_key)
     end)
 end)

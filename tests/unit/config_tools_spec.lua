@@ -383,7 +383,10 @@ describe("new config prefix + shortcut defaults", function()
         fresh_setup(nil)
         assert.equals("<C-g>p", parley.config.global_shortcut_super_repo_toggle.shortcut)
         assert.same({ "n", "i" }, parley.config.global_shortcut_super_repo_toggle.modes)
-        assert.equals("<C-g>b", parley.config.chat_shortcut_prune.shortcut)
+        -- #214: prune joined the alt family as <M-p>, keeping <C-g>b as a legacy
+        -- alias. The shipped value is now a LIST — asserting only the string
+        -- would have silently accepted the alias being dropped.
+        assert.same({ "<M-p>", "<C-g>b" }, parley.config.chat_shortcut_prune.shortcut)
         assert.same({ "n" }, parley.config.chat_shortcut_prune.modes)
         assert.is_nil(parley.config.chat_shortcut_toggle_tool_folds)
     end)

@@ -2037,6 +2037,95 @@ local function drill_in_callbacks(buf)
 	}
 end
 
+-- Return the branch prefix string from config.
+local function get_branch_prefix()
+	return M.config.chat_branch_prefix or "🌿:"
+end
+
+-- Format a 🌿: branch reference line.
+local function format_branch_ref(rel_path, topic)
+	return get_branch_prefix() .. " " .. rel_path .. ": " .. (topic or "")
+end
+
+
+-- ONE branch-at-this-point implementation for chat and markdown buffers (#214).
+--
+-- There were four copies. They had drifted where it mattered: both VISUAL paths
+-- called create_child_chat, neither n/i path did — so the no-selection case
+-- wrote a reference to a file that did not exist. That gap is what made the two
+-- invocations feel like different actions rather than one action with a
+-- selection or without.
+--
+-- `abs_link` is the only real difference between the buffer types: a chat file
+-- links its sibling by basename, a markdown file elsewhere needs the full path.
+--
+-- On the no-selection path the topic does not exist yet, so the child is created
+-- with an empty topic and OPENED — the user types the question in the child
+-- rather than on the parent's ref line. The child's filename gains its slug on
+-- first write (the ParleySlug BufWritePost autocmd, which correctly skips an
+-- empty/`?` topic), and the parent's link keeps resolving because
+-- resolve_chat_path falls back to globbing the timestamp for any slug variant
+-- (init.lua:2812-2816). Verified, not assumed.
+local function branch_inserters(buf, abs_link)
+	local br = require("parley.branch_ref")
+
+	local function new_target()
+		local file = M.config.chat_dir .. "/" .. M.logger.now() .. ".md"
+		return file, (abs_link and vim.fn.fnamemodify(file, ":p") or vim.fn.fnamemodify(file, ":t"))
+	end
+
+	local function insert_plain()
+		local cursor_pos = vim.api.nvim_win_get_cursor(0)
+		local new_chat_file, link = new_target()
+		local rel_path = vim.fn.fnamemodify(new_chat_file, ":t")
+		vim.api.nvim_buf_set_lines(buf, cursor_pos[1], cursor_pos[1], false, {
+			br.format_ref_line(get_branch_prefix(), rel_path, ""),
+		})
+		-- Create the child here too — the n/i path used to write a reference to a
+		-- file that did not exist until someone opened the link.
+		M.create_child_chat(new_chat_file, "", buf, nil)
+		M.highlight_chat_branch_refs(buf)
+		M.logger.info("Created branch to new chat: " .. rel_path)
+		-- Focus the child: this is a submission redirected into a new branch, so
+		-- the question belongs there, not on the parent's ref line.
+		vim.schedule(function()
+			vim.cmd("edit " .. vim.fn.fnameescape(new_chat_file))
+			vim.cmd("normal! G")
+			vim.cmd("startinsert!")
+		end)
+		return link
+	end
+
+	local function insert_inline()
+		vim.cmd("normal! " .. vim.api.nvim_replace_termcodes("<Esc>", true, false, true))
+		local sp, ep = vim.fn.getpos("'<"), vim.fn.getpos("'>")
+		local start_line, start_col, end_line, end_col = sp[2], sp[3], ep[2], ep[3]
+		if start_line ~= end_line then
+			M.logger.warning("Inline branch links only support single-line selections")
+			return
+		end
+		local line = vim.api.nvim_buf_get_lines(buf, start_line - 1, start_line, false)[1]
+		local new_chat_file, link = new_target()
+		local spliced, selected = br.splice_inline_link(
+			line, start_col, end_col, get_branch_prefix(), link)
+		if selected == "" then
+			M.logger.warning("No text selected")
+			return
+		end
+		local topic = br.topic_for_selection(selected)
+		vim.api.nvim_buf_set_lines(buf, start_line - 1, start_line, false, { spliced })
+		M.create_child_chat(new_chat_file, topic, buf, topic .. "?")
+		M.highlight_chat_branch_refs(buf)
+		M.logger.debug("Created inline branch to new chat: " .. link .. " (" .. topic .. ")")
+	end
+
+	return {
+		n = insert_plain,
+		i = function() vim.cmd("stopinsert"); insert_plain() end,
+		v = insert_inline,
+	}
+end
+
 M.prep_chat = function(buf, file_name)
 	if M.not_chat(buf, file_name) then
 		return
@@ -2100,48 +2189,9 @@ M.prep_chat = function(buf, file_name)
 		}
 	end
 
-	-- Branch ref helpers (chat-specific: uses relative path)
-	local function chat_insert_branch_ref()
-		local cursor_pos = vim.api.nvim_win_get_cursor(0)
-		local new_chat_file = M.config.chat_dir .. "/" .. M.logger.now() .. ".md"
-		local rel_path = vim.fn.fnamemodify(new_chat_file, ":t")
-		local branch_prefix = M.config.chat_branch_prefix or "🌿:"
-		vim.api.nvim_buf_set_lines(buf, cursor_pos[1], cursor_pos[1], false, {
-			branch_prefix .. " " .. rel_path .. ": ",
-		})
-		vim.api.nvim_win_set_cursor(0, { cursor_pos[1] + 1, 0 })
-		vim.schedule(function() vim.cmd("startinsert!") end)
-		M.logger.info("Created branch reference to new chat: " .. rel_path)
-		M.highlight_chat_branch_refs(buf)
-	end
-
-	local function chat_insert_inline_branch_ref()
-		local start_pos = vim.fn.getpos("'<")
-		local end_pos = vim.fn.getpos("'>")
-		local start_line, start_col = start_pos[2], start_pos[3]
-		local end_line, end_col = end_pos[2], end_pos[3]
-		if start_line ~= end_line then
-			M.logger.warning("Inline branch links only support single-line selections")
-			return
-		end
-		local line = vim.api.nvim_buf_get_lines(buf, start_line - 1, start_line, false)[1]
-		local selected_text = line:sub(start_col, end_col)
-		if selected_text == "" then
-			M.logger.warning("No text selected")
-			return
-		end
-		local new_chat_file = M.config.chat_dir .. "/" .. M.logger.now() .. ".md"
-		local rel_path = vim.fn.fnamemodify(new_chat_file, ":t")
-		local branch_prefix = M.config.chat_branch_prefix or "🌿:"
-		local topic = 'what is "' .. selected_text .. '"'
-		local before = line:sub(1, start_col - 1)
-		local after = line:sub(end_col + 1)
-		local inline_link = "[" .. branch_prefix .. selected_text .. "](" .. rel_path .. ")"
-		vim.api.nvim_buf_set_lines(buf, start_line - 1, start_line, false, { before .. inline_link .. after })
-		M.create_child_chat(new_chat_file, topic, buf, topic .. "?")
-		M.logger.debug("Created inline branch to new chat: " .. rel_path .. " (" .. topic .. ")")
-		M.highlight_chat_branch_refs(buf)
-	end
+	-- Branch inserters: shared with markdown buffers (#214). Chat links its
+	-- sibling by basename.
+	local chat_branch = branch_inserters(buf, false)
 
 	-- Drill-in handlers (visual wrap + resolve) live at module scope and are
 	-- wired identically in markdown buffers — see `drill_in_callbacks` near
@@ -2231,14 +2281,14 @@ M.prep_chat = function(buf, file_name)
 			copy_fence = M.cmd.CopyCodeFence,
 			outline = M.cmd.Outline,
 			branch_ref = {
-				n = chat_insert_branch_ref,
+				n = chat_branch.n,
 				i = function()
 					vim.cmd("stopinsert")
-					chat_insert_branch_ref()
+					chat_branch.n()
 				end,
 				v = function()
 					vim.cmd("normal! " .. vim.api.nvim_replace_termcodes("<Esc>", true, false, true))
-					chat_insert_inline_branch_ref()
+					chat_branch.v()
 				end,
 			},
 			-- chat scope
@@ -2408,63 +2458,15 @@ M.highlight_question_block = function(buf)
 	highlighter.highlight_question_block(buf)
 end
 
--- Return the branch prefix string from config.
-local function get_branch_prefix()
-	return M.config.chat_branch_prefix or "🌿:"
-end
-
--- Format a 🌿: branch reference line.
-local function format_branch_ref(rel_path, topic)
-	return get_branch_prefix() .. " " .. rel_path .. ": " .. (topic or "")
-end
-
 M.setup_markdown_keymaps = function(buf)
 	-- Document review keybindings (via skill system, not registry-managed)
 	local review_skill = require("parley.skills.review")
 	review_skill.setup_keymaps(buf)
 
 	-- Branch ref helpers (markdown-specific: uses format_branch_ref and absolute paths)
-	local function md_insert_branch_ref()
-		local cursor_pos = vim.api.nvim_win_get_cursor(0)
-		local new_chat_file = M.config.chat_dir .. "/" .. M.logger.now() .. ".md"
-		local rel_path = vim.fn.fnamemodify(new_chat_file, ":t")
-		vim.api.nvim_buf_set_lines(buf, cursor_pos[1], cursor_pos[1], false, {
-			format_branch_ref(rel_path, ""),
-		})
-		vim.api.nvim_win_set_cursor(0, { cursor_pos[1] + 1, 0 })
-		vim.schedule(function() vim.cmd("startinsert!") end)
-		M.logger.info("Created branch reference to new chat: " .. rel_path)
-		M.highlight_chat_branch_refs(buf)
-	end
-
-	local function md_insert_inline_branch_ref()
-		vim.cmd("normal! " .. vim.api.nvim_replace_termcodes("<Esc>", true, false, true))
-		local start_pos = vim.fn.getpos("'<")
-		local end_pos = vim.fn.getpos("'>")
-		local start_line, start_col = start_pos[2], start_pos[3]
-		local end_line, end_col = end_pos[2], end_pos[3]
-		if start_line ~= end_line then
-			M.logger.warning("Inline branch links only support single-line selections")
-			return
-		end
-		local line = vim.api.nvim_buf_get_lines(buf, start_line - 1, start_line, false)[1]
-		local selected_text = line:sub(start_col, end_col)
-		if selected_text == "" then
-			M.logger.warning("No text selected")
-			return
-		end
-		local new_chat_file = M.config.chat_dir .. "/" .. M.logger.now() .. ".md"
-		local chat_path = vim.fn.fnamemodify(new_chat_file, ":p")
-		local branch_prefix = M.config.chat_branch_prefix or "🌿:"
-		local topic = 'what is "' .. selected_text .. '"'
-		local before = line:sub(1, start_col - 1)
-		local after = line:sub(end_col + 1)
-		local inline_link = "[" .. branch_prefix .. selected_text .. "](" .. chat_path .. ")"
-		vim.api.nvim_buf_set_lines(buf, start_line - 1, start_line, false, { before .. inline_link .. after })
-		M.create_child_chat(new_chat_file, topic, buf, topic .. "?")
-		M.logger.debug("Created inline branch to new chat: " .. chat_path .. " (" .. topic .. ")")
-		M.highlight_chat_branch_refs(buf)
-	end
+	-- Branch inserters: shared with chat buffers (#214). Markdown links by
+	-- absolute path, since the file may live anywhere.
+	local md_branch = branch_inserters(buf, true)
 
 	-- Drill-in handlers (visual wrap + resolve) — same in markdown and chat,
 	-- see `drill_in_callbacks` near the top of this file.
@@ -2483,12 +2485,12 @@ M.setup_markdown_keymaps = function(buf)
 			copy_fence = M.cmd.CopyCodeFence,
 			outline = M.cmd.Outline,
 			branch_ref = {
-				n = md_insert_branch_ref,
+				n = md_branch.n,
 				i = function()
 					vim.cmd("stopinsert")
-					md_insert_branch_ref()
+					md_branch.n()
 				end,
-				v = md_insert_inline_branch_ref,
+				v = md_branch.v,
 			},
 			chat_drill_in = drill_in_cbs.chat_drill_in,
 			chat_accept_drill_in = drill_in_cbs.chat_accept_drill_in,
