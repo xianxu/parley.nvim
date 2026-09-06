@@ -5,7 +5,7 @@ deps: [#212]
 github_issue:
 created: 2026-09-02
 updated: 2026-09-05
-estimate_hours:
+estimate_hours: 2.84
 started: 2026-09-05T22:03:29-07:00
 ---
 
@@ -103,6 +103,99 @@ Ordering: this depends on #212, which establishes context-filtered registration.
 This issue sets the *policy* that mechanism enforces; doing them in the other
 order means reworking the same call sites twice.
 
+## Enumeration (2026-09-05)
+
+Measured from `keybinding_registry.M.entries` + `config.lua`, not counted by
+hand. **81 registry entries** (the Problem section said 78 — it grew by 3),
+across 11 scopes:
+
+| scope | n | notes |
+|---|---|---|
+| `global` | 17 | incl. 5 `<leader>` maps and `<leader>fo` → oil.nvim |
+| `chat` | 17 | the core chat surface |
+| `parley_buffer` | 10 | 5 of the 10 registry-only entries live here |
+| `markdown` | 7 | |
+| `chat_finder` | 7 | picker-local, only live while the picker is open |
+| `vision` | 6 | **ariadne** |
+| `repo` | 4 | **ariadne** (3 × `<C-y>`, 1 × `<C-j>`) |
+| `issue_finder` | 4 | **ariadne**, picker-local |
+| `issue` | 3 | **ariadne** |
+| `note` | 3 | all three are registry-only |
+| `note_finder` | 3 | picker-local |
+
+### Three entries ship with no key at all
+
+`default_key = nil`, resolved through `config_key`:
+
+| id | resolves to |
+|---|---|
+| `super_repo_toggle` | `<C-g>p` |
+| `chat_prune` | `<C-g>b` |
+| `chat_toggle_tool_folds` | **nil — genuinely unbound** |
+
+`chat_toggle_tool_folds` confirms the audit's finding: a feature with 60+ tests
+that no user can reach without editing config. It is not a keyspace question,
+it is a missing default.
+
+### Off-registry bindings: eight, not four
+
+The Problem section lists four. There are **eight**, in five sites:
+
+| keys | where | mode |
+|---|---|---|
+| `u`, `<C-r>` | `init.lua:2208,2211` | n |
+| `<CR>` | `spell.lua:168` | i |
+| `<CR>` | `interview.lua:85` | i |
+| `*`, `#`, `g*`, `g#` | `init.lua:2175-2183` | n |
+
+The last row is new to this issue: four **core Vim search keys** shadowed in
+chat buffers, invisible to `<C-g>?` and to config, exactly like `u`/`<C-r>`.
+(`q`/`<Esc>` at `init.lua:1527-1529` are float-local and conventional — not in
+scope.)
+
+So the never-claimed question covers seven core keys, not three.
+
+## Operator decisions (2026-09-05)
+
+### Never-claimed set: only `<CR>` is in it
+
+The Problem section grouped seven core keys together. Reading them showed they
+are not comparable, and the operator split them accordingly.
+
+**`u` / `<C-r>` and `*` / `#` / `g*` / `g#` — default ON, no configuration.**
+Both are *conditional* intercepts that fall through to native:
+
+- `bracket_jump` (`init.lua:2156-2173`) calls `drill_in.bracket_at`; with the
+  cursor outside a `[...]` anchor it runs `normal! <builtin>` and returns.
+  Inside one it searches the whole span. It sets the search register like
+  builtin `*` and deliberately does not force `hlsearch`, so the user's own
+  setting governs — matching the fall-through path.
+- `u` / `<C-r>` intercept only while this chat owns a pending response.
+
+Neither is a keyspace claim: with the feature inapplicable, the native key runs.
+They stay off-registry and unconfigurable, and this issue records **why not**
+rather than registering them — which the Plan's "or record why not" allows.
+
+**`<CR>` in insert mode is the real one, and the whole typeahead gets gated.**
+The logic is already guarded (`spell.lua:71-80`): no popup → defer to `base_cr`;
+selection → `<C-y>`; otherwise `<C-e>` + base. The defect is not the logic, it is
+**whose popup**: `pumvisible()` is true for cmp's and blink's menus too, so in a
+chat buffer parley silently reinterprets the accept key those users configured.
+
+Rejected as the fix: detecting "someone else's popup". It is not reliably
+determinable, and the operator's call is to gate the feature instead.
+
+**Decision: opt-in semantics AND `typeahead = false` shipped.** Flipping only the
+shipped value would leave the trap; flipping only the semantics would leave the
+default reinterpreting cmp/blink's accept key. Both.
+
+**A trap found while confirming the gate.** `config.chat_spell.typeahead` exists,
+but `spell.lua:130` documents it as *opt-out* — `nil ⇒ on`, so a partial
+`chat_spell = { enable = true }` (squiggles only) silently also gets the `<CR>`
+map. The entry condition `if cs and (cs.enable or cs.typeahead)` reinforces it.
+Gating means making `typeahead` **opt-in** (`nil ⇒ off`), not just flipping the
+shipped value — otherwise the trap survives the fix.
+
 ## Done when
 
 - The default keymap is enumerated in one place with a written rationale per
@@ -111,21 +204,153 @@ order means reworking the same call sites twice.
   a test asserts no registry entry lacks a `config_key`, and has been seen red.
 - `u`, `<C-r>` and insert-mode `<CR>` are either not shadowed by default, or are
   shadowed only behind an opt-in that is documented and testable.
-- No binding exists that `<C-g>?` cannot show — asserted in both directions, so
-  help and reality agree.
+- No **registry-derived** binding exists that `<C-g>?` cannot show — asserted in
+  both directions. The conditional fall-through keys (`u`, `<C-r>`, `*`, `#`,
+  `g*`, `g#`) are a named, closed allowance list: the assertion checks the list
+  does not grow, rather than pretending they are registered (PQ-4 — the earlier
+  wording contradicted this issue's own decision to leave them off-registry).
 - A single documented switch disables the entire default keymap, verified by
   `:map` showing no parley mapping afterwards.
-- With the opt-in set unconfigured, a fresh install claims no `<leader>` key and
-  no `<C-y>`/`<C-j>` key in any context.
+- With the opt-in set unconfigured, a fresh install claims no `<leader>` key.
+  *(The `<C-y>`/`<C-j>` half of this criterion moved out — it cannot be
+  certified while the ariadne split is deferred. Owner: #212, then a follow-up
+  that applies the policy. See the Plan's deferral note.)*
+
+## Estimate
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: lua-neovim         design=0.3  impl=0.6
+item: lua-neovim         design=0.2  impl=0.5
+item: lua-neovim         design=0.2  impl=0.4
+item: atlas-docs         design=0.05 impl=0.08
+item: milestone-review   design=0.0  impl=0.2
+item: milestone-review   design=0.0  impl=0.2
+design-buffer: 0.15
+total: 2.84
+```
+
+*Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against
+`baseline-v3.1.md`. Method A only.* Calibration reported **stale** by
+`sdlc estimate-source` (ariadne#127); hours provisional.
+
+Derivation notes:
+
+- **Corrected twice.** The first block asserted `total: 3.22`, which reconciles
+  to neither buffer — an arithmetic slip, caught by the reconciliation gate.
+  Recomputing surfaced a second error the gate would not have caught: `impl=0.7`
+  on M2 was **above** the primitive band, since v3.1 scales v2's Lua/Neovim
+  0.5–1.5 to **0.2–0.6**. A single item cannot carry M2's scope while staying in
+  band, which is the table telling me M2 is two primitives, not one.
+- **Three `lua-neovim` items.** M1 (chords + the four-function branch unification
+  + the fold-toggle binding); M2a (nine `config_key`s + the superset guard);
+  M2b (typeahead gate + `<leader>` opt-in + master switch). Splitting M2 is not
+  bookkeeping — it is what keeps each item inside the band it is drawn from.
+- **impl 0.6 / 0.5 / 0.4** — M1 at the ceiling because the gate widened its class
+  from two functions to four; M2a next because a nine-site sweep is where #218
+  showed the overrun lands; M2b lowest, being three localised default flips.
+- **design 0.3 / 0.2 / 0.2** sit in v2.1 Step 3's discounted band (×0.2 of 1–3 =
+  0.2–0.6). All three are at or near the floor: three plan-quality rounds
+  resolved the ordering trap, the creation-timing question and the class width,
+  so what remains is execution.
+- **atlas-docs impl 0.08** is the scaled ceiling (0.05–0.2 × 0.40 = 0.02–0.08);
+  the first block's 0.1 was over it.
+- **design-buffer 0.15** — v3.1 step 4's thorough-plan rate, matching
+  `baseline-v3.1.md`'s own `est_design * 1.15` column.
+- **Two `milestone-review` items**, one per genuine boundary, each at the scaled
+  ceiling (0.2–0.5 × 0.40 = 0.08–0.20). #218 needed five close rounds; budgeting
+  one clean round per boundary would be optimistic.
 
 ## Plan
 
-- [ ] Enumerate all 65 defaults + 4 off-registry bindings; classify core / opt-in / never-claimed with a rationale each.
-- [ ] Review the classification with the operator before changing code — this is a policy decision, not a refactor.
-- [ ] Give all 10 registry-only entries a `config_key`; pin with a test seen red.
-- [ ] Bring the 4 off-registry bindings into the registry, or record why not.
-- [ ] Apply the classification; add the master disable switch.
-- [ ] Assert help/reality agreement in both directions; assert a bare install claims no opt-in key.
+Two review boundaries, sequenced as the operator directed: the chords are what
+gets *felt*, so they land first; the curation cleanup follows. The ariadne
+core/opt-in split is **not** in either — it touches `register_global`'s scope
+list, which is #212's territory, and that is the whole of this issue's
+`deps: [#212]`.
+
+**Ordering constraint discovered at the gate (PQ-1).** `resolve_keys`
+(`keybinding_registry.lua:965-967`) returns the config `shortcut` and **ignores
+`default_key` entirely** whenever a `config_key` exists:
+
+```lua
+if not entry.config_key then
+    return as_list(entry.default_key), entry.default_modes
+end
+```
+
+Two consequences, and the second is the dangerous one.
+
+**M1's edits would be inert or revoked.** `chat_prune` is already
+config-resolved, so a key list on its registry entry changes nothing; and M2
+giving `branch_ref` a `config_key` with a single-string default would drop M1's
+`<M-S-CR>`/`<M-i>` a milestone later. So the artifact carrying the list is
+**`config.lua`**, and `branch_ref` gets its `config_key` in M1, not M2.
+
+**Generalised: adding a `config_key` can silently SHRINK an entry's key set.**
+Two registry-only entries ship more than one key today —
+
+| entry | keys | what a single-string config default would delete |
+|---|---|---|
+| `chat_drill_in` | `<C-g>q`, `<M-q>` | **`<M-q>`** — the headline quote feature (#217 item 7) |
+| `outline` | `<C-g>t`, `<M-t>` | `<M-t>` |
+
+— so M2's nine new config defaults must each carry that entry's **full existing
+key list**, and a guard must enforce it rather than leave it to review. Without
+one, the most-praised binding in the shakedown disappears in a commit whose
+stated purpose is making bindings *more* configurable.
+
+- [ ] **M1** — chords **in config, with `branch_ref` gaining its `config_key` in
+      the same step**: `global_shortcut_branch_ref = { "<M-S-CR>", "<M-i>", "<C-g>i" }`,
+      `chat_shortcut_prune = { "<M-p>", "<C-g>b" }`. Old keys kept as legacy
+      aliases (`chat_drill_in` is the precedent for a key list). `<M-S-CR>` is
+      documented primary, `<M-i>`/`<M-p>` the fallback for the many terminals
+      that cannot distinguish Shift+Enter. Test: `resolve_keys` returns all three
+      for `branch_ref` under the shipped config.
+- [ ] **M1** — unify the branch paths. The class is **four** functions, not two
+      (PQ-3): `chat_insert_branch_ref` / `chat_insert_inline_branch_ref`
+      (`init.lua:2104,2118`) and the identical markdown twins
+      `md_insert_branch_ref` / `md_insert_inline_branch_ref` (`:2427,2440`).
+      Only the two *visual* paths call `create_child_chat`. Extract one helper
+      both buffer types call, so the pair cannot drift again.
+- [ ] **M1** — resolve *when* the child is created on the no-selection path
+      (PQ-2): the topic does not exist at keypress. Decision: create immediately
+      with an empty topic and **open** the child, so the user types the question
+      in the child rather than on the parent's ref line — this is what makes the
+      no-selection case a redirected submission rather than an exception. The
+      existing auto-slug-rename from the first topic
+      (`atlas/chat/lifecycle.md`) fills the name in afterwards; verify that
+      before relying on it.
+- [ ] **M1** — bind `chat_toggle_tool_folds`, which resolves to `nil`: 60+ tests
+      behind a key no user can press.
+- [ ] **M2** — `config_key` for the remaining 9 registry-only entries, each
+      shipped default carrying that entry's **full** existing key list.
+      **Tighten the existing assertion** at `tests/unit/keybindings_spec.lua:217-229`
+      rather than adding a second one beside it. Seen red.
+- [ ] **M2** — guard the shrink class: for every entry with a `config_key`, the
+      shipped config must resolve to a superset of the entry's `default_key`
+      list. Seen red by shipping a single-string default for `chat_drill_in`
+      (which would silently delete `<M-q>`).
+- [ ] **M2** — gate the spell typeahead: `nil ⇒ off` semantics **and**
+      `typeahead = false` shipped. Strategy: `spell.attach` across `typeahead`
+      nil / false / true, crossed with a partial `chat_spell = { enable = true }`
+      and with `prompt_buf_type` set.
+- [ ] **M2** — `resolve_keys` strategy: config values that are a string, a list,
+      an empty string, and a table with no `shortcut` — the shapes the chord
+      change and the 9 new `config_key`s both newly depend on.
+- [ ] **M2** — record in-repo why `u`/`<C-r>`/`*`/`#`/`g*`/`g#` stay off-registry
+      (conditional, fall through to native — not a keyspace claim), as the named
+      allowance list the help assertion checks against.
+- [ ] **M2** — `<leader>` maps to opt-in, per the Spec's recorded direction;
+      `<leader>fo` maps oil.nvim, which parley never requires.
+- [ ] **M2** — one documented switch disabling the whole default keymap, verified
+      by `:map` showing no parley mapping.
+- [ ] **M2** — assert registry-derived help/reality agreement in both directions,
+      with the allowance list closed.
+
+**Deferred to after #212:** the ariadne core/opt-in split (`<C-y>*`, `<C-j>*`),
+and with it the `<C-y>`/`<C-j>` half of the fresh-install Done-when criterion.
 
 ## Log
 
