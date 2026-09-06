@@ -348,18 +348,58 @@ M.simple_markdown_to_html = function(markdown)
 	html = html:gsub("<", "&lt;")
 	html = html:gsub(">", "&gt;")
 
-	-- Convert code blocks with language-specific styling
-	html = html:gsub("```([^\n]*)\n(.-)\n```", function(lang, code)
-		local class_attr = ""
-		if lang and lang ~= "" then
-			class_attr = ' class="language-' .. lang .. '"'
+	-- Convert code blocks with language-specific styling.
+	--
+	-- #218: this was a document-wide gsub, `"```([^\n]*)\n(.-)\n```"`, whose
+	-- closer had to follow a newline directly — so an INDENTED closer never
+	-- matched and the scan ran on to the next flush-left fence anywhere in the
+	-- file, swallowing the questions and answers in between. The default system
+	-- prompt now asks models to indent every fence by two spaces, which made
+	-- that the normal shape rather than a rare one.
+	--
+	-- Line-based, using the one prose fence predicate, and bounded by turn
+	-- partitions so an unmatched opener cannot consume later exchanges.
+	html = (function(text)
+		local hs = require("parley.highlight_structure")
+		local patterns = hs.patterns(_parley and _parley.config or nil)
+		local out, open_at, body = {}, nil, nil
+		for line in (text .. "\n"):gmatch("([^\n]*)\n") do
+			if open_at and hs.is_partition(line, patterns) then
+				-- unterminated: emit what we buffered verbatim, then the marker
+				out[#out + 1] = open_at
+				for _, b in ipairs(body) do out[#out + 1] = b end
+				open_at, body = nil, nil
+				out[#out + 1] = line
+			elseif hs.is_fence_delim(line) then
+				if open_at then
+					local lang = open_at:match("^%s*`+%s*([%w_+-]*)") or ""
+					local class_attr = lang ~= "" and (' class="language-' .. lang .. '"') or ""
+					-- Blank line either side: the old gsub emitted "\n<div…</div>\n"
+					-- and the later `<p[^>]*>%s*<div` / `</div>%s*</p>` cleanups
+					-- depend on it. Without them a code block nests inside a
+					-- paragraph — and 175 of 256 fence delimiters in this repo's
+					-- own transcripts follow a non-blank line, so that is the
+					-- majority shape, not an edge case (BR-20).
+					out[#out + 1] = ""
+					out[#out + 1] = '<div class="code-block"><pre><code' .. class_attr .. ">"
+						.. table.concat(body, "\n") .. "</code></pre></div>"
+					out[#out + 1] = ""
+					open_at, body = nil, nil
+				else
+					open_at, body = line, {}
+				end
+			elseif open_at then
+				body[#body + 1] = line
+			else
+				out[#out + 1] = line
+			end
 		end
-		return '\n<div class="code-block"><pre><code'
-			.. class_attr
-			.. ">"
-			.. code
-			.. "</code></pre></div>\n"
-	end)
+		if open_at then -- ran to EOF unterminated: verbatim, never swallow
+			out[#out + 1] = open_at
+			for _, b in ipairs(body) do out[#out + 1] = b end
+		end
+		return table.concat(out, "\n")
+	end)(html)
 
 	-- Convert inline code
 	html = html:gsub("`([^`\n]+)`", '<code class="inline-code">%1</code>')

@@ -8,10 +8,15 @@ local patterns = structure.patterns({
     chat_memory = { enable = true, reasoning_prefix = "🧠:", summary_prefix = "📝:" },
 })
 
-local function state(question, code, reasoning, explicit_end, tool)
+-- `fence_len` is the width of the OPEN fence, nil when closed (#218). It is
+-- asserted explicitly rather than allowed to float: the whole state table is
+-- compared with assert.are.same, and a state that claims in_code with no width
+-- cannot match a closer correctly.
+local function state(question, code, reasoning, explicit_end, tool, fence_len)
     return {
         in_question = question,
         in_code = code,
+        code_fence_len = fence_len or (code and 3 or nil),
         in_reasoning = reasoning,
         reasoning_explicit_end = explicit_end,
         in_tool = tool,
@@ -184,6 +189,144 @@ describe("STRUCTURAL_KINDS (#203)", function()
         for kind in pairs(hs.STRUCTURAL_KINDS) do
             assert.message(kind .. " is in STRUCTURAL_KINDS but no marker classifies as it")
                 .is_true(produced[kind] == true)
+        end
+    end)
+end)
+
+-- #218 — fence containment. The invariant, stated once: a 💬:/🤖: partition
+-- terminates any open fence, so malformed output corrupts at most its own
+-- exchange. Verified by mutation: removing reset_partition's in_code line turns
+-- the property test red.
+describe("fence containment across exchange partitions (#218)", function()
+    local P = structure.patterns()
+
+    it("build: in_code is false entering EVERY partition row, over random fence runs", function()
+        -- Property/fuzz: arbitrary interleavings of fence runs (3-5 ticks),
+        -- prose and partitions. No matter how unbalanced, a partition row must
+        -- never be entered while in code.
+        math.randomseed(218)
+        for _ = 1, 200 do
+            local lines, partition_rows = {}, {}
+            for _ = 1, math.random(6, 30) do
+                local r = math.random(4)
+                if r == 1 then
+                    lines[#lines + 1] = string.rep("`", math.random(3, 5))
+                elseif r == 2 then
+                    lines[#lines + 1] = "💬: q"
+                    partition_rows[#lines] = true
+                elseif r == 3 then
+                    lines[#lines + 1] = "🤖: a"
+                    partition_rows[#lines] = true
+                else
+                    lines[#lines + 1] = "prose"
+                end
+            end
+            local built = structure.build(lines, P)
+            for row1 in pairs(partition_rows) do
+                local st = structure.state_before(built, row1 - 1)
+                assert.is_false(st.in_code,
+                    "partition at row " .. row1 .. " entered while in_code; lines:\n"
+                    .. table.concat(lines, "\n"))
+            end
+        end
+    end)
+
+    it("build: an unmatched fence does not leak past the next partition", function()
+        local lines = { "💬: q", "```lua", "code", "🤖: a", "plain answer", "💬: q2", "more" }
+        local built = structure.build(lines, P)
+        assert.is_true(structure.state_before(built, 2).in_code)   -- inside the run
+        assert.is_false(structure.state_before(built, 3).in_code)  -- 🤖: clears it
+        assert.is_false(structure.state_before(built, 4).in_code)
+        assert.is_false(structure.state_before(built, 6).in_code)
+    end)
+
+    it("build: a shorter run does not close a longer fence (CommonMark)", function()
+        local lines = { "🤖: a", "````", "```", "still inside", "````", "outside" }
+        local built = structure.build(lines, P)
+        assert.is_true(structure.state_before(built, 2).in_code, "``` must not close ````")
+        assert.is_true(structure.state_before(built, 3).in_code)
+        assert.is_false(structure.state_before(built, 5).in_code, "```` closes ````")
+    end)
+
+    it("replace: editing a fence's WIDTH invalidates the fast path", function()
+        -- PQ-2. TOKENS.fence used to be one token for every width, so this edit
+        -- kept an identical fingerprint and M.replace served stale state for the
+        -- rest of the buffer.
+        local lines = { "🤖: a", "```", "body", "```", "after" }
+        local built = structure.build(lines, P)
+        local out = structure.replace(built, 1, 2, { "````" }, P)
+        assert.is_nil(out, "a width edit must force a rebuild, not reuse state_before")
+    end)
+
+    it("is_partition recognises the turn prefixes and nothing else", function()
+        assert.is_true(structure.is_partition("💬: q", P))
+        assert.is_true(structure.is_partition("🤖: a", P))
+        assert.is_false(structure.is_partition("```", P))
+        assert.is_false(structure.is_partition("prose", P))
+    end)
+end)
+
+-- #218 BR-3/BR-4: the review skill and outline carry their own fence walks. The
+-- close review found the review change reverting GREEN across all eight review
+-- specs, and outline's third tracker still exhibiting the bug. Both are pinned
+-- here against the shared helpers they now use.
+describe("shared fence helpers (#218)", function()
+    it("is_fence_delim accepts indented fences — the shape the prompt asks for", function()
+        assert.are.equal(3, structure.is_fence_delim("```"))
+        assert.are.equal(3, structure.is_fence_delim("  ```lua"))
+        assert.are.equal(4, structure.is_fence_delim("  ````"))
+        assert.is_nil(structure.is_fence_delim("``"))
+        assert.is_nil(structure.is_fence_delim("prose ```"))
+        -- tildes only when asked (outline's grammar, not the render path's)
+        assert.is_nil(structure.is_fence_delim("~~~"))
+        assert.are.equal(3, structure.is_fence_delim("~~~", true))
+    end)
+
+    it("code_block_memo contains an unmatched fence at the partition", function()
+        local P = structure.patterns()
+        local memo = structure.code_block_memo({
+            "🤖: a", "```", "code", "💬: q", "not code",
+        }, P)
+        assert.is_true(memo[3], "inside the open fence")
+        assert.is_false(memo[4], "partition clears it")
+        assert.is_false(memo[5], "and stays clear")
+    end)
+
+    it("code_block_memo honours CONFIGURED prefixes, not just defaults", function()
+        -- BR-2: patterns() with no config silently disabled containment for
+        -- anyone with a custom chat_user_prefix.
+        local custom = structure.patterns({
+            chat_user_prefix = "U:", chat_assistant_prefix = "A:",
+        })
+        local lines = { "A: answer", "```", "code", "U: question", "after" }
+        local memo = structure.code_block_memo(lines, custom)
+        assert.is_false(memo[4], "custom prefix must end the fence")
+        assert.is_false(memo[5])
+        -- and with default patterns the custom prefix is NOT a partition
+        local memo_default = structure.code_block_memo(lines, structure.patterns())
+        assert.is_true(memo_default[4], "sanity: defaults do not recognise U:")
+    end)
+end)
+
+-- #218 BR-22: is_partition was rewritten from M.classify to four anchored
+-- prefix matches for speed (6.06ms -> 0.84ms per 5000-line buffer). A perf
+-- refactor produces no behavioural red, so the EQUIVALENCE is what needs
+-- pinning — otherwise the fast path is free to be subtly wrong.
+describe("is_partition fast path equals the classifier (#218)", function()
+    it("agrees with classify over the whole decoration grammar", function()
+        local P = structure.patterns()
+        local corpus = {
+            "💬: q", "🤖: a", "🔒: local", "🌿: branch.md: ", "📝: summary",
+            "🧠: thinking", "🧠:[END]", "```", "  ```lua", "~~~", "prose",
+            "", "   ", "=== draft ===", "=== end ===", "[^id]: a footnote",
+            "🔧 tool", "  💬: indented, NOT a partition", "💬 no colon",
+            "x💬: not at column zero", "````", "> quoted 💬:",
+        }
+        for _, line in ipairs(corpus) do
+            local token = structure.classify(line, P).token
+            local via_classify = token == "u" or token == "a" or token == "l" or token == "b"
+            assert.are.equal(via_classify, structure.is_partition(line, P),
+                "fast path disagrees with classify on: " .. vim.inspect(line))
         end
     end)
 end)

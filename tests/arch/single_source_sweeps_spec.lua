@@ -241,6 +241,94 @@ describe("arch: single-source sweeps stay swept", function()
                 .. "require('parley.cliproxy')._set_data_dir(vim.fn.tempname())")
     end)
 
+    -- #218. A triple-backtick predicate belongs in exactly two places: the prose
+    -- grammar (highlight_structure.is_fence_delim) and the tool-body grammar
+    -- (fence.lua). Hand-rolled copies drifted three separate times in this one
+    -- issue — the review skill matched only column-zero backticks and so missed
+    -- every fence the default prompt now asks models to indent, and the HTML
+    -- exporter required the closer to follow a newline directly and swallowed
+    -- whole turns. Inspection kept missing them; this makes a new copy fail.
+    --
+    -- Measured allowances, not aspirational ones. The list may shrink, never grow.
+    --   chat_respond.lua  1  matches a SPECIFIC info string, ```yaml {"type":"request"},
+    --                        which is a typed request envelope rather than a fence
+    --                        predicate — it must not become "any fence".
+    it("the triple-backtick predicate lives only in its two owners", function()
+        local OWNERS = {
+            ["lua/parley/highlight_structure.lua"] = true, -- prose grammar
+            ["lua/parley/fence.lua"] = true,               -- tool-body grammar
+        }
+        local ALLOWANCES = { ["lua/parley/chat_respond.lua"] = 1 }
+        local offenders = {}
+        for _, path in ipairs(repo_files("git ls-files 'lua/**/*.lua'")) do
+            if not OWNERS[path] then
+                local text = read(path)
+                -- MATCHING a fence is the invariant; EMITTING one is fine and
+                -- common (log_emit, render_buffer and the review journal all
+                -- write fences, and defaults.lua describes them in prose). So
+                -- flag a triple backtick only where it is a pattern argument.
+                --
+                -- Scanned over a comment-stripped WINDOW, not line-by-line: the
+                -- first version required the backtick and the match call to
+                -- share a line, so wrapping the pattern onto its own line
+                -- silently escaped the guard (BR-23).
+                local scrubbed = text:gsub("\n%s*%-%-[^\n]*", "\n")
+                local n = 0
+                for call in scrubbed:gmatch("[:%.]g?match%b()") do
+                    if call:find("```", 1, true) then n = n + 1 end
+                end
+                for call in scrubbed:gmatch("[:%.]gsub%b()") do
+                    if call:find("```", 1, true) then n = n + 1 end
+                end
+                for call in scrubbed:gmatch("[:%.]find%b()") do
+                    if call:find("```", 1, true) then n = n + 1 end
+                end
+                local allowed = ALLOWANCES[path] or 0
+                if n > allowed then
+                    offenders[#offenders + 1] = path .. " (" .. n .. " > " .. allowed .. ")"
+                end
+            end
+        end
+        assert.are.same({}, offenders,
+            "hand-rolled fence matcher(s); use highlight_structure.is_fence_delim "
+            .. "for prose or parley.fence for tool bodies (#218)")
+    end)
+
+    -- #218 BR-15: the convention is only load-bearing if EVERY shipped prompt
+    -- carries it. Stripping it from the four non-default prompts left five
+    -- specs green.
+    -- The rule, not the instance: EVERY prompt string in shipped config that
+    -- agent_info.resolve can select must carry the convention, enumerated FROM
+    -- config rather than hand-picked. resolve falls back to agent.system_prompt
+    -- (agent_info.lua:48-50) and config.lua calls that field mandatory, so a
+    -- guard over config.system_prompts alone covered one of two arms (BR-21).
+    --
+    -- The third arm is not enforceable here: a user-merged system_prompts entry
+    -- or a chat header `system_prompt:` replaces the prompt wholesale. That is
+    -- documented in README instead — see "Custom system prompts".
+    it("every selectable shipped prompt carries the fence indentation convention", function()
+        local defaults = dofile("lua/parley/defaults.lua")
+        local config = dofile("lua/parley/config.lua")
+        assert.is_truthy(defaults.fence_indent_convention)
+        local missing = {}
+        local function check(label, prompt)
+            if type(prompt) == "string" and prompt ~= ""
+                and not prompt:find(defaults.fence_indent_convention, 1, true) then
+                missing[#missing + 1] = label
+            end
+        end
+        for _, entry in ipairs(config.system_prompts or {}) do
+            check("system_prompts:" .. tostring(entry.name), entry.system_prompt)
+        end
+        for _, agent in ipairs(config.agents or {}) do
+            check("agents:" .. tostring(agent.name), agent.system_prompt)
+        end
+        assert.are.same({}, missing,
+            "selectable prompt(s) missing defaults.fence_indent_convention — "
+            .. "switching prompt or agent would silently change how malformed "
+            .. "output renders (#218)")
+    end)
+
     it("picker keys come from the keybinding registry, not literals", function()
         -- A hardcoded key is neither discoverable in <C-g>? nor rebindable. The
         -- pre-#205 keys in root_dir_picker and system_prompt_picker are listed

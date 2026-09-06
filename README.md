@@ -212,6 +212,16 @@ Common options live in `setup()`:
 
 Merge behavior in `setup(opts)`:
 - `agents`, `system_prompts`, and `hooks` are merged by key/name, so you can override only selected entries.
+- **If you replace a system prompt, keep the fenced-code indentation line.** Every
+  shipped prompt asks the model to indent fenced code blocks by exactly two
+  spaces. That is not a style preference: parley matches turn markers (`💬:`,
+  `🤖:`) at column zero, so indenting fenced content is what lets a quoted
+  transcript sit inside a code block without being read as a new turn. A custom
+  `system_prompts` entry, or a chat header `system_prompt:`, replaces the prompt
+  **wholesale** — the convention goes with it, and a model that emits a
+  flush-left `💬:` inside a fence will have it treated as a turn. Append
+  `require("parley.defaults").fence_indent_convention` to a custom prompt to keep
+  the behaviour.
 - Most other top-level keys are replaced when provided (for example `chat_dir`, `chat_dirs`, `notes_dir`, `chat_template`, `raw_mode`, `highlight`, `chat_memory`, `providers`, `api_keys`).
 - Practical rule: for non-merged tables, provide the full table you want, not just one nested field.
 - Reference [lua/parley/config.lua](https://github.com/xianxu/parley.nvim/blob/main/lua/parley/config.lua) for full defaults and examples.

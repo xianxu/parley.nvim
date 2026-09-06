@@ -602,10 +602,14 @@ atlas:
       - lua/parley/highlighter.lua
       - lua/parley/timezone_diagnostics.lua
       - lua/parley/init.lua
+      - lua/parley/copy.lua
+      - lua/parley/highlight_structure.lua
     tests:
       - tests/integration/highlighting_spec.lua
       - tests/unit/timezone_diagnostics_spec.lua
       - tests/unit/render_spec.lua
+      - tests/integration/fence_containment_spec.lua
+      - tests/unit/highlight_structure_spec.lua
 
   ui/lualine:
     code:

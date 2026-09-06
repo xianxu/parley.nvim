@@ -1,5 +1,6 @@
 -- Copy commands: code fences, file locations, and context to clipboard.
--- Pure utility module — no parley module dependencies.
+-- Depends on parley.highlight_structure for the shared fence predicate and the
+-- turn-partition bound (#218); it was dependency-free before that.
 
 local M = {}
 
@@ -9,11 +10,18 @@ function M.copy_code_fence()
 	local cursor_row = vim.api.nvim_win_get_cursor(0)[1] -- 1-indexed
 	local line_count = vim.api.nvim_buf_line_count(buf)
 
-	-- Scan up for opening ```
+	-- Scan up for opening ```. Stops at a turn partition: an unmatched fence in
+	-- an earlier exchange must not make this look like the enclosing block
+	-- (#218 — same containment rule as the render path and outline).
+	local hs = require("parley.highlight_structure")
+	local hs_patterns = hs.patterns(require("parley").config)
 	local fence_start = nil
 	for i = cursor_row, 1, -1 do
 		local line = vim.api.nvim_buf_get_lines(buf, i - 1, i, false)[1]
-		if line:match("^%s*```") then
+		if hs.is_partition(line, hs_patterns) then
+			break
+		end
+		if hs.is_fence_delim(line) then
 			fence_start = i
 			break
 		end
@@ -29,7 +37,10 @@ function M.copy_code_fence()
 	local fence_end = nil
 	for i = fence_start + 1, line_count do
 		local line = vim.api.nvim_buf_get_lines(buf, i - 1, i, false)[1]
-		if line:match("^%s*```") then
+		if hs.is_partition(line, hs_patterns) then
+			break -- #218: the block cannot run past the end of its own exchange
+		end
+		if hs.is_fence_delim(line) then
 			fence_end = i
 			break
 		end

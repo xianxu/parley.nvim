@@ -162,8 +162,22 @@ end
 local function compute_fence_ranges(lines)
     local ranges = {}
     local fence_start = nil
+    local hs = require("parley.highlight_structure")
+    -- Live config, not defaults: patterns() with no argument uses the built-in
+    -- prefixes, so containment silently did nothing for a custom
+    -- chat_user_prefix (BR-2).
+    local ok_cfg, cfg = pcall(function() return get_parley().config end)
+    local patterns = hs.patterns(ok_cfg and cfg or nil)
     for i, line in ipairs(lines) do
-        if line:match("^```") then
+        -- #218: close an unterminated fence at the turn boundary. Otherwise a
+        -- single stray ``` opens a range that runs to end-of-file and
+        -- suppresses every review marker after it.
+        if hs.is_partition(line, patterns) then
+            if fence_start then
+                table.insert(ranges, { fence_start, i - 2 })
+                fence_start = nil
+            end
+        elseif hs.is_fence_delim(line) then
             if fence_start then
                 table.insert(ranges, { fence_start, i - 1 })
                 fence_start = nil

@@ -374,3 +374,68 @@ describe("agent_display_name_with_web_search", function()
         assert.equals("ClaudeAgentTools[🔧]", name)
     end)
 end)
+
+-- #218 BR-14: the two-space fence convention broke HTML export. The old
+-- document-wide gsub required the closer to follow a newline directly, so an
+-- indented closer never matched and the scan ran to the next flush-left fence,
+-- swallowing every turn in between. Existing coverage used only flush-left
+-- fences, so nothing went red.
+describe("simple_markdown_to_html fence handling (#218)", function()
+    local exporter = require("parley.exporter")
+
+    it("closes an INDENTED fence — the shape the prompt convention produces", function()
+        local html = exporter.simple_markdown_to_html(table.concat({
+            "  ```lua",
+            "  local x = 1",
+            "  ```",
+            "after the block",
+            "💬: next question",
+            "🤖: next answer",
+        }, "\n"))
+        assert.is_truthy(html:find("code%-block"), "the indented block must become a code block")
+        assert.is_truthy(html:find("next question", 1, true),
+            "the following question was swallowed into the code block")
+        assert.is_truthy(html:find("next answer", 1, true),
+            "the following answer was swallowed into the code block")
+    end)
+
+    it("an unterminated fence does not consume the following turns", function()
+        local html = exporter.simple_markdown_to_html(table.concat({
+            "🤖: an answer",
+            "```lua",
+            "local x = 1",
+            "💬: a later question",
+            "🤖: a later answer",
+        }, "\n"))
+        assert.is_truthy(html:find("a later question", 1, true))
+        assert.is_truthy(html:find("a later answer", 1, true))
+    end)
+
+    -- BR-20: the rewrite dropped the blank lines the old gsub emitted, so the
+    -- later <p>…<div cleanups stopped firing and code blocks began nesting
+    -- inside paragraphs. The other tests here only assert text survives, which
+    -- is why that regression shipped green.
+    it("a code block after prose is NOT nested inside a paragraph", function()
+        local html = exporter.simple_markdown_to_html(table.concat({
+            "some prose directly above",
+            "```lua",
+            "local x = 1",
+            "```",
+        }, "\n"))
+        local div_at = html:find('<div class="code%-block"')
+        assert.is_truthy(div_at, "expected a code block")
+        local before = html:sub(1, div_at - 1)
+        -- the last paragraph opened before the div must already be closed
+        local last_open = select(2, before:gsub("<p[^>]*>", ""))
+        local last_close = select(2, before:gsub("</p>", ""))
+        assert.are.equal(last_open, last_close,
+            "the code block sits inside an unclosed <p> — the blank-line "
+            .. "guarantee the old gsub provided was dropped")
+    end)
+
+    it("still converts a well-formed flush-left block", function()
+        local html = exporter.simple_markdown_to_html("```lua\nlocal y = 2\n```")
+        assert.is_truthy(html:find('class="language%-lua"'))
+        assert.is_truthy(html:find("local y = 2", 1, true))
+    end)
+end)

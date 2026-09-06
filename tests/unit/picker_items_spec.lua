@@ -293,11 +293,31 @@ describe("outline picker item building", function()
         assert.truthy(items[1].display:find("💬:", 1, true))
     end)
 
-    it("skips lines inside code blocks", function()
+    -- #218: a 💬:/🤖: at column zero now ENDS any open fence, so an unmatched
+    -- fence in one answer can no longer mark the rest of the document as code.
+    -- The trade: a turn marker written flush-left inside a fence is read as a
+    -- turn. That is why the default system prompt asks the model to indent every
+    -- fenced block by two spaces (lua/parley/defaults.lua) — indented content
+    -- does not match the column-zero prefix patterns, so a properly formatted
+    -- quoted transcript still nests cleanly. This fixture is the unindented,
+    -- convention-violating shape.
+    it("treats a column-zero turn marker inside a fence as a turn (containment)", function()
         local bufnr = make_buf({
             "```",
             "💬: Not a question",
             "```",
+            "💬: Real question",
+        })
+        local items = outline._build_picker_items(bufnr, config)
+        assert.equals(2, #items)
+        assert.truthy(items[2].display:find("Real question", 1, true))
+    end)
+
+    it("skips lines inside a fence when the block is indented per the convention", function()
+        local bufnr = make_buf({
+            "  ```",
+            "  💬: Not a question",
+            "  ```",
             "💬: Real question",
         })
         local items = outline._build_picker_items(bufnr, config)
@@ -658,5 +678,76 @@ describe("agent_picker repaint passes the identity", function()
         expand.fn()
         assert.equals("claude-opus-5*", captured.selection,
             "the toggle must name the row to return to, or the cursor jumps")
+    end)
+end)
+
+-- #218 BR-1: build_file_outline_items kept a THIRD copy of the code-block memo
+-- with no partition reset, so the bug stayed live in the tree picker after the
+-- two buffer paths were fixed. All three now share
+-- highlight_structure.code_block_memo.
+describe("tree outline fence containment (#218)", function()
+    local tmpdir, path
+    -- parse_chat reads chat_memory off config, so a bare prefix table is not enough
+    local cfg = {
+        chat_user_prefix = "💬:",
+        chat_assistant_prefix = "🤖:",
+        chat_memory = { enable = true, summary_prefix = "📝:", reasoning_prefix = "🧠:" },
+    }
+
+    before_each(function()
+        tmpdir = vim.fn.tempname()
+        vim.fn.mkdir(tmpdir, "p")
+        path = tmpdir .. "/2026-09-05.10-00-00.000_stray-fence.md"
+        vim.fn.writefile({
+            "---", "topic: t", "file: f", "---", "",
+            "💬: first question",
+            "🤖: an answer with an unclosed fence",
+            "```lua",
+            "local x = 1",
+            "💬: second question",
+        }, path)
+    end)
+
+    after_each(function() vim.fn.delete(tmpdir, "rf") end)
+
+    it("a question after an unmatched fence still appears in the tree outline", function()
+        local items = outline._build_tree_outline_items(path, cfg, {})
+        local found = false
+        for _, it in ipairs(items) do
+            if it.display and it.display:find("second question", 1, true) then found = true end
+        end
+        assert.is_true(found,
+            "the tree picker dropped the question after a stray fence — the third "
+            .. "code_memo was still toggling without a partition reset")
+    end)
+end)
+
+-- #218 BR-2: the outline memo called patterns() with no config, so containment
+-- silently did nothing for anyone with a custom chat_user_prefix. Mutating the
+-- call back to patterns() must turn this red.
+describe("outline containment honours configured prefixes (#218)", function()
+    local custom = {
+        chat_user_prefix = "U:",
+        chat_assistant_prefix = "A:",
+        chat_memory = { enable = true, summary_prefix = "📝:", reasoning_prefix = "🧠:" },
+    }
+
+    it("a custom-prefix question after an unmatched fence is still an outline item", function()
+        local bufnr = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, {
+            "A: an answer with an unclosed fence",
+            "```lua",
+            "local x = 1",
+            "U: second question",
+        })
+        local items = outline._build_picker_items(bufnr, custom, { is_chat = true })
+        local found = false
+        for _, it in ipairs(items) do
+            if it.display and it.display:find("second question", 1, true) then found = true end
+        end
+        vim.api.nvim_buf_delete(bufnr, { force = true })
+        assert.is_true(found,
+            "containment used default prefixes, so a custom chat_user_prefix "
+            .. "never ended the fence")
     end)
 end)
