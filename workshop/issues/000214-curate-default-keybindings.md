@@ -415,3 +415,37 @@ criterion, which will render aliases rather than reorder more keys.
 **Three tests encoded the old chords** and now assert the full key **list** — an
 assertion reading `keys[1]` would have stayed green while an alias silently
 vanished, which is the shrink class PQ-1 named.
+
+## Revisions
+
+### 2026-09-06 — M1 decisions superseded during review (BR-30)
+
+Four review rounds changed three decisions the Plan and the earlier Log still
+state as settled. Recording the deltas rather than editing the originals.
+
+**1. `<M-S-CR>` is no longer the documented primary.** The Plan says "`<M-S-CR>`
+is documented primary, `<M-i>`/`<M-p>` the fallback". Shipped order is
+`<M-i>`, `<M-S-CR>`, `<C-g>i` — because `<C-g>?` renders only `keys[1]`, so
+leading with the mnemonic would advertise a chord most terminals cannot
+distinguish from `<CR>`. Flagged to the operator at the time; the mnemonic is
+still bound, just not first.
+
+**2. `chat_toggle_tool_folds` is NOT bound.** The Plan says "bind
+`chat_toggle_tool_folds`". The codebase already carried the opposite decision in
+a comment and an assertion, and the operator confirmed it: a tool call's *result*
+is low-value reading and does not justify a key out of the shared `<C-g>`
+surface. The real defect was that "unbound" also meant *unreachable* — fixed with
+`:ParleyToggleToolFolds`, not with a key.
+
+**3. The branch key does NOT behave identically in both buffer types.** The Plan
+says "make all three branch paths one action", and the first implementation took
+that literally — which produced two Criticals in a row: writing an arbitrary
+markdown document to disk (persisting the user's unrelated edits), and creating
+a child whose only reference could never be committed. The rule that survived
+review is narrower and honest: **parley commits a reference only in a file it
+owns.** A chat buffer gets create + commit + open; a foreign markdown buffer gets
+the reference line and the cursor, with no child and no write. One code path,
+one explicit branch on ownership — not one behaviour.
+
+The consolidation itself stands: four near-identical functions became one, and
+the drift they had accumulated (only the visual paths created children) is gone.

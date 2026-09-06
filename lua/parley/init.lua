@@ -2119,7 +2119,22 @@ local function branch_inserters(buf, abs_link)
 		return ok
 	end
 
+	-- Two buffer types, two honest guarantees — stated once here rather than
+	-- discovered per finding (#214 BR-27/BR-28).
+	--
+	-- A CHAT buffer is parley's own file, so the full flow is coherent: create
+	-- the child, commit the parent so the only reference to it is durable, then
+	-- focus the child because this is a submission redirected into a new branch.
+	--
+	-- A FOREIGN markdown buffer is the user's document. parley must not `:write`
+	-- it (that persists their unrelated pending edits — I3-2), and without a
+	-- write it cannot make the reference durable — so creating a child there
+	-- would leave an orphan on disk reachable only through an unsaved line
+	-- (BR-28). It therefore does what it did before #214: insert the reference,
+	-- put the cursor on it, and let the user type the topic. The child is created
+	-- when the link is followed.
 	local function insert_plain()
+		local owns_file = M._parley_bufs[buf] == "chat"
 		local cursor_pos = vim.api.nvim_win_get_cursor(0)
 		-- The standalone ref line always uses the basename, in both buffer types:
 		-- format_ref_line writes `🌿: <name>: `, which resolve_chat_path looks up
@@ -2129,29 +2144,33 @@ local function branch_inserters(buf, abs_link)
 		vim.api.nvim_buf_set_lines(buf, cursor_pos[1], cursor_pos[1], false, {
 			br.format_ref_line(get_branch_prefix(), rel_path, ""),
 		})
-		-- Create the child here too — the n/i path used to write a reference to a
-		-- file that did not exist until someone opened the link.
-		--
-		-- The topic is "?", NOT "". `?` is the sentinel the rest of the lifecycle
-		-- keys off: auto-topic generation fires only on `headers.topic == "?"`
-		-- (chat_respond.lua:1934) and the slug rename waits for a real topic
-		-- rather than an empty one. Passing "" produced a child
-		-- that was never titled and never slugged — a permanently anonymous
-		-- <timestamp>.md whose parent ref line stayed `🌿: ….md: ` forever (#214
-		-- BR-1). Verified by reading the created header, not by assuming.
-		M.create_child_chat(new_chat_file, "?", buf, nil)
 		M.highlight_chat_branch_refs(buf)
 
-		-- Commit before navigating. ChatPrune already writes the parent before
-		-- opening the child; same order here (ARCH-ORDER).
-		local committed = commit_reference()
-		M.logger.info("Created branch to new chat: " .. rel_path)
-		if not committed then
-			-- Nothing was written, so do not navigate away from the unsaved link.
+		if not owns_file then
+			-- Pre-#214 behaviour, restored deliberately: no child, no write, and
+			-- the cursor lands on the new line in insert mode so the topic can be
+			-- typed. An early `return` here once skipped these two lines and made
+			-- the key look inert (BR-27).
+			vim.api.nvim_win_set_cursor(0, { cursor_pos[1] + 1, 0 })
+			vim.schedule(function() vim.cmd("startinsert!") end)
+			M.logger.info("Inserted branch reference: " .. rel_path)
 			return
 		end
-		-- Focus the child: this is a submission redirected into a new branch, so
-		-- the question belongs there, not on the parent's ref line.
+
+		-- The topic is "?", NOT "": `?` is the sentinel the rest of the lifecycle
+		-- keys off. Auto-topic generation fires only on `headers.topic == "?"`,
+		-- and the slug rename waits for a real topic rather than an empty one.
+		-- Passing "" produced a child that was never titled and never slugged — a
+		-- permanently anonymous <timestamp>.md whose parent ref line stayed
+		-- `🌿: ….md: ` forever (BR-1). Verified by reading the created header.
+		M.create_child_chat(new_chat_file, "?", buf, nil)
+		M.highlight_chat_branch_refs(buf)
+		if not commit_reference() then
+			-- Could not save: stay put rather than navigate away from the only
+			-- reference to a file that now exists on disk.
+			return
+		end
+		M.logger.info("Created branch to new chat: " .. rel_path)
 		vim.schedule(function()
 			vim.cmd("edit " .. vim.fn.fnameescape(new_chat_file))
 			vim.cmd("normal! G")

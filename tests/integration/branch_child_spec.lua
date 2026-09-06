@@ -73,9 +73,13 @@ describe("branch inserter call site (#214 BR-1)", function()
         vim.fn.writefile({ "---", "topic: parent", "file: f", "---", "", "💬: q" }, parent_path)
         vim.cmd("edit " .. vim.fn.fnameescape(parent_path))
         buf = vim.api.nvim_get_current_buf()
+        -- A CHAT buffer: only there does parley create a child, because only
+        -- there can it commit the reference (BR-28).
+        parley._parley_bufs[buf] = "chat"
     end)
 
     after_each(function()
+        parley._parley_bufs[buf] = nil
         parley.config.chat_dir = saved_dir
         vim.fn.delete(tmpdir, "rf")
     end)
@@ -148,6 +152,29 @@ describe("branch commits its reference, in every mode (#214)", function()
                 ("mode %q created a child but left the reference unsaved — a :q! "
                     .. "orphans a file discoverable only through that link"):format(mode))
         end
+    end)
+
+    it("on a foreign markdown buffer: inserts the ref, no child, no write", function()
+        -- BR-27/BR-28: parley cannot make the reference durable in a file it does
+        -- not own, so it must not create a child there either — an orphan on disk
+        -- reachable only through an unsaved line. And it must still do the LOCAL
+        -- work (cursor + insert mode) an early return once skipped, which made
+        -- the key look inert.
+        local path = tmpdir .. "/plain-notes.md"
+        vim.fn.writefile({ "# Notes", "body" }, path)
+        vim.cmd("edit! " .. vim.fn.fnameescape(path))
+        local b = vim.api.nvim_get_current_buf()
+        vim.api.nvim_win_set_cursor(0, { 1, 0 })
+        local before = #vim.fn.readdir(tmpdir)
+
+        parley._branch_inserters(b, true).n()
+
+        assert.are.equal(before, #vim.fn.readdir(tmpdir),
+            "no child may be created in a buffer parley cannot commit")
+        assert.is_truthy(vim.api.nvim_buf_get_lines(b, 1, 2, false)[1]:find("🌿:", 1, true),
+            "the reference line must still be inserted")
+        assert.are.equal(2, vim.api.nvim_win_get_cursor(0)[1],
+            "cursor must land on the new reference line so the topic can be typed")
     end)
 
     it("does NOT write a foreign markdown buffer", function()

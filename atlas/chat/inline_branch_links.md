@@ -4,19 +4,29 @@
 - `[🌿:display text](file.md)` — inline within any line (vs full-line `🌿:` on its own line)
 
 ## Creation (`<M-i>`, `<M-S-CR>`, `<C-g>i`)
-One action, one implementation: `branch_inserters(buf, abs_link)` in `init.lua`,
-with the pure line editing in `lua/parley/branch_ref.lua`. Chat and markdown
-buffers differ **only** in the link target — chat links its sibling by basename,
-markdown by absolute path — so the two used to be four near-identical functions
-that had drifted (#214).
+One implementation — `branch_inserters(buf, abs_link)` in `init.lua`, with the
+pure line editing in `lua/parley/branch_ref.lua`. It replaced four
+near-identical functions that had drifted (#214).
+
+**The two buffer types get different guarantees, deliberately.** A chat buffer is
+parley's own file, so it can commit the reference; a foreign markdown document is
+not, and `:write` would persist the user's unrelated pending edits.
+
+| | chat buffer | foreign markdown |
+|---|---|---|
+| inserts the `🌿:` reference | yes | yes |
+| creates the child on disk | yes | **no** — it would be an orphan reachable only through an unsaved line |
+| saves the parent | yes | **no** — never writes a file parley does not own |
+| after the keypress | opens the child | cursor on the new line, insert mode |
 
 - **Visual mode**: wraps the selection as `[🌿:selected text](target)` and creates
   the child with topic `what is "selected text"`.
-- **Normal / insert mode**: inserts a full-line `🌿: <filename>: `, creates the
-  child, and **opens it** — the question is typed in the child, not on the
-  parent's ref line. Before #214 this path created no file at all, so it wrote a
-  reference to something that did not exist; that gap is what made the two
-  invocations feel like different actions.
+- **Normal / insert mode, chat buffer**: inserts a full-line `🌿: <filename>: `,
+  creates the child, saves the parent, and **opens the child** — the question is
+  typed there. Before #214 this path created no file at all, so it wrote a
+  reference to something that did not exist.
+- **Normal / insert mode, foreign markdown**: inserts the reference and puts the
+  cursor on it in insert mode. No child, no write.
 - The no-selection child starts with `topic: ?` — the sentinel the lifecycle
   keys off. `?` (not `""`) is what makes auto-titling fire on first respond;
   an empty topic left the child permanently anonymous (#214 BR-1). It gains its slug on

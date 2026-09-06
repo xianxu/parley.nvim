@@ -662,3 +662,258 @@ The suite is green and the two new specs are real tests, not mock theatre — `b
 - **Same file, `## Revisions`:** record that `branch_inserters` writes the parent buffer before navigating, and that this applies to *arbitrary markdown buffers* as well as chat files — that is a user-visible policy decision (whose file parley is willing to save) that no artifact currently states.
 - **Add a `## Core concepts` table to the issue's Plan.** The two arch guards in `single_source_sweeps_spec.lua:61` and `:135` are hardwired to `000205-*`, so #214 added a module, two specs and a command with no table-vs-code cross-check at all. Parameterising those guards on the issue id would close this for every issue at once, and is the kind of one-line generalisation §6 asks for.
 - **`## Log`:** BR-20's rule needs restating at per-finding granularity before the next round, with the closing commit naming, per finding id, the test that goes red without the fix. The per-file revert table that replaced it cannot detect any of the five cases measured above.
+
+---
+
+## Re-review — 2026-09-06T09:55:45-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 214 — audit and curate the default keybinding surface |
+| repo | parley.nvim |
+| issue file | workshop/issues/000214-curate-default-keybindings.md |
+| boundary | milestone M1 |
+| milestone | M1 |
+| window | 54a5c7a2ecaa3faf268d867f5222e73bd6f1dafb..1d7ae62017a0356eb9dd1aa333f42cd5abb0ad47 |
+| command | sdlc milestone-close --issue 214 --milestone M1 |
+| reviewer | claude |
+| timestamp | 2026-09-06T09:55:45-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+Round 3's own two fixes are the best work in this range: `commit_reference()` is a real enumeration over the dispatch table, and I confirmed it by mutation in a git clone — removing the plain-path commit, removing the inline commit, or removing the scope guard each turns `branch_child_spec` red while the rest of the suite (351 files, lint clean) stays green. What blocks SHIP is that the scope guard fixed I3-2 by adding an early return that nobody traced through the *markdown* path: pressing `<M-i>` in an ordinary markdown file now inserts the ref line, writes a child chat to disk, and then returns — no cursor move, no `startinsert`, no navigation, no save. I measured base vs HEAD through the real keymap: base left the cursor at `{3,34}` with `startinsert!` queued and created **no** file; HEAD leaves the cursor at `{2,0}` in normal mode and leaves a stray chat file in `chat_dir` referenced only by an unsaved line. The code comment claims this "keeps the pre-#214 behaviour"; it does not. Separately, BR-20's rule is still not in force — I reverted BR-10, BR-11, BR-17 and BR-21 one at a time and the **full suite stayed green for all four**, which is the fourth round in a row that this family has reported the same thing.
+
+## 1. Strengths
+
+- **BR-19 is genuinely closed, and pinned.** `tests/integration/branch_child_spec.lua:130-149` iterates `pairs(inserters)` and asserts the table is exactly `{i,n,v}`, so a new mode without coverage fails. Verified by three separate mutations in a scratch clone; each one goes red.
+- **The scope guard is real and reachable.** `M._parley_bufs[buf] = "chat"` is set in `highlighter.lua:1063` on `BufEnter` before `prep_chat` wires the keymaps, so the guard fires in production, not just in fixtures. Removing it turns `does NOT write a foreign markdown buffer` red.
+- **BR-5 is fully swept.** Every full-line `🌿:` construction in `lua/` now routes through `branch_ref.format_ref_line` (`init.lua:2066,2130,3104,3638,3651,3709,4606`, `chat_finder.lua:765`, `highlighter.lua:725`), and `tests/arch/single_source_sweeps_spec.lua:378` guards it.
+- **`branch_ref.lua` is genuinely PURE** — `tests/unit/branch_ref_spec.lua` runs 9 assertions with no filesystem, no `vim.fn`, no mocks. ARCH-PURE pass.
+- **BR-15 is clean.** No `.lua:NNNN` citation survives in `atlas/` from this range, and the one line citation added to code (`chat_respond.lua:1934`) is accurate — I checked it.
+
+## 2. Critical findings
+
+**`lua/parley/init.lua:2109-2118` + `:2151` — the markdown normal/insert branch path lost its cursor move and `startinsert`, silently.**
+
+Measured through the real keymap in a clone at each end of the window:
+
+```
+base 54a5c7a2:  cursor {3,34}, startinsert! queued, chat_dir = {}          (no child)
+HEAD 1d7ae62:   cursor {2, 0}, normal mode,        chat_dir = {…189.md}    (child created)
+```
+
+`commit_reference()` returns `false` on any buffer that is not `"chat"`, and `insert_plain` treats that as "do not navigate" and returns — but the pre-#214 markdown path did not navigate either; it moved the cursor onto the new ref line and scheduled `startinsert!` so the user could type the topic (`git show 54a5c7a2:lua/parley/init.lua`, `md_insert_branch_ref`). That step has no home in the unified helper, so it was dropped for the buffer type that used it. The user presses the key parley now advertises as primary and sees nothing happen. Fix sketch: put the non-chat fallback in `insert_plain` explicitly — `nvim_win_set_cursor(0, {cursor_pos[1]+1, 0})` + `vim.schedule(startinsert!)` when `committed` is false — and pin it with a spec asserting cursor row and `mode()` for the markdown case, so the two buffer types' *observable effects* are enumerated the way the modes now are.
+
+## 3. Important findings
+
+**`lua/parley/init.lua:2142-2151` — on a markdown buffer the branch key creates a durable child on disk and leaves the only reference to it unsaved, with no navigation.**
+
+*This is the 2nd finding in family `partial-effect-not-committed`.* Do NOT fix this instance. The rule round 3 wrote — "every mode of that keypress commits the reference in the same action, and the enumeration is the dispatch table's keys" — was enumerated over the wrong axis. The dispatch table has three keys; the *component* has two buffer types, and the fix swept modes and left `markdown` as an unnamed third state where the artifact is created and the reference is not committed. The rule needs restating as: **the enumeration is `modes × buffer types`, and every cell either commits the reference or does not create the artifact.** The cheap resolution for the `markdown` cell is the second half — do not call `create_child_chat` when the reference cannot be committed — which also restores the pre-#214 contract the comment claims. Reproduced above: `chat_dir = {2026-09-06.09-53-24.189.md}` with `modified = true` and the ref line only in the buffer.
+
+**`atlas/chat/inline_branch_links.md:6-19` asserts two things the code does not do.**
+
+"Chat and markdown buffers differ **only** in the link target" and "**Normal / insert mode**: … creates the child, and **opens it**". Both are false for markdown at HEAD: it also differs on parent-commit and on navigation, and markdown never opens the child. The atlas also never mentions that branching now `:write`s the parent buffer — a user-visible policy (whose file parley is willing to save) that no artifact states. README is correctly scoped (`**In Chat Buffer**`) and is fine.
+
+*This is the 3rd finding in family `docs-assert-unverified-behavior`.* Do NOT fix this instance. Round 3 stated the rule ("a sentence in README/atlas that asserts a runtime effect lands with a test naming that effect") and then broke it in the same commit that applied it to README — which is the signal that the rule needs a mechanism, not another restatement. Measured prevalence: BR-7, BR-8, I3-1, this. The missing mechanism the family keeps asking for is a spec that reads the atlas/README claim and exercises it; absent that, the enforceable substitute is the enumeration `git diff --name-only <base> HEAD -- atlas/ README.md` swept against every effect verb ("creates", "opens", "writes", "saves", "renames", "only") added in the same range, run before the closing commit.
+
+**`workshop/issues/000214-curate-default-keybindings.md:341-372` — the Plan still states three superseded decisions and has no `## Revisions` section.**
+
+Row 1 names `global_shortcut_branch_ref` (code ships `chat_shortcut_branch_ref`) and the order `{ "<M-S-CR>", "<M-i>", "<C-g>i" }` (code ships `<M-i>` first). Row 3 says "create immediately with an **empty topic**" (code ships `"?"`, which was BR-1's fix). Row 2 is `[x]` on "Extract one helper both buffer types call, so the pair cannot drift again", while the markdown call site still re-implements `.i` and the two buffer types now diverge on three observable effects. AGENTS.md §1 requires an appended `## Revisions` entry rather than a stale row; two prior rounds recommended it and it has not been written. This is the artifact the close gate's plan-unchecked guard reads.
+
+## 4. Minor findings
+
+- `lua/parley/chat_finder.lua:777` still hand-builds `"[" .. branch_prefix .. topic .. "](" .. rel_path .. ")"`, the format `branch_ref.splice_inline_link` owns; the new arch guard only matches the full-line `branch_prefix .. " " ..` shape, so it does not see this. *This is the 4th finding in family `duplicate-helper-not-retired`* — do NOT fix the instance; the guard added at `single_source_sweeps_spec.lua:378` matches one literal concatenation idiom, which is why the sweep keeps missing siblings. The rule: the guard must key on the *emitted shape* (`"](" ` adjacent to a `.md` path, and `": "` after a prefix variable), not on one spelling of the concatenation.
+- `lua/parley/init.lua:2114-2119` — `commit_reference` discards the `pcall` error, so a write failure reports "could not save the parent" with no cause; and `M.logger.info("Created branch to new chat: …")` at `:2148` now fires *before* the `committed` check, announcing success on the path where nothing was committed and nothing opened.
+- `lua/parley/init.lua:1078-1082` — the warning reads "Tool folds apply to parley chat buffers **only**" but the guard is `if not M._parley_bufs[buf]`, which markdown buffers satisfy. Message and guard disagree.
+
+## 5. Test coverage notes
+
+Full suite green at HEAD (351 spec files, `make lint` 0/0). Mutation results, each reverted in isolation in a git clone with the whole suite re-run:
+
+| fix | reverted | result |
+|---|---|---|
+| BR-19 plain-path commit | `commit_reference()` → `true` | **red** (branch_child_spec) |
+| I3-3 inline commit | delete `commit_reference()` | **red** (branch_child_spec) |
+| I3-2 scope guard | delete the `~= "chat"` early return | **red** (branch_child_spec) |
+| BR-21 `%` escaping | `gsub(fn)` → string concat | green |
+| BR-10 parent_ref fallback | → always basename | green |
+| BR-11 callback identity | → inline closure | green |
+| BR-17 buffer scope guard | delete the guard | green |
+
+BR-21 is the instructive one and is unchanged from round 3's diagnosis: `branch_ref_spec.lua:53-67` re-implements the production `gsub` inside the test body instead of calling `create_child_chat`, so it asserts the fix's mental model, not the call site. A test at `branch_child_spec` passing `topic = 'what is "50% off"'` through `create_child_chat` and reading back the header would go red against the concat form.
+
+Not covered after this round: the markdown branch path in any form (cursor, mode, navigation, orphan creation — the Critical above is entirely unobserved), the `%`-in-topic path through `create_child_chat`, the callback/command identity, the `ToggleToolFolds` buffer guard, and the markdown parent back-link fallback. `branch_child_spec.lua:130-149` also leaves two unflushed `vim.schedule(edit → G → startinsert!)` callbacks in the loop while `after_each` deletes the tmpdir — harmless today, latent flake, and it means the navigation half of BR-19 is unobserved rather than merely unasserted.
+
+## 6. Architectural notes for upcoming work
+
+- **ARCH-DRY — flag.** `init.lua:2551-2557` still rebuilds the markdown `.i` wrapper that `branch_inserters` returns, so `.i` remains dead at zero call sites (BR-4, chat swept, markdown not). `chat_finder.lua:777` duplicates the inline-link format. `keybinding_registry.lua:478` duplicates `config.lua:362`'s key list with nothing asserting they agree (BR-24) — reconcile before M2's superset guard is written against it, or the guard certifies the duplication.
+- **ARCH-PURE — pass.** Clean pure/IO split; the pure half is tested without IO, confirmed by running the spec.
+- **ARCH-PURPOSE — flag.** Two shadow-sweeps came up short on the same axis: the durability rule enumerated modes and not buffer types (Critical + finding 3.2), and BR-4 swept the chat call site and not its twin. The consolidation's stated purpose — "so the pair cannot drift again" — is not met while one call site re-implements a mode and the two types diverge on three effects.
+- **ARCH-MOCK — pass.** No new external binary or service; the arch guard shells to `git ls-files` consistently with the existing guards; tests run entirely inside the per-run scratch `HOME`/`TMPDIR`.
+- **ARCH-CONSTRAINTS — flag (minor).** `<M-i>` is a keystroke path that now performs two synchronous disk writes (`writefile` for the child, then a full parent `:write`) plus a buffer reload, with no budget stated in the plan for the interaction the plan itself calls "what gets *felt*". Chat files are small so this is likely fine; state it rather than leave it implicit.
+- **ARCH-SECURE — flag.** `.gitignore:49-53` landed and `1d7ae62`'s tree is clean, but `8ade807` still carries `.local/state/nvim/parley.nvim.log` (14 KB, including `secret = "parley-local"` and absolute user paths) plus three other runtime blobs; they reach `main` unless the branch is squashed or rebased. No live credential — API keys are redacted. Residue: `splice_inline_link` splices selected text into a markdown link unescaped, so a selection containing `](` emits a broken link (BR-26's missing case).
+- **ARCH-ORDER — flag.** The `{n,i,v}` enumeration is now written down *and* pinned, which is real progress. Two gaps remain: the failure path still drops the in-flight effect — when `commit_reference` returns false the child is already on disk and is not removed, and with the markdown early-return that is now the *normal* path, not the exceptional one — and the `vim.schedule(edit → G → startinsert!)` chain still has no injectable seam, so no test can observe or reproduce an ordering failure in it (BR-18).
+
+## 7. Plan revision recommendations
+
+Append a `## Revisions` section to `workshop/issues/000214-curate-default-keybindings.md` (it has none; §1 requires appending, not overwriting):
+
+1. **Config key name and order.** M1 row 1 says `global_shortcut_branch_ref = { "<M-S-CR>", "<M-i>", "<C-g>i" }`; the code ships `chat_shortcut_branch_ref = { "<M-i>", "<M-S-CR>", "<C-g>i" }`. The code is right on both counts (`chat_shortcut_*` is the prefix every `parley_buffer` entry uses; `## Log` records why `<M-i>` leads). Correct the row.
+2. **Topic sentinel.** M1 row 3 says "create immediately with an **empty topic**"; BR-1 established that `"?"` is required, and the code ships it. Correct the row so the plan stops describing the bug.
+3. **Row 2 scope.** "Extract one helper both buffer types call, so the pair cannot drift again" is `[x]`, but `.i` is still re-implemented at the markdown call site and the two types diverge on parent-commit, navigation, and cursor/insert. Either uncheck it or narrow the wording to what shipped.
+4. **State the buffer-type policy.** Record explicitly what happens on a non-chat buffer: whether parley creates a child it cannot commit a reference to, and whether it saves the user's arbitrary document. That is a user-visible decision no artifact currently states, and it is the axis the Critical fell through.
+5. **Add a `## Core concepts` table.** #214 added a module, two specs and a command with no table-vs-code cross-check; the two existing arch guards in `single_source_sweeps_spec.lua` are hardwired to `000205-*`. Parameterising them on the issue id closes this for every issue at once.
+
+```findings
+dispose:
+  - id: BR-2
+    disposition: not-addressed
+    note: |
+      Tests now exist (branch_ref_spec, 9 assertions, no IO); atlas/traceability.yaml:141-150 still lists only the four old files, so branch_ref.lua and both new specs route nowhere under make test-changed.
+  - id: BR-4
+    disposition: not-addressed
+    note: |
+      Chat site fixed (branch_ref = chat_branch); init.lua:2551-2557 still rebuilds n/i/v wrappers for markdown, so .i remains dead at zero call sites.
+  - id: BR-5
+    disposition: addressed
+    note: |
+      All full-line formatter sites route through branch_ref.format_ref_line; the arch guard at single_source_sweeps_spec.lua:378 is real.
+  - id: BR-10
+    disposition: not-addressed
+    note: |
+      Code fix is correct and reachable, but reverting parent_ref to the bare basename leaves the FULL suite green — measured in a git clone.
+  - id: BR-11
+    disposition: not-addressed
+    note: |
+      config_tools_spec.lua:436-447 still asserts only is_function plus registry-entry existence; reverting the callback to an inline closure leaves the full suite green — measured.
+  - id: BR-15
+    disposition: addressed
+    note: |
+      No .lua:NNNN citation from this range survives in atlas/; the one code citation added (chat_respond.lua:1934) is accurate — verified.
+  - id: BR-17
+    disposition: not-addressed
+    note: |
+      Guard added but no spec invokes ToggleToolFolds; deleting the guard leaves the full suite green — measured. Warning text says "chat buffers only" while markdown satisfies the guard.
+  - id: BR-18
+    disposition: not-addressed
+    note: |
+      M._branch_inserters seam exists and specs now drive it, but nothing observes the stopinsert -> schedule(edit/G/startinsert!) interleaving; branch_child_spec also leaves two unflushed schedules while after_each deletes the tmpdir.
+  - id: BR-19
+    disposition: addressed
+    note: |
+      Mutation-verified in a clone: removing the plain-path commit, the inline commit, or the scope guard each turns branch_child_spec red. The markdown residue is raised separately, not as BR-19.
+  - id: BR-20
+    disposition: not-addressed
+    note: |
+      Measured this round: BR-10, BR-11, BR-17 and BR-21 each revert clean with the full suite green; the issue's Log names no per-finding test.
+  - id: BR-21
+    disposition: not-addressed
+    note: |
+      init.lua:4586 uses a function replacement correctly, but branch_ref_spec.lua:53-67 re-implements the gsub in the test body; reverting to string concat leaves the full suite green — measured.
+  - id: BR-22
+    disposition: not-addressed
+    note: |
+      .gitignore entry landed and HEAD's tree is clean, but 8ade807 still carries the four blobs (14 KB log with secret = "parley-local" and absolute paths); they reach main unless the branch is squashed or rebased.
+  - id: BR-23
+    disposition: not-addressed
+    note: |
+      Both atlas instances swept, but the rule half was not delivered — no guard row asserts a doc names resolve_keys(entry, config)[1]; the row that landed guards the branch-ref formatter instead.
+  - id: BR-24
+    disposition: not-addressed
+    note: |
+      keybinding_registry.lua:478 still duplicates config.lua's list byte-for-byte with nothing asserting they agree.
+  - id: BR-25
+    disposition: not-addressed
+    note: |
+      keybindings_spec.lua:349 is still dofile("lua/parley/config.lua"), CWD-relative.
+  - id: BR-26
+    disposition: not-addressed
+    note: |
+      branch_ref_spec has no case for a selection containing "](" nor for one ending mid-codepoint.
+findings:
+  - id: new
+    severity: Critical
+    family: merged-path-loses-original-effect
+    title: |
+      Markdown normal/insert branch lost its cursor move and startinsert — the key now appears to do nothing
+    detail: |
+      commit_reference() returns false on any non-chat buffer and insert_plain
+      treats that as "do not navigate" and returns, but the pre-#214 markdown
+      path did not navigate either — it moved the cursor onto the new ref line
+      and scheduled startinsert! so the user could type the topic. Measured
+      through the real keymap: base 54a5c7a2 leaves cursor {3,34} with
+      startinsert! queued and chat_dir empty; HEAD leaves cursor {2,0} in normal
+      mode with a child file created. The code comment claims it "keeps the
+      pre-#214 behaviour"; it does not. No test observes the markdown path.
+  - id: new
+    severity: Important
+    family: partial-effect-not-committed
+    title: |
+      On a markdown buffer the branch key creates a child on disk whose only reference is never committed
+    detail: |
+      This is the 2nd finding in this family. Do not fix the instance. Round 3's
+      rule enumerated the dispatch table's MODES; the component's state space is
+      modes x buffer types, and the markdown cell creates the durable artifact
+      while committing nothing and navigating nowhere — the exact BR-19 shape,
+      relocated. Restate the rule as: every cell of modes x buffer types either
+      commits the reference or does not create the artifact. For markdown the
+      cheap resolution is the second half.
+  - id: new
+    severity: Important
+    family: docs-assert-unverified-behavior
+    title: |
+      atlas/chat/inline_branch_links.md says markdown opens the child and that the two buffer types differ only in link target
+    detail: |
+      This is the 3rd finding in this family. Do not fix the instance. Both
+      claims at :6-19 are false at HEAD — markdown never opens the child and the
+      types also diverge on parent-commit and navigation — and the atlas never
+      records that branching now :writes the parent buffer at all. Round 3 stated
+      the rule and broke it in the same commit that applied it to README, which
+      is the signal the family needs a mechanism: sweep every effect verb
+      ("creates", "opens", "writes", "saves", "renames", "only") added by
+      git diff --name-only <base> HEAD -- atlas/ README.md before the closing
+      commit, and pin the surviving claims with a spec that exercises them.
+      README is correctly scoped to "In Chat Buffer" and is fine.
+  - id: new
+    severity: Important
+    family: plan-not-revised-after-decision-change
+    title: |
+      The issue Plan still states three superseded M1 decisions and has no Revisions section
+    detail: |
+      Row 1 names global_shortcut_branch_ref and the order {<M-S-CR>, <M-i>,
+      <C-g>i}; the code ships chat_shortcut_branch_ref with <M-i> first. Row 3
+      says "create immediately with an empty topic"; BR-1 established "?" and the
+      code ships it. Row 2 is checked on "so the pair cannot drift again" while
+      the markdown call site still re-implements .i and the two types diverge on
+      three effects. AGENTS.md section 1 requires an appended "## Revisions"
+      entry; the file has no such section, and this is the artifact the close
+      gate's plan-unchecked guard reads.
+  - id: new
+    severity: Minor
+    family: duplicate-helper-not-retired
+    title: |
+      chat_finder.lua:777 still hand-builds the inline branch-link format the new arch guard does not see
+    detail: |
+      This is the 4th finding in this family. Do not fix the instance. The guard
+      at single_source_sweeps_spec.lua:378 matches one literal concatenation
+      idiom (branch_prefix .. " " ..), which is why the sweep keeps missing
+      siblings. The rule: key the guard on the emitted SHAPE — "](" adjacent to a
+      .md path, and ": " after a prefix variable — not on one spelling of the
+      concatenation.
+  - id: new
+    severity: Minor
+    family: partial-effect-not-committed
+    title: |
+      commit_reference discards the write error, and the success log line fires before the committed check
+    detail: |
+      init.lua:2114-2119 pcalls the write and drops the error, so a failure
+      reports "could not save the parent" with no cause. init.lua:2148 logs
+      "Created branch to new chat: <file>" before the committed check, announcing
+      success on the path where nothing was committed and nothing opened.
+```
