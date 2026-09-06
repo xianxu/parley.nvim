@@ -301,20 +301,20 @@ key list**, and a guard must enforce it rather than leave it to review. Without
 one, the most-praised binding in the shakedown disappears in a commit whose
 stated purpose is making bindings *more* configurable.
 
-- [ ] **M1** — chords **in config, with `branch_ref` gaining its `config_key` in
+- [x] **M1** — chords **in config, with `branch_ref` gaining its `config_key` in
       the same step**: `global_shortcut_branch_ref = { "<M-S-CR>", "<M-i>", "<C-g>i" }`,
       `chat_shortcut_prune = { "<M-p>", "<C-g>b" }`. Old keys kept as legacy
       aliases (`chat_drill_in` is the precedent for a key list). `<M-S-CR>` is
       documented primary, `<M-i>`/`<M-p>` the fallback for the many terminals
       that cannot distinguish Shift+Enter. Test: `resolve_keys` returns all three
       for `branch_ref` under the shipped config.
-- [ ] **M1** — unify the branch paths. The class is **four** functions, not two
+- [x] **M1** — unify the branch paths. The class is **four** functions, not two
       (PQ-3): `chat_insert_branch_ref` / `chat_insert_inline_branch_ref`
       (`init.lua:2104,2118`) and the identical markdown twins
       `md_insert_branch_ref` / `md_insert_inline_branch_ref` (`:2427,2440`).
       Only the two *visual* paths call `create_child_chat`. Extract one helper
       both buffer types call, so the pair cannot drift again.
-- [ ] **M1** — resolve *when* the child is created on the no-selection path
+- [x] **M1** — resolve *when* the child is created on the no-selection path
       (PQ-2): the topic does not exist at keypress. Decision: create immediately
       with an empty topic and **open** the child, so the user types the question
       in the child rather than on the parent's ref line — this is what makes the
@@ -322,8 +322,17 @@ stated purpose is making bindings *more* configurable.
       existing auto-slug-rename from the first topic
       (`atlas/chat/lifecycle.md`) fills the name in afterwards; verify that
       before relying on it.
-- [ ] **M1** — bind `chat_toggle_tool_folds`, which resolves to `nil`: 60+ tests
-      behind a key no user can press.
+- [x] **M1** — ~~bind~~ **make `chat_toggle_tool_folds` callable while staying
+      unbound.** The plan step said "bind it"; the codebase disagreed in two
+      places — a config comment reading *"Intentionally unbound by default"* and
+      `config_tools_spec.lua:388` asserting `is_nil`. Operator ruled: **stays
+      unbound, because a tool call's RESULT is low-value reading and does not
+      justify a key out of the shared `<C-g>` surface** — the rationale the
+      original decision never recorded. But "unbound" had also meant
+      *unreachable*: the toggle existed only as a registry callback, so a user
+      could not invoke it without first configuring a key. Now
+      `:ParleyToggleToolFolds`, with the registry callback pointing AT the
+      command so binding it cannot drift from calling it.
 - [ ] **M2** — `config_key` for the remaining 9 registry-only entries, each
       shipped default carrying that entry's **full** existing key list.
       **Tighten the existing assertion** at `tests/unit/keybindings_spec.lua:217-229`
@@ -371,3 +380,29 @@ launch blocker; this is quality work that rides on the mechanism #212 builds.
 Counts current as of this date: 78 registry entries (68 rebindable, 10 not, 18
 help-only, 3 with no default key), 65 default shortcuts in `config.lua`, and 4
 bindings made outside the registry.
+
+### 2026-09-06 — M1 implemented
+
+Commit `d57e660` + the tool-folds follow-up. Suite green (195 files), lint clean.
+
+**The chords had to land in `config.lua`, not the registry.** `resolve_keys`
+ignores `default_key` entirely once a `config_key` exists, so the registry-side
+edit I originally planned would have been **inert** for `chat_prune` and revoked
+for `branch_ref` when M2 added its `config_key`. Caught by the plan gate, not by
+me.
+
+**`<M-i>` leads over `<M-S-CR>`, reversing the order the operator approved.**
+The `<C-g>?` help float renders only `keys[1]`, and most terminals cannot
+distinguish Shift+Enter from Enter — so leading with the mnemonic would
+advertise a chord that silently does nothing for most users. Portable key first.
+Flagged to the operator rather than done quietly.
+
+**Found while checking that: `<M-q>` is invisible in the help float.**
+`chat_drill_in` is `{ "<C-g>q", "<M-q>" }` and help shows only the first, so the
+binding the operator singled out as a shakedown talking point is undiscoverable.
+Same for `outline`'s `<M-t>`. Pre-existing; belongs to M2's help/reality
+criterion, which will render aliases rather than reorder more keys.
+
+**Three tests encoded the old chords** and now assert the full key **list** — an
+assertion reading `keys[1]` would have stayed green while an alias silently
+vanished, which is the shrink class PQ-1 named.

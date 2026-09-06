@@ -1070,6 +1070,16 @@ M.setup = function(opts)
 	end
 
 	-- Toggle server-side web_search tool per chat
+	-- Fold the 🔧:/📎: tool blocks in the current chat. Deliberately UNBOUND by
+	-- default (#214): a tool call's result is low-value reading for the user, so
+	-- folding it does not earn a key out of the shared <C-g> surface. It is a
+	-- command so it is still reachable without editing config — set
+	-- `chat_shortcut_toggle_tool_folds` to bind it.
+	M.cmd.ToggleToolFolds = function()
+		vim.wo.foldenable = not vim.wo.foldenable
+		M.logger.info("Tool folds " .. (vim.wo.foldenable and "enabled" or "disabled"))
+	end
+
 	M.cmd.ToggleWebSearch = function()
 		local agent = M._state.agent
 		local conf = M.agents[agent]
@@ -2323,9 +2333,7 @@ M.prep_chat = function(buf, file_name)
 				end,
 			},
 			chat_exchange_paste = M.cmd.ExchangePaste,
-			chat_toggle_tool_folds = function()
-				vim.wo.foldenable = not vim.wo.foldenable
-			end,
+			chat_toggle_tool_folds = M.cmd.ToggleToolFolds,
 			chat_drill_in = drill_in_cbs.chat_drill_in,
 			chat_accept_drill_in = drill_in_cbs.chat_accept_drill_in,
 			chat_reject_drill_in = drill_in_cbs.chat_reject_drill_in,

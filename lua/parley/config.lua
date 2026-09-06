@@ -332,8 +332,10 @@ local config = {
 	chat_shortcut_delete_tree = { modes = { "n" }, shortcut = "<C-g>D" },
 	chat_shortcut_stop = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>x" },
 	-- Toggle folds of 🔧:/📎: components within the exchange under cursor.
-	-- Intentionally unbound by default; configure chat_shortcut_toggle_tool_folds
-	-- to opt in.
+	-- Intentionally unbound by default (#214): a tool call's RESULT is low-value
+	-- reading, so folding it does not justify a key out of the shared <C-g>
+	-- surface. Reachable as `:ParleyToggleToolFolds` without configuring
+	-- anything; set chat_shortcut_toggle_tool_folds to bind it.
 	chat_shortcut_agent = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>a" },
 	chat_shortcut_system_prompt = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>P" },
 	chat_shortcut_follow_cursor = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>l" },

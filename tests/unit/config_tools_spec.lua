@@ -412,3 +412,29 @@ describe("get_agent with a stale selection", function()
         assert.is_not_nil(agent.model, "the fallback must be a real, usable agent")
     end)
 end)
+
+-- #214: tool folds stay UNBOUND but must be CALLABLE. The operator's reasoning:
+-- a tool call's result is low-value reading, so folding it does not justify a
+-- key out of the shared <C-g> surface — but "unbound" previously also meant
+-- "unreachable without editing config", which is a different thing.
+describe("tool folds: unbound but callable (#214)", function()
+    local parley = require("parley")
+
+    it("ships no default key", function()
+        parley.setup({})
+        assert.is_nil(parley.config.chat_shortcut_toggle_tool_folds)
+    end)
+
+    it("is reachable as a command with no configuration", function()
+        parley.setup({})
+        assert.are.equal(2, vim.fn.exists(":ParleyToggleToolFolds"),
+            "tool folds are unbound by design, so the command is the only way in")
+    end)
+
+    it("the keybinding callback and the command are the same function", function()
+        -- Not two implementations of one toggle: the registry callback IS the
+        -- command, so binding it cannot drift from calling it.
+        parley.setup({})
+        assert.is_function(parley.cmd.ToggleToolFolds)
+    end)
+end)
