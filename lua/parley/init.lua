@@ -2084,13 +2084,39 @@ end
 -- first write (the ParleySlug BufWritePost autocmd, which correctly skips an
 -- empty/`?` topic), and the parent's link keeps resolving because
 -- resolve_chat_path falls back to globbing the timestamp for any slug variant
--- (init.lua:2812-2816). Verified, not assumed.
+-- via resolve_chat_path's glob fallback. Verified, not assumed.
 local function branch_inserters(buf, abs_link)
 	local br = require("parley.branch_ref")
 
 	local function new_target()
 		local file = M.config.chat_dir .. "/" .. M.logger.now() .. ".md"
 		return file, (abs_link and vim.fn.fnamemodify(file, ":p") or vim.fn.fnamemodify(file, ":t"))
+	end
+
+	-- Every mode that creates a child MUST commit the reference in the same
+	-- action: the child is a durable artifact on disk, discoverable ONLY through
+	-- the in-buffer link, so a :q! or crash between the two orphans it (#214
+	-- BR-19 / I3-3). The enumeration is the dispatch table below — n, i, v — not
+	-- "the path I happened to be looking at".
+	--
+	-- Scoped to parley-owned CHAT buffers. `:write` commits the whole buffer, so
+	-- writing an arbitrary markdown document would persist the user's unrelated
+	-- pending edits, which they never asked for (I3-2). On a foreign buffer we
+	-- keep the pre-#214 behaviour instead: leave the line unsaved and stay put,
+	-- so nothing is written and nothing is navigated away from.
+	--- @return boolean committed  false when the caller must not navigate away
+	local function commit_reference()
+		if M._parley_bufs[buf] ~= "chat" then
+			return false
+		end
+		local ok = pcall(function()
+			vim.api.nvim_buf_call(buf, function() vim.cmd("write") end)
+		end)
+		if not ok then
+			M.logger.warning("Branch: could not save the parent; staying put so "
+				.. "the reference is not lost")
+		end
+		return ok
 	end
 
 	local function insert_plain()
@@ -2109,29 +2135,21 @@ local function branch_inserters(buf, abs_link)
 		-- The topic is "?", NOT "". `?` is the sentinel the rest of the lifecycle
 		-- keys off: auto-topic generation fires only on `headers.topic == "?"`
 		-- (chat_respond.lua:1934) and the slug rename waits for a real topic
-		-- rather than an empty one (init.lua:2652). Passing "" produced a child
+		-- rather than an empty one. Passing "" produced a child
 		-- that was never titled and never slugged — a permanently anonymous
 		-- <timestamp>.md whose parent ref line stayed `🌿: ….md: ` forever (#214
 		-- BR-1). Verified by reading the created header, not by assuming.
 		M.create_child_chat(new_chat_file, "?", buf, nil)
 		M.highlight_chat_branch_refs(buf)
 
-		-- Commit the parent BEFORE navigating. Three effects happen here — the
-		-- child is written to disk, the parent gains a ref line, focus moves —
-		-- and only the first was durable: a :q! or crash orphaned a child
-		-- discoverable solely through the link that was never saved. Under
-		-- `nohidden` the scheduled `edit` also raised a raw E37 and simply did
-		-- not switch windows (#214 BR-19). ChatPrune already writes the parent
-		-- before opening the child (init.lua:3617); same order here (ARCH-ORDER).
-		local ok_write = pcall(function()
-			vim.api.nvim_buf_call(buf, function() vim.cmd("write") end)
-		end)
-		if not ok_write then
-			M.logger.warning("Branch: could not save the parent; staying put so "
-				.. "the reference is not lost")
+		-- Commit before navigating. ChatPrune already writes the parent before
+		-- opening the child; same order here (ARCH-ORDER).
+		local committed = commit_reference()
+		M.logger.info("Created branch to new chat: " .. rel_path)
+		if not committed then
+			-- Nothing was written, so do not navigate away from the unsaved link.
 			return
 		end
-		M.logger.info("Created branch to new chat: " .. rel_path)
 		-- Focus the child: this is a submission redirected into a new branch, so
 		-- the question belongs there, not on the parent's ref line.
 		vim.schedule(function()
@@ -2161,6 +2179,10 @@ local function branch_inserters(buf, abs_link)
 		vim.api.nvim_buf_set_lines(buf, start_line - 1, start_line, false, { spliced })
 		M.create_child_chat(new_chat_file, topic, buf, topic .. "?")
 		M.highlight_chat_branch_refs(buf)
+		-- Same durability rule as insert_plain: the child is on disk and only the
+		-- in-buffer link points at it. Focus stays in the parent here, so Vim's
+		-- own unsaved-buffer guard also applies — but :q! would still orphan it.
+		commit_reference()
 		M.logger.debug("Created inline branch to new chat: " .. link .. " (" .. topic .. ")")
 	end
 

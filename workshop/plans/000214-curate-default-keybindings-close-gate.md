@@ -343,6 +343,12 @@ rounds:
           round: 2
       boundary: M1
       blocked: true
+    - "n": 3
+      timestamp: "2026-09-06T09:31:47-07:00"
+      agent: claude
+      boundary: M1
+      blocked: true
+      protocol_error: no valid findings block
 ---
 
 # Gate ledger — parley.nvim#214 (boundary-review)
@@ -522,6 +528,10 @@ later rounds disposed of them. Generated — edit the gate, not this file.
   Works only because every runner cd's to the repo root. Resolve against a path
   derived from the spec's own location.
 - **BR-26** [Minor] `pure-extraction-without-tests` branch_ref_spec has no case for a selection containing "](", which breaks the emitted markdown link
+
+## Round 3 — 2026-09-06T09:31:47-07:00 (claude) — BLOCKED
+
+**Protocol error:** no valid findings block — this round contributed no findings.
 
 ## Open findings
 

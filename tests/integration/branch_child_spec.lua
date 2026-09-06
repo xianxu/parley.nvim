@@ -96,3 +96,74 @@ describe("branch inserter call site (#214 BR-1)", function()
             .. "auto-titled and never slugged")
     end)
 end)
+
+-- #214 I3-2 / I3-3. Two rules, both stated by the reviewer as classes:
+--   1. Every mode that creates a child commits the reference in the SAME action.
+--      The enumeration is the dispatch table's keys, so this iterates it rather
+--      than naming a mode — BR-19 was fixed on insert_plain and left insert_inline
+--      leaking precisely because the fix named a path.
+--   2. The commit is scoped to parley CHAT buffers. `:write` commits the whole
+--      buffer, so writing an arbitrary markdown document would persist the
+--      user's unrelated pending edits.
+describe("branch commits its reference, in every mode (#214)", function()
+    local tmpdir, saved_dir
+
+    local function chat_buf()
+        local path = tmpdir .. "/2026-09-06.12-00-00.000_parent.md"
+        vim.fn.writefile({ "---", "topic: parent", "file: f", "---", "", "💬: q", "some prose" }, path)
+        vim.cmd("edit! " .. vim.fn.fnameescape(path))
+        local b = vim.api.nvim_get_current_buf()
+        parley._parley_bufs[b] = "chat"
+        return b
+    end
+
+    before_each(function()
+        parley.setup({})
+        tmpdir = vim.fn.tempname(); vim.fn.mkdir(tmpdir, "p")
+        saved_dir = parley.config.chat_dir
+        parley.config.chat_dir = tmpdir
+    end)
+
+    after_each(function()
+        parley.config.chat_dir = saved_dir
+        vim.fn.delete(tmpdir, "rf")
+    end)
+
+    it("leaves the parent saved after EVERY dispatch mode", function()
+        local inserters = parley._branch_inserters(chat_buf(), false)
+        local modes = {}
+        for mode in pairs(inserters) do modes[#modes + 1] = mode end
+        table.sort(modes)
+        assert.are.same({ "i", "n", "v" }, modes,
+            "the dispatch table changed; this test must cover every mode")
+
+        for _, mode in ipairs(modes) do
+            local b = chat_buf()
+            if mode == "v" then
+                vim.api.nvim_win_set_cursor(0, { 7, 0 })
+                vim.cmd("normal! v$")
+            end
+            parley._branch_inserters(b, false)[mode]()
+            assert.is_false(vim.bo[b].modified,
+                ("mode %q created a child but left the reference unsaved — a :q! "
+                    .. "orphans a file discoverable only through that link"):format(mode))
+        end
+    end)
+
+    it("does NOT write a foreign markdown buffer", function()
+        local path = tmpdir .. "/notes.md"
+        vim.fn.writefile({ "# Notes" }, path)
+        vim.cmd("edit! " .. vim.fn.fnameescape(path))
+        local b = vim.api.nvim_get_current_buf()
+        vim.api.nvim_buf_set_lines(b, -1, -1, false, { "UNSAVED USER EDIT" })
+        assert.is_true(vim.bo[b].modified)
+
+        parley._branch_inserters(b, true).n()
+
+        assert.is_true(vim.bo[b].modified,
+            "branching from an arbitrary document must not :write it — that "
+            .. "persists unrelated pending edits the user never asked to save")
+        local on_disk = table.concat(vim.fn.readfile(path), "\n")
+        assert.is_falsy(on_disk:find("UNSAVED USER EDIT", 1, true))
+    end)
+end)

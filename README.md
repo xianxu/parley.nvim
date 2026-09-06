@@ -169,8 +169,10 @@ outside every exchange (the frontmatter, for instance) are left alone.
 - `<C-g>l` toggle follow cursor
 - `<M-i>` (or `<M-S-CR>`, or `<C-g>i`) to fork the chat tree. With text
   selected it wraps the selection as an inline `[🌿:…](file)` link; with nothing
-  selected it inserts a standalone `🌿:` line. **Either way it creates the child
-  chat and opens it**, so the question is typed in the child.
+  selected it inserts a standalone `🌿:` line. Both create the child chat on
+  disk and save the parent so the link is never orphaned; the **standalone**
+  form also opens the child, so the question is typed there. The inline form
+  keeps you in the parent, where the surrounding prose is.
   `<M-S-CR>` is the mnemonic — shift as "same action, new destination" — but
   many terminals cannot distinguish Shift+Enter from Enter, so `<M-i>` is the
   portable spelling and the one the `<C-g>?` help shows.
