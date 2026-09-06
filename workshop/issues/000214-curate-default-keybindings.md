@@ -1,11 +1,12 @@
 ---
 id: 000214
-status: open
+status: working
 deps: [#212]
 github_issue:
 created: 2026-09-02
-updated: 2026-09-02
+updated: 2026-09-05
 estimate_hours:
+started: 2026-09-05T22:03:29-07:00
 ---
 
 # audit and curate the default keybinding surface
