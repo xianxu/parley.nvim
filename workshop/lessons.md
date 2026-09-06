@@ -1256,3 +1256,41 @@ And the recursive one: the arch guard I added to enforce rule 1 only fired when
 the backtick and the `match(` call shared a line — the same class of gap as the
 rule it enforced. **Plant a violation and watch the guard fail before trusting
 it.**
+
+## "Unify N implementations" is not "make N situations identical" (#214 M1, 2026-09-06)
+
+M1 was a small change that took **five review rounds**, and four of them found a
+defect introduced while fixing the previous round's finding. Two Criticals and a
+third near-Critical all traced to one over-general premise in my own plan:
+*"make all three branch paths one action."*
+
+I implemented that literally — identical behaviour everywhere — which produced,
+in order: writing the user's arbitrary markdown document to disk (persisting
+their unrelated pending edits), creating orphan child files whose only reference
+could never be committed, and finally an early-return that made the key look
+inert on markdown.
+
+The consolidation was right: four near-identical functions had genuinely
+drifted. The **uniformity** was wrong. The honest rule is narrower —
+*parley commits a reference only in a file it owns* — one code path, one explicit
+branch on ownership, different guarantees where the situation differs.
+
+**Rules.**
+
+1. **Consolidating implementations ≠ erasing situational differences.** When
+   collapsing N copies, list what genuinely differs between their callers and
+   make each difference an explicit, named parameter. Here that was one boolean
+   (`owns_file`) that took four rounds to discover because "one action" sounded
+   like a virtue.
+2. **When a fix goes into shared code, the scope is the set of callers — and
+   that set is enumerable, not a judgment call.** The reviewer's framing that
+   finally landed: the enumeration is `modes × buffer types`, six cells. I fixed
+   two, twice, while believing I had fixed the class. A test that iterates both
+   axes fails when a cell is added; a test that names a mode does not.
+3. **Make the invariant structural, not remembered.** Neither mode may call
+   `create_child_chat` directly now; both go through one gate. A rule a caller
+   can forget is not a rule.
+4. **A test that exercises the fix inside its own body proves nothing.** BR-21's
+   first tests ran the corrected `gsub` in the test itself — Lua's semantics, not
+   parley's code — and stayed green when the fix was reverted. Drive the real
+   entry point, then revert and watch it go red.

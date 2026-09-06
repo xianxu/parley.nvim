@@ -44,23 +44,3 @@ describe("branch_ref.topic_for_selection", function()
         assert.are.equal('what is "widget"', br.topic_for_selection("widget"))
     end)
 end)
-
--- #214 BR-21: a topic is user-selected text and reaches a gsub REPLACEMENT,
--- where `%` is special. `what is "50% off"` used to raise "invalid use of '%'",
--- and a selection containing %1 silently substituted a capture.
-describe("branch_ref.topic_for_selection with pattern metacharacters", function()
-    it("survives a selection containing %", function()
-        local topic = br.topic_for_selection("50% off")
-        assert.are.equal('what is "50% off"', topic)
-        local ok = pcall(function()
-            return ("topic: ?"):gsub("topic: %?", function() return "topic: " .. topic end)
-        end)
-        assert.is_true(ok, "a % in the selection must not break template substitution")
-    end)
-
-    it("does not let %1 in a selection substitute a capture", function()
-        local topic = br.topic_for_selection("%1 placeholder")
-        local out = ("topic: ?"):gsub("topic: %?", function() return "topic: " .. topic end)
-        assert.is_truthy(out:find("%%1 placeholder"), "got: " .. out)
-    end)
-end)

@@ -85,7 +85,7 @@ describe("branch inserter call site (#214 BR-1)", function()
     end)
 
     it("the no-selection path hands create_child_chat the ? sentinel", function()
-        parley._branch_inserters(buf, false).n()
+        parley._branch_inserters(buf, false, true).n()
         local created
         for _, f in ipairs(vim.fn.readdir(tmpdir)) do
             if f ~= vim.fn.fnamemodify(parent_path, ":t") then created = tmpdir .. "/" .. f end
@@ -134,7 +134,7 @@ describe("branch commits its reference, in every mode (#214)", function()
     end)
 
     it("leaves the parent saved after EVERY dispatch mode", function()
-        local inserters = parley._branch_inserters(chat_buf(), false)
+        local inserters = parley._branch_inserters(chat_buf(), false, true)
         local modes = {}
         for mode in pairs(inserters) do modes[#modes + 1] = mode end
         table.sort(modes)
@@ -147,7 +147,7 @@ describe("branch commits its reference, in every mode (#214)", function()
                 vim.api.nvim_win_set_cursor(0, { 7, 0 })
                 vim.cmd("normal! v$")
             end
-            parley._branch_inserters(b, false)[mode]()
+            parley._branch_inserters(b, false, true)[mode]()
             assert.is_false(vim.bo[b].modified,
                 ("mode %q created a child but left the reference unsaved — a :q! "
                     .. "orphans a file discoverable only through that link"):format(mode))
@@ -167,7 +167,7 @@ describe("branch commits its reference, in every mode (#214)", function()
         vim.api.nvim_win_set_cursor(0, { 1, 0 })
         local before = #vim.fn.readdir(tmpdir)
 
-        parley._branch_inserters(b, true).n()
+        parley._branch_inserters(b, true, false).n()
 
         assert.are.equal(before, #vim.fn.readdir(tmpdir),
             "no child may be created in a buffer parley cannot commit")
@@ -185,12 +185,121 @@ describe("branch commits its reference, in every mode (#214)", function()
         vim.api.nvim_buf_set_lines(b, -1, -1, false, { "UNSAVED USER EDIT" })
         assert.is_true(vim.bo[b].modified)
 
-        parley._branch_inserters(b, true).n()
+        parley._branch_inserters(b, true, false).n()
 
         assert.is_true(vim.bo[b].modified,
             "branching from an arbitrary document must not :write it — that "
             .. "persists unrelated pending edits the user never asked to save")
         local on_disk = table.concat(vim.fn.readfile(path), "\n")
         assert.is_falsy(on_disk:find("UNSAVED USER EDIT", 1, true))
+    end)
+end)
+
+-- #214 BR-28, third occurrence. The ownership rule was applied to insert_plain
+-- twice while insert_inline kept creating children on foreign markdown. The
+-- enumeration is modes x buffer types — six cells — so this iterates BOTH axes
+-- instead of naming a path.
+describe("no child is created in a buffer parley cannot commit (#214)", function()
+    local tmpdir, saved_dir
+
+    before_each(function()
+        parley.setup({})
+        tmpdir = vim.fn.tempname(); vim.fn.mkdir(tmpdir, "p")
+        saved_dir = parley.config.chat_dir
+        parley.config.chat_dir = tmpdir
+    end)
+    after_each(function()
+        parley.config.chat_dir = saved_dir
+        vim.fn.delete(tmpdir, "rf")
+    end)
+
+    it("every mode on a FOREIGN buffer creates no file and writes nothing", function()
+        for _, mode in ipairs({ "n", "i", "v" }) do
+            local path = tmpdir .. "/doc-" .. mode .. ".md"
+            vim.fn.writefile({ "# Doc", "some prose here" }, path)
+            vim.cmd("edit! " .. vim.fn.fnameescape(path))
+            local b = vim.api.nvim_get_current_buf()
+            local before = #vim.fn.readdir(tmpdir)
+            if mode == "v" then
+                vim.api.nvim_win_set_cursor(0, { 2, 0 })
+                vim.cmd("normal! v$")
+            end
+            parley._branch_inserters(b, true, false)[mode]()
+            assert.are.equal(before, #vim.fn.readdir(tmpdir),
+                ("mode %q created a child in a buffer parley cannot commit — an "
+                    .. "orphan reachable only through an unsaved line"):format(mode))
+        end
+    end)
+end)
+
+-- #214 BR-21. The first attempt at this ran the fixed gsub inside the test body,
+-- so it proved Lua's semantics rather than parley's code — reverting the fix
+-- left it green. This drives create_child_chat, the function that owns the
+-- substitution.
+describe("a selection with pattern metacharacters (#214 BR-21)", function()
+    local tmpdir, parent_buf
+
+    before_each(function()
+        parley.setup({})
+        tmpdir = vim.fn.tempname(); vim.fn.mkdir(tmpdir, "p")
+        local parent = tmpdir .. "/2026-09-06.13-00-00.000_p.md"
+        vim.fn.writefile({ "---", "topic: p", "file: f", "---", "", "💬: q" }, parent)
+        vim.cmd("edit! " .. vim.fn.fnameescape(parent))
+        parent_buf = vim.api.nvim_get_current_buf()
+    end)
+    after_each(function() vim.fn.delete(tmpdir, "rf") end)
+
+    local function topic_of(path)
+        for _, l in ipairs(vim.fn.readfile(path)) do
+            local t = l:match("^topic:%s*(.*)$")
+            if t then return t end
+        end
+    end
+
+    it("a topic containing % does not raise, and lands verbatim", function()
+        local child = tmpdir .. "/2026-09-06.13-01-00.000.md"
+        local topic = 'what is "50% off"'
+        assert.has_no.errors(function()
+            parley.create_child_chat(child, topic, parent_buf, topic .. "?")
+        end)
+        assert.are.equal(topic, topic_of(child))
+    end)
+
+    it("a topic containing %1 is not treated as a capture reference", function()
+        local child = tmpdir .. "/2026-09-06.13-02-00.000.md"
+        local topic = 'what is "%1 placeholder"'
+        parley.create_child_chat(child, topic, parent_buf, topic .. "?")
+        assert.are.equal(topic, topic_of(child))
+    end)
+end)
+
+-- #214 BR-10 / BR-17, measured as unpinned across three rounds.
+describe("residual M1 fixes, pinned (#214)", function()
+    before_each(function() parley.setup({}) end)
+
+    it("BR-10: a NON-chat parent gets an absolute back-link, not a bare basename", function()
+        local tmpdir = vim.fn.tempname(); vim.fn.mkdir(tmpdir, "p")
+        local parent = tmpdir .. "/plain-notes.md"     -- no parseable timestamp
+        vim.fn.writefile({ "# Notes" }, parent)
+        vim.cmd("edit! " .. vim.fn.fnameescape(parent))
+        local pb = vim.api.nvim_get_current_buf()
+        local child = tmpdir .. "/2026-09-06.14-00-00.000.md"
+        parley.create_child_chat(child, "?", pb, nil)
+        local body = table.concat(vim.fn.readfile(child), "\n")
+        assert.is_truthy(body:find(tmpdir, 1, true),
+            "a basename back-link is unresolvable for a parent that is not a "
+            .. "timestamped chat file; got: " .. body:sub(1, 200))
+        vim.fn.delete(tmpdir, "rf")
+    end)
+
+    it("BR-17: ToggleToolFolds refuses outside a parley buffer", function()
+        local b = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_set_current_buf(b)
+        parley._parley_bufs[b] = nil
+        local before = vim.wo.foldenable
+        parley.cmd.ToggleToolFolds()
+        assert.are.equal(before, vim.wo.foldenable,
+            "the command flipped folds in a window that is not a parley buffer")
+        vim.api.nvim_buf_delete(b, { force = true })
     end)
 end)

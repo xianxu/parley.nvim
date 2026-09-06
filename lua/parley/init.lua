@@ -2085,7 +2085,10 @@ end
 -- empty/`?` topic), and the parent's link keeps resolving because
 -- resolve_chat_path falls back to globbing the timestamp for any slug variant
 -- via resolve_chat_path's glob fallback. Verified, not assumed.
-local function branch_inserters(buf, abs_link)
+--- @param buf number
+--- @param abs_link boolean  inline links use an absolute path (markdown)
+--- @param owns_file boolean parley owns this file and may write it (chat)
+local function branch_inserters(buf, abs_link, owns_file)
 	local br = require("parley.branch_ref")
 
 	local function new_target()
@@ -2104,9 +2107,20 @@ local function branch_inserters(buf, abs_link)
 	-- pending edits, which they never asked for (I3-2). On a foreign buffer we
 	-- keep the pre-#214 behaviour instead: leave the line unsaved and stay put,
 	-- so nothing is written and nothing is navigated away from.
+	--- Create the child ONLY where the reference can be made durable. Both modes
+	--- call this; neither calls create_child_chat directly, because "apply the
+	--- rule to the path I am looking at" is what left insert_inline creating
+	--- orphans on markdown two rounds running (#214 BR-28).
+	--- @return boolean created
+	local function create_child_if_owned(file, topic, question)
+		if not owns_file then return false end
+		M.create_child_chat(file, topic, buf, question)
+		return true
+	end
+
 	--- @return boolean committed  false when the caller must not navigate away
 	local function commit_reference()
-		if M._parley_bufs[buf] ~= "chat" then
+		if not owns_file then
 			return false
 		end
 		local ok = pcall(function()
@@ -2134,7 +2148,6 @@ local function branch_inserters(buf, abs_link)
 	-- put the cursor on it, and let the user type the topic. The child is created
 	-- when the link is followed.
 	local function insert_plain()
-		local owns_file = M._parley_bufs[buf] == "chat"
 		local cursor_pos = vim.api.nvim_win_get_cursor(0)
 		-- The standalone ref line always uses the basename, in both buffer types:
 		-- format_ref_line writes `🌿: <name>: `, which resolve_chat_path looks up
@@ -2163,7 +2176,7 @@ local function branch_inserters(buf, abs_link)
 		-- Passing "" produced a child that was never titled and never slugged — a
 		-- permanently anonymous <timestamp>.md whose parent ref line stayed
 		-- `🌿: ….md: ` forever (BR-1). Verified by reading the created header.
-		M.create_child_chat(new_chat_file, "?", buf, nil)
+		create_child_if_owned(new_chat_file, "?", nil)
 		M.highlight_chat_branch_refs(buf)
 		if not commit_reference() then
 			-- Could not save: stay put rather than navigate away from the only
@@ -2196,7 +2209,7 @@ local function branch_inserters(buf, abs_link)
 		end
 		local topic = br.topic_for_selection(selected)
 		vim.api.nvim_buf_set_lines(buf, start_line - 1, start_line, false, { spliced })
-		M.create_child_chat(new_chat_file, topic, buf, topic .. "?")
+		create_child_if_owned(new_chat_file, topic, topic .. "?")
 		M.highlight_chat_branch_refs(buf)
 		-- Same durability rule as insert_plain: the child is on disk and only the
 		-- in-buffer link points at it. Focus stays in the parent here, so Vim's
@@ -2283,7 +2296,7 @@ M.prep_chat = function(buf, file_name)
 
 	-- Branch inserters: shared with markdown buffers (#214). Chat links its
 	-- sibling by basename.
-	local chat_branch = branch_inserters(buf, false)
+	local chat_branch = branch_inserters(buf, false, true)
 
 	-- Drill-in handlers (visual wrap + resolve) live at module scope and are
 	-- wired identically in markdown buffers — see `drill_in_callbacks` near
@@ -2549,7 +2562,7 @@ M.setup_markdown_keymaps = function(buf)
 	-- Branch inserters: shared with chat buffers (#214). Markdown links INLINE
 	-- by absolute path, since the file may live anywhere; the standalone ref
 	-- line uses the basename in both buffer types.
-	local md_branch = branch_inserters(buf, true)
+	local md_branch = branch_inserters(buf, true, false)
 
 	-- Drill-in handlers (visual wrap + resolve) — same in markdown and chat,
 	-- see `drill_in_callbacks` near the top of this file.

@@ -917,3 +917,200 @@ findings:
       "Created branch to new chat: <file>" before the committed check, announcing
       success on the path where nothing was committed and nothing opened.
 ```
+
+---
+
+## Re-review — 2026-09-06T10:18:15-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 214 — audit and curate the default keybinding surface |
+| repo | parley.nvim |
+| issue file | workshop/issues/000214-curate-default-keybindings.md |
+| boundary | milestone M1 |
+| milestone | M1 |
+| window | 54a5c7a2ecaa3faf268d867f5222e73bd6f1dafb..db2f33140e561f3adbc4a81567bf6b94b9fb1b98 |
+| command | sdlc milestone-close --issue 214 --milestone M1 |
+| reviewer | claude |
+| timestamp | 2026-09-06T10:18:15-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+Round 4's thesis — "stop patching, state the guarantee per buffer type" — is the right rule, and where it landed (the chat cells, the `n`/`i` markdown cell) it is well-implemented and pinned by a spec that iterates the dispatch table instead of naming a mode. But the rule was applied to two of the six `modes × buffer types` cells and skipped the third markdown cell: **`insert_inline` still calls `create_child_chat` on a foreign markdown buffer and then `commit_reference()` returns `false` without writing** (`init.lua:2199-2204`) — I reproduced it in a real buffer, and it leaves a child chat on disk whose only reference lives in an unsaved line. That is BR-28's exact shape, in the round that claims to have eliminated the class, and the atlas shipped this round (`atlas/chat/inline_branch_links.md:18`) now asserts the opposite as a contract. Separately, BR-20's rule ("a fix lands with its revert demonstrated") is still not adopted: I reverted four fixes in the working tree and the suite stayed green each time — BR-10, BR-11, BR-17 (the same three the last round measured) plus **BR-21, whose two new tests run the fixed `gsub` inside the test body rather than through `create_child_chat`**. Of 19 open findings, 3 are addressed and 16 are not.
+
+## 1. Strengths
+
+- **The guarantee block (`init.lua:2122-2135`) is the right abstraction and the chat cells honour it.** Stating ownership once, then branching on it, is the fix shape three earlier rounds were groping for.
+- **`tests/integration/branch_child_spec.lua:141-152` enumerates the dispatch table rather than naming modes**, and asserts it is exactly `{i,n,v}` so a new mode without coverage fails. That is the anti-drift shape; it just needs the second axis.
+- **BR-27 is genuinely pinned.** `branch_child_spec.lua:157-176` asserts the cursor lands on the new ref line for a foreign buffer; the early return that caused the Critical cannot come back silently.
+- **`atlas/ui/keybindings.md:33-46` is accurate.** I re-read `resolve_keys` (`keybinding_registry.lua:959-999`) against all six rows of the table — including the non-obvious "bare string → `default_key`" and "`shortcut = \"\"` → `default_key`" rows. Measured, not inferred, and it matches.
+- **BR-22 is fully closed.** `git ls-files | grep '^\.local'` is empty at HEAD; the four files were removed in `f617b96` and `.gitignore:49-53` carries the reason.
+- **Full suite green on re-run**: 60 integration/arch files + all unit files PASS. (First `make test` run had 3 failures — `chat_respond_spec`, `cliproxy_lifecycle_spec`, `cliproxy_login_spec` — all green in isolation and green on the second full run. Pre-existing parallel-run flakiness, not this diff; flagged in §5.)
+
+## 2. Critical
+
+**BR-28 (re-raised, disposed `not-addressed`) — `init.lua:2181-2205`. The markdown × visual cell creates a child on disk and never commits the reference.** I rate this Critical this round because the diff also ships the contract it violates.
+
+Measured, in a real foreign markdown buffer with an unrelated pending edit:
+
+```
+CHILDREN CREATED: { "2026-09-06.10-01-34.310.md" }
+PARENT MODIFIED (uncommitted link): true
+ON DISK HAS LINK: false
+CHILD BACKLINK: 🌿: /private/tmp/.../notes.md:
+```
+
+`atlas/chat/inline_branch_links.md:18` says "creates the child on disk | … | **no** — it would be an orphan reachable only through an unsaved line", and `:22` says "**Visual mode**: … creates the child". The document contradicts itself on the same page, and the code follows the bullet, not the table.
+
+Fix sketch — the class, not the cell: `commit_reference()` currently returns `false` for two different reasons ("not ours" and "write failed"), and only `insert_plain` distinguishes them. Give `insert_inline` the same `owns_file` branch: on a foreign buffer, splice the link, put the cursor after it, and create no child (the link is materialised by `open_branch_ref` when followed — exactly as the `n`/`i` path already relies on). Then extend `branch_child_spec`'s enumeration from `modes` to `modes × {chat, foreign}` with a per-cell expectation table, so the uncovered cell fails loudly rather than being discovered by a reviewer.
+
+## 3. Important
+
+**New — `init.lua:2110/2137`: ownership is re-derived from a mutable global at keypress instead of passed by the call site.** `branch_inserters(buf, abs_link)` takes the *link form* as a parameter but reads the *ownership* from `M._parley_bufs[buf]`, a map the highlighter maintains (`highlighter.lua:1063,1078,1138`). Both call sites already know the answer statically — `prep_chat` runs only for chat buffers, `setup_markdown_keymaps` only for markdown — so the one fact that decides three effects is the one fact not in the signature. Three consequences, all visible in this diff: `insert_inline` could skip the check without any signature saying it must not (it did); the spec has to poke private state (`parley._parley_bufs[buf] = "chat"`, `branch_child_spec.lua:77`) to reach the chat path, i.e. the test mocks the thing under test; and if the map is cleared (`BufUnload`, handle reuse) a real chat buffer silently degrades to foreign behaviour — no child, no write, no navigation — indistinguishable from a bug. Recommend `branch_inserters(buf, { abs_link = …, owns_file = … })`, both call sites passing literals. *(ARCH-ORDER, ARCH-MOCK.)*
+
+**Re-raised (see the findings block for full dispositions):**
+
+- **BR-20** — the rule is still not in force. Measured this round: reverting BR-10's `parent_ref` fallback leaves `branch_child_spec` 7/0/0; reverting BR-11 leaves `config_tools_spec` 26/0/0 and `keybindings_spec` 30/0/0; reverting BR-17 the same; reverting BR-21's function replacement leaves `branch_ref_spec` 9/0/0 and `branch_child_spec` 7/0/0. Four of four.
+- **BR-21** — `branch_ref_spec.lua:53-66` calls `("topic: ?"):gsub("topic: %?", function() … end)` *in the test body*. It asserts that the test's own code is correct. Nothing calls `create_child_chat` with a `%` topic. Move the assertion to `create_child_chat(child, br.topic_for_selection('50% off'), …)` and read the header back.
+- **BR-4** — `init.lua:2570-2577` still rebuilds `.i` around `md_branch.n`; the chat site passes the table through. The row the Plan checks says "so the pair cannot drift again"; half the pair still hand-wires.
+- **BR-2** — `branch_ref_spec.lua` exists, but `atlas/traceability.yaml`'s `chat/inline_branch_links` block still lists four files and three specs; `branch_ref.lua`, `branch_ref_spec.lua` and `branch_child_spec.lua` appear nowhere, so `make test-changed` routes edits to the new module to nothing.
+- **BR-23 / BR-31** — the instances were swept; neither rule shipped. No guard row asserts a doc names only keys in `resolve_keys(entry, config)`, and the new arch guard (`single_source_sweeps_spec.lua:378`) matches the literal `branch_prefix .. " " ..` idiom, which is why `chat_finder.lua:777`'s hand-built `"[" .. branch_prefix .. topic .. "](" .. rel_path .. ")"` is still invisible to it.
+- **BR-29 / BR-30** — the atlas table is false for visual mode (above), and `init.lua:2078-2087` still says "`abs_link` is the only real difference between the buffer types" and "the child is created **with an empty topic**" — both contradicted 40 and 80 lines below by code the same commit wrote. The `## Revisions` section now exists, but of BR-30's three named deltas it records one (`<M-S-CR>` ordering); Row 1's `global_shortcut_branch_ref` and Row 3's "empty topic" are still stated as shipped.
+
+## 4. Minor
+
+- **BR-32** — `init.lua:2113` still drops the write error (`local ok = pcall(…)`); the warning has no cause. The log-ordering half is fixed.
+- **BR-24** — `keybinding_registry.lua:478` and `config.lua:362` carry the same three-key list with nothing asserting they agree; M2's superset guard will compare against it.
+- **BR-25** — `keybindings_spec.lua:331` `dofile("lua/parley/config.lua")` is still CWD-relative.
+- **BR-26** — no `branch_ref_spec` case for a selection containing `](`, which is the one input that breaks the emitted link.
+- **BR-18** — `.i()` is now driven, but nothing drains the scheduled `startinsert!`/`edit`; a reported ordering failure still has no reproduction.
+- `init.lua:2147` and `:2167` call `M.highlight_chat_branch_refs(buf)` twice per keypress on the chat path (viewport-scoped and timer-debounced, so cheap — but the second call restarts the timer the first started).
+- The Spec's "`<M-*>` family for terminal portability" item is unassigned: M1 added two more alt chords, including insert-mode `<M-i>`, and neither M1 nor M2 owns that review.
+
+## 5. Test coverage notes
+
+Suite is green (second full `make test` run: all files PASS; lint clean). What is *not* covered is uniform and matches the findings: the `markdown × v` and `markdown × i` cells (the broken one is `markdown × v`); `create_child_chat` with a pattern-metacharacter topic; the `parse_filename == nil` back-link fallback; the scope guard on `:ParleyToggleToolFolds`; the registry-callback/command identity `config_tools_spec.lua:434` claims in its title. Every one of those is a fix that reverts clean.
+
+Separately: the **first** `make test` run failed 3 integration files (`chat_respond_spec:1978`, `cliproxy_lifecycle_spec`, `cliproxy_login_spec`), all of which pass in isolation and passed on the second full run. Not caused by this diff and not raised as a finding, but it means "suite green" is a one-in-two observation under `JOBS=8` — worth a `## Log` line so the close gate's evidence is honest about it.
+
+## 6. Architecture
+
+- **ARCH-DRY — flag.** BR-4 (markdown re-wraps `.i`), BR-31 (`chat_finder.lua:777` hand-builds the inline shape `splice_inline_link` owns), BR-24 (registry/config list duplicated). The `format_ref_line` consolidation itself is real and guarded — the remaining copies are the *inline* shape, which got no owner.
+- **ARCH-PURE — pass with a caveat.** `branch_ref.lua` is genuinely pure and now tested without IO. The caveat is that purity was used as a substitute for coverage of the call site: BR-21's test exercises the pure helper and a hand-written copy of the impure caller.
+- **ARCH-PURPOSE — flag.** "Extract one helper both buffer types call, so the pair cannot drift again" is checked; the pair drifted inside this milestone (the `v` cell), and one call site still re-implements. The findings the round disposed `addressed` were fixed at the site (`insert_plain`) with the enumerable sibling (`insert_inline`) left in the tree — the same instance-not-class pattern the last three rounds named.
+- **ARCH-MOCK — flag (minor).** `parley._parley_bufs[buf] = "chat"` in the spec is a stateless poke at private state that decides behaviour; with ownership as a parameter the fake disappears.
+- **ARCH-CONSTRAINTS — pass.** Keystroke path; one buffer `:write` and one viewport-scoped highlight pass (twice — see §4). Nothing unbounded.
+- **ARCH-SECURE — flag.** The `gsub` replacement fix is correct but unpinned (BR-21); `splice_inline_link` still emits user text into a markdown link without escaping `](` (BR-26). No credential exposure at HEAD; BR-22's runtime state is gone from the index.
+- **ARCH-ORDER — flag.** Two items: the `startinsert!`/`edit` schedule has no observable interleaving (BR-18), and ownership is carried in a mutable global read at event time rather than in the state the component was constructed with (§3, new finding). The second is what let one cell of the state space diverge from the other five.
+
+## 7. Plan revision recommendations
+
+- **M1 Row 1** still names `global_shortcut_branch_ref`; the shipped key is `chat_shortcut_branch_ref`. Add to `## Revisions`.
+- **M1 Row 3** still says "create immediately with an **empty** topic"; the code ships `"?"` and the reason is load-bearing (auto-title + slug). BR-30 named this; the Revisions section does not record it.
+- **M1 Row 2** is checked with the rationale "so the pair cannot drift again". Either narrow it to "one shared implementation; the markdown dispatch still wraps `.i`, and the `v` cell's buffer-type behaviour is M1-open", or leave it unchecked until BR-4 and BR-28 close.
+- **New row (M1 or M2):** the `<M-*>` terminal-portability review the Spec asks for is in no milestone.
+
+```findings
+dispose:
+  - id: BR-2
+    disposition: not-addressed
+    note: |
+      Spec landed; atlas/traceability.yaml still has no branch_ref.lua, branch_ref_spec or branch_child_spec, so make test-changed routes the new module nowhere.
+  - id: BR-4
+    disposition: not-addressed
+    note: |
+      Chat site now passes the table through; init.lua:2570-2577 still re-implements .i around md_branch.n.
+  - id: BR-10
+    disposition: not-addressed
+    note: |
+      Measured: reverting parent_ref to the plain basename leaves branch_child_spec 7/0/0; the only path reaching the fallback is the markdown-visual cell BR-28 says must not create a child.
+  - id: BR-11
+    disposition: not-addressed
+    note: |
+      Measured: restoring the inline closure leaves config_tools_spec 26/0/0 and keybindings_spec 30/0/0; the added assertion checks the registry entry exists, not the identity.
+  - id: BR-17
+    disposition: not-addressed
+    note: |
+      Measured: deleting the _parley_bufs guard from M.cmd.ToggleToolFolds leaves both specs green; no test enters it.
+  - id: BR-18
+    disposition: not-addressed
+    note: |
+      .i() is driven now, but nothing drains or orders the scheduled startinsert!/edit, so no interleaving is observable.
+  - id: BR-20
+    disposition: not-addressed
+    note: |
+      Measured prevalence this round is 4/4 - BR-10, BR-11, BR-17 and BR-21 all revert clean with the suite green; no Log line names a red test per finding id.
+  - id: BR-21
+    disposition: not-addressed
+    note: |
+      branch_ref_spec.lua:53-66 runs the fixed gsub inside the test body; reverting init.lua's function replacement leaves branch_ref_spec 9/0/0 and branch_child_spec 7/0/0.
+  - id: BR-22
+    disposition: addressed
+    note: |
+      Files removed in f617b96 and .gitignore carries .local/ with the cause; git ls-files shows none at HEAD.
+  - id: BR-23
+    disposition: not-addressed
+    note: |
+      lifecycle.md and format.md were swept, but the guard row the rule called for was not added to single_source_sweeps_spec.lua.
+  - id: BR-24
+    disposition: not-addressed
+    note: |
+      keybinding_registry.lua:478 and config.lua:362 still carry the same list with nothing asserting they agree.
+  - id: BR-25
+    disposition: not-addressed
+    note: |
+      keybindings_spec.lua:331 still dofiles a CWD-relative path.
+  - id: BR-26
+    disposition: not-addressed
+    note: |
+      No case for a selection containing "](" in branch_ref_spec.
+  - id: BR-27
+    disposition: addressed
+    note: |
+      Pinned by branch_child_spec.lua:157-176 (cursor on the new line); the scheduled startinsert! half is still unasserted, which is BR-18.
+  - id: BR-28
+    disposition: not-addressed
+    note: |
+      Reproduced at HEAD: on a foreign markdown buffer insert_inline (init.lua:2199-2204) creates the child and commit_reference returns false without writing - the rule was applied to n/i only.
+  - id: BR-29
+    disposition: not-addressed
+    note: |
+      inline_branch_links.md:18 ("creates the child: no") contradicts :22 ("Visual mode ... creates the child") and the code follows :22; init.lua:2078-2082 still claims abs_link is the only difference and the topic is empty.
+  - id: BR-30
+    disposition: not-addressed
+    note: |
+      Revisions section exists but records one of the three named deltas; Row 1's global_shortcut_branch_ref and Row 3's "empty topic" are still stated as shipped.
+  - id: BR-31
+    disposition: not-addressed
+    note: |
+      chat_finder.lua:777 still hand-builds the inline link; the new guard matches only the `branch_prefix .. " " ..` idiom, not the emitted shape.
+  - id: BR-32
+    disposition: not-addressed
+    note: |
+      Log ordering fixed; init.lua:2113 still discards the pcall error so a failed write reports no cause.
+findings:
+  - id: new
+    severity: Important
+    family: state-rederived-instead-of-passed
+    title: |
+      branch_inserters reads ownership from the global M._parley_bufs at keypress instead of taking it from the call site that already knows
+    detail: |
+      init.lua:2110 and :2137 derive owns_file from a map the highlighter maintains
+      (highlighter.lua:1063,1078,1138), while abs_link - the lesser fact - is a
+      parameter. Both call sites know statically: prep_chat runs only for chat
+      buffers, setup_markdown_keymaps only for markdown. Consequences measured in
+      this diff: insert_inline omits the check with no signature saying it must
+      not (that is BR-28); branch_child_spec.lua:77 must poke private state to
+      reach the chat path, so the test fakes the thing under test; and a cleared
+      entry (BufUnload, handle reuse) silently degrades a real chat buffer to
+      foreign behaviour - no child, no write, no navigation. Pass
+      { abs_link = ..., owns_file = ... } from both call sites, then the
+      guarantee table is enforced by the signature rather than by a comment.
+      ARCH-ORDER, ARCH-MOCK.
+```
