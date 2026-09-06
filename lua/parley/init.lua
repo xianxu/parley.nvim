@@ -1069,17 +1069,25 @@ M.setup = function(opts)
 		interview.toggle()
 	end
 
-	-- Toggle server-side web_search tool per chat
 	-- Fold the 🔧:/📎: tool blocks in the current chat. Deliberately UNBOUND by
 	-- default (#214): a tool call's result is low-value reading for the user, so
 	-- folding it does not earn a key out of the shared <C-g> surface. It is a
 	-- command so it is still reachable without editing config — set
 	-- `chat_shortcut_toggle_tool_folds` to bind it.
 	M.cmd.ToggleToolFolds = function()
+		-- Scoped: foldenable is window-local, so an unscoped toggle would flip
+		-- folds in whatever window happened to be current, including a source
+		-- file that has nothing to do with parley (#214 BR-17).
+		local buf = vim.api.nvim_get_current_buf()
+		if not M._parley_bufs[buf] then
+			M.logger.warning("Tool folds apply to parley chat buffers only")
+			return
+		end
 		vim.wo.foldenable = not vim.wo.foldenable
 		M.logger.info("Tool folds " .. (vim.wo.foldenable and "enabled" or "disabled"))
 	end
 
+	-- Toggle the server-side web_search tool for this chat.
 	M.cmd.ToggleWebSearch = function()
 		local agent = M._state.agent
 		local conf = M.agents[agent]
@@ -2054,7 +2062,8 @@ end
 
 -- Format a 🌿: branch reference line.
 local function format_branch_ref(rel_path, topic)
-	return get_branch_prefix() .. " " .. rel_path .. ": " .. (topic or "")
+	-- Delegates: branch_ref.format_ref_line is the one definition (#214 BR-5).
+	return require("parley.branch_ref").format_ref_line(get_branch_prefix(), rel_path, topic)
 end
 
 
@@ -2086,14 +2095,25 @@ local function branch_inserters(buf, abs_link)
 
 	local function insert_plain()
 		local cursor_pos = vim.api.nvim_win_get_cursor(0)
-		local new_chat_file, link = new_target()
+		-- The standalone ref line always uses the basename, in both buffer types:
+		-- format_ref_line writes `🌿: <name>: `, which resolve_chat_path looks up
+		-- across the chat roots. abs_link governs the INLINE link only.
+		local new_chat_file = (new_target())
 		local rel_path = vim.fn.fnamemodify(new_chat_file, ":t")
 		vim.api.nvim_buf_set_lines(buf, cursor_pos[1], cursor_pos[1], false, {
 			br.format_ref_line(get_branch_prefix(), rel_path, ""),
 		})
 		-- Create the child here too — the n/i path used to write a reference to a
 		-- file that did not exist until someone opened the link.
-		M.create_child_chat(new_chat_file, "", buf, nil)
+		--
+		-- The topic is "?", NOT "". `?` is the sentinel the rest of the lifecycle
+		-- keys off: auto-topic generation fires only on `headers.topic == "?"`
+		-- (chat_respond.lua:1934) and the slug rename waits for a real topic
+		-- rather than an empty one (init.lua:2652). Passing "" produced a child
+		-- that was never titled and never slugged — a permanently anonymous
+		-- <timestamp>.md whose parent ref line stayed `🌿: ….md: ` forever (#214
+		-- BR-1). Verified by reading the created header, not by assuming.
+		M.create_child_chat(new_chat_file, "?", buf, nil)
 		M.highlight_chat_branch_refs(buf)
 		M.logger.info("Created branch to new chat: " .. rel_path)
 		-- Focus the child: this is a submission redirected into a new branch, so
@@ -2103,7 +2123,6 @@ local function branch_inserters(buf, abs_link)
 			vim.cmd("normal! G")
 			vim.cmd("startinsert!")
 		end)
-		return link
 	end
 
 	local function insert_inline()
@@ -2135,6 +2154,12 @@ local function branch_inserters(buf, abs_link)
 		v = insert_inline,
 	}
 end
+
+-- Test seam (#214 BR-18): the inserters are buffer-local closures wired straight
+-- into the keymap dispatch, so a test could reach create_child_chat but not the
+-- CALL SITE that decides what topic it is handed — which is precisely where BR-1
+-- lived.
+M._branch_inserters = branch_inserters
 
 M.prep_chat = function(buf, file_name)
 	if M.not_chat(buf, file_name) then
@@ -2290,17 +2315,10 @@ M.prep_chat = function(buf, file_name)
 			resolve_ref_project = M.cmd.ResolveRefProject,
 			copy_fence = M.cmd.CopyCodeFence,
 			outline = M.cmd.Outline,
-			branch_ref = {
-				n = chat_branch.n,
-				i = function()
-					vim.cmd("stopinsert")
-					chat_branch.n()
-				end,
-				v = function()
-					vim.cmd("normal! " .. vim.api.nvim_replace_termcodes("<Esc>", true, false, true))
-					chat_branch.v()
-				end,
-			},
+			-- All three modes come from branch_inserters; the dispatch used to
+			-- re-implement i and v, which left `.i` dead and made the visual path
+			-- <Esc> twice (#214 BR-4).
+			branch_ref = chat_branch,
 			-- chat scope
 			chat_respond = respond_cb,
 			-- #161: <M-CR> — n/i reuse the respond closures; v/x <Esc>-commit the
@@ -2471,9 +2489,9 @@ M.setup_markdown_keymaps = function(buf)
 	local review_skill = require("parley.skills.review")
 	review_skill.setup_keymaps(buf)
 
-	-- Branch ref helpers (markdown-specific: uses format_branch_ref and absolute paths)
-	-- Branch inserters: shared with chat buffers (#214). Markdown links by
-	-- absolute path, since the file may live anywhere.
+	-- Branch inserters: shared with chat buffers (#214). Markdown links INLINE
+	-- by absolute path, since the file may live anywhere; the standalone ref
+	-- line uses the basename in both buffer types.
 	local md_branch = branch_inserters(buf, true)
 
 	-- Drill-in handlers (visual wrap + resolve) — same in markdown and chat,
@@ -4534,7 +4552,16 @@ M.create_child_chat = function(file_path, topic, parent_buf, question)
 		local parent_path = vim.api.nvim_buf_get_name(parent_buf)
 		local parent_rel = vim.fn.fnamemodify(parent_path, ":t")
 		local parent_topic = M.get_chat_topic(parent_path) or ""
-		local back_link = branch_prefix .. " " .. parent_rel .. ": " .. parent_topic
+		-- A basename only resolves for a CHAT parent: resolve_chat_path searches
+		-- the chat roots and then falls back to globbing a parseable timestamp.
+		-- Branching from an arbitrary markdown file (`notes.md`) produced a
+		-- back-link the child could never follow — pre-existing for the visual
+		-- path, and reachable from the primary branch key once the n/i path
+		-- started creating children too (#214 BR-10). Fall back to the absolute
+		-- path, which resolve_chat_path handles directly.
+		local parent_ref = chat_slug.parse_filename(parent_rel) and parent_rel
+			or vim.fn.fnamemodify(parent_path, ":p")
+		local back_link = branch_prefix .. " " .. parent_ref .. ": " .. parent_topic
 		table.insert(file_lines, header_end + 1, back_link)
 
 		if question then

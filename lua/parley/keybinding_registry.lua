@@ -471,10 +471,10 @@ M.entries = {
 	{
 		id = "branch_ref",
 		config_key = "chat_shortcut_branch_ref",
-		-- The config_key lands with the chord change, not after it (#214 PQ-1):
-		-- resolve_keys returns the config `shortcut` and ignores `default_key`
-		-- entirely once a config_key exists, so adding one later would silently
-		-- revoke whatever list default_key carried.
+		-- The config_key lands with the chord change, not after it (#214 PQ-1).
+		-- resolve_keys falls back to `default_key` unless config supplies a table
+		-- with a NON-EMPTY `shortcut` — but config.lua does supply one here, so
+		-- the shipped list must live there; a registry-side edit would be inert.
 		default_key = { "<M-i>", "<M-S-CR>", "<C-g>i" },
 		default_modes = { "n", "i", "v" },
 		scope = "parley_buffer",

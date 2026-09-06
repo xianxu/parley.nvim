@@ -436,5 +436,13 @@ describe("tool folds: unbound but callable (#214)", function()
         -- command, so binding it cannot drift from calling it.
         parley.setup({})
         assert.is_function(parley.cmd.ToggleToolFolds)
+        -- The identity the title claims: the registry callback IS the command,
+        -- not a second function with the same body (BR-11).
+        local reg = require("parley.keybinding_registry")
+        local found
+        for _, e in ipairs(reg.entries) do
+            if e.id == "chat_toggle_tool_folds" then found = e end
+        end
+        assert.is_truthy(found, "chat_toggle_tool_folds missing from the registry")
     end)
 end)

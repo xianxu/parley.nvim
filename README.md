@@ -153,10 +153,12 @@ Most-used defaults:
 - `<C-g>a` change agent
 - `<C-g>P` next system prompt
 - `<C-g>s` skill picker (review, voice-apply, etc.)
-- `<C-g>b` branch/prune - move the current exchange and following exchanges to
-  a child chat
+- `<M-p>` (or `<C-g>b`) branch/prune - move the current exchange and following
+  exchanges to a child chat
 
-Tool-fold toggling is configurable but unbound by default. To opt in, set
+Tool-fold toggling ships **unbound**: a tool call's result is low-value reading,
+so folding it does not earn a key out of the shared `<C-g>` surface. It is still
+reachable as `:ParleyToggleToolFolds`. To bind it, set
 `chat_shortcut_toggle_tool_folds = { modes = { "n" }, shortcut = "<leader>tf" }`.
 
 Parley manages folds inside a chat buffer: tool calls, tool results, summaries
@@ -165,7 +167,13 @@ an exchange — including the tail of the buffer after the last block — so a
 manual `zf` there is removed the next time that exchange is reconciled. Folds
 outside every exchange (the frontmatter, for instance) are left alone.
 - `<C-g>l` toggle follow cursor
-- `<C-g>i` to insert a fork in the chat tree, can be inline or standalone
+- `<M-i>` (or `<M-S-CR>`, or `<C-g>i`) to fork the chat tree. With text
+  selected it wraps the selection as an inline `[🌿:…](file)` link; with nothing
+  selected it inserts a standalone `🌿:` line. **Either way it creates the child
+  chat and opens it**, so the question is typed in the child.
+  `<M-S-CR>` is the mnemonic — shift as "same action, new destination" — but
+  many terminals cannot distinguish Shift+Enter from Enter, so `<M-i>` is the
+  portable spelling and the one the `<C-g>?` help shows.
 - `gf` smart go-to-file: on an ariadne artifact ref (`ariadne#11`, `#15 M4`, `pair#84`) resolves it and jumps (family picker when it resolves to many); on a plain path, Vim's native `gf`
 
 **Corresponding commands**

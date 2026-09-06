@@ -30,32 +30,39 @@ chat_finder / note_finder / issue_finder  — standalone (only their own keys sh
 Buffer context is auto-detected (`detect_buffer_context`): vision YAML, issue dir, note dir, repo marker (`.parley`), chat file, or other.
 
 ## Resolution
-Shortcuts come from the config override (`config_key`) **or** `default_key` —
-`resolve_keys` **replaces**, it does not merge or fall back
-(`keybinding_registry.lua:965`):
+`resolve_keys` (`keybinding_registry.lua`) picks ONE source — it never merges —
+but it falls back far more often than "config wins" suggests. Measured, not
+inferred:
 
-```lua
-if not entry.config_key then
-    return as_list(entry.default_key), entry.default_modes
-end
-```
+| config for the entry | resolves to |
+|---|---|
+| no `config_key` on the entry | `default_key` |
+| `config_key` set, key absent from config | `default_key` |
+| table without a `shortcut` field | `default_key` |
+| bare string (`k = "<Z>"`) | `default_key` |
+| `shortcut = ""` | `default_key` |
+| `shortcut = "<Z>"` or `{ … }` | **the config value** |
 
-Two consequences, both of which have bitten (#214):
+So **only a table with a non-empty `shortcut` replaces**. Two consequences that
+have bitten this repo (#214):
 
-- Editing `default_key` on an entry that HAS a `config_key` is **inert** — the
-  config value wins and the edit does nothing.
-- **Adding** a `config_key` to an entry silently **discards** whatever
-  `default_key` held. For a multi-key entry that deletes bindings: giving
-  `chat_drill_in` a single-string config default would drop `<M-q>`. An arch
-  guard asserts the shipped config resolves to a superset of `default_key`.
+- Editing `default_key` is inert **when config supplies a real shortcut** —
+  which is why `chat_prune`'s chord had to change in `config.lua`, not the
+  registry.
+- A config value that supplies a *single* key where `default_key` held a list
+  **shrinks** the binding set: giving `chat_drill_in` `shortcut = "<C-g>q"`
+  would drop `<M-q>`.
+- `shortcut = ""` does **not** disable a binding — it falls through to the
+  default. Today the only way to ship an entry disabled is `default_key = nil`
+  (how `chat_toggle_tool_folds` does it).
 
 Both `default_key` and a config `shortcut` accept a string or a **list**; the
 list is the alias mechanism (`chat_drill_in` = `{ "<C-g>q", "<M-q>" }`).
 
-Help reads live keymaps first; falls back to config/default. **It renders only
-`keys[1]`**, so an entry's aliases are invisible in `<C-g>?` — which is why the
-shipped order puts the portable key first (`branch_ref` leads with `<M-i>`, not
-the `<M-S-CR>` mnemonic that most terminals cannot distinguish from `<CR>`).
+Help reads live keymaps first, then config/default. **It renders only
+`keys[1]`**, so aliases are invisible in `<C-g>?` — which is why the shipped
+order puts the portable key first (`branch_ref` leads with `<M-i>`, not the
+`<M-S-CR>` mnemonic most terminals cannot distinguish from `<CR>`).
 
 ## Unbound but callable
 A binding may be deliberately keyless and still reachable. `chat_toggle_tool_folds`

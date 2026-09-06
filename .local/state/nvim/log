@@ -1,0 +1,4 @@
+ERR 2026-09-06T08:34:49.888 ?.29155    vim_mktempdir:3307: tempdir root not owned by current user (xianxu): /tmp/nvim.xianxu
+ERR 2026-09-06T08:34:49.888 ?.29155    vim_mktempdir:3313: tempdir root has invalid permissions (37777777776): /tmp/nvim.xianxu
+WRN 2026-09-06T08:34:49.889 ?.29155    vim_mktempdir:3325: tempdir create failed: operation not permitted: /tmp/nvim.XXXXXX
+WRN 2026-09-06T08:34:49.889 ?.29155    server_start:199: Failed to start server: operation not permitted: /Users/xianxu/workspace/parley.nvim/nvim.xianxu/zUHGkU/nvim.29155.0

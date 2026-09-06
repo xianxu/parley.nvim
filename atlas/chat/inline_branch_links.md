@@ -17,11 +17,12 @@ that had drifted (#214).
   parent's ref line. Before #214 this path created no file at all, so it wrote a
   reference to something that did not exist; that gap is what made the two
   invocations feel like different actions.
-- The no-selection child starts with an **empty topic**. It gains its slug on
+- The no-selection child starts with `topic: ?` — the sentinel the lifecycle
+  keys off. `?` (not `""`) is what makes auto-titling fire on first respond;
+  an empty topic left the child permanently anonymous (#214 BR-1). It gains its slug on
   first write (the `ParleySlug` `BufWritePost` autocmd, which skips an empty or
   `?` topic), and the parent's link keeps resolving because `resolve_chat_path`
-  falls back to globbing the timestamp for any slug variant
-  (`init.lua:2812-2816`).
+  falls back to globbing the timestamp for any slug variant.
 - Child gets a `🌿:` parent back-link.
 
 ## Parser

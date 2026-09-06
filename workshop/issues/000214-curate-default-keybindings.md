@@ -337,10 +337,19 @@ stated purpose is making bindings *more* configurable.
       shipped default carrying that entry's **full** existing key list.
       **Tighten the existing assertion** at `tests/unit/keybindings_spec.lua:217-229`
       rather than adding a second one beside it. Seen red.
-- [ ] **M2** — guard the shrink class: for every entry with a `config_key`, the
-      shipped config must resolve to a superset of the entry's `default_key`
-      list. Seen red by shipping a single-string default for `chat_drill_in`
-      (which would silently delete `<M-q>`).
+- [ ] **M2** — guard BOTH directions of the resolve seam. Measured behaviour
+      (`keybinding_registry.lua`, verified not inferred): only a table with a
+      **non-empty `shortcut`** replaces `default_key`; an absent key, a table
+      without `shortcut`, a bare string, and `shortcut = ""` **all fall back to
+      `default_key` in full**.
+      - *shrink* — a config value supplying one key where `default_key` held a
+        list silently drops the rest. Seen red by shipping a single-string
+        default for `chat_drill_in` (which would delete `<M-q>`).
+      - *disable* — **`shortcut = ""` does not disable a binding**, it falls
+        through to the default, so `branch_ref` is still not disableable and
+        Done-when's "rebindable **and** disableable" is unmet (#214 BR-9). Today
+        the only way to ship an entry off is `default_key = nil`. Decide the
+        semantics (empty string / empty list = disabled) and pin both directions.
 - [ ] **M2** — gate the spell typeahead: `nil ⇒ off` semantics **and**
       `typeahead = false` shipped. Strategy: `spell.attach` across `typeahead`
       nil / false / true, crossed with a partial `chat_spell = { enable = true }`

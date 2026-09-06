@@ -342,4 +342,26 @@ describe("branch/prune chords (#214 M1)", function()
     it("branch_ref has a config_key, so M2 cannot revoke these chords", function()
         assert.are.equal("chat_shortcut_branch_ref", entry("branch_ref").config_key)
     end)
+
+    -- BR-3: the tests above read parley.config, which is the MERGED table — so
+    -- they stayed green with the shipped default deleted, because resolve_keys
+    -- falls back to default_key. Assert the SHIPPED file carries the list.
+    it("config.lua itself ships both chord lists", function()
+        local shipped = dofile("lua/parley/config.lua")
+        assert.same({ "<M-i>", "<M-S-CR>", "<C-g>i" },
+            shipped.chat_shortcut_branch_ref.shortcut)
+        assert.same({ "<M-p>", "<C-g>b" }, shipped.chat_shortcut_prune.shortcut)
+    end)
+
+    -- BR-12: asserting only the ABSENCE of <M-S-CR> would pass with <C-g>i first.
+    it("the help float leads with the portable alt key specifically", function()
+        local lines = parley._keybinding_help_lines("chat")
+        local shown
+        for _, l in ipairs(lines) do
+            if l:find("branch", 1, true) or l:find("Insert branch", 1, true) then shown = l end
+        end
+        assert.is_truthy(shown, "branch_ref missing from the chat help")
+        assert.is_truthy(shown:find("<M-i>", 1, true),
+            "help must lead with <M-i>, got: " .. tostring(shown))
+    end)
 end)
