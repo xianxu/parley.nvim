@@ -19,6 +19,9 @@ every later exchange as code — the boundary was already tracked for
   be clean); `advance` runs after, matching the convention that
   `state_before[row]` is the state *entering* the row. Collapsing the two
   inverts the fence delimiter's own render.
+- **`code_block_memo(lines, patterns, tildes)`** is the shared buffer scan; it
+  tracks open/closed only, not fence WIDTH (that lives in the row state the
+  render path builds), and accepts `~~~` only when `tildes` is passed.
 - **`is_partition(line, patterns)`** is exported for consumers that keep their
   own lightweight fence walks — `outline` (two of them) and the review skill —
   so "what is a partition" has one definition, not four.
@@ -32,7 +35,7 @@ every later exchange as code — the boundary was already tracked for
 | | grammar | rule |
 |---|---|---|
 | **tool bodies** | `lua/parley/fence.lua` | no leading whitespace; closes only on an **exactly equal** run, so a body may contain shorter fences |
-| **prose (render)** | `highlight_structure` | CommonMark: up to 3 spaces of indent; closer must be **at least** as long as its opener |
+| **prose (render)** | `highlight_structure` | any leading whitespace (`^%s*`), looser than CommonMark's 3-space limit; closer must be **at least** as long as its opener |
 
 `fence.lua` is not the canonical prose grammar and adopting it would silently
 stop recognising indented fences.

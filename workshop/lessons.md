@@ -1213,3 +1213,46 @@ something *adjacent* to it.
    value production cannot, it is not a double. Correct it in the *shared*
    fixture — a per-test override that re-hand-rolls the contract reintroduces
    the bug next to its own fix.
+
+## A guard is only as good as the thing that proves it fires (#218, 2026-09-05)
+
+#218 took **two plan rounds and five close rounds**. The findings were not one
+mistake repeated — they were four distinct failure modes, and only the first was
+already in `lessons.md`.
+
+**1. An unswept class cannot be closed by inspection.** The fence tracker count
+went 1 → 2 → 4 → 5 → 7 across rounds, each time after I had said the sweep was
+complete. The reviewer *reproduced* the bug still live in a path I had just
+"fixed". What ended it was not looking harder: it was deleting the duplication
+(one `is_fence_delim`, one `code_block_memo`) and adding an arch test that fails
+when a new copy appears.
+→ **When a finding names a duplicated predicate, the deliverable is the
+deletion plus a guard, not an audit.**
+
+**2. A rewrite drops guarantees the original made incidentally.** Replacing a
+document-wide `gsub` with a line pass lost the blank lines it had emitted around
+its output, so code blocks began nesting inside `<p>`. Nothing said the old code
+guaranteed that; it just did. My tests asserted the text survived — the property
+I had set out to keep.
+→ **Before replacing an implementation, enumerate what it emits incidentally,
+not only what it is for.**
+
+**3. A perf refactor produces no behavioural red, so nothing pins it.** Swapping
+`is_partition` from the full classifier to four prefix matches (6.06ms → 0.84ms)
+passed identically before and after. Correct — and it meant the *equivalence*
+was unverified and free to be subtly wrong.
+→ **An optimisation needs an equivalence test, not a behaviour test.**
+
+**4. A green number from an instrument that did not run.** Three attempts at the
+mutation ledger reported all-zeros because zsh does not word-split an unquoted
+`$SPECS`, so every run passed seven paths as one filename. Zero was also the
+answer I wanted. The "sanity: nothing reverted → 0 red" control was useless
+because zero was the broken output too. Separately, a close review died on a 401
+and the gate recorded "0 findings, converging".
+→ **A control that cannot distinguish *passing* from *not running* is not a
+control. Make the sanity check assert a NON-zero expected value.**
+
+And the recursive one: the arch guard I added to enforce rule 1 only fired when
+the backtick and the `match(` call shared a line — the same class of gap as the
+rule it enforced. **Plant a violation and watch the guard fail before trusting
+it.**

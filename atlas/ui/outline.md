@@ -10,7 +10,12 @@
 ## Logic
 - Identifies: `💬:` (user questions), `#`/`##`/`###` (headings), `@@…@@` (annotations), `🌿:` (branch refs)
 - Headings indented by level: `#` → 2sp, `##` → 4sp, `###` → 6sp
-- Lines inside code blocks (``` / ~~~) are excluded
+- Lines inside code blocks (``` / ~~~) are excluded — but a `💬:`/`🤖:` turn
+  marker at column zero ENDS an open fence (#218), so an unmatched fence in one
+  answer no longer drops every later question from the outline. All three
+  outline scans share `highlight_structure.code_block_memo`; it must be given
+  patterns from the live config, or a custom `chat_user_prefix` silently loses
+  containment.
 - Document order (ascending line number)
 
 ## Tree-Aware Outline (Chat Files)

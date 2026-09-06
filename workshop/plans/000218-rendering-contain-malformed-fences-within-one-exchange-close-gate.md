@@ -389,6 +389,64 @@ rounds:
           family: injected-seam-bypassed
           round: 3
       blocked: true
+    - "n": 4
+      timestamp: "2026-09-05T14:34:22-07:00"
+      agent: claude
+      blocked: false
+      protocol_error: no valid findings block
+    - "n": 5
+      timestamp: "2026-09-05T20:08:41-07:00"
+      agent: claude
+      dispose:
+        - id: BR-8
+          disposition: not-addressed
+          note: highlighter.lua:148 `classified` and :192 `classification` both still call classify; measured 0.706 vs 0.587 ms per 60-line window with BR-9.
+          round: 5
+        - id: BR-9
+          disposition: not-addressed
+          note: walk table still allocated per line at highlighter.lua:155-159; still only in_code/code_fence_len/in_tool copied back at :162.
+          round: 5
+        - id: BR-10
+          disposition: not-addressed
+          note: 'atlas/ui/highlights.md:35 still reads "CommonMark: up to 3 spaces of indent"; is_fence_delim uses ^%s* (any run, tabs included).'
+          round: 5
+        - id: BR-13
+          disposition: not-addressed
+          note: atlas/ui/outline.md untouched in this window; :13 still states the pre-218 rule.
+          round: 5
+        - id: BR-16
+          disposition: not-addressed
+          note: 'Measured at HEAD: creative/concise/teacher/code_reviewer all render "...in your responses.Indent every fenced"; only default has a separating newline.'
+          round: 5
+        - id: BR-17
+          disposition: not-addressed
+          note: copy.lua:2 still claims "no parley module dependencies" while :15-16 requires two; atlas:35 still attributes the >= rule to a grammar code_block_memo does not implement.
+          round: 5
+        - id: BR-18
+          disposition: not-addressed
+          note: 'Re-measured: 22 of 146 lua modules and 28 of 195 specs unmapped; copy.lua and copy_fence_spec.lua among them.'
+          round: 5
+        - id: BR-20
+          disposition: addressed
+          note: Verified by revert — removing both `out[#out+1] = ""` at exporter.lua:379,385 turns pure_functions_spec red; traced byte-for-byte parity with the old gsub for leading, trailing and mid-document fences.
+          round: 5
+        - id: BR-21
+          disposition: addressed
+          note: Guard's agents arm is reachable and load-bearing — replacing config.lua:224's system_prompt with a convention-free literal turns the arch spec red; README.md:215-224 documents the unenforceable third arm.
+          round: 5
+        - id: BR-22
+          disposition: addressed
+          note: 'Re-measured independently per 5000-line buffer: 7.23 ms classify-based, 1.63 ms at HEAD, 0.72 ms for the toggles it replaced; equivalence pinned at highlight_structure_spec.lua:311-331.'
+          round: 5
+        - id: BR-23
+          disposition: not-addressed
+          note: 'Guard unchanged at single_source_sweeps_spec.lua:264-268; re-measured evasions in lua/: 0 predicates, 1 non-predicate (exporter.lua:375).'
+          round: 5
+        - id: BR-24
+          disposition: addressed
+          note: exporter.lua:364 now uses the injected `_parley` handle; exporter.setup is wired at init.lua:131 so production and the nil-handle test path are equivalent.
+          round: 5
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#218 (boundary-review)
@@ -610,6 +668,27 @@ later rounds disposed of them. Generated — edit the gate, not this file.
   _parley at :2 and uses it at :37, :693 and :750. Two ways into the same
   dependency in one module; the injected handle is the seam.
 
+## Round 4 — 2026-09-05T14:34:22-07:00 (claude) — passed
+
+**Protocol error:** no valid findings block — this round contributed no findings.
+
+## Round 5 — 2026-09-05T20:08:41-07:00 (claude) — passed
+
+### Disposed
+
+- BR-8 — not-addressed — highlighter.lua:148 `classified` and :192 `classification` both still call classify; measured 0.706 vs 0.587 ms per 60-line window with BR-9.
+- BR-9 — not-addressed — walk table still allocated per line at highlighter.lua:155-159; still only in_code/code_fence_len/in_tool copied back at :162.
+- BR-10 — not-addressed — atlas/ui/highlights.md:35 still reads "CommonMark: up to 3 spaces of indent"; is_fence_delim uses ^%s* (any run, tabs included).
+- BR-13 — not-addressed — atlas/ui/outline.md untouched in this window; :13 still states the pre-218 rule.
+- BR-16 — not-addressed — Measured at HEAD: creative/concise/teacher/code_reviewer all render "...in your responses.Indent every fenced"; only default has a separating newline.
+- BR-17 — not-addressed — copy.lua:2 still claims "no parley module dependencies" while :15-16 requires two; atlas:35 still attributes the >= rule to a grammar code_block_memo does not implement.
+- BR-18 — not-addressed — Re-measured: 22 of 146 lua modules and 28 of 195 specs unmapped; copy.lua and copy_fence_spec.lua among them.
+- BR-20 — addressed — Verified by revert — removing both `out[#out+1] = ""` at exporter.lua:379,385 turns pure_functions_spec red; traced byte-for-byte parity with the old gsub for leading, trailing and mid-document fences.
+- BR-21 — addressed — Guard's agents arm is reachable and load-bearing — replacing config.lua:224's system_prompt with a convention-free literal turns the arch spec red; README.md:215-224 documents the unenforceable third arm.
+- BR-22 — addressed — Re-measured independently per 5000-line buffer: 7.23 ms classify-based, 1.63 ms at HEAD, 0.72 ms for the toggles it replaced; equivalence pinned at highlight_structure_spec.lua:311-331.
+- BR-23 — not-addressed — Guard unchanged at single_source_sweeps_spec.lua:264-268; re-measured evasions in lua/: 0 predicates, 1 non-predicate (exporter.lua:375).
+- BR-24 — addressed — exporter.lua:364 now uses the injected `_parley` handle; exporter.setup is wired at init.lua:131 so production and the nil-handle test path are equivalent.
+
 ## Open findings
 
 - **BR-8** [Minor] `redundant-recompute-on-render-path` classify is called twice per line per redraw in compute_chat_highlights
@@ -619,8 +698,4 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-16** [Minor] `shared-fragment-missing-separator` The convention is concatenated onto a sentence-final period in four of five prompts
 - **BR-17** [Minor] `doc-overstates-implementation` copy.lua's header now contradicts the file, and the atlas grammar table overstates code_block_memo
 - **BR-18** [Minor] `traceability-unmapped` lua/parley/copy.lua changed in this window and is in no traceability code list
-- **BR-20** [Important] `rewrite-drops-incidental-guarantee` The BR-14 exporter rewrite drops the blank lines the old gsub guaranteed, so code blocks now nest inside <p>
-- **BR-21** [Important] `convention-not-derived-by-consumers` The convention guard enumerates config.system_prompts only, not config.agents system_prompt or user overrides
-- **BR-22** [Minor] `shared-helper-unmeasured-cost` code_block_memo costs about 20x the inline toggles it replaced and no perf run was recorded
 - **BR-23** [Minor] `single-source-bypassed` The fence-matcher arch guard only fires when the triple backtick and the match call share a line
-- **BR-24** [Minor] `injected-seam-bypassed` exporter.lua reaches for require("parley").config although the module already holds the injected _parley handle

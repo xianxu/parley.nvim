@@ -15,6 +15,20 @@ M.fence_indent_convention =
 	.. "column zero. Indenting your code keeps those unambiguous even when a code "
 	.. "sample or quoted transcript contains them.\n\n"
 
+--- Append the fence convention to a prompt, guaranteeing the blank-line
+--- separator. Concatenating the fragment directly glues it onto the previous
+--- sentence's period ("…in your responses.Indent every fenced…"), which is what
+--- four of five shipped prompts did (#218 BR-16). Callers cannot forget a
+--- separator they do not supply.
+--- @param prompt string
+--- @return string
+function M.with_fence_convention(prompt)
+    prompt = prompt or ""
+    if prompt:find(M.fence_indent_convention, 1, true) then return prompt end
+    local sep = prompt:match("\n\n$") and "" or (prompt:match("\n$") and "\n" or "\n\n")
+    return prompt .. sep .. M.fence_indent_convention
+end
+
 M.chat_system_prompt = "A conversation between You and Me. \n\n"
 	.. "We collaboratively seek knowledge, truth and learn together. \n\n"
 	.. "We are peers, we should be serious, transparent and critical in our discussion. \n\n"

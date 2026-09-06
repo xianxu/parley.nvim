@@ -1,12 +1,13 @@
 ---
 id: 000218
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-09-05
 updated: 2026-09-05
 estimate_hours: 1.86
 started: 2026-09-05T12:12:38-07:00
+actual_hours: 2.13
 ---
 
 # Rendering: contain malformed fences within one exchange
@@ -182,6 +183,7 @@ total: 1.86
 ## Log
 
 ### 2026-09-05
+- 2026-09-05: closed — make test: 195 spec files, MAKE_EXIT=0 verified against make status; luacheck lua tests clean. Round 4 review previously died on auth (401 token revoked) producing verdict unknown and zero findings — that was a tooling failure, not a clean review, and BR-20/BR-21 were demoted past the round cap as a side effect; re-running so the round-3 fixes actually get reviewed rather than closing on a cap technicality. Round 3 fixes in dd5cb4e, all mutation-verified: BR-20 the exporter rewrite had dropped the blank lines the old gsub emitted incidentally so code blocks nested inside paragraphs (175 of 256 fence delimiters in this repos transcripts follow a non-blank line) — restored, plus an assertion that the div is not inside an unclosed paragraph, which goes red when the blank lines are removed. BR-21 the convention guard covered one of two arms since agent_info.resolve falls back to agent.system_prompt; now enumerated from config across system_prompts AND agents, verified by stripping an agents convention, with the unenforceable third arm (user-merged prompts, chat header system_prompt:) documented in README. BR-22 code_block_memo cost ~20x the toggles it replaced; four anchored prefix matches, 6.06ms to 0.84ms per 5000-line buffer, and since a perf refactor yields no behavioural red the EQUIVALENCE is pinned by a property test against classify across the grammar. BR-24 exporter uses its injected _parley handle. Earlier rounds: five then seven fence trackers swept behind one is_fence_delim and one code_block_memo, an arch rule in single_source_sweeps_spec so a new hand-rolled matcher fails, is_partition asserts on nil patterns making BR-2s silent no-op unrepresentable, and the mutation ledger is generated from the diff (config 1 red, copy 2, defaults 8, exporter 2, highlight_structure 82, outline 3, review 3). One suite run failed on helper.prepare_dirs check-then-act mkdir racing concurrent specs — not this diff, filed as #219. NOT verified live against a provider: the indentation convention is a model-compliance improvement measurable only once real answers arrive in the new format; it fails safe to the tested unindented path.; review verdict: FIX-THEN-SHIP
 
 Filed from #217 gap 10. Operator proposed the hard-partition rule and correctly
 predicted the render path was ignoring the boundary the structure already

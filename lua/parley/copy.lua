@@ -1,5 +1,6 @@
 -- Copy commands: code fences, file locations, and context to clipboard.
--- Pure utility module — no parley module dependencies.
+-- Depends on parley.highlight_structure for the shared fence predicate and the
+-- turn-partition bound (#218); it was dependency-free before that.
 
 local M = {}
 

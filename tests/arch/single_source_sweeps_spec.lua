@@ -263,18 +263,25 @@ describe("arch: single-source sweeps stay swept", function()
         for _, path in ipairs(repo_files("git ls-files 'lua/**/*.lua'")) do
             if not OWNERS[path] then
                 local text = read(path)
+                -- MATCHING a fence is the invariant; EMITTING one is fine and
+                -- common (log_emit, render_buffer and the review journal all
+                -- write fences, and defaults.lua describes them in prose). So
+                -- flag a triple backtick only where it is a pattern argument.
+                --
+                -- Scanned over a comment-stripped WINDOW, not line-by-line: the
+                -- first version required the backtick and the match call to
+                -- share a line, so wrapping the pattern onto its own line
+                -- silently escaped the guard (BR-23).
+                local scrubbed = text:gsub("\n%s*%-%-[^\n]*", "\n")
                 local n = 0
-                for line in text:gmatch("[^\n]+") do
-                    -- MATCHING a fence is the invariant; EMITTING one is fine and
-                    -- common (log_emit, render_buffer and the review journal all
-                    -- write fences, and defaults.lua describes them in prose).
-                    -- So only flag a triple backtick inside a pattern argument.
-                    local is_comment = line:match("^%s*%-%-") ~= nil
-                    local matches = line:find("[:%.]g?match%(") or line:find("[:%.]gsub%(")
-                        or line:find("[:%.]find%(")
-                    if not is_comment and matches and line:find("```", 1, true) then
-                        n = n + 1
-                    end
+                for call in scrubbed:gmatch("[:%.]g?match%b()") do
+                    if call:find("```", 1, true) then n = n + 1 end
+                end
+                for call in scrubbed:gmatch("[:%.]gsub%b()") do
+                    if call:find("```", 1, true) then n = n + 1 end
+                end
+                for call in scrubbed:gmatch("[:%.]find%b()") do
+                    if call:find("```", 1, true) then n = n + 1 end
                 end
                 local allowed = ALLOWANCES[path] or 0
                 if n > allowed then
