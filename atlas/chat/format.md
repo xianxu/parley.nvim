@@ -13,5 +13,5 @@ Front matter (`---`/`---`) with `topic`, `file` (required) and optional override
 
 ## Branch Links
 - First `🌿:` after header = parent back-link; later ones = child forward-links
-- `<C-g>i` inserts link; `<C-g>o` navigates
+- `<M-i>` (legacy `<C-g>i`) inserts link; `<C-g>o` navigates
 - Inline variant: `[🌿:text](file.md)` — see `inline_branch_links.md`

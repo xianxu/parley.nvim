@@ -9,7 +9,7 @@ When a chat's `topic:` header changes, the file is auto-renamed to include a slu
 ## Move (`:ParleyChatMove`)
 Moves entire chat tree (root + descendants) to another chat root; rewrites all `🌿:` references.
 
-## Branching / Pruning (`<C-g>b`)
+## Branching / Pruning (`<M-p>`, legacy `<C-g>b`)
 Splits current exchange + following into a new child chat with `🌿:` links. Async LLM topic generation.
 
 The tool-fold toggle remains configurable as

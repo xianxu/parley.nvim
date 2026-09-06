@@ -722,7 +722,7 @@ M.render_chat_branch_line = function(line, base_dir)
     local display_topic = (topic and topic ~= "") and topic or parsed.topic
 
     local branch_prefix = _parley.config.chat_branch_prefix or "🌿:"
-    local new_line = branch_prefix .. " " .. parsed.path .. ": " .. display_topic .. warning
+    local new_line = require("parley.branch_ref").format_ref_line(branch_prefix, parsed.path, display_topic) .. warning
     if new_line == line then return line end
     return new_line
 end

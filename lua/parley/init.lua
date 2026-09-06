@@ -2115,6 +2115,22 @@ local function branch_inserters(buf, abs_link)
 		-- BR-1). Verified by reading the created header, not by assuming.
 		M.create_child_chat(new_chat_file, "?", buf, nil)
 		M.highlight_chat_branch_refs(buf)
+
+		-- Commit the parent BEFORE navigating. Three effects happen here — the
+		-- child is written to disk, the parent gains a ref line, focus moves —
+		-- and only the first was durable: a :q! or crash orphaned a child
+		-- discoverable solely through the link that was never saved. Under
+		-- `nohidden` the scheduled `edit` also raised a raw E37 and simply did
+		-- not switch windows (#214 BR-19). ChatPrune already writes the parent
+		-- before opening the child (init.lua:3617); same order here (ARCH-ORDER).
+		local ok_write = pcall(function()
+			vim.api.nvim_buf_call(buf, function() vim.cmd("write") end)
+		end)
+		if not ok_write then
+			M.logger.warning("Branch: could not save the parent; staying put so "
+				.. "the reference is not lost")
+			return
+		end
 		M.logger.info("Created branch to new chat: " .. rel_path)
 		-- Focus the child: this is a submission redirected into a new branch, so
 		-- the question belongs there, not on the parent's ref line.
@@ -3063,7 +3079,7 @@ M.move_chat_tree = function(file_name, target_dir)
 						for old_abs, new_abs in pairs(path_map) do
 							if ref_abs == old_abs or resolve_chat_path(ref_path, current_root) == old_abs then
 								local new_rel = vim.fn.fnamemodify(new_abs, ":t")
-								lines[i] = branch_prefix .. " " .. new_rel .. ": " .. (topic or "")
+								lines[i] = require("parley.branch_ref").format_ref_line(branch_prefix, new_rel, topic)
 								changed = true
 								break
 							end
@@ -3597,7 +3613,7 @@ M.cmd.ChatPrune = function()
 	-- Insert parent back-link as first transcript line
 	local parent_rel = vim.fn.fnamemodify(file_name, ":t")
 	local parent_topic = M.get_chat_topic(file_name) or ""
-	table.insert(child_lines, branch_prefix .. " " .. parent_rel .. ": " .. parent_topic)
+	table.insert(child_lines, require("parley.branch_ref").format_ref_line(branch_prefix, parent_rel, parent_topic))
 	table.insert(child_lines, "")
 
 	-- Append the pruned exchanges
@@ -3610,7 +3626,7 @@ M.cmd.ChatPrune = function()
 	vim.fn.writefile(child_lines, new_file)
 
 	-- Replace pruned lines in parent with a branch reference + fresh question starter
-	local branch_line = branch_prefix .. " " .. rel_child .. ": "
+	local branch_line = require("parley.branch_ref").format_ref_line(branch_prefix, rel_child, "")
 	local user_prefix = M.config.chat_user_prefix
 	vim.api.nvim_buf_set_lines(buf, prune_start - 1, prune_end, false, { "", branch_line, "", user_prefix, "", "" })
 
@@ -3668,7 +3684,7 @@ M.cmd.ChatPrune = function()
 				local parent_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
 				for i, line in ipairs(parent_lines) do
 					if line:match("^" .. vim.pesc(branch_prefix)) and line:find(rel_child, 1, true) then
-						local updated = branch_prefix .. " " .. rel_child .. ": " .. topic
+						local updated = require("parley.branch_ref").format_ref_line(branch_prefix, rel_child, topic)
 						vim.api.nvim_buf_set_lines(buf, i - 1, i, false, { updated })
 						vim.cmd("write")
 						break
@@ -4542,7 +4558,11 @@ M.create_child_chat = function(file_path, topic, parent_buf, question)
 	local agent = M.get_agent()
 	M.helpers.prepare_dir(vim.fn.fnamemodify(file_path, ":h"))
 	local template = M.get_default_template(agent, file_path)
-	template = template:gsub("topic: %?", "topic: " .. topic)
+	-- Function replacement, not string concat: a topic is user-selected text, and
+	-- gsub treats `%` in a REPLACEMENT specially — `what is "50% off"` raises
+	-- "invalid use of '%'", and a topic containing %1 silently substitutes a
+	-- capture (#214 BR-21, ARCH-SECURE).
+	template = template:gsub("topic: %?", function() return "topic: " .. topic end)
 	local file_lines = vim.split(template, "\n")
 
 	local chat_parser = require("parley.chat_parser")
@@ -4561,7 +4581,7 @@ M.create_child_chat = function(file_path, topic, parent_buf, question)
 		-- path, which resolve_chat_path handles directly.
 		local parent_ref = chat_slug.parse_filename(parent_rel) and parent_rel
 			or vim.fn.fnamemodify(parent_path, ":p")
-		local back_link = branch_prefix .. " " .. parent_ref .. ": " .. parent_topic
+		local back_link = require("parley.branch_ref").format_ref_line(branch_prefix, parent_ref, parent_topic)
 		table.insert(file_lines, header_end + 1, back_link)
 
 		if question then

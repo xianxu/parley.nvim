@@ -762,7 +762,7 @@ M.open = function(_)
 								_parley._chat_finder.insert_line - 1,
 								_parley._chat_finder.insert_line - 1,
 								false,
-								{ branch_prefix .. " " .. rel_path .. ": " .. topic }
+								{ require("parley.branch_ref").format_ref_line(branch_prefix, rel_path, topic) }
 							)
 						else
 							-- Handle insert mode insertion (inline branch link)

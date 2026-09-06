@@ -373,3 +373,25 @@ describe("arch: single-source sweeps stay swept", function()
         end
     end)
 end)
+
+-- #214 BR-5: the branch-ref line format was hand-inlined in SEVEN places across
+-- init.lua, chat_finder.lua and highlighter.lua. Consolidating the two obvious
+-- ones left five, and the review had to find them twice. One owner, and a guard
+-- so the next inline copy fails instead of being caught by a reviewer.
+describe("arch: the branch-ref line has one formatter (#214)", function()
+    it("no module hand-builds a 🌿: line", function()
+        local offenders = {}
+        for _, path in ipairs(repo_files("git ls-files 'lua/**/*.lua'")) do
+            if path ~= "lua/parley/branch_ref.lua" then
+                for _, line in ipairs(vim.split(read(path), "\n")) do
+                    if not line:match("^%s*%-%-")
+                        and line:find('branch_prefix .. " " ..', 1, true) then
+                        offenders[#offenders + 1] = path .. ": " .. vim.trim(line)
+                    end
+                end
+            end
+        end
+        assert.are.same({}, offenders,
+            "hand-built branch-ref line; use branch_ref.format_ref_line (#214)")
+    end)
+end)
