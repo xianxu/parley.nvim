@@ -712,8 +712,14 @@ local function write_html_file(info, export_dir, link_map)
 
 	-- Replace branch placeholders (they may be wrapped in <p> tags)
 	for key, replacement in pairs(placeholders) do
-		body_html = body_html:gsub("<p[^>]*>%s*" .. key .. "%s*</p>", replacement)
-		body_html = body_html:gsub(key, replacement)
+		-- Function replacements: these carry chat topics, which are user text,
+		-- and a `%` in a gsub replacement corrupts silently under LuaJIT
+		-- (#214 BR-34).
+		local function repl() return replacement end
+		-- gsub-safe: `repl` is a function replacement (#214 BR-34)
+		body_html = body_html:gsub("<p[^>]*>%s*" .. key .. "%s*</p>", repl)
+		-- gsub-safe: same function replacement
+		body_html = body_html:gsub(key, repl)
 	end
 
 	local html_template = [[

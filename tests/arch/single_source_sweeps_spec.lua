@@ -395,3 +395,40 @@ describe("arch: the branch-ref line has one formatter (#214)", function()
             "hand-built branch-ref line; use branch_ref.format_ref_line (#214)")
     end)
 end)
+
+-- #214 BR-21 / BR-34: a runtime string as gsub's SECOND argument is a silent
+-- corruption bug under LuaJIT, which — unlike standard Lua — does not raise.
+-- Measured in this repo's nvim: "50% off" -> "50 off", "%1 x" -> the pattern
+-- itself, "100%" -> a NUL byte written into the file. Found twice, so it gets a
+-- guard rather than a third review round.
+describe("arch: no runtime string is a gsub replacement (#214)", function()
+    it("gsub/sub replacements are literals, functions, or explicitly escaped", function()
+        -- A bare identifier as gsub's replacement argument. Literals and inline
+        -- `function` replacements are fine. Anything else must carry an explicit
+        -- `-- gsub-safe: <why>` on the line or the one above — an annotation,
+        -- not a guess from the variable's NAME, so the exception is greppable
+        -- and reviewable instead of inferred.
+        -- gsub ONLY: string.sub takes numeric indices, not a replacement, so
+        -- matching :sub( floods this with false positives.
+        local pat = ":gsub%b()"
+        local offenders = {}
+        for _, path in ipairs(repo_files("git ls-files 'lua/**/*.lua'")) do
+            local lines = vim.split(read(path), "\n")
+            for n, line in ipairs(lines) do
+                if not line:match("^%s*%-%-") then
+                    for call in line:gmatch(pat) do
+                        local second = call:match("^:gsub%(.-,%s*([%a_][%w_%.%[%]]*)%s*%)$")
+                        local annotated = line:find("gsub%-safe")
+                            or (lines[n - 1] or ""):find("gsub%-safe")
+                        if second and not second:match("^function") and not annotated then
+                            offenders[#offenders + 1] = ("%s:%d  %s"):format(path, n, second)
+                        end
+                    end
+                end
+            end
+        end
+        assert.are.same({}, offenders,
+            "runtime string used as a gsub replacement — use a function "
+            .. "replacement, or escape %% first (#214 BR-34)")
+    end)
+end)

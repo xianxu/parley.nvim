@@ -660,6 +660,7 @@ M._normalize_account = function(tokens, provider)
     account.account_id = account.account_id or M._make_account_id(account, account.provider)
     account.invalid = account.invalid == true
     if not account.label then
+        -- gsub-safe: string.upper is a function replacement, not a string
         local provider_label = account.provider:gsub("^%l", string.upper)
         account.label = provider_label .. " Account " .. account.account_id:sub(-6)
     end

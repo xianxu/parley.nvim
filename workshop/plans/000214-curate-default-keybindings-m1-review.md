@@ -1114,3 +1114,218 @@ findings:
       guarantee table is enforced by the signature rather than by a comment.
       ARCH-ORDER, ARCH-MOCK.
 ```
+
+---
+
+## Re-review — 2026-09-07T13:47:38-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 214 — audit and curate the default keybinding surface |
+| repo | parley.nvim |
+| issue file | workshop/issues/000214-curate-default-keybindings.md |
+| boundary | milestone M1 |
+| milestone | M1 |
+| window | 54a5c7a2ecaa3faf268d867f5222e73bd6f1dafb..d1f6aec3feb3cecb37e842241d270d375284911e |
+| command | sdlc milestone-close --issue 214 --milestone M1 |
+| reviewer | claude |
+| timestamp | 2026-09-07T13:47:38-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+Round 6 is the first round where the milestone's *behaviour* holds up under mutation: I reverted each of round 5's four behavioural fixes one at a time in a clean clone and all four went red (BR-10 → 11/1, BR-17 → 11/1, BR-21 → 10/2, BR-28 → 11/1), and `make test` is green at HEAD (exit 0, full unit+integration+arch fan-out). The six-cell `modes × buffer types` spec is a real oracle, not theatre. What blocks SHIP is not the branch code: it is that the *classes* three rounds have now named are still unswept. BR-21 was fixed at `create_child_chat` while four enumerable siblings put user text into a `gsub` **replacement** — and one of them, `init.lua:3936`, is the child-creation path M1's own markdown decision ("the child is created when the link is followed") routes every markdown branch to; I measured the runtime behaviour in this nvim's LuaJIT and it does not raise, it silently corrupts (`50% off` → `50 off`, `%1 x` → `{{topic}} x`, a trailing `%` writes a NUL byte). Alongside that: BR-11's fix reverts clean for the fourth consecutive round, BR-23's and BR-31's rule-guards still do not exist, and the `## Revisions` section the close gate's plan-unchecked guard reads still omits two of BR-30's three named deltas.
+
+## 1. Strengths
+
+- **`create_child_if_owned` (`lua/parley/init.lua:2115-2120`) makes the invariant structural.** Neither mode can call `create_child_chat` directly any more. I verified it is load-bearing: restoring the direct call in `insert_inline` turns `branch_child_spec` red.
+- **The six-cell spec iterates both axes** (`tests/integration/branch_child_spec.lua:200-231`) and asserts the dispatch table's key set (`:137-141`), so adding a mode or a buffer type without coverage fails rather than passes silently.
+- **BR-21's tests were moved onto the real entry point.** `branch_child_spec.lua:236-274` drives `create_child_chat`; reverting the function replacement fails 2. The previous version of these tests ran the fixed `gsub` in the test body — that trap is closed.
+- **`atlas/ui/keybindings.md:33-46` is measured, not inferred.** The resolution table matches `resolve_keys` cell for cell, including the three fall-through shapes, and it is the artifact M2 will build its superset guard against.
+- **`workshop/lessons.md:1259-1296`** is an honest post-mortem — "consolidating implementations ≠ erasing situational differences" is the rule that actually explains all three Criticals.
+
+## 2. Critical findings
+
+None.
+
+## 3. Important findings
+
+**I6-1 — the `%`-in-replacement class was fixed at one site; four siblings remain, one of them on the path M1 chose for markdown.**
+*This is the 2nd finding in family `user-text-unescaped-in-lua-pattern`.* Do NOT fix the instance — state the rule and sweep the enumeration in this round.
+
+Rule: **a runtime string may never be the second argument to `gsub`/`sub` — use a function replacement, or `%`-escape.** The enumeration is `grep -n ':gsub(' lua/parley/*.lua` filtered to calls whose replacement is not a string literal. Surviving sites at HEAD:
+
+| site | replacement | reachable from |
+|---|---|---|
+| `init.lua:3936` | `topic` (user text) | `<C-g>o` on a `🌿:` line whose child does not exist — **the markdown branch path M1 shipped** |
+| `init.lua:4079` | `topic` | `@@ref:` chat creation |
+| `init.lua:4241` | `topic` | same, second copy |
+| `init.lua:3272` | `initial_question` | `M.cmd.ChatReview` (embeds a file path) |
+
+Measured in this repo's runtime, not assumed — LuaJIT does **not** raise:
+```
+rep="50% off"        -> "50 off"          (character silently dropped)
+rep="%1 placeholder" -> "{{topic}} …"     (capture substituted)
+rep="100%"           -> "100\0"           (NUL written into the file)
+```
+So the failure is silent corruption of the child's `topic:` header, not a visible error. Fix sketch: one shared helper (`branch_ref` is the natural owner) or `gsub(pat, function() return v end)` at each site, plus a spec per site driving the real entry point. Note `init.lua:3930-3950` and `:4060-4085` are two hand-rolled re-implementations of `create_child_chat` — collapsing them onto `create_child_chat` fixes the class and removes the duplication in one move. ARCH-SECURE, ARCH-PURPOSE, ARCH-DRY.
+
+**Also open and re-raised by id (details in the findings block):** BR-2 (traceability), BR-4 (markdown re-wraps `.i`), BR-11 (identity still unpinned, 4th round), BR-18 (no ordering seam), BR-20 (rule not in the Log), BR-23 (guard row), BR-28→addressed, BR-29 (atlas), BR-30 (Revisions), BR-33→addressed.
+
+## 4. Minor findings
+
+- `branch_inserters(buf, abs_link, owns_file)` — two independent booleans encode one bit; `(true,true)` and `(false,false)` are representable and untested (new finding, below).
+- `init.lua:2126` still drops the `pcall` error (BR-32); `init.lua:2218` logs *"Created inline branch to new chat"* on the foreign-markdown path where no child was created.
+- `M.cmd.ToggleToolFolds`'s guard is `not M._parley_bufs[buf]`, which also admits parley-managed **markdown** buffers, while the warning reads "parley chat buffers only".
+- `keybindings_spec.lua:350` `dofile("lua/parley/config.lua")` still CWD-relative (BR-25).
+- `keybinding_registry.lua:478` still byte-duplicates `config.lua:362` (BR-24).
+- `branch_child_spec.lua:77` still pokes `parley._parley_bufs[buf] = "chat"`; since BR-33 it is vestigial.
+
+## 5. Test coverage notes
+
+Verified by mutation in a clean clone of `d1f6aec` (full suite green at baseline):
+
+| fix | revert | result |
+|---|---|---|
+| BR-28 `create_child_if_owned` in `insert_inline` | direct `create_child_chat` | `branch_child_spec` **11/1** ✅ |
+| BR-21 function replacement | string concat | **10/2** ✅ |
+| BR-10 `parent_ref` fallback | bare `parent_rel` | **11/1** ✅ |
+| BR-17 buffer guard | remove guard | **11/1** ✅ |
+| BR-11 `= M.cmd.ToggleToolFolds` | inline closure | `config_tools` 26/0, `keybindings` 30/0, `branch_child` 12/0 ❌ |
+| BR-33 ownership from call site | re-read `M._parley_bufs` | 12/0 ❌ |
+
+Uncovered: the entire markdown dispatch table (`init.lua:2583-2590` — no spec calls `setup_markdown_keymaps`); the `vim.schedule(edit → G → startinsert!)` that README and the atlas both advertise as "opens the child" — the run leaks it, emitting `E211: File ".../plain-notes.md" no longer available` and three out-of-order log lines *after* the suite summary, which is the unbounded-extent symptom, not a cosmetic one.
+
+## 6. Architectural notes
+
+- **ARCH-DRY — flag.** BR-4 (markdown rebuilds `.i`), BR-31 (`chat_finder.lua:777` hand-builds the inline shape `splice_inline_link` owns; the guard is keyed on one concatenation spelling), BR-24, plus the two `create_child_chat` re-implementations named in I6-1.
+- **ARCH-PURE — pass, with a caveat.** `branch_ref.lua` is genuinely pure and now has 7 IO-free tests. The caveat: the three extracted functions are the trivial half; the ownership branch and the ordering both stayed inside the IO closure, reachable only through the private `M._branch_inserters` seam.
+- **ARCH-PURPOSE — flag.** Three rounds have now named a class and had the instance fixed: BR-21 (I6-1 above), BR-23 and BR-31 (instances swept, neither guard written). The shadow-sweep for "one formatter" passes for the `🌿: path: topic` shape and fails for the `[🌿:text](path)` shape, which has no owner in production code.
+- **ARCH-MOCK — pass.** No new external binary or service; the filesystem is exercised through real scratch dirs, the repo's existing seam.
+- **ARCH-CONSTRAINTS — pass.** `commit_reference`'s synchronous `:write` is on a keystroke path but is bounded and deliberate; no unbounded fan-out introduced.
+- **ARCH-SECURE — flag.** I6-1 (user text into `gsub` replacements, measured silent corruption + a NUL byte). Residual: `splice_inline_link` still emits user text into a markdown link without escaping `](` (BR-26). No credential exposure; `git ls-files | grep '^\.local'` is empty and `.gitignore:49-53` carries the reason.
+- **ARCH-ORDER — flag.** BR-18: `M._branch_inserters` is a *call* seam, not an ordering seam — no test can inject or observe the `stopinsert` → `schedule(edit + startinsert!)` interleaving, and the scheduled work outlives its scope (measured E211 above). Second: `(buf, abs_link, owns_file)` is a two-flag constellation declaring four states where two are legal, with the call sites passing mirrored literals `(false, true)` and `(true, false)` — collapse to one `kind` parameter so the guarantee table BR-33 asked to encode in the signature actually is.
+
+## 7. Plan revision recommendations
+
+Append to `## Revisions` (do not edit the rows):
+
+1. **Row 1's config key is `chat_shortcut_branch_ref`, not `global_shortcut_branch_ref`.** The `chat_` prefix is the shipped convention for `parley_buffer`-scoped entries (`chat_shortcut_open_file`, `chat_shortcut_copy_fence` are the precedents), so the Plan's name was wrong, not the code's.
+2. **Row 3 ships `topic: "?"`, not an empty topic.** `""` disabled auto-titling and the slug rename (BR-1); `?` is the sentinel the lifecycle keys off. The existing Revisions section records the chord order and the buffer-type divergence but not this.
+3. **Row 2's rationale is narrower than its text.** "so the pair cannot drift again" holds for `n` and `v`; `setup_markdown_keymaps` (`init.lua:2584-2589`) still hand-wires `.i`. Either narrow the rationale or leave the row unchecked until BR-4 closes.
+4. Add an **M3 scope line** (or an M2 row) for I6-1's sweep if the operator judges the `{{topic}}` class out of M1 — but record the deferral explicitly; it is currently neither fixed nor written down.
+
+```findings
+dispose:
+  - id: BR-2
+    disposition: not-addressed
+    note: |
+      branch_ref_spec ships and passes 7, but atlas/traceability.yaml:141-150 still lists only the four old code files and three old tests - branch_ref.lua, branch_ref_spec.lua and branch_child_spec.lua are all absent, so make test-changed still routes nothing to them.
+  - id: BR-4
+    disposition: not-addressed
+    note: |
+      Chat passes the table through (init.lua:2391); init.lua:2584-2589 still rebuilds .i around md_branch.n, so half the pair hand-wires and the Plan row claiming "the pair cannot drift again" is still not true.
+  - id: BR-10
+    disposition: addressed
+    note: |
+      Verified by revert: parent_ref -> bare parent_rel leaves branch_child_spec 11/1.
+  - id: BR-11
+    disposition: not-addressed
+    note: |
+      Verified by revert for the 4th round: an inline closure at init.lua:2429 leaves config_tools_spec 26/0, keybindings_spec 30/0 and branch_child_spec 12/0. The new test asserts the registry ENTRY exists, not that its callback IS M.cmd.ToggleToolFolds.
+  - id: BR-17
+    disposition: addressed
+    note: |
+      Verified by revert: removing the guard leaves branch_child_spec 11/1. Minor residual - the guard is `not M._parley_bufs[buf]`, so it also admits parley markdown buffers while the warning says "chat buffers only".
+  - id: BR-18
+    disposition: not-addressed
+    note: |
+      M._branch_inserters is a call seam, not an ordering seam. Nothing flushes or observes the schedule(edit -> G -> startinsert!), and the run leaks it - E211 "File .../plain-notes.md no longer available" plus three log lines printed after the suite summary.
+  - id: BR-20
+    disposition: not-addressed
+    note: |
+      Improved but not in force. Measured this round 4/6 pin (BR-10, BR-17, BR-21, BR-28 all go red on revert); BR-11 and BR-33 revert clean. The issue's Log still names no test per finding id - those statements live only in the commit body.
+  - id: BR-21
+    disposition: addressed
+    note: |
+      Verified by revert: string concat leaves branch_child_spec 10/2. The site is fixed and pinned; the CLASS is not - see the new finding.
+  - id: BR-23
+    disposition: not-addressed
+    note: |
+      Instances swept (verified - only alias mentions remain in README/ARCH/atlas/lua). The rule half was not delivered: no guard row asserts a doc names only keys in resolve_keys(entry, config); the one new arch row is about the branch-ref formatter.
+  - id: BR-24
+    disposition: not-addressed
+    note: |
+      keybinding_registry.lua:478 and config.lua:362 still carry the same three-key list with nothing asserting they agree.
+  - id: BR-25
+    disposition: not-addressed
+    note: |
+      keybindings_spec.lua:350 dofile("lua/parley/config.lua") is still CWD-relative.
+  - id: BR-26
+    disposition: not-addressed
+    note: |
+      branch_ref_spec has no case for a selection containing "](", nor for one ending in a multibyte character.
+  - id: BR-28
+    disposition: addressed
+    note: |
+      Verified by revert: restoring the direct create_child_chat in insert_inline leaves branch_child_spec 11/1. The six-cell spec iterates both axes and fires.
+  - id: BR-29
+    disposition: not-addressed
+    note: |
+      The two named claims are gone, but three new unverified ones landed in the same file - :7 states the signature as branch_inserters(buf, abs_link) when it takes three params; :22 says visual mode "creates the child" unconditionally, contradicting the table four lines above for foreign markdown; the table's "after the keypress = opens the child" is false for the chat x visual cell, which stays in the parent; and :36 "Child gets a parent back-link" is false for the markdown full-line path, which routes through init.lua:3939 where the back-link is skipped for a non-chat source. No spec exercises any atlas or README claim, which is the rule half that keeps not shipping.
+  - id: BR-30
+    disposition: not-addressed
+    note: |
+      Revisions records the chord order, the tool-fold decision and the buffer-type divergence. Two of BR-30's three named deltas are still missing - Row 1's global_shortcut_branch_ref (code ships chat_shortcut_branch_ref) and Row 3's "empty topic" (code ships "?"). Row 2 is still [x] on "so the pair cannot drift again" while init.lua:2584-2589 re-implements .i.
+  - id: BR-31
+    disposition: not-addressed
+    note: |
+      chat_finder.lua:777 is unchanged and the guard at single_source_sweeps_spec.lua:381 still matches the literal `branch_prefix .. " " ..` idiom, so the inline shape splice_inline_link owns has no owner and no guard.
+  - id: BR-32
+    disposition: not-addressed
+    note: |
+      The log-ordering half is fixed. init.lua:2126 still writes `local ok = pcall(...)`, dropping the cause. Sibling in the same function - init.lua:2218 logs "Created inline branch to new chat" on the foreign-markdown path where no child was created.
+  - id: BR-33
+    disposition: addressed
+    note: |
+      Both call sites now pass ownership (init.lua:2296, :2565) and neither mode reads M._parley_bufs. Residual raised separately as a Minor - two independent booleans do not encode the guarantee table in the signature the way the finding asked. branch_child_spec.lua:77's poke is now vestigial.
+findings:
+  - id: new
+    severity: Important
+    family: user-text-unescaped-in-lua-pattern
+    title: |
+      BR-21 was fixed at one site; four gsub-replacement siblings survive, one of them the child-creation path M1 routes markdown branches to
+    detail: |
+      This is the 2nd finding in family user-text-unescaped-in-lua-pattern. Do NOT fix the
+      named instances - state the rule and sweep the enumeration in this round. Rule - a
+      runtime string may never be the second argument to gsub/sub; use a function
+      replacement or escape %. Enumeration is `grep -n ':gsub(' lua/parley/*.lua` filtered
+      to non-literal replacements. Surviving at HEAD - init.lua:3936 and :4079 and :4241
+      substitute a user topic into `{{topic}}`, init.lua:3272 substitutes initial_question.
+      Measured in this repo's LuaJIT, which does NOT raise - "50% off" becomes "50 off",
+      "%1 placeholder" becomes "{{topic}} placeholder", "100%" writes a NUL byte. So the
+      failure is silent corruption of the child's topic header. init.lua:3936 is load-
+      bearing for M1 - the atlas states that on a foreign markdown buffer "the child is
+      created when the link is followed", and that is this call. init.lua:3930-3950 and
+      :4060-4085 are two hand-rolled re-implementations of create_child_chat; collapsing
+      them onto it fixes the class and the duplication together. ARCH-SECURE, ARCH-PURPOSE.
+  - id: new
+    severity: Minor
+    family: illegal-state-representable-in-signature
+    title: |
+      branch_inserters takes two independent booleans that encode one bit, so two of the four representable states are illegal and untested
+    detail: |
+      init.lua:2090 - branch_inserters(buf, abs_link, owns_file). The two call sites pass
+      exactly mirrored literals, (buf, false, true) at :2296 for chat and (buf, true, false)
+      at :2565 for markdown, and branch_child_spec hand-writes the same pairs at five
+      places. (true, true) and (false, false) are representable, mean nothing, and no test
+      covers them. BR-33's stated purpose was that "the guarantee table is enforced by the
+      signature rather than by a comment"; two independent booleans do not do that. Collapse
+      to one tagged parameter - kind = "chat" | "foreign" - and derive both facts from it.
+      ARCH-ORDER.
+```

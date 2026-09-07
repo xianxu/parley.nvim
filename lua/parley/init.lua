@@ -2817,6 +2817,7 @@ M._read_repair_reference = function(referring_file, old_basename, new_basename)
 		if line:find(old_basename, 1, true) then
 			-- Escape % in replacement string (Lua gsub treats % as capture ref)
 			local safe_new = new_basename:gsub("%%", "%%%%")
+			-- gsub-safe: `safe_new` is %-escaped on the line above
 			lines[i] = line:gsub(vim.pesc(old_basename), safe_new)
 			changed = true
 		end
@@ -3269,9 +3270,13 @@ M.new_chat = function(system_prompt, agent, initial_question)
 	-- If an initial question is provided, append it after the user prefix
 	-- (done after underscore escaping so file paths in @@references stay intact)
 	if initial_question then
+		-- Function replacement: `initial_question` is runtime text, and in LuaJIT
+		-- a `%` in a gsub REPLACEMENT does not raise — it silently corrupts.
+		-- "50% off" becomes "50 off" and "100%" writes a NUL byte into the file
+		-- (#214 BR-34, ARCH-SECURE).
 		template = template:gsub(
 			M.config.chat_user_prefix .. "%s*$",
-			M.config.chat_user_prefix .. " " .. initial_question
+			function() return M.config.chat_user_prefix .. " " .. initial_question end
 		)
 	end
 
@@ -3933,7 +3938,7 @@ local function open_branch_ref(current_line, buf)
 
 		local agent = M.get_agent()
 		local template = M.get_default_template(agent, chat_file)
-		template = template:gsub("{{topic}}", topic)
+		template = template:gsub("{{topic}}", function() return topic end)
 		local file_lines = vim.split(template, "\n")
 
 		-- Insert parent back-link only when source is a chat file
@@ -4076,7 +4081,7 @@ M.open_chat_reference = function(current_line, cursor_col, _in_insert_mode, full
 
 			-- Prepare template
 			local template = M.get_default_template(agent, expanded_path)
-			template = template:gsub("{{topic}}", topic)
+			template = template:gsub("{{topic}}", function() return topic end)
 
 			-- Make sure the file has UTF-8 encoding header
 			vim.fn.writefile(vim.split(template, "\n"), expanded_path)
@@ -4238,7 +4243,7 @@ M.cmd.OpenFileUnderCursor = function()
 
 				-- Prepare template
 				local template = M.get_default_template(agent, expanded_path)
-				template = template:gsub("{{topic}}", topic)
+				template = template:gsub("{{topic}}", function() return topic end)
 
 				-- Make sure the file has UTF-8 encoding header
 				vim.fn.writefile(vim.split(template, "\n"), expanded_path)
