@@ -992,17 +992,10 @@ function M.resolve_keys(entry, config)
 	local function as_list(v)
 		if v == nil then return nil end
 		if type(v) == "string" then return v ~= "" and { v } or nil end
-		if type(v) ~= "table" then
-			-- #214: a number/boolean is not a shape this config has a meaning
-			-- for. Silently mapping it onto "disabled" hides a typo behind a
-			-- binding that just stops working; before M2 it fell back to the
-			-- default, which hid it differently. Say so, then treat as absent.
-			require("parley.logger").warning(string.format(
-				"parley: %s has shortcut of type %s (expected string or list) — "
-				.. "ignoring it and using the default",
-				tostring(entry.config_key), type(v)))
-			return nil, true
-		end
+		-- Not a string or list. `setup()` reports and strips these where the
+		-- config enters the system (#214 BR-49), so the resolver stays pure and
+		-- total: no logger, no IO, no notification on a per-keystroke path.
+		if type(v) ~= "table" then return nil, true end
 		local keys = {}
 		for _, key in ipairs(v) do
 			if type(key) == "string" and key ~= "" then table.insert(keys, key) end

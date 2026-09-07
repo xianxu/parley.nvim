@@ -355,3 +355,258 @@ findings:
       chat_shortcut_delete_file is the one new config key neither README nor
       atlas/ui/keybindings.md mentions.
 ```
+
+---
+
+## Re-review — 2026-09-07T15:29:49-07:00 (FIX-THEN-SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 214 — audit and curate the default keybinding surface |
+| repo | parley.nvim |
+| issue file | workshop/issues/000214-curate-default-keybindings.md |
+| boundary | milestone M2 |
+| milestone | M2 |
+| window | b17f4761101430bea7ed5780b240b8f8e18e8ab9..a84108a177816c0e5dc16dae9b92a7775e0df276 |
+| command | sdlc milestone-close --issue 214 --milestone M2 |
+| reviewer | claude |
+| timestamp | 2026-09-07T15:29:49-07:00 |
+| verdict | FIX-THEN-SHIP |
+
+## Review
+
+```verdict
+verdict: FIX-THEN-SHIP
+confidence: high
+```
+
+All nine open findings are genuinely fixed, and I verified seven of them the hard way — reverting the fix in place and watching a named test go red, or planting the exact failure the guard exists to catch. `make test` is green (198 spec files, exit 0; luacheck 0 warnings / 0 errors across 352 files). The round's headline work is sound: `register_global` now tracks and revokes what it installed, the leak oracle no longer depends on a `desc` convention (I planted a desc-less `vim.keymap.set` in `prep_chat` and five tests went red), the disable/rebind claims are quantified over all 81 entries including the 15 dotted picker keys, and the traceability guard is self-enforcing. What keeps this from SHIP is that three of the round's own fixes introduced new behaviour nobody measured: the interview `<CR>` rescope destroys parley's *own* spell-typeahead `<CR>` and confines interview-mode timestamping to one buffer (both measured); the malformed-shortcut warning fires a `vim.notify` plus a log-file append on every buffer prep and every `<C-g>?` rather than parsing once at the boundary, inside an entity the plan lists as PURE; and the README paragraph that replaced the per-knob list makes a universal claim that is false for 2 of 81 knobs. None is a crash, none blocks the gate — but the first is a functional regression shipped by a milestone whose Plan declares itself behaviour-free.
+
+## 1. Strengths
+
+- **Every claimed fix is pinned, and I confirmed it by reversion.** Removing `revoke_global_maps()` reds two tests; removing the `desc` guard reds a third; reverting interview to a global map reds two; forcing dotted config lookups to `nil` reds both the disable and rebind loops; reverting the malformed-shortcut branch reds two; dropping `keybinding_agreement_spec.lua` from `traceability.yaml` reds the new guard. Seven independent reversions, seven red suites.
+- **The new leak oracle is measurably stronger, not just differently worded.** `tests/integration/keybinding_agreement_spec.lua:63-72` diffs a pre-prep snapshot instead of filtering on `desc`. I planted `vim.keymap.set("n", "<C-g>ZZ", …, { buffer = buf })` with **no desc** immediately after `_prepared_bufs[buf] = true` — the exact case BR-39 named as invisible — and five tests failed. The comment at `:79-82` explaining *why the snapshot must precede the prep* is the transferable part.
+- **`register_global`'s revocation gets the ownership rule right** (`keybinding_registry.lua:1223-1231`): it deletes only maps whose current `desc` still matches what it installed, so a key the user rebound after `setup()` survives. Both halves are asserted separately (`:480`, `:498`), and both go red when reverted.
+- **The atlas states the rule for all three sample sites**, not the one that was examined (`atlas/ui/keybindings.md`, "Reversibility, per sample site"). That table is the shape BR-38 asked for — it makes the next reader check the third site instead of rediscovering it.
+- **The traceability guard immediately earned its keep** — it is red-verifiable, and per the commit it found a second unrouted spec from M1 on its first run. A guard that finds something you did not already know is the good kind.
+
+## 2. Critical findings
+
+None.
+
+## 3. Important findings
+
+### A — the interview `<CR>` rescope destroys parley's own spell map, and confines interview mode to one buffer
+
+`lua/parley/interview.lua:95-118`. Both measured, in a probe spec run against HEAD:
+
+```
+after spell.attach:      { "parley: accept spell suggestion / newline" }
+after interview install: { "Insert timestamp on new line in interview mode" }   -- spell's map is gone
+after interview remove:  { }                                                     -- and so is the slot
+```
+
+```
+b1 (entered here) = { "Insert timestamp on new line in interview mode" }
+b2 (opened after) = { }        -- mode flag, timer and lualine still say "on"
+```
+
+Two consequences. (1) `<C-n>i` then `<C-n>I` in a chat buffer with `chat_spell = { typeahead = true }` leaves that buffer with **no** `<CR>` map at all — spell typeahead is dead there for the buffer's lifetime. The same happens to a user's *buffer-local* `<CR>` (nvim-autopairs and some cmp setups install one). (2) `interview_start`/`interview_stop` are `scope = "note"` with no `buffer_local`, so they are **global** maps: interview mode is session state, but its effect is now installed on exactly one buffer. Open a second note while the mode is on and `<CR>` silently stops inserting timestamps while the statusline still reports interview mode active. That is a behaviour change to a shipped feature, inside the milestone whose Plan says "M2 is pure policy … This is behaviour" — and no `## Revisions` entry records it. The `## Core concepts` row claims "it shadows and unshadows instead of destroying", which is true against a global map and false against the buffer-local map it now collides with.
+
+> **This is the 3rd finding in family `command-not-scoped-to-context`.** Do not just special-case spell. **The rule, in full:** `del` cannot distinguish "mine" from "theirs" *at any scope* — narrowing from global to buffer-local moved the collision, it did not remove it. A feature map must (a) be installed at the same scope as the state it serves, and (b) tear down by **restoring what it shadowed**, not by deleting the slot: capture `vim.fn.maparg(lhs, mode, false, true)` before setting and re-apply it after, or route both features through one owned `<CR>` dispatcher the way `base_cr` already does for spell. **The enumeration is three collisions on one slot:** interview `<CR>` vs spell's buffer-local `<CR>` (measured, destructive), interview `<CR>` vs a user's buffer-local `<CR>` (same mechanism), and interview's global mode flag vs its per-buffer effect (measured, silent). If the operator wants the scope narrowing kept, it needs a Done-when/Revisions entry saying interview mode is now buffer-scoped, and a test over two buffers.
+
+### B — the README paragraph that replaced the per-knob list is false for 2 of 81 knobs
+
+`README.md:275-277`: "Every knob is named in `lua/parley/config.lua` beside the binding it controls — that file is the reference, so this section does not duplicate the list." Enumerated all 81 `config_key`s against `lua/parley/config.lua`: **`global_shortcut_vision_allocation`** and **`agent_picker_mappings.expand_catalog`** appear nowhere in that file (`grep` confirms zero hits outside `keybinding_registry.lua`). Both still resolve from `default_key` and are overridable, so this is discoverability, not breakage — but the round deleted an explicit list and replaced it with a stronger universal claim that nothing derives.
+
+> **This is the 5th finding in family `docs-assert-unverified-behavior`.** Do not add the two knobs by hand. **The rule, restated for the fourth time:** a user-facing promise quantified over a set must be pinned by a test that *derives* the set from the source. **The enumeration is one loop** — for each `reg.entries[i].config_key`, assert it appears in `lua/parley/config.lua` (for a dotted key, the table and the leaf) — and it belongs next to the "commands the README names" test, which is already the correct shape. The family has now produced five findings across four rounds and still has no derived assertion for the README's *prose* claims specifically; that is the thing to fix, not the two knobs.
+
+### C — the malformed-shortcut warning fires at every resolution, not once at the boundary
+
+`lua/parley/keybinding_registry.lua:995-1004`. `parley.logger.warning` opens the log file for append, writes, closes, and schedules a `vim.notify` popup (`logger.lua:88-101`). Measured with `chat_shortcut_respond = { shortcut = 5 }`:
+
+```
+help_lines("chat")  → 1 warning   (twice in a row → 2)
+register_buffer(…)  → 1 warning   (i.e. once per chat/markdown buffer prepared)
+```
+
+So one typo produces a "Parley.nvim: …" popup on **every BufEnter of a chat buffer** and **every `<C-g>?` press**, for the whole session. Two problems ride together: the issue's `## Core concepts` lists `resolve_keys` under **Pure entities**, and it now performs file IO and a UI notification (`ARCH-PURE`); and repeated notify + file-append on the buffer-prep path is exactly the "repeated expensive work on a UI path" `ARCH-CONSTRAINTS` names.
+
+> **This is the 3rd finding in family `illegal-state-representable-in-signature`.** The finding that produced this fix stated the rule itself: "**parse the config value into a typed result at the boundary** and degrade visibly." The fix validates at every *read* instead. **The rule:** validation belongs where the config enters the system — `setup()`, beside the `_explicit_shortcuts` capture that already walks the same tables — and the resolver stays a total function of already-typed input. **The enumeration:** every config shape `resolve_keys` currently tolerates by coercion (number/boolean `shortcut`, a non-table `cfg_val` for a dotted key, a list containing non-strings — that last one is still silently filtered at `:1008`) should be reported once at `setup()` and normalised there, leaving `resolve_keys` with no logger dependency at all.
+
+### D — two of this round's oracles still trust an input the code does not verify
+
+Both measured.
+
+1. `tests/integration/keybinding_agreement_spec.lua:474` — "a fresh setup with the switch off installs no global map" is not fresh. Its `before = global_snapshot()` runs after ~13 earlier `setup()` calls in the same file, so anything `setup()` installs globally *outside* the registry is already in the baseline. I planted `vim.keymap.set("n", "<C-g>ZQ", …, { desc = "planted global" })` immediately before the `register_global` call: the whole file stayed **green**. The identical assertion in an isolated spec goes red on the same plant. The spec's own comment at `:79-82` states this rule correctly for buffers and the global block violates it.
+2. `keybinding_registry.lua:1080-1090` — `feature_gated` is trusted by both leak tests (`:129`, `:151`) with nothing asserting its members are actually gated or carry a rationale. `native_overrides` has both guards (`single_source_sweeps_spec.lua:546,558`); `feature_gated` has neither, and the "really absent until the feature is on" check at `:161` hand-types `<CR>` instead of iterating the table. Adding a key here silently widens the allowance list. (Related, same shape: the new traceability guard at `:588` keys off `git merge-base HEAD main`, so on `main` it passes vacuously — the exact thing the `000205` fallback was fixed for two hunks earlier, where the answer was `pending()`.)
+
+> **This is the 3rd finding in family `test-harness-assumption`.** **The rule:** an oracle has two unverified inputs — its *baseline* and its *allowance list* — and each must be derived from a state the subject has not touched, or asserted. **The enumeration:** take the global baseline in a `before_each`/fresh process the way the buffer fixtures do; give `feature_gated` the two guards `native_overrides` already has (every member carries `gate`+`where`; every member really resolves to nothing under the shipped config); and make the branch-scoped traceability guard say `pending` off a branch rather than passing on an empty diff.
+
+## 4. Minor findings
+
+- `lua/parley/init.lua:2284-2285` and `lua/parley/spell.lua:167-169` still describe interview's `<CR>` as a **global** map that spell's buffer-local map "shadows". After BR-41 both are buffer-local on the same buffer and neither shadows the other — the later install wins outright, which is finding A. *(3rd in `stale-comment-after-move` — the rule: a comment that explains *why* a mechanism is safe must be re-read when the mechanism moves; the two here are the load-bearing explanation for `base_cr` existing at all.)*
+- `tests/integration/keybinding_agreement_spec.lua:124-136`, `:146-158`, `:318-328` — three near-identical "build `known` from entries + `native_overrides` (+ `feature_gated`) then diff" blocks. *(6th in `duplicate-helper-not-retired`. The family is now six deep with the rule stated each time and no enforcement; a guard over byte-identical adjacent blocks, or simply a `known_keys(cfg)` local in this spec, is the class fix.)*
+- `README.md:275` — the "Every knob is named in `config.lua`…" paragraph has no blank line before it, so GFM renders it as a lazy continuation of the preceding `u`/`<C-r>` bullet rather than as its own paragraph.
+- `keybinding_registry.lua:1008` — a `shortcut` list containing a non-string still drops that element silently, which is the same "typo indistinguishable from a decision" the number/boolean case was just fixed for.
+
+## 5. Test coverage notes
+
+- Seven of nine claimed fixes verified red by reversion or by planting the failure; the two exceptions are pure moves. **BR-43** (`key_hint` deduplication) and **BR-44** (`key_label`) are both unpinned: reverting `key_label` leaves `chat_finder_logic_spec.lua:1009` and `note_finder_logic_spec.lua:239` green, because they assert the default-config rendering and never the `default_keymaps = false` case that produced `nil`. Both fixes are correct and I confirmed them by reading the resolution path, but neither would survive a regression.
+- The 81-entry disable/rebind loops and the derived help↔reality assertions are the strongest coverage in the milestone: they are quantified over the registry with no filters left.
+- Still uncovered by the agreement spec: the `note`, `issue`, `vision`, `repo` and `*_finder` scopes, and the picker keymaps generally. Finding A's whole surface (interview + spell on one buffer) has no test; the two BR-41 tests exercise a bare scratch buffer with no spell attached.
+
+## 6. Architectural notes
+
+- **ARCH-DRY — flag (Minor).** Three duplicated known-set/diff blocks in the agreement spec; sixth instance of the family.
+- **ARCH-PURE — flag (C).** `resolve_keys`, declared a Pure entity, now does `io.open`+write and schedules `vim.notify` on the malformed path. Move the parse to `setup()`.
+- **ARCH-PURPOSE — flag (A, B).** BR-41 was answered at the site it named (a global `del`) and not at the class (`del` on any slot you don't exclusively own); BR-46's README half was answered by replacing a list with a broader unverified claim. The shadow-sweep for "every knob is in config.lua" is two knobs short.
+- **ARCH-MOCK — pass / N/A.** No external binary or service in the window; the tests drive real Neovim keymap APIs at the correct seam, which is the right boundary for this work.
+- **ARCH-CONSTRAINTS — flag (C).** Repeated notify + file append on the buffer-prep and help-render paths. Otherwise clean: the master switch is an O(1) early return in `resolve_keys`, and `revoke_global_maps` is one `maparg` per previously-installed map at `setup()` only.
+- **ARCH-SECURE — pass.** No credentials or externally-authored input in the window. Positive note: `revoke_global_maps` compares `desc` before deleting rather than deleting blind, which is the right trust boundary between parley's claims and the user's.
+- **ARCH-ORDER — flag (A).** `_parley._state.interview_mode` (session-global, plus a timer and a lualine indicator) and `interview._keymap_bufs` (per-buffer) are now two pieces of state for one mode, with the legal combinations unwritten: "mode on, zero mapped buffers" and "mode on, mapped buffer no longer displayed" are both reachable and undefined. The events that matter here are the ones the caller cannot block — a `BufEnter` on a second note while the mode is on, and a buffer wipe of the entering buffer. Write the `(state, event) -> (state, effects)` row for those two, or scope the mode flag to the buffer so there is only one piece of state.
+
+## 7. Plan revision recommendations
+
+1. **`## Revisions` — "interview mode is buffer-scoped as of M2."** Record that `setup_keymap` moved from a global to a buffer-local map, that this narrows the mode's effect to the buffer where it was entered while the flag/timer/statusline stay global, and that it collides destructively with `chat_spell.typeahead`'s `<CR>` on the same buffer. The `## Core concepts` row currently says "it shadows and unshadows instead of destroying", which is true against a global map and false against the buffer-local one; amend it.
+2. **`## Core concepts` — `resolve_keys` is no longer purely pure.** Either move the malformed-value warning to `setup()` and keep the Pure-entities row honest, or move `resolve_keys` out of that table and say what IO it performs. As written the table and the code disagree.
+3. **`## Revisions` — record that M2 landed two behaviour changes.** The Plan's "Why M3 and not M2" paragraph argues M2 is pure policy and that bundling behaviour into a curation milestone is what cost M1 five rounds. BR-41 (interview `<CR>`) and BR-46 (malformed shortcut now warns and falls back rather than disabling) are both behaviour, both landed here with operator sign-off on the first. Say so, so the paragraph stops asserting something the milestone no longer satisfies.
+
+```findings
+dispose:
+  - id: BR-38
+    disposition: addressed
+    note: |
+      Verified red twice by reversion — removing revoke_global_maps() fails two switch tests; removing the desc guard fails the "user rebound" test.
+  - id: BR-39
+    disposition: addressed
+    note: |
+      Planted a desc-less vim.keymap.set in prep_chat: five tests red. Emptying feature_gated reds the typeahead-on leak test.
+  - id: BR-40
+    disposition: addressed
+    note: |
+      Forcing dotted config lookups to nil reds both the disable and rebind loops over all 81 entries; the 000205 fallback now reports pending instead of passing vacuously.
+  - id: BR-41
+    disposition: addressed
+    note: |
+      Verified red by reverting to the global map — but the rescope introduced two new collisions, raised as a new finding in the same family.
+  - id: BR-42
+    disposition: addressed
+    note: |
+      Removing keybinding_agreement_spec.lua from traceability.yaml reds the new guard; branch_ref module and specs are routed.
+  - id: BR-43
+    disposition: addressed
+    note: |
+      One module-scope key_hint at init.lua:1527. Unpinned (a pure move); the family still has no enforcement — see Minor.
+  - id: BR-44
+    disposition: addressed
+    note: |
+      Three title sites now use key_label. No test pins the "-" fallback: the existing title specs stay green if reverted.
+  - id: BR-45
+    disposition: addressed
+    note: |
+      Verified — a planted .shortcut read at system_prompt_picker.lua:121 is now reported as :121, not :223.
+  - id: BR-46
+    disposition: addressed
+    note: |
+      Verified red by reverting the malformed branch — but the warning fires at every resolution rather than at the boundary; see new finding.
+findings:
+  - id: new
+    severity: Important
+    family: command-not-scoped-to-context
+    title: |
+      the interview <CR> rescope destroys parley's own spell map and confines interview mode to one buffer
+    detail: |
+      Measured at HEAD. spell.attach then interview.setup_keymap then remove_keymap leaves the
+      buffer with NO <CR> map: interview's buffer-local map overwrites spell's, and the del
+      removes the slot. Separately, interview_start/stop are global maps and the mode flag,
+      timer and lualine indicator are session state, but the effect is now installed on one
+      buffer — open a second note and <CR> silently stops inserting timestamps while the
+      statusline still says the mode is on. 3rd in family. Rule: del cannot distinguish "mine"
+      from "theirs" at ANY scope, so narrowing global to buffer-local moved the collision
+      rather than removing it; a feature map must be installed at the same scope as the state
+      it serves and must tear down by RESTORING what it shadowed (capture maparg before
+      setting, re-apply after) or by routing both features through one owned dispatcher, as
+      base_cr already does. Enumeration, three collisions on one slot: interview vs spell's
+      buffer-local <CR> (measured, destructive), interview vs a user's buffer-local <CR>
+      (same mechanism, e.g. nvim-autopairs), and the global mode flag vs the per-buffer effect
+      (measured, silent). If the narrowing is kept deliberately it needs a Revisions entry and
+      a two-buffer test.
+  - id: new
+    severity: Important
+    family: docs-assert-unverified-behavior
+    title: |
+      README's "every knob is named in config.lua" is false for 2 of 81 knobs
+    detail: |
+      README.md:275-277 replaced the per-knob list with a universal claim. Enumerated all 81
+      config_keys against lua/parley/config.lua — global_shortcut_vision_allocation and
+      agent_picker_mappings.expand_catalog appear nowhere in that file (zero grep hits outside
+      keybinding_registry.lua). Both still resolve from default_key, so this is
+      discoverability, not breakage. 5th in family across four rounds. Rule restated: a
+      user-facing promise quantified over a set must be pinned by a test that DERIVES the set
+      from the source. Enumeration is one loop beside the existing "commands the README names"
+      test — for each entry, assert its config_key appears in config.lua (table plus leaf for
+      a dotted key). Fix the missing derived assertion, not the two knobs.
+  - id: new
+    severity: Important
+    family: illegal-state-representable-in-signature
+    title: |
+      the malformed-shortcut warning fires at every resolution instead of parsing once at the boundary
+    detail: |
+      keybinding_registry.lua:995-1004 calls parley.logger.warning, which appends to the log
+      file and schedules a vim.notify popup (logger.lua:88-101). Measured with
+      chat_shortcut_respond = { shortcut = 5 }: one warning per help_lines call and one per
+      register_buffer pass — i.e. a popup on every chat/markdown BufEnter and every <C-g>?
+      press, all session. Two consequences: resolve_keys is listed under "Pure entities" in
+      the issue's Core concepts and now performs file IO plus a UI notification (ARCH-PURE),
+      and repeated notify plus file-append sits on the buffer-prep path (ARCH-CONSTRAINTS).
+      3rd in family. The rule was stated by the finding that produced this fix — parse the
+      config value into a typed result AT THE BOUNDARY — and the fix validates at every read
+      instead. Enumeration: every shape resolve_keys tolerates by coercion (number/boolean
+      shortcut, non-table cfg_val for a dotted key, a list containing non-strings, still
+      filtered silently at :1008) should be reported once in setup() beside the
+      _explicit_shortcuts walk, leaving resolve_keys with no logger dependency.
+  - id: new
+    severity: Important
+    family: test-harness-assumption
+    title: |
+      two of this round's oracles still trust an input the code does not verify
+    detail: |
+      Both measured. (1) keybinding_agreement_spec.lua:474 "a fresh setup with the switch off
+      installs no global map" takes its baseline after ~13 earlier setup() calls in the same
+      file. Planting vim.keymap.set("n", "<C-g>ZQ", ...) before the register_global call left
+      the whole file GREEN; the identical assertion in an isolated spec goes red on the same
+      plant. The spec's own comment at :79-82 states this rule correctly for buffers.
+      (2) feature_gated (keybinding_registry.lua:1080) is trusted by both leak tests with
+      nothing asserting its members are gated or documented — native_overrides has both guards,
+      this has neither, and the "absent until the feature is on" check hand-types <CR> instead
+      of iterating the table. 3rd in family. Rule: an oracle has two unverified inputs, its
+      BASELINE and its ALLOWANCE LIST, and each must be derived from a state the subject has
+      not touched, or asserted. Enumeration: take the global baseline per-test the way the
+      buffer fixtures do; give feature_gated the two guards native_overrides has; and make the
+      new traceability guard (:588, keyed off git merge-base HEAD main, so vacuous on main)
+      report pending off a branch — the same fix applied two hunks earlier to the 000205
+      fallback.
+  - id: new
+    severity: Minor
+    family: stale-comment-after-move
+    title: |
+      init.lua and spell.lua still describe interview's <CR> as a global map
+    detail: |
+      init.lua:2284-2285 and spell.lua:167-169 both say spell's buffer-local map "shadows
+      interview's global <CR> map", which is the load-bearing explanation for base_cr existing
+      at all. After BR-41 both maps are buffer-local on the same buffer and neither shadows the
+      other. 3rd in family. Rule: a comment that explains why a mechanism is SAFE must be
+      re-read when the mechanism moves.
+  - id: new
+    severity: Minor
+    family: duplicate-helper-not-retired
+    title: |
+      three near-identical known-set/diff blocks in the agreement spec
+    detail: |
+      keybinding_agreement_spec.lua:124-136, :146-158 and :318-328 each rebuild `known` from
+      reg.entries plus native_overrides (plus feature_gated in two of the three) and then diff.
+      6th in family; the rule has been stated each round and there is still no enforcement. A
+      known_keys(cfg) local in this spec is the cheap fix, a guard over duplicated adjacent
+      blocks is the class fix.
+```

@@ -51,6 +51,23 @@ end
 -- Pre-prep snapshots, keyed by buffer, recorded by the fixtures below.
 local BEFORE = {}
 
+-- #214 BR-50: the global-map baseline must come from a state parley has not
+-- touched. Taken inside a test it already contained ~13 earlier setup() calls,
+-- so a global map planted OUTSIDE the registry sat in the baseline too and the
+-- "installs no global map" assertion stayed green over it. Captured at module
+-- load — plenary runs each spec file in its own nvim, so this is pristine.
+local function global_snapshot()
+    local out = {}
+    for _, mode in ipairs(MODES) do
+        for _, m in ipairs(vim.api.nvim_get_keymap(mode)) do
+            out[mode .. " " .. canon(m.lhs)] = m.desc or ""
+        end
+    end
+    return out
+end
+
+local PRISTINE_GLOBALS = global_snapshot()
+
 -- What parley ADDED to `buf`, as { canon(lhs) = desc }.
 --
 -- #214 BR-39: this used to filter by `m.desc:lower():find("parley")`. 46 of 81
@@ -393,75 +410,135 @@ describe("markdown buffers obey the same registry contract (#214 C1)", function(
     end)
 end)
 
--- #214 BR-41: parley's <CR> map for interview mode used to be GLOBAL, and
--- leaving interview mode did an unconditional vim.keymap.del("i", "<CR>") — so
--- it deleted whatever was there, which for most Neovim users is cmp/blink's
--- accept key. `del` cannot tell "mine" from "theirs"; a feature map scoped to a
--- buffer shadows and unshadows instead of destroying.
-describe("interview <CR> does not destroy the user's map (#214 BR-41)", function()
+-- #214 BR-41/BR-47. The defect is teardown, not scope: `vim.keymap.del` cannot
+-- tell "mine" from "theirs", so leaving interview mode deleted whatever owned
+-- the <CR> slot. Narrowing to buffer-local (round 9) MOVED that collision onto
+-- spell typeahead's own buffer-local <CR> and confined session state to one
+-- buffer. The map is global again — matching the session state it serves, and
+-- the base_cr delegation spell already implements — and teardown restores what
+-- it shadowed.
+describe("interview <CR> restores what it shadowed (#214 BR-41/BR-47)", function()
     local interview = require("parley.interview")
+    local spell = require("parley.spell")
 
-    local function user_cr_map()
+    local function global_cr()
         for _, m in ipairs(vim.api.nvim_get_keymap("i")) do
-            if m.lhs == "<CR>" and m.desc == "user's own accept key" then return m end
+            if m.lhs == "<CR>" then return m end
         end
     end
 
     after_each(function()
         pcall(vim.keymap.del, "i", "<CR>")
-        interview._keymap_bufs = {}
+        interview._saved_cr = nil
     end)
 
-    it("leaves a pre-existing global <CR> map intact across enter/exit", function()
+    it("a pre-existing global <CR> is restored, not deleted", function()
         vim.keymap.set("i", "<CR>", "<Ignore>", { desc = "user's own accept key" })
-        assert.is_truthy(user_cr_map(), "fixture did not install")
+        interview.setup_keymap()
+        assert.are.equal("Insert timestamp on new line in interview mode", global_cr().desc)
 
-        local buf = vim.api.nvim_create_buf(false, true)
-        vim.api.nvim_set_current_buf(buf)
-        interview.setup_keymap(buf)
         interview.remove_keymap()
-
-        assert.is_truthy(user_cr_map(),
-            "leaving interview mode deleted the user's own global <CR> map")
-        vim.api.nvim_buf_delete(buf, { force = true })
+        local back = global_cr()
+        assert.is_truthy(back, "leaving interview mode deleted the user's <CR> map")
+        assert.are.equal("user's own accept key", back.desc)
     end)
 
-    it("installs buffer-locally, so it shadows rather than replaces", function()
+    it("a user's Lua-callback <CR> survives too", function()
+        vim.keymap.set("i", "<CR>", function() return "<CR>" end,
+            { expr = true, desc = "user's lua accept key" })
+        interview.setup_keymap()
+        interview.remove_keymap()
+        local back = global_cr()
+        assert.is_truthy(back, "the callback map was lost")
+        assert.are.equal("user's lua accept key", back.desc)
+    end)
+
+    it("with no previous map, the slot is left clean", function()
+        assert.is_nil(global_cr(), "fixture is not clean")
+        interview.setup_keymap()
+        interview.remove_keymap()
+        assert.is_nil(global_cr(), "interview left its own map behind")
+    end)
+
+    it("re-entering does not save our own map as the thing to restore", function()
         vim.keymap.set("i", "<CR>", "<Ignore>", { desc = "user's own accept key" })
+        interview.setup_keymap()
+        interview.setup_keymap()   -- re-enter without leaving
+        interview.remove_keymap()
+        assert.are.equal("user's own accept key", global_cr().desc)
+    end)
+
+    -- BR-47's measured regression: interview must not destroy parley's OWN
+    -- buffer-local <CR>, which is the map that delegates back to it (#134).
+    it("spell typeahead's buffer-local <CR> is untouched", function()
         local buf = vim.api.nvim_create_buf(false, true)
         vim.api.nvim_set_current_buf(buf)
-        interview.setup_keymap(buf)
+        spell.attach(buf, { enable = true, typeahead = true, base_cr = interview.cr_keys })
 
-        local found
-        for _, m in ipairs(vim.api.nvim_buf_get_keymap(buf, "i")) do
-            if m.lhs == "<CR>" then found = m end
+        local function buf_cr()
+            for _, m in ipairs(vim.api.nvim_buf_get_keymap(buf, "i")) do
+                if m.lhs == "<CR>" then return m end
+            end
         end
-        assert.is_truthy(found, "interview <CR> is not buffer-local")
-        assert.is_truthy(user_cr_map(), "the global map was clobbered at install time")
+        assert.is_truthy(buf_cr(), "fixture did not install spell's map")
+
+        interview.setup_keymap()
+        interview.remove_keymap()
+
+        assert.is_truthy(buf_cr(),
+            "interview mode destroyed spell typeahead's <CR> for this buffer")
+        vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+
+    -- The other half of BR-47: interview mode is session state, so its effect
+    -- must not be confined to the buffer it was entered from.
+    it("the mapping applies in every buffer, not only where it was entered", function()
+        local b1 = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_set_current_buf(b1)
+        interview.setup_keymap()
+
+        local b2 = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_set_current_buf(b2)
+        assert.is_truthy(global_cr(),
+            "interview <CR> does not apply in a buffer opened after entering the mode")
 
         interview.remove_keymap()
-        vim.api.nvim_buf_delete(buf, { force = true })
+        vim.api.nvim_buf_delete(b1, { force = true })
+        vim.api.nvim_buf_delete(b2, { force = true })
     end)
 end)
 
--- #214 BR-38: `default_keymaps` is SAMPLED at three sites, and each is a place
--- the decision becomes durable state. Two are buffer-local and guarded by
--- `_prepared_bufs` (rule: governs buffers prepared after the flip). The third,
--- `register_global`, had no teardown at all — so `setup()` then
--- `setup({ default_keymaps = false })` left 43 global mappings live, and the
--- Done-when's own procedure (":map shows no parley mapping") failed in the most
--- natural way to try the switch. Measured desc-independently.
-describe("the master switch is reversible for GLOBAL maps too (#214 BR-38)", function()
-    local function global_snapshot()
-        local out = {}
-        for _, mode in ipairs(MODES) do
-            for _, m in ipairs(vim.api.nvim_get_keymap(mode)) do
-                out[mode .. " " .. canon(m.lhs)] = m.desc or ""
-            end
-        end
-        return out
-    end
+-- #214 BR-48, and the fifth finding in the family "docs assert unverified
+-- behavior". The README's prose makes claims quantified over sets — "every knob
+-- is named in config.lua", "no <leader> key", "every binding is rebindable" —
+-- and prose has never had a derived assertion, which is why the family keeps
+-- recurring. These derive the set from the source; adding the missing members by
+-- hand would fix the instance and leave the rule unpinned.
+describe("the README's universal claims are derived, not typed (#214 BR-48)", function()
+    local shipped_src = table.concat(vim.fn.readfile("lua/parley/config.lua"), "\n")
 
+    it("every registry config_key is actually named in config.lua", function()
+        local missing = {}
+        for _, e in ipairs(reg.entries) do
+            local leaf = e.config_key:match("([^.]+)$")
+            local root = e.config_key:match("^([^.]+)")
+            -- a dotted key needs its table AND its leaf present
+            local ok = shipped_src:find(root, 1, true) and shipped_src:find(leaf, 1, true)
+            if not ok then missing[#missing + 1] = e.id .. " (" .. e.config_key .. ")" end
+        end
+        table.sort(missing)
+        assert.same({}, missing,
+            "README says every knob is named in config.lua; these are not")
+    end)
+end)
+
+-- #214 BR-38: `default_keymaps` is SAMPLED at three sites, and each is where the
+-- decision becomes durable state. Two are buffer-local and guarded by
+-- `_prepared_bufs`. The third, `register_global`, had no teardown at all — so
+-- `setup()` then `setup({ default_keymaps = false })` left 43 global mappings
+-- live, and the Done-when's own procedure (":map shows no parley mapping")
+-- failed in the most natural way to try the switch.
+describe("the master switch is reversible for GLOBAL maps too (#214 BR-38)", function()
     local function added_globals(before)
         local out = {}
         for key, desc in pairs(global_snapshot()) do
@@ -471,33 +548,32 @@ describe("the master switch is reversible for GLOBAL maps too (#214 BR-38)", fun
         return out
     end
 
+    -- Measured against the PRISTINE baseline, so anything setup() installs
+    -- globally OUTSIDE the registry shows up here too — which is the leak this
+    -- assertion exists for (#214 BR-50).
     it("a fresh setup with the switch off installs no global map", function()
-        local before = global_snapshot()
         setup({ default_keymaps = false })
-        assert.same({}, added_globals(before))
+        assert.same({}, added_globals(PRISTINE_GLOBALS))
     end)
 
     it("re-running setup with the switch off REVOKES the previous global maps", function()
-        local before = global_snapshot()
         setup()
-        assert.is_true(#added_globals(before) > 0, "fixture installed nothing to revoke")
+        assert.is_true(#added_globals(PRISTINE_GLOBALS) > 0, "fixture installed nothing to revoke")
 
         setup({ default_keymaps = false })
-        assert.same({}, added_globals(before))
+        assert.same({}, added_globals(PRISTINE_GLOBALS))
     end)
 
     it("and turning it back on reinstates them", function()
-        local before = global_snapshot()
         setup({ default_keymaps = false })
-        assert.same({}, added_globals(before))
+        assert.same({}, added_globals(PRISTINE_GLOBALS))
 
         setup()
-        assert.is_true(#added_globals(before) > 0, "globals did not come back")
+        assert.is_true(#added_globals(PRISTINE_GLOBALS) > 0, "globals did not come back")
     end)
 
     it("a key the user rebound after setup is not revoked", function()
         setup()
-        -- user takes the key over afterwards, with their own description
         vim.keymap.set("n", "<C-g>c", "<Ignore>", { desc = "user's own mapping" })
 
         setup({ default_keymaps = false })

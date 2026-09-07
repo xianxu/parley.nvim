@@ -313,6 +313,7 @@ Derivation notes:
 | `opt_in` | `lua/parley/keybinding_registry.lua` | new |
 | `native_overrides` | `lua/parley/keybinding_registry.lua` | new |
 | `feature_gated` | `lua/parley/keybinding_registry.lua` | new |
+| `_saved_cr` | `lua/parley/interview.lua` | new |
 
 - **`opt_in`** — entries parley deliberately ships unbound, with the reason.
   Being listed is the only sanctioned way for a shipped binding to resolve to
@@ -341,11 +342,14 @@ Derivation notes:
   supplies behaviour; the registry owns installation (#214 C1).
 - **`native_map`** — gates the six native wrappers on the master switch and
   refuses an undeclared key.
-- **`setup_keymap`** — interview's timestamp `<CR>`. Was global, and its removal
-  did an unconditional `vim.keymap.del("i", "<CR>")`, deleting the user's own
-  map (cmp/blink's accept key for most users). Buffer-local now: it shadows and
-  unshadows instead of destroying, because `del` cannot tell "mine" from
-  "theirs".
+- **`setup_keymap` / `_saved_cr`** — interview's timestamp `<CR>`. Its removal
+  did an unconditional `vim.keymap.del("i", "<CR>")`, deleting the user's own map
+  (cmp/blink's accept key for most users). The defect is **teardown, not scope**:
+  round 9 narrowed the map to buffer-local, which moved the collision onto spell
+  typeahead's own buffer-local `<CR>` — destroying it — and confined session
+  state to one buffer. It is global again, matching the session state it serves
+  and the `base_cr` delegation spell already implements, and `_saved_cr` holds
+  whatever it shadowed so teardown restores rather than deletes.
 - **`register_global`** — installs the non-buffer-local half of the registry and
   now tracks what it installed, so a later `setup()` can revoke it. Without the
   teardown, flipping `default_keymaps` off and re-running `setup()` left 43
@@ -457,15 +461,51 @@ stated purpose is making bindings *more* configurable.
 - [x] **M2** — assert registry-derived help/reality agreement in both directions,
       with the allowance list closed.
 
-- [ ] **M3** — `<M-S-CR>`/`<M-i>` with **pending `<M-q>` quotes** submits them into
-      the new branch. This is the half of the chord's semantics that was
-      specified in #217 gap 11 and never built: the operator's framing was
-      "submission redirected into a new chat", with two natural cases — a visual
-      selection (shipped in M1) and pending drill-in quotes (**not shipped**).
-      Today `drill_in.gather_edit_plan` is consumed only by `chat_respond`
-      (`chat_respond.lua:1294,1345`), which folds quotes into the *current*
-      chat's next turn; `branch_ref` never touches the drill-in machinery.
-      Reuses `gather_and_strip` rather than adding parsing.
+- [ ] **M3** — generalise `<M-S-CR>` (operator, 2026-09-07). The chord is not a
+      quotes feature; it is **one rule**:
+
+      > `<M-S-CR>` performs the submission `<M-CR>` would perform, into a new
+      > child chat, and leaves a `🌿:` reference at the position `<M-CR>`'s
+      > output would have occupied.
+
+      The parent always keeps its context; only the new work moves. That is why
+      the question is **copied**, not moved (operator, superseding the earlier
+      "move that question" wording).
+
+      | # | context | `<M-CR>` does | `<M-S-CR>` does | ref lands |
+      |---|---|---|---|---|
+      | 1 | visual selection | inline term definition at the selection | child seeded `tell me more about "<sel>"` | inline `[🌿:<sel>](child)` at the selection |
+      | 2a | cursor on a past exchange carrying `<M-q>` markers | strip markers in place; insert a new turn **after that exchange's answer**, original Q/A preserved (`atlas/chat/drill_in.md:36`) | same gathered quote+question blocks become the child's first question | after **that** exchange's `📝:` |
+      | 2b | `<M-q>` markers elsewhere | strip markers; append the new turn at buffer end | same payload → child | after the **last** exchange's `📝:` |
+      | 3a | cursor on an unanswered question | submit it; the answer appears after the question | question copied to child | after the question — where the answer would have been |
+      | 3b | cursor on an answered question | **resubmit**: old answer deleted, regenerated in place (`atlas/chat/drill_in.md:64`) | old answer deleted, question copied to child | where the deleted answer was |
+
+      Spacing is the exchange model's own `MARGIN`: the ref is its own block with
+      exactly one blank line before and after — `add_block(k, "branch_ref", 1, 1)`.
+
+- [x] **M3 item 4 decision — the ref goes AFTER the `📝:` summary. Measured, not
+      reasoned.** Built both layouts and ran each through `from_parsed_chat`:
+
+      ```
+      ref AFTER  📝:  ex1 blocks = question@4 agent_header@6 text@8 summary@10   append_pos=12  <- the ref line
+      ref BEFORE 📝:  ex1 blocks = question@4 agent_header@6 text@8              append_pos=10
+      ```
+
+      Placing the ref **before** the summary drops the `summary` block out of the
+      exchange model entirely — so the summary stops being folded, and
+      `append_pos` / `exchange_total_size` / `last_nonempty_block_end` all point
+      into the middle of the exchange. Placing it after leaves the answer's blocks
+      contiguous and lands exactly on `append_pos(k)`, which is the model's only
+      end-of-exchange API (there is no mid-list insert). It also matches the
+      operator's phrasing — "end of answer, right before next question" — and the
+      semantics: `📝:` summarises the **answer**, while a branch ref is an
+      annotation about where the conversation forked.
+
+      (A first argument — that `🌿` is a structural marker in `chat_parser` and so
+      would split the answer — was **wrong**: at parse level both placements yield
+      an identical summary and branch list. The breakage is one level down, in the
+      model. Recorded because the inference looked convincing and was not.)
+
 - [x] **M3 decision (operator, 2026-09-07): STRIP, same as `<M-CR>`.** The
       markers move into the child and the parent is left clean. Rationale:
       `<M-q>` + `<M-CR>` moves your quotes into the next turn *here*; `<M-q>` +

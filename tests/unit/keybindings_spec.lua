@@ -773,3 +773,58 @@ describe("malformed shortcut values degrade visibly (#214)", function()
         assert.is_nil((reg.resolve_keys(entry, { k = { shortcut = "" } })))
     end)
 end)
+
+-- #214 BR-49: the malformed-shortcut report belongs at the boundary. Warning
+-- from resolve_keys meant one typo produced a log write and a vim.notify popup
+-- on EVERY <C-g>? press and EVERY chat BufEnter for the whole session, and put
+-- file IO plus a UI notification inside an entity the Core-concepts table calls
+-- pure. Report once at setup(), strip the value, keep the resolver total.
+describe("malformed shortcuts are reported once, at setup (#214 BR-49)", function()
+    local parley = require("parley")
+    local reg = require("parley.keybinding_registry")
+
+    local function with_counted_warnings(fn)
+        local n = 0
+        local orig = parley.logger.warning
+        parley.logger.warning = function(msg)
+            if tostring(msg):find("malformed shortcut", 1, true) then n = n + 1 end
+        end
+        local ok, err = pcall(fn, function() return n end)
+        parley.logger.warning = orig
+        assert(ok, err)
+        return n
+    end
+
+    it("warns once at setup and never again on the resolution paths", function()
+        local at_setup, after
+        with_counted_warnings(function(count)
+            parley.setup({ chat_shortcut_respond = { modes = { "n" }, shortcut = 5 } })
+            at_setup = count()
+            for _ = 1, 3 do reg.help_lines("chat", parley.config) end
+            local e
+            for _, x in ipairs(reg.entries) do if x.id == "chat_respond" then e = x end end
+            for _ = 1, 5 do reg.resolve_keys(e, parley.config) end
+            after = count()
+        end)
+        assert.are.equal(1, at_setup, "expected exactly one report at setup")
+        assert.are.equal(at_setup, after, "resolution warned again; it must be silent")
+    end)
+
+    it("the binding falls back to its default rather than vanishing", function()
+        parley.setup({ chat_shortcut_respond = { modes = { "n" }, shortcut = 5 } })
+        local e
+        for _, x in ipairs(reg.entries) do if x.id == "chat_respond" then e = x end end
+        assert.same({ "<C-g><C-g>" }, (reg.resolve_keys(e, parley.config)))
+    end)
+
+    it("setup strips the bad value, so nothing downstream re-derives it", function()
+        parley.setup({ chat_shortcut_respond = { modes = { "n" }, shortcut = 5 } })
+        assert.is_nil(parley.config.chat_shortcut_respond.shortcut)
+    end)
+
+    it("resolve_keys itself pulls in no logger", function()
+        local src = table.concat(vim.fn.readfile("lua/parley/keybinding_registry.lua"), "\n")
+        assert.is_nil(src:find("parley.logger", 1, true),
+            "the registry took a logger dependency again — validation belongs at setup()")
+    end)
+end)

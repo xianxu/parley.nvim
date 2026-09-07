@@ -79,42 +79,66 @@ M.cr_keys = function()
 	return "<CR>"
 end
 
--- Buffers this session has installed the interview <CR> map on, so removal
--- touches exactly those and nothing else.
-M._keymap_bufs = {}
+local INTERVIEW_CR_DESC = "Insert timestamp on new line in interview mode"
+
+-- The GLOBAL insert-mode <CR> mapping this module replaced, if any, so teardown
+-- can put it back. nvim_get_keymap returns only global maps — maparg would hand
+-- back a buffer-local one when both exist (measured) — and mapset restores the
+-- entry verbatim, Lua-callback maps included (also measured).
+M._saved_cr = nil
+
+local function global_cr_map()
+	for _, m in ipairs(vim.api.nvim_get_keymap("i")) do
+		if m.lhs == "<CR>" then
+			return m
+		end
+	end
+end
 
 --- Install the insert-mode <CR> mapping that inserts timestamps in interview
---- mode. BUFFER-LOCAL (#214): it used to be global, and `remove_keymap` then
---- did an unconditional `vim.keymap.del("i", "<CR>")` — so leaving interview
---- mode DELETED the user's own <CR> map rather than restoring it. `<C-n>i`
---- followed by `<C-n>I` cost a cmp/blink user their accept key for the rest of
---- the session. A buffer-local map shadows the global one and unshadows on
---- removal, which is the same effect without the destruction; `del` cannot tell
---- "mine" from "theirs", so it must never be aimed at a global map.
----@param buf integer|nil  buffer to map in (defaults to the current buffer)
-M.setup_keymap = function(buf)
-	buf = buf or vim.api.nvim_get_current_buf()
-	_logger.info("Setting up interview keymap on buffer " .. tostring(buf))
+--- mode.
+---
+--- GLOBAL, deliberately (#214 BR-47). Interview mode is *session* state, so its
+--- map must live at the same scope as the state it serves; a buffer-local
+--- install left the mode "on" in the statusline while `<CR>` silently stopped
+--- inserting timestamps in every other buffer. It also collided with the one
+--- buffer-local `<CR>` parley itself installs — spell typeahead's — destroying
+--- it, when spell's map is precisely the coordination point: it delegates to
+--- `M.cr_keys` through `base_cr` (#134), so a global interview map is what that
+--- design already expects.
+---
+--- The real defect BR-41 named is scope-independent: teardown must RESTORE what
+--- it shadowed, because `vim.keymap.del` cannot tell "mine" from "theirs".
+M.setup_keymap = function()
+	_logger.info("Setting up interview keymap")
+	-- Capture before overwriting, and only if it is not already ours (re-entering
+	-- interview mode must not save our own map as the thing to restore).
+	local prev = global_cr_map()
+	if prev and prev.desc ~= INTERVIEW_CR_DESC then
+		M._saved_cr = prev
+	end
 	vim.keymap.set("i", "<CR>", function()
 		return M.cr_keys()
 	end, {
-		buffer = buf,
 		expr = true,
-		desc = "Insert timestamp on new line in interview mode",
+		desc = INTERVIEW_CR_DESC,
 	})
-	M._keymap_bufs[buf] = true
 end
 
---- Remove the mappings installed by setup_keymap(). Only ever deletes
---- buffer-local maps this module installed.
+--- Remove the mapping installed by setup_keymap, restoring whatever it shadowed.
 M.remove_keymap = function()
 	_logger.info("Removing interview keymap")
-	for buf in pairs(M._keymap_bufs) do
-		if vim.api.nvim_buf_is_valid(buf) then
-			pcall(vim.keymap.del, "i", "<CR>", { buffer = buf })
+	local saved = M._saved_cr
+	M._saved_cr = nil
+	if saved then
+		-- Overwrite ours with theirs rather than deleting the slot: a delete
+		-- followed by a failed restore is the destructive case BR-41 reported.
+		if pcall(vim.fn.mapset, "i", false, saved) then
+			return
 		end
+		_logger.warning("Interview: could not restore the previous <CR> mapping")
 	end
-	M._keymap_bufs = {}
+	pcall(vim.keymap.del, "i", "<CR>")
 end
 
 --- Add (or refresh) syntax highlighting for interview timestamp lines in a buffer.

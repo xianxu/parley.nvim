@@ -547,6 +547,37 @@ describe("arch: native key overrides are declared (#214)", function()
         assert.same({}, undeclared)
     end)
 
+    -- #214 BR-50: `feature_gated` is trusted by both leak tests and had NEITHER
+    -- of the guards `native_overrides` carries. An allowance list is an oracle's
+    -- second unverified input; adding a key to it silently widens what the leak
+    -- guard forgives.
+    it("every feature_gated key carries a gate and a location", function()
+        local reg = require("parley.keybinding_registry")
+        local bad = {}
+        for key, meta in pairs(reg.feature_gated) do
+            if not (meta.gate and #meta.gate > 0) then bad[#bad + 1] = key .. ": no gate" end
+            if not (meta.where and #meta.where > 0) then bad[#bad + 1] = key .. ": no where" end
+        end
+        assert.same({}, bad)
+    end)
+
+    it("no feature_gated key is bound by the SHIPPED config", function()
+        -- If it resolves under the shipped defaults it is a default, not a
+        -- feature-gated map, and belongs in the registry rather than the
+        -- allowance list.
+        local reg = require("parley.keybinding_registry")
+        local shipped = dofile("lua/parley/config.lua")
+        local leaked = {}
+        for key in pairs(reg.feature_gated) do
+            for _, e in ipairs(reg.entries) do
+                for _, k in ipairs(reg.resolve_keys(e, shipped) or {}) do
+                    if k == key then leaked[#leaked + 1] = key .. " via " .. e.id end
+                end
+            end
+        end
+        assert.same({}, leaked)
+    end)
+
     it("no declared override is stale — each is still installed somewhere", function()
         local reg = require("parley.keybinding_registry")
         local src = read("lua/parley/init.lua")
@@ -588,6 +619,14 @@ describe("arch: traceability.yaml lists every file it claims to map (#214)", fun
     end)
 
     it("every spec this branch ADDED is routed somewhere", function()
+        -- Same trap the 000205 fallback had (#214 BR-40/BR-50): on `main`,
+        -- merge-base IS head, the diff is empty, and this passes while asserting
+        -- nothing. Report instead of passing.
+        local branch = vim.fn.systemlist("git rev-parse --abbrev-ref HEAD")[1] or ""
+        if not branch:match("^%d%d%d%d%d%d%-") then
+            pending("not on an issue branch — this guard is scoped to a branch's own diff")
+            return
+        end
         local base = vim.fn.systemlist("git merge-base HEAD main")[1]
         if not base or base == "" then
             pending("branch point not found")

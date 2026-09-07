@@ -633,6 +633,41 @@ M.setup = function(opts)
 		M.config[k] = v
 	end
 
+	-- #214 BR-49: normalise shortcut shapes ONCE, here, where config enters the
+	-- system — not on every resolution. `resolve_keys` used to warn when it met a
+	-- number/boolean `shortcut`, which meant one typo produced a log write and a
+	-- vim.notify popup on every <C-g>? press and every chat BufEnter, for the
+	-- session; and it put file IO and a UI notification inside what the issue's
+	-- Core-concepts table calls a PURE entity. Report once, drop the bad value so
+	-- the binding falls back to its default, and leave the resolver total over
+	-- already-typed input.
+	do
+		local function bad_shape(v)
+			if type(v) == "string" or type(v) == "table" then return false end
+			return true
+		end
+		local offenders = {}
+		local function check(key, tbl)
+			if type(tbl) ~= "table" then return end
+			if tbl.shortcut ~= nil and bad_shape(tbl.shortcut) then -- shortcut-read-ok: validating the shape, not deriving a key
+				offenders[#offenders + 1] = key .. " (" .. type(tbl.shortcut) .. ")" -- shortcut-read-ok: reporting the shape
+				tbl.shortcut = nil -- shortcut-read-ok: stripping the bad value, not deriving a key
+			end
+		end
+		for k, v in pairs(M.config) do
+			if type(v) == "table" then
+				check(k, v)
+				for nk, nv in pairs(v) do
+					if type(nv) == "table" then check(k .. "." .. nk, nv) end
+				end
+			end
+		end
+		if #offenders > 0 then
+			M.logger.warning("parley: ignoring malformed shortcut(s) — expected a string "
+				.. "or a list of strings: " .. table.concat(offenders, ", "))
+		end
+	end
+
 	-- #116 M2: seed issues_dir from the cue `discovery.home` (ariadne's issue.cue,
 	-- exported to construct/generated/vocabulary/issue.json) when the user did NOT
 	-- override it, so every config.issues_dir reader (get_issues_dir,

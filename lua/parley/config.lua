@@ -467,6 +467,11 @@ local config = {
 	skills = {},
 	-- default search term when using :ParleyChatFinder
 	chat_finder_pattern = "",
+	-- agent picker (float-local): expand the full model catalog
+	agent_picker_mappings = {
+		expand_catalog = { modes = { "n", "i" }, shortcut = "<C-a>" },
+	},
+
 	chat_finder_mappings = {
 		delete = { modes = { "n", "i", "v", "x" }, shortcut = "<C-d>" },
 		delete_tree = { modes = { "n", "i", "v", "x" }, shortcut = "<C-D>" },
@@ -519,6 +524,7 @@ local config = {
 	global_shortcut_vision_validate = { modes = { "n" }, shortcut = "<C-j>v" },
 	global_shortcut_vision_export_csv = { modes = { "n" }, shortcut = "<C-j>ec" },
 	global_shortcut_vision_export_dot = { modes = { "n" }, shortcut = "<C-j>ed" },
+	global_shortcut_vision_allocation = { modes = { "n" }, shortcut = "<C-j>ea" },
 	global_shortcut_vision_finder = { modes = { "n", "i" }, shortcut = "<C-j>f" },
 	global_shortcut_vision_new = { modes = { "n" }, shortcut = "<C-j>n" },
 	global_shortcut_vision_goto = { modes = { "n" }, shortcut = "<C-j>o" },
