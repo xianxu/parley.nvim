@@ -44,12 +44,12 @@ interview's `<CR>` behavior instead of clobbering it.
 
 ## Config
 
-`config.chat_spell` (defaults on):
+`config.chat_spell`:
 
 | key           | default   | meaning                                            |
 |---------------|-----------|----------------------------------------------------|
 | `enable`      | `true`    | visible spell underlines (window-local `spell`)    |
-| `typeahead`   | `true`    | the as-you-type suggestion menu + `<CR>` handling  |
+| `typeahead`   | `false`   | the as-you-type suggestion menu + `<CR>` handling  |
 | `spelllang`   | `"en_us"` | spell language (set even when `spell` is off)      |
 | `min_word`    | `4`       | min misspelled-word length before suggesting       |
 | `max_suggest` | `9`       | max suggestions shown in the menu                  |
@@ -57,6 +57,13 @@ interview's `<CR>` behavior instead of clobbering it.
 `enable` and `typeahead` are independent — `spellsuggest()` reads `spelllang`
 regardless of the `spell` option, so squiggles and typeahead are separately
 gateable (e.g. `typeahead`-only with no underlines).
+
+**Both are opt-in-shaped: `nil ⇒ off`.** #214 flipped `typeahead` from opt-out
+(`nil ⇒ on`) and shipped it `false`. It installs an insert-mode `<CR>` map on
+every chat buffer — the key most likely to collide with a completion plugin —
+and a popup that appears while you type has to be asked for. So a partial
+`chat_spell = { enable = true }` now means squiggles *only*, where before it
+silently also took `<CR>`. Set `typeahead = true` to get the menu back.
 
 ## Key files
 

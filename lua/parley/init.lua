@@ -2303,11 +2303,28 @@ M.prep_chat = function(buf, file_name)
 	-- the top of this file.
 	local drill_in_cbs = drill_in_callbacks(buf)
 
+	-- Buffer-local wrappers around NATIVE keys. Each falls through to the
+	-- builtin unless a parley-specific condition holds, so it claims no
+	-- keyspace and has nothing to rebind — which is why it is not a registry
+	-- entry. `native_map` enforces that exemption instead of trusting it: the
+	-- key must carry a rationale in `keybinding_registry.native_overrides`, and
+	-- the whole set honours the `default_keymaps` master switch (#214).
+	local function native_map(key, fn, desc)
+		if not kb_registry.native_overrides[key] then
+			error("parley: un-registered native override '" .. key .. "' — add it to "
+				.. "keybinding_registry.native_overrides with its rationale, or give it "
+				.. "a registry entry so it can be rebound")
+		end
+		if M.config.default_keymaps == false then
+			return
+		end
+		vim.keymap.set("n", key, fn, { buffer = buf, silent = true, desc = desc })
+	end
+
 	-- #141: in chat buffers, `*`/`#` (and `g*`/`g#`) over a `[...]` anchor search
 	-- the whole bracketed string, so a cursor inside a `[quoted text]` jumps to
 	-- its twin (the decoration left at the source). Outside any bracket, fall
-	-- through to the builtin motion. Buffer-local; not a configurable shortcut,
-	-- so wired directly rather than through the keybinding registry.
+	-- through to the builtin motion.
 	local function bracket_jump(builtin, back)
 		local line = vim.api.nvim_get_current_line()
 		local b = require("parley.drill_in").bracket_at(line, vim.fn.col("."))
@@ -2332,9 +2349,9 @@ M.prep_chat = function(buf, file_name)
 		{ key = "g*", back = false },
 		{ key = "g#", back = true },
 	}) do
-		vim.keymap.set("n", m.key, function()
+		native_map(m.key, function()
 			bracket_jump(m.key, m.back)
-		end, { buffer = buf, silent = true, desc = "Parley: search whole [...] anchor (#141)" })
+		end, "Parley: search whole [...] anchor (#141)")
 	end
 
 	-- Standard history keys stay native unless this chat owns a pending response.
@@ -2360,12 +2377,8 @@ M.prep_chat = function(buf, file_name)
 			})
 		end
 	end
-	vim.keymap.set("n", "u", guarded_history("u"), {
-		buffer = buf, silent = true, desc = "Parley: guard chat history undo",
-	})
-	vim.keymap.set("n", "<C-r>", guarded_history("redo"), {
-		buffer = buf, silent = true, desc = "Parley: guard chat history redo",
-	})
+	native_map("u", guarded_history("u"), "Parley: guard chat history undo")
+	native_map("<C-r>", guarded_history("redo"), "Parley: guard chat history redo")
 
 	-- #161: one respond-callback set, shared by chat_respond and chat_define.
 	local respond_cb = make_respond_cb("ChatRespond")

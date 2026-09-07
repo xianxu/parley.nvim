@@ -236,6 +236,38 @@ Merge behavior in `setup(opts)`:
 - Practical rule: for non-merged tables, provide the full table you want, not just one nested field.
 - Reference [lua/parley/config.lua](https://github.com/xianxu/parley.nvim/blob/main/lua/parley/config.lua) for full defaults and examples.
 
+### Keybindings
+
+Every binding parley ships is rebindable **and** disableable, from one place:
+
+```lua
+require("parley").setup({
+  -- rebind: the config value REPLACES the shipped keys, it does not merge,
+  -- so list every key you want (aliases included).
+  chat_shortcut_drill_in = { modes = { "v", "x", "i", "n" }, shortcut = { "<M-q>", "<C-g>q" } },
+
+  -- disable one binding
+  chat_shortcut_prune = { shortcut = "" },
+
+  -- disable ALL of parley's default keymaps; every feature stays reachable
+  -- as a :Parley* command, and <C-g>? goes quiet with them
+  default_keymaps = false,
+})
+```
+
+`<C-g>?` shows what is actually bound in the current buffer — it reads the same
+resolution the keymaps do, so it never advertises a key you cannot press.
+
+Two deliberate defaults worth knowing:
+
+- **No `<leader>` map ships on.** `<leader>` is your namespace. The five copy
+  helpers and the oil.nvim shortcut are one config line each to enable; see the
+  paste-ready block in [`lua/parley/config.lua`](lua/parley/config.lua).
+- **`u`, `<C-r>`, `*`, `#`, `g*`, `g#` are wrapped, not claimed.** In chat
+  buffers they behave natively except when parley has something specific to do —
+  `u`/`<C-r>` ask before discarding a response that is still streaming, and
+  `*`/`#` search the whole `[...]` anchor when the cursor is inside one.
+
 Chat storage roots:
 - `chat_dir` is the primary writable root used for new chats.
 - `chat_dirs` is an optional list of additional roots that Chat Finder, chat validation, and chat-aware commands will scan alongside `chat_dir`.

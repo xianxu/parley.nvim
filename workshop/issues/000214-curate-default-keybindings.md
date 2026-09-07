@@ -343,11 +343,11 @@ stated purpose is making bindings *more* configurable.
       could not invoke it without first configuring a key. Now
       `:ParleyToggleToolFolds`, with the registry callback pointing AT the
       command so binding it cannot drift from calling it.
-- [ ] **M2** — `config_key` for the remaining 9 registry-only entries, each
+- [x] **M2** — `config_key` for the remaining 9 registry-only entries, each
       shipped default carrying that entry's **full** existing key list.
       **Tighten the existing assertion** at `tests/unit/keybindings_spec.lua:217-229`
       rather than adding a second one beside it. Seen red.
-- [ ] **M2** — guard BOTH directions of the resolve seam. Measured behaviour
+- [x] **M2** — guard BOTH directions of the resolve seam. Measured behaviour
       (`keybinding_registry.lua`, verified not inferred): only a table with a
       **non-empty `shortcut`** replaces `default_key`; an absent key, a table
       without `shortcut`, a bare string, and `shortcut = ""` **all fall back to
@@ -360,21 +360,21 @@ stated purpose is making bindings *more* configurable.
         Done-when's "rebindable **and** disableable" is unmet (#214 BR-9). Today
         the only way to ship an entry off is `default_key = nil`. Decide the
         semantics (empty string / empty list = disabled) and pin both directions.
-- [ ] **M2** — gate the spell typeahead: `nil ⇒ off` semantics **and**
+- [x] **M2** — gate the spell typeahead: `nil ⇒ off` semantics **and**
       `typeahead = false` shipped. Strategy: `spell.attach` across `typeahead`
       nil / false / true, crossed with a partial `chat_spell = { enable = true }`
       and with `prompt_buf_type` set.
-- [ ] **M2** — `resolve_keys` strategy: config values that are a string, a list,
+- [x] **M2** — `resolve_keys` strategy: config values that are a string, a list,
       an empty string, and a table with no `shortcut` — the shapes the chord
       change and the 9 new `config_key`s both newly depend on.
-- [ ] **M2** — record in-repo why `u`/`<C-r>`/`*`/`#`/`g*`/`g#` stay off-registry
+- [x] **M2** — record in-repo why `u`/`<C-r>`/`*`/`#`/`g*`/`g#` stay off-registry
       (conditional, fall through to native — not a keyspace claim), as the named
       allowance list the help assertion checks against.
-- [ ] **M2** — `<leader>` maps to opt-in, per the Spec's recorded direction;
+- [x] **M2** — `<leader>` maps to opt-in, per the Spec's recorded direction;
       `<leader>fo` maps oil.nvim, which parley never requires.
-- [ ] **M2** — one documented switch disabling the whole default keymap, verified
+- [x] **M2** — one documented switch disabling the whole default keymap, verified
       by `:map` showing no parley mapping.
-- [ ] **M2** — assert registry-derived help/reality agreement in both directions,
+- [x] **M2** — assert registry-derived help/reality agreement in both directions,
       with the allowance list closed.
 
 - [ ] **M3** — `<M-S-CR>`/`<M-i>` with **pending `<M-q>` quotes** submits them into

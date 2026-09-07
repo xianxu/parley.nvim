@@ -303,6 +303,7 @@ M.entries = {
 	-- ── Note ────────────────────────────────────────────────────────────
 	{
 		id = "interview_start",
+		config_key = "note_shortcut_interview_start",
 		default_key = "<C-n>i",
 		default_modes = { "n" },
 		scope = "note",
@@ -311,6 +312,7 @@ M.entries = {
 	},
 	{
 		id = "interview_stop",
+		config_key = "note_shortcut_interview_stop",
 		default_key = "<C-n>I",
 		default_modes = { "n" },
 		scope = "note",
@@ -319,6 +321,7 @@ M.entries = {
 	},
 	{
 		id = "note_template",
+		config_key = "note_shortcut_template",
 		default_key = "<C-n>t",
 		default_modes = { "n" },
 		scope = "note",
@@ -461,6 +464,7 @@ M.entries = {
 	},
 	{
 		id = "outline",
+		config_key = "chat_shortcut_outline",
 		default_key = { "<C-g>t", "<M-t>" },
 		default_modes = { "n", "i" },
 		scope = "parley_buffer",
@@ -647,6 +651,7 @@ M.entries = {
 	},
 	{
 		id = "chat_toggle_web_search",
+		config_key = "chat_shortcut_toggle_web_search",
 		default_key = "<C-g>w",
 		default_modes = { "n" },
 		scope = "chat",
@@ -655,6 +660,7 @@ M.entries = {
 	},
 	{
 		id = "chat_drill_in",
+		config_key = "chat_shortcut_drill_in",
 		default_key = { "<C-g>q", "<M-q>" },
 		default_modes = { "v", "x", "i", "n" },
 		scope = "parley_buffer",
@@ -664,6 +670,7 @@ M.entries = {
 	},
 	{
 		id = "chat_accept_drill_in",
+		config_key = "chat_shortcut_accept_drill_in",
 		default_key = "<M-a>",
 		default_modes = { "n" },
 		scope = "parley_buffer",
@@ -673,6 +680,7 @@ M.entries = {
 	},
 	{
 		id = "chat_reject_drill_in",
+		config_key = "chat_shortcut_reject_drill_in",
 		default_key = "<M-r>",
 		default_modes = { "n" },
 		scope = "parley_buffer",
@@ -694,6 +702,7 @@ M.entries = {
 	},
 	{
 		id = "md_delete_file",
+		config_key = "chat_shortcut_delete",
 		default_key = "<C-g>d",
 		default_modes = { "n" },
 		scope = "markdown",
@@ -957,6 +966,14 @@ end
 --- @return string[]|nil keys
 --- @return string[]|nil modes
 function M.resolve_keys(entry, config)
+	-- #214: master switch. Placed HERE rather than in the two register_*
+	-- installers so that the help float, `key_for`, and the actual keymaps all
+	-- go quiet together — a gate in the installers alone would leave <C-g>?
+	-- advertising keys nothing had bound.
+	if config and config.default_keymaps == false then
+		return nil, nil
+	end
+
 	local function as_list(v)
 		if v == nil then return nil end
 		if type(v) == "string" then return v ~= "" and { v } or nil end
@@ -992,26 +1009,87 @@ function M.resolve_keys(entry, config)
 	end
 
 	if cfg_val and type(cfg_val) == "table" then
-		return as_list(cfg_val.shortcut) or as_list(entry.default_key),
-			cfg_val.modes or entry.default_modes
+		local modes = cfg_val.modes or entry.default_modes
+		-- #214 BR-9: an explicit `shortcut` is authoritative in BOTH
+		-- directions. A non-empty value rebinds; an EMPTY one ("" or {})
+		-- disables. The previous `as_list(...) or as_list(default_key)`
+		-- collapsed those cases, so no entry carrying a default_key could
+		-- ever be turned off — only `chat_toggle_tool_folds` looked
+		-- disableable, and only because it ships no default_key at all.
+		-- Absent `shortcut` still means "no opinion" and falls back.
+		if cfg_val.shortcut ~= nil then
+			return as_list(cfg_val.shortcut), modes
+		end
+		return as_list(entry.default_key), modes
 	end
 	return as_list(entry.default_key), entry.default_modes
 end
+
+--- Entries parley deliberately ships UNBOUND — the opt-in set (#214). Being in
+--- this list is the ONLY sanctioned reason for a shipped binding to resolve to
+--- nothing; the keybindings spec closes it in both directions, so an entry that
+--- silently loses its key fails the suite instead of shipping quiet. Each is one
+--- config line away from on (see the paste block in `config.lua`).
+--- @type table<string, string>
+M.opt_in = {
+	-- `<leader>` is the USER's namespace. Parley claiming five of it by default
+	-- is a land grab; `<leader>fo` additionally mapped oil.nvim, which parley
+	-- never requires.
+	copy_location = "<leader> is the user's namespace",
+	copy_location_content = "<leader> is the user's namespace",
+	copy_context = "<leader> is the user's namespace",
+	copy_context_wide = "<leader> is the user's namespace",
+	copy_fence = "<leader> is the user's namespace",
+	oil = "<leader> is the user's namespace; oil.nvim is not a parley dependency",
+	-- A tool call's RESULT is low-value reading, so folding it does not justify
+	-- a key out of the shared <C-g> surface. Reachable as :ParleyToggleToolFolds.
+	chat_toggle_tool_folds = "low-value surface; callable as a command",
+}
+
+--- Keys parley maps buffer-locally WITHOUT owning them, and therefore without a
+--- registry entry. Each one wraps the native key, does its parley-specific work
+--- only when a condition holds, and otherwise performs the native behaviour — so
+--- it is not a keyspace claim and there is nothing to rebind or disable. They are
+--- listed here so the help/reality agreement test has a CLOSED allowance list:
+--- any parley mapping that is neither registry-derived nor named here is a leak.
+--- @type table<string, { where: string, why: string }>
+M.native_overrides = {
+	["u"] = {
+		where = "init.lua prep_chat (guarded_history)",
+		why = "undo runs natively unless this chat owns a pending response, in "
+			.. "which case it first asks whether to stop it (#214: shipped on, "
+			.. "not configurable — an unguarded undo mid-stream corrupts the "
+			.. "transcript, so opting out is opting into a bug)",
+	},
+	["<C-r>"] = { where = "init.lua prep_chat (guarded_history)", why = "redo twin of `u`" },
+	["*"] = {
+		where = "init.lua prep_chat (bracket_jump, #141)",
+		why = "searches the whole [...] anchor when the cursor sits inside one, "
+			.. "else native word search",
+	},
+	["#"] = { where = "init.lua prep_chat (bracket_jump, #141)", why = "backward twin of `*`" },
+	["g*"] = { where = "init.lua prep_chat (bracket_jump, #141)", why = "partial-match twin of `*`" },
+	["g#"] = { where = "init.lua prep_chat (bracket_jump, #141)", why = "partial-match twin of `#`" },
+}
 
 -------------------------------------------------------------------
 -- Help display
 -------------------------------------------------------------------
 
---- Resolve the actual runtime shortcut by querying vim keymaps.
---- Falls back to config/default if runtime lookup fails.
+--- The key the help float should print for `entry`, or nil if nothing is bound
+--- (callers omit the row).
 --- @param entry table  registry entry
 --- @param config table  parley config
---- @param bufnr integer|nil  buffer number for buffer-local lookup
---- @return string  display string for the shortcut
+--- @param bufnr integer|nil  unused; kept for call-site compatibility
+--- @return string|nil  display string for the shortcut
 local function resolve_display_shortcut(entry, config, _bufnr)
-	-- Use config resolution (preserves user-facing format like <C-g>?)
-	local key, _ = M.resolve_key(entry, config)
-	return key or entry.default_key
+	-- #214: `resolve_key` IS the resolution. This used to end in
+	-- `or entry.default_key`, which resurrected a key the resolver had just
+	-- refused — so the float advertised bindings the user could not press
+	-- (every opt-in <leader> map, anything with `shortcut = ""`, and everything
+	-- at all under `default_keymaps = false`). It also handed `add()` a raw
+	-- TABLE for multi-key entries, printing "table: 0x…" as the shortcut.
+	return (M.resolve_key(entry, config))
 end
 
 --- Generate help lines for a given context.

@@ -143,14 +143,27 @@ describe("key bindings help", function()
         assert.is_true(has_line(lines, "<C-g>k", "Show key bindings"))
     end)
 
-    it("global section includes copy shortcuts", function()
+    -- #214 flipped the <leader> copy maps to opt-in, so the help must NOT
+    -- advertise them by default — and must advertise them once configured.
+    -- (Before #214 the help printed entry.default_key whenever resolution came
+    -- back empty, so it would have shown these regardless of what was bound.)
+    it("global section omits the opt-in copy shortcuts by default", function()
         setup_parley()
 
         local lines = parley._keybinding_help_lines("other")
+        assert.is_false(has_line(lines, "<leader>cl", "Copy location"))
+        assert.is_false(has_line(lines, "<leader>cc", "Copy context"))
+    end)
+
+    it("global section shows copy shortcuts once the user opts in", function()
+        setup_parley({
+            global_shortcut_copy_location = { modes = { "n", "v" }, shortcut = "<leader>cl" },
+            global_shortcut_copy_context = { modes = { "n", "v" }, shortcut = "<leader>cc" },
+        })
+
+        local lines = parley._keybinding_help_lines("other")
         assert.is_true(has_line(lines, "<leader>cl", "Copy location"))
-        assert.is_true(has_line(lines, "<leader>cL", "Copy location + content"))
         assert.is_true(has_line(lines, "<leader>cc", "Copy context"))
-        assert.is_true(has_line(lines, "<leader>cC", "Copy wide context"))
     end)
 
     it("repo scope includes issue and vision finders", function()
@@ -220,9 +233,15 @@ describe("keybinding registry", function()
         local reg = require("parley.keybinding_registry")
         for _, entry in ipairs(reg.entries) do
             assert.is_not_nil(entry.id, "entry missing id")
-            assert.is_true(
-                entry.default_key ~= nil or entry.config_key ~= nil,
-                "entry " .. entry.id .. " missing default_key/config_key"
+            -- #214 M2 tightened this from `default_key or config_key`. That OR
+            -- was satisfied by the default_key arm alone, which is how nine
+            -- entries shipped with no way to rebind or disable them. config_key
+            -- IS the rebindable-ness, so it is required outright; default_key
+            -- stays optional (an entry may ship deliberately unbound — see
+            -- keybinding_registry.opt_in).
+            assert.is_not_nil(
+                entry.config_key,
+                "entry " .. entry.id .. " has no config_key, so it cannot be rebound or disabled"
             )
             assert.is_not_nil(entry.default_modes, "entry " .. entry.id .. " missing default_modes")
             assert.is_not_nil(entry.scope, "entry " .. entry.id .. " missing scope")
@@ -363,5 +382,205 @@ describe("branch/prune chords (#214 M1)", function()
         assert.is_truthy(shown, "branch_ref missing from the chat help")
         assert.is_truthy(shown:find("<M-i>", 1, true),
             "help must lead with <M-i>, got: " .. tostring(shown))
+    end)
+end)
+
+describe("config_key coverage + shipped-default superset (#214 M2)", function()
+    local parley = require("parley")
+    local reg = require("parley.keybinding_registry")
+    local shipped = dofile("lua/parley/config.lua")
+
+    local function as_list(k)
+        if k == nil then return {} end
+        if type(k) == "string" then return { k } end
+        return k
+    end
+
+    before_each(function() parley.setup({}) end)
+
+    -- The trap this milestone exists to avoid: adding a config_key whose
+    -- SHIPPED default is a single string, for an entry whose registry
+    -- default_key is a list. resolve_keys REPLACES rather than merges, so that
+    -- silently revokes every key past the first — for chat_drill_in that is
+    -- <M-q>, the headline quote gesture.
+    it("each shipped default is a superset of the entry's registry keys", function()
+        local lost = {}
+        for _, e in ipairs(reg.entries) do
+            local cfg = e.config_key and shipped[e.config_key]
+            -- An opt-in entry ships off on purpose; that is not shrinkage. The
+            -- test below proves it is in fact off, so this skip cannot hide one.
+            if reg.opt_in[e.id] then cfg = nil end
+            if cfg and type(cfg) == "table" and cfg.shortcut then
+                local have = {}
+                for _, k in ipairs(as_list(cfg.shortcut)) do have[k] = true end
+                for _, k in ipairs(as_list(e.default_key)) do
+                    if not have[k] then
+                        lost[#lost + 1] = e.id .. " loses " .. k .. " via " .. e.config_key
+                    end
+                end
+            end
+        end
+        assert.same({}, lost)
+    end)
+
+    -- Same guarantee measured through the seam users actually hit, so the
+    -- assertion above cannot pass on a config the resolver never consults.
+    it("resolve_keys returns every shipped key for the multi-key entries", function()
+        assert.same({ "<C-g>t", "<M-t>" }, reg.resolve_keys(
+            (function() for _, e in ipairs(reg.entries) do if e.id == "outline" then return e end end end)(),
+            parley.config))
+        assert.same({ "<C-g>q", "<M-q>" }, reg.resolve_keys(
+            (function() for _, e in ipairs(reg.entries) do if e.id == "chat_drill_in" then return e end end end)(),
+            parley.config))
+    end)
+end)
+
+-- The resolve seam's full strategy table. Written from MEASURED behaviour, not
+-- from reading the `or` chain: the pre-#214 code disabled nothing that carried
+-- a default_key, while the tool-folds tests made it look like "" worked
+-- generally. It only worked for the one entry shipping no default_key.
+describe("resolve_keys config-vs-default strategy (#214 M2)", function()
+    local reg = require("parley.keybinding_registry")
+
+    local with_default = { id = "x", config_key = "k", default_key = { "<C-g>x", "<M-x>" },
+        default_modes = { "n" } }
+    local no_default = { id = "y", config_key = "k", default_modes = { "n" } }
+
+    local function keys(entry, cfg) return (reg.resolve_keys(entry, cfg)) end
+
+    it("config absent — falls back to the full default list", function()
+        assert.same({ "<C-g>x", "<M-x>" }, keys(with_default, {}))
+    end)
+
+    it("table without `shortcut` — no opinion, still falls back", function()
+        assert.same({ "<C-g>x", "<M-x>" }, keys(with_default, { k = { modes = { "v" } } }))
+    end)
+
+    it("table without `shortcut` still applies its `modes`", function()
+        local _, modes = reg.resolve_keys(with_default, { k = { modes = { "v" } } })
+        assert.same({ "v" }, modes)
+    end)
+
+    it("bare string config (not a table) — ignored, falls back", function()
+        assert.same({ "<C-g>x", "<M-x>" }, keys(with_default, { k = "<M-z>" }))
+    end)
+
+    it("non-empty shortcut REPLACES the default list, it does not merge", function()
+        assert.same({ "<M-z>" }, keys(with_default, { k = { shortcut = "<M-z>" } }))
+    end)
+
+    it('shortcut = "" DISABLES an entry that ships a default (BR-9)', function()
+        assert.is_nil(keys(with_default, { k = { shortcut = "" } }))
+    end)
+
+    it("shortcut = {} disables too", function()
+        assert.is_nil(keys(with_default, { k = { shortcut = {} } }))
+    end)
+
+    it("a list of empty strings is still a disable, not a fallback", function()
+        assert.is_nil(keys(with_default, { k = { shortcut = { "", "" } } }))
+    end)
+
+    it("entry with no default_key is unbound until configured", function()
+        assert.is_nil(keys(no_default, {}))
+        assert.same({ "<M-z>" }, keys(no_default, { k = { shortcut = "<M-z>" } }))
+    end)
+
+    -- Done-when: every shipped binding must be BOTH rebindable and disableable.
+    it("every registry entry can actually be disabled from config", function()
+        local stuck = {}
+        for _, e in ipairs(reg.entries) do
+            if e.config_key and not e.config_key:find(".", 1, true) then
+                local cfg = { [e.config_key] = { shortcut = "" } }
+                if reg.resolve_keys(e, cfg) ~= nil then stuck[#stuck + 1] = e.id end
+            end
+        end
+        assert.same({}, stuck)
+    end)
+end)
+
+-- #214 M2: the opt-in set, closed in both directions. Shipping a binding off is
+-- legitimate, but it has to be a decision someone wrote down — otherwise the
+-- superset guard above can be defeated by simply emptying a shortcut.
+describe("opt-in set is closed (#214 M2)", function()
+    local reg = require("parley.keybinding_registry")
+    local shipped = dofile("lua/parley/config.lua")
+
+    it("every entry parley ships UNBOUND is a declared opt-in", function()
+        local undeclared = {}
+        for _, e in ipairs(reg.entries) do
+            if not e.help_only and not e.config_key:find(".", 1, true) then
+                if reg.resolve_keys(e, shipped) == nil and not reg.opt_in[e.id] then
+                    undeclared[#undeclared + 1] = e.id
+                end
+            end
+        end
+        assert.same({}, undeclared)
+    end)
+
+    it("every declared opt-in really does ship unbound", function()
+        local still_bound = {}
+        for id in pairs(reg.opt_in) do
+            local e
+            for _, cand in ipairs(reg.entries) do if cand.id == id then e = cand end end
+            assert.is_truthy(e, "opt_in names a non-existent entry: " .. id)
+            local keys = reg.resolve_keys(e, shipped)
+            if keys ~= nil then
+                still_bound[#still_bound + 1] = id .. " => " .. table.concat(keys, ",")
+            end
+        end
+        assert.same({}, still_bound)
+    end)
+
+    it("no <leader> key is claimed by the shipped config", function()
+        local claimed = {}
+        for _, e in ipairs(reg.entries) do
+            if not e.config_key:find(".", 1, true) then
+                for _, k in ipairs(reg.resolve_keys(e, shipped) or {}) do
+                    if k:lower():find("<leader>", 1, true) then
+                        claimed[#claimed + 1] = e.id .. " => " .. k
+                    end
+                end
+            end
+        end
+        assert.same({}, claimed)
+    end)
+
+    it("turning one on is a one-line config change", function()
+        local e
+        for _, cand in ipairs(reg.entries) do if cand.id == "copy_context" then e = cand end end
+        local cfg = vim.tbl_extend("force", shipped, {
+            global_shortcut_copy_context = { modes = { "n", "v" }, shortcut = "<leader>cc" },
+        })
+        assert.same({ "<leader>cc" }, reg.resolve_keys(e, cfg))
+    end)
+end)
+
+-- #214 M2: the master switch.
+describe("default_keymaps master switch (#214 M2)", function()
+    local reg = require("parley.keybinding_registry")
+    local shipped = dofile("lua/parley/config.lua")
+
+    it("ships ON, so the default experience is unchanged", function()
+        assert.is_true(shipped.default_keymaps)
+    end)
+
+    it("false unbinds every registry entry, including the help float itself", function()
+        local off = vim.tbl_extend("force", shipped, { default_keymaps = false })
+        local bound = {}
+        for _, e in ipairs(reg.entries) do
+            if reg.resolve_keys(e, off) ~= nil then bound[#bound + 1] = e.id end
+        end
+        assert.same({}, bound)
+    end)
+
+    it("help goes quiet with it — help and reality cannot disagree", function()
+        local off = vim.tbl_extend("force", shipped, { default_keymaps = false })
+        for _, ctx in ipairs({ "chat", "markdown", "other", "issue" }) do
+            for _, line in ipairs(reg.help_lines(ctx, off)) do
+                assert.is_falsy(line:find("<C-g>", 1, true),
+                    "help still advertises a key in context " .. ctx .. ": " .. line)
+            end
+        end
     end)
 end)
