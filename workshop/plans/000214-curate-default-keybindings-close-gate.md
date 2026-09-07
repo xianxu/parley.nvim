@@ -712,6 +712,109 @@ rounds:
           round: 6
       boundary: M1
       blocked: false
+    - "n": 7
+      timestamp: "2026-09-07T14:02:24-07:00"
+      agent: claude
+      dispose:
+        - id: BR-2
+          disposition: not-addressed
+          note: Tests shipped (branch_ref_spec, 7 cases, green); atlas/traceability.yaml:141-150 is unchanged, so branch_ref.lua and both new specs are still mapped nowhere.
+          round: 7
+        - id: BR-4
+          disposition: not-addressed
+          note: Chat site fixed (init.lua:2391 passes chat_branch directly); init.lua:2583-2589 still rebuilds the table and re-implements `stopinsert; .n()`, which is verbatim `.i`.
+          round: 7
+        - id: BR-11
+          disposition: not-addressed
+          note: Verified by revert - replacing chat_toggle_tool_folds with an inline closure leaves config_tools_spec at 26/26. The new assertions check is_function and registry membership, never callback identity.
+          round: 7
+        - id: BR-18
+          disposition: not-addressed
+          note: M._branch_inserters exists and is used, but no test observes or injects the stopinsert -> schedule(edit + startinsert!) interleaving.
+          round: 7
+        - id: BR-20
+          disposition: not-addressed
+          note: Rule not built. Measured this round - BR-11 reverts clean, and the round's own init.lua:3272 gsub fix reverts clean with the arch and integration specs green. No per-finding-id test line in the Log.
+          round: 7
+        - id: BR-23
+          disposition: not-addressed
+          note: Both named doc lines swept, but the required guard row (no doc names a key that is not resolve_keys(entry, config)[1]) was not added to single_source_sweeps_spec.lua. The guard was the deliverable.
+          round: 7
+        - id: BR-24
+          disposition: not-addressed
+          note: keybinding_registry.lua:478 still duplicates config.lua:362 with nothing asserting agreement.
+          round: 7
+        - id: BR-25
+          disposition: not-addressed
+          note: keybindings_spec.lua:350 unchanged. Three pre-existing specs share the idiom, so the fix belongs in a shared repo-root helper.
+          round: 7
+        - id: BR-26
+          disposition: not-addressed
+          note: branch_ref_spec still has no case for a selection containing "](".
+          round: 7
+        - id: BR-29
+          disposition: not-addressed
+          note: Named claims corrected, rule not built, and two new false claims shipped in the same commit - atlas:7 states a 2-arg signature (3 params at HEAD) and atlas:20 states "opens the child" for the chat column, false for visual mode since create_child_chat only writes the file.
+          round: 7
+        - id: BR-30
+          disposition: not-addressed
+          note: Revisions records the chord order, tool-fold decision and buffer-type divergence. Row 1's global_shortcut_branch_ref (no such key exists) and Row 3's "empty topic" (code ships "?") are still stated as shipped.
+          round: 7
+        - id: BR-31
+          disposition: not-addressed
+          note: chat_finder.lua fixed; the guard at single_source_sweeps_spec.lua:388 still matches the literal `branch_prefix .. " " ..` idiom rather than the emitted shape.
+          round: 7
+        - id: BR-32
+          disposition: not-addressed
+          note: Log ordering IS fixed. init.lua:2126 still drops pcall's error, so "could not save the parent" ships with no cause.
+          round: 7
+        - id: BR-34
+          disposition: not-addressed
+          note: Four init.lua sites fixed, but issues.lua:662,663,665 - inside the finding's own `lua/parley/*.lua` enumeration - still pass runtime strings; the guard catches 1 of 5 planted shapes and misses the `or ""` form that is the live violation.
+          round: 7
+        - id: BR-35
+          disposition: not-addressed
+          note: Signature is still branch_inserters(buf, abs_link, owns_file); (true,true) and (false,false) remain representable and untested.
+          round: 7
+      findings:
+        - id: BR-36
+          severity: Important
+          title: On a foreign markdown buffer the debounced refresh appends a warning to the line the user is typing the topic into
+          detail: |-
+            This is the 2nd finding in family no-seam-for-ordering. Do NOT fix the
+            instance - state the rule. insert_plain calls highlight_chat_branch_refs
+            before the non-owned early return (init.lua:2170), arming the 500ms
+            debounce at highlighter.lua:816. No child is created on that path, so
+            render_chat_branch_line sees filereadable == 0 and rewrites the line with
+            " warning-emoji" appended after whatever the user has typed, in insert
+            mode. Measured - immediately the line is the bare ref, after typing it is
+            "topic", after 900ms it is "topic + warning". It does not accumulate
+            across five refreshes. The behaviour predates #214, but this milestone
+            re-blessed the path as a stated guarantee (atlas table row "cursor on the
+            new line, insert mode") and pinned it with branch_child_spec:181-204,
+            which asserts only the synchronous state and therefore passes while the
+            settled line differs. Rule - a branch path that arms a timer or schedules
+            an effect is not pinned by a test asserting the buffer immediately after
+            the call; the test must advance past the debounce and assert the settled
+            line. That rule is enumerable over every vim.schedule and every
+            highlight_chat_branch_refs call in the branch paths.
+          family: no-seam-for-ordering
+          round: 7
+        - id: BR-37
+          severity: Minor
+          title: 'c8cccd0 swept 462 lines of unrelated workshop/parley transcripts into a commit whose subject is a #220 process-leak filing'
+          detail: |-
+            This is the 2nd finding in family scratch-artifact-swept-into-commit. Do
+            NOT fix the instance - state the rule. BR-22's fix was a .gitignore rule
+            for .local/, which cannot generalize to this case - workshop/parley
+            transcripts are wanted, tracked artifacts that landed in the wrong commit,
+            so no ignore rule reaches them. The rule is staging discipline - stage the
+            enumerated paths the commit subject names, never `git add -A`, and if a
+            commit carries anything outside its issue's touch set, name it in the body.
+          family: scratch-artifact-swept-into-commit
+          round: 7
+      boundary: M1
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#214 (boundary-review)
@@ -1058,6 +1161,55 @@ later rounds disposed of them. Generated — edit the gate, not this file.
   to one tagged parameter - kind = "chat" | "foreign" - and derive both facts from it.
   ARCH-ORDER.
 
+## Round 7 — 2026-09-07T14:02:24-07:00 (claude) — passed
+
+### Disposed
+
+- BR-2 — not-addressed — Tests shipped (branch_ref_spec, 7 cases, green); atlas/traceability.yaml:141-150 is unchanged, so branch_ref.lua and both new specs are still mapped nowhere.
+- BR-4 — not-addressed — Chat site fixed (init.lua:2391 passes chat_branch directly); init.lua:2583-2589 still rebuilds the table and re-implements `stopinsert; .n()`, which is verbatim `.i`.
+- BR-11 — not-addressed — Verified by revert - replacing chat_toggle_tool_folds with an inline closure leaves config_tools_spec at 26/26. The new assertions check is_function and registry membership, never callback identity.
+- BR-18 — not-addressed — M._branch_inserters exists and is used, but no test observes or injects the stopinsert -> schedule(edit + startinsert!) interleaving.
+- BR-20 — not-addressed — Rule not built. Measured this round - BR-11 reverts clean, and the round's own init.lua:3272 gsub fix reverts clean with the arch and integration specs green. No per-finding-id test line in the Log.
+- BR-23 — not-addressed — Both named doc lines swept, but the required guard row (no doc names a key that is not resolve_keys(entry, config)[1]) was not added to single_source_sweeps_spec.lua. The guard was the deliverable.
+- BR-24 — not-addressed — keybinding_registry.lua:478 still duplicates config.lua:362 with nothing asserting agreement.
+- BR-25 — not-addressed — keybindings_spec.lua:350 unchanged. Three pre-existing specs share the idiom, so the fix belongs in a shared repo-root helper.
+- BR-26 — not-addressed — branch_ref_spec still has no case for a selection containing "](".
+- BR-29 — not-addressed — Named claims corrected, rule not built, and two new false claims shipped in the same commit - atlas:7 states a 2-arg signature (3 params at HEAD) and atlas:20 states "opens the child" for the chat column, false for visual mode since create_child_chat only writes the file.
+- BR-30 — not-addressed — Revisions records the chord order, tool-fold decision and buffer-type divergence. Row 1's global_shortcut_branch_ref (no such key exists) and Row 3's "empty topic" (code ships "?") are still stated as shipped.
+- BR-31 — not-addressed — chat_finder.lua fixed; the guard at single_source_sweeps_spec.lua:388 still matches the literal `branch_prefix .. " " ..` idiom rather than the emitted shape.
+- BR-32 — not-addressed — Log ordering IS fixed. init.lua:2126 still drops pcall's error, so "could not save the parent" ships with no cause.
+- BR-34 — not-addressed — Four init.lua sites fixed, but issues.lua:662,663,665 - inside the finding's own `lua/parley/*.lua` enumeration - still pass runtime strings; the guard catches 1 of 5 planted shapes and misses the `or ""` form that is the live violation.
+- BR-35 — not-addressed — Signature is still branch_inserters(buf, abs_link, owns_file); (true,true) and (false,false) remain representable and untested.
+
+### Raised
+
+- **BR-36** [Important] `no-seam-for-ordering` On a foreign markdown buffer the debounced refresh appends a warning to the line the user is typing the topic into
+  This is the 2nd finding in family no-seam-for-ordering. Do NOT fix the
+  instance - state the rule. insert_plain calls highlight_chat_branch_refs
+  before the non-owned early return (init.lua:2170), arming the 500ms
+  debounce at highlighter.lua:816. No child is created on that path, so
+  render_chat_branch_line sees filereadable == 0 and rewrites the line with
+  " warning-emoji" appended after whatever the user has typed, in insert
+  mode. Measured - immediately the line is the bare ref, after typing it is
+  "topic", after 900ms it is "topic + warning". It does not accumulate
+  across five refreshes. The behaviour predates #214, but this milestone
+  re-blessed the path as a stated guarantee (atlas table row "cursor on the
+  new line, insert mode") and pinned it with branch_child_spec:181-204,
+  which asserts only the synchronous state and therefore passes while the
+  settled line differs. Rule - a branch path that arms a timer or schedules
+  an effect is not pinned by a test asserting the buffer immediately after
+  the call; the test must advance past the debounce and assert the settled
+  line. That rule is enumerable over every vim.schedule and every
+  highlight_chat_branch_refs call in the branch paths.
+- **BR-37** [Minor] `scratch-artifact-swept-into-commit` c8cccd0 swept 462 lines of unrelated workshop/parley transcripts into a commit whose subject is a #220 process-leak filing
+  This is the 2nd finding in family scratch-artifact-swept-into-commit. Do
+  NOT fix the instance - state the rule. BR-22's fix was a .gitignore rule
+  for .local/, which cannot generalize to this case - workshop/parley
+  transcripts are wanted, tracked artifacts that landed in the wrong commit,
+  so no ignore rule reaches them. The rule is staging discipline - stage the
+  enumerated paths the commit subject names, never `git add -A`, and if a
+  commit carries anything outside its issue's touch set, name it in the body.
+
 ## Open findings
 
 - **BR-2** [Important] `pure-extraction-without-tests` New pure module lua/parley/branch_ref.lua has zero tests and is absent from traceability.yaml
@@ -1075,3 +1227,5 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-32** [Minor] `partial-effect-not-committed` commit_reference discards the write error, and the success log line fires before the committed check
 - **BR-34** [Important] `user-text-unescaped-in-lua-pattern` BR-21 was fixed at one site; four gsub-replacement siblings survive, one of them the child-creation path M1 routes markdown branches to
 - **BR-35** [Minor] `illegal-state-representable-in-signature` branch_inserters takes two independent booleans that encode one bit, so two of the four representable states are illegal and untested
+- **BR-36** [Important] `no-seam-for-ordering` On a foreign markdown buffer the debounced refresh appends a warning to the line the user is typing the topic into
+- **BR-37** [Minor] `scratch-artifact-swept-into-commit` c8cccd0 swept 462 lines of unrelated workshop/parley transcripts into a commit whose subject is a #220 process-leak filing
