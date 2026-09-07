@@ -57,6 +57,30 @@ local function defines(name, text)
     return #hit > 0
 end
 
+-- #214 (M1 review item 5, M2 review item 4): these two guards were hardwired to
+-- `000205-*`, so every issue after it added surface with no table-vs-code
+-- cross-check at all. Derive the issue from the branch instead, and accept the
+-- Core-concepts table wherever this repo's §1 hierarchy puts it — a durable
+-- plan for complex work, the issue file itself for issue-only designs.
+local function current_issue_docs()
+    local branch = vim.fn.systemlist("git rev-parse --abbrev-ref HEAD")[1] or ""
+    local id = branch:match("^(%d%d%d%d%d%d)%-")
+    if not id then
+        -- not on an issue branch (main, a detached CI checkout): fall back to
+        -- the issue that owns the arch guards' original sweep so the assertion
+        -- keeps its historical coverage rather than silently passing.
+        id = "000205"
+    end
+    local docs = {}
+    for _, pat in ipairs({ "workshop/plans/" .. id .. "-*-plan.md",
+                           "workshop/issues/" .. id .. "-*.md" }) do
+        for _, hit in ipairs(vim.fn.glob(pat, false, true)) do
+            docs[#docs + 1] = hit
+        end
+    end
+    return id, docs
+end
+
 describe("arch: single-source sweeps stay swept", function()
     it("the plan's Core-concepts tables name every entity THIS issue added", function()
         -- The other direction of the referent sweep, and scoped to the issue's
@@ -64,15 +88,18 @@ describe("arch: single-source sweeps stay swept", function()
         -- instances the finding named; a second listed four and fired on
         -- everything those modules had ever exported. What must be tabled is the
         -- surface this issue ADDS, in any definition form.
-        local plan = vim.fn.glob("workshop/plans/000205-*-plan.md")
-        if plan == "" then
-            pending("plan not present")
+        local id, docs = current_issue_docs()
+        if #docs == 0 then
+            pending("no plan or issue document for " .. id)
             return
         end
-        local base = vim.fn.systemlist(
-            "git log --grep '^#205' --reverse --format=%H -- workshop/issues | head -1")[1]
+        -- The BRANCH point, not the issue's first commit. Those coincided for
+        -- #205, so the original worked; on a branch cut from a main that has
+        -- moved on, diffing from the issue commit attributes every unrelated
+        -- merge to this issue and demands table rows for other issues' work.
+        local base = vim.fn.systemlist("git merge-base HEAD main")[1]
         if not base or base == "" then
-            pending("issue base commit not found")
+            pending("branch point not found")
             return
         end
         -- `git diff <base>` — NOT `<base>..HEAD`. Diffing to HEAD ignores the
@@ -80,7 +107,7 @@ describe("arch: single-source sweeps stay swept", function()
         -- appeared: `make test` passed pre-commit and the same run failed once
         -- committed, which is a guard that reports one commit late. Comparing
         -- against the working tree flags it while it is still being written.
-        local diff = vim.fn.system(("git diff %s~1 -- lua/ scripts/"):format(base))
+        local diff = vim.fn.system(("git diff %s -- lua/ scripts/"):format(base))
         if vim.v.shell_error ~= 0 then
             pending("git diff unavailable")
             return
@@ -89,15 +116,17 @@ describe("arch: single-source sweeps stay swept", function()
         -- claims. Searching the whole document let a name mentioned anywhere —
         -- a Revisions entry, a commit recipe, a code block — satisfy a guard
         -- about table rows.
-        local whole = read(plan)
-        local plan_body = whole:match("## Core concepts(.-)\n## ") or whole
         local table_rows = {}
-        for line in plan_body:gmatch("[^\n]+") do
-            if line:match("^| ") then
-                table_rows[#table_rows + 1] = line
+        for _, doc in ipairs(docs) do
+            local whole = read(doc)
+            local section = whole:match("## Core concepts(.-)\n## ") or ""
+            for line in section:gmatch("[^\n]+") do
+                if line:match("^| ") then
+                    table_rows[#table_rows + 1] = line
+                end
             end
         end
-        plan_body = table.concat(table_rows, "\n")
+        local plan_body = table.concat(table_rows, "\n")
         local missing = {}
         for line in diff:gmatch("[^\n]+") do
             -- Public FUNCTIONS, in either definition form. Deliberately not
@@ -138,10 +167,7 @@ describe("arch: single-source sweeps stay swept", function()
         -- catches a document naming a function that was renamed or never
         -- written, which happened three times on this issue (`catalog_write`,
         -- `provider_states`, `M._logged_out_providers`).
-        local docs = {
-            vim.fn.glob("workshop/plans/000205-*-plan.md"),
-            vim.fn.glob("workshop/issues/000205-*.md"),
-        }
+        local _, docs = current_issue_docs()
         local missing = {}
         for _, doc in ipairs(docs) do
             if doc ~= "" then
@@ -430,5 +456,95 @@ describe("arch: no runtime string is a gsub replacement (#214)", function()
         assert.are.same({}, offenders,
             "runtime string used as a gsub replacement — use a function "
             .. "replacement, or escape %% first (#214 BR-34)")
+    end)
+end)
+
+-- #214 C1. M2 gave the registry three guarantees — rebinding, `shortcut = ""`
+-- disabling, and the `default_keymaps` master switch — and every one of them
+-- attaches to `resolve_keys`. Any code that turns config into a key WITHOUT
+-- going through it silently opts out of all three. That was not hypothetical:
+-- the review skill and ~20 picker sites read `config.X.shortcut` directly, so
+-- `default_keymaps = false` left four maps live on every markdown buffer and a
+-- `shortcut = ""` disable raised "Invalid (empty) LHS" on every markdown
+-- BufEnter. A sweep without a guard is a snapshot.
+describe("arch: every key derives from the keybinding registry (#214)", function()
+    it("no module outside the registry reads a config `.shortcut` field", function()
+        local offenders = {}
+        for _, path in ipairs(repo_files("git ls-files 'lua/**/*.lua'")) do
+            if not path:match("keybinding_registry%.lua$") then
+                local lineno = 0
+                for line in read(path):gmatch("[^\n]*") do
+                    lineno = lineno + 1
+                    -- comments are documentation, not derivation; and a read
+                    -- that inspects the USER's opts (rather than deriving a key
+                    -- to bind) opts out explicitly, never by inference
+                    local code = line:match("^%s*%-%-") and "" or line
+                    if code:find("shortcut%-read%-ok") then code = "" end
+                    if code:find("%.shortcut") then
+                        offenders[#offenders + 1] = path .. ":" .. lineno .. " " .. vim.trim(line)
+                    end
+                end
+            end
+        end
+        assert.same({}, offenders,
+            "resolve a key with keybinding_registry.key_for/resolve_keys instead of "
+            .. "reading config.<key>.shortcut — a raw read bypasses rebinding, "
+            .. "`shortcut = \"\"` and `default_keymaps = false`")
+    end)
+
+    it("registry entries marked help_only are installed by a resolver-based path", function()
+        -- `help_only` means "shown in <C-g>?, registered elsewhere". That is the
+        -- exemption the shadow installs hid behind, so the surviving ones must be
+        -- picker mappings — which now resolve via key_for — and nothing else.
+        local reg = require("parley.keybinding_registry")
+        local unexpected = {}
+        for _, e in ipairs(reg.entries) do
+            if e.help_only and not e.config_key:find("_mappings%.") then
+                unexpected[#unexpected + 1] = e.id .. " (" .. e.config_key .. ")"
+            end
+        end
+        assert.same({}, unexpected,
+            "a help_only entry outside a picker mappings table means a hand-rolled "
+            .. "install path again — register it through kb_registry.register_buffer")
+    end)
+end)
+
+-- #214 review (Minor): native_map's contract used to be a production error()
+-- raised from prep_chat, AFTER _prepared_bufs was set — a mis-registered key
+-- left the buffer permanently half-prepared with no retry. The contract belongs
+-- here, where it costs a red test instead of a broken buffer.
+describe("arch: native key overrides are declared (#214)", function()
+    it("every literal native_map key carries a rationale in the registry", function()
+        local reg = require("parley.keybinding_registry")
+        local src = read("lua/parley/init.lua")
+        local undeclared = {}
+        for key in src:gmatch('native_map%("([^"]+)"') do
+            if not reg.native_overrides[key] then
+                undeclared[#undeclared + 1] = key
+            end
+        end
+        assert.same({}, undeclared,
+            "add the key to keybinding_registry.native_overrides with its rationale")
+        -- the loop-driven ones (*/#/g*/g#) come from a literal table beside it
+        for key in src:gmatch('{ key = "([^"]+)", back = ') do
+            if not reg.native_overrides[key] then
+                undeclared[#undeclared + 1] = key
+            end
+        end
+        assert.same({}, undeclared)
+    end)
+
+    it("no declared override is stale — each is still installed somewhere", function()
+        local reg = require("parley.keybinding_registry")
+        local src = read("lua/parley/init.lua")
+        local stale = {}
+        for key, meta in pairs(reg.native_overrides) do
+            local literal = src:find('native_map("' .. key .. '"', 1, true)
+            local tabled = src:find('{ key = "' .. key .. '", back = ', 1, true)
+            if not literal and not tabled then
+                stale[#stale + 1] = key .. " (" .. meta.where .. ")"
+            end
+        end
+        assert.same({}, stale, "declared in native_overrides but never installed")
     end)
 end)

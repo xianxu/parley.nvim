@@ -249,11 +249,18 @@ require("parley").setup({
   -- disable one binding
   chat_shortcut_prune = { shortcut = "" },
 
-  -- disable ALL of parley's default keymaps; every feature stays reachable
-  -- as a :Parley* command, and <C-g>? goes quiet with them
+  -- claim NO keys by default. Anything you bind explicitly above still
+  -- works — the switch suppresses parley's own claims, not your choices —
+  -- and <C-g>? shows exactly what survived.
   default_keymaps = false,
 })
 ```
+
+With `default_keymaps = false` and nothing else set, parley binds nothing at
+all. Most actions also have a `:Parley*` command (`:ParleyChatRespond`,
+`:ParleyChatFinder`, `:ParleyToggleToolFolds`, …), but not every binding has
+one — so if you want a key, bind it explicitly rather than relying on a command
+existing for it.
 
 `<C-g>?` shows what is actually bound in the current buffer — it reads the same
 resolution the keymaps do, so it never advertises a key you cannot press.
@@ -267,13 +274,28 @@ Two deliberate defaults worth knowing:
   buffers they behave natively except when parley has something specific to do —
   `u`/`<C-r>` ask before discarding a response that is still streaming, and
   `*`/`#` search the whole `[...]` anchor when the cursor is inside one.
+- **Note-buffer keys** (`<C-n>i` / `<C-n>I` enter and leave interview mode,
+  `<C-n>t` new note from template) are configurable like the rest, via
+  `note_shortcut_interview_start`, `note_shortcut_interview_stop` and
+  `note_shortcut_template`.
+
+**Changed defaults (upgrading).** Three shipped defaults changed when the
+keybinding surface was curated. Nothing is gone — each is one config line away:
+
+| Was | Now | Restore with |
+|---|---|---|
+| `<leader>cl` `<leader>cL` `<leader>cc` `<leader>cC` `<leader>cf` bound | unbound | the paste block in `config.lua` |
+| `<leader>fo` opened oil.nvim | unbound | `global_shortcut_oil = { modes = { "n" }, shortcut = "<leader>fo" }` |
+| spell typeahead popup on, mapping insert-mode `<CR>` | off (squiggles stay on) | `chat_spell = { typeahead = true }` |
 
 Chat storage roots:
 - `chat_dir` is the primary writable root used for new chats.
 - `chat_dirs` is an optional list of additional roots that Chat Finder, chat validation, and chat-aware commands will scan alongside `chat_dir`.
-- `:ParleyChatDirs` opens a picker to add or remove chat roots at runtime.
-- `:ParleyChatDirAdd {dir}` adds a root directly, with directory completion.
-- `:ParleyChatDirRemove {dir}` removes a configured root directly.
+- Chat roots are configured up front via `chat_dir` / `chat_dirs` in `setup()`.
+  (The runtime add/remove picker exists for **notes** — `:ParleyNoteDirs`,
+  `:ParleyNoteDirAdd`, `:ParleyNoteDirRemove` — but has no chat-domain twin;
+  this section previously documented three chat-domain `ParleyChatDir…`
+  commands that were never implemented.)
 - `:ParleyChatMove {dir}` moves the current chat to another registered chat root.
 - The primary `chat_dir` cannot be removed at runtime.
 - The default shortcut for chat-root management is `<C-g>h`.

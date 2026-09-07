@@ -208,7 +208,7 @@ function M.open(opts)
                 end,
             },
             {
-                key = (plugin.config.global_shortcut_keybindings or { shortcut = "<C-g>?" }).shortcut,
+                key = require("parley.keybinding_registry").key_for("help", plugin.config),
                 fn = function(_, _)
                     vim.schedule(function()
                         plugin.cmd.KeyBindings()

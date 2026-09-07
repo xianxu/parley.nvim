@@ -272,6 +272,64 @@ Derivation notes:
   than adding parsing, but above M2b because it is behaviour with a durable
   side effect — the class that produced every Critical in M1.
 
+## Core concepts
+
+### Pure entities
+
+| Name | Lives in | Status |
+|------|----------|--------|
+| `splice_inline_link` | `lua/parley/branch_ref.lua` | new |
+| `format_ref_line` | `lua/parley/branch_ref.lua` | new |
+| `topic_for_selection` | `lua/parley/branch_ref.lua` | new |
+| `resolve_keys` | `lua/parley/keybinding_registry.lua` | changed |
+| `help_lines` | `lua/parley/keybinding_registry.lua` | changed |
+
+- **`branch_ref`** — the line-editing half of a branch reference: build the
+  `🌿:` line, splice an inline link around a selection, derive a child topic
+  from selected text. No buffer, no IO.
+  - **DRY rationale:** four near-identical branch functions each formatted the
+    line themselves (`ARCH-DRY`); an arch guard now enforces single ownership.
+- **`resolve_keys`** — `(entry, config) -> (keys, modes)`. M2 made an explicit
+  `shortcut` authoritative in **both** directions (non-empty rebinds, empty
+  disables) and put the `default_keymaps` master switch inside it, so
+  registration, `key_for` and `<C-g>?` can never disagree.
+  - **Relationships:** every key parley binds derives from it — enforced by
+    `tests/arch/single_source_sweeps_spec.lua`, since the review skill and ~20
+    picker sites previously read `config.X.shortcut` directly and so sat
+    outside every guarantee it provides.
+- **`help_lines`** — renders the `<C-g>?` float from the registry. Now shows
+  aliases (primary in the aligned column, the rest after the description) and
+  omits any entry that resolves to nothing.
+
+### Data (single-source tables)
+
+| Name | Lives in | Status |
+|------|----------|--------|
+| `opt_in` | `lua/parley/keybinding_registry.lua` | new |
+| `native_overrides` | `lua/parley/keybinding_registry.lua` | new |
+
+- **`opt_in`** — entries parley deliberately ships unbound, with the reason.
+  Being listed is the only sanctioned way for a shipped binding to resolve to
+  nothing; the spec closes it in both directions.
+- **`native_overrides`** — the six keys parley wraps without owning
+  (`u`, `<C-r>`, `*`, `#`, `g*`, `g#`), each with where it is installed and why
+  it is not a registry entry. `native_map` refuses a key absent from it.
+
+### Integration points
+
+| Name | Lives in | Status | Wraps |
+|------|----------|--------|-------|
+| `_branch_inserters` | `lua/parley/init.lua` | new | buffer writes + child-chat creation |
+| `registry_callbacks` | `lua/parley/skills/review/init.lua` | new | review actions, for the registry to install |
+| `native_map` | `lua/parley/init.lua` | new | `vim.keymap.set` for non-registry keys |
+
+- **`_branch_inserters`** — one helper both chat and markdown call, branching on
+  `owns_file`: parley commits a reference only in a file it owns.
+- **`registry_callbacks`** — replaced the skill's own `setup_keymaps`. The skill
+  supplies behaviour; the registry owns installation (#214 C1).
+- **`native_map`** — gates the six native wrappers on the master switch and
+  refuses an undeclared key.
+
 ## Plan
 
 Two review boundaries, sequenced as the operator directed: the chords are what
@@ -407,10 +465,50 @@ and with it the `<C-y>`/`<C-j>` half of the fresh-install Done-when criterion.
 
 ## Log
 
+- 2026-09-07: M2 boundary review returned REWORK with two Criticals, both mine, both correct on measurement. **C1 was the milestone's own thesis failing at the install seam.** M2 gave the registry three guarantees — rebinding, `shortcut = ""` disabling, the master switch — and every one attaches to `resolve_keys`; but the review skill and ~20 picker sites built keymaps by reading `config.X.shortcut` directly, so none of the three reached them. Measured symptoms: `default_keymaps = false` left `<M-o>`/`<M-CR>`/`<C-g>ve` bound on every markdown buffer, and the `shortcut = ""` gesture the README had just documented raised `Invalid (empty) LHS` on every markdown BufEnter. The class fix, not the site fix: the review skill now returns `registry_callbacks` and the registry installs them (its three entries lost `help_only`, the flag that WAS the exemption); every picker resolves via `key_for`, which also deleted their hardcoded `default_key` duplicates; `float_picker` skips an empty key; the two chat-template display sites use `key_hint`. Zero raw `.shortcut` reads remain outside the registry, and an arch guard enforces that plus "no `help_only` entry outside a picker mappings table", both seen red. The agreement spec now covers markdown and journal-sidecar buffers — C1 lived entirely in the chat-only blind spot. **C2 was subtler and worse in kind:** giving `md_delete_file` the shared `chat_shortcut_delete` knob handed it the chat entry's MODES too, putting a file-deleting action on insert and visual mode in every markdown buffer, inside a milestone whose plan declares itself behaviour-free. My superset guard inspected `shortcut` only. It now covers keys AND modes in one loop, plus a new rule that entries may share a config_key only when their declared defaults match exactly — which is the general statement of why the twin pattern was wrong here. Fixing I1 exposed something worse than the README sentence: the switch as built overrode the user's OWN bindings, so turning it on was a one-way door (and 8 entries, `chat_drill_in`/`<M-q>` among them, have no `:Parley*` command to fall back on). `setup()` now records `config._explicit_shortcuts` and the switch honours them — it suppresses parley's claims, not the user's choices. I2 delivered rather than retired: `<C-g>?` renders aliases, closing the Done-when M1's Log had committed M2 to. Writing the derived README-command test immediately caught three commands the README documents that were never implemented (`ParleyChatDirs`/`ChatDirAdd`/`ChatDirRemove`); README corrected. Minors: `native_map` logs and skips instead of raising after `_prepared_bufs` was set (contract moved to an arch guard); dead `bufnr` thread removed; the reversibility test now states the real `_prepared_bufs` rule instead of only the flattering half; upgrade note and `note_shortcut_*` added to the README. The two Core-concepts arch guards were hardwired to `000205-*` — parameterised on the branch's issue and on `git merge-base HEAD main` (the issue's first commit attributed every unrelated merge to this issue), and #214's own table added. Two bugs in my own new guards, caught by running them: a `plain=true` find with a pattern-escaped needle, and the arch sweep flagging the `_explicit_shortcuts` capture, which reads `.shortcut` to detect user INTENT rather than to derive a key — now an explicit `-- shortcut-read-ok:` annotation rather than an inferred exemption.
+
 - 2026-09-07: M2 implementation complete, pre-close. Three of the eight rows named the same defect from different angles: parley shipped bindings the registry could not govern. (1) Nine entries had no `config_key`. Adding one is not free — `resolve_keys` REPLACES rather than merges, so a single-string shipped default would have deleted `<M-q>` (the headline quote gesture, #217 item 7) and `<M-t>`; each new default carries the entry's full key list and a superset guard enforces it, seen red by shipping `chat_drill_in` as a string. (2) BR-9 confirmed and fixed: `shortcut = ""` fell through to `default_key`, so nothing carrying a default could be disabled. The existing tool-folds tests made empty look like it worked generally — it only worked for the one entry shipping no `default_key` at all, which is the adjacent-thing trap again. An explicit `shortcut` is now authoritative both ways. (3) The help float ended in `or entry.default_key`, resurrecting exactly the keys resolution had refused, so `<C-g>?` advertised bindings nobody could press — and handed a raw TABLE to `string.format` for multi-key entries. It now reads `resolve_keys` and nothing else, which is also what makes the master switch honest: `default_keymaps = false` lives inside `resolve_keys`, so registration, `key_for` and the float go quiet together rather than the float advertising a keymap set that was never installed. `<leader>` maps (five copy helpers plus `<leader>fo`, which mapped oil.nvim — not a parley dependency) ship off via a declared `opt_in` list the spec closes in BOTH directions, so a binding cannot lose its key quietly; being in that list is the only sanctioned way to resolve to nothing. `u`/`<C-r>`/`*`/`#`/`g*`/`g#` stay off-registry with their rationale recorded in `native_overrides`, and that exemption is enforced rather than trusted — `native_map` refuses a key absent from the list, and the new `keybinding_agreement_spec` closes it against a real prepped chat buffer (no leaks, no ghosts). Writing that test surfaced a normalization bug in my own first version: Neovim reports `<C-g>` as `<C-G>`, so every `<C-g>` binding looked simultaneously leaked and missing until both sides went through `keytrans(replace_termcodes(...))`. `chat_spell.typeahead` flips to nil-implies-off and ships `false` per the operator's call to gate the whole typeahead. One design correction mid-flight: I invented `chat_shortcut_delete_file` for `md_delete_file` before checking the two existing markdown twins, which both share their chat sibling's `config_key`; sharing `chat_shortcut_delete` matches the precedent and a test now rebinds all three pairs through the shared knob. Mutation ledger built from `git diff <M1 boundary> -- lua/`, not recall: ten deliverables, ten mutations, each verified red and restored green.
 
 
 - 2026-09-07: closed M1 — make test: 197 spec files, MAKE_EXIT=0 verified against make status; luacheck clean across 351 files. Round 6 disposed 18 findings and left the gate with no open blocking items; its one new finding BR-34 is addressed in 0a712ad. That finding also corrected my own earlier BR-21 report: I had said a % in a gsub replacement RAISES, reproduced in standard Lua, but neovim runs LuaJIT which does not raise — measured here, "50% off" becomes "50 off", "%1 ph" becomes the pattern itself, and "100%" writes a NUL byte into the file. So it was silent corruption of chat topics and note titles, not a crash. I had fixed one site; the enumeration turned up six more: three {{topic}} substitutions including the child-creation path M1 routes markdown branches to, the initial_question substitution, notes.lua title and metadata placeholders, and exporter.lua branch placeholders in HTML export. render.lua and the slug rename were already escaped. An arch guard now enforces the rule — a runtime string is never gsubs second argument — using an explicit `-- gsub-safe: <why>` annotation rather than inferring safety from variable names, which my first version did and which is a guess dressed as a rule; verified by planting a raw runtime replacement. M1 itself delivers: branch_ref resolving <M-i>, <M-S-CR>, <C-g>i and chat_prune resolving <M-p>, <C-g>b, both in config.lua because a registry-side edit would have been inert; the portable key leads because the help float renders only keys[1] and most terminals cannot distinguish Shift+Enter from Enter; four branch functions collapsed into one branch_inserters(buf, abs_link, owns_file) with the pure line editing in the new parley/branch_ref.lua; chat_toggle_tool_folds unbound per operator decision but callable as :ParleyToggleToolFolds. The governing rule from six rounds: parley commits a reference only in a file it OWNS, so a chat buffer gets create-child + save-parent + open-child while a foreign markdown buffer gets the ref line and cursor with no child and no write. Neither mode calls create_child_chat directly and the spec iterates modes x buffer types. Mutation ledger generated from git diff rather than recall. Atlas corrected twice, README updated, ## Revisions records the three M1 decisions review overturned, lessons.md records the root cause. Deferred: BR-9 to M2, and routing <M-q> quotes into the branch to M3 with the strip-not-fork decision recorded up front.; review verdict: FIX-THEN-SHIP
+
+### 2026-09-07 — M2 boundary review (REWORK) reversed three things I had recorded
+
+**1. `default_keymaps = false` no longer overrides the user's own bindings.**
+As first built the switch was absolute: `resolve_keys` returned nil for every
+entry, including one the user had explicitly configured. That made it a one-way
+door — you turn it on to take the keyspace back, and then nothing you write in
+`setup{}` can ever bind again. Compounded by I1: eight registry entries have no
+`:Parley*` command, `chat_drill_in` (`<M-q>`) among them, so "use the command
+instead" was not a recovery path either. `setup()` now records which
+`*_shortcut_*` knobs the caller supplied (`config._explicit_shortcuts`) and the
+switch honours them. The Done-when still holds: with nothing configured, `:map`
+shows no parley mapping.
+
+**2. The master switch's carve-out list was wrong as written.** `config.lua` and
+the atlas claimed it exempted "keys inside transient parley windows (pickers,
+the help float, the review menu)". `<M-o>`/`<M-CR>`/`<C-g>ve` are the keys that
+*open* the review menu, on every ordinary markdown buffer — not keys inside it.
+They were exempt for an entirely different reason: the review skill installed
+them itself from raw config. Corrected extent: the switch covers everything
+registry-derived, picker mappings included; only **hardcoded** window keys
+(`q`/`<Esc>`, motion) are outside it.
+
+**3. Alias rendering in `<C-g>?` is delivered, not accepted-as-missing.** M1's
+Log committed M2's help criterion to "render aliases"; my first M2 pass ticked
+the row and documented alias-invisibility in the atlas as settled instead. That
+was a superseded commitment recorded in the wrong artifact. The float now shows
+the primary in the aligned column and names the rest after the description
+(`(also <M-S-CR>, <C-g>i)`), and the Done-when's both-directions assertion is
+the test that closes it.
+
+**4. `md_delete_file` does not share `chat_shortcut_delete` after all.** Round 1
+of M2 gave it the shared knob to match `md_delete_tree`/`md_export_html`. But
+`resolve_keys` lets config replace *modes* too, and the chat entry ships
+`n/i/v/x` while `md_delete_file` declares `{ "n" }` — so a **file-deleting**
+action reached insert and visual mode on every markdown buffer. It has its own
+`chat_shortcut_delete_file` knob; entries may share one only when their declared
+defaults match exactly, which is now asserted.
 ### 2026-09-02
 
 Raised by the operator while reviewing the parley-v1-release breakdown: the

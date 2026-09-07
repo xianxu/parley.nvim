@@ -184,7 +184,7 @@ describe("review journal sidecar exclusion (#133 M3)", function()
     end)
     it("setup_keymaps no-ops on a sidecar buffer (no review map bound)", function()
         local b = named("/tmp/x.parley-journal.md")
-        require("parley.skills.review").setup_keymaps(b)
+        require("parley").setup_markdown_keymaps(b)  -- #214 C1: the registry installs review keys now
         for _, m in ipairs(vim.api.nvim_buf_get_keymap(b, "n")) do
             assert.is_nil(m.desc and m.desc:find("Parley review", 1, true))
         end

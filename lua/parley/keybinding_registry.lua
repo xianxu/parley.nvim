@@ -702,7 +702,7 @@ M.entries = {
 	},
 	{
 		id = "md_delete_file",
-		config_key = "chat_shortcut_delete",
+		config_key = "chat_shortcut_delete_file",
 		default_key = "<C-g>d",
 		default_modes = { "n" },
 		scope = "markdown",
@@ -739,7 +739,6 @@ M.entries = {
 		desc = "Parley review: process markers",
 		help_desc = "Apply review marker edits",
 		buffer_local = true,
-		help_only = true, -- registered by review skill
 	},
 	{
 		id = "review_menu",
@@ -750,7 +749,6 @@ M.entries = {
 		desc = "Parley: open skill picker",
 		help_desc = "Open skill picker",
 		buffer_local = true,
-		help_only = true, -- registered by review skill (#133)
 	},
 	{
 		id = "review_next",
@@ -761,7 +759,6 @@ M.entries = {
 		desc = "Parley review: open mode menu (direct trigger)",
 		help_desc = "Open review-mode menu",
 		buffer_local = true,
-		help_only = true, -- registered by review skill (#133)
 	},
 
 	-- ── Picker: Agent ───────────────────────────────────────────────────
@@ -971,7 +968,13 @@ function M.resolve_keys(entry, config)
 	-- go quiet together — a gate in the installers alone would leave <C-g>?
 	-- advertising keys nothing had bound.
 	if config and config.default_keymaps == false then
-		return nil, nil
+		-- Suppresses parley's DEFAULT claims. A key the user set explicitly in
+		-- setup{} survives, which is what makes the switch usable rather than a
+		-- one-way door: turn it off, then bind back exactly what you want.
+		local explicit = config._explicit_shortcuts
+		if not (explicit and entry.config_key and explicit[entry.config_key]) then
+			return nil, nil
+		end
 	end
 
 	local function as_list(v)
@@ -1076,28 +1079,27 @@ M.native_overrides = {
 -- Help display
 -------------------------------------------------------------------
 
---- The key the help float should print for `entry`, or nil if nothing is bound
---- (callers omit the row).
+--- Every key the help float should print for `entry`, or nil if nothing is
+--- bound (callers omit the row). Returns the full list: aliases are bindings
+--- too, and hiding them made <C-g>? unable to show <M-q>/<M-t>/<C-g>i (#214).
 --- @param entry table  registry entry
 --- @param config table  parley config
---- @param bufnr integer|nil  unused; kept for call-site compatibility
---- @return string|nil  display string for the shortcut
-local function resolve_display_shortcut(entry, config, _bufnr)
+--- @return string[]|nil  the bound keys, primary first
+local function resolve_display_keys(entry, config)
 	-- #214: `resolve_key` IS the resolution. This used to end in
 	-- `or entry.default_key`, which resurrected a key the resolver had just
 	-- refused — so the float advertised bindings the user could not press
 	-- (every opt-in <leader> map, anything with `shortcut = ""`, and everything
 	-- at all under `default_keymaps = false`). It also handed `add()` a raw
 	-- TABLE for multi-key entries, printing "table: 0x…" as the shortcut.
-	return (M.resolve_key(entry, config))
+	return (M.resolve_keys(entry, config))
 end
 
 --- Generate help lines for a given context.
 --- @param context string  buffer context (e.g. "chat", "issue", "other")
 --- @param config table  parley config
---- @param bufnr integer|nil  current buffer number
 --- @return string[]  lines for the help window
-function M.help_lines(context, config, bufnr)
+function M.help_lines(context, config)
 	-- Title
 	local title_suffix = {
 		chat = " (Chat)",
@@ -1119,6 +1121,18 @@ function M.help_lines(context, config, bufnr)
 		table.insert(lines, string.format("  %-12s %s", shortcut, description))
 	end
 
+	-- #214 I2: an alias is a real binding, and a help screen that hides it is a
+	-- help screen the Done-when ("no registry-derived binding <C-g>? cannot
+	-- show") is not satisfied by. The primary keeps the aligned column — it is
+	-- the one to reach for — and the rest are named in the description so a
+	-- three-key entry like branch_ref does not blow the layout apart.
+	local function add_entry(keys, description)
+		if #keys > 1 then
+			description = description .. "  (also " .. table.concat(keys, ", ", 2) .. ")"
+		end
+		add(keys[1], description)
+	end
+
 	-- Get applicable scopes in display order
 	local display_scopes = M.get_display_scopes(context)
 
@@ -1127,8 +1141,8 @@ function M.help_lines(context, config, bufnr)
 		if scope_entries and #scope_entries > 0 then
 			table.insert(lines, M.scope_labels[scope] or scope)
 			for _, entry in ipairs(scope_entries) do
-				local key = resolve_display_shortcut(entry, config, bufnr)
-				if key then add(key, entry.help_desc or entry.desc) end
+				local keys = resolve_display_keys(entry, config)
+				if keys then add_entry(keys, entry.help_desc or entry.desc) end
 			end
 			table.insert(lines, "")
 		end

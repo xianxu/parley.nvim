@@ -735,13 +735,19 @@ end
 -- Keybindings (buffer-local, for markdown files)
 --------------------------------------------------------------------------------
 
-M.setup_keymaps = function(buf)
+-- Review's buffer-local actions, as registry CALLBACKS. Installing them is the
+-- keybinding registry's job (#214 C1): this function used to read
+-- `cfg.review_shortcut_*.shortcut` and call set_keymap itself, which put it
+-- outside every guarantee the registry provides — `default_keymaps = false`
+-- left <M-o>/<M-CR>/<C-g>ve bound on every markdown buffer, a `shortcut = ""`
+-- disable raised "Invalid (empty) LHS" on each markdown BufEnter, and a key
+-- LIST would have been handed to vim.keymap.set as a table.
+--
+-- Returns nil for a journal sidecar, which must never get review keys (#133 M3).
+M.registry_callbacks = function(buf)
     if M.is_journal_sidecar(buf) then
-        return -- never attach review to a journal sidecar (#133 M3)
+        return nil
     end
-    local parley = get_parley()
-    local cfg = parley.config
-    local set_keymap = parley.helpers.set_keymap
 
     scan_on_enter(buf)
 
@@ -751,43 +757,27 @@ M.setup_keymaps = function(buf)
     -- review-specific insertion shortcuts (<C-g>vi / <C-g>vr) were
     -- retired because they duplicated that path with divergent
     -- output shapes.
-
-    -- <C-g>ve: run review (legacy marker-only, no mode)
-    local edit_cfg = cfg.review_shortcut_edit
-    if edit_cfg then
-        for _, mode in ipairs(edit_cfg.modes or {}) do
-            set_keymap({ buf }, mode, edit_cfg.shortcut, function()
-                M.run_via_invoke(buf, {})
-            end, "Parley review: process markers")
-        end
-    end
-
-    -- <M-o> opens the general SKILL PICKER (review is one of the skills); <M-CR>
-    -- is the DIRECT review trigger — it opens the review-mode menu (sticky-
-    -- preselected) and runs a round on submit with the chosen {mode,instruction}.
-    -- (#133 — operator: alt+o = skill selector, alt+return = review.)
-    local skill_cfg = cfg.review_shortcut_menu
-    if skill_cfg then
-        for _, mode in ipairs(skill_cfg.modes or {}) do
-            set_keymap({ buf }, mode, skill_cfg.shortcut, function()
-                require("parley.skill_picker").open()
-            end, "Parley: open skill picker")
-        end
-    end
-
-    local function open_review_menu()
-        require("parley.review_menu").open({
-            on_submit = function(r)
-                M.run_via_invoke(buf, { mode = r.mode, instruction = r.instruction })
-            end,
-        })
-    end
-    local next_cfg = cfg.review_shortcut_next
-    if next_cfg then
-        for _, mode in ipairs(next_cfg.modes or {}) do
-            set_keymap({ buf }, mode, next_cfg.shortcut, open_review_menu, "Parley review: open mode menu")
-        end
-    end
+    return {
+        -- <C-g>ve: run review (legacy marker-only, no mode)
+        review_edit = function()
+            M.run_via_invoke(buf, {})
+        end,
+        -- <M-o> opens the general SKILL PICKER (review is one of the skills);
+        -- <M-CR> is the DIRECT review trigger — it opens the review-mode menu
+        -- (sticky-preselected) and runs a round on submit with the chosen
+        -- {mode,instruction}. (#133 — operator: alt+o = skill selector,
+        -- alt+return = review.)
+        review_menu = function()
+            require("parley.skill_picker").open()
+        end,
+        review_next = function()
+            require("parley.review_menu").open({
+                on_submit = function(r)
+                    M.run_via_invoke(buf, { mode = r.mode, instruction = r.instruction })
+                end,
+            })
+        end,
+    }
 end
 
 return M

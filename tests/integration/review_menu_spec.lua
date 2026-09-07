@@ -98,7 +98,7 @@ describe("review_menu", function()
         p.config.review_shortcut_next = { modes = { "n", "i" }, shortcut = "<M-CR>" }
         local b = vim.api.nvim_create_buf(false, true)
         vim.api.nvim_buf_set_name(b, "/tmp/doc-m4.md")
-        require("parley.skills.review").setup_keymaps(b)
+        p.setup_markdown_keymaps(b)  -- #214 C1: the registry installs review keys now
         local function has_desc(m, needle)
             for _, km in ipairs(vim.api.nvim_buf_get_keymap(b, m)) do
                 if km.desc and km.desc:find(needle, 1, true) then

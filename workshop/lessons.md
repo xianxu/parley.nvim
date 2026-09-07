@@ -1342,3 +1342,48 @@ end
    in a test.** `native_overrides` documents six off-registry keys; `native_map`
    refuses to map a key that is not in it. Documentation a future call site can
    bypass is not an allowance list, it is a comment.
+
+## #214 M2 — a guarantee is only as wide as the seam it lives in
+
+M2's thesis was "every binding derives from the registry", and the milestone
+proved it about the registry's **entry table**: all 81 entries got a
+`config_key`, and three guarantees — rebinding, `shortcut = ""` disabling, and a
+`default_keymaps` master switch — were built into `resolve_keys` and guarded
+with red-verified tests.
+
+Then the boundary review measured the *installed* keymaps and found four parley
+mappings still live on every markdown buffer with the switch off, plus an
+`Invalid (empty) LHS` raised on every markdown `BufEnter` by the very
+`shortcut = ""` gesture the README had just documented. The review skill and
+~20 picker sites built their keymaps from `config.X.shortcut` directly. Every
+guarantee attached to `resolve_keys`; none of those sites called it.
+
+The registry even had a name for the exemption — `help_only`, "registered
+elsewhere" — and eighteen entries carried it. I read the flag as metadata about
+help rendering. It was a list of the places my guarantees did not reach.
+
+**Rules.**
+
+1. **When you add a guarantee to a function, enumerate its callers before
+   claiming the guarantee holds for the system.** `resolve_keys` had 4 internal
+   callers and ~23 modules that did the same job without it. The question is not
+   "is the seam correct" but "is the seam the only way through".
+2. **A flag that says "handled elsewhere" is an inventory of your blind spots.**
+   Grep for the exemption marker (`help_only`, `skip`, `custom`, `legacy`) and
+   check each instance against the invariant you just introduced. Then make the
+   marker mean something enforceable — here, "help_only is allowed only inside a
+   picker mappings table", which is now an arch guard.
+3. **Test where the behaviour lands, not where the logic lives.** The agreement
+   spec was real, red-verifiable, and scoped to chat buffers; C1 lived entirely
+   in markdown. A guard's blast radius is its fixture, so enumerate buffer/file
+   types the way you enumerate cases.
+4. **Adopting a shared config key adopts every field it carries, not the one you
+   were thinking about.** Giving `md_delete_file` the chat delete knob for its
+   *key* also gave it the chat entry's *modes*, putting a file-deleting action on
+   insert and visual mode. Two things may share a knob only when their declared
+   defaults match **exactly** — now asserted rather than assumed.
+5. **A kill switch that overrides the user's explicit configuration is a
+   one-way door.** `default_keymaps = false` suppressed everything, including
+   keys the user had set in `setup{}`, and 8 actions have no command to fall
+   back on. "Disable the defaults" must mean the defaults; record what the user
+   asked for and honour it.

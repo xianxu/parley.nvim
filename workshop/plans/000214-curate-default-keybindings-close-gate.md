@@ -815,6 +815,12 @@ rounds:
           round: 7
       boundary: M1
       blocked: false
+    - "n": 8
+      timestamp: "2026-09-07T14:33:09-07:00"
+      agent: claude
+      boundary: M2
+      blocked: false
+      protocol_error: no valid findings block
 ---
 
 # Gate ledger — parley.nvim#214 (boundary-review)
@@ -1209,6 +1215,10 @@ later rounds disposed of them. Generated — edit the gate, not this file.
   so no ignore rule reaches them. The rule is staging discipline - stage the
   enumerated paths the commit subject names, never `git add -A`, and if a
   commit carries anything outside its issue's touch set, name it in the body.
+
+## Round 8 — 2026-09-07T14:33:09-07:00 (claude) — passed
+
+**Protocol error:** no valid findings block — this round contributed no findings.
 
 ## Open findings
 

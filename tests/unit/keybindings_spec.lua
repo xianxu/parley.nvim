@@ -342,16 +342,22 @@ describe("branch/prune chords (#214 M1)", function()
     end)
 
     it("the help float advertises a key that works in a plain terminal", function()
-        -- <C-g>? renders only keys[1]. Leading with <M-S-CR> would advertise a
-        -- chord most terminals cannot distinguish from <CR>.
+        -- The invariant is about the PRIMARY column, not about <M-S-CR> being
+        -- absent: since #214 I2 the float also names aliases, and <M-S-CR> is a
+        -- legitimate one. What must not happen is leading with a chord most
+        -- terminals cannot distinguish from <CR>. Asserting absence was a proxy
+        -- for that, and the proxy broke the moment aliases became visible.
         local lines = parley._keybinding_help_lines("chat")
         local shown
         for _, l in ipairs(lines) do
             if l:find("branch", 1, true) or l:find("Insert branch", 1, true) then shown = l end
         end
         assert.is_truthy(shown, "branch_ref missing from the chat help")
-        assert.is_falsy(shown:find("<M-S-CR>", 1, true),
-            "help leads with the non-portable chord: " .. tostring(shown))
+        local primary = shown:match("^%s*(%S+)")
+        assert.are.equal("<M-i>", primary,
+            "help must LEAD with the portable key, got: " .. tostring(shown))
+        assert.is_truthy(shown:find("(also", 1, true),
+            "the aliases are no longer advertised at all: " .. tostring(shown))
     end)
 
     it("prune keeps <C-g>b as a legacy alias alongside <M-p>", function()
@@ -380,7 +386,7 @@ describe("branch/prune chords (#214 M1)", function()
             if l:find("branch", 1, true) or l:find("Insert branch", 1, true) then shown = l end
         end
         assert.is_truthy(shown, "branch_ref missing from the chat help")
-        assert.is_truthy(shown:find("<M-i>", 1, true),
+        assert.are.equal("<M-i>", shown:match("^%s*(%S+)"),
             "help must lead with <M-i>, got: " .. tostring(shown))
     end)
 end)
@@ -403,24 +409,68 @@ describe("config_key coverage + shipped-default superset (#214 M2)", function()
     -- default_key is a list. resolve_keys REPLACES rather than merges, so that
     -- silently revokes every key past the first — for chat_drill_in that is
     -- <M-q>, the headline quote gesture.
-    it("each shipped default is a superset of the entry's registry keys", function()
-        local lost = {}
+    -- Adopting a config_key hands the config EVERY field, not just `shortcut`
+    -- (`resolve_keys` does `cfg_val.modes or entry.default_modes`). So the guard
+    -- has to cover keys AND modes in one loop: shrinking a key set silently
+    -- revokes a binding, and widening a mode set silently grants one — which is
+    -- how md_delete_file, a FILE-DELETING action declared normal-mode-only,
+    -- reached insert and visual mode on every markdown buffer (#214 C2).
+    it("each shipped default preserves the entry's registry keys AND modes", function()
+        local drift = {}
         for _, e in ipairs(reg.entries) do
             local cfg = e.config_key and shipped[e.config_key]
             -- An opt-in entry ships off on purpose; that is not shrinkage. The
             -- test below proves it is in fact off, so this skip cannot hide one.
             if reg.opt_in[e.id] then cfg = nil end
-            if cfg and type(cfg) == "table" and cfg.shortcut then
-                local have = {}
-                for _, k in ipairs(as_list(cfg.shortcut)) do have[k] = true end
-                for _, k in ipairs(as_list(e.default_key)) do
-                    if not have[k] then
-                        lost[#lost + 1] = e.id .. " loses " .. k .. " via " .. e.config_key
+            if cfg and type(cfg) == "table" then
+                if cfg.shortcut then
+                    local have = {}
+                    for _, k in ipairs(as_list(cfg.shortcut)) do have[k] = true end
+                    for _, k in ipairs(as_list(e.default_key)) do
+                        if not have[k] then
+                            drift[#drift + 1] = e.id .. " loses key " .. k .. " via " .. e.config_key
+                        end
+                    end
+                end
+                if cfg.modes then
+                    local declared = {}
+                    for _, m in ipairs(e.default_modes or {}) do declared[m] = true end
+                    for _, m in ipairs(cfg.modes) do
+                        if not declared[m] then
+                            drift[#drift + 1] = e.id .. " GAINS mode " .. m
+                                .. " (declares " .. table.concat(e.default_modes or {}, "/")
+                                .. ") via " .. e.config_key
+                        end
                     end
                 end
             end
         end
-        assert.same({}, lost)
+        assert.same({}, drift)
+    end)
+
+    -- Two entries may share a config_key only if they are true twins. If their
+    -- declared defaults differ, one of them is being silently redefined by the
+    -- other's config — which is exactly what happened to md_delete_file.
+    it("entries sharing a config_key declare identical defaults", function()
+        local by_key = {}
+        for _, e in ipairs(reg.entries) do
+            by_key[e.config_key] = by_key[e.config_key] or {}
+            table.insert(by_key[e.config_key], e)
+        end
+        local mismatched = {}
+        for key, group in pairs(by_key) do
+            if #group > 1 then
+                local first = group[1]
+                for i = 2, #group do
+                    local other = group[i]
+                    if not vim.deep_equal(as_list(first.default_key), as_list(other.default_key))
+                        or not vim.deep_equal(first.default_modes, other.default_modes) then
+                        mismatched[#mismatched + 1] = key .. ": " .. first.id .. " vs " .. other.id
+                    end
+                end
+            end
+        end
+        assert.same({}, mismatched)
     end)
 
     -- Same guarantee measured through the seam users actually hit, so the
@@ -546,15 +596,16 @@ describe("opt-in set is closed (#214 M2)", function()
         assert.same({}, claimed)
     end)
 
-    -- md_delete_file shares chat_shortcut_delete with chat_delete, the way
-    -- md_delete_tree/md_export_html already share theirs: same gesture, two
-    -- scopes, one knob. Rebinding must move BOTH, or the twins drift.
+    -- A markdown entry shares its chat sibling's knob only when the two are
+    -- TRUE twins — same keys, same modes. md_delete_file is not one of them: it
+    -- deletes a file and is normal-mode-only, while chat delete is n/i/v/x. It
+    -- gets its own knob, and the "identical defaults" test above is what keeps
+    -- a future twin from being declared without checking.
     it("markdown twins rebind through their chat sibling's knob", function()
         local function ent(id)
             for _, e in ipairs(reg.entries) do if e.id == id then return e end end
         end
         for _, pair in ipairs({
-            { "chat_delete", "md_delete_file", "chat_shortcut_delete" },
             { "chat_delete_tree", "md_delete_tree", "chat_shortcut_delete_tree" },
             { "chat_export_html", "md_export_html", "chat_shortcut_export_html" },
         }) do
@@ -602,5 +653,67 @@ describe("default_keymaps master switch (#214 M2)", function()
                     "help still advertises a key in context " .. ctx .. ": " .. line)
             end
         end
+    end)
+end)
+
+-- #214 I2 / Done-when: "no registry-derived binding exists that <C-g>? cannot
+-- show — asserted in both directions". Rendering only keys[1] left <M-q>,
+-- <M-t>, <M-S-CR> and <C-g>i invisible, so the criterion was ticked without
+-- being met. This is the assertion that closes it.
+describe("<C-g>? can show every bound key (#214 I2)", function()
+    local parley = require("parley")
+    local reg = require("parley.keybinding_registry")
+
+    before_each(function() parley.setup({}) end)
+
+    local CONTEXTS = { "chat", "markdown", "note", "issue", "vision", "repo", "other",
+                       "chat_finder", "note_finder", "issue_finder" }
+
+    local function help_text(ctx)
+        return table.concat(reg.help_lines(ctx, parley.config), "\n")
+    end
+
+    it("every key of every displayed entry appears in its context's help", function()
+        local hidden = {}
+        for _, ctx in ipairs(CONTEXTS) do
+            local text = help_text(ctx)
+            local shown_scopes = {}
+            for _, sc in ipairs(reg.get_display_scopes(ctx)) do shown_scopes[sc] = true end
+            for _, e in ipairs(reg.entries) do
+                if shown_scopes[e.scope] then
+                    for _, k in ipairs(reg.resolve_keys(e, parley.config) or {}) do
+                        if not text:find(k, 1, true) then
+                            hidden[#hidden + 1] = ctx .. "/" .. e.id .. " hides " .. k
+                        end
+                    end
+                end
+            end
+        end
+        assert.same({}, hidden)
+    end)
+
+    it("the aliases the chords depend on are visible by name", function()
+        local chat = help_text("chat")
+        for _, k in ipairs({ "<M-q>", "<C-g>q", "<M-t>", "<C-g>t",
+                             "<M-i>", "<M-S-CR>", "<C-g>i", "<M-p>", "<C-g>b" }) do
+            assert.is_truthy(chat:find(k, 1, true), k .. " is not shown in the chat help")
+        end
+    end)
+
+    it("and the reverse — help shows no key that is not bound", function()
+        local bound = {}
+        for _, e in ipairs(reg.entries) do
+            for _, k in ipairs(reg.resolve_keys(e, parley.config) or {}) do bound[k] = true end
+        end
+        local ghosts = {}
+        for _, ctx in ipairs(CONTEXTS) do
+            for _, line in ipairs(reg.help_lines(ctx, parley.config)) do
+                local primary = line:match("^%s%s(%S+)%s%s")
+                if primary and not bound[primary] then
+                    ghosts[#ghosts + 1] = ctx .. ": " .. primary
+                end
+            end
+        end
+        assert.same({}, ghosts)
     end)
 end)

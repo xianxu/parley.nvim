@@ -1493,9 +1493,15 @@ function M.open(opts)
     end
 
     for _, m in ipairs(extra_mappings) do
-        local normalized_key = key_name(keycode(m.key))
-        local reserved_key = reserved_keys[normalized_key]
-        if reserved_key then
+        -- #214 C1: a nil/empty key means the binding is disabled (the caller
+        -- resolved it through the keybinding registry and got nothing back —
+        -- `shortcut = ""`, or `default_keymaps = false`). Skip it. Passing it
+        -- through raised "Invalid (empty) LHS" and took the whole picker down.
+        local normalized_key = m.key ~= nil and m.key ~= "" and key_name(keycode(m.key)) or nil
+        local reserved_key = normalized_key and reserved_keys[normalized_key]
+        if not normalized_key then
+            logger.debug("float_picker mapping skipped: no key bound")
+        elseif reserved_key then
             logger.warning(string.format(
                 "float_picker mapping %s skipped because it conflicts with reserved key %s",
                 tostring(m.key),

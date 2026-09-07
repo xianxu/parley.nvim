@@ -346,11 +346,14 @@ M.open = function(_options)
     end
     _parley._issue_finder.opened = true
 
-    local issue_finder_mappings = _parley.config.issue_finder_mappings or {}
-    local delete_shortcut = issue_finder_mappings.delete or { shortcut = "<C-d>" }
-    local cycle_status_shortcut = issue_finder_mappings.cycle_status or { shortcut = "<C-s>" }
-    local toggle_done_shortcut = issue_finder_mappings.toggle_done or { shortcut = "<C-a>" }
-    local cycle_view_shortcut = issue_finder_mappings.cycle_view or { shortcut = "<Tab>" }
+    -- #214 C1: picker keys resolve through the registry (not raw config), so
+    -- rebinding, `shortcut = ""` and `default_keymaps = false` all reach them and
+    -- the hardcoded default_key duplicates are gone. nil = unbound; skipped.
+    local kb = require("parley.keybinding_registry")
+    local delete_shortcut = kb.key_for("if_delete", _parley.config)
+    local cycle_status_shortcut = kb.key_for("if_cycle_status", _parley.config)
+    local toggle_done_shortcut = kb.key_for("if_toggle_done", _parley.config)
+    local cycle_view_shortcut = kb.key_for("if_cycle_view", _parley.config)
 
     -- View mode: 0=issues (default), 1=history. Clamp with % 2 so any stale
     -- in-memory value (e.g. a `2` left by the pre-#158 tri-state) self-heals.
@@ -445,7 +448,7 @@ M.open = function(_options)
     local prompt_title = string.format(
         "Issues (%s  %s: cycle view)",
         M.VIEW_LABELS[view_mode] or M.VIEW_LABELS[0],
-        cycle_view_shortcut.shortcut
+        cycle_view_shortcut
     )
 
     local picker_ref = {}
@@ -532,7 +535,7 @@ M.open = function(_options)
             end,
             mappings = {
             {
-                key = delete_shortcut.shortcut,
+                key = delete_shortcut,
                 fn = function(item, close_fn, context)
                     if not item then
                         return
@@ -561,7 +564,7 @@ M.open = function(_options)
                 end,
             },
             {
-                key = cycle_status_shortcut.shortcut,
+                key = cycle_status_shortcut,
                 fn = function(item, close_fn)
                     if not item or not item.issue then
                         return
@@ -588,16 +591,16 @@ M.open = function(_options)
                 end,
             },
             {
-                key = cycle_view_shortcut.shortcut,
+                key = cycle_view_shortcut,
                 fn = cycle_view_fn,
             },
             {
-                key = toggle_done_shortcut.shortcut,
+                key = toggle_done_shortcut,
                 fn = cycle_view_fn,
             },
             -- Show key bindings help
             {
-                key = (_parley.config.global_shortcut_keybindings or { shortcut = "<C-g>?" }).shortcut,
+                key = kb.key_for("help", _parley.config),
                 fn = function(_, _)
                     vim.schedule(function()
                         _parley.cmd.KeyBindings("issue_finder")

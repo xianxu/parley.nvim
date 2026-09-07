@@ -324,18 +324,24 @@ local config = {
 		min_word = 4, -- min misspelled-word length before suggesting
 		max_suggest = 9, -- max suggestions shown in the menu
 	},
-	-- #214 master switch. `false` makes parley install NO default keymaps:
-	-- every registry-derived binding, plus the buffer-local native wrappers
-	-- (u / <C-r> / * / # / g* / g#). `<C-g>?` goes quiet with them, because the
-	-- switch lives in `resolve_keys` — help and reality cannot disagree.
-	-- Everything stays reachable as a `:Parley*` command, and per-binding
-	-- rebinding (`shortcut = "<M-z>"`) / disabling (`shortcut = ""`) still work
-	-- when this is left on.
-	-- NOT covered, deliberately: keys inside transient parley windows (pickers,
-	-- the help float, the review menu) — those exist only while the window is
-	-- open and `q`/`<Esc>` is the only way out; and maps that exist solely
-	-- because a feature was explicitly switched on (interview-mode <CR>,
-	-- chat_spell.typeahead's <CR>), which are the feature, not a default.
+	-- #214 master switch. `false` makes parley claim NO keys by DEFAULT: every
+	-- registry-derived binding (including picker-internal ones), plus the
+	-- buffer-local native wrappers (u / <C-r> / * / # / g* / g#). `<C-g>?` goes
+	-- quiet with them, because the switch lives in `resolve_keys` — help and
+	-- reality cannot disagree.
+	--
+	-- A shortcut YOU set in setup{} still binds. The switch suppresses parley's
+	-- own claims, not your choices; without that it would be a one-way door,
+	-- since no later configuration could bind anything back.
+	--
+	-- NOT covered: hardcoded keys inside transient parley windows (`q`/`<Esc>`
+	-- to dismiss a picker, cursor motion within it) — a window you opened
+	-- deliberately must remain closable; and maps that exist solely because a
+	-- feature was switched on (interview-mode <CR>, chat_spell.typeahead's
+	-- <CR>), which are the feature, not a default.
+	--
+	-- Sampled when a buffer is prepared, so it takes effect on buffers opened
+	-- after `setup()`; buffers already open keep what they were given.
 	default_keymaps = true,
 	-- local shortcuts bound to the chat buffer
 	-- (be careful to choose something which will work across specified modes)
@@ -347,6 +353,12 @@ local config = {
 	chat_shortcut_respond_all = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>G" },
 	chat_shortcut_delete = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>d" },
 	chat_shortcut_delete_tree = { modes = { "n" }, shortcut = "<C-g>D" },
+	-- The markdown-scope delete. Shares the <C-g>d GESTURE with
+	-- chat_shortcut_delete but NOT its knob: chat delete is n/i/v/x, and this one
+	-- removes a FILE, so it stays normal-mode-only. Sharing the config_key handed
+	-- it the chat entry's modes and put a file-deleting action on insert and
+	-- visual mode in every markdown buffer (#214 C2).
+	chat_shortcut_delete_file = { modes = { "n" }, shortcut = "<C-g>d" },
 	chat_shortcut_stop = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>x" },
 	-- Toggle folds of 🔧:/📎: components within the exchange under cursor.
 	-- Intentionally unbound by default (#214): a tool call's RESULT is low-value

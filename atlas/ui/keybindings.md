@@ -58,13 +58,16 @@ bitten this repo (#214):
 Both `default_key` and a config `shortcut` accept a string or a **list**; the
 list is the alias mechanism (`chat_drill_in` = `{ "<C-g>q", "<M-q>" }`).
 
-Help renders only `keys[1]`, so aliases are invisible in `<C-g>?` — which is why
-the shipped order puts the portable key first (`branch_ref` leads with `<M-i>`,
-not the `<M-S-CR>` mnemonic most terminals cannot distinguish from `<CR>`). Help
-takes its key from `resolve_keys` and nothing else: an entry that resolves to
-nothing is **omitted**, so the float cannot advertise a key that is not bound.
-(Before #214 it ended in `or entry.default_key`, resurrecting exactly the keys
-resolution had refused.)
+Help shows **every** bound key: the primary holds the aligned column and the
+aliases follow the description as `(also <M-S-CR>, <C-g>i)`. The shipped order
+still puts the portable key first, because the column is the one a reader
+reaches for — `branch_ref` leads with `<M-i>`, not the `<M-S-CR>` mnemonic most
+terminals cannot distinguish from `<CR>`. Help takes its keys from
+`resolve_keys` and nothing else: an entry that resolves to nothing is
+**omitted**, so the float cannot advertise a key that is not bound. (Before #214
+it rendered `keys[1]` only — hiding `<M-q>`, `<M-t>` and `<C-g>i` — and fell
+back to `or entry.default_key`, resurrecting exactly the keys resolution had
+refused.)
 
 ## Every binding is rebindable
 Every registry entry carries a `config_key` — enforced by
@@ -76,16 +79,26 @@ To disable one binding: `shortcut = ""`.
 To disable **all** of parley's default keymaps: `default_keymaps = false`.
 
 ## The master switch
-`default_keymaps = false` makes parley install no default keymaps: every
-registry-derived binding and every native override (below). It lives inside
-`resolve_keys`, so registration, `key_for`, and the `<C-g>?` float all go quiet
-together — help and reality cannot disagree. Everything remains reachable as a
-`:Parley*` command.
+`default_keymaps = false` makes parley claim no keys by default: every
+registry-derived binding — picker-internal mappings included — and every native
+override (below). It lives inside `resolve_keys`, so registration, `key_for`,
+and the `<C-g>?` float all go quiet together; help and reality cannot disagree.
 
-Deliberately **not** covered: keys inside transient parley windows (pickers, the
-help float, the review menu), where `q`/`<Esc>` is the only way out; and maps
-that exist solely because a feature was switched on (interview-mode `<CR>`,
+**A shortcut the user sets in `setup{}` still binds.** The switch suppresses
+parley's *own* claims, not the user's choices — `setup()` records which
+`*_shortcut_*` knobs the caller supplied (`config._explicit_shortcuts`) and
+`resolve_keys` honours those. Without that carve-out the switch is a one-way
+door: no later configuration could bind anything back, and several actions
+(`chat_drill_in`/`<M-q>` among them) have no `:Parley*` command to fall back on.
+
+Not covered: **hardcoded** keys inside transient parley windows (`q`/`<Esc>` to
+dismiss a picker, motion within it), so a window you opened stays closable; and
+maps that exist solely because a feature was switched on (interview-mode `<CR>`,
 `chat_spell.typeahead`'s `<CR>`) — those are the feature, not a default.
+
+The switch is read when a buffer is *prepared*, and `_prepared_bufs` makes that
+per-buffer sample permanent: it governs buffers opened after `setup()`, while
+buffers already open keep the keymaps they were given.
 
 ## Opt-in set
 `keybinding_registry.opt_in` names the entries parley ships **unbound**, each

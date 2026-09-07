@@ -239,7 +239,7 @@ function M.agent_picker(plugin)
             { all = all, agents = plugin.agents })
     end
 
-    local keybindings_key = (plugin.config.global_shortcut_keybindings or { shortcut = "<C-g>?" }).shortcut
+    local keybindings_key = require("parley.keybinding_registry").key_for("help", plugin.config)
     local expand_key = require("parley.keybinding_registry")
         .key_for("ap_expand_catalog", plugin.config)
     local title = "🤖 Parley Agents"

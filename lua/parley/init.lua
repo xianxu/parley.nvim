@@ -537,6 +537,27 @@ M.setup = function(opts)
 	-- reset M.config
 	M.config = vim.deepcopy(config)
 
+	-- #214: record which shortcut knobs the USER set explicitly, so
+	-- `default_keymaps = false` can suppress parley's DEFAULT claims without
+	-- suppressing the keys you chose yourself. Without this the switch is a
+	-- trap — you turn it on to take over the keyspace, and then no
+	-- configuration can bind anything ever again. Lives on the config table
+	-- (not on M) so `resolve_keys` stays a pure function of its argument.
+	M.config._explicit_shortcuts = {}
+	for k, v in pairs(opts) do
+		if type(v) == "table" then
+			if v.shortcut ~= nil then -- shortcut-read-ok: detecting user intent, not deriving a key
+				M.config._explicit_shortcuts[k] = true
+			end
+			-- nested mapping tables, e.g. chat_finder_mappings.delete
+			for nk, nv in pairs(v) do
+				if type(nv) == "table" and nv.shortcut ~= nil then -- shortcut-read-ok: as above
+					M.config._explicit_shortcuts[k .. "." .. nk] = true
+				end
+			end
+		end
+	end
+
 	-- Register builtin tool-use tools (M1 of #81). Runs before any
 	-- agent validation so agents can reference tools by name. The
 	-- registry module handles reset-idempotence internally.
@@ -1500,7 +1521,7 @@ local function keybinding_help_lines(context)
 	local cfg = M.config or {}
 	local current_buf = vim.api.nvim_get_current_buf()
 	context = context or detect_buffer_context(current_buf)
-	return kb_registry.help_lines(context, cfg, current_buf)
+	return kb_registry.help_lines(context, cfg)
 end
 
 M._keybinding_help_lines = function(context)
@@ -2311,9 +2332,14 @@ M.prep_chat = function(buf, file_name)
 	-- the whole set honours the `default_keymaps` master switch (#214).
 	local function native_map(key, fn, desc)
 		if not kb_registry.native_overrides[key] then
-			error("parley: un-registered native override '" .. key .. "' — add it to "
-				.. "keybinding_registry.native_overrides with its rationale, or give it "
-				.. "a registry entry so it can be rebound")
+			-- A developer mistake, not a user one, and prep_chat has already set
+			-- _prepared_bufs — raising here would leave the buffer permanently
+			-- half-prepared with no retry. Log and skip; the binding contract is
+			-- enforced at test time instead (tests/arch/single_source_sweeps_spec).
+			M.logger.warning("parley: un-registered native override '" .. key
+				.. "' — add it to keybinding_registry.native_overrides with its "
+				.. "rationale, or give it a registry entry so it can be rebound")
+			return
 		end
 		if M.config.default_keymaps == false then
 			return
@@ -2568,9 +2594,13 @@ M.highlight_question_block = function(buf)
 end
 
 M.setup_markdown_keymaps = function(buf)
-	-- Document review keybindings (via skill system, not registry-managed)
+	-- Document review actions. The skill supplies the callbacks; the REGISTRY
+	-- installs them (#214 C1) — it used to install them itself from raw config,
+	-- which put <C-g>ve/<M-o>/<M-CR> outside the master switch and made a
+	-- `shortcut = ""` disable raise on every markdown BufEnter. nil = journal
+	-- sidecar, which gets no review keys.
 	local review_skill = require("parley.skills.review")
-	review_skill.setup_keymaps(buf)
+	local review_cbs = review_skill.registry_callbacks(buf) or {}
 
 	-- Branch inserters: shared with chat buffers (#214). Markdown links INLINE
 	-- by absolute path, since the file may live anywhere; the standalone ref
@@ -2643,6 +2673,10 @@ M.setup_markdown_keymaps = function(buf)
 			end,
 			md_delete_tree = M.cmd.ChatDeleteTree,
 			md_export_html = function() exporter.pandoc_export_html() end,
+			-- review scope (#214 C1) — callbacks from the skill, install here
+			review_edit = review_cbs.review_edit,
+			review_menu = review_cbs.review_menu,
+			review_next = review_cbs.review_next,
 		},
 		M.helpers.set_keymap
 	)
@@ -3265,16 +3299,22 @@ M.new_chat = function(system_prompt, agent, initial_question)
 		end
 	end
 
-	local primary = function(s) return type(s) == "table" and s[1] or s end
+	-- #214 C1: keys shown in the chat header resolve through the registry, so a
+	-- rebound, aliased or disabled binding is reported accurately instead of from
+	-- a second copy of the resolution rules. An unbound key renders as the
+	-- command, which the template already offers as the alternative.
+	local function key_hint(id, cmd)
+		return kb_registry.key_for(id, M.config) or (":" .. M.config.cmd_prefix .. cmd)
+	end
 	local template = M.render.template(M.config.chat_template or require("parley.defaults").chat_template, {
 		["{{filename}}"] = string.match(filename, "([^/]+)$"),
 		["{{optional_headers}}"] = model .. provider .. system_prompt,
 		["{{user_prefix}}"] = M.config.chat_user_prefix,
-		["{{respond_shortcut}}"] = primary(M.config.chat_shortcut_respond.shortcut),
+		["{{respond_shortcut}}"] = key_hint("chat_respond", "ChatRespond"),
 		["{{cmd_prefix}}"] = M.config.cmd_prefix,
-		["{{stop_shortcut}}"] = primary(M.config.chat_shortcut_stop.shortcut),
-		["{{delete_shortcut}}"] = primary(M.config.chat_shortcut_delete.shortcut),
-		["{{new_shortcut}}"] = primary(M.config.global_shortcut_new.shortcut),
+		["{{stop_shortcut}}"] = key_hint("chat_stop", "ChatStop"),
+		["{{delete_shortcut}}"] = key_hint("chat_delete", "ChatDelete"),
+		["{{new_shortcut}}"] = key_hint("chat_new", "ChatNew"),
 	})
 
 	-- escape underscores (for markdown)
@@ -4601,11 +4641,17 @@ M.get_default_template = function(agent, file_path)
 
 	-- Generate template using the same pattern as M.new_chat
 	-- Get shortcuts, handling potentially missing values
-	local primary = function(s) return type(s) == "table" and s[1] or s end
-	local respond_shortcut = M.config.chat_shortcut_respond and primary(M.config.chat_shortcut_respond.shortcut) or "<C-g><C-g>"
-	local stop_shortcut = M.config.chat_shortcut_stop and primary(M.config.chat_shortcut_stop.shortcut) or "<C-g>x"
-	local delete_shortcut = M.config.chat_shortcut_delete and primary(M.config.chat_shortcut_delete.shortcut) or "<C-g>d"
-	local new_shortcut = M.config.global_shortcut_new and primary(M.config.global_shortcut_new.shortcut) or "<C-g>c"
+	-- #214 C1: keys shown in the chat header resolve through the registry, so a
+	-- rebound, aliased or disabled binding is reported accurately instead of from
+	-- a second copy of the resolution rules. An unbound key renders as the
+	-- command, which the template already offers as the alternative.
+	local function key_hint(id, cmd)
+		return kb_registry.key_for(id, M.config) or (":" .. M.config.cmd_prefix .. cmd)
+	end
+	local respond_shortcut = key_hint("chat_respond", "ChatRespond")
+	local stop_shortcut = key_hint("chat_stop", "ChatStop")
+	local delete_shortcut = key_hint("chat_delete", "ChatDelete")
+	local new_shortcut = key_hint("chat_new", "ChatNew")
 
 	local template = M.render.template(M.config.chat_template or require("parley.defaults").chat_template, {
 		["{{filename}}"] = basename,
