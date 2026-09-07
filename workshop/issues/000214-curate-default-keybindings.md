@@ -5,7 +5,7 @@ deps: [#212]
 github_issue:
 created: 2026-09-02
 updated: 2026-09-05
-estimate_hours: 2.84
+estimate_hours: 3.83
 started: 2026-09-05T22:03:29-07:00
 ---
 
@@ -224,11 +224,13 @@ familiarity: 1.0
 item: lua-neovim         design=0.3  impl=0.6
 item: lua-neovim         design=0.2  impl=0.5
 item: lua-neovim         design=0.2  impl=0.4
+item: lua-neovim         design=0.25 impl=0.5
 item: atlas-docs         design=0.05 impl=0.08
 item: milestone-review   design=0.0  impl=0.2
 item: milestone-review   design=0.0  impl=0.2
+item: milestone-review   design=0.0  impl=0.2
 design-buffer: 0.15
-total: 2.84
+total: 3.83
 ```
 
 *Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against
@@ -258,9 +260,17 @@ Derivation notes:
   the first block's 0.1 was over it.
 - **design-buffer 0.15** — v3.1 step 4's thorough-plan rate, matching
   `baseline-v3.1.md`'s own `est_design * 1.15` column.
-- **Two `milestone-review` items**, one per genuine boundary, each at the scaled
-  ceiling (0.2–0.5 × 0.40 = 0.08–0.20). #218 needed five close rounds; budgeting
-  one clean round per boundary would be optimistic.
+- **Three `milestone-review` items**, one per genuine boundary, each at the
+  scaled ceiling (0.2–0.5 × 0.40 = 0.08–0.20). #218 needed five close rounds and
+  M1 needed five; budgeting one clean round per boundary would be optimistic.
+- **M3 added 2026-09-07** (`design=0.25 impl=0.5`): routing pending `<M-q>`
+  quotes into the new branch — the half of the chord's semantics specified in
+  #217 gap 11 and never built. Its design line is above M1/M2's because one
+  decision is genuinely open (does redirecting quotes *move* them out of the
+  parent or *copy* them), and that choice changes what the action means.
+  `impl=0.5` sits below M2a's 0.6 because it reuses `gather_and_strip` rather
+  than adding parsing, but above M2b because it is behaviour with a durable
+  side effect — the class that produced every Critical in M1.
 
 ## Plan
 
@@ -366,6 +376,31 @@ stated purpose is making bindings *more* configurable.
       by `:map` showing no parley mapping.
 - [ ] **M2** — assert registry-derived help/reality agreement in both directions,
       with the allowance list closed.
+
+- [ ] **M3** — `<M-S-CR>`/`<M-i>` with **pending `<M-q>` quotes** submits them into
+      the new branch. This is the half of the chord's semantics that was
+      specified in #217 gap 11 and never built: the operator's framing was
+      "submission redirected into a new chat", with two natural cases — a visual
+      selection (shipped in M1) and pending drill-in quotes (**not shipped**).
+      Today `drill_in.gather_edit_plan` is consumed only by `chat_respond`
+      (`chat_respond.lua:1294,1345`), which folds quotes into the *current*
+      chat's next turn; `branch_ref` never touches the drill-in machinery.
+      Reuses `gather_and_strip` rather than adding parsing.
+- [x] **M3 decision (operator, 2026-09-07): STRIP, same as `<M-CR>`.** The
+      markers move into the child and the parent is left clean. Rationale:
+      `<M-q>` + `<M-CR>` moves your quotes into the next turn *here*; `<M-q>` +
+      `<M-S-CR>` moves them into the next turn *there*. Same gesture, different
+      destination — which is the whole mnemonic. A *fork* (copy, parent keeps the
+      annotation) was the alternative and is rejected: it would make the same
+      preparation gesture mean two different things depending on which key
+      follows it.
+
+**Why M3 and not M2.** M2 is pure policy — which keys exist, are they rebindable,
+are they disableable. This is behaviour: what happens when the key fires, in code
+(`drill_in`, `create_child_chat`) that M2 does not touch. M1 cost five review
+rounds and three Criticals precisely because a behaviour change (the branch-path
+unification) rode inside a curation milestone; bundling another one into M2 would
+repeat that. Separate boundary, separate review, smaller blast radius.
 
 **Deferred to after #212:** the ariadne core/opt-in split (`<C-y>*`, `<C-j>*`),
 and with it the `<C-y>`/`<C-j>` half of the fresh-install Done-when criterion.
