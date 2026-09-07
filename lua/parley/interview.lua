@@ -79,23 +79,42 @@ M.cr_keys = function()
 	return "<CR>"
 end
 
---- Install a global insert-mode <CR> mapping that inserts timestamps in interview mode.
-M.setup_keymap = function()
-	_logger.info("Setting up interview keymap")
+-- Buffers this session has installed the interview <CR> map on, so removal
+-- touches exactly those and nothing else.
+M._keymap_bufs = {}
+
+--- Install the insert-mode <CR> mapping that inserts timestamps in interview
+--- mode. BUFFER-LOCAL (#214): it used to be global, and `remove_keymap` then
+--- did an unconditional `vim.keymap.del("i", "<CR>")` — so leaving interview
+--- mode DELETED the user's own <CR> map rather than restoring it. `<C-n>i`
+--- followed by `<C-n>I` cost a cmp/blink user their accept key for the rest of
+--- the session. A buffer-local map shadows the global one and unshadows on
+--- removal, which is the same effect without the destruction; `del` cannot tell
+--- "mine" from "theirs", so it must never be aimed at a global map.
+---@param buf integer|nil  buffer to map in (defaults to the current buffer)
+M.setup_keymap = function(buf)
+	buf = buf or vim.api.nvim_get_current_buf()
+	_logger.info("Setting up interview keymap on buffer " .. tostring(buf))
 	vim.keymap.set("i", "<CR>", function()
 		return M.cr_keys()
 	end, {
+		buffer = buf,
 		expr = true,
 		desc = "Insert timestamp on new line in interview mode",
 	})
+	M._keymap_bufs[buf] = true
 end
 
---- Remove the global insert-mode <CR> mapping installed by setup_keymap().
+--- Remove the mappings installed by setup_keymap(). Only ever deletes
+--- buffer-local maps this module installed.
 M.remove_keymap = function()
 	_logger.info("Removing interview keymap")
-	pcall(function()
-		vim.keymap.del("i", "<CR>")
-	end)
+	for buf in pairs(M._keymap_bufs) do
+		if vim.api.nvim_buf_is_valid(buf) then
+			pcall(vim.keymap.del, "i", "<CR>", { buffer = buf })
+		end
+	end
+	M._keymap_bufs = {}
 end
 
 --- Add (or refresh) syntax highlighting for interview timestamp lines in a buffer.

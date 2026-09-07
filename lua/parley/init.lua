@@ -1517,6 +1517,17 @@ end
 
 M._detect_buffer_context = detect_buffer_context
 
+-- The key to advertise for `id` in chat-header prose. Resolves through the
+-- registry, so a rebound, aliased or disabled binding is reported accurately
+-- rather than from a second copy of the resolution rules; an unbound key
+-- renders as the command, which the templates already offer as the alternative.
+-- Module-scope because both call sites need it — #214 replaced a `primary`
+-- helper that was duplicated at those same two sites, and copying the body
+-- again would have preserved the duplication it was meant to retire.
+local function key_hint(id, cmd)
+	return kb_registry.key_for(id, M.config) or (":" .. M.config.cmd_prefix .. cmd)
+end
+
 local function keybinding_help_lines(context)
 	local cfg = M.config or {}
 	local current_buf = vim.api.nvim_get_current_buf()
@@ -3299,13 +3310,6 @@ M.new_chat = function(system_prompt, agent, initial_question)
 		end
 	end
 
-	-- #214 C1: keys shown in the chat header resolve through the registry, so a
-	-- rebound, aliased or disabled binding is reported accurately instead of from
-	-- a second copy of the resolution rules. An unbound key renders as the
-	-- command, which the template already offers as the alternative.
-	local function key_hint(id, cmd)
-		return kb_registry.key_for(id, M.config) or (":" .. M.config.cmd_prefix .. cmd)
-	end
 	local template = M.render.template(M.config.chat_template or require("parley.defaults").chat_template, {
 		["{{filename}}"] = string.match(filename, "([^/]+)$"),
 		["{{optional_headers}}"] = model .. provider .. system_prompt,
@@ -4641,13 +4645,6 @@ M.get_default_template = function(agent, file_path)
 
 	-- Generate template using the same pattern as M.new_chat
 	-- Get shortcuts, handling potentially missing values
-	-- #214 C1: keys shown in the chat header resolve through the registry, so a
-	-- rebound, aliased or disabled binding is reported accurately instead of from
-	-- a second copy of the resolution rules. An unbound key renders as the
-	-- command, which the template already offers as the alternative.
-	local function key_hint(id, cmd)
-		return kb_registry.key_for(id, M.config) or (":" .. M.config.cmd_prefix .. cmd)
-	end
 	local respond_shortcut = key_hint("chat_respond", "ChatRespond")
 	local stop_shortcut = key_hint("chat_stop", "ChatStop")
 	local delete_shortcut = key_hint("chat_delete", "ChatDelete")

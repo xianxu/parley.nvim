@@ -631,8 +631,8 @@ M.open = function(_)
 		local prompt_title = string.format(
 			"Chat Files (%s  %s/%s: cycle)",
 			resolved_recency.current.label,
-			cycle_filter_shortcut or "-",
-			cycle_filter_prev_shortcut or "-"
+			kb.key_label("cf_cycle_filter", cfg),
+			kb.key_label("cf_cycle_filter_prev", cfg)
 		)
 
 		_parley.logger.debug("ChatFinder using active_window: " .. (_parley._chat_finder.active_window or "nil"))

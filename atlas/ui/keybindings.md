@@ -96,9 +96,18 @@ dismiss a picker, motion within it), so a window you opened stays closable; and
 maps that exist solely because a feature was switched on (interview-mode `<CR>`,
 `chat_spell.typeahead`'s `<CR>`) — those are the feature, not a default.
 
-The switch is read when a buffer is *prepared*, and `_prepared_bufs` makes that
-per-buffer sample permanent: it governs buffers opened after `setup()`, while
-buffers already open keep the keymaps they were given.
+**Reversibility, per sample site.** The switch is *sampled* in three places, and
+each one is where its decision becomes durable state:
+
+| site | scope | reversible? |
+|---|---|---|
+| `register_global` | global maps, at `setup()` | **yes** — it tracks what it installed and revokes those maps on the next `setup()`, skipping any key whose `desc` no longer matches (so a key the user rebound afterwards is left alone) |
+| `register_buffer` via `prep_chat` / `setup_markdown_keymaps` | buffer-local | governs buffers prepared *after* the flip; `_prepared_bufs` makes each buffer's sample permanent until it is reopened |
+| `native_map` | buffer-local | same rule as `register_buffer` |
+
+Before #214 the global site had no teardown, so `setup()` followed by
+`setup({ default_keymaps = false })` left 43 global mappings live — the switch
+failed in the most natural way to try it.
 
 ## Opt-in set
 `keybinding_registry.opt_in` names the entries parley ships **unbound**, each
@@ -109,6 +118,20 @@ binding that silently loses its key fails the suite.
 All five `<leader>` copy maps plus `<leader>fo` are in it: `<leader>` is the
 user's namespace, and `<leader>fo` mapped oil.nvim, which parley never requires.
 `config.lua` carries a paste-ready block to turn any of them on.
+
+## Feature-gated maps
+A third category, distinct from both defaults and opt-ins:
+`keybinding_registry.feature_gated` names keys that exist **only** because a
+feature was switched on — `chat_spell.typeahead`'s insert-mode `<CR>`, and
+interview mode's. They are not keyspace claims: turning the feature off removes
+them. They are listed so the leak guard's allowance list is genuinely closed
+rather than reporting a documented opt-in as an escape.
+
+Interview's `<CR>` is **buffer-local**. It was global, and teardown did an
+unconditional `vim.keymap.del("i", "<CR>")` — so leaving interview mode deleted
+the user's own `<CR>` map (cmp/blink's accept key, for most users) instead of
+restoring it. A buffer-local map shadows and unshadows; `del` cannot tell
+"mine" from "theirs", so it must never be aimed at a global map.
 
 ## Native overrides (off-registry by design)
 `u`, `<C-r>`, `*`, `#`, `g*`, `g#` are mapped buffer-locally in chat buffers but

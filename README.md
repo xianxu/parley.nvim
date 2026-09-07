@@ -274,10 +274,9 @@ Two deliberate defaults worth knowing:
   buffers they behave natively except when parley has something specific to do —
   `u`/`<C-r>` ask before discarding a response that is still streaming, and
   `*`/`#` search the whole `[...]` anchor when the cursor is inside one.
-- **Note-buffer keys** (`<C-n>i` / `<C-n>I` enter and leave interview mode,
-  `<C-n>t` new note from template) are configurable like the rest, via
-  `note_shortcut_interview_start`, `note_shortcut_interview_stop` and
-  `note_shortcut_template`.
+Every knob is named in [`lua/parley/config.lua`](lua/parley/config.lua) beside
+the binding it controls — that file is the reference, so this section does not
+duplicate the list.
 
 **Changed defaults (upgrading).** Three shipped defaults changed when the
 keybinding surface was curated. Nothing is gone — each is one config line away:
@@ -288,6 +287,10 @@ keybinding surface was curated. Nothing is gone — each is one config line away
 | `<leader>fo` opened oil.nvim | unbound | `global_shortcut_oil = { modes = { "n" }, shortcut = "<leader>fo" }` |
 | spell typeahead popup on, mapping insert-mode `<CR>` | off (squiggles stay on) | `chat_spell = { typeahead = true }` |
 
+One config *contract* changed with them: `shortcut = ""` used to fall through to
+the shipped default, and now means **disabled**. If you set it somewhere
+expecting the default, name the key instead.
+
 Chat storage roots:
 - `chat_dir` is the primary writable root used for new chats.
 - `chat_dirs` is an optional list of additional roots that Chat Finder, chat validation, and chat-aware commands will scan alongside `chat_dir`.
@@ -297,8 +300,9 @@ Chat storage roots:
   this section previously documented three chat-domain `ParleyChatDir…`
   commands that were never implemented.)
 - `:ParleyChatMove {dir}` moves the current chat to another registered chat root.
-- The primary `chat_dir` cannot be removed at runtime.
-- The default shortcut for chat-root management is `<C-g>h`.
+
+  (`<C-g>h` was documented here as a chat-root management shortcut; it is bound
+  to nothing and never was — same stale block as the commands above.)
 
 For full defaults and examples, see [`lua/parley/config.lua`](lua/parley/config.lua).
 

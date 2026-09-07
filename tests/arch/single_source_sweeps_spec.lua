@@ -65,13 +65,14 @@ end
 local function current_issue_docs()
     local branch = vim.fn.systemlist("git rev-parse --abbrev-ref HEAD")[1] or ""
     local id = branch:match("^(%d%d%d%d%d%d)%-")
-    if not id then
-        -- not on an issue branch (main, a detached CI checkout): fall back to
-        -- the issue that owns the arch guards' original sweep so the assertion
-        -- keeps its historical coverage rather than silently passing.
-        id = "000205"
-    end
+    -- No fallback id. An earlier version fell back to `000205` and claimed it
+    -- "keeps its historical coverage" — but on main `git merge-base HEAD main`
+    -- is HEAD, so the diff is empty and the guard passed vacuously while
+    -- asserting it had not (#214 BR-40, same family). Report instead.
     local docs = {}
+    if not id then
+        return nil, docs
+    end
     for _, pat in ipairs({ "workshop/plans/" .. id .. "-*-plan.md",
                            "workshop/issues/" .. id .. "-*.md" }) do
         for _, hit in ipairs(vim.fn.glob(pat, false, true)) do
@@ -89,6 +90,10 @@ describe("arch: single-source sweeps stay swept", function()
         -- everything those modules had ever exported. What must be tabled is the
         -- surface this issue ADDS, in any definition form.
         local id, docs = current_issue_docs()
+        if not id then
+            pending("not on an issue branch — this guard is scoped to a branch's own diff")
+            return
+        end
         if #docs == 0 then
             pending("no plan or issue document for " .. id)
             return
@@ -163,11 +168,16 @@ describe("arch: single-source sweeps stay swept", function()
     end)
 
     it("every symbol the Spec and plan tables name exists in the tree", function()
+        -- unlike its sibling this one needs no diff, so it runs on any branch
         -- The plan→code direction. The other test walks code→table; this one
         -- catches a document naming a function that was renamed or never
         -- written, which happened three times on this issue (`catalog_write`,
         -- `provider_states`, `M._logged_out_providers`).
-        local _, docs = current_issue_docs()
+        local id, docs = current_issue_docs()
+        if not id then
+            pending("not on an issue branch")
+            return
+        end
         local missing = {}
         for _, doc in ipairs(docs) do
             if doc ~= "" then
@@ -472,8 +482,11 @@ describe("arch: every key derives from the keybinding registry (#214)", function
         local offenders = {}
         for _, path in ipairs(repo_files("git ls-files 'lua/**/*.lua'")) do
             if not path:match("keybinding_registry%.lua$") then
+                -- `[^\n]*` yields an empty match after every line, which doubles
+                -- every reported line number (a planted violation at :121 was
+                -- reported as :223). `(.-)\n` over a newline-terminated body does not.
                 local lineno = 0
-                for line in read(path):gmatch("[^\n]*") do
+                for line in (read(path) .. "\n"):gmatch("(.-)\n") do
                     lineno = lineno + 1
                     -- comments are documentation, not derivation; and a read
                     -- that inspects the USER's opts (rather than deriving a key
@@ -546,5 +559,56 @@ describe("arch: native key overrides are declared (#214)", function()
             end
         end
         assert.same({}, stale, "declared in native_overrides but never installed")
+    end)
+end)
+
+-- #214 BR-42. `atlas/traceability.yaml` maps each atlas doc to the code and
+-- tests that realise it, and `make test-changed` runs off it — but nothing
+-- enforced it, which is exactly why it drifted: this milestone's headline spec
+-- and M1's whole pure module were absent, so editing the very atlas doc M2
+-- rewrote ran neither. An index nobody checks is a list of what someone
+-- remembered.
+describe("arch: traceability.yaml lists every file it claims to map (#214)", function()
+    local function traceability_paths()
+        local paths = {}
+        for line in (read("atlas/traceability.yaml") .. "\n"):gmatch("(.-)\n") do
+            local path = line:match("^%s*%-%s+([%w_%-/%.]+%.lua)%s*$")
+            if path then paths[#paths + 1] = path end
+        end
+        return paths
+    end
+
+    it("every path it names exists", function()
+        local missing = {}
+        for _, path in ipairs(traceability_paths()) do
+            if vim.fn.filereadable(path) == 0 then missing[#missing + 1] = path end
+        end
+        assert.same({}, missing,
+            "traceability.yaml points at files that are not in the tree")
+    end)
+
+    it("every spec this branch ADDED is routed somewhere", function()
+        local base = vim.fn.systemlist("git merge-base HEAD main")[1]
+        if not base or base == "" then
+            pending("branch point not found")
+            return
+        end
+        local added = vim.fn.systemlist(
+            ("git diff --name-only --diff-filter=A %s -- tests/"):format(base))
+        if vim.v.shell_error ~= 0 then
+            pending("git diff unavailable")
+            return
+        end
+        local listed = {}
+        for _, p in ipairs(traceability_paths()) do listed[p] = true end
+        local unrouted = {}
+        for _, spec in ipairs(added) do
+            if spec:match("_spec%.lua$") and not listed[spec] then
+                unrouted[#unrouted + 1] = spec
+            end
+        end
+        assert.same({}, unrouted,
+            "a new spec routes nowhere under `make test-changed` — add it to "
+            .. "atlas/traceability.yaml under the doc it verifies")
     end)
 end)

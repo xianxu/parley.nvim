@@ -941,6 +941,18 @@ function M.key_for(id, config)
 	return nil
 end
 
+--- The key for `id` as DISPLAY text — never nil, so it can go straight into a
+--- picker title. `key_for` returns nil for an unbound entry, and three title
+--- sites fed that to `string.format("%s")`, rendering "Issues (open  nil: cycle
+--- view)" under `default_keymaps = false`; one of the three guarded it with
+--- `or "-"` and the other two did not. One convention, in one place (#214).
+--- @param id string
+--- @param config table
+--- @return string
+function M.key_label(id, config)
+	return M.key_for(id, config) or "-"
+end
+
 --- Resolve the key and modes for an entry, checking config overrides.
 --- Handles both flat config keys (e.g. "global_shortcut_new") and
 --- nested dot-notation (e.g. "chat_finder_mappings.delete").
@@ -980,7 +992,17 @@ function M.resolve_keys(entry, config)
 	local function as_list(v)
 		if v == nil then return nil end
 		if type(v) == "string" then return v ~= "" and { v } or nil end
-		if type(v) ~= "table" then return nil end
+		if type(v) ~= "table" then
+			-- #214: a number/boolean is not a shape this config has a meaning
+			-- for. Silently mapping it onto "disabled" hides a typo behind a
+			-- binding that just stops working; before M2 it fell back to the
+			-- default, which hid it differently. Say so, then treat as absent.
+			require("parley.logger").warning(string.format(
+				"parley: %s has shortcut of type %s (expected string or list) — "
+				.. "ignoring it and using the default",
+				tostring(entry.config_key), type(v)))
+			return nil, true
+		end
 		local keys = {}
 		for _, key in ipairs(v) do
 			if type(key) == "string" and key ~= "" then table.insert(keys, key) end
@@ -1021,7 +1043,12 @@ function M.resolve_keys(entry, config)
 		-- disableable, and only because it ships no default_key at all.
 		-- Absent `shortcut` still means "no opinion" and falls back.
 		if cfg_val.shortcut ~= nil then
-			return as_list(cfg_val.shortcut), modes
+			local keys, malformed = as_list(cfg_val.shortcut)
+			-- malformed is not a disable: fall back rather than silently unbind
+			if malformed then
+				return as_list(entry.default_key), modes
+			end
+			return keys, modes
 		end
 		return as_list(entry.default_key), modes
 	end
@@ -1047,6 +1074,19 @@ M.opt_in = {
 	-- A tool call's RESULT is low-value reading, so folding it does not justify
 	-- a key out of the shared <C-g> surface. Reachable as :ParleyToggleToolFolds.
 	chat_toggle_tool_folds = "low-value surface; callable as a command",
+}
+
+--- Keys that exist ONLY because a feature was explicitly switched on. They are
+--- neither defaults nor keyspace claims: turning the feature off removes them.
+--- `config.lua` and the atlas already blessed this category in prose; it is
+--- listed here so the leak guard's allowance list is genuinely closed, rather
+--- than reporting a documented, opt-in map as an escape (#214 BR-39).
+--- @type table<string, { gate: string, where: string }>
+M.feature_gated = {
+	["<CR>"] = {
+		gate = "chat_spell.typeahead (opt-in, ships false) / interview mode",
+		where = "spell.lua attach + interview.lua setup_keymap",
+	},
 }
 
 --- Keys parley maps buffer-locally WITHOUT owning them, and therefore without a
@@ -1171,11 +1211,32 @@ end
 --- @param scopes string[]  list of scope names to register
 --- @param config table  parley config
 --- @param callbacks table  map of entry.id → callback function
+--- Global maps this module installed, as { {mode, key, desc}, … }. Tracked so a
+--- later `setup()` can revoke them (#214 BR-38): `register_global` samples
+--- `default_keymaps` once per setup and had no teardown, so flipping the switch
+--- and re-running setup left 43 global parley mappings live — the most natural
+--- way to try the switch was the one way it did not work. Only maps whose
+--- current `desc` still matches what we installed are deleted, so a user who
+--- rebound the key afterwards keeps their own mapping.
+M._installed_global = {}
+
+local function revoke_global_maps()
+	for _, m in ipairs(M._installed_global) do
+		local existing = vim.fn.maparg(m.key, m.mode, false, true)
+		if type(existing) == "table" and existing.desc == m.desc then
+			pcall(vim.keymap.del, m.mode, m.key)
+		end
+	end
+	M._installed_global = {}
+end
+
 function M.register_global(scopes, config, callbacks)
 	local scope_set = {}
 	for _, s in ipairs(scopes) do
 		scope_set[s] = true
 	end
+
+	revoke_global_maps()
 
 	for _, entry in ipairs(M.entries) do
 		if scope_set[entry.scope] and not entry.buffer_local and not entry.help_only then
@@ -1195,6 +1256,8 @@ function M.register_global(scopes, config, callbacks)
 								wrapped = cb
 							end
 							vim.keymap.set(mode, key, wrapped, { silent = true, desc = entry.desc })
+							table.insert(M._installed_global,
+								{ mode = mode, key = key, desc = entry.desc })
 						end
 					end
 				end

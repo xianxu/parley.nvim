@@ -1387,3 +1387,52 @@ help rendering. It was a list of the places my guarantees did not reach.
    keys the user had set in `setup{}`, and 8 actions have no command to fall
    back on. "Disable the defaults" must mean the defaults; record what the user
    asked for and honour it.
+
+## #214 M2 round 9 — my oracles were the weakest thing I wrote
+
+Two of the guards I built to prove M2's claims were themselves unsound, and the
+reviewer found both by measuring rather than reading.
+
+**The leak guard identified parley's keymaps by `desc:lower():find("parley")`.**
+46 of 81 registry entries carry a `desc` with no "parley" in it — "Create New
+Chat", "Delete selected chat", "Cycle recency window left". They happen to all
+be non-`buffer_local` today, which is the only reason the guard worked, and
+nothing asserted that. A hand-rolled `vim.keymap.set` with no `desc` at all —
+exactly the leak the guard existed to catch — was invisible to it. The fix costs
+nothing and needs no convention: snapshot `nvim_buf_get_keymap` *before*
+preparing the buffer and treat the diff as parley's claims. Whatever appeared
+is parley's, by construction.
+
+**"Every binding is disableable" excluded 15 of 81 entries** via a hand-typed
+`not e.config_key:find(".")` that skipped the dotted picker keys. A filter that
+removes members of the set is an allowlist wearing a predicate — the same
+finding family as the README's "every feature has a command", one round after I
+had written that rule down and applied it to a single sibling.
+
+A third instance was in a guard I wrote *that round* to fix this family: the
+Core-concepts sweep fell back to `000205` off an issue branch, claiming it
+"keeps its historical coverage rather than silently passing". On `main`,
+`git merge-base HEAD main` is `HEAD`, so the diff is empty and it passed
+vacuously — while asserting in a comment that it had not.
+
+**Rules.**
+
+1. **An oracle must not depend on a property the code does not enforce.** Before
+   trusting a test's *detection* step, ask what makes it true. If the answer is
+   "the code happens to be written that way", either assert that or find a
+   detector that cannot be wrong — a before/after diff, a returned handle, an
+   identity the runtime gives you.
+2. **Write the escape hatch's failure case, not just its comment.** Every
+   `if not X then pending/return end` is a path where the test asserts nothing.
+   Run it deliberately once and confirm it *reports*; a comment claiming
+   coverage is not coverage.
+3. **A predicate that narrows the set under test must be justified in the test,
+   or it is an allowlist.** Skipping is a decision about scope; make it visible
+   (`assert.is_true(#dotted >= 15)`) or remove it by handling the hard case.
+4. **When a review names a family, sweep the family in that round — including
+   the code you are writing to fix it.** Instance three was created by the fix
+   for instances one and two, in the same commit.
+5. **Feature-scoped keymaps go on the buffer, never globally.** Teardown of a
+   global map is destructive because `vim.keymap.del` cannot distinguish yours
+   from the user's; buffer-local shadows and unshadows for free. Reviewing an
+   install for safety is half the job — review the *removal*.

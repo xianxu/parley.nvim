@@ -385,8 +385,8 @@ M.open = function(_)
 			title = string.format(
 				"Note Files (%s  %s/%s: cycle)",
 				resolved_recency.current.label,
-				next_recency_shortcut,
-				previous_recency_shortcut
+				kb.key_label("nf_next_recency", cfg),
+				kb.key_label("nf_prev_recency", cfg)
 			),
 			recall_key = "parley.note_finder",
 			initial_index = _chat_finder_mod.resolve_finder_initial_index(

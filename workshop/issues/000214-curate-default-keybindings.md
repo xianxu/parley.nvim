@@ -283,6 +283,7 @@ Derivation notes:
 | `topic_for_selection` | `lua/parley/branch_ref.lua` | new |
 | `resolve_keys` | `lua/parley/keybinding_registry.lua` | changed |
 | `help_lines` | `lua/parley/keybinding_registry.lua` | changed |
+| `key_label` | `lua/parley/keybinding_registry.lua` | new |
 
 - **`branch_ref`** — the line-editing half of a branch reference: build the
   `🌿:` line, splice an inline link around a selection, derive a child topic
@@ -300,6 +301,10 @@ Derivation notes:
 - **`help_lines`** — renders the `<C-g>?` float from the registry. Now shows
   aliases (primary in the aligned column, the rest after the description) and
   omits any entry that resolves to nothing.
+- **`key_label`** — `key_for` as display text, never nil. Three picker-title
+  sites fed a nil key straight to `string.format("%s")` (rendering
+  `Issues (open  nil: cycle view)` under `default_keymaps = false`); one guarded
+  it with `or "-"` and two did not. One convention, in one place.
 
 ### Data (single-source tables)
 
@@ -307,6 +312,7 @@ Derivation notes:
 |------|----------|--------|
 | `opt_in` | `lua/parley/keybinding_registry.lua` | new |
 | `native_overrides` | `lua/parley/keybinding_registry.lua` | new |
+| `feature_gated` | `lua/parley/keybinding_registry.lua` | new |
 
 - **`opt_in`** — entries parley deliberately ships unbound, with the reason.
   Being listed is the only sanctioned way for a shipped binding to resolve to
@@ -314,6 +320,10 @@ Derivation notes:
 - **`native_overrides`** — the six keys parley wraps without owning
   (`u`, `<C-r>`, `*`, `#`, `g*`, `g#`), each with where it is installed and why
   it is not a registry entry. `native_map` refuses a key absent from it.
+- **`feature_gated`** — keys that exist only because a feature was switched on
+  (`chat_spell.typeahead`'s `<CR>`, interview mode's). The prose already blessed
+  this category; listing it is what makes the leak guard's allowance list
+  genuinely closed instead of reporting a documented opt-in as an escape.
 
 ### Integration points
 
@@ -322,6 +332,8 @@ Derivation notes:
 | `_branch_inserters` | `lua/parley/init.lua` | new | buffer writes + child-chat creation |
 | `registry_callbacks` | `lua/parley/skills/review/init.lua` | new | review actions, for the registry to install |
 | `native_map` | `lua/parley/init.lua` | new | `vim.keymap.set` for non-registry keys |
+| `setup_keymap` | `lua/parley/interview.lua` | changed | interview's `<CR>`, now buffer-local |
+| `register_global` | `lua/parley/keybinding_registry.lua` | changed | global keymap install + teardown |
 
 - **`_branch_inserters`** — one helper both chat and markdown call, branching on
   `owns_file`: parley commits a reference only in a file it owns.
@@ -329,6 +341,16 @@ Derivation notes:
   supplies behaviour; the registry owns installation (#214 C1).
 - **`native_map`** — gates the six native wrappers on the master switch and
   refuses an undeclared key.
+- **`setup_keymap`** — interview's timestamp `<CR>`. Was global, and its removal
+  did an unconditional `vim.keymap.del("i", "<CR>")`, deleting the user's own
+  map (cmp/blink's accept key for most users). Buffer-local now: it shadows and
+  unshadows instead of destroying, because `del` cannot tell "mine" from
+  "theirs".
+- **`register_global`** — installs the non-buffer-local half of the registry and
+  now tracks what it installed, so a later `setup()` can revoke it. Without the
+  teardown, flipping `default_keymaps` off and re-running `setup()` left 43
+  global mappings live — the most natural way to try the switch was the one way
+  it did not work.
 
 ## Plan
 
@@ -471,6 +493,38 @@ and with it the `<C-y>`/`<C-j>` half of the fresh-install Done-when criterion.
 
 
 - 2026-09-07: closed M1 — make test: 197 spec files, MAKE_EXIT=0 verified against make status; luacheck clean across 351 files. Round 6 disposed 18 findings and left the gate with no open blocking items; its one new finding BR-34 is addressed in 0a712ad. That finding also corrected my own earlier BR-21 report: I had said a % in a gsub replacement RAISES, reproduced in standard Lua, but neovim runs LuaJIT which does not raise — measured here, "50% off" becomes "50 off", "%1 ph" becomes the pattern itself, and "100%" writes a NUL byte into the file. So it was silent corruption of chat topics and note titles, not a crash. I had fixed one site; the enumeration turned up six more: three {{topic}} substitutions including the child-creation path M1 routes markdown branches to, the initial_question substitution, notes.lua title and metadata placeholders, and exporter.lua branch placeholders in HTML export. render.lua and the slug rename were already escaped. An arch guard now enforces the rule — a runtime string is never gsubs second argument — using an explicit `-- gsub-safe: <why>` annotation rather than inferring safety from variable names, which my first version did and which is a guess dressed as a rule; verified by planting a raw runtime replacement. M1 itself delivers: branch_ref resolving <M-i>, <M-S-CR>, <C-g>i and chat_prune resolving <M-p>, <C-g>b, both in config.lua because a registry-side edit would have been inert; the portable key leads because the help float renders only keys[1] and most terminals cannot distinguish Shift+Enter from Enter; four branch functions collapsed into one branch_inserters(buf, abs_link, owns_file) with the pure line editing in the new parley/branch_ref.lua; chat_toggle_tool_folds unbound per operator decision but callable as :ParleyToggleToolFolds. The governing rule from six rounds: parley commits a reference only in a file it OWNS, so a chat buffer gets create-child + save-parent + open-child while a foreign markdown buffer gets the ref line and cursor with no child and no write. Neither mode calls create_child_chat directly and the spec iterates modes x buffer types. Mutation ledger generated from git diff rather than recall. Atlas corrected twice, README updated, ## Revisions records the three M1 decisions review overturned, lessons.md records the root cause. Deferred: BR-9 to M2, and routing <M-q> quotes into the branch to M3 with the strip-not-fork decision recorded up front.; review verdict: FIX-THEN-SHIP
+
+### 2026-09-07 — M2 round 9 (FIX-THEN-SHIP, 5 open Importants) — two more reversals
+
+**5. The master switch is reversible for global maps too, and that is a stated
+rule per sample site rather than a property of buffers.** Round 8 raised the
+buffer half as a Minor; I fixed and documented buffers and never looked at the
+other sample site. `register_global` samples `default_keymaps` once per
+`setup()` and had no teardown, so `setup()` then
+`setup({ default_keymaps = false })` left **43** global mappings live — the
+switch failing in the most natural way to try it. It now tracks what it
+installed and revokes it, skipping any key whose `desc` no longer matches so a
+user who rebound the key keeps theirs. The atlas states the rule for all three
+sample sites (`register_global`, `register_buffer`, `native_map`), not just the
+one I had looked at.
+
+**6. Interview's `<CR>` is buffer-local.** M2's carve-out reasoning called it
+"the feature, not a default" and stopped there. It never asked whether
+*removing* it was safe: `remove_keymap` did an unconditional
+`vim.keymap.del("i", "<CR>")`, so `<C-n>i` then `<C-n>I` deleted the user's own
+`<CR>` — cmp/blink's accept key for most Neovim users — for the rest of the
+session. This is the exact collision the Spec names and the Done-when's `<CR>`
+clause covers. Buffer-local shadows and unshadows instead; `del` cannot
+distinguish "mine" from "theirs", so it must never be aimed at a global map.
+
+Two of my own guards were also wrong in ways worth recording, because both were
+oracles that looked like assertions. The leak guard identified parley's maps by
+a `desc` containing "parley" — a convention nothing enforced, and 46 of 81
+entries do not follow it; it now diffs a before/after keymap snapshot and
+depends on no convention at all. And "every binding is disableable" excluded the
+15 dotted picker keys via a hand-typed predicate, which is an allowlist wearing
+a filter; it now builds the nested config and covers all 81, as does a new
+rebindability twin.
 
 ### 2026-09-07 — M2 boundary review (REWORK) reversed three things I had recorded
 

@@ -536,16 +536,53 @@ describe("resolve_keys config-vs-default strategy (#214 M2)", function()
         assert.same({ "<M-z>" }, keys(no_default, { k = { shortcut = "<M-z>" } }))
     end)
 
+    -- Build the config a user would write for `config_key`, dotted or not, so
+    -- the assertion below covers all 81 entries. Skipping dotted keys excluded
+    -- 15 picker entries from a claim quantified over "every binding" — a filter
+    -- that removes members of the set is an allowlist wearing a predicate
+    -- (#214 BR-40).
+    local function config_for(config_key, value)
+        local cfg, node = {}, nil
+        local parts = {}
+        for part in config_key:gmatch("[^.]+") do parts[#parts + 1] = part end
+        node = cfg
+        for i = 1, #parts - 1 do
+            node[parts[i]] = {}
+            node = node[parts[i]]
+        end
+        node[parts[#parts]] = value
+        return cfg
+    end
+
     -- Done-when: every shipped binding must be BOTH rebindable and disableable.
     it("every registry entry can actually be disabled from config", function()
         local stuck = {}
         for _, e in ipairs(reg.entries) do
-            if e.config_key and not e.config_key:find(".", 1, true) then
-                local cfg = { [e.config_key] = { shortcut = "" } }
-                if reg.resolve_keys(e, cfg) ~= nil then stuck[#stuck + 1] = e.id end
+            if reg.resolve_keys(e, config_for(e.config_key, { shortcut = "" })) ~= nil then
+                stuck[#stuck + 1] = e.id .. " (" .. e.config_key .. ")"
             end
         end
         assert.same({}, stuck)
+    end)
+
+    it("every registry entry can actually be rebound from config", function()
+        local unbindable = {}
+        for _, e in ipairs(reg.entries) do
+            local keys = reg.resolve_keys(e, config_for(e.config_key, { shortcut = "<M-F12>" }))
+            if not (keys and keys[1] == "<M-F12>") then
+                unbindable[#unbindable + 1] = e.id .. " (" .. e.config_key .. ")"
+            end
+        end
+        assert.same({}, unbindable)
+    end)
+
+    it("the dotted picker keys are actually covered, not just tolerated", function()
+        local dotted = 0
+        for _, e in ipairs(reg.entries) do
+            if e.config_key:find(".", 1, true) then dotted = dotted + 1 end
+        end
+        assert.is_true(dotted >= 15,
+            "expected the picker mapping entries to be present; got " .. dotted)
     end)
 end)
 
@@ -559,7 +596,7 @@ describe("opt-in set is closed (#214 M2)", function()
     it("every entry parley ships UNBOUND is a declared opt-in", function()
         local undeclared = {}
         for _, e in ipairs(reg.entries) do
-            if not e.help_only and not e.config_key:find(".", 1, true) then
+            if not e.help_only then
                 if reg.resolve_keys(e, shipped) == nil and not reg.opt_in[e.id] then
                     undeclared[#undeclared + 1] = e.id
                 end
@@ -585,11 +622,9 @@ describe("opt-in set is closed (#214 M2)", function()
     it("no <leader> key is claimed by the shipped config", function()
         local claimed = {}
         for _, e in ipairs(reg.entries) do
-            if not e.config_key:find(".", 1, true) then
-                for _, k in ipairs(reg.resolve_keys(e, shipped) or {}) do
-                    if k:lower():find("<leader>", 1, true) then
-                        claimed[#claimed + 1] = e.id .. " => " .. k
-                    end
+            for _, k in ipairs(reg.resolve_keys(e, shipped) or {}) do
+                if k:lower():find("<leader>", 1, true) then
+                    claimed[#claimed + 1] = e.id .. " => " .. k
                 end
             end
         end
@@ -715,5 +750,26 @@ describe("<C-g>? can show every bound key (#214 I2)", function()
             end
         end
         assert.same({}, ghosts)
+    end)
+end)
+
+-- #214 review (Minor): a shortcut of an unrepresentable type used to fall
+-- through as_list to nil and silently DISABLE the binding — the same value that
+-- means "off" when written deliberately as "". A typo and a decision must not
+-- produce the same outcome.
+describe("malformed shortcut values degrade visibly (#214)", function()
+    local reg = require("parley.keybinding_registry")
+    local entry = { id = "x", config_key = "k", default_key = { "<C-g>x" }, default_modes = { "n" } }
+
+    it("a number falls back to the default rather than unbinding", function()
+        assert.same({ "<C-g>x" }, (reg.resolve_keys(entry, { k = { shortcut = 42 } })))
+    end)
+
+    it("a boolean falls back too", function()
+        assert.same({ "<C-g>x" }, (reg.resolve_keys(entry, { k = { shortcut = true } })))
+    end)
+
+    it('but a deliberate "" still disables', function()
+        assert.is_nil((reg.resolve_keys(entry, { k = { shortcut = "" } })))
     end)
 end)

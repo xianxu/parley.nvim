@@ -25,40 +25,6 @@ local function setup(extra)
     }, extra or {}))
 end
 
--- A real markdown buffer, prepped through the production path. C1 lived here:
--- the chat-only spec could not see the review skill's hand-rolled installs.
--- `suffix` lands BEFORE the .md so a caller can build a real `*.parley-journal.md`
--- sidecar name; appending the random id after it silently produced an ordinary
--- markdown file and the sidecar assertion passed for the wrong reason.
-local function prepped_markdown(suffix)
-    local dir = parley.config.chat_dir
-    vim.fn.mkdir(dir, "p")
-    local path = dir .. "/doc-" .. math.random(1e6) .. (suffix or "") .. ".md"
-    vim.fn.writefile({ "# doc", "", "some prose" }, path)
-    vim.cmd("edit " .. vim.fn.fnameescape(path))
-    local buf = vim.api.nvim_get_current_buf()
-    parley.setup_markdown_keymaps(buf)
-    return buf, path
-end
-
--- A real chat buffer, prepped through the production path.
-local function prepped_chat()
-    local dir = parley.config.chat_dir
-    vim.fn.mkdir(dir, "p")
-    local path = dir .. "/2026-03-01-agree-" .. math.random(1e6) .. ".md"
-    vim.fn.writefile({ "# topic: agree", "- file: agree.md", "---", "", "💬: hi" }, path)
-    vim.cmd("edit " .. vim.fn.fnameescape(path))
-    local buf = vim.api.nvim_get_current_buf()
-    parley.prep_chat(buf, path)
-    return buf, path
-end
-
-local function cleanup(buf, path)
-    pcall(vim.api.nvim_buf_delete, buf, { force = true })
-    parley._prepared_bufs[buf] = nil
-    vim.fn.delete(path)
-end
-
 -- Neovim reports mapping lhs in ITS canonical spelling (<C-g> comes back as
 -- <C-G>), so both sides must be normalised before comparison — otherwise every
 -- <C-g> binding looks simultaneously leaked and missing.
@@ -69,17 +35,85 @@ local function canon(lhs)
     return ok and out or lhs
 end
 
--- Every buffer-local mapping carrying a parley desc, as { canon(lhs) = desc }.
-local function parley_maps(buf)
+local MODES = { "n", "i", "v", "x" }
+
+-- Snapshot of every buffer-local mapping, keyed mode+lhs.
+local function keymap_snapshot(buf)
     local out = {}
-    for _, mode in ipairs({ "n", "i", "v", "x" }) do
+    for _, mode in ipairs(MODES) do
         for _, m in ipairs(vim.api.nvim_buf_get_keymap(buf, mode)) do
-            if m.desc and m.desc:lower():find("parley", 1, true) then
-                out[canon(m.lhs)] = m.desc
-            end
+            out[mode .. " " .. canon(m.lhs)] = m.desc or ""
         end
     end
     return out
+end
+
+-- Pre-prep snapshots, keyed by buffer, recorded by the fixtures below.
+local BEFORE = {}
+
+-- What parley ADDED to `buf`, as { canon(lhs) = desc }.
+--
+-- #214 BR-39: this used to filter by `m.desc:lower():find("parley")`. 46 of 81
+-- registry entries carry a desc with no "parley" in it ("Create New Chat",
+-- "Delete selected chat", …); they happen to all be non-buffer_local today,
+-- which is the ONLY reason that oracle worked, and nothing asserted it. A
+-- hand-rolled keymap with no desc — precisely the leak the guard exists to
+-- catch — was invisible to it. Diffing a before/after snapshot depends on no
+-- convention at all: whatever appeared is parley's, by construction.
+local function parley_maps(buf)
+    local before = BEFORE[buf] or {}
+    local out = {}
+    for key, desc in pairs(keymap_snapshot(buf)) do
+        if before[key] == nil then
+            out[key:match("^%S+ (.*)$")] = desc
+        end
+    end
+    return out
+end
+
+-- A real markdown buffer, prepped through the production path. C1 lived here:
+-- the chat-only spec could not see the review skill's hand-rolled installs.
+-- `suffix` lands BEFORE the .md so a caller can build a real `*.parley-journal.md`
+-- sidecar name; appending the random id after it silently produced an ordinary
+-- markdown file and the sidecar assertion passed for the wrong reason.
+-- The snapshot must be taken on a buffer parley has NOT touched. `:edit` fires
+-- BufEnter, which preps the buffer, so a snapshot taken after it already
+-- contains parley's maps and the diff comes back half-empty. Create the buffer
+-- detached, snapshot, and only then show it and prep.
+local function detached_buffer(path, lines)
+    vim.fn.writefile(lines, path)
+    local buf = vim.api.nvim_create_buf(false, true)
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+    vim.api.nvim_buf_set_name(buf, path)
+    BEFORE[buf] = keymap_snapshot(buf)
+    vim.api.nvim_win_set_buf(0, buf)
+    return buf
+end
+
+local function prepped_markdown(suffix)
+    local dir = parley.config.chat_dir
+    vim.fn.mkdir(dir, "p")
+    local path = dir .. "/doc-" .. math.random(1e6) .. (suffix or "") .. ".md"
+    local buf = detached_buffer(path, { "# doc", "", "some prose" })
+    parley.setup_markdown_keymaps(buf)
+    return buf, path
+end
+
+-- A real chat buffer, prepped through the production path.
+local function prepped_chat()
+    local dir = parley.config.chat_dir
+    vim.fn.mkdir(dir, "p")
+    local path = dir .. "/2026-03-01-agree-" .. math.random(1e6) .. ".md"
+    local buf = detached_buffer(path, { "# topic: agree", "- file: agree.md", "---", "", "💬: hi" })
+    parley.prep_chat(buf, path)
+    return buf, path
+end
+
+local function cleanup(buf, path)
+    BEFORE[buf] = nil
+    parley._prepared_bufs[buf] = nil
+    pcall(vim.api.nvim_buf_delete, buf, { force = true })
+    vim.fn.delete(path)
 end
 
 describe("keybinding registry vs. reality (#214 M2)", function()
@@ -92,6 +126,7 @@ describe("keybinding registry vs. reality (#214 M2)", function()
             for _, k in ipairs(reg.resolve_keys(e, parley.config) or {}) do known[canon(k)] = true end
         end
         for k in pairs(reg.native_overrides) do known[canon(k)] = true end
+        for k in pairs(reg.feature_gated) do known[canon(k)] = true end
 
         local leaked = {}
         for lhs, desc in pairs(parley_maps(buf)) do
@@ -99,6 +134,37 @@ describe("keybinding registry vs. reality (#214 M2)", function()
         end
         cleanup(buf, path)
         assert.same({}, leaked)
+    end)
+
+    -- BR-39: the docs bless feature-gated maps as a third category, but the
+    -- closed list did not know about them — so turning on a documented opt-in
+    -- reported its own map as a leak.
+    it("no leaks with the opt-in spell typeahead switched on", function()
+        setup({ chat_spell = { enable = true, typeahead = true } })
+        local buf, path = prepped_chat()
+
+        local known = {}
+        for _, e in ipairs(reg.entries) do
+            for _, k in ipairs(reg.resolve_keys(e, parley.config) or {}) do known[canon(k)] = true end
+        end
+        for k in pairs(reg.native_overrides) do known[canon(k)] = true end
+        for k in pairs(reg.feature_gated) do known[canon(k)] = true end
+
+        local leaked = {}
+        for lhs, desc in pairs(parley_maps(buf)) do
+            if not known[lhs] then leaked[#leaked + 1] = lhs .. " (" .. desc .. ")" end
+        end
+        cleanup(buf, path)
+        assert.same({}, leaked)
+    end)
+
+    it("and the feature-gated key really is absent until the feature is on", function()
+        setup()
+        local buf, path = prepped_chat()
+        local live = parley_maps(buf)
+        cleanup(buf, path)
+        assert.is_nil(live[canon("<CR>")],
+            "the spell <CR> map is installed even though typeahead ships off")
     end)
 
     it("no ghosts — every resolved chat-scope key is really mapped", function()
@@ -304,9 +370,7 @@ describe("markdown buffers obey the same registry contract (#214 C1)", function(
         local dir = parley.config.chat_dir
         vim.fn.mkdir(dir, "p")
         local path = dir .. "/nocrash-" .. math.random(1e6) .. ".md"
-        vim.fn.writefile({ "# doc", "", "prose" }, path)
-        vim.cmd("edit " .. vim.fn.fnameescape(path))
-        local buf = vim.api.nvim_get_current_buf()
+        local buf = detached_buffer(path, { "# doc", "", "prose" })
 
         local ok, err = pcall(parley.setup_markdown_keymaps, buf)
         local live = parley_maps(buf)
@@ -326,5 +390,121 @@ describe("markdown buffers obey the same registry contract (#214 C1)", function(
         for _, k in ipairs({ "<C-g>ve", "<M-o>" }) do
             assert.is_nil(live[canon(k)], k .. " leaked onto a journal sidecar")
         end
+    end)
+end)
+
+-- #214 BR-41: parley's <CR> map for interview mode used to be GLOBAL, and
+-- leaving interview mode did an unconditional vim.keymap.del("i", "<CR>") — so
+-- it deleted whatever was there, which for most Neovim users is cmp/blink's
+-- accept key. `del` cannot tell "mine" from "theirs"; a feature map scoped to a
+-- buffer shadows and unshadows instead of destroying.
+describe("interview <CR> does not destroy the user's map (#214 BR-41)", function()
+    local interview = require("parley.interview")
+
+    local function user_cr_map()
+        for _, m in ipairs(vim.api.nvim_get_keymap("i")) do
+            if m.lhs == "<CR>" and m.desc == "user's own accept key" then return m end
+        end
+    end
+
+    after_each(function()
+        pcall(vim.keymap.del, "i", "<CR>")
+        interview._keymap_bufs = {}
+    end)
+
+    it("leaves a pre-existing global <CR> map intact across enter/exit", function()
+        vim.keymap.set("i", "<CR>", "<Ignore>", { desc = "user's own accept key" })
+        assert.is_truthy(user_cr_map(), "fixture did not install")
+
+        local buf = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_set_current_buf(buf)
+        interview.setup_keymap(buf)
+        interview.remove_keymap()
+
+        assert.is_truthy(user_cr_map(),
+            "leaving interview mode deleted the user's own global <CR> map")
+        vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+
+    it("installs buffer-locally, so it shadows rather than replaces", function()
+        vim.keymap.set("i", "<CR>", "<Ignore>", { desc = "user's own accept key" })
+        local buf = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_set_current_buf(buf)
+        interview.setup_keymap(buf)
+
+        local found
+        for _, m in ipairs(vim.api.nvim_buf_get_keymap(buf, "i")) do
+            if m.lhs == "<CR>" then found = m end
+        end
+        assert.is_truthy(found, "interview <CR> is not buffer-local")
+        assert.is_truthy(user_cr_map(), "the global map was clobbered at install time")
+
+        interview.remove_keymap()
+        vim.api.nvim_buf_delete(buf, { force = true })
+    end)
+end)
+
+-- #214 BR-38: `default_keymaps` is SAMPLED at three sites, and each is a place
+-- the decision becomes durable state. Two are buffer-local and guarded by
+-- `_prepared_bufs` (rule: governs buffers prepared after the flip). The third,
+-- `register_global`, had no teardown at all — so `setup()` then
+-- `setup({ default_keymaps = false })` left 43 global mappings live, and the
+-- Done-when's own procedure (":map shows no parley mapping") failed in the most
+-- natural way to try the switch. Measured desc-independently.
+describe("the master switch is reversible for GLOBAL maps too (#214 BR-38)", function()
+    local function global_snapshot()
+        local out = {}
+        for _, mode in ipairs(MODES) do
+            for _, m in ipairs(vim.api.nvim_get_keymap(mode)) do
+                out[mode .. " " .. canon(m.lhs)] = m.desc or ""
+            end
+        end
+        return out
+    end
+
+    local function added_globals(before)
+        local out = {}
+        for key, desc in pairs(global_snapshot()) do
+            if before[key] == nil then out[#out + 1] = key .. " :: " .. desc end
+        end
+        table.sort(out)
+        return out
+    end
+
+    it("a fresh setup with the switch off installs no global map", function()
+        local before = global_snapshot()
+        setup({ default_keymaps = false })
+        assert.same({}, added_globals(before))
+    end)
+
+    it("re-running setup with the switch off REVOKES the previous global maps", function()
+        local before = global_snapshot()
+        setup()
+        assert.is_true(#added_globals(before) > 0, "fixture installed nothing to revoke")
+
+        setup({ default_keymaps = false })
+        assert.same({}, added_globals(before))
+    end)
+
+    it("and turning it back on reinstates them", function()
+        local before = global_snapshot()
+        setup({ default_keymaps = false })
+        assert.same({}, added_globals(before))
+
+        setup()
+        assert.is_true(#added_globals(before) > 0, "globals did not come back")
+    end)
+
+    it("a key the user rebound after setup is not revoked", function()
+        setup()
+        -- user takes the key over afterwards, with their own description
+        vim.keymap.set("n", "<C-g>c", "<Ignore>", { desc = "user's own mapping" })
+
+        setup({ default_keymaps = false })
+
+        local mine = vim.fn.maparg("<C-g>c", "n", false, true)
+        assert.are.equal("user's own mapping", mine and mine.desc,
+            "revoking parley's globals deleted a mapping the user had replaced")
+        pcall(vim.keymap.del, "n", "<C-g>c")
     end)
 end)

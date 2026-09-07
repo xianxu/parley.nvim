@@ -448,7 +448,7 @@ M.open = function(_options)
     local prompt_title = string.format(
         "Issues (%s  %s: cycle view)",
         M.VIEW_LABELS[view_mode] or M.VIEW_LABELS[0],
-        cycle_view_shortcut
+        kb.key_label("if_cycle_view", _parley.config)
     )
 
     local picker_ref = {}

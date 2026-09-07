@@ -821,6 +821,142 @@ rounds:
       boundary: M2
       blocked: false
       protocol_error: no valid findings block
+    - "n": 9
+      timestamp: "2026-09-07T15:05:18-07:00"
+      agent: claude
+      findings:
+        - id: BR-38
+          severity: Important
+          title: default_keymaps = false does not revoke global maps installed by an earlier setup()
+          detail: |-
+            Measured by keymap diff: setup() then setup({default_keymaps=false}) leaves 43
+            global parley mappings live (<C-G>c/f/w, all <C-J>*, <C-N>*, <C-Y>*). register_global
+            samples the switch once and has no teardown. config.lua:340 and atlas/ui/keybindings.md
+            describe the limitation as buffer-local only, so the docs do not cover this.
+            3rd in family: round 8 raised the buffer half as a Minor; the fix addressed buffers
+            and never revisited the other sample site. Rule: every site that samples
+            default_keymaps makes the decision durable, so each needs a stated reversibility rule
+            and an assertion. Enumeration: register_global (setup-time, no teardown),
+            register_buffer via prep_chat/setup_markdown_keymaps (_prepared_bufs-guarded),
+            native_map (init.lua:2341, same guard).
+          family: no-seam-for-ordering
+          round: 9
+        - id: BR-39
+          severity: Important
+          title: the no-leaks guard detects parley maps by a desc convention nothing enforces
+          detail: |-
+            keybinding_agreement_spec.lua:71-79 filters on desc containing "parley". 46 of 81
+            registry entries have descs that do not ("Create New Chat", "Delete selected chat").
+            They are all non-buffer_local today, which is the only reason the guard holds, and
+            nothing asserts that. A hand-rolled vim.keymap.set with no desc — the exact failure
+            the guard exists to catch — is invisible. Separately, running the leak test with
+            chat_spell = { typeahead = true } fails on '<CR> (parley: accept spell suggestion /
+            newline)', a map config.lua:337 and the atlas explicitly bless as a third category
+            the allowance list omits. 2nd in family. Rule: an oracle must not depend on a
+            property the code does not enforce — snapshot the buffer keymaps before prep and
+            diff, or assert the desc convention; then add the feature-gated category to the list.
+          family: test-harness-assumption
+          round: 9
+        - id: BR-40
+          severity: Important
+          title: '"every binding disableable" and ":map shows no parley mapping" are pinned over hand-narrowed subsets'
+          detail: |-
+            keybindings_spec.lua:472,501,513 exclude every dotted config_key (15 of 81 picker
+            entries) with a typed `not e.config_key:find(".")`; keybinding_agreement_spec.lua:139
+            checks only nvim_buf_get_keymap, never nvim_get_keymap. Both behaviours are in fact
+            correct — I verified all 15 dotted entries disable via a nested config build, and
+            that globals add nothing with the switch off — so this is coverage, not a bug.
+            4th recorded in family (5th counting round 8's I1, lost to the protocol error).
+            Rule restated: a promise quantified over a set must be pinned by a test that derives
+            the set; a filter removing members is an allowlist wearing a predicate. Enumeration:
+            build the nested table for dotted keys instead of skipping; assert the global keymap
+            table alongside the buffer one. Third in-window instance: single_source_sweeps_spec
+            .lua:66-72's fallback comment claims it "keeps historical coverage rather than
+            silently passing", but on main merge-base==HEAD, the diff is empty, and it passes
+            vacuously.
+          family: docs-assert-unverified-behavior
+          round: 9
+        - id: BR-41
+          severity: Important
+          title: leaving interview mode deletes the user's own global insert-mode <CR> map
+          detail: |-
+            interview.lua:94-99 does an unconditional vim.keymap.del("i", "<CR>"). Measured: a
+            user map on i <CR>, then setup_keymap() then remove_keymap(), leaves no map at all.
+            <C-n>i followed by <C-n>I destroys a cmp/blink user's accept key for the session —
+            the exact collision the Spec names and the Done-when's <CR> clause covers. The
+            carve-out at config.lua:337 decides it is "the feature, not a default" but never asks
+            whether removal is safe. Code is outside the diff window; operator's call whether it
+            lands here, in M3, or at close. 2nd in family. Rule: a keymap serving a buffer-scoped
+            feature must be installed buffer-locally, because a global install makes teardown
+            destructive — del cannot distinguish mine from theirs. Buffer-local fixes it for
+            free. interview.setup_keymap is the only global feature map left; spell.attach is
+            already buffer-local.
+          family: command-not-scoped-to-context
+          round: 9
+        - id: BR-42
+          severity: Important
+          title: the milestone's headline spec and M1's pure module are absent from atlas/traceability.yaml
+          detail: |-
+            atlas/traceability.yaml:689-696 maps ui/keybindings to keybindings_spec.lua and
+            config_tools_spec.lua only. Missing: tests/integration/keybinding_agreement_spec.lua,
+            lua/parley/branch_ref.lua and tests/unit/branch_ref_spec.lua (zero occurrences of
+            "branch_ref" in the file), and the new #214 arch guards. Consequence: make
+            test-changed after editing atlas/ui/keybindings.md — the doc this milestone rewrote —
+            runs neither the agreement spec nor the new guards. No guard references
+            traceability.yaml, which is why it drifts; M1's BR-2 flagged the same gap and only
+            its test half was closed.
+          family: artifact-missing-from-its-index
+          round: 9
+        - id: BR-43
+          severity: Minor
+          title: key_hint is defined twice verbatim in init.lua
+          detail: |-
+            init.lua:3306 and init.lua:4648 carry identical bodies and identical five-line
+            comments. It replaced a `primary` helper that was also duplicated at those two sites,
+            so the fix preserved the duplication rather than retiring it. Measured: the only
+            byte-identical duplicated local in lua/. 5th in family. Rule: a helper needed at two
+            call sites in one module is one module-scope helper; do not copy the body to keep the
+            diff local.
+          family: duplicate-helper-not-retired
+          round: 9
+        - id: BR-44
+          severity: Minor
+          title: key_for's new nil return reaches string.format at two of three picker title sites
+          detail: |-
+            issue_finder.lua:451 and note_finder.lua:388-389 pass a possibly-nil key straight to
+            string.format("%s"), rendering "Issues (open  nil: cycle view)" and "Note Files
+            (3 months  nil/nil: cycle)" under default_keymaps = false. chat_finder.lua:634-635
+            guards the same value with `or "-"`. Same sweep, three sites, two conventions. Rule:
+            when a helper's return type gains nil, every consumer must be updated, not only the
+            ones that would crash.
+          family: nullable-return-not-handled
+          round: 9
+        - id: BR-45
+          severity: Minor
+          title: the new arch guard reports roughly doubled line numbers
+          detail: |-
+            single_source_sweeps_spec.lua:473 iterates with gmatch("[^\n]*"), which yields an
+            empty match after every line. Measured: a planted violation at
+            system_prompt_picker.lua:121 was reported as :223. Use
+            for line in (body.."\n"):gmatch("(.-)\n").
+          family: diagnostic-cites-wrong-location
+          round: 9
+        - id: BR-46
+          severity: Minor
+          title: a malformed shortcut value silently disables the binding
+          detail: |-
+            keybinding_registry.lua:1019 — shortcut = 5 or shortcut = true falls through as_list
+            to nil and disables the entry; before M2 it fell back to default_key. 2nd in family.
+            Rule: parse the config value into a typed result at the boundary and degrade visibly
+            (log and fall back), rather than mapping every unrepresentable shape onto a legal one.
+            Related surface gaps, same round: README's "Changed defaults (upgrading)" table omits
+            that shortcut = "" changed meaning from fall-through to disable, and
+            chat_shortcut_delete_file is the one new config key neither README nor
+            atlas/ui/keybindings.md mentions.
+          family: illegal-state-representable-in-signature
+          round: 9
+      boundary: M2
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#214 (boundary-review)
@@ -1220,6 +1356,96 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 
 **Protocol error:** no valid findings block — this round contributed no findings.
 
+## Round 9 — 2026-09-07T15:05:18-07:00 (claude) — BLOCKED
+
+### Raised
+
+- **BR-38** [Important] `no-seam-for-ordering` default_keymaps = false does not revoke global maps installed by an earlier setup()
+  Measured by keymap diff: setup() then setup({default_keymaps=false}) leaves 43
+  global parley mappings live (<C-G>c/f/w, all <C-J>*, <C-N>*, <C-Y>*). register_global
+  samples the switch once and has no teardown. config.lua:340 and atlas/ui/keybindings.md
+  describe the limitation as buffer-local only, so the docs do not cover this.
+  3rd in family: round 8 raised the buffer half as a Minor; the fix addressed buffers
+  and never revisited the other sample site. Rule: every site that samples
+  default_keymaps makes the decision durable, so each needs a stated reversibility rule
+  and an assertion. Enumeration: register_global (setup-time, no teardown),
+  register_buffer via prep_chat/setup_markdown_keymaps (_prepared_bufs-guarded),
+  native_map (init.lua:2341, same guard).
+- **BR-39** [Important] `test-harness-assumption` the no-leaks guard detects parley maps by a desc convention nothing enforces
+  keybinding_agreement_spec.lua:71-79 filters on desc containing "parley". 46 of 81
+  registry entries have descs that do not ("Create New Chat", "Delete selected chat").
+  They are all non-buffer_local today, which is the only reason the guard holds, and
+  nothing asserts that. A hand-rolled vim.keymap.set with no desc — the exact failure
+  the guard exists to catch — is invisible. Separately, running the leak test with
+  chat_spell = { typeahead = true } fails on '<CR> (parley: accept spell suggestion /
+  newline)', a map config.lua:337 and the atlas explicitly bless as a third category
+  the allowance list omits. 2nd in family. Rule: an oracle must not depend on a
+  property the code does not enforce — snapshot the buffer keymaps before prep and
+  diff, or assert the desc convention; then add the feature-gated category to the list.
+- **BR-40** [Important] `docs-assert-unverified-behavior` "every binding disableable" and ":map shows no parley mapping" are pinned over hand-narrowed subsets
+  keybindings_spec.lua:472,501,513 exclude every dotted config_key (15 of 81 picker
+  entries) with a typed `not e.config_key:find(".")`; keybinding_agreement_spec.lua:139
+  checks only nvim_buf_get_keymap, never nvim_get_keymap. Both behaviours are in fact
+  correct — I verified all 15 dotted entries disable via a nested config build, and
+  that globals add nothing with the switch off — so this is coverage, not a bug.
+  4th recorded in family (5th counting round 8's I1, lost to the protocol error).
+  Rule restated: a promise quantified over a set must be pinned by a test that derives
+  the set; a filter removing members is an allowlist wearing a predicate. Enumeration:
+  build the nested table for dotted keys instead of skipping; assert the global keymap
+  table alongside the buffer one. Third in-window instance: single_source_sweeps_spec
+  .lua:66-72's fallback comment claims it "keeps historical coverage rather than
+  silently passing", but on main merge-base==HEAD, the diff is empty, and it passes
+  vacuously.
+- **BR-41** [Important] `command-not-scoped-to-context` leaving interview mode deletes the user's own global insert-mode <CR> map
+  interview.lua:94-99 does an unconditional vim.keymap.del("i", "<CR>"). Measured: a
+  user map on i <CR>, then setup_keymap() then remove_keymap(), leaves no map at all.
+  <C-n>i followed by <C-n>I destroys a cmp/blink user's accept key for the session —
+  the exact collision the Spec names and the Done-when's <CR> clause covers. The
+  carve-out at config.lua:337 decides it is "the feature, not a default" but never asks
+  whether removal is safe. Code is outside the diff window; operator's call whether it
+  lands here, in M3, or at close. 2nd in family. Rule: a keymap serving a buffer-scoped
+  feature must be installed buffer-locally, because a global install makes teardown
+  destructive — del cannot distinguish mine from theirs. Buffer-local fixes it for
+  free. interview.setup_keymap is the only global feature map left; spell.attach is
+  already buffer-local.
+- **BR-42** [Important] `artifact-missing-from-its-index` the milestone's headline spec and M1's pure module are absent from atlas/traceability.yaml
+  atlas/traceability.yaml:689-696 maps ui/keybindings to keybindings_spec.lua and
+  config_tools_spec.lua only. Missing: tests/integration/keybinding_agreement_spec.lua,
+  lua/parley/branch_ref.lua and tests/unit/branch_ref_spec.lua (zero occurrences of
+  "branch_ref" in the file), and the new #214 arch guards. Consequence: make
+  test-changed after editing atlas/ui/keybindings.md — the doc this milestone rewrote —
+  runs neither the agreement spec nor the new guards. No guard references
+  traceability.yaml, which is why it drifts; M1's BR-2 flagged the same gap and only
+  its test half was closed.
+- **BR-43** [Minor] `duplicate-helper-not-retired` key_hint is defined twice verbatim in init.lua
+  init.lua:3306 and init.lua:4648 carry identical bodies and identical five-line
+  comments. It replaced a `primary` helper that was also duplicated at those two sites,
+  so the fix preserved the duplication rather than retiring it. Measured: the only
+  byte-identical duplicated local in lua/. 5th in family. Rule: a helper needed at two
+  call sites in one module is one module-scope helper; do not copy the body to keep the
+  diff local.
+- **BR-44** [Minor] `nullable-return-not-handled` key_for's new nil return reaches string.format at two of three picker title sites
+  issue_finder.lua:451 and note_finder.lua:388-389 pass a possibly-nil key straight to
+  string.format("%s"), rendering "Issues (open  nil: cycle view)" and "Note Files
+  (3 months  nil/nil: cycle)" under default_keymaps = false. chat_finder.lua:634-635
+  guards the same value with `or "-"`. Same sweep, three sites, two conventions. Rule:
+  when a helper's return type gains nil, every consumer must be updated, not only the
+  ones that would crash.
+- **BR-45** [Minor] `diagnostic-cites-wrong-location` the new arch guard reports roughly doubled line numbers
+  single_source_sweeps_spec.lua:473 iterates with gmatch("[^\n]*"), which yields an
+  empty match after every line. Measured: a planted violation at
+  system_prompt_picker.lua:121 was reported as :223. Use
+  for line in (body.."\n"):gmatch("(.-)\n").
+- **BR-46** [Minor] `illegal-state-representable-in-signature` a malformed shortcut value silently disables the binding
+  keybinding_registry.lua:1019 — shortcut = 5 or shortcut = true falls through as_list
+  to nil and disables the entry; before M2 it fell back to default_key. 2nd in family.
+  Rule: parse the config value into a typed result at the boundary and degrade visibly
+  (log and fall back), rather than mapping every unrepresentable shape onto a legal one.
+  Related surface gaps, same round: README's "Changed defaults (upgrading)" table omits
+  that shortcut = "" changed meaning from fall-through to disable, and
+  chat_shortcut_delete_file is the one new config key neither README nor
+  atlas/ui/keybindings.md mentions.
+
 ## Open findings
 
 - **BR-2** [Important] `pure-extraction-without-tests` New pure module lua/parley/branch_ref.lua has zero tests and is absent from traceability.yaml
@@ -1239,3 +1465,12 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-35** [Minor] `illegal-state-representable-in-signature` branch_inserters takes two independent booleans that encode one bit, so two of the four representable states are illegal and untested
 - **BR-36** [Important] `no-seam-for-ordering` On a foreign markdown buffer the debounced refresh appends a warning to the line the user is typing the topic into
 - **BR-37** [Minor] `scratch-artifact-swept-into-commit` c8cccd0 swept 462 lines of unrelated workshop/parley transcripts into a commit whose subject is a #220 process-leak filing
+- **BR-38** [Important] `no-seam-for-ordering` default_keymaps = false does not revoke global maps installed by an earlier setup()
+- **BR-39** [Important] `test-harness-assumption` the no-leaks guard detects parley maps by a desc convention nothing enforces
+- **BR-40** [Important] `docs-assert-unverified-behavior` "every binding disableable" and ":map shows no parley mapping" are pinned over hand-narrowed subsets
+- **BR-41** [Important] `command-not-scoped-to-context` leaving interview mode deletes the user's own global insert-mode <CR> map
+- **BR-42** [Important] `artifact-missing-from-its-index` the milestone's headline spec and M1's pure module are absent from atlas/traceability.yaml
+- **BR-43** [Minor] `duplicate-helper-not-retired` key_hint is defined twice verbatim in init.lua
+- **BR-44** [Minor] `nullable-return-not-handled` key_for's new nil return reaches string.format at two of three picker title sites
+- **BR-45** [Minor] `diagnostic-cites-wrong-location` the new arch guard reports roughly doubled line numbers
+- **BR-46** [Minor] `illegal-state-representable-in-signature` a malformed shortcut value silently disables the binding
