@@ -1294,3 +1294,51 @@ branch on ownership, different guarantees where the situation differs.
    first tests ran the corrected `gsub` in the test itself — Lua's semantics, not
    parley's code — and stayed green when the fix was reverted. Drive the real
    entry point, then revert and watch it go red.
+
+## #214 M2 — a green test can be green for a reason that doesn't generalise
+
+Two tests said `shortcut = ""` disabled a binding:
+
+```
+key bindings help treats an empty configured shortcut as unbound
+keybinding registry registers tool folds only when a non-empty shortcut is configured
+```
+
+Both pass. Both have passed for a year. And `shortcut = ""` disabled nothing:
+`resolve_keys` ended in `as_list(cfg_val.shortcut) or as_list(entry.default_key)`,
+so an empty shortcut fell straight through to the default. The two tests happen
+to exercise `chat_toggle_tool_folds` — **the one entry in the registry that
+ships no `default_key`** — where the fallback arm has nothing to return, so the
+`or` yields nil and the disable *appears* to work.
+
+The fixture was the special case, and the assertion read like a general
+statement about the mechanism. I nearly wrote "empty already disables, BR-9 is
+stale" on the strength of it. What settled it was not reading the code more
+carefully; it was running the resolver over **every** entry:
+
+```lua
+for _, e in ipairs(reg.entries) do
+    if reg.resolve_keys(e, { [e.config_key] = { shortcut = "" } }) ~= nil then
+        stuck[#stuck+1] = e.id      -- 80 of 81 entries
+    end
+end
+```
+
+**Rules.**
+
+1. **Before generalising from a green test, ask what is unusual about its
+   fixture.** A property demonstrated on one entry is a property of that entry
+   until it is quantified over the set. Prefer the loop over the example: the
+   loop is the claim.
+2. **Two tests agreeing is not corroboration when they share a fixture.** Both
+   of these used `chat_toggle_tool_folds`; they were one observation, counted
+   twice.
+3. **This is the same failure as verifying the adjacent thing** (#215's
+   never-nil `get_agent`, #218's zsh word-splitting, BR-21's wrong interpreter).
+   The recurring shape: I confirm something *near* the claim and read it as the
+   claim. The cheap defence is always the same — make the deliverable's absence
+   observable, then check that something goes red.
+4. **A guard's allowance list must be enforced at the source, not just asserted
+   in a test.** `native_overrides` documents six off-registry keys; `native_map`
+   refuses to map a key that is not in it. Documentation a future call site can
+   bypass is not an allowance list, it is a comment.
