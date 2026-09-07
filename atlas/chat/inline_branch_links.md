@@ -19,15 +19,50 @@ not, and `:write` would persist the user's unrelated pending edits.
 | saves the parent | yes | **no** — never writes a file parley does not own |
 | after the keypress | opens the child | cursor on the new line, insert mode |
 
-- **Visual mode**: wraps the selection as `[🌿:selected text](target)` and creates
-  the child with topic `what is "selected text"`.
-- **Normal / insert mode, chat buffer**: inserts a full-line `🌿: <filename>: `,
-  creates the child, saves the parent, and **opens the child** — the question is
-  typed there. Before #214 this path created no file at all, so it wrote a
-  reference to something that did not exist.
+### The chord is one rule (#214 M3)
+
+> `<M-S-CR>` performs the submission `<M-CR>` would perform, into a new child
+> chat, and leaves a `🌿:` reference where `<M-CR>`'s output would have appeared.
+
+The parent always keeps its context; the only thing it ever loses is an answer
+`<M-CR>` would itself have replaced. `<M-i>` and `<C-g>i` are aliases for the
+same action.
+
+| context | `<M-CR>` does | `<M-S-CR>` does | the ref lands |
+|---|---|---|---|
+| visual selection | inline term definition at the selection | child seeded `tell me more about "<sel>"` | inline `[🌿:<sel>](child)`, in place |
+| cursor on a past exchange with `<M-q>` markers | strips them, inserts a new turn after that exchange's answer, original Q/A preserved | those gathered quote blocks become the child's first question | after **that** exchange's `📝:` |
+| `<M-q>` markers elsewhere | strips them, appends the new turn at the buffer end | same payload → child | after the **last** exchange's `📝:` |
+| cursor on an unanswered question | submits it; the answer appears after it | the question is **copied** to the child | after the question |
+| cursor on an answered question | resubmits: the old answer is deleted and regenerated | old answer deleted, question copied to the child | where the answer was |
+
+**Why the reference follows `📝:` and not precedes it.** Measured, not reasoned:
+run both layouts through `exchange_model.from_parsed_chat` and the "before"
+variant yields blocks `question, agent_header, text` — **the summary block is
+gone** — with `append_pos` pointing into the middle of the exchange. After the
+summary, the blocks stay contiguous and `append_pos` lands exactly on the
+reference line. (At *parse* level the two are indistinguishable, so the parser is
+not where this is decided.)
+
+The reference is its own block with one blank line each side, which is the
+exchange model's `MARGIN`.
+
+**Refusals.** The chord declines while the buffer owns a pending response — a
+streaming answer holds a chat lease on its `🤖:` line, and editing under it
+corrupts the transcript rather than erroring. With *nothing* to submit (an empty
+transcript, or the cursor outside every exchange) it falls back to the pre-M3
+behaviour below rather than doing nothing: generalising the chord must not delete
+the "make me a side chat" affordance, and it is never a no-op.
+
+- **Normal / insert mode, chat buffer, nothing to submit**: inserts a full-line
+  `🌿: <filename>: `, creates the child, saves the parent, and **opens the
+  child** — the question is typed there. Before #214 this path created no file at
+  all, so it wrote a reference to something that did not exist.
 - **Normal / insert mode, foreign markdown**: inserts the reference and puts the
   cursor on it in insert mode. No child, no write.
-- The no-selection child starts with `topic: ?` — the sentinel the lifecycle
+- Every child created without a selection starts with `topic: ?` — including the
+  M3 question and quotes cases, whose reference line carries the question text as
+  its *display label* while the child's own topic stays the sentinel the lifecycle
   keys off. `?` (not `""`) is what makes auto-titling fire on first respond;
   an empty topic left the child permanently anonymous (#214 BR-1). It gains its slug on
   first write (the `ParleySlug` `BufWritePost` autocmd, which skips an empty or

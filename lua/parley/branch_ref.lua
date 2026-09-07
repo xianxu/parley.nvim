@@ -42,9 +42,20 @@ end
 --- Topic seeded for a selection-derived branch.
 --- PURE.
 --- @param selected string
+--- The child chat's `topic:` header for a selection, which becomes its filename
+--- slug — so it names the SUBJECT, not a question about it. This returned
+--- `what is "<selected>"` before #214 M3, which put a question form into every
+--- branched filename; the question wording now lives in
+--- `branch_submit.seed_question`.
+---
+--- Whitespace is collapsed because a visual selection can span lines and the
+--- slug has to survive it. An all-whitespace selection returns "" — the caller
+--- decides whether that is an error (the inline path already rejects it).
+--- @param selected string
 --- @return string
 function M.topic_for_selection(selected)
-    return 'what is "' .. selected .. '"'
+    local topic = (selected or ""):gsub("%s+", " ")
+    return (topic:gsub("^%s+", ""):gsub("%s+$", ""))
 end
 
 return M

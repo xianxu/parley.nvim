@@ -44,8 +44,9 @@ describe("branched child lifecycle (#214)", function()
 
     it("a selection-derived branch keeps its real topic", function()
         local child = tmpdir .. "/2026-09-06.10-02-00.000.md"
-        parley.create_child_chat(child, 'what is "widget"', parent_buf, 'what is "widget"?')
-        assert.are.equal('what is "widget"', header_of(child).topic)
+        parley.create_child_chat(child, "widget", parent_buf,
+            require("parley.branch_submit").seed_question("define", "widget"))
+        assert.are.equal("widget", header_of(child).topic)
     end)
 
     it("the child carries a resolvable parent back-link", function()
@@ -302,4 +303,382 @@ describe("residual M1 fixes, pinned (#214)", function()
             "the command flipped folds in a window that is not a parley buffer")
         vim.api.nvim_buf_delete(b, { force = true })
     end)
+end)
+
+-- #214 M3. `<M-S-CR>` performs the submission `<M-CR>` would perform, into a new
+-- child chat, and leaves a 🌿: reference where `<M-CR>`'s output would have
+-- appeared. Driven through the real keymap callback on a real chat buffer — the
+-- transition, not the sub-step (round-11 lesson).
+describe("branched submission (#214 M3)", function()
+    local tmpdir, parent_path, parent_buf
+
+    -- The transcript every case plans against. `answer.line_end` is the 📝: line.
+    --  5 💬: first question   7..11 🤖: … 📝: sum      13 💬: second question
+    local TRANSCRIPT = {
+        "---", "topic: parent topic", "file: f", "---", "",
+        "💬: first question", "",
+        "🤖:[A]", "",
+        "answer text here", "",
+        "📝: the summary", "",
+        "💬: second question",
+    }
+
+    local function open(lines)
+        tmpdir = vim.fn.tempname()
+        vim.fn.mkdir(tmpdir, "p")
+        parent_path = tmpdir .. "/2026-09-06.10-00-00.000_parent.md"
+        vim.fn.writefile(lines, parent_path)
+        vim.cmd("edit " .. vim.fn.fnameescape(parent_path))
+        parent_buf = vim.api.nvim_get_current_buf()
+        parley.prep_chat(parent_buf, parent_path)
+        return parent_buf
+    end
+
+    before_each(function()
+        parley.setup({})
+        open(TRANSCRIPT)
+        parley.config.chat_dir = tmpdir
+    end)
+
+    after_each(function()
+        parley._prepared_bufs[parent_buf] = nil
+        vim.fn.delete(tmpdir, "rf")
+    end)
+
+    local function lines_now()
+        return vim.api.nvim_buf_get_lines(parent_buf, 0, -1, false)
+    end
+
+    local function ref_line_index(lines)
+        for i, l in ipairs(lines) do if l:match("^🌿:") then return i end end
+    end
+
+    local function child_path_from(ref)
+        return tmpdir .. "/" .. ref:match("^🌿:%s*([^:]+):")
+    end
+
+    local function branch_here(line)
+        vim.api.nvim_win_set_cursor(0, { line, 0 })
+        parley._branch_inserters(parent_buf, false, true).n()
+    end
+
+    it("an unanswered question is COPIED; the ref follows it", function()
+        branch_here(14)   -- 💬: second question
+        local l = lines_now()
+        local i = ref_line_index(l)
+        assert.is_truthy(i, "no branch reference was inserted")
+        assert.are.equal("💬: second question", l[14], "the question must stay in the parent")
+        assert.are.equal("", l[15], "one blank line between the question and the ref")
+        assert.are.equal(16, i)
+    end)
+
+    it("and the child is seeded with that question", function()
+        branch_here(14)
+        local l = lines_now()
+        local child = child_path_from(l[ref_line_index(l)])
+        local body = table.concat(vim.fn.readfile(child), "\n")
+        assert.is_truthy(body:find("second question", 1, true),
+            "the child was not seeded with the question it branched from")
+    end)
+
+    it("an answered question loses its answer, and the ref takes its place", function()
+        branch_here(6)    -- 💬: first question, which has an answer at 8..12
+        local l = lines_now()
+        assert.are.equal("💬: first question", l[6], "the question must stay")
+        assert.is_nil(vim.tbl_filter(function(x) return x == "answer text here" end, l)[1],
+            "the answer <M-CR> would have replaced is still there")
+        assert.is_truthy(l[8]:match("^🌿:"), "the ref did not take the answer's place")
+    end)
+
+    -- This is the QUOTES case: the answer is preserved, so the exchange still
+    -- ends with its 📝: and the ref must follow it. (The question case deletes
+    -- the answer, so its ref follows the question — a different line, same rule:
+    -- the ref goes where <M-CR>'s output would have gone.)
+    it("the ref lands AFTER the summary, so the summary keeps its model block", function()
+        open({
+            "---", "topic: parent topic", "file: f", "---", "",
+            "💬: first question", "",
+            "🤖:[A]", "",
+            "answer text here 🤖[what about this?]", "",
+            "📝: the summary",
+        })
+        parley.config.chat_dir = tmpdir
+        branch_here(10)
+
+        local l = lines_now()
+        local i = ref_line_index(l)
+        local summary_at
+        for n = 1, #l do if l[n]:match("^📝:") then summary_at = n end end
+        assert.is_truthy(summary_at, "the summary vanished")
+        assert.is_true(i > summary_at,
+            "the ref was placed BEFORE the summary; measured, that drops the "
+            .. "summary block out of the exchange model entirely")
+    end)
+
+    -- The model-level consequence, asserted directly rather than by proxy.
+    it("and the exchange model still carries the summary block afterwards", function()
+        open({
+            "---", "topic: parent topic", "file: f", "---", "",
+            "💬: first question", "",
+            "🤖:[A]", "",
+            "answer text here 🤖[what about this?]", "",
+            "📝: the summary",
+        })
+        parley.config.chat_dir = tmpdir
+        branch_here(10)
+
+        local l = lines_now()
+        local parsed = parley.parse_chat(l, parley.chat_parser.find_header_end(l))
+        local model = require("parley.exchange_model").from_parsed_chat(parsed)
+        local kinds = {}
+        for _, blk in ipairs(model.exchanges[1].blocks) do kinds[#kinds + 1] = blk.kind end
+        assert.is_truthy(vim.tbl_contains(kinds, "summary"),
+            "summary block lost from the model: " .. table.concat(kinds, ", "))
+    end)
+
+    it("pending <M-q> quotes go to the child and are stripped from the parent", function()
+        open({
+            "---", "topic: parent topic", "file: f", "---", "",
+            "💬: first question", "",
+            "🤖:[A]", "",
+            "answer text here 🤖[what about this?]", "",
+            "📝: the summary",
+        })
+        parley.config.chat_dir = tmpdir
+        branch_here(10)
+
+        local l = lines_now()
+        local joined = table.concat(l, "\n")
+        assert.is_nil(joined:find("🤖[", 1, true), "the marker was not stripped from the parent")
+        assert.is_truthy(joined:find("answer text here", 1, true), "the answer must be preserved")
+
+        local child = child_path_from(l[ref_line_index(l)])
+        local body = table.concat(vim.fn.readfile(child), "\n")
+        assert.is_truthy(body:find("what about this?", 1, true),
+            "the gathered quote did not reach the child")
+    end)
+
+    it("the parent is saved, so the only pointer to the child is durable", function()
+        branch_here(14)
+        assert.is_false(vim.api.nvim_get_option_value("modified", { buf = parent_buf }),
+            "parent left unsaved: a :q! here orphans the child (#214 BR-19)")
+    end)
+end)
+
+-- #214 M3: generalising the chord must not delete the affordance M1 shipped.
+-- With nothing to submit, <M-S-CR> still makes a side chat — it is never a no-op.
+describe("branched submission falls back, never no-ops (#214 M3)", function()
+    local tmpdir, parent_path, parent_buf
+
+    after_each(function()
+        parley._prepared_bufs[parent_buf] = nil
+        vim.fn.delete(tmpdir, "rf")
+    end)
+
+    local function open(lines)
+        parley.setup({})
+        tmpdir = vim.fn.tempname()
+        vim.fn.mkdir(tmpdir, "p")
+        parent_path = tmpdir .. "/2026-09-06.10-00-00.000_parent.md"
+        vim.fn.writefile(lines, parent_path)
+        vim.cmd("edit " .. vim.fn.fnameescape(parent_path))
+        parent_buf = vim.api.nvim_get_current_buf()
+        parley.config.chat_dir = tmpdir
+        parley.prep_chat(parent_buf, parent_path)
+    end
+
+    local function child_of()
+        for _, f in ipairs(vim.fn.readdir(tmpdir)) do
+            if f ~= vim.fn.fnamemodify(parent_path, ":t") then return tmpdir .. "/" .. f end
+        end
+    end
+
+    it("a transcript with no exchanges still branches", function()
+        open({ "---", "topic: t", "file: f", "---", "" })
+        vim.api.nvim_win_set_cursor(0, { 5, 0 })
+        parley._branch_inserters(parent_buf, false, true).n()
+        assert.is_truthy(child_of(), "the chord did nothing at all")
+    end)
+
+    it("a cursor in the frontmatter still branches, and keeps the ? sentinel", function()
+        open({ "---", "topic: t", "file: f", "---", "", "💬: q", "", "🤖:[A]", "", "a" })
+        vim.api.nvim_win_set_cursor(0, { 1, 0 })
+        parley._branch_inserters(parent_buf, false, true).n()
+
+        local created = child_of()
+        assert.is_truthy(created, "the chord did nothing at all")
+        local topic
+        for _, line in ipairs(vim.fn.readfile(created)) do
+            topic = topic or line:match("^topic:%s*(.*)$")
+        end
+        assert.are.equal("?", topic, "the fallback must keep BR-1's sentinel")
+    end)
+
+    it("the fallback does not delete the answer it did not point at", function()
+        open({ "---", "topic: t", "file: f", "---", "", "💬: q", "", "🤖:[A]", "", "answer body" })
+        vim.api.nvim_win_set_cursor(0, { 1, 0 })
+        parley._branch_inserters(parent_buf, false, true).n()
+
+        local joined = table.concat(vim.api.nvim_buf_get_lines(parent_buf, 0, -1, false), "\n")
+        assert.is_truthy(joined:find("answer body", 1, true),
+            "a cursor outside every exchange must not destroy an answer")
+    end)
+end)
+
+-- #214 M3 case 1: a visual selection anchors in place and the child is told what
+-- to do with it. The topic names the subject (it becomes the slug); the
+-- instruction is the seeded question. Before M3 both were `what is "X"`, and the
+-- same phrase was rebuilt inline on the follow-a-dead-link path.
+describe("visual branch seeds the child with an instruction (#214 M3)", function()
+    local tmpdir, parent_path, parent_buf
+
+    before_each(function()
+        parley.setup({})
+        tmpdir = vim.fn.tempname()
+        vim.fn.mkdir(tmpdir, "p")
+        parent_path = tmpdir .. "/2026-09-06.10-00-00.000_parent.md"
+        vim.fn.writefile({ "---", "topic: t", "file: f", "---", "",
+                           "💬: q", "", "🤖:[A]", "", "monad transformers are useful" }, parent_path)
+        vim.cmd("edit " .. vim.fn.fnameescape(parent_path))
+        parent_buf = vim.api.nvim_get_current_buf()
+        parley.config.chat_dir = tmpdir
+        parley.prep_chat(parent_buf, parent_path)
+    end)
+
+    after_each(function()
+        parley._prepared_bufs[parent_buf] = nil
+        vim.fn.delete(tmpdir, "rf")
+    end)
+
+    it("the child's topic is the selection and its question is the instruction", function()
+        vim.api.nvim_win_set_cursor(0, { 10, 0 })
+        vim.cmd("normal! v" .. string.rep("l", 17))   -- "monad transformers"
+        parley._branch_inserters(parent_buf, false, true).v()
+
+        local created
+        for _, f in ipairs(vim.fn.readdir(tmpdir)) do
+            if f ~= vim.fn.fnamemodify(parent_path, ":t") then created = tmpdir .. "/" .. f end
+        end
+        assert.is_truthy(created, "no child was created")
+        local body = table.concat(vim.fn.readfile(created), "\n")
+        assert.is_truthy(body:find("topic: monad transformers", 1, true),
+            "the topic should name the subject, not a question about it")
+        assert.is_truthy(body:find('tell me more about "monad transformers"', 1, true),
+            "the child was not seeded with the instruction")
+    end)
+
+    it("the anchor stays in the parent, linking the child", function()
+        vim.api.nvim_win_set_cursor(0, { 10, 0 })
+        vim.cmd("normal! v" .. string.rep("l", 17))
+        parley._branch_inserters(parent_buf, false, true).v()
+
+        local joined = table.concat(vim.api.nvim_buf_get_lines(parent_buf, 0, -1, false), "\n")
+        assert.is_truthy(joined:find("[🌿:monad transformers]", 1, true),
+            "the selection was not wrapped as an inline anchor")
+    end)
+end)
+
+-- #214 M3, ARCH-ORDER. A streaming response owns the parent's exchange model and
+-- holds a chat lease anchored on the 🤖: line. Deleting the answer under it
+-- (case 3b) or splicing a line into the exchange it is writing would fight that
+-- lease, and the failure mode is a corrupted transcript rather than an error. The
+-- transition is synchronous on the keypress, so declining is enough — there is
+-- no queue to build.
+describe("branched submission refuses under a pending response (#214 M3)", function()
+    local tmpdir, parent_path, parent_buf
+    local pending = require("parley.chat_pending")
+
+    before_each(function()
+        parley.setup({})
+        tmpdir = vim.fn.tempname()
+        vim.fn.mkdir(tmpdir, "p")
+        parent_path = tmpdir .. "/2026-09-06.10-00-00.000_parent.md"
+        vim.fn.writefile({ "---", "topic: t", "file: f", "---", "",
+                           "💬: first question", "", "🤖:[A]", "", "answer body", "",
+                           "📝: sum" }, parent_path)
+        vim.cmd("edit " .. vim.fn.fnameescape(parent_path))
+        parent_buf = vim.api.nvim_get_current_buf()
+        parley.config.chat_dir = tmpdir
+        parley.prep_chat(parent_buf, parent_path)
+    end)
+
+    after_each(function()
+        parley._prepared_bufs[parent_buf] = nil
+        vim.fn.delete(tmpdir, "rf")
+    end)
+
+    it("changes nothing while the buffer owns a pending response", function()
+        local before = table.concat(vim.api.nvim_buf_get_lines(parent_buf, 0, -1, false), "\n")
+        local orig = pending.identity
+        pending.identity = function(b) return b == parent_buf and { agent = "A" } or nil end
+
+        vim.api.nvim_win_set_cursor(0, { 6, 0 })
+        parley._branch_inserters(parent_buf, false, true).n()
+
+        pending.identity = orig
+        local after = table.concat(vim.api.nvim_buf_get_lines(parent_buf, 0, -1, false), "\n")
+        assert.are.equal(before, after,
+            "the transcript was edited while a response was streaming into it")
+        for _, f in ipairs(vim.fn.readdir(tmpdir)) do
+            assert.are.equal(vim.fn.fnamemodify(parent_path, ":t"), f,
+                "a child was created for a submission that was refused")
+        end
+    end)
+
+    it("works again once the response is done", function()
+        vim.api.nvim_win_set_cursor(0, { 6, 0 })
+        parley._branch_inserters(parent_buf, false, true).n()
+        local joined = table.concat(vim.api.nvim_buf_get_lines(parent_buf, 0, -1, false), "\n")
+        assert.is_truthy(joined:find("🌿:", 1, true), "no branch after the response finished")
+    end)
+end)
+
+-- #214 M3, Task 7. `branch_submit` re-derives the exchange-at-line rule that
+-- `init.lua`'s `find_exchange_at_line` already implements — deliberately, so the
+-- planner stays pure and loadable without the plugin. A duplicated rule is a
+-- drift risk, so pin the two against each other BEHAVIOURALLY, line by line,
+-- rather than against prose. (Deviation from the plan, which proposed grepping
+-- the case names out of atlas/chat/drill_in.md: a prose grep would pass while
+-- the two implementations disagreed, which is the only thing that matters here.)
+describe("the planner agrees with <M-CR>'s exchange resolution (#214 M3)", function()
+    local bs = require("parley.branch_submit")
+
+    local TRANSCRIPTS = {
+        {
+            name = "answered, then an unanswered trailing question",
+            lines = { "---", "topic: t", "file: f", "---", "",
+                      "💬: first question", "", "🤖:[A]", "", "answer", "", "📝: sum", "",
+                      "💬: second question", "", "" },
+        },
+        {
+            name = "two answered exchanges",
+            lines = { "---", "topic: t", "file: f", "---", "",
+                      "💬: one", "", "🤖:[A]", "", "a1", "", "📝: s1", "",
+                      "💬: two", "", "🤖:[A]", "", "a2", "", "📝: s2", "" },
+        },
+        {
+            name = "a single unanswered question with trailing blanks",
+            lines = { "---", "topic: t", "file: f", "---", "", "💬: only", "", "", "" },
+        },
+    }
+
+    for _, t in ipairs(TRANSCRIPTS) do
+        it("agrees on every line — " .. t.name, function()
+            parley.setup({})
+            local header_end = parley.chat_parser.find_header_end(t.lines)
+            local parsed = parley.parse_chat(t.lines, header_end)
+
+            local disagreements = {}
+            for line = 1, #t.lines do
+                local theirs = parley.find_exchange_at_line(parsed, line)
+                local mine = bs._exchange_at(parsed, line)
+                if theirs ~= mine then
+                    disagreements[#disagreements + 1] = string.format(
+                        "line %d (%q): <M-CR> says %s, planner says %s",
+                        line, t.lines[line], tostring(theirs), tostring(mine))
+                end
+            end
+            assert.same({}, disagreements)
+        end)
+    end
 end)

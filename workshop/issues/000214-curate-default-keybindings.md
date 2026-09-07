@@ -211,6 +211,14 @@ shipped value — otherwise the trap survives the fix.
   wording contradicted this issue's own decision to leave them off-registry).
 - A single documented switch disables the entire default keymap, verified by
   `:map` showing no parley mapping afterwards.
+- **(M3)** `<M-S-CR>` submits what `<M-CR>` would submit, into a new child chat,
+  leaving a `🌿:` reference where `<M-CR>`'s output would have appeared — asserted
+  per case (visual selection / pending `<M-q>` markers / unanswered question /
+  answered question), driven through the real keymap callback on a real chat
+  buffer rather than through the planner alone. The parent keeps its context in
+  every case; the only thing it loses is an answer `<M-CR>` would itself have
+  replaced. With nothing to submit the chord still branches — generalising it
+  must not delete M1's "make me a side chat" affordance, and it is never a no-op.
 - With the opt-in set unconfigured, a fresh install claims no `<leader>` key.
   *(The `<C-y>`/`<C-j>` half of this criterion moved out — it cannot be
   certified while the ariadne split is deferred. Owner: #212, then a follow-up

@@ -2262,7 +2262,121 @@ local function branch_inserters(buf, abs_link, owns_file)
 	-- (BR-28). It therefore does what it did before #214: insert the reference,
 	-- put the cursor on it, and let the user type the topic. The child is created
 	-- when the link is followed.
+	--- Ready drill-in markers as LINE numbers, which is all `plan_submission`
+	--- needs. drill_in works in byte offsets; converting here keeps the planner
+	--- pure over line numbers and out of the encoding business.
+	--- @return table[] markers
+	local function ready_marker_lines(text)
+		local drill_in = require("parley.drill_in")
+		local out = {}
+		for _, marker in ipairs(drill_in.parse(text)) do
+			if marker.ready then
+				local _, newlines = text:sub(1, marker.byte_start):gsub("\n", "")
+				out[#out + 1] = { line = newlines + 1 }
+			end
+		end
+		return out
+	end
+
+	--- #214 M3: `<M-S-CR>` in normal/insert mode on a CHAT buffer submits what
+	--- `<M-CR>` would submit, into a new child, leaving the reference where
+	--- `<M-CR>`'s output would have appeared.
+	---
+	--- Returns false when there is nothing to submit — an empty transcript, or a
+	--- cursor outside every exchange — and the caller then does what `<M-i>` did
+	--- before M3: insert a bare reference and open the child. That fallback is
+	--- deliberate. "Make me a side chat from here" is a real affordance M1
+	--- shipped, and generalising the chord must not delete it; the chord should
+	--- never be a no-op.
+	local function insert_planned()
+		-- ARCH-ORDER, the one real concurrency case. A streaming response owns
+		-- this buffer's exchange model and holds a chat lease anchored on its
+		-- 🤖: line; deleting the answer under it, or splicing a reference into
+		-- the exchange it is writing, corrupts the transcript rather than
+		-- erroring. The transition is synchronous on the keypress, so refusing is
+		-- the whole handling — there is no queue to build and nothing to roll
+		-- back. Refuse LOUDLY: the user pressed a key and must know why nothing
+		-- happened.
+		if require("parley.chat_pending").identity(buf) then
+			M.logger.warning("Branch: this chat has a response in flight — "
+				.. "wait for it, or stop it with the stop shortcut, then branch")
+			return true
+		end
+
+		local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+		local text = table.concat(lines, "\n")
+		local header_end = M.chat_parser.find_header_end(lines)
+		local parsed = M.parse_chat(lines, header_end)
+		local cursor_line = vim.api.nvim_win_get_cursor(0)[1]
+
+		local plan, reason = require("parley.branch_submit").plan_submission(
+			parsed, cursor_line, ready_marker_lines(text))
+		if not plan then
+			M.logger.debug("Branch: nothing to submit (" .. tostring(reason)
+				.. "); falling back to a plain reference")
+			return false
+		end
+
+		local drill_in = require("parley.drill_in")
+		local buffer_edit = require("parley.buffer_edit")
+		local question, topic, label = plan.question, plan.topic, plan.label
+
+		-- Case 2: the gathered quotes become the child's first question, and the
+		-- markers leave the parent exactly as `<M-CR>` would have stripped them.
+		if plan.case == "quotes" then
+			local blocks, _, marker_edits = drill_in.gather_edit_plan(text, {
+				boundaries = drill_in.chat_boundaries(M.config), bracket = true,
+			})
+			if #blocks == 0 then
+				M.logger.debug("Branch: markers found but none ready; plain reference")
+				return false
+			end
+			question = table.concat(drill_in.format_blocks(blocks), "\n")
+			label = require("parley.branch_ref").topic_for_selection(
+				(blocks[1].sections[#blocks[1].sections] or {}).text or "")
+			topic = "?"
+			buffer_edit.apply_text_edits(buf, 0, text, marker_edits)
+		end
+
+		-- Case 3b: `<M-CR>` on an answered question deletes the answer and
+		-- regenerates it. The answer is going to the child instead, so the
+		-- deletion is the same; only the destination differs.
+		if plan.delete_lines then
+			local first, last = plan.delete_lines[1], plan.delete_lines[2]
+			buffer_edit.delete_lines_after(buf, first - 1, last - first + 1)
+		end
+
+		local new_chat_file = (new_target())
+		local rel_path = vim.fn.fnamemodify(new_chat_file, ":t")
+		-- The reference is its own block with one blank line on each side, which
+		-- is the exchange model's MARGIN. `ref_after` is a 1-indexed line and
+		-- nvim_buf_set_lines takes a 0-indexed position, so they coincide.
+		vim.api.nvim_buf_set_lines(buf, plan.ref_after, plan.ref_after, false, {
+			"", br.format_ref_line(get_branch_prefix(), rel_path, label or ""),
+		})
+		M.highlight_chat_branch_refs(buf)
+
+		create_child_if_owned(new_chat_file, (topic ~= "" and topic) or "?", question)
+		if not commit_reference() then
+			return true
+		end
+		M.logger.info("Branched submission into: " .. rel_path)
+		vim.schedule(function()
+			vim.cmd("edit " .. vim.fn.fnameescape(new_chat_file))
+			vim.cmd("normal! G")
+		end)
+		return true
+	end
+
 	local function insert_plain()
+		-- A chat buffer takes the planned path: parley owns the file, so it can
+		-- make the reference durable, and the transcript has exchanges to plan
+		-- against. A foreign markdown document has neither (#214 M1's rule), so
+		-- it keeps the pre-M3 behaviour below.
+		if owns_file and insert_planned() then
+			return
+		end
+
 		local cursor_pos = vim.api.nvim_win_get_cursor(0)
 		-- The standalone ref line always uses the basename, in both buffer types:
 		-- format_ref_line writes `🌿: <name>: `, which resolve_chat_path looks up
@@ -2322,9 +2436,13 @@ local function branch_inserters(buf, abs_link, owns_file)
 			M.logger.warning("No text selected")
 			return
 		end
+		-- #214 M3: the topic names the SUBJECT (it becomes the filename slug) and
+		-- the child is seeded with the instruction, not with `<topic>?`. One
+		-- place owns that wording — three call sites would each invent their own.
 		local topic = br.topic_for_selection(selected)
 		vim.api.nvim_buf_set_lines(buf, start_line - 1, start_line, false, { spliced })
-		create_child_if_owned(new_chat_file, topic, topic .. "?")
+		create_child_if_owned(new_chat_file, topic,
+			require("parley.branch_submit").seed_question("define", selected))
 		M.highlight_chat_branch_refs(buf)
 		-- Same durability rule as insert_plain: the child is on disk and only the
 		-- in-buffer link points at it. Focus stays in the parent here, so Vim's
@@ -3128,8 +3246,13 @@ local function try_open_inline_branch_link(current_line, cursor_col, parent_buf)
 			if vim.fn.filereadable(expanded) == 1 then
 				M.open_buf(expanded)
 			elseif expanded:match("%d%d%d%d%-%d%d%-%d%d%.%d%d%-%d%d%-%d%d%.%d+%.md$") then
-				local topic = link.topic ~= "" and ('what is "' .. link.topic .. '"') or "New chat"
-				M.create_child_chat(expanded, topic, parent_buf, topic .. "?")
+				-- Same wording, same owner (#214 M3): this built `what is "X"`
+				-- inline, so the phrase lived in two places and the two branch
+				-- paths seeded their children differently.
+				local br_submit = require("parley.branch_submit")
+				local topic = link.topic ~= "" and link.topic or "?"
+				M.create_child_chat(expanded, topic, parent_buf,
+					link.topic ~= "" and br_submit.seed_question("define", link.topic) or nil)
 				M.open_buf(expanded)
 			else
 				M.logger.warning("Chat file not found: " .. expanded)

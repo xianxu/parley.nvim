@@ -65,7 +65,7 @@
 - Modify: `lua/parley/branch_ref.lua`
 - Test: `tests/unit/branch_ref_spec.lua`
 
-- [ ] **Step 1: Update the failing test**
+- [x] **Step 1: Update the failing test**
 
 ```lua
 it("topic is the selected text, so the slug names the subject", function()
@@ -77,12 +77,12 @@ it("collapses whitespace and trims, so the slug stays clean", function()
 end)
 ```
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail**
 
 Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/branch_ref_spec.lua" -c "qa!"`
 Expected: FAIL — currently returns `what is "monad transformers"`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```lua
 --- The child's `topic:` header for a selection. The topic becomes the filename
@@ -93,8 +93,8 @@ function M.topic_for_selection(selected)
 end
 ```
 
-- [ ] **Step 4: Run the test — expect PASS**
-- [ ] **Step 5: Commit** — `git commit -m "#214 M3: the child's topic names the subject, not the question"`
+- [x] **Step 4: Run the test — expect PASS**
+- [x] **Step 5: Commit** — `git commit -m "#214 M3: the child's topic names the subject, not the question"`
 
 ### Task 2: `seed_question`
 
@@ -102,7 +102,7 @@ end
 - Create: `lua/parley/branch_submit.lua`
 - Test: `tests/unit/branch_submit_spec.lua`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```lua
 local bs = require("parley.branch_submit")
@@ -129,10 +129,10 @@ describe("seed_question", function()
 end)
 ```
 
-- [ ] **Step 2: Run it — expect FAIL** (module does not exist)
-- [ ] **Step 3: Implement the minimum**
-- [ ] **Step 4: Run — expect PASS**
-- [ ] **Step 5: Commit**
+- [x] **Step 2: Run it — expect FAIL** (module does not exist)
+- [x] **Step 3: Implement the minimum**
+- [x] **Step 4: Run — expect PASS**
+- [x] **Step 5: Commit**
 
 ### Task 3: `plan_submission` — the four cases
 
@@ -152,7 +152,7 @@ local function ex(q_start, q_end, a_start, a_end)
 end
 ```
 
-- [ ] **Step 1: Write the failing tests — one per row of the issue's table**
+- [x] **Step 1: Write the failing tests — one per row of the issue's table**
 
 ```lua
 describe("plan_submission", function()
@@ -203,10 +203,10 @@ describe("plan_submission", function()
 end)
 ```
 
-- [ ] **Step 2: Run — expect FAIL**
-- [ ] **Step 3: Implement `plan_submission`**
-- [ ] **Step 4: Run — expect PASS**
-- [ ] **Step 5: Commit**
+- [x] **Step 2: Run — expect FAIL**
+- [x] **Step 3: Implement `plan_submission`**
+- [x] **Step 4: Run — expect PASS**
+- [x] **Step 5: Commit**
 
 ---
 
@@ -218,7 +218,7 @@ end)
 - Modify: `lua/parley/init.lua` (`branch_inserters`)
 - Test: `tests/integration/branch_child_spec.lua`
 
-- [ ] **Step 1: Write the failing integration tests** — driving the real keymap callback on a real chat buffer, per the round-11 lesson (test the transition, not the sub-step):
+- [x] **Step 1: Write the failing integration tests** — driving the real keymap callback on a real chat buffer, per the round-11 lesson (test the transition, not the sub-step):
 
 ```lua
 it("copies the trailing question into the child and leaves a ref behind", function()
@@ -242,11 +242,11 @@ it("routes pending <M-q> quotes into the child and strips them from the parent",
 it("puts the ref after the summary, so the summary stays in the exchange model", function() ... end)
 ```
 
-- [ ] **Step 2: Run — expect FAIL**
-- [ ] **Step 3: Implement the `n`/`i` path**
-- [ ] **Step 4: Run — expect PASS**
-- [ ] **Step 5: Verify by reversion** — revert the `ref_after` computation to "cursor line" and confirm the summary-placement test goes red.
-- [ ] **Step 6: Commit**
+- [x] **Step 2: Run — expect FAIL**
+- [x] **Step 3: Implement the `n`/`i` path**
+- [x] **Step 4: Run — expect PASS**
+- [x] **Step 5: Verify by reversion** — revert the `ref_after` computation to "cursor line" and confirm the summary-placement test goes red.
+- [x] **Step 6: Commit**
 
 ### Task 5: the visual path's seeded question
 
@@ -254,9 +254,9 @@ it("puts the ref after the summary, so the summary stays in the exchange model",
 - Modify: `lua/parley/init.lua` (`insert_inline`)
 - Test: `tests/integration/branch_child_spec.lua`
 
-- [ ] **Step 1: Test that the child is seeded `tell me more about "<selection>"` and its topic is the selection**
-- [ ] **Step 2–4: red → implement → green**
-- [ ] **Step 5: Commit**
+- [x] **Step 1: Test that the child is seeded `tell me more about "<selection>"` and its topic is the selection**
+- [x] **Step 2–4: red → implement → green**
+- [x] **Step 5: Commit**
 
 ### Task 6: refuse while a response is pending
 
@@ -266,9 +266,9 @@ it("puts the ref after the summary, so the summary stays in the exchange model",
 
 The one real concurrency case named in ARCH-ORDER above: a streaming response owns the parent's exchange model and a chat lease. Deleting the answer under it (case 3b) would fight the lease.
 
-- [ ] **Step 1: Test that `<M-S-CR>` declines with a message while the buffer has a pending response, and changes nothing**
-- [ ] **Step 2–4: red → implement → green**
-- [ ] **Step 5: Commit**
+- [x] **Step 1: Test that `<M-S-CR>` declines with a message while the buffer has a pending response, and changes nothing**
+- [x] **Step 2–4: red → implement → green**
+- [x] **Step 5: Commit**
 
 ---
 
@@ -281,24 +281,24 @@ The one real concurrency case named in ARCH-ORDER above: a streaming response ow
 
 The chord's whole promise is "what `<M-CR>` would submit". That promise is quantified over cases, so it needs a derived check rather than four hand-written examples — the family that produced five findings in M2.
 
-- [ ] **Step 1: Assert every case the atlas documents for `<M-CR>` has a `plan_submission` row**, reading the case list out of `atlas/chat/drill_in.md` rather than a literal in the test.
-- [ ] **Step 2–4: red → implement → green**
-- [ ] **Step 5: Commit**
+- [x] **Step 1: Assert every case the atlas documents for `<M-CR>` has a `plan_submission` row**, reading the case list out of `atlas/chat/drill_in.md` rather than a literal in the test.
+- [x] **Step 2–4: red → implement → green**
+- [x] **Step 5: Commit**
 
 ### Task 8: atlas + README
 
 **Files:**
 - Modify: `atlas/chat/inline_branch_links.md`, `atlas/chat/drill_in.md`, `README.md`, `atlas/traceability.yaml`
 
-- [ ] **Step 1: Document the one rule** and the four rows, including the measured reason the ref follows `📝:`.
-- [ ] **Step 2: Route the new spec** in `atlas/traceability.yaml` — the guard added in M2 fails otherwise.
-- [ ] **Step 3: Commit**
+- [x] **Step 1: Document the one rule** and the four rows, including the measured reason the ref follows `📝:`.
+- [x] **Step 2: Route the new spec** in `atlas/traceability.yaml` — the guard added in M2 fails otherwise.
+- [x] **Step 3: Commit**
 
 ### Task 9: close
 
-- [ ] `make test` green, `luacheck` clean.
-- [ ] Mutation ledger from `git diff <M2 boundary> -- lua/`, each deliverable seen red.
-- [ ] `sdlc milestone-close --issue 214 --milestone M3 --actual <measured> --verified '<evidence>'`
+- [x] `make test` green, `luacheck` clean.
+- [x] Mutation ledger from `git diff <M2 boundary> -- lua/`, each deliverable seen red.
+- [x] `sdlc milestone-close --issue 214 --milestone M3 --actual <measured> --verified '<evidence>'`
 
 ---
 
@@ -306,3 +306,50 @@ The chord's whole promise is "what `<M-CR>` would submit". That promise is quant
 
 - **`<M-CR>`'s rules live in prose, not in a shared function.** Task 7 pins the two against the atlas rather than against each other; a genuine unification of `chat_respond`'s branching with `plan_submission` is deliberately out of scope — that is a refactor of a 700-line function inside a milestone that is otherwise additive, and M1 cost five review rounds for exactly that kind of bundling.
 - **Case 2b's "last exchange" is a choice, not a derivation.** `<M-CR>` appends the new turn at the buffer end; the ref follows the last exchange. If a future `<M-CR>` change moves that, the two drift — Task 7's check is what should catch it.
+
+---
+
+## Deviations from this plan, and why
+
+1. **`seed_question` does not escape quote marks in a selection.** The draft test
+   expected `tell me more about "the \"hard\" problem"`. Backslash escaping is a
+   code convention leaking into chat prose, and the model reads either form; the
+   selection is passed through instead. What the test now pins is that it does
+   not crash or mangle — including a `%`, which is the live hazard (BR-21) at any
+   site where the value later reaches `gsub` as a replacement.
+
+2. **Task 7 compares implementations, not prose.** The plan proposed reading the
+   case list out of `atlas/chat/drill_in.md`. A prose grep passes while the two
+   implementations disagree, which is the only thing that matters — so the check
+   now runs `plan_submission`'s exchange resolution against `init.lua`'s
+   `find_exchange_at_line` line-by-line over three transcripts. Verified by
+   deleting the planner's margin rule: three tests go red.
+
+3. **Declining falls back rather than stopping.** The plan implied `plan_submission`
+   returning nil meant "do nothing". Building it that way regressed M1's
+   "make me a side chat" affordance and broke the BR-1 sentinel test — a chat with
+   no exchanges, or a cursor in the frontmatter, got no branch at all. Nothing to
+   submit now falls through to the pre-M3 plain reference. The chord is never a
+   no-op. (The pending-response refusal is the one case that does NOT fall back:
+   the fallback would also edit the buffer under the lease.)
+
+4. **The child's topic stays `?`, and the reference carries a `label`.** The plan
+   had `plan.topic` naming the subject. Wiring it that way regressed BR-1: a real
+   topic disables auto-titling *and* the slug rename. The child keeps the sentinel
+   so the lifecycle runs; the question text became `plan.label`, which is what the
+   parent's `🌿:` line displays. Two jobs, two fields.
+
+## Mutation ledger
+
+Generated from `git diff d5ba3eb -- lua/`, not recall. Each deliverable reverted,
+seen red, restored.
+
+| deliverable | mutation | red |
+|---|---|---|
+| topic names the subject | revert to `what is "X"` | 3 unit + 1 integration |
+| case 3b deletes the replaced answer | `delete_lines = nil` | 3 unit + 1 integration |
+| markers win over the question case | disable the marker branch | 4 unit + 3 integration |
+| pending-response guard | remove it | 1 integration |
+| ref lands after `📝:` | shift it before | 1 integration |
+| `seed_question` instructs | return the bare selection | 4 unit + 1 integration |
+| planner agrees with `find_exchange_at_line` | drop the margin rule | 3 integration |

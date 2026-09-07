@@ -40,7 +40,20 @@ describe("branch_ref.format_ref_line", function()
 end)
 
 describe("branch_ref.topic_for_selection", function()
-    it("quotes the selection so the child opens with a real question", function()
-        assert.are.equal('what is "widget"', br.topic_for_selection("widget"))
+    -- #214 M3: the topic becomes the child's `topic:` header and therefore its
+    -- filename slug, so it names the SUBJECT. It used to return
+    -- `what is "widget"`, which put a question form in every branched filename.
+    -- The question wording moved to branch_submit.seed_question.
+    it("is the selected text, so the slug names the subject", function()
+        assert.are.equal("widget", br.topic_for_selection("widget"))
+    end)
+
+    it("collapses internal whitespace so a multi-line selection still slugs", function()
+        assert.are.equal("monad transformers",
+            br.topic_for_selection("  monad\n  transformers  "))
+    end)
+
+    it("an empty selection stays empty for the caller to reject", function()
+        assert.are.equal("", br.topic_for_selection("   "))
     end)
 end)
