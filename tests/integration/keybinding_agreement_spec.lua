@@ -410,7 +410,14 @@ describe("markdown buffers obey the same registry contract (#214 C1)", function(
     end)
 end)
 
--- #214 BR-41/BR-47. The defect is teardown, not scope: `vim.keymap.del` cannot
+-- #214 BR-41/BR-47/N2. These drive `enter()`/`exit()` — the transitions a user
+-- actually triggers with <C-n>i / <C-n>I — not the `setup_keymap`/`remove_keymap`
+-- sub-steps the fix edited. Driving the sub-step cannot observe the state the
+-- transition carries, and that is exactly what hid N2: entering interview mode
+-- put a libuv timer handle in `_state`, so every later `refresh_state` (i.e.
+-- opening any chat file) raised "Cannot deepcopy object of type userdata".
+--
+-- The defect is teardown, not scope: `vim.keymap.del` cannot
 -- tell "mine" from "theirs", so leaving interview mode deleted whatever owned
 -- the <CR> slot. Narrowing to buffer-local (round 9) MOVED that collision onto
 -- spell typeahead's own buffer-local <CR> and confined session state to one
@@ -428,16 +435,17 @@ describe("interview <CR> restores what it shadowed (#214 BR-41/BR-47)", function
     end
 
     after_each(function()
+        pcall(interview.exit)
         pcall(vim.keymap.del, "i", "<CR>")
         interview._saved_cr = nil
     end)
 
     it("a pre-existing global <CR> is restored, not deleted", function()
         vim.keymap.set("i", "<CR>", "<Ignore>", { desc = "user's own accept key" })
-        interview.setup_keymap()
+        interview.enter()
         assert.are.equal("Insert timestamp on new line in interview mode", global_cr().desc)
 
-        interview.remove_keymap()
+        interview.exit()
         local back = global_cr()
         assert.is_truthy(back, "leaving interview mode deleted the user's <CR> map")
         assert.are.equal("user's own accept key", back.desc)
@@ -446,8 +454,8 @@ describe("interview <CR> restores what it shadowed (#214 BR-41/BR-47)", function
     it("a user's Lua-callback <CR> survives too", function()
         vim.keymap.set("i", "<CR>", function() return "<CR>" end,
             { expr = true, desc = "user's lua accept key" })
-        interview.setup_keymap()
-        interview.remove_keymap()
+        interview.enter()
+        interview.exit()
         local back = global_cr()
         assert.is_truthy(back, "the callback map was lost")
         assert.are.equal("user's lua accept key", back.desc)
@@ -455,16 +463,16 @@ describe("interview <CR> restores what it shadowed (#214 BR-41/BR-47)", function
 
     it("with no previous map, the slot is left clean", function()
         assert.is_nil(global_cr(), "fixture is not clean")
-        interview.setup_keymap()
-        interview.remove_keymap()
+        interview.enter()
+        interview.exit()
         assert.is_nil(global_cr(), "interview left its own map behind")
     end)
 
     it("re-entering does not save our own map as the thing to restore", function()
         vim.keymap.set("i", "<CR>", "<Ignore>", { desc = "user's own accept key" })
-        interview.setup_keymap()
-        interview.setup_keymap()   -- re-enter without leaving
-        interview.remove_keymap()
+        interview.enter()
+        interview.enter()   -- re-enter without leaving
+        interview.exit()
         assert.are.equal("user's own accept key", global_cr().desc)
     end)
 
@@ -482,8 +490,8 @@ describe("interview <CR> restores what it shadowed (#214 BR-41/BR-47)", function
         end
         assert.is_truthy(buf_cr(), "fixture did not install spell's map")
 
-        interview.setup_keymap()
-        interview.remove_keymap()
+        interview.enter()
+        interview.exit()
 
         assert.is_truthy(buf_cr(),
             "interview mode destroyed spell typeahead's <CR> for this buffer")
@@ -495,14 +503,14 @@ describe("interview <CR> restores what it shadowed (#214 BR-41/BR-47)", function
     it("the mapping applies in every buffer, not only where it was entered", function()
         local b1 = vim.api.nvim_create_buf(false, true)
         vim.api.nvim_set_current_buf(b1)
-        interview.setup_keymap()
+        interview.enter()
 
         local b2 = vim.api.nvim_create_buf(false, true)
         vim.api.nvim_set_current_buf(b2)
         assert.is_truthy(global_cr(),
             "interview <CR> does not apply in a buffer opened after entering the mode")
 
-        interview.remove_keymap()
+        interview.exit()
         vim.api.nvim_buf_delete(b1, { force = true })
         vim.api.nvim_buf_delete(b2, { force = true })
     end)
@@ -582,5 +590,43 @@ describe("the master switch is reversible for GLOBAL maps too (#214 BR-38)", fun
         assert.are.equal("user's own mapping", mine and mine.desc,
             "revoking parley's globals deleted a mapping the user had replaced")
         pcall(vim.keymap.del, "n", "<C-g>c")
+    end)
+end)
+
+-- #214 N2: the transition must survive the thing that happens right after it.
+describe("interview mode's transitions are runnable (#214 N2)", function()
+    local interview = require("parley.interview")
+
+    after_each(function()
+        pcall(interview.exit)
+        pcall(vim.keymap.del, "i", "<CR>")
+    end)
+
+    it("refresh_state works while interview mode is on", function()
+        setup()
+        interview.enter()
+        local ok, err = pcall(parley.refresh_state, { last_chat = "x.md" })
+        assert.is_true(ok, "refresh_state raised during interview mode: " .. tostring(err))
+    end)
+
+    it("opening a chat file while interview mode is on does not raise", function()
+        setup()
+        interview.enter()
+        local ok, err = pcall(function()
+            local buf, path = prepped_chat()
+            cleanup(buf, path)
+        end)
+        assert.is_true(ok, "BufEnter -> prep_chat raised during interview mode: " .. tostring(err))
+    end)
+
+    it("no libuv handle is parked in the serialisable state", function()
+        setup()
+        interview.enter()
+        local offenders = {}
+        for k, v in pairs(parley._state) do
+            if type(v) == "userdata" then offenders[#offenders + 1] = k end
+        end
+        assert.same({}, offenders,
+            "_state is deepcopied by refresh_state; a runtime handle there raises")
     end)
 end)

@@ -13,7 +13,9 @@ local M = {
 	_state = {
 		interview_mode = false, -- interview mode state
 		interview_start_time = nil, -- interview start timestamp
-		interview_timer = nil, -- timer handle for statusline updates
+		-- (interview_timer lives in parley/interview.lua as a module-local: a
+		-- libuv handle cannot be deepcopied, and refresh_state deepcopies
+		-- _state — see #214 N2)
 	}, -- table of state variables
 	agents = {}, -- table of agents
 	system_prompts = {}, -- table of system prompts
@@ -642,23 +644,69 @@ M.setup = function(opts)
 	-- the binding falls back to its default, and leave the resolver total over
 	-- already-typed input.
 	do
-		local function bad_shape(v)
-			if type(v) == "string" or type(v) == "table" then return false end
-			return true
+		-- Every shape `resolve_keys` would otherwise tolerate by coercion, not
+		-- just the top-level type (#214 N3). The element case is the one that
+		-- matters most: `shortcut = { 5 }` used to resolve to nil — i.e. exactly
+		-- what a deliberate `shortcut = ""` means — so a typo and a decision
+		-- produced the same outcome, which is the defect this check was created
+		-- to remove. Returns the normalised value plus a reason, or nothing when
+		-- the value is already well-formed.
+		local function normalise_shortcut(v)
+			if type(v) == "string" then return nil end
+			if type(v) ~= "table" then
+				return "strip", "expected a string or a list, got " .. type(v)
+			end
+			local kept, dropped = {}, {}
+			for _, el in ipairs(v) do
+				if type(el) == "string" then
+					kept[#kept + 1] = el
+				else
+					dropped[#dropped + 1] = type(el)
+				end
+			end
+			if #dropped == 0 then return nil end
+			if #kept == 0 then
+				return "strip", "every list element was a non-string ("
+					.. table.concat(dropped, ", ") .. ")"
+			end
+			return kept, "dropped non-string list element(s): " .. table.concat(dropped, ", ")
 		end
+
 		local offenders = {}
 		local function check(key, tbl)
 			if type(tbl) ~= "table" then return end
-			if tbl.shortcut ~= nil and bad_shape(tbl.shortcut) then -- shortcut-read-ok: validating the shape, not deriving a key
-				offenders[#offenders + 1] = key .. " (" .. type(tbl.shortcut) .. ")" -- shortcut-read-ok: reporting the shape
-				tbl.shortcut = nil -- shortcut-read-ok: stripping the bad value, not deriving a key
+			if tbl.shortcut == nil then return end -- shortcut-read-ok: validating the shape, not deriving a key
+			local fixed, why = normalise_shortcut(tbl.shortcut) -- shortcut-read-ok: as above
+			if why then
+				offenders[#offenders + 1] = key .. " — " .. why
+				tbl.shortcut = (fixed ~= "strip") and fixed or nil -- shortcut-read-ok: normalising, not deriving
 			end
 		end
+		local reg_entries = require("parley.keybinding_registry").entries
 		for k, v in pairs(M.config) do
 			if type(v) == "table" then
 				check(k, v)
 				for nk, nv in pairs(v) do
 					if type(nv) == "table" then check(k .. "." .. nk, nv) end
+				end
+			end
+		end
+		-- A dotted config_key whose value is not a table (`chat_finder_mappings =
+		-- 5`, or `.delete = 5`) never reaches `check` above, and resolve_keys just
+		-- falls back with no word said. Walk the registry's own key list so the
+		-- report covers every knob rather than every table that happens to exist.
+		for _, e in ipairs(reg_entries) do
+			if e.config_key:find(".", 1, true) then
+				local root, leaf = e.config_key:match("^([^.]+)%.(.+)$")
+				local parent = M.config[root]
+				if parent ~= nil and type(parent) ~= "table" then
+					offenders[#offenders + 1] = root .. " — expected a table, got " .. type(parent)
+					M.config[root] = nil
+				elseif type(parent) == "table" and parent[leaf] ~= nil
+					and type(parent[leaf]) ~= "table" then
+					offenders[#offenders + 1] = e.config_key
+						.. " — expected a table, got " .. type(parent[leaf])
+					parent[leaf] = nil
 				end
 			end
 		end

@@ -1098,6 +1098,99 @@ rounds:
           round: 10
       boundary: M2
       blocked: true
+    - "n": 11
+      timestamp: "2026-09-07T16:15:14-07:00"
+      agent: claude
+      dispose:
+        - id: BR-47
+          disposition: addressed
+          note: Verified by reversion — round 9's buffer-local shape reds both halves (spell's map destroyed; mode confined to one buffer); dropping the restore reds 3 more.
+          round: 11
+        - id: BR-48
+          disposition: addressed
+          note: Verified by reversion — removing the two knobs from config.lua reds the new derived assertion. See the Minor on its substring predicate.
+          round: 11
+        - id: BR-49
+          disposition: not-addressed
+          note: Headline fixed and pinned; two of the four shapes the finding enumerated still coerce silently — see N3.
+          round: 11
+        - id: BR-50
+          disposition: addressed
+          note: All three parts verified — global plant reds 3, feature_gated has both guards, traceability guard reds on a real branch when a spec is unrouted.
+          round: 11
+        - id: BR-51
+          disposition: addressed
+          note: Resolved by reverting the mechanism, so init.lua/spell.lua read true again — but the atlas and lessons.md were not swept back (N1).
+          round: 11
+        - id: BR-52
+          disposition: not-addressed
+          note: The three blocks at keybinding_agreement_spec.lua:141-146, :163-168, :334-338 are untouched this round.
+          round: 11
+      findings:
+        - id: BR-53
+          severity: Important
+          title: atlas and lessons.md still teach the interview-<CR> design round 10 reversed
+          detail: |-
+            atlas/ui/keybindings.md:130 states "Interview's <CR> is buffer-local … del must never be aimed
+            at a global map"; the shipped map is global (interview.lua:112) and round 10's own commit says
+            del cannot distinguish ownership at ANY scope. workshop/lessons.md:1435 carries the same
+            reversed claim as a RULE every agent reads at session start, so following it re-creates BR-47.
+            4th in family. Rule — when a round reverses a prior round's decision, the artifacts that
+            recorded it are part of the reversal's diff and are mechanically enumerable via
+            `git show --stat` of the reversed commit: a84108a touched atlas/ui/keybindings.md,
+            workshop/lessons.md, interview.lua and the issue; 5bc1a41 touched only the last two.
+            Enumeration: the atlas paragraph, the lessons rule, and the missing ## Revisions / ## Log entry.
+          family: stale-comment-after-move
+          round: 11
+        - id: BR-54
+          severity: Important
+          title: the new interview tests drive setup_keymap/remove_keymap, never enter/exit — and enter/exit raises
+          detail: |-
+            keybinding_agreement_spec.lua:420-508 exercises the two internal steps. Driving the real
+            transition instead raises, measured through the production BufEnter path: interview.enter()
+            then opening any chat file gives "Cannot deepcopy object of type userdata" at init.lua:1347
+            (refresh_state) from init.lua:2310 (prep_chat), because start_timer stores a vim.loop handle in
+            _state.interview_timer (interview.lua:193). Pre-existing and outside the window, so not a
+            blocker on its own; it matters because round 10's rationale is "the map lives at the same scope
+            as the session state it serves" and that state's lifecycle cannot currently run, and because the
+            tests added this round are the ones that would have caught it. 4th in family. Rule — a lifecycle
+            fix must be pinned through the transition the user triggers, not the internal step the fix
+            edited. Enumeration: convert the six tests to enter()/exit() (both work headless), and keep the
+            timer handle out of the deepcopied state.
+          family: no-seam-for-ordering
+          round: 11
+        - id: BR-55
+          severity: Minor
+          title: _explicit_shortcuts is computed from raw opts before setup() strips malformed values
+          detail: |-
+            init.lua:546 walks the raw opts; the malformed-shortcut strip runs at :636. A knob whose value is
+            later stripped stays marked explicit, so the master switch lets it through and it falls back to
+            default_key. Measured — default_keymaps = false plus chat_shortcut_respond = { shortcut = 5 }
+            binds <C-g><C-g>, a default key on a config that asked for none. Build the explicit set from the
+            normalised config, or clear the entry when stripping.
+          family: derive-before-validate
+          round: 11
+        - id: BR-56
+          severity: Minor
+          title: the BR-48 derived guard uses an unanchored substring, so 8 of 15 dotted knobs cannot fail it
+          detail: |-
+            keybinding_agreement_spec.lua:526 asserts shipped_src:find(leaf, 1, true). Leaf "delete" occurs
+            11 times in config.lua, "move" 7, "next_recency" 3 — so deleting note_finder_mappings.delete,
+            chat_finder_mappings.move and six siblings leaves the test green. 5th in family. Rule — a derived
+            assertion must be member-discriminating: verify it by deleting one member at a time for EVERY
+            member, not for the two the finding happened to name. Anchor the match to an assignment.
+          family: test-does-not-pin-the-fix
+          round: 11
+        - id: BR-57
+          severity: Minor
+          title: README's "Every knob is named in config.lua" is swallowed into the preceding bullet
+          detail: |-
+            README.md:277 follows a list item with no blank line, so GFM lazy continuation renders this
+            section-level claim as part of the `u`/`<C-r>` bullet.
+          family: markdown-block-not-separated
+          round: 11
+      boundary: M2
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#214 (boundary-review)
@@ -1672,6 +1765,57 @@ later rounds disposed of them. Generated — edit the gate, not this file.
   known_keys(cfg) local in this spec is the cheap fix, a guard over duplicated adjacent
   blocks is the class fix.
 
+## Round 11 — 2026-09-07T16:15:14-07:00 (claude) — passed
+
+### Disposed
+
+- BR-47 — addressed — Verified by reversion — round 9's buffer-local shape reds both halves (spell's map destroyed; mode confined to one buffer); dropping the restore reds 3 more.
+- BR-48 — addressed — Verified by reversion — removing the two knobs from config.lua reds the new derived assertion. See the Minor on its substring predicate.
+- BR-49 — not-addressed — Headline fixed and pinned; two of the four shapes the finding enumerated still coerce silently — see N3.
+- BR-50 — addressed — All three parts verified — global plant reds 3, feature_gated has both guards, traceability guard reds on a real branch when a spec is unrouted.
+- BR-51 — addressed — Resolved by reverting the mechanism, so init.lua/spell.lua read true again — but the atlas and lessons.md were not swept back (N1).
+- BR-52 — not-addressed — The three blocks at keybinding_agreement_spec.lua:141-146, :163-168, :334-338 are untouched this round.
+
+### Raised
+
+- **BR-53** [Important] `stale-comment-after-move` atlas and lessons.md still teach the interview-<CR> design round 10 reversed
+  atlas/ui/keybindings.md:130 states "Interview's <CR> is buffer-local … del must never be aimed
+  at a global map"; the shipped map is global (interview.lua:112) and round 10's own commit says
+  del cannot distinguish ownership at ANY scope. workshop/lessons.md:1435 carries the same
+  reversed claim as a RULE every agent reads at session start, so following it re-creates BR-47.
+  4th in family. Rule — when a round reverses a prior round's decision, the artifacts that
+  recorded it are part of the reversal's diff and are mechanically enumerable via
+  `git show --stat` of the reversed commit: a84108a touched atlas/ui/keybindings.md,
+  workshop/lessons.md, interview.lua and the issue; 5bc1a41 touched only the last two.
+  Enumeration: the atlas paragraph, the lessons rule, and the missing ## Revisions / ## Log entry.
+- **BR-54** [Important] `no-seam-for-ordering` the new interview tests drive setup_keymap/remove_keymap, never enter/exit — and enter/exit raises
+  keybinding_agreement_spec.lua:420-508 exercises the two internal steps. Driving the real
+  transition instead raises, measured through the production BufEnter path: interview.enter()
+  then opening any chat file gives "Cannot deepcopy object of type userdata" at init.lua:1347
+  (refresh_state) from init.lua:2310 (prep_chat), because start_timer stores a vim.loop handle in
+  _state.interview_timer (interview.lua:193). Pre-existing and outside the window, so not a
+  blocker on its own; it matters because round 10's rationale is "the map lives at the same scope
+  as the session state it serves" and that state's lifecycle cannot currently run, and because the
+  tests added this round are the ones that would have caught it. 4th in family. Rule — a lifecycle
+  fix must be pinned through the transition the user triggers, not the internal step the fix
+  edited. Enumeration: convert the six tests to enter()/exit() (both work headless), and keep the
+  timer handle out of the deepcopied state.
+- **BR-55** [Minor] `derive-before-validate` _explicit_shortcuts is computed from raw opts before setup() strips malformed values
+  init.lua:546 walks the raw opts; the malformed-shortcut strip runs at :636. A knob whose value is
+  later stripped stays marked explicit, so the master switch lets it through and it falls back to
+  default_key. Measured — default_keymaps = false plus chat_shortcut_respond = { shortcut = 5 }
+  binds <C-g><C-g>, a default key on a config that asked for none. Build the explicit set from the
+  normalised config, or clear the entry when stripping.
+- **BR-56** [Minor] `test-does-not-pin-the-fix` the BR-48 derived guard uses an unanchored substring, so 8 of 15 dotted knobs cannot fail it
+  keybinding_agreement_spec.lua:526 asserts shipped_src:find(leaf, 1, true). Leaf "delete" occurs
+  11 times in config.lua, "move" 7, "next_recency" 3 — so deleting note_finder_mappings.delete,
+  chat_finder_mappings.move and six siblings leaves the test green. 5th in family. Rule — a derived
+  assertion must be member-discriminating: verify it by deleting one member at a time for EVERY
+  member, not for the two the finding happened to name. Anchor the match to an assignment.
+- **BR-57** [Minor] `markdown-block-not-separated` README's "Every knob is named in config.lua" is swallowed into the preceding bullet
+  README.md:277 follows a list item with no blank line, so GFM lazy continuation renders this
+  section-level claim as part of the `u`/`<C-r>` bullet.
+
 ## Open findings
 
 - **BR-2** [Important] `pure-extraction-without-tests` New pure module lua/parley/branch_ref.lua has zero tests and is absent from traceability.yaml
@@ -1691,9 +1835,10 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-35** [Minor] `illegal-state-representable-in-signature` branch_inserters takes two independent booleans that encode one bit, so two of the four representable states are illegal and untested
 - **BR-36** [Important] `no-seam-for-ordering` On a foreign markdown buffer the debounced refresh appends a warning to the line the user is typing the topic into
 - **BR-37** [Minor] `scratch-artifact-swept-into-commit` c8cccd0 swept 462 lines of unrelated workshop/parley transcripts into a commit whose subject is a #220 process-leak filing
-- **BR-47** [Important] `command-not-scoped-to-context` the interview <CR> rescope destroys parley's own spell map and confines interview mode to one buffer
-- **BR-48** [Important] `docs-assert-unverified-behavior` README's "every knob is named in config.lua" is false for 2 of 81 knobs
 - **BR-49** [Important] `illegal-state-representable-in-signature` the malformed-shortcut warning fires at every resolution instead of parsing once at the boundary
-- **BR-50** [Important] `test-harness-assumption` two of this round's oracles still trust an input the code does not verify
-- **BR-51** [Minor] `stale-comment-after-move` init.lua and spell.lua still describe interview's <CR> as a global map
 - **BR-52** [Minor] `duplicate-helper-not-retired` three near-identical known-set/diff blocks in the agreement spec
+- **BR-53** [Important] `stale-comment-after-move` atlas and lessons.md still teach the interview-<CR> design round 10 reversed
+- **BR-54** [Important] `no-seam-for-ordering` the new interview tests drive setup_keymap/remove_keymap, never enter/exit — and enter/exit raises
+- **BR-55** [Minor] `derive-before-validate` _explicit_shortcuts is computed from raw opts before setup() strips malformed values
+- **BR-56** [Minor] `test-does-not-pin-the-fix` the BR-48 derived guard uses an unanchored substring, so 8 of 15 dotted knobs cannot fail it
+- **BR-57** [Minor] `markdown-block-not-separated` README's "Every knob is named in config.lua" is swallowed into the preceding bullet

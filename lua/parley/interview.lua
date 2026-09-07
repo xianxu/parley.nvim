@@ -184,14 +184,22 @@ M.clear_match_cache = function(buf)
 	end
 end
 
+-- The libuv timer handle. A module-local, NOT `_parley._state` (#214 N2):
+-- `_state` is serialised and `refresh_state` deepcopies it, and a userdata handle
+-- cannot be deepcopied — so while interview mode was on, EVERY refresh_state
+-- caller raised "Cannot deepcopy object of type userdata". That includes
+-- prep_chat via BufEnter, so opening any chat file during interview mode errored.
+-- Measured before and after. Runtime handles do not belong in persisted state.
+local _timer = nil
+
 --- Start a repeating 15-second timer that refreshes lualine while interview mode is active.
 M.start_timer = function()
 	-- Stop any existing timer first
 	M.stop_timer()
 
 	-- Create a timer that updates the statusline every 15 seconds
-	_parley._state.interview_timer = vim.loop.new_timer()
-	_parley._state.interview_timer:start(
+	_timer = vim.loop.new_timer()
+	_timer:start(
 		15000,
 		15000,
 		vim.schedule_wrap(function()
@@ -212,9 +220,9 @@ end
 
 --- Stop the repeating statusline-refresh timer.
 M.stop_timer = function()
-	if _parley._state.interview_timer then
-		stop_and_close_timer(_parley._state.interview_timer)
-		_parley._state.interview_timer = nil
+	if _timer then
+		stop_and_close_timer(_timer)
+		_timer = nil
 		_logger.debug("Interview timer stopped")
 	end
 end

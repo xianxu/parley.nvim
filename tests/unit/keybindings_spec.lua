@@ -822,6 +822,42 @@ describe("malformed shortcuts are reported once, at setup (#214 BR-49)", functio
         assert.is_nil(parley.config.chat_shortcut_respond.shortcut)
     end)
 
+    -- #214 N3: the first pass checked only the TOP-LEVEL type, so the element
+    -- coercion inside as_list survived — and `{ 5 }` resolved to nil, i.e. the
+    -- same outcome as a deliberate `shortcut = ""`. That equivalence between a
+    -- typo and a decision is the whole defect, in a shape the check did not look
+    -- at. Every shape resolve_keys would otherwise tolerate is covered here.
+    it("reports and normalises every coercible shape, not just the top level", function()
+        local function resolved(opts)
+            local reported
+            local orig = parley.logger.warning
+            parley.logger.warning = function(m)
+                if tostring(m):find("malformed shortcut", 1, true) then reported = true end
+            end
+            parley.setup(opts)
+            parley.logger.warning = orig
+            local e
+            for _, x in ipairs(reg.entries) do if x.id == "chat_respond" then e = x end end
+            return (reg.resolve_keys(e, parley.config)), reported
+        end
+
+        -- a list of non-strings must NOT mean "disabled"
+        local keys, reported = resolved({ chat_shortcut_respond = { modes = { "n" }, shortcut = { 5 } } })
+        assert.same({ "<C-g><C-g>" }, keys, "{ 5 } silently disabled the binding")
+        assert.is_true(reported, "{ 5 } was not reported")
+
+        -- a mixed list keeps the good keys and says what it dropped
+        keys, reported = resolved({ chat_shortcut_respond = { modes = { "n" }, shortcut = { "<M-z>", 5 } } })
+        assert.same({ "<M-z>" }, keys)
+        assert.is_true(reported, "the dropped element was not reported")
+
+        -- a dotted key whose parent or leaf is not a table
+        local _, r1 = resolved({ chat_finder_mappings = 5 })
+        assert.is_true(r1, "a non-table dotted parent went unreported")
+        local _, r2 = resolved({ chat_finder_mappings = { delete = 5 } })
+        assert.is_true(r2, "a non-table dotted leaf went unreported")
+    end)
+
     it("resolve_keys itself pulls in no logger", function()
         local src = table.concat(vim.fn.readfile("lua/parley/keybinding_registry.lua"), "\n")
         assert.is_nil(src:find("parley.logger", 1, true),

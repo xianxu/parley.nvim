@@ -127,11 +127,27 @@ interview mode's. They are not keyspace claims: turning the feature off removes
 them. They are listed so the leak guard's allowance list is genuinely closed
 rather than reporting a documented opt-in as an escape.
 
-Interview's `<CR>` is **buffer-local**. It was global, and teardown did an
-unconditional `vim.keymap.del("i", "<CR>")` — so leaving interview mode deleted
-the user's own `<CR>` map (cmp/blink's accept key, for most users) instead of
-restoring it. A buffer-local map shadows and unshadows; `del` cannot tell
-"mine" from "theirs", so it must never be aimed at a global map.
+Interview's `<CR>` is **global**, and its teardown **restores what it shadowed**.
+
+The bug was that teardown did an unconditional `vim.keymap.del("i", "<CR>")`, so
+leaving interview mode deleted the user's own `<CR>` map — cmp/blink's accept
+key, for most people — instead of putting it back. `del` cannot tell "mine" from
+"theirs" at **any** scope, so narrowing the map to buffer-local (a first attempt)
+only moved the collision: it then destroyed the one buffer-local `<CR>` parley
+itself installs, spell typeahead's, and confined session state to a single
+buffer while the statusline still reported the mode as on.
+
+Global is the right scope because interview mode *is* session state, and because
+spell's buffer-local `<CR>` already delegates to `interview.cr_keys` through
+`base_cr` (#134) — a global interview map is what that design expects. Teardown
+captures the previous mapping with `nvim_get_keymap` (`maparg` returns a
+buffer-local map when both exist) and restores it with `mapset`, which
+round-trips Lua-callback maps.
+
+Its timer handle lives in a module-local, never in `_state`: `refresh_state`
+deepcopies `_state`, and a libuv userdata cannot be deepcopied — parking it there
+made every `refresh_state` caller raise while the mode was on, so opening any
+chat file errored.
 
 ## Native overrides (off-registry by design)
 `u`, `<C-r>`, `*`, `#`, `g*`, `g#` are mapped buffer-locally in chat buffers but

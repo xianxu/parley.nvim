@@ -1432,7 +1432,58 @@ vacuously — while asserting in a comment that it had not.
 4. **When a review names a family, sweep the family in that round — including
    the code you are writing to fix it.** Instance three was created by the fix
    for instances one and two, in the same commit.
-5. **Feature-scoped keymaps go on the buffer, never globally.** Teardown of a
-   global map is destructive because `vim.keymap.del` cannot distinguish yours
-   from the user's; buffer-local shadows and unshadows for free. Reviewing an
-   install for safety is half the job — review the *removal*.
+5. **Teardown must restore what it shadowed — scope is not the fix.**
+   `vim.keymap.del` cannot distinguish yours from the user's at **any** scope.
+   An earlier version of this rule said "feature-scoped keymaps go on the
+   buffer, never globally"; following it re-created the bug one level down,
+   because parley's own buffer-local `<CR>` (spell typeahead) then became the
+   thing being destroyed, and session-scoped state ended up installed on one
+   buffer. Capture the previous mapping before you set yours and put it back
+   after — `nvim_get_keymap` to capture (`maparg` returns a buffer-local map
+   when both exist), `mapset` to restore. Install at the scope the *state* has,
+   not the scope that makes teardown feel safer. Reviewing an install is half
+   the job; review the removal.
+
+## #214 M2 round 11 — I tested the step I edited, not the transition it belongs to
+
+The interview `<CR>` fix went through three rounds. The last one found that all
+six tests I had written for it called `interview.setup_keymap()` and
+`interview.remove_keymap()` — the two functions the fix edited — while the thing
+a user triggers is `interview.enter()` / `interview.exit()`. Driving those
+instead raised immediately:
+
+```
+interview.enter()
+:edit <a chat file>
+E5108: Cannot deepcopy object of type userdata
+  init.lua: in function 'refresh_state'   <- prep_chat, from BufEnter
+```
+
+`start_timer` parked a libuv handle in `_state`, and `refresh_state` deepcopies
+`_state`. So for ~16 months, opening any chat file while interview mode was on
+errored. Not one test saw it, because no test ever entered interview mode — they
+all called the sub-step directly.
+
+The sub-step cannot observe the state the transition carries. That is the whole
+point of the transition.
+
+**Rules.**
+
+1. **Pin a lifecycle fix through the transition a user triggers, not the
+   internal step you edited.** `enter`/`exit`, not `setup_keymap`/`remove_keymap`.
+   If the public verb is awkward to drive in a test, that is a finding about the
+   verb, not a reason to test one level down.
+2. **Runtime handles never go in serialisable state.** `_state` is deepcopied
+   and written to disk; a timer, a job handle, or a buffer-local closure parked
+   there turns every reader into a crash site. Keep them module-local.
+3. **When a round reverses an earlier decision, the artifacts that RECORDED the
+   decision are part of the reversal's diff — and they are enumerable, not
+   remembered:** `git show --stat <the reversed commit>` lists them. Round 10
+   reversed round 9's buffer-local design in the code and the issue, and left the
+   atlas and `lessons.md` teaching the reversed version. `lessons.md` is read by
+   every agent at session start, so a stale rule there is not documentation debt
+   — it is an instruction to re-create the bug.
+4. **Fixing "validate the shape" at the top level is not fixing the shape.**
+   `shortcut = { 5 }` still resolved to nil — identical to a deliberate
+   `shortcut = ""` — after I had "fixed" the typo-equals-decision defect, because
+   I checked the container's type and not its elements.
