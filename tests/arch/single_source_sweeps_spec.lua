@@ -651,3 +651,30 @@ describe("arch: traceability.yaml lists every file it claims to map (#214)", fun
             .. "atlas/traceability.yaml under the doc it verifies")
     end)
 end)
+
+-- #214 M3. `vim.fn.writefile` encodes a `\n` INSIDE a list element as a NUL byte
+-- rather than rejecting it, and `readfile` turns that NUL back into `\n` — so a
+-- caller that composes a line cannot discover the mistake by round-tripping in
+-- Lua. It shipped, and the operator found it in a real transcript.
+--
+-- Every writefile whose lines are COMPOSED (as opposed to read straight from a
+-- buffer) routes through `helper.flatten_lines`. This is a source-level
+-- assertion on purpose: the guard is currently unreachable through
+-- create_child_chat's own paths (the template is split after the gsub, the
+-- question is split at the call site), so no behavioural test can distinguish
+-- it from its own absence. What it protects against is the NEXT caller.
+describe("arch: composed writefile lines are flattened (#214 M3)", function()
+    it("create_child_chat's writefile is guarded", function()
+        local src = read("lua/parley/init.lua")
+        local body = src:match("M%.create_child_chat = function.-\nend")
+        assert.is_truthy(body, "create_child_chat not found")
+        assert.is_truthy(body:find("flatten_lines", 1, true),
+            "create_child_chat composes lines (a back-link and a question turn) "
+            .. "and writes them with writefile — route them through "
+            .. "helper.flatten_lines, or a multi-line element becomes NUL on disk")
+    end)
+
+    it("flatten_lines exists and is exported", function()
+        assert.is_function(require("parley.helper").flatten_lines)
+    end)
+end)

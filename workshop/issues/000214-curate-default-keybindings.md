@@ -292,6 +292,9 @@ Derivation notes:
 | `resolve_keys` | `lua/parley/keybinding_registry.lua` | changed |
 | `help_lines` | `lua/parley/keybinding_registry.lua` | changed |
 | `key_label` | `lua/parley/keybinding_registry.lua` | new |
+| `plan_submission` | `lua/parley/branch_submit.lua` | new |
+| `seed_question` | `lua/parley/branch_submit.lua` | new |
+| `_exchange_at` | `lua/parley/branch_submit.lua` | new |
 
 - **`branch_ref`** — the line-editing half of a branch reference: build the
   `🌿:` line, splice an inline link around a selection, derive a child topic
@@ -309,6 +312,18 @@ Derivation notes:
 - **`help_lines`** — renders the `<C-g>?` float from the registry. Now shows
   aliases (primary in the aligned column, the rest after the description) and
   omits any entry that resolves to nothing.
+- **`plan_submission`** — `(parsed_chat, cursor_line, markers) -> plan`. Decides
+  which of `<M-CR>`'s cases applies at the cursor, what the child is seeded with,
+  which parent line the `🌿:` reference follows, and what the parent loses. No
+  IO, no buffer — so `<M-S-CR>`'s decision is unit-testable with hand-built
+  parser output while the effects stay in `branch_inserters`.
+- **`seed_question`** — one place that knows how a payload becomes a prompt.
+  Three call sites would otherwise each invent wording, and two already had:
+  `what is "X"` was built inline at the follow-a-dead-link path as well.
+- **`_exchange_at`** — the exchange-at-line rule, re-derived rather than imported
+  so the planner loads without the plugin. A duplicated rule that nothing
+  compares is how the two chords drift, so it is exposed as a test seam and
+  pinned line-by-line against `init.lua`'s `find_exchange_at_line`.
 - **`key_label`** — `key_for` as display text, never nil. Three picker-title
   sites fed a nil key straight to `string.format("%s")` (rendering
   `Issues (open  nil: cycle view)` under `default_keymaps = false`); one guarded
@@ -341,6 +356,7 @@ Derivation notes:
 | `_branch_inserters` | `lua/parley/init.lua` | new | buffer writes + child-chat creation |
 | `registry_callbacks` | `lua/parley/skills/review/init.lua` | new | review actions, for the registry to install |
 | `native_map` | `lua/parley/init.lua` | new | `vim.keymap.set` for non-registry keys |
+| `flatten_lines` | `lua/parley/helper.lua` | new | `vim.fn.writefile`'s NUL encoding |
 | `setup_keymap` | `lua/parley/interview.lua` | changed | interview's `<CR>`, now buffer-local |
 | `register_global` | `lua/parley/keybinding_registry.lua` | changed | global keymap install + teardown |
 
@@ -350,6 +366,11 @@ Derivation notes:
   supplies behaviour; the registry owns installation (#214 C1).
 - **`native_map`** — gates the six native wrappers on the master switch and
   refuses an undeclared key.
+- **`flatten_lines`** — no `writefile` element may contain a newline. `writefile`
+  encodes one as a NUL byte instead of rejecting it, and `readfile` turns that
+  NUL back into a newline, so a Lua round-trip cannot see the damage — it is
+  visible only outside Vim. That is how a corrupt child transcript shipped in M3
+  and was caught by the operator on first use.
 - **`setup_keymap` / `_saved_cr`** — interview's timestamp `<CR>`. Its removal
   did an unconditional `vim.keymap.del("i", "<CR>")`, deleting the user's own map
   (cmp/blink's accept key for most users). The defect is **teardown, not scope**:

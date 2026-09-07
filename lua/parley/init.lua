@@ -4907,13 +4907,37 @@ M.create_child_chat = function(file_path, topic, parent_buf, question)
 
 		if question then
 			local user_prefix = M.config.chat_user_prefix or "💬:"
-			table.insert(file_lines, header_end + 2, "")
-			table.insert(file_lines, header_end + 3, user_prefix .. " " .. question)
-			table.insert(file_lines, header_end + 4, "")
+			-- One LINE per list element. `writefile` encodes a \n INSIDE an
+			-- element as a NUL byte, so a multi-line question — the gathered
+			-- <M-q> quote blocks are inherently multi-line — landed on disk as
+			-- `> [abstractions]^@^@what's this`, a corrupt transcript (#214 M3).
+			--
+			-- A single-line question stays inline after the prefix; a multi-line
+			-- one puts `💬:` on its own line and the body beneath, which is
+			-- exactly how chat_respond writes a gathered drill-in turn
+			-- (chat_respond.lua: `insert_lines = { "", user_prefix }` then the
+			-- block lines). The chord's promise is that the two agree.
+			local body = vim.split(question, "\n", { plain = true })
+			local turn = #body == 1 and { user_prefix .. " " .. body[1] } or { user_prefix }
+			if #body > 1 then
+				for _, line in ipairs(body) do turn[#turn + 1] = line end
+			end
+
+			local at = header_end + 2
+			table.insert(file_lines, at, "")
+			for i, line in ipairs(turn) do
+				table.insert(file_lines, at + i, line)
+			end
+			table.insert(file_lines, at + #turn + 1, "")
 		end
 	end
 
-	vim.fn.writefile(file_lines, file_path)
+	-- `writefile` encodes a \n INSIDE an element as a NUL byte rather than
+	-- rejecting it, so a caller that hands it a multi-line string silently writes
+	-- a corrupt file. Flatten defensively: the cost is one pass, and the failure
+	-- it prevents is invisible until someone reads the file outside Vim (readfile
+	-- turns the NUL back into \n, so a round-trip test cannot see it either).
+	vim.fn.writefile(M.helpers.flatten_lines(file_lines), file_path)
 end
 
 -- Agent info resolution (delegated to parley.agent_info module)

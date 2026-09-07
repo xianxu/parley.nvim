@@ -114,6 +114,30 @@ _H.get_buffer = function(file_name)
 end
 
 ---@return string # returns unique uuid
+--- Flatten a writefile() line list so no element contains a newline.
+---
+--- `vim.fn.writefile` encodes a `\n` INSIDE a list element as a NUL byte rather
+--- than rejecting it, so a caller that passes a multi-line string silently
+--- writes a corrupt file. Worse, `readfile` turns that NUL back into `\n`, so a
+--- Lua round-trip test cannot see the damage — it is visible only outside Vim,
+--- as `^@`. Every writefile caller that can be handed composed text should run
+--- its lines through here (#214 M3).
+--- @param lines string[]
+--- @return string[]
+_H.flatten_lines = function(lines)
+    local out = {}
+    for _, line in ipairs(lines) do
+        if type(line) == "string" and line:find("\n", 1, true) then
+            for _, part in ipairs(vim.split(line, "\n", { plain = true })) do
+                out[#out + 1] = part
+            end
+        else
+            out[#out + 1] = line
+        end
+    end
+    return out
+end
+
 _H.uuid = function()
 	local random = math.random
 	local template = "xxxxxxxx_xxxx_4xxx_yxxx_xxxxxxxxxxxx"

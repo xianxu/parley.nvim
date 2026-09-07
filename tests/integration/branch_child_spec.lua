@@ -682,3 +682,126 @@ describe("the planner agrees with <M-CR>'s exchange resolution (#214 M3)", funct
         end)
     end
 end)
+
+-- #214 M3, found by the operator on first real use. `vim.fn.writefile` encodes a
+-- `\n` INSIDE a list element as a NUL byte instead of rejecting it, so a
+-- multi-line question — and the gathered <M-q> quote blocks are inherently
+-- multi-line — wrote `> [abstractions]^@^@what's this` to disk.
+--
+-- The trap that let it ship: `readfile` turns those NULs back into newlines, so
+-- every Lua-side round-trip looks perfect. The damage is only visible OUTSIDE
+-- Vim, which is where the operator saw it. These tests read the raw bytes.
+describe("a branched child is not NUL-corrupted (#214 M3)", function()
+    local tmpdir, parent_buf, parent_path
+
+    before_each(function()
+        parley.setup({})
+        tmpdir = vim.fn.tempname()
+        vim.fn.mkdir(tmpdir, "p")
+        parent_path = tmpdir .. "/2026-09-06.10-00-00.000_parent.md"
+        vim.fn.writefile({ "---", "topic: t", "file: f", "---", "", "💬: q" }, parent_path)
+        vim.cmd("edit " .. vim.fn.fnameescape(parent_path))
+        parent_buf = vim.api.nvim_get_current_buf()
+        parley.config.chat_dir = tmpdir
+    end)
+
+    after_each(function()
+        parley._prepared_bufs[parent_buf] = nil
+        vim.fn.delete(tmpdir, "rf")
+    end)
+
+    -- Raw bytes, not readfile: readfile cannot see this bug.
+    local function raw(path)
+        local fd = assert(io.open(path, "rb"))
+        local body = fd:read("*a")
+        fd:close()
+        return body
+    end
+
+    it("a multi-line question writes real lines, not NUL bytes", function()
+        local child = tmpdir .. "/child.md"
+        parley.create_child_chat(child, "?", parent_buf,
+            "> [abstractions]\n\nwhat's this\n\n> [rungs]\n\nwhat's that")
+
+        local body = raw(child)
+        assert.are.equal(0, select(2, body:gsub("%z", "")),
+            "NUL bytes on disk — writefile was handed an element containing \\n")
+        assert.is_truthy(body:find("\n> [rungs]\n", 1, true),
+            "the second quote block is not on its own line")
+    end)
+
+    it("a multi-line question is shaped the way <M-CR> shapes a gathered turn", function()
+        -- chat_respond inserts { "", user_prefix } then the block lines, so the
+        -- prefix sits on its own line. The chord's promise is that the two agree.
+        local child = tmpdir .. "/child.md"
+        parley.create_child_chat(child, "?", parent_buf, "> [q]\n\nwhat's this")
+        local lines = vim.fn.readfile(child)
+
+        -- the FIRST bare prefix: the template ends with a trailing `💬:` prompt
+        -- for the user to type into, and taking the last one finds that instead.
+        local at
+        for i, l in ipairs(lines) do
+            if l == "💬:" and not at then at = i end
+        end
+        assert.is_truthy(at, "the user prefix is not on its own line for a multi-line turn")
+        assert.are.equal("> [q]", lines[at + 1])
+    end)
+
+    it("a single-line question still sits inline after the prefix", function()
+        local child = tmpdir .. "/child2.md"
+        parley.create_child_chat(child, "?", parent_buf, "how does X work?")
+        local joined = table.concat(vim.fn.readfile(child), "\n")
+        assert.is_truthy(joined:find("💬: how does X work?", 1, true))
+    end)
+
+    -- A newline in the TOPIC must not corrupt either. Note this passes with the
+    -- writer-side guard REMOVED — the template is split after the gsub, so this
+    -- path never had the defect. Kept as a property worth holding, labelled so
+    -- nobody reads it as coverage of `flatten_lines` (M2's lesson: a green test
+    -- can be green for a reason that does not generalise).
+    it("a newline in the topic does not corrupt the file either", function()
+        local child = tmpdir .. "/child3.md"
+        parley.create_child_chat(child, "line one\nline two", parent_buf, "q")
+        local body = raw(child)
+        assert.are.equal(0, select(2, body:gsub("%z", "")))
+    end)
+
+    it("the end-to-end quotes branch produces a clean child on disk", function()
+        vim.fn.writefile({ "---", "topic: t", "file: f", "---", "",
+                           "💬: first question", "", "🤖:[A]", "",
+                           "some talk 🤖[what's this] and more 🤖[what's that]", "",
+                           "📝: sum" }, parent_path)
+        vim.cmd("edit! " .. vim.fn.fnameescape(parent_path))
+        parent_buf = vim.api.nvim_get_current_buf()
+        parley.prep_chat(parent_buf, parent_path)
+
+        vim.api.nvim_win_set_cursor(0, { 10, 0 })
+        parley._branch_inserters(parent_buf, false, true).n()
+
+        local created
+        for _, f in ipairs(vim.fn.readdir(tmpdir)) do
+            if f ~= vim.fn.fnamemodify(parent_path, ":t") then created = tmpdir .. "/" .. f end
+        end
+        assert.is_truthy(created, "no child was created")
+        local body = raw(created)
+        assert.are.equal(0, select(2, body:gsub("%z", "")), "the branched child has NUL bytes")
+        assert.is_truthy(body:find("what's this", 1, true), "the quote did not reach the child")
+    end)
+end)
+
+-- The writer-side guard: no caller can reintroduce this, whatever it hands over.
+describe("helper.flatten_lines (#214 M3)", function()
+    local helper = require("parley.helper")
+
+    it("splits an element containing newlines", function()
+        assert.same({ "a", "b", "c" }, helper.flatten_lines({ "a\nb", "c" }))
+    end)
+
+    it("leaves clean input untouched", function()
+        assert.same({ "a", "b" }, helper.flatten_lines({ "a", "b" }))
+    end)
+
+    it("preserves the blank lines a split produces", function()
+        assert.same({ "a", "", "b" }, helper.flatten_lines({ "a\n\nb" }))
+    end)
+end)
