@@ -546,6 +546,26 @@ describe("opt-in set is closed (#214 M2)", function()
         assert.same({}, claimed)
     end)
 
+    -- md_delete_file shares chat_shortcut_delete with chat_delete, the way
+    -- md_delete_tree/md_export_html already share theirs: same gesture, two
+    -- scopes, one knob. Rebinding must move BOTH, or the twins drift.
+    it("markdown twins rebind through their chat sibling's knob", function()
+        local function ent(id)
+            for _, e in ipairs(reg.entries) do if e.id == id then return e end end
+        end
+        for _, pair in ipairs({
+            { "chat_delete", "md_delete_file", "chat_shortcut_delete" },
+            { "chat_delete_tree", "md_delete_tree", "chat_shortcut_delete_tree" },
+            { "chat_export_html", "md_export_html", "chat_shortcut_export_html" },
+        }) do
+            local chat_e, md_e, key = ent(pair[1]), ent(pair[2]), pair[3]
+            assert.are.equal(key, md_e.config_key, pair[2] .. " does not share the knob")
+            local cfg = { [key] = { modes = { "n" }, shortcut = "<M-z>" } }
+            assert.same({ "<M-z>" }, reg.resolve_keys(chat_e, cfg))
+            assert.same({ "<M-z>" }, reg.resolve_keys(md_e, cfg))
+        end
+    end)
+
     it("turning one on is a one-line config change", function()
         local e
         for _, cand in ipairs(reg.entries) do if cand.id == "copy_context" then e = cand end end
