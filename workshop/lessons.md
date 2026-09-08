@@ -1256,3 +1256,348 @@ And the recursive one: the arch guard I added to enforce rule 1 only fired when
 the backtick and the `match(` call shared a line — the same class of gap as the
 rule it enforced. **Plant a violation and watch the guard fail before trusting
 it.**
+
+## "Unify N implementations" is not "make N situations identical" (#214 M1, 2026-09-06)
+
+M1 was a small change that took **five review rounds**, and four of them found a
+defect introduced while fixing the previous round's finding. Two Criticals and a
+third near-Critical all traced to one over-general premise in my own plan:
+*"make all three branch paths one action."*
+
+I implemented that literally — identical behaviour everywhere — which produced,
+in order: writing the user's arbitrary markdown document to disk (persisting
+their unrelated pending edits), creating orphan child files whose only reference
+could never be committed, and finally an early-return that made the key look
+inert on markdown.
+
+The consolidation was right: four near-identical functions had genuinely
+drifted. The **uniformity** was wrong. The honest rule is narrower —
+*parley commits a reference only in a file it owns* — one code path, one explicit
+branch on ownership, different guarantees where the situation differs.
+
+**Rules.**
+
+1. **Consolidating implementations ≠ erasing situational differences.** When
+   collapsing N copies, list what genuinely differs between their callers and
+   make each difference an explicit, named parameter. Here that was one boolean
+   (`owns_file`) that took four rounds to discover because "one action" sounded
+   like a virtue.
+2. **When a fix goes into shared code, the scope is the set of callers — and
+   that set is enumerable, not a judgment call.** The reviewer's framing that
+   finally landed: the enumeration is `modes × buffer types`, six cells. I fixed
+   two, twice, while believing I had fixed the class. A test that iterates both
+   axes fails when a cell is added; a test that names a mode does not.
+3. **Make the invariant structural, not remembered.** Neither mode may call
+   `create_child_chat` directly now; both go through one gate. A rule a caller
+   can forget is not a rule.
+4. **A test that exercises the fix inside its own body proves nothing.** BR-21's
+   first tests ran the corrected `gsub` in the test itself — Lua's semantics, not
+   parley's code — and stayed green when the fix was reverted. Drive the real
+   entry point, then revert and watch it go red.
+
+## #214 M2 — a green test can be green for a reason that doesn't generalise
+
+Two tests said `shortcut = ""` disabled a binding:
+
+```
+key bindings help treats an empty configured shortcut as unbound
+keybinding registry registers tool folds only when a non-empty shortcut is configured
+```
+
+Both pass. Both have passed for a year. And `shortcut = ""` disabled nothing:
+`resolve_keys` ended in `as_list(cfg_val.shortcut) or as_list(entry.default_key)`,
+so an empty shortcut fell straight through to the default. The two tests happen
+to exercise `chat_toggle_tool_folds` — **the one entry in the registry that
+ships no `default_key`** — where the fallback arm has nothing to return, so the
+`or` yields nil and the disable *appears* to work.
+
+The fixture was the special case, and the assertion read like a general
+statement about the mechanism. I nearly wrote "empty already disables, BR-9 is
+stale" on the strength of it. What settled it was not reading the code more
+carefully; it was running the resolver over **every** entry:
+
+```lua
+for _, e in ipairs(reg.entries) do
+    if reg.resolve_keys(e, { [e.config_key] = { shortcut = "" } }) ~= nil then
+        stuck[#stuck+1] = e.id      -- 80 of 81 entries
+    end
+end
+```
+
+**Rules.**
+
+1. **Before generalising from a green test, ask what is unusual about its
+   fixture.** A property demonstrated on one entry is a property of that entry
+   until it is quantified over the set. Prefer the loop over the example: the
+   loop is the claim.
+2. **Two tests agreeing is not corroboration when they share a fixture.** Both
+   of these used `chat_toggle_tool_folds`; they were one observation, counted
+   twice.
+3. **This is the same failure as verifying the adjacent thing** (#215's
+   never-nil `get_agent`, #218's zsh word-splitting, BR-21's wrong interpreter).
+   The recurring shape: I confirm something *near* the claim and read it as the
+   claim. The cheap defence is always the same — make the deliverable's absence
+   observable, then check that something goes red.
+4. **A guard's allowance list must be enforced at the source, not just asserted
+   in a test.** `native_overrides` documents six off-registry keys; `native_map`
+   refuses to map a key that is not in it. Documentation a future call site can
+   bypass is not an allowance list, it is a comment.
+
+## #214 M2 — a guarantee is only as wide as the seam it lives in
+
+M2's thesis was "every binding derives from the registry", and the milestone
+proved it about the registry's **entry table**: all 81 entries got a
+`config_key`, and three guarantees — rebinding, `shortcut = ""` disabling, and a
+`default_keymaps` master switch — were built into `resolve_keys` and guarded
+with red-verified tests.
+
+Then the boundary review measured the *installed* keymaps and found four parley
+mappings still live on every markdown buffer with the switch off, plus an
+`Invalid (empty) LHS` raised on every markdown `BufEnter` by the very
+`shortcut = ""` gesture the README had just documented. The review skill and
+~20 picker sites built their keymaps from `config.X.shortcut` directly. Every
+guarantee attached to `resolve_keys`; none of those sites called it.
+
+The registry even had a name for the exemption — `help_only`, "registered
+elsewhere" — and eighteen entries carried it. I read the flag as metadata about
+help rendering. It was a list of the places my guarantees did not reach.
+
+**Rules.**
+
+1. **When you add a guarantee to a function, enumerate its callers before
+   claiming the guarantee holds for the system.** `resolve_keys` had 4 internal
+   callers and ~23 modules that did the same job without it. The question is not
+   "is the seam correct" but "is the seam the only way through".
+2. **A flag that says "handled elsewhere" is an inventory of your blind spots.**
+   Grep for the exemption marker (`help_only`, `skip`, `custom`, `legacy`) and
+   check each instance against the invariant you just introduced. Then make the
+   marker mean something enforceable — here, "help_only is allowed only inside a
+   picker mappings table", which is now an arch guard.
+3. **Test where the behaviour lands, not where the logic lives.** The agreement
+   spec was real, red-verifiable, and scoped to chat buffers; C1 lived entirely
+   in markdown. A guard's blast radius is its fixture, so enumerate buffer/file
+   types the way you enumerate cases.
+4. **Adopting a shared config key adopts every field it carries, not the one you
+   were thinking about.** Giving `md_delete_file` the chat delete knob for its
+   *key* also gave it the chat entry's *modes*, putting a file-deleting action on
+   insert and visual mode. Two things may share a knob only when their declared
+   defaults match **exactly** — now asserted rather than assumed.
+5. **A kill switch that overrides the user's explicit configuration is a
+   one-way door.** `default_keymaps = false` suppressed everything, including
+   keys the user had set in `setup{}`, and 8 actions have no command to fall
+   back on. "Disable the defaults" must mean the defaults; record what the user
+   asked for and honour it.
+
+## #214 M2 round 9 — my oracles were the weakest thing I wrote
+
+Two of the guards I built to prove M2's claims were themselves unsound, and the
+reviewer found both by measuring rather than reading.
+
+**The leak guard identified parley's keymaps by `desc:lower():find("parley")`.**
+46 of 81 registry entries carry a `desc` with no "parley" in it — "Create New
+Chat", "Delete selected chat", "Cycle recency window left". They happen to all
+be non-`buffer_local` today, which is the only reason the guard worked, and
+nothing asserted that. A hand-rolled `vim.keymap.set` with no `desc` at all —
+exactly the leak the guard existed to catch — was invisible to it. The fix costs
+nothing and needs no convention: snapshot `nvim_buf_get_keymap` *before*
+preparing the buffer and treat the diff as parley's claims. Whatever appeared
+is parley's, by construction.
+
+**"Every binding is disableable" excluded 15 of 81 entries** via a hand-typed
+`not e.config_key:find(".")` that skipped the dotted picker keys. A filter that
+removes members of the set is an allowlist wearing a predicate — the same
+finding family as the README's "every feature has a command", one round after I
+had written that rule down and applied it to a single sibling.
+
+A third instance was in a guard I wrote *that round* to fix this family: the
+Core-concepts sweep fell back to `000205` off an issue branch, claiming it
+"keeps its historical coverage rather than silently passing". On `main`,
+`git merge-base HEAD main` is `HEAD`, so the diff is empty and it passed
+vacuously — while asserting in a comment that it had not.
+
+**Rules.**
+
+1. **An oracle must not depend on a property the code does not enforce.** Before
+   trusting a test's *detection* step, ask what makes it true. If the answer is
+   "the code happens to be written that way", either assert that or find a
+   detector that cannot be wrong — a before/after diff, a returned handle, an
+   identity the runtime gives you.
+2. **Write the escape hatch's failure case, not just its comment.** Every
+   `if not X then pending/return end` is a path where the test asserts nothing.
+   Run it deliberately once and confirm it *reports*; a comment claiming
+   coverage is not coverage.
+3. **A predicate that narrows the set under test must be justified in the test,
+   or it is an allowlist.** Skipping is a decision about scope; make it visible
+   (`assert.is_true(#dotted >= 15)`) or remove it by handling the hard case.
+4. **When a review names a family, sweep the family in that round — including
+   the code you are writing to fix it.** Instance three was created by the fix
+   for instances one and two, in the same commit.
+5. **Teardown must restore what it shadowed — scope is not the fix.**
+   `vim.keymap.del` cannot distinguish yours from the user's at **any** scope.
+   An earlier version of this rule said "feature-scoped keymaps go on the
+   buffer, never globally"; following it re-created the bug one level down,
+   because parley's own buffer-local `<CR>` (spell typeahead) then became the
+   thing being destroyed, and session-scoped state ended up installed on one
+   buffer. Capture the previous mapping before you set yours and put it back
+   after — `nvim_get_keymap` to capture (`maparg` returns a buffer-local map
+   when both exist), `mapset` to restore. Install at the scope the *state* has,
+   not the scope that makes teardown feel safer. Reviewing an install is half
+   the job; review the removal.
+
+## #214 M2 round 11 — I tested the step I edited, not the transition it belongs to
+
+The interview `<CR>` fix went through three rounds. The last one found that all
+six tests I had written for it called `interview.setup_keymap()` and
+`interview.remove_keymap()` — the two functions the fix edited — while the thing
+a user triggers is `interview.enter()` / `interview.exit()`. Driving those
+instead raised immediately:
+
+```
+interview.enter()
+:edit <a chat file>
+E5108: Cannot deepcopy object of type userdata
+  init.lua: in function 'refresh_state'   <- prep_chat, from BufEnter
+```
+
+`start_timer` parked a libuv handle in `_state`, and `refresh_state` deepcopies
+`_state`. So for ~16 months, opening any chat file while interview mode was on
+errored. Not one test saw it, because no test ever entered interview mode — they
+all called the sub-step directly.
+
+The sub-step cannot observe the state the transition carries. That is the whole
+point of the transition.
+
+**Rules.**
+
+1. **Pin a lifecycle fix through the transition a user triggers, not the
+   internal step you edited.** `enter`/`exit`, not `setup_keymap`/`remove_keymap`.
+   If the public verb is awkward to drive in a test, that is a finding about the
+   verb, not a reason to test one level down.
+2. **Runtime handles never go in serialisable state.** `_state` is deepcopied
+   and written to disk; a timer, a job handle, or a buffer-local closure parked
+   there turns every reader into a crash site. Keep them module-local.
+3. **When a round reverses an earlier decision, the artifacts that RECORDED the
+   decision are part of the reversal's diff — and they are enumerable, not
+   remembered:** `git show --stat <the reversed commit>` lists them. Round 10
+   reversed round 9's buffer-local design in the code and the issue, and left the
+   atlas and `lessons.md` teaching the reversed version. `lessons.md` is read by
+   every agent at session start, so a stale rule there is not documentation debt
+   — it is an instruction to re-create the bug.
+4. **Fixing "validate the shape" at the top level is not fixing the shape.**
+   `shortcut = { 5 }` still resolved to nil — identical to a deliberate
+   `shortcut = ""` — after I had "fixed" the typo-equals-decision defect, because
+   I checked the container's type and not its elements.
+
+## #214 M3 — the test that confirmed one interleaving and reported coverage
+
+`<M-i>` computes where the branch reference goes, then strips the `<M-q>` markers,
+then inserts at the computed line. The strip changes the line count. The
+reference landed past the exchange's summary — a Critical, in the milestone's
+headline feature.
+
+The integration test for that path used an **inline** marker (`text 🤖[q] more`),
+whose removal deletes no lines. Delta zero. Green. The ordinary form is a
+**standalone** `🤖[…]` on its own line, which `<M-q>` on a blank line produces
+and whose removal deletes lines — and no test used one.
+
+`chat_respond` already solves this, four lines away, with
+`buffer_edit.make_handle` around the same call. I did not look at how the
+neighbour did it before writing the second copy.
+
+**Rules.**
+
+1. **When an edit computes a position and then mutates, the test must mutate a
+   different amount than zero.** Any "compute then edit" pair has a delta axis;
+   a fixture that happens to sit at delta 0 exercises the one case where the bug
+   cannot appear. Pick the fixture that moves lines, not the one that reads
+   nicely.
+2. **Before writing code that edits a buffer around another edit, read the
+   nearest existing caller.** The extmark-handle idiom was already in the file
+   this feature is named after. Reusing it is not just DRY — it is inheriting a
+   bug fix someone already paid for.
+3. **A checked-off plan step whose test no longer exists is worse than an
+   unchecked one.** When a narrowing deleted `exchange_at`, its conformance test
+   went with it, leaving Task 7 ticked over nothing and three mutation-ledger
+   rows describing mutations of code not in the tree. Re-read the ledger against
+   `git diff` when scope changes, not only when writing it.
+4. **A guarded write next to an unguarded create is not "mostly safe".** The
+   `:write` was `pcall`ed and `create_child_chat` was not, so a failure raised
+   after the parent had already been stripped and rewritten. Ordering fixed it —
+   create first, mutate second — which removes the window instead of trying to
+   unwind inside it. Ask which step is the point of no return, and do the
+   fallible thing before it.
+5. **A unit test that calls `setup()` to exercise a pure function buys a race.**
+   `parse_chat` needs a config table, not a plugin. Mine called `parley.setup({})`
+   per test, which ran `file_tracker.init` and raced the parallel runner on a
+   shared XDG dir — red from a clean environment, green from a warm one. I
+   diagnosed it as my own concurrent `make test` and was half wrong.
+
+## #214 M3 — a fix that moves a hazard instead of removing it
+
+Removing the parser's `line_before_local` latch made `🌿:`/`🔒:` ordinary content
+again. I knew that put annotation lines *inside* a component's span, because I
+found and fixed the case where it mattered: a **trailing** reference would land
+inside `answer.line_end`, and a resubmit deletes `question..answer.line_end`, so
+it would have been destroyed. I wrote the trailing-trim, the test, and a comment
+explaining the hazard.
+
+Then the operator's placement decision put references **mid-answer** — the
+common case, by design — and mid-answer is the position the trim does not
+cover. Same hazard, same mechanism, same consequence (an orphaned child chat),
+one position over. Review found it two rounds later.
+
+I had the general statement in hand: *"an annotation is now inside a span that
+gets deleted."* I fixed the instance I could see and did not enumerate the
+positions.
+
+**Rules.**
+
+1. **When you write "X is now inside Y", enumerate every position X can occupy
+   in Y before choosing a fix.** Leading, trailing, middle, alone, repeated.
+   The trim handled one of five.
+2. **A hazard you documented is one you are responsible for sweeping.** The
+   comment I wrote on the trailing-trim describes the exact failure that then
+   shipped in the middle position. Writing the sentence is not the fix.
+3. **Fix at the operation, not at the boundary, when the operation is the one
+   with the semantics.** The right fix was never "keep annotations out of
+   spans" — it was "a resubmit replaces the model's output, and an annotation is
+   not the model's output". Stated that way, `delete_answer` is obviously where
+   it belongs, and every position is covered at once.
+4. **Renumbering a list breaks every ordinal citation into it.** Consolidating
+   `## Revisions` silently re-pointed five references at unrelated decisions.
+   Cite by heading or date — a form the cited artifact cannot invalidate.
+
+## #214 M3 — positions are not forms
+
+Three rounds in a row on one hazard. Removing the parser latch made `🌿:`/`🔒:`
+part of an answer's span, so a resubmit — which deletes the span and regenerates
+— started destroying them.
+
+- Round 1: I fixed the **trailing** position, wrote the test, wrote a comment
+  explaining that otherwise the child would be orphaned.
+- Round 2: review found the **middle** position, which the operator's placement
+  decision had just made the common one. I fixed it at the operation
+  (`delete_answer` keeps annotations) reasoning that this covers *every position
+  at once*.
+- Round 3: review found the **inline** form — `[🌿:anchor](file)`, which is what
+  the visual branch exists to produce. My predicate was `vim.startswith`.
+
+"Every position at once" was true and still insufficient, because I had
+enumerated the axis I could already see. Leading/middle/trailing is one axis;
+line-start versus inline is another, and the second one is where the feature's
+own headline case lives.
+
+**Rules.**
+
+1. **After enumerating one axis, ask what the other axis is.** Position and form
+   are different axes. So are "in a question" versus "in an answer", "one" versus
+   "many", "alone on a line" versus "embedded". A sweep along one axis reads as
+   thorough and is not.
+2. **Enumerate from the FEATURE's cases, not from the bug report's shape.** The
+   chord has three cases and one of them produces an inline link. Walking the
+   feature would have found it; walking the finding did not.
+3. **A required argument beats a defaulted one when a wrong answer destroys
+   data.** `is_annotation` first defaulted its prefixes when config was missing,
+   which silently answered for a caller that had not threaded config through.
+   Asserting instead immediately exposed that `delete_answer` was reading plugin
+   state a unit spec had never set up. (Same shape as #215's `is_partition`.)

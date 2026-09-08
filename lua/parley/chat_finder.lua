@@ -553,14 +553,21 @@ M.open = function(_)
 	else
 		session = new_session(snapshot, "picker", false)
 	end
-	local delete_shortcut = _parley.config.chat_finder_mappings.delete or _parley.config.chat_shortcut_delete
-	local delete_tree_shortcut = _parley.config.chat_finder_mappings.delete_tree or { shortcut = "<C-D>" }
-	local move_shortcut = _parley.config.chat_finder_mappings.move or { shortcut = "<C-x>" }
-	local next_recency_shortcut = _parley.config.chat_finder_mappings.next_recency or { shortcut = "<C-a>" }
-	local previous_recency_shortcut = _parley.config.chat_finder_mappings.previous_recency or { shortcut = "<C-s>" }
-	local cycle_filter_shortcut = _parley.config.chat_finder_mappings.cycle_filter or { shortcut = "<Tab>" }
-	local cycle_filter_prev_shortcut = _parley.config.chat_finder_mappings.cycle_filter_prev or { shortcut = "<S-Tab>" }
-	local keybindings_shortcut = _parley.config.global_shortcut_keybindings or { shortcut = "<C-g>?" }
+	-- #214 C1: resolve picker keys through the registry, not from raw config.
+	-- These used to read `config.chat_finder_mappings.X.shortcut or "<hardcoded>"`,
+	-- which duplicated `default_key` (so a registry edit was inert here), ignored
+	-- `default_keymaps = false`, and passed `shortcut = ""` straight to
+	-- vim.keymap.set. nil = deliberately unbound; float_picker skips those.
+	local kb = require("parley.keybinding_registry")
+	local cfg = _parley.config
+	local delete_shortcut = kb.key_for("cf_delete", cfg)
+	local delete_tree_shortcut = kb.key_for("cf_delete_tree", cfg)
+	local move_shortcut = kb.key_for("cf_move", cfg)
+	local next_recency_shortcut = kb.key_for("cf_next_recency", cfg)
+	local previous_recency_shortcut = kb.key_for("cf_prev_recency", cfg)
+	local cycle_filter_shortcut = kb.key_for("cf_cycle_filter", cfg)
+	local cycle_filter_prev_shortcut = kb.key_for("cf_cycle_filter_prev", cfg)
+	local keybindings_shortcut = kb.key_for("help", cfg)
 
 	-- Launch float picker for chat finder
 	do
@@ -624,8 +631,8 @@ M.open = function(_)
 		local prompt_title = string.format(
 			"Chat Files (%s  %s/%s: cycle)",
 			resolved_recency.current.label,
-			cycle_filter_shortcut.shortcut,
-			cycle_filter_prev_shortcut.shortcut
+			kb.key_label("cf_cycle_filter", cfg),
+			kb.key_label("cf_cycle_filter_prev", cfg)
 		)
 
 		_parley.logger.debug("ChatFinder using active_window: " .. (_parley._chat_finder.active_window or "nil"))
@@ -762,7 +769,7 @@ M.open = function(_)
 								_parley._chat_finder.insert_line - 1,
 								_parley._chat_finder.insert_line - 1,
 								false,
-								{ branch_prefix .. " " .. rel_path .. ": " .. topic }
+								{ require("parley.branch_ref").format_ref_line(branch_prefix, rel_path, topic) }
 							)
 						else
 							-- Handle insert mode insertion (inline branch link)
@@ -823,7 +830,7 @@ M.open = function(_)
 			mappings = {
 				-- Delete selected chat file
 				{
-					key = delete_shortcut.shortcut,
+					key = delete_shortcut,
 					fn = function(item, close_fn, context)
 						if not item then
 							_parley.logger.debug("ChatFinder trace: delete mapping invoked with nil item")
@@ -862,7 +869,7 @@ M.open = function(_)
 				},
 				-- Delete entire chat tree for the selected file
 				{
-					key = delete_tree_shortcut.shortcut,
+					key = delete_tree_shortcut,
 					fn = function(item, close_fn, context)
 						if not item then
 							return
@@ -892,7 +899,7 @@ M.open = function(_)
 				},
 				-- Move selected chat file to another registered chat root
 				{
-					key = move_shortcut.shortcut,
+					key = move_shortcut,
 					fn = function(item, close_fn)
 						if not item then
 							return
@@ -914,25 +921,25 @@ M.open = function(_)
 				},
 				-- Move left through recency presets (<C-a> and <Tab>)
 				{
-					key = next_recency_shortcut.shortcut,
+					key = next_recency_shortcut,
 					fn = recency_left_fn,
 				},
 				{
-					key = cycle_filter_shortcut.shortcut,
+					key = cycle_filter_shortcut,
 					fn = recency_left_fn,
 				},
 				-- Move right through recency presets and "All" (<C-s> and <S-Tab>)
 				{
-					key = previous_recency_shortcut.shortcut,
+					key = previous_recency_shortcut,
 					fn = recency_right_fn,
 				},
 				{
-					key = cycle_filter_prev_shortcut.shortcut,
+					key = cycle_filter_prev_shortcut,
 					fn = recency_right_fn,
 				},
 				-- Show key bindings help
 				{
-					key = keybindings_shortcut.shortcut,
+					key = keybindings_shortcut,
 					fn = function(_, _)
 						vim.schedule(function()
 							_parley.cmd.KeyBindings("chat_finder")

@@ -303,6 +303,7 @@ M.entries = {
 	-- ── Note ────────────────────────────────────────────────────────────
 	{
 		id = "interview_start",
+		config_key = "note_shortcut_interview_start",
 		default_key = "<C-n>i",
 		default_modes = { "n" },
 		scope = "note",
@@ -311,6 +312,7 @@ M.entries = {
 	},
 	{
 		id = "interview_stop",
+		config_key = "note_shortcut_interview_stop",
 		default_key = "<C-n>I",
 		default_modes = { "n" },
 		scope = "note",
@@ -319,6 +321,7 @@ M.entries = {
 	},
 	{
 		id = "note_template",
+		config_key = "note_shortcut_template",
 		default_key = "<C-n>t",
 		default_modes = { "n" },
 		scope = "note",
@@ -415,7 +418,11 @@ M.entries = {
 	{
 		id = "open_file",
 		config_key = "chat_shortcut_open_file",
-		default_key = "<C-g>o",
+		-- <M-g> FIRST: the alt family means "act on this transcript", and
+		-- following a link between a chat and its sub-chats is that (#214,
+		-- continuing M1's <M-p>/<M-i> migration). <C-g>o stays as the legacy
+		-- alias. The help float renders keys[1], so the alt spelling leads.
+		default_key = { "<M-g>", "<C-g>o" },
 		default_modes = { "n", "i" },
 		scope = "parley_buffer",
 		desc = "Parley open file under cursor",
@@ -461,6 +468,7 @@ M.entries = {
 	},
 	{
 		id = "outline",
+		config_key = "chat_shortcut_outline",
 		default_key = { "<C-g>t", "<M-t>" },
 		default_modes = { "n", "i" },
 		scope = "parley_buffer",
@@ -470,7 +478,12 @@ M.entries = {
 	},
 	{
 		id = "branch_ref",
-		default_key = "<C-g>i",
+		config_key = "chat_shortcut_branch_ref",
+		-- The config_key lands with the chord change, not after it (#214 PQ-1).
+		-- resolve_keys falls back to `default_key` unless config supplies a table
+		-- with a NON-EMPTY `shortcut` — but config.lua does supply one here, so
+		-- the shipped list must live there; a registry-side edit would be inert.
+		default_key = { "<M-i>", "<M-S-CR>", "<C-g>i" },
 		default_modes = { "n", "i", "v" },
 		scope = "parley_buffer",
 		desc = "Parley create and insert new chat",
@@ -642,6 +655,7 @@ M.entries = {
 	},
 	{
 		id = "chat_toggle_web_search",
+		config_key = "chat_shortcut_toggle_web_search",
 		default_key = "<C-g>w",
 		default_modes = { "n" },
 		scope = "chat",
@@ -650,6 +664,7 @@ M.entries = {
 	},
 	{
 		id = "chat_drill_in",
+		config_key = "chat_shortcut_drill_in",
 		default_key = { "<C-g>q", "<M-q>" },
 		default_modes = { "v", "x", "i", "n" },
 		scope = "parley_buffer",
@@ -659,6 +674,7 @@ M.entries = {
 	},
 	{
 		id = "chat_accept_drill_in",
+		config_key = "chat_shortcut_accept_drill_in",
 		default_key = "<M-a>",
 		default_modes = { "n" },
 		scope = "parley_buffer",
@@ -668,6 +684,7 @@ M.entries = {
 	},
 	{
 		id = "chat_reject_drill_in",
+		config_key = "chat_shortcut_reject_drill_in",
 		default_key = "<M-r>",
 		default_modes = { "n" },
 		scope = "parley_buffer",
@@ -689,6 +706,7 @@ M.entries = {
 	},
 	{
 		id = "md_delete_file",
+		config_key = "chat_shortcut_delete_file",
 		default_key = "<C-g>d",
 		default_modes = { "n" },
 		scope = "markdown",
@@ -725,7 +743,6 @@ M.entries = {
 		desc = "Parley review: process markers",
 		help_desc = "Apply review marker edits",
 		buffer_local = true,
-		help_only = true, -- registered by review skill
 	},
 	{
 		id = "review_menu",
@@ -736,7 +753,6 @@ M.entries = {
 		desc = "Parley: open skill picker",
 		help_desc = "Open skill picker",
 		buffer_local = true,
-		help_only = true, -- registered by review skill (#133)
 	},
 	{
 		id = "review_next",
@@ -747,7 +763,6 @@ M.entries = {
 		desc = "Parley review: open mode menu (direct trigger)",
 		help_desc = "Open review-mode menu",
 		buffer_local = true,
-		help_only = true, -- registered by review skill (#133)
 	},
 
 	-- ── Picker: Agent ───────────────────────────────────────────────────
@@ -930,6 +945,18 @@ function M.key_for(id, config)
 	return nil
 end
 
+--- The key for `id` as DISPLAY text — never nil, so it can go straight into a
+--- picker title. `key_for` returns nil for an unbound entry, and three title
+--- sites fed that to `string.format("%s")`, rendering "Issues (open  nil: cycle
+--- view)" under `default_keymaps = false`; one of the three guarded it with
+--- `or "-"` and the other two did not. One convention, in one place (#214).
+--- @param id string
+--- @param config table
+--- @return string
+function M.key_label(id, config)
+	return M.key_for(id, config) or "-"
+end
+
 --- Resolve the key and modes for an entry, checking config overrides.
 --- Handles both flat config keys (e.g. "global_shortcut_new") and
 --- nested dot-notation (e.g. "chat_finder_mappings.delete").
@@ -952,10 +979,27 @@ end
 --- @return string[]|nil keys
 --- @return string[]|nil modes
 function M.resolve_keys(entry, config)
+	-- #214: master switch. Placed HERE rather than in the two register_*
+	-- installers so that the help float, `key_for`, and the actual keymaps all
+	-- go quiet together — a gate in the installers alone would leave <C-g>?
+	-- advertising keys nothing had bound.
+	if config and config.default_keymaps == false then
+		-- Suppresses parley's DEFAULT claims. A key the user set explicitly in
+		-- setup{} survives, which is what makes the switch usable rather than a
+		-- one-way door: turn it off, then bind back exactly what you want.
+		local explicit = config._explicit_shortcuts
+		if not (explicit and entry.config_key and explicit[entry.config_key]) then
+			return nil, nil
+		end
+	end
+
 	local function as_list(v)
 		if v == nil then return nil end
 		if type(v) == "string" then return v ~= "" and { v } or nil end
-		if type(v) ~= "table" then return nil end
+		-- Not a string or list. `setup()` reports and strips these where the
+		-- config enters the system (#214 BR-49), so the resolver stays pure and
+		-- total: no logger, no IO, no notification on a per-keystroke path.
+		if type(v) ~= "table" then return nil, true end
 		local keys = {}
 		for _, key in ipairs(v) do
 			if type(key) == "string" and key ~= "" then table.insert(keys, key) end
@@ -987,34 +1031,112 @@ function M.resolve_keys(entry, config)
 	end
 
 	if cfg_val and type(cfg_val) == "table" then
-		return as_list(cfg_val.shortcut) or as_list(entry.default_key),
-			cfg_val.modes or entry.default_modes
+		local modes = cfg_val.modes or entry.default_modes
+		-- #214 BR-9: an explicit `shortcut` is authoritative in BOTH
+		-- directions. A non-empty value rebinds; an EMPTY one ("" or {})
+		-- disables. The previous `as_list(...) or as_list(default_key)`
+		-- collapsed those cases, so no entry carrying a default_key could
+		-- ever be turned off — only `chat_toggle_tool_folds` looked
+		-- disableable, and only because it ships no default_key at all.
+		-- Absent `shortcut` still means "no opinion" and falls back.
+		if cfg_val.shortcut ~= nil then
+			local keys, malformed = as_list(cfg_val.shortcut)
+			-- malformed is not a disable: fall back rather than silently unbind
+			if malformed then
+				return as_list(entry.default_key), modes
+			end
+			return keys, modes
+		end
+		return as_list(entry.default_key), modes
 	end
 	return as_list(entry.default_key), entry.default_modes
 end
+
+--- Entries parley deliberately ships UNBOUND — the opt-in set (#214). Being in
+--- this list is the ONLY sanctioned reason for a shipped binding to resolve to
+--- nothing; the keybindings spec closes it in both directions, so an entry that
+--- silently loses its key fails the suite instead of shipping quiet. Each is one
+--- config line away from on (see the paste block in `config.lua`).
+--- @type table<string, string>
+M.opt_in = {
+	-- `<leader>` is the USER's namespace. Parley claiming five of it by default
+	-- is a land grab; `<leader>fo` additionally mapped oil.nvim, which parley
+	-- never requires.
+	copy_location = "<leader> is the user's namespace",
+	copy_location_content = "<leader> is the user's namespace",
+	copy_context = "<leader> is the user's namespace",
+	copy_context_wide = "<leader> is the user's namespace",
+	copy_fence = "<leader> is the user's namespace",
+	oil = "<leader> is the user's namespace; oil.nvim is not a parley dependency",
+	-- A tool call's RESULT is low-value reading, so folding it does not justify
+	-- a key out of the shared <C-g> surface. Reachable as :ParleyToggleToolFolds.
+	chat_toggle_tool_folds = "low-value surface; callable as a command",
+}
+
+--- Keys that exist ONLY because a feature was explicitly switched on. They are
+--- neither defaults nor keyspace claims: turning the feature off removes them.
+--- `config.lua` and the atlas already blessed this category in prose; it is
+--- listed here so the leak guard's allowance list is genuinely closed, rather
+--- than reporting a documented, opt-in map as an escape (#214 BR-39).
+--- @type table<string, { gate: string, where: string }>
+M.feature_gated = {
+	["<CR>"] = {
+		gate = "chat_spell.typeahead (opt-in, ships false) / interview mode",
+		where = "spell.lua attach + interview.lua setup_keymap",
+	},
+}
+
+--- Keys parley maps buffer-locally WITHOUT owning them, and therefore without a
+--- registry entry. Each one wraps the native key, does its parley-specific work
+--- only when a condition holds, and otherwise performs the native behaviour — so
+--- it is not a keyspace claim and there is nothing to rebind or disable. They are
+--- listed here so the help/reality agreement test has a CLOSED allowance list:
+--- any parley mapping that is neither registry-derived nor named here is a leak.
+--- @type table<string, { where: string, why: string }>
+M.native_overrides = {
+	["u"] = {
+		where = "init.lua prep_chat (guarded_history)",
+		why = "undo runs natively unless this chat owns a pending response, in "
+			.. "which case it first asks whether to stop it (#214: shipped on, "
+			.. "not configurable — an unguarded undo mid-stream corrupts the "
+			.. "transcript, so opting out is opting into a bug)",
+	},
+	["<C-r>"] = { where = "init.lua prep_chat (guarded_history)", why = "redo twin of `u`" },
+	["*"] = {
+		where = "init.lua prep_chat (bracket_jump, #141)",
+		why = "searches the whole [...] anchor when the cursor sits inside one, "
+			.. "else native word search",
+	},
+	["#"] = { where = "init.lua prep_chat (bracket_jump, #141)", why = "backward twin of `*`" },
+	["g*"] = { where = "init.lua prep_chat (bracket_jump, #141)", why = "partial-match twin of `*`" },
+	["g#"] = { where = "init.lua prep_chat (bracket_jump, #141)", why = "partial-match twin of `#`" },
+}
 
 -------------------------------------------------------------------
 -- Help display
 -------------------------------------------------------------------
 
---- Resolve the actual runtime shortcut by querying vim keymaps.
---- Falls back to config/default if runtime lookup fails.
+--- Every key the help float should print for `entry`, or nil if nothing is
+--- bound (callers omit the row). Returns the full list: aliases are bindings
+--- too, and hiding them made <C-g>? unable to show <M-q>/<M-t>/<C-g>i (#214).
 --- @param entry table  registry entry
 --- @param config table  parley config
---- @param bufnr integer|nil  buffer number for buffer-local lookup
---- @return string  display string for the shortcut
-local function resolve_display_shortcut(entry, config, _bufnr)
-	-- Use config resolution (preserves user-facing format like <C-g>?)
-	local key, _ = M.resolve_key(entry, config)
-	return key or entry.default_key
+--- @return string[]|nil  the bound keys, primary first
+local function resolve_display_keys(entry, config)
+	-- #214: `resolve_key` IS the resolution. This used to end in
+	-- `or entry.default_key`, which resurrected a key the resolver had just
+	-- refused — so the float advertised bindings the user could not press
+	-- (every opt-in <leader> map, anything with `shortcut = ""`, and everything
+	-- at all under `default_keymaps = false`). It also handed `add()` a raw
+	-- TABLE for multi-key entries, printing "table: 0x…" as the shortcut.
+	return (M.resolve_keys(entry, config))
 end
 
 --- Generate help lines for a given context.
 --- @param context string  buffer context (e.g. "chat", "issue", "other")
 --- @param config table  parley config
---- @param bufnr integer|nil  current buffer number
 --- @return string[]  lines for the help window
-function M.help_lines(context, config, bufnr)
+function M.help_lines(context, config)
 	-- Title
 	local title_suffix = {
 		chat = " (Chat)",
@@ -1036,6 +1158,18 @@ function M.help_lines(context, config, bufnr)
 		table.insert(lines, string.format("  %-12s %s", shortcut, description))
 	end
 
+	-- #214 I2: an alias is a real binding, and a help screen that hides it is a
+	-- help screen the Done-when ("no registry-derived binding <C-g>? cannot
+	-- show") is not satisfied by. The primary keeps the aligned column — it is
+	-- the one to reach for — and the rest are named in the description so a
+	-- three-key entry like branch_ref does not blow the layout apart.
+	local function add_entry(keys, description)
+		if #keys > 1 then
+			description = description .. "  (also " .. table.concat(keys, ", ", 2) .. ")"
+		end
+		add(keys[1], description)
+	end
+
 	-- Get applicable scopes in display order
 	local display_scopes = M.get_display_scopes(context)
 
@@ -1044,8 +1178,8 @@ function M.help_lines(context, config, bufnr)
 		if scope_entries and #scope_entries > 0 then
 			table.insert(lines, M.scope_labels[scope] or scope)
 			for _, entry in ipairs(scope_entries) do
-				local key = resolve_display_shortcut(entry, config, bufnr)
-				if key then add(key, entry.help_desc or entry.desc) end
+				local keys = resolve_display_keys(entry, config)
+				if keys then add_entry(keys, entry.help_desc or entry.desc) end
 			end
 			table.insert(lines, "")
 		end
@@ -1074,11 +1208,32 @@ end
 --- @param scopes string[]  list of scope names to register
 --- @param config table  parley config
 --- @param callbacks table  map of entry.id → callback function
+--- Global maps this module installed, as { {mode, key, desc}, … }. Tracked so a
+--- later `setup()` can revoke them (#214 BR-38): `register_global` samples
+--- `default_keymaps` once per setup and had no teardown, so flipping the switch
+--- and re-running setup left 43 global parley mappings live — the most natural
+--- way to try the switch was the one way it did not work. Only maps whose
+--- current `desc` still matches what we installed are deleted, so a user who
+--- rebound the key afterwards keeps their own mapping.
+M._installed_global = {}
+
+local function revoke_global_maps()
+	for _, m in ipairs(M._installed_global) do
+		local existing = vim.fn.maparg(m.key, m.mode, false, true)
+		if type(existing) == "table" and existing.desc == m.desc then
+			pcall(vim.keymap.del, m.mode, m.key)
+		end
+	end
+	M._installed_global = {}
+end
+
 function M.register_global(scopes, config, callbacks)
 	local scope_set = {}
 	for _, s in ipairs(scopes) do
 		scope_set[s] = true
 	end
+
+	revoke_global_maps()
 
 	for _, entry in ipairs(M.entries) do
 		if scope_set[entry.scope] and not entry.buffer_local and not entry.help_only then
@@ -1098,6 +1253,8 @@ function M.register_global(scopes, config, callbacks)
 								wrapped = cb
 							end
 							vim.keymap.set(mode, key, wrapped, { silent = true, desc = entry.desc })
+							table.insert(M._installed_global,
+								{ mode = mode, key = key, desc = entry.desc })
 						end
 					end
 				end

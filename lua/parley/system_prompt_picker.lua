@@ -118,7 +118,7 @@ end
 -- Create a floating picker to select a system prompt
 function M.system_prompt_picker(plugin)
     local items = M._build_items(plugin)
-    local keybindings_key = (plugin.config.global_shortcut_keybindings or { shortcut = "<C-g>?" }).shortcut
+    local keybindings_key = require("parley.keybinding_registry").key_for("help", plugin.config)
     float_picker.open({
         title = "💬 System Prompts  <C-e>: edit  <C-n>: new  <C-d>: delete  <C-r>: rename",
         items = items,

@@ -127,8 +127,11 @@ end
 --                     set, skip the <CR> map so we don't shadow the prompt.
 --   base_cr         → function returning the no-popup <CR> keys (injected by the
 --                     caller so this module stays decoupled from interview mode).
--- `enable` is opt-in, `typeahead` is opt-out (nil ⇒ on) — matching the defaults-on
--- config; a partial `chat_spell = { enable = true }` still gets typeahead.
+-- Both `enable` and `typeahead` are OPT-IN (nil ⇒ off). #214 flipped `typeahead`
+-- from opt-out: it installs an insert-mode <CR> map and a TextChangedI autocmd on
+-- every chat buffer, so a user who has not asked for a spelling popup should not
+-- be paying for one — and a partial `chat_spell = { enable = true }` (squiggles
+-- only) now means exactly that, where before it silently also took the <CR> map.
 -- spelllang is set unconditionally because spellsuggest()/spellbadword() read it
 -- even when `spell` is off (typeahead-only mode still needs a language).
 ---@param buf number # buffer handle
@@ -144,7 +147,8 @@ function M.attach(buf, opts)
 		end
 	end)
 
-	if opts.typeahead == false then
+	-- nil ⇒ off (#214). Only an explicit truthy `typeahead` wires the popup.
+	if not opts.typeahead then
 		return
 	end
 

@@ -3,11 +3,96 @@
 ## Syntax
 - `[🌿:display text](file.md)` — inline within any line (vs full-line `🌿:` on its own line)
 
-## Creation (`<C-g>i`)
-- **Visual mode** (chat + markdown): wraps selection as `[🌿:selected text](new-file.md)`, creates child chat with topic `what is "selected text"`
-- **Normal mode** (chat + markdown): inserts full-line `🌿: <filename>: ` (tail-only relative name) and enters insert mode for topic
-- **Insert mode** (markdown): exits insert, then behaves as normal mode
-- Child gets `🌿:` parent back-link; no auto topic inference (topic is not `?`)
+## Creation (`<M-i>`, `<M-S-CR>`, `<C-g>i`)
+One implementation — `branch_inserters(buf, abs_link)` in `init.lua`, with the
+pure line editing in `lua/parley/branch_ref.lua`. It replaced four
+near-identical functions that had drifted (#214).
+
+**The two buffer types get different guarantees, deliberately.** A chat buffer is
+parley's own file, so it can commit the reference; a foreign markdown document is
+not, and `:write` would persist the user's unrelated pending edits.
+
+| | chat buffer | foreign markdown |
+|---|---|---|
+| inserts the `🌿:` reference | yes | yes |
+| creates the child on disk | yes | **no** — it would be an orphan reachable only through an unsaved line |
+| saves the parent | yes | **no** — never writes a file parley does not own |
+| after the keypress | opens the child | cursor on the new line, insert mode |
+
+### What `<M-i>` does (#214 M3)
+
+`<M-i>` / `<M-S-CR>` / `<C-g>i` are one binding. The chord **inserts a branch
+reference at the cursor** and creates the child it points at:
+
+| context | what happens | the child gets |
+|---|---|---|
+| visual selection | the selection becomes an inline `[🌿:…](child)` anchor, in place | `tell me more about "<sel>"` |
+| pending `<M-q>` markers | the markers are gathered and stripped; a `🌿:` line lands at the cursor | those quote blocks as its first question |
+| neither | a bare `🌿:` line at the cursor — a **placeholder** — and the child opens for you to type in | nothing |
+
+**Placement is the cursor, deliberately** (operator, 2026-09-07, revising an
+earlier end-of-answer rule). `<M-S-CR>` reads as a *submission*, whose effect is
+not local to anywhere — but `<M-S-CR>` does not survive most terminals (zellij,
+tmux, anything without CSI-u), so `<M-i>` is the key people actually press, and
+it reads as an *insertion*. Relocating the line made the keypress jump.
+
+**The cost that used to carry.** A mid-answer `🌿:` once truncated the exchange
+— the parser latched a local-section flag, so text after the reference left the
+LLM context and the exchange model lost the rest of that exchange. That is what
+made end-of-answer placement look attractive. It is fixed at the source (#214):
+`🌿:` and `🔒:` are single-line annotations, so a reference costs exactly its own
+line wherever it sits. See `atlas/chat/parsing.md`.
+
+**The chord never deletes.** An earlier M3 draft had it copy the question into
+the child and delete the answer it replaced, mirroring `<M-CR>`'s resubmit. That
+is coherent for a *submission* but not for an *insertion*, and the three keys
+share one callback — so the destructive reading would have been reachable from
+the key that says "insert here". Dropped.
+
+**How far the `<M-CR>` parallel goes.** Both keys gather through the same
+`drill_in.chat_gather_opts`, so the marker removal and the `[…]` span marking are
+identical and follow `mark_reference_span` (they did not before #214 BR-60 —
+`<M-i>` hardcoded brackets on). The **scope** deliberately differs: `<M-i>`
+gathers every pending quote in the buffer, while `<M-CR>` with the cursor inside
+an exchange gathers only that exchange's and does not fall through to the
+whole-buffer path. Branching is a "take all of this elsewhere" gesture; responding
+is "answer this turn".
+
+**A reference outlives the answer it sits in.** `<M-CR>` on an answered question
+resubmits: the old answer is deleted and regenerated. Since #214 made `🌿:`/`🔒:`
+ordinary content, those lines are inside the span that deletes — so
+`buffer_edit.delete_answer` keeps them (`annotation.survivors`). A resubmit
+replaces the *model's* output, and an annotation is not the model's output; a
+branch reference in particular is the only pointer to a child chat that exists on
+disk, so deleting it orphans a file.
+
+Two forms, both preserved:
+
+- a **line-start** `🌿:`/`🔒:` survives verbatim, in order, at the deletion point;
+- an **inline** `[🌿:anchor](file)` — what the visual branch produces — survives
+  as a **standalone** `🌿: file: anchor` line. The prose around it belonged to the
+  answer being replaced, so keeping the whole line would leave a stale sentence
+  inside the new answer; the link is what must not be lost.
+
+**Refusals.** The chord declines while the buffer owns a pending response — a
+streaming answer holds a chat lease on its `🤖:` line, and editing under it
+corrupts the transcript rather than erroring.
+
+- **Normal / insert mode, chat buffer, nothing to submit**: inserts a full-line
+  `🌿: <filename>: `, creates the child, saves the parent, and **opens the
+  child** — the question is typed there. Before #214 this path created no file at
+  all, so it wrote a reference to something that did not exist.
+- **Normal / insert mode, foreign markdown**: inserts the reference and puts the
+  cursor on it in insert mode. No child, no write.
+- Every child created without a selection starts with `topic: ?` — including the
+  M3 question and quotes cases, whose reference line carries the question text as
+  its *display label* while the child's own topic stays the sentinel the lifecycle
+  keys off. `?` (not `""`) is what makes auto-titling fire on first respond;
+  an empty topic left the child permanently anonymous (#214 BR-1). It gains its slug on
+  first write (the `ParleySlug` `BufWritePost` autocmd, which skips an empty or
+  `?` topic), and the parent's link keeps resolving because `resolve_chat_path`
+  falls back to globbing the timestamp for any slug variant.
+- Child gets a `🌿:` parent back-link.
 
 ## Parser
 - Detected by `parse_chat`, added to `parsed.branches` with `{ path, topic, line, after_exchange }`

@@ -153,10 +153,12 @@ Most-used defaults:
 - `<C-g>a` change agent
 - `<C-g>P` next system prompt
 - `<C-g>s` skill picker (review, voice-apply, etc.)
-- `<C-g>b` branch/prune - move the current exchange and following exchanges to
-  a child chat
+- `<M-p>` (or `<C-g>b`) branch/prune - move the current exchange and following
+  exchanges to a child chat
 
-Tool-fold toggling is configurable but unbound by default. To opt in, set
+Tool-fold toggling ships **unbound**: a tool call's result is low-value reading,
+so folding it does not earn a key out of the shared `<C-g>` surface. It is still
+reachable as `:ParleyToggleToolFolds`. To bind it, set
 `chat_shortcut_toggle_tool_folds = { modes = { "n" }, shortcut = "<leader>tf" }`.
 
 Parley manages folds inside a chat buffer: tool calls, tool results, summaries
@@ -165,7 +167,27 @@ an exchange — including the tail of the buffer after the last block — so a
 manual `zf` there is removed the next time that exchange is reconciled. Folds
 outside every exchange (the frontmatter, for instance) are left alone.
 - `<C-g>l` toggle follow cursor
-- `<C-g>i` to insert a fork in the chat tree, can be inline or standalone
+- `<M-i>` (or `<M-S-CR>`, or `<C-g>i`) **inserts a branch at the cursor** and
+  creates the child chat it points at.
+  - **text selected** → the selection becomes an inline `[🌿:…](file)` anchor and
+    the child opens with `tell me more about "…"`. You stay in the parent.
+  - **pending `<M-q>` quotes** → they are stripped from the parent and become
+    the child's first question. Note the scope differs from `<M-CR>`: this
+    gathers **every** pending quote in the buffer, where `<M-CR>` with the cursor
+    inside an exchange gathers only that exchange's.
+  - **neither** → a bare `🌿:` placeholder, and the child opens for you to type
+    in.
+
+  The reference always lands where your cursor is, and the chord never deletes
+  anything from the parent. Every case saves the parent first, so the link is
+  never orphaned. It declines while a response is still streaming into that chat.
+
+  Re-running a question (`<M-CR>` on an answered one) replaces that answer — but
+  **your branch references and `🔒:` notes inside it survive**. An inline
+  `[🌿:…](file)` becomes a standalone `🌿:` line, since the sentence around it
+  belonged to the answer being replaced.
+- `<M-g>` (or `<C-g>o`) follow the link under the cursor — a `🌿:` reference to a
+  sub-chat, an inline `[🌿:…](file)`, or an `@@path@@` file reference
 - `gf` smart go-to-file: on an ariadne artifact ref (`ariadne#11`, `#15 M4`, `pair#84`) resolves it and jumps (family picker when it resolves to many); on a plain path, Vim's native `gf`
 
 **Corresponding commands**
@@ -226,15 +248,83 @@ Merge behavior in `setup(opts)`:
 - Practical rule: for non-merged tables, provide the full table you want, not just one nested field.
 - Reference [lua/parley/config.lua](https://github.com/xianxu/parley.nvim/blob/main/lua/parley/config.lua) for full defaults and examples.
 
+### Keybindings
+
+Every binding parley ships is rebindable **and** disableable, from one place:
+
+```lua
+require("parley").setup({
+  -- rebind: the config value REPLACES the shipped keys, it does not merge,
+  -- so list every key you want (aliases included).
+  chat_shortcut_drill_in = { modes = { "v", "x", "i", "n" }, shortcut = { "<M-q>", "<C-g>q" } },
+
+  -- disable one binding
+  chat_shortcut_prune = { shortcut = "" },
+
+  -- claim NO keys by default. Anything you bind explicitly above still
+  -- works — the switch suppresses parley's own claims, not your choices —
+  -- and <C-g>? shows exactly what survived.
+  default_keymaps = false,
+})
+```
+
+With `default_keymaps = false` and nothing else set, parley binds nothing at
+all. Most actions also have a `:Parley*` command (`:ParleyChatRespond`,
+`:ParleyChatFinder`, `:ParleyToggleToolFolds`, …), but not every binding has
+one — so if you want a key, bind it explicitly rather than relying on a command
+existing for it.
+
+`<C-g>?` shows what is actually bound in the current buffer — it reads the same
+resolution the keymaps do, so it never advertises a key you cannot press.
+
+Two deliberate defaults worth knowing:
+
+- **No `<leader>` map ships on.** `<leader>` is your namespace. The five copy
+  helpers and the oil.nvim shortcut are one config line each to enable; see the
+  paste-ready block in [`lua/parley/config.lua`](lua/parley/config.lua).
+- **`u`, `<C-r>`, `*`, `#`, `g*`, `g#` are wrapped, not claimed.** In chat
+  buffers they behave natively except when parley has something specific to do —
+  `u`/`<C-r>` ask before discarding a response that is still streaming, and
+  `*`/`#` search the whole `[...]` anchor when the cursor is inside one.
+Every knob is named in [`lua/parley/config.lua`](lua/parley/config.lua) beside
+the binding it controls — that file is the reference, so this section does not
+duplicate the list.
+
+**Changed defaults (upgrading).** Three shipped defaults changed when the
+keybinding surface was curated. Nothing is gone — each is one config line away:
+
+| Was | Now | Restore with |
+|---|---|---|
+| `<leader>cl` `<leader>cL` `<leader>cc` `<leader>cC` `<leader>cf` bound | unbound | the paste block in `config.lua` |
+| `<leader>fo` opened oil.nvim | unbound | `global_shortcut_oil = { modes = { "n" }, shortcut = "<leader>fo" }` |
+| spell typeahead popup on, mapping insert-mode `<CR>` | off (squiggles stay on) | `chat_spell = { typeahead = true }` |
+
+Two config *contracts* changed with them:
+
+- `shortcut = ""` used to fall through to the shipped default, and now means
+  **disabled**. If you set it somewhere expecting the default, name the key
+  instead.
+- **`🔒:` is a one-line note, not a section.** A line starting with `🔒:` is kept
+  out of what is sent to the model — but only *that* line. It previously withheld
+  everything from there to the end of the answer or question it sat in, which
+  meant a note dropped early in a long answer silently removed the rest of it
+  from every later turn. If you have transcripts written against the old
+  behaviour, text you expected to stay private will now be submitted. Prefix each
+  line you want withheld. (`🌿:` branch references changed the same way, and are
+  bookkeeping rather than content.)
+
 Chat storage roots:
 - `chat_dir` is the primary writable root used for new chats.
 - `chat_dirs` is an optional list of additional roots that Chat Finder, chat validation, and chat-aware commands will scan alongside `chat_dir`.
-- `:ParleyChatDirs` opens a picker to add or remove chat roots at runtime.
-- `:ParleyChatDirAdd {dir}` adds a root directly, with directory completion.
-- `:ParleyChatDirRemove {dir}` removes a configured root directly.
+- Chat roots are configured up front via `chat_dir` / `chat_dirs` in `setup()`.
+  (The runtime add/remove picker exists for **notes** — `:ParleyNoteDirs`,
+  `:ParleyNoteDirAdd`, `:ParleyNoteDirRemove` — but has no chat-domain twin;
+  this section previously documented three chat-domain `ParleyChatDir…`
+  commands that were never implemented.)
 - `:ParleyChatMove {dir}` moves the current chat to another registered chat root.
-- The primary `chat_dir` cannot be removed at runtime.
-- The default shortcut for chat-root management is `<C-g>h`.
+
+  (`<C-g>h` was documented here as a chat-root management shortcut; it is bound
+  to nothing and never was — same stale block as the commands above.)
 
 For full defaults and examples, see [`lua/parley/config.lua`](lua/parley/config.lua).
 

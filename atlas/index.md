@@ -11,7 +11,7 @@ This index provides a central directory for all atlas entries of the `parley.nvi
 - [Memory Preferences](chat/memory_prefs.md): Per-tag user preference profiles from chat history summaries.
 - [Chat Parsing](chat/parsing.md): Buffer segmentation, turn identification, and branch link parsing.
 - [Exchange Model](chat/exchange_model.md): Size-based positional model — single source of truth for buffer layout. Everything is a block.
-- [Inline Branch Links](chat/inline_branch_links.md): Footnote-style `[🌿:text](file)` links within chat text.
+- [Inline Branch Links](chat/inline_branch_links.md): Footnote-style `[🌿:text](file)` links within chat text; one shared `branch_inserters` for chat + markdown (`<M-i>`/`<M-S-CR>`/`<C-g>i`); in a chat buffer the no-selection path creates the child, commits the reference and opens it, while a foreign markdown buffer is never written and gets no child.
 - [Drill-In Markers](chat/drill_in.md): Inline `🤖<T>[Q]` discussion markers — gather/strip into the next user turn on respond; reuses the review-skill marker syntax.
 - [Inline Term Definition](chat/inline_define.md): Visual-select a phrase + `<M-CR>` → concise context-aware definition as a managed footnote diagnostic rehydrated for markdown buffers (the `define` skill + `emit_definition` tool; honors `:ToggleWebSearch`).
 - [Spell Typeahead](chat/spell_typeahead.md): As-you-type spell-suggestion completion + squiggles on chat buffers (`config.chat_spell`); plugin-free on `spellsuggest()`.
@@ -43,7 +43,7 @@ This index provides a central directory for all atlas entries of the `parley.nvi
 
 ## 6. UI & UX Components
 - [UI Pickers](ui/pickers.md): Custom floating-window pickers for agents, prompts, finder, and outline navigation.
-- [Key Bindings Help](ui/keybindings.md): Shortcut reference command and default mapping.
+- [Key Bindings Help](ui/keybindings.md): Shortcut reference command and default mapping; resolution REPLACES rather than merges (adding a `config_key` discards `default_key`), help renders only `keys[1]`, and a binding may be deliberately unbound yet callable.
 - [Outline Navigation](ui/outline.md): Buffer navigation and outline logic.
 - [Lualine Integration](ui/lualine.md): Statusline component and indicators.
 - [Syntax Highlighting](ui/highlights.md): Highlighting groups and rules; exchange partitions contain fence state (`advance`/`reset_partition`/`is_partition`), and the two deliberately-separate fence grammars — `fence.lua` for tool bodies, CommonMark for prose.

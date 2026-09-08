@@ -94,8 +94,34 @@ function M.create_answer_region(buf, after_line_0_indexed, agent_prefix, agent_s
 end
 
 --- Delete an answer region by inclusive 0-indexed line range.
-function M.delete_answer(buf, line_start_0_indexed, line_end_0_indexed)
-    vim.api.nvim_buf_set_lines(buf, line_start_0_indexed, line_end_0_indexed + 1, false, {})
+--- Delete an answer for regeneration, KEEPING the user's single-line
+--- annotations (`🌿:` branch references, `🔒:` private notes).
+---
+--- A resubmit replaces the MODEL's output. An annotation is not the model's —
+--- a branch reference is the only pointer to a child chat that exists on disk,
+--- and a private note is the user's own writing. #214 made those lines part of
+--- the answer's span (they used to truncate it), so a plain range delete started
+--- destroying them: `<M-CR>` on an exchange erased the reference `<M-i>` had
+--- just inserted into it, which is precisely where the chord puts one by design
+--- (BR-75). Verified against the pre-#214 tree, where the truncation hid this.
+---
+--- Survivors are re-inserted in order at the deletion point, so the reference
+--- stays attached to the exchange it annotates rather than drifting to the end.
+--- @param buf integer
+--- @param line_start_0_indexed integer
+--- @param line_end_0_indexed integer
+--- @param cfg table  parley config — REQUIRED, so the prefixes come from the
+---                   caller rather than from module state this function happens
+---                   to be able to reach (#214 BR-80)
+function M.delete_answer(buf, line_start_0_indexed, line_end_0_indexed, cfg)
+    local doomed = vim.api.nvim_buf_get_lines(
+        buf, line_start_0_indexed, line_end_0_indexed + 1, false)
+    local keep = require("parley.annotation").survivors(doomed, cfg)
+    if #keep > 0 then
+        -- one blank line above the kept block, so it does not abut the question
+        table.insert(keep, 1, "")
+    end
+    vim.api.nvim_buf_set_lines(buf, line_start_0_indexed, line_end_0_indexed + 1, false, keep)
 end
 
 --- Replace an answer region with a single blank separator. Returns a

@@ -139,3 +139,50 @@ describe("parley.spell integration", function()
 		end)
 	end)
 end)
+
+-- #214 M2: the typeahead gate. `typeahead` flipped from opt-out (nil ⇒ on) to
+-- opt-in (nil ⇒ off), and the shipped default flipped to false. The whole point
+-- of the gate is that a user who never mentions typeahead gets no <CR> map, so
+-- the nil row is the one that matters.
+describe("typeahead gate (#214 M2)", function()
+	local matrix = {
+		{ name = "nil — the unconfigured case: OFF", opts = { enable = true }, wired = false },
+		{ name = "false — explicitly off", opts = { enable = true, typeahead = false }, wired = false },
+		{ name = "true — explicitly on", opts = { enable = true, typeahead = true }, wired = true },
+		{ name = "partial chat_spell = { enable = true } gets squiggles, not the popup",
+		  opts = { enable = true }, wired = false },
+		{ name = "typeahead alone, no enable", opts = { typeahead = true }, wired = true },
+		{ name = "empty opts", opts = {}, wired = false },
+	}
+
+	for _, case in ipairs(matrix) do
+		it(case.name, function()
+			local buf = make_buf()
+			spell.attach(buf, case.opts)
+			-- one autocmd, registered for two events → two entries back
+			assert.equals(case.wired, typeahead_autocmds(buf) > 0)
+			assert.equals(case.wired, has_cr_map(buf))
+		end)
+	end
+
+	it("prompt_buf_type suppresses the <CR> map but keeps the autocmd", function()
+		local buf = make_buf()
+		spell.attach(buf, { enable = true, typeahead = true, prompt_buf_type = true })
+		assert.is_true(typeahead_autocmds(buf) > 0)
+		assert.is_false(has_cr_map(buf))
+	end)
+
+	it("spelllang is set even when the gate is closed", function()
+		local buf = make_buf()
+		spell.attach(buf, { enable = true, spelllang = "en_gb" })
+		assert.equals("en_gb", vim.api.nvim_buf_call(buf, function() return vim.o.spelllang end))
+	end)
+
+	-- The shipped config is the deliverable; parley.config is the merged table,
+	-- so read the file (same reason as keybindings_spec's BR-3 test).
+	it("config.lua ships typeahead off and squiggles on", function()
+		local shipped = dofile("lua/parley/config.lua")
+		assert.is_false(shipped.chat_spell.typeahead)
+		assert.is_true(shipped.chat_spell.enable)
+	end)
+end)

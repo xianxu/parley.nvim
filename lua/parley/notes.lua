@@ -32,10 +32,13 @@ M._create_note_file_impl = function(filename, title, metadata, template_content)
         for _, raw in ipairs(tlines) do
             local ln = raw
             -- Replace title placeholder
-            ln = ln:gsub("{{title}}", title)
+            -- Function replacement: `title` is runtime text, and LuaJIT does not
+            -- raise on a `%` in a gsub REPLACEMENT — it silently corrupts
+            -- ("50% off" -> "50 off", "100%" -> a NUL byte). #214 BR-34.
+            ln = ln:gsub("{{title}}", function() return title end)
             -- Replace metadata placeholders
             for _, kv in ipairs(metadata) do
-                ln = ln:gsub("{{" .. kv[1]:lower() .. "}}", kv[2])
+                ln = ln:gsub("{{" .. kv[1]:lower() .. "}}", function() return kv[2] end)
             end
             table.insert(lines, ln)
         end

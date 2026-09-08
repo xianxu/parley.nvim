@@ -76,7 +76,7 @@ product they document must be settled first.
 - [ ] **#211** — remove personal configuration from product defaults *(B6, B7)*
 - [ ] **#212** — gate the ariadne surface behind repo detection *(B8, B9, Tier 3)*
 - [ ] **#213** — delete dead code and make checkhealth honest *(Tier 4, B10)*
-- [ ] **#214** — audit and curate the default keybinding surface *(policy on top of #212's mechanism)*
+- [x] **#214** — audit and curate the default keybinding surface *(policy on top of #212's mechanism)* — **closed 2026-09-08, 17.14h** (est 3.83h, 0.2×)
 - [ ] **#206** — rebuild Parley user documentation *(step 1 done: the audit)*
 - [ ] **#207** — produce Parley introduction video *(depends on #206)*
 - [ ] **#162** — split parley into two plugins — **deferred**, see Log
@@ -123,6 +123,22 @@ justified, and ariadne bindings should be explicitly configured rather than
 defaulted. #212 owns the mechanism (context-filtered registration); #214 owns the
 policy it enforces. #214 is quality work, not a launch blocker, and is sequenced
 after #212 to avoid reworking the same call sites twice.
+
+**#214 closed 2026-09-08 at 17.14h against a 3.83h estimate (0.2×).** The
+delivered scope matches the Spec — every binding rebindable and disableable, no
+`<leader>` claimed, one master switch, aliases visible in `<C-g>?` — plus a
+generalised `<M-i>` branch chord the operator asked for mid-flight and verified
+in a live session. The overrun is not scope: it is sixteen boundary-review
+rounds, several of them fixing regressions introduced while fixing the previous
+round's findings. Read it as a signal about milestone size rather than about
+estimating: M2 alone carried eight plan rows across four subsystems and took
+8.53h. `lessons.md` gained five entries from it.
+
+Three follow-ups were split out rather than absorbed: **#221** (tool
+discoverability — `@all` should mean `@all public`; this is why a branched child
+called `emit_definition`), **#222** (lift a definition into a sub-chat), and
+**#223** (footnote id from the selected phrase, Minor). The ariadne
+`<C-y>`/`<C-j>` core/opt-in split stays with **#212**.
 
 **Documentation findings held for #206.** 63 commands ship and ~20 are
 documented. `:ParleyChatDirs`/`ChatDirAdd`/`ChatDirRemove` and `<C-g>h` are

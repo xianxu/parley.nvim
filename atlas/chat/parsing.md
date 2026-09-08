@@ -51,10 +51,46 @@ when a later `🧠:[END]` resolves a provisional legacy blank, it reduces exactl
 that opener-through-terminator span and no earlier line.
 
 ## Excluded from LLM Context
-`🔒:` local sections, `🌿:` branch links (full-line).
+`🔒:` local notes, `🌿:` branch links (both full-line, both SINGLE-line — see below).
 
 ## Branch Link Parsing
 First `🌿:` before first `💬:` = parent link. Subsequent = child branches with `after_exchange` count for context assembly.
 
 ## Validation
 Path must be inside a configured chat root; filename must match `YYYY-MM-DD` pattern; header must contain `topic` and `file`.
+
+## Single-line annotations (#214)
+
+`🌿:` and `🔒:` at the start of a line are **one-line annotations**: the line
+itself is withheld from what is sent to the LLM, and the next line is ordinary
+content again.
+
+They used to latch a `line_before_local` flag meaning *"content from here to the
+end of this component is local"* — right for a section marker, wrong for an
+annotation, and nothing distinguished the two. Measured before the fix:
+
+```
+baseline           BEFORE line | | | AFTER line | | 📝: the summary
+🌿: standalone     BEFORE line | | 📝: the summary        <- AFTER line gone
+🔒: standalone     BEFORE line | | 📝: the summary        <- same
+```
+
+So a private note dropped early in a long answer silently removed the rest of
+that answer from every later submission, and a note inside a question removed
+the second half of the user's own question. The operator's call is that
+single-line is the more useful primitive — notes go anywhere — and a multi-line
+note is several noted lines.
+
+Two properties the fix has to hold together, both asserted in
+`tests/unit/annotation_lines_spec.lua`:
+
+- **Content resumes** after the annotation line.
+- **A TRAILING annotation stays outside the component's line span.** Resubmit
+  deletes `question..answer.line_end` and regenerates, so an end-of-answer `🌿:`
+  inside the span would be deleted — destroying the only pointer to a child chat
+  that exists on disk. Before the fix this fell out of the latch for free; now
+  the trailing-blank trim skips annotation lines too, and reverting that turns
+  the span test red.
+
+An inline `[🌿:anchor](file)` link already worked this way — the target is
+dropped and the anchor text is submitted — and is unchanged.

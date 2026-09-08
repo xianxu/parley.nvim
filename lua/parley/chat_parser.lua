@@ -277,7 +277,6 @@ local fence = require("parley.fence")
 	-- Track the current exchange and component being built
 	local current_exchange = nil
 	local current_component = nil
-	local line_before_local = nil
 	local first_question_seen = false
 	-- Multi-line reasoning state: opened by a 🧠: line inside an answer.
 	-- Two termination modes, decided per-block at open time:
@@ -307,6 +306,15 @@ local fence = require("parley.fence")
 	end
 
 	-- Helper to finalize the current component's content from accumulated parts
+	-- Is line `n` a single-line annotation (🌿:/🔒:)? `parley.annotation` owns
+	-- that question for the whole codebase (#214 BR-75) — the resubmit's
+	-- survivor filter asks it too, and a predicate spelled once cannot answer
+	-- differently in two places.
+	local annotation = require("parley.annotation")
+	local function annotation_line(n)
+		return annotation.is_annotation(lines[n], config)
+	end
+
 	local function finalize_component(end_line)
 		if current_exchange and current_component then
 			if current_component == "question" then
@@ -324,9 +332,17 @@ local fence = require("parley.fence")
 			-- between blocks/exchanges. Without this, trailing blanks
 			-- in the parser's line_end would double-count with the
 			-- model's MARGIN constant.
+			-- Trailing blanks AND trailing single-line annotations. A 🌿:
+			-- reference sitting at the end of an answer must stay OUTSIDE that
+			-- answer's span: a resubmit deletes question..answer.line_end and
+			-- regenerates, so including it would delete the only pointer to a
+			-- child chat that exists on disk — BR-19's orphan by another route.
+			-- Before #214 this fell out of the `line_before_local` latch; now
+			-- the trim has to say it (verified by reversion).
 			local trimmed_end = end_line
 			while trimmed_end > current_exchange[current_component].line_start
-				and (not lines[trimmed_end] or not lines[trimmed_end]:match("%S")) do
+				and (not lines[trimmed_end] or not lines[trimmed_end]:match("%S")
+					or annotation_line(trimmed_end)) do
 				trimmed_end = trimmed_end - 1
 			end
 			current_exchange[current_component].line_end = trimmed_end
@@ -582,12 +598,21 @@ local fence = require("parley.fence")
 			else
 				table.insert(result.branches, branch_info)
 			end
-			line_before_local = i
+			-- SINGLE LINE (#214). This used to latch `line_before_local`, which
+			-- means "content from here to the end of this component is local" —
+			-- correct for a section marker, wrong for a one-line annotation.
+			-- A reference dropped mid-answer therefore removed the rest of that
+			-- answer from every later submission, silently. The line itself is
+			-- still never submitted: this branch never appends it as content.
 
-		-- Check for local section (excluded from LLM context)
-		elseif (not line_before_local) and decoration_kind == "local" then
+		-- Check for a local note (excluded from LLM context). SINGLE LINE, for
+		-- the same reason as the branch reference above (#214): a private note
+		-- dropped anywhere in an answer used to remove everything after it, so
+		-- annotating early in a long answer quietly deleted most of it from the
+		-- context. Operator's call: single-line is the more useful primitive —
+		-- notes go anywhere — and a multi-line note is several noted lines.
+		elseif decoration_kind == "local" then
 			in_reasoning_block = false
-			line_before_local = i
 
 		-- Check for user message start
 		elseif decoration_kind == "user" then
@@ -595,7 +620,7 @@ local fence = require("parley.fence")
 			first_question_seen = true
 			-- Content_blocks for the closing answer (if any) get attached
 			-- before we finalize the old component and start a new exchange.
-			local current_component_start = line_before_local or i
+			local current_component_start = i
 			cb_attach_to_current_answer(current_component_start - 1)
 			-- If we were building a previous exchange, finalize it
 			finalize_component(current_component_start - 1)
@@ -622,7 +647,6 @@ local fence = require("parley.fence")
 			content_parts = { question_content }
 			table.insert(result.exchanges, current_exchange)
 			current_component = "question"
-			line_before_local = nil
 
 			-- Add inline branch links from the question prefix line
 			for _, ib in ipairs(q_inline) do
@@ -654,7 +678,7 @@ local fence = require("parley.fence")
 			-- were already attached by the preceding `💬:` branch or by
 			-- this branch if there was no question in between — see
 			-- the cb_attach below after we start the new block.)
-			local current_component_start = line_before_local or i
+			local current_component_start = i
 			finalize_component(current_component_start - 1)
 
 			-- Defensive attach: if we had a previous answer with unflushed
@@ -684,7 +708,6 @@ local fence = require("parley.fence")
 			}
 			content_parts = {}
 			current_component = "answer"
-			line_before_local = nil
 
 			-- Initialize content_blocks state for this answer. Start with
 			-- an empty "text" block; content continuation lines will fill
@@ -812,9 +835,11 @@ local fence = require("parley.fence")
 				cb_append_line(line, i)
 			end
 
-		-- Handle content continuation, ignore lines if we are in local_prefix section, aka line_before_local is set
-		--   note, in this mode, both plain text and file reference pattern @@ are ignored.
-		elseif (not line_before_local) and current_exchange and current_component then
+		-- Handle content continuation. There is no "local section" MODE any more
+		-- (#214): 🌿: and 🔒: are single-line annotations, each handled in its own
+		-- branch above and never appended here, so content simply resumes on the
+		-- next line.
+		elseif current_exchange and current_component then
 			-- Detect inline branch links [🌿:text](file) and add to branches
 			local inline_branches = M.extract_inline_branch_links(line, branch_prefix)
 			for _, ib in ipairs(inline_branches) do

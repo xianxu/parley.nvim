@@ -500,19 +500,23 @@ describe("parse_chat: summary and reasoning lines", function()
 end)
 
 describe("parse_chat: 🔒: local prefix", function()
-    it("excludes content after local_prefix from question content", function()
+    -- #214: 🔒: withholds its OWN line, not everything after it. This asserted
+    -- the section reading until the operator settled it: a private note is
+    -- something you drop anywhere in an answer, so a latch made annotating early
+    -- in a long answer silently remove most of it from the submission.
+    it("excludes the noted line, and only that line", function()
         local lines, header_end = make_chat(std_header, {
             "💬: Visible question",
             "more visible content",
             "🔒: This is local and should be excluded",
-            "also excluded",
+            "visible again",
         })
         local result = parse_chat(lines, header_end)
         local content = result.exchanges[1].question.content
         assert.is_truthy(content:match("Visible question"))
         assert.is_truthy(content:match("more visible content"))
-        -- local content should not appear in question content
-        assert.is_falsy(content:match("excluded"))
+        assert.is_truthy(content:match("visible again"))
+        assert.is_falsy(content:match("should be excluded"))
     end)
 
     it("local prefix resets at next 💬: block", function()

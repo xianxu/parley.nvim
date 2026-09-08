@@ -279,9 +279,15 @@ local config = {
 	-- just a static string is legacy and the [{{agent}}] element is added automatically
 	-- if you really want just a static string, make it a table with one element { "🤖:" }
 	chat_assistant_prefix = { "🤖:", "[{{agent}}]" },
-	-- chat local section prefix (for content that should be ignored by parley processing)
+	-- A private note. SINGLE LINE (#214): the line it starts is withheld from
+	-- what is sent to the model; the next line is ordinary content again. It used
+	-- to withhold everything to the end of the answer or question it sat in,
+	-- which meant a note dropped early in a long answer silently removed the rest
+	-- of it from every later turn.
 	chat_local_prefix = "🔒:",
-	-- chat branch prefix (for tree-of-chat links: parent back-link on first line, child branches in body)
+	-- Branch reference (tree-of-chat links: parent back-link on the first line,
+	-- child branches in the body). Single line, same as 🔒:, and likewise never
+	-- sent to the model. An inline [🌿:anchor](file) submits its anchor text.
 	chat_branch_prefix = "🌿:",
 	-- tool use prefix (client-side tool call emitted by the LLM during agentic loop)
 	chat_tool_use_prefix = "🔧:",
@@ -315,11 +321,34 @@ local config = {
 	-- independent — `spellsuggest()` works even with `spell` off.
 	chat_spell = {
 		enable = true, -- visible spell underlines on chat buffers
-		typeahead = true, -- as-you-type spell-suggestion popup + <CR> handling
+		-- #214: shipped OFF. It maps insert-mode <CR> in every chat buffer, and a
+		-- popup that appears while you type is the kind of default that has to be
+		-- asked for. `enable` (the squiggles) stays on; set typeahead = true to
+		-- get the suggestion menu back.
+		typeahead = false, -- as-you-type spell-suggestion popup + <CR> handling
 		spelllang = "en_us",
 		min_word = 4, -- min misspelled-word length before suggesting
 		max_suggest = 9, -- max suggestions shown in the menu
 	},
+	-- #214 master switch. `false` makes parley claim NO keys by DEFAULT: every
+	-- registry-derived binding (including picker-internal ones), plus the
+	-- buffer-local native wrappers (u / <C-r> / * / # / g* / g#). `<C-g>?` goes
+	-- quiet with them, because the switch lives in `resolve_keys` — help and
+	-- reality cannot disagree.
+	--
+	-- A shortcut YOU set in setup{} still binds. The switch suppresses parley's
+	-- own claims, not your choices; without that it would be a one-way door,
+	-- since no later configuration could bind anything back.
+	--
+	-- NOT covered: hardcoded keys inside transient parley windows (`q`/`<Esc>`
+	-- to dismiss a picker, cursor motion within it) — a window you opened
+	-- deliberately must remain closable; and maps that exist solely because a
+	-- feature was switched on (interview-mode <CR>, chat_spell.typeahead's
+	-- <CR>), which are the feature, not a default.
+	--
+	-- Sampled when a buffer is prepared, so it takes effect on buffers opened
+	-- after `setup()`; buffers already open keep what they were given.
+	default_keymaps = true,
 	-- local shortcuts bound to the chat buffer
 	-- (be careful to choose something which will work across specified modes)
 	chat_shortcut_respond = { modes = { "n", "i", "v", "x" }, shortcut = { "<C-g><C-g>" } },
@@ -330,15 +359,34 @@ local config = {
 	chat_shortcut_respond_all = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>G" },
 	chat_shortcut_delete = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>d" },
 	chat_shortcut_delete_tree = { modes = { "n" }, shortcut = "<C-g>D" },
+	-- The markdown-scope delete. Shares the <C-g>d GESTURE with
+	-- chat_shortcut_delete but NOT its knob: chat delete is n/i/v/x, and this one
+	-- removes a FILE, so it stays normal-mode-only. Sharing the config_key handed
+	-- it the chat entry's modes and put a file-deleting action on insert and
+	-- visual mode in every markdown buffer (#214 C2).
+	chat_shortcut_delete_file = { modes = { "n" }, shortcut = "<C-g>d" },
 	chat_shortcut_stop = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>x" },
 	-- Toggle folds of 🔧:/📎: components within the exchange under cursor.
-	-- Intentionally unbound by default; configure chat_shortcut_toggle_tool_folds
-	-- to opt in.
+	-- Intentionally unbound by default (#214): a tool call's RESULT is low-value
+	-- reading, so folding it does not justify a key out of the shared <C-g>
+	-- surface. Reachable as `:ParleyToggleToolFolds` without configuring
+	-- anything; set chat_shortcut_toggle_tool_folds to bind it.
 	chat_shortcut_agent = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>a" },
+	chat_shortcut_toggle_web_search = { modes = { "n" }, shortcut = "<C-g>w" },
 	chat_shortcut_system_prompt = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>P" },
 	chat_shortcut_follow_cursor = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>l" },
 	chat_shortcut_search = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>n" },
-	chat_shortcut_open_file = { modes = { "n", "i" }, shortcut = "<C-g>o" },
+	-- Follow a link under the cursor: a 🌿: reference to a sub-chat, an inline
+	-- [🌿:…](file), an @@path@@ reference. <M-g> joins the alt family (quote /
+	-- respond / branch / prune / outline); <C-g>o stays a legacy alias so muscle
+	-- memory keeps working. Overriding `shortcut` REPLACES the list — name both
+	-- if you want both.
+	chat_shortcut_open_file = { modes = { "n", "i" }, shortcut = { "<M-g>", "<C-g>o" } },
+	-- Outline picker. Ships BOTH keys: <M-t> is the alt-family member users
+	-- actually reach for, <C-g>t the prefix-surface alias. Overriding `shortcut`
+	-- replaces the whole list (it does not merge), so a single-key override here
+	-- silently drops <M-t>.
+	chat_shortcut_outline = { modes = { "n", "i" }, shortcut = { "<C-g>t", "<M-t>" } },
 	-- #160: smart `gf` — resolve an ariadne artifact ref under the cursor (via
 	-- `sdlc resolve`), else native go-to-file. Transparent (native gf preserved on
 	-- plain paths); remap here to disable.
@@ -346,17 +394,40 @@ local config = {
 	-- ariadne#171 M4: project jump — resolve the issue ref under the cursor to
 	-- the fleet-wide project record(s) referencing it (cross-repo class).
 	chat_shortcut_resolve_ref_project = { modes = { "n" }, shortcut = "gP" },
-	chat_shortcut_prune = { modes = { "n" }, shortcut = "<C-g>b" },
+	-- Prune: move the rest of the transcript into a side chain so the main
+	-- thread can continue. <M-p> joins the alt family (quote / respond / branch /
+	-- prune); <C-g>b stays as a legacy alias so muscle memory keeps working.
+	chat_shortcut_prune = { modes = { "n" }, shortcut = { "<M-p>", "<C-g>b" } },
+	-- Branch: create a sub-transcript at this point in the chat tree.
+	-- <M-i> is FIRST deliberately. <M-S-CR> is the better mnemonic (shift as
+	-- "same action, redirected destination"), but most terminals cannot
+	-- distinguish Shift+Enter from Enter without the kitty keyboard protocol /
+	-- CSI-u / modifyOtherKeys — and the <C-g>? help float renders only keys[1],
+	-- so leading with <M-S-CR> would advertise a key that silently does nothing
+	-- for most users. Portable key first, mnemonic second, <C-g>i legacy alias.
+	chat_shortcut_branch_ref = { modes = { "n", "i", "v" }, shortcut = { "<M-i>", "<M-S-CR>", "<C-g>i" } },
 	chat_shortcut_export_markdown = { modes = { "n" }, shortcut = "<C-g>em" },
 	chat_shortcut_export_html = { modes = { "n" }, shortcut = "<C-g>eh" },
 	chat_shortcut_exchange_cut = { modes = { "n", "v" }, shortcut = "<C-g>X" },
 	chat_shortcut_exchange_paste = { modes = { "n" }, shortcut = "<C-g>V" },
-	chat_shortcut_copy_fence = { modes = { "n" }, shortcut = "<leader>cf" },
+	chat_shortcut_copy_fence = { modes = { "n" }, shortcut = "" }, -- opt-in: <leader>cf
 	-- global shortcuts (available in any buffer)
-	global_shortcut_copy_location = { modes = { "n", "v" }, shortcut = "<leader>cl" },
-	global_shortcut_copy_location_content = { modes = { "n", "v" }, shortcut = "<leader>cL" },
-	global_shortcut_copy_context = { modes = { "n", "v" }, shortcut = "<leader>cc" },
-	global_shortcut_copy_context_wide = { modes = { "n", "v" }, shortcut = "<leader>cC" },
+	-- #214: every `<leader>` map ships OFF. `<leader>` is the USER's namespace —
+	-- parley claiming five of it by default is a land grab, and `<leader>fo`
+	-- mapped oil.nvim, a plugin parley never requires. They remain one line each
+	-- to turn on; paste into your setup{} and pick your own keys:
+	--
+	--   global_shortcut_copy_location       = { modes = { "n", "v" }, shortcut = "<leader>cl" },
+	--   global_shortcut_copy_location_content = { modes = { "n", "v" }, shortcut = "<leader>cL" },
+	--   global_shortcut_copy_context        = { modes = { "n", "v" }, shortcut = "<leader>cc" },
+	--   global_shortcut_copy_context_wide   = { modes = { "n", "v" }, shortcut = "<leader>cC" },
+	--   chat_shortcut_copy_fence            = { modes = { "n" },      shortcut = "<leader>cf" },
+	--   global_shortcut_oil                 = { modes = { "n" },      shortcut = "<leader>fo" },
+	--
+	global_shortcut_copy_location = { modes = { "n", "v" }, shortcut = "" }, -- opt-in: <leader>cl
+	global_shortcut_copy_location_content = { modes = { "n", "v" }, shortcut = "" }, -- opt-in: <leader>cL
+	global_shortcut_copy_context = { modes = { "n", "v" }, shortcut = "" }, -- opt-in: <leader>cc
+	global_shortcut_copy_context_wide = { modes = { "n", "v" }, shortcut = "" }, -- opt-in: <leader>cC
 	global_shortcut_new = { modes = { "n", "i" }, shortcut = "<C-g>c" },
 	global_shortcut_review = { modes = { "n" }, shortcut = "<C-g>C" },
 	global_shortcut_finder = { modes = { "n", "i" }, shortcut = "<C-g>f" },
@@ -368,11 +439,20 @@ local config = {
 	global_shortcut_note_finder = { modes = { "n", "i" }, shortcut = "<C-n>f" },
 	global_shortcut_year_root = { modes = { "n", "i" }, shortcut = "<C-n>r" },
 	global_shortcut_note_dirs = { modes = { "n", "i" }, shortcut = "<C-n>h" },
+	-- note-scope (buffer-local to notes), so `note_` rather than `global_`
+	note_shortcut_interview_start = { modes = { "n" }, shortcut = "<C-n>i" },
+	note_shortcut_interview_stop = { modes = { "n" }, shortcut = "<C-n>I" },
+	note_shortcut_template = { modes = { "n" }, shortcut = "<C-n>t" },
 	-- shortcut for opening oil.nvim file explorer
-	global_shortcut_oil = { modes = { "n" }, shortcut = "<leader>fo" },
+	global_shortcut_oil = { modes = { "n" }, shortcut = "" }, -- opt-in: <leader>fo
 	-- document review shortcuts (markdown files only, not chat buffers).
 	-- Marker insertion has moved to the shared <M-q> / <C-g>q drill-in
 	-- binding — see lua/parley/init.lua `drill_in_callbacks` and #124.
+	-- Quote/annotate (🤖 marker). Ships BOTH keys — <M-q> is the headline
+	-- gesture, <C-g>q the prefix alias; same replace-not-merge caveat as outline.
+	chat_shortcut_drill_in = { modes = { "v", "x", "i", "n" }, shortcut = { "<C-g>q", "<M-q>" } },
+	chat_shortcut_accept_drill_in = { modes = { "n" }, shortcut = "<M-a>" },
+	chat_shortcut_reject_drill_in = { modes = { "n" }, shortcut = "<M-r>" },
 	review_shortcut_edit = { modes = { "n" }, shortcut = "<C-g>ve" },
 	review_shortcut_finder = { modes = { "n", "i" }, shortcut = "<C-g>vf" },
 	-- Review bindings (#133): <M-o> opens the general skill picker (review is one
@@ -398,6 +478,11 @@ local config = {
 	skills = {},
 	-- default search term when using :ParleyChatFinder
 	chat_finder_pattern = "",
+	-- agent picker (float-local): expand the full model catalog
+	agent_picker_mappings = {
+		expand_catalog = { modes = { "n", "i" }, shortcut = "<C-a>" },
+	},
+
 	chat_finder_mappings = {
 		delete = { modes = { "n", "i", "v", "x" }, shortcut = "<C-d>" },
 		delete_tree = { modes = { "n", "i", "v", "x" }, shortcut = "<C-D>" },
@@ -450,6 +535,7 @@ local config = {
 	global_shortcut_vision_validate = { modes = { "n" }, shortcut = "<C-j>v" },
 	global_shortcut_vision_export_csv = { modes = { "n" }, shortcut = "<C-j>ec" },
 	global_shortcut_vision_export_dot = { modes = { "n" }, shortcut = "<C-j>ed" },
+	global_shortcut_vision_allocation = { modes = { "n" }, shortcut = "<C-j>ea" },
 	global_shortcut_vision_finder = { modes = { "n", "i" }, shortcut = "<C-j>f" },
 	global_shortcut_vision_new = { modes = { "n" }, shortcut = "<C-j>n" },
 	global_shortcut_vision_goto = { modes = { "n" }, shortcut = "<C-j>o" },

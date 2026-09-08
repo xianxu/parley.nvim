@@ -300,11 +300,15 @@ M.open = function(_)
 		session = new_session(snapshot, "picker", false)
 	end
 
-	local mappings = _parley.config.note_finder_mappings or {}
-	local delete_shortcut = mappings.delete or _parley.config.chat_shortcut_delete
-	local next_recency_shortcut = mappings.next_recency or { shortcut = "<C-a>" }
-	local previous_recency_shortcut = mappings.previous_recency or { shortcut = "<C-s>" }
-	local keybindings_shortcut = _parley.config.global_shortcut_keybindings or { shortcut = "<C-g>?" }
+	-- #214 C1: picker keys resolve through the registry (not raw config), so
+	-- rebinding, `shortcut = ""` and `default_keymaps = false` all reach them and
+	-- the hardcoded default_key duplicates are gone. nil = unbound; skipped.
+	local kb = require("parley.keybinding_registry")
+	local cfg = _parley.config
+	local delete_shortcut = kb.key_for("nf_delete", cfg)
+	local next_recency_shortcut = kb.key_for("nf_next_recency", cfg)
+	local previous_recency_shortcut = kb.key_for("nf_prev_recency", cfg)
+	local keybindings_shortcut = kb.key_for("help", cfg)
 	local recency_config = _parley.config.note_finder_recency or {
 		filter_by_default = true,
 		months = 3,
@@ -381,8 +385,8 @@ M.open = function(_)
 			title = string.format(
 				"Note Files (%s  %s/%s: cycle)",
 				resolved_recency.current.label,
-				next_recency_shortcut.shortcut,
-				previous_recency_shortcut.shortcut
+				kb.key_label("nf_next_recency", cfg),
+				kb.key_label("nf_prev_recency", cfg)
 			),
 			recall_key = "parley.note_finder",
 			initial_index = _chat_finder_mod.resolve_finder_initial_index(
@@ -409,7 +413,7 @@ M.open = function(_)
 			end,
 			mappings = {
 				{
-					key = delete_shortcut.shortcut,
+					key = delete_shortcut,
 					fn = function(item, close_fn, context)
 						if not item then
 							return
@@ -436,10 +440,10 @@ M.open = function(_)
 						end, 20)
 					end,
 				},
-				{ key = next_recency_shortcut.shortcut, fn = cycle_recency("previous") },
-				{ key = previous_recency_shortcut.shortcut, fn = cycle_recency("next") },
+				{ key = next_recency_shortcut, fn = cycle_recency("previous") },
+				{ key = previous_recency_shortcut, fn = cycle_recency("next") },
 				{
-					key = keybindings_shortcut.shortcut,
+					key = keybindings_shortcut,
 					fn = function()
 						vim.schedule(function()
 							_parley.cmd.KeyBindings("note_finder")

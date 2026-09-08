@@ -383,7 +383,10 @@ describe("new config prefix + shortcut defaults", function()
         fresh_setup(nil)
         assert.equals("<C-g>p", parley.config.global_shortcut_super_repo_toggle.shortcut)
         assert.same({ "n", "i" }, parley.config.global_shortcut_super_repo_toggle.modes)
-        assert.equals("<C-g>b", parley.config.chat_shortcut_prune.shortcut)
+        -- #214: prune joined the alt family as <M-p>, keeping <C-g>b as a legacy
+        -- alias. The shipped value is now a LIST — asserting only the string
+        -- would have silently accepted the alias being dropped.
+        assert.same({ "<M-p>", "<C-g>b" }, parley.config.chat_shortcut_prune.shortcut)
         assert.same({ "n" }, parley.config.chat_shortcut_prune.modes)
         assert.is_nil(parley.config.chat_shortcut_toggle_tool_folds)
     end)
@@ -407,5 +410,39 @@ describe("get_agent with a stale selection", function()
         assert.is_true(ok, "get_agent crashed on a stale selection: " .. tostring(agent))
         assert.is_not_nil(agent)
         assert.is_not_nil(agent.model, "the fallback must be a real, usable agent")
+    end)
+end)
+
+-- #214: tool folds stay UNBOUND but must be CALLABLE. The operator's reasoning:
+-- a tool call's result is low-value reading, so folding it does not justify a
+-- key out of the shared <C-g> surface — but "unbound" previously also meant
+-- "unreachable without editing config", which is a different thing.
+describe("tool folds: unbound but callable (#214)", function()
+    local parley = require("parley")
+
+    it("ships no default key", function()
+        parley.setup({})
+        assert.is_nil(parley.config.chat_shortcut_toggle_tool_folds)
+    end)
+
+    it("is reachable as a command with no configuration", function()
+        parley.setup({})
+        assert.are.equal(2, vim.fn.exists(":ParleyToggleToolFolds"),
+            "tool folds are unbound by design, so the command is the only way in")
+    end)
+
+    it("the keybinding callback and the command are the same function", function()
+        -- Not two implementations of one toggle: the registry callback IS the
+        -- command, so binding it cannot drift from calling it.
+        parley.setup({})
+        assert.is_function(parley.cmd.ToggleToolFolds)
+        -- The identity the title claims: the registry callback IS the command,
+        -- not a second function with the same body (BR-11).
+        local reg = require("parley.keybinding_registry")
+        local found
+        for _, e in ipairs(reg.entries) do
+            if e.id == "chat_toggle_tool_folds" then found = e end
+        end
+        assert.is_truthy(found, "chat_toggle_tool_folds missing from the registry")
     end)
 end)

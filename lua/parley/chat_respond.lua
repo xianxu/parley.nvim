@@ -1279,10 +1279,7 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
     -- config→prefix mapping is a tested pure helper; drill_in's core stays pure.
     -- `bracket` encloses each referenced span in `[]` in place so the reader can
     -- see what the gathered comment points at (highlighted via ParleyReference).
-    local di_opts = {
-        boundaries = drill_in.chat_boundaries(_parley.config),
-        bracket = _parley.config.mark_reference_span ~= false,
-    }
+    local di_opts = drill_in.chat_gather_opts(_parley.config)
 
     if params.range ~= 2 and exchange_idx and component then
         local exch = parsed_chat.exchanges[exchange_idx]
@@ -1436,7 +1433,7 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                 -- Removes old margin + answer. The inter-exchange margin
                 -- (if next exchange exists) survives because it's past
                 -- answer.line_end. The insert cleanup keeps exactly 1.
-                be.delete_answer(buf, question.line_end, answer.line_end - 1)
+                be.delete_answer(buf, question.line_end, answer.line_end - 1, _parley.config)
                 -- Re-parse after deletion so build_messages sees clean state.
                 local new_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
                 local new_header_end = find_chat_header_end(new_lines) or 0

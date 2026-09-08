@@ -57,6 +57,31 @@ local function defines(name, text)
     return #hit > 0
 end
 
+-- #214 (M1 review item 5, M2 review item 4): these two guards were hardwired to
+-- `000205-*`, so every issue after it added surface with no table-vs-code
+-- cross-check at all. Derive the issue from the branch instead, and accept the
+-- Core-concepts table wherever this repo's §1 hierarchy puts it — a durable
+-- plan for complex work, the issue file itself for issue-only designs.
+local function current_issue_docs()
+    local branch = vim.fn.systemlist("git rev-parse --abbrev-ref HEAD")[1] or ""
+    local id = branch:match("^(%d%d%d%d%d%d)%-")
+    -- No fallback id. An earlier version fell back to `000205` and claimed it
+    -- "keeps its historical coverage" — but on main `git merge-base HEAD main`
+    -- is HEAD, so the diff is empty and the guard passed vacuously while
+    -- asserting it had not (#214 BR-40, same family). Report instead.
+    local docs = {}
+    if not id then
+        return nil, docs
+    end
+    for _, pat in ipairs({ "workshop/plans/" .. id .. "-*-plan.md",
+                           "workshop/issues/" .. id .. "-*.md" }) do
+        for _, hit in ipairs(vim.fn.glob(pat, false, true)) do
+            docs[#docs + 1] = hit
+        end
+    end
+    return id, docs
+end
+
 describe("arch: single-source sweeps stay swept", function()
     it("the plan's Core-concepts tables name every entity THIS issue added", function()
         -- The other direction of the referent sweep, and scoped to the issue's
@@ -64,15 +89,22 @@ describe("arch: single-source sweeps stay swept", function()
         -- instances the finding named; a second listed four and fired on
         -- everything those modules had ever exported. What must be tabled is the
         -- surface this issue ADDS, in any definition form.
-        local plan = vim.fn.glob("workshop/plans/000205-*-plan.md")
-        if plan == "" then
-            pending("plan not present")
+        local id, docs = current_issue_docs()
+        if not id then
+            pending("not on an issue branch — this guard is scoped to a branch's own diff")
             return
         end
-        local base = vim.fn.systemlist(
-            "git log --grep '^#205' --reverse --format=%H -- workshop/issues | head -1")[1]
+        if #docs == 0 then
+            pending("no plan or issue document for " .. id)
+            return
+        end
+        -- The BRANCH point, not the issue's first commit. Those coincided for
+        -- #205, so the original worked; on a branch cut from a main that has
+        -- moved on, diffing from the issue commit attributes every unrelated
+        -- merge to this issue and demands table rows for other issues' work.
+        local base = vim.fn.systemlist("git merge-base HEAD main")[1]
         if not base or base == "" then
-            pending("issue base commit not found")
+            pending("branch point not found")
             return
         end
         -- `git diff <base>` — NOT `<base>..HEAD`. Diffing to HEAD ignores the
@@ -80,7 +112,7 @@ describe("arch: single-source sweeps stay swept", function()
         -- appeared: `make test` passed pre-commit and the same run failed once
         -- committed, which is a guard that reports one commit late. Comparing
         -- against the working tree flags it while it is still being written.
-        local diff = vim.fn.system(("git diff %s~1 -- lua/ scripts/"):format(base))
+        local diff = vim.fn.system(("git diff %s -- lua/ scripts/"):format(base))
         if vim.v.shell_error ~= 0 then
             pending("git diff unavailable")
             return
@@ -89,15 +121,17 @@ describe("arch: single-source sweeps stay swept", function()
         -- claims. Searching the whole document let a name mentioned anywhere —
         -- a Revisions entry, a commit recipe, a code block — satisfy a guard
         -- about table rows.
-        local whole = read(plan)
-        local plan_body = whole:match("## Core concepts(.-)\n## ") or whole
         local table_rows = {}
-        for line in plan_body:gmatch("[^\n]+") do
-            if line:match("^| ") then
-                table_rows[#table_rows + 1] = line
+        for _, doc in ipairs(docs) do
+            local whole = read(doc)
+            local section = whole:match("## Core concepts(.-)\n## ") or ""
+            for line in section:gmatch("[^\n]+") do
+                if line:match("^| ") then
+                    table_rows[#table_rows + 1] = line
+                end
             end
         end
-        plan_body = table.concat(table_rows, "\n")
+        local plan_body = table.concat(table_rows, "\n")
         local missing = {}
         for line in diff:gmatch("[^\n]+") do
             -- Public FUNCTIONS, in either definition form. Deliberately not
@@ -134,14 +168,16 @@ describe("arch: single-source sweeps stay swept", function()
     end)
 
     it("every symbol the Spec and plan tables name exists in the tree", function()
+        -- unlike its sibling this one needs no diff, so it runs on any branch
         -- The plan→code direction. The other test walks code→table; this one
         -- catches a document naming a function that was renamed or never
         -- written, which happened three times on this issue (`catalog_write`,
         -- `provider_states`, `M._logged_out_providers`).
-        local docs = {
-            vim.fn.glob("workshop/plans/000205-*-plan.md"),
-            vim.fn.glob("workshop/issues/000205-*.md"),
-        }
+        local id, docs = current_issue_docs()
+        if not id then
+            pending("not on an issue branch")
+            return
+        end
         local missing = {}
         for _, doc in ipairs(docs) do
             if doc ~= "" then
@@ -371,5 +407,274 @@ describe("arch: single-source sweeps stay swept", function()
                 .. "so the key is discoverable and rebindable")
                 :format(path, literals, allowed))
         end
+    end)
+end)
+
+-- #214 BR-5: the branch-ref line format was hand-inlined in SEVEN places across
+-- init.lua, chat_finder.lua and highlighter.lua. Consolidating the two obvious
+-- ones left five, and the review had to find them twice. One owner, and a guard
+-- so the next inline copy fails instead of being caught by a reviewer.
+describe("arch: the branch-ref line has one formatter (#214)", function()
+    it("no module hand-builds a 🌿: line", function()
+        local offenders = {}
+        for _, path in ipairs(repo_files("git ls-files 'lua/**/*.lua'")) do
+            if path ~= "lua/parley/branch_ref.lua" then
+                for _, line in ipairs(vim.split(read(path), "\n")) do
+                    if not line:match("^%s*%-%-")
+                        and line:find('branch_prefix .. " " ..', 1, true) then
+                        offenders[#offenders + 1] = path .. ": " .. vim.trim(line)
+                    end
+                end
+            end
+        end
+        assert.are.same({}, offenders,
+            "hand-built branch-ref line; use branch_ref.format_ref_line (#214)")
+    end)
+end)
+
+-- #214 BR-21 / BR-34: a runtime string as gsub's SECOND argument is a silent
+-- corruption bug under LuaJIT, which — unlike standard Lua — does not raise.
+-- Measured in this repo's nvim: "50% off" -> "50 off", "%1 x" -> the pattern
+-- itself, "100%" -> a NUL byte written into the file. Found twice, so it gets a
+-- guard rather than a third review round.
+describe("arch: no runtime string is a gsub replacement (#214)", function()
+    it("gsub/sub replacements are literals, functions, or explicitly escaped", function()
+        -- A bare identifier as gsub's replacement argument. Literals and inline
+        -- `function` replacements are fine. Anything else must carry an explicit
+        -- `-- gsub-safe: <why>` on the line or the one above — an annotation,
+        -- not a guess from the variable's NAME, so the exception is greppable
+        -- and reviewable instead of inferred.
+        -- gsub ONLY: string.sub takes numeric indices, not a replacement, so
+        -- matching :sub( floods this with false positives.
+        local pat = ":gsub%b()"
+        local offenders = {}
+        for _, path in ipairs(repo_files("git ls-files 'lua/**/*.lua'")) do
+            local lines = vim.split(read(path), "\n")
+            for n, line in ipairs(lines) do
+                if not line:match("^%s*%-%-") then
+                    for call in line:gmatch(pat) do
+                        local second = call:match("^:gsub%(.-,%s*([%a_][%w_%.%[%]]*)%s*%)$")
+                        local annotated = line:find("gsub%-safe")
+                            or (lines[n - 1] or ""):find("gsub%-safe")
+                        if second and not second:match("^function") and not annotated then
+                            offenders[#offenders + 1] = ("%s:%d  %s"):format(path, n, second)
+                        end
+                    end
+                end
+            end
+        end
+        assert.are.same({}, offenders,
+            "runtime string used as a gsub replacement — use a function "
+            .. "replacement, or escape %% first (#214 BR-34)")
+    end)
+end)
+
+-- #214 C1. M2 gave the registry three guarantees — rebinding, `shortcut = ""`
+-- disabling, and the `default_keymaps` master switch — and every one of them
+-- attaches to `resolve_keys`. Any code that turns config into a key WITHOUT
+-- going through it silently opts out of all three. That was not hypothetical:
+-- the review skill and ~20 picker sites read `config.X.shortcut` directly, so
+-- `default_keymaps = false` left four maps live on every markdown buffer and a
+-- `shortcut = ""` disable raised "Invalid (empty) LHS" on every markdown
+-- BufEnter. A sweep without a guard is a snapshot.
+describe("arch: every key derives from the keybinding registry (#214)", function()
+    it("no module outside the registry reads a config `.shortcut` field", function()
+        local offenders = {}
+        for _, path in ipairs(repo_files("git ls-files 'lua/**/*.lua'")) do
+            if not path:match("keybinding_registry%.lua$") then
+                -- `[^\n]*` yields an empty match after every line, which doubles
+                -- every reported line number (a planted violation at :121 was
+                -- reported as :223). `(.-)\n` over a newline-terminated body does not.
+                local lineno = 0
+                for line in (read(path) .. "\n"):gmatch("(.-)\n") do
+                    lineno = lineno + 1
+                    -- comments are documentation, not derivation; and a read
+                    -- that inspects the USER's opts (rather than deriving a key
+                    -- to bind) opts out explicitly, never by inference
+                    local code = line:match("^%s*%-%-") and "" or line
+                    if code:find("shortcut%-read%-ok") then code = "" end
+                    if code:find("%.shortcut") then
+                        offenders[#offenders + 1] = path .. ":" .. lineno .. " " .. vim.trim(line)
+                    end
+                end
+            end
+        end
+        assert.same({}, offenders,
+            "resolve a key with keybinding_registry.key_for/resolve_keys instead of "
+            .. "reading config.<key>.shortcut — a raw read bypasses rebinding, "
+            .. "`shortcut = \"\"` and `default_keymaps = false`")
+    end)
+
+    it("registry entries marked help_only are installed by a resolver-based path", function()
+        -- `help_only` means "shown in <C-g>?, registered elsewhere". That is the
+        -- exemption the shadow installs hid behind, so the surviving ones must be
+        -- picker mappings — which now resolve via key_for — and nothing else.
+        local reg = require("parley.keybinding_registry")
+        local unexpected = {}
+        for _, e in ipairs(reg.entries) do
+            if e.help_only and not e.config_key:find("_mappings%.") then
+                unexpected[#unexpected + 1] = e.id .. " (" .. e.config_key .. ")"
+            end
+        end
+        assert.same({}, unexpected,
+            "a help_only entry outside a picker mappings table means a hand-rolled "
+            .. "install path again — register it through kb_registry.register_buffer")
+    end)
+end)
+
+-- #214 review (Minor): native_map's contract used to be a production error()
+-- raised from prep_chat, AFTER _prepared_bufs was set — a mis-registered key
+-- left the buffer permanently half-prepared with no retry. The contract belongs
+-- here, where it costs a red test instead of a broken buffer.
+describe("arch: native key overrides are declared (#214)", function()
+    it("every literal native_map key carries a rationale in the registry", function()
+        local reg = require("parley.keybinding_registry")
+        local src = read("lua/parley/init.lua")
+        local undeclared = {}
+        for key in src:gmatch('native_map%("([^"]+)"') do
+            if not reg.native_overrides[key] then
+                undeclared[#undeclared + 1] = key
+            end
+        end
+        assert.same({}, undeclared,
+            "add the key to keybinding_registry.native_overrides with its rationale")
+        -- the loop-driven ones (*/#/g*/g#) come from a literal table beside it
+        for key in src:gmatch('{ key = "([^"]+)", back = ') do
+            if not reg.native_overrides[key] then
+                undeclared[#undeclared + 1] = key
+            end
+        end
+        assert.same({}, undeclared)
+    end)
+
+    -- #214 BR-50: `feature_gated` is trusted by both leak tests and had NEITHER
+    -- of the guards `native_overrides` carries. An allowance list is an oracle's
+    -- second unverified input; adding a key to it silently widens what the leak
+    -- guard forgives.
+    it("every feature_gated key carries a gate and a location", function()
+        local reg = require("parley.keybinding_registry")
+        local bad = {}
+        for key, meta in pairs(reg.feature_gated) do
+            if not (meta.gate and #meta.gate > 0) then bad[#bad + 1] = key .. ": no gate" end
+            if not (meta.where and #meta.where > 0) then bad[#bad + 1] = key .. ": no where" end
+        end
+        assert.same({}, bad)
+    end)
+
+    it("no feature_gated key is bound by the SHIPPED config", function()
+        -- If it resolves under the shipped defaults it is a default, not a
+        -- feature-gated map, and belongs in the registry rather than the
+        -- allowance list.
+        local reg = require("parley.keybinding_registry")
+        local shipped = dofile("lua/parley/config.lua")
+        local leaked = {}
+        for key in pairs(reg.feature_gated) do
+            for _, e in ipairs(reg.entries) do
+                for _, k in ipairs(reg.resolve_keys(e, shipped) or {}) do
+                    if k == key then leaked[#leaked + 1] = key .. " via " .. e.id end
+                end
+            end
+        end
+        assert.same({}, leaked)
+    end)
+
+    it("no declared override is stale — each is still installed somewhere", function()
+        local reg = require("parley.keybinding_registry")
+        local src = read("lua/parley/init.lua")
+        local stale = {}
+        for key, meta in pairs(reg.native_overrides) do
+            local literal = src:find('native_map("' .. key .. '"', 1, true)
+            local tabled = src:find('{ key = "' .. key .. '", back = ', 1, true)
+            if not literal and not tabled then
+                stale[#stale + 1] = key .. " (" .. meta.where .. ")"
+            end
+        end
+        assert.same({}, stale, "declared in native_overrides but never installed")
+    end)
+end)
+
+-- #214 BR-42. `atlas/traceability.yaml` maps each atlas doc to the code and
+-- tests that realise it, and `make test-changed` runs off it — but nothing
+-- enforced it, which is exactly why it drifted: this milestone's headline spec
+-- and M1's whole pure module were absent, so editing the very atlas doc M2
+-- rewrote ran neither. An index nobody checks is a list of what someone
+-- remembered.
+describe("arch: traceability.yaml lists every file it claims to map (#214)", function()
+    local function traceability_paths()
+        local paths = {}
+        for line in (read("atlas/traceability.yaml") .. "\n"):gmatch("(.-)\n") do
+            local path = line:match("^%s*%-%s+([%w_%-/%.]+%.lua)%s*$")
+            if path then paths[#paths + 1] = path end
+        end
+        return paths
+    end
+
+    it("every path it names exists", function()
+        local missing = {}
+        for _, path in ipairs(traceability_paths()) do
+            if vim.fn.filereadable(path) == 0 then missing[#missing + 1] = path end
+        end
+        assert.same({}, missing,
+            "traceability.yaml points at files that are not in the tree")
+    end)
+
+    it("every spec this branch ADDED is routed somewhere", function()
+        -- Same trap the 000205 fallback had (#214 BR-40/BR-50): on `main`,
+        -- merge-base IS head, the diff is empty, and this passes while asserting
+        -- nothing. Report instead of passing.
+        local branch = vim.fn.systemlist("git rev-parse --abbrev-ref HEAD")[1] or ""
+        if not branch:match("^%d%d%d%d%d%d%-") then
+            pending("not on an issue branch — this guard is scoped to a branch's own diff")
+            return
+        end
+        local base = vim.fn.systemlist("git merge-base HEAD main")[1]
+        if not base or base == "" then
+            pending("branch point not found")
+            return
+        end
+        local added = vim.fn.systemlist(
+            ("git diff --name-only --diff-filter=A %s -- tests/"):format(base))
+        if vim.v.shell_error ~= 0 then
+            pending("git diff unavailable")
+            return
+        end
+        local listed = {}
+        for _, p in ipairs(traceability_paths()) do listed[p] = true end
+        local unrouted = {}
+        for _, spec in ipairs(added) do
+            if spec:match("_spec%.lua$") and not listed[spec] then
+                unrouted[#unrouted + 1] = spec
+            end
+        end
+        assert.same({}, unrouted,
+            "a new spec routes nowhere under `make test-changed` — add it to "
+            .. "atlas/traceability.yaml under the doc it verifies")
+    end)
+end)
+
+-- #214 M3. `vim.fn.writefile` encodes a `\n` INSIDE a list element as a NUL byte
+-- rather than rejecting it, and `readfile` turns that NUL back into `\n` — so a
+-- caller that composes a line cannot discover the mistake by round-tripping in
+-- Lua. It shipped, and the operator found it in a real transcript.
+--
+-- Every writefile whose lines are COMPOSED (as opposed to read straight from a
+-- buffer) routes through `helper.flatten_lines`. This is a source-level
+-- assertion on purpose: the guard is currently unreachable through
+-- create_child_chat's own paths (the template is split after the gsub, the
+-- question is split at the call site), so no behavioural test can distinguish
+-- it from its own absence. What it protects against is the NEXT caller.
+describe("arch: composed writefile lines are flattened (#214 M3)", function()
+    it("create_child_chat's writefile is guarded", function()
+        local src = read("lua/parley/init.lua")
+        local body = src:match("M%.create_child_chat = function.-\nend")
+        assert.is_truthy(body, "create_child_chat not found")
+        assert.is_truthy(body:find("flatten_lines", 1, true),
+            "create_child_chat composes lines (a back-link and a question turn) "
+            .. "and writes them with writefile — route them through "
+            .. "helper.flatten_lines, or a multi-line element becomes NUL on disk")
+    end)
+
+    it("flatten_lines exists and is exported", function()
+        assert.is_function(require("parley.helper").flatten_lines)
     end)
 end)

@@ -79,23 +79,66 @@ M.cr_keys = function()
 	return "<CR>"
 end
 
---- Install a global insert-mode <CR> mapping that inserts timestamps in interview mode.
+local INTERVIEW_CR_DESC = "Insert timestamp on new line in interview mode"
+
+-- The GLOBAL insert-mode <CR> mapping this module replaced, if any, so teardown
+-- can put it back. nvim_get_keymap returns only global maps — maparg would hand
+-- back a buffer-local one when both exist (measured) — and mapset restores the
+-- entry verbatim, Lua-callback maps included (also measured).
+M._saved_cr = nil
+
+local function global_cr_map()
+	for _, m in ipairs(vim.api.nvim_get_keymap("i")) do
+		if m.lhs == "<CR>" then
+			return m
+		end
+	end
+end
+
+--- Install the insert-mode <CR> mapping that inserts timestamps in interview
+--- mode.
+---
+--- GLOBAL, deliberately (#214 BR-47). Interview mode is *session* state, so its
+--- map must live at the same scope as the state it serves; a buffer-local
+--- install left the mode "on" in the statusline while `<CR>` silently stopped
+--- inserting timestamps in every other buffer. It also collided with the one
+--- buffer-local `<CR>` parley itself installs — spell typeahead's — destroying
+--- it, when spell's map is precisely the coordination point: it delegates to
+--- `M.cr_keys` through `base_cr` (#134), so a global interview map is what that
+--- design already expects.
+---
+--- The real defect BR-41 named is scope-independent: teardown must RESTORE what
+--- it shadowed, because `vim.keymap.del` cannot tell "mine" from "theirs".
 M.setup_keymap = function()
 	_logger.info("Setting up interview keymap")
+	-- Capture before overwriting, and only if it is not already ours (re-entering
+	-- interview mode must not save our own map as the thing to restore).
+	local prev = global_cr_map()
+	if prev and prev.desc ~= INTERVIEW_CR_DESC then
+		M._saved_cr = prev
+	end
 	vim.keymap.set("i", "<CR>", function()
 		return M.cr_keys()
 	end, {
 		expr = true,
-		desc = "Insert timestamp on new line in interview mode",
+		desc = INTERVIEW_CR_DESC,
 	})
 end
 
---- Remove the global insert-mode <CR> mapping installed by setup_keymap().
+--- Remove the mapping installed by setup_keymap, restoring whatever it shadowed.
 M.remove_keymap = function()
 	_logger.info("Removing interview keymap")
-	pcall(function()
-		vim.keymap.del("i", "<CR>")
-	end)
+	local saved = M._saved_cr
+	M._saved_cr = nil
+	if saved then
+		-- Overwrite ours with theirs rather than deleting the slot: a delete
+		-- followed by a failed restore is the destructive case BR-41 reported.
+		if pcall(vim.fn.mapset, "i", false, saved) then
+			return
+		end
+		_logger.warning("Interview: could not restore the previous <CR> mapping")
+	end
+	pcall(vim.keymap.del, "i", "<CR>")
 end
 
 --- Add (or refresh) syntax highlighting for interview timestamp lines in a buffer.
@@ -141,14 +184,22 @@ M.clear_match_cache = function(buf)
 	end
 end
 
+-- The libuv timer handle. A module-local, NOT `_parley._state` (#214 N2):
+-- `_state` is serialised and `refresh_state` deepcopies it, and a userdata handle
+-- cannot be deepcopied — so while interview mode was on, EVERY refresh_state
+-- caller raised "Cannot deepcopy object of type userdata". That includes
+-- prep_chat via BufEnter, so opening any chat file during interview mode errored.
+-- Measured before and after. Runtime handles do not belong in persisted state.
+local _timer = nil
+
 --- Start a repeating 15-second timer that refreshes lualine while interview mode is active.
 M.start_timer = function()
 	-- Stop any existing timer first
 	M.stop_timer()
 
 	-- Create a timer that updates the statusline every 15 seconds
-	_parley._state.interview_timer = vim.loop.new_timer()
-	_parley._state.interview_timer:start(
+	_timer = vim.loop.new_timer()
+	_timer:start(
 		15000,
 		15000,
 		vim.schedule_wrap(function()
@@ -169,9 +220,9 @@ end
 
 --- Stop the repeating statusline-refresh timer.
 M.stop_timer = function()
-	if _parley._state.interview_timer then
-		stop_and_close_timer(_parley._state.interview_timer)
-		_parley._state.interview_timer = nil
+	if _timer then
+		stop_and_close_timer(_timer)
+		_timer = nil
 		_logger.debug("Interview timer stopped")
 	end
 end

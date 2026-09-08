@@ -33,8 +33,9 @@ M.submit_review = function(buf, level)
     get_review().run_via_invoke(buf, { level = level or "edit" })
 end
 
--- Keybindings (delegated to review skill)
-M.setup_keymaps = function(buf) get_review().setup_keymaps(buf) end
+-- Buffer-local review actions as registry callbacks (delegated to review skill).
+-- The registry installs them; see #214 C1.
+M.registry_callbacks = function(buf) return get_review().registry_callbacks(buf) end
 
 -- Lazy property for _parse_marker_sections (used by highlighter.lua)
 setmetatable(M, {

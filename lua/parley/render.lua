@@ -16,6 +16,7 @@ M.template_replace = function(template, key, value)
 	end
 
 	value = value:gsub("%%", "%%%%")
+	-- gsub-safe: `value` is %-escaped on the line above (#214 BR-34)
 	template = template:gsub(key, value)
 	template = template:gsub("%%%%", "%%")
 	return template

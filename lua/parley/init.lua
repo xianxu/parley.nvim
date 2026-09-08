@@ -13,7 +13,9 @@ local M = {
 	_state = {
 		interview_mode = false, -- interview mode state
 		interview_start_time = nil, -- interview start timestamp
-		interview_timer = nil, -- timer handle for statusline updates
+		-- (interview_timer lives in parley/interview.lua as a module-local: a
+		-- libuv handle cannot be deepcopied, and refresh_state deepcopies
+		-- _state — see #214 N2)
 	}, -- table of state variables
 	agents = {}, -- table of agents
 	system_prompts = {}, -- table of system prompts
@@ -537,6 +539,27 @@ M.setup = function(opts)
 	-- reset M.config
 	M.config = vim.deepcopy(config)
 
+	-- #214: record which shortcut knobs the USER set explicitly, so
+	-- `default_keymaps = false` can suppress parley's DEFAULT claims without
+	-- suppressing the keys you chose yourself. Without this the switch is a
+	-- trap — you turn it on to take over the keyspace, and then no
+	-- configuration can bind anything ever again. Lives on the config table
+	-- (not on M) so `resolve_keys` stays a pure function of its argument.
+	M.config._explicit_shortcuts = {}
+	for k, v in pairs(opts) do
+		if type(v) == "table" then
+			if v.shortcut ~= nil then -- shortcut-read-ok: detecting user intent, not deriving a key
+				M.config._explicit_shortcuts[k] = true
+			end
+			-- nested mapping tables, e.g. chat_finder_mappings.delete
+			for nk, nv in pairs(v) do
+				if type(nv) == "table" and nv.shortcut ~= nil then -- shortcut-read-ok: as above
+					M.config._explicit_shortcuts[k .. "." .. nk] = true
+				end
+			end
+		end
+	end
+
 	-- Register builtin tool-use tools (M1 of #81). Runs before any
 	-- agent validation so agents can reference tools by name. The
 	-- registry module handles reset-idempotence internally.
@@ -610,6 +633,87 @@ M.setup = function(opts)
 	-- now merge the rest of opts into M.config, this would be fully override.
 	for k, v in pairs(opts) do
 		M.config[k] = v
+	end
+
+	-- #214 BR-49: normalise shortcut shapes ONCE, here, where config enters the
+	-- system — not on every resolution. `resolve_keys` used to warn when it met a
+	-- number/boolean `shortcut`, which meant one typo produced a log write and a
+	-- vim.notify popup on every <C-g>? press and every chat BufEnter, for the
+	-- session; and it put file IO and a UI notification inside what the issue's
+	-- Core-concepts table calls a PURE entity. Report once, drop the bad value so
+	-- the binding falls back to its default, and leave the resolver total over
+	-- already-typed input.
+	do
+		-- Every shape `resolve_keys` would otherwise tolerate by coercion, not
+		-- just the top-level type (#214 N3). The element case is the one that
+		-- matters most: `shortcut = { 5 }` used to resolve to nil — i.e. exactly
+		-- what a deliberate `shortcut = ""` means — so a typo and a decision
+		-- produced the same outcome, which is the defect this check was created
+		-- to remove. Returns the normalised value plus a reason, or nothing when
+		-- the value is already well-formed.
+		local function normalise_shortcut(v)
+			if type(v) == "string" then return nil end
+			if type(v) ~= "table" then
+				return "strip", "expected a string or a list, got " .. type(v)
+			end
+			local kept, dropped = {}, {}
+			for _, el in ipairs(v) do
+				if type(el) == "string" then
+					kept[#kept + 1] = el
+				else
+					dropped[#dropped + 1] = type(el)
+				end
+			end
+			if #dropped == 0 then return nil end
+			if #kept == 0 then
+				return "strip", "every list element was a non-string ("
+					.. table.concat(dropped, ", ") .. ")"
+			end
+			return kept, "dropped non-string list element(s): " .. table.concat(dropped, ", ")
+		end
+
+		local offenders = {}
+		local function check(key, tbl)
+			if type(tbl) ~= "table" then return end
+			if tbl.shortcut == nil then return end -- shortcut-read-ok: validating the shape, not deriving a key
+			local fixed, why = normalise_shortcut(tbl.shortcut) -- shortcut-read-ok: as above
+			if why then
+				offenders[#offenders + 1] = key .. " — " .. why
+				tbl.shortcut = (fixed ~= "strip") and fixed or nil -- shortcut-read-ok: normalising, not deriving
+			end
+		end
+		local reg_entries = require("parley.keybinding_registry").entries
+		for k, v in pairs(M.config) do
+			if type(v) == "table" then
+				check(k, v)
+				for nk, nv in pairs(v) do
+					if type(nv) == "table" then check(k .. "." .. nk, nv) end
+				end
+			end
+		end
+		-- A dotted config_key whose value is not a table (`chat_finder_mappings =
+		-- 5`, or `.delete = 5`) never reaches `check` above, and resolve_keys just
+		-- falls back with no word said. Walk the registry's own key list so the
+		-- report covers every knob rather than every table that happens to exist.
+		for _, e in ipairs(reg_entries) do
+			if e.config_key:find(".", 1, true) then
+				local root, leaf = e.config_key:match("^([^.]+)%.(.+)$")
+				local parent = M.config[root]
+				if parent ~= nil and type(parent) ~= "table" then
+					offenders[#offenders + 1] = root .. " — expected a table, got " .. type(parent)
+					M.config[root] = nil
+				elseif type(parent) == "table" and parent[leaf] ~= nil
+					and type(parent[leaf]) ~= "table" then
+					offenders[#offenders + 1] = e.config_key
+						.. " — expected a table, got " .. type(parent[leaf])
+					parent[leaf] = nil
+				end
+			end
+		end
+		if #offenders > 0 then
+			M.logger.warning("parley: ignoring malformed shortcut(s) — expected a string "
+				.. "or a list of strings: " .. table.concat(offenders, ", "))
+		end
 	end
 
 	-- #116 M2: seed issues_dir from the cue `discovery.home` (ariadne's issue.cue,
@@ -1069,7 +1173,25 @@ M.setup = function(opts)
 		interview.toggle()
 	end
 
-	-- Toggle server-side web_search tool per chat
+	-- Fold the 🔧:/📎: tool blocks in the current chat. Deliberately UNBOUND by
+	-- default (#214): a tool call's result is low-value reading for the user, so
+	-- folding it does not earn a key out of the shared <C-g> surface. It is a
+	-- command so it is still reachable without editing config — set
+	-- `chat_shortcut_toggle_tool_folds` to bind it.
+	M.cmd.ToggleToolFolds = function()
+		-- Scoped: foldenable is window-local, so an unscoped toggle would flip
+		-- folds in whatever window happened to be current, including a source
+		-- file that has nothing to do with parley (#214 BR-17).
+		local buf = vim.api.nvim_get_current_buf()
+		if not M._parley_bufs[buf] then
+			M.logger.warning("Tool folds apply to parley chat buffers only")
+			return
+		end
+		vim.wo.foldenable = not vim.wo.foldenable
+		M.logger.info("Tool folds " .. (vim.wo.foldenable and "enabled" or "disabled"))
+	end
+
+	-- Toggle the server-side web_search tool for this chat.
 	M.cmd.ToggleWebSearch = function()
 		local agent = M._state.agent
 		local conf = M.agents[agent]
@@ -1478,11 +1600,22 @@ end
 
 M._detect_buffer_context = detect_buffer_context
 
+-- The key to advertise for `id` in chat-header prose. Resolves through the
+-- registry, so a rebound, aliased or disabled binding is reported accurately
+-- rather than from a second copy of the resolution rules; an unbound key
+-- renders as the command, which the templates already offer as the alternative.
+-- Module-scope because both call sites need it — #214 replaced a `primary`
+-- helper that was duplicated at those same two sites, and copying the body
+-- again would have preserved the duplication it was meant to retire.
+local function key_hint(id, cmd)
+	return kb_registry.key_for(id, M.config) or (":" .. M.config.cmd_prefix .. cmd)
+end
+
 local function keybinding_help_lines(context)
 	local cfg = M.config or {}
 	local current_buf = vim.api.nvim_get_current_buf()
 	context = context or detect_buffer_context(current_buf)
-	return kb_registry.help_lines(context, cfg, current_buf)
+	return kb_registry.help_lines(context, cfg)
 end
 
 M._keybinding_help_lines = function(context)
@@ -2037,6 +2170,341 @@ local function drill_in_callbacks(buf)
 	}
 end
 
+-- Return the branch prefix string from config.
+local function get_branch_prefix()
+	return M.config.chat_branch_prefix or "🌿:"
+end
+
+-- Format a 🌿: branch reference line.
+local function format_branch_ref(rel_path, topic)
+	-- Delegates: branch_ref.format_ref_line is the one definition (#214 BR-5).
+	return require("parley.branch_ref").format_ref_line(get_branch_prefix(), rel_path, topic)
+end
+
+
+-- ONE branch-at-this-point implementation for chat and markdown buffers (#214).
+--
+-- There were four copies. They had drifted where it mattered: both VISUAL paths
+-- called create_child_chat, neither n/i path did — so the no-selection case
+-- wrote a reference to a file that did not exist. That gap is what made the two
+-- invocations feel like different actions rather than one action with a
+-- selection or without.
+--
+-- `abs_link` is the only real difference between the buffer types: a chat file
+-- links its sibling by basename, a markdown file elsewhere needs the full path.
+--
+-- On the no-selection path the topic does not exist yet, so the child is created
+-- with an empty topic and OPENED — the user types the question in the child
+-- rather than on the parent's ref line. The child's filename gains its slug on
+-- first write (the ParleySlug BufWritePost autocmd, which correctly skips an
+-- empty/`?` topic), and the parent's link keeps resolving because
+-- resolve_chat_path falls back to globbing the timestamp for any slug variant
+-- via resolve_chat_path's glob fallback. Verified, not assumed.
+--- @param buf number
+--- @param abs_link boolean  inline links use an absolute path (markdown)
+--- @param owns_file boolean parley owns this file and may write it (chat)
+local function branch_inserters(buf, abs_link, owns_file)
+	local br = require("parley.branch_ref")
+
+	local function new_target()
+		local file = M.config.chat_dir .. "/" .. M.logger.now() .. ".md"
+		return file, (abs_link and vim.fn.fnamemodify(file, ":p") or vim.fn.fnamemodify(file, ":t"))
+	end
+
+	-- Every mode that creates a child MUST commit the reference in the same
+	-- action: the child is a durable artifact on disk, discoverable ONLY through
+	-- the in-buffer link, so a :q! or crash between the two orphans it (#214
+	-- BR-19 / I3-3). The enumeration is the dispatch table below — n, i, v — not
+	-- "the path I happened to be looking at".
+	--
+	-- Scoped to parley-owned CHAT buffers. `:write` commits the whole buffer, so
+	-- writing an arbitrary markdown document would persist the user's unrelated
+	-- pending edits, which they never asked for (I3-2). On a foreign buffer we
+	-- keep the pre-#214 behaviour instead: leave the line unsaved and stay put,
+	-- so nothing is written and nothing is navigated away from.
+	--- Create the child ONLY where the reference can be made durable. Both modes
+	--- call this; neither calls create_child_chat directly, because "apply the
+	--- rule to the path I am looking at" is what left insert_inline creating
+	--- orphans on markdown two rounds running (#214 BR-28).
+	--- @return boolean created
+	local function create_child_if_owned(file, topic, question)
+		if not owns_file then return false end
+		M.create_child_chat(file, topic, buf, question)
+		return true
+	end
+
+	--- @return boolean committed  false when the caller must not navigate away
+	local function commit_reference()
+		if not owns_file then
+			return false
+		end
+		local ok = pcall(function()
+			vim.api.nvim_buf_call(buf, function() vim.cmd("write") end)
+		end)
+		if not ok then
+			M.logger.warning("Branch: could not save the parent; staying put so "
+				.. "the reference is not lost")
+		end
+		return ok
+	end
+
+	-- Two buffer types, two honest guarantees — stated once here rather than
+	-- discovered per finding (#214 BR-27/BR-28).
+	--
+	-- A CHAT buffer is parley's own file, so the full flow is coherent: create
+	-- the child, commit the parent so the only reference to it is durable, then
+	-- focus the child because this is a submission redirected into a new branch.
+	--
+	-- A FOREIGN markdown buffer is the user's document. parley must not `:write`
+	-- it (that persists their unrelated pending edits — I3-2), and without a
+	-- write it cannot make the reference durable — so creating a child there
+	-- would leave an orphan on disk reachable only through an unsaved line
+	-- (BR-28). It therefore does what it did before #214: insert the reference,
+	-- put the cursor on it, and let the user type the topic. The child is created
+	-- when the link is followed.
+	--- #214 M3: `<M-S-CR>` in normal/insert mode on a CHAT buffer submits what
+	--- `<M-CR>` would submit, into a new child, leaving the reference where
+	--- `<M-CR>`'s output would have appeared.
+	---
+	--- Returns false when there is nothing to submit — an empty transcript, or a
+	--- cursor outside every exchange — and the caller then does what `<M-i>` did
+	--- before M3: insert a bare reference and open the child. That fallback is
+	--- deliberate. "Make me a side chat from here" is a real affordance M1
+	--- shipped, and generalising the chord must not delete it; the chord should
+	--- never be a no-op.
+	local function insert_planned()
+		local drill_in = require("parley.drill_in")
+		local buffer_edit = require("parley.buffer_edit")
+		local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+		local text = table.concat(lines, "\n")
+		local header_end = M.chat_parser.find_header_end(lines)
+		local parsed = M.parse_chat(lines, header_end)
+		local cursor_line = vim.api.nvim_win_get_cursor(0)[1]
+
+		-- One parse, not two. This used to run `drill_in.parse` over the whole
+		-- buffer to build a marker list carrying a `line` field the planner never
+		-- read, and `gather_edit_plan` parsed it all again three lines later
+		-- (#214 M3 review, Minor). The gather is the authority on whether there
+		-- is anything to rearrange, so ask it first.
+		local blocks, _, marker_edits = drill_in.gather_edit_plan(
+			text, drill_in.chat_gather_opts(M.config))
+		local plan, reason = require("parley.branch_submit").plan_submission(
+			parsed, cursor_line, #blocks > 0)
+		if not plan then
+			M.logger.debug("Branch: nothing to submit (" .. tostring(reason)
+				.. "); falling back to a plain reference")
+			return false
+		end
+
+		local question = require("parley.branch_submit").seed_question(
+			"quotes", table.concat(drill_in.format_blocks(blocks), "\n"))
+		local label = require("parley.branch_ref").topic_for_selection(
+			(blocks[1].sections[#blocks[1].sections] or {}).text or "")
+
+		local new_chat_file = (new_target())
+		local rel_path = vim.fn.fnamemodify(new_chat_file, ":t")
+
+		-- Create the child FIRST, before touching the parent (#214 BR-63). The
+		-- write was pcall-guarded and this was not, so an unwritable chat_dir
+		-- raised out of the keymap callback with the markers already stripped and
+		-- the reference already inserted — a parent pointing at a file that does
+		-- not exist, and the user's annotations gone. Ordering removes the
+		-- window rather than trying to undo inside it: nothing is mutated until
+		-- the child is on disk.
+		--
+		-- The reverse hazard (child on disk, reference not yet saved) is BR-19's
+		-- orphan and is handled below by not navigating away on a failed write.
+		local created_ok = pcall(create_child_if_owned, new_chat_file, "?", question)
+		if not created_ok then
+			M.logger.warning("Branch: could not create " .. rel_path
+				.. " — nothing was changed in this chat")
+			return true
+		end
+
+		-- #214 BR-58: anchor the insertion point BEFORE stripping. `ref_after` is
+		-- a pre-strip line number and `apply_text_edits` changes the line count
+		-- whenever a removed marker owned whole lines — which the ordinary
+		-- standalone `🤖[…]` form does. An extmark travels with the edit;
+		-- chat_respond solves the same problem the same way (`make_handle` around
+		-- its own gather). The earlier code kept the raw number, so the reference
+		-- drifted by however many lines the strip removed, in the common case
+		-- landing past the exchange's `📝:` summary.
+		-- Anchor ON the cursor line, not on the line after it. `ref_after` is
+		-- 1-indexed and `make_handle` takes a 0-indexed row, so passing it
+		-- directly put the mark on the following line — usually the blank gap
+		-- that `drill_in`'s edit swallows, and with left gravity the mark then
+		-- collapsed and the reference landed ABOVE the cursor. Visible only with
+		-- a marker BELOW the cursor; every fixture in the first fix put one
+		-- above, sampling one side of the axis (#214 BR-58, round 2).
+		local anchor = buffer_edit.make_handle(buf, plan.ref_after - 1)
+		buffer_edit.apply_text_edits(buf, 0, text, marker_edits)
+		local insert_at = buffer_edit.handle_line(anchor) + 1
+		buffer_edit.handle_invalidate(anchor)
+
+		-- AT THE CURSOR (operator, 2026-09-07), as its own block — one blank line
+		-- on each side, added only where there is not one already. `ref_block`
+		-- owns that rule for both insert paths (#214 BR-68); this used to emit
+		-- `{ "", ref }`, a blank before only, so the reference abutted whatever
+		-- followed it.
+		local around = vim.api.nvim_buf_get_lines(buf, math.max(insert_at - 1, 0),
+			insert_at + 1, false)
+		vim.api.nvim_buf_set_lines(buf, insert_at, insert_at, false,
+			br.ref_block(br.format_ref_line(get_branch_prefix(), rel_path, label or ""),
+				insert_at > 0 and around[1] or nil,
+				around[insert_at > 0 and 2 or 1]))
+		M.highlight_chat_branch_refs(buf)
+		if not commit_reference() then
+			return true
+		end
+		M.logger.info("Branched submission into: " .. rel_path)
+		vim.schedule(function()
+			vim.cmd("edit " .. vim.fn.fnameescape(new_chat_file))
+			vim.cmd("normal! G")
+			-- Insert mode at the end, the same landing the placeholder path
+			-- gives. One key must not have two landing modes (#214 M3 review);
+			-- and a gathered child usually wants a line of framing before it is
+			-- submitted, so insert is the useful default in both cases.
+			vim.cmd("startinsert!")
+		end)
+		return true
+	end
+
+	local function insert_plain()
+		-- A chat buffer takes the planned path: parley owns the file, so it can
+		-- make the reference durable, and the transcript has exchanges to plan
+		-- against. A foreign markdown document has neither (#214 M1's rule), so
+		-- it keeps the pre-M3 behaviour below.
+		if owns_file and insert_planned() then
+			return
+		end
+
+		local cursor_pos = vim.api.nvim_win_get_cursor(0)
+		-- The standalone ref line always uses the basename, in both buffer types:
+		-- format_ref_line writes `🌿: <name>: `, which resolve_chat_path looks up
+		-- across the chat roots. abs_link governs the INLINE link only.
+		local new_chat_file = (new_target())
+		local rel_path = vim.fn.fnamemodify(new_chat_file, ":t")
+		-- Same block rule as the planned path (#214 BR-68): this inserted a bare
+		-- line with no blank on either side, so a placeholder dropped into prose
+		-- ran straight into it.
+		local near = vim.api.nvim_buf_get_lines(buf, math.max(cursor_pos[1] - 1, 0),
+			cursor_pos[1] + 1, false)
+		local block = br.ref_block(br.format_ref_line(get_branch_prefix(), rel_path, ""),
+			cursor_pos[1] > 0 and near[1] or nil,
+			near[cursor_pos[1] > 0 and 2 or 1])
+		vim.api.nvim_buf_set_lines(buf, cursor_pos[1], cursor_pos[1], false, block)
+		M.highlight_chat_branch_refs(buf)
+
+		-- Which of the inserted lines IS the reference — the block may open with
+		-- a margin blank, and the cursor has to land on the reference itself so
+		-- the topic can be typed (#214 BR-68 follow-on: adding the margin moved
+		-- the cursor onto the blank).
+		local ref_row = cursor_pos[1]
+		for i, line in ipairs(block) do
+			if line:match("%S") then ref_row = cursor_pos[1] + i break end
+		end
+
+		if not owns_file then
+			-- Pre-#214 behaviour, restored deliberately: no child, no write, and
+			-- the cursor lands on the new line in insert mode so the topic can be
+			-- typed. An early `return` here once skipped these two lines and made
+			-- the key look inert (BR-27).
+			vim.api.nvim_win_set_cursor(0, { ref_row, 0 })
+			vim.schedule(function() vim.cmd("startinsert!") end)
+			M.logger.info("Inserted branch reference: " .. rel_path)
+			return
+		end
+
+		-- The topic is "?", NOT "": `?` is the sentinel the rest of the lifecycle
+		-- keys off. Auto-topic generation fires only on `headers.topic == "?"`,
+		-- and the slug rename waits for a real topic rather than an empty one.
+		-- Passing "" produced a child that was never titled and never slugged — a
+		-- permanently anonymous <timestamp>.md whose parent ref line stayed
+		-- `🌿: ….md: ` forever (BR-1). Verified by reading the created header.
+		create_child_if_owned(new_chat_file, "?", nil)
+		M.highlight_chat_branch_refs(buf)
+		if not commit_reference() then
+			-- Could not save: stay put rather than navigate away from the only
+			-- reference to a file that now exists on disk.
+			return
+		end
+		M.logger.info("Created branch to new chat: " .. rel_path)
+		vim.schedule(function()
+			vim.cmd("edit " .. vim.fn.fnameescape(new_chat_file))
+			vim.cmd("normal! G")
+			vim.cmd("startinsert!")
+		end)
+	end
+
+	local function insert_inline()
+		vim.cmd("normal! " .. vim.api.nvim_replace_termcodes("<Esc>", true, false, true))
+		local sp, ep = vim.fn.getpos("'<"), vim.fn.getpos("'>")
+		local start_line, start_col, end_line, end_col = sp[2], sp[3], ep[2], ep[3]
+		if start_line ~= end_line then
+			M.logger.warning("Inline branch links only support single-line selections")
+			return
+		end
+		local line = vim.api.nvim_buf_get_lines(buf, start_line - 1, start_line, false)[1]
+		local new_chat_file, link = new_target()
+		local spliced, selected = br.splice_inline_link(
+			line, start_col, end_col, get_branch_prefix(), link)
+		-- Guard the DERIVED topic, not the raw selection (#214 BR-86). Since
+		-- `topic_for_selection` collapses and trims, a whitespace-only selection
+		-- derives "" — and an empty topic is BR-1's anonymity bug: auto-titling
+		-- fires only on "?" and the slug rename bails on "", so the child stays a
+		-- nameless <timestamp>.md forever. `selected == ""` cannot see that,
+		-- because "   " is not "".
+		local topic = br.topic_for_selection(selected)
+		if topic == "" then
+			M.logger.warning("Branch: nothing but whitespace selected")
+			return
+		end
+		-- #214 M3: the topic names the SUBJECT (it becomes the filename slug) and
+		-- the child is seeded with the instruction, not with `<topic>?`. One
+		-- place owns that wording — three call sites would each invent their own.
+		vim.api.nvim_buf_set_lines(buf, start_line - 1, start_line, false, { spliced })
+		create_child_if_owned(new_chat_file, topic,
+			require("parley.branch_submit").seed_question("define", selected))
+		M.highlight_chat_branch_refs(buf)
+		-- Same durability rule as insert_plain: the child is on disk and only the
+		-- in-buffer link points at it. Focus stays in the parent here, so Vim's
+		-- own unsaved-buffer guard also applies — but :q! would still orphan it.
+		commit_reference()
+		M.logger.debug("Created inline branch to new chat: " .. link .. " (" .. topic .. ")")
+	end
+
+	--- ARCH-ORDER, applied to the WHOLE chord (#214 BR-69). A streaming response
+	--- owns this buffer's exchange model and holds a chat lease on its 🤖: line;
+	--- any of these three paths edits the transcript under it. The guard sat
+	--- inside `insert_planned`, which only n/i reach, so visual mode created a
+	--- child and wrote the parent mid-stream — while the README and the atlas
+	--- said the chord declines. This file already states the governing rule
+	--- ("The enumeration is the dispatch table below — n, i, v"); wrapping the
+	--- table is what applies it, rather than guarding the path in front of me.
+	local function refuse_while_pending(fn)
+		return function()
+			if require("parley.chat_pending").identity(buf) then
+				M.logger.warning("Branch: this chat has a response in flight — "
+					.. "wait for it, or stop it with the stop shortcut, then branch")
+				return
+			end
+			fn()
+		end
+	end
+
+	return {
+		n = refuse_while_pending(insert_plain),
+		i = refuse_while_pending(function() vim.cmd("stopinsert"); insert_plain() end),
+		v = refuse_while_pending(insert_inline),
+	}
+end
+
+-- Test seam (#214 BR-18): the inserters are buffer-local closures wired straight
+-- into the keymap dispatch, so a test could reach create_child_chat but not the
+-- CALL SITE that decides what topic it is handed — which is precisely where BR-1
+-- lived.
+M._branch_inserters = branch_inserters
+
 M.prep_chat = function(buf, file_name)
 	if M.not_chat(buf, file_name) then
 		return
@@ -2100,59 +2568,42 @@ M.prep_chat = function(buf, file_name)
 		}
 	end
 
-	-- Branch ref helpers (chat-specific: uses relative path)
-	local function chat_insert_branch_ref()
-		local cursor_pos = vim.api.nvim_win_get_cursor(0)
-		local new_chat_file = M.config.chat_dir .. "/" .. M.logger.now() .. ".md"
-		local rel_path = vim.fn.fnamemodify(new_chat_file, ":t")
-		local branch_prefix = M.config.chat_branch_prefix or "🌿:"
-		vim.api.nvim_buf_set_lines(buf, cursor_pos[1], cursor_pos[1], false, {
-			branch_prefix .. " " .. rel_path .. ": ",
-		})
-		vim.api.nvim_win_set_cursor(0, { cursor_pos[1] + 1, 0 })
-		vim.schedule(function() vim.cmd("startinsert!") end)
-		M.logger.info("Created branch reference to new chat: " .. rel_path)
-		M.highlight_chat_branch_refs(buf)
-	end
-
-	local function chat_insert_inline_branch_ref()
-		local start_pos = vim.fn.getpos("'<")
-		local end_pos = vim.fn.getpos("'>")
-		local start_line, start_col = start_pos[2], start_pos[3]
-		local end_line, end_col = end_pos[2], end_pos[3]
-		if start_line ~= end_line then
-			M.logger.warning("Inline branch links only support single-line selections")
-			return
-		end
-		local line = vim.api.nvim_buf_get_lines(buf, start_line - 1, start_line, false)[1]
-		local selected_text = line:sub(start_col, end_col)
-		if selected_text == "" then
-			M.logger.warning("No text selected")
-			return
-		end
-		local new_chat_file = M.config.chat_dir .. "/" .. M.logger.now() .. ".md"
-		local rel_path = vim.fn.fnamemodify(new_chat_file, ":t")
-		local branch_prefix = M.config.chat_branch_prefix or "🌿:"
-		local topic = 'what is "' .. selected_text .. '"'
-		local before = line:sub(1, start_col - 1)
-		local after = line:sub(end_col + 1)
-		local inline_link = "[" .. branch_prefix .. selected_text .. "](" .. rel_path .. ")"
-		vim.api.nvim_buf_set_lines(buf, start_line - 1, start_line, false, { before .. inline_link .. after })
-		M.create_child_chat(new_chat_file, topic, buf, topic .. "?")
-		M.logger.debug("Created inline branch to new chat: " .. rel_path .. " (" .. topic .. ")")
-		M.highlight_chat_branch_refs(buf)
-	end
+	-- Branch inserters: shared with markdown buffers (#214). Chat links its
+	-- sibling by basename.
+	local chat_branch = branch_inserters(buf, false, true)
 
 	-- Drill-in handlers (visual wrap + resolve) live at module scope and are
 	-- wired identically in markdown buffers — see `drill_in_callbacks` near
 	-- the top of this file.
 	local drill_in_cbs = drill_in_callbacks(buf)
 
+	-- Buffer-local wrappers around NATIVE keys. Each falls through to the
+	-- builtin unless a parley-specific condition holds, so it claims no
+	-- keyspace and has nothing to rebind — which is why it is not a registry
+	-- entry. `native_map` enforces that exemption instead of trusting it: the
+	-- key must carry a rationale in `keybinding_registry.native_overrides`, and
+	-- the whole set honours the `default_keymaps` master switch (#214).
+	local function native_map(key, fn, desc)
+		if not kb_registry.native_overrides[key] then
+			-- A developer mistake, not a user one, and prep_chat has already set
+			-- _prepared_bufs — raising here would leave the buffer permanently
+			-- half-prepared with no retry. Log and skip; the binding contract is
+			-- enforced at test time instead (tests/arch/single_source_sweeps_spec).
+			M.logger.warning("parley: un-registered native override '" .. key
+				.. "' — add it to keybinding_registry.native_overrides with its "
+				.. "rationale, or give it a registry entry so it can be rebound")
+			return
+		end
+		if M.config.default_keymaps == false then
+			return
+		end
+		vim.keymap.set("n", key, fn, { buffer = buf, silent = true, desc = desc })
+	end
+
 	-- #141: in chat buffers, `*`/`#` (and `g*`/`g#`) over a `[...]` anchor search
 	-- the whole bracketed string, so a cursor inside a `[quoted text]` jumps to
 	-- its twin (the decoration left at the source). Outside any bracket, fall
-	-- through to the builtin motion. Buffer-local; not a configurable shortcut,
-	-- so wired directly rather than through the keybinding registry.
+	-- through to the builtin motion.
 	local function bracket_jump(builtin, back)
 		local line = vim.api.nvim_get_current_line()
 		local b = require("parley.drill_in").bracket_at(line, vim.fn.col("."))
@@ -2177,9 +2628,9 @@ M.prep_chat = function(buf, file_name)
 		{ key = "g*", back = false },
 		{ key = "g#", back = true },
 	}) do
-		vim.keymap.set("n", m.key, function()
+		native_map(m.key, function()
 			bracket_jump(m.key, m.back)
-		end, { buffer = buf, silent = true, desc = "Parley: search whole [...] anchor (#141)" })
+		end, "Parley: search whole [...] anchor (#141)")
 	end
 
 	-- Standard history keys stay native unless this chat owns a pending response.
@@ -2205,12 +2656,8 @@ M.prep_chat = function(buf, file_name)
 			})
 		end
 	end
-	vim.keymap.set("n", "u", guarded_history("u"), {
-		buffer = buf, silent = true, desc = "Parley: guard chat history undo",
-	})
-	vim.keymap.set("n", "<C-r>", guarded_history("redo"), {
-		buffer = buf, silent = true, desc = "Parley: guard chat history redo",
-	})
+	native_map("u", guarded_history("u"), "Parley: guard chat history undo")
+	native_map("<C-r>", guarded_history("redo"), "Parley: guard chat history redo")
 
 	-- #161: one respond-callback set, shared by chat_respond and chat_define.
 	local respond_cb = make_respond_cb("ChatRespond")
@@ -2230,17 +2677,10 @@ M.prep_chat = function(buf, file_name)
 			resolve_ref_project = M.cmd.ResolveRefProject,
 			copy_fence = M.cmd.CopyCodeFence,
 			outline = M.cmd.Outline,
-			branch_ref = {
-				n = chat_insert_branch_ref,
-				i = function()
-					vim.cmd("stopinsert")
-					chat_insert_branch_ref()
-				end,
-				v = function()
-					vim.cmd("normal! " .. vim.api.nvim_replace_termcodes("<Esc>", true, false, true))
-					chat_insert_inline_branch_ref()
-				end,
-			},
+			-- All three modes come from branch_inserters; the dispatch used to
+			-- re-implement i and v, which left `.i` dead and made the visual path
+			-- <Esc> twice (#214 BR-4).
+			branch_ref = chat_branch,
 			-- chat scope
 			chat_respond = respond_cb,
 			-- #161: <M-CR> — n/i reuse the respond closures; v/x <Esc>-commit the
@@ -2273,9 +2713,7 @@ M.prep_chat = function(buf, file_name)
 				end,
 			},
 			chat_exchange_paste = M.cmd.ExchangePaste,
-			chat_toggle_tool_folds = function()
-				vim.wo.foldenable = not vim.wo.foldenable
-			end,
+			chat_toggle_tool_folds = M.cmd.ToggleToolFolds,
 			chat_drill_in = drill_in_cbs.chat_drill_in,
 			chat_accept_drill_in = drill_in_cbs.chat_accept_drill_in,
 			chat_reject_drill_in = drill_in_cbs.chat_reject_drill_in,
@@ -2408,63 +2846,19 @@ M.highlight_question_block = function(buf)
 	highlighter.highlight_question_block(buf)
 end
 
--- Return the branch prefix string from config.
-local function get_branch_prefix()
-	return M.config.chat_branch_prefix or "🌿:"
-end
-
--- Format a 🌿: branch reference line.
-local function format_branch_ref(rel_path, topic)
-	return get_branch_prefix() .. " " .. rel_path .. ": " .. (topic or "")
-end
-
 M.setup_markdown_keymaps = function(buf)
-	-- Document review keybindings (via skill system, not registry-managed)
+	-- Document review actions. The skill supplies the callbacks; the REGISTRY
+	-- installs them (#214 C1) — it used to install them itself from raw config,
+	-- which put <C-g>ve/<M-o>/<M-CR> outside the master switch and made a
+	-- `shortcut = ""` disable raise on every markdown BufEnter. nil = journal
+	-- sidecar, which gets no review keys.
 	local review_skill = require("parley.skills.review")
-	review_skill.setup_keymaps(buf)
+	local review_cbs = review_skill.registry_callbacks(buf) or {}
 
-	-- Branch ref helpers (markdown-specific: uses format_branch_ref and absolute paths)
-	local function md_insert_branch_ref()
-		local cursor_pos = vim.api.nvim_win_get_cursor(0)
-		local new_chat_file = M.config.chat_dir .. "/" .. M.logger.now() .. ".md"
-		local rel_path = vim.fn.fnamemodify(new_chat_file, ":t")
-		vim.api.nvim_buf_set_lines(buf, cursor_pos[1], cursor_pos[1], false, {
-			format_branch_ref(rel_path, ""),
-		})
-		vim.api.nvim_win_set_cursor(0, { cursor_pos[1] + 1, 0 })
-		vim.schedule(function() vim.cmd("startinsert!") end)
-		M.logger.info("Created branch reference to new chat: " .. rel_path)
-		M.highlight_chat_branch_refs(buf)
-	end
-
-	local function md_insert_inline_branch_ref()
-		vim.cmd("normal! " .. vim.api.nvim_replace_termcodes("<Esc>", true, false, true))
-		local start_pos = vim.fn.getpos("'<")
-		local end_pos = vim.fn.getpos("'>")
-		local start_line, start_col = start_pos[2], start_pos[3]
-		local end_line, end_col = end_pos[2], end_pos[3]
-		if start_line ~= end_line then
-			M.logger.warning("Inline branch links only support single-line selections")
-			return
-		end
-		local line = vim.api.nvim_buf_get_lines(buf, start_line - 1, start_line, false)[1]
-		local selected_text = line:sub(start_col, end_col)
-		if selected_text == "" then
-			M.logger.warning("No text selected")
-			return
-		end
-		local new_chat_file = M.config.chat_dir .. "/" .. M.logger.now() .. ".md"
-		local chat_path = vim.fn.fnamemodify(new_chat_file, ":p")
-		local branch_prefix = M.config.chat_branch_prefix or "🌿:"
-		local topic = 'what is "' .. selected_text .. '"'
-		local before = line:sub(1, start_col - 1)
-		local after = line:sub(end_col + 1)
-		local inline_link = "[" .. branch_prefix .. selected_text .. "](" .. chat_path .. ")"
-		vim.api.nvim_buf_set_lines(buf, start_line - 1, start_line, false, { before .. inline_link .. after })
-		M.create_child_chat(new_chat_file, topic, buf, topic .. "?")
-		M.logger.debug("Created inline branch to new chat: " .. chat_path .. " (" .. topic .. ")")
-		M.highlight_chat_branch_refs(buf)
-	end
+	-- Branch inserters: shared with chat buffers (#214). Markdown links INLINE
+	-- by absolute path, since the file may live anywhere; the standalone ref
+	-- line uses the basename in both buffer types.
+	local md_branch = branch_inserters(buf, true, false)
 
 	-- Drill-in handlers (visual wrap + resolve) — same in markdown and chat,
 	-- see `drill_in_callbacks` near the top of this file.
@@ -2482,14 +2876,11 @@ M.setup_markdown_keymaps = function(buf)
 			resolve_ref_project = M.cmd.ResolveRefProject,
 			copy_fence = M.cmd.CopyCodeFence,
 			outline = M.cmd.Outline,
-			branch_ref = {
-				n = md_insert_branch_ref,
-				i = function()
-					vim.cmd("stopinsert")
-					md_insert_branch_ref()
-				end,
-				v = md_insert_inline_branch_ref,
-			},
+			-- The whole dispatch table, as the chat path does (#214 BR-4). This
+			-- rebuilt n/i/v inline, which left `branch_inserters(...).i` dead at
+			-- zero call sites and re-derived a mapping the constructor already
+			-- returns — the same drift M1 collapsed four copies to remove.
+			branch_ref = md_branch,
 			chat_drill_in = drill_in_cbs.chat_drill_in,
 			chat_accept_drill_in = drill_in_cbs.chat_accept_drill_in,
 			chat_reject_drill_in = drill_in_cbs.chat_reject_drill_in,
@@ -2532,6 +2923,10 @@ M.setup_markdown_keymaps = function(buf)
 			end,
 			md_delete_tree = M.cmd.ChatDeleteTree,
 			md_export_html = function() exporter.pandoc_export_html() end,
+			-- review scope (#214 C1) — callbacks from the skill, install here
+			review_edit = review_cbs.review_edit,
+			review_menu = review_cbs.review_menu,
+			review_next = review_cbs.review_next,
 		},
 		M.helpers.set_keymap
 	)
@@ -2719,6 +3114,7 @@ M._read_repair_reference = function(referring_file, old_basename, new_basename)
 		if line:find(old_basename, 1, true) then
 			-- Escape % in replacement string (Lua gsub treats % as capture ref)
 			local safe_new = new_basename:gsub("%%", "%%%%")
+			-- gsub-safe: `safe_new` is %-escaped on the line above
 			lines[i] = line:gsub(vim.pesc(old_basename), safe_new)
 			changed = true
 		end
@@ -2888,8 +3284,13 @@ local function try_open_inline_branch_link(current_line, cursor_col, parent_buf)
 			if vim.fn.filereadable(expanded) == 1 then
 				M.open_buf(expanded)
 			elseif expanded:match("%d%d%d%d%-%d%d%-%d%d%.%d%d%-%d%d%-%d%d%.%d+%.md$") then
-				local topic = link.topic ~= "" and ('what is "' .. link.topic .. '"') or "New chat"
-				M.create_child_chat(expanded, topic, parent_buf, topic .. "?")
+				-- Same wording, same owner (#214 M3): this built `what is "X"`
+				-- inline, so the phrase lived in two places and the two branch
+				-- paths seeded their children differently.
+				local br_submit = require("parley.branch_submit")
+				local topic = link.topic ~= "" and link.topic or "?"
+				M.create_child_chat(expanded, topic, parent_buf,
+					link.topic ~= "" and br_submit.seed_question("define", link.topic) or nil)
 				M.open_buf(expanded)
 			else
 				M.logger.warning("Chat file not found: " .. expanded)
@@ -3035,7 +3436,7 @@ M.move_chat_tree = function(file_name, target_dir)
 						for old_abs, new_abs in pairs(path_map) do
 							if ref_abs == old_abs or resolve_chat_path(ref_path, current_root) == old_abs then
 								local new_rel = vim.fn.fnamemodify(new_abs, ":t")
-								lines[i] = branch_prefix .. " " .. new_rel .. ": " .. (topic or "")
+								lines[i] = require("parley.branch_ref").format_ref_line(branch_prefix, new_rel, topic)
 								changed = true
 								break
 							end
@@ -3153,16 +3554,15 @@ M.new_chat = function(system_prompt, agent, initial_question)
 		end
 	end
 
-	local primary = function(s) return type(s) == "table" and s[1] or s end
 	local template = M.render.template(M.config.chat_template or require("parley.defaults").chat_template, {
 		["{{filename}}"] = string.match(filename, "([^/]+)$"),
 		["{{optional_headers}}"] = model .. provider .. system_prompt,
 		["{{user_prefix}}"] = M.config.chat_user_prefix,
-		["{{respond_shortcut}}"] = primary(M.config.chat_shortcut_respond.shortcut),
+		["{{respond_shortcut}}"] = key_hint("chat_respond", "ChatRespond"),
 		["{{cmd_prefix}}"] = M.config.cmd_prefix,
-		["{{stop_shortcut}}"] = primary(M.config.chat_shortcut_stop.shortcut),
-		["{{delete_shortcut}}"] = primary(M.config.chat_shortcut_delete.shortcut),
-		["{{new_shortcut}}"] = primary(M.config.global_shortcut_new.shortcut),
+		["{{stop_shortcut}}"] = key_hint("chat_stop", "ChatStop"),
+		["{{delete_shortcut}}"] = key_hint("chat_delete", "ChatDelete"),
+		["{{new_shortcut}}"] = key_hint("chat_new", "ChatNew"),
 	})
 
 	-- escape underscores (for markdown)
@@ -3171,9 +3571,13 @@ M.new_chat = function(system_prompt, agent, initial_question)
 	-- If an initial question is provided, append it after the user prefix
 	-- (done after underscore escaping so file paths in @@references stay intact)
 	if initial_question then
+		-- Function replacement: `initial_question` is runtime text, and in LuaJIT
+		-- a `%` in a gsub REPLACEMENT does not raise — it silently corrupts.
+		-- "50% off" becomes "50 off" and "100%" writes a NUL byte into the file
+		-- (#214 BR-34, ARCH-SECURE).
 		template = template:gsub(
 			M.config.chat_user_prefix .. "%s*$",
-			M.config.chat_user_prefix .. " " .. initial_question
+			function() return M.config.chat_user_prefix .. " " .. initial_question end
 		)
 	end
 
@@ -3569,7 +3973,7 @@ M.cmd.ChatPrune = function()
 	-- Insert parent back-link as first transcript line
 	local parent_rel = vim.fn.fnamemodify(file_name, ":t")
 	local parent_topic = M.get_chat_topic(file_name) or ""
-	table.insert(child_lines, branch_prefix .. " " .. parent_rel .. ": " .. parent_topic)
+	table.insert(child_lines, require("parley.branch_ref").format_ref_line(branch_prefix, parent_rel, parent_topic))
 	table.insert(child_lines, "")
 
 	-- Append the pruned exchanges
@@ -3582,7 +3986,7 @@ M.cmd.ChatPrune = function()
 	vim.fn.writefile(child_lines, new_file)
 
 	-- Replace pruned lines in parent with a branch reference + fresh question starter
-	local branch_line = branch_prefix .. " " .. rel_child .. ": "
+	local branch_line = require("parley.branch_ref").format_ref_line(branch_prefix, rel_child, "")
 	local user_prefix = M.config.chat_user_prefix
 	vim.api.nvim_buf_set_lines(buf, prune_start - 1, prune_end, false, { "", branch_line, "", user_prefix, "", "" })
 
@@ -3640,7 +4044,7 @@ M.cmd.ChatPrune = function()
 				local parent_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
 				for i, line in ipairs(parent_lines) do
 					if line:match("^" .. vim.pesc(branch_prefix)) and line:find(rel_child, 1, true) then
-						local updated = branch_prefix .. " " .. rel_child .. ": " .. topic
+						local updated = require("parley.branch_ref").format_ref_line(branch_prefix, rel_child, topic)
 						vim.api.nvim_buf_set_lines(buf, i - 1, i, false, { updated })
 						vim.cmd("write")
 						break
@@ -3835,7 +4239,7 @@ local function open_branch_ref(current_line, buf)
 
 		local agent = M.get_agent()
 		local template = M.get_default_template(agent, chat_file)
-		template = template:gsub("{{topic}}", topic)
+		template = template:gsub("{{topic}}", function() return topic end)
 		local file_lines = vim.split(template, "\n")
 
 		-- Insert parent back-link only when source is a chat file
@@ -3978,7 +4382,7 @@ M.open_chat_reference = function(current_line, cursor_col, _in_insert_mode, full
 
 			-- Prepare template
 			local template = M.get_default_template(agent, expanded_path)
-			template = template:gsub("{{topic}}", topic)
+			template = template:gsub("{{topic}}", function() return topic end)
 
 			-- Make sure the file has UTF-8 encoding header
 			vim.fn.writefile(vim.split(template, "\n"), expanded_path)
@@ -4140,7 +4544,7 @@ M.cmd.OpenFileUnderCursor = function()
 
 				-- Prepare template
 				local template = M.get_default_template(agent, expanded_path)
-				template = template:gsub("{{topic}}", topic)
+				template = template:gsub("{{topic}}", function() return topic end)
 
 				-- Make sure the file has UTF-8 encoding header
 				vim.fn.writefile(vim.split(template, "\n"), expanded_path)
@@ -4485,11 +4889,10 @@ M.get_default_template = function(agent, file_path)
 
 	-- Generate template using the same pattern as M.new_chat
 	-- Get shortcuts, handling potentially missing values
-	local primary = function(s) return type(s) == "table" and s[1] or s end
-	local respond_shortcut = M.config.chat_shortcut_respond and primary(M.config.chat_shortcut_respond.shortcut) or "<C-g><C-g>"
-	local stop_shortcut = M.config.chat_shortcut_stop and primary(M.config.chat_shortcut_stop.shortcut) or "<C-g>x"
-	local delete_shortcut = M.config.chat_shortcut_delete and primary(M.config.chat_shortcut_delete.shortcut) or "<C-g>d"
-	local new_shortcut = M.config.global_shortcut_new and primary(M.config.global_shortcut_new.shortcut) or "<C-g>c"
+	local respond_shortcut = key_hint("chat_respond", "ChatRespond")
+	local stop_shortcut = key_hint("chat_stop", "ChatStop")
+	local delete_shortcut = key_hint("chat_delete", "ChatDelete")
+	local new_shortcut = key_hint("chat_new", "ChatNew")
 
 	local template = M.render.template(M.config.chat_template or require("parley.defaults").chat_template, {
 		["{{filename}}"] = basename,
@@ -4514,7 +4917,11 @@ M.create_child_chat = function(file_path, topic, parent_buf, question)
 	local agent = M.get_agent()
 	M.helpers.prepare_dir(vim.fn.fnamemodify(file_path, ":h"))
 	local template = M.get_default_template(agent, file_path)
-	template = template:gsub("topic: %?", "topic: " .. topic)
+	-- Function replacement, not string concat: a topic is user-selected text, and
+	-- gsub treats `%` in a REPLACEMENT specially — `what is "50% off"` raises
+	-- "invalid use of '%'", and a topic containing %1 silently substitutes a
+	-- capture (#214 BR-21, ARCH-SECURE).
+	template = template:gsub("topic: %?", function() return "topic: " .. topic end)
 	local file_lines = vim.split(template, "\n")
 
 	local chat_parser = require("parley.chat_parser")
@@ -4524,18 +4931,57 @@ M.create_child_chat = function(file_path, topic, parent_buf, question)
 		local parent_path = vim.api.nvim_buf_get_name(parent_buf)
 		local parent_rel = vim.fn.fnamemodify(parent_path, ":t")
 		local parent_topic = M.get_chat_topic(parent_path) or ""
-		local back_link = branch_prefix .. " " .. parent_rel .. ": " .. parent_topic
+		-- A basename only resolves for a CHAT parent: resolve_chat_path searches
+		-- the chat roots and then falls back to globbing a parseable timestamp.
+		-- Branching from an arbitrary markdown file (`notes.md`) produced a
+		-- back-link the child could never follow — pre-existing for the visual
+		-- path, and reachable from the primary branch key once the n/i path
+		-- started creating children too (#214 BR-10). Fall back to the absolute
+		-- path, which resolve_chat_path handles directly.
+		local parent_ref = chat_slug.parse_filename(parent_rel) and parent_rel
+			or vim.fn.fnamemodify(parent_path, ":p")
+		local back_link = require("parley.branch_ref").format_ref_line(branch_prefix, parent_ref, parent_topic)
 		table.insert(file_lines, header_end + 1, back_link)
 
 		if question then
 			local user_prefix = M.config.chat_user_prefix or "💬:"
-			table.insert(file_lines, header_end + 2, "")
-			table.insert(file_lines, header_end + 3, user_prefix .. " " .. question)
-			table.insert(file_lines, header_end + 4, "")
+			-- One LINE per list element. `writefile` encodes a \n INSIDE an
+			-- element as a NUL byte, so a multi-line question — the gathered
+			-- <M-q> quote blocks are inherently multi-line — landed on disk as
+			-- `> [abstractions]^@^@what's this`, a corrupt transcript (#214 M3).
+			--
+			-- A single-line question stays inline after the prefix; a multi-line
+			-- one puts `💬:` on its own line and the body beneath, which is
+			-- exactly how chat_respond writes a gathered drill-in turn
+			-- (chat_respond.lua: `insert_lines = { "", user_prefix }` then the
+			-- block lines). The chord's promise is that the two agree.
+			local body = vim.split(question, "\n", { plain = true })
+			local turn = #body == 1 and { user_prefix .. " " .. body[1] } or { user_prefix }
+			if #body > 1 then
+				for _, line in ipairs(body) do turn[#turn + 1] = line end
+			end
+
+			local at = header_end + 2
+			table.insert(file_lines, at, "")
+			for i, line in ipairs(turn) do
+				table.insert(file_lines, at + i, line)
+			end
+			-- Only if the template does not already open with one. It does, so
+			-- adding a second left every branched child with a double blank
+			-- above its trailing `💬:` prompt.
+			local follows = file_lines[at + #turn + 1]
+			if follows and follows:match("%S") then
+				table.insert(file_lines, at + #turn + 1, "")
+			end
 		end
 	end
 
-	vim.fn.writefile(file_lines, file_path)
+	-- `writefile` encodes a \n INSIDE an element as a NUL byte rather than
+	-- rejecting it, so a caller that hands it a multi-line string silently writes
+	-- a corrupt file. Flatten defensively: the cost is one pass, and the failure
+	-- it prevents is invisible until someone reads the file outside Vim (readfile
+	-- turns the NUL back into \n, so a round-trip test cannot see it either).
+	vim.fn.writefile(M.helpers.flatten_lines(file_lines), file_path)
 end
 
 -- Agent info resolution (delegated to parley.agent_info module)
