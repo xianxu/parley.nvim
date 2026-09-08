@@ -153,3 +153,26 @@ committed in the same action. Prefix identity is what makes that safe.
 Reported by the operator while using the fork feature heavily. They read it as a
 possibly-spurious warning; it is a silent context loss, which is the more
 important half and is why this is not just a log-level change.
+
+**The bug was masked, which is why it read as a warning rather than a defect.**
+The operator noticed that the model in a forked chat started emitting
+`chat_history_search` — *"it's almost like organic life finding ways when
+there's bug."* That is exactly what happened: deprived of the parent
+conversation by this defect, and handed every builtin tool by #221's `@all`, the
+model went and fetched the context itself.
+
+Two things follow:
+
+- **It is behavioural evidence for this issue, stronger than the log line.** A
+  model that already has the parent conversation in its context has no reason to
+  search for it. The tool calls are the symptom the warning only hints at.
+- **It is not an argument against `chat_history_search`.** Unlike
+  `emit_definition` that tool is a legitimate general capability and should stay
+  discoverable under #221. The problem is that its availability *compensated*
+  for a missing input, at the cost of extra round-trips and a retrieval that may
+  well find the wrong chats — a plausible answer built from a search instead of
+  the actual parent thread.
+
+Worth remembering as a review heuristic: a model reaching for a tool to obtain
+something the harness was supposed to hand it is a signal that the harness
+stopped handing it over.
