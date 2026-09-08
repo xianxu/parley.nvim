@@ -306,16 +306,13 @@ local fence = require("parley.fence")
 	end
 
 	-- Helper to finalize the current component's content from accumulated parts
-	-- Is line `n` a single-line annotation (🌿:/🔒:)? Uses the same anchored
-	-- patterns `highlight_structure.classify` derives from config, rather than a
-	-- second spelling of the prefixes (ARCH-DRY) — but matches them directly,
-	-- since classify answers a wider question and would cost a call per line.
-	-- Defined once here: it was a closure rebuilt on every finalize_component.
+	-- Is line `n` a single-line annotation (🌿:/🔒:)? `parley.annotation` owns
+	-- that question for the whole codebase (#214 BR-75) — the resubmit's
+	-- survivor filter asks it too, and a predicate spelled once cannot answer
+	-- differently in two places.
+	local annotation = require("parley.annotation")
 	local function annotation_line(n)
-		local text = lines[n]
-		if not text then return false end
-		return text:match(decoration_patterns.local_pattern) ~= nil
-			or text:match(decoration_patterns.branch_pattern) ~= nil
+		return annotation.is_annotation(lines[n], config)
 	end
 
 	local function finalize_component(end_line)

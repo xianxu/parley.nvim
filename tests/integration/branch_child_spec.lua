@@ -989,3 +989,52 @@ describe("both branch paths land the same way (#214 M3)", function()
         end
     end)
 end)
+
+-- #214 BR-75 end-to-end: the sequence the finding describes. <M-i> inserts a
+-- reference mid-answer (where the chord puts one, by design), then <M-CR> on
+-- that exchange resubmits — which deletes question..answer.line_end. Before the
+-- fix that deleted the reference, orphaning a child that exists on disk.
+describe("a resubmit does not orphan the child <M-i> just made (#214 BR-75)", function()
+    local tmpdir, parent_path, parent_buf
+
+    after_each(function()
+        parley._prepared_bufs[parent_buf] = nil
+        vim.fn.delete(tmpdir, "rf")
+    end)
+
+    it("the reference survives the delete_answer a resubmit performs", function()
+        parley.setup({})
+        tmpdir = vim.fn.tempname()
+        vim.fn.mkdir(tmpdir, "p")
+        parent_path = tmpdir .. "/2026-09-06.10-00-00.000_parent.md"
+        vim.fn.writefile({ "---", "topic: t", "file: f", "---", "",
+                           "💬: first question", "", "🤖:[A]", "",
+                           "answer one 🤖[what about this?]", "",
+                           "answer two", "", "📝: sum" }, parent_path)
+        vim.cmd("edit " .. vim.fn.fnameescape(parent_path))
+        parent_buf = vim.api.nvim_get_current_buf()
+        parley.config.chat_dir = tmpdir
+        parley.prep_chat(parent_buf, parent_path)
+
+        vim.api.nvim_win_set_cursor(0, { 10, 0 })
+        parley._branch_inserters(parent_buf, false, true).n()
+
+        local l = vim.api.nvim_buf_get_lines(parent_buf, 0, -1, false)
+        local ref
+        for _, line in ipairs(l) do if line:match("^🌿:") then ref = line end end
+        assert.is_truthy(ref, "no reference was inserted")
+        local child = tmpdir .. "/" .. ref:match("^🌿:%s*([^:]+):")
+        assert.are.equal(1, vim.fn.filereadable(child), "the child is not on disk")
+
+        -- now the resubmit's own deletion, over that exchange
+        local parsed = parley.parse_chat(l, parley.chat_parser.find_header_end(l))
+        local ex = parsed.exchanges[1]
+        require("parley.buffer_edit").delete_answer(
+            parent_buf, ex.question.line_end, ex.answer.line_end - 1)
+
+        local after = table.concat(vim.api.nvim_buf_get_lines(parent_buf, 0, -1, false), "\n")
+        assert.is_truthy(after:find(ref, 1, true),
+            "the resubmit deleted the only pointer to " .. vim.fn.fnamemodify(child, ":t"))
+        assert.is_nil(after:find("answer two", 1, true), "the answer was not replaced")
+    end)
+end)

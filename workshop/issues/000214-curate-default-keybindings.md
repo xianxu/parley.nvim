@@ -293,6 +293,7 @@ Derivation notes:
 | `key_label` | `lua/parley/keybinding_registry.lua` | new |
 | `plan_submission` | `lua/parley/branch_submit.lua` | new |
 | `chat_gather_opts` | `lua/parley/drill_in.lua` | new |
+| `is_annotation` | `lua/parley/annotation.lua` | new |
 | `seed_question` | `lua/parley/branch_submit.lua` | new |
 
 - **`branch_ref`** — the line-editing half of a branch reference: build the
@@ -323,6 +324,10 @@ Derivation notes:
     reference lands at the cursor, and the chord never deletes — removed the
     question case entirely. Recorded here rather than left as a table describing
     code that does not exist.
+- **`is_annotation`** — one owner for "does this line start a `🌿:`/`🔒:`
+  annotation". The parser's trailing-span trim, the resubmit's survivor filter
+  and the arch guard all need that answer; spelled three times, a fourth caller
+  gets it subtly wrong.
 - **`ref_block`** — the lines that make a reference its own block: one blank
   line each side, added only where there is not one already. "One blank line each
   side" was asserted in three artifacts and held by neither insert path — one
@@ -503,7 +508,7 @@ stated purpose is making bindings *more* configurable.
       with the allowance list closed.
 
 - [x] **M3** — generalise `<M-S-CR>` (operator, 2026-09-07), then NARROWED by the
-      operator on first use (## Revisions 9 and 10): the chord inserts at the
+      operator on first use (## Revisions, "M3 placement reversed by the operator"): the chord inserts at the
       cursor and never deletes. The rule as shipped:
 
       > ~~`<M-S-CR>` performs the submission `<M-CR>` would perform, into a new
@@ -525,7 +530,7 @@ stated purpose is making bindings *more* configurable.
       | 2b | `<M-q>` markers elsewhere | strip markers; append the new turn at buffer end | same payload → child | after the **last** exchange's `📝:` |
       | 3 | neither | submits the question | **placeholder**: bare `🌿:`, empty child, question untouched | at the cursor |
 
-      **Superseded 2026-09-07** — see ## Revisions 9 and 10. Rows 2a/2b collapse
+      **Superseded 2026-09-07** — see ## Revisions, "M3 placement reversed by the operator". Rows 2a/2b collapse
       (placement is the cursor, not the exchange end) and row 3 became a pure
       placeholder (the chord never deletes). The rule as shipped is in
       `atlas/chat/inline_branch_links.md`; this table is the design record.
@@ -533,7 +538,7 @@ stated purpose is making bindings *more* configurable.
       Spacing is the exchange model's own `MARGIN`: the ref is its own block with
       exactly one blank line before and after — `add_block(k, "branch_ref", 1, 1)`.
 
-- [x] **M3 item 4 decision — SUPERSEDED (## Revisions 9 and 11). The ref lands
+- [x] **M3 item 4 decision — SUPERSEDED (## Revisions, "M3 placement reversed" + "single-line annotations"). The ref lands
       at the CURSOR.** The reasoning below was sound and its measurement stands,
       but it was reasoning about a *workaround*: the model truncation it avoids
       was caused by the parser latching on `🌿:`, which is fixed at the source —
@@ -641,7 +646,10 @@ vanished, which is the shrink class PQ-1 named.
 ## Revisions
 
 Numbered continuously with the `## Problem` enumeration above (which owns 1-3),
-so no number repeats anywhere in this file. Appended in the order the decisions
+so no number repeats anywhere in this file. **Cite an entry by its dated heading,
+not by its number** — the consolidation that produced this sequence silently
+re-pointed five existing citations at unrelated decisions, and an ordinal is a
+reference that its own artifact can invalidate (#214 BR-76). Appended in the order the decisions
 were made; entries that reverse an earlier one say which. Five of these blocks
 lived under `## Log` until the M3 boundary review pointed out that a revision
 belongs here and that 1/2/3 were each in use twice (#214 BR-67).

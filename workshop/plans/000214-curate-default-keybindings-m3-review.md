@@ -545,3 +545,212 @@ findings:
       under `## Log`; 1/2/3 are used twice; and the move left
       "      (placement is the cursor, not the exchange end) and the 3a/3b split is gone" dangling after revision 11's body.
 ```
+
+---
+
+## Re-review — 2026-09-07T18:56:41-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 214 — audit and curate the default keybinding surface |
+| repo | parley.nvim |
+| issue file | workshop/issues/000214-curate-default-keybindings.md |
+| boundary | milestone M3 |
+| milestone | M3 |
+| window | d5ba3ebca28f42a93cf95ed132bd695c12f29c50..6e786ae9fb2f17f141dbeb7f576b27dad2416865 |
+| command | sdlc milestone-close --issue 214 --milestone M3 |
+| reviewer | claude |
+| timestamp | 2026-09-07T18:56:41-07:00 |
+| verdict | REWORK |
+
+## Review
+
+Tree restored to its pre-review state (only the pre-existing workshop changes remain).
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+The prior round's four Criticals/Importants are genuinely fixed and each is pinned by a test I confirmed goes red when reverted (BR-58 anchor → 2 red, BR-68 `ref_block` → 1 red, BR-69 `refuse_while_pending` on `v` → 1 red). Full suite green, luacheck clean. What blocks SHIP is a regression this window introduced and did not sweep: removing the `line_before_local` latch put `🌿:`/`🔒:` annotation lines *inside* the component's line span, and the restoration covered only the **trailing** position. `<M-CR>`'s resubmit deletes `question.line_end+1 .. answer.line_end`, so a **mid-answer** reference — which is precisely where the M3 chord now puts one, by design — is deleted on the next resubmit, orphaning a child chat that exists on disk (BR-19's hazard, by the route the trim was added to close), and a mid-answer `🔒:` private note is silently destroyed with it. Measured end-to-end against a base worktree: `answer.line_end` is 10 at `d5ba3eb` and 16 at HEAD for the same transcript; after a real `<M-i>` at line 10 the reference lands at 12 and the resubmit span is 7..16.
+
+### 1. Strengths
+
+- **`drill_in.chat_gather_opts`** (`lua/parley/drill_in.lua:346-360`) is the right shape for BR-60: one owner, two consumers, and `branch_submit_spec.lua:153-161` asserts *neither call site rebuilds the options* rather than asserting today's values. That guard survives the next refactor.
+- **The BR-58 fix samples both sides of the delta axis.** `branch_child_spec.lua:493-538` adds a marker *below* the cursor and a marker above-and-below, after round 1's fixtures all sat on one side. Reverting the `make_handle` anchor turns 2 tests red.
+- **The NUL-byte tests read raw bytes** (`branch_child_spec.lua:833-838`), which is the only oracle that can see the defect — `readfile` turns the NUL back into `\n`. And `branch_child_spec.lua:871-879` is labelled as *not* coverage of `flatten_lines`, which is an unusually honest thing to write about one's own green test.
+- **`refuse_while_pending` wraps the dispatch table, not a path** (`init.lua:2470-2489`), applying the enumeration rule the file already states. The test loops n/i/v rather than asserting the one mode that broke.
+- **The `🔒:` semantic change ships with a real upgrade note** in `README.md`'s config-contract section, naming the user-visible consequence ("text you expected to stay private will now be submitted") rather than describing the code change.
+
+### 2. Critical findings
+
+**`lua/parley/chat_parser.lua:335-352` — a mid-component `🌿:`/`🔒:` is inside the span a resubmit deletes.**
+*This is the 2nd finding in family `merged-path-loses-original-effect`.* Do not fix the trailing case again — state the rule: **when a latch is replaced by per-line handling, enumerate every effect the latch provided and restore each across its whole axis, not at the one position a fixture happens to test.** The `line_before_local` latch provided two effects: content exclusion after the marker (deliberately dropped) *and* truncation of the component's `line_end` at the marker (needed, restored only for trailing lines). Measured:
+
+```
+d5ba3eb: 💬:q@6 … 🌿:@12 … 📝:@16   →  answer.line_end = 10   (ref survives resubmit)
+HEAD:    same transcript             →  answer.line_end = 16   (ref inside 7..16)
+```
+
+`chat_respond.lua:1436` runs `be.delete_answer(buf, question.line_end, answer.line_end - 1)` → `nvim_buf_set_lines(buf, 6, 16, …)` → deletes 1-indexed 7..16, including the reference. Driving the real chord (`_branch_inserters(buf,false,true).n()` at line 10 of an answer with text after it) puts the `🌿:` at 12 inside that span. `atlas/chat/inline_branch_links.md:38-43` claims the cost is "fixed at the source … a reference costs exactly its own line wherever it sits"; it is not. Fix sketch: make the resubmit deletion annotation-preserving — collect `🌿:`/`🔒:` lines in `[question.line_end+1, answer.line_end]` and re-emit them after the delete (or delete around them) — and pin it with a test that resubmits an exchange carrying both a mid-answer reference and a mid-answer note, asserting both survive and the reference still resolves.
+
+### 3. Important findings
+
+**`workshop/issues/000214-curate-default-keybindings.md:506,528,536` + `workshop/plans/000214-branch-submit-m3-plan.md:39,159` — the BR-67 renumbering invalidated five cross-references.**
+*This is the 2nd finding in family `reference-written-in-unresolvable-form`.* Do not renumber the citations by hand — state the rule: **a cross-reference into an artifact is written in a form that survives that artifact's own renumbering (anchor/heading/date, not an ordinal), or the renumbering edit updates every citation in the same commit.** Consolidating the revisions produced a unique 1-17 sequence, and the M3 Plan rows and the M3 plan file still point at "## Revisions 9 and 10" / "9 and 11" / "9-10". Those slots now hold `<C-g>?` alias rendering, `md_delete_file`'s config key, and master-switch reversibility. The intended targets are 15/16/17. A reader following any of the five lands on an unrelated decision.
+
+### 4. Minor findings
+
+- `lua/parley/helper.lua:117` and `lua/parley/drill_in.lua:346` — new functions spliced into the *middle* of an adjacent function's doc block: `flatten_lines` sits between `---@return string # returns unique uuid` and `_H.uuid`, and `chat_gather_opts` between `chat_boundaries`' prose+`@param` and its `@return`. Both neighbours now carry the wrong annotations. *4th in family `markdown-block-not-separated`* — same rule as BR-67/BR-74, generalised: **a block is inserted between complete blocks, never into the middle of one.**
+- `lua/parley/helper.lua:117` — `flatten_lines` is a new exported pure entity with no row in either Core-concepts table; the plan's table also omits `ref_block` and `chat_gather_opts` (the issue's has them). *2nd in family `artifact-missing-from-its-index`* — rule: **a new exported entity is added to the Core-concepts table in the same commit that introduces it.**
+- `workshop/issues/…:534-535` still states spacing as `add_block(k, "branch_ref", 1, 1)`; no such block kind exists in `exchange_model.lua`. The code invariant is now correct (`ref_block`), so this is a leftover in the design record, uncovered by the "Superseded" note directly above it.
+- `lua/parley/branch_submit.lua:26-31` asserts as current fact that `🌿:` "sets the parser's `line_before_local`" — removed in `b9fc6c8`, one commit later in this same window. `tests/integration/branch_child_spec.lua:409` repeats it.
+
+### 5. Test coverage notes
+
+- Reversion-verified this round: BR-58 (2 red), BR-68 (1 red), BR-69 (1 red). `make test` green end to end, exit 0, lint included.
+- The gap that ships the Critical: `annotation_lines_spec.lua:96-106` pins only *"a trailing `🌿:` stays outside the answer's line span"*. There is no fixture with an annotation followed by more answer text, and no test anywhere drives a resubmit over an exchange containing one. This is the same one-sided-axis mistake `workshop/lessons.md` rule 1 was written for this round.
+- `branch_submit_spec.lua:126` passes `{}` (truthy) where the signature takes a boolean, and `:131-136` names a branch (`question.content` empty) that `plan_submission` never inspects — both green via the zero-exchanges / marker branches (BR-73, re-raised).
+
+### 6. Architectural notes
+
+- **ARCH-DRY** — flag. `chat_gather_opts`, `seed_question` and `ref_block` are genuine consolidations. But `chat_parser.lua:314-320`'s `annotation_line` re-derives what `kinds[]` at `:557` already holds for every line (`kinds[n] == "local" or kinds[n] == "branch"`), and its comment justifies the duplication with "would cost a call per line" — the call has already been made. See BR-66, re-raised.
+- **ARCH-PURE** — pass. `plan_submission`, `seed_question`, `topic_for_selection`, `ref_block`, `flatten_lines` all run in `tests/unit/` with a config table and no plugin (BR-62's lesson applied in `annotation_lines_spec.lua:17-24`). `insert_planned` is the IO shell and reads neighbours from the buffer to feed the pure margin rule — the right seam.
+- **ARCH-PURPOSE** — flag, and it is the Critical. Shadow-sweep of the single-source change is otherwise clean: `exporter.lua` and `outline` derive through `chat_parser`/`highlight_structure`, no module re-implements section semantics. But `atlas/chat/inline_branch_links.md:38-43` asserts a purpose ("a reference costs exactly its own line wherever it sits") the diff does not deliver.
+- **ARCH-MOCK** — pass. No new external dependency; the `writefile`/`readfile` asymmetry is exercised against the real API in a tmpdir, with a raw-byte read as the conformance oracle.
+- **ARCH-CONSTRAINTS** — flag (Minor, BR-71). `<M-i>` is an interactive keypress now doing two full-buffer passes; the redundant `drill_in.parse` was removed, but `M.parse_chat` (uncached) still runs unconditionally at `init.lua:2280` before the gather that decides whether a plan is possible at all, and the adjacent comment claims the opposite ordering.
+- **ARCH-SECURE** — pass. `topic` reaches `gsub` only via a function replacement (BR-21 class held); `question` never reaches `gsub` as a replacement; `fnameescape` on the edit. I probed the multi-line-marker label: `sections[n].text` does contain a `\n`, and `topic_for_selection`'s whitespace collapse is what keeps it out of `nvim_buf_set_lines` — load-bearing and worth a word at the call site.
+- **ARCH-ORDER** — flag (Minor, BR-72). Good seams for the interleavings that are tested (`pending.identity` injection, `create_child_chat` monkeypatch). But BR-63 moved the point of no return without sweeping past it: `apply_text_edits` and `nvim_buf_set_lines` at `init.lua:2337-2352` sit between the `pcall`'d create and `commit_reference`, so a raise there leaves a child on disk with no reference.
+
+### 7. Plan revision recommendations
+
+- `workshop/plans/000214-branch-submit-m3-plan.md` — a `## Revisions` entry recording that the trailing-annotation trim covers only one position of the axis, and that mid-component annotations remain inside the resubmit delete span; state which milestone owns the fix.
+- Same file — replace the ordinal citations at `:39` and `:159` with the revision headings (`### 2026-09-07 — M3 placement reversed…`), and correct `:519-536` in the issue the same way.
+- `atlas/chat/inline_branch_links.md:38-43` — withdraw or qualify "a reference costs exactly its own line wherever it sits" until the resubmit path preserves mid-answer annotations.
+
+```findings
+dispose:
+  - id: BR-58
+    disposition: addressed
+    note: |
+      make_handle anchor + fixtures on both sides of the delta axis; reverting the anchor turns 2 integration tests red.
+  - id: BR-59
+    disposition: addressed
+    note: |
+      Plan Core concepts + Task 3 carry corrections, issue Core concepts rewritten, Deviations entry 0 records the removal, ledger rows struck.
+  - id: BR-60
+    disposition: addressed
+    note: |
+      Task 7 steps removed with a NOT-DELIVERED note; three ledger rows struck; bracket unified via chat_gather_opts with a no-rebuild test; scope difference stated as deliberate in README, atlas and module header.
+  - id: BR-61
+    disposition: addressed
+    note: |
+      gf bullet restored; keybinding_agreement_spec now derives README-key to registry agreement and pins the headline chords in the reverse direction.
+  - id: BR-66
+    disposition: not-addressed
+    note: |
+      Predicate still duplicated; the new rationale "would cost a call per line" is contradicted by kinds[] at chat_parser.lua:557, which already holds classify's answer for every line.
+  - id: BR-67
+    disposition: addressed
+    note: |
+      Revisions consolidated under one heading, numbering unique 1-17 — but the renumbering broke five cross-references; raised separately.
+  - id: BR-68
+    disposition: addressed
+    note: |
+      branch_ref.ref_block owns the margin for both insert paths; reverting it turns the prose-both-sides test red.
+  - id: BR-69
+    disposition: addressed
+    note: |
+      refuse_while_pending wraps the n/i/v dispatch table; reverting v turns the every-mode test red.
+  - id: BR-70
+    disposition: addressed
+    note: |
+      atlas/chat/drill_in.md now names chat_gather_opts as the owner with both consumers.
+  - id: BR-71
+    disposition: not-addressed
+    note: |
+      The redundant drill_in.parse was removed, but M.parse_chat still runs unconditionally at init.lua:2280 before the gather, and the adjacent comment claims the gather is asked first.
+  - id: BR-72
+    disposition: not-addressed
+    note: |
+      apply_text_edits and nvim_buf_set_lines at init.lua:2337-2352 remain unguarded between the pcall'd create and commit_reference.
+  - id: BR-73
+    disposition: not-addressed
+    note: |
+      Both tests unchanged — branch_submit_spec.lua:126 still passes {} for a boolean, and :131-136 still names a content check plan_submission never performs.
+  - id: BR-74
+    disposition: not-addressed
+    note: |
+      The two-line fragment is still stranded, now at issue lines 799-800 after revision 15's body.
+findings:
+  - id: new
+    severity: Critical
+    family: merged-path-loses-original-effect
+    title: |
+      a mid-component 🌿:/🔒: annotation is inside the span a resubmit deletes, so <M-CR> destroys the reference the chord just inserted
+    detail: |
+      This is the 2nd finding in family `merged-path-loses-original-effect`. Do not
+      re-fix the trailing case — the rule is: when a latch is replaced by per-line
+      handling, enumerate every effect the latch provided and restore each across
+      its whole axis, not at the one position a fixture happens to test. The
+      line_before_local latch provided content exclusion (deliberately dropped) AND
+      truncation of the component's line_end at the marker; only the trailing half
+      of the second was restored by the annotation-aware trim at
+      chat_parser.lua:335-352.
+      Measured against a base worktree, same transcript: answer.line_end is 10 at
+      d5ba3eb and 16 at HEAD for a 🌿: at line 12. chat_respond.lua:1436 calls
+      delete_answer(buf, question.line_end, answer.line_end - 1) →
+      nvim_buf_set_lines(buf, 6, 16) → deletes 1-indexed 7..16 including the
+      reference. Driving the real chord (_branch_inserters(buf,false,true).n() at
+      line 10 of an answer with text after it) lands the 🌿: at 12, inside 7..16 —
+      so the next resubmit of that exchange orphans the child chat on disk (BR-19)
+      and silently deletes any mid-answer 🔒: private note in the same range.
+      atlas/chat/inline_branch_links.md:38-43 asserts the opposite. Fix: make the
+      resubmit deletion annotation-preserving, pinned by a test that resubmits an
+      exchange carrying both a mid-answer reference and a mid-answer note.
+  - id: new
+    severity: Important
+    family: reference-written-in-unresolvable-form
+    title: |
+      the BR-67 revision renumbering invalidated five cross-references, which now point at unrelated decisions
+    detail: |
+      This is the 2nd finding in family `reference-written-in-unresolvable-form`.
+      Do not renumber the citations by hand — the rule is: a cross-reference into
+      an artifact is written in a form that survives that artifact's own
+      renumbering (heading or date anchor, not an ordinal), or the renumbering edit
+      updates every citation in the same commit.
+      Consolidating the revisions produced a unique 1-17 sequence. The issue's M3
+      Plan rows at :506, :528 and :536 still say "## Revisions 9 and 10" / "9 and
+      11", and workshop/plans/000214-branch-submit-m3-plan.md:39 and :159 say
+      "## Revisions 9-10". Slots 9/10/11 now hold alias rendering in <C-g>?,
+      md_delete_file's config key, and master-switch reversibility. The intended
+      targets are 15/16/17.
+  - id: new
+    severity: Minor
+    family: markdown-block-not-separated
+    title: |
+      two new functions were spliced into the middle of an adjacent function's doc-comment block
+    detail: |
+      This is the 4th finding in family `markdown-block-not-separated`. Do not fix
+      the two sites — the rule generalises past markdown: a block is inserted
+      BETWEEN complete blocks, never into the middle of one.
+      helper.lua:117 puts flatten_lines between "---@return string # returns unique
+      uuid" and _H.uuid, so uuid loses its annotation and flatten_lines gains a
+      bogus second @return. drill_in.lua:346 puts chat_gather_opts between
+      chat_boundaries' description plus @param cfg and its @return string[], so
+      chat_boundaries is left with only a return type and chat_gather_opts inherits
+      prose about the anchor scan that describes its neighbour.
+  - id: new
+    severity: Minor
+    family: artifact-missing-from-its-index
+    title: |
+      helper.flatten_lines shipped as a new exported pure entity with no Core-concepts row
+    detail: |
+      This is the 2nd finding in family `artifact-missing-from-its-index`. The rule
+      covering both: a new exported entity is added to the Core-concepts table that
+      enumerates its kind, in the same commit that introduces it.
+      flatten_lines is new, exported, unit-tested and guarded by an arch spec, but
+      appears in neither the issue's nor the plan's Core concepts. The plan's table
+      also omits ref_block and chat_gather_opts, which the issue's table does carry
+      — so the two tables disagree about what M3 delivered.
+```

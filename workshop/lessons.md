@@ -1531,3 +1531,38 @@ neighbour did it before writing the second copy.
    per test, which ran `file_tracker.init` and raced the parallel runner on a
    shared XDG dir — red from a clean environment, green from a warm one. I
    diagnosed it as my own concurrent `make test` and was half wrong.
+
+## #214 M3 — a fix that moves a hazard instead of removing it
+
+Removing the parser's `line_before_local` latch made `🌿:`/`🔒:` ordinary content
+again. I knew that put annotation lines *inside* a component's span, because I
+found and fixed the case where it mattered: a **trailing** reference would land
+inside `answer.line_end`, and a resubmit deletes `question..answer.line_end`, so
+it would have been destroyed. I wrote the trailing-trim, the test, and a comment
+explaining the hazard.
+
+Then the operator's placement decision put references **mid-answer** — the
+common case, by design — and mid-answer is the position the trim does not
+cover. Same hazard, same mechanism, same consequence (an orphaned child chat),
+one position over. Review found it two rounds later.
+
+I had the general statement in hand: *"an annotation is now inside a span that
+gets deleted."* I fixed the instance I could see and did not enumerate the
+positions.
+
+**Rules.**
+
+1. **When you write "X is now inside Y", enumerate every position X can occupy
+   in Y before choosing a fix.** Leading, trailing, middle, alone, repeated.
+   The trim handled one of five.
+2. **A hazard you documented is one you are responsible for sweeping.** The
+   comment I wrote on the trailing-trim describes the exact failure that then
+   shipped in the middle position. Writing the sentence is not the fix.
+3. **Fix at the operation, not at the boundary, when the operation is the one
+   with the semantics.** The right fix was never "keep annotations out of
+   spans" — it was "a resubmit replaces the model's output, and an annotation is
+   not the model's output". Stated that way, `delete_answer` is obviously where
+   it belongs, and every position is covered at once.
+4. **Renumbering a list breaks every ordinal citation into it.** Consolidating
+   `## Revisions` silently re-pointed five references at unrelated decisions.
+   Cite by heading or date — a form the cited artifact cannot invalidate.

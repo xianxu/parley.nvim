@@ -1191,6 +1191,404 @@ rounds:
           round: 11
       boundary: M2
       blocked: false
+    - "n": 12
+      timestamp: "2026-09-07T16:42:25-07:00"
+      agent: claude
+      boundary: M3
+      blocked: false
+      protocol_error: no valid findings block
+    - "n": 13
+      timestamp: "2026-09-07T18:11:18-07:00"
+      agent: claude
+      findings:
+        - id: BR-58
+          severity: Critical
+          title: "the \U0001F33F: reference position is computed before the marker strip and used after it"
+          detail: "init.lua:2336-2347 applies marker_edits, then inserts at plan.ref_after — the\nPRE-strip cursor line. apply_text_edits returns line_delta (buffer_edit.lua:203)\nand it is discarded; chat_respond.lua:1299 solves the same problem with\nbuffer_edit.make_handle. Reproduced three ways: a standalone \U0001F916[…] above the\ncursor (drill_in.lua:443-446 deletes the newline), a cursor on the last line,\nand a multi-line \U0001F916[a\\nb]. In the third the reference lands AFTER \U0001F4DD: the\nsummary — the relocation the operator revised the design twice to remove — and\nin the first the \"one blank line each side\" MARGIN invariant breaks (two before,\nzero after). The only quotes-case integration test uses an inline marker, whose\ndelta is zero, so it observes one interleaving and reports no coverage\n(ARCH-ORDER). Fix: anchor the cursor line with make_handle before\napply_text_edits and read it back, and add a standalone-marker fixture."
+          family: stale-position-across-buffer-edit
+          round: 13
+        - id: BR-59
+          severity: Critical
+          title: the plan's and issue's Core concepts tables describe a plan_submission the code does not implement
+          detail: |-
+            This is the 2nd finding in family `plan-not-revised-after-decision-change`.
+            Do not patch the one table — state the rule: when a decision removes a field or
+            a case from a Core-concepts entity, the SAME commit rewrites every artifact that
+            restates that entity (plan table, plan task steps, issue Core concepts, mutation
+            ledger) and records the removal under `## Deviations`, because those artifacts
+            are what the next agent reads instead of the code.
+            plan:29-41 and the issue's `## Core concepts` specify case = "quotes"|"question",
+            question, topic and delete_lines; branch_submit.lua:96-100 returns only
+            { case = "quotes", ref_after, strip_markers }. Task 3's checked steps (plan:186-236)
+            list six tests asserting p.delete_lines / case == "question" / p.question, none of
+            which exist in tests/unit/branch_submit_spec.lua. The four `## Deviations` entries
+            do not mention the removal.
+          family: plan-not-revised-after-decision-change
+          round: 13
+        - id: BR-60
+          severity: Critical
+          title: Task 7's <M-CR> agreement check is checked off but absent, and the equivalence it guarded is already false
+          detail: "This is the 6th finding in family `docs-assert-unverified-behavior`. Earlier\nrounds fixed instances. Do not fix this instance alone — the rule is: a plan step\nmay not be checked off, and a `## Deviations` entry may not describe a test, until\nthat test exists in the tree and has been seen red; the mutation ledger is\ngenerated from `git diff <base> -- lua/` and a row whose mutation target is not in\nthe diff is a defect in the ledger, not a note.\nplan:314-320 checks off the agreement pin; `## Deviations` item 2 claims it \"runs\nplan_submission's exchange resolution against init.lua's find_exchange_at_line\nline-by-line over three transcripts. Verified by deleting the planner's margin\nrule: three tests go red.\" grep -rn find_exchange_at_line tests/ hits only\ntests/unit/pure_functions_spec.lua; plan_submission has no exchange resolution and\nno margin rule. Three ledger rows (case 3b delete_lines, ref lands after \U0001F4DD:,\nplanner agrees with find_exchange_at_line) mutate code that is not in the tree.\nThe unguarded promise is already broken twice: init.lua:2329 hardcodes\nbracket = true where chat_respond.lua:1284 reads config.mark_reference_span, and\n<M-i> gathers buffer-wide where <M-CR> gathers per-exchange\n(chat_respond.lua:1287-1294, :1336-1345) — so README.md:174,\natlas/chat/inline_branch_links.md:31 and branch_submit.lua:5-6 all assert an\nequivalence that does not hold."
+          family: docs-assert-unverified-behavior
+          round: 13
+        - id: BR-61
+          severity: Important
+          title: the gf smart go-to-file bullet was deleted from README as collateral of the <M-i> rewrite
+          detail: |-
+            This is the 3rd finding in family `readme-missing-for-changed-surface`. Do not
+            just restore the line — state the rule: README's binding list and the registry's
+            resolved default keys must agree, and that agreement should be derived, not
+            reviewed. M2 already built the machinery (keybinding_agreement_spec.lua, key_for)
+            and already caught three README-documented commands that were never implemented;
+            extend the same derivation to bindings so a bullet cannot vanish silently.
+            `git show d5ba3eb:README.md` line 179 documents `gf`; it is absent at HEAD and
+            `gf` is still shipped.
+          family: readme-missing-for-changed-surface
+          round: 13
+        - id: BR-62
+          severity: Important
+          title: the new unit spec calls parley.setup() per test, and make test is red from a clean environment
+          detail: |-
+            This is the 4th finding in family `test-harness-assumption`. Do not fix only the
+            new spec — the rule is: a spec in tests/unit/ exercises pure logic with an
+            injected config stub and never calls parley.setup(), and the shared IO it would
+            have touched must be race-safe rather than trusted to serialise.
+            Two of two `make test-clean-env && make test-unit` runs failed; the annotation
+            spec fails with E739: Cannot create directory .../xdg/data/nvim: file already
+            exists, from file_tracker.lua:26-31 (isdirectory check then mkdir, raced by the
+            8-way runner). It passes standalone and in four warm-env runs, and
+            artifact_ref_spec.lua — one of 21 pre-existing unit specs that call setup() —
+            failed the same way on the other clean run. annotation_lines_spec tests
+            parse_chat, which tests/unit/parse_chat_spec.lua already covers with a plain
+            config stub and no setup at all. Class fix: drop setup() from the new spec, and
+            make ensure_dir_exists tolerate an existing directory.
+          family: test-harness-assumption
+          round: 13
+        - id: BR-63
+          severity: Important
+          title: create_child_chat is unguarded after the parent has already been stripped and the reference inserted
+          detail: "This is the 4th finding in family `partial-effect-not-committed`. Do not guard\nthe one call — the rule is: within a single keypress transition, every effect\nafter the first buffer mutation is guarded the same way, and a failure states\nwhat the buffer is left holding. Right now the guarding is inconsistent within\nten lines of the same function.\ninit.lua:2350 calls create_child_if_owned bare while :2351 calls commit_reference,\nwhich pcalls its :write. By :2350 the markers are stripped and the \U0001F33F: line\ninserted, so a raise (unwritable chat_dir, full disk) escapes the keymap callback\nleaving a parent pointing at a file that does not exist. This is plan-gate finding\nPQ-8, still open at that gate, shipped unchanged."
+          family: partial-effect-not-committed
+          round: 13
+        - id: BR-64
+          severity: Important
+          title: "\U0001F512: content previously withheld from the LLM is now submitted, with no upgrade note"
+          detail: "atlas/chat/format.md documented \U0001F512: as a local SECTION excluded from LLM context;\nchat_parser.lua:606-613 makes it one line. A user whose transcripts used the\ndocumented semantics silently begins submitting every line after the first noted\none on their next request. The measurement cited (0 of 16 chats in the operator's\ncorpus) bounds the operator's exposure, not a published plugin's users. The atlas\nrecords the new behaviour; README has no upgrade or breaking-change section and\nnever documented the prefix, so there is nowhere a user would see this\n(ARCH-SECURE at-review)."
+          family: breaking-change-without-upgrade-note
+          round: 13
+        - id: BR-65
+          severity: Minor
+          title: ready_marker_lines computes a line number per marker that plan_submission never reads
+          detail: |-
+            This is the 2nd finding in family `dead-value-in-new-code`. Do not just delete
+            the field — the rule is: a value computed to satisfy a signature must be read by
+            that signature's implementation, or the parameter goes away; a dead field in a
+            "pure decision" module is what makes the module look like it decides more than it
+            does. init.lua:2266-2278 counts newlines per ready marker to build { line = N };
+            branch_submit.lua:87-101 only tests #markers > 0. The same pass also runs
+            drill_in.parse over the whole buffer a second time — gather_edit_plan at :2329
+            parses again.
+          family: dead-value-in-new-code
+          round: 13
+        - id: BR-66
+          severity: Minor
+          title: annotation_line re-implements the classifier's predicate while its comment claims it reuses it
+          detail: |-
+            This is the 7th finding in family `duplicate-helper-not-retired`. Earlier rounds
+            fixed instances. Do not fix this instance — the rule is: a line-kind predicate
+            lives in highlight_structure beside the patterns it reads, and callers ask it
+            rather than re-matching pattern fields; highlight_structure.is_partition
+            (:180-198) is the precedent for exactly this. chat_parser.lua:335-342 defines
+            annotation_line inline (rebuilt per finalize_component call) matching
+            local_pattern/branch_pattern directly, under a comment asserting it reuses
+            highlight_structure.classify. Add is_annotation(line, patterns) there and call it.
+          family: duplicate-helper-not-retired
+          round: 13
+        - id: BR-67
+          severity: Minor
+          title: 'revision 11 was written into the middle of the M3 Plan bullet instead of into ## Revisions'
+          detail: |-
+            This is the 2nd finding in family `markdown-block-not-separated`. Do not just move
+            this block — the rule is: a `## Revisions` entry is appended to `## Revisions`,
+            never inlined into the artifact section it revises, and its number is unique
+            across the issue.
+            workshop/issues/000214-curate-default-keybindings.md:507 puts a `###` heading and
+            its body between "Rows 2a/2b collapse" and "(placement is the cursor, not the
+            exchange end)", severing the bullet and nesting a heading inside `## Plan`.
+            `## Revisions` is at :764, and the numbered entries 1-11 are currently split
+            across `## Plan`, `## Log` and `## Revisions` with 1/2/3 used twice.
+          family: markdown-block-not-separated
+          round: 13
+      boundary: M3
+      blocked: true
+    - "n": 14
+      timestamp: "2026-09-07T18:32:20-07:00"
+      agent: claude
+      dispose:
+        - id: BR-58
+          disposition: not-addressed
+          note: |-
+            make_handle takes a 0-indexed row but is passed the 1-indexed cursor line, so the
+            anchor sits on the whitespace gap that drill_in.lua:457-458 swallows into its `]`
+            edit; with left gravity the mark collapses and the ref lands ABOVE the cursor line.
+            Reproduced: standalone marker directly below the cursor, and inline-above + standalone-below.
+            Every new fixture puts the marker above the cursor, so the suite samples one side of the axis.
+          round: 14
+        - id: BR-59
+          disposition: not-addressed
+          note: |-
+            Core-concepts tables corrected in both plan and issue and the ledger rows struck, but
+            the plan's Task 3 steps are still `- [x]` over six assertions absent from the tree, and
+            `## Deviations` still records no entry for the removal — two of the four artifacts the rule named.
+          round: 14
+        - id: BR-60
+          disposition: not-addressed
+          note: |-
+            Task 7's body now says NOT DELIVERED and the ledger row is struck, but `## Deviations`
+            item 2 still states verbatim that the check runs plan_submission's exchange resolution
+            against find_exchange_at_line over three transcripts, verified by three red tests. No such test exists.
+          round: 14
+        - id: BR-61
+          disposition: not-addressed
+          note: |-
+            The `gf` bullet is restored, but the derivation the finding asked for was not built —
+            no test relates README's binding bullets to the registry's resolved default keys, so the
+            next bullet can still vanish silently. Instance fixed, class open.
+          round: 14
+        - id: BR-62
+          disposition: addressed
+          note: |-
+            setup() dropped from the new spec; two clean-environment `make test` runs green (200 files).
+            The ensure_dir_exists half is unnecessary — measured that vim.fn.mkdir(existing, "p") returns
+            1 without error on nvim 0.11.7, and every mkdir in lua/ passes "p".
+          round: 14
+        - id: BR-63
+          disposition: addressed
+          note: |-
+            Create now precedes every buffer mutation and is pcall'd; branch_child_spec.lua:820-838
+            simulates the failure and asserts the markers survive. See Minor M2 for the unswept half
+            (the effects after the create are now the unguarded ones).
+          round: 14
+        - id: BR-64
+          disposition: addressed
+          note: |-
+            README now carries an explicit upgrade note under "Two config contracts changed"; the atlas
+            records the single-line semantics in both format.md and parsing.md.
+          round: 14
+        - id: BR-65
+          disposition: addressed
+          note: |-
+            ready_marker_lines is gone (grep: zero hits) and the second drill_in.parse pass with it;
+            the gather is now asked first and is the authority. See Minor M1 for the parse_chat that remains unconditional.
+          round: 14
+        - id: BR-66
+          disposition: not-addressed
+          note: |-
+            The false comment is fixed and the closure hoisted out of finalize_component, but the
+            predicate still re-matches local_pattern/branch_pattern in chat_parser instead of living in
+            highlight_structure as is_annotation. A reasoned counter-argument is given in the comment; the stated rule is not followed.
+          round: 14
+        - id: BR-67
+          disposition: not-addressed
+          note: |-
+            The block no longer severs the Plan bullet, but the rule was not applied: entries 9-11 still
+            live under `## Log` rather than `## Revisions`, numbers 1/2/3 remain duplicated across the two
+            sections, and the move stranded a two-line fragment at issue :647-648.
+          round: 14
+      findings:
+        - id: BR-68
+          severity: Important
+          title: the "one blank line each side" margin is asserted in three artifacts and held by neither insert path
+          detail: |-
+            init.lua:2343-2345 inserts { "", ref } — one blank BEFORE only — under a comment claiming
+            "one blank line each side"; insert_plain at :2387-2390 inserts the bare line with no blank on
+            either side. The plan says `add_block(k, "branch_ref", 1, 1)` and no such block kind exists in
+            exchange_model.lua. Measured: cursor line followed immediately by non-blank prose leaves the ref
+            abutting the next line; the two-marker case leaves two blanks before it. The existing assertions
+            (branch_child_spec.lua:397, 419-420) pass only because those fixtures happen to have a blank in the
+            right place. Rule: an invariant stated in a comment or plan is pinned by a fixture that would violate
+            it if the code were wrong — here, non-blank text on BOTH sides — and one key gets one spacing rule in one helper.
+          family: docs-assert-unverified-behavior
+          round: 14
+        - id: BR-69
+          severity: Important
+          title: the pending-response refusal covers n and i but not v, while README and the atlas state it for the whole chord
+          detail: |-
+            init.lua:2288 guards insert_planned, reachable only from insert_plain (n/i). insert_inline at
+            :2425-2452 runs create_child_if_owned and commit_reference with no check. README.md's closing
+            paragraph ("It declines while a response is still streaming into that chat") and
+            atlas/chat/inline_branch_links.md:60-62 ("Refusals. The chord declines...") both assert it for all
+            three cases. init.lua:2216-2219 already states the governing rule for this file: the enumeration is
+            the dispatch table n/i/v, not the path in front of you. Lift the guard above the dispatch table, or narrow both documents.
+          family: docs-assert-unverified-behavior
+          round: 14
+        - id: BR-70
+          severity: Important
+          title: atlas/chat/drill_in.md still names chat_respond as the owner of the gather options
+          detail: |-
+            :130-137 read "chat_respond assembles them from config" and "opts.bracket (set by chat_respond from
+            config.mark_reference_span)". The owner is now drill_in.chat_gather_opts with two consumers. The file
+            is named in the plan's Task 8 file list and is absent from the diff — new surface with no update to its
+            home atlas page (AGENTS.md section 8).
+          family: stale-comment-after-move
+          round: 14
+        - id: BR-71
+          severity: Minor
+          title: a full parse_chat runs on every M-i press to answer only "are there zero exchanges"
+          detail: |-
+            init.lua:2296 parses the whole buffer (M.parse_chat is uncached, init.lua:3709) before the
+            has_markers check that decides whether a plan is possible at all; on the common no-marker path the
+            result is discarded. Ask the gather first, then parse only when a plan can exist. ARCH-CONSTRAINTS:
+            this is an interactive keypress path now doing two full-buffer passes with no declared envelope.
+          family: derive-before-validate
+          round: 14
+        - id: BR-72
+          severity: Minor
+          title: BR-63 moved the point of no return, and the effects after it are now the unguarded ones
+          detail: |-
+            This is the 5th finding in family `partial-effect-not-committed`. Earlier rounds fixed instances.
+            Do not guard the one call — the rule BR-63 stated still has an unswept half: within a single keypress
+            transition, every effect after the point of no return is guarded the same way and a failure states what
+            the buffer is left holding. create_child_if_owned is now pcall'd and first (init.lua:2329); the
+            apply_text_edits and nvim_buf_set_lines at :2337-2345 that follow it are not, so a raise there leaves a
+            child on disk with no reference — BR-19's orphan by the reverse route. Low probability, since the edits are drill_in's own.
+          family: partial-effect-not-committed
+          round: 14
+        - id: BR-73
+          severity: Minor
+          title: two plan_submission decline tests are green for reasons unrelated to their names
+          detail: |-
+            This is the 6th finding in family `test-does-not-pin-the-fix`. Do not fix these two — the rule is:
+            a test's name states the branch it takes, and the assertion fails if that branch is removed.
+            branch_submit_spec.lua:135-140 "a question with no text has nothing to submit" passes has_markers = false
+            and plan_submission never inspects question.content, so it exercises the marker branch and would stay
+            green if the content check it names were added and then broken. :129 passes `{}` (truthy) for a boolean
+            parameter, a leftover from the pre-narrowing signature, and passes only via the zero-exchanges branch.
+          family: test-does-not-pin-the-fix
+          round: 14
+        - id: BR-74
+          severity: Minor
+          title: a stranded two-line fragment remains at the issue's :647-648 after revision 11 was moved
+          detail: |-
+            This is the 3rd finding in family `markdown-block-not-separated`. Do not just delete these two lines —
+            the rule from BR-67 still applies and was not: a `## Revisions` entry is appended to `## Revisions`,
+            never left in the section it revises, and its number is unique across the issue. Entries 9-11 are still
+            under `## Log`; 1/2/3 are used twice; and the move left
+            "      (placement is the cursor, not the exchange end) and the 3a/3b split is gone" dangling after revision 11's body.
+          family: markdown-block-not-separated
+          round: 14
+      boundary: M3
+      blocked: true
+    - "n": 15
+      timestamp: "2026-09-07T18:56:41-07:00"
+      agent: claude
+      dispose:
+        - id: BR-58
+          disposition: addressed
+          note: make_handle anchor + fixtures on both sides of the delta axis; reverting the anchor turns 2 integration tests red.
+          round: 15
+        - id: BR-59
+          disposition: addressed
+          note: Plan Core concepts + Task 3 carry corrections, issue Core concepts rewritten, Deviations entry 0 records the removal, ledger rows struck.
+          round: 15
+        - id: BR-60
+          disposition: addressed
+          note: Task 7 steps removed with a NOT-DELIVERED note; three ledger rows struck; bracket unified via chat_gather_opts with a no-rebuild test; scope difference stated as deliberate in README, atlas and module header.
+          round: 15
+        - id: BR-61
+          disposition: addressed
+          note: gf bullet restored; keybinding_agreement_spec now derives README-key to registry agreement and pins the headline chords in the reverse direction.
+          round: 15
+        - id: BR-66
+          disposition: not-addressed
+          note: Predicate still duplicated; the new rationale "would cost a call per line" is contradicted by kinds[] at chat_parser.lua:557, which already holds classify's answer for every line.
+          round: 15
+        - id: BR-67
+          disposition: addressed
+          note: Revisions consolidated under one heading, numbering unique 1-17 — but the renumbering broke five cross-references; raised separately.
+          round: 15
+        - id: BR-68
+          disposition: addressed
+          note: branch_ref.ref_block owns the margin for both insert paths; reverting it turns the prose-both-sides test red.
+          round: 15
+        - id: BR-69
+          disposition: addressed
+          note: refuse_while_pending wraps the n/i/v dispatch table; reverting v turns the every-mode test red.
+          round: 15
+        - id: BR-70
+          disposition: addressed
+          note: atlas/chat/drill_in.md now names chat_gather_opts as the owner with both consumers.
+          round: 15
+        - id: BR-71
+          disposition: not-addressed
+          note: The redundant drill_in.parse was removed, but M.parse_chat still runs unconditionally at init.lua:2280 before the gather, and the adjacent comment claims the gather is asked first.
+          round: 15
+        - id: BR-72
+          disposition: not-addressed
+          note: apply_text_edits and nvim_buf_set_lines at init.lua:2337-2352 remain unguarded between the pcall'd create and commit_reference.
+          round: 15
+        - id: BR-73
+          disposition: not-addressed
+          note: Both tests unchanged — branch_submit_spec.lua:126 still passes {} for a boolean, and :131-136 still names a content check plan_submission never performs.
+          round: 15
+        - id: BR-74
+          disposition: not-addressed
+          note: The two-line fragment is still stranded, now at issue lines 799-800 after revision 15's body.
+          round: 15
+      findings:
+        - id: BR-75
+          severity: Critical
+          title: "a mid-component \U0001F33F:/\U0001F512: annotation is inside the span a resubmit deletes, so <M-CR> destroys the reference the chord just inserted"
+          detail: "This is the 2nd finding in family `merged-path-loses-original-effect`. Do not\nre-fix the trailing case — the rule is: when a latch is replaced by per-line\nhandling, enumerate every effect the latch provided and restore each across\nits whole axis, not at the one position a fixture happens to test. The\nline_before_local latch provided content exclusion (deliberately dropped) AND\ntruncation of the component's line_end at the marker; only the trailing half\nof the second was restored by the annotation-aware trim at\nchat_parser.lua:335-352.\nMeasured against a base worktree, same transcript: answer.line_end is 10 at\nd5ba3eb and 16 at HEAD for a \U0001F33F: at line 12. chat_respond.lua:1436 calls\ndelete_answer(buf, question.line_end, answer.line_end - 1) →\nnvim_buf_set_lines(buf, 6, 16) → deletes 1-indexed 7..16 including the\nreference. Driving the real chord (_branch_inserters(buf,false,true).n() at\nline 10 of an answer with text after it) lands the \U0001F33F: at 12, inside 7..16 —\nso the next resubmit of that exchange orphans the child chat on disk (BR-19)\nand silently deletes any mid-answer \U0001F512: private note in the same range.\natlas/chat/inline_branch_links.md:38-43 asserts the opposite. Fix: make the\nresubmit deletion annotation-preserving, pinned by a test that resubmits an\nexchange carrying both a mid-answer reference and a mid-answer note."
+          family: merged-path-loses-original-effect
+          round: 15
+        - id: BR-76
+          severity: Important
+          title: the BR-67 revision renumbering invalidated five cross-references, which now point at unrelated decisions
+          detail: |-
+            This is the 2nd finding in family `reference-written-in-unresolvable-form`.
+            Do not renumber the citations by hand — the rule is: a cross-reference into
+            an artifact is written in a form that survives that artifact's own
+            renumbering (heading or date anchor, not an ordinal), or the renumbering edit
+            updates every citation in the same commit.
+            Consolidating the revisions produced a unique 1-17 sequence. The issue's M3
+            Plan rows at :506, :528 and :536 still say "## Revisions 9 and 10" / "9 and
+            11", and workshop/plans/000214-branch-submit-m3-plan.md:39 and :159 say
+            "## Revisions 9-10". Slots 9/10/11 now hold alias rendering in <C-g>?,
+            md_delete_file's config key, and master-switch reversibility. The intended
+            targets are 15/16/17.
+          family: reference-written-in-unresolvable-form
+          round: 15
+        - id: BR-77
+          severity: Minor
+          title: two new functions were spliced into the middle of an adjacent function's doc-comment block
+          detail: |-
+            This is the 4th finding in family `markdown-block-not-separated`. Do not fix
+            the two sites — the rule generalises past markdown: a block is inserted
+            BETWEEN complete blocks, never into the middle of one.
+            helper.lua:117 puts flatten_lines between "---@return string # returns unique
+            uuid" and _H.uuid, so uuid loses its annotation and flatten_lines gains a
+            bogus second @return. drill_in.lua:346 puts chat_gather_opts between
+            chat_boundaries' description plus @param cfg and its @return string[], so
+            chat_boundaries is left with only a return type and chat_gather_opts inherits
+            prose about the anchor scan that describes its neighbour.
+          family: markdown-block-not-separated
+          round: 15
+        - id: BR-78
+          severity: Minor
+          title: helper.flatten_lines shipped as a new exported pure entity with no Core-concepts row
+          detail: |-
+            This is the 2nd finding in family `artifact-missing-from-its-index`. The rule
+            covering both: a new exported entity is added to the Core-concepts table that
+            enumerates its kind, in the same commit that introduces it.
+            flatten_lines is new, exported, unit-tested and guarded by an arch spec, but
+            appears in neither the issue's nor the plan's Core concepts. The plan's table
+            also omits ref_block and chat_gather_opts, which the issue's table does carry
+            — so the two tables disagree about what M3 delivered.
+          family: artifact-missing-from-its-index
+          round: 15
+      boundary: M3
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#214 (boundary-review)
@@ -1816,6 +2214,287 @@ later rounds disposed of them. Generated — edit the gate, not this file.
   README.md:277 follows a list item with no blank line, so GFM lazy continuation renders this
   section-level claim as part of the `u`/`<C-r>` bullet.
 
+## Round 12 — 2026-09-07T16:42:25-07:00 (claude) — passed
+
+**Protocol error:** no valid findings block — this round contributed no findings.
+
+## Round 13 — 2026-09-07T18:11:18-07:00 (claude) — BLOCKED
+
+### Raised
+
+- **BR-58** [Critical] `stale-position-across-buffer-edit` the 🌿: reference position is computed before the marker strip and used after it
+  init.lua:2336-2347 applies marker_edits, then inserts at plan.ref_after — the
+  PRE-strip cursor line. apply_text_edits returns line_delta (buffer_edit.lua:203)
+  and it is discarded; chat_respond.lua:1299 solves the same problem with
+  buffer_edit.make_handle. Reproduced three ways: a standalone 🤖[…] above the
+  cursor (drill_in.lua:443-446 deletes the newline), a cursor on the last line,
+  and a multi-line 🤖[a\nb]. In the third the reference lands AFTER 📝: the
+  summary — the relocation the operator revised the design twice to remove — and
+  in the first the "one blank line each side" MARGIN invariant breaks (two before,
+  zero after). The only quotes-case integration test uses an inline marker, whose
+  delta is zero, so it observes one interleaving and reports no coverage
+  (ARCH-ORDER). Fix: anchor the cursor line with make_handle before
+  apply_text_edits and read it back, and add a standalone-marker fixture.
+- **BR-59** [Critical] `plan-not-revised-after-decision-change` the plan's and issue's Core concepts tables describe a plan_submission the code does not implement
+  This is the 2nd finding in family `plan-not-revised-after-decision-change`.
+  Do not patch the one table — state the rule: when a decision removes a field or
+  a case from a Core-concepts entity, the SAME commit rewrites every artifact that
+  restates that entity (plan table, plan task steps, issue Core concepts, mutation
+  ledger) and records the removal under `## Deviations`, because those artifacts
+  are what the next agent reads instead of the code.
+  plan:29-41 and the issue's `## Core concepts` specify case = "quotes"|"question",
+  question, topic and delete_lines; branch_submit.lua:96-100 returns only
+  { case = "quotes", ref_after, strip_markers }. Task 3's checked steps (plan:186-236)
+  list six tests asserting p.delete_lines / case == "question" / p.question, none of
+  which exist in tests/unit/branch_submit_spec.lua. The four `## Deviations` entries
+  do not mention the removal.
+- **BR-60** [Critical] `docs-assert-unverified-behavior` Task 7's <M-CR> agreement check is checked off but absent, and the equivalence it guarded is already false
+  This is the 6th finding in family `docs-assert-unverified-behavior`. Earlier
+  rounds fixed instances. Do not fix this instance alone — the rule is: a plan step
+  may not be checked off, and a `## Deviations` entry may not describe a test, until
+  that test exists in the tree and has been seen red; the mutation ledger is
+  generated from `git diff <base> -- lua/` and a row whose mutation target is not in
+  the diff is a defect in the ledger, not a note.
+  plan:314-320 checks off the agreement pin; `## Deviations` item 2 claims it "runs
+  plan_submission's exchange resolution against init.lua's find_exchange_at_line
+  line-by-line over three transcripts. Verified by deleting the planner's margin
+  rule: three tests go red." grep -rn find_exchange_at_line tests/ hits only
+  tests/unit/pure_functions_spec.lua; plan_submission has no exchange resolution and
+  no margin rule. Three ledger rows (case 3b delete_lines, ref lands after 📝:,
+  planner agrees with find_exchange_at_line) mutate code that is not in the tree.
+  The unguarded promise is already broken twice: init.lua:2329 hardcodes
+  bracket = true where chat_respond.lua:1284 reads config.mark_reference_span, and
+  <M-i> gathers buffer-wide where <M-CR> gathers per-exchange
+  (chat_respond.lua:1287-1294, :1336-1345) — so README.md:174,
+  atlas/chat/inline_branch_links.md:31 and branch_submit.lua:5-6 all assert an
+  equivalence that does not hold.
+- **BR-61** [Important] `readme-missing-for-changed-surface` the gf smart go-to-file bullet was deleted from README as collateral of the <M-i> rewrite
+  This is the 3rd finding in family `readme-missing-for-changed-surface`. Do not
+  just restore the line — state the rule: README's binding list and the registry's
+  resolved default keys must agree, and that agreement should be derived, not
+  reviewed. M2 already built the machinery (keybinding_agreement_spec.lua, key_for)
+  and already caught three README-documented commands that were never implemented;
+  extend the same derivation to bindings so a bullet cannot vanish silently.
+  `git show d5ba3eb:README.md` line 179 documents `gf`; it is absent at HEAD and
+  `gf` is still shipped.
+- **BR-62** [Important] `test-harness-assumption` the new unit spec calls parley.setup() per test, and make test is red from a clean environment
+  This is the 4th finding in family `test-harness-assumption`. Do not fix only the
+  new spec — the rule is: a spec in tests/unit/ exercises pure logic with an
+  injected config stub and never calls parley.setup(), and the shared IO it would
+  have touched must be race-safe rather than trusted to serialise.
+  Two of two `make test-clean-env && make test-unit` runs failed; the annotation
+  spec fails with E739: Cannot create directory .../xdg/data/nvim: file already
+  exists, from file_tracker.lua:26-31 (isdirectory check then mkdir, raced by the
+  8-way runner). It passes standalone and in four warm-env runs, and
+  artifact_ref_spec.lua — one of 21 pre-existing unit specs that call setup() —
+  failed the same way on the other clean run. annotation_lines_spec tests
+  parse_chat, which tests/unit/parse_chat_spec.lua already covers with a plain
+  config stub and no setup at all. Class fix: drop setup() from the new spec, and
+  make ensure_dir_exists tolerate an existing directory.
+- **BR-63** [Important] `partial-effect-not-committed` create_child_chat is unguarded after the parent has already been stripped and the reference inserted
+  This is the 4th finding in family `partial-effect-not-committed`. Do not guard
+  the one call — the rule is: within a single keypress transition, every effect
+  after the first buffer mutation is guarded the same way, and a failure states
+  what the buffer is left holding. Right now the guarding is inconsistent within
+  ten lines of the same function.
+  init.lua:2350 calls create_child_if_owned bare while :2351 calls commit_reference,
+  which pcalls its :write. By :2350 the markers are stripped and the 🌿: line
+  inserted, so a raise (unwritable chat_dir, full disk) escapes the keymap callback
+  leaving a parent pointing at a file that does not exist. This is plan-gate finding
+  PQ-8, still open at that gate, shipped unchanged.
+- **BR-64** [Important] `breaking-change-without-upgrade-note` 🔒: content previously withheld from the LLM is now submitted, with no upgrade note
+  atlas/chat/format.md documented 🔒: as a local SECTION excluded from LLM context;
+  chat_parser.lua:606-613 makes it one line. A user whose transcripts used the
+  documented semantics silently begins submitting every line after the first noted
+  one on their next request. The measurement cited (0 of 16 chats in the operator's
+  corpus) bounds the operator's exposure, not a published plugin's users. The atlas
+  records the new behaviour; README has no upgrade or breaking-change section and
+  never documented the prefix, so there is nowhere a user would see this
+  (ARCH-SECURE at-review).
+- **BR-65** [Minor] `dead-value-in-new-code` ready_marker_lines computes a line number per marker that plan_submission never reads
+  This is the 2nd finding in family `dead-value-in-new-code`. Do not just delete
+  the field — the rule is: a value computed to satisfy a signature must be read by
+  that signature's implementation, or the parameter goes away; a dead field in a
+  "pure decision" module is what makes the module look like it decides more than it
+  does. init.lua:2266-2278 counts newlines per ready marker to build { line = N };
+  branch_submit.lua:87-101 only tests #markers > 0. The same pass also runs
+  drill_in.parse over the whole buffer a second time — gather_edit_plan at :2329
+  parses again.
+- **BR-66** [Minor] `duplicate-helper-not-retired` annotation_line re-implements the classifier's predicate while its comment claims it reuses it
+  This is the 7th finding in family `duplicate-helper-not-retired`. Earlier rounds
+  fixed instances. Do not fix this instance — the rule is: a line-kind predicate
+  lives in highlight_structure beside the patterns it reads, and callers ask it
+  rather than re-matching pattern fields; highlight_structure.is_partition
+  (:180-198) is the precedent for exactly this. chat_parser.lua:335-342 defines
+  annotation_line inline (rebuilt per finalize_component call) matching
+  local_pattern/branch_pattern directly, under a comment asserting it reuses
+  highlight_structure.classify. Add is_annotation(line, patterns) there and call it.
+- **BR-67** [Minor] `markdown-block-not-separated` revision 11 was written into the middle of the M3 Plan bullet instead of into ## Revisions
+  This is the 2nd finding in family `markdown-block-not-separated`. Do not just move
+  this block — the rule is: a `## Revisions` entry is appended to `## Revisions`,
+  never inlined into the artifact section it revises, and its number is unique
+  across the issue.
+  workshop/issues/000214-curate-default-keybindings.md:507 puts a `###` heading and
+  its body between "Rows 2a/2b collapse" and "(placement is the cursor, not the
+  exchange end)", severing the bullet and nesting a heading inside `## Plan`.
+  `## Revisions` is at :764, and the numbered entries 1-11 are currently split
+  across `## Plan`, `## Log` and `## Revisions` with 1/2/3 used twice.
+
+## Round 14 — 2026-09-07T18:32:20-07:00 (claude) — BLOCKED
+
+### Disposed
+
+- BR-58 — not-addressed — make_handle takes a 0-indexed row but is passed the 1-indexed cursor line, so the
+anchor sits on the whitespace gap that drill_in.lua:457-458 swallows into its `]`
+edit; with left gravity the mark collapses and the ref lands ABOVE the cursor line.
+Reproduced: standalone marker directly below the cursor, and inline-above + standalone-below.
+Every new fixture puts the marker above the cursor, so the suite samples one side of the axis.
+- BR-59 — not-addressed — Core-concepts tables corrected in both plan and issue and the ledger rows struck, but
+the plan's Task 3 steps are still `- [x]` over six assertions absent from the tree, and
+`## Deviations` still records no entry for the removal — two of the four artifacts the rule named.
+- BR-60 — not-addressed — Task 7's body now says NOT DELIVERED and the ledger row is struck, but `## Deviations`
+item 2 still states verbatim that the check runs plan_submission's exchange resolution
+against find_exchange_at_line over three transcripts, verified by three red tests. No such test exists.
+- BR-61 — not-addressed — The `gf` bullet is restored, but the derivation the finding asked for was not built —
+no test relates README's binding bullets to the registry's resolved default keys, so the
+next bullet can still vanish silently. Instance fixed, class open.
+- BR-62 — addressed — setup() dropped from the new spec; two clean-environment `make test` runs green (200 files).
+The ensure_dir_exists half is unnecessary — measured that vim.fn.mkdir(existing, "p") returns
+1 without error on nvim 0.11.7, and every mkdir in lua/ passes "p".
+- BR-63 — addressed — Create now precedes every buffer mutation and is pcall'd; branch_child_spec.lua:820-838
+simulates the failure and asserts the markers survive. See Minor M2 for the unswept half
+(the effects after the create are now the unguarded ones).
+- BR-64 — addressed — README now carries an explicit upgrade note under "Two config contracts changed"; the atlas
+records the single-line semantics in both format.md and parsing.md.
+- BR-65 — addressed — ready_marker_lines is gone (grep: zero hits) and the second drill_in.parse pass with it;
+the gather is now asked first and is the authority. See Minor M1 for the parse_chat that remains unconditional.
+- BR-66 — not-addressed — The false comment is fixed and the closure hoisted out of finalize_component, but the
+predicate still re-matches local_pattern/branch_pattern in chat_parser instead of living in
+highlight_structure as is_annotation. A reasoned counter-argument is given in the comment; the stated rule is not followed.
+- BR-67 — not-addressed — The block no longer severs the Plan bullet, but the rule was not applied: entries 9-11 still
+live under `## Log` rather than `## Revisions`, numbers 1/2/3 remain duplicated across the two
+sections, and the move stranded a two-line fragment at issue :647-648.
+
+### Raised
+
+- **BR-68** [Important] `docs-assert-unverified-behavior` the "one blank line each side" margin is asserted in three artifacts and held by neither insert path
+  init.lua:2343-2345 inserts { "", ref } — one blank BEFORE only — under a comment claiming
+  "one blank line each side"; insert_plain at :2387-2390 inserts the bare line with no blank on
+  either side. The plan says `add_block(k, "branch_ref", 1, 1)` and no such block kind exists in
+  exchange_model.lua. Measured: cursor line followed immediately by non-blank prose leaves the ref
+  abutting the next line; the two-marker case leaves two blanks before it. The existing assertions
+  (branch_child_spec.lua:397, 419-420) pass only because those fixtures happen to have a blank in the
+  right place. Rule: an invariant stated in a comment or plan is pinned by a fixture that would violate
+  it if the code were wrong — here, non-blank text on BOTH sides — and one key gets one spacing rule in one helper.
+- **BR-69** [Important] `docs-assert-unverified-behavior` the pending-response refusal covers n and i but not v, while README and the atlas state it for the whole chord
+  init.lua:2288 guards insert_planned, reachable only from insert_plain (n/i). insert_inline at
+  :2425-2452 runs create_child_if_owned and commit_reference with no check. README.md's closing
+  paragraph ("It declines while a response is still streaming into that chat") and
+  atlas/chat/inline_branch_links.md:60-62 ("Refusals. The chord declines...") both assert it for all
+  three cases. init.lua:2216-2219 already states the governing rule for this file: the enumeration is
+  the dispatch table n/i/v, not the path in front of you. Lift the guard above the dispatch table, or narrow both documents.
+- **BR-70** [Important] `stale-comment-after-move` atlas/chat/drill_in.md still names chat_respond as the owner of the gather options
+  :130-137 read "chat_respond assembles them from config" and "opts.bracket (set by chat_respond from
+  config.mark_reference_span)". The owner is now drill_in.chat_gather_opts with two consumers. The file
+  is named in the plan's Task 8 file list and is absent from the diff — new surface with no update to its
+  home atlas page (AGENTS.md section 8).
+- **BR-71** [Minor] `derive-before-validate` a full parse_chat runs on every M-i press to answer only "are there zero exchanges"
+  init.lua:2296 parses the whole buffer (M.parse_chat is uncached, init.lua:3709) before the
+  has_markers check that decides whether a plan is possible at all; on the common no-marker path the
+  result is discarded. Ask the gather first, then parse only when a plan can exist. ARCH-CONSTRAINTS:
+  this is an interactive keypress path now doing two full-buffer passes with no declared envelope.
+- **BR-72** [Minor] `partial-effect-not-committed` BR-63 moved the point of no return, and the effects after it are now the unguarded ones
+  This is the 5th finding in family `partial-effect-not-committed`. Earlier rounds fixed instances.
+  Do not guard the one call — the rule BR-63 stated still has an unswept half: within a single keypress
+  transition, every effect after the point of no return is guarded the same way and a failure states what
+  the buffer is left holding. create_child_if_owned is now pcall'd and first (init.lua:2329); the
+  apply_text_edits and nvim_buf_set_lines at :2337-2345 that follow it are not, so a raise there leaves a
+  child on disk with no reference — BR-19's orphan by the reverse route. Low probability, since the edits are drill_in's own.
+- **BR-73** [Minor] `test-does-not-pin-the-fix` two plan_submission decline tests are green for reasons unrelated to their names
+  This is the 6th finding in family `test-does-not-pin-the-fix`. Do not fix these two — the rule is:
+  a test's name states the branch it takes, and the assertion fails if that branch is removed.
+  branch_submit_spec.lua:135-140 "a question with no text has nothing to submit" passes has_markers = false
+  and plan_submission never inspects question.content, so it exercises the marker branch and would stay
+  green if the content check it names were added and then broken. :129 passes `{}` (truthy) for a boolean
+  parameter, a leftover from the pre-narrowing signature, and passes only via the zero-exchanges branch.
+- **BR-74** [Minor] `markdown-block-not-separated` a stranded two-line fragment remains at the issue's :647-648 after revision 11 was moved
+  This is the 3rd finding in family `markdown-block-not-separated`. Do not just delete these two lines —
+  the rule from BR-67 still applies and was not: a `## Revisions` entry is appended to `## Revisions`,
+  never left in the section it revises, and its number is unique across the issue. Entries 9-11 are still
+  under `## Log`; 1/2/3 are used twice; and the move left
+  "      (placement is the cursor, not the exchange end) and the 3a/3b split is gone" dangling after revision 11's body.
+
+## Round 15 — 2026-09-07T18:56:41-07:00 (claude) — BLOCKED
+
+### Disposed
+
+- BR-58 — addressed — make_handle anchor + fixtures on both sides of the delta axis; reverting the anchor turns 2 integration tests red.
+- BR-59 — addressed — Plan Core concepts + Task 3 carry corrections, issue Core concepts rewritten, Deviations entry 0 records the removal, ledger rows struck.
+- BR-60 — addressed — Task 7 steps removed with a NOT-DELIVERED note; three ledger rows struck; bracket unified via chat_gather_opts with a no-rebuild test; scope difference stated as deliberate in README, atlas and module header.
+- BR-61 — addressed — gf bullet restored; keybinding_agreement_spec now derives README-key to registry agreement and pins the headline chords in the reverse direction.
+- BR-66 — not-addressed — Predicate still duplicated; the new rationale "would cost a call per line" is contradicted by kinds[] at chat_parser.lua:557, which already holds classify's answer for every line.
+- BR-67 — addressed — Revisions consolidated under one heading, numbering unique 1-17 — but the renumbering broke five cross-references; raised separately.
+- BR-68 — addressed — branch_ref.ref_block owns the margin for both insert paths; reverting it turns the prose-both-sides test red.
+- BR-69 — addressed — refuse_while_pending wraps the n/i/v dispatch table; reverting v turns the every-mode test red.
+- BR-70 — addressed — atlas/chat/drill_in.md now names chat_gather_opts as the owner with both consumers.
+- BR-71 — not-addressed — The redundant drill_in.parse was removed, but M.parse_chat still runs unconditionally at init.lua:2280 before the gather, and the adjacent comment claims the gather is asked first.
+- BR-72 — not-addressed — apply_text_edits and nvim_buf_set_lines at init.lua:2337-2352 remain unguarded between the pcall'd create and commit_reference.
+- BR-73 — not-addressed — Both tests unchanged — branch_submit_spec.lua:126 still passes {} for a boolean, and :131-136 still names a content check plan_submission never performs.
+- BR-74 — not-addressed — The two-line fragment is still stranded, now at issue lines 799-800 after revision 15's body.
+
+### Raised
+
+- **BR-75** [Critical] `merged-path-loses-original-effect` a mid-component 🌿:/🔒: annotation is inside the span a resubmit deletes, so <M-CR> destroys the reference the chord just inserted
+  This is the 2nd finding in family `merged-path-loses-original-effect`. Do not
+  re-fix the trailing case — the rule is: when a latch is replaced by per-line
+  handling, enumerate every effect the latch provided and restore each across
+  its whole axis, not at the one position a fixture happens to test. The
+  line_before_local latch provided content exclusion (deliberately dropped) AND
+  truncation of the component's line_end at the marker; only the trailing half
+  of the second was restored by the annotation-aware trim at
+  chat_parser.lua:335-352.
+  Measured against a base worktree, same transcript: answer.line_end is 10 at
+  d5ba3eb and 16 at HEAD for a 🌿: at line 12. chat_respond.lua:1436 calls
+  delete_answer(buf, question.line_end, answer.line_end - 1) →
+  nvim_buf_set_lines(buf, 6, 16) → deletes 1-indexed 7..16 including the
+  reference. Driving the real chord (_branch_inserters(buf,false,true).n() at
+  line 10 of an answer with text after it) lands the 🌿: at 12, inside 7..16 —
+  so the next resubmit of that exchange orphans the child chat on disk (BR-19)
+  and silently deletes any mid-answer 🔒: private note in the same range.
+  atlas/chat/inline_branch_links.md:38-43 asserts the opposite. Fix: make the
+  resubmit deletion annotation-preserving, pinned by a test that resubmits an
+  exchange carrying both a mid-answer reference and a mid-answer note.
+- **BR-76** [Important] `reference-written-in-unresolvable-form` the BR-67 revision renumbering invalidated five cross-references, which now point at unrelated decisions
+  This is the 2nd finding in family `reference-written-in-unresolvable-form`.
+  Do not renumber the citations by hand — the rule is: a cross-reference into
+  an artifact is written in a form that survives that artifact's own
+  renumbering (heading or date anchor, not an ordinal), or the renumbering edit
+  updates every citation in the same commit.
+  Consolidating the revisions produced a unique 1-17 sequence. The issue's M3
+  Plan rows at :506, :528 and :536 still say "## Revisions 9 and 10" / "9 and
+  11", and workshop/plans/000214-branch-submit-m3-plan.md:39 and :159 say
+  "## Revisions 9-10". Slots 9/10/11 now hold alias rendering in <C-g>?,
+  md_delete_file's config key, and master-switch reversibility. The intended
+  targets are 15/16/17.
+- **BR-77** [Minor] `markdown-block-not-separated` two new functions were spliced into the middle of an adjacent function's doc-comment block
+  This is the 4th finding in family `markdown-block-not-separated`. Do not fix
+  the two sites — the rule generalises past markdown: a block is inserted
+  BETWEEN complete blocks, never into the middle of one.
+  helper.lua:117 puts flatten_lines between "---@return string # returns unique
+  uuid" and _H.uuid, so uuid loses its annotation and flatten_lines gains a
+  bogus second @return. drill_in.lua:346 puts chat_gather_opts between
+  chat_boundaries' description plus @param cfg and its @return string[], so
+  chat_boundaries is left with only a return type and chat_gather_opts inherits
+  prose about the anchor scan that describes its neighbour.
+- **BR-78** [Minor] `artifact-missing-from-its-index` helper.flatten_lines shipped as a new exported pure entity with no Core-concepts row
+  This is the 2nd finding in family `artifact-missing-from-its-index`. The rule
+  covering both: a new exported entity is added to the Core-concepts table that
+  enumerates its kind, in the same commit that introduces it.
+  flatten_lines is new, exported, unit-tested and guarded by an arch spec, but
+  appears in neither the issue's nor the plan's Core concepts. The plan's table
+  also omits ref_block and chat_gather_opts, which the issue's table does carry
+  — so the two tables disagree about what M3 delivered.
+
 ## Open findings
 
 - **BR-2** [Important] `pure-extraction-without-tests` New pure module lua/parley/branch_ref.lua has zero tests and is absent from traceability.yaml
@@ -1842,3 +2521,12 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-55** [Minor] `derive-before-validate` _explicit_shortcuts is computed from raw opts before setup() strips malformed values
 - **BR-56** [Minor] `test-does-not-pin-the-fix` the BR-48 derived guard uses an unanchored substring, so 8 of 15 dotted knobs cannot fail it
 - **BR-57** [Minor] `markdown-block-not-separated` README's "Every knob is named in config.lua" is swallowed into the preceding bullet
+- **BR-66** [Minor] `duplicate-helper-not-retired` annotation_line re-implements the classifier's predicate while its comment claims it reuses it
+- **BR-71** [Minor] `derive-before-validate` a full parse_chat runs on every M-i press to answer only "are there zero exchanges"
+- **BR-72** [Minor] `partial-effect-not-committed` BR-63 moved the point of no return, and the effects after it are now the unguarded ones
+- **BR-73** [Minor] `test-does-not-pin-the-fix` two plan_submission decline tests are green for reasons unrelated to their names
+- **BR-74** [Minor] `markdown-block-not-separated` a stranded two-line fragment remains at the issue's :647-648 after revision 11 was moved
+- **BR-75** [Critical] `merged-path-loses-original-effect` a mid-component 🌿:/🔒: annotation is inside the span a resubmit deletes, so <M-CR> destroys the reference the chord just inserted
+- **BR-76** [Important] `reference-written-in-unresolvable-form` the BR-67 revision renumbering invalidated five cross-references, which now point at unrelated decisions
+- **BR-77** [Minor] `markdown-block-not-separated` two new functions were spliced into the middle of an adjacent function's doc-comment block
+- **BR-78** [Minor] `artifact-missing-from-its-index` helper.flatten_lines shipped as a new exported pure entity with no Core-concepts row

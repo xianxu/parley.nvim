@@ -14,11 +14,19 @@
 
 ### Pure entities
 
+> **The issue's `## Core concepts` is the DELIVERED record; this one is the
+> DESIGN record.** They are separate tables and the arch guard accepts an entity
+> in either, which is how they drifted — three entities M3 shipped were in the
+> issue and not here (#214). Rows added after the fact are marked *(as built)*.
+
 | Name | Lives in | Status |
 |------|----------|--------|
 | `plan_submission` | `lua/parley/branch_submit.lua` | new |
 | `seed_question` | `lua/parley/branch_submit.lua` | new |
 | `topic_for_selection` | `lua/parley/branch_ref.lua` | modified |
+| `ref_block` | `lua/parley/branch_ref.lua` | new *(as built)* |
+| `chat_gather_opts` | `lua/parley/drill_in.lua` | new *(as built)* |
+| `is_annotation` | `lua/parley/annotation.lua` | new *(as built)* |
 
 - **`plan_submission`** — `(parsed_chat, cursor_line, markers) -> plan`. Decides
   whether there is anything to rearrange and where the reference goes; performs
@@ -36,7 +44,7 @@
   > `case = "question"`, `question`, `topic` and `delete_lines` do not exist. The
   > Task 3 steps below still describe the planned shape and their assertions are
   > not in the tree; they are left as the record of what was designed, with this
-  > note as the correction. See ## Revisions 9-10 in the issue.
+  > note as the correction. See ## Revisions, "M3 placement reversed by the operator" in the issue.
 
 - **`seed_question`** — `(case, payload) -> string`. The child's first question: `tell me more about "<selection>"` for a visual selection, the formatted quote blocks for case 2, the question text verbatim for case 3.
   - **DRY rationale:** one place that knows how a payload becomes a prompt; three call sites would otherwise each invent wording.
@@ -48,7 +56,17 @@
 | Name | Lives in | Status | Wraps |
 |------|----------|--------|-------|
 | `branch_inserters` | `lua/parley/init.lua` | modified | buffer writes, child creation, parent `:write` |
+| `flatten_lines` | `lua/parley/helper.lua` | new *(as built)* | `vim.fn.writefile`'s NUL encoding |
+| `delete_answer` | `lua/parley/buffer_edit.lua` | modified *(as built)* | the resubmit's answer removal |
 
+- **`is_annotation`** — one owner for "is this line a `🌿:`/`🔒:` annotation".
+  Three places needed the answer — the parser's trailing-span trim, the
+  resubmit's survivor filter, and the arch guard — and a predicate spelled three
+  times is the shape that lets a fourth caller get it subtly wrong.
+- **`delete_answer`** — a resubmit replaces the MODEL's output, so it now keeps
+  the user's annotations. #214 made those lines part of the answer's span (they
+  used to truncate it), which turned a plain range delete into a destroyer of the
+  reference `<M-i>` had just inserted — orphaning a child chat on disk (BR-75).
 - **`branch_inserters`** — gains an `n`/`i` path that consults `plan_submission` and executes the returned plan. The existing durability rule is unchanged and load-bearing: create the child, commit the parent, *then* navigate — so a `:q!` between steps cannot orphan the child (#214 BR-19).
   - **Injected into:** nothing; it is the effect layer. `plan_submission` is called *by* it and receives already-parsed inputs, so the decision stays testable with no buffer.
   - **Future extensions:** the markdown (`owns_file == false`) path stays as it is — parley must not `:write` a document it does not own, so it cannot make a reference durable there and therefore creates no child.
@@ -156,7 +174,7 @@ end
 > (#214 BR-59). Six of their assertions — `p.delete_lines`, `case == "question"`,
 > `p.question` — describe the pre-narrowing `plan_submission` and are not in
 > `tests/unit/branch_submit_spec.lua`. What shipped is the quotes case alone; see
-> the correction under Core concepts above and ## Revisions 9-10 in the issue.
+> the correction under Core concepts above and ## Revisions, "M3 placement reversed by the operator" in the issue.
 
 - [x] **Step 1: Write the failing tests — one per row of the issue's table**
 
