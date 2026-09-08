@@ -483,8 +483,9 @@ stated purpose is making bindings *more* configurable.
 - [x] **M2** — assert registry-derived help/reality agreement in both directions,
       with the allowance list closed.
 
-- [ ] **M3** — generalise `<M-S-CR>` (operator, 2026-09-07). The chord is not a
-      quotes feature; it is **one rule**:
+- [x] **M3** — generalise `<M-S-CR>` (operator, 2026-09-07), then NARROWED by the
+      operator on first use (## Revisions 9 and 10): the chord inserts at the
+      cursor and never deletes. The rule as shipped:
 
       > `<M-S-CR>` performs the submission `<M-CR>` would perform, into a new
       > child chat, and leaves a `🌿:` reference at the position `<M-CR>`'s
@@ -535,8 +536,15 @@ line_before_local is set"*) and were updated to the decided contract.
       Spacing is the exchange model's own `MARGIN`: the ref is its own block with
       exactly one blank line before and after — `add_block(k, "branch_ref", 1, 1)`.
 
-- [x] **M3 item 4 decision — the ref goes AFTER the `📝:` summary. Measured, not
-      reasoned.** Built both layouts and ran each through `from_parsed_chat`:
+- [x] **M3 item 4 decision — SUPERSEDED (## Revisions 9 and 11). The ref lands
+      at the CURSOR.** The reasoning below was sound and its measurement stands,
+      but it was reasoning about a *workaround*: the model truncation it avoids
+      was caused by the parser latching on `🌿:`, which is fixed at the source —
+      a reference now costs exactly its own line wherever it sits. What follows
+      is the original decision, kept because the measurement is still the record
+      of how the exchange model behaved.
+
+      ~~The ref goes AFTER the `📝:` summary. Measured, not reasoned.~~ Built both layouts and ran each through `from_parsed_chat`:
 
       ```
       ref AFTER  📝:  ex1 blocks = question@4 agent_header@6 text@8 summary@10   append_pos=12  <- the ref line
@@ -558,8 +566,9 @@ line_before_local is set"*) and were updated to the decided contract.
       an identical summary and branch list. The breakage is one level down, in the
       model. Recorded because the inference looked convincing and was not.)
 
-- [x] **M3 decision (operator, 2026-09-07): STRIP, same as `<M-CR>`.** The
-      markers move into the child and the parent is left clean. Rationale:
+- [x] **M3 decision (operator, 2026-09-07): STRIP, same as `<M-CR>` — SHIPPED,
+      and it is the only case the chord acts on.** The markers move into the
+      child and the parent is left clean. Rationale:
       `<M-q>` + `<M-CR>` moves your quotes into the next turn *here*; `<M-q>` +
       `<M-S-CR>` moves them into the next turn *there*. Same gesture, different
       destination — which is the whole mnemonic. A *fork* (copy, parent keeps the
