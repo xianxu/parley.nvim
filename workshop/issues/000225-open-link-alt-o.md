@@ -1,11 +1,12 @@
 ---
 id: 000225
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-09-08
 updated: 2026-09-08
 estimate_hours:
+started: 2026-09-08T16:45:24-07:00
 ---
 
 # Open a link with <M-o>, falling back to gf
