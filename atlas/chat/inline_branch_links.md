@@ -19,40 +19,43 @@ not, and `:write` would persist the user's unrelated pending edits.
 | saves the parent | yes | **no** — never writes a file parley does not own |
 | after the keypress | opens the child | cursor on the new line, insert mode |
 
-### The chord is one rule (#214 M3)
+### What `<M-i>` does (#214 M3)
 
-> `<M-S-CR>` performs the submission `<M-CR>` would perform, into a new child
-> chat, and leaves a `🌿:` reference where `<M-CR>`'s output would have appeared.
+`<M-i>` / `<M-S-CR>` / `<C-g>i` are one binding. The chord **inserts a branch
+reference at the cursor** and creates the child it points at:
 
-The parent always keeps its context; the only thing it ever loses is an answer
-`<M-CR>` would itself have replaced. `<M-i>` and `<C-g>i` are aliases for the
-same action.
+| context | what happens | the child gets |
+|---|---|---|
+| visual selection | the selection becomes an inline `[🌿:…](child)` anchor, in place | `tell me more about "<sel>"` |
+| pending `<M-q>` markers | the markers are gathered and stripped exactly as `<M-CR>` would strip them; a `🌿:` line lands at the cursor | those quote blocks as its first question |
+| neither | a bare `🌿:` line at the cursor — a **placeholder** — and the child opens for you to type in | nothing |
 
-| context | `<M-CR>` does | `<M-S-CR>` does | the ref lands |
-|---|---|---|---|
-| visual selection | inline term definition at the selection | child seeded `tell me more about "<sel>"` | inline `[🌿:<sel>](child)`, in place |
-| cursor on a past exchange with `<M-q>` markers | strips them, inserts a new turn after that exchange's answer, original Q/A preserved | those gathered quote blocks become the child's first question | after **that** exchange's `📝:` |
-| `<M-q>` markers elsewhere | strips them, appends the new turn at the buffer end | same payload → child | after the **last** exchange's `📝:` |
-| cursor on an unanswered question | submits it; the answer appears after it | the question is **copied** to the child | after the question |
-| cursor on an answered question | resubmits: the old answer is deleted and regenerated | old answer deleted, question copied to the child | where the answer was |
+**Placement is the cursor, deliberately** (operator, 2026-09-07, revising an
+earlier end-of-answer rule). `<M-S-CR>` reads as a *submission*, whose effect is
+not local to anywhere — but `<M-S-CR>` does not survive most terminals (zellij,
+tmux, anything without CSI-u), so `<M-i>` is the key people actually press, and
+it reads as an *insertion*. Relocating the line made the keypress jump.
 
-**Why the reference follows `📝:` and not precedes it.** Measured, not reasoned:
-run both layouts through `exchange_model.from_parsed_chat` and the "before"
-variant yields blocks `question, agent_header, text` — **the summary block is
-gone** — with `append_pos` pointing into the middle of the exchange. After the
-summary, the blocks stay contiguous and `append_pos` lands exactly on the
-reference line. (At *parse* level the two are indistinguishable, so the parser is
-not where this is decided.)
+**The cost, measured.** `🌿:` sets the parser's `line_before_local` — the same
+mechanism `🔒:` uses to mark a local section — so a reference in the MIDDLE of an
+answer excludes the text after it from the LLM context, and
+`exchange_model.from_parsed_chat` truncates that exchange (its `summary` block
+disappears, `append_pos` moves into the middle). Placing the reference at the end
+of an answer avoids this entirely, which is why the first design did. This is
+pre-existing behaviour — the pre-#214 path also inserted at the cursor — and the
+operator's call is that a key that reads as "insert" must insert where you are.
+Fixing it properly means teaching the parser that a standalone `🌿:` is a
+one-line annotation rather than a local-section boundary.
 
-The reference is its own block with one blank line each side, which is the
-exchange model's `MARGIN`.
+**The chord never deletes.** An earlier M3 draft had it copy the question into
+the child and delete the answer it replaced, mirroring `<M-CR>`'s resubmit. That
+is coherent for a *submission* but not for an *insertion*, and the three keys
+share one callback — so the destructive reading would have been reachable from
+the key that says "insert here". Dropped.
 
 **Refusals.** The chord declines while the buffer owns a pending response — a
 streaming answer holds a chat lease on its `🤖:` line, and editing under it
-corrupts the transcript rather than erroring. With *nothing* to submit (an empty
-transcript, or the cursor outside every exchange) it falls back to the pre-M3
-behaviour below rather than doing nothing: generalising the chord must not delete
-the "make me a side chat" affordance, and it is never a no-op.
+corrupts the transcript rather than erroring.
 
 - **Normal / insert mode, chat buffer, nothing to submit**: inserts a full-line
   `🌿: <filename>: `, creates the child, saves the parent, and **opens the

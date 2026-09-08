@@ -12,12 +12,18 @@
 -- output, and the effects stay in `init.lua`'s `branch_inserters`, which already
 -- owns the durability rule (create the child, commit the parent, then navigate).
 --
--- The reference always follows the last line of what the exchange currently ends
--- with, which for an answered exchange is `answer.line_end` — and that line IS
--- the `📝:` summary (verified against chat_parser). Placing it *before* the
--- summary drops the summary block out of the exchange model entirely: measured,
--- `from_parsed_chat` yields `question, agent_header, text` with no `summary`, and
--- `append_pos` then points into the middle of the exchange.
+-- WHERE the reference lands (operator, 2026-09-07, revising the earlier
+-- end-of-answer rule): at the CURSOR. `<M-S-CR>` reads as a *submission*, whose
+-- effect is not local to anywhere — but `<M-i>` is the key that actually works
+-- in a terminal, and it reads as an *insertion*, which has to happen where you
+-- are. Relocating the line to the end of the answer made the keypress jump.
+--
+-- The cost is measured and real: `🌿:` sets the parser's `line_before_local`,
+-- the same mechanism `🔒:` uses, so answer text AFTER a mid-answer reference is
+-- excluded from the LLM context and the exchange model truncates that exchange
+-- (its `summary` block disappears and `append_pos` moves into the middle). That
+-- is pre-existing — `insert_plain` has always inserted at the cursor — and it is
+-- why end-of-answer looked better on paper. See the issue's ## Revisions.
 
 local M = {}
 
@@ -47,123 +53,44 @@ function M.seed_question(case, payload)
     return payload
 end
 
---- Where exchange `ex` currently ends: the summary line when it has an answer,
---- otherwise its question. This is the line the reference follows.
-local function exchange_end(ex)
-    if ex.answer then
-        return ex.answer.line_end
-    end
-    return ex.question and ex.question.line_end
-end
-
---- The exchange the cursor is in, by line span. Mirrors `init.lua`'s
---- `find_exchange_at_line` INCLUDING its margin rule — a line after a question
---- but before the answer (or before the next exchange, when there is no answer)
---- belongs to that question. Without the margin, composing on the blank line
---- under a new question resolved to "nowhere", and `<M-CR>` and `<M-S-CR>` would
---- disagree about the most common case there is.
+--- Plan the branch for a cursor position.
 ---
---- Deliberately re-derived rather than called: that function needs the whole
---- plugin loaded, and this module's reason for existing is that it does not.
---- Task 7's conformance check is what keeps the two honest.
---- @return integer|nil index
-local function exchange_at(parsed_chat, line)
-    local exchanges = parsed_chat.exchanges
-    for i, ex in ipairs(exchanges) do
-        local q, a = ex.question, ex.answer
-        if q and line >= q.line_start and line <= q.line_end then
-            return i
-        end
-        if a and line >= a.line_start and line <= a.line_end then
-            return i
-        end
-        if q and line > q.line_end then
-            if a then
-                if line < a.line_start then return i end
-            else
-                local nxt = exchanges[i + 1]
-                if not nxt or line < nxt.question.line_start then return i end
-            end
-        end
-    end
-    return nil
-end
-
--- Test seam: the duplicated rule is pinned line-by-line against
--- `init.lua`'s `find_exchange_at_line` (#214 M3 Task 7). Exposed because a
--- duplicated rule that nothing compares is exactly how the two chords drift.
-M._exchange_at = exchange_at
-
---- Plan the submission for a cursor position.
+--- Returns a plan ONLY when there are pending `<M-q>` markers to rearrange.
+--- Everything else — a bare question, an answered exchange, an empty transcript
+--- — returns nil, and the caller inserts a plain reference at the cursor and
+--- opens an empty child. That is a deliberate narrowing (operator, 2026-09-07):
+---
+---   `<M-i>` reads as an INSERTION. An insertion must not delete your answer.
+---
+--- The earlier design copied the question into the child and deleted the answer
+--- it replaced, mirroring `<M-CR>`'s resubmit. That is coherent for
+--- `<M-S-CR>` — a *submission*, whose effect is not local to anywhere — but
+--- `<M-i>`, `<M-S-CR>` and `<C-g>i` are one registry entry with one callback, and
+--- `<M-S-CR>` does not survive most terminals. So the destructive reading would
+--- only ever be reachable from the key that reads as "insert here". Dropped
+--- rather than left as unreachable code.
 ---
 --- @param parsed_chat table   chat_parser output
 --- @param cursor_line integer 1-indexed
 --- @param markers table[]     ready drill-in markers, each carrying `line`
 --- @return table|nil plan, string|nil reason
 --- plan = {
----   case          = "quotes" | "question",
----   question      = string,                -- what the child is seeded with
----   topic         = string,                -- the child's `topic:` header
----   ref_after     = integer,               -- parent line the 🌿: block follows
----   strip_markers = boolean,               -- case 2 only
----   delete_lines  = { first, last } | nil, -- case 3b only: the replaced answer
+---   case          = "quotes",
+---   ref_after     = integer,  -- parent line the 🌿: block follows (the cursor)
+---   strip_markers = true,
 --- }
 function M.plan_submission(parsed_chat, cursor_line, markers)
     local exchanges = (parsed_chat or {}).exchanges or {}
     if #exchanges == 0 then
         return nil, "no exchange to branch from"
     end
-
-    -- Case 2 first. `<M-CR>` resolves drill-in markers BEFORE resubmit handling
-    -- (atlas/chat/drill_in.md), and preserves the original Q/A — so markers win
-    -- over the question case, and nothing is deleted.
-    if markers and #markers > 0 then
-        local target = nil
-        for _, marker in ipairs(markers) do
-            local idx = marker.line and exchange_at(parsed_chat, marker.line)
-            if idx then
-                target = math.max(target or idx, idx)
-            end
-        end
-        -- Markers that belong to no exchange (or none at all) mean the new turn
-        -- would have gone to the end of the buffer, so the ref follows the last
-        -- exchange — which is where <M-CR> would have appended it.
-        target = target or #exchanges
-        return {
-            case = "quotes",
-            ref_after = exchange_end(exchanges[target]),
-            strip_markers = true,
-        }
+    if not (markers and #markers > 0) then
+        return nil, "no pending 🤖 markers — inserting a plain reference"
     end
-
-    -- Case 3: the question at the cursor. A cursor outside every exchange — in
-    -- the frontmatter, say — is NOT "the last question": `<M-CR>` there submits
-    -- the buffer as a new turn and deletes nothing, so silently adopting the last
-    -- exchange would make <M-S-CR> destroy an answer the user never pointed at.
-    -- Decline instead.
-    local idx = exchange_at(parsed_chat, cursor_line)
-    if not idx then
-        return nil, "put the cursor on the question you want to branch"
-    end
-    local ex = exchanges[idx]
-    local text = ex.question and ex.question.content or ""
-    if text:match("^%s*$") then
-        return nil, "that question is empty — nothing to submit"
-    end
-
     return {
-        case = "question",
-        question = M.seed_question("question", text),
-        -- The child's `topic:` stays the "?" sentinel so auto-titling fires and
-        -- the slug rename follows (#214 BR-1 — a real topic here disables both,
-        -- and the generated title beats the raw question text anyway). `label`
-        -- is what the parent's 🌿: line displays, which is a different job.
-        topic = "?",
-        label = require("parley.branch_ref").topic_for_selection(text),
-        -- The ref replaces the ANSWER, so it follows the question — never
-        -- `exchange_end`, which would put it inside the span we are deleting.
-        ref_after = ex.question.line_end,
-        delete_lines = ex.answer and { ex.answer.line_start, ex.answer.line_end } or nil,
+        case = "quotes",
+        ref_after = cursor_line,
+        strip_markers = true,
     }
 end
 

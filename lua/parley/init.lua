@@ -2319,44 +2319,36 @@ local function branch_inserters(buf, abs_link, owns_file)
 
 		local drill_in = require("parley.drill_in")
 		local buffer_edit = require("parley.buffer_edit")
-		local question, topic, label = plan.question, plan.topic, plan.label
 
-		-- Case 2: the gathered quotes become the child's first question, and the
-		-- markers leave the parent exactly as `<M-CR>` would have stripped them.
-		if plan.case == "quotes" then
-			local blocks, _, marker_edits = drill_in.gather_edit_plan(text, {
-				boundaries = drill_in.chat_boundaries(M.config), bracket = true,
-			})
-			if #blocks == 0 then
-				M.logger.debug("Branch: markers found but none ready; plain reference")
-				return false
-			end
-			question = table.concat(drill_in.format_blocks(blocks), "\n")
-			label = require("parley.branch_ref").topic_for_selection(
-				(blocks[1].sections[#blocks[1].sections] or {}).text or "")
-			topic = "?"
-			buffer_edit.apply_text_edits(buf, 0, text, marker_edits)
+		-- The only planned case: gathered <M-q> quotes become the child's first
+		-- question and leave the parent exactly as `<M-CR>` would strip them.
+		local blocks, _, marker_edits = drill_in.gather_edit_plan(text, {
+			boundaries = drill_in.chat_boundaries(M.config), bracket = true,
+		})
+		if #blocks == 0 then
+			M.logger.debug("Branch: markers found but none ready; plain reference")
+			return false
 		end
-
-		-- Case 3b: `<M-CR>` on an answered question deletes the answer and
-		-- regenerates it. The answer is going to the child instead, so the
-		-- deletion is the same; only the destination differs.
-		if plan.delete_lines then
-			local first, last = plan.delete_lines[1], plan.delete_lines[2]
-			buffer_edit.delete_lines_after(buf, first - 1, last - first + 1)
-		end
+		local question = require("parley.branch_submit").seed_question(
+			"quotes", table.concat(drill_in.format_blocks(blocks), "\n"))
+		local label = require("parley.branch_ref").topic_for_selection(
+			(blocks[1].sections[#blocks[1].sections] or {}).text or "")
+		buffer_edit.apply_text_edits(buf, 0, text, marker_edits)
 
 		local new_chat_file = (new_target())
 		local rel_path = vim.fn.fnamemodify(new_chat_file, ":t")
-		-- The reference is its own block with one blank line on each side, which
-		-- is the exchange model's MARGIN. `ref_after` is a 1-indexed line and
-		-- nvim_buf_set_lines takes a 0-indexed position, so they coincide.
+		-- AT THE CURSOR (operator, 2026-09-07). Its own block with one blank line
+		-- each side, which is the exchange model's MARGIN. `ref_after` is a
+		-- 1-indexed line and nvim_buf_set_lines takes a 0-indexed position, so
+		-- the two coincide.
 		vim.api.nvim_buf_set_lines(buf, plan.ref_after, plan.ref_after, false, {
 			"", br.format_ref_line(get_branch_prefix(), rel_path, label or ""),
 		})
 		M.highlight_chat_branch_refs(buf)
 
-		create_child_if_owned(new_chat_file, (topic ~= "" and topic) or "?", question)
+		-- The child keeps the "?" sentinel so auto-titling and the slug rename
+		-- both fire (#214 BR-1); `label` is only what the parent's line displays.
+		create_child_if_owned(new_chat_file, "?", question)
 		if not commit_reference() then
 			return true
 		end

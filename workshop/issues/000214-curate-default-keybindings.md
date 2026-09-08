@@ -211,14 +211,12 @@ shipped value — otherwise the trap survives the fix.
   wording contradicted this issue's own decision to leave them off-registry).
 - A single documented switch disables the entire default keymap, verified by
   `:map` showing no parley mapping afterwards.
-- **(M3)** `<M-S-CR>` submits what `<M-CR>` would submit, into a new child chat,
-  leaving a `🌿:` reference where `<M-CR>`'s output would have appeared — asserted
-  per case (visual selection / pending `<M-q>` markers / unanswered question /
-  answered question), driven through the real keymap callback on a real chat
-  buffer rather than through the planner alone. The parent keeps its context in
-  every case; the only thing it loses is an answer `<M-CR>` would itself have
-  replaced. With nothing to submit the chord still branches — generalising it
-  must not delete M1's "make me a side chat" affordance, and it is never a no-op.
+- **(M3)** `<M-i>` inserts a branch reference **at the cursor** and creates the
+  child it points at — asserted per case (visual selection / pending `<M-q>`
+  markers / neither), driven through the real keymap callback on a real chat
+  buffer rather than through the planner alone. It **never deletes** anything
+  from the parent, and it is never a no-op: with nothing to gather it still
+  inserts a placeholder and opens an empty child.
 - With the opt-in set unconfigured, a fresh install claims no `<leader>` key.
   *(The `<C-y>`/`<C-j>` half of this criterion moved out — it cannot be
   certified while the ariadne split is deferred. Owner: #212, then a follow-up
@@ -294,7 +292,6 @@ Derivation notes:
 | `key_label` | `lua/parley/keybinding_registry.lua` | new |
 | `plan_submission` | `lua/parley/branch_submit.lua` | new |
 | `seed_question` | `lua/parley/branch_submit.lua` | new |
-| `_exchange_at` | `lua/parley/branch_submit.lua` | new |
 
 - **`branch_ref`** — the line-editing half of a branch reference: build the
   `🌿:` line, splice an inline link around a selection, derive a child topic
@@ -320,10 +317,6 @@ Derivation notes:
 - **`seed_question`** — one place that knows how a payload becomes a prompt.
   Three call sites would otherwise each invent wording, and two already had:
   `what is "X"` was built inline at the follow-a-dead-link path as well.
-- **`_exchange_at`** — the exchange-at-line rule, re-derived rather than imported
-  so the planner loads without the plugin. A duplicated rule that nothing
-  compares is how the two chords drift, so it is exposed as a test seam and
-  pinned line-by-line against `init.lua`'s `find_exchange_at_line`.
 - **`key_label`** — `key_for` as display text, never nil. Three picker-title
   sites fed a nil key straight to `string.format("%s")` (rendering
   `Issues (open  nil: cycle view)` under `default_keymaps = false`); one guarded
@@ -506,8 +499,11 @@ stated purpose is making bindings *more* configurable.
       | 1 | visual selection | inline term definition at the selection | child seeded `tell me more about "<sel>"` | inline `[🌿:<sel>](child)` at the selection |
       | 2a | cursor on a past exchange carrying `<M-q>` markers | strip markers in place; insert a new turn **after that exchange's answer**, original Q/A preserved (`atlas/chat/drill_in.md:36`) | same gathered quote+question blocks become the child's first question | after **that** exchange's `📝:` |
       | 2b | `<M-q>` markers elsewhere | strip markers; append the new turn at buffer end | same payload → child | after the **last** exchange's `📝:` |
-      | 3a | cursor on an unanswered question | submit it; the answer appears after the question | question copied to child | after the question — where the answer would have been |
-      | 3b | cursor on an answered question | **resubmit**: old answer deleted, regenerated in place (`atlas/chat/drill_in.md:64`) | old answer deleted, question copied to child | where the deleted answer was |
+      | 3 | neither | submits the question | **placeholder**: bare `🌿:`, empty child, question untouched | at the cursor |
+
+      **Superseded 2026-09-07** — see ## Revisions 9 and 10. Rows 2a/2b collapse
+      (placement is the cursor, not the exchange end) and the 3a/3b split is gone
+      (the chord never deletes).
 
       Spacing is the exchange model's own `MARGIN`: the ref is its own block with
       exactly one blank line before and after — `add_block(k, "branch_ref", 1, 1)`.
@@ -564,6 +560,36 @@ and with it the `<C-y>`/`<C-j>` half of the fresh-install Done-when criterion.
 
 
 - 2026-09-07: closed M1 — make test: 197 spec files, MAKE_EXIT=0 verified against make status; luacheck clean across 351 files. Round 6 disposed 18 findings and left the gate with no open blocking items; its one new finding BR-34 is addressed in 0a712ad. That finding also corrected my own earlier BR-21 report: I had said a % in a gsub replacement RAISES, reproduced in standard Lua, but neovim runs LuaJIT which does not raise — measured here, "50% off" becomes "50 off", "%1 ph" becomes the pattern itself, and "100%" writes a NUL byte into the file. So it was silent corruption of chat topics and note titles, not a crash. I had fixed one site; the enumeration turned up six more: three {{topic}} substitutions including the child-creation path M1 routes markdown branches to, the initial_question substitution, notes.lua title and metadata placeholders, and exporter.lua branch placeholders in HTML export. render.lua and the slug rename were already escaped. An arch guard now enforces the rule — a runtime string is never gsubs second argument — using an explicit `-- gsub-safe: <why>` annotation rather than inferring safety from variable names, which my first version did and which is a guess dressed as a rule; verified by planting a raw runtime replacement. M1 itself delivers: branch_ref resolving <M-i>, <M-S-CR>, <C-g>i and chat_prune resolving <M-p>, <C-g>b, both in config.lua because a registry-side edit would have been inert; the portable key leads because the help float renders only keys[1] and most terminals cannot distinguish Shift+Enter from Enter; four branch functions collapsed into one branch_inserters(buf, abs_link, owns_file) with the pure line editing in the new parley/branch_ref.lua; chat_toggle_tool_folds unbound per operator decision but callable as :ParleyToggleToolFolds. The governing rule from six rounds: parley commits a reference only in a file it OWNS, so a chat buffer gets create-child + save-parent + open-child while a foreign markdown buffer gets the ref line and cursor with no child and no write. Neither mode calls create_child_chat directly and the spec iterates modes x buffer types. Mutation ledger generated from git diff rather than recall. Atlas corrected twice, README updated, ## Revisions records the three M1 decisions review overturned, lessons.md records the root cause. Deferred: BR-9 to M2, and routing <M-q> quotes into the branch to M3 with the strip-not-fork decision recorded up front.; review verdict: FIX-THEN-SHIP
+
+### 2026-09-07 — M3 placement reversed by the operator, on first real use
+
+**9. The reference lands at the CURSOR, not at the end of the answer.** The
+operator's earlier instruction ("end of answer, right before next question") was
+withdrawn after using it: `<M-i>` inserted the line, then the line appeared
+somewhere else, and the jump read as wrong. The reasoning is the part that
+settles it — `<M-S-CR>` reads as a *submission*, whose effect is not local to
+anywhere, but `<M-S-CR>` does not survive most terminals, so `<M-i>` is the key
+people actually press and it reads as an *insertion*. An insertion happens where
+you are.
+
+I raised the measured cost before changing it: `🌿:` sets the parser's
+`line_before_local` — the mechanism `🔒:` uses for a local section — so a
+mid-answer reference drops the text after it from the LLM context, and
+`from_parsed_chat` truncates the exchange (`summary` block gone, `append_pos`
+into the middle). That is what end-of-answer placement was buying. It is also
+pre-existing: the pre-#214 path inserted at the cursor too. The operator's call
+stands; the real fix is a parser change (a standalone `🌿:` is a one-line
+annotation, not a section boundary), which is not this milestone's to make.
+
+**10. The chord never deletes.** With the placement change the operator also
+narrowed case 3 to a pure placeholder: no markers means a bare `🌿:` at the
+cursor and an empty child, with the question left alone. The earlier "copy the
+question, delete the answer" reading mirrored `<M-CR>`'s resubmit and was
+coherent for a submission — but `<M-i>`, `<M-S-CR>` and `<C-g>i` are one registry
+entry with one callback, so it would only ever have been reachable from the key
+that says "insert here". `plan_submission` now returns a plan only for the quotes
+case; `exchange_at` and its conformance test went with it rather than staying as
+tested-but-unreachable code.
 
 ### 2026-09-07 — M2 round 11 (FIX-THEN-SHIP) — one reversal of a reversal
 

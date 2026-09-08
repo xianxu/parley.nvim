@@ -167,28 +167,18 @@ an exchange — including the tail of the buffer after the last block — so a
 manual `zf` there is removed the next time that exchange is reconciled. Folds
 outside every exchange (the frontmatter, for instance) are left alone.
 - `<C-g>l` toggle follow cursor
-- `<M-i>` (or `<M-S-CR>`, or `<C-g>i`) sends **what `<M-CR>` would submit into a
-  new side chat**, and leaves a `🌿:` reference where the answer would have been.
-  The parent keeps its context; the only thing it loses is an answer `<M-CR>`
-  would itself have replaced.
+- `<M-i>` (or `<M-S-CR>`, or `<C-g>i`) **inserts a branch at the cursor** and
+  creates the child chat it points at.
   - **text selected** → the selection becomes an inline `[🌿:…](file)` anchor and
     the child opens with `tell me more about "…"`. You stay in the parent.
-  - **pending `<M-q>` quotes** → the quotes go to the child as its first
-    question and are stripped from the parent, exactly as `<M-CR>` would strip
-    them; the reference lands after that answer's `📝:` summary.
-  - **on a question** → the question is copied into the child. If it already had
-    an answer, that answer is deleted — which is what `<M-CR>` does when it
-    resubmits — and the reference takes its place.
-  - **nothing to submit** → you still get a side chat: a standalone `🌿:` line
-    and the child opens for you to type in.
+  - **pending `<M-q>` quotes** → they are stripped from the parent, exactly as
+    `<M-CR>` would strip them, and become the child's first question.
+  - **neither** → a bare `🌿:` placeholder, and the child opens for you to type
+    in.
 
-  Every case creates the child on disk and saves the parent first, so the link is
-  never orphaned. The chord declines while a response is still streaming into
-  that chat.
-  `<M-S-CR>` is the mnemonic — shift as "same action, new destination" — but
-  many terminals cannot distinguish Shift+Enter from Enter, so `<M-i>` is the
-  portable spelling and the one the `<C-g>?` help shows.
-- `gf` smart go-to-file: on an ariadne artifact ref (`ariadne#11`, `#15 M4`, `pair#84`) resolves it and jumps (family picker when it resolves to many); on a plain path, Vim's native `gf`
+  The reference always lands where your cursor is, and the chord never deletes
+  anything from the parent. Every case saves the parent first, so the link is
+  never orphaned. It declines while a response is still streaming into that chat.
 
 **Corresponding commands**
 - `:ParleyChatNew` create a new chat

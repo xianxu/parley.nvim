@@ -362,79 +362,68 @@ describe("branched submission (#214 M3)", function()
         parley._branch_inserters(parent_buf, false, true).n()
     end
 
-    it("an unanswered question is COPIED; the ref follows it", function()
-        branch_here(14)   -- 💬: second question
+    -- 1.2 — no markers: a PLACEHOLDER at the cursor. `<M-i>` reads as an
+    -- insertion, so it must not delete an answer or move the line elsewhere.
+    it("with no markers it inserts a placeholder at the cursor", function()
+        branch_here(10)   -- inside the answer of exchange 1
         local l = lines_now()
-        local i = ref_line_index(l)
-        assert.is_truthy(i, "no branch reference was inserted")
-        assert.are.equal("💬: second question", l[14], "the question must stay in the parent")
-        assert.are.equal("", l[15], "one blank line between the question and the ref")
-        assert.are.equal(16, i)
+        -- the placeholder path inserts the bare line directly under the cursor
+        assert.is_truthy(l[11] and l[11]:match("^🌿:"),
+            "the reference did not land at the cursor: " .. vim.inspect(l))
     end)
 
-    it("and the child is seeded with that question", function()
-        branch_here(14)
+    it("and the placeholder destroys nothing", function()
+        branch_here(10)
+        local after = table.concat(lines_now(), "\n")
+        for _, keep in ipairs({ "💬: first question", "answer text here",
+                               "📝: the summary", "💬: second question" }) do
+            assert.is_truthy(after:find(keep, 1, true), "lost from the parent: " .. keep)
+        end
+    end)
+
+    it("and its child is empty, ready to be typed into", function()
+        branch_here(10)
         local l = lines_now()
         local child = child_path_from(l[ref_line_index(l)])
         local body = table.concat(vim.fn.readfile(child), "\n")
-        assert.is_truthy(body:find("second question", 1, true),
-            "the child was not seeded with the question it branched from")
+        assert.is_nil(body:find("first question", 1, true),
+            "a bare <M-i> must not copy the question into the child")
     end)
 
-    it("an answered question loses its answer, and the ref takes its place", function()
-        branch_here(6)    -- 💬: first question, which has an answer at 8..12
-        local l = lines_now()
-        assert.are.equal("💬: first question", l[6], "the question must stay")
-        assert.is_nil(vim.tbl_filter(function(x) return x == "answer text here" end, l)[1],
-            "the answer <M-CR> would have replaced is still there")
-        assert.is_truthy(l[8]:match("^🌿:"), "the ref did not take the answer's place")
+    it("an answered question is never destroyed by a bare <M-i>", function()
+        branch_here(6)    -- on 💬: first question, which HAS an answer
+        local joined = table.concat(lines_now(), "\n")
+        assert.is_truthy(joined:find("answer text here", 1, true),
+            "a bare <M-i> deleted the answer — that is <M-CR>'s job, not this one")
     end)
 
-    -- This is the QUOTES case: the answer is preserved, so the exchange still
-    -- ends with its 📝: and the ref must follow it. (The question case deletes
-    -- the answer, so its ref follows the question — a different line, same rule:
-    -- the ref goes where <M-CR>'s output would have gone.)
-    it("the ref lands AFTER the summary, so the summary keeps its model block", function()
+    -- 1.3 — with markers: rearrange, and the reference still lands at the cursor.
+    -- This REVISES the earlier end-of-answer rule. The cost is real and measured:
+    -- `🌿:` sets the parser's `line_before_local` (the mechanism `🔒:` uses), so
+    -- answer text after a mid-answer reference leaves the LLM context and the
+    -- exchange model truncates that exchange. Recorded in ## Revisions; the
+    -- operator's call is that a key named "insert" must insert where you are.
+    it("the quotes case also lands at the cursor", function()
         open({
             "---", "topic: parent topic", "file: f", "---", "",
             "💬: first question", "",
             "🤖:[A]", "",
             "answer text here 🤖[what about this?]", "",
+            "more answer text", "",
             "📝: the summary",
         })
         parley.config.chat_dir = tmpdir
-        branch_here(10)
+        branch_here(12)   -- on "more answer text", below the marker
 
         local l = lines_now()
-        local i = ref_line_index(l)
-        local summary_at
-        for n = 1, #l do if l[n]:match("^📝:") then summary_at = n end end
-        assert.is_truthy(summary_at, "the summary vanished")
-        assert.is_true(i > summary_at,
-            "the ref was placed BEFORE the summary; measured, that drops the "
-            .. "summary block out of the exchange model entirely")
+        -- cursor line, then the MARGIN blank, then the reference
+        assert.are.equal("more answer text", l[12])
+        assert.are.equal("", l[13], "no blank line between the text and the reference")
+        assert.is_truthy(l[14] and l[14]:match("^🌿:"),
+            "the reference was relocated instead of landing at the cursor: " .. vim.inspect(l))
+        assert.are.equal("", l[15], "no blank line after the reference")
     end)
 
-    -- The model-level consequence, asserted directly rather than by proxy.
-    it("and the exchange model still carries the summary block afterwards", function()
-        open({
-            "---", "topic: parent topic", "file: f", "---", "",
-            "💬: first question", "",
-            "🤖:[A]", "",
-            "answer text here 🤖[what about this?]", "",
-            "📝: the summary",
-        })
-        parley.config.chat_dir = tmpdir
-        branch_here(10)
-
-        local l = lines_now()
-        local parsed = parley.parse_chat(l, parley.chat_parser.find_header_end(l))
-        local model = require("parley.exchange_model").from_parsed_chat(parsed)
-        local kinds = {}
-        for _, blk in ipairs(model.exchanges[1].blocks) do kinds[#kinds + 1] = blk.kind end
-        assert.is_truthy(vim.tbl_contains(kinds, "summary"),
-            "summary block lost from the model: " .. table.concat(kinds, ", "))
-    end)
 
     it("pending <M-q> quotes go to the child and are stripped from the parent", function()
         open({
@@ -631,56 +620,6 @@ describe("branched submission refuses under a pending response (#214 M3)", funct
         local joined = table.concat(vim.api.nvim_buf_get_lines(parent_buf, 0, -1, false), "\n")
         assert.is_truthy(joined:find("🌿:", 1, true), "no branch after the response finished")
     end)
-end)
-
--- #214 M3, Task 7. `branch_submit` re-derives the exchange-at-line rule that
--- `init.lua`'s `find_exchange_at_line` already implements — deliberately, so the
--- planner stays pure and loadable without the plugin. A duplicated rule is a
--- drift risk, so pin the two against each other BEHAVIOURALLY, line by line,
--- rather than against prose. (Deviation from the plan, which proposed grepping
--- the case names out of atlas/chat/drill_in.md: a prose grep would pass while
--- the two implementations disagreed, which is the only thing that matters here.)
-describe("the planner agrees with <M-CR>'s exchange resolution (#214 M3)", function()
-    local bs = require("parley.branch_submit")
-
-    local TRANSCRIPTS = {
-        {
-            name = "answered, then an unanswered trailing question",
-            lines = { "---", "topic: t", "file: f", "---", "",
-                      "💬: first question", "", "🤖:[A]", "", "answer", "", "📝: sum", "",
-                      "💬: second question", "", "" },
-        },
-        {
-            name = "two answered exchanges",
-            lines = { "---", "topic: t", "file: f", "---", "",
-                      "💬: one", "", "🤖:[A]", "", "a1", "", "📝: s1", "",
-                      "💬: two", "", "🤖:[A]", "", "a2", "", "📝: s2", "" },
-        },
-        {
-            name = "a single unanswered question with trailing blanks",
-            lines = { "---", "topic: t", "file: f", "---", "", "💬: only", "", "", "" },
-        },
-    }
-
-    for _, t in ipairs(TRANSCRIPTS) do
-        it("agrees on every line — " .. t.name, function()
-            parley.setup({})
-            local header_end = parley.chat_parser.find_header_end(t.lines)
-            local parsed = parley.parse_chat(t.lines, header_end)
-
-            local disagreements = {}
-            for line = 1, #t.lines do
-                local theirs = parley.find_exchange_at_line(parsed, line)
-                local mine = bs._exchange_at(parsed, line)
-                if theirs ~= mine then
-                    disagreements[#disagreements + 1] = string.format(
-                        "line %d (%q): <M-CR> says %s, planner says %s",
-                        line, t.lines[line], tostring(theirs), tostring(mine))
-                end
-            end
-            assert.same({}, disagreements)
-        end)
-    end
 end)
 
 -- #214 M3, found by the operator on first real use. `vim.fn.writefile` encodes a
