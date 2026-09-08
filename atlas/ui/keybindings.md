@@ -60,9 +60,17 @@ list is the alias mechanism (`chat_drill_in` = `{ "<C-g>q", "<M-q>" }`).
 
 Help shows **every** bound key: the primary holds the aligned column and the
 aliases follow the description as `(also <M-S-CR>, <C-g>i)`. The shipped order
-still puts the portable key first, because the column is the one a reader
-reaches for — `branch_ref` leads with `<M-i>`, not the `<M-S-CR>` mnemonic most
-terminals cannot distinguish from `<CR>`. Help takes its keys from
+puts the key a reader should reach for first, because the column is the one they
+see. Two rules decide it: the **alt spelling leads** for transcript actions —
+`branch_ref` with `<M-i>`, `chat_prune` with `<M-p>`, `open_file` with `<M-g>`,
+each keeping its `<C-g>` spelling as a legacy alias rather than revoking it — and
+the **portable key leads** where portability is the issue, so `branch_ref` shows
+`<M-i>` and not the `<M-S-CR>` mnemonic most terminals cannot distinguish from
+`<CR>`.
+
+The alt family means "act on this transcript": quote, respond/define, accept,
+reject, branch, prune, outline, skill picker, and now follow-a-link. `<C-g>` is
+the prefix surface for everything else. Help takes its keys from
 `resolve_keys` and nothing else: an entry that resolves to nothing is
 **omitted**, so the float cannot advertise a key that is not bound. (Before #214
 it rendered `keys[1]` only — hiding `<M-q>`, `<M-t>` and `<C-g>i` — and fell

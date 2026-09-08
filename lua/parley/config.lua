@@ -376,7 +376,12 @@ local config = {
 	chat_shortcut_system_prompt = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>P" },
 	chat_shortcut_follow_cursor = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>l" },
 	chat_shortcut_search = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>n" },
-	chat_shortcut_open_file = { modes = { "n", "i" }, shortcut = "<C-g>o" },
+	-- Follow a link under the cursor: a 🌿: reference to a sub-chat, an inline
+	-- [🌿:…](file), an @@path@@ reference. <M-g> joins the alt family (quote /
+	-- respond / branch / prune / outline); <C-g>o stays a legacy alias so muscle
+	-- memory keeps working. Overriding `shortcut` REPLACES the list — name both
+	-- if you want both.
+	chat_shortcut_open_file = { modes = { "n", "i" }, shortcut = { "<M-g>", "<C-g>o" } },
 	-- Outline picker. Ships BOTH keys: <M-t> is the alt-family member users
 	-- actually reach for, <C-g>t the prefix-surface alias. Overriding `shortcut`
 	-- replaces the whole list (it does not merge), so a single-key override here

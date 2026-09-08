@@ -864,3 +864,48 @@ describe("malformed shortcuts are reported once, at setup (#214 BR-49)", functio
             "the registry took a logger dependency again — validation belongs at setup()")
     end)
 end)
+
+-- #214: <M-g> follows a link — a 🌿: reference to a sub-chat, an inline
+-- [🌿:…](file), an @@path@@ — joining the alt family that already means "act on
+-- this transcript". Same migration shape as M1's <M-p>/<M-i>: the alt spelling
+-- leads because the help float renders keys[1], and the <C-g> spelling stays a
+-- legacy alias rather than being revoked.
+describe("open_file joins the alt family (#214)", function()
+    local parley = require("parley")
+    local reg = require("parley.keybinding_registry")
+
+    before_each(function() parley.setup({}) end)
+
+    local function entry(id)
+        for _, e in ipairs(reg.entries) do if e.id == id then return e end end
+    end
+
+    it("resolves <M-g> first, then the legacy <C-g>o", function()
+        assert.same({ "<M-g>", "<C-g>o" }, reg.resolve_keys(entry("open_file"), parley.config))
+    end)
+
+    it("config.lua ships both, so a registry-side edit cannot revoke one", function()
+        local shipped = dofile("lua/parley/config.lua")
+        assert.same({ "<M-g>", "<C-g>o" }, shipped.chat_shortcut_open_file.shortcut)
+    end)
+
+    it("the help float leads with <M-g> and still names the alias", function()
+        local shown
+        for _, l in ipairs(parley._keybinding_help_lines("chat")) do
+            if l:find("Open file reference", 1, true) then shown = l end
+        end
+        assert.is_truthy(shown, "open_file missing from the chat help")
+        assert.are.equal("<M-g>", shown:match("^%s*(%S+)"))
+        assert.is_truthy(shown:find("<C-g>o", 1, true), "the legacy alias is not advertised")
+    end)
+
+    it("<M-g> collides with nothing else", function()
+        local owners = {}
+        for _, e in ipairs(reg.entries) do
+            for _, k in ipairs(reg.resolve_keys(e, parley.config) or {}) do
+                if k == "<M-g>" then owners[#owners + 1] = e.id end
+            end
+        end
+        assert.same({ "open_file" }, owners)
+    end)
+end)

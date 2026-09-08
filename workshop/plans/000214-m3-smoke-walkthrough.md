@@ -34,6 +34,13 @@ Then, the two that used to be broken:
   untouched. (It briefly created a child with an empty `topic:` — a permanently
   nameless file.)
 
+## 1b. `<M-g>` follows a link
+
+- **1.8** cursor on a `🌿:` reference line, `<M-g>` → opens that sub-chat.
+- **1.9** cursor inside an inline `[🌿:…](file)`, `<M-g>` → same.
+- **1.10** `<C-g>o` still works — it is kept as a legacy alias, not replaced.
+- **1.11** `<C-g>?` shows `<M-g>` in the column with `(also <C-g>o)`.
+
 ## 2. Annotations are single-line
 
 - **2.1** drop a `🔒: note` in the *middle* of a long answer, then ask a

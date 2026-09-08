@@ -186,6 +186,8 @@ outside every exchange (the frontmatter, for instance) are left alone.
   **your branch references and `🔒:` notes inside it survive**. An inline
   `[🌿:…](file)` becomes a standalone `🌿:` line, since the sentence around it
   belonged to the answer being replaced.
+- `<M-g>` (or `<C-g>o`) follow the link under the cursor — a `🌿:` reference to a
+  sub-chat, an inline `[🌿:…](file)`, or an `@@path@@` file reference
 - `gf` smart go-to-file: on an ariadne artifact ref (`ariadne#11`, `#15 M4`, `pair#84`) resolves it and jumps (family picker when it resolves to many); on a plain path, Vim's native `gf`
 
 **Corresponding commands**

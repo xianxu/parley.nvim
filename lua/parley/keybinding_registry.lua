@@ -418,7 +418,11 @@ M.entries = {
 	{
 		id = "open_file",
 		config_key = "chat_shortcut_open_file",
-		default_key = "<C-g>o",
+		-- <M-g> FIRST: the alt family means "act on this transcript", and
+		-- following a link between a chat and its sub-chats is that (#214,
+		-- continuing M1's <M-p>/<M-i> migration). <C-g>o stays as the legacy
+		-- alias. The help float renders keys[1], so the alt spelling leads.
+		default_key = { "<M-g>", "<C-g>o" },
 		default_modes = { "n", "i" },
 		scope = "parley_buffer",
 		desc = "Parley open file under cursor",

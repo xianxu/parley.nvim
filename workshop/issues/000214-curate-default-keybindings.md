@@ -593,6 +593,16 @@ are they disableable. This is behaviour: what happens when the key fires, in cod
 rounds and three Criticals precisely because a behaviour change (the branch-path
 unification) rode inside a curation milestone; bundling another one into M2 would
 repeat that. Separate boundary, separate review, smaller blast radius.
+- [x] **Post-M3 (operator, 2026-09-07, during the smoke test): `<M-g>` follows a
+      link.** `open_file` joins the alt family — the same migration M1 made for
+      `<M-p>`/`<M-i>`, and the last transcript action still living only on the
+      `<C-g>` prefix. `<C-g>o` stays as a legacy alias; both ship in `config.lua`
+      because the M2 superset guard requires the full list. Verified `<M-g>` is
+      free before binding (the alt keys bound today are `<M-CR> <M-S-CR> <M-a>
+      <M-i> <M-o> <M-p> <M-q> <M-r> <M-t>`), and asserted that nothing else
+      resolves to it. Lands after the M3 boundary, so `sdlc close`'s review
+      covers it.
+
 
 **Deferred to after #212:** the ariadne core/opt-in split (`<C-y>*`, `<C-j>*`),
 and with it the `<C-y>`/`<C-j>` half of the fresh-install Done-when criterion.
