@@ -44,42 +44,96 @@ Two things are wrong beyond the reach:
 `o` = open and `s` = skills both resolve as mnemonics, which the previous
 assignment did not.
 
-**Fallback chain for `<M-o>`**, in order, each falling through to the next:
+**Fallback chain for `<M-o>`**, in order:
 
 1. `🌿:` reference line → open that chat
 2. inline `[🌿:anchor](file)` under the cursor → open it
-3. `@@path@@` reference → open it
-4. **otherwise → `ResolveRefOrGotoFile`**: an ariadne artifact ref
-   (`ariadne#11`, `#15 M4`) resolves and jumps; anything else gets native `gf`
+3. `src:` link / `@@path@@` reference → open it
+4. **otherwise → `ResolveRefOrGotoFile`**: an ariadne artifact ref resolves and
+   jumps; anything else gets native `gf`
 
-Step 4 is the new part; steps 1-3 exist. `ResolveRefOrGotoFile` is already a
-command (`init.lua:4692`) and already ends in `normal! gf`, so this is a
-delegation, not new logic.
+### The structural problem step 4 exposes (PQ-1, PQ-2)
 
-- `<C-g>o` stays as a legacy alias, as `<C-g>i`/`<C-g>b` did in #214.
-- `gf` keeps its own binding. `<M-o>` is a superset, not a replacement — muscle
-  memory for `gf` is worth more than the deduplication.
-- The old "no file reference found" warning goes away; falling through IS the
-  answer, and a warning that fires whenever you are not on a link is noise.
+`OpenFileUnderCursor` has **two** chains, not one:
+
+```lua
+if M.is_markdown(buf, file_name) then
+    M.open_chat_reference(current_line, cursor_col, in_insert_mode, current_line)
+    return                       -- UNCONDITIONAL. markdown never reaches below.
+end
+if M.not_chat(buf, file_name) then … return end
+if open_branch_ref(...) then return end            -- the chat chain
+if try_open_inline_branch_link(...) then return end
+… @@ handling …
+```
+
+Appending step 4 at the end would fire in chat buffers and never in markdown —
+the per-buffer-type divergence this issue exists to remove, reintroduced by the
+fix for it. Appending it to both is two copies of the fall-through.
+
+**So step 4 is not an append; it is an extraction.** One predicate, used by both
+buffer types, and the fall-through stated once:
+
+```lua
+--- @return boolean handled
+local function open_reference_under_cursor(buf, line, col, in_insert) … end
+
+M.cmd.OpenFileUnderCursor = function()
+    …guards…
+    if open_reference_under_cursor(buf, line, col, in_insert) then return end
+    M.cmd.ResolveRefOrGotoFile()          -- exactly one fall-through
+end
+```
+
+`open_chat_reference` already returns a boolean and already chains src → inline
+→ `@@`; the chat path duplicates most of it. The extraction is mostly deleting
+the second copy, which is the same four-copies-to-one move #214 M1 made for
+`branch_inserters`.
+
+### Insert mode (PQ-3)
+
+`open_file` is bound in `n` **and** `i`, and `register_buffer` passes a
+mode-specific callback straight through — no `stopinsert` wrapper (that exists
+only in `register_global`). `normal! gf` from insert mode would run against a
+cursor one column off and drop the user out of insert anyway.
+
+**Decision: `stopinsert` first, then fall through.** Following a link is a
+navigation, and navigating out of insert mode is what the user asked for by
+pressing the key. The alternative — no fall-through in insert mode — makes one
+key mean two things depending on mode, which is the divergence again.
 
 ## Done when
 
-- `<M-o>` opens a `🌿:` line, an inline link and an `@@ref@@` in both chat and
-  markdown buffers; `<C-g>o` still does the same.
-- On a plain word `<M-o>` behaves as `gf` would — asserted, not assumed.
-- `<M-s>` opens the skill picker; `<M-o>` no longer does, in any buffer type.
-- `<M-o>` resolves to exactly one entry — the collision check #214 added for
-  `<M-g>` catches a re-collision.
-- No "no file reference" warning remains on the fall-through path.
+- `<M-o>` opens a `🌿:` line, an inline link, a `src:` link and an `@@ref@@`, in
+  **both** chat and markdown buffers; `<C-g>o` does the same.
+- On a plain word `<M-o>` reaches the `gf` path **in both buffer types** —
+  asserted by spying the delegation, not by hoping a real file exists.
+- On an ariadne artifact ref it resolves, exercised through
+  `artifact_ref.run_resolve`'s existing injected-runner seam
+  (`artifact_ref.lua:112-134`) rather than spawning `sdlc`.
+- From insert mode, `<M-o>` leaves insert and then falls through.
+- `<M-s>` opens the skill picker; `<M-o>` does not, in any buffer type.
+- **No alt key resolves to more than one entry** — generalised from #214's
+  `<M-g>`-specific check, which would not have caught this collision (PQ-4).
+- One fall-through call site, asserted, so it cannot be re-duplicated per branch.
+- No "no file reference" warning on the fall-through path.
 
 ## Plan
 
-- [ ] Move `review_menu` to `<M-s>`; assert `<M-o>` has one owner
-- [ ] Rebind `open_file` to `<M-o>` (with `<C-g>o` alias, full list in config —
-      M2's superset guard requires it)
-- [ ] Fall through to `ResolveRefOrGotoFile` instead of warning; drop the warning
-- [ ] Tests: each of the four steps, in both buffer types
-- [ ] README + `atlas/ui/keybindings.md` + the alt-family list
+- [ ] Generalise the collision guard: no alt key has two owners (fails today
+      only if a collision exists; seen red by binding `<M-o>` twice)
+- [ ] Extract `open_reference_under_cursor(buf, line, col, in_insert) -> handled`
+      from the markdown branch and the chat chain; delete the duplicate
+- [ ] One fall-through to `ResolveRefOrGotoFile`, after `stopinsert` when in
+      insert mode; drop the "no file reference" warning
+- [ ] Move `review_menu` to `<M-s>`; update `atlas/modes/review.md:55,199` and
+      `tests/integration/review_menu_spec.lua:93,110`, which assert `<M-o>`
+- [ ] Rebind `open_file` to `{ "<M-o>", "<C-g>o" }` — full list in `config.lua`,
+      since M2's superset guard requires it
+- [ ] Tests, named: `OpenFileUnderCursor` reaches each of the four steps in both
+      buffer types; the gf arm via a `vim.cmd` spy; the resolve arm via the
+      injected runner
+- [ ] README + `atlas/ui/keybindings.md` alt-family list + `atlas/modes/review.md`
 
 ## Log
 
