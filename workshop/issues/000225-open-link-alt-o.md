@@ -52,9 +52,9 @@ assignment did not.
 4. **otherwise → `ResolveRefOrGotoFile`**: an ariadne artifact ref resolves and
    jumps; anything else gets native `gf`
 
-### The structural problem step 4 exposes (PQ-1, PQ-2)
+### Step 4 is an extraction, and it needs a three-valued contract (PQ-1, PQ-2)
 
-`OpenFileUnderCursor` has **two** chains, not one:
+`OpenFileUnderCursor` has **two** chains:
 
 ```lua
 if M.is_markdown(buf, file_name) then
@@ -67,40 +67,46 @@ if try_open_inline_branch_link(...) then return end
 … @@ handling …
 ```
 
-Appending step 4 at the end would fire in chat buffers and never in markdown —
-the per-buffer-type divergence this issue exists to remove, reintroduced by the
-fix for it. Appending it to both is two copies of the fall-through.
-
-**So step 4 is not an append; it is an extraction.** One predicate, used by both
-buffer types, and the fall-through stated once:
-
-```lua
---- @return boolean handled
-local function open_reference_under_cursor(buf, line, col, in_insert) … end
-
-M.cmd.OpenFileUnderCursor = function()
-    …guards…
-    if open_reference_under_cursor(buf, line, col, in_insert) then return end
-    M.cmd.ResolveRefOrGotoFile()          -- exactly one fall-through
-end
-```
-
-`open_chat_reference` already returns a boolean and already chains src → inline
-→ `@@`; the chat path duplicates most of it. The extraction is mostly deleting
-the second copy, which is the same four-copies-to-one move #214 M1 made for
+Appending step 4 would fire in chat and never in markdown — the per-buffer
+divergence this issue exists to remove, reintroduced by its own fix. Appending
+to both is two copies. So it is an **extraction**: one predicate for both types,
+one fall-through at the caller. `open_chat_reference` already chains
+`try_open_src_link` → inline → `@@` (the Spec's "steps 1-3 exist" omitted
+`src:`, `init.lua:4307`) and the chat path duplicates most of it — the
+extraction is largely deleting the second copy, the same move #214 M1 made for
 `branch_inserters`.
 
-### Insert mode (PQ-3)
+**A boolean is not enough.** Making markdown fall through promotes three
+currently-discarded exits to load-bearing, and they do not mean the same thing:
 
-`open_file` is bound in `n` **and** `i`, and `register_buffer` passes a
-mode-specific callback straight through — no `stopinsert` wrapper (that exists
-only in `register_global`). `normal! gf` from insert mode would run against a
-cursor one column off and drop the user out of insert anyway.
+| exit | today | means | on fall-through |
+|---|---|---|---|
+| `init.lua:4337` | `nil` + warning *"No chat reference (@@ syntax) found"* | there is no reference here | **fall through to `gf`**; drop the warning |
+| `init.lua:4344` | `nil` + warning *"Could not extract chat path"* | same | **fall through**; drop the warning |
+| `init.lua:4394` | `false` + warning *"Chat file not found: <path>"* | a reference we understood, whose file is missing | **terminal — report, do NOT fall through** |
 
-**Decision: `stopinsert` first, then fall through.** Following a link is a
-navigation, and navigating out of insert mode is what the user asked for by
-pressing the key. The alternative — no fall-through in insert mode — makes one
-key mean two things depending on mode, which is the divergence again.
+Falling through on the third would hand `gf` a path we already know is absent,
+losing the diagnostic and letting `gf` fail or open something unrelated. So:
+
+```lua
+--- @return "opened" | "none" | "failed"
+local function open_reference_under_cursor(buf, line, col, in_insert) … end
+```
+
+`"none"` is the only value that falls through. `"failed"` keeps its message.
+
+### Landing mode (PQ-3, PQ-7)
+
+Every existing success exit restores insert when it started there
+(`init.lua:4511, 4587, 4602`). That is not an oversight to normalise away — it
+is a coherent policy once stated:
+
+> **The landing mode follows the destination, not the origin.**
+> A chat reference is somewhere you went to *write*, so insert is restored.
+> A `gf` destination is source you went to *read*, so it lands in normal.
+
+So the fall-through does `stopinsert`, the reference exits keep `startinsert`,
+and the difference is intended rather than an artifact of which branch ran.
 
 ## Done when
 
@@ -108,10 +114,13 @@ key mean two things depending on mode, which is the divergence again.
   **both** chat and markdown buffers; `<C-g>o` does the same.
 - On a plain word `<M-o>` reaches the `gf` path **in both buffer types** —
   asserted by spying the delegation, not by hoping a real file exists.
+- A `🌿:` reference whose file is missing still reports and does **not** reach
+  `gf` — the `"failed"` case, asserted separately from `"none"`.
 - On an ariadne artifact ref it resolves, exercised through
   `artifact_ref.run_resolve`'s existing injected-runner seam
   (`artifact_ref.lua:112-134`) rather than spawning `sdlc`.
-- From insert mode, `<M-o>` leaves insert and then falls through.
+- From insert mode: a reference lands in insert (unchanged), the `gf`
+  fall-through lands in normal — both asserted, since the split is the policy.
 - `<M-s>` opens the skill picker; `<M-o>` does not, in any buffer type.
 - **No alt key resolves to more than one entry** — generalised from #214's
   `<M-g>`-specific check, which would not have caught this collision (PQ-4).
@@ -124,8 +133,10 @@ key mean two things depending on mode, which is the divergence again.
       only if a collision exists; seen red by binding `<M-o>` twice)
 - [ ] Extract `open_reference_under_cursor(buf, line, col, in_insert) -> handled`
       from the markdown branch and the chat chain; delete the duplicate
-- [ ] One fall-through to `ResolveRefOrGotoFile`, after `stopinsert` when in
-      insert mode; drop the "no file reference" warning
+- [ ] Three-valued return; only `"none"` falls through. `"failed"` keeps its
+      diagnostic; the two `"none"` warnings are deleted
+- [ ] One fall-through to `ResolveRefOrGotoFile`, `stopinsert` first when in
+      insert mode
 - [ ] Move `review_menu` to `<M-s>`; update `atlas/modes/review.md:55,199` and
       `tests/integration/review_menu_spec.lua:93,110`, which assert `<M-o>`
 - [ ] Rebind `open_file` to `{ "<M-o>", "<C-g>o" }` — full list in `config.lua`,
