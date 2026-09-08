@@ -1125,3 +1125,25 @@ describe("a whitespace-only selection is refused (#214 BR-86)", function()
         end
     end)
 end)
+
+-- #214 BR-4: both buffer types pass the WHOLE dispatch table from
+-- branch_inserters. The markdown site rebuilt n/i/v inline, which left
+-- `branch_inserters(...).i` dead at zero call sites and re-derived a mapping the
+-- constructor already returns — the drift M1 collapsed four copies to remove.
+describe("both call sites use the constructor's table (#214 BR-4)", function()
+    it("neither rebuilds the branch dispatch inline", function()
+        local src = table.concat(vim.fn.readfile("lua/parley/init.lua"), "\n")
+        local rebuilt = 0
+        for _ in src:gmatch("branch_ref = %{%s*\n%s*n = ") do rebuilt = rebuilt + 1 end
+        assert.are.equal(0, rebuilt,
+            "a call site rebuilds branch_ref's n/i/v instead of passing the table")
+    end)
+
+    it("the constructor's i is reachable, not dead", function()
+        local inserters = parley._branch_inserters(vim.api.nvim_create_buf(false, true), true, false)
+        assert.is_function(inserters.i)
+        for _, mode in ipairs({ "n", "i", "v" }) do
+            assert.is_function(inserters[mode], mode .. " missing from the dispatch table")
+        end
+    end)
+end)

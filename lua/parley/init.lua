@@ -2876,14 +2876,11 @@ M.setup_markdown_keymaps = function(buf)
 			resolve_ref_project = M.cmd.ResolveRefProject,
 			copy_fence = M.cmd.CopyCodeFence,
 			outline = M.cmd.Outline,
-			branch_ref = {
-				n = md_branch.n,
-				i = function()
-					vim.cmd("stopinsert")
-					md_branch.n()
-				end,
-				v = md_branch.v,
-			},
+			-- The whole dispatch table, as the chat path does (#214 BR-4). This
+			-- rebuilt n/i/v inline, which left `branch_inserters(...).i` dead at
+			-- zero call sites and re-derived a mapping the constructor already
+			-- returns — the same drift M1 collapsed four copies to remove.
+			branch_ref = md_branch,
 			chat_drill_in = drill_in_cbs.chat_drill_in,
 			chat_accept_drill_in = drill_in_cbs.chat_accept_drill_in,
 			chat_reject_drill_in = drill_in_cbs.chat_reject_drill_in,
