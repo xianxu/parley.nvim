@@ -2448,14 +2448,20 @@ local function branch_inserters(buf, abs_link, owns_file)
 		local new_chat_file, link = new_target()
 		local spliced, selected = br.splice_inline_link(
 			line, start_col, end_col, get_branch_prefix(), link)
-		if selected == "" then
-			M.logger.warning("No text selected")
+		-- Guard the DERIVED topic, not the raw selection (#214 BR-86). Since
+		-- `topic_for_selection` collapses and trims, a whitespace-only selection
+		-- derives "" — and an empty topic is BR-1's anonymity bug: auto-titling
+		-- fires only on "?" and the slug rename bails on "", so the child stays a
+		-- nameless <timestamp>.md forever. `selected == ""` cannot see that,
+		-- because "   " is not "".
+		local topic = br.topic_for_selection(selected)
+		if topic == "" then
+			M.logger.warning("Branch: nothing but whitespace selected")
 			return
 		end
 		-- #214 M3: the topic names the SUBJECT (it becomes the filename slug) and
 		-- the child is seeded with the instruction, not with `<topic>?`. One
 		-- place owns that wording — three call sites would each invent their own.
-		local topic = br.topic_for_selection(selected)
 		vim.api.nvim_buf_set_lines(buf, start_line - 1, start_line, false, { spliced })
 		create_child_if_owned(new_chat_file, topic,
 			require("parley.branch_submit").seed_question("define", selected))

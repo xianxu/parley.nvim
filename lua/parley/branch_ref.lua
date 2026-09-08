@@ -48,8 +48,11 @@ end
 --- `branch_submit.seed_question`.
 ---
 --- Whitespace is collapsed because a visual selection can span lines and the
---- slug has to survive it. An all-whitespace selection returns "" — the caller
---- decides whether that is an error (the inline path already rejects it).
+--- slug has to survive it. An all-whitespace selection returns "", which callers
+--- MUST reject: an empty topic is BR-1's anonymity bug (auto-titling fires only
+--- on "?" and the slug rename bails on ""). This comment used to say the inline
+--- path "already rejects it" — it checked the raw selection, and "   " is not ""
+--- (#214 BR-86). It checks this return value now.
 --- @param selected string
 --- @return string
 function M.topic_for_selection(selected)

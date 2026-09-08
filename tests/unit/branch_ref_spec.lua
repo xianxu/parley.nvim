@@ -53,8 +53,12 @@ describe("branch_ref.topic_for_selection", function()
             br.topic_for_selection("  monad\n  transformers  "))
     end)
 
-    it("an empty selection stays empty for the caller to reject", function()
+    -- The caller must reject this, and #214 BR-86 found that it did not: the
+    -- visual path guarded `selected == ""`, and "   " is not "". Asserted at the
+    -- call site in branch_child_spec, not just here.
+    it("a whitespace-only selection derives the empty topic callers must reject", function()
         assert.are.equal("", br.topic_for_selection("   "))
+        assert.are.equal("", br.topic_for_selection("\n\t "))
     end)
 end)
 

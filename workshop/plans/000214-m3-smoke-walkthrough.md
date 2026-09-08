@@ -30,6 +30,10 @@ Then, the two that used to be broken:
 - **1.6** while a response is streaming, press `<M-i>` in that chat. It should
   decline with a message, in **all three** of normal/insert/visual.
 
+- **1.7** whitespace-only visual selection + `<M-i>` → refuses; no child, line
+  untouched. (It briefly created a child with an empty `topic:` — a permanently
+  nameless file.)
+
 ## 2. Annotations are single-line
 
 - **2.1** drop a `🔒: note` in the *middle* of a long answer, then ask a

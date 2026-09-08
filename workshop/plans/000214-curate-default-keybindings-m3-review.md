@@ -1006,3 +1006,224 @@ findings:
       3d8ab7b and ddb5614 have not been reviewed by any gate. Re-pin or review them
       before recording the M3 verdict.
 ```
+
+---
+
+## Re-review — 2026-09-07T19:40:30-07:00 (FIX-THEN-SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 214 — audit and curate the default keybinding surface |
+| repo | parley.nvim |
+| issue file | workshop/issues/000214-curate-default-keybindings.md |
+| boundary | milestone M3 |
+| milestone | M3 |
+| window | d5ba3ebca28f42a93cf95ed132bd695c12f29c50..a4a173d749d6691ab0498b19a8413515f7f7980c |
+| command | sdlc milestone-close --issue 214 --milestone M3 |
+| reviewer | claude |
+| timestamp | 2026-09-07T19:40:30-07:00 |
+| verdict | FIX-THEN-SHIP |
+
+## Review
+
+```verdict
+verdict: FIX-THEN-SHIP
+confidence: high
+```
+
+The window's headline work — narrowing `<M-i>` to an insertion, making `🌿:`/`🔒:` single-line annotations, and protecting the resubmit path — is real, and the two Criticals from round 16 are genuinely fixed: I verified both by reversion in a scratch worktree (reverting `annotation.survivors`' inline branch turns 2 unit assertions AND the end-to-end visual-branch test red; the whole suite is green at HEAD, luacheck 0/0 across 356 files). BR-85's window complaint is resolved — the pinned head now includes the three previously-unreviewed commits. What keeps this off SHIP is not the code that was fixed but the classes around it: I found one measured behaviour regression this window introduced (a whitespace-only visual selection now produces a child with an empty `topic:` — the exact BR-1 anonymity the codebase spends a comment block avoiding, and the `topic_for_selection` doc-comment plus its own unit test both assert a caller-side rejection that does not exist), the user-visible resubmit-survivor transformation is documented in no atlas file or the README, and 9 of the 12 open prior findings are still open verbatim — including one, BR-70, that a prior round disposed `addressed` while the same claim survives one section further down the same file.
+
+## 1. Strengths
+
+- **`annotation.survivors` is the right shape for the class.** Splitting "line-start form" from "inline form" into one pure function taking `(lines, cfg)`, reusing `chat_parser.extract_inline_branch_links` rather than writing a second matcher, is exactly the consolidation BR-79 asked for (`lua/parley/annotation.lua:70-84`). ARCH-PURE holds: it does no IO and its tests run without a plugin `setup()`.
+- **BR-80's fix went the stricter way.** `prefixes()` now derives from `highlight_structure.patterns(cfg)` instead of carrying a third hardcoded copy of the shipped prefixes (`annotation.lua:29-33`), and asserting a live config immediately exposed that `delete_answer` was reading plugin state a unit spec had never set up — the signature change at `buffer_edit.lua:117` and `chat_respond.lua:1436` is the correct follow-through.
+- **The BR-79 test is a real end-to-end one.** `branch_child_spec.lua:1018` drives the actual visual chord (`_branch_inserters(buf,false,true).v()`) in a prepped chat buffer, then runs the exact `delete_answer` call `chat_respond` makes. Reverting the fix turns it red; this is not a test written to agree with its fix.
+- **`refuse_while_pending` wraps the dispatch table, not the path in front of the author** (`init.lua:2470-2489`). That is the ARCH-ORDER-correct answer to BR-69 and is pinned by "every dispatch mode refuses, not just the one that had the guard" (`branch_child_spec.lua:775`).
+- **ARCH-CONSTRAINTS, measured not assumed.** I benchmarked `parse_chat` on a ~10k-line real transcript at base vs head: 52.5ms → 51.1ms. The new per-line `annotation_line()` call in the trailing trim costs nothing detectable.
+
+## 2. Critical findings
+
+None.
+
+## 3. Important findings
+
+**I1 — a whitespace-only visual selection writes a child with an empty `topic:`, and both the doc and the unit test claim a guard that isn't there.** `lua/parley/init.lua:2450` guards `selected == ""`, but the value that must be non-empty is the *derived* topic. `branch_ref.topic_for_selection` (`branch_ref.lua:52-55`) now collapses whitespace and trims, so `"   "` → `""`, where before this window it returned `what is "   "` — non-empty. Measured end-to-end (`v` over the spaces in `a   b` inside an answer, then the real chord):
+
+```
+PARENT:  a[🌿:   ](2026-09-07.19-35-01.698.md)b
+CHILD:   1| ---
+         2| topic:                       <- empty, not the ? sentinel
+         8| 💬: tell me more about ""
+```
+
+That is precisely the state `init.lua:2420-2424` documents as BR-1 ("a permanently anonymous `<timestamp>.md` whose parent ref line stayed `🌿: ….md: ` forever") and passes `"?"` everywhere else to avoid. `branch_ref.lua:49-50` asserts "An all-whitespace selection returns `""` — the caller decides whether that is an error (the inline path already rejects it)", and `branch_ref_spec.lua:57` pins the empty return with the comment "for the caller to reject". Neither half is true. Fix at the class, not the site: validate the *derived* topic, not the raw selection — reject when `topic_for_selection(selected) == ""` (which also covers `selected == ""`, retiring the raw check), and add a spec driving `v` over whitespace.
+
+**I2 — the resubmit-survivor transformation is user-visible surface documented nowhere in `atlas/` or `README.md`.** After this window, a `<M-CR>` resubmit of an exchange containing `A [🌿:monad](child.md) wraps a value.` rewrites the user's prose into a standalone `🌿: child.md: monad` line — the sentence is dropped and the link is relocated and reformatted. `atlas/chat/parsing.md:83-92` enumerates "Two properties the fix has to hold together" and lists only *content resumes* and *a trailing annotation stays outside the span*; the mid-answer and inline survivor rule — the one that took three review rounds and is the whole of BR-75/BR-79 — appears in no atlas file (`grep -rn "survivor" atlas/ README.md` returns nothing) and in no README bullet. `atlas/chat/inline_branch_links.md` documents the chord that *creates* the inline link without saying what a later resubmit does to it. The only prose record is `workshop/plans/000214-m3-smoke-walkthrough.md:1.4b`, which is a plan artifact, not user-facing docs. This is the 4th finding in family `readme-missing-for-changed-surface`; the rule is: when a milestone changes what a keypress does to text the user already typed, the atlas doc that owns that text's contract and the README's behaviour list are updated in the same commit — enumerate from the *behaviours changed*, not from the files touched.
+
+## 4. Minor findings
+
+- **M1 — `annotation.lua:14-15` claims four consumers; there are two.** The header says "four places need these answers: the parser's trailing-span trim, the resubmit's survivor filter, the arch guard, and the tests." `grep -rn 'require("parley.annotation")' lua/ tests/` returns exactly `chat_parser.lua:313` and `buffer_edit.lua:119`. No arch guard and no test consume it directly. 10th in family `docs-assert-unverified-behavior`.
+- **M2 — two dead ternaries in the new insert paths.** `init.lua:2352-2353` (`insert_at > 0 and around[1] or nil`, `around[insert_at > 0 and 2 or 1]`) and `init.lua:2400-2402` (same shape on `cursor_pos[1]`). `nvim_win_get_cursor` returns a 1-based row and `handle_line() + 1 >= 1`, so both conditions are constant-true; the `or 1` index branch is unreachable and makes the neighbour lookup harder to read than the two-line form it replaces. 3rd in family `dead-value-in-new-code`.
+- **M3 — `follows:match("%S")` treats a whitespace-only following line as content** (`init.lua:4970`), so a template ending in `"  "` would still get a second blank. Cosmetic; `ref_block` already uses the `%S` convention consistently, so this is only noted for symmetry.
+
+## 5. Test coverage notes
+
+- **Verified by reversion (the standard the prompt sets):** BR-79's fix — reverting `survivors` to line-start-only turns `annotation_lines_spec.lua:187` and `:202` red *and* `branch_child_spec.lua:1018` red. Confirmed `addressed`.
+- **BR-80's fix has no pinning test.** I restored `cfg = cfg or {}` + `M.DEFAULTS` in a scratch copy and ran `annotation_lines_spec` (14/14), `buffer_edit_spec` (23/23) and `single_source_sweeps_spec` (21/21) — all green. The fix is real and reachable (a `nil` cfg raises today), but nothing prevents it regressing. This is the same rule BR-73 already names, so I am recording it there rather than opening a 7th id in that family.
+- **I1 has no coverage at all.** `branch_child_spec.lua:45` and `:696` both pin the *normal* selection topic; no test drives a whitespace-only or degenerate selection, which is why the regression reached HEAD green.
+- **The failure-injection seam is a single function stub.** `branch_child_spec.lua:971` monkeypatches `parley.create_child_chat` to raise. That covers exactly one failure point and cannot express "the buffer edit raised after the child was written" — which is why BR-72's post-create window has no test. A fake filesystem behind the write seam (ARCH-MOCK) would let both halves of the transition be exercised.
+
+## 6. Architectural notes for upcoming work
+
+Working each marker explicitly:
+
+- **ARCH-DRY — flag (minor).** `chat_gather_opts`, `seed_question`, `ref_block` and `annotation` are all genuine consolidations. Residual: "does this line start with `🌿:`/`🔒:`" is still answered three ways — `annotation.is_annotation` (`vim.startswith`), `highlight_structure.classify` (anchored pattern), `is_partition` (four anchored matches). The defaults now have one source, so this is a predicate-shape duplication rather than a value duplication, but `chat_parser`'s trim loop calls `annotation.is_annotation(line, config)` — which rebuilds all ten compiled patterns per call — while the same function already holds `decoration_patterns` and a per-line `decoration_kind` it computed. Taking compiled `patterns` (the `is_partition` signature) instead of raw `cfg` would retire both the recompute and the third predicate shape. This is family `duplicate-helper-not-retired` (already at 7); recorded here rather than raised as an 8th instance.
+- **ARCH-PURE — pass.** `branch_submit`, `branch_ref`, `annotation` and `helper.flatten_lines` are all pure and unit-tested without a buffer; the effects stayed in `branch_inserters`. `annotation_lines_spec` no longer calls `parley.setup()` (BR-62), which is the tell.
+- **ARCH-PURPOSE — flag.** BR-79's fix did enumerate the second axis and swept it in code, which is the right answer. The *docs* half of the same class was not swept: `atlas/chat/parsing.md` still enumerates two properties where there are now three (I2), and `atlas/chat/drill_in.md:165` still carries the claim BR-70 removed from `:127-140` in the same file. Both are the instance-not-class shape one level up from the code.
+- **ARCH-MOCK — flag (see §5).** The only external dependency is the filesystem; tests use real tmpdirs, which is an acceptable seam for reads/writes, but there is no stateful fake that can fail *mid-sequence*. That is the direct cause of BR-72 being unpinnable.
+- **ARCH-CONSTRAINTS — pass, measured.** No parser regression (52.5 → 51.1ms on 10k lines). `<M-i>` remains a discrete keypress doing one full parse plus one full gather (~13ms on a 2500-line chat) — BR-71's ordering point stands as a Minor, not a budget breach.
+- **ARCH-SECURE — pass.** `vim.pesc` guards the configured branch prefix at `chat_parser.lua:179/202`; user-selected topics reach `gsub` only as *function* replacements (`init.lua:4920`); `flatten_lines` closes the `writefile` NUL corruption. `survivors` does synthesize a `🌿: <path>: <anchor>` line from untrusted buffer content, but that path resolves through the same `resolve_chat_path` root validation the inline form already used, so no new exposure. I1 is the one input-validation gap.
+- **ARCH-ORDER — flag.** BR-72's transition still has an unguarded tail: `create_child_if_owned` is `pcall`'d and first (`init.lua:2317`), but `apply_text_edits` (`:2340`), `handle_line` (`:2342`, which raises on a nil extmark) and `nvim_buf_set_lines` (`:2351`) are not, so a raise there leaves a child on disk with no reference. The `(state, event) -> (state, effects)` enumeration for this keypress is written in prose across three comment blocks; writing it as one table would make the unguarded half self-evident.
+
+## 7. Plan revision recommendations
+
+1. `workshop/plans/000214-branch-submit-m3-plan.md` — **untick `- [x] sdlc milestone-close --issue 214 --milestone M3` (Task 9, :330).** This review *is* that gate and the issue's `## Log` carries no M3 entry (BR-83, still open).
+2. Same file — Task 8 Step 1 (:322) still says "including the measured reason the ref follows `📝:`", and "Open risks" still names case 2b's "last exchange". Both were removed by the cursor-placement narrowing; the same edit that changed the decision should have swept them.
+3. Same file — add a `## Revisions` entry recording that `topic_for_selection` returns `""` for a degenerate selection and that the caller-side rejection the row's prose promises was never built (I1), so the plan stops claiming a contract the code does not hold.
+4. `workshop/issues/000214-curate-default-keybindings.md` — the Integration-points row for `setup_keymap` reads "interview's `<CR>`, now buffer-local" while the prose two paragraphs below states "It is global again". Reconcile the row with the decision round 10 reversed. Also add the missing `delete_answer` row to the issue's (delivered-record) Core-concepts table — it is in the plan's table only.
+5. `workshop/issues/…:813-814` — the two-line fragment stranded after the "single-line annotations" revision ("…(placement is the cursor, not the exchange end) and the 3a/3b split is gone / (the chord never deletes).") is still dangling (BR-74).
+
+```findings
+dispose:
+  - id: BR-70
+    disposition: not-addressed
+    note: |
+      atlas/chat/drill_in.md:165 still says chat_respond "assembles the turn-prefix boundaries from config and threads them into gather_and_strip"; only :127-140 was swept, and the Key-files list also omits chat_gather_opts/chat_boundaries and init.lua as a gather consumer.
+  - id: BR-71
+    disposition: not-addressed
+    note: |
+      init.lua:2281 still calls M.parse_chat unconditionally before the gather at :2289, and the new comment at :2284 ("The gather is the authority ... so ask it first") now describes an ordering the code does not have. Measured cost is small (~13ms on a 2500-line chat), so it stays Minor.
+  - id: BR-72
+    disposition: not-addressed
+    note: |
+      create_child_if_owned is pcall'd at init.lua:2317; apply_text_edits (:2340), handle_line (:2342, raises on a nil extmark) and nvim_buf_set_lines (:2351) remain unguarded. No seam exists to inject a failure there — the only test stub is on create_child_chat.
+  - id: BR-73
+    disposition: not-addressed
+    note: |
+      branch_submit_spec.lua:126 still passes `{}` for the boolean has_markers; :131 still names a content check plan_submission never makes. Additional measured instance of the same rule this round - BR-80's fix has NO pinning test at all - reverting the assert plus restoring M.DEFAULTS leaves annotation_lines_spec, buffer_edit_spec and single_source_sweeps_spec all green.
+  - id: BR-74
+    disposition: not-addressed
+    note: |
+      The dangling two-line fragment is still present at workshop/issues/000214-curate-default-keybindings.md:813-814, after the "single-line annotations" revision body.
+  - id: BR-77
+    disposition: not-addressed
+    note: |
+      helper.lua:116 still splices flatten_lines between "---@return string # returns unique uuid" and _H.uuid; drill_in.lua:346 still splices chat_gather_opts between chat_boundaries' description and its @return. buffer_edit.lua:96-97 is a third site (a stale one-line summary left above the replacement doc block).
+  - id: BR-79
+    disposition: addressed
+    note: |
+      Verified by reversion in a scratch worktree - reverting survivors to line-start-only turns annotation_lines_spec:187 and :202 red AND branch_child_spec:1018 (the real visual chord, end to end) red.
+  - id: BR-80
+    disposition: addressed
+    note: |
+      prefixes() now asserts a table cfg and derives from highlight_structure.patterns; M.DEFAULTS is gone and cfg is threaded through delete_answer at chat_respond.lua:1436. No test pins it - recorded under BR-73 rather than as a new id.
+  - id: BR-81
+    disposition: not-addressed
+    note: |
+      branch_submit.lua:26-31 and branch_child_spec.lua:408-412 still assert the line_before_local latch b9fc6c8 removed inside this window; unchanged since round 16.
+  - id: BR-82
+    disposition: not-addressed
+    note: |
+      annotation.lua and annotation_lines_spec.lua were added to traceability under ui/keybindings, but the atlas doc whose contract they implement is chat/parsing (which cites the spec by name at :85), so `make test-changed` on atlas/chat/parsing.md still does not run it. annotation.lua appears in no atlas/*.md at all.
+  - id: BR-83
+    disposition: not-addressed
+    note: |
+      workshop/plans/000214-branch-submit-m3-plan.md:330 still ticks its own sdlc milestone-close; :322 still cites the superseded "ref follows 📝:" reason; Open risks still names case 2b's "last exchange".
+  - id: BR-84
+    disposition: not-addressed
+    note: |
+      buffer_edit.lua:108-109 still claims survivors do not drift to the end; every test still calls delete_answer directly rather than running the composed resubmit.
+  - id: BR-85
+    disposition: addressed
+    note: |
+      The file now lives at workshop/plans/000214-m3-smoke-walkthrough.md; workshop/ root holds no stray artifact. The window is also re-pinned to a4a173d, so 3d8ab7b and ddb5614 are inside this review.
+findings:
+  - id: new
+    severity: Important
+    family: derive-before-validate
+    title: |
+      a whitespace-only visual selection writes a child with an empty topic:, and the doc plus its unit test claim a caller-side guard that does not exist
+    detail: |
+      This is the 3rd finding in family `derive-before-validate`. Do not fix the one
+      call site - the rule is: the guard validates the value that is USED, not the
+      value that was read. init.lua:2450 rejects `selected == ""`, but the value that
+      must be non-empty is the derived topic. branch_ref.topic_for_selection
+      (branch_ref.lua:52-55) now collapses whitespace and trims, so "   " returns "";
+      before this window it returned `what is "   "`, which was never empty. Measured
+      end-to-end by driving the real visual chord over the spaces in `a   b` inside an
+      answer: the parent becomes `a[🌿:   ](2026-09-07.19-35-01.698.md)b`, and the child
+      on disk carries `topic: ` (empty, not the `?` sentinel) with the seed question
+      `💬: tell me more about ""`. That is exactly the BR-1 state init.lua:2420-2424
+      documents and passes "?" everywhere else to avoid - a permanently anonymous
+      timestamp file that never slugs. branch_ref.lua:49-50 asserts "the inline path
+      already rejects it" and branch_ref_spec.lua:57 pins the empty return "for the
+      caller to reject"; neither is true. Fix - reject on the derived topic (which
+      subsumes the raw `selected == ""` check, retiring it), and pin with a spec that
+      drives `v` over whitespace.
+  - id: new
+    severity: Important
+    family: readme-missing-for-changed-surface
+    title: |
+      the resubmit-survivor transformation is user-visible surface documented in no atlas file and no README bullet
+    detail: |
+      This is the 4th finding in family `readme-missing-for-changed-surface`. Do not
+      add the one paragraph - the rule is: when a milestone changes what a keypress
+      does to text the user already typed, the atlas doc owning that text's contract
+      and the README behaviour list are updated in the same commit, enumerated from
+      the behaviours changed rather than the files touched.
+      After this window a `<M-CR>` resubmit of an exchange containing
+      `A [🌿:monad](child.md) wraps a value.` rewrites the user's own prose into a
+      standalone `🌿: child.md: monad` line - the sentence is dropped, the link is
+      relocated and reformatted. `grep -rn "survivor" atlas/ README.md` returns nothing.
+      atlas/chat/parsing.md:83-92 enumerates "Two properties the fix has to hold
+      together" and lists only "content resumes" and "a trailing annotation stays
+      outside the span" - the mid-answer and inline survivor rule, which is the whole
+      of BR-75/BR-79 and took three rounds, is absent. atlas/chat/inline_branch_links.md
+      documents the chord that creates the inline link without saying what a later
+      resubmit does to it. The only prose record is
+      workshop/plans/000214-m3-smoke-walkthrough.md item 1.4b, which is a plan
+      artifact, not user-facing docs.
+  - id: new
+    severity: Minor
+    family: docs-assert-unverified-behavior
+    title: |
+      annotation.lua's header claims four consumers; grep finds two
+    detail: |
+      This is the 10th finding in family `docs-assert-unverified-behavior`. Do not fix
+      the sentence - the rule is: a comment that QUANTIFIES over the codebase ("four
+      places", "three call sites") is checked against the codebase in the commit that
+      writes it, or it is written without the count.
+      annotation.lua:14-15 says "One owner, because four places need these answers: the
+      parser's trailing-span trim, the resubmit's survivor filter, the arch guard, and
+      the tests." `grep -rn 'require("parley.annotation")' lua/ tests/` returns exactly
+      chat_parser.lua:313 and buffer_edit.lua:119. No arch guard consumes it, and no
+      test requires it directly - the specs reach it through parse_chat and
+      delete_answer. The same header is the module's justification for existing, so the
+      overstated count is load-bearing.
+  - id: new
+    severity: Minor
+    family: dead-value-in-new-code
+    title: |
+      two constant-true ternaries in the new insert paths make the neighbour lookup unreadable
+    detail: |
+      This is the 3rd finding in family `dead-value-in-new-code`. Do not fix the two
+      sites - the rule is: a defensive branch is written only where the guarded value
+      can actually take the guarded value; otherwise it reads as protection while
+      being noise.
+      init.lua:2352-2353 (`insert_at > 0 and around[1] or nil` and
+      `around[insert_at > 0 and 2 or 1]`) and init.lua:2400-2402 (the same shape on
+      `cursor_pos[1]`) are both constant-true: `nvim_win_get_cursor` returns a 1-based
+      row, and `insert_at = handle_line(anchor) + 1` where handle_line returns an
+      extmark row >= 0. The `or 1` index branch is unreachable, and the ternary inside
+      the subscript is harder to read than the two-line form it replaced.
+```

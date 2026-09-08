@@ -58,6 +58,22 @@ an exchange gathers only that exchange's and does not fall through to the
 whole-buffer path. Branching is a "take all of this elsewhere" gesture; responding
 is "answer this turn".
 
+**A reference outlives the answer it sits in.** `<M-CR>` on an answered question
+resubmits: the old answer is deleted and regenerated. Since #214 made `🌿:`/`🔒:`
+ordinary content, those lines are inside the span that deletes — so
+`buffer_edit.delete_answer` keeps them (`annotation.survivors`). A resubmit
+replaces the *model's* output, and an annotation is not the model's output; a
+branch reference in particular is the only pointer to a child chat that exists on
+disk, so deleting it orphans a file.
+
+Two forms, both preserved:
+
+- a **line-start** `🌿:`/`🔒:` survives verbatim, in order, at the deletion point;
+- an **inline** `[🌿:anchor](file)` — what the visual branch produces — survives
+  as a **standalone** `🌿: file: anchor` line. The prose around it belonged to the
+  answer being replaced, so keeping the whole line would leave a stale sentence
+  inside the new answer; the link is what must not be lost.
+
 **Refusals.** The chord declines while the buffer owns a pending response — a
 streaming answer holds a chat lease on its `🤖:` line, and editing under it
 corrupts the transcript rather than erroring.

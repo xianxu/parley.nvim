@@ -1087,3 +1087,41 @@ describe("a resubmit does not orphan the child <M-i> just made (#214 BR-75)", fu
         assert.is_nil(after:find("answer two", 1, true), "the answer was not replaced")
     end)
 end)
+
+-- #214 BR-86: a whitespace-only visual selection must not create a child, and
+-- certainly not one with an empty `topic:` — that is BR-1's anonymity bug, where
+-- auto-titling never fires and the slug rename bails, leaving a nameless
+-- <timestamp>.md forever. The guard checked the RAW selection, and "   " is not
+-- "" once topic_for_selection collapses it.
+describe("a whitespace-only selection is refused (#214 BR-86)", function()
+    local tmpdir, parent_path, parent_buf
+
+    after_each(function()
+        parley._prepared_bufs[parent_buf] = nil
+        vim.fn.delete(tmpdir, "rf")
+    end)
+
+    it("creates no child and leaves the line alone", function()
+        parley.setup({})
+        tmpdir = vim.fn.tempname()
+        vim.fn.mkdir(tmpdir, "p")
+        parent_path = tmpdir .. "/2026-09-06.10-00-00.000_parent.md"
+        vim.fn.writefile({ "---", "topic: t", "file: f", "---", "",
+                           "💬: q", "", "🤖:[A]", "", "a   b", "", "📝: sum" }, parent_path)
+        vim.cmd("edit " .. vim.fn.fnameescape(parent_path))
+        parent_buf = vim.api.nvim_get_current_buf()
+        parley.config.chat_dir = tmpdir
+        parley.prep_chat(parent_buf, parent_path)
+
+        vim.api.nvim_win_set_cursor(0, { 10, 1 })
+        vim.cmd("normal! vll")          -- the three spaces in "a   b"
+        parley._branch_inserters(parent_buf, false, true).v()
+
+        assert.are.equal("a   b", vim.api.nvim_buf_get_lines(parent_buf, 9, 10, false)[1],
+            "the line was spliced for a selection with no topic in it")
+        for _, f in ipairs(vim.fn.readdir(tmpdir)) do
+            assert.are.equal(vim.fn.fnamemodify(parent_path, ":t"), f,
+                "a child was created with an empty topic — BR-1's anonymous chat")
+        end
+    end)
+end)
