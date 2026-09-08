@@ -70,11 +70,23 @@ if try_open_inline_branch_link(...) then return end
 Appending step 4 would fire in chat and never in markdown — the per-buffer
 divergence this issue exists to remove, reintroduced by its own fix. Appending
 to both is two copies. So it is an **extraction**: one predicate for both types,
-one fall-through at the caller. `open_chat_reference` already chains
-`try_open_src_link` → inline → `@@` (the Spec's "steps 1-3 exist" omitted
-`src:`, `init.lua:4307`) and the chat path duplicates most of it — the
-extraction is largely deleting the second copy, the same move #214 M1 made for
-`branch_inserters`.
+one fall-through at the caller. **The two chains are NOT duplicates, and saying so was the #214 M1 mistake
+repeated** (PQ-8). I cited `branch_inserters` as the precedent for the
+extraction and then made the error that precedent exists to prevent —
+*"consolidating implementations ≠ erasing situational differences"*
+(`lessons.md`). Measured, four divergences, each with a verdict:
+
+| # | difference | today | verdict |
+|---|---|---|---|
+| 1 | `src:` links (`init.lua:4307`) | markdown only | **keep, extend to chat.** A `src:` link is a reference like any other; its absence in chat is an omission, not a policy. |
+| 2 | `@@path: topic` form (`init.lua:4328`) | markdown only | **keep, extend to chat.** Same parser, strictly more forms accepted. Low risk: the chat path already handles bare `@@ref@@`. |
+| 3 | bare-name `resolve_chat_path` (`init.lua:4352`) | markdown only | **keep, extend to chat** — and it is the timestamp-prefix resolver #224 is about, so chat gains slug-tolerance it should already have had. |
+| 4 | directory `Explore` + split-aware edit (`init.lua:4463-4492`) | **chat only** | **keep, chat only.** This is the one that must NOT be flattened: it opens a directory reference in netrw, preferring the other window in a two-split layout. Deleting the "second copy" as originally written would have silently dropped it. Whether markdown should gain it is a separate question, deliberately not answered here. |
+
+So the extraction takes the union for 1-3 and preserves 4 as a chat-only arm —
+one function with one explicit branch, not one function that quietly loses a
+feature. That branch is the `owns_file`-shaped parameter M1 ended up with, for
+the same reason.
 
 **A boolean is not enough.** Making markdown fall through promotes three
 currently-discarded exits to load-bearing, and they do not mean the same thing:
@@ -110,8 +122,10 @@ and the difference is intended rather than an artifact of which branch ran.
 
 ## Done when
 
-- `<M-o>` opens a `🌿:` line, an inline link, a `src:` link and an `@@ref@@`, in
-  **both** chat and markdown buffers; `<C-g>o` does the same.
+- `<M-o>` opens a `🌿:` line, an inline link, a `src:` link, an `@@ref@@` and an
+  `@@path: topic` in **both** chat and markdown buffers; `<C-g>o` does the same.
+- A directory reference still opens in `Explore`, split-aware, **in chat
+  buffers** — the one divergence kept rather than flattened.
 - On a plain word `<M-o>` reaches the `gf` path **in both buffer types** —
   asserted by spying the delegation, not by hoping a real file exists.
 - A `🌿:` reference whose file is missing still reports and does **not** reach
@@ -131,8 +145,10 @@ and the difference is intended rather than an artifact of which branch ran.
 
 - [ ] Generalise the collision guard: no alt key has two owners (fails today
       only if a collision exists; seen red by binding `<M-o>` twice)
-- [ ] Extract `open_reference_under_cursor(buf, line, col, in_insert) -> handled`
-      from the markdown branch and the chat chain; delete the duplicate
+- [ ] Extract `open_reference_under_cursor(buf, line, col, in_insert, is_chat)`
+      taking the UNION of differences 1-3 and keeping 4 behind `is_chat`;
+      characterisation tests for all four BEFORE the extraction, so a dropped
+      arm fails rather than passing silently
 - [ ] Three-valued return; only `"none"` falls through. `"failed"` keeps its
       diagnostic; the two `"none"` warnings are deleted
 - [ ] One fall-through to `ResolveRefOrGotoFile`, `stopinsert` first when in
