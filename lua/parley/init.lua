@@ -4963,7 +4963,13 @@ M.create_child_chat = function(file_path, topic, parent_buf, question)
 			for i, line in ipairs(turn) do
 				table.insert(file_lines, at + i, line)
 			end
-			table.insert(file_lines, at + #turn + 1, "")
+			-- Only if the template does not already open with one. It does, so
+			-- adding a second left every branched child with a double blank
+			-- above its trailing `💬:` prompt.
+			local follows = file_lines[at + #turn + 1]
+			if follows and follows:match("%S") then
+				table.insert(file_lines, at + #turn + 1, "")
+			end
 		end
 	end
 

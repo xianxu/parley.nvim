@@ -870,6 +870,16 @@ describe("a branched child is not NUL-corrupted (#214 M3)", function()
         assert.are.equal("> [q]", lines[at + 1])
     end)
 
+    it("does not leave a double blank above the template's own prompt", function()
+        local child = tmpdir .. "/child4.md"
+        parley.create_child_chat(child, "?", parent_buf, "> [q]\n\nwhat's this")
+        local lines = vim.fn.readfile(child)
+        for i = 1, #lines - 1 do
+            assert.is_false(lines[i] == "" and lines[i + 1] == "",
+                ("blank lines stacked at %d-%d: %s"):format(i, i + 1, vim.inspect(lines)))
+        end
+    end)
+
     it("a single-line question still sits inline after the prefix", function()
         local child = tmpdir .. "/child2.md"
         parley.create_child_chat(child, "?", parent_buf, "how does X work?")
