@@ -279,9 +279,15 @@ local config = {
 	-- just a static string is legacy and the [{{agent}}] element is added automatically
 	-- if you really want just a static string, make it a table with one element { "🤖:" }
 	chat_assistant_prefix = { "🤖:", "[{{agent}}]" },
-	-- chat local section prefix (for content that should be ignored by parley processing)
+	-- A private note. SINGLE LINE (#214): the line it starts is withheld from
+	-- what is sent to the model; the next line is ordinary content again. It used
+	-- to withhold everything to the end of the answer or question it sat in,
+	-- which meant a note dropped early in a long answer silently removed the rest
+	-- of it from every later turn.
 	chat_local_prefix = "🔒:",
-	-- chat branch prefix (for tree-of-chat links: parent back-link on first line, child branches in body)
+	-- Branch reference (tree-of-chat links: parent back-link on the first line,
+	-- child branches in the body). Single line, same as 🔒:, and likewise never
+	-- sent to the model. An inline [🌿:anchor](file) submits its anchor text.
 	chat_branch_prefix = "🌿:",
 	-- tool use prefix (client-side tool call emitted by the LLM during agentic loop)
 	chat_tool_use_prefix = "🔧:",
