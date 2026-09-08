@@ -1,11 +1,12 @@
 ---
 id: 000224
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-09-08
 updated: 2026-09-08
 estimate_hours:
+started: 2026-09-08T15:04:07-07:00
 ---
 
 # Forked chat loses its parent context after a slug rename
