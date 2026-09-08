@@ -701,6 +701,7 @@ atlas:
       - tests/unit/config_tools_spec.lua
       - tests/unit/branch_ref_spec.lua
       - tests/unit/branch_submit_spec.lua
+      - tests/unit/annotation_lines_spec.lua
       - tests/integration/branch_child_spec.lua
       - tests/integration/keybinding_agreement_spec.lua
       - tests/arch/single_source_sweeps_spec.lua

@@ -291,16 +291,19 @@ describe("chat_parser content_blocks vs other prefixes", function()
         assert.is_not_nil(parsed.exchanges[1].summary)
     end)
 
-    it("local 🔒: section inside an answer stops content block accumulation", function()
-        -- Existing parser behavior: once 🔒: is seen, content continuation
-        -- is skipped until the next 💬:/🤖: prefix. Our content_blocks
-        -- should match that behavior — no local-section lines leak in.
+    it("a 🔒: line inside an answer withholds only that line", function()
+        -- #214: 🔒: is a SINGLE-LINE annotation, not a section. Only the noted
+        -- line is withheld; the line after it is ordinary content again. This
+        -- test previously asserted the opposite ("still private because
+        -- line_before_local is set"), which is the behaviour that silently
+        -- deleted the rest of an answer from every submission once a note was
+        -- dropped early in it.
         local lines, header_end = buf({
             "💬: hello",
             "🤖: [Claude]",
             "Visible text.",
             "🔒: private scratch notes",
-            "still private because line_before_local is set",
+            "visible again after the note",
             "💬: second turn",
             "🤖: [Claude]",
             "next answer",
@@ -310,7 +313,7 @@ describe("chat_parser content_blocks vs other prefixes", function()
         assert.equals(1, #blocks)
         assert.equals("text", blocks[1].type)
         assert.matches("Visible text", blocks[1].text)
-        assert.not_matches("still private", blocks[1].text)
+        assert.matches("visible again after the note", blocks[1].text)
         assert.not_matches("private scratch notes", blocks[1].text)
     end)
 end)

@@ -502,6 +502,33 @@ stated purpose is making bindings *more* configurable.
       | 3 | neither | submits the question | **placeholder**: bare `🌿:`, empty child, question untouched | at the cursor |
 
       **Superseded 2026-09-07** — see ## Revisions 9 and 10. Rows 2a/2b collapse
+
+### 2026-09-07 — 🌿: and 🔒: are single-line annotations (operator)
+
+**11. The parser latched instead of skipping.** Both prefixes set
+`line_before_local`, meaning *"content from here to the end of this component is
+local"*. Right for a section marker, wrong for a one-line annotation, and nothing
+distinguished the two — so a private note dropped early in a long answer silently
+removed the rest of that answer from every later submission, and a note inside a
+question removed the second half of the user's own question. Operator's model,
+now the code's: the line is withheld, the next line is ordinary content.
+Single-line is also the more useful primitive for `🔒:` — notes go anywhere, and
+a multi-line note is several noted lines.
+
+**My blast-radius estimate was wrong, and the operator called it.** I said this
+"touches the parse of essentially every file" because every child chat opens with
+a `🌿:` back-link. Measured: the latch resets at the next `💬:`, so a back-link
+before the first question truncates nothing. Real corpus: 0 of 16 chats affected,
+0 fixtures. The bug only bit mid-component. Same shape as the recurring mistake —
+I verified that the marker is everywhere rather than that its position matters.
+
+**What the fix did need was a hazard I had not seen.** Removing the latch put a
+TRAILING `🌿:` inside the answer's line span, and resubmit deletes
+`question..answer.line_end` — so the reference would have been deleted and the
+child orphaned on disk, BR-19 by another route. The trailing-blank trim now skips
+annotation lines; reverting that turns the span test red. Three existing tests
+encoded the old semantics (one carried the fixture line *"still private because
+line_before_local is set"*) and were updated to the decided contract.
       (placement is the cursor, not the exchange end) and the 3a/3b split is gone
       (the chord never deletes).
 

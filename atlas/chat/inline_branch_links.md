@@ -36,16 +36,12 @@ not local to anywhere — but `<M-S-CR>` does not survive most terminals (zellij
 tmux, anything without CSI-u), so `<M-i>` is the key people actually press, and
 it reads as an *insertion*. Relocating the line made the keypress jump.
 
-**The cost, measured.** `🌿:` sets the parser's `line_before_local` — the same
-mechanism `🔒:` uses to mark a local section — so a reference in the MIDDLE of an
-answer excludes the text after it from the LLM context, and
-`exchange_model.from_parsed_chat` truncates that exchange (its `summary` block
-disappears, `append_pos` moves into the middle). Placing the reference at the end
-of an answer avoids this entirely, which is why the first design did. This is
-pre-existing behaviour — the pre-#214 path also inserted at the cursor — and the
-operator's call is that a key that reads as "insert" must insert where you are.
-Fixing it properly means teaching the parser that a standalone `🌿:` is a
-one-line annotation rather than a local-section boundary.
+**The cost that used to carry.** A mid-answer `🌿:` once truncated the exchange
+— the parser latched a local-section flag, so text after the reference left the
+LLM context and the exchange model lost the rest of that exchange. That is what
+made end-of-answer placement look attractive. It is fixed at the source (#214):
+`🌿:` and `🔒:` are single-line annotations, so a reference costs exactly its own
+line wherever it sits. See `atlas/chat/parsing.md`.
 
 **The chord never deletes.** An earlier M3 draft had it copy the question into
 the child and delete the answer it replaced, mirroring `<M-CR>`'s resubmit. That
