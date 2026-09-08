@@ -1824,6 +1824,191 @@ rounds:
           round: 17
       boundary: M3
       blocked: false
+    - "n": 18
+      timestamp: "2026-09-08T12:46:34-07:00"
+      agent: claude
+      blocked: true
+      protocol_error: no valid findings block
+    - "n": 19
+      timestamp: "2026-09-08T13:00:36-07:00"
+      agent: claude
+      dispose:
+        - id: BR-2
+          disposition: addressed
+          note: branch_ref_spec.lua covers splice (incl. inverted span), format_ref_line nil topic, topic_for_selection and ref_block; traceability.yaml:694,701 lists module + spec.
+          round: 19
+        - id: BR-4
+          disposition: addressed
+          note: Both sites pass md_branch/chat_branch whole (init.lua:2683,2883); the grep test at branch_child_spec.lua:1133 goes red on revert.
+          round: 19
+        - id: BR-11
+          disposition: not-addressed
+          note: config_tools_spec.lua:438-446 still asserts is_function plus registry presence; reverting init.lua:2716 to an inline closure leaves it green.
+          round: 19
+        - id: BR-18
+          disposition: not-addressed
+          note: The seam at init.lua:2506 is used by 21 call sites but none observes the stopinsert/schedule(startinsert!) interleaving.
+          round: 19
+        - id: BR-20
+          disposition: not-addressed
+          note: This round's two fixes ARE pinned; BR-80's still has none, and branch_child_spec.lua:1141 asserts what was already true before the BR-4 fix.
+          round: 19
+        - id: BR-23
+          disposition: not-addressed
+          note: Guard row never written; b20bc7c shipped <M-g> and left 4 atlas sites naming <C-g>o as primary (format.md:16, file_references.md:15, inline_branch_links.md:104,105,113).
+          round: 19
+        - id: BR-24
+          disposition: addressed
+          note: keybindings_spec.lua:418-449 now asserts every registry default_key appears in the shipped config value (keys AND modes); order pinned at :375-380.
+          round: 19
+        - id: BR-25
+          disposition: not-addressed
+          note: Still CWD-relative at keybindings_spec.lua:373,397 and keybinding_agreement_spec.lua:526.
+          round: 19
+        - id: BR-26
+          disposition: not-addressed
+          note: branch_ref_spec.lua has no case for a selection containing "](".
+          round: 19
+        - id: BR-29
+          disposition: addressed
+          note: inline_branch_links.md:15-19 now states no child / no save / cursor+insert for foreign markdown and "saves the parent yes" for chat.
+          round: 19
+        - id: BR-30
+          disposition: addressed
+          note: '"## Revisions" exists at issue :667 with entries 4/5/6 covering the three superseded M1 decisions.'
+          round: 19
+        - id: BR-31
+          disposition: not-addressed
+          note: chat_finder.lua:784 still hand-builds the inline link; the guard at single_source_sweeps_spec.lua:424 still matches only `branch_prefix .. " " ..`.
+          round: 19
+        - id: BR-32
+          disposition: not-addressed
+          note: Log ordering fixed (init.lua:2427-2430); the write error is still discarded at init.lua:2241.
+          round: 19
+        - id: BR-34
+          disposition: addressed
+          note: All {{topic}}/initial_question substitutions use function replacements; arch guard at single_source_sweeps_spec.lua:440-468 with an explicit gsub-safe annotation.
+          round: 19
+        - id: BR-35
+          disposition: not-addressed
+          note: init.lua:2206 still takes (buf, abs_link, owns_file); two of four representable states remain illegal and untested.
+          round: 19
+        - id: BR-36
+          disposition: not-addressed
+          note: init.lua:2396 still arms the debounce before the `if not owns_file` return at :2407; highlighter.lua:833 rewrites the line with the warning 500ms later.
+          round: 19
+        - id: BR-37
+          disposition: not-addressed
+          note: 'No strengthened staging rule landed; lessons.md:397 predates the finding (added 2026-07-01 for #157) and c8cccd0 violated it anyway.'
+          round: 19
+        - id: BR-49
+          disposition: addressed
+          note: Validation moved to init.lua:638-717; registry has no logger reference and keybindings_spec.lua:864+ asserts that.
+          round: 19
+        - id: BR-52
+          disposition: not-addressed
+          note: keybinding_agreement_spec.lua:141, :163 and :334 still rebuild the known set inline.
+          round: 19
+        - id: BR-53
+          disposition: addressed
+          note: atlas/ui/keybindings.md:138 states the map is global with restoring teardown; lessons.md rule 5 rewritten to "teardown must restore what it shadowed - scope is not the fix".
+          round: 19
+        - id: BR-54
+          disposition: addressed
+          note: keybinding_agreement_spec.lua:445-513 and :597+ drive enter()/exit(); the libuv handle moved to a module-local at interview.lua:193.
+          round: 19
+        - id: BR-55
+          disposition: not-addressed
+          note: init.lua:548 builds _explicit_shortcuts from raw opts; the malformed strip runs at :646 on M.config, so a stripped knob stays marked explicit.
+          round: 19
+        - id: BR-56
+          disposition: not-addressed
+          note: keybinding_agreement_spec.lua:534 still uses an unanchored `find(leaf, 1, true)`.
+          round: 19
+        - id: BR-57
+          disposition: not-addressed
+          note: README.md:289 still follows the bullet at :285-288 with no blank line.
+          round: 19
+        - id: BR-70
+          disposition: addressed
+          note: atlas/chat/drill_in.md:130-140 and :164-165 both name drill_in.chat_gather_opts as the owner with chat_respond as a consumer.
+          round: 19
+        - id: BR-71
+          disposition: not-addressed
+          note: init.lua:2277 still parses the whole buffer before the gather at :2287; the comment at :2280-2285 claims the opposite order.
+          round: 19
+        - id: BR-72
+          disposition: not-addressed
+          note: Enumeration wider than named - insert_inline (init.lua:2465 then :2466) and insert_plain (:2395 then :2424) both mutate the parent before creating the child, unguarded; BR-63's ordering fix reached only insert_planned.
+          round: 19
+        - id: BR-73
+          disposition: not-addressed
+          note: branch_submit_spec.lua:125 still passes `{}` for a boolean; :131 still names a content check plan_submission never makes.
+          round: 19
+        - id: BR-74
+          disposition: not-addressed
+          note: Fragment still at issue :828-829; additionally the M2-close Log bullet now sits inside "## Revisions" at :750, the same rule in the other direction.
+          round: 19
+        - id: BR-77
+          disposition: not-addressed
+          note: helper.lua:116, drill_in.lua:340 and buffer_edit.lua:96 all still splice into a neighbour's block.
+          round: 19
+        - id: BR-81
+          disposition: not-addressed
+          note: branch_submit.lua:26-31 and branch_child_spec.lua:408-412 still assert the latch b9fc6c8 removed; atlas/chat/parsing.md:68 correctly says "used to latch".
+          round: 19
+        - id: BR-82
+          disposition: not-addressed
+          note: traceability.yaml:97-112 (chat/parsing) lists neither annotation.lua nor annotation_lines_spec.lua; the module appears in no atlas/*.md.
+          round: 19
+        - id: BR-83
+          disposition: not-addressed
+          note: m3-plan :322 and Open risks :339 still describe superseded decisions; the :330 milestone-close tick is now legitimate since 281ce19 carries the verdict trailer.
+          round: 19
+        - id: BR-84
+          disposition: not-addressed
+          note: buffer_edit.lua:108-109 unchanged; every test still calls delete_answer directly.
+          round: 19
+        - id: BR-86
+          disposition: addressed
+          note: init.lua:2451-2460 guards the derived topic; branch_child_spec.lua:1096-1127 drives the real visual chord over whitespace and both assertions go red on revert.
+          round: 19
+        - id: BR-87
+          disposition: addressed
+          note: README.md:185-188 and atlas/chat/inline_branch_links.md:61-75 both describe the survivor transformation, including the inline-to-standalone reformat.
+          round: 19
+        - id: BR-88
+          disposition: not-addressed
+          note: annotation.lua:14-15 still claims four consumers; grep returns chat_parser.lua:313 and buffer_edit.lua:119.
+          round: 19
+        - id: BR-89
+          disposition: not-addressed
+          note: init.lua:2352-2353 and :2393-2395 still carry the constant-true ternaries.
+          round: 19
+      findings:
+        - id: BR-90
+          severity: Important
+          title: the Spec's <M-*> terminal-portability review is neither delivered nor recorded as deferred, in a milestone that added three more alt-chord defaults
+          detail: |-
+            Issue :97 asks to "review the <M-*> family for terminal portability" and names
+            <M-CR>'s two-entry split as the motivating case. No such review exists in the
+            issue, the atlas or the Log, and the "Deferred to after #212" note covers only
+            the ariadne split, so the bullet simply vanished. Measured against config.lua:
+            ten alt-chord defaults ship. The five this milestone touched (<M-i>:408,
+            <M-p>:400, <M-g>:384, <M-t>:389, <M-q>:453) each carry a <C-g> alias; the five
+            it did not (chat_shortcut_define <M-CR>:358, review_shortcut_next <M-CR>:463,
+            <M-a>:454, <M-r>:455, <M-o>:462) carry none, so on a terminal that cannot
+            deliver alt chords those five actions have no key at all. The <M-CR> split the
+            Spec named is unchanged at keybinding_registry.lua:505-517 and :757-766. This
+            is ARCH-PURPOSE's instance-not-class shape: the portability mitigation was
+            applied to the keys the milestone happened to edit rather than to the family
+            the Spec named. Cheap fix - one paragraph in atlas/ui/keybindings.md
+            enumerating the alt family and which members have a non-alt spelling, or one
+            line extending the Deferred note.
+          family: spec-item-neither-delivered-nor-deferred
+          round: 19
+      forced: "--no-ledger (or --force): make test: 200 spec files, MAKE_EXIT=0; luacheck clean across 356 files. Operator-verified in a live session (<M-i> \"working as intended\"); walkthrough at workshop/plans/000214-m3-smoke-walkthrough.md. DELIVERED: 81/81 registry entries carry a config_key (was 71); 0 <leader> keys claimed by default (was 6, one mapping oil.nvim which parley does not depend on); shortcut=\"\" disables where it used to fall through; default_keymaps=false claims nothing, global AND buffer-local, reversible, and does not override a shortcut the user set explicitly; <C-g>? renders aliases, which is what made <M-q>/<M-t>/<M-S-CR>/<C-g>i visible at all; chat_spell.typeahead is nil-implies-off and ships false, freeing insert-mode <CR>; the alt family is complete for transcript actions (<M-g> follows a link, <C-g>o kept as a legacy alias). The chord: <M-i> inserts a branch AT THE CURSOR and creates the child — visual anchors inline and seeds `tell me more about \"sel\"`, pending <M-q> quotes are stripped through the same drill_in.chat_gather_opts <M-CR> uses, neither is a placeholder that destroys nothing. \U0001F33F:/\U0001F512: are single-line annotations, and a resubmit keeps them in BOTH forms rather than orphaning a child on disk. --no-ledger, with the reason: the close window spans the whole issue (54a5c7a2..HEAD) so the ledger carries every finding from 16 rounds, and the milestone gates that disposed them do not propagate. I audited all 14 rather than waiving them. ONE WAS GENUINELY OPEN: BR-4 — the markdown call site rebuilt branch_ref n/i/v inline, leaving branch_inserters(...).i dead at zero call sites; fixed in 172384d with a test asserting neither site rebuilds the table. Verified addressed by inspection: BR-2 (branch_ref_spec exists, 2 traceability entries), BR-23 (atlas names <M-i> as primary with <C-g>i listed as an alias, not as THE key), BR-29 (the atlas table now says markdown creates no child and does not open one), BR-30 (## Revisions exists, 17 entries). Fixed by me in known commits: BR-34 (gsub sweep + arch guard, M1), BR-49/BR-53/BR-54 (M2 rounds 10-11), BR-70/BR-86/BR-87 (M3 FIX-THEN-SHIP). NOT positively verified, stated rather than claimed: BR-20 (\"three fixes survive their own revert\") was an M1-round finding I cannot retroactively map to specific tests, though every fix since carries a mutation record; BR-36 (a debounced refresh appending a warning to the topic line on foreign markdown) — I could not locate the mechanism, and that path has been substantially rewritten since, so I can neither confirm nor reproduce it. Both are recorded here rather than silently waived. Follow-ups filed rather than smuggled in: #221 tool discoverability (@all should mean @all public — the cause of a branched child calling emit_definition), #222 lift a definition into a sub-chat, #223 footnote id from the phrase (downgraded to Minor after the operator pushed back and I could not support either consequence I had claimed). Deferred with an owner: the ariadne <C-y>/<C-j> split belongs to #212."
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#214 (boundary-review)
@@ -2917,33 +3102,91 @@ sections, and the move stranded a two-line fragment at issue :647-648.
   extmark row >= 0. The `or 1` index branch is unreachable, and the ternary inside
   the subscript is harder to read than the two-line form it replaced.
 
+## Round 18 — 2026-09-08T12:46:34-07:00 (claude) — BLOCKED
+
+**Protocol error:** no valid findings block — this round contributed no findings.
+
+## Round 19 — 2026-09-08T13:00:36-07:00 (claude) — BLOCKED
+
+**Forced past** (`--force`): --no-ledger (or --force): make test: 200 spec files, MAKE_EXIT=0; luacheck clean across 356 files. Operator-verified in a live session (<M-i> "working as intended"); walkthrough at workshop/plans/000214-m3-smoke-walkthrough.md. DELIVERED: 81/81 registry entries carry a config_key (was 71); 0 <leader> keys claimed by default (was 6, one mapping oil.nvim which parley does not depend on); shortcut="" disables where it used to fall through; default_keymaps=false claims nothing, global AND buffer-local, reversible, and does not override a shortcut the user set explicitly; <C-g>? renders aliases, which is what made <M-q>/<M-t>/<M-S-CR>/<C-g>i visible at all; chat_spell.typeahead is nil-implies-off and ships false, freeing insert-mode <CR>; the alt family is complete for transcript actions (<M-g> follows a link, <C-g>o kept as a legacy alias). The chord: <M-i> inserts a branch AT THE CURSOR and creates the child — visual anchors inline and seeds `tell me more about "sel"`, pending <M-q> quotes are stripped through the same drill_in.chat_gather_opts <M-CR> uses, neither is a placeholder that destroys nothing. 🌿:/🔒: are single-line annotations, and a resubmit keeps them in BOTH forms rather than orphaning a child on disk. --no-ledger, with the reason: the close window spans the whole issue (54a5c7a2..HEAD) so the ledger carries every finding from 16 rounds, and the milestone gates that disposed them do not propagate. I audited all 14 rather than waiving them. ONE WAS GENUINELY OPEN: BR-4 — the markdown call site rebuilt branch_ref n/i/v inline, leaving branch_inserters(...).i dead at zero call sites; fixed in 172384d with a test asserting neither site rebuilds the table. Verified addressed by inspection: BR-2 (branch_ref_spec exists, 2 traceability entries), BR-23 (atlas names <M-i> as primary with <C-g>i listed as an alias, not as THE key), BR-29 (the atlas table now says markdown creates no child and does not open one), BR-30 (## Revisions exists, 17 entries). Fixed by me in known commits: BR-34 (gsub sweep + arch guard, M1), BR-49/BR-53/BR-54 (M2 rounds 10-11), BR-70/BR-86/BR-87 (M3 FIX-THEN-SHIP). NOT positively verified, stated rather than claimed: BR-20 ("three fixes survive their own revert") was an M1-round finding I cannot retroactively map to specific tests, though every fix since carries a mutation record; BR-36 (a debounced refresh appending a warning to the topic line on foreign markdown) — I could not locate the mechanism, and that path has been substantially rewritten since, so I can neither confirm nor reproduce it. Both are recorded here rather than silently waived. Follow-ups filed rather than smuggled in: #221 tool discoverability (@all should mean @all public — the cause of a branched child calling emit_definition), #222 lift a definition into a sub-chat, #223 footnote id from the phrase (downgraded to Minor after the operator pushed back and I could not support either consequence I had claimed). Deferred with an owner: the ariadne <C-y>/<C-j> split belongs to #212.
+
+### Disposed
+
+- BR-2 — addressed — branch_ref_spec.lua covers splice (incl. inverted span), format_ref_line nil topic, topic_for_selection and ref_block; traceability.yaml:694,701 lists module + spec.
+- BR-4 — addressed — Both sites pass md_branch/chat_branch whole (init.lua:2683,2883); the grep test at branch_child_spec.lua:1133 goes red on revert.
+- BR-11 — not-addressed — config_tools_spec.lua:438-446 still asserts is_function plus registry presence; reverting init.lua:2716 to an inline closure leaves it green.
+- BR-18 — not-addressed — The seam at init.lua:2506 is used by 21 call sites but none observes the stopinsert/schedule(startinsert!) interleaving.
+- BR-20 — not-addressed — This round's two fixes ARE pinned; BR-80's still has none, and branch_child_spec.lua:1141 asserts what was already true before the BR-4 fix.
+- BR-23 — not-addressed — Guard row never written; b20bc7c shipped <M-g> and left 4 atlas sites naming <C-g>o as primary (format.md:16, file_references.md:15, inline_branch_links.md:104,105,113).
+- BR-24 — addressed — keybindings_spec.lua:418-449 now asserts every registry default_key appears in the shipped config value (keys AND modes); order pinned at :375-380.
+- BR-25 — not-addressed — Still CWD-relative at keybindings_spec.lua:373,397 and keybinding_agreement_spec.lua:526.
+- BR-26 — not-addressed — branch_ref_spec.lua has no case for a selection containing "](".
+- BR-29 — addressed — inline_branch_links.md:15-19 now states no child / no save / cursor+insert for foreign markdown and "saves the parent yes" for chat.
+- BR-30 — addressed — "## Revisions" exists at issue :667 with entries 4/5/6 covering the three superseded M1 decisions.
+- BR-31 — not-addressed — chat_finder.lua:784 still hand-builds the inline link; the guard at single_source_sweeps_spec.lua:424 still matches only `branch_prefix .. " " ..`.
+- BR-32 — not-addressed — Log ordering fixed (init.lua:2427-2430); the write error is still discarded at init.lua:2241.
+- BR-34 — addressed — All {{topic}}/initial_question substitutions use function replacements; arch guard at single_source_sweeps_spec.lua:440-468 with an explicit gsub-safe annotation.
+- BR-35 — not-addressed — init.lua:2206 still takes (buf, abs_link, owns_file); two of four representable states remain illegal and untested.
+- BR-36 — not-addressed — init.lua:2396 still arms the debounce before the `if not owns_file` return at :2407; highlighter.lua:833 rewrites the line with the warning 500ms later.
+- BR-37 — not-addressed — No strengthened staging rule landed; lessons.md:397 predates the finding (added 2026-07-01 for #157) and c8cccd0 violated it anyway.
+- BR-49 — addressed — Validation moved to init.lua:638-717; registry has no logger reference and keybindings_spec.lua:864+ asserts that.
+- BR-52 — not-addressed — keybinding_agreement_spec.lua:141, :163 and :334 still rebuild the known set inline.
+- BR-53 — addressed — atlas/ui/keybindings.md:138 states the map is global with restoring teardown; lessons.md rule 5 rewritten to "teardown must restore what it shadowed - scope is not the fix".
+- BR-54 — addressed — keybinding_agreement_spec.lua:445-513 and :597+ drive enter()/exit(); the libuv handle moved to a module-local at interview.lua:193.
+- BR-55 — not-addressed — init.lua:548 builds _explicit_shortcuts from raw opts; the malformed strip runs at :646 on M.config, so a stripped knob stays marked explicit.
+- BR-56 — not-addressed — keybinding_agreement_spec.lua:534 still uses an unanchored `find(leaf, 1, true)`.
+- BR-57 — not-addressed — README.md:289 still follows the bullet at :285-288 with no blank line.
+- BR-70 — addressed — atlas/chat/drill_in.md:130-140 and :164-165 both name drill_in.chat_gather_opts as the owner with chat_respond as a consumer.
+- BR-71 — not-addressed — init.lua:2277 still parses the whole buffer before the gather at :2287; the comment at :2280-2285 claims the opposite order.
+- BR-72 — not-addressed — Enumeration wider than named - insert_inline (init.lua:2465 then :2466) and insert_plain (:2395 then :2424) both mutate the parent before creating the child, unguarded; BR-63's ordering fix reached only insert_planned.
+- BR-73 — not-addressed — branch_submit_spec.lua:125 still passes `{}` for a boolean; :131 still names a content check plan_submission never makes.
+- BR-74 — not-addressed — Fragment still at issue :828-829; additionally the M2-close Log bullet now sits inside "## Revisions" at :750, the same rule in the other direction.
+- BR-77 — not-addressed — helper.lua:116, drill_in.lua:340 and buffer_edit.lua:96 all still splice into a neighbour's block.
+- BR-81 — not-addressed — branch_submit.lua:26-31 and branch_child_spec.lua:408-412 still assert the latch b9fc6c8 removed; atlas/chat/parsing.md:68 correctly says "used to latch".
+- BR-82 — not-addressed — traceability.yaml:97-112 (chat/parsing) lists neither annotation.lua nor annotation_lines_spec.lua; the module appears in no atlas/*.md.
+- BR-83 — not-addressed — m3-plan :322 and Open risks :339 still describe superseded decisions; the :330 milestone-close tick is now legitimate since 281ce19 carries the verdict trailer.
+- BR-84 — not-addressed — buffer_edit.lua:108-109 unchanged; every test still calls delete_answer directly.
+- BR-86 — addressed — init.lua:2451-2460 guards the derived topic; branch_child_spec.lua:1096-1127 drives the real visual chord over whitespace and both assertions go red on revert.
+- BR-87 — addressed — README.md:185-188 and atlas/chat/inline_branch_links.md:61-75 both describe the survivor transformation, including the inline-to-standalone reformat.
+- BR-88 — not-addressed — annotation.lua:14-15 still claims four consumers; grep returns chat_parser.lua:313 and buffer_edit.lua:119.
+- BR-89 — not-addressed — init.lua:2352-2353 and :2393-2395 still carry the constant-true ternaries.
+
+### Raised
+
+- **BR-90** [Important] `spec-item-neither-delivered-nor-deferred` the Spec's <M-*> terminal-portability review is neither delivered nor recorded as deferred, in a milestone that added three more alt-chord defaults
+  Issue :97 asks to "review the <M-*> family for terminal portability" and names
+  <M-CR>'s two-entry split as the motivating case. No such review exists in the
+  issue, the atlas or the Log, and the "Deferred to after #212" note covers only
+  the ariadne split, so the bullet simply vanished. Measured against config.lua:
+  ten alt-chord defaults ship. The five this milestone touched (<M-i>:408,
+  <M-p>:400, <M-g>:384, <M-t>:389, <M-q>:453) each carry a <C-g> alias; the five
+  it did not (chat_shortcut_define <M-CR>:358, review_shortcut_next <M-CR>:463,
+  <M-a>:454, <M-r>:455, <M-o>:462) carry none, so on a terminal that cannot
+  deliver alt chords those five actions have no key at all. The <M-CR> split the
+  Spec named is unchanged at keybinding_registry.lua:505-517 and :757-766. This
+  is ARCH-PURPOSE's instance-not-class shape: the portability mitigation was
+  applied to the keys the milestone happened to edit rather than to the family
+  the Spec named. Cheap fix - one paragraph in atlas/ui/keybindings.md
+  enumerating the alt family and which members have a non-alt spelling, or one
+  line extending the Deferred note.
+
 ## Open findings
 
-- **BR-2** [Important] `pure-extraction-without-tests` New pure module lua/parley/branch_ref.lua has zero tests and is absent from traceability.yaml
-- **BR-4** [Important] `duplicate-helper-not-retired` branch_inserters(...).i is dead at zero call sites and the chat visual path double-Escs
 - **BR-11** [Minor] `test-does-not-pin-the-fix` config_tools_spec.lua:434 asserts is_function, not the identity its title claims
 - **BR-18** [Minor] `no-seam-for-ordering` insert_plain's stopinsert then schedule(edit + startinsert!) has no seam to inject or observe
 - **BR-20** [Important] `test-does-not-pin-the-fix` Three of this round's fixes survive their own revert with the full suite green
 - **BR-23** [Important] `readme-missing-for-changed-surface` The changed-key doc sweep stopped at README; two atlas files still name the superseded primaries
-- **BR-24** [Minor] `duplicate-helper-not-retired` keybinding_registry.lua:478 duplicates config.lua:362's chord list with nothing asserting they agree
 - **BR-25** [Minor] `test-harness-assumption` keybindings_spec.lua:331 dofile("lua/parley/config.lua") is CWD-relative
 - **BR-26** [Minor] `pure-extraction-without-tests` branch_ref_spec has no case for a selection containing "](", which breaks the emitted markdown link
-- **BR-29** [Important] `docs-assert-unverified-behavior` atlas/chat/inline_branch_links.md says markdown opens the child and that the two buffer types differ only in link target
-- **BR-30** [Important] `plan-not-revised-after-decision-change` The issue Plan still states three superseded M1 decisions and has no Revisions section
 - **BR-31** [Minor] `duplicate-helper-not-retired` chat_finder.lua:777 still hand-builds the inline branch-link format the new arch guard does not see
 - **BR-32** [Minor] `partial-effect-not-committed` commit_reference discards the write error, and the success log line fires before the committed check
-- **BR-34** [Important] `user-text-unescaped-in-lua-pattern` BR-21 was fixed at one site; four gsub-replacement siblings survive, one of them the child-creation path M1 routes markdown branches to
 - **BR-35** [Minor] `illegal-state-representable-in-signature` branch_inserters takes two independent booleans that encode one bit, so two of the four representable states are illegal and untested
 - **BR-36** [Important] `no-seam-for-ordering` On a foreign markdown buffer the debounced refresh appends a warning to the line the user is typing the topic into
 - **BR-37** [Minor] `scratch-artifact-swept-into-commit` c8cccd0 swept 462 lines of unrelated workshop/parley transcripts into a commit whose subject is a #220 process-leak filing
-- **BR-49** [Important] `illegal-state-representable-in-signature` the malformed-shortcut warning fires at every resolution instead of parsing once at the boundary
 - **BR-52** [Minor] `duplicate-helper-not-retired` three near-identical known-set/diff blocks in the agreement spec
-- **BR-53** [Important] `stale-comment-after-move` atlas and lessons.md still teach the interview-<CR> design round 10 reversed
-- **BR-54** [Important] `no-seam-for-ordering` the new interview tests drive setup_keymap/remove_keymap, never enter/exit — and enter/exit raises
 - **BR-55** [Minor] `derive-before-validate` _explicit_shortcuts is computed from raw opts before setup() strips malformed values
 - **BR-56** [Minor] `test-does-not-pin-the-fix` the BR-48 derived guard uses an unanchored substring, so 8 of 15 dotted knobs cannot fail it
 - **BR-57** [Minor] `markdown-block-not-separated` README's "Every knob is named in config.lua" is swallowed into the preceding bullet
-- **BR-70** [Important] `stale-comment-after-move` atlas/chat/drill_in.md still names chat_respond as the owner of the gather options
 - **BR-71** [Minor] `derive-before-validate` a full parse_chat runs on every M-i press to answer only "are there zero exchanges"
 - **BR-72** [Minor] `partial-effect-not-committed` BR-63 moved the point of no return, and the effects after it are now the unguarded ones
 - **BR-73** [Minor] `test-does-not-pin-the-fix` two plan_submission decline tests are green for reasons unrelated to their names
@@ -2953,7 +3196,6 @@ sections, and the move stranded a two-line fragment at issue :647-648.
 - **BR-82** [Minor] `artifact-missing-from-its-index` annotation.lua is in no traceability entry, and its spec is filed under the atlas doc it does not verify
 - **BR-83** [Minor] `plan-not-revised-after-decision-change` the M3 plan ticks its own milestone-close, and two steps still describe superseded decisions
 - **BR-84** [Minor] `docs-assert-unverified-behavior` delete_answer's doc claims survivors do not drift to the end; in the composed resubmit they do
-- **BR-86** [Important] `derive-before-validate` a whitespace-only visual selection writes a child with an empty topic:, and the doc plus its unit test claim a caller-side guard that does not exist
-- **BR-87** [Important] `readme-missing-for-changed-surface` the resubmit-survivor transformation is user-visible surface documented in no atlas file and no README bullet
 - **BR-88** [Minor] `docs-assert-unverified-behavior` annotation.lua's header claims four consumers; grep finds two
 - **BR-89** [Minor] `dead-value-in-new-code` two constant-true ternaries in the new insert paths make the neighbour lookup unreadable
+- **BR-90** [Important] `spec-item-neither-delivered-nor-deferred` the Spec's <M-*> terminal-portability review is neither delivered nor recorded as deferred, in a milestone that added three more alt-chord defaults
