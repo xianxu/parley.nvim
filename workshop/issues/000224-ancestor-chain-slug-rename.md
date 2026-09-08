@@ -70,21 +70,58 @@ guaranteed to be the one that has not learned about renames.
 
 ## Spec
 
-- `collect_ancestor_chain` resolves the parent through `resolve_chat_path`,
-  passing the referring file so the read-repair fires and the stale link is
-  rewritten rather than merely tolerated.
-- The branch-match at `:221` resolves through it too, so `branch_after` is right
-  for a renamed child.
-- `chat_respond`'s local `resolve_path` goes away if nothing else needs it; if
-  something does, it is not used for chat references.
-- An arch guard: no module outside the resolver joins a chat-reference path
-  itself. Same shape as #214's "no module outside the registry reads
-  `config.<key>.shortcut`", which caught the class rather than the site.
+**The timestamp prefix is the identity of a chat file. The trailing slug exists
+for human inspection and carries no meaning to resolution** (operator,
+2026-09-08). `YYYY-MM-DD.HH-MM-SS.mmm` is unique in practice — two chats created
+in the same millisecond is the only collision, and it is handled below rather
+than assumed away.
 
-**Not in scope:** making the back-link correct at creation time. The child is
-written before the parent has a topic, and #214 BR-19 establishes the reference
-must be committed in the same action. Resolution-side repair is the design, not
-a workaround — the rename is legitimate and the resolver already handles it.
+That makes resolution one rule instead of a rule plus a fallback:
+
+```
+reference → parse_filename() → timestamp → glob "<ts>*.md" across the chat roots
+```
+
+`chat_slug` already provides both halves (`parse_filename` at `:74`,
+`glob_pattern` at `:103`). Today they sit behind an exact-name tier as a *fuzzy
+fallback* (`init.lua:3208`, comment: "Fuzzy fallback"). Nothing about it is
+fuzzy — it is the identity — and demoting it to a fallback is what let a second
+resolver be written that only does exact matching.
+
+- **Exact match stops being a tier.** It is just the case where the glob returns
+  the name the reference already used. Delete the two-tier structure rather than
+  reordering it.
+- **Collision, handled not assumed:** if the glob returns more than one file,
+  prefer an exact basename match when the reference has one; otherwise take the
+  lexicographically first and log at warning. Today the code sorts by *length*
+  and silently prefers the longest, which encodes "the one with a slug" — a
+  guess that stops being right the moment two slugged variants exist.
+- **Both `chat_respond` sites use it** — the parent lookup (`:201`) and the
+  branch-match that sets `branch_after` (`:221`). Its local `resolve_path` goes
+  away; the exporter already delegates (`exporter.lua:32`), so after this there
+  is exactly one resolver.
+- **An arch guard for the class:** no module outside the resolver joins a
+  chat-reference path itself. Same shape as #214's "no module outside the
+  registry reads `config.<key>.shortcut`", which caught the class rather than
+  the site.
+
+### Consequence: read-repair becomes optional
+
+`resolve_chat_path` currently schedules `_read_repair_reference` to rewrite a
+stale link on the way past (`init.lua:3241`). Under prefix identity a
+slug-stale link is not stale — it resolves correctly forever — so repair stops
+being load-bearing and becomes cosmetic.
+
+**Recommendation: drop it from the resolution path.** Resolution is a read;
+mutating a file the user may not even have open, as a side effect of navigating,
+is a surprise that only existed because the name was load-bearing. If tidy links
+are still wanted, they belong in an explicit sweep, not in a resolver. Flagging
+rather than deciding — it is a behaviour removal and the operator may want the
+links kept current for grep-ability outside parley.
+
+**Not in scope:** making the back-link correct at creation. The child is written
+before the parent has a topic, and #214 BR-19 requires the reference to be
+committed in the same action. Prefix identity is what makes that safe.
 
 ## Done when
 
@@ -92,16 +129,21 @@ a workaround — the rename is legitimate and the resolver already handles it.
   conversation as context — asserted on the message list, not on the absence of
   a warning.
 - `branch_after` is correct when the CHILD was renamed.
-- The stale back-link is read-repaired.
+- A slug-stale reference resolves by timestamp, with no repair required for
+  correctness (whether repair is kept at all is the open question above).
+- A same-timestamp collision picks deterministically and says so, rather than
+  silently preferring the longest name.
 - A guard fails if a module joins a chat-reference path outside the resolver.
 - Seen red: reverting to the naive resolver drops the ancestor messages.
 
 ## Plan
 
 - [ ] Failing test: parent renamed post-fork → ancestor messages are empty
-- [ ] Route both `chat_respond` sites through `resolve_chat_path`
+- [ ] Make prefix matching the primary rule; delete the exact-match tier
+- [ ] Route both `chat_respond` sites through it; remove the local joiner
 - [ ] Test the renamed-child `branch_after` case
-- [ ] Assert the read-repair rewrites the link
+- [ ] Decide read-repair with the operator; test whichever way it lands
+- [ ] Collision case: deterministic pick + warning
 - [ ] Arch guard for the class; remove the local joiner
 
 ## Log
