@@ -172,9 +172,14 @@ describe("branch commits its reference, in every mode (#214)", function()
 
         assert.are.equal(before, #vim.fn.readdir(tmpdir),
             "no child may be created in a buffer parley cannot commit")
-        assert.is_truthy(vim.api.nvim_buf_get_lines(b, 1, 2, false)[1]:find("🌿:", 1, true),
-            "the reference line must still be inserted")
-        assert.are.equal(2, vim.api.nvim_win_get_cursor(0)[1],
+        -- The reference is inserted as its own BLOCK (#214 BR-68), so it may be
+        -- preceded by a margin blank; what matters is that it exists and that
+        -- the cursor is on IT, not on the blank.
+        local body = vim.api.nvim_buf_get_lines(b, 0, -1, false)
+        local ref_row
+        for i, line in ipairs(body) do if line:find("🌿:", 1, true) then ref_row = i end end
+        assert.is_truthy(ref_row, "the reference line must still be inserted")
+        assert.are.equal(ref_row, vim.api.nvim_win_get_cursor(0)[1],
             "cursor must land on the new reference line so the topic can be typed")
     end)
 
@@ -367,8 +372,10 @@ describe("branched submission (#214 M3)", function()
     it("with no markers it inserts a placeholder at the cursor", function()
         branch_here(10)   -- inside the answer of exchange 1
         local l = lines_now()
-        -- the placeholder path inserts the bare line directly under the cursor
-        assert.is_truthy(l[11] and l[11]:match("^🌿:"),
+        -- Its own block right under the cursor: a margin blank, then the
+        -- reference (#214 BR-68 — this used to be a bare line with no margin).
+        assert.are.equal("", l[11], "no blank line between the prose and the reference")
+        assert.is_truthy(l[12] and l[12]:match("^🌿:"),
             "the reference did not land at the cursor: " .. vim.inspect(l))
     end)
 
@@ -448,7 +455,8 @@ describe("branched submission (#214 M3)", function()
         local i = ref_line_index(l)
         assert.is_truthy(i, "no reference was inserted")
         local anchor
-        for n = 1, #l do if l[n] == "the cursor line" then anchor = n end end
+        -- the line may be [bracketed] in place by mark_reference_span
+        for n = 1, #l do if l[n]:find("the cursor line", 1, true) then anchor = n end end
         assert.is_truthy(anchor, "the cursor line vanished")
         assert.are.equal(anchor + 2, i,
             ("reference at %d, cursor line at %d — the strip moved it"):format(i, anchor))
@@ -472,10 +480,103 @@ describe("branched submission (#214 M3)", function()
         local l = lines_now()
         local i = ref_line_index(l)
         local anchor
-        for n = 1, #l do if l[n] == "the cursor line" then anchor = n end end
+        -- the line may be [bracketed] in place by mark_reference_span
+        for n = 1, #l do if l[n]:find("the cursor line", 1, true) then anchor = n end end
         assert.are.equal(anchor + 2, i,
             ("reference at %d, cursor line at %d — a multi-line strip moved it"):format(
                 i, anchor))
+    end)
+
+    -- BR-58 round 2: my fixtures all put the marker ABOVE the cursor, which
+    -- samples one side of the delta axis. A marker BELOW the cursor moves no
+    -- line above it, so an off-by-one in the anchor shows up only here.
+    it("a standalone marker BELOW the cursor does not move the reference", function()
+        open({
+            "---", "topic: parent topic", "file: f", "---", "",
+            "💬: first question", "",
+            "🤖:[A]", "",
+            "the cursor line", "",
+            "🤖[what about this?]", "",
+            "trailing answer text", "",
+            "📝: the summary",
+        })
+        parley.config.chat_dir = tmpdir
+        branch_here(10)   -- "the cursor line"
+
+        local l = lines_now()
+        local i = ref_line_index(l)
+        assert.is_truthy(i, "no reference was inserted")
+        local anchor
+        -- the line may be [bracketed] in place by mark_reference_span
+        for n = 1, #l do if l[n]:find("the cursor line", 1, true) then anchor = n end end
+        assert.is_truthy(anchor, "the cursor line vanished")
+        assert.is_true(i > anchor,
+            ("reference at %d is ABOVE the cursor line at %d"):format(i, anchor))
+        assert.are.equal(anchor + 2, i,
+            ("reference at %d, cursor line at %d"):format(i, anchor))
+    end)
+
+    it("a marker above AND below the cursor still anchors correctly", function()
+        open({
+            "---", "topic: parent topic", "file: f", "---", "",
+            "💬: first question", "",
+            "🤖:[A]", "",
+            "text 🤖[first] more", "",
+            "the cursor line", "",
+            "🤖[second]", "",
+            "📝: the summary",
+        })
+        parley.config.chat_dir = tmpdir
+        branch_here(12)   -- "the cursor line"
+
+        local l = lines_now()
+        local i = ref_line_index(l)
+        local anchor
+        -- the line may be [bracketed] in place by mark_reference_span
+        for n = 1, #l do if l[n]:find("the cursor line", 1, true) then anchor = n end end
+        assert.are.equal(anchor + 2, i,
+            ("reference at %d, cursor line at %d"):format(i, anchor))
+    end)
+
+    -- BR-68: the margin claim was in three artifacts and held by neither path.
+    -- The tests that "covered" it had a blank line already sitting where the
+    -- margin would go, so they passed either way. Prose on BOTH sides is the
+    -- fixture that can tell the difference.
+    it("the reference gets a blank line on each side, with prose both sides", function()
+        open({
+            "---", "topic: parent topic", "file: f", "---", "",
+            "💬: first question", "",
+            "🤖:[A]", "",
+            "line above 🤖[what about this?]",
+            "line below with no blank between",
+            "", "📝: the summary",
+        })
+        parley.config.chat_dir = tmpdir
+        branch_here(10)
+
+        local l = lines_now()
+        local i = ref_line_index(l)
+        assert.is_truthy(i, "no reference inserted")
+        assert.are.equal("", l[i - 1], "no blank line before the reference")
+        assert.are.equal("", l[i + 1], "no blank line after the reference")
+    end)
+
+    it("but does not double a blank that is already there", function()
+        open({
+            "---", "topic: parent topic", "file: f", "---", "",
+            "💬: first question", "",
+            "🤖:[A]", "",
+            "line above 🤖[what about this?]", "",
+            "line below", "", "📝: the summary",
+        })
+        parley.config.chat_dir = tmpdir
+        branch_here(10)
+
+        local l = lines_now()
+        local i = ref_line_index(l)
+        assert.are.equal("", l[i - 1])
+        assert.is_truthy(l[i - 2] and l[i - 2]:match("%S"),
+            "two blank lines stacked before the reference: " .. vim.inspect(l))
     end)
 
     it("pending <M-q> quotes go to the child and are stripped from the parent", function()
@@ -664,6 +765,36 @@ describe("branched submission refuses under a pending response (#214 M3)", funct
         for _, f in ipairs(vim.fn.readdir(tmpdir)) do
             assert.are.equal(vim.fn.fnamemodify(parent_path, ":t"), f,
                 "a child was created for a submission that was refused")
+        end
+    end)
+
+    -- BR-69: the guard sat inside insert_planned, which only n/i reach — so
+    -- VISUAL mode created a child and wrote the parent mid-stream while the
+    -- README and the atlas said the chord declines. The enumeration is the
+    -- dispatch table (n, i, v), which this file already says out loud.
+    it("every dispatch mode refuses, not just the one that had the guard", function()
+        local orig = pending.identity
+        for _, mode in ipairs({ "n", "i", "v" }) do
+            vim.fn.writefile({ "---", "topic: t", "file: f", "---", "",
+                               "💬: first question", "", "🤖:[A]", "", "answer body", "",
+                               "📝: sum" }, parent_path)
+            vim.cmd("edit! " .. vim.fn.fnameescape(parent_path))
+            parent_buf = vim.api.nvim_get_current_buf()
+            parley.prep_chat(parent_buf, parent_path)
+            local before = table.concat(vim.api.nvim_buf_get_lines(parent_buf, 0, -1, false), "\n")
+
+            pending.identity = function(b) return b == parent_buf and { agent = "A" } or nil end
+            vim.api.nvim_win_set_cursor(0, { 10, 0 })
+            if mode == "v" then vim.cmd("normal! v$") end
+            parley._branch_inserters(parent_buf, false, true)[mode]()
+            pending.identity = orig
+
+            local after = table.concat(vim.api.nvim_buf_get_lines(parent_buf, 0, -1, false), "\n")
+            assert.are.equal(before, after, mode .. " edited the transcript mid-stream")
+            for _, f in ipairs(vim.fn.readdir(tmpdir)) do
+                assert.are.equal(vim.fn.fnamemodify(parent_path, ":t"), f,
+                    mode .. " created a child for a refused branch")
+            end
         end
     end)
 

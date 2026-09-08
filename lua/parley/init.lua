@@ -2273,20 +2273,6 @@ local function branch_inserters(buf, abs_link, owns_file)
 	--- shipped, and generalising the chord must not delete it; the chord should
 	--- never be a no-op.
 	local function insert_planned()
-		-- ARCH-ORDER, the one real concurrency case. A streaming response owns
-		-- this buffer's exchange model and holds a chat lease anchored on its
-		-- 🤖: line; deleting the answer under it, or splicing a reference into
-		-- the exchange it is writing, corrupts the transcript rather than
-		-- erroring. The transition is synchronous on the keypress, so refusing is
-		-- the whole handling — there is no queue to build and nothing to roll
-		-- back. Refuse LOUDLY: the user pressed a key and must know why nothing
-		-- happened.
-		if require("parley.chat_pending").identity(buf) then
-			M.logger.warning("Branch: this chat has a response in flight — "
-				.. "wait for it, or stop it with the stop shortcut, then branch")
-			return true
-		end
-
 		local drill_in = require("parley.drill_in")
 		local buffer_edit = require("parley.buffer_edit")
 		local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
@@ -2343,16 +2329,29 @@ local function branch_inserters(buf, abs_link, owns_file)
 		-- its own gather). The earlier code kept the raw number, so the reference
 		-- drifted by however many lines the strip removed, in the common case
 		-- landing past the exchange's `📝:` summary.
-		local anchor = buffer_edit.make_handle(buf, plan.ref_after)
+		-- Anchor ON the cursor line, not on the line after it. `ref_after` is
+		-- 1-indexed and `make_handle` takes a 0-indexed row, so passing it
+		-- directly put the mark on the following line — usually the blank gap
+		-- that `drill_in`'s edit swallows, and with left gravity the mark then
+		-- collapsed and the reference landed ABOVE the cursor. Visible only with
+		-- a marker BELOW the cursor; every fixture in the first fix put one
+		-- above, sampling one side of the axis (#214 BR-58, round 2).
+		local anchor = buffer_edit.make_handle(buf, plan.ref_after - 1)
 		buffer_edit.apply_text_edits(buf, 0, text, marker_edits)
-		local insert_at = buffer_edit.handle_line(anchor)
+		local insert_at = buffer_edit.handle_line(anchor) + 1
 		buffer_edit.handle_invalidate(anchor)
 
-		-- AT THE CURSOR (operator, 2026-09-07). Its own block with one blank line
-		-- each side, which is the exchange model's MARGIN.
-		vim.api.nvim_buf_set_lines(buf, insert_at, insert_at, false, {
-			"", br.format_ref_line(get_branch_prefix(), rel_path, label or ""),
-		})
+		-- AT THE CURSOR (operator, 2026-09-07), as its own block — one blank line
+		-- on each side, added only where there is not one already. `ref_block`
+		-- owns that rule for both insert paths (#214 BR-68); this used to emit
+		-- `{ "", ref }`, a blank before only, so the reference abutted whatever
+		-- followed it.
+		local around = vim.api.nvim_buf_get_lines(buf, math.max(insert_at - 1, 0),
+			insert_at + 1, false)
+		vim.api.nvim_buf_set_lines(buf, insert_at, insert_at, false,
+			br.ref_block(br.format_ref_line(get_branch_prefix(), rel_path, label or ""),
+				insert_at > 0 and around[1] or nil,
+				around[insert_at > 0 and 2 or 1]))
 		M.highlight_chat_branch_refs(buf)
 		if not commit_reference() then
 			return true
@@ -2385,17 +2384,32 @@ local function branch_inserters(buf, abs_link, owns_file)
 		-- across the chat roots. abs_link governs the INLINE link only.
 		local new_chat_file = (new_target())
 		local rel_path = vim.fn.fnamemodify(new_chat_file, ":t")
-		vim.api.nvim_buf_set_lines(buf, cursor_pos[1], cursor_pos[1], false, {
-			br.format_ref_line(get_branch_prefix(), rel_path, ""),
-		})
+		-- Same block rule as the planned path (#214 BR-68): this inserted a bare
+		-- line with no blank on either side, so a placeholder dropped into prose
+		-- ran straight into it.
+		local near = vim.api.nvim_buf_get_lines(buf, math.max(cursor_pos[1] - 1, 0),
+			cursor_pos[1] + 1, false)
+		local block = br.ref_block(br.format_ref_line(get_branch_prefix(), rel_path, ""),
+			cursor_pos[1] > 0 and near[1] or nil,
+			near[cursor_pos[1] > 0 and 2 or 1])
+		vim.api.nvim_buf_set_lines(buf, cursor_pos[1], cursor_pos[1], false, block)
 		M.highlight_chat_branch_refs(buf)
+
+		-- Which of the inserted lines IS the reference — the block may open with
+		-- a margin blank, and the cursor has to land on the reference itself so
+		-- the topic can be typed (#214 BR-68 follow-on: adding the margin moved
+		-- the cursor onto the blank).
+		local ref_row = cursor_pos[1]
+		for i, line in ipairs(block) do
+			if line:match("%S") then ref_row = cursor_pos[1] + i break end
+		end
 
 		if not owns_file then
 			-- Pre-#214 behaviour, restored deliberately: no child, no write, and
 			-- the cursor lands on the new line in insert mode so the topic can be
 			-- typed. An early `return` here once skipped these two lines and made
 			-- the key look inert (BR-27).
-			vim.api.nvim_win_set_cursor(0, { cursor_pos[1] + 1, 0 })
+			vim.api.nvim_win_set_cursor(0, { ref_row, 0 })
 			vim.schedule(function() vim.cmd("startinsert!") end)
 			M.logger.info("Inserted branch reference: " .. rel_path)
 			return
@@ -2453,10 +2467,29 @@ local function branch_inserters(buf, abs_link, owns_file)
 		M.logger.debug("Created inline branch to new chat: " .. link .. " (" .. topic .. ")")
 	end
 
+	--- ARCH-ORDER, applied to the WHOLE chord (#214 BR-69). A streaming response
+	--- owns this buffer's exchange model and holds a chat lease on its 🤖: line;
+	--- any of these three paths edits the transcript under it. The guard sat
+	--- inside `insert_planned`, which only n/i reach, so visual mode created a
+	--- child and wrote the parent mid-stream — while the README and the atlas
+	--- said the chord declines. This file already states the governing rule
+	--- ("The enumeration is the dispatch table below — n, i, v"); wrapping the
+	--- table is what applies it, rather than guarding the path in front of me.
+	local function refuse_while_pending(fn)
+		return function()
+			if require("parley.chat_pending").identity(buf) then
+				M.logger.warning("Branch: this chat has a response in flight — "
+					.. "wait for it, or stop it with the stop shortcut, then branch")
+				return
+			end
+			fn()
+		end
+	end
+
 	return {
-		n = insert_plain,
-		i = function() vim.cmd("stopinsert"); insert_plain() end,
-		v = insert_inline,
+		n = refuse_while_pending(insert_plain),
+		i = refuse_while_pending(function() vim.cmd("stopinsert"); insert_plain() end),
+		v = refuse_while_pending(insert_inline),
 	}
 end
 

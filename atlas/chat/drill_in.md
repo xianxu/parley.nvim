@@ -127,14 +127,17 @@ boundaries):
 agent turn — otherwise a standalone marker at a reply's start would anchor the
 agent's comment to the `💬:` user question or a `🧠:`/`📎:` block. The scan stops
 at any line beginning with a configured turn prefix. To keep `generate_snippet`
-pure, the prefixes are passed in as `opts.boundaries`; `chat_respond` assembles
-them from config (`💬: 🤖: 🧠: 📝: 🔧: 📎: 🌿:`, plus `chat_local_prefix` when
-set) and threads them through `gather_and_strip`. Note `---` is a *body* section
+pure, the prefixes are passed in as `opts.boundaries`. **`drill_in.chat_gather_opts`
+owns the option set** — the boundaries (`💬: 🤖: 🧠: 📝: 🔧: 📎: 🌿:`, plus
+`chat_local_prefix` when set) and `bracket` together — and both consumers call it:
+`chat_respond` for `<M-CR>` and `branch_inserters` for `<M-i>`. They were assembled
+independently until #214 BR-60, when the branch path was found hardcoding
+`bracket = true` against the other's config read. Note `---` is a *body* section
 separator, **not** a turn boundary, so it never stops the scan.
 
 **Referenced-span brackets + highlight.** `generate_snippet` also returns the
-**byte range** of the prose it drew from. With `opts.bracket` (set by
-`chat_respond` from `config.mark_reference_span`, default on) `gather_and_strip`
+**byte range** of the prose it drew from. With `opts.bracket` (from
+`config.mark_reference_span` via `chat_gather_opts`, default on) `gather_and_strip`
 encloses that span in `[]` in place — inline spans absorb the trailing gap +
 marker into the closing `]`; standalone spans are bracketed in the previous
 paragraph with the marker removed separately. Explicit `<Q>` becomes `[Q]`. The

@@ -285,6 +285,7 @@ Derivation notes:
 | Name | Lives in | Status |
 |------|----------|--------|
 | `splice_inline_link` | `lua/parley/branch_ref.lua` | new |
+| `ref_block` | `lua/parley/branch_ref.lua` | new |
 | `format_ref_line` | `lua/parley/branch_ref.lua` | new |
 | `topic_for_selection` | `lua/parley/branch_ref.lua` | new |
 | `resolve_keys` | `lua/parley/keybinding_registry.lua` | changed |
@@ -322,6 +323,11 @@ Derivation notes:
     reference lands at the cursor, and the chord never deletes — removed the
     question case entirely. Recorded here rather than left as a table describing
     code that does not exist.
+- **`ref_block`** — the lines that make a reference its own block: one blank
+  line each side, added only where there is not one already. "One blank line each
+  side" was asserted in three artifacts and held by neither insert path — one
+  emitted a blank before only, the other none — and the tests passed because
+  their fixtures happened to have a blank where the margin would go (#214 BR-68).
 - **`seed_question`** — one place that knows how a payload becomes a prompt.
   Three call sites would otherwise each invent wording, and two already had:
   `what is "X"` was built inline at the follow-a-dead-link path as well.
@@ -588,155 +594,6 @@ and with it the `<C-y>`/`<C-j>` half of the fresh-install Done-when criterion.
 
 - 2026-09-07: closed M1 — make test: 197 spec files, MAKE_EXIT=0 verified against make status; luacheck clean across 351 files. Round 6 disposed 18 findings and left the gate with no open blocking items; its one new finding BR-34 is addressed in 0a712ad. That finding also corrected my own earlier BR-21 report: I had said a % in a gsub replacement RAISES, reproduced in standard Lua, but neovim runs LuaJIT which does not raise — measured here, "50% off" becomes "50 off", "%1 ph" becomes the pattern itself, and "100%" writes a NUL byte into the file. So it was silent corruption of chat topics and note titles, not a crash. I had fixed one site; the enumeration turned up six more: three {{topic}} substitutions including the child-creation path M1 routes markdown branches to, the initial_question substitution, notes.lua title and metadata placeholders, and exporter.lua branch placeholders in HTML export. render.lua and the slug rename were already escaped. An arch guard now enforces the rule — a runtime string is never gsubs second argument — using an explicit `-- gsub-safe: <why>` annotation rather than inferring safety from variable names, which my first version did and which is a guess dressed as a rule; verified by planting a raw runtime replacement. M1 itself delivers: branch_ref resolving <M-i>, <M-S-CR>, <C-g>i and chat_prune resolving <M-p>, <C-g>b, both in config.lua because a registry-side edit would have been inert; the portable key leads because the help float renders only keys[1] and most terminals cannot distinguish Shift+Enter from Enter; four branch functions collapsed into one branch_inserters(buf, abs_link, owns_file) with the pure line editing in the new parley/branch_ref.lua; chat_toggle_tool_folds unbound per operator decision but callable as :ParleyToggleToolFolds. The governing rule from six rounds: parley commits a reference only in a file it OWNS, so a chat buffer gets create-child + save-parent + open-child while a foreign markdown buffer gets the ref line and cursor with no child and no write. Neither mode calls create_child_chat directly and the spec iterates modes x buffer types. Mutation ledger generated from git diff rather than recall. Atlas corrected twice, README updated, ## Revisions records the three M1 decisions review overturned, lessons.md records the root cause. Deferred: BR-9 to M2, and routing <M-q> quotes into the branch to M3 with the strip-not-fork decision recorded up front.; review verdict: FIX-THEN-SHIP
 
-### 2026-09-07 — M3 placement reversed by the operator, on first real use
-
-**9. The reference lands at the CURSOR, not at the end of the answer.** The
-operator's earlier instruction ("end of answer, right before next question") was
-withdrawn after using it: `<M-i>` inserted the line, then the line appeared
-somewhere else, and the jump read as wrong. The reasoning is the part that
-settles it — `<M-S-CR>` reads as a *submission*, whose effect is not local to
-anywhere, but `<M-S-CR>` does not survive most terminals, so `<M-i>` is the key
-people actually press and it reads as an *insertion*. An insertion happens where
-you are.
-
-I raised the measured cost before changing it: `🌿:` sets the parser's
-`line_before_local` — the mechanism `🔒:` uses for a local section — so a
-mid-answer reference drops the text after it from the LLM context, and
-`from_parsed_chat` truncates the exchange (`summary` block gone, `append_pos`
-into the middle). That is what end-of-answer placement was buying. It is also
-pre-existing: the pre-#214 path inserted at the cursor too. The operator's call
-stands; the real fix is a parser change (a standalone `🌿:` is a one-line
-annotation, not a section boundary), which is not this milestone's to make.
-
-**10. The chord never deletes.** With the placement change the operator also
-narrowed case 3 to a pure placeholder: no markers means a bare `🌿:` at the
-cursor and an empty child, with the question left alone. The earlier "copy the
-question, delete the answer" reading mirrored `<M-CR>`'s resubmit and was
-coherent for a submission — but `<M-i>`, `<M-S-CR>` and `<C-g>i` are one registry
-entry with one callback, so it would only ever have been reachable from the key
-that says "insert here". `plan_submission` now returns a plan only for the quotes
-case; `exchange_at` and its conformance test went with it rather than staying as
-tested-but-unreachable code.
-
-### 2026-09-07 — 🌿: and 🔒: are single-line annotations (operator)
-
-**11. The parser latched instead of skipping.** Both prefixes set
-`line_before_local`, meaning *"content from here to the end of this component is
-local"*. Right for a section marker, wrong for a one-line annotation, and nothing
-distinguished the two — so a private note dropped early in a long answer silently
-removed the rest of that answer from every later submission, and a note inside a
-question removed the second half of the user's own question. Operator's model,
-now the code's: the line is withheld, the next line is ordinary content.
-Single-line is also the more useful primitive for `🔒:` — notes go anywhere, and
-a multi-line note is several noted lines.
-
-**My blast-radius estimate was wrong, and the operator called it.** I said this
-"touches the parse of essentially every file" because every child chat opens with
-a `🌿:` back-link. Measured: the latch resets at the next `💬:`, so a back-link
-before the first question truncates nothing. Real corpus: 0 of 16 chats affected,
-0 fixtures. The bug only bit mid-component. Same shape as the recurring mistake —
-I verified that the marker is everywhere rather than that its position matters.
-
-**What the fix did need was a hazard I had not seen.** Removing the latch put a
-TRAILING `🌿:` inside the answer's line span, and resubmit deletes
-`question..answer.line_end` — so the reference would have been deleted and the
-child orphaned on disk, BR-19 by another route. The trailing-blank trim now skips
-annotation lines; reverting that turns the span test red. Three existing tests
-encoded the old semantics (one carried the fixture line *"still private because
-line_before_local is set"*) and were updated to the decided contract.
-      (placement is the cursor, not the exchange end) and the 3a/3b split is gone
-      (the chord never deletes).
-
-### 2026-09-07 — M2 round 11 (FIX-THEN-SHIP) — one reversal of a reversal
-
-**7. Interview's `<CR>` is GLOBAL again, and the Core-concepts row that said
-"buffer-local" was itself the round-9 decision being reversed.** Round 9 read the
-BR-41 defect as a scope problem; round 10 established it is a *teardown* problem
-(`del` cannot tell "mine" from "theirs" at any scope) and put the map back to
-global with save/restore. Round 11 caught that the artifacts *recording* the
-round-9 decision — `atlas/ui/keybindings.md` and `workshop/lessons.md` — were
-never part of the reversal's diff, and that `lessons.md` in particular is loaded
-by every agent at session start, so its rule would have re-created BR-47. Both
-corrected. The enumeration is mechanical, not a memory exercise:
-`git show --stat <the reversed commit>` lists exactly which artifacts recorded it.
-
-**8. Interview's timer handle left `_state`.** Round 10's rationale was "the map
-must live at the same scope as the session state it serves" — and that state's
-own lifecycle could not run: `_state.interview_timer` held a libuv userdata and
-`refresh_state` deepcopies `_state`, so opening any chat file while interview
-mode was on raised. Pre-existing (~16 months), surfaced only once the tests were
-converted to drive `enter()`/`exit()` instead of the sub-steps the fix edited.
-
-### 2026-09-07 — M2 round 9 (FIX-THEN-SHIP, 5 open Importants) — two more reversals
-- 2026-09-07: closed M2 — make test: 198 spec files, MAKE_EXIT=0; luacheck clean across 352 files. Round-10 findings all fixed at the class. BR-47 (my own round-9 regression): making interview <CR> buffer-local MOVED the collision — it destroyed spell typeahead buffer-local <CR> and confined session state to one buffer. The defect is teardown, not scope, so the map is global again (matching session state and the base_cr delegation spell implements, #134) and teardown RESTORES what it shadowed: captured via nvim_get_keymap because maparg returns a buffer-local map when both exist (measured), restored via mapset which round-trips Lua-callback maps (measured). Six tests; red both on reverting to delete-the-slot (3) and on reverting to buffer-local (2), so both the original BR-41 defect and my regression are pinned. BR-49: validation moved from resolve_keys to setup() — measured 1 warning at setup and 0 across 3x help_lines + 5x resolve_keys (was 1 per call, i.e. a notify popup on every <C-g>? and every chat BufEnter); binding falls back to default; registry asserted to carry no logger dependency, restoring the purity the Core-concepts table claims. BR-48: added the DERIVED assertion the family lacked across five findings — every registry config_key must appear in config.lua — which reproduced the reviewers exact two (global_shortcut_vision_allocation, agent_picker_mappings.expand_catalog); both added, test green. BR-50 (both mine): global baseline now captured at module load rather than after ~13 setup() calls — the reviewers planted out-of-registry global now fails 3 tests where the file previously stayed green; feature_gated given both guards native_overrides already had (every member carries gate+where; no member is bound by the shipped config); traceability guard now reports pending off an issue branch instead of passing on an empty diff. Also caught and fixed while doing this: my round-9 rewrite had silently deleted the four BR-38 global-switch tests (file went 29->25 green with no failure) — restored. Actual 8.53h = measured 9.84h cumulative minus M1 recorded 1.31h.; review verdict: FIX-THEN-SHIP
-
-**5. The master switch is reversible for global maps too, and that is a stated
-rule per sample site rather than a property of buffers.** Round 8 raised the
-buffer half as a Minor; I fixed and documented buffers and never looked at the
-other sample site. `register_global` samples `default_keymaps` once per
-`setup()` and had no teardown, so `setup()` then
-`setup({ default_keymaps = false })` left **43** global mappings live — the
-switch failing in the most natural way to try it. It now tracks what it
-installed and revokes it, skipping any key whose `desc` no longer matches so a
-user who rebound the key keeps theirs. The atlas states the rule for all three
-sample sites (`register_global`, `register_buffer`, `native_map`), not just the
-one I had looked at.
-
-**6. Interview's `<CR>` is buffer-local.** M2's carve-out reasoning called it
-"the feature, not a default" and stopped there. It never asked whether
-*removing* it was safe: `remove_keymap` did an unconditional
-`vim.keymap.del("i", "<CR>")`, so `<C-n>i` then `<C-n>I` deleted the user's own
-`<CR>` — cmp/blink's accept key for most Neovim users — for the rest of the
-session. This is the exact collision the Spec names and the Done-when's `<CR>`
-clause covers. Buffer-local shadows and unshadows instead; `del` cannot
-distinguish "mine" from "theirs", so it must never be aimed at a global map.
-
-Two of my own guards were also wrong in ways worth recording, because both were
-oracles that looked like assertions. The leak guard identified parley's maps by
-a `desc` containing "parley" — a convention nothing enforced, and 46 of 81
-entries do not follow it; it now diffs a before/after keymap snapshot and
-depends on no convention at all. And "every binding is disableable" excluded the
-15 dotted picker keys via a hand-typed predicate, which is an allowlist wearing
-a filter; it now builds the nested config and covers all 81, as does a new
-rebindability twin.
-
-### 2026-09-07 — M2 boundary review (REWORK) reversed three things I had recorded
-
-**1. `default_keymaps = false` no longer overrides the user's own bindings.**
-As first built the switch was absolute: `resolve_keys` returned nil for every
-entry, including one the user had explicitly configured. That made it a one-way
-door — you turn it on to take the keyspace back, and then nothing you write in
-`setup{}` can ever bind again. Compounded by I1: eight registry entries have no
-`:Parley*` command, `chat_drill_in` (`<M-q>`) among them, so "use the command
-instead" was not a recovery path either. `setup()` now records which
-`*_shortcut_*` knobs the caller supplied (`config._explicit_shortcuts`) and the
-switch honours them. The Done-when still holds: with nothing configured, `:map`
-shows no parley mapping.
-
-**2. The master switch's carve-out list was wrong as written.** `config.lua` and
-the atlas claimed it exempted "keys inside transient parley windows (pickers,
-the help float, the review menu)". `<M-o>`/`<M-CR>`/`<C-g>ve` are the keys that
-*open* the review menu, on every ordinary markdown buffer — not keys inside it.
-They were exempt for an entirely different reason: the review skill installed
-them itself from raw config. Corrected extent: the switch covers everything
-registry-derived, picker mappings included; only **hardcoded** window keys
-(`q`/`<Esc>`, motion) are outside it.
-
-**3. Alias rendering in `<C-g>?` is delivered, not accepted-as-missing.** M1's
-Log committed M2's help criterion to "render aliases"; my first M2 pass ticked
-the row and documented alias-invisibility in the atlas as settled instead. That
-was a superseded commitment recorded in the wrong artifact. The float now shows
-the primary in the aligned column and names the rest after the description
-(`(also <M-S-CR>, <C-g>i)`), and the Done-when's both-directions assertion is
-the test that closes it.
-
-**4. `md_delete_file` does not share `chat_shortcut_delete` after all.** Round 1
-of M2 gave it the shared knob to match `md_delete_tree`/`md_export_html`. But
-`resolve_keys` lets config replace *modes* too, and the chat entry ships
-`n/i/v/x` while `md_delete_file` declares `{ "n" }` — so a **file-deleting**
-action reached insert and visual mode on every markdown buffer. It has its own
-`chat_shortcut_delete_file` knob; entries may share one only when their declared
-defaults match exactly, which is now asserted.
 ### 2026-09-02
 
 Raised by the operator while reviewing the parley-v1-release breakdown: the
@@ -783,26 +640,33 @@ vanished, which is the shrink class PQ-1 named.
 
 ## Revisions
 
+Numbered continuously with the `## Problem` enumeration above (which owns 1-3),
+so no number repeats anywhere in this file. Appended in the order the decisions
+were made; entries that reverse an earlier one say which. Five of these blocks
+lived under `## Log` until the M3 boundary review pointed out that a revision
+belongs here and that 1/2/3 were each in use twice (#214 BR-67).
+
+
 ### 2026-09-06 — M1 decisions superseded during review (BR-30)
 
 Four review rounds changed three decisions the Plan and the earlier Log still
 state as settled. Recording the deltas rather than editing the originals.
 
-**1. `<M-S-CR>` is no longer the documented primary.** The Plan says "`<M-S-CR>`
+**4. `<M-S-CR>` is no longer the documented primary.** The Plan says "`<M-S-CR>`
 is documented primary, `<M-i>`/`<M-p>` the fallback". Shipped order is
 `<M-i>`, `<M-S-CR>`, `<C-g>i` — because `<C-g>?` renders only `keys[1]`, so
 leading with the mnemonic would advertise a chord most terminals cannot
 distinguish from `<CR>`. Flagged to the operator at the time; the mnemonic is
 still bound, just not first.
 
-**2. `chat_toggle_tool_folds` is NOT bound.** The Plan says "bind
+**5. `chat_toggle_tool_folds` is NOT bound.** The Plan says "bind
 `chat_toggle_tool_folds`". The codebase already carried the opposite decision in
 a comment and an assertion, and the operator confirmed it: a tool call's *result*
 is low-value reading and does not justify a key out of the shared `<C-g>`
 surface. The real defect was that "unbound" also meant *unreachable* — fixed with
 `:ParleyToggleToolFolds`, not with a key.
 
-**3. The branch key does NOT behave identically in both buffer types.** The Plan
+**6. The branch key does NOT behave identically in both buffer types.** The Plan
 says "make all three branch paths one action", and the first implementation took
 that literally — which produced two Criticals in a row: writing an arbitrary
 markdown document to disk (persisting the user's unrelated edits), and creating
@@ -814,3 +678,153 @@ one explicit branch on ownership — not one behaviour.
 
 The consolidation itself stands: four near-identical functions became one, and
 the drift they had accumulated (only the visual paths created children) is gone.
+
+### 2026-09-07 — M2 boundary review (REWORK) reversed three things I had recorded
+
+**7. `default_keymaps = false` no longer overrides the user's own bindings.**
+As first built the switch was absolute: `resolve_keys` returned nil for every
+entry, including one the user had explicitly configured. That made it a one-way
+door — you turn it on to take the keyspace back, and then nothing you write in
+`setup{}` can ever bind again. Compounded by I1: eight registry entries have no
+`:Parley*` command, `chat_drill_in` (`<M-q>`) among them, so "use the command
+instead" was not a recovery path either. `setup()` now records which
+`*_shortcut_*` knobs the caller supplied (`config._explicit_shortcuts`) and the
+switch honours them. The Done-when still holds: with nothing configured, `:map`
+shows no parley mapping.
+
+**8. The master switch's carve-out list was wrong as written.** `config.lua` and
+the atlas claimed it exempted "keys inside transient parley windows (pickers,
+the help float, the review menu)". `<M-o>`/`<M-CR>`/`<C-g>ve` are the keys that
+*open* the review menu, on every ordinary markdown buffer — not keys inside it.
+They were exempt for an entirely different reason: the review skill installed
+them itself from raw config. Corrected extent: the switch covers everything
+registry-derived, picker mappings included; only **hardcoded** window keys
+(`q`/`<Esc>`, motion) are outside it.
+
+**9. Alias rendering in `<C-g>?` is delivered, not accepted-as-missing.** M1's
+Log committed M2's help criterion to "render aliases"; my first M2 pass ticked
+the row and documented alias-invisibility in the atlas as settled instead. That
+was a superseded commitment recorded in the wrong artifact. The float now shows
+the primary in the aligned column and names the rest after the description
+(`(also <M-S-CR>, <C-g>i)`), and the Done-when's both-directions assertion is
+the test that closes it.
+
+**10. `md_delete_file` does not share `chat_shortcut_delete` after all.** Round 1
+of M2 gave it the shared knob to match `md_delete_tree`/`md_export_html`. But
+`resolve_keys` lets config replace *modes* too, and the chat entry ships
+`n/i/v/x` while `md_delete_file` declares `{ "n" }` — so a **file-deleting**
+action reached insert and visual mode on every markdown buffer. It has its own
+`chat_shortcut_delete_file` knob; entries may share one only when their declared
+defaults match exactly, which is now asserted.
+
+### 2026-09-07 — M2 round 9 (FIX-THEN-SHIP, 5 open Importants) — two more reversals
+- 2026-09-07: closed M2 — make test: 198 spec files, MAKE_EXIT=0; luacheck clean across 352 files. Round-10 findings all fixed at the class. BR-47 (my own round-9 regression): making interview <CR> buffer-local MOVED the collision — it destroyed spell typeahead buffer-local <CR> and confined session state to one buffer. The defect is teardown, not scope, so the map is global again (matching session state and the base_cr delegation spell implements, #134) and teardown RESTORES what it shadowed: captured via nvim_get_keymap because maparg returns a buffer-local map when both exist (measured), restored via mapset which round-trips Lua-callback maps (measured). Six tests; red both on reverting to delete-the-slot (3) and on reverting to buffer-local (2), so both the original BR-41 defect and my regression are pinned. BR-49: validation moved from resolve_keys to setup() — measured 1 warning at setup and 0 across 3x help_lines + 5x resolve_keys (was 1 per call, i.e. a notify popup on every <C-g>? and every chat BufEnter); binding falls back to default; registry asserted to carry no logger dependency, restoring the purity the Core-concepts table claims. BR-48: added the DERIVED assertion the family lacked across five findings — every registry config_key must appear in config.lua — which reproduced the reviewers exact two (global_shortcut_vision_allocation, agent_picker_mappings.expand_catalog); both added, test green. BR-50 (both mine): global baseline now captured at module load rather than after ~13 setup() calls — the reviewers planted out-of-registry global now fails 3 tests where the file previously stayed green; feature_gated given both guards native_overrides already had (every member carries gate+where; no member is bound by the shipped config); traceability guard now reports pending off an issue branch instead of passing on an empty diff. Also caught and fixed while doing this: my round-9 rewrite had silently deleted the four BR-38 global-switch tests (file went 29->25 green with no failure) — restored. Actual 8.53h = measured 9.84h cumulative minus M1 recorded 1.31h.; review verdict: FIX-THEN-SHIP
+
+**11. The master switch is reversible for global maps too, and that is a stated
+rule per sample site rather than a property of buffers.** Round 8 raised the
+buffer half as a Minor; I fixed and documented buffers and never looked at the
+other sample site. `register_global` samples `default_keymaps` once per
+`setup()` and had no teardown, so `setup()` then
+`setup({ default_keymaps = false })` left **43** global mappings live — the
+switch failing in the most natural way to try it. It now tracks what it
+installed and revokes it, skipping any key whose `desc` no longer matches so a
+user who rebound the key keeps theirs. The atlas states the rule for all three
+sample sites (`register_global`, `register_buffer`, `native_map`), not just the
+one I had looked at.
+
+**12. Interview's `<CR>` is buffer-local.** M2's carve-out reasoning called it
+"the feature, not a default" and stopped there. It never asked whether
+*removing* it was safe: `remove_keymap` did an unconditional
+`vim.keymap.del("i", "<CR>")`, so `<C-n>i` then `<C-n>I` deleted the user's own
+`<CR>` — cmp/blink's accept key for most Neovim users — for the rest of the
+session. This is the exact collision the Spec names and the Done-when's `<CR>`
+clause covers. Buffer-local shadows and unshadows instead; `del` cannot
+distinguish "mine" from "theirs", so it must never be aimed at a global map.
+
+Two of my own guards were also wrong in ways worth recording, because both were
+oracles that looked like assertions. The leak guard identified parley's maps by
+a `desc` containing "parley" — a convention nothing enforced, and 46 of 81
+entries do not follow it; it now diffs a before/after keymap snapshot and
+depends on no convention at all. And "every binding is disableable" excluded the
+15 dotted picker keys via a hand-typed predicate, which is an allowlist wearing
+a filter; it now builds the nested config and covers all 81, as does a new
+rebindability twin.
+
+### 2026-09-07 — M2 round 11 (FIX-THEN-SHIP) — one reversal of a reversal
+
+**13. Interview's `<CR>` is GLOBAL again, and the Core-concepts row that said
+"buffer-local" was itself the round-9 decision being reversed.** Round 9 read the
+BR-41 defect as a scope problem; round 10 established it is a *teardown* problem
+(`del` cannot tell "mine" from "theirs" at any scope) and put the map back to
+global with save/restore. Round 11 caught that the artifacts *recording* the
+round-9 decision — `atlas/ui/keybindings.md` and `workshop/lessons.md` — were
+never part of the reversal's diff, and that `lessons.md` in particular is loaded
+by every agent at session start, so its rule would have re-created BR-47. Both
+corrected. The enumeration is mechanical, not a memory exercise:
+`git show --stat <the reversed commit>` lists exactly which artifacts recorded it.
+
+**14. Interview's timer handle left `_state`.** Round 10's rationale was "the map
+must live at the same scope as the session state it serves" — and that state's
+own lifecycle could not run: `_state.interview_timer` held a libuv userdata and
+`refresh_state` deepcopies `_state`, so opening any chat file while interview
+mode was on raised. Pre-existing (~16 months), surfaced only once the tests were
+converted to drive `enter()`/`exit()` instead of the sub-steps the fix edited.
+
+### 2026-09-07 — 🌿: and 🔒: are single-line annotations (operator)
+
+**15. The parser latched instead of skipping.** Both prefixes set
+`line_before_local`, meaning *"content from here to the end of this component is
+local"*. Right for a section marker, wrong for a one-line annotation, and nothing
+distinguished the two — so a private note dropped early in a long answer silently
+removed the rest of that answer from every later submission, and a note inside a
+question removed the second half of the user's own question. Operator's model,
+now the code's: the line is withheld, the next line is ordinary content.
+Single-line is also the more useful primitive for `🔒:` — notes go anywhere, and
+a multi-line note is several noted lines.
+
+**My blast-radius estimate was wrong, and the operator called it.** I said this
+"touches the parse of essentially every file" because every child chat opens with
+a `🌿:` back-link. Measured: the latch resets at the next `💬:`, so a back-link
+before the first question truncates nothing. Real corpus: 0 of 16 chats affected,
+0 fixtures. The bug only bit mid-component. Same shape as the recurring mistake —
+I verified that the marker is everywhere rather than that its position matters.
+
+**What the fix did need was a hazard I had not seen.** Removing the latch put a
+TRAILING `🌿:` inside the answer's line span, and resubmit deletes
+`question..answer.line_end` — so the reference would have been deleted and the
+child orphaned on disk, BR-19 by another route. The trailing-blank trim now skips
+annotation lines; reverting that turns the span test red. Three existing tests
+encoded the old semantics (one carried the fixture line *"still private because
+line_before_local is set"*) and were updated to the decided contract.
+      (placement is the cursor, not the exchange end) and the 3a/3b split is gone
+      (the chord never deletes).
+
+### 2026-09-07 — M3 placement reversed by the operator, on first real use
+
+**16. The reference lands at the CURSOR, not at the end of the answer.** The
+operator's earlier instruction ("end of answer, right before next question") was
+withdrawn after using it: `<M-i>` inserted the line, then the line appeared
+somewhere else, and the jump read as wrong. The reasoning is the part that
+settles it — `<M-S-CR>` reads as a *submission*, whose effect is not local to
+anywhere, but `<M-S-CR>` does not survive most terminals, so `<M-i>` is the key
+people actually press and it reads as an *insertion*. An insertion happens where
+you are.
+
+I raised the measured cost before changing it: `🌿:` sets the parser's
+`line_before_local` — the mechanism `🔒:` uses for a local section — so a
+mid-answer reference drops the text after it from the LLM context, and
+`from_parsed_chat` truncates the exchange (`summary` block gone, `append_pos`
+into the middle). That is what end-of-answer placement was buying. It is also
+pre-existing: the pre-#214 path inserted at the cursor too. The operator's call
+stands; the real fix is a parser change (a standalone `🌿:` is a one-line
+annotation, not a section boundary), which is not this milestone's to make.
+
+**17. The chord never deletes.** With the placement change the operator also
+narrowed case 3 to a pure placeholder: no markers means a bare `🌿:` at the
+cursor and an empty child, with the question left alone. The earlier "copy the
+question, delete the answer" reading mirrored `<M-CR>`'s resubmit and was
+coherent for a submission — but `<M-i>`, `<M-S-CR>` and `<C-g>i` are one registry
+entry with one callback, so it would only ever have been reachable from the key
+that says "insert here". `plan_submission` now returns a plan only for the quotes
+case; `exchange_at` and its conformance test went with it rather than staying as
+tested-but-unreachable code.

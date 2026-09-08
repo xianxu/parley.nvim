@@ -152,6 +152,12 @@ local function ex(q_start, q_end, a_start, a_end)
 end
 ```
 
+> **The Task 3 steps below are the DESIGN record, not a delivered checklist**
+> (#214 BR-59). Six of their assertions — `p.delete_lines`, `case == "question"`,
+> `p.question` — describe the pre-narrowing `plan_submission` and are not in
+> `tests/unit/branch_submit_spec.lua`. What shipped is the quotes case alone; see
+> the correction under Core concepts above and ## Revisions 9-10 in the issue.
+
 - [x] **Step 1: Write the failing tests — one per row of the issue's table**
 
 ```lua
@@ -316,6 +322,15 @@ The one real concurrency case named in ARCH-ORDER above: a streaming response ow
 
 ## Deviations from this plan, and why
 
+0. **The `question` case was removed entirely.** The plan's `plan_submission`
+   returns `case = "quotes" | "question"` with `question`, `topic` and
+   `delete_lines`, mirroring `<M-CR>`'s resubmit. Two operator revisions on first
+   use — the reference lands at the cursor, and the chord never deletes — left
+   only the quotes case, and `exchange_at` plus its conformance test went with
+   it. The tables above are corrected in place; this entry is the record that the
+   removal happened rather than the design being wrong on paper (#214 BR-59).
+
+
 1. **`seed_question` does not escape quote marks in a selection.** The draft test
    expected `tell me more about "the \"hard\" problem"`. Backslash escaping is a
    code convention leaking into chat prose, and the model reads either form; the
@@ -323,12 +338,22 @@ The one real concurrency case named in ARCH-ORDER above: a streaming response ow
    not crash or mangle — including a `%`, which is the live hazard (BR-21) at any
    site where the value later reaches `gsub` as a replacement.
 
-2. **Task 7 compares implementations, not prose.** The plan proposed reading the
-   case list out of `atlas/chat/drill_in.md`. A prose grep passes while the two
-   implementations disagree, which is the only thing that matters — so the check
-   now runs `plan_submission`'s exchange resolution against `init.lua`'s
-   `find_exchange_at_line` line-by-line over three transcripts. Verified by
-   deleting the planner's margin rule: three tests go red.
+2. **Task 7 was NOT delivered.** The plan proposed reading the case list out of
+   `atlas/chat/drill_in.md`; I replaced it with a line-by-line comparison of
+   `plan_submission`'s exchange resolution against `find_exchange_at_line`. Then
+   the operator's narrowing removed that resolution as dead code and the test
+   went with it — leaving the step checked off over nothing, which is worse than
+   leaving it unchecked (#214 BR-60). No such test is in the tree.
+
+   What stands in its place, and why it is the better guard: the equivalence
+   Task 7 was meant to protect turned out to be **already false** in two ways a
+   prose or resolution check would never have caught. `<M-i>` hardcoded
+   `bracket = true` against `<M-CR>`'s `config.mark_reference_span`, so the two
+   keys stripped differently under that option — now both call one
+   `drill_in.chat_gather_opts`, with a test that neither call site rebuilds the
+   options. And the two gather at different **scopes** (buffer-wide vs the
+   cursor's exchange), which is deliberate and is now stated in the README, the
+   atlas and the module header instead of being claimed away.
 
 3. **Declining falls back rather than stopping.** The plan implied `plan_submission`
    returning nil meant "do nothing". Building it that way regressed M1's

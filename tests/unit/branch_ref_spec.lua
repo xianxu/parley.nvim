@@ -57,3 +57,27 @@ describe("branch_ref.topic_for_selection", function()
         assert.are.equal("", br.topic_for_selection("   "))
     end)
 end)
+
+-- #214 BR-68: "one blank line each side" was claimed in three artifacts and
+-- held by neither insert path — one emitted a blank before only, the other no
+-- blanks at all. The tests that "covered" it passed because their fixtures
+-- happened to have a blank in the right place.
+describe("branch_ref.ref_block", function()
+    it("adds a blank on each side when the neighbours are prose", function()
+        assert.same({ "", "🌿: x", "" }, br.ref_block("🌿: x", "above", "below"))
+    end)
+
+    it("does not double a blank that is already there", function()
+        assert.same({ "🌿: x" }, br.ref_block("🌿: x", "", ""))
+        assert.same({ "🌿: x", "" }, br.ref_block("🌿: x", "", "below"))
+        assert.same({ "", "🌿: x" }, br.ref_block("🌿: x", "above", ""))
+    end)
+
+    it("treats the buffer edges as already-blank", function()
+        assert.same({ "🌿: x" }, br.ref_block("🌿: x", nil, nil))
+    end)
+
+    it("treats a whitespace-only line as blank", function()
+        assert.same({ "🌿: x" }, br.ref_block("🌿: x", "   ", "\t"))
+    end)
+end)

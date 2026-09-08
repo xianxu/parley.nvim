@@ -630,3 +630,51 @@ describe("interview mode's transitions are runnable (#214 N2)", function()
             "_state is deepcopied by refresh_state; a runtime handle there raises")
     end)
 end)
+
+-- #214 BR-61 (class, not instance). The `gf` bullet vanished from README as
+-- collateral of an unrelated rewrite and only a human reading the diff caught
+-- it. A prose list of bindings is a claim quantified over a set, so it needs a
+-- derived check — the same rule this file already applies to the commands the
+-- README names.
+describe("README's key bullets name keys that are really bound (#214 BR-61)", function()
+    it("every key the README advertises resolves to a binding", function()
+        setup()
+        local bound = {}
+        for _, e in ipairs(reg.entries) do
+            for _, k in ipairs(reg.resolve_keys(e, parley.config) or {}) do
+                bound[canon(k)] = true
+            end
+        end
+        for k in pairs(reg.native_overrides) do bound[canon(k)] = true end
+
+        -- Only the bullets that OPEN with a key: `- \`<X>\` …`. Prose mentioning
+        -- a key mid-sentence is discussion, not a claim that it is bound.
+        -- Capture the whole backticked token: an earlier pattern required it to
+        -- END in `>`, which quietly skipped `<C-g>?`, `<C-g>t` and every other
+        -- prefix chord — 5 bullets checked out of 14.
+        local claimed, missing = 0, {}
+        for _, line in ipairs(vim.fn.readfile("README.md")) do
+            local tok = line:match("^%s*%-%s+`([^`]+)`")
+            local key = tok and (tok:match("^<") or tok:match("^g[fP]$")) and tok or nil
+            if key and not key:lower():find("<leader>", 1, true) then
+                claimed = claimed + 1
+                if not bound[canon(key)] then missing[#missing + 1] = key end
+            end
+        end
+        assert.is_true(claimed >= 8,
+            "expected the README to advertise several keys; found " .. claimed)
+        table.sort(missing)
+        assert.same({}, missing,
+            "the README advertises keys that resolve to nothing")
+    end)
+
+    -- The other direction is the one BR-61 actually was: a key silently leaving
+    -- the README. Pin the headline chords by name so a rewrite cannot drop them.
+    it("the headline chords are still documented", function()
+        local readme = table.concat(vim.fn.readfile("README.md"), "\n")
+        for _, k in ipairs({ "<M-q>", "<M-CR>", "<M-i>", "<M-p>", "<C-g>?", "gf" }) do
+            assert.is_truthy(readme:find("`" .. k .. "`", 1, true),
+                k .. " is no longer documented in the README")
+        end
+    end)
+end)

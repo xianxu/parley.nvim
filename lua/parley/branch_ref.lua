@@ -57,4 +57,27 @@ function M.topic_for_selection(selected)
     return (topic:gsub("^%s+", ""):gsub("%s+$", ""))
 end
 
+--- The lines to insert so a reference sits as its own block: one blank line on
+--- each side, but only where there is not already one.
+---
+--- Three artifacts claimed "one blank line each side" and neither insert path
+--- held it (#214 BR-68): the planned path emitted `{ "", ref }` — a blank before
+--- only, so the reference abutted the following prose — and the placeholder path
+--- emitted the bare line with no blank at all. The existing assertions passed
+--- because their fixtures happened to have a blank in the right place. PURE, so
+--- the rule is stated once and testable without a buffer.
+---
+--- @param ref string       the formatted 🌿: line
+--- @param prev string|nil  the line above the insertion point, nil at BOF
+--- @param next_ string|nil the line below it, nil at EOF
+--- @return string[]
+function M.ref_block(ref, prev, next_)
+    local function blank(line) return line == nil or not line:match("%S") end
+    local out = {}
+    if not blank(prev) then out[#out + 1] = "" end
+    out[#out + 1] = ref
+    if not blank(next_) then out[#out + 1] = "" end
+    return out
+end
+
 return M
