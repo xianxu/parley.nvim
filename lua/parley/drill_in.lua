@@ -343,6 +343,22 @@ end
 --- chat_respond glue. These prefixes hard-stop the backward anchor scan so it
 --- never crosses out of the marker's own agent turn.
 --- @param cfg table  parley config (reads chat_*_prefix fields)
+--- The gather options for a chat buffer: the turn-prefix boundaries plus whether
+--- to enclose each referenced span in `[]` in place.
+---
+--- One owner (#214 BR-60). `chat_respond` built this inline and `<M-i>`'s branch
+--- path hardcoded `bracket = true`, so with `mark_reference_span = false` the two
+--- keys disagreed: branching injected brackets into the parent that responding
+--- would not. The chord's whole claim is that it strips the way `<M-CR>` strips.
+--- @param cfg table  parley config
+--- @return table
+function M.chat_gather_opts(cfg)
+    return {
+        boundaries = M.chat_boundaries(cfg),
+        bracket = cfg.mark_reference_span ~= false,
+    }
+end
+
 --- @return string[]  ordered, de-nil'd prefix list
 function M.chat_boundaries(cfg)
     cfg = cfg or {}

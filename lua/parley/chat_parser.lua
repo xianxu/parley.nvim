@@ -306,6 +306,18 @@ local fence = require("parley.fence")
 	end
 
 	-- Helper to finalize the current component's content from accumulated parts
+	-- Is line `n` a single-line annotation (🌿:/🔒:)? Uses the same anchored
+	-- patterns `highlight_structure.classify` derives from config, rather than a
+	-- second spelling of the prefixes (ARCH-DRY) — but matches them directly,
+	-- since classify answers a wider question and would cost a call per line.
+	-- Defined once here: it was a closure rebuilt on every finalize_component.
+	local function annotation_line(n)
+		local text = lines[n]
+		if not text then return false end
+		return text:match(decoration_patterns.local_pattern) ~= nil
+			or text:match(decoration_patterns.branch_pattern) ~= nil
+	end
+
 	local function finalize_component(end_line)
 		if current_exchange and current_component then
 			if current_component == "question" then
@@ -330,15 +342,6 @@ local fence = require("parley.fence")
 			-- child chat that exists on disk — BR-19's orphan by another route.
 			-- Before #214 this fell out of the `line_before_local` latch; now
 			-- the trim has to say it (verified by reversion).
-			-- Reuse the registry's own anchored patterns rather than a second
-			-- matcher: highlight_structure.classify already owns what a line
-			-- starting with one of these prefixes IS (ARCH-DRY).
-			local function annotation_line(n)
-				local text = lines[n]
-				if not text then return false end
-				return text:match(decoration_patterns.local_pattern) ~= nil
-					or text:match(decoration_patterns.branch_pattern) ~= nil
-			end
 			local trimmed_end = end_line
 			while trimmed_end > current_exchange[current_component].line_start
 				and (not lines[trimmed_end] or not lines[trimmed_end]:match("%S")

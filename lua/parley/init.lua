@@ -2262,22 +2262,6 @@ local function branch_inserters(buf, abs_link, owns_file)
 	-- (BR-28). It therefore does what it did before #214: insert the reference,
 	-- put the cursor on it, and let the user type the topic. The child is created
 	-- when the link is followed.
-	--- Ready drill-in markers as LINE numbers, which is all `plan_submission`
-	--- needs. drill_in works in byte offsets; converting here keeps the planner
-	--- pure over line numbers and out of the encoding business.
-	--- @return table[] markers
-	local function ready_marker_lines(text)
-		local drill_in = require("parley.drill_in")
-		local out = {}
-		for _, marker in ipairs(drill_in.parse(text)) do
-			if marker.ready then
-				local _, newlines = text:sub(1, marker.byte_start):gsub("\n", "")
-				out[#out + 1] = { line = newlines + 1 }
-			end
-		end
-		return out
-	end
-
 	--- #214 M3: `<M-S-CR>` in normal/insert mode on a CHAT buffer submits what
 	--- `<M-CR>` would submit, into a new child, leaving the reference where
 	--- `<M-CR>`'s output would have appeared.
@@ -2303,52 +2287,73 @@ local function branch_inserters(buf, abs_link, owns_file)
 			return true
 		end
 
+		local drill_in = require("parley.drill_in")
+		local buffer_edit = require("parley.buffer_edit")
 		local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
 		local text = table.concat(lines, "\n")
 		local header_end = M.chat_parser.find_header_end(lines)
 		local parsed = M.parse_chat(lines, header_end)
 		local cursor_line = vim.api.nvim_win_get_cursor(0)[1]
 
+		-- One parse, not two. This used to run `drill_in.parse` over the whole
+		-- buffer to build a marker list carrying a `line` field the planner never
+		-- read, and `gather_edit_plan` parsed it all again three lines later
+		-- (#214 M3 review, Minor). The gather is the authority on whether there
+		-- is anything to rearrange, so ask it first.
+		local blocks, _, marker_edits = drill_in.gather_edit_plan(
+			text, drill_in.chat_gather_opts(M.config))
 		local plan, reason = require("parley.branch_submit").plan_submission(
-			parsed, cursor_line, ready_marker_lines(text))
+			parsed, cursor_line, #blocks > 0)
 		if not plan then
 			M.logger.debug("Branch: nothing to submit (" .. tostring(reason)
 				.. "); falling back to a plain reference")
 			return false
 		end
 
-		local drill_in = require("parley.drill_in")
-		local buffer_edit = require("parley.buffer_edit")
-
-		-- The only planned case: gathered <M-q> quotes become the child's first
-		-- question and leave the parent exactly as `<M-CR>` would strip them.
-		local blocks, _, marker_edits = drill_in.gather_edit_plan(text, {
-			boundaries = drill_in.chat_boundaries(M.config), bracket = true,
-		})
-		if #blocks == 0 then
-			M.logger.debug("Branch: markers found but none ready; plain reference")
-			return false
-		end
 		local question = require("parley.branch_submit").seed_question(
 			"quotes", table.concat(drill_in.format_blocks(blocks), "\n"))
 		local label = require("parley.branch_ref").topic_for_selection(
 			(blocks[1].sections[#blocks[1].sections] or {}).text or "")
-		buffer_edit.apply_text_edits(buf, 0, text, marker_edits)
 
 		local new_chat_file = (new_target())
 		local rel_path = vim.fn.fnamemodify(new_chat_file, ":t")
+
+		-- Create the child FIRST, before touching the parent (#214 BR-63). The
+		-- write was pcall-guarded and this was not, so an unwritable chat_dir
+		-- raised out of the keymap callback with the markers already stripped and
+		-- the reference already inserted — a parent pointing at a file that does
+		-- not exist, and the user's annotations gone. Ordering removes the
+		-- window rather than trying to undo inside it: nothing is mutated until
+		-- the child is on disk.
+		--
+		-- The reverse hazard (child on disk, reference not yet saved) is BR-19's
+		-- orphan and is handled below by not navigating away on a failed write.
+		local created_ok = pcall(create_child_if_owned, new_chat_file, "?", question)
+		if not created_ok then
+			M.logger.warning("Branch: could not create " .. rel_path
+				.. " — nothing was changed in this chat")
+			return true
+		end
+
+		-- #214 BR-58: anchor the insertion point BEFORE stripping. `ref_after` is
+		-- a pre-strip line number and `apply_text_edits` changes the line count
+		-- whenever a removed marker owned whole lines — which the ordinary
+		-- standalone `🤖[…]` form does. An extmark travels with the edit;
+		-- chat_respond solves the same problem the same way (`make_handle` around
+		-- its own gather). The earlier code kept the raw number, so the reference
+		-- drifted by however many lines the strip removed, in the common case
+		-- landing past the exchange's `📝:` summary.
+		local anchor = buffer_edit.make_handle(buf, plan.ref_after)
+		buffer_edit.apply_text_edits(buf, 0, text, marker_edits)
+		local insert_at = buffer_edit.handle_line(anchor)
+		buffer_edit.handle_invalidate(anchor)
+
 		-- AT THE CURSOR (operator, 2026-09-07). Its own block with one blank line
-		-- each side, which is the exchange model's MARGIN. `ref_after` is a
-		-- 1-indexed line and nvim_buf_set_lines takes a 0-indexed position, so
-		-- the two coincide.
-		vim.api.nvim_buf_set_lines(buf, plan.ref_after, plan.ref_after, false, {
+		-- each side, which is the exchange model's MARGIN.
+		vim.api.nvim_buf_set_lines(buf, insert_at, insert_at, false, {
 			"", br.format_ref_line(get_branch_prefix(), rel_path, label or ""),
 		})
 		M.highlight_chat_branch_refs(buf)
-
-		-- The child keeps the "?" sentinel so auto-titling and the slug rename
-		-- both fire (#214 BR-1); `label` is only what the parent's line displays.
-		create_child_if_owned(new_chat_file, "?", question)
 		if not commit_reference() then
 			return true
 		end
@@ -2356,6 +2361,11 @@ local function branch_inserters(buf, abs_link, owns_file)
 		vim.schedule(function()
 			vim.cmd("edit " .. vim.fn.fnameescape(new_chat_file))
 			vim.cmd("normal! G")
+			-- Insert mode at the end, the same landing the placeholder path
+			-- gives. One key must not have two landing modes (#214 M3 review);
+			-- and a gathered child usually wants a line of framing before it is
+			-- submitted, so insert is the useful default in both cases.
+			vim.cmd("startinsert!")
 		end)
 		return true
 	end

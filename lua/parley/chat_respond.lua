@@ -1279,10 +1279,7 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
     -- config→prefix mapping is a tested pure helper; drill_in's core stays pure.
     -- `bracket` encloses each referenced span in `[]` in place so the reader can
     -- see what the gathered comment points at (highlighted via ParleyReference).
-    local di_opts = {
-        boundaries = drill_in.chat_boundaries(_parley.config),
-        bracket = _parley.config.mark_reference_span ~= false,
-    }
+    local di_opts = drill_in.chat_gather_opts(_parley.config)
 
     if params.range ~= 2 and exchange_idx and component then
         local exch = parsed_chat.exchanges[exchange_idx]

@@ -14,13 +14,30 @@
 --   🌿: standalone  BEFORE line | | 📝: the summary        <- AFTER line gone
 --   🔒: standalone  BEFORE line | | 📝: the summary        <- same
 
-local parley = require("parley")
+-- parse_chat is pure: no Neovim APIs, no setup() required — a config stub is
+-- enough, exactly as tests/unit/parse_chat_spec.lua does it. This spec called
+-- parley.setup({}) per test, which runs file_tracker.init and races the 8-way
+-- unit runner on the shared XDG dir ("E739: Cannot create directory … already
+-- exists"). It passed standalone and in a warm environment, and failed from a
+-- clean one — a unit test reaching for the whole plugin to exercise a pure
+-- function (#214 BR-62).
+local chat_parser = require("parley.chat_parser")
+
+local test_config = {
+    chat_user_prefix      = "💬:",
+    chat_local_prefix     = "🔒:",
+    chat_branch_prefix    = "🌿:",
+    chat_assistant_prefix = { "🤖:", "[{{agent}}]" },
+    chat_memory = {
+        enable            = true,
+        summary_prefix    = "📝:",
+        reasoning_prefix  = "🧠:",
+    },
+}
 
 describe("single-line annotations (#214)", function()
-    before_each(function() parley.setup({}) end)
-
     local function parse(lines)
-        return parley.parse_chat(lines, parley.chat_parser.find_header_end(lines))
+        return chat_parser.parse_chat(lines, chat_parser.find_header_end(lines), test_config)
     end
 
     local function answer_of(mid)

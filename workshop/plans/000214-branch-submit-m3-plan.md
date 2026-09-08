@@ -20,23 +20,23 @@
 | `seed_question` | `lua/parley/branch_submit.lua` | new |
 | `topic_for_selection` | `lua/parley/branch_ref.lua` | modified |
 
-- **`plan_submission`** — `(parsed_chat, cursor_line, markers) -> plan`. Decides which case applies and returns a description of the work; performs no IO and touches no buffer.
+- **`plan_submission`** — `(parsed_chat, cursor_line, markers) -> plan`. Decides
+  whether there is anything to rearrange and where the reference goes; performs
+  no IO and touches no buffer.
 
-  ```lua
-  --- @return table|nil plan, string|nil reason
-  --- plan = {
-  ---   case         = "quotes" | "question",
-  ---   question     = string,          -- what the child is seeded with
-  ---   topic        = string,          -- the child's `topic:` header
-  ---   ref_after    = integer,         -- 1-indexed parent line the 🌿: block follows
-  ---   strip_markers= boolean,         -- case 2: apply drill_in's marker edits first
-  ---   delete_lines = { first, last } | nil,  -- case 3b: the answer being replaced
-  --- }
-  ```
-
-  - **Relationships:** 1:1 with a keypress. Consumes `chat_parser` output (N exchanges) and `drill_in.parse` output (N markers); owns neither.
-  - **DRY rationale:** `<M-CR>` decides the same four cases inside `chat_respond.respond`. Re-deriving them at the `<M-S-CR>` call site is how the two chords would drift — and the whole point of the chord is that it *matches* `<M-CR>`. The rules are stated once here, and Task 5 pins them against the atlas that documents `<M-CR>`'s behaviour.
-  - **Future extensions:** a `case = "define"` row for the visual path, if the inline splice ever needs the same planning treatment. Deliberately **not** built now (YAGNI): the visual path takes no cursor-based decision.
+  > **As shipped (#214 BR-59), narrower than planned here.** Two operator
+  > revisions on first use — the reference lands at the cursor, and the chord
+  > never deletes — collapsed this to the quotes case alone:
+  >
+  > ```lua
+  > --- @return table|nil plan, string|nil reason
+  > --- plan = { case = "quotes", ref_after = integer, strip_markers = true }
+  > ```
+  >
+  > `case = "question"`, `question`, `topic` and `delete_lines` do not exist. The
+  > Task 3 steps below still describe the planned shape and their assertions are
+  > not in the tree; they are left as the record of what was designed, with this
+  > note as the correction. See ## Revisions 9-10 in the issue.
 
 - **`seed_question`** — `(case, payload) -> string`. The child's first question: `tell me more about "<selection>"` for a visual selection, the formatted quote blocks for case 2, the question text verbatim for case 3.
   - **DRY rationale:** one place that knows how a payload becomes a prompt; three call sites would otherwise each invent wording.
@@ -276,14 +276,19 @@ The one real concurrency case named in ARCH-ORDER above: a streaming response ow
 
 ### Task 7: pin the chord against `<M-CR>`'s documented rules
 
-**Files:**
-- Test: `tests/unit/branch_submit_spec.lua`
-
-The chord's whole promise is "what `<M-CR>` would submit". That promise is quantified over cases, so it needs a derived check rather than four hand-written examples — the family that produced five findings in M2.
-
-- [x] **Step 1: Assert every case the atlas documents for `<M-CR>` has a `plan_submission` row**, reading the case list out of `atlas/chat/drill_in.md` rather than a literal in the test.
-- [x] **Step 2–4: red → implement → green**
-- [x] **Step 5: Commit**
+> **NOT DELIVERED as written (#214 BR-60).** The check built here compared
+> `plan_submission`'s exchange resolution against `find_exchange_at_line`
+> line-by-line. When the operator narrowed the chord to the quotes case, that
+> resolution was removed as dead code — and the test went with it, leaving this
+> box ticked over nothing. The equivalence it was meant to guard was also false
+> in two ways review had to find rather than the test: `<M-i>` hardcoded
+> `bracket = true` against `<M-CR>`'s `mark_reference_span`, and the two gather
+> at different scopes.
+>
+> What replaced it: `drill_in.chat_gather_opts` is now the single owner of the
+> gather options, with a test asserting neither call site rebuilds them; and the
+> scope difference is stated as deliberate in the README, the atlas and the
+> module header rather than claimed away.
 
 ### Task 8: atlas + README
 
@@ -347,9 +352,12 @@ seen red, restored.
 | deliverable | mutation | red |
 |---|---|---|
 | topic names the subject | revert to `what is "X"` | 3 unit + 1 integration |
-| case 3b deletes the replaced answer | `delete_lines = nil` | 3 unit + 1 integration |
+| ~~case 3b deletes the replaced answer~~ | *removed with the never-delete narrowing* | — |
 | markers win over the question case | disable the marker branch | 4 unit + 3 integration |
 | pending-response guard | remove it | 1 integration |
-| ref lands after `📝:` | shift it before | 1 integration |
+| ~~ref lands after `📝:`~~ | *superseded: the reference lands at the cursor* | — |
 | `seed_question` instructs | return the bare selection | 4 unit + 1 integration |
-| planner agrees with `find_exchange_at_line` | drop the margin rule | 3 integration |
+| ~~planner agrees with `find_exchange_at_line`~~ | *removed with `exchange_at`* | — |
+| reference survives the strip (BR-58) | keep the pre-strip line number | 2 integration |
+| one owner for gather options (BR-60) | rebuild them inline | 1 unit |
+| annotations are single-line | the pre-fix parser | 4 unit |

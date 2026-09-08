@@ -171,14 +171,17 @@ outside every exchange (the frontmatter, for instance) are left alone.
   creates the child chat it points at.
   - **text selected** → the selection becomes an inline `[🌿:…](file)` anchor and
     the child opens with `tell me more about "…"`. You stay in the parent.
-  - **pending `<M-q>` quotes** → they are stripped from the parent, exactly as
-    `<M-CR>` would strip them, and become the child's first question.
+  - **pending `<M-q>` quotes** → they are stripped from the parent and become
+    the child's first question. Note the scope differs from `<M-CR>`: this
+    gathers **every** pending quote in the buffer, where `<M-CR>` with the cursor
+    inside an exchange gathers only that exchange's.
   - **neither** → a bare `🌿:` placeholder, and the child opens for you to type
     in.
 
   The reference always lands where your cursor is, and the chord never deletes
   anything from the parent. Every case saves the parent first, so the link is
   never orphaned. It declines while a response is still streaming into that chat.
+- `gf` smart go-to-file: on an ariadne artifact ref (`ariadne#11`, `#15 M4`, `pair#84`) resolves it and jumps (family picker when it resolves to many); on a plain path, Vim's native `gf`
 
 **Corresponding commands**
 - `:ParleyChatNew` create a new chat
@@ -289,9 +292,19 @@ keybinding surface was curated. Nothing is gone — each is one config line away
 | `<leader>fo` opened oil.nvim | unbound | `global_shortcut_oil = { modes = { "n" }, shortcut = "<leader>fo" }` |
 | spell typeahead popup on, mapping insert-mode `<CR>` | off (squiggles stay on) | `chat_spell = { typeahead = true }` |
 
-One config *contract* changed with them: `shortcut = ""` used to fall through to
-the shipped default, and now means **disabled**. If you set it somewhere
-expecting the default, name the key instead.
+Two config *contracts* changed with them:
+
+- `shortcut = ""` used to fall through to the shipped default, and now means
+  **disabled**. If you set it somewhere expecting the default, name the key
+  instead.
+- **`🔒:` is a one-line note, not a section.** A line starting with `🔒:` is kept
+  out of what is sent to the model — but only *that* line. It previously withheld
+  everything from there to the end of the answer or question it sat in, which
+  meant a note dropped early in a long answer silently removed the rest of it
+  from every later turn. If you have transcripts written against the old
+  behaviour, text you expected to stay private will now be submitted. Prefix each
+  line you want withheld. (`🌿:` branch references changed the same way, and are
+  bookkeeping rather than content.)
 
 Chat storage roots:
 - `chat_dir` is the primary writable root used for new chats.

@@ -41,7 +41,6 @@ end
 
 --- Topic seeded for a selection-derived branch.
 --- PURE.
---- @param selected string
 --- The child chat's `topic:` header for a selection, which becomes its filename
 --- slug — so it names the SUBJECT, not a question about it. This returned
 --- `what is "<selected>"` before #214 M3, which put a question form into every

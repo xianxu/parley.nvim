@@ -425,6 +425,59 @@ describe("branched submission (#214 M3)", function()
     end)
 
 
+    -- #214 BR-58 (Critical). `plan.ref_after` is the PRE-strip cursor line, and
+    -- `apply_text_edits` runs before the insert — so any marker whose removal
+    -- changes the line count moves the reference. The only test for this path
+    -- used an INLINE marker, whose delta is zero: one interleaving, reported as
+    -- coverage. A STANDALONE `🤖[…]` is the ordinary form (`<M-q>` on a blank
+    -- line produces it) and gather_edit_plan deletes its newline too.
+    it("a standalone marker above the cursor does not move the reference", function()
+        open({
+            "---", "topic: parent topic", "file: f", "---", "",
+            "💬: first question", "",
+            "🤖:[A]", "",
+            "answer text here", "",
+            "🤖[what about this?]", "",
+            "the cursor line", "",
+            "📝: the summary",
+        })
+        parley.config.chat_dir = tmpdir
+        branch_here(14)   -- "the cursor line"
+
+        local l = lines_now()
+        local i = ref_line_index(l)
+        assert.is_truthy(i, "no reference was inserted")
+        local anchor
+        for n = 1, #l do if l[n] == "the cursor line" then anchor = n end end
+        assert.is_truthy(anchor, "the cursor line vanished")
+        assert.are.equal(anchor + 2, i,
+            ("reference at %d, cursor line at %d — the strip moved it"):format(i, anchor))
+        assert.are.equal("", l[i - 1], "no blank line before the reference")
+        assert.are.equal("", l[i + 1], "no blank line after the reference")
+    end)
+
+    it("a multi-line marker above the cursor does not move it either", function()
+        open({
+            "---", "topic: parent topic", "file: f", "---", "",
+            "💬: first question", "",
+            "🤖:[A]", "",
+            "answer text here", "",
+            "🤖[line one", "line two]", "",
+            "the cursor line", "",
+            "📝: the summary",
+        })
+        parley.config.chat_dir = tmpdir
+        branch_here(15)   -- "the cursor line"
+
+        local l = lines_now()
+        local i = ref_line_index(l)
+        local anchor
+        for n = 1, #l do if l[n] == "the cursor line" then anchor = n end end
+        assert.are.equal(anchor + 2, i,
+            ("reference at %d, cursor line at %d — a multi-line strip moved it"):format(
+                i, anchor))
+    end)
+
     it("pending <M-q> quotes go to the child and are stripped from the parent", function()
         open({
             "---", "topic: parent topic", "file: f", "---", "",
@@ -742,5 +795,66 @@ describe("helper.flatten_lines (#214 M3)", function()
 
     it("preserves the blank lines a split produces", function()
         assert.same({ "a", "", "b" }, helper.flatten_lines({ "a\n\nb" }))
+    end)
+end)
+
+-- #214 BR-63: the parent must not be mutated until the child exists. The write
+-- was pcall-guarded and the create was not, so an unwritable chat_dir raised out
+-- of the keymap callback with the markers already stripped and the reference
+-- already inserted — a parent pointing at nothing, and the annotations gone.
+describe("a failed child creation leaves the parent untouched (#214 BR-63)", function()
+    local tmpdir, parent_path, parent_buf
+
+    before_each(function()
+        parley.setup({})
+        tmpdir = vim.fn.tempname()
+        vim.fn.mkdir(tmpdir, "p")
+        parent_path = tmpdir .. "/2026-09-06.10-00-00.000_parent.md"
+        vim.fn.writefile({ "---", "topic: t", "file: f", "---", "",
+                           "💬: q", "", "🤖:[A]", "",
+                           "answer 🤖[what about this?]", "", "📝: sum" }, parent_path)
+        vim.cmd("edit " .. vim.fn.fnameescape(parent_path))
+        parent_buf = vim.api.nvim_get_current_buf()
+        parley.config.chat_dir = tmpdir
+        parley.prep_chat(parent_buf, parent_path)
+    end)
+
+    after_each(function()
+        parley._prepared_bufs[parent_buf] = nil
+        vim.fn.delete(tmpdir, "rf")
+    end)
+
+    it("the markers survive and no reference is inserted", function()
+        local before = table.concat(vim.api.nvim_buf_get_lines(parent_buf, 0, -1, false), "\n")
+
+        local orig = parley.create_child_chat
+        parley.create_child_chat = function() error("simulated: chat_dir unwritable") end
+        local ok = pcall(function()
+            vim.api.nvim_win_set_cursor(0, { 10, 0 })
+            parley._branch_inserters(parent_buf, false, true).n()
+        end)
+        parley.create_child_chat = orig
+
+        assert.is_true(ok, "the failure escaped the keymap callback")
+        local after = table.concat(vim.api.nvim_buf_get_lines(parent_buf, 0, -1, false), "\n")
+        assert.are.equal(before, after,
+            "the parent was mutated for a child that was never created")
+        assert.is_truthy(after:find("🤖[what about this?]", 1, true),
+            "the user's annotation was stripped and then lost")
+    end)
+end)
+
+-- #214 M3 review (Minor): one key, one landing. The placeholder path opened the
+-- child in insert mode and the quotes path did not.
+describe("both branch paths land the same way (#214 M3)", function()
+    it("the child is opened in insert mode from either path", function()
+        local src = table.concat(vim.fn.readfile("lua/parley/init.lua"), "\n")
+        local planned = src:match("Branched submission into.-end%)")
+        local plain = src:match("Created branch to new chat.-end%)")
+        assert.is_truthy(planned and plain, "could not locate both branch landings")
+        for name, body in pairs({ ["quotes path"] = planned, ["placeholder path"] = plain }) do
+            assert.is_truthy(body:find("startinsert", 1, true),
+                name .. " does not put the cursor in insert mode in the child")
+        end
     end)
 end)

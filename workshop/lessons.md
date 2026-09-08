@@ -1487,3 +1487,47 @@ point of the transition.
    `shortcut = { 5 }` still resolved to nil — identical to a deliberate
    `shortcut = ""` — after I had "fixed" the typo-equals-decision defect, because
    I checked the container's type and not its elements.
+
+## #214 M3 — the test that confirmed one interleaving and reported coverage
+
+`<M-i>` computes where the branch reference goes, then strips the `<M-q>` markers,
+then inserts at the computed line. The strip changes the line count. The
+reference landed past the exchange's summary — a Critical, in the milestone's
+headline feature.
+
+The integration test for that path used an **inline** marker (`text 🤖[q] more`),
+whose removal deletes no lines. Delta zero. Green. The ordinary form is a
+**standalone** `🤖[…]` on its own line, which `<M-q>` on a blank line produces
+and whose removal deletes lines — and no test used one.
+
+`chat_respond` already solves this, four lines away, with
+`buffer_edit.make_handle` around the same call. I did not look at how the
+neighbour did it before writing the second copy.
+
+**Rules.**
+
+1. **When an edit computes a position and then mutates, the test must mutate a
+   different amount than zero.** Any "compute then edit" pair has a delta axis;
+   a fixture that happens to sit at delta 0 exercises the one case where the bug
+   cannot appear. Pick the fixture that moves lines, not the one that reads
+   nicely.
+2. **Before writing code that edits a buffer around another edit, read the
+   nearest existing caller.** The extmark-handle idiom was already in the file
+   this feature is named after. Reusing it is not just DRY — it is inheriting a
+   bug fix someone already paid for.
+3. **A checked-off plan step whose test no longer exists is worse than an
+   unchecked one.** When a narrowing deleted `exchange_at`, its conformance test
+   went with it, leaving Task 7 ticked over nothing and three mutation-ledger
+   rows describing mutations of code not in the tree. Re-read the ledger against
+   `git diff` when scope changes, not only when writing it.
+4. **A guarded write next to an unguarded create is not "mostly safe".** The
+   `:write` was `pcall`ed and `create_child_chat` was not, so a failure raised
+   after the parent had already been stripped and rewritten. Ordering fixed it —
+   create first, mutate second — which removes the window instead of trying to
+   unwind inside it. Ask which step is the point of no return, and do the
+   fallible thing before it.
+5. **A unit test that calls `setup()` to exercise a pure function buys a race.**
+   `parse_chat` needs a config table, not a plugin. Mine called `parley.setup({})`
+   per test, which ran `file_tracker.init` and raced the parallel runner on a
+   shared XDG dir — red from a clean environment, green from a warm one. I
+   diagnosed it as my own concurrent `make test` and was half wrong.

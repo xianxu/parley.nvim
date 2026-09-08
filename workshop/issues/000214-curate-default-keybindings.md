@@ -291,6 +291,7 @@ Derivation notes:
 | `help_lines` | `lua/parley/keybinding_registry.lua` | changed |
 | `key_label` | `lua/parley/keybinding_registry.lua` | new |
 | `plan_submission` | `lua/parley/branch_submit.lua` | new |
+| `chat_gather_opts` | `lua/parley/drill_in.lua` | new |
 | `seed_question` | `lua/parley/branch_submit.lua` | new |
 
 - **`branch_ref`** — the line-editing half of a branch reference: build the
@@ -309,14 +310,26 @@ Derivation notes:
 - **`help_lines`** — renders the `<C-g>?` float from the registry. Now shows
   aliases (primary in the aligned column, the rest after the description) and
   omits any entry that resolves to nothing.
-- **`plan_submission`** — `(parsed_chat, cursor_line, markers) -> plan`. Decides
-  which of `<M-CR>`'s cases applies at the cursor, what the child is seeded with,
-  which parent line the `🌿:` reference follows, and what the parent loses. No
-  IO, no buffer — so `<M-S-CR>`'s decision is unit-testable with hand-built
-  parser output while the effects stay in `branch_inserters`.
+- **`plan_submission`** — `(parsed_chat, cursor_line, markers) -> plan|nil`.
+  Decides whether there is anything to rearrange; returns
+  `{ case = "quotes", ref_after, strip_markers }` when pending `<M-q>` markers
+  exist and `nil` otherwise, so the caller inserts a plain placeholder. No IO, no
+  buffer — the decision is unit-testable with hand-built parser output while the
+  effects stay in `branch_inserters`.
+  - **As designed vs as shipped (#214 BR-59):** the plan specified
+    `case = "quotes" | "question"` with `question`, `topic` and `delete_lines`,
+    mirroring `<M-CR>`'s resubmit. Two operator revisions on first use — the
+    reference lands at the cursor, and the chord never deletes — removed the
+    question case entirely. Recorded here rather than left as a table describing
+    code that does not exist.
 - **`seed_question`** — one place that knows how a payload becomes a prompt.
   Three call sites would otherwise each invent wording, and two already had:
   `what is "X"` was built inline at the follow-a-dead-link path as well.
+- **`chat_gather_opts`** (`lua/parley/drill_in.lua`, new) — the gather options a
+  chat buffer uses: turn boundaries plus whether to mark referenced spans with
+  `[]`. `chat_respond` built them inline and the branch path hardcoded
+  `bracket = true`, so under `mark_reference_span = false` the two keys stripped
+  differently (#214 BR-60). A test asserts neither call site rebuilds them.
 - **`key_label`** — `key_for` as display text, never nil. Three picker-title
   sites fed a nil key straight to `string.format("%s")` (rendering
   `Issues (open  nil: cycle view)` under `default_keymaps = false`); one guarded
@@ -487,13 +500,17 @@ stated purpose is making bindings *more* configurable.
       operator on first use (## Revisions 9 and 10): the chord inserts at the
       cursor and never deletes. The rule as shipped:
 
-      > `<M-S-CR>` performs the submission `<M-CR>` would perform, into a new
+      > ~~`<M-S-CR>` performs the submission `<M-CR>` would perform, into a new
       > child chat, and leaves a `🌿:` reference at the position `<M-CR>`'s
-      > output would have occupied.
+      > output would have occupied.~~
+      >
+      > **As shipped:** `<M-i>` inserts a branch reference at the cursor and
+      > creates the child it points at, gathering any pending `<M-q>` quotes into
+      > it. It never deletes from the parent.
 
-      The parent always keeps its context; only the new work moves. That is why
-      the question is **copied**, not moved (operator, superseding the earlier
-      "move that question" wording).
+      The parent always keeps its context. The design below is kept as the record
+      of what was planned; the two revisions that narrowed it are in
+      ## Revisions.
 
       | # | context | `<M-CR>` does | `<M-S-CR>` does | ref lands |
       |---|---|---|---|---|
@@ -503,35 +520,9 @@ stated purpose is making bindings *more* configurable.
       | 3 | neither | submits the question | **placeholder**: bare `🌿:`, empty child, question untouched | at the cursor |
 
       **Superseded 2026-09-07** — see ## Revisions 9 and 10. Rows 2a/2b collapse
-
-### 2026-09-07 — 🌿: and 🔒: are single-line annotations (operator)
-
-**11. The parser latched instead of skipping.** Both prefixes set
-`line_before_local`, meaning *"content from here to the end of this component is
-local"*. Right for a section marker, wrong for a one-line annotation, and nothing
-distinguished the two — so a private note dropped early in a long answer silently
-removed the rest of that answer from every later submission, and a note inside a
-question removed the second half of the user's own question. Operator's model,
-now the code's: the line is withheld, the next line is ordinary content.
-Single-line is also the more useful primitive for `🔒:` — notes go anywhere, and
-a multi-line note is several noted lines.
-
-**My blast-radius estimate was wrong, and the operator called it.** I said this
-"touches the parse of essentially every file" because every child chat opens with
-a `🌿:` back-link. Measured: the latch resets at the next `💬:`, so a back-link
-before the first question truncates nothing. Real corpus: 0 of 16 chats affected,
-0 fixtures. The bug only bit mid-component. Same shape as the recurring mistake —
-I verified that the marker is everywhere rather than that its position matters.
-
-**What the fix did need was a hazard I had not seen.** Removing the latch put a
-TRAILING `🌿:` inside the answer's line span, and resubmit deletes
-`question..answer.line_end` — so the reference would have been deleted and the
-child orphaned on disk, BR-19 by another route. The trailing-blank trim now skips
-annotation lines; reverting that turns the span test red. Three existing tests
-encoded the old semantics (one carried the fixture line *"still private because
-line_before_local is set"*) and were updated to the decided contract.
-      (placement is the cursor, not the exchange end) and the 3a/3b split is gone
-      (the chord never deletes).
+      (placement is the cursor, not the exchange end) and row 3 became a pure
+      placeholder (the chord never deletes). The rule as shipped is in
+      `atlas/chat/inline_branch_links.md`; this table is the design record.
 
       Spacing is the exchange model's own `MARGIN`: the ref is its own block with
       exactly one blank line before and after — `add_block(k, "branch_ref", 1, 1)`.
@@ -626,6 +617,35 @@ entry with one callback, so it would only ever have been reachable from the key
 that says "insert here". `plan_submission` now returns a plan only for the quotes
 case; `exchange_at` and its conformance test went with it rather than staying as
 tested-but-unreachable code.
+
+### 2026-09-07 — 🌿: and 🔒: are single-line annotations (operator)
+
+**11. The parser latched instead of skipping.** Both prefixes set
+`line_before_local`, meaning *"content from here to the end of this component is
+local"*. Right for a section marker, wrong for a one-line annotation, and nothing
+distinguished the two — so a private note dropped early in a long answer silently
+removed the rest of that answer from every later submission, and a note inside a
+question removed the second half of the user's own question. Operator's model,
+now the code's: the line is withheld, the next line is ordinary content.
+Single-line is also the more useful primitive for `🔒:` — notes go anywhere, and
+a multi-line note is several noted lines.
+
+**My blast-radius estimate was wrong, and the operator called it.** I said this
+"touches the parse of essentially every file" because every child chat opens with
+a `🌿:` back-link. Measured: the latch resets at the next `💬:`, so a back-link
+before the first question truncates nothing. Real corpus: 0 of 16 chats affected,
+0 fixtures. The bug only bit mid-component. Same shape as the recurring mistake —
+I verified that the marker is everywhere rather than that its position matters.
+
+**What the fix did need was a hazard I had not seen.** Removing the latch put a
+TRAILING `🌿:` inside the answer's line span, and resubmit deletes
+`question..answer.line_end` — so the reference would have been deleted and the
+child orphaned on disk, BR-19 by another route. The trailing-blank trim now skips
+annotation lines; reverting that turns the span test red. Three existing tests
+encoded the old semantics (one carried the fixture line *"still private because
+line_before_local is set"*) and were updated to the decided contract.
+      (placement is the cursor, not the exchange end) and the 3a/3b split is gone
+      (the chord never deletes).
 
 ### 2026-09-07 — M2 round 11 (FIX-THEN-SHIP) — one reversal of a reversal
 

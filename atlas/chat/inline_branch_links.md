@@ -27,7 +27,7 @@ reference at the cursor** and creates the child it points at:
 | context | what happens | the child gets |
 |---|---|---|
 | visual selection | the selection becomes an inline `[🌿:…](child)` anchor, in place | `tell me more about "<sel>"` |
-| pending `<M-q>` markers | the markers are gathered and stripped exactly as `<M-CR>` would strip them; a `🌿:` line lands at the cursor | those quote blocks as its first question |
+| pending `<M-q>` markers | the markers are gathered and stripped; a `🌿:` line lands at the cursor | those quote blocks as its first question |
 | neither | a bare `🌿:` line at the cursor — a **placeholder** — and the child opens for you to type in | nothing |
 
 **Placement is the cursor, deliberately** (operator, 2026-09-07, revising an
@@ -48,6 +48,15 @@ the child and delete the answer it replaced, mirroring `<M-CR>`'s resubmit. That
 is coherent for a *submission* but not for an *insertion*, and the three keys
 share one callback — so the destructive reading would have been reachable from
 the key that says "insert here". Dropped.
+
+**How far the `<M-CR>` parallel goes.** Both keys gather through the same
+`drill_in.chat_gather_opts`, so the marker removal and the `[…]` span marking are
+identical and follow `mark_reference_span` (they did not before #214 BR-60 —
+`<M-i>` hardcoded brackets on). The **scope** deliberately differs: `<M-i>`
+gathers every pending quote in the buffer, while `<M-CR>` with the cursor inside
+an exchange gathers only that exchange's and does not fall through to the
+whole-buffer path. Branching is a "take all of this elsewhere" gesture; responding
+is "answer this turn".
 
 **Refusals.** The chord declines while the buffer owns a pending response — a
 streaming answer holds a chat lease on its `🤖:` line, and editing under it

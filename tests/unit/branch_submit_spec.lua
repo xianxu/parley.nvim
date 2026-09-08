@@ -72,18 +72,18 @@ describe("branch_submit.plan_submission", function()
     describe("no markers — the planner declines so the caller inserts in place", function()
         it("an unanswered question is a placeholder, not a submission", function()
             local c = chat({ ex(5, 5, 7, 11), ex(13, 13) })
-            local p, reason = bs.plan_submission(c, 13, {})
+            local p, reason = bs.plan_submission(c, 13, false)
             assert.is_nil(p)
             assert.is_truthy(reason)
         end)
 
         it("an ANSWERED question is never destroyed", function()
-            local p = bs.plan_submission(TWO, 5, {})
+            local p = bs.plan_submission(TWO, 5, false)
             assert.is_nil(p, "a bare <M-i> must not plan to delete an answer")
         end)
 
         it("a cursor inside an answer is likewise a placeholder", function()
-            assert.is_nil((bs.plan_submission(TWO, 9, {})))
+            assert.is_nil((bs.plan_submission(TWO, 9, false)))
         end)
     end)
 
@@ -92,22 +92,22 @@ describe("branch_submit.plan_submission", function()
     -- relocating the line elsewhere made the keypress jump.
     describe("case 2 — pending <M-q> markers", function()
         it("the ref lands at the cursor, not at the end of the answer", function()
-            local p = bs.plan_submission(TWO, 9, { { line = 9 } })
+            local p = bs.plan_submission(TWO, 9, true)
             assert.are.equal("quotes", p.case)
             assert.are.equal(9, p.ref_after)
             assert.is_true(p.strip_markers)
             assert.is_nil(p.delete_lines, "case 2 preserves the original Q/A")
         end)
 
-        it("the cursor governs even when the markers are elsewhere", function()
-            local p = bs.plan_submission(TWO, 17, { { line = 9 } })
+        it("the cursor governs, wherever the markers are", function()
+            local p = bs.plan_submission(TWO, 17, true)
             assert.are.equal(17, p.ref_after)
         end)
 
         it("markers win over the question case — <M-CR> resolves them first", function()
             -- atlas/chat/drill_in.md: "Drill-in detection runs BEFORE resubmit
             -- handling"; the original answer is preserved.
-            local p = bs.plan_submission(TWO, 5, { { line = 9 } })
+            local p = bs.plan_submission(TWO, 5, true)
             assert.are.equal("quotes", p.case)
             assert.is_nil(p.delete_lines)
         end)
@@ -115,7 +115,7 @@ describe("branch_submit.plan_submission", function()
         it("markers work from a cursor outside every exchange", function()
             -- The question case declines there (it would delete an answer the
             -- user never pointed at); the quotes case has no such hazard.
-            local p = bs.plan_submission(TWO, 1, { { line = 9 } })
+            local p = bs.plan_submission(TWO, 1, true)
             assert.are.equal("quotes", p.case)
             assert.are.equal(1, p.ref_after)
         end)
@@ -130,9 +130,33 @@ describe("branch_submit.plan_submission", function()
 
         it("a question with no text has nothing to submit", function()
             local c = chat({ { question = { line_start = 5, line_end = 5, content = "  " } } })
-            local p, reason = bs.plan_submission(c, 5, {})
+            local p, reason = bs.plan_submission(c, 5, false)
             assert.is_nil(p)
             assert.is_truthy(reason)
         end)
+    end)
+end)
+
+-- #214 BR-60: the chord's claim is that it strips the way `<M-CR>` strips, so
+-- both must gather with the SAME options. `<M-i>` hardcoded `bracket = true`
+-- while chat_respond read `config.mark_reference_span`, so with that option off
+-- branching injected `[…]` brackets into the parent that responding would not.
+describe("both keys gather with one set of options (#214 BR-60)", function()
+    local drill_in = require("parley.drill_in")
+
+    it("bracket follows mark_reference_span", function()
+        assert.is_true(drill_in.chat_gather_opts({ mark_reference_span = true }).bracket)
+        assert.is_false(drill_in.chat_gather_opts({ mark_reference_span = false }).bracket)
+        assert.is_true(drill_in.chat_gather_opts({}).bracket, "default is on")
+    end)
+
+    it("neither call site builds the options itself", function()
+        for _, path in ipairs({ "lua/parley/init.lua", "lua/parley/chat_respond.lua" }) do
+            local src = table.concat(vim.fn.readfile(path), "\n")
+            local body = src:gsub("\n%s*%-%-[^\n]*", "")   -- drop comments
+            assert.is_nil(body:find("bracket = ", 1, true),
+                path .. " builds gather options inline again — use "
+                .. "drill_in.chat_gather_opts so the two keys cannot drift")
+        end
     end)
 end)

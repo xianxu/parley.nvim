@@ -1,9 +1,14 @@
 -- parley/branch_submit.lua — the PURE half of `<M-S-CR>` (#214 M3).
 --
--- The chord is one rule:
---
---     <M-S-CR> performs the submission <M-CR> would perform, into a new child
---     chat, and leaves a 🌿: reference where <M-CR>'s output would have appeared.
+-- The chord inserts a branch reference at the cursor and creates the child it
+-- points at. Where pending <M-q> markers exist it gathers them into that child,
+-- stripping them from the parent through the SAME `drill_in.chat_gather_opts`
+-- `<M-CR>` uses — so removal and `[…]` span marking match, and both follow
+-- `mark_reference_span`. The SCOPE differs on purpose: this gathers every
+-- pending quote in the buffer, while `<M-CR>` inside an exchange gathers only
+-- that exchange's. Branching takes all of it elsewhere; responding answers a
+-- turn. An earlier header claimed the two were equivalent, which was never true
+-- of scope and stopped being true of brackets (#214 BR-60).
 --
 -- This module decides *what* that means for a given cursor position: which case
 -- applies, what the child is seeded with, which parent line the reference
@@ -72,19 +77,19 @@ end
 ---
 --- @param parsed_chat table   chat_parser output
 --- @param cursor_line integer 1-indexed
---- @param markers table[]     ready drill-in markers, each carrying `line`
+--- @param has_markers boolean whether the gather found anything to rearrange
 --- @return table|nil plan, string|nil reason
 --- plan = {
 ---   case          = "quotes",
 ---   ref_after     = integer,  -- parent line the 🌿: block follows (the cursor)
 ---   strip_markers = true,
 --- }
-function M.plan_submission(parsed_chat, cursor_line, markers)
+function M.plan_submission(parsed_chat, cursor_line, has_markers)
     local exchanges = (parsed_chat or {}).exchanges or {}
     if #exchanges == 0 then
         return nil, "no exchange to branch from"
     end
-    if not (markers and #markers > 0) then
+    if not has_markers then
         return nil, "no pending 🤖 markers — inserting a plain reference"
     end
     return {
