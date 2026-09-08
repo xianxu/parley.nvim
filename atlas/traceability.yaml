@@ -693,6 +693,7 @@ atlas:
       - lua/parley/keybinding_registry.lua
       - lua/parley/branch_ref.lua
       - lua/parley/branch_submit.lua
+      - lua/parley/annotation.lua
       - lua/parley/interview.lua
       - lua/parley/float_picker.lua
       - lua/parley/skills/review/init.lua

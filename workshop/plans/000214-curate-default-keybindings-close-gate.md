@@ -1589,6 +1589,137 @@ rounds:
           round: 15
       boundary: M3
       blocked: true
+    - "n": 16
+      timestamp: "2026-09-07T19:21:28-07:00"
+      agent: claude
+      dispose:
+        - id: BR-66
+          disposition: addressed
+          note: inline re-match retired; single owner exists, though outside highlight_structure — see I1.
+          round: 16
+        - id: BR-71
+          disposition: not-addressed
+          note: init.lua:2281 still parses before the gather at :2289; the comment claims the reverse ordering.
+          round: 16
+        - id: BR-72
+          disposition: not-addressed
+          note: init.lua:2340 and :2351 remain unguarded after the pcall'd create at :2317; insert_inline is a second site.
+          round: 16
+        - id: BR-73
+          disposition: not-addressed
+          note: branch_submit_spec.lua:125 still passes `{}` for a boolean; :131 still names a content check plan_submission never makes.
+          round: 16
+        - id: BR-74
+          disposition: not-addressed
+          note: numbering is now unique 4-17 and all under Revisions, but the two-line fragment at issue :807-808 is still dangling.
+          round: 16
+        - id: BR-75
+          disposition: addressed
+          note: 'verified by reversion — three assertions in annotation_lines_spec go red without the fix. Class incomplete: see C1.'
+          round: 16
+        - id: BR-76
+          disposition: addressed
+          note: citations now use dated headings and the section states the rule; no ordinal citations remain in issue or plan.
+          round: 16
+        - id: BR-77
+          disposition: not-addressed
+          note: helper.lua:116 and drill_in.lua:345 unchanged; this round added a third site at buffer_edit.lua:96.
+          round: 16
+        - id: BR-78
+          disposition: addressed
+          note: plan table synced with (as built) rows and the two records labelled; delete_answer is still absent from the issue's table.
+          round: 16
+      findings:
+        - id: BR-79
+          severity: Critical
+          title: "an inline [\U0001F33F:…](child.md) inside an answer is still destroyed by a resubmit, orphaning the child"
+          detail: "This is the 3rd finding in family `merged-path-loses-original-effect`. Do not fix\nthe inline case as an instance — the rule is: the survivor set of a resubmit is\nevery user-authored pointer to a durable artifact inside the deleted span, derived\nfrom the parser's own branch/annotation extraction rather than from a line-prefix\ntest. `is_annotation` answers \"does this line START with a prefix\", which is\nstrictly narrower than \"does this line carry a reference\".\nMeasured end-to-end: driving the real visual chord\n(_branch_inserters(buf,false,true).v()) over text inside an answer in a chat buffer\nproduces `the answer talks about m[\U0001F33F:onads ](2026-09-07.19-18-20.725.md)here`,\ncreates the child on disk and writes the parent; the parser reports branches=1.\nbuffer_edit.delete_answer(buf, question.line_end, answer.line_end - 1) — the exact\ncall at chat_respond.lua:1436 — then leaves the buffer at `\U0001F4AC: first question` with\nthe link gone and the child unreachable. Identical consequence to BR-75, one\nposition over on the same axis, on a path README.md and\natlas/chat/inline_branch_links.md both document first.\nFix: extract a pure `annotation.survivors(lines, cfg)` that keeps annotation-prefixed\nlines AND lines carrying an inline branch link (reusing\nchat_parser.extract_inline_branch_links, not a second matcher); pin with a resubmit\ntest carrying a full-line \U0001F33F:, a full-line \U0001F512: and an inline [\U0001F33F:…](f) at once."
+          family: merged-path-loses-original-effect
+          round: 16
+        - id: BR-80
+          severity: Important
+          title: annotation.is_annotation fabricates the shipped prefixes for a missing live config, the shape is_partition exists to forbid
+          detail: |-
+            lua/parley/annotation.lua:16-28 does `cfg = cfg or {}` then
+            `cfg.chat_branch_prefix or M.DEFAULTS.branch`. highlight_structure.is_partition
+            (:180-187) refuses exactly this in a comment naming the incident it cost: "No
+            `patterns or M.patterns()` default. Silently falling back to the shipped prefixes is
+            exactly BR-2 ... at two call sites, twice. An assert makes that state
+            unrepresentable instead of auditable." annotation.lua is a NEW internal module whose
+            surface downstream code will consume, and it ships the banned affordance as its
+            documented default; buffer_edit.delete_answer:117 reaches it through
+            `require("parley").config`, populated only inside setup() at init.lua:540, so the
+            fallback is live surface. ARCH-SECURE (a value fabricated rather than parsed) and
+            ARCH-DRY (M.DEFAULTS is a third hardcoded copy of config.lua:283,285).
+            Related: chat_parser.lua:307-310 claims parley.annotation "owns that question for
+            the whole codebase" while highlight_structure.classify:98-99 and is_partition:196-197
+            still answer it independently — and parse_chat already holds the compiled
+            `decoration_patterns` it could have asked.
+            Fix: assert a live config (or take compiled `patterns` like is_partition does) and
+            delete M.DEFAULTS.
+          family: silent-fallback-to-shipped-default
+          round: 16
+        - id: BR-81
+          severity: Minor
+          title: two live comments still assert the line_before_local latch this window deleted
+          detail: "This is the 6th finding in family `stale-comment-after-move`. Do not fix the two\nsites — the rule is: a commit that removes a mechanism greps for its name and\nupdates or deletes every prose reference in the same commit.\nbranch_submit.lua:26-31 (\"The cost is measured and real: \U0001F33F: sets the parser's\nline_before_local ... so answer text AFTER a mid-answer reference is excluded from\nthe LLM context and the exchange model truncates that exchange\") and\nbranch_child_spec.lua:408-412 both state a behaviour b9fc6c8 removed INSIDE this\nwindow, and which README.md and atlas/chat/parsing.md now describe the opposite way.\n`grep -rn line_before_local lua/ tests/` returns these two live claims plus four\ncorrectly-historical ones."
+          family: stale-comment-after-move
+          round: 16
+        - id: BR-82
+          severity: Minor
+          title: annotation.lua is in no traceability entry, and its spec is filed under the atlas doc it does not verify
+          detail: |-
+            This is the 3rd finding in family `artifact-missing-from-its-index`. Do not fix the
+            two rows — the rule is: a new module and its spec are routed under the atlas doc
+            whose contract they implement, in the commit that adds them.
+            lua/parley/annotation.lua appears nowhere in atlas/traceability.yaml (branch_submit.lua
+            was added in the same window; this one was not) and nowhere in atlas/ at all.
+            tests/unit/annotation_lines_spec.lua is filed under ui/keybindings:tests (:704) while
+            atlas/chat/parsing.md cites it by name as the spec asserting the parsing contract —
+            so `make test-changed` on atlas/chat/parsing.md does not run it. The Core-concepts
+            arch guard cannot catch either, because it only matches `+function M.x(` and
+            `+M.x = <rhs>` and misses the `_H.x = function` helper idiom that flatten_lines uses.
+          family: artifact-missing-from-its-index
+          round: 16
+        - id: BR-83
+          severity: Minor
+          title: the M3 plan ticks its own milestone-close, and two steps still describe superseded decisions
+          detail: "This is the 3rd finding in family `plan-not-revised-after-decision-change`. Do not\nfix the three rows — the rule is: when a decision is superseded, the same edit\nsweeps every step, risk and checkbox that depends on it; and a checkbox is ticked by\nthe action, never in advance.\nworkshop/plans/000214-branch-submit-m3-plan.md:330 ticks `sdlc milestone-close\n--issue 214 --milestone M3` although this review IS that gate and the issue's `## Log`\ncarries no M3 entry. :322 ticks \"including the measured reason the ref follows \U0001F4DD:\"\nfor docs that now say placement is the cursor. The \"Open risks\" block still names\ncase 2b's \"last exchange\", which the narrowing removed."
+          family: plan-not-revised-after-decision-change
+          round: 16
+        - id: BR-84
+          severity: Minor
+          title: delete_answer's doc claims survivors do not drift to the end; in the composed resubmit they do
+          detail: |-
+            This is the 9th finding in family `docs-assert-unverified-behavior`. Do not fix the
+            sentence — the rule is: a sentence describing a COMPOSED flow is backed by a test
+            that runs that flow, or it is narrowed to what the function itself does.
+            buffer_edit.lua:108-109 says survivors are re-inserted "at the deletion point, so the
+            reference stays attached to the exchange it annotates rather than drifting to the
+            end". Running the real sequence (delete_answer -> reparse -> from_parsed_chat ->
+            block_start -> the blank cleanup and insert_lines_at at chat_respond.lua:1550-1578)
+            inserts the regenerated answer shell ABOVE the survivors, so a mid-answer reference
+            lands at the end of the new answer. Benign, but unasserted: every test calls
+            delete_answer directly, including the one named "end-to-end"
+            (branch_child_spec.lua:1024).
+          family: docs-assert-unverified-behavior
+          round: 16
+        - id: BR-85
+          severity: Minor
+          title: workshop/000214-smoke.md sits at the workshop root, which names no datatype
+          detail: |-
+            This is the 3rd finding in family `scratch-artifact-swept-into-commit`. Do not just
+            move the file — the rule is: a workshop artifact lives in the subdirectory its
+            datatype names (issues/, plans/, parley/, pensive/, projects/, targets/, vision/);
+            nothing lands at workshop/ root. This is guard-enforceable.
+            NOTE: this arrived in ddb5614, which is OUTSIDE the pinned review window
+            (d5ba3eb..87ecc53). The working tree is two commits ahead of the pinned head —
+            3d8ab7b and ddb5614 have not been reviewed by any gate. Re-pin or review them
+            before recording the M3 verdict.
+          family: scratch-artifact-swept-into-commit
+          round: 16
+      boundary: M3
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#214 (boundary-review)
@@ -2495,6 +2626,114 @@ sections, and the move stranded a two-line fragment at issue :647-648.
   also omits ref_block and chat_gather_opts, which the issue's table does carry
   — so the two tables disagree about what M3 delivered.
 
+## Round 16 — 2026-09-07T19:21:28-07:00 (claude) — BLOCKED
+
+### Disposed
+
+- BR-66 — addressed — inline re-match retired; single owner exists, though outside highlight_structure — see I1.
+- BR-71 — not-addressed — init.lua:2281 still parses before the gather at :2289; the comment claims the reverse ordering.
+- BR-72 — not-addressed — init.lua:2340 and :2351 remain unguarded after the pcall'd create at :2317; insert_inline is a second site.
+- BR-73 — not-addressed — branch_submit_spec.lua:125 still passes `{}` for a boolean; :131 still names a content check plan_submission never makes.
+- BR-74 — not-addressed — numbering is now unique 4-17 and all under Revisions, but the two-line fragment at issue :807-808 is still dangling.
+- BR-75 — addressed — verified by reversion — three assertions in annotation_lines_spec go red without the fix. Class incomplete: see C1.
+- BR-76 — addressed — citations now use dated headings and the section states the rule; no ordinal citations remain in issue or plan.
+- BR-77 — not-addressed — helper.lua:116 and drill_in.lua:345 unchanged; this round added a third site at buffer_edit.lua:96.
+- BR-78 — addressed — plan table synced with (as built) rows and the two records labelled; delete_answer is still absent from the issue's table.
+
+### Raised
+
+- **BR-79** [Critical] `merged-path-loses-original-effect` an inline [🌿:…](child.md) inside an answer is still destroyed by a resubmit, orphaning the child
+  This is the 3rd finding in family `merged-path-loses-original-effect`. Do not fix
+  the inline case as an instance — the rule is: the survivor set of a resubmit is
+  every user-authored pointer to a durable artifact inside the deleted span, derived
+  from the parser's own branch/annotation extraction rather than from a line-prefix
+  test. `is_annotation` answers "does this line START with a prefix", which is
+  strictly narrower than "does this line carry a reference".
+  Measured end-to-end: driving the real visual chord
+  (_branch_inserters(buf,false,true).v()) over text inside an answer in a chat buffer
+  produces `the answer talks about m[🌿:onads ](2026-09-07.19-18-20.725.md)here`,
+  creates the child on disk and writes the parent; the parser reports branches=1.
+  buffer_edit.delete_answer(buf, question.line_end, answer.line_end - 1) — the exact
+  call at chat_respond.lua:1436 — then leaves the buffer at `💬: first question` with
+  the link gone and the child unreachable. Identical consequence to BR-75, one
+  position over on the same axis, on a path README.md and
+  atlas/chat/inline_branch_links.md both document first.
+  Fix: extract a pure `annotation.survivors(lines, cfg)` that keeps annotation-prefixed
+  lines AND lines carrying an inline branch link (reusing
+  chat_parser.extract_inline_branch_links, not a second matcher); pin with a resubmit
+  test carrying a full-line 🌿:, a full-line 🔒: and an inline [🌿:…](f) at once.
+- **BR-80** [Important] `silent-fallback-to-shipped-default` annotation.is_annotation fabricates the shipped prefixes for a missing live config, the shape is_partition exists to forbid
+  lua/parley/annotation.lua:16-28 does `cfg = cfg or {}` then
+  `cfg.chat_branch_prefix or M.DEFAULTS.branch`. highlight_structure.is_partition
+  (:180-187) refuses exactly this in a comment naming the incident it cost: "No
+  `patterns or M.patterns()` default. Silently falling back to the shipped prefixes is
+  exactly BR-2 ... at two call sites, twice. An assert makes that state
+  unrepresentable instead of auditable." annotation.lua is a NEW internal module whose
+  surface downstream code will consume, and it ships the banned affordance as its
+  documented default; buffer_edit.delete_answer:117 reaches it through
+  `require("parley").config`, populated only inside setup() at init.lua:540, so the
+  fallback is live surface. ARCH-SECURE (a value fabricated rather than parsed) and
+  ARCH-DRY (M.DEFAULTS is a third hardcoded copy of config.lua:283,285).
+  Related: chat_parser.lua:307-310 claims parley.annotation "owns that question for
+  the whole codebase" while highlight_structure.classify:98-99 and is_partition:196-197
+  still answer it independently — and parse_chat already holds the compiled
+  `decoration_patterns` it could have asked.
+  Fix: assert a live config (or take compiled `patterns` like is_partition does) and
+  delete M.DEFAULTS.
+- **BR-81** [Minor] `stale-comment-after-move` two live comments still assert the line_before_local latch this window deleted
+  This is the 6th finding in family `stale-comment-after-move`. Do not fix the two
+  sites — the rule is: a commit that removes a mechanism greps for its name and
+  updates or deletes every prose reference in the same commit.
+  branch_submit.lua:26-31 ("The cost is measured and real: 🌿: sets the parser's
+  line_before_local ... so answer text AFTER a mid-answer reference is excluded from
+  the LLM context and the exchange model truncates that exchange") and
+  branch_child_spec.lua:408-412 both state a behaviour b9fc6c8 removed INSIDE this
+  window, and which README.md and atlas/chat/parsing.md now describe the opposite way.
+  `grep -rn line_before_local lua/ tests/` returns these two live claims plus four
+  correctly-historical ones.
+- **BR-82** [Minor] `artifact-missing-from-its-index` annotation.lua is in no traceability entry, and its spec is filed under the atlas doc it does not verify
+  This is the 3rd finding in family `artifact-missing-from-its-index`. Do not fix the
+  two rows — the rule is: a new module and its spec are routed under the atlas doc
+  whose contract they implement, in the commit that adds them.
+  lua/parley/annotation.lua appears nowhere in atlas/traceability.yaml (branch_submit.lua
+  was added in the same window; this one was not) and nowhere in atlas/ at all.
+  tests/unit/annotation_lines_spec.lua is filed under ui/keybindings:tests (:704) while
+  atlas/chat/parsing.md cites it by name as the spec asserting the parsing contract —
+  so `make test-changed` on atlas/chat/parsing.md does not run it. The Core-concepts
+  arch guard cannot catch either, because it only matches `+function M.x(` and
+  `+M.x = <rhs>` and misses the `_H.x = function` helper idiom that flatten_lines uses.
+- **BR-83** [Minor] `plan-not-revised-after-decision-change` the M3 plan ticks its own milestone-close, and two steps still describe superseded decisions
+  This is the 3rd finding in family `plan-not-revised-after-decision-change`. Do not
+  fix the three rows — the rule is: when a decision is superseded, the same edit
+  sweeps every step, risk and checkbox that depends on it; and a checkbox is ticked by
+  the action, never in advance.
+  workshop/plans/000214-branch-submit-m3-plan.md:330 ticks `sdlc milestone-close
+  --issue 214 --milestone M3` although this review IS that gate and the issue's `## Log`
+  carries no M3 entry. :322 ticks "including the measured reason the ref follows 📝:"
+  for docs that now say placement is the cursor. The "Open risks" block still names
+  case 2b's "last exchange", which the narrowing removed.
+- **BR-84** [Minor] `docs-assert-unverified-behavior` delete_answer's doc claims survivors do not drift to the end; in the composed resubmit they do
+  This is the 9th finding in family `docs-assert-unverified-behavior`. Do not fix the
+  sentence — the rule is: a sentence describing a COMPOSED flow is backed by a test
+  that runs that flow, or it is narrowed to what the function itself does.
+  buffer_edit.lua:108-109 says survivors are re-inserted "at the deletion point, so the
+  reference stays attached to the exchange it annotates rather than drifting to the
+  end". Running the real sequence (delete_answer -> reparse -> from_parsed_chat ->
+  block_start -> the blank cleanup and insert_lines_at at chat_respond.lua:1550-1578)
+  inserts the regenerated answer shell ABOVE the survivors, so a mid-answer reference
+  lands at the end of the new answer. Benign, but unasserted: every test calls
+  delete_answer directly, including the one named "end-to-end"
+  (branch_child_spec.lua:1024).
+- **BR-85** [Minor] `scratch-artifact-swept-into-commit` workshop/000214-smoke.md sits at the workshop root, which names no datatype
+  This is the 3rd finding in family `scratch-artifact-swept-into-commit`. Do not just
+  move the file — the rule is: a workshop artifact lives in the subdirectory its
+  datatype names (issues/, plans/, parley/, pensive/, projects/, targets/, vision/);
+  nothing lands at workshop/ root. This is guard-enforceable.
+  NOTE: this arrived in ddb5614, which is OUTSIDE the pinned review window
+  (d5ba3eb..87ecc53). The working tree is two commits ahead of the pinned head —
+  3d8ab7b and ddb5614 have not been reviewed by any gate. Re-pin or review them
+  before recording the M3 verdict.
+
 ## Open findings
 
 - **BR-2** [Important] `pure-extraction-without-tests` New pure module lua/parley/branch_ref.lua has zero tests and is absent from traceability.yaml
@@ -2521,12 +2760,15 @@ sections, and the move stranded a two-line fragment at issue :647-648.
 - **BR-55** [Minor] `derive-before-validate` _explicit_shortcuts is computed from raw opts before setup() strips malformed values
 - **BR-56** [Minor] `test-does-not-pin-the-fix` the BR-48 derived guard uses an unanchored substring, so 8 of 15 dotted knobs cannot fail it
 - **BR-57** [Minor] `markdown-block-not-separated` README's "Every knob is named in config.lua" is swallowed into the preceding bullet
-- **BR-66** [Minor] `duplicate-helper-not-retired` annotation_line re-implements the classifier's predicate while its comment claims it reuses it
 - **BR-71** [Minor] `derive-before-validate` a full parse_chat runs on every M-i press to answer only "are there zero exchanges"
 - **BR-72** [Minor] `partial-effect-not-committed` BR-63 moved the point of no return, and the effects after it are now the unguarded ones
 - **BR-73** [Minor] `test-does-not-pin-the-fix` two plan_submission decline tests are green for reasons unrelated to their names
 - **BR-74** [Minor] `markdown-block-not-separated` a stranded two-line fragment remains at the issue's :647-648 after revision 11 was moved
-- **BR-75** [Critical] `merged-path-loses-original-effect` a mid-component 🌿:/🔒: annotation is inside the span a resubmit deletes, so <M-CR> destroys the reference the chord just inserted
-- **BR-76** [Important] `reference-written-in-unresolvable-form` the BR-67 revision renumbering invalidated five cross-references, which now point at unrelated decisions
 - **BR-77** [Minor] `markdown-block-not-separated` two new functions were spliced into the middle of an adjacent function's doc-comment block
-- **BR-78** [Minor] `artifact-missing-from-its-index` helper.flatten_lines shipped as a new exported pure entity with no Core-concepts row
+- **BR-79** [Critical] `merged-path-loses-original-effect` an inline [🌿:…](child.md) inside an answer is still destroyed by a resubmit, orphaning the child
+- **BR-80** [Important] `silent-fallback-to-shipped-default` annotation.is_annotation fabricates the shipped prefixes for a missing live config, the shape is_partition exists to forbid
+- **BR-81** [Minor] `stale-comment-after-move` two live comments still assert the line_before_local latch this window deleted
+- **BR-82** [Minor] `artifact-missing-from-its-index` annotation.lua is in no traceability entry, and its spec is filed under the atlas doc it does not verify
+- **BR-83** [Minor] `plan-not-revised-after-decision-change` the M3 plan ticks its own milestone-close, and two steps still describe superseded decisions
+- **BR-84** [Minor] `docs-assert-unverified-behavior` delete_answer's doc claims survivors do not drift to the end; in the composed resubmit they do
+- **BR-85** [Minor] `scratch-artifact-swept-into-commit` workshop/000214-smoke.md sits at the workshop root, which names no datatype

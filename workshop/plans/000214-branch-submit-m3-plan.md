@@ -27,6 +27,8 @@
 | `ref_block` | `lua/parley/branch_ref.lua` | new *(as built)* |
 | `chat_gather_opts` | `lua/parley/drill_in.lua` | new *(as built)* |
 | `is_annotation` | `lua/parley/annotation.lua` | new *(as built)* |
+| `inline_links` | `lua/parley/annotation.lua` | new *(as built)* |
+| `survivors` | `lua/parley/annotation.lua` | new *(as built)* |
 
 - **`plan_submission`** — `(parsed_chat, cursor_line, markers) -> plan`. Decides
   whether there is anything to rearrange and where the reference goes; performs

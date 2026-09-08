@@ -1566,3 +1566,38 @@ positions.
 4. **Renumbering a list breaks every ordinal citation into it.** Consolidating
    `## Revisions` silently re-pointed five references at unrelated decisions.
    Cite by heading or date — a form the cited artifact cannot invalidate.
+
+## #214 M3 — positions are not forms
+
+Three rounds in a row on one hazard. Removing the parser latch made `🌿:`/`🔒:`
+part of an answer's span, so a resubmit — which deletes the span and regenerates
+— started destroying them.
+
+- Round 1: I fixed the **trailing** position, wrote the test, wrote a comment
+  explaining that otherwise the child would be orphaned.
+- Round 2: review found the **middle** position, which the operator's placement
+  decision had just made the common one. I fixed it at the operation
+  (`delete_answer` keeps annotations) reasoning that this covers *every position
+  at once*.
+- Round 3: review found the **inline** form — `[🌿:anchor](file)`, which is what
+  the visual branch exists to produce. My predicate was `vim.startswith`.
+
+"Every position at once" was true and still insufficient, because I had
+enumerated the axis I could already see. Leading/middle/trailing is one axis;
+line-start versus inline is another, and the second one is where the feature's
+own headline case lives.
+
+**Rules.**
+
+1. **After enumerating one axis, ask what the other axis is.** Position and form
+   are different axes. So are "in a question" versus "in an answer", "one" versus
+   "many", "alone on a line" versus "embedded". A sweep along one axis reads as
+   thorough and is not.
+2. **Enumerate from the FEATURE's cases, not from the bug report's shape.** The
+   chord has three cases and one of them produces an inline link. Walking the
+   feature would have found it; walking the finding did not.
+3. **A required argument beats a defaulted one when a wrong answer destroys
+   data.** `is_annotation` first defaulted its prefixes when config was missing,
+   which silently answered for a caller that had not threaded config through.
+   Asserting instead immediately exposed that `delete_answer` was reading plugin
+   state a unit spec had never set up. (Same shape as #215's `is_partition`.)

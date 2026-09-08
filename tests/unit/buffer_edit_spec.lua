@@ -89,7 +89,9 @@ end)
 describe("buffer_edit.delete_answer", function()
     it("deletes the answer region (inclusive line range)", function()
         local b = mk_buf({ "💬: q", "🤖: [A]", "answer", "💬: q2" })
-        be.delete_answer(b, 1, 2)
+        -- delete_answer needs the annotation prefixes; pass a stub rather than
+        -- reaching for plugin state a unit spec has not set up (#214 BR-80).
+        be.delete_answer(b, 1, 2, { chat_branch_prefix = "🌿:", chat_local_prefix = "🔒:" })
         assert.same({ "💬: q", "💬: q2" }, buf_lines(b))
     end)
 end)

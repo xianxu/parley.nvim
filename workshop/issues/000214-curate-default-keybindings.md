@@ -294,6 +294,8 @@ Derivation notes:
 | `plan_submission` | `lua/parley/branch_submit.lua` | new |
 | `chat_gather_opts` | `lua/parley/drill_in.lua` | new |
 | `is_annotation` | `lua/parley/annotation.lua` | new |
+| `inline_links` | `lua/parley/annotation.lua` | new |
+| `survivors` | `lua/parley/annotation.lua` | new |
 | `seed_question` | `lua/parley/branch_submit.lua` | new |
 
 - **`branch_ref`** — the line-editing half of a branch reference: build the
@@ -324,6 +326,13 @@ Derivation notes:
     reference lands at the cursor, and the chord never deletes — removed the
     question case entirely. Recorded here rather than left as a table describing
     code that does not exist.
+- **`survivors`** — what must outlive a regenerated answer. Two FORMS, which is
+  the distinction three rounds kept missing: a line-start annotation survives
+  verbatim, and an inline `[🌿:anchor](file)` survives as a **standalone**
+  reference — the prose around it belonged to the answer being replaced, but the
+  link is the only pointer to a child on disk. Enumerating line *positions*
+  (leading/middle/trailing) is not enumerating forms, and the visual branch —
+  the case that exists to produce an inline link — kept losing its child.
 - **`is_annotation`** — one owner for "does this line start a `🌿:`/`🔒:`
   annotation". The parser's trailing-span trim, the resubmit's survivor filter
   and the arch guard all need that answer; spelled three times, a fourth caller

@@ -20,6 +20,11 @@ Then, the two that used to be broken:
 
 - **1.4** after 1.3, put the cursor on that same question and `<M-CR>` (resubmit).
   The `🌿:` line must **survive**. It used to be deleted, orphaning the child.
+- **1.4b** the same after **1.1** (the visual case): resubmit that question, and
+  the inline `[🌿:phrase](file)` must survive too — it is reformatted into a
+  standalone `🌿:` line, because the sentence around it belonged to the answer
+  being replaced. This was a separate bug from 1.4: the fix for the line form did
+  not cover the inline one.
 - **1.5** open the child from 1.3. It must contain real lines — not `^@^@`
   between the quotes. That was the NUL bug you caught.
 - **1.6** while a response is streaming, press `<M-i>` in that chat. It should

@@ -110,17 +110,13 @@ end
 --- @param buf integer
 --- @param line_start_0_indexed integer
 --- @param line_end_0_indexed integer
-function M.delete_answer(buf, line_start_0_indexed, line_end_0_indexed)
+--- @param cfg table  parley config — REQUIRED, so the prefixes come from the
+---                   caller rather than from module state this function happens
+---                   to be able to reach (#214 BR-80)
+function M.delete_answer(buf, line_start_0_indexed, line_end_0_indexed, cfg)
     local doomed = vim.api.nvim_buf_get_lines(
         buf, line_start_0_indexed, line_end_0_indexed + 1, false)
-    local annotation = require("parley.annotation")
-    local cfg = require("parley").config
-    local keep = {}
-    for _, line in ipairs(doomed) do
-        if annotation.is_annotation(line, cfg) then
-            keep[#keep + 1] = line
-        end
-    end
+    local keep = require("parley.annotation").survivors(doomed, cfg)
     if #keep > 0 then
         -- one blank line above the kept block, so it does not abut the question
         table.insert(keep, 1, "")

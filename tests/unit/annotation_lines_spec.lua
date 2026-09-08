@@ -140,7 +140,7 @@ describe("a resubmit preserves annotations (#214 BR-75)", function()
     local function after_delete(lines, from_1, to_1)
         local buf = vim.api.nvim_create_buf(false, true)
         vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-        buffer_edit.delete_answer(buf, from_1, to_1 - 1)
+        buffer_edit.delete_answer(buf, from_1, to_1 - 1, test_config)
         local out = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
         vim.api.nvim_buf_delete(buf, { force = true })
         return out
@@ -177,6 +177,38 @@ describe("a resubmit preserves annotations (#214 BR-75)", function()
             if l:match("^🔒:") or l:match("^🌿:") then kept[#kept + 1] = l end
         end
         assert.same({ "🔒: one", "🌿: c.md: two" }, kept)
+    end)
+
+    -- BR-79: the same hazard in the INLINE form. `<M-i>` on a visual selection
+    -- leaves `[🌿:anchor](child.md)` embedded in the answer's prose — that is
+    -- the whole point of the visual case — and my first fix matched only
+    -- LINE-START prefixes, so a resubmit deleted the line and the child with it.
+    -- Enumerating line positions was not enumerating FORMS.
+    it("keeps an inline [🌿:…](file) link, as a standalone reference", function()
+        local out = after_delete({
+            "💬: q", "", "🤖:[A]", "",
+            "A [🌿:monad](2026-09-07.child.md) wraps a value.", "",
+            "more answer", "", "📝: sum",
+        }, 1, 9)
+        local joined = table.concat(out, "\n")
+        assert.is_truthy(joined:find("2026-09-07.child.md", 1, true),
+            "the resubmit destroyed the only pointer to the child: " .. vim.inspect(out))
+        assert.is_truthy(joined:find("monad", 1, true),
+            "the anchor text is the label; it should survive as one")
+        assert.is_nil(joined:find("wraps a value", 1, true),
+            "the stale answer prose was kept along with the link")
+    end)
+
+    it("keeps several inline links from one answer", function()
+        local out = after_delete({
+            "💬: q", "", "🤖:[A]", "",
+            "See [🌿:one](a.md) and also [🌿:two](b.md).", "",
+            "and [🌿:three](c.md) here", "", "📝: sum",
+        }, 1, 9)
+        local joined = table.concat(out, "\n")
+        for _, f in ipairs({ "a.md", "b.md", "c.md" }) do
+            assert.is_truthy(joined:find(f, 1, true), f .. " was lost")
+        end
     end)
 
     it("still removes the answer when there is nothing to keep", function()

@@ -1012,6 +1012,45 @@ describe("a resubmit does not orphan the child <M-i> just made (#214 BR-75)", fu
         vim.fn.delete(tmpdir, "rf")
     end)
 
+    -- BR-79 end-to-end: the VISUAL case, which is the one that produces an
+    -- inline link inside the answer. <M-i> on a selection, then a resubmit of
+    -- that exchange, must not orphan the child.
+    it("an inline link from a visual branch survives a resubmit", function()
+        parley.setup({})
+        tmpdir = vim.fn.tempname()
+        vim.fn.mkdir(tmpdir, "p")
+        parent_path = tmpdir .. "/2026-09-06.10-00-00.000_parent.md"
+        vim.fn.writefile({ "---", "topic: t", "file: f", "---", "",
+                           "💬: how do monads work?", "", "🤖:[A]", "",
+                           "A monad wraps a value with context.", "", "📝: sum" }, parent_path)
+        vim.cmd("edit " .. vim.fn.fnameescape(parent_path))
+        parent_buf = vim.api.nvim_get_current_buf()
+        parley.config.chat_dir = tmpdir
+        parley.prep_chat(parent_buf, parent_path)
+
+        vim.api.nvim_win_set_cursor(0, { 10, 2 })
+        vim.cmd("normal! v" .. string.rep("l", 4))     -- "monad"
+        parley._branch_inserters(parent_buf, false, true).v()
+
+        local l = vim.api.nvim_buf_get_lines(parent_buf, 0, -1, false)
+        local child
+        for _, line in ipairs(l) do
+            child = child or line:match("%]%(([^%)]+)%)")
+        end
+        assert.is_truthy(child, "no inline link was created")
+        assert.are.equal(1, vim.fn.filereadable(tmpdir .. "/" .. child),
+            "the child is not on disk")
+
+        local parsed = parley.parse_chat(l, parley.chat_parser.find_header_end(l))
+        local ex = parsed.exchanges[1]
+        require("parley.buffer_edit").delete_answer(
+            parent_buf, ex.question.line_end, ex.answer.line_end - 1, parley.config)
+
+        local after = table.concat(vim.api.nvim_buf_get_lines(parent_buf, 0, -1, false), "\n")
+        assert.is_truthy(after:find(child, 1, true),
+            "the resubmit deleted the inline link, orphaning " .. child)
+    end)
+
     it("the reference survives the delete_answer a resubmit performs", function()
         parley.setup({})
         tmpdir = vim.fn.tempname()
@@ -1040,7 +1079,7 @@ describe("a resubmit does not orphan the child <M-i> just made (#214 BR-75)", fu
         local parsed = parley.parse_chat(l, parley.chat_parser.find_header_end(l))
         local ex = parsed.exchanges[1]
         require("parley.buffer_edit").delete_answer(
-            parent_buf, ex.question.line_end, ex.answer.line_end - 1)
+            parent_buf, ex.question.line_end, ex.answer.line_end - 1, parley.config)
 
         local after = table.concat(vim.api.nvim_buf_get_lines(parent_buf, 0, -1, false), "\n")
         assert.is_truthy(after:find(ref, 1, true),
