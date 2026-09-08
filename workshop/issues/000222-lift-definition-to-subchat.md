@@ -102,7 +102,7 @@ Filed separately from #214: that issue is closed on all three milestones and is
 already 4x its estimate, and this is a new case rather than a fix to what
 shipped.
 
-Related: **#223** — the footnote id is derived from the model's returned `term`
-rather than the selected phrase, which is why the Euclid case produced
-`Euclid[^liu-hui]`. Independent defect; this feature works either way, but the
-quote a lift produces reads better once the id and the anchor agree.
+Related: **#223** — the footnote id derives from the model's `term` rather than
+the selected phrase (`Euclid[^liu-hui]`). Downgraded to a Minor on 2026-09-08:
+recovery does NOT break as I first claimed, and this feature works either way.
+Do it only if the define path is already open.

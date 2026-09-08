@@ -32,17 +32,33 @@ The user selected *Euclid*; the model answered about *Liu Hui*. The model being
 wrong is the model's problem — but parley then labels the anchor with an id that
 names something else.
 
-Two consequences beyond the confusion:
+**Corrected 2026-09-08, after the operator pushed back.** I originally claimed
+two consequences and could support neither:
 
-- **Reopened-chat recovery breaks.** `atlas/chat/inline_define.md` describes
-  recovering the anchor phrase from the footnote slug when the phrase appears
-  before the reference. `[^liu-hui]` next to `Euclid` recovers nothing.
-- **The error is disguised.** `Euclid[^euclid]: A third-century Chinese
-  mathematician…` reads as an obviously wrong answer. `Euclid[^liu-hui]` reads
-  as a footnote about a different person, which is harder to spot as a defect.
+- *"Reopened-chat recovery breaks."* **False.** `footnote_diagnostics`
+  (`define.lua:318-336`) has a three-tier fallback — structured term, then slug,
+  then expand backwards from the reference. Run against the exact transcript
+  above it recovers `term="Euclid"` at the right column: the slug tier misses
+  and the third tier gets it. I cited an atlas sentence about slug recovery and
+  asserted breakage without running the code.
+- *"The error is disguised."* Weak. The definition is visibly about someone else
+  either way; the id is not what tells you the answer is wrong.
 
-Parley knows what the user selected. It cannot validate what the model returned.
-The id should come from the thing it knows.
+What actually remains:
+
+- **Cosmetic incoherence.** `Euclid[^liu-hui]` reads oddly. Nothing misreads it.
+- **One narrow collision.** `replace_or_append_footnote` keys on the id, so two
+  different phrases whose definitions come back with the same `term` collapse to
+  one footnote — the second overwrites the first. Real, but it needs the model to
+  answer wrongly twice in the same direction, and repeatedly re-defining is not
+  the workflow (operator).
+
+Also not a reason to do this: the spurious `emit_definition` call in a branched
+child. That is **#221** — once wildcard selectors mean "public only" the child
+never sees the tool.
+
+**So this is a Minor, not the defect the first draft described.** Worth doing
+when the define path is open for another reason; not worth doing on its own.
 
 ## Spec
 
@@ -59,6 +75,8 @@ anchor.
   the whole fix.
 
 ## Done when
+
+*(Unchanged; the fix is still one argument. The priority is what changed.)*
 
 - The footnote id derives from the selected phrase; a definition whose `term`
   differs still anchors as `phrase[^phrase-slug]` — asserted with a model term
