@@ -1,7 +1,7 @@
 ---
 id: 000214
 status: codecomplete
-deps: [#212]
+deps: [000212]
 github_issue:
 created: 2026-09-02
 updated: 2026-09-08
