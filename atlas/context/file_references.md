@@ -43,7 +43,9 @@ caller fall through safely:
 | `"failed"` | recognised, could not open; already reported | done — do **not** fall through |
 
 `"failed"` must not fall through: handing `gf` a path we already know is absent
-trades a precise diagnostic ("Chat file not found: …") for a vague one.
+trades a precise diagnostic for a vague one. The wording differs by arm — the
+`🌿:` and inline-link arms say `Chat file not found: …`, the `@@` arm says
+`File not found: …`, and a directory reference says `Directory not found: …`.
 
 **Landing mode follows the destination, not the origin.** A chat reference is
 somewhere you went to *write*, so insert mode is restored; a `gf` destination

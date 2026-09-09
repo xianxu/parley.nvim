@@ -210,6 +210,37 @@ describe("reference opening: capabilities that live in only one chain", function
     end)
 end)
 
+describe("reference opening: the @@ forms", function()
+    it("a path containing an @ survives", function()
+        -- Chat's chain was greedy (`^@@(.+)@@`) and markdown's was not
+        -- (`^@@%s*([^@]+)@@`). Adopting markdown's wholesale silently made
+        -- `@@/tmp/a@b/c.md@@` unopenable — a fifth divergence, resolved the
+        -- wrong way and not tabulated with the other four (#225 review).
+        local weird_dir = tmp_dir .. "/a@b"
+        vim.fn.mkdir(weird_dir, "p")
+        local target = weird_dir .. "/c.md"
+        vim.fn.writefile({ "# c" }, target)
+
+        local line = "@@" .. target .. "@@"
+        local chat = write_chat("2026-03-24.16-00-00.001_at.md", { "", line })
+        local rec = open_at(chat, line, 3)
+
+        same_path(target, rec.opened)
+    end)
+
+    it("a line carrying two references is not swallowed whole", function()
+        -- The guard on the greedy branch: `@@x@@ and @@y@@` must not resolve
+        -- to the path `x@@ and @@y`.
+        local target = write_chat("2026-03-24.16-00-00.002_two-a.md")
+        local other = write_chat("2026-03-24.16-00-00.003_two-b.md")
+        local line = "@@" .. target .. "@@ and @@" .. other .. "@@"
+        local chat = write_chat("2026-03-24.16-00-00.004_two.md", { "", line })
+        local rec = open_at(chat, line, 3)
+
+        same_path(target, rec.opened)
+    end)
+end)
+
 describe("reference opening: the union, in chat buffers", function()
     -- The operator's release surface is chat (#225, 2026-09-08): markdown is
     -- experimental ariadne-stack polish. All three of these worked in markdown
@@ -296,6 +327,50 @@ describe("reference opening: the fall-through to gf", function()
 
         assert.equals(0, calls)
         assert.is_truthy(table.concat(rec.warnings, "\n"):match("not found"))
+    end)
+end)
+
+describe("open_buf prefers the other split", function()
+    -- BR-6 moved this logic into `focus_other_split`; the review noted the
+    -- CALL SITE was left unpinned — reverting open_buf to open in the current
+    -- window would have kept the suite green. The netrw arm exercises the
+    -- helper, not open_buf's use of it.
+    it("opens in the other window when the tab has exactly two", function()
+        local target = write_chat("2026-03-24.17-00-00.001_split.md")
+        local origin = write_chat("2026-03-24.17-00-00.002_origin.md")
+
+        vim.cmd("silent! %bwipeout!")
+        vim.cmd("only")
+        vim.cmd("edit " .. vim.fn.fnameescape(origin))
+        vim.cmd("vsplit")
+        vim.cmd("wincmd h")
+        local origin_win = vim.api.nvim_get_current_win()
+
+        parley.open_buf(target)
+        local landed_win = vim.api.nvim_get_current_win()
+        local landed_name = vim.api.nvim_buf_get_name(vim.api.nvim_get_current_buf())
+        vim.cmd("only")
+
+        assert.are_not.equals(origin_win, landed_win)
+        same_path(target, landed_name)
+    end)
+
+    it("stays in the current window when ChatFinder asked for it", function()
+        local target = write_chat("2026-03-24.17-00-00.003_finder.md")
+        local origin = write_chat("2026-03-24.17-00-00.004_finder-origin.md")
+
+        vim.cmd("silent! %bwipeout!")
+        vim.cmd("only")
+        vim.cmd("edit " .. vim.fn.fnameescape(origin))
+        vim.cmd("vsplit")
+        vim.cmd("wincmd h")
+        local origin_win = vim.api.nvim_get_current_win()
+
+        parley.open_buf(target, true)
+        local landed_win = vim.api.nvim_get_current_win()
+        vim.cmd("only")
+
+        assert.equals(origin_win, landed_win)
     end)
 end)
 

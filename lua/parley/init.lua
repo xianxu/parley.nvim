@@ -823,7 +823,11 @@ M.setup = function(opts)
 	end
 	for k, v in pairs(M.config) do
 		if not skip_prepare[k] and k:match("_dir$") and type(v) == "string" then
-			M.config[k] = M.helpers.prepare_dir(v, k)
+			-- prepare_dir returns nil if it refuses (a backtick path); keep the
+			-- original rather than nilling a config key. Config paths are
+			-- operator-derived so this should never fire — it is here so the
+			-- refusal contract is uniform across every sink (#225 review I2).
+			M.config[k] = M.helpers.prepare_dir(v, k) or v
 		end
 	end
 
@@ -3179,14 +3183,20 @@ end
 -- For absolute/~ paths, returns a single candidate.
 -- For relative paths, tries base_dir first, then all chat roots.
 M._resolve_chat_path_candidates = function(path, base_dir, dirs)
-	if path:match("^~/") or path == "~" then
-		-- `path` is a 🌿: / inline-link target lifted out of a transcript.
-		local expanded = M.helpers.expand_path(path)
-		return expanded and { vim.fn.resolve(expanded) } or {}
-	elseif path:sub(1, 1) == "/" then
-		return { vim.fn.resolve(path) }
+	-- `path` is a 🌿: / inline-link target lifted out of a transcript, so the
+	-- ~-branch goes through the guard. resolve_relative_path is TOTAL: on a
+	-- refused (backtick) path it returns the literal unexpanded, `filereadable`
+	-- says no, and the caller takes its ordinary not-found branch. Returning
+	-- nil here is what crashed two callers in review round 2 (C2).
+	--
+	-- This was the FIFTH copy of the ~/absolute/relative triage; the arch guard
+	-- in tests/arch/untrusted_path_spec.lua found it while the other four were
+	-- being merged.
+	local first = M.helpers.resolve_relative_path(path, base_dir)
+	if path:match("^~/") or path == "~" or path:sub(1, 1) == "/" then
+		return { first }
 	end
-	local candidates = { vim.fn.resolve(base_dir .. "/" .. path) }
+	local candidates = { first }
 	for _, dir in ipairs(dirs or {}) do
 		local c = vim.fn.resolve(dir .. "/" .. path)
 		if c ~= candidates[1] then
@@ -3312,9 +3322,7 @@ end
 local function find_tree_root_file(file_path, depth)
 	depth = depth or 0
 	if depth > 20 then return file_path end
-	local expanded = M.helpers.expand_path(file_path)
-	if not expanded then return file_path end
-	local abs_path = vim.fn.resolve(expanded)
+	local abs_path = M.helpers.abs_path(file_path)
 	if vim.fn.filereadable(abs_path) == 0 then return abs_path end
 	local lines = vim.fn.readfile(abs_path)
 	local header_end = M.chat_parser.find_header_end(lines)
@@ -3330,9 +3338,7 @@ end
 -- Collect all file paths in a chat tree (root + all descendants via branches).
 local function collect_tree_files(file_path, visited)
 	visited = visited or {}
-	local expanded = M.helpers.expand_path(file_path)
-	if not expanded then return {} end
-	local abs_path = vim.fn.resolve(expanded)
+	local abs_path = M.helpers.abs_path(file_path)
 	if visited[abs_path] then return {} end
 	visited[abs_path] = true
 	if vim.fn.filereadable(abs_path) == 0 then return {} end
@@ -3469,7 +3475,7 @@ M.move_chat_tree = function(file_name, target_dir)
 	end
 
 	-- Return the new path of the originally requested file
-	local resolved_file = vim.fn.resolve(vim.fn.expand(file_name))
+	local resolved_file = M.helpers.abs_path(file_name)
 	return path_map[resolved_file] or path_map[tree_root]
 end
 
@@ -4355,9 +4361,20 @@ local function open_reference_under_cursor(buf, current_line, cursor_col, is_cha
 	-- @@ references: accept every form either chain used to accept.
 	local ref_path
 	if current_line:match("^@@") then
-		ref_path = current_line:match("^@@%s*([^@]+)@@")
-			or current_line:match("^@@%s*([^:]+):")
-			or current_line:match("^@@(.+)$")
+		-- A line that is ENTIRELY one reference is taken greedily, so a path
+		-- containing an `@` survives (`@@/tmp/a@b/c.md@@`). Chat used to be
+		-- greedy and markdown did not; adopting markdown's `[^@]+` wholesale
+		-- was a fifth divergence resolved the wrong way, silently (#225 review).
+		-- The `not whole:find("@@")` guard keeps it from swallowing a line that
+		-- carries two references.
+		local whole = current_line:match("^@@(.+)@@$")
+		if whole and not whole:find("@@", 1, true) then
+			ref_path = whole
+		else
+			ref_path = current_line:match("^@@%s*([^@]+)@@")
+				or current_line:match("^@@%s*([^:]+):")
+				or current_line:match("^@@(.+)$")
+		end
 		ref_path = ref_path and ref_path:gsub("^%s*(.-)%s*$", "%1")
 	else
 		ref_path = M._parse_at_reference(current_line, cursor_col)

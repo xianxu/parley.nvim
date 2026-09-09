@@ -185,3 +185,263 @@ findings:
       commit titled "#225: one reference chain, three-valued...". git log --grep "^#225" now
       returns a commit whose diff is mostly unrelated prose (AGENTS.md section 12).
 ```
+
+---
+
+## Re-review — 2026-09-08T19:54:08-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 225 — Open a link with <M-o>, falling back to gf |
+| repo | parley.nvim |
+| issue file | workshop/issues/000225-open-link-alt-o.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 4fc595d084904410aa5ed82d7c8a3c81f987949d..5029f4a7c706357fc0e795698cfd500b74002ab5 |
+| command | sdlc close --issue 225 |
+| reviewer | claude |
+| timestamp | 2026-09-08T19:54:08-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+The extraction itself is excellent and I confirmed it by mutation rather than by reading the commit messages: flipping `is_chat` to `true` at `init.lua:4387` now reddens exactly one test (BR-5 genuinely fixed), the `deleted`-row matcher fires on a control symbol and stays silent on `open_chat_reference` (BR-8 reachable), and the runner seam is threaded to a real caller (BR-3). Eleven of twelve prior findings are addressed. What blocks SHIP is three things I verified by running the code: **`make test` is red at HEAD** (`tests/arch/single_source_sweeps_spec.lua` — the two new spec files are unrouted in `atlas/traceability.yaml`), the BR-4 guard makes `resolve_chat_path` return `nil` and **two callers crash on it** instead of taking their not-found branch (I reproduced a Lua error on both the `🌿:` and inline-link arms, hidden by a bare `pcall` in the new spec), and the backtick class sweep **stopped short of `outline.lua`**, which I confirmed still executes `` `touch …` `` from a transcript-derived branch path.
+
+## 1. Strengths
+
+- **The three-valued contract is real, not decorative.** `init.lua:4306-4326` states why `"failed"` must not fall through, and the gf spec (`open_reference_spec.lua:288-297`) asserts `calls == 0` for it separately from `"none"`. This is the ARCH-ORDER tagged-enum shape replacing a boolean that meant two things.
+- **BR-5 is mutation-verified, by me, not just claimed.** Rewriting `init.lua:4387` to `if true and (…)` turns exactly `D4 — a directory reference does NOT Explore in a markdown buffer` red and leaves the other 17 green. The negative half is doing the work the positive half could not.
+- **The BR-8 inversion is reachable.** I ran the guard's own `definition_pattern` grep against a control (`glob_base` → hit in `helper.lua`) and against the deleted symbol (`open_chat_reference` → no hit). The row would fire if the deletion were fake.
+- **BR-3's seam is threaded to a real caller.** `artifact_ref.lua:233` passes `opts.runner`, and `artifact_ref_spec.lua:250-262` now asserts the constructed argv (`resolve`, `ariadne#144`) instead of swapping the module function — production and test share `run_resolve`. The `<M-o>` test goes one level lower and fakes `vim.system`, so argv construction, the default runner, JSON decode and dispatch all execute.
+- **#226 is a good filing, not a shelf.** It names the ARCH-ORDER extent (staleness after leaving the buffer) that the review only implied, and its Done-when reuses the seam #225 built.
+- **BR-12's rebuild is verifiable.** `git diff --name-status` over the pinned range contains no `workshop/parley/` paths; the transcripts are back to untracked.
+
+## 2. Critical findings
+
+**C1 — `atlas/traceability.yaml:190` / `tests/arch/single_source_sweeps_spec.lua:646`: the suite is RED at HEAD.**
+```
+=== Failed integration test files ===
+tests/arch/single_source_sweeps_spec.lua
+  a new spec routes nowhere under `make test-changed`
+  Passed in: { [1] = 'tests/integration/untrusted_path_spec.lua', [2] = 'tests/unit/glob_base_spec.lua' }
+```
+`make test` (lint + 356 spec files) is otherwise clean — this is the only failure, and it is caused by this round's own fix commit. The round added three spec files and routed one. Fix: add both to `atlas/traceability.yaml` (`untrusted_path_spec` under `context/file_references`, `glob_base_spec` under whichever doc owns `process_directory_pattern`). The prior round's ledger states "Full suite (356 files) and `make lint` both clean at HEAD" — that was true of the *previous* window, and was not re-established after the fixes.
+
+**C2 — `lua/parley/init.lua:4246` and `:3292`: the BR-4 guard degrades into a Lua error, not a warning.**
+`_resolve_chat_path_candidates` (`init.lua:3184`) now returns `{}` on refusal, so `resolve_chat_path` falls to `return candidates[1]` → `nil`. `helper.lua:264` documents the contract as *"Callers treat nil as 'this path is not usable' and take whatever their existing not-found branch is"*, and two callers do not:
+
+```
+🌿: ~/`touch /tmp/M && echo /nope`.md: Topic   → ./lua/parley/init.lua:4246: attempt to index local 'expanded' (a nil value)
+[🌿:c](~/`touch /tmp/M && echo /nope`.md)      → ./lua/parley/init.lua:3292: attempt to index local 'expanded' (a nil value)
+```
+(Both reproduced through the real `M.cmd.OpenFileUnderCursor`; the marker file is *not* created, so the security property holds — the failure mode does not.) The reason this shipped is the oracle: `untrusted_path_spec.lua:99` wraps the call in a bare `pcall` and asserts only the marker, so it cannot tell "refused cleanly" from "crashed". Fix: guard `expanded` for `nil` at both sites with the existing `"failed"`/warning exit, sweep the other `resolve_chat_path` consumers (`init.lua:3325`, `:3348`, `:3445`, `exporter.lua:151`, `:180`, `highlighter.lua:66`), and make each untrusted-path arm assert `ok == true` plus the expected warning, not just the absent marker.
+
+**C3 — `lua/parley/outline.lua:207`: the backtick class sweep stopped short; a transcript path still reaches a shell.**
+
+> **This is the 2nd finding in family `untrusted-path-expansion`.** Earlier rounds fixed instances. Do NOT fix this instance — state the rule that covers all of them, and fix that.
+
+The rule: **a path parsed out of buffer text — anything derived from `chat_parser` output (`branches[].path`, `parent_link.path`, `@@` refs, inline links) — may be expanded only via `helper.expand_path`; `vim.fn.expand(<variable>)` in any module that consumes `chat_parser` output is the enumeration, and it should be an arch test with an explicit config-derived allowlist, not a memorised list.** The measured prevalence is now 4 rounds of the same shape: BR-4 named 3 sites, the fix found 10, and a mechanical grep finds the residue the fix did not:
+
+| site | status |
+|---|---|
+| `outline.lua:207` (`resolve_path`, a **4th** copy of the same 5-line function) | unguarded |
+| `outline.lua:221`, `:243`, `:320` | unguarded |
+| `exporter.lua:117`, `:128`, `:140`, `:163` | unguarded |
+| `chat_respond.lua:176`, `init.lua:3184` | guarded this round |
+| `highlighter.lua:66`, `exporter.lua:32` | delegate to the guarded one |
+
+Reproduced end-to-end: a chat with `🌿: ~/`` `touch <marker>` ``.md: Child`, driven through `outline._build_tree_outline_items` → `MARKER CREATED: true`. Reachable from `<M-t>` (outline picker). Note `outline.lua:205` and `chat_respond.lua:176` were *byte-identical* functions; the round guarded one and not the other, which is exactly the drift the third copy predicts (ARCH-DRY + ARCH-PURPOSE: instance, not class).
+
+## 3. Important findings
+
+**I1 — `workshop/issues/000225-open-link-alt-o.md:135`: the Core-concepts table classifies `expand_path` as PURE; it is IO (ARCH-PURE).**
+`helper.lua:270` calls `vim.fn.expand`, which reads the environment, globs the filesystem, and — the whole point of the guard — can run a subprocess. Its tests live in `tests/integration/untrusted_path_spec.lua` and need a real Neovim plus a real filesystem to observe the marker; `assert.equals(vim.fn.expand("~"), helpers.expand_path(p))` is asserting against the runtime, not against a pure function. `glob_base` in the row above it *is* pure and its spec proves it. Fix: move `expand_path` to the Integration-points table with `wraps: vim.fn.expand` and add a `## Revisions` note. (The prompt's blanket rule makes a table/code contradiction Critical; I am rating it Important because it is a classification label with no runtime consequence, and the sweep guard already confirms the symbol exists where the row says.)
+
+**I2 — `lua/parley/helper.lua:611-615`: `prepare_dir` returns the unusable input on refusal while every sibling sink returns `nil`/`{}`.**
+`read_file_content` → `nil`, `is_directory` → `false`, `find_files` → `{}`, `expand_path` → `nil`; `prepare_dir` alone returns `odir`, the backtick string, which `init.lua:826` (`M.config[k] = M.helpers.prepare_dir(v, k)`) would then store as a config value. Unreachable today because that call site is config-derived, but it is inconsistent error handling introduced by this diff and it makes the guard's contract two-valued in one place and three-valued in another. Fix: return `nil` and let the one config call site keep its existing fallback.
+
+## 4. Minor findings
+
+- `lua/parley/init.lua:4358`: adopting markdown's `^@@%s*([^@]+)@@` narrows chat, which used greedy `^@@(.+)@@`. `@@/tmp/a@b/c.md@@` now falls to `^@@(.+)$` and carries the trailing `@@` into the path → `"failed"` instead of opening. Tiny, but it is a divergence resolved the other way than the four the Spec tabulates, and it is unrecorded.
+- `lua/parley/keybinding_registry.lua:750` vs `:256`: `review_menu` (`<M-s>`, `markdown`, desc "open skill picker") and `skill_picker` (`<C-g>s`, `global`, desc "Open Skill Picker") are two ids and two config keys for one action. Now that the key is `<M-s>`, they are the alt/`<C-g>` pair `open_file` models as **one** entry with `default_key = { … }` (ARCH-DRY). Pre-existing, but the rename made it adjacent.
+- `atlas/context/file_references.md:52` quotes the surviving diagnostic as `"Chat file not found: …"`; the `@@` arm now emits `"File not found: …"` (`init.lua:4432`). The 🌿: arm still says "Chat file not found", so the doc is half-right.
+- `tests/integration/open_reference_spec.lua:305-311` pins the one-call-site invariant by regexing `init.lua` source text for `M%.cmd%.OpenFileUnderCursor = function%(%)(.-)\nend\n`. It works today and the intent is right; it will silently start passing vacuously if the function ever gains a top-level `\nend\n` before its close.
+
+## 5. Test coverage notes
+
+- **The gap that let C2 through is the oracle, not the code.** `untrusted_path_spec.lua:99` and `:112` use `pcall(...)` with no `assert(ok)`. A test whose only assertion is "the marker file is absent" passes identically whether the guard returned cleanly or the interpreter blew up. Every arm should assert `ok == true` *and* the expected warning text.
+- **No test pins `open_buf`'s two-split preference**, which is the call site BR-6 added. `focus_other_split` is exercised only through the netrw arm (`open_reference_spec.lua:170-210`); reverting `open_buf` to open in the current window would leave the suite green. BR-6 is structurally correct (I read the diff; the duplicate block is gone), but it is unpinned.
+- **Nothing drives `outline`/`exporter` with a hostile branch path** — see C3. The rule-level fix wants one arch test over the module set, not four more per-site cases.
+- Positive: the D3 test asserting the chat-file *count* (`open_reference_spec.lua:252`) pins the real old bug (a silent second empty chat) rather than just the path returned. That is the right shape.
+
+## 6. Architectural notes
+
+- **ARCH-DRY — flag.** `focus_other_split` (3→1) and `glob_base` (2→1) are correct consolidations. `resolve_path` is at four copies with two behaviours (C3).
+- **ARCH-PURE — flag.** `glob_base` is a clean pure extraction with an IO-free spec; `expand_path` is mislabelled (I1).
+- **ARCH-PURPOSE — flag.** The union of D1-D3 genuinely fulfils the issue's purpose and the D4 divergence is defended. The backtick sweep is the under-delivery: the round enumerated ten sinks and stopped at the module boundary rather than at the *provenance* boundary (C3).
+- **ARCH-MOCK — pass, with a note.** BR-3 is properly disposed: production and test now share `run_resolve`, and the `<M-o>` test fakes `vim.system` (the OS boundary). But `sdlc` still has no stateful fake and no live conformance check on `resolve --json`'s schema — each test hand-rolls a one-shot response. #226 will inject through the same seam repeatedly; that is the moment a small stateful fake pays for itself.
+- **ARCH-CONSTRAINTS — pass.** The keystroke path adds no blocking work; the unbounded-spawn concern is recorded with a real Done-when in #226 rather than waved off.
+- **ARCH-SECURE — flag.** Provenance (transcript vs config) is the right axis and is stated in the code, not just the plan. Two gaps: the refusal path crashes rather than degrading (C2), and the enumeration is memorised rather than enforced (C3).
+- **ARCH-ORDER — pass.** Replacing `true`-means-two-things with `"opened"|"none"|"failed"` is the principle applied exactly; #226 writes down the interleavings (double press, completion after the user moves) rather than leaving them emergent.
+
+## 7. Plan revision recommendations
+
+- **`## Revisions` — Core concepts, `expand_path` reclassified.** Move the row from *Pure entities* to *Integration points* (`wraps: vim.fn.expand — environment, filesystem glob, and, absent the guard, subprocess`), with the reason: its tests are integration and cannot run without the Neovim runtime and a real filesystem.
+- **`## Revisions` — the untrusted-path sweep is incomplete.** Record that the ten routed sinks are the *chat-navigation* consumers only, that `outline.lua` (4 sites, including a 4th copy of `resolve_path`) and `exporter.lua` (4 sites) still expand transcript-derived paths, and that the durable fix is one shared guarded `resolve_path` plus an arch test over `vim.fn.expand(<variable>)` in `chat_parser`-consuming modules — not another hand-maintained list.
+- **`## Revisions` — the refusal contract.** State that `resolve_chat_path` may now return `nil`, list its consumers, and record that `open_branch_ref`/`try_open_inline_branch_link` must take their `"failed"` exit rather than indexing it.
+- **`## Log`** — the `@@` parser narrowing for `@`-containing paths belongs in the divergence record; it is a fifth resolved difference and currently only visible in the diff.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      The unified file arm goes through open_buf, so the chat path gains file-tracking and window reuse; focus_other_split remains only for the netrw call site.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      Plan row now carries the grep-derived list (13 hits / 7 files) and keybinding_agreement + review_menu specs are updated; both suites pass.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      opts.runner threaded at artifact_ref.lua:233; artifact_ref_spec asserts the real argv, and the M-o test fakes vim.system rather than the module.
+  - id: BR-4
+    disposition: addressed
+    note: |
+      The three named sites plus seven more are routed through helper.expand_path; the residual class outside the chat-navigation modules is raised new (see C3).
+  - id: BR-5
+    disposition: addressed
+    note: |
+      Mutation-verified independently: `if true and (...)` at init.lua:4387 reddens exactly the new negative test.
+  - id: BR-6
+    disposition: addressed
+    note: |
+      open_buf calls focus_other_split; the inline block is gone. Unpinned by any test — noted under coverage, not re-raised.
+  - id: BR-7
+    disposition: addressed
+    note: |
+      helper.glob_base plus an IO-free unit spec; process_directory_pattern now derives from it.
+  - id: BR-8
+    disposition: addressed
+    note: |
+      The deleted row inverts, and I confirmed the matcher fires on a control symbol and stays silent on open_chat_reference.
+  - id: BR-9
+    disposition: addressed
+    note: |
+      <M-o> added to the markdown mapped list; the journal-sidecar assertion correctly moved to <M-s>.
+  - id: BR-10
+    disposition: addressed
+    note: |
+      Deferred deliberately and filed as parley.nvim#226 with a Done-when that reuses the runner seam; recorded in the issue Revisions.
+  - id: BR-11
+    disposition: addressed
+    note: |
+      The chain-order flip is now recorded in the issue's Revisions with the reason the inline link is the better match.
+  - id: BR-12
+    disposition: addressed
+    note: |
+      No workshop/parley paths appear in the pinned range; the transcripts are untracked again.
+findings:
+  - id: new
+    severity: Critical
+    family: doc-consumer-enumeration
+    title: |
+      make test is RED at HEAD — two new spec files are unrouted in atlas/traceability.yaml
+    detail: |
+      tests/arch/single_source_sweeps_spec.lua "every spec this branch ADDED is routed somewhere"
+      fails on tests/integration/untrusted_path_spec.lua and tests/unit/glob_base_spec.lua. It is
+      the only failure in a 356-file run (lint clean), and this round's own fix commit caused it.
+      2nd in family, so the RULE: the branch adds artifacts, the registry that indexes them must be
+      dispositioned against a mechanical enumeration — and here the repo ALREADY encodes that
+      enumeration as an arch guard. So the enforcing rule is narrower and cheaper than a checklist:
+      `make test` must be green at the moment the boundary review is REQUESTED, not merely at the
+      moment the previous round's ledger was written. The prior ledger's "full suite clean at HEAD"
+      described a window three commits back.
+  - id: new
+    severity: Critical
+    family: guard-nil-contract-unswept
+    title: |
+      The BR-4 guard makes resolve_chat_path return nil; two callers index it and crash
+    detail: |
+      helper.lua:264 states the contract as "callers treat nil as not usable and take their
+      existing not-found branch". init.lua:4246 and init.lua:3292 instead raise "attempt to index
+      local 'expanded' (a nil value)" — reproduced through the real M.cmd.OpenFileUnderCursor on a
+      backticked 🌿: line and on a backticked inline [🌿:…](file). The security property holds (no
+      marker file), the degrade-visibly property does not. It shipped because untrusted_path_spec
+      wraps the call in a bare pcall and asserts only the absent marker, so the test cannot
+      distinguish a clean refusal from a crash. Sweep the other resolve_chat_path consumers
+      (init.lua:3325, :3348, :3445; exporter.lua:151, :180; highlighter.lua:66) and make each arm
+      assert ok == true plus the expected warning.
+  - id: new
+    severity: Critical
+    family: untrusted-path-expansion
+    title: |
+      outline.lua still executes backticks from a transcript-derived branch path — confirmed end-to-end
+    detail: |
+      2nd in family, so the ask is the RULE, not this site: a path parsed out of buffer text —
+      anything derived from chat_parser output (branches[].path, parent_link.path, @@ refs, inline
+      links) — may be expanded only via helper.expand_path, and the enumeration is
+      `vim.fn.expand(<variable>)` in every module that consumes chat_parser output, enforced as an
+      arch test with an explicit config-derived allowlist rather than a memorised list. Measured:
+      BR-4 named 3 sites, the fix found 10, and the residue is outline.lua:207/221/243/320 and
+      exporter.lua:117/128/140/163. outline.lua:205 and chat_respond.lua:176 were byte-identical
+      5-line resolve_path functions; the round guarded one and not the other — a 4th copy of the
+      same function, which is why instance-fixing keeps missing (ARCH-DRY + ARCH-PURPOSE).
+      Reproduced: a chat with "🌿: ~/`touch <marker>`.md: Child" driven through
+      outline._build_tree_outline_items creates the marker. Reachable from <M-t>.
+  - id: new
+    severity: Important
+    family: pure-label-vs-io
+    title: |
+      Core-concepts table calls expand_path PURE; it expands the environment, globs the fs, and its tests are integration
+    detail: |
+      workshop/issues/000225-open-link-alt-o.md:135 lists expand_path under "Pure entities", but
+      helper.lua:270 calls vim.fn.expand and its only tests live in
+      tests/integration/untrusted_path_spec.lua, needing a real Neovim and a real filesystem to
+      observe the marker. glob_base in the row above IS pure and its spec proves it. Move the row
+      to Integration points (wraps: vim.fn.expand) with a ## Revisions entry.
+  - id: new
+    severity: Important
+    family: guard-nil-contract-unswept
+    title: |
+      prepare_dir returns the unusable input on refusal while every sibling sink returns nil
+    detail: |
+      helper.lua:611-615 returns odir (the backtick string) where read_file_content returns nil,
+      is_directory false, find_files {} and expand_path nil. init.lua:826 assigns that return
+      straight into M.config[k]. Unreachable today because that call site is config-derived, but it
+      is inconsistent error handling introduced by this diff.
+  - id: new
+    severity: Minor
+    family: divergence-not-pinned
+    title: |
+      The @@ parser adopted markdown's [^@]+ form, narrowing chat for @-containing paths, unrecorded
+    detail: |
+      init.lua:4358 replaces chat's greedy ^@@(.+)@@ with ^@@%s*([^@]+)@@, so @@/tmp/a@b/c.md@@ now
+      falls to ^@@(.+)$ and carries a trailing @@ into the path, exiting "failed" instead of
+      opening. It is a fifth resolved divergence and belongs in the Spec's table or the Log rather
+      than only in the diff.
+  - id: new
+    severity: Minor
+    family: duplicate-registry-entry-one-action
+    title: |
+      review_menu(<M-s>) and skill_picker(<C-g>s) are two ids and two config keys for one action
+    detail: |
+      keybinding_registry.lua:750 (markdown scope, config_key review_shortcut_menu) and :256 (global
+      scope, config_key skill_shortcut) both call parley.skill_picker.open(). Now that the key is
+      <M-s>, they are precisely the alt/<C-g> pair that open_file models as ONE entry with
+      default_key = { "<M-o>", "<C-g>o" }. Pre-existing; the rename made it adjacent (ARCH-DRY).
+  - id: new
+    severity: Minor
+    family: doc-consumer-enumeration
+    title: |
+      atlas quotes a diagnostic the @@ arm no longer emits
+    detail: |
+      atlas/context/file_references.md:52 justifies the no-fall-through rule with "Chat file not
+      found: …", but the @@ arm now warns "File not found: …" (init.lua:4432). The 🌿: arm still
+      uses the old wording, so the doc is half-right.
+```

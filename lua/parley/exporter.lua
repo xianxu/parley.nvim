@@ -114,7 +114,7 @@ end
 --- Read and parse a chat file from disk, returning export metadata.
 --- IO wrapper: reads file, resolves path, then delegates to pure build_info.
 local function read_chat_file(file_path)
-	local abs_path = vim.fn.resolve(vim.fn.expand(file_path))
+	local abs_path = _parley.helpers.abs_path(file_path)
 	if vim.fn.filereadable(abs_path) == 0 then
 		return nil
 	end
@@ -125,7 +125,7 @@ end
 --- Build an info table from buffer lines (for the current buffer, which may have unsaved changes).
 --- IO wrapper: resolves path, then delegates to pure build_info.
 local function build_info_from_lines(lines, file_path)
-	return build_info(lines, vim.fn.resolve(vim.fn.expand(file_path)), _parley.chat_parser, get_parse_config())
+	return build_info(lines, _parley.helpers.abs_path(file_path), _parley.chat_parser, get_parse_config())
 end
 
 --------------------------------------------------------------------------------
@@ -137,7 +137,7 @@ local function find_tree_root(file_path, depth)
 	if depth > 20 then
 		return file_path
 	end
-	local abs_path = vim.fn.resolve(vim.fn.expand(file_path))
+	local abs_path = _parley.helpers.abs_path(file_path)
 	if vim.fn.filereadable(abs_path) == 0 then
 		return abs_path
 	end
@@ -160,7 +160,7 @@ end
 --- Files that exist but can't be parsed are skipped.
 local function collect_tree(file_path, visited)
 	visited = visited or {}
-	local abs_path = vim.fn.resolve(vim.fn.expand(file_path))
+	local abs_path = _parley.helpers.abs_path(file_path)
 	if visited[abs_path] then
 		return {}
 	end

@@ -132,18 +132,20 @@ possible at all.
 | Name | Lives in | Status |
 |---|---|---|
 | `glob_base` | `lua/parley/helper.lua` | new |
-| `expand_path` | `lua/parley/helper.lua` | new |
 
 Reference opening is *mostly* an integration — it reads the filesystem, creates
 buffers and moves windows — and the first version of this table said "none",
-which the close review correctly called out as hiding two pure fragments.
+which the close review correctly called out as hiding a pure fragment.
 
 - **`glob_base`** — the directory part of a glob-ish reference
   (`a/b/**/*.md` → `a/b`). It had two near-copies stripping different shapes;
-  neither wrong, but a pair that could drift.
-- **`expand_path`** — the transcript-path guard. Pure in the sense that matters
-  (a string predicate plus one expansion), and the single place a
-  buffer-derived path may be expanded at all.
+  neither wrong, but a pair that could drift. Its spec runs with no IO, which
+  is the test that the purity claim is real.
+
+The second version of this table also listed `expand_path` here, which was
+wrong: `vim.fn.expand` reads the environment, globs the filesystem and — the
+entire point of the guard — can spawn a process. It is an integration point and
+is tabled as one below.
 
 The other pure parts it leans on (`_parse_at_reference`, `_parse_branch_ref`,
 `extract_inline_branch_links`) already exist and are unchanged.
@@ -153,6 +155,9 @@ The other pure parts it leans on (`_parse_at_reference`, `_parse_branch_ref`,
 | Name | Lives in | Status | Wraps |
 |---|---|---|---|
 | `_open_reference_under_cursor` | `lua/parley/init.lua` | new | filesystem + buffer/window opening |
+| `expand_path` | `lua/parley/helper.lua` | new | `vim.fn.expand` |
+| `abs_path` | `lua/parley/helper.lua` | new | `vim.fn.expand` + `vim.fn.resolve` |
+| `resolve_relative_path` | `lua/parley/helper.lua` | new | path resolution against a base dir |
 | `focus_other_split` | `lua/parley/init.lua` | new | window layout |
 | `open_buf` | `lua/parley/init.lua` | modified | — |
 | `open_branch_ref` | `lua/parley/init.lua` | modified | — |
@@ -187,6 +192,23 @@ The other pure parts it leans on (`_parse_at_reference`, `_parse_branch_ref`,
 
 - **`open_chat_reference`** — deleted. It was the markdown-only chain; its one
   production caller and its one test now go through the unified function.
+
+- **`expand_path` / `abs_path`** — the provenance boundary. `expand_path`
+  refuses (returns `nil`) so a caller can *report* the refusal; `abs_path` is
+  **total**, degrading to the unexpanded literal so a caller's existing
+  "file not readable" branch handles it without a nil check. That split is not
+  taste: making the resolution path return `nil` crashed two callers that index
+  the result (close review C2). `abs_path` is also the single copy of
+  `vim.fn.resolve(vim.fn.expand(x))`, which had fifteen.
+  - **Injected into:** nothing — they are leaves, and `tests/arch/untrusted_path_spec.lua`
+    is what keeps them the only expansion sites, by allowlisting every
+    `vim.fn.expand(<variable>)` in `lua/` with a stated reason.
+
+- **`resolve_relative_path`** — the ~/absolute/relative triage, which existed in
+  **five** copies, two of them byte-identical. The round that guarded one of the
+  identical pair missed the other, leaving a live sink in `outline.lua`; the
+  arch guard then found a fifth in `init.lua` while the other four were being
+  merged. That sequence is the argument for the guard over another sweep.
 
 **Test surface.** `tests/integration/open_reference_spec.lua` — integration
 rather than unit because the behaviour under test *is* the IO: real files, real
@@ -249,6 +271,62 @@ transcripts (~1,300 lines) into the implementation commit via `git add -A`.
 The branch was unpushed, so it was rebuilt without them; the transcripts are
 back to untracked and byte-identical, and the only diff between the old and
 rebuilt branches is those 1,314 lines.
+
+### 2026-09-08 — close review round 2 (REWORK, 3 Critical + 2 Important)
+
+Round 1's fixes introduced two of the three Criticals. Recorded plainly because
+the pattern matters more than the individual defects.
+
+- **C1 — I reported a clean suite that was red.** `make test` failed at HEAD:
+  the two new spec files were unrouted in `atlas/traceability.yaml`. I had
+  grepped the log for `^FAIL: `, a pattern that does not appear in this
+  runner's output, instead of checking the exit code. The verification claim in
+  the round-1 close was therefore false, not merely optimistic. Fixed by
+  routing both specs; the lesson is that **the oracle for "tests pass" is the
+  exit status**.
+- **C2 — the BR-4 guard crashed instead of degrading.** Making
+  `_resolve_chat_path_candidates` return `{}` made `resolve_chat_path` return
+  `nil`, and two callers index that result: both the `🌿:` arm and the
+  inline-link arm raised `attempt to index local 'expanded'`. The security
+  property held (nothing executed) and the failure mode did not.
+  Fixed by making the resolution path **total**: `helper.abs_path` returns the
+  unexpanded literal on refusal, so `filereadable` says no and every caller
+  keeps its existing not-found branch. No caller changed.
+  **Why it shipped is the oracle**: my spec wrapped each call in a bare `pcall`
+  and asserted only that the marker file was absent. That cannot distinguish
+  "refused cleanly" from "the interpreter blew up" — an absent side effect is
+  evidence that *something* stopped, not that the right thing happened. Every
+  arm now asserts `ok == true` and the reported diagnostic, and the strengthened
+  oracle was mutation-checked against the exact C2 regression (four arms red).
+- **C3 — the sweep stopped at the module boundary, not the provenance
+  boundary.** `outline.lua` held a **byte-identical copy** of the resolver I had
+  just guarded in `chat_respond.lua`, still executing backticks from a `🌿:`
+  path and reachable from `<M-t>`. Round 1 named 3 sites, my sweep found 10,
+  and 4 remained.
+  Enumeration was the wrong instrument, so this round replaces it with a rule:
+  `tests/arch/untrusted_path_spec.lua` allowlists every
+  `vim.fn.expand(<variable>)` in `lua/` with a stated reason why the argument is
+  operator-derived, and fails on anything new. It found a **fifth** copy of the
+  resolver in `init.lua` while the other four were being merged — which is the
+  argument for the guard, made by the guard.
+- **I1** — the table called `expand_path` PURE. It expands the environment,
+  globs the filesystem and can spawn a process. Moved to Integration points.
+- **I2** — `prepare_dir` returned the unusable input on refusal while every
+  sibling returned `nil`. Now `nil`, with the two assigning call sites keeping
+  their original value.
+
+Minors landed: the greedy `@@` form restored (adopting markdown's `[^@]+`
+wholesale had silently broken `@@/tmp/a@b/c.md@@` — a **fifth** divergence,
+resolved the wrong way and never tabulated), `open_buf`'s two-split preference
+pinned (BR-6 moved the logic but left its call site unasserted), and the atlas
+corrected to name the per-arm diagnostic wording.
+
+Noted, not fixed: `review_menu` (`<M-s>`, markdown) and `skill_picker`
+(`<C-g>s`, global) are two registry ids and two config keys for one action, and
+the rename made them exactly the alt/`<C-g>` pair `open_file` models as one
+entry. Merging them retires a public `config_key`, which is a release-notes
+change rather than a review fix — it belongs with the keybinding surface work,
+not here.
 
 ## Estimate
 

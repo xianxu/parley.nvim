@@ -274,6 +274,40 @@ _H.expand_path = function(path)
     return vim.fn.expand(path)
 end
 
+-- Absolute, symlink-resolved form of a path that came out of a transcript.
+--
+-- TOTAL, unlike expand_path: on refusal it returns the path resolved but
+-- UNEXPANDED, so callers keep their existing "file not readable" branch instead
+-- of needing a nil check. That distinction is load-bearing — the first version
+-- of the guard made resolve_chat_path return nil and two callers crashed
+-- indexing it (#225 close review C2). Use expand_path when you want to REPORT
+-- the refusal; use abs_path when you just need something to hand filereadable.
+--
+-- Also the single copy of `vim.fn.resolve(vim.fn.expand(x))`, which had fifteen.
+---@param path string
+---@return string
+_H.abs_path = function(path)
+    local expanded = _H.expand_path(path)
+    return vim.fn.resolve(expanded or path)
+end
+
+-- Resolve a reference path against a base directory: ~-prefixed, absolute, or
+-- relative. This existed as FOUR copies (outline, chat_respond, init's chat-root
+-- variant, and the @@ chain), two of them byte-identical — and the round that
+-- guarded one of the identical pair missed the other, which is the drift a
+-- fourth copy predicts (#225 close review C3).
+---@param path string # transcript-derived
+---@param base_dir string
+---@return string
+_H.resolve_relative_path = function(path, base_dir)
+    if path:match("^~/") or path == "~" then
+        return _H.abs_path(path)
+    elseif path:sub(1, 1) == "/" then
+        return vim.fn.resolve(path)
+    end
+    return vim.fn.resolve(base_dir .. "/" .. path)
+end
+
 -- Read file contents into a string if it exists
 ---@param filepath string # path to the file
 ---@return string|nil # file contents or nil if file doesn't exist
@@ -610,8 +644,11 @@ _H.prepare_dir = function(dir, name)
 	local odir = dir
 	dir = _H.expand_path(dir)
 	if not dir then
+		-- nil, like every sibling sink (read_file_content, find_files,
+		-- expand_path). Returning the backtick string would let the one
+		-- config-derived caller store it AS a config value (#225 review I2).
 		logger.warning("Refusing to create a directory whose path contains a backtick: " .. tostring(odir))
-		return odir
+		return nil
 	end
 	dir = dir:gsub("/$", "")
 	name = name and name .. " " or ""

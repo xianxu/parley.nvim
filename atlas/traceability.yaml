@@ -188,8 +188,10 @@ atlas:
       - lua/parley/helper.lua
     tests:
       - tests/integration/open_reference_spec.lua
+      - tests/integration/untrusted_path_spec.lua
       - tests/unit/parse_at_reference_spec.lua
       - tests/unit/process_directory_pattern_spec.lua
+      - tests/unit/glob_base_spec.lua
       - tests/unit/file_tracker_spec.lua
 
   context/google_drive:

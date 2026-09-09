@@ -64,7 +64,7 @@ D.setup = function(opts)
 		provider.secret = nil
 	end
 
-	D.query_dir = helpers.prepare_dir(D.query_dir, "query store")
+	D.query_dir = helpers.prepare_dir(D.query_dir, "query store") or D.query_dir
 
 	local files = vim.fn.glob(D.query_dir .. "/*.json", false, true)
 	if #files > 200 then

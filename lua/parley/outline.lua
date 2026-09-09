@@ -202,14 +202,11 @@ end
 --------------------------------------------------------------------------------
 
 -- Resolve a path that may be absolute, ~-prefixed, or relative to base_dir.
+-- #225 C3: this was byte-identical to chat_respond's copy, and the round that
+-- guarded that one missed this one — a transcript branch path still reached a
+-- shell here, driven from <M-t>. One implementation now.
 local function resolve_path(path, base_dir)
-  if path:match("^~/") or path == "~" then
-    return vim.fn.resolve(vim.fn.expand(path))
-  elseif path:sub(1, 1) == "/" then
-    return vim.fn.resolve(path)
-  else
-    return vim.fn.resolve(base_dir .. "/" .. path)
-  end
+  return require("parley.helper").resolve_relative_path(path, base_dir)
 end
 
 -- Walk parent_link chain to find the tree root file path.
@@ -218,7 +215,7 @@ local function find_tree_root(file_path, config, depth)
   depth = depth or 0
   if depth > 20 then return file_path end
 
-  local abs_path = vim.fn.resolve(vim.fn.expand(file_path))
+  local abs_path = require("parley.helper").abs_path(file_path)
   if vim.fn.filereadable(abs_path) == 0 then return abs_path end
 
   local lines = vim.fn.readfile(abs_path)
@@ -240,7 +237,7 @@ end
 -- Returns array of { display, value: { lnum, file, child_path? } }
 -- child_path is set on 🌿: items — the resolved absolute path of the child file.
 local function build_file_outline_items(file_path, config, depth)
-  local abs_path = vim.fn.resolve(vim.fn.expand(file_path))
+  local abs_path = require("parley.helper").abs_path(file_path)
   if vim.fn.filereadable(abs_path) == 0 then return {} end
 
   local file_lines = vim.fn.readfile(abs_path)
@@ -317,7 +314,7 @@ function M._build_tree_outline_items(root_path, config, expanded_set, depth, vis
   visited = visited or {}
   -- nil expanded_set = expand all; do NOT default to {}
 
-  local abs_path = vim.fn.resolve(vim.fn.expand(root_path))
+  local abs_path = require("parley.helper").abs_path(root_path)
   if visited[abs_path] then return {} end
   visited[abs_path] = true
 
