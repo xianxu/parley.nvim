@@ -194,8 +194,15 @@ Recomputed: (0.5+0.1) × 1.15 + (0.5+0.25+0.15+0.2) × 1.0 = 0.69 + 1.10 = **1.7
       diagnostic; the two `"none"` warnings are deleted
 - [ ] One fall-through to `ResolveRefOrGotoFile`, `stopinsert` first when in
       insert mode
-- [ ] Move `review_menu` to `<M-s>`; update `atlas/modes/review.md:55,199` and
-      `tests/integration/review_menu_spec.lua:93,110`, which assert `<M-o>`
+- [ ] Move `review_menu` to `<M-s>`. **Grep-derived hit list** (13 across 7
+      files — the first version of this row was recalled and named 2):
+      `keybinding_registry.lua:750` (`default_key`), `config.lua:458,462`,
+      `skills/review/init.lua:742,765`, `init.lua`, `atlas/modes/review.md:55,199`,
+      `tests/integration/review_menu_spec.lua:93,110`,
+      `tests/integration/keybinding_agreement_spec.lua:326,370,397,407` — where
+      two hardcoded `{ "<C-g>ve", "<M-o>", "<M-CR>" }` lists need editing and
+      `:407` (journal sidecar asserts `is_nil` for `<M-o>`) fails outright
+- [ ] `<M-g>` also lives in `README.md:189` and `atlas/ui/keybindings.md:65`
 - [ ] Rebind `open_file` to `{ "<M-o>", "<C-g>o" }` — full list in `config.lua`,
       since M2's superset guard requires it
 - [ ] Tests, named: `OpenFileUnderCursor` reaches each of the four steps in both
