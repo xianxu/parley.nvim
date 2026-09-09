@@ -109,6 +109,12 @@ resolver be written that only does exact matching.
   | `outline.lua:273` — branch topic | a renamed child shows no topic |
   | `outline.lua:277` — picker `child_path` | a renamed child stores an unreadable navigation target |
 
+  A **sixth** `resolve_path` turned up in `highlighter.lua` while the other five
+  were being removed. That one was already a correct delegate and never had the
+  bug — but the shared NAME is what made the broken pair look like the working
+  one, so it goes too. After this there is no `local resolve_path` anywhere in
+  `lua/`.
+
   The exporter (`exporter.lua:32`) and highlighter (`highlighter.lua:66`)
   already delegate to `resolve_chat_path`, so after this there is exactly one
   resolver *and* one set of consumers.
@@ -237,6 +243,7 @@ moving off it onto a user action.
 | `resolve_chat_path` | `lua/parley/init.lua` | modified | filesystem glob |
 | `resolve_path` | `lua/parley/chat_respond.lua` | deleted | — |
 | `resolve_path` | `lua/parley/outline.lua` | deleted | — |
+| `resolve_path` | `lua/parley/highlighter.lua` | deleted | — |
 | `_read_repair_reference` | `lua/parley/init.lua` | deleted | — |
 
 - **`repair_reference_at_cursor(buf, lnum)`** — resolves the reference on one
@@ -392,30 +399,30 @@ Against #225 (est 1.79, actual 3.92) for comparable-but-smaller scope, and with
 
 ## Plan
 
-- [ ] Failing test: parent renamed post-fork → ancestor messages are empty.
+- [x] Failing test: parent renamed post-fork → ancestor messages are empty.
       Assert on the MESSAGE LIST, not on the absence of a warning — the warning
       is the symptom the operator saw, the missing context is the defect
-- [ ] Make prefix matching the primary rule in `resolve_chat_path`; delete the
+- [x] Make prefix matching the primary rule in `resolve_chat_path`; delete the
       exact-match tier rather than reordering it (it is the case where the glob
       returns the name already used)
-- [ ] Collision: prefer an exact basename match when the reference has one, else
+- [x] Collision: prefer an exact basename match when the reference has one, else
       lexicographically first + a warning. Replaces the current sort-by-length,
       which encodes "the one with a slug" and stops being right the moment two
       slugged variants exist
-- [ ] Route ALL FIVE consumer sites through it — `chat_respond.lua:195` and
+- [x] Route ALL FIVE consumer sites through it — `chat_respond.lua:195` and
       `:215`, `outline.lua:230`, `:273` and `:277` — and delete both local
       `resolve_path` delegates. Five, not two: the plan-quality gate caught the
       plan claiming "exactly one resolver" while `outline` sat outside it
-- [ ] Test the renamed-CHILD `branch_after` case (the second site, same cause:
+- [x] Test the renamed-CHILD `branch_after` case (the second site, same cause:
       a renamed child fails the parent-branch comparison and truncates at 0)
 - [ ] Test the `<M-t>` tree: a renamed parent must not make the CHILD the tree
       root. Verified failing today via `_build_tree_outline_items` — the outline
       shows `📋 Child` and never reaches the parent
-- [ ] Remove `_read_repair_reference` from the resolution path; resolution
+- [x] Remove `_read_repair_reference` from the resolution path; resolution
       becomes a pure read
-- [ ] Drop `referring_file` from `resolve_chat_path`'s signature and sweep the
+- [x] Drop `referring_file` from `resolve_chat_path`'s signature and sweep the
       four call sites that pass it
-- [ ] Add the cursor-entry trigger: `CursorHold` in a chat buffer, reference on
+- [x] Add the cursor-entry trigger: `CursorHold` in a chat buffer, reference on
       the cursor line, name actually changed, not insert mode, not busy →
       rewrite the line as a BUFFER edit. Test: the no-op case leaves `modified`
       untouched; a busy buffer is skipped and retried on the next hold

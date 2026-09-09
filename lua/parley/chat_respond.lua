@@ -172,11 +172,6 @@ M.build_ancestor_messages = function(ancestor_chain)
     return msgs
 end
 
--- Resolve a path that may be absolute, ~-prefixed, or relative to base_dir.
-local function resolve_path(path, base_dir)
-    return require("parley.helper").resolve_relative_path(path, base_dir)
-end
-
 -- Walk the ancestor chain via parent_link, building an ordered list of
 -- { exchanges, branch_after } records (oldest ancestor first).
 -- Returns an empty table when there is no parent or the parent is unreadable.
@@ -192,7 +187,10 @@ local function collect_ancestor_chain(current_file, parsed_chat, depth)
     end
 
     local current_dir = vim.fn.fnamemodify(current_file, ":h")
-    local abs_parent = resolve_path(parsed_chat.parent_link.path, current_dir)
+    -- THE resolver, called directly (#224). A local wrapper named resolve_path is
+    -- what this module had before, and it was exact-match-only: it worked for
+    -- every reference whose parent had not been renamed yet.
+    local abs_parent = _parley.resolve_chat_path(parsed_chat.parent_link.path, current_dir)
 
     if vim.fn.filereadable(abs_parent) == 0 then
         _parley.logger.warning("collect_ancestor_chain: parent file not readable: " .. abs_parent)
@@ -212,7 +210,7 @@ local function collect_ancestor_chain(current_file, parsed_chat, depth)
     local current_abs = vim.fn.resolve(current_file)
     local parent_dir = vim.fn.fnamemodify(abs_parent, ":h")
     for _, branch in ipairs(parent_parsed.branches) do
-        if resolve_path(branch.path, parent_dir) == current_abs then
+        if _parley.resolve_chat_path(branch.path, parent_dir) == current_abs then
             branch_after = branch.after_exchange
             break
         end

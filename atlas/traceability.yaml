@@ -93,7 +93,10 @@ atlas:
     tests:
       - tests/unit/build_messages_spec.lua
       - tests/unit/ancestor_messages_spec.lua
+      - tests/unit/resolve_candidates_spec.lua
+      - tests/unit/rewrite_reference_spec.lua
       - tests/integration/ancestor_chain_rename_spec.lua
+      - tests/integration/read_repair_spec.lua
       - tests/integration/chat_respond_spec.lua
 
   chat/parsing:

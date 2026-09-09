@@ -50,25 +50,35 @@ describe("ancestor chain across a parent slug rename (#224)", function()
     -- The parent is created bare and renamed once it earns a topic; the child's
     -- back-link still names the pre-rename file. This IS the on-disk state the
     -- operator reported.
-    local function fork_with_renamed_parent(stamp)
-        local pre = stamp .. ".md"
-        local post = stamp .. "_light-lag.md"
+    -- The child gets its OWN timestamp, as a real fork does. The first version
+    -- of this helper appended "-child" to the parent's stamp, so both parsed to
+    -- the same timestamp: the resolver matched the child as its own parent and
+    -- the walk recursed to the depth cap. A fixture that shares an identity key
+    -- tests the collision path, not the rename path.
+    local function fork_with_renamed_parent(pstamp, cstamp)
+        local pre = pstamp .. ".md"
+        local post = pstamp .. "_light-lag.md"
+        local kid_name = cstamp .. "_child.md"
         write_chat(post, {
+            -- The 🤖: prefix LINE is not captured; only its continuation
+            -- lines are (tests/unit/parse_chat_spec.lua:203). A fixture that
+            -- puts the answer on the marker line asserts against an empty
+            -- string and looks like a product bug.
             "💬: what is light lag?", "",
-            "🤖:[A] the delay between an event and seeing it", "",
+            "🤖:[A]", "the delay between an event and seeing it", "",
             "💬: and simultaneity?", "",
-            "🤖:[A] there is no universal now", "",
-            "🌿: " .. stamp .. "-child.md: Child",
+            "🤖:[A]", "there is no universal now", "",
+            "🌿: " .. kid_name .. ": Child",
         })
-        local kid = write_chat(stamp .. "-child.md", {
+        local kid = write_chat(kid_name, {
             "🌿: " .. pre .. ": Light lag",   -- names the PRE-rename parent
-            "", "💬: child question", "", "🤖:[A] child answer",
+            "", "💬: child question", "", "🤖:[A]", "child answer",
         })
         return kid, post
     end
 
     it("carries the parent conversation into the fork's messages", function()
-        local kid = fork_with_renamed_parent("2026-09-09.08-00-00.001")
+        local kid = fork_with_renamed_parent("2026-09-09.08-00-00.001", "2026-09-09.08-05-00.002")
         local msgs = chat_respond._collect_ancestor_messages(kid, parse(kid))
         local text = contents(msgs)
 
@@ -83,7 +93,7 @@ describe("ancestor chain across a parent slug rename (#224)", function()
         -- The second site, same cause: the parent's branch line names the child,
         -- and matching it back uses the same naive resolver. A wrong answer here
         -- truncates the parent at exchange 0 even when the parent resolves.
-        local kid = fork_with_renamed_parent("2026-09-09.08-10-00.001")
+        local kid = fork_with_renamed_parent("2026-09-09.08-10-00.001", "2026-09-09.08-15-00.002")
         local chain = chat_respond._collect_ancestor_chain(kid, parse(kid))
 
         assert.equals(1, #chain, "expected exactly one ancestor")
@@ -94,13 +104,13 @@ describe("ancestor chain across a parent slug rename (#224)", function()
 
     it("still works when the parent was never renamed", function()
         -- The control. If this ever goes red, the fix broke the common case.
-        local stamp = "2026-09-09.08-20-00.001"
+        local stamp, cstamp = "2026-09-09.08-20-00.001", "2026-09-09.08-25-00.002"
         write_chat(stamp .. ".md", {
-            "💬: plain parent question", "", "🤖:[A] plain parent answer", "",
-            "🌿: " .. stamp .. "-child.md: Child",
+            "💬: plain parent question", "", "🤖:[A]", "plain parent answer", "",
+            "🌿: " .. cstamp .. "_child.md: Child",
         })
-        local kid = write_chat(stamp .. "-child.md", {
-            "🌿: " .. stamp .. ".md: Parent", "", "💬: q", "", "🤖:[A] a",
+        local kid = write_chat(cstamp .. "_child.md", {
+            "🌿: " .. stamp .. ".md: Parent", "", "💬: q", "", "🤖:[A]", "a",
         })
         local text = contents(chat_respond._collect_ancestor_messages(kid, parse(kid)))
         assert.is_truthy(text:match("plain parent question"), text)

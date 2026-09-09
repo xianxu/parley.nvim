@@ -104,4 +104,69 @@ M.glob_pattern = function(timestamp)
 	return timestamp .. "*.md"
 end
 
+--- Order the candidates a timestamp glob returned, for one reference. PURE.
+---
+--- The timestamp prefix IS the identity of a chat file; the trailing slug is
+--- for human inspection and carries no meaning to resolution (#224). So a glob
+--- over `<timestamp>*` normally returns exactly one file and this is trivial.
+--- It exists for the case that is not:
+---
+---   * the reference names a file that is still there → that exact name wins,
+---     whatever else matched;
+---   * otherwise the pick is the lexicographically first, which is stable
+---     across machines and across the order the filesystem happens to hand
+---     back — and the caller reports the ambiguity.
+---
+--- The rule it replaces sorted by LENGTH and took the longest, encoding
+--- "prefer the one that has a slug". That is right until two slugged variants
+--- exist, at which point it silently prefers whichever has the wordier topic.
+---
+---@param reference string # the basename the reference used
+---@param names string[] # candidate paths whose timestamp matched
+---@return string[] # ordered picks, best first
+---@return boolean # true when the choice was ambiguous (>1 and no exact match)
+M.resolve_candidates = function(reference, names)
+    local ordered = {}
+    for _, n in ipairs(names or {}) do
+        ordered[#ordered + 1] = n
+    end
+    table.sort(ordered)
+
+    for i, n in ipairs(ordered) do
+        if vim.fn.fnamemodify(n, ":t") == reference then
+            table.remove(ordered, i)
+            table.insert(ordered, 1, n)
+            return ordered, false
+        end
+    end
+    return ordered, #ordered > 1
+end
+
+--- Rewrite one reference inside a line. PURE.
+---
+--- Returns the new line, or nil when `old_basename` does not appear in it —
+--- nil means "nothing to do", which is how the caller avoids dirtying a buffer
+--- for a no-op.
+---
+--- The `%`-escape on the replacement is load-bearing: Lua's `gsub` reads `%` in
+--- the replacement string as a capture reference, so a filename containing one
+--- would either raise or silently interpolate. That trap already cost a round
+--- in #214.
+---
+---@param line string
+---@param old_basename string
+---@param new_basename string
+---@return string|nil
+M.rewrite_reference = function(line, old_basename, new_basename)
+    if old_basename == new_basename then
+        return nil
+    end
+    if not line:find(old_basename, 1, true) then
+        return nil
+    end
+    local safe_new = new_basename:gsub("%%", "%%%%")
+    -- gsub-safe: `safe_new` is %-escaped on the line above
+    return (line:gsub(vim.pesc(old_basename), safe_new))
+end
+
 return M

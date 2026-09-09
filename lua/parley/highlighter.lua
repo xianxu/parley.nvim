@@ -62,9 +62,6 @@ end
 local HIGHLIGHT_VIEWPORT_MARGIN = 20
 local structure_caches = {}
 
-local function resolve_path(path, base_dir)
-    return _parley.resolve_chat_path(path, base_dir)
-end
 
 
 
@@ -714,7 +711,11 @@ M.render_chat_branch_line = function(line, base_dir)
         return line
     end
 
-    local expanded = resolve_path(parsed.path, base_dir)
+    -- THE resolver, called directly. This module's one-line `resolve_path`
+    -- wrapper was already correct, but #224 removes the NAME tree-wide: three
+    -- modules had a local `resolve_path`, two of them exact-match-only, and the
+    -- shared name is what made the broken pair look like the working one.
+    local expanded = _parley.resolve_chat_path(parsed.path, base_dir)
     local file_exists = vim.fn.filereadable(expanded) == 1
 
     local topic = file_exists and _parley.get_chat_topic(expanded) or nil
