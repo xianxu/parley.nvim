@@ -130,6 +130,26 @@ describe("read-repair on cursor entry", function()
         assert.is_false(modified(buf))
     end)
 
+    it("skips in insert mode", function()
+        -- #224 BR-2: atlas claimed "five guards, each with its own test" and
+        -- this one had none — deleting the insert-mode check broke nothing.
+        -- Repair must not fight a half-typed reference.
+        local kid = stale_pair()
+        local buf, lnum = open_at(kid, "🌿:")
+        local before = line_at(buf, lnum)
+
+        local real = vim.api.nvim_get_mode
+        vim.api.nvim_get_mode = function() return { mode = "i", blocking = false } end
+        local repaired = parley.repair_reference_at_cursor(buf, lnum)
+        vim.api.nvim_get_mode = real
+
+        assert.is_false(repaired)
+        assert.equals(before, line_at(buf, lnum))
+        assert.is_false(modified(buf))
+        -- and it is not a lost chance: it repairs once you leave insert
+        assert.is_true(parley.repair_reference_at_cursor(buf, lnum))
+    end)
+
     it("skips while the buffer is busy", function()
         -- A streaming response is a concurrent writer, and chat_lease
         -- invalidates on concurrent mutation. It IGNORES rather than queues —

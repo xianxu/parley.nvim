@@ -3186,7 +3186,11 @@ M.repair_reference_at_cursor = function(buf, lnum)
 		return false
 	end
 
-	vim.api.nvim_buf_set_lines(buf, lnum - 1, lnum, false, { updated })
+	-- buffer_edit, not nvim_buf_set_lines directly: init.lua sits on the
+	-- SHRINKING allowlist in tests/arch/buffer_mutation_spec.lua (#90 — "after
+	-- Phase 3, ONLY buffer_edit.lua remains"), so a new direct call moves that
+	-- list the wrong way. replace_line_at is exactly this operation.
+	require("parley.buffer_edit").replace_line_at(buf, lnum - 1, updated)
 	return true
 end
 
@@ -3293,8 +3297,18 @@ local function resolve_chat_path(path, base_dir)
 		-- while `get_chat_dirs()` returns it resolved (`/private/tmp/…` on
 		-- macOS), so a plain `d ~= base_dir` skip globs the same directory
 		-- twice — and every hit then looks like a same-timestamp collision.
+		-- The reference's OWN directory is in the search set, not just base_dir
+		-- and the chat roots. Without it, an absolute or `../archive/…`
+		-- reference globs everywhere EXCEPT where it points: `resolve_candidates`
+		-- never sees the exact basename, an unrelated same-timestamp file in a
+		-- chat root wins, and the existence loop below is unreachable because
+		-- the glob already answered. That is a silently WRONG file — the same
+		-- failure this issue exists to remove, from the opposite cause (#224
+		-- BR-1). Adding the directory keeps the one-rule design: the exact hit
+		-- wins through resolve_candidates rather than through a restored tier.
 		local seen_dir, search_dirs = {}, {}
-		for _, d in ipairs(vim.list_extend({ base_dir }, M.get_chat_dirs() or {})) do
+		local ref_dir = vim.fn.fnamemodify(candidates[1], ":h")
+		for _, d in ipairs(vim.list_extend({ base_dir, ref_dir }, M.get_chat_dirs() or {})) do
 			local key = vim.fn.resolve(vim.fn.fnamemodify(d, ":p")):gsub("/+$", "")
 			if not seen_dir[key] then
 				seen_dir[key] = true

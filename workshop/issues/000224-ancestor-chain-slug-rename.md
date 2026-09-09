@@ -240,6 +240,7 @@ moving off it onto a user action.
 | `repair_reference_at_cursor` | `lua/parley/init.lua` | new | buffer read/write |
 | `_collect_ancestor_messages` | `lua/parley/chat_respond.lua` | new | test seam over the ancestor walk |
 | `_collect_ancestor_chain` | `lua/parley/chat_respond.lua` | new | test seam over the ancestor walk |
+| `_find_tree_root` | `lua/parley/outline.lua` | new | test seam over the upward tree walk |
 | `resolve_chat_path` | `lua/parley/init.lua` | modified | filesystem glob |
 | `resolve_path` | `lua/parley/chat_respond.lua` | deleted | — |
 | `resolve_path` | `lua/parley/outline.lua` | deleted | — |
@@ -257,6 +258,12 @@ moving off it onto a user action.
     property that makes it unsurprising; a whole-file rewrite triggered by
     resting a cursor would be the behaviour the old design was criticised for,
     moved rather than removed.
+
+- **`_find_tree_root`** — the UPWARD half of the outline walk.
+  `_build_tree_outline_items` builds *downward* from whatever path it is handed,
+  so a test driving it can never observe a broken parent lookup — which is
+  exactly how the `<M-t>` coverage claim shipped unbacked (close review BR-2).
+  Same shape as the ancestor seam below: the defect lives in the IO half.
 
 - **`_collect_ancestor_messages` / `_collect_ancestor_chain`** — the repo's
   `M._x = local_fn` seam idiom. The walk is IO (it reads parent files off disk
@@ -286,6 +293,51 @@ keeps its existing depth cap.
 **Trust (ARCH-SECURE).** The reference is transcript text, so resolution goes
 through the `helper.safe_glob` / `expand_path` guards #225 installed; the arch
 guard added there already covers any new sink this introduces.
+
+## Revisions
+
+### 2026-09-09 — close review round 1 (REWORK, 1 Critical + 2 Important)
+
+- **BR-1 (Critical) — making the glob primary introduced a silently WRONG
+  answer.** `search_dirs` was `{base_dir} ∪ chat_roots`, so a reference whose
+  own directory is neither — an absolute path, `~/…`, `../archive/…` — globbed
+  everywhere *except* where it pointed. `resolve_candidates` never saw the exact
+  basename, an unrelated same-timestamp file in a chat root won, and the
+  existence loop below was unreachable because the glob had already answered.
+  Reproduced: an archived chat referenced by absolute path resolved to a
+  different chat entirely.
+  That is this issue's own failure mode from the opposite cause, and it is worse
+  than the bug being fixed: not-found is loud, wrong-file is silent. The fix
+  adds the reference's own directory to the glob set, so the exact hit wins
+  *through* `resolve_candidates` — the one-rule design intact, no tier restored.
+
+- **BR-2 (Important) — three claims of coverage with no test behind them.** All
+  three verified by the reviewer's mutations, and all three are mine:
+  the `<M-t>` Plan row was ticked with only the arch guard behind it; the
+  `branch_after` test wrote the parent's branch line as the child's ACTUAL
+  on-disk name, so the naive resolver handled it and the test passed with the
+  fix reverted; and the atlas claimed "five guards, each with its own test"
+  while the insert-mode guard had none.
+  The `<M-t>` one has a second lesson in it: I drove
+  `_build_tree_outline_items`, which builds *downward* from the path it is
+  handed and therefore can never observe a broken parent lookup. The defect
+  lives in the upward walk, which is now exposed as `_find_tree_root`. Testing
+  the reachable seam instead of the defective one is how a claim ships unbacked.
+
+- **BR-3 (Important) — the new writer bypassed `buffer_edit`.** `init.lua` is on
+  `buffer_mutation_spec`'s *shrinking* allowlist (#90: "after Phase 3, ONLY
+  buffer_edit.lua remains"), and a new direct `nvim_buf_set_lines` moves that
+  list the wrong way. `replace_line_at` is exactly this operation.
+
+- Minor: `<M-t>` resolved the same branch reference twice per untopiced branch.
+  Under prefix identity each resolve is a glob per chat root, so that is double
+  cost on a keystroke path.
+
+Each fix is mutation-verified by name with lint clean — twice this round an
+`exit 2` came from lint (an unused variable the mutation created) rather than
+from the guard, and once a `head -2` on the output hid the failure I was looking
+for. Red for the wrong reason is the same as green, and so is red you did not
+read.
 
 ## Estimate
 
