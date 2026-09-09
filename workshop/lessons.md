@@ -1827,3 +1827,60 @@ either direction.
 3. **One predicate behind every guard.** `helper.would_execute` is shared by
    `expand_path`, `safe_glob` and `abs_path` precisely so a new guard cannot
    quietly adopt a narrower notion of "dangerous" than the existing ones.
+
+## Check why the exit code came back, not just what it was (#225)
+
+Three verification steps of mine were buggy in a single round, and each one
+produced a *plausible* result that I nearly accepted:
+
+1. A mutation check reported `exit 2` and I read it as "the guard bites". The
+   `2` came from **lint** — my probe shadowed a variable — and `make test` runs
+   lint first and bails. The guard never ran.
+2. A mutation meant to add a top-level export inserted it *inside* a function,
+   because `s.replace('return _H', …)` matched an earlier `return _H.abs_path(…)`
+   substring. Indented, it was invisible to a `^`-anchored matcher. `exit 0`
+   looked like "the guard is blind"; the guard was fine and the mutation was
+   malformed.
+3. (Round 3) A probe and the test it was meant to corroborate shared the same
+   wrong function signature, so both agreed that nothing executed — because
+   nothing ran at all.
+
+The common shape: a result consistent with my hypothesis, produced by a
+mechanism I had not checked.
+
+**Rules.**
+
+1. **A mutation check needs the failure to name the mutation.** Grep the output
+   for the symbol you introduced. "It went red" is not enough — red for the
+   wrong reason is the same as green.
+2. **Read the failure text, not the exit status, when a step is supposed to
+   fail.** Exit status is the right oracle for "did the suite pass"; it is the
+   wrong oracle for "did MY guard catch MY probe".
+3. **Anchor textual mutations.** `replace(x, y, 1)` finds the first occurrence,
+   which is rarely the one you pictured. Assert on the file's shape
+   (`endswith`, a unique count) before mutating.
+
+## The guard you install to end a pattern will contain the pattern (#225)
+
+Round 2 replaced a list of sites with a rule. Round 3 found the rule covered one
+sink of four. Round 4 found the *matcher* for that rule saw one argument shape,
+and its allowlist keyed on a file rather than a site — so an entry pre-approved
+calls written later. Separately, the sweep meant to catch untabled entities
+matched the `M.` export idiom literally, and was therefore inert across the one
+file where five of the issue's new entities lived.
+
+Every one of those was a mechanism installed to stop hand-maintained
+enumerations, which was itself a hand-maintained enumeration one level up.
+
+**Rules.**
+
+1. **After writing a guard, ask what in it is still a literal.** A hardcoded
+   `M.`, a single sink name, one argument shape, a file-level key. Each is a
+   quantifier you left in your head.
+2. **Test the guard against the thing it is meant to catch, in the shapes the
+   codebase actually writes.** Grep the tree for the spellings in use and drive
+   the matcher over each; a self-test that exercises the handled shape confirms
+   nothing.
+3. **A guard is inert until you have watched it fire.** Add a deliberate
+   violation, in the real file, in the real idiom, and see it named in the
+   failure.

@@ -132,8 +132,30 @@ describe("arch: single-source sweeps stay swept", function()
             end
         end
         local plan_body = table.concat(table_rows, "\n")
+
+        -- A module's export table is whatever it returns. Reading it from the
+        -- file beats hardcoding `M`, which is what made this guard inert over
+        -- helper.lua's `_H.` idiom.
+        local alias_cache = {}
+        local function alias_for(file)
+            if not file then return nil end
+            if alias_cache[file] ~= nil then return alias_cache[file] or nil end
+            local found = false
+            if vim.fn.filereadable(file) == 1 then
+                for l in io.lines(file) do
+                    local a = l:match("^return ([%w_]+)%s*$")
+                    if a then alias_cache[file] = a found = true break end
+                end
+            end
+            if not found then alias_cache[file] = false end
+            return alias_cache[file] or nil
+        end
+
         local missing = {}
+        local current_file = nil
         for line in diff:gmatch("[^\n]+") do
+            local hdr = line:match("^%+%+%+ b/(.+)$")
+            if hdr then current_file = hdr end
             -- Public FUNCTIONS, in either definition form. Deliberately not
             -- data: `M.AGENT = { … }` is a constant belonging to a module the
             -- tables already name by path, and demanding a row per constant
@@ -141,15 +163,23 @@ describe("arch: single-source sweeps stay swept", function()
             -- already-listed module still needs its row — that is the case the
             -- guard exists for. A bare `fn = function()` is a field in a local
             -- table literal (a picker mapping), not exported surface.
-            local name = line:match("^%+function M%.([%w_]+)%(")
+            -- The module ALIAS, not the literal `M`. helper.lua exports through
+            -- `_H.`, so a guard hardcoded to `M` was inert across that whole
+            -- file — and five of #225's seven new entities live behind `_H.`,
+            -- which is to say the guard was blind exactly where the work was
+            -- (#225 round 4 I2). `alias_for(file)` derives it from the module's
+            -- own `return <X>`, so `_S.` and friends are covered too.
+            local alias = alias_for(current_file) or "M"
+            local esc = vim.pesc(alias)
+            local name = line:match("^%+function " .. esc .. "%.([%w_]+)%(")
             if not name then
-                -- `M.x = <rhs>`: an export, in any of the forms this repo uses.
-                -- Narrowing this to `= function` (the first attempt) dropped the
-                -- 41-site `M._x = local_fn` seam-export idiom — excluding by
-                -- SYNTAX rather than by what the right-hand side actually is.
-                -- Data constants are what should be excluded, and they are
-                -- literals: a table, a string, a number.
-                local n, rhs = line:match("^%+M%.([%w_]+) = (.+)$")
+                -- `<alias>.x = <rhs>`: an export, in any of the forms this repo
+                -- uses. Narrowing this to `= function` (the first attempt)
+                -- dropped the 41-site `M._x = local_fn` seam-export idiom —
+                -- excluding by SYNTAX rather than by what the right-hand side
+                -- actually is. Data constants are what should be excluded, and
+                -- they are literals: a table, a string, a number.
+                local n, rhs = line:match("^%+" .. esc .. "%.([%w_]+) = (.+)$")
                 if n and rhs and not rhs:match('^[{"\'%d]') then
                     name = n
                 end

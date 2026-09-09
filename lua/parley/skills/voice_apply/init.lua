@@ -40,10 +40,15 @@ return {
     -- ctx = { args = {...}, repo_root, skill_md }.
     source = function(ctx)
         local slug = (ctx.args or {}).slug
-        local style_path = vim.fn.expand("~/.personal/" .. tostring(slug) .. "-writing-style.md")
-        local f = io.open(style_path, "r")
+        -- expand_path, not expand: a skill argument can be emitted by the model,
+        -- so `slug` carries transcript provenance. It was exempt from the #225
+        -- sink guard only because the matcher could not see a concatenated
+        -- argument — exempt by accident rather than by allowlist.
+        local style_path = require("parley.helper").expand_path(
+            "~/.personal/" .. tostring(slug) .. "-writing-style.md")
+        local f = style_path and io.open(style_path, "r")
         if not f then
-            error("Voice style file not found: " .. style_path)
+            error("Voice style file not found: " .. tostring(style_path or slug))
         end
         local style = f:read("*a")
         f:close()

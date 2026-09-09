@@ -1,12 +1,13 @@
 ---
 id: 000225
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-09-08
 updated: 2026-09-08
 estimate_hours: 1.79
 started: 2026-09-08T16:45:24-07:00
+actual_hours: 3.92
 ---
 
 # Open a link with <M-o>, falling back to gf
@@ -139,6 +140,7 @@ possible at all.
 | Name | Lives in | Status |
 |---|---|---|
 | `glob_base` | `lua/parley/helper.lua` | new |
+| `would_execute` | `lua/parley/helper.lua` | new |
 
 Reference opening is *mostly* an integration — it reads the filesystem, creates
 buffers and moves windows — and the first version of this table said "none",
@@ -148,6 +150,12 @@ which the close review correctly called out as hiding a pure fragment.
   (`a/b/**/*.md` → `a/b`). It had two near-copies stripping different shapes;
   neither wrong, but a pair that could drift. Its spec runs with no IO, which
   is the test that the purity claim is real.
+
+- **`would_execute`** — a string predicate: would handing this to a
+  command-executing vim function run a shell command? One predicate behind all
+  three guards, so a new guard cannot adopt a narrower notion of "dangerous"
+  than the existing ones — which is exactly how `glob` stayed open for a round
+  after `expand` was closed.
 
 The second version of this table also listed `expand_path` here, which was
 wrong: `vim.fn.expand` reads the environment, globs the filesystem and — the
@@ -164,6 +172,7 @@ The other pure parts it leans on (`_parse_at_reference`, `_parse_branch_ref`,
 | `_open_reference_under_cursor` | `lua/parley/init.lua` | new | filesystem + buffer/window opening |
 | `expand_path` | `lua/parley/helper.lua` | new | `vim.fn.expand` |
 | `abs_path` | `lua/parley/helper.lua` | new | `vim.fn.expand` + `vim.fn.resolve` |
+| `safe_glob` | `lua/parley/helper.lua` | new | `vim.fn.glob` |
 | `resolve_relative_path` | `lua/parley/helper.lua` | new | path resolution against a base dir |
 | `focus_other_split` | `lua/parley/init.lua` | new | window layout |
 | `open_buf` | `lua/parley/init.lua` | modified | — |
@@ -199,6 +208,11 @@ The other pure parts it leans on (`_parse_at_reference`, `_parse_branch_ref`,
 
 - **`open_chat_reference`** — deleted. It was the markdown-only chain; its one
   production caller and its one test now go through the unified function.
+
+- **`safe_glob`** — the second sink. `vim.fn.glob` executes backticks exactly
+  as `expand` does, which the arch spec now establishes by probe rather than by
+  memory. It refuses like `expand_path` (returns `nil`), because a glob has no
+  sensible "degrade to the literal" answer.
 
 - **`expand_path` / `abs_path`** — the provenance boundary. `expand_path`
   refuses (returns `nil`) so a caller can *report* the refusal; `abs_path` is
@@ -383,6 +397,54 @@ claims that round 2 could not support are corrected: "every arm goes red" was
 false (C3), and "fifteen copies → one" was false (six config-side copies
 remain, now stated).
 
+### 2026-09-08 — close review round 4 (FIX-THEN-SHIP)
+
+Gate passed: no open blocking findings. Three Importants were demoted past the
+round cap and are fixed here anyway, because all three are about the *guards*
+the previous rounds installed — the mechanisms meant to end this pattern still
+had the pattern in them.
+
+- **I1 — the sink matcher saw one argument shape, and the allowlist keyed on a
+  file rather than a site.** Round 3 established the sink *set* by executable
+  probe and left the matcher's *coverage* established by memory: it captured
+  only a leading identifier, so `vim.fn.glob("/tmp/" .. ref_path)` was invisible
+  — and one such call was already in the tree
+  (`skills/voice_apply/init.lua:43`), exempt by accident rather than by
+  allowlist. Its self-test drove the single shape it already handled, which is
+  round 3's "my probe shared my misconception" one layer up.
+  The matcher now extracts the full first-argument expression with balanced
+  parens/quotes, skips only bare string literals, and keys `ALLOW` on
+  `<file>:<enclosing function>:<expression>` — so an entry cannot pre-approve a
+  call written later. Its self-test drives nine argument shapes and three
+  literals. Both holes the reviewer demonstrated now fail by name.
+  `voice_apply`'s `slug` is routed through `expand_path`: a skill argument can
+  be emitted by the model, so it carries transcript provenance.
+- **I2 — the code→table sweep was blind to `helper.lua`'s export idiom.** It
+  matched `M.` literally; `helper.lua` exports through `_H.`, so its entire
+  surface was exempt — and five of this issue's new entities live there. The
+  guard was inert exactly where the work was. It now derives the alias from the
+  module's own `return <X>`. De-blinded, it immediately named `safe_glob` and
+  `would_execute` as untabled, which they were.
+- **I3 — the inline-link arm was the one member of the tri-state conversion with
+  no test through the chain.** The bug it hid is specific: had the success arm
+  returned `nil`, the chain would keep walking, answer `"none"`, and run
+  `ResolveRefOrGotoFile` on top of a navigation that already happened — two
+  navigations per keypress, with a green suite. Tests added in both buffer
+  types plus the missing-target case, mutation-checked against exactly that
+  `nil`. The rule: an arch check now enumerates every producer of the tri-state
+  and requires each to be dispositioned by name with the test that
+  distinguishes its values. This was the fourth sweep on this issue to come up
+  one member short.
+
+**Three of my own verification steps were themselves buggy this round**, which
+is the honest summary of the whole issue: a mutation check that reported `exit
+2` from *lint* rather than from the guard; a mutation that inserted its probe
+into the middle of a function (matching a `return _H` substring) so it proved
+nothing; and, in round 3, a probe that shared its test's wrong signature. Each
+was caught only by looking at *why* the result came back the way it did. A
+green or red exit code is a starting point for that question, not an answer to
+it.
+
 ## Estimate
 
 Derived against the calibration ledger's comparable parley rows rather than a
@@ -479,6 +541,7 @@ Recomputed: (0.5+0.1) × 1.15 + (0.5+0.25+0.15+0.2) × 1.0 = 0.69 + 1.10 = **1.7
 ## Log
 
 ### 2026-09-08 — implementation
+- 2026-09-08: closed — Round 4 after REWORK. Verified AFTER the commit (5394d88), by exit code: make test exit=0, make lint 0 warnings / 0 errors in 359 files — that ordering IS round 3s C1, since the routing guard reads git state and answers differently across the commit boundary. C1 fixed at the mechanism, not the instance: the guard unioned git ls-files --others so an untracked new spec is flagged while it is being written rather than one commit later; proven by touching a stray spec and watching it go red. The arch spec is also routed. C2 fixed at the rule, not the sink: vim.fn.glob executes backticks and reached a transcript-derived pattern through find_files pattern half (reproduced, marker created; now refused). The sink set is PROBED — the arch spec runs a live payload through nine candidate vim functions and fails if the declared set differs either way; four execute (expand, glob, globpath, expandcmd). One shared predicate helper.would_execute backs expand_path, safe_glob and abs_path. Mutation-checked: a raw vim.fn.glob in find_files reddens the arch guard, and SINKS={expand} reddens the probe. C3 fixed: the outline arm passed a buffer number where root_path was wanted and put the branch line before the first exchange, so it asserted nothing — my own standalone probe had the identical bug and I had read its MARKER:false as confirmation. The arm now asserts the walk actually rendered the child branch before asserting refusal, and was verified by reverting outline.lua to its vulnerable resolver and watching it go red. Minors: third prepare_dir consumer handles nil with an arch check that enumerates consumers mechanically; landing-mode specs parameterised over {chat, markdown} so divergence seven is a red test not a review round; atlas corrected on two claims round 2 could not support (every arm goes red — false; fifteen copies to one — false, six config-side remain). Divergence table extended to six rows with verdicts. side-quest: chat_respond_footnote_spec made hermetic after one intermittent failure during this rounds verification; three consecutive full runs green afterwards.; review verdict: FIX-THEN-SHIP
 
 **The bare-name gap was not just an omission.** D3 was tabled as "markdown
 resolves bare filenames against the chat roots, chat does not." What chat

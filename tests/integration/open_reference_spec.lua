@@ -210,6 +210,51 @@ describe("reference opening: capabilities that live in only one chain", function
     end)
 end)
 
+describe("reference opening: the inline [🌿:…](file) arm", function()
+    -- The one member of the tri-state conversion with no test through the
+    -- chain (#225 round 4 I3). `try_open_inline_branch_link` went from
+    -- true|false to "opened"|"failed"|nil in this window, and the bug the gap
+    -- hid is specific: had the success arm returned nil, the chain would keep
+    -- walking, reach the @@ step, answer "none", and the caller would run
+    -- ResolveRefOrGotoFile AFTER open_buf had already navigated — two
+    -- navigations per keypress, with a green suite.
+    for _, bt in ipairs({ "chat", "markdown" }) do
+        it("opens the linked chat and stops there, in " .. bt, function()
+            local target = write_chat("2026-03-24.18-00-00.001_inline-" .. bt .. ".md")
+            local line = "as shown in [🌿:the child](" .. target .. ") above"
+            local origin = bt == "chat"
+                and write_chat("2026-03-24.18-10-00.001_inline-src-" .. bt .. ".md", { "", line })
+                or write_markdown("inline-src-" .. bt .. ".md", { "# Doc", "", line })
+
+            local gf_calls = 0
+            local real = parley.cmd.ResolveRefOrGotoFile
+            parley.cmd.ResolveRefOrGotoFile = function() gf_calls = gf_calls + 1 end
+            local rec = open_at(origin, line, 20)
+            parley.cmd.ResolveRefOrGotoFile = real
+
+            same_path(target, rec.opened)
+            -- "opened" is terminal. A nil here would fall through to gf on top
+            -- of a navigation that already happened.
+            assert.equals(0, gf_calls)
+        end)
+    end
+
+    it("a missing inline target reports and does not fall through", function()
+        local line = "see [🌿:gone](2026-01-01.00-00-00.998_nope.md) here"
+        local chat = write_chat("2026-03-24.18-20-00.001_inline-missing.md", { "", line })
+
+        local gf_calls = 0
+        local real = parley.cmd.ResolveRefOrGotoFile
+        parley.cmd.ResolveRefOrGotoFile = function() gf_calls = gf_calls + 1 end
+        local rec = open_at(chat, line, 8)
+        parley.cmd.ResolveRefOrGotoFile = real
+
+        assert.is_nil(rec.opened)
+        assert.equals(0, gf_calls)
+        assert.is_truthy(table.concat(rec.warnings, "\n"):match("not found"))
+    end)
+end)
+
 describe("reference opening: the @@ forms", function()
     it("a path containing an @ survives", function()
         -- Chat's chain was greedy (`^@@(.+)@@`) and markdown's was not

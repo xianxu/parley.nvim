@@ -669,3 +669,209 @@ findings:
       now precede a nullary function returning a boolean. Move the block back
       adjacent to M.open_buf.
 ```
+
+---
+
+## Re-review — 2026-09-08T21:27:20-07:00 (FIX-THEN-SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 225 — Open a link with <M-o>, falling back to gf |
+| repo | parley.nvim |
+| issue file | workshop/issues/000225-open-link-alt-o.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 4fc595d084904410aa5ed82d7c8a3c81f987949d..5394d88d203e19360d7c2bf89470709194f0eea4 |
+| command | sdlc close --issue 225 |
+| reviewer | claude |
+| timestamp | 2026-09-08T21:27:20-07:00 |
+| verdict | FIX-THEN-SHIP |
+
+## Review
+
+```verdict
+verdict: FIX-THEN-SHIP
+confidence: high
+```
+
+All seven open findings are genuinely closed, and I verified six of them by reverting the fix and watching a test go red rather than by reading the commit message. The suite is green at HEAD (`make test` exit 0, 203 spec files, lint 0/0 in 359 files), which retires BR-13 both as a fact and as a mechanism — the routing guard now unions `git ls-files --others`, so a new spec is flagged while it is being written rather than one commit later. The remaining findings are all about the *guards* the last three rounds installed, not about the shipped behaviour: two of them have blind spots I demonstrated with a live probe (an unguarded `vim.fn.glob("/tmp/" .. ref_path, …)` leaves the sink spec 6/6 green; a new `_H.` export leaves the Core-concepts sweep 21/21 green), and one arm of the new three-valued contract has no test at all. Nothing here is a correctness bug in `<M-o>`, so the gate is passable, but the pattern the last three rounds recorded — *a rule declared closed while its enumeration is narrower than its class* — is still live in the mechanisms meant to end it.
+
+## 1. Strengths
+
+- **The sink set is now probed, not remembered** (`tests/arch/untrusted_path_spec.lua:98-130`). Running nine candidate vim functions against a live `touch` payload and asserting the declared set matches *in both directions* is the right shape: it fails when a sink stops executing as well as when one starts. Four execute (`expand`, `glob`, `globpath`, `expandcmd`); I re-ran the reasoning independently and would also have guessed two.
+- **BR-21's exact reproduction is dead.** `process_directory_pattern("<dir>/**/\`touch <marker>\`.md")` at HEAD logs `Refusing to glob a pattern containing a backtick` and creates nothing. Reverting `helper.lua:437` to `vim.fn.glob(glob_pattern, …)` reddens the arch guard with `lua/parley/helper.lua:437 vim.fn.glob(glob_pattern)`.
+- **BR-22's no-op test actually bites now.** Reverting `outline.lua`'s `resolve_path` to its inline `vim.fn.resolve(vim.fn.expand(path))` turns `tests/integration/untrusted_path_spec.lua:150` red with *"the outline tree walk executed a shell command"*. The added "guard the guard" assertion (`rendered:match("Child")`) is what makes that possible.
+- **One shared predicate behind three guards.** `helper.would_execute` (`helper.lua:274`) means `expand_path`, `safe_glob` and `abs_path` cannot drift apart on what "dangerous" means — the exact failure mode that kept `glob` open for a round after `expand` closed.
+- **The collision guard is genuinely general now** (`tests/unit/keybindings_spec.lua`), and the `scopes_overlap` helper has its own positive/negative test so the disjoint `<M-CR>` case is *allowed*, not accidentally passing.
+
+## 2. Critical findings
+
+None.
+
+## 3. Important findings
+
+### I1 — the sink matcher only sees one argument shape, and the allowlist keys on a file, not a site
+`tests/arch/untrusted_path_spec.lua:70` — `sink_pattern` is `vim%.fn%.<fn>%(([%w_%.]+)`, so it matches only calls whose first argument *starts* with an identifier.
+
+Probed against this tree, both holes are real:
+- Appending `_H.probe_hole = function(ref_path) return vim.fn.glob("/tmp/" .. ref_path, false, true) end` to `helper.lua` leaves the arch spec **6/6 green**. `vim.fn.glob("~/" .. pattern)` and `vim.fn.expand(("%s/x"):format(p))` are ordinary spellings, and one already exists in-tree: `skills/voice_apply/init.lua:43` (`vim.fn.expand("~/.personal/" .. tostring(slug) .. …)`) is invisible to the guard. That one is safe — `slug` is an operator-typed skill argument — but it is exempt by accident, not by allowlist.
+- `ALLOW` is keyed `"<file>:<arg token>"`, so `expand_path`'s entry (`lua/parley/helper.lua:path`) pre-approves *every* `vim.fn.expand(path)` in `helper.lua`. Appending a second `_H.probe_hole2 = function(path) return vim.fn.expand(path) end` also leaves the spec **6/6 green**.
+
+**This is the 4th finding in family `untrusted-path-expansion`.** Earlier rounds fixed instances. Do NOT fix these two shapes. The rule: round 3 established the sink *set* by executable probe and left the *matcher's coverage* established by memory — and `it("the matcher actually sees a violation, for every sink")` (line 158) drives exactly one shape, `vim.fn.<fn>(ref_path, false, true)`, so it confirms only the form already handled. That is the same "my probe shared my misconception" failure round 3 recorded for C3, one layer up. Fix sketch: (a) drive the matcher test over the argument shapes the codebase actually uses — bare identifier, `a .. b`, `"lit" .. x`, `f(x)`, `("%s"):format(x)`, `vim.fn["glob"](x)` — and assert each is either seen or explicitly out of scope with a reason; (b) invert the matcher to flag every `vim.fn.<sink>(` whose argument list is not a single string literal; (c) key `ALLOW` on `<file>:<line-ish site>` or on the enclosing function, so an allowlist entry cannot silently cover a call written later.
+
+### I2 — `safe_glob` and `would_execute` are new public helpers with no Core-concepts row, and the guard that should catch that is blind to `helper.lua`'s export idiom
+`lua/parley/helper.lua:274` (`_H.would_execute`) and `:295` (`_H.safe_glob`) are new in this window and are documented in `atlas/context/file_references.md` as two of the three transcript-path guards. Neither appears in the issue's Core concepts table (Pure or Integration). `would_execute` is a pure string predicate and belongs in the Pure table beside `glob_base`; `safe_glob` is an Integration point wrapping `vim.fn.glob`.
+
+The code→table sweep (`tests/arch/single_source_sweeps_spec.lua:144-156`) matches `^%+function M%.<name>%(` and `^%+M%.<name> = <rhs>` only. `helper.lua` exports through `_H.`, so its whole surface is exempt. Probed: a new `_H.brand_new_helper` inserted before `return _H` leaves the spec **21/21 green**, while a new `M.brand_new_export` in `init.lua` reddens it with *"these are added by this issue but appear in no Core-concepts table row"*. Five of this issue's seven new entities (`glob_base`, `expand_path`, `abs_path`, `resolve_relative_path`, `safe_glob`, `would_execute`) live behind `_H.` — the guard was inert exactly where the work was.
+
+**New family `core-concepts-table-not-derived`.** I am coining rather than reusing `pure-label-vs-io` because that slug names a symptom (one row's purity label). It is the same rule: the table is hand-maintained, so it drifts in membership as well as in labelling, and BR-16 was that rule's first instance. Fix sketch: derive the export alias from the module's own `local <X> = {}` / `return <X>` rather than hardcoding `M`, so `_H.`, `_S.` and friends are covered; then add the two missing rows.
+
+### I3 — the inline-`[🌿:…](file)` arm is the one member of the tri-state conversion with no test through the chain
+`lua/parley/init.lua:3292` `try_open_inline_branch_link` was converted from `true|false` to `"opened"|"failed"|nil` in this window. `tests/integration/open_reference_spec.lua` has no inline-link case in either buffer type (its only `🌿` fixture is the `🌿:`-line "failed" case at :323), and no other spec drives `OpenFileUnderCursor` or `_open_reference_under_cursor` with one — `inline_branch_spec.lua` and `branch_child_spec.lua` test the parser and the child creation, not the opening chain. The Done-when bullet names it explicitly: *"`<M-o>` opens a `🌿:` line, **an inline link**, a `src:` link … in both chat and markdown."*
+
+The bug the gap hides is specific: if the `"opened"` arm had returned `nil`, `open_reference_under_cursor` would keep walking, reach the `@@` chain, return `"none"`, and the caller would run `ResolveRefOrGotoFile()` *after* `open_buf` had already navigated. Two navigations per keypress, silently, with a green suite.
+
+**This is the 4th finding in family `guard-nil-contract-unswept`.** Do NOT fix this instance alone. The rule: a return-contract change requires a mechanical enumeration of the converted set (`grep -n 'return "opened"' lua/` gives the three), with each member dispositioned by a test that distinguishes the *new* values — the same discipline the round-3 `prepare_dir` arch check applied to consumers, applied to producers. This is the third sweep on this issue that came up one member short.
+
+## 4. Minor findings
+
+- **`docblock-detached-from-symbol` (2nd).** Three blocks that do not describe the symbol they sit on, all from this window: `helper.lua:455-457` — `process_directory_pattern`'s comment and its `---@param dirspec` / `---@return string # combined contents of all matching files` now precede `_H.glob_base` (:468), which therefore carries two `@param`s and two `@return`s while `process_directory_pattern` (:477) has none; `init.lua:3289` — `-- Returns true if a link was found (and handled), false otherwise` retained directly above the new `---@return "opened"|"failed"|nil`; `helper.lua:676` — `---@return string` on `prepare_dir`, which now returns `string|nil`. Do NOT fix the three sites: the adjacency half is mechanically checkable and belongs in the arch sweeps. I ran that check over `lua/` — a `---@param` block whose following function does not take that parameter has exactly **one** new instance in this diff (`glob_base`) and seven pre-existing benign ones (`_params` vs `params`, multi-line signatures), so the guard is cheap and would not drown in legacy noise.
+- **`unbacked-existing-behavior-claim` (3rd).** The issue's own Core-concepts prose still carries both claims round 3 retracted elsewhere: `workshop/issues/000225-open-link-alt-o.md:208-209` — *"`abs_path` is also the single copy of `vim.fn.resolve(vim.fn.expand(x))`, which had fifteen"* (six remain: `root_dir_picker.lua:36,38,91`, `root_dirs.lua:12`, `init.lua:68`, `super_repo.lua:26`) — and `:211-212` — *"allowlisting every `vim.fn.expand(<variable>)` in `lua/`"*, which is the narrow round-2 rule BR-21 replaced with four sinks. `helper.lua:311` and the atlas were corrected; the issue file, which is the artifact the plan-table guard actually reads, was not. Do NOT fix the two sentences — the class is "a retracted claim gets swept wherever it was restated", and the enumeration is `grep -rn` over the issue, the plan, the atlas and the code comments.
+
+## 5. Test coverage notes
+
+- Mutation-verified this round, by revert: `safe_glob` in `find_files` (arch guard red), `outline.lua`'s resolver (integration arm red), `root_dirs.lua`'s `or dir` (arch enumeration red), the `deleted`-row inversion (re-adding `M.open_chat_reference` reddens `single_source_sweeps_spec`). BR-8's fix does fire — note that it only fires on a branch whose name matches `^%d%d%d%d%d%d-`, so a detached-HEAD or renamed worktree runs it as `pending`.
+- The landing-mode cases are now parameterised over `{chat, markdown}` (`open_reference_spec.lua:461-519`), which is the right harness shape and is what closes BR-24. It is the *only* parameterised group — D1/D2/D3 are still hand-written once per buffer type, and the `@@`-form cases are chat-only. That is a defensible stopping point, not a finding, but it is where the next divergence will hide.
+- The `<M-o>` → artifact-ref test fakes `vim.system` (the OS boundary) so argv construction, JSON decode and dispatch all execute for real. Good. It is a one-shot stub, not a stateful fake, and there is no live conformance check against a real `sdlc resolve` — see the ARCH-MOCK note below.
+
+## 6. Architectural notes
+
+- **ARCH-DRY — pass.** Three real consolidations, each with a guard: `focus_other_split` 3→1 (`init.lua:2951`), `resolve_relative_path` 5→1 (pinned by `untrusted_path_spec.lua:194`), `glob_base` 2→1. The six remaining config-side `resolve(expand())` copies are now stated honestly instead of claimed gone — including the byte-identical `resolve_dir_key` pair (`root_dirs.lua:12` / `init.lua:68`), which is the next one to fold.
+- **ARCH-PURE — pass, with I2.** `glob_base`'s spec runs with no IO, which is the test that the purity claim is real. `would_execute` is the other genuinely pure fragment and is untabled (I2).
+- **ARCH-PURPOSE — flag (I1, I3).** Both are the instance-vs-class axis: the sink *set* is now derived while the matcher's *shape coverage* is still remembered; the contract conversion swept two of three members. The `## Revisions` prose says *"I keep declaring a class closed on the strength of a sweep"* — that is still the accurate diagnosis, one level further in.
+- **ARCH-MOCK — pass, with a note.** `sdlc resolve` is faked at `vim.system`, and `goto_ref_at_cursor` gained `opts.runner` so the seam is reachable from a caller (BR-3, verified: `artifact_ref_spec.lua` now asserts the argv carries `ariadne#144`). What is still absent is a *stateful* fake for `sdlc` and any scheduled conformance check against the real binary, so a change to `sdlc resolve --json`'s output shape would land as a runtime failure, not a red test. Worth a target or an issue, not a fix here.
+- **ARCH-CONSTRAINTS — pass.** `<M-o>` is a keystroke path. The one blocking subprocess is `resolve_src_link`'s synchronous `vim.fn.system("git … rev-parse --show-toplevel")` (`init.lua:4294`), now reachable from chat buffers too — but it fires only when the cursor is inside a `src:` link, which is the navigation the user asked for. `sdlc resolve` is async. No unbounded fan-out; `is_chat and (…)` short-circuits so markdown does no filesystem stat.
+- **ARCH-SECURE — flag (I1).** The chain's own handling is sound: `ref_path` is refused before any sink, `abs_path` is total so callers keep their not-found branch, and I confirmed the last mile is safe — `vim.fn.fnameescape` escapes backticks, so `vim.cmd("edit " .. fnameescape(p))` and the `Explore` call do not reopen the hole.
+- **ARCH-ORDER — pass.** The three-valued return is exactly this principle's prescription: a tagged enum replacing a boolean that conflated "opened" with "recognised and failed", with the illegal-state difference (`"failed"` falling through to `gf`) now unrepresentable. The one unbounded extent remaining — `<M-o>` spawning `sdlc resolve` with no in-flight guard or cancellation — is correctly deferred to #226, which exists and states the problem accurately.
+
+## 7. Plan revision recommendations
+
+One `## Revisions` entry for `workshop/issues/000225-open-link-alt-o.md`, dated 2026-09-08, covering:
+
+- **Core concepts, Pure entities** — add `would_execute` (`lua/parley/helper.lua`, new): the one predicate behind all three guards, pure, tested without IO.
+- **Core concepts, Integration points** — add `safe_glob` (`lua/parley/helper.lua`, new, wraps `vim.fn.glob`).
+- **Core concepts prose** — correct the two claims retracted elsewhere in round 3: `abs_path` is the single *transcript-side* copy (six config-side copies remain), and the arch spec allowlists every call to a *command-executing* vim function (`expand`/`glob`/`globpath`/`expandcmd`), not `vim.fn.expand` alone.
+- **Revisions §round 4** — record that the round-3 mechanisms were verified by revert (four of them) and that two of them were found to be narrower than the class they claim: the sink matcher's argument-shape coverage and the code→table sweep's `M.`-only export pattern.
+
+```findings
+dispose:
+  - id: BR-13
+    disposition: addressed
+    note: |
+      make test exit 0 at HEAD (203 PASS, lint 0/0 in 359 files); the routing guard now unions `git ls-files --others` so it fires on an untracked spec.
+  - id: BR-21
+    disposition: addressed
+    note: |
+      BR-21's exact payload refuses at HEAD; reverting safe_glob in find_files reddens the arch guard at helper.lua:437.
+  - id: BR-22
+    disposition: addressed
+    note: |
+      Reverting outline.lua's resolver turns untrusted_path_spec.lua:150 red — the arm now asserts the walk reached the branch first.
+  - id: BR-23
+    disposition: addressed
+    note: |
+      root_dirs.lua:77 handles nil; removing `or dir` reddens the new prepare_dir call-site enumeration in the arch spec.
+  - id: BR-24
+    disposition: addressed
+    note: |
+      Divergence row 6 tabulated and the landing-mode cases parameterised over {chat, markdown}.
+  - id: BR-25
+    disposition: addressed
+    note: |
+      atlas and helper.lua:311 corrected and now name the enforcing spec; the unswept sibling claims in the issue file are raised separately.
+  - id: BR-26
+    disposition: addressed
+    note: |
+      The LuaLS block is adjacent to M.open_buf again (init.lua:2967-2970).
+findings:
+  - id: new
+    severity: Important
+    family: untrusted-path-expansion
+    title: |
+      The sink matcher sees only identifier-first arguments, and ALLOW keys on a file rather than a site
+    detail: |
+      4th in this family — do NOT fix the two shapes. tests/arch/untrusted_path_spec.lua:70
+      matches `vim%.fn%.<fn>%(([%w_%.]+)`, so a literal-first concatenation is invisible.
+      Probed: adding `_H.probe = function(ref_path) return vim.fn.glob("/tmp/" .. ref_path,
+      false, true) end` to helper.lua leaves the spec 6/6 green; so does a second
+      `vim.fn.expand(path)` anywhere in helper.lua, because ALLOW is keyed
+      "<file>:<arg token>" and expand_path's entry pre-approves it. voice_apply/init.lua:43
+      is already exempt by accident (its slug is operator-typed, so not a live hole).
+      Round 3 made the sink SET executable and left the matcher's COVERAGE remembered;
+      it(the matcher actually sees a violation) at :158 drives one shape and so confirms
+      only the shape already handled. Fix the rule: probe the argument shapes the codebase
+      uses, invert the matcher to flag any non-literal argument list, and key ALLOW per site.
+  - id: new
+    severity: Important
+    family: core-concepts-table-not-derived
+    title: |
+      safe_glob and would_execute have no Core-concepts row, and the sweep is blind to helper.lua's _H. export idiom
+    detail: |
+      helper.lua:274 (would_execute, PURE) and :295 (safe_glob, Integration) are new this
+      window and documented in atlas/context/file_references.md as two of the three guards,
+      but appear in neither Core-concepts table. single_source_sweeps_spec.lua:144-156 matches
+      only `^%+function M%.` / `^%+M%.<name> = `; helper.lua exports through `_H.`, so its
+      whole surface is exempt. Probed: a new `_H.brand_new_helper` leaves the spec 21/21 green
+      while a new `M.brand_new_export` in init.lua reddens it. Five of this issue's seven new
+      entities live behind `_H.`, so the guard was inert exactly where the work was. New slug
+      because pure-label-vs-io (BR-16) names a symptom; the rule is that the table is
+      hand-maintained and drifts in membership as well as in labelling. Fix: derive the export
+      alias from the module's own `local X = {}` / `return X`, then add the two rows.
+  - id: new
+    severity: Important
+    family: guard-nil-contract-unswept
+    title: |
+      The inline-link arm is the one member of the tri-state conversion with no test through the chain
+    detail: |
+      4th in this family — do NOT fix this instance alone. init.lua:3292
+      try_open_inline_branch_link went from true|false to "opened"|"failed"|nil this window,
+      and no spec drives an inline [branch-anchor](file) through OpenFileUnderCursor or
+      _open_reference_under_cursor in either buffer type; inline_branch_spec and
+      branch_child_spec cover the parser and child creation, not the opening chain. The
+      Done-when bullet names inline links explicitly. Failure mode: had the "opened" arm
+      returned nil, the chain would continue to "none" and the caller would run
+      ResolveRefOrGotoFile after open_buf had already navigated — two navigations per
+      keypress, green suite. Rule: a contract change needs a mechanical enumeration of the
+      converted set (grep -n 'return "opened"' lua/ gives three) with each member
+      dispositioned by a test that distinguishes the new values, in the same round.
+  - id: new
+    severity: Minor
+    family: docblock-detached-from-symbol
+    title: |
+      Three docblocks introduced this window do not describe the symbol they sit on
+    detail: |
+      2nd in this family — do NOT fix the three sites. helper.lua:455-457
+      (process_directory_pattern's comment and its @param dirspec / @return now precede
+      _H.glob_base at :468, which carries two @params and two @returns while
+      process_directory_pattern at :477 carries none); init.lua:3289 ("Returns true if a link
+      was found, false otherwise" retained above the new tri-state annotation);
+      helper.lua:676 (@return string on prepare_dir, which returns string|nil). The adjacency
+      half is mechanically checkable and belongs in the arch sweeps: I ran it over lua/ and
+      glob_base is the only new instance, with seven pre-existing benign ones, so the guard
+      would not drown in legacy noise.
+  - id: new
+    severity: Minor
+    family: unbacked-existing-behavior-claim
+    title: |
+      The issue's Core-concepts prose still carries both claims round 3 retracted in the atlas and helper.lua
+    detail: |
+      3rd in this family — do NOT fix the two sentences.
+      workshop/issues/000225-open-link-alt-o.md:208-209 still says abs_path is "the single
+      copy of vim.fn.resolve(vim.fn.expand(x)), which had fifteen"; six remain
+      (root_dir_picker.lua:36,38,91, root_dirs.lua:12, init.lua:68, super_repo.lua:26).
+      :211-212 still states the narrow round-2 rule, "allowlisting every
+      vim.fn.expand(<variable>) in lua/", which BR-21 replaced with four sinks. helper.lua:311
+      and the atlas were corrected; the issue file — the artifact the plan-table guard
+      actually reads — was not. The class is "a retracted claim gets swept wherever it was
+      restated", enumerable by grep across issue, plan, atlas and code comments.
+```
