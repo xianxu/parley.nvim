@@ -184,7 +184,12 @@ describe("arch: single-source sweeps stay swept", function()
                 local body = read(doc)
                 -- table rows only: prose may legitimately discuss removed names
                 for line in body:gmatch("[^\n]+") do
-                    if line:match("^| `") then
+                    -- A `deleted` row names a symbol that by definition no
+                    -- longer exists — that is the whole content of the row.
+                    -- `deleted` is in the writing-plans status legend
+                    -- alongside new/modified, so demanding a definition for it
+                    -- makes the legend unusable.
+                    if line:match("^| `") and not line:match("|%s*deleted%s*|") then
                         -- A row names either a SYMBOL or a MODULE. A module is
                         -- checked as a file (its row carries the path in another
                         -- cell); a symbol must have a DEFINITION, not a mention.

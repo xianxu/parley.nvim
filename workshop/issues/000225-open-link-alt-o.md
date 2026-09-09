@@ -120,6 +120,63 @@ is a coherent policy once stated:
 So the fall-through does `stopinsert`, the reference exits keep `startinsert`,
 and the difference is intended rather than an artifact of which branch ran.
 
+## Core concepts
+
+The work is one extraction, so the table is short. `open_reference_under_cursor`
+is the entity; the three helpers below it change *contract* (boolean → status)
+without changing shape, which is what makes the extraction's fall-through
+possible at all.
+
+### Pure entities
+
+None. Reference opening is inherently an integration — it reads the filesystem,
+creates buffers and moves windows. The pure parts it leans on
+(`_parse_at_reference`, `_parse_branch_ref`, `extract_inline_branch_links`)
+already exist and are unchanged.
+
+### Integration points
+
+| Name | Lives in | Status | Wraps |
+|---|---|---|---|
+| `_open_reference_under_cursor` | `lua/parley/init.lua` | new | filesystem + buffer/window opening |
+| `focus_other_split` | `lua/parley/init.lua` | new | window layout |
+| `open_branch_ref` | `lua/parley/init.lua` | modified | — |
+| `try_open_src_link` | `lua/parley/init.lua` | modified | — |
+| `try_open_inline_branch_link` | `lua/parley/init.lua` | modified | — |
+| `OpenFileUnderCursor` | `lua/parley/init.lua` | modified | — |
+| `open_chat_reference` | `lua/parley/init.lua` | deleted | — |
+
+- **`_open_reference_under_cursor`** — the single chain, exported under `M._`
+  purely as a test seam (the repo's existing idiom for a file-local function).
+  - **Injected into:** nothing; it is the leaf. `OpenFileUnderCursor` is its
+    only caller and owns the `"none"` → `gf` fall-through, so the fall-through
+    exists in exactly one place and cannot be re-duplicated per buffer type.
+  - **DRY rationale:** collapses two chains that had drifted apart in four
+    measured ways. Three of the four were omissions **in chat** — the released
+    surface — so the union is the fix, not a nicety.
+  - **Future extensions:** `is_chat` is the one deliberate divergence axis. If
+    markdown should ever gain directory `Explore`, the parameter disappears; no
+    other caller shape changes.
+
+- **`focus_other_split`** — the two-split preference, previously hand-inlined
+  twice inside `OpenFileUnderCursor`. `open_buf` already had its own copy for
+  files; this one exists because netrw does not go through `open_buf`.
+
+- **`open_branch_ref` / `try_open_src_link` / `try_open_inline_branch_link`** —
+  each returned `true` for both "opened it" and "recognised it and failed".
+  That conflation was harmless while every non-`false` answer meant "stop"; it
+  is not harmless once `"none"` falls through to `gf`. Each now returns
+  `"opened" | "failed" | nil`.
+
+- **`open_chat_reference`** — deleted. It was the markdown-only chain; its one
+  production caller and its one test now go through the unified function.
+
+**Test surface.** `tests/integration/open_reference_spec.lua` — integration
+rather than unit because the behaviour under test *is* the IO: real files, real
+buffers, real window layout, with `vim.cmd` / `open_buf` / `logger.warning`
+spied at the boundary. Each of the four one-chain capabilities was
+mutation-checked before the extraction landed.
+
 ## Estimate
 
 Derived against the calibration ledger's comparable parley rows rather than a
