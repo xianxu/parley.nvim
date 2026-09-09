@@ -2849,7 +2849,7 @@ end
 M.setup_markdown_keymaps = function(buf)
 	-- Document review actions. The skill supplies the callbacks; the REGISTRY
 	-- installs them (#214 C1) — it used to install them itself from raw config,
-	-- which put <C-g>ve/<M-o>/<M-CR> outside the master switch and made a
+	-- which put <C-g>ve/<M-s>/<M-CR> outside the master switch and made a
 	-- `shortcut = ""` disable raise on every markdown BufEnter. nil = journal
 	-- sidecar, which gets no review keys.
 	local review_skill = require("parley.skills.review")

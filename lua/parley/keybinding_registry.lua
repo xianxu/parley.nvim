@@ -418,11 +418,14 @@ M.entries = {
 	{
 		id = "open_file",
 		config_key = "chat_shortcut_open_file",
-		-- <M-g> FIRST: the alt family means "act on this transcript", and
+		-- <M-o> FIRST: the alt family means "act on this transcript", and
 		-- following a link between a chat and its sub-chats is that (#214,
 		-- continuing M1's <M-p>/<M-i> migration). <C-g>o stays as the legacy
 		-- alias. The help float renders keys[1], so the alt spelling leads.
-		default_key = { "<M-g>", "<C-g>o" },
+		-- #225: this was <M-g> for a few hours. Free and in the right family
+		-- turned out to be necessary and not sufficient — it is awkward to
+		-- press, and o = open is the mnemonic that was sitting there.
+		default_key = { "<M-o>", "<C-g>o" },
 		default_modes = { "n", "i" },
 		scope = "parley_buffer",
 		desc = "Parley open file under cursor",
@@ -747,7 +750,11 @@ M.entries = {
 	{
 		id = "review_menu",
 		config_key = "review_shortcut_menu",
-		default_key = "<M-o>",
+		-- #225: moved off <M-o>, which open_file took. open_file is
+		-- parley_buffer scope — an ANCESTOR of markdown — so the two would
+		-- have been live in the same buffer, unlike the <M-CR> pair, whose
+		-- chat/markdown scopes are siblings and can never both apply.
+		default_key = "<M-s>",
 		default_modes = { "n" },
 		scope = "markdown",
 		desc = "Parley: open skill picker",

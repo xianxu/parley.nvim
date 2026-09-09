@@ -52,7 +52,7 @@ After an optional `<>`, `[]` and `{}` may appear in any order.
 | `<M-r>`         | Reject the marker at cursor per review-convention §5            |
 | `<C-g>ve`       | Run the review skill (agent edits per ready markers, legacy no-mode) |
 | `<C-g>vf`       | Open the review finder (jump to files with pending markers)     |
-| `<M-o>`         | Open the **skill picker** (review is one of the skills) (#133) |
+| `<M-s>`         | Open the **skill picker** (review is one of the skills) (#133; moved off `<M-o>` in #225) |
 | `<M-CR>`        | Open the **review-mode menu** (mode selector + instruction editor; sticky-preselected) (#133) |
 
 ## Review menu (#133 M4)
@@ -196,7 +196,7 @@ review_agent = nil,             -- optional pin (deprecated; use skills config).
 review_highlight_duration = 2000, -- highlight fade time in ms
 review_shortcut_edit   = { modes = { "n" }, shortcut = "<C-g>ve" },
 review_shortcut_finder = { modes = { "n", "i" }, shortcut = "<C-g>vf" },
-review_shortcut_menu   = { modes = { "n" }, shortcut = "<M-o>" },   -- skill picker (#133)
+review_shortcut_menu   = { modes = { "n" }, shortcut = "<M-s>" },   -- skill picker (#133, #225)
 review_shortcut_next   = { modes = { "n", "i" }, shortcut = "<M-CR>" }, -- review-mode menu (#133)
 -- Marker insertion: see drill_in_callbacks in lua/parley/init.lua
 -- (shared <M-q> / <C-g>q binding)

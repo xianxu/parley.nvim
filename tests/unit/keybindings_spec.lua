@@ -865,11 +865,15 @@ describe("malformed shortcuts are reported once, at setup (#214 BR-49)", functio
     end)
 end)
 
--- #214: <M-g> follows a link — a 🌿: reference to a sub-chat, an inline
+-- #214: open_file follows a link — a 🌿: reference to a sub-chat, an inline
 -- [🌿:…](file), an @@path@@ — joining the alt family that already means "act on
 -- this transcript". Same migration shape as M1's <M-p>/<M-i>: the alt spelling
 -- leads because the help float renders keys[1], and the <C-g> spelling stays a
 -- legacy alias rather than being revoked.
+--
+-- #225 moved the alt spelling from <M-g> to <M-o>. <M-g> was chosen because it
+-- was free and in the right family, which is necessary and not sufficient: it
+-- is awkward to press, and it lasted a few hours of real use.
 describe("open_file joins the alt family (#214)", function()
     local parley = require("parley")
     local reg = require("parley.keybinding_registry")
@@ -880,27 +884,29 @@ describe("open_file joins the alt family (#214)", function()
         for _, e in ipairs(reg.entries) do if e.id == id then return e end end
     end
 
-    it("resolves <M-g> first, then the legacy <C-g>o", function()
-        assert.same({ "<M-g>", "<C-g>o" }, reg.resolve_keys(entry("open_file"), parley.config))
+    it("resolves <M-o> first, then the legacy <C-g>o", function()
+        assert.same({ "<M-o>", "<C-g>o" }, reg.resolve_keys(entry("open_file"), parley.config))
     end)
 
     it("config.lua ships both, so a registry-side edit cannot revoke one", function()
         local shipped = dofile("lua/parley/config.lua")
-        assert.same({ "<M-g>", "<C-g>o" }, shipped.chat_shortcut_open_file.shortcut)
+        assert.same({ "<M-o>", "<C-g>o" }, shipped.chat_shortcut_open_file.shortcut)
     end)
 
-    it("the help float leads with <M-g> and still names the alias", function()
+    it("the help float leads with <M-o> and still names the alias", function()
         local shown
         for _, l in ipairs(parley._keybinding_help_lines("chat")) do
             if l:find("Open file reference", 1, true) then shown = l end
         end
         assert.is_truthy(shown, "open_file missing from the chat help")
-        assert.are.equal("<M-g>", shown:match("^%s*(%S+)"))
+        assert.are.equal("<M-o>", shown:match("^%s*(%S+)"))
         assert.is_truthy(shown:find("<C-g>o", 1, true), "the legacy alias is not advertised")
     end)
 
     -- #225 PQ-4: this was hardcoded to <M-g> and so could not catch the NEXT
-    -- collision, which is the whole job.
+    -- collision, which is the whole job. It went red on exactly the collision
+    -- #225 creates — open_file(parley_buffer) vs review_menu(markdown) on
+    -- <M-o> — which is why the skill picker moved to <M-s>.
     --
     -- Two entries may share a key when their scopes are DISJOINT — `<M-CR>` is
     -- respond/define in a chat buffer and the review menu in a markdown one,

@@ -49,7 +49,7 @@ Two independent resolvers, and only one knows about renames:
 | searches every chat root | yes | no |
 | timestamp glob for slug variants | yes | no |
 | read-repairs the stale reference | yes | no |
-| used by | `<M-g>`, `gf`, navigation | **the ancestor chain** |
+| used by | `<M-o>`, `gf`, navigation | **the ancestor chain** |
 
 `collect_ancestor_chain` (`chat_respond.lua:201`) uses the naive one, bails, and
 returns `{}` — so `collect_ancestor_messages` → `build_ancestor_messages`
