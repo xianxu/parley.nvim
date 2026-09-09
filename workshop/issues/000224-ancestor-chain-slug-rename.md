@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-09-08
 updated: 2026-09-08
-estimate_hours:
+estimate_hours: 4.11
 started: 2026-09-08T15:04:07-07:00
 ---
 
@@ -271,6 +271,55 @@ keeps its existing depth cap.
 **Trust (ARCH-SECURE).** The reference is transcript text, so resolution goes
 through the `helper.safe_glob` / `expand_path` guards #225 installed; the arch
 guard added there already covers any new sink this introduces.
+
+## Estimate
+
+Derived against the calibration ledger's parley rows (`sdlc estimate-source`
+flags the v3.1 doc `[stale]`; the ledger is the newer artifact):
+
+| row | est | design | impl | actual | ratio |
+|---|---|---|---|---|---|
+| #215 | 2.23 | 1.25 | 0.60 | 1.67 | 1.34 |
+| #218 | 1.86 | 0.70 | 1.05 | 2.13 | 0.87 |
+| #202 | 1.64 | 0.65 | 0.89 | 1.89 | 0.87 |
+| #225 | 1.79 | 0.60 | 1.10 | 3.92 | **0.46** |
+| #214 | 3.83 | 1.00 | 2.68 | 17.14 | **0.22** |
+
+**The pattern in my own rows is the useful signal, and it is not "everything
+overruns".** The four that landed near 1.0 (#201 0.97, #202 0.87, #215 1.34,
+#218 0.87) were single-concern changes that closed in one review round. The ones
+that missed badly (#225 0.46, #203 0.40, #205 0.30, #214 0.22) all took three or
+more close-review rounds. The overrun is not in the implementation line — it is
+in a `milestone-review` item budgeted for **one** round when the work reliably
+takes several.
+
+#224 is #225-shaped and slightly larger: five consumer sites rather than two, a
+resolver rewrite, and a genuinely new surface (the plugin's first cursor
+autocmd, with a concurrency guard). #225 actualled 3.92. So the review line is
+budgeted at 0.6 — two to three rounds — rather than the 0.2 that made #225's
+estimate wrong.
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: lua-neovim              design=0.4 impl=0.7
+item: lua-neovim              design=0.4 impl=0.6
+item: pure-entity-tests       design=0.1 impl=0.35
+item: arch-guard              design=0.15 impl=0.3
+item: signature-sweep         design=0.0 impl=0.15
+item: atlas-docs              design=0.0 impl=0.2
+item: milestone-review        design=0.0 impl=0.6
+design-buffer: 0.15
+total: 4.11
+```
+
+`design-buffer: 0.15` (not the 0.30 default) because the plan is thorough: two
+plan-gate rounds, the five consumer sites measured rather than recalled, the
+guard's rule restated after the gate showed it was over the wrong term, and the
+repair trigger's five guards enumerated with a stated disposition each.
+
+Recomputed: (0.4+0.4+0.1+0.15) × 1.15 + (0.7+0.6+0.35+0.3+0.15+0.2+0.6) × 1.0
+= 1.05 × 1.15 + 2.90 = 1.21 + 2.90 = **4.11**.
 
 ## Done when
 
