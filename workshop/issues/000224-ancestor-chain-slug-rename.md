@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-09-08
 updated: 2026-09-08
-estimate_hours: 4.11
+estimate_hours: 4.01
 started: 2026-09-08T15:04:07-07:00
 ---
 
@@ -299,18 +299,23 @@ autocmd, with a concurrency guard). #225 actualled 3.92. So the review line is
 budgeted at 0.6 — two to three rounds — rather than the 0.2 that made #225's
 estimate wrong.
 
+Three of the first draft's slugs (`pure-entity-tests`, `arch-guard`,
+`signature-sweep`) were invented; the vocabulary is closed. Remapped onto real
+primitives rather than renamed — the guard and the signature sweep are what
+`cross-cutting-refactor` names (a multi-file sweep across five consumer sites
+plus six signature consumers), and the pure entities are part of the Lua
+feature they belong to.
+
 ```estimate
 model: estimate-logic-v3.1
 familiarity: 1.0
+item: lua-neovim              design=0.4 impl=0.85
 item: lua-neovim              design=0.4 impl=0.7
-item: lua-neovim              design=0.4 impl=0.6
-item: pure-entity-tests       design=0.1 impl=0.35
-item: arch-guard              design=0.15 impl=0.3
-item: signature-sweep         design=0.0 impl=0.15
+item: cross-cutting-refactor  design=0.25 impl=0.45
 item: atlas-docs              design=0.0 impl=0.2
 item: milestone-review        design=0.0 impl=0.6
 design-buffer: 0.15
-total: 4.11
+total: 4.01
 ```
 
 `design-buffer: 0.15` (not the 0.30 default) because the plan is thorough: two
@@ -318,8 +323,8 @@ plan-gate rounds, the five consumer sites measured rather than recalled, the
 guard's rule restated after the gate showed it was over the wrong term, and the
 repair trigger's five guards enumerated with a stated disposition each.
 
-Recomputed: (0.4+0.4+0.1+0.15) × 1.15 + (0.7+0.6+0.35+0.3+0.15+0.2+0.6) × 1.0
-= 1.05 × 1.15 + 2.90 = 1.21 + 2.90 = **4.11**.
+Recomputed: (0.4+0.4+0.25) × 1.15 + (0.85+0.7+0.45+0.2+0.6) × 1.0
+= 1.05 × 1.15 + 2.80 = 1.21 + 2.80 = **4.01**.
 
 ## Done when
 
