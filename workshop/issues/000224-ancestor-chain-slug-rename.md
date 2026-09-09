@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-09-08
 updated: 2026-09-08
-estimate_hours: 4.01
+estimate_hours: 6.00
 started: 2026-09-08T15:04:07-07:00
 ---
 
@@ -299,23 +299,43 @@ autocmd, with a concurrency guard). #225 actualled 3.92. So the review line is
 budgeted at 0.6 — two to three rounds — rather than the 0.2 that made #225's
 estimate wrong.
 
+Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against
+`baseline-v3.1.md`. Method A only. (`sdlc estimate-source` flags that doc
+`[stale]`, so the per-primitive hours were cross-checked against the newer
+calibration ledger rows above; the method and vocabulary are unchanged.)
+
 Three of the first draft's slugs (`pure-entity-tests`, `arch-guard`,
-`signature-sweep`) were invented; the vocabulary is closed. Remapped onto real
-primitives rather than renamed — the guard and the signature sweep are what
-`cross-cutting-refactor` names (a multi-file sweep across five consumer sites
-plus six signature consumers), and the pure entities are part of the Lua
-feature they belong to.
+`signature-sweep`) were invented; the vocabulary is closed.
+
+**Two corrections after the estimate-quality pass, both worth recording because
+the first one was the same mistake the block itself was written to avoid:**
+
+- The first remap parked the arch guard inside `cross-cutting-refactor` at
+  `impl=0.45` — **2.3× that slug's ceiling**, which is the tell that a number is
+  being stretched to make a slug fit. The guard is a Lua test with a seen-red
+  mutation; it belongs under `lua-neovim`. `cross-cutting-refactor` now carries
+  only what it names: the six-consumer signature sweep.
+- **The design line was badly under-budgeted, and I can now measure it.**
+  `sdlc actual --issue 224` reports **2.60h already spent** — claim, spec,
+  Core concepts, the read-repair write-up and two plan-gate rounds. Against a
+  4.01h total that left 1.4h for the whole implementation plus the two-to-three
+  review rounds this block itself names as the dominant term. The block argued
+  the right thing and then wrote a number that contradicted it.
+
+  This is a revision of the per-item hours with new evidence, not a back-fit:
+  the total moved *because* the items did, not the other way round.
 
 ```estimate
 model: estimate-logic-v3.1
 familiarity: 1.0
-item: lua-neovim              design=0.4 impl=0.85
-item: lua-neovim              design=0.4 impl=0.7
-item: cross-cutting-refactor  design=0.25 impl=0.45
+item: lua-neovim              design=0.8 impl=0.9
+item: lua-neovim              design=0.8 impl=0.8
+item: lua-neovim              design=0.2 impl=0.4
+item: cross-cutting-refactor  design=0.2 impl=0.2
 item: atlas-docs              design=0.0 impl=0.2
-item: milestone-review        design=0.0 impl=0.6
+item: milestone-review        design=0.0 impl=1.2
 design-buffer: 0.15
-total: 4.01
+total: 6.00
 ```
 
 `design-buffer: 0.15` (not the 0.30 default) because the plan is thorough: two
@@ -323,8 +343,11 @@ plan-gate rounds, the five consumer sites measured rather than recalled, the
 guard's rule restated after the gate showed it was over the wrong term, and the
 repair trigger's five guards enumerated with a stated disposition each.
 
-Recomputed: (0.4+0.4+0.25) × 1.15 + (0.85+0.7+0.45+0.2+0.6) × 1.0
-= 1.05 × 1.15 + 2.80 = 1.21 + 2.80 = **4.01**.
+Recomputed: (0.8+0.8+0.2+0.2) × 1.15 + (0.9+0.8+0.4+0.2+0.2+1.2) × 1.0
+= 2.00 × 1.15 + 3.70 = 2.30 + 3.70 = **6.00**.
+
+Against #225 (est 1.79, actual 3.92) for comparable-but-smaller scope, and with
+2.60h already measured on this one, 6.00 is arithmetic rather than a hedge.
 
 ## Done when
 
