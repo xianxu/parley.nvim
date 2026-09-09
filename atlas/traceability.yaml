@@ -97,6 +97,7 @@ atlas:
       - tests/unit/rewrite_reference_spec.lua
       - tests/integration/ancestor_chain_rename_spec.lua
       - tests/integration/read_repair_spec.lua
+      - tests/arch/single_resolver_spec.lua
       - tests/integration/chat_respond_spec.lua
 
   chat/parsing:

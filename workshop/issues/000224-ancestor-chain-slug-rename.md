@@ -415,7 +415,7 @@ Against #225 (est 1.79, actual 3.92) for comparable-but-smaller scope, and with
       plan claiming "exactly one resolver" while `outline` sat outside it
 - [x] Test the renamed-CHILD `branch_after` case (the second site, same cause:
       a renamed child fails the parent-branch comparison and truncates at 0)
-- [ ] Test the `<M-t>` tree: a renamed parent must not make the CHILD the tree
+- [x] Test the `<M-t>` tree: a renamed parent must not make the CHILD the tree
       root. Verified failing today via `_build_tree_outline_items` — the outline
       shows `📋 Child` and never reaches the parent
 - [x] Remove `_read_repair_reference` from the resolution path; resolution
@@ -426,7 +426,7 @@ Against #225 (est 1.79, actual 3.92) for comparable-but-smaller scope, and with
       the cursor line, name actually changed, not insert mode, not busy →
       rewrite the line as a BUFFER edit. Test: the no-op case leaves `modified`
       untouched; a busy buffer is skipped and retried on the next hold
-- [ ] Arch guard over RESOLUTION: `helper.resolve_relative_path` reached with a
+- [x] Arch guard over RESOLUTION: `helper.resolve_relative_path` reached with a
       chat reference only from `resolve_chat_path`, allowlisted per site with a
       stated reason (shape of `untrusted_path_spec.lua`'s ALLOW). Seen red by
       re-adding a local RESOLVER — a guard over "joining" greps clean over the
