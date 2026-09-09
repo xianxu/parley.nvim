@@ -113,16 +113,111 @@ stale link on the way past (`init.lua:3241`). Under prefix identity a
 slug-stale link is not stale — it resolves correctly forever — so repair stops
 being load-bearing and becomes cosmetic.
 
-**Recommendation: drop it from the resolution path.** Resolution is a read;
-mutating a file the user may not even have open, as a side effect of navigating,
-is a surprise that only existed because the name was load-bearing. If tidy links
-are still wanted, they belong in an explicit sweep, not in a resolver. Flagging
-rather than deciding — it is a behaviour removal and the operator may want the
-links kept current for grep-ability outside parley.
+**Decided (operator, 2026-09-08): drop it from the resolution path, and give it
+one explicit trigger — the cursor entering the link.**
+
+> *"it's not broken but not desirable to be out of sync, that's all. I think we
+> can trigger the read repair operation to be cursor entering that link, you put
+> your cursor there, we do a refresh in case slug changes. that's the only
+> read-repair trigger, by user action, seems safe?"*
+
+It is safe, and it is better than both alternatives. Keeping repair in the
+resolver means navigating mutates files you may not have open; dropping it
+entirely leaves links that are correct-but-stale to anything reading the
+transcripts outside parley (grep, the exporter, a human). Cursor-entry is a user
+action, is scoped to the one reference you are looking at, and happens in a
+buffer that is by definition already open.
+
+Four consequences, each a design commitment rather than an implementation
+detail:
+
+- **Buffer edit, not file write.** Repair rewrites the line in the buffer, so it
+  is undoable, visible in the diff the user is looking at, and never touches a
+  file behind their back. `_read_repair_reference`'s current file-write shape
+  goes away with the resolver call that motivated it.
+- **`CursorHold`, not `CursorMoved`** (ARCH-CONSTRAINTS). Cursor movement is a
+  keystroke path; a glob across chat roots per motion is exactly the "repeated
+  expensive work on a critical UI path" the envelope forbids. `CursorHold` fires
+  after `updatetime` idle, so the cost is one glob per pause, and only when the
+  cursor line actually carries a reference.
+- **Only when the name actually changed.** Resolution answers with a path; if
+  its basename equals the one in the line, there is nothing to repair and no
+  edit is made. A no-op must leave `modified` untouched.
+- **Never on a line the user is editing.** Repair is skipped in insert mode, so
+  it cannot fight a half-typed reference.
+
+The read-repair trigger is therefore the *only* writer, and prefix identity is
+what makes it optional — correctness never depends on it firing.
 
 **Not in scope:** making the back-link correct at creation. The child is written
 before the parent has a topic, and #214 BR-19 requires the reference to be
 committed in the same action. Prefix identity is what makes that safe.
+
+## Core concepts
+
+The work is one consolidation plus one relocation. The consolidation is
+`resolve_chat_path` becoming the single resolver; the relocation is read-repair
+moving off it onto a user action.
+
+### Pure entities
+
+| Name | Lives in | Status |
+|---|---|---|
+| `rewrite_reference` | `lua/parley/chat_slug.lua` | new |
+| `resolve_candidates` | `lua/parley/chat_slug.lua` | new |
+
+- **`rewrite_reference(line, old_basename, new_basename)`** — the line with the
+  reference renamed, or `nil` when it does not appear. This is the one part of
+  today's `_read_repair_reference` worth keeping, and it carries a real trap:
+  the replacement must be `%`-escaped or Lua's `gsub` reads `%` as a capture
+  reference. That bug class already cost a round in #214.
+  - **DRY rationale:** first occurrence of "rename a reference inside a line",
+    which the exporter and any future sweep would otherwise each re-derive.
+  - **Future extensions:** an explicit repair-the-whole-file sweep calls it per
+    line; that is the natural growth axis and needs no signature change.
+
+- **`resolve_candidates(reference, names)`** — given a reference basename and
+  the candidate names a glob returned, the ordered picks. Owns the collision
+  policy (exact basename wins; else lexicographically first) with no IO, so the
+  policy is testable without a filesystem. Today that decision is a
+  `table.sort` by *length* buried inside the resolver.
+
+### Integration points
+
+| Name | Lives in | Status | Wraps |
+|---|---|---|---|
+| `repair_reference_at_cursor` | `lua/parley/init.lua` | new | buffer read/write |
+| `resolve_chat_path` | `lua/parley/init.lua` | modified | filesystem glob |
+| `resolve_path` | `lua/parley/chat_respond.lua` | deleted | — |
+| `_read_repair_reference` | `lua/parley/init.lua` | deleted | — |
+
+- **`repair_reference_at_cursor(buf, lnum)`** — resolves the reference on one
+  line and applies `rewrite_reference` as a buffer edit. Wired to `CursorHold`
+  in a chat buffer.
+  - **Injected into:** nothing; it is the leaf. The autocmd is its only caller,
+    so "repair happens on exactly one trigger" is checkable by grep.
+  - **Scope, deliberately:** the line under the cursor, not the file. A
+    transcript with three stale references needs three visits. That follows
+    from the operator's framing ("you put your cursor there") and is the
+    property that makes it unsurprising; a whole-file rewrite triggered by
+    resting a cursor would be the behaviour the old design was criticised for,
+    moved rather than removed.
+
+- **`resolve_chat_path`** — prefix identity becomes the primary rule, not a
+  fallback tier, and it stops scheduling repair. Resolution becomes a pure read
+  (ARCH-PURE: the glob is the only IO, and the ordering decision moves out to
+  `resolve_candidates`).
+
+**Operating envelope (ARCH-CONSTRAINTS).** `CursorHold` is an idle event, not a
+keystroke path — that is why it is the trigger rather than `CursorMoved`, which
+would glob across every chat root on every motion. Budget: one `glob` per idle
+pause, and only when the cursor line matches the reference pattern (a cheap
+string test gates the glob). No work at all in insert mode. The ancestor walk
+keeps its existing depth cap.
+
+**Trust (ARCH-SECURE).** The reference is transcript text, so resolution goes
+through the `helper.safe_glob` / `expand_path` guards #225 installed; the arch
+guard added there already covers any new sink this introduces.
 
 ## Done when
 
@@ -130,8 +225,13 @@ committed in the same action. Prefix identity is what makes that safe.
   conversation as context — asserted on the message list, not on the absence of
   a warning.
 - `branch_after` is correct when the CHILD was renamed.
-- A slug-stale reference resolves by timestamp, with no repair required for
-  correctness (whether repair is kept at all is the open question above).
+- A slug-stale reference resolves by timestamp, and **correctness never depends
+  on repair having fired** — asserted by resolving with repair disabled.
+- Resting the cursor on a stale reference rewrites that line in the BUFFER
+  (undoable, `modified` set); resting it on a current one changes nothing and
+  leaves `modified` untouched.
+- Navigation performs no writes at all — asserted by spying the file-write seam
+  across `<M-o>`, `gf` and the ancestor walk.
 - A same-timestamp collision picks deterministically and says so, rather than
   silently preferring the longest name.
 - A guard fails if a module joins a chat-reference path outside the resolver.
@@ -139,13 +239,44 @@ committed in the same action. Prefix identity is what makes that safe.
 
 ## Plan
 
-- [ ] Failing test: parent renamed post-fork → ancestor messages are empty
-- [ ] Make prefix matching the primary rule; delete the exact-match tier
-- [ ] Route both `chat_respond` sites through it; remove the local joiner
-- [ ] Test the renamed-child `branch_after` case
-- [ ] Decide read-repair with the operator; test whichever way it lands
-- [ ] Collision case: deterministic pick + warning
-- [ ] Arch guard for the class; remove the local joiner
+- [ ] Failing test: parent renamed post-fork → ancestor messages are empty.
+      Assert on the MESSAGE LIST, not on the absence of a warning — the warning
+      is the symptom the operator saw, the missing context is the defect
+- [ ] Make prefix matching the primary rule in `resolve_chat_path`; delete the
+      exact-match tier rather than reordering it (it is the case where the glob
+      returns the name already used)
+- [ ] Collision: prefer an exact basename match when the reference has one, else
+      lexicographically first + a warning. Replaces the current sort-by-length,
+      which encodes "the one with a slug" and stops being right the moment two
+      slugged variants exist
+- [ ] Route both `chat_respond` sites through it — the parent lookup (`:201`)
+      and the branch-match that sets `branch_after` (`:221`) — and delete the
+      local `resolve_path`
+- [ ] Test the renamed-CHILD `branch_after` case (the second site, same cause:
+      a renamed child fails the parent-branch comparison and truncates at 0)
+- [ ] Remove `_read_repair_reference` from the resolution path; resolution
+      becomes a pure read
+- [ ] Add the cursor-entry trigger: `CursorHold` in a chat buffer, reference on
+      the cursor line, name actually changed, not in insert mode → rewrite the
+      line as a BUFFER edit. Test the no-op case leaves `modified` untouched
+- [ ] Arch guard for the class: no module outside the resolver joins a
+      chat-reference path itself (same shape as #214's registry guard). Seen red
+      by re-adding a local joiner
+
+## Revisions
+
+### 2026-09-09 — read-repair decided
+
+The Spec recommended **dropping** read-repair outright and flagged it as the
+operator's call. The operator chose a third option the Spec had not offered:
+keep it, but give it exactly one trigger — the cursor entering the link.
+
+The recommendation was reasoned from "resolution is a read, so it must not
+mutate", which is right about the *resolver* and overshoots to the *feature*.
+Moving the trigger to a user action keeps the property that motivated the
+recommendation (navigation never writes) without losing the property the
+operator wanted (links that stay grep-able outside parley). Spec section
+updated in place; Plan row 5 replaced by the two rows that implement it.
 
 ## Log
 
