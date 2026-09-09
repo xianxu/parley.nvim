@@ -83,10 +83,12 @@ describe("arch: chat references resolve in one place", function()
     end)
 
     it("no module defines its own `resolve_path`", function()
-        -- Six modules had one. Two were exact-match-only (the defect), three
-        -- delegated to the naive helper, and ONE was already correct. The
-        -- correct one is gone too: the shared NAME is what made the broken pair
-        -- look like the working one at a glance.
+        -- THREE modules defined one: chat_respond, outline and highlighter.
+        -- (An earlier count said six — that was CALL SITES read as definitions,
+        -- and the 2+3+1 breakdown double-counted the same functions before and
+        -- after #225 merged two of them.) Two resolved exact-only, one was
+        -- already correct; the correct one is gone too, because the shared NAME
+        -- is what made the broken pair look like the working one at a glance.
         local defs = vim.fn.systemlist(
             [[grep -rn 'local function resolve_path\|local resolve_path =' lua/ 2>/dev/null]])
         assert.same({}, defs,

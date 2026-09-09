@@ -1950,3 +1950,49 @@ mistake, through a command that satisfied the letter of the rule.
 `workshop` parent, and never `-A` even with a pathspec. The check that would
 have caught both occurrences: read `git show --stat` before pushing and ask
 whether every file in it belongs to this change.
+
+## Count the definitions, not the mentions (#224)
+
+I reported "six modules had a `local resolve_path`" — in a commit message, in
+`atlas/chat/lifecycle.md`, in an arch guard's comment, and to the operator. The
+real number was **three**: `chat_respond`, `outline`, `highlighter`.
+
+The error was mechanical. I had a table of five consumer *call sites* and a
+narrative — "two exact-only, three delegating, one correct" — and the narrative
+double-counted: the same two functions appeared once as "exact-only" (before
+#225 merged them) and again as "delegating to the naive helper" (after). Adding
+a list of sites to a list of states produced a number that described neither.
+
+Nothing downstream was wrong — the fix removed every definition — but the claim
+was repeated into three artifacts before a reviewer counted.
+
+**Rules.**
+
+1. **A count in prose needs the command that produced it.**
+   `grep -c 'local function resolve_path' lua/` takes seconds and cannot
+   double-count. Write the number the command gives, not the number the story
+   gives.
+2. **Watch for adding across categories.** Sites and definitions, occurrences
+   and files, before-state and after-state — a total that spans two of these is
+   a category error wearing a number.
+3. **A number repeated into an atlas is load-bearing.** Prose that says "six"
+   will be trusted by the next reader; the guard's comment saying "six" will be
+   trusted by the next editor. Fix all copies, and prefer stating the rule
+   ("no module defines its own") over the count.
+
+## Dead code from your own fix is the easiest kind to leave (#224)
+
+Adding an exact-hit short-circuit at the top of `resolve_chat_path` made the
+existence loop at the bottom unreachable — byte-identical, over the same list,
+with nothing in between touching it. I left it there for a round. The docstring
+still credited it.
+
+The shape is specific: an optimisation added *in front of* existing logic does
+not look like a deletion, so nothing prompts you to check whether the thing
+behind it still runs.
+
+**Rule.** After adding an early return, re-read everything it now precedes and
+ask what is still reachable. The cheap check is to poison the suspect block
+(`error("unreachable")`) and run the suite — if it stays green, the block is
+dead, and dead code that *looks* like a fallback is worse than none, because the
+next reader will believe in it.

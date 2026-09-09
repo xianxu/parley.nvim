@@ -492,3 +492,165 @@ findings:
       one correct. "Six" is the Spec's count of call sites transcribed as
       modules; the 2+3+1 breakdown double-counts.
 ```
+
+---
+
+## Re-review — 2026-09-09T13:07:20-07:00 (FIX-THEN-SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 224 — Forked chat loses its parent context after a slug rename |
+| repo | parley.nvim |
+| issue file | workshop/issues/000224-ancestor-chain-slug-rename.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 6425abc72bb87f821802840a69e614e7d1c70606..bcee430754b09b0142eacc8add3ca1b60914968d |
+| command | sdlc close --issue 224 |
+| reviewer | claude |
+| timestamp | 2026-09-09T13:07:20-07:00 |
+| verdict | FIX-THEN-SHIP |
+
+## Review
+
+I've completed the review: full diff inspection, full test suite, lint, and four mutation checks against the round-2 claimed fixes.
+
+```verdict
+verdict: FIX-THEN-SHIP
+confidence: high
+```
+
+The three Important findings from round 2 are genuinely fixed and each is pinned by a test that goes red when I revert the fix — I verified BR-14, BR-15 and BR-16 by mutation rather than by commit message, and also re-verified round 1's BR-2 claims (the `<M-t>` seam and the insert-mode guard), which now redden on mutation too. The whole suite is green (unit + integration + arch, 0 failures) and `luacheck lua tests` is clean (0 warnings / 0 errors, 364 files). Nothing Critical or Important remains open. What's left is a batch of 10 carried Minors plus 2 new ones, both of which are family repeats — the one I'd actually insist on before merge is BR-11, the missing README line, because resting the cursor on a branch line now marks the buffer `modified` (so `:q` on a chat you were only reading refuses with E37) and the responsiveness depends on the user's `updatetime`, and none of that is written down anywhere a user reads.
+
+## 1. Strengths
+
+- **`chat_slug.resolve_candidates` / `rewrite_reference` are genuinely pure** (`lua/parley/chat_slug.lua:107`, `:161`) — the collision policy and the `%`-escape trap are unit-tested with no filesystem at all (`tests/unit/resolve_candidates_spec.lua`, `tests/unit/rewrite_reference_spec.lua`). ARCH-PURE, done properly: the ordering decision moved out of the IO shell rather than being tested through it.
+- **BR-14's fix is the class, and it is pinned.** Reverting `dirs` to `candidates[1]` alone (`lua/parley/init.lua:3338`) reddens `ancestor_chain_rename_spec` "resolves a reference with a directory component under another root". The fixture's own comment records why the two obvious versions couldn't discriminate — that's the right artifact to leave behind.
+- **BR-15's short-circuit measurably restores the cost class.** I re-measured base `6425abc` vs HEAD at 1 root × 2000 files, exact-name hit: **0.031 ms → 0.039 ms** (versus 2.43 ms with the short-circuit removed). The equivalence argument in the comment at `init.lua:3293` also holds under inspection: candidate dirs lead the search order, so the first exact-basename hit the glob would pick is the same file the short-circuit returns.
+- **BR-16's autocmd arm really enters through the trigger.** Flipping `pattern = "*.md"` to `"*.txt"` (`init.lua:1098`) reddens "the CursorHold autocmd is what drives it".
+- **The arch guard is function-scoped with a stated reason per entry, plus a dead-entry check** (`tests/arch/single_resolver_spec.lua:29`, `:72`). That is a better shape than the file-level allowlists elsewhere in the tree, and the positive-form fourth assertion ("a module that reads a chat reference's `.path` must reach `resolve_chat_path`") is the part that would catch the *next* second resolver rather than this one.
+
+## 2. Critical findings
+
+None.
+
+## 3. Important findings
+
+None new. All three of round 2's Importants dispose `addressed`.
+
+## 4. Minor findings
+
+- **New (family `unreachable-guard`, 2nd):** the second existence loop at `lua/parley/init.lua:3385` is dead — byte-identical to the short-circuit at `:3305`, over the same `candidates`, with nothing between that touches the list or the filesystem. Confirmed empirically (poisoned with `error()`; `read_repair`, `ancestor_chain_rename`, `chat_respond`, `not_chat`, `resolve_candidates` all stayed green). The docstring at `:3277` still credits it.
+- **New (family `undeclared-envelope-change`, 2nd):** the *stale*-reference resolve now globs every search dir instead of returning at the first dir with a match. Measured 3 roots × 2000 files: base **2.54 ms → 7.22 ms**; at the operator's real scale (116 + 28 files) **0.19 ms → 0.30 ms**, i.e. immaterial today. The extra globs buy only BR-7's ambiguity warning.
+- Carried, all still true at HEAD and all re-verified: BR-5 (pcall swallow, `init.lua:1104`), BR-6 (`init.lua:3343` hand-rolls the key that `resolve_dir_key` at `:68` owns, and `buffer_mutation_spec.lua:97` greps the literal `vim.fn.resolve(vim.fn.expand` spelling so it can't see it), BR-7, BR-8, BR-9, BR-10 (`exporter.lua:32`), BR-11, BR-12, BR-13, BR-17 (I counted the base tree: **three** `local resolve_path` definitions — `chat_respond.lua:176`, `highlighter.lua:65`, `outline.lua:208` — not six; `atlas/chat/lifecycle.md:32` and `single_resolver_spec.lua:74` both still say six).
+
+## 5. Test coverage notes
+
+Coverage is strong where it matters, and I checked it by reverting rather than reading. Two thin spots, neither worth a finding: the "undoable" half of the Done-when is never exercised (no arm runs `undo` and re-asserts the line) — it's guaranteed by `nvim_buf_set_lines` rather than by this code; and the `ev.buf` half of the autocmd pairing isn't discriminated, since both autocmd arms run in a single-buffer fixture where `ev.buf` and `0` coincide. The round-2 finding already conceded that.
+
+## 6. Architectural notes
+
+Working through each marker: **ARCH-DRY** flag (the dead duplicate loop above, plus carried BR-6/BR-10/BR-12). **ARCH-PURE** pass — worth noting for later that `repair_reference_at_cursor` is ~55 lines mixing buffer IO, mode/busy guards, resolution and the rewrite loop; the pure composition (line + resolver → updated line) is extractable and would let the multi-ref and idempotence cases be unit-tested without a buffer. **ARCH-PURPOSE** pass on the shadow-sweep — I enumerated the consumers (`chat_respond` ×2, `outline` ×2, `highlighter`, `exporter`, and init's four sites) and every one derives from `resolve_chat_path`, with the guard enforcing it; the flag is that the atlas and the guard's own comment are hand-maintained restatements of the model and are wrong (BR-17). **ARCH-MOCK** pass — the only external dependency is the filesystem, and tests exercise it through the same `safe_glob` seam production uses, on real temp dirs. **ARCH-CONSTRAINTS** flag (the stale-path fan-out above). **ARCH-SECURE** pass on the read side — the transcript-derived glob pattern *and* the transcript-derived directory both go through `safe_glob`, which returns nil on refusal and is handled by `or {}`, and `resolve_relative_path` is TOTAL so no caller can index nil; flag on the write side (BR-13, the unvalidated basename). **ARCH-ORDER** pass — the feature holds no state between events: each `CursorHold` is a synchronous read-decide-write with no async and no work outliving the call, the concurrent writer is named (`chat_lease`) and the disposition is stated and tested (ignore, not queue, with a retry arm proving the chance isn't consumed).
+
+## 7. Plan revision recommendations
+
+Four `## Revisions` entries the issue needs so it stops claiming what the code doesn't show:
+
+1. **Done-when #5** ("Navigation performs no writes at all — asserted by spying the file-write seam across `<M-o>`, `gf` and the ancestor walk") — no write-seam spy exists anywhere in `tests/`. What shipped is `read_repair_spec`'s "the resolver itself performs no repair", a before/after content compare on one `resolve_chat_path` call. That is adequate in substance (all three entry points go through the one resolver, and `_read_repair_reference` is deleted), but the line should describe the evidence that exists.
+2. **Spec ¶ at lines 118–120** — "the exporter … already delegate[s] … so after this there is exactly one resolver *and* one set of consumers" is not literally true while `exporter.lua:32` still defines `local function resolve_chat_path` (BR-10).
+3. **Spec ¶ at lines 112–116, and `atlas/chat/lifecycle.md:32`** — the "six modules" count is the Spec's count of *call sites* transcribed as modules; there were three definitions, and the 2+3+1 breakdown double-counts (BR-17).
+4. **Spec bullet at lines 92–94** ("Delete the two-tier structure rather than reordering it") — round 2 restored the exact-hit short-circuit and argues at length that it is not a tier. The argument is sound, but the Spec bullet still reads as an unqualified deletion; it needs a pointer to the round-2 Revisions entry.
+
+```findings
+dispose:
+  - id: BR-5
+    disposition: not-addressed
+    note: |
+      init.lua:1104 still pcalls and discards; no debug log on the false branch.
+  - id: BR-6
+    disposition: not-addressed
+    note: |
+      init.lua:3343 still spells the key by hand; buffer_mutation_spec.lua:97 greps the literal resolve(vim.fn.expand form and cannot see it.
+  - id: BR-7
+    disposition: not-addressed
+    note: |
+      M.logger.warning still fires inside resolve_chat_path on every ambiguous resolve.
+  - id: BR-8
+    disposition: not-addressed
+    note: |
+      The insert/replace guard is unchanged and still unreachable from CursorHold; its test reaches it only by stubbing nvim_get_mode.
+  - id: BR-9
+    disposition: not-addressed
+    note: |
+      not_chat's full-buffer read still precedes the reference string test.
+  - id: BR-10
+    disposition: not-addressed
+    note: |
+      exporter.lua:32 still defines a local resolve_chat_path wrapper the guard's name rule does not cover.
+  - id: BR-11
+    disposition: not-addressed
+    note: |
+      README has nothing on cursor-hold repair; under this round's docs gate this is the Important-class gap, and it is one line.
+  - id: BR-12
+    disposition: not-addressed
+    note: |
+      single_resolver_spec.lua:15-25 still re-derives what arch_helper.lua already provides.
+  - id: BR-13
+    disposition: not-addressed
+    note: |
+      No newline check before replace_line_at; a filesystem basename still reaches the buffer unvalidated.
+  - id: BR-14
+    disposition: addressed
+    note: |
+      Mutation-verified: reverting dirs to candidates[1] alone reddens the sub/-under-a-second-root arm.
+  - id: BR-15
+    disposition: addressed
+    note: |
+      Re-measured base vs HEAD on an exact hit at 1 root x 2000 files: 0.031 ms vs 0.039 ms (2.43 ms without the short-circuit).
+  - id: BR-16
+    disposition: addressed
+    note: |
+      Mutation-verified: changing the autocmd pattern to *.txt reddens the CursorHold arm.
+  - id: BR-17
+    disposition: not-addressed
+    note: |
+      Counted at base 6425abc: three local resolve_path definitions, not six. Atlas and the spec comment both still say six.
+findings:
+  - id: new
+    severity: Minor
+    family: unreachable-guard
+    title: |
+      The second existence loop in resolve_chat_path is dead code the docstring still credits
+    detail: |
+      This is the 2nd finding in family `unreachable-guard` (BR-8 is the 1st, still
+      open). Do NOT fix this instance. The rule that covers both: a branch is only
+      allowed to exist if you can name an input that reaches it, and a fix that
+      re-introduces an earlier guard (BR-15's short-circuit) must be checked for
+      branches it has just made unreachable. The enumeration for this diff is two:
+      the insert/replace-mode guard at init.lua:3143, unreachable because CursorHold
+      does not fire in insert mode; and the existence loop at init.lua:3385, byte-
+      identical to the short-circuit at init.lua:3305 over the same `candidates`
+      with nothing between them that touches the list or the filesystem. Confirmed
+      by replacing the loop body with error() — read_repair, ancestor_chain_rename,
+      chat_respond, not_chat and resolve_candidates all stayed green. The docstring
+      at init.lua:3277 still describes it as the non-chat-filename fallback, which
+      is now what the short-circuit does.
+  - id: new
+    severity: Minor
+    family: undeclared-envelope-change
+    title: |
+      The stale-reference path now globs every search dir instead of stopping at the first hit
+    detail: |
+      This is the 2nd finding in family `undeclared-envelope-change` (BR-15 is the
+      1st). Do NOT fix this instance. The rule: when a resolver's control flow
+      changes, every path through it whose cost class moved must be measured and
+      declared, not only the one the previous finding named. BR-15 measured and
+      restored the exact-hit path; the stale path was not measured. Base returned as
+      soon as one directory yielded a verified match; HEAD globs all of search_dirs
+      before calling resolve_candidates, so the extra globs buy only BR-7's
+      ambiguity warning. Measured base 6425abc vs HEAD, reference whose target was
+      renamed: 2.536 -> 7.223 ms at 3 roots x 2000 files (2.8x); 0.192 -> 0.297 ms
+      at the operator's actual 116+28 files. Immaterial at real scale today, but it
+      is the case this issue exists for, and the highlighter re-resolves it per
+      visible branch line every 500 ms. The issue's ARCH-CONSTRAINTS block budgets
+      only the CursorHold path.
+```

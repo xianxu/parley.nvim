@@ -1097,7 +1097,14 @@ M.setup = function(opts)
 		group = repair_augroup,
 		pattern = "*.md",
 		callback = function(ev)
-			pcall(M.repair_reference_at_cursor, ev.buf, vim.api.nvim_win_get_cursor(0)[1])
+			-- pcall so a repair bug cannot break cursor movement, but the error
+			-- is REPORTED: a silently swallowed one would make this feature
+			-- fail invisibly for as long as nobody looked.
+			local ok, err = pcall(M.repair_reference_at_cursor, ev.buf,
+				vim.api.nvim_win_get_cursor(0)[1])
+			if not ok then
+				M.logger.warning("read-repair failed: " .. tostring(err))
+			end
 		end,
 	})
 
@@ -3341,7 +3348,10 @@ local function resolve_chat_path(path, base_dir)
 		dirs[#dirs + 1] = base_dir
 		vim.list_extend(dirs, M.get_chat_dirs() or {})
 		for _, d in ipairs(dirs) do
-			local key = vim.fn.resolve(vim.fn.fnamemodify(d, ":p")):gsub("/+$", "")
+			-- resolve_dir_key owns the canonical-directory-key spelling (:68).
+			-- Hand-rolling a second one is how two "same directory?" answers
+			-- drift apart.
+			local key = resolve_dir_key(d)
 			if not seen_dir[key] then
 				seen_dir[key] = true
 				search_dirs[#search_dirs + 1] = d
@@ -3385,12 +3395,10 @@ local function resolve_chat_path(path, base_dir)
 		end
 	end
 
-	-- Not a chat filename (or the glob found nothing): plain existence.
-	for _, candidate in ipairs(candidates) do
-		if vim.fn.filereadable(candidate) == 1 then
-			return vim.fn.resolve(candidate)
-		end
-	end
+	-- No timestamp to glob, or the glob found nothing. The existence check
+	-- already ran at the top as the short-circuit, and nothing since has
+	-- touched `candidates` or the filesystem — so repeating it here was dead
+	-- code, byte-identical and unreachable (close review round 3).
 	return candidates[1] and vim.fn.resolve(candidates[1]) or candidates[1]
 end
 M.resolve_chat_path = resolve_chat_path

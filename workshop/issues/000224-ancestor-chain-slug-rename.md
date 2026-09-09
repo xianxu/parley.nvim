@@ -1,12 +1,13 @@
 ---
 id: 000224
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-09-08
-updated: 2026-09-08
+updated: 2026-09-09
 estimate_hours: 6.46
 started: 2026-09-08T15:04:07-07:00
+actual_hours: 4.46
 ---
 
 # Forked chat loses its parent context after a slug rename
@@ -109,11 +110,16 @@ resolver be written that only does exact matching.
   | `outline.lua:273` — branch topic | a renamed child shows no topic |
   | `outline.lua:277` — picker `child_path` | a renamed child stores an unreadable navigation target |
 
-  A **sixth** `resolve_path` turned up in `highlighter.lua` while the other five
-  were being removed. That one was already a correct delegate and never had the
-  bug — but the shared NAME is what made the broken pair look like the working
-  one, so it goes too. After this there is no `local resolve_path` anywhere in
-  `lua/`.
+  A **third** `resolve_path` definition turned up in `highlighter.lua` while the
+  other two were being removed. That one was already a correct delegate and
+  never had the bug — but the shared NAME is what made the broken pair look like
+  the working one, so it goes too. After this there is no `local resolve_path`
+  anywhere in `lua/`.
+
+  *(Counting note, close review round 3: the table above lists five consumer
+  CALL SITES; the definitions were three — `chat_respond`, `outline`,
+  `highlighter`. Round 1's commit message and the atlas both said "six", which
+  read call sites as definitions and double-counted the pair #225 had merged.)*
 
   The exporter (`exporter.lua:32`) and highlighter (`highlighter.lua:66`)
   already delegate to `resolve_chat_path`, so after this there is exactly one
@@ -493,8 +499,12 @@ Against #225 (est 1.79, actual 3.92) for comparable-but-smaller scope, and with
 - Resting the cursor on a stale reference rewrites that line in the BUFFER
   (undoable, `modified` set); resting it on a current one changes nothing and
   leaves `modified` untouched.
-- Navigation performs no writes at all — asserted by spying the file-write seam
-  across `<M-o>`, `gf` and the ancestor walk.
+- Navigation performs no writes at all. Evidence as shipped: `read_repair_spec`
+  compares the referring file's bytes before and after a `resolve_chat_path`
+  call. That covers all three entry points because they go through the one
+  resolver and `_read_repair_reference` is deleted — but it is a content
+  compare on one call, not the per-entry-point write-seam spy this line
+  originally promised (close review round 3).
 - A same-timestamp collision picks deterministically and says so, rather than
   silently preferring the longest name.
 - A guard fails if a module joins a chat-reference path outside the resolver.
@@ -552,6 +562,8 @@ updated in place; Plan row 5 replaced by the two rows that implement it.
 
 ## Log
 
+
+- 2026-09-09: closed — Round 3 after FIX-THEN-SHIP-with-open-findings. make test exit=0 (208 spec files), make lint 0 warnings / 0 errors in 364 files — verified AFTER the commit, by exit code. BR-14 fixed at the CLASS: the glob set derives from candidates rather than naming candidates[1], and search order is the tie-break with candidate directories first (base_dir is where a reference was written from, not where it points). Mutation-verified by name with lint clean, on a fixture that actually discriminates — two earlier fixtures passed against BOTH the instance fix and the class fix, one because a single root made candidates[1] already right, the other because BR-15 short-circuit answered before the glob ran; the discriminating case is a sub/ reference whose target was RENAMED. resolve_candidates no longer sorts (the caller supplies search order and sorts within each directory, so filesystem order still cannot leak), and its unit spec was rewritten to the new contract. BR-15 fixed and MEASURED BY ME rather than cited: one root of 2000 files, exact-name hit, 0.031 ms with the short-circuit vs 2.434 ms without, matching the review 0.033/2.486. The short-circuit is not the deleted tier — it cannot change the answer, because resolve_candidates prefers an exact basename and after BR-14 an existing exact target is always among the glob matches; removing it leaves the suite green, which is that equivalence as evidence. BR-16 fixed: two arms now fire the real CursorHold event, and breaking the *.md pattern reddens them by name. Commit hygiene second occurrence recorded and corrected: the round-1 commit swept 14 operator transcripts because "stage by path, never -A" was satisfied by `git add -A -- lua tests atlas workshop` and workshop contains workshop/parley; branch was unpushed, commit amended, transcripts untracked again, and the sharpened rule immediately caught an unrelated config.lua edit staged into round 2.; review verdict: FIX-THEN-SHIP
 ### 2026-09-08
 
 Reported by the operator while using the fork feature heavily. They read it as a

@@ -251,6 +251,102 @@ rounds:
           family: doc-claim-unverified
           round: 2
       blocked: true
+    - "n": 3
+      timestamp: "2026-09-09T13:07:20-07:00"
+      agent: claude
+      dispose:
+        - id: BR-5
+          disposition: not-addressed
+          note: init.lua:1104 still pcalls and discards; no debug log on the false branch.
+          round: 3
+        - id: BR-6
+          disposition: not-addressed
+          note: init.lua:3343 still spells the key by hand; buffer_mutation_spec.lua:97 greps the literal resolve(vim.fn.expand form and cannot see it.
+          round: 3
+        - id: BR-7
+          disposition: not-addressed
+          note: M.logger.warning still fires inside resolve_chat_path on every ambiguous resolve.
+          round: 3
+        - id: BR-8
+          disposition: not-addressed
+          note: The insert/replace guard is unchanged and still unreachable from CursorHold; its test reaches it only by stubbing nvim_get_mode.
+          round: 3
+        - id: BR-9
+          disposition: not-addressed
+          note: not_chat's full-buffer read still precedes the reference string test.
+          round: 3
+        - id: BR-10
+          disposition: not-addressed
+          note: exporter.lua:32 still defines a local resolve_chat_path wrapper the guard's name rule does not cover.
+          round: 3
+        - id: BR-11
+          disposition: not-addressed
+          note: README has nothing on cursor-hold repair; under this round's docs gate this is the Important-class gap, and it is one line.
+          round: 3
+        - id: BR-12
+          disposition: not-addressed
+          note: single_resolver_spec.lua:15-25 still re-derives what arch_helper.lua already provides.
+          round: 3
+        - id: BR-13
+          disposition: not-addressed
+          note: No newline check before replace_line_at; a filesystem basename still reaches the buffer unvalidated.
+          round: 3
+        - id: BR-14
+          disposition: addressed
+          note: 'Mutation-verified: reverting dirs to candidates[1] alone reddens the sub/-under-a-second-root arm.'
+          round: 3
+        - id: BR-15
+          disposition: addressed
+          note: 'Re-measured base vs HEAD on an exact hit at 1 root x 2000 files: 0.031 ms vs 0.039 ms (2.43 ms without the short-circuit).'
+          round: 3
+        - id: BR-16
+          disposition: addressed
+          note: 'Mutation-verified: changing the autocmd pattern to *.txt reddens the CursorHold arm.'
+          round: 3
+        - id: BR-17
+          disposition: not-addressed
+          note: 'Counted at base 6425abc: three local resolve_path definitions, not six. Atlas and the spec comment both still say six.'
+          round: 3
+      findings:
+        - id: BR-18
+          severity: Minor
+          title: The second existence loop in resolve_chat_path is dead code the docstring still credits
+          detail: |-
+            This is the 2nd finding in family `unreachable-guard` (BR-8 is the 1st, still
+            open). Do NOT fix this instance. The rule that covers both: a branch is only
+            allowed to exist if you can name an input that reaches it, and a fix that
+            re-introduces an earlier guard (BR-15's short-circuit) must be checked for
+            branches it has just made unreachable. The enumeration for this diff is two:
+            the insert/replace-mode guard at init.lua:3143, unreachable because CursorHold
+            does not fire in insert mode; and the existence loop at init.lua:3385, byte-
+            identical to the short-circuit at init.lua:3305 over the same `candidates`
+            with nothing between them that touches the list or the filesystem. Confirmed
+            by replacing the loop body with error() — read_repair, ancestor_chain_rename,
+            chat_respond, not_chat and resolve_candidates all stayed green. The docstring
+            at init.lua:3277 still describes it as the non-chat-filename fallback, which
+            is now what the short-circuit does.
+          family: unreachable-guard
+          round: 3
+        - id: BR-19
+          severity: Minor
+          title: The stale-reference path now globs every search dir instead of stopping at the first hit
+          detail: |-
+            This is the 2nd finding in family `undeclared-envelope-change` (BR-15 is the
+            1st). Do NOT fix this instance. The rule: when a resolver's control flow
+            changes, every path through it whose cost class moved must be measured and
+            declared, not only the one the previous finding named. BR-15 measured and
+            restored the exact-hit path; the stale path was not measured. Base returned as
+            soon as one directory yielded a verified match; HEAD globs all of search_dirs
+            before calling resolve_candidates, so the extra globs buy only BR-7's
+            ambiguity warning. Measured base 6425abc vs HEAD, reference whose target was
+            renamed: 2.536 -> 7.223 ms at 3 roots x 2000 files (2.8x); 0.192 -> 0.297 ms
+            at the operator's actual 116+28 files. Immaterial at real scale today, but it
+            is the case this issue exists for, and the highlighter re-resolves it per
+            visible branch line every 500 ms. The issue's ARCH-CONSTRAINTS block budgets
+            only the CursorHold path.
+          family: undeclared-envelope-change
+          round: 3
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#224 (boundary-review)
@@ -384,6 +480,55 @@ later rounds disposed of them. Generated — edit the gate, not this file.
   one correct. "Six" is the Spec's count of call sites transcribed as
   modules; the 2+3+1 breakdown double-counts.
 
+## Round 3 — 2026-09-09T13:07:20-07:00 (claude) — passed
+
+### Disposed
+
+- BR-5 — not-addressed — init.lua:1104 still pcalls and discards; no debug log on the false branch.
+- BR-6 — not-addressed — init.lua:3343 still spells the key by hand; buffer_mutation_spec.lua:97 greps the literal resolve(vim.fn.expand form and cannot see it.
+- BR-7 — not-addressed — M.logger.warning still fires inside resolve_chat_path on every ambiguous resolve.
+- BR-8 — not-addressed — The insert/replace guard is unchanged and still unreachable from CursorHold; its test reaches it only by stubbing nvim_get_mode.
+- BR-9 — not-addressed — not_chat's full-buffer read still precedes the reference string test.
+- BR-10 — not-addressed — exporter.lua:32 still defines a local resolve_chat_path wrapper the guard's name rule does not cover.
+- BR-11 — not-addressed — README has nothing on cursor-hold repair; under this round's docs gate this is the Important-class gap, and it is one line.
+- BR-12 — not-addressed — single_resolver_spec.lua:15-25 still re-derives what arch_helper.lua already provides.
+- BR-13 — not-addressed — No newline check before replace_line_at; a filesystem basename still reaches the buffer unvalidated.
+- BR-14 — addressed — Mutation-verified: reverting dirs to candidates[1] alone reddens the sub/-under-a-second-root arm.
+- BR-15 — addressed — Re-measured base vs HEAD on an exact hit at 1 root x 2000 files: 0.031 ms vs 0.039 ms (2.43 ms without the short-circuit).
+- BR-16 — addressed — Mutation-verified: changing the autocmd pattern to *.txt reddens the CursorHold arm.
+- BR-17 — not-addressed — Counted at base 6425abc: three local resolve_path definitions, not six. Atlas and the spec comment both still say six.
+
+### Raised
+
+- **BR-18** [Minor] `unreachable-guard` The second existence loop in resolve_chat_path is dead code the docstring still credits
+  This is the 2nd finding in family `unreachable-guard` (BR-8 is the 1st, still
+  open). Do NOT fix this instance. The rule that covers both: a branch is only
+  allowed to exist if you can name an input that reaches it, and a fix that
+  re-introduces an earlier guard (BR-15's short-circuit) must be checked for
+  branches it has just made unreachable. The enumeration for this diff is two:
+  the insert/replace-mode guard at init.lua:3143, unreachable because CursorHold
+  does not fire in insert mode; and the existence loop at init.lua:3385, byte-
+  identical to the short-circuit at init.lua:3305 over the same `candidates`
+  with nothing between them that touches the list or the filesystem. Confirmed
+  by replacing the loop body with error() — read_repair, ancestor_chain_rename,
+  chat_respond, not_chat and resolve_candidates all stayed green. The docstring
+  at init.lua:3277 still describes it as the non-chat-filename fallback, which
+  is now what the short-circuit does.
+- **BR-19** [Minor] `undeclared-envelope-change` The stale-reference path now globs every search dir instead of stopping at the first hit
+  This is the 2nd finding in family `undeclared-envelope-change` (BR-15 is the
+  1st). Do NOT fix this instance. The rule: when a resolver's control flow
+  changes, every path through it whose cost class moved must be measured and
+  declared, not only the one the previous finding named. BR-15 measured and
+  restored the exact-hit path; the stale path was not measured. Base returned as
+  soon as one directory yielded a verified match; HEAD globs all of search_dirs
+  before calling resolve_candidates, so the extra globs buy only BR-7's
+  ambiguity warning. Measured base 6425abc vs HEAD, reference whose target was
+  renamed: 2.536 -> 7.223 ms at 3 roots x 2000 files (2.8x); 0.192 -> 0.297 ms
+  at the operator's actual 116+28 files. Immaterial at real scale today, but it
+  is the case this issue exists for, and the highlighter re-resolves it per
+  visible branch line every 500 ms. The issue's ARCH-CONSTRAINTS block budgets
+  only the CursorHold path.
+
 ## Open findings
 
 - **BR-5** [Minor] `silent-error-swallow` The CursorHold callback pcalls repair and discards the error unlogged
@@ -395,7 +540,6 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-11** [Minor] `docs-user-surface` README not updated for the cursor-hold repair behavior
 - **BR-12** [Minor] `arch-helper-reuse` single_resolver_spec re-derives file enumeration and line reading
 - **BR-13** [Minor] `untrusted-input-writeback` A filesystem-derived basename is written into the buffer unvalidated
-- **BR-14** [Important] `prefix-identity-scope` The glob set covers only candidates[1]'s directory, so an existing exact target still loses silently
-- **BR-15** [Important] `undeclared-envelope-change` Deleting the exact-hit short-circuit made every pre-existing consumer's resolve O(chat-root size)
-- **BR-16** [Important] `claimed-test-not-pinned` Nothing drives the CursorHold autocmd — the feature's only production entry point
 - **BR-17** [Minor] `doc-claim-unverified` Atlas and the arch spec both say six modules had a local resolve_path; there were three
+- **BR-18** [Minor] `unreachable-guard` The second existence loop in resolve_chat_path is dead code the docstring still credits
+- **BR-19** [Minor] `undeclared-envelope-change` The stale-reference path now globs every search dir instead of stopping at the first hit

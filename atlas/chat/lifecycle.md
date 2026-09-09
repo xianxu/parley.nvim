@@ -22,10 +22,12 @@ prefers. Keeping it as a tier is what let an exact-match-only second resolver be
 written and go unnoticed for months — it worked for every reference whose parent
 had not been renamed yet.
 
-- **One resolver.** `parley.resolve_chat_path(path, base_dir)`. Six modules once
-  had a `local resolve_path`; two were exact-match-only, three delegated to a
-  naive shared helper, one was correct. All six are gone, because the shared
-  *name* is what made the broken pair look like the working one.
+- **One resolver.** `parley.resolve_chat_path(path, base_dir)`. **Three** modules
+  defined a `local resolve_path` — `chat_respond`, `outline`, `highlighter`. Two
+  resolved exact-only; the third was already correct and is gone too, because
+  the shared *name* is what made the broken pair look like the working one.
+  (An earlier revision of this paragraph said "six": that was the count of call
+  *sites* transcribed as modules.)
   `tests/arch/single_resolver_spec.lua` enforces it: the naive
   `helper.resolve_relative_path` is reachable only from inside the real
   resolver, no module defines its own `resolve_path`, and any module that reads
@@ -35,6 +37,16 @@ had not been renamed yet.
   ambiguity is reported. The rule this replaced sorted by *length* — "prefer the
   one with a slug" — which stops being right the moment two slugged variants
   exist.
+- **An exact hit short-circuits**, before the glob. Not the tier this design
+  deletes — a tier changes the answer, and this cannot, because
+  `resolve_candidates` already prefers an exact basename and every existing
+  exact target is in the glob set. It is there for cost: without it the common
+  case (a reference whose parent has not been renamed) goes from a
+  `filereadable` to O(files in the roots) — measured 0.031 ms → 2.43 ms at one
+  root of 2000 files, and `<M-t>` resolves once per branch.
+- **Search order is the tie-break** for non-exact matches, with the reference's
+  own directories first. `resolve_candidates` preserves the order it is given;
+  the caller sorts within each directory so filesystem order cannot leak in.
 - **Resolution returns a resolved path**, always. The second consumer site
   compares the result against `vim.fn.resolve(current_file)` for equality; an
   unresolved return makes that comparison fail and truncates the parent to
