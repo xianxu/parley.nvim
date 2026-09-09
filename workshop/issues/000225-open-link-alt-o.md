@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-09-08
 updated: 2026-09-08
-estimate_hours:
+estimate_hours: 1.79
 started: 2026-09-08T16:45:24-07:00
 ---
 
@@ -119,6 +119,47 @@ is a coherent policy once stated:
 
 So the fall-through does `stopinsert`, the reference exits keep `startinsert`,
 and the difference is intended rather than an artifact of which branch ran.
+
+## Estimate
+
+Derived against the calibration ledger's comparable parley rows rather than a
+remembered table (`sdlc estimate-source` flags the v3.1 doc `[stale]`; the
+ledger is the newer artifact):
+
+| row | est | design | impl | actual | ratio |
+|---|---|---|---|---|---|
+| #215 | 2.23 | 1.25 | 0.60 | 1.67 | 1.34 |
+| #218 | 1.86 | 0.70 | 1.05 | 2.13 | 0.87 |
+| #214 | 3.83 | 1.00 | 2.68 | 17.14 | **0.22** |
+
+#218 is the closest shape — a focused Lua behaviour change with real edge cases
+— and it bracketed 1.0 from the low side. #225 is a little more than that: an
+extraction with four measured divergences, a three-valued contract, and 13
+literal hits across 7 files.
+
+**#214's 0.22 is the loud one, and it is not evidence to inflate this.** That
+overrun was sixteen boundary rounds on a milestone carrying eight plan rows
+across four subsystems. #225 is single-pass, one concern, and its design is
+largely already spent — four plan-gate rounds have happened, which is why the
+design line is not larger.
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: lua-neovim              design=0.5 impl=0.5
+item: ux-rename-iteration     design=0.1 impl=0.25
+item: atlas-docs              design=0.0 impl=0.15
+item: milestone-review        design=0.0 impl=0.2
+design-buffer: 0.15
+total: 1.79
+```
+
+`design-buffer: 0.15` (not the 0.30 default) because there is a thorough plan:
+four gate rounds, the divergences enumerated with verdicts, the exit contract
+tabulated. `milestone-review ×1` because the Plan is plain checkboxes — one
+boundary, one `sdlc close`, no `Mx` tags.
+
+Recomputed: (0.5+0.1) × 1.15 + (0.5+0.25+0.15+0.2) × 1.0 = 0.69 + 1.10 = **1.79**.
 
 ## Done when
 
