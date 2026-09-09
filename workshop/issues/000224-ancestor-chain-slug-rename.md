@@ -44,19 +44,19 @@ submitted with no parent context at all.**
 
 Two independent resolvers, and only one knows about renames:
 
-| | `resolve_chat_path` (`init.lua:3200`) | `resolve_path` (`chat_respond.lua:176`) |
+| | `resolve_chat_path` (`init.lua:3215`) | `resolve_relative_path` (`helper.lua`, via `chat_respond.lua:176`, `outline.lua:208`) |
 |---|---|---|
 | searches every chat root | yes | no |
 | timestamp glob for slug variants | yes | no |
 | read-repairs the stale reference | yes | no |
 | used by | `<M-o>`, `gf`, navigation | **the ancestor chain** |
 
-`collect_ancestor_chain` (`chat_respond.lua:201`) uses the naive one, bails, and
+`collect_ancestor_chain` (`chat_respond.lua:195`) uses the naive one, bails, and
 returns `{}` — so `collect_ancestor_messages` → `build_ancestor_messages`
 contributes nothing. For a fork, the parent conversation IS the context the fork
 exists to carry.
 
-**Second site, same cause.** `chat_respond.lua:221` matches a parent branch back
+**Second site, same cause.** `chat_respond.lua:215` matches a parent branch back
 to the current file with the same naive resolver. A renamed CHILD therefore
 fails that comparison, leaving `branch_after = 0` — so even when the parent
 resolves, its exchanges are truncated at the wrong point.
@@ -65,7 +65,7 @@ resolves, its exchanges are truncated at the wrong point.
 
 `resolve_chat_path` was built for exactly this (it even schedules
 `_read_repair_reference` to rewrite the stale link) and is already exported at
-`init.lua:3252`. `chat_respond` grew its own path-joiner instead. Any code
+`init.lua:3269`. `chat_respond` grew its own path-joiner instead. Any code
 resolving a chat reference must go through the one resolver — a second one is
 guaranteed to be the one that has not learned about renames.
 
@@ -97,19 +97,50 @@ resolver be written that only does exact matching.
   lexicographically first and log at warning. Today the code sorts by *length*
   and silently prefers the longest, which encodes "the one with a slug" — a
   guess that stops being right the moment two slugged variants exist.
-- **Both `chat_respond` sites use it** — the parent lookup (`:201`) and the
-  branch-match that sets `branch_after` (`:221`). Its local `resolve_path` goes
-  away; the exporter already delegates (`exporter.lua:32`), so after this there
-  is exactly one resolver.
-- **An arch guard for the class:** no module outside the resolver joins a
-  chat-reference path itself. Same shape as #214's "no module outside the
-  registry reads `config.<key>.shortcut`", which caught the class rather than
-  the site.
+- **All FIVE consumer sites use it**, not two. Measured, after the plan-quality
+  gate caught the plan claiming "exactly one resolver" while a third consumer
+  sat outside it:
+
+  | site | what breaks today |
+  |---|---|
+  | `chat_respond.lua:195` — parent lookup | the fork submits with no parent context |
+  | `chat_respond.lua:215` — branch-match | `branch_after = 0`, parent truncated at the wrong point |
+  | `outline.lua:230` — `find_tree_root` | **verified**: a renamed parent makes the tree root the CHILD; `<M-t>` never reaches the parent |
+  | `outline.lua:273` — branch topic | a renamed child shows no topic |
+  | `outline.lua:277` — picker `child_path` | a renamed child stores an unreadable navigation target |
+
+  The exporter (`exporter.lua:32`) and highlighter (`highlighter.lua:66`)
+  already delegate to `resolve_chat_path`, so after this there is exactly one
+  resolver *and* one set of consumers.
+
+- **#225's consolidation unified the bug rather than fixing it** — worth stating,
+  because it is the reason the third site is easy to miss. `chat_respond` and
+  `outline` each had a byte-identical private `resolve_path`; #225 merged them
+  into `helper.resolve_relative_path` (ARCH-DRY, correctly) — but merged them
+  onto the **naive** resolver. One implementation of the wrong thing is still
+  the wrong thing, now uniformly. A DRY consolidation must pick the
+  more-correct implementation as the survivor, not the more common one.
+- **An arch guard, over RESOLUTION rather than joining.** The obvious phrasing —
+  "no module joins a chat-reference path itself" — greps clean over a tree that
+  still has the bug, because after #225 nothing joins: `chat_respond.lua:176`
+  and `outline.lua:208` both *delegate* to `helper.resolve_relative_path`. A
+  guard over the wrong term is the #225 round-3 failure exactly (the rule was
+  over `expand` while `glob` was the live sink).
+
+  The rule: **`helper.resolve_relative_path` may be reached with a
+  transcript-derived chat reference only from `resolve_chat_path`.** Enforced in
+  the shape of `tests/arch/untrusted_path_spec.lua`'s ALLOW — every call site
+  listed with a stated reason, so a new one fails until it is justified. After
+  this change the allowlist has exactly one entry (`init.lua`'s
+  `_resolve_chat_path_candidates`), which is the assertion worth making.
+
+  **Seen red by re-adding a local RESOLVER, not a local joiner** — the mutation
+  has to be the mistake the guard exists to catch.
 
 ### Consequence: read-repair becomes optional
 
 `resolve_chat_path` currently schedules `_read_repair_reference` to rewrite a
-stale link on the way past (`init.lua:3241`). Under prefix identity a
+stale link on the way past (`init.lua:3258`). Under prefix identity a
 slug-stale link is not stale — it resolves correctly forever — so repair stops
 being load-bearing and becomes cosmetic.
 
@@ -145,6 +176,20 @@ detail:
   edit is made. A no-op must leave `modified` untouched.
 - **Never on a line the user is editing.** Repair is skipped in insert mode, so
   it cannot fight a half-typed reference.
+- **Never while the buffer is busy.** A response streaming into the buffer is a
+  concurrent writer, and `chat_lease` anchors on a buffer line and invalidates
+  on concurrent mutation (`chat_respond.lua:1575-1582`). Both existing writers
+  already defer on this — `_read_repair_reference` on `tasker.is_busy`
+  (`init.lua:3107`), `_slug_rename_chat` refuses outright (`init.lua:3029`) — and
+  omitting it here would make the new writer the only one that does not.
+  **It IGNORES, it does not queue or cancel:** repair is cosmetic and
+  idempotent, there is no state to cancel, and the next `CursorHold` retries for
+  free. Queuing would land the write at the least predictable moment.
+
+`CursorHold` **reads** `updatetime` and does not set it — this is the plugin's
+first cursor autocmd, and silently changing a global option to tune a cosmetic
+feature would be exactly the kind of surprise `default_keymaps` exists to
+prevent. Users who want faster repair set `updatetime` themselves.
 
 The read-repair trigger is therefore the *only* writer, and prefix identity is
 what makes it optional — correctness never depends on it firing.
@@ -189,6 +234,7 @@ moving off it onto a user action.
 | `repair_reference_at_cursor` | `lua/parley/init.lua` | new | buffer read/write |
 | `resolve_chat_path` | `lua/parley/init.lua` | modified | filesystem glob |
 | `resolve_path` | `lua/parley/chat_respond.lua` | deleted | — |
+| `resolve_path` | `lua/parley/outline.lua` | deleted | — |
 | `_read_repair_reference` | `lua/parley/init.lua` | deleted | — |
 
 - **`repair_reference_at_cursor(buf, lnum)`** — resolves the reference on one
@@ -203,10 +249,17 @@ moving off it onto a user action.
     resting a cursor would be the behaviour the old design was criticised for,
     moved rather than removed.
 
-- **`resolve_chat_path`** — prefix identity becomes the primary rule, not a
-  fallback tier, and it stops scheduling repair. Resolution becomes a pure read
-  (ARCH-PURE: the glob is the only IO, and the ordering decision moves out to
-  `resolve_candidates`).
+- **`resolve_chat_path(path, base_dir)`** — prefix identity becomes the primary
+  rule, not a fallback tier, and it stops scheduling repair. Resolution becomes
+  a pure read (ARCH-PURE: the glob is the only IO, and the ordering decision
+  moves out to `resolve_candidates`).
+  - **Signature change:** the third parameter `referring_file` goes away, since
+    its only purpose was scheduling repair. Six consumers pass or re-export it:
+    `init.lua:3302`, `:3337`, `:3358`, `:4248` pass it; `exporter.lua:32` and
+    `highlighter.lua:66` re-export the 2-arg form and are unaffected. Dropping a
+    parameter is source-compatible in Lua (extra args are ignored), which is
+    precisely why it must be swept rather than left — a forgotten caller would
+    keep compiling and silently pass a now-meaningless argument.
 
 **Operating envelope (ARCH-CONSTRAINTS).** `CursorHold` is an idle event, not a
 keystroke path — that is why it is the trigger rather than `CursorMoved`, which
@@ -249,19 +302,28 @@ guard added there already covers any new sink this introduces.
       lexicographically first + a warning. Replaces the current sort-by-length,
       which encodes "the one with a slug" and stops being right the moment two
       slugged variants exist
-- [ ] Route both `chat_respond` sites through it — the parent lookup (`:201`)
-      and the branch-match that sets `branch_after` (`:221`) — and delete the
-      local `resolve_path`
+- [ ] Route ALL FIVE consumer sites through it — `chat_respond.lua:195` and
+      `:215`, `outline.lua:230`, `:273` and `:277` — and delete both local
+      `resolve_path` delegates. Five, not two: the plan-quality gate caught the
+      plan claiming "exactly one resolver" while `outline` sat outside it
 - [ ] Test the renamed-CHILD `branch_after` case (the second site, same cause:
       a renamed child fails the parent-branch comparison and truncates at 0)
+- [ ] Test the `<M-t>` tree: a renamed parent must not make the CHILD the tree
+      root. Verified failing today via `_build_tree_outline_items` — the outline
+      shows `📋 Child` and never reaches the parent
 - [ ] Remove `_read_repair_reference` from the resolution path; resolution
       becomes a pure read
+- [ ] Drop `referring_file` from `resolve_chat_path`'s signature and sweep the
+      four call sites that pass it
 - [ ] Add the cursor-entry trigger: `CursorHold` in a chat buffer, reference on
-      the cursor line, name actually changed, not in insert mode → rewrite the
-      line as a BUFFER edit. Test the no-op case leaves `modified` untouched
-- [ ] Arch guard for the class: no module outside the resolver joins a
-      chat-reference path itself (same shape as #214's registry guard). Seen red
-      by re-adding a local joiner
+      the cursor line, name actually changed, not insert mode, not busy →
+      rewrite the line as a BUFFER edit. Test: the no-op case leaves `modified`
+      untouched; a busy buffer is skipped and retried on the next hold
+- [ ] Arch guard over RESOLUTION: `helper.resolve_relative_path` reached with a
+      chat reference only from `resolve_chat_path`, allowlisted per site with a
+      stated reason (shape of `untrusted_path_spec.lua`'s ALLOW). Seen red by
+      re-adding a local RESOLVER — a guard over "joining" greps clean over the
+      buggy tree, which is what the gate caught
 
 ## Revisions
 
