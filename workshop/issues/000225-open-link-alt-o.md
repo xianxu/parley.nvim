@@ -241,17 +241,20 @@ Recomputed: (0.5+0.1) × 1.15 + (0.5+0.25+0.15+0.2) × 1.0 = 0.69 + 1.10 = **1.7
 
 ## Plan
 
-- [ ] Generalise the collision guard: no alt key has two owners (fails today
+- [x] Generalise the collision guard: no alt key has two owners (fails today
       only if a collision exists; seen red by binding `<M-o>` twice)
-- [ ] Extract `open_reference_under_cursor(buf, line, col, in_insert, is_chat)`
+- [x] Extract `open_reference_under_cursor(buf, line, col, is_chat)` — landed
+      without the `in_insert` parameter: the landing mode is the *caller's*
+      decision (it depends on which of the three outcomes came back), so
+      passing it in would have been a parameter the function never reads
       taking the UNION of differences 1-3 and keeping 4 behind `is_chat`;
       characterisation tests for all four BEFORE the extraction, so a dropped
       arm fails rather than passing silently
-- [ ] Three-valued return; only `"none"` falls through. `"failed"` keeps its
+- [x] Three-valued return; only `"none"` falls through. `"failed"` keeps its
       diagnostic; the two `"none"` warnings are deleted
-- [ ] One fall-through to `ResolveRefOrGotoFile`, `stopinsert` first when in
+- [x] One fall-through to `ResolveRefOrGotoFile`, `stopinsert` first when in
       insert mode
-- [ ] Move `review_menu` to `<M-s>`. **Grep-derived hit list** (13 across 7
+- [x] Move `review_menu` to `<M-s>`. **Grep-derived hit list** (13 across 7
       files — the first version of this row was recalled and named 2):
       `keybinding_registry.lua:750` (`default_key`), `config.lua:458,462`,
       `skills/review/init.lua:742,765`, `init.lua`, `atlas/modes/review.md:55,199`,
@@ -259,15 +262,57 @@ Recomputed: (0.5+0.1) × 1.15 + (0.5+0.25+0.15+0.2) × 1.0 = 0.69 + 1.10 = **1.7
       `tests/integration/keybinding_agreement_spec.lua:326,370,397,407` — where
       two hardcoded `{ "<C-g>ve", "<M-o>", "<M-CR>" }` lists need editing and
       `:407` (journal sidecar asserts `is_nil` for `<M-o>`) fails outright
-- [ ] `<M-g>` also lives in `README.md:189` and `atlas/ui/keybindings.md:65`
-- [ ] Rebind `open_file` to `{ "<M-o>", "<C-g>o" }` — full list in `config.lua`,
+- [x] `<M-g>` also lives in `README.md:189` and `atlas/ui/keybindings.md:65`
+- [x] Rebind `open_file` to `{ "<M-o>", "<C-g>o" }` — full list in `config.lua`,
       since M2's superset guard requires it
-- [ ] Tests, named: `OpenFileUnderCursor` reaches each of the four steps in both
+- [x] Tests, named: `OpenFileUnderCursor` reaches each of the four steps in both
       buffer types; the gf arm via a `vim.cmd` spy; the resolve arm via the
       injected runner
-- [ ] README + `atlas/ui/keybindings.md` alt-family list + `atlas/modes/review.md`
+- [x] README + `atlas/ui/keybindings.md` alt-family list + `atlas/modes/review.md`
 
 ## Log
+
+### 2026-09-08 — implementation
+
+**The bare-name gap was not just an omission.** D3 was tabled as "markdown
+resolves bare filenames against the chat roots, chat does not." What chat
+actually did was fall past `filereadable`, match the timestamp pattern, and
+**create a second empty chat** beside the one being referenced. So `@@<bare
+name>@@` in a chat buffer silently forked the transcript. The union fixes it;
+`open_reference_spec` asserts the file count, not just which path was opened.
+
+**Chat is the release surface** (operator, mid-implementation): markdown is
+experimental ariadne-stack polish. That reinforces rather than redirects the
+extraction — all three omissions were on the chat side. It does settle the
+question the Spec deliberately left open: whether markdown should gain
+directory `Explore` is not worth answering now.
+
+**The unified file-open goes through `open_buf`.** The chat chain hand-rolled
+its own split-aware `vim.cmd("edit")`, a strictly worse copy of what `open_buf`
+already did: no existing-window reuse, no `file_tracker` access record. Chat
+gains both. `focus_other_split` exists only because netrw does not go through
+`open_buf`.
+
+**Read-repair was deliberately NOT extended.** `resolve_chat_path` takes an
+optional `referring_file` that schedules a slug rewrite in the referring
+document. The `🌿:` paths pass it; the `@@` path does not, and this change kept
+it that way — widening read-repair to `@@` references is #224's call, not a
+side effect of a keybinding move.
+
+**Two guards were wrong, not the code.**
+- The plan-table sweep demanded a definition for rows marked `deleted` — a
+  status its own legend defines. Fixed in `single_source_sweeps_spec`.
+- The journal-sidecar assertion listed `<M-o>` among "review keys that must not
+  leak". `<M-o>` is now `open_file`, `parley_buffer` scope, which *belongs* on a
+  sidecar. It checks `<M-s>` instead: the key changed, but so did the rule the
+  line was expressing.
+
+**`<M-CR>` means two things and that is fine.** `chat_define` (chat) and
+`review_next` (markdown) are siblings under `parley_buffer`, so no buffer is
+ever both — the collision guard permits it by design. `<M-o>` was the opposite
+case: `open_file` is an *ancestor* scope of `markdown`, so both bindings would
+have been live in one buffer with the later registration silently winning. That
+is why the skill picker had to move rather than coexist.
 
 ### 2026-09-08
 

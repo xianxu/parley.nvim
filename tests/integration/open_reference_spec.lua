@@ -282,6 +282,75 @@ describe("reference opening: the fall-through to gf", function()
     end)
 end)
 
+describe("reference opening: one fall-through, one owner per key", function()
+    it("the gf fall-through has exactly one call site", function()
+        -- The whole point of the extraction: appending the fall-through to each
+        -- chain would have been two copies, and the divergence #225 removes is
+        -- exactly what two copies grow back into.
+        local src = table.concat(vim.fn.readfile("lua/parley/init.lua"), "\n")
+        local body = src:match("M%.cmd%.OpenFileUnderCursor = function%(%)(.-)\nend\n")
+        assert.is_truthy(body, "could not locate OpenFileUnderCursor")
+        local n = select(2, body:gsub("ResolveRefOrGotoFile", ""))
+        assert.equals(1, n)
+    end)
+
+    it("<M-o> is open_file and <M-s> is the skill picker", function()
+        local reg = require("parley.keybinding_registry")
+        local function keys(id)
+            for _, e in ipairs(reg.entries) do
+                if e.id == id then return reg.resolve_keys(e, parley.config) end
+            end
+        end
+        assert.same({ "<M-o>", "<C-g>o" }, keys("open_file"))
+        assert.same({ "<M-s>" }, keys("review_menu"))
+    end)
+end)
+
+describe("reference opening: the fall-through reaches artifact resolution", function()
+    -- The delegation tests above stub `ResolveRefOrGotoFile` and so prove only
+    -- that it is called. This one lets the real command run and stubs one level
+    -- down, so `parse_ref_at_cursor` -> `run_resolve` -> `dispatch_resolve_result`
+    -- -> `open_buf` all execute.
+    --
+    -- The stub sits on `run_resolve` rather than on its documented
+    -- `runner(argv, on_complete)` seam because `goto_ref_at_cursor` calls
+    -- `run_resolve` with three arguments — the seam is real but not reachable
+    -- from this caller. Either way no `sdlc` is spawned.
+    it("an ariadne artifact ref under the cursor resolves and opens", function()
+        local target = docs_dir .. "/000015-something.md"
+        vim.fn.writefile({ "# issue" }, target)
+
+        local line = "as decided in #15, we ship it"
+        local chat = write_chat("2026-03-24.15-00-00.001_ref.md", { "", line })
+
+        vim.cmd("silent! %bwipeout!")
+        vim.cmd("edit " .. vim.fn.fnameescape(chat))
+        local buf = vim.api.nvim_get_current_buf()
+        local target_line
+        for i, l in ipairs(vim.api.nvim_buf_get_lines(buf, 0, -1, false)) do
+            if l == line then target_line = i break end
+        end
+        assert(target_line, "fixture line not found")
+        vim.api.nvim_win_set_cursor(0, { target_line, 16 })
+
+        local artifact_ref = require("parley.artifact_ref")
+        local asked_for, opened
+        local real_resolve, real_open = artifact_ref.run_resolve, parley.open_buf
+        artifact_ref.run_resolve = function(ref, _opts, on_done)
+            asked_for = ref
+            on_done({ { path = target } }, nil)
+        end
+        parley.open_buf = function(path) opened = path end
+        local ok, err = pcall(parley.cmd.OpenFileUnderCursor)
+        vim.wait(200, function() return opened ~= nil end)
+        artifact_ref.run_resolve, parley.open_buf = real_resolve, real_open
+        assert(ok, err)
+
+        assert.equals("#15", asked_for)
+        same_path(target, opened)
+    end)
+end)
+
 describe("reference opening: landing mode follows the destination", function()
     -- A chat reference is somewhere you went to WRITE; a gf destination is
     -- source you went to READ. The split is the policy, so both halves assert.
