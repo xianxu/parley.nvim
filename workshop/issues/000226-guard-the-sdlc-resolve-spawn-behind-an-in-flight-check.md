@@ -51,7 +51,25 @@ Open. The shape to decide:
 
 ## Plan
 
-- [ ]
+Written to the open Spec: the first row is the decision, and the rest follow
+from it. Not costed yet — `sdlc change-code` derives the estimate once the
+supersede-vs-queue question is settled.
+
+- [ ] Decide supersede vs queue vs drop for a second press, and record the
+      choice in the Spec with its reason. A second press on the SAME ref is a
+      no-op; on a DIFFERENT ref it is a change of mind and should win
+- [ ] Add the in-flight record to `artifact_ref` — keyed per the decision
+      above — and make `goto_ref_at_cursor` consult it before spawning
+- [ ] Staleness check at dispatch: drop the result if the buffer/cursor the
+      resolve started from is gone. This is the cheaper half and fixes the
+      "yanked the window" symptom even without cancellation
+- [ ] Kill the outstanding `vim.system` handle when a press supersedes, if the
+      decision says supersede
+- [ ] Tests through the `runner` seam (`goto_ref_at_cursor(opts.runner)`,
+      threaded in #225): two rapid presses on one ref → one spawn, one open;
+      two presses on different refs → the second wins; a result landing after
+      the origin buffer is gone → no navigation
+- [ ] Atlas: `context/artifact_refs.md` gains the in-flight rule
 
 ## Log
 
