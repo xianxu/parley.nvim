@@ -121,8 +121,15 @@ end
 --- "prefer the one that has a slug". That is right until two slugged variants
 --- exist, at which point it silently prefers whichever has the wordier topic.
 ---
+--- `names` arrives in SEARCH ORDER — the reference's own directory first, then
+--- the chat roots — and that order is the tie-break for non-exact matches. It
+--- has to be: a reference reading `sub/<ts>.md` whose target has been renamed
+--- must resolve inside `sub/`, and sorting the full paths lexicographically
+--- instead would hand it whichever root sorts first (#224 BR-14). The caller
+--- sorts within each directory, so nothing depends on filesystem order.
+---
 ---@param reference string # the basename the reference used
----@param names string[] # candidate paths whose timestamp matched
+---@param names string[] # candidate paths whose timestamp matched, in search order
 ---@return string[] # ordered picks, best first
 ---@return boolean # true when the choice was ambiguous (>1 and no exact match)
 M.resolve_candidates = function(reference, names)
@@ -130,7 +137,6 @@ M.resolve_candidates = function(reference, names)
     for _, n in ipairs(names or {}) do
         ordered[#ordered + 1] = n
     end
-    table.sort(ordered)
 
     for i, n in ipairs(ordered) do
         if vim.fn.fnamemodify(n, ":t") == reference then

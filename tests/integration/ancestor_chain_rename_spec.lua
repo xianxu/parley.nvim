@@ -171,6 +171,51 @@ describe("ancestor chain across a parent slug rename (#224)", function()
             "the parent's exchanges never appear in the tree:\n" .. text)
     end)
 
+    it("resolves a reference with a directory component under another root", function()
+        -- #224 BR-14: BR-1's fix added only `candidates[1]`'s directory, so a
+        -- `sub/<ts>.md` reference resolving under a SECOND chat root still lost
+        -- to an unrelated same-timestamp file — the instance, not the class.
+        --
+        -- And it lost SILENTLY: one non-exact glob hit makes resolve_candidates
+        -- report no ambiguity. That is the sharp form of the rule — a single
+        -- non-exact hit is not evidence the reference is stale, it can mean the
+        -- reference's own directory was never searched.
+        -- TWO roots, and the reference is resolved from root1: candidates are
+        -- root1/sub/<ts>.md (absent) and root2/sub/<ts>.md (present), so
+        -- candidates[1] is the wrong one. A fixture with a single root has
+        -- candidates[1] pointing at the right directory already and cannot
+        -- distinguish the instance fix from the class fix — the first version
+        -- of this test made exactly that mistake and passed either way.
+        local root1 = tmp_dir .. "/root1"
+        local root2 = tmp_dir .. "/root2"
+        vim.fn.mkdir(root1, "p")
+        vim.fn.mkdir(root2 .. "/sub", "p")
+        -- The target is RENAMED, so no candidate path exists and the exact-hit
+        -- short-circuit cannot rescue it — the glob has to find it, which means
+        -- `root2/sub` must be in the search set AND must outrank the unrelated
+        -- same-timestamp file in root1. With the target present under its
+        -- referenced name, BR-15's short-circuit answers first and the test
+        -- passes either way, which is how the first version of this failed to
+        -- discriminate.
+        local stamp = "2026-05-05.10-00-00.777"
+        local target = root2 .. "/sub/" .. stamp .. "_now-has-a-slug.md"
+        vim.fn.writefile({ "the one actually named" }, target)
+        vim.fn.writefile({ "unrelated" }, root1 .. "/" .. stamp .. "_unrelated.md")
+
+        -- Through setup(), not by assigning config fields: get_chat_dirs()
+        -- derives the root list at setup time, so a direct `config.chat_dirs =`
+        -- never reaches it and the test resolves against the original roots —
+        -- which made the first version of this fail against a CORRECT fix.
+        local base = { state_dir = tmp_dir .. "/state", providers = {}, api_keys = {} }
+        parley.setup(vim.tbl_extend("force", base, { chat_dir = root1, chat_dirs = { root2 } }))
+        local got = parley.resolve_chat_path("sub/" .. stamp .. ".md", root1)
+        parley.setup(vim.tbl_extend("force", base, { chat_dir = chat_dir }))
+
+        assert.equals(vim.fn.resolve(target), vim.fn.resolve(got),
+            "a reference with a directory component lost to a same-timestamp "
+            .. "file in another root")
+    end)
+
     it("still works when the parent was never renamed", function()
         -- The control. If this ever goes red, the fix broke the common case.
         local stamp, cstamp = "2026-09-09.08-20-00.001", "2026-09-09.08-25-00.002"

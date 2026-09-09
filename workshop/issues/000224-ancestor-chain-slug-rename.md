@@ -339,6 +339,57 @@ from the guard, and once a `head -2` on the output hid the failure I was looking
 for. Red for the wrong reason is the same as green, and so is red you did not
 read.
 
+### 2026-09-09 — close review round 2 (FIX-THEN-SHIP, 3 Important)
+
+- **BR-14 — my BR-1 fix was the instance, not the class.** BR-1 named absolute
+  and `~/` references, and I added `candidates[1]`'s directory. The class is
+  *every* directory the candidate list can point into: a `sub/<ts>.md`
+  reference resolving under a second chat root still lost. The glob set is now
+  derived from `candidates`, so it cannot go stale when
+  `_resolve_chat_path_candidates` gains a source.
+  Two further things fell out of building a test that could actually tell the
+  two fixes apart:
+  - **Search ORDER is the tie-break**, and candidate directories have to come
+    first. `base_dir` is where the reference was *written from*, not where it
+    points; leading with it resolved a renamed `sub/` target to whatever sat at
+    the root. `resolve_candidates` no longer sorts — the caller supplies search
+    order and sorts within each directory, so filesystem order still cannot
+    leak in.
+  - **The obvious fixture could not discriminate.** With the target present
+    under its referenced name, BR-15's exact-hit short-circuit answers first and
+    the test passes against both the instance fix and the class fix. The
+    discriminating case is a `sub/` reference whose target was *renamed*: no
+    candidate exists, so the glob must find it. Two versions of this test
+    passed either way before the third one bit.
+
+- **BR-15 — deleting the exact-hit short-circuit changed the cost class of
+  every existing consumer.** Measured here, not taken on faith: one root of
+  2000 files, exact-name hit, **0.031 ms → 2.434 ms** (the review measured
+  0.033 → 2.486). That is the *common* case — every reference whose parent has
+  not been renamed — and `<M-t>` pays it once per branch on a keystroke path.
+  The short-circuit is back, and it is **not** the tier the Spec deletes: a tier
+  changes the answer, and this cannot, because `resolve_candidates` already
+  prefers an exact basename over every other same-timestamp match and (after
+  BR-14) an existing exact target is always among the glob's matches. Removing
+  it leaves the suite green — which is the equivalence claim, as evidence.
+
+- **BR-16 — nothing drove the `CursorHold` autocmd**, the feature's only
+  production entry point. Nine arms called `repair_reference_at_cursor`
+  directly, so the event, the `*.md` pattern and the `ev.buf` /
+  `nvim_win_get_cursor(0)` pairing were pinned by nothing. Two arms now fire
+  the real event, and breaking the pattern reddens them.
+  This is the same family as BR-2's `<M-t>` finding, stated one level up: **a
+  test must enter through the path production enters through — the trigger, not
+  just the function behind it.**
+
+**Commit hygiene, second occurrence.** The round-1 commit swept 14 of the
+operator's chat transcripts (~1,500 lines) into the diff. #225 recorded the
+lesson as "stage by path, never `-A`" and I then wrote
+`git add -A -- lua tests atlas workshop` — which *is* by path, and `workshop`
+contains `workshop/parley/`. The rule was true and not specific enough. The
+branch was unpushed; the commit was amended and the transcripts are untracked
+again.
+
 ## Estimate
 
 Derived against the calibration ledger's parley rows (`sdlc estimate-source`

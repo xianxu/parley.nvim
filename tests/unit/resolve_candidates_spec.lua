@@ -25,30 +25,38 @@ describe("chat_slug.resolve_candidates", function()
         assert.is_false(ambiguous, "an exact match is not an ambiguity")
     end)
 
-    it("is deterministic and flags the ambiguity when nothing matches exactly", function()
+    it("keeps the caller's SEARCH ORDER when nothing matches exactly, and says so", function()
+        -- The caller passes matches in search order — the reference's own
+        -- directory first, then the chat roots — and sorts within each
+        -- directory. That order is the tie-break, because a `sub/<ts>.md`
+        -- reference whose target was renamed must resolve inside `sub/`
+        -- (#224 BR-14). Sorting full paths here would hand it whichever root
+        -- sorts first, which is what this function used to do.
         local ordered, ambiguous = pick("2026-01-01.00-00-00.001.md", {
-            "/c/2026-01-01.00-00-00.001_zebra.md",
-            "/c/2026-01-01.00-00-00.001_alpha.md",
+            "/root2/sub/2026-01-01.00-00-00.001_renamed.md",   -- reference's own dir
+            "/root1/2026-01-01.00-00-00.001_unrelated.md",     -- a chat root
         })
-        assert.equals("/c/2026-01-01.00-00-00.001_alpha.md", ordered[1])
-        assert.is_true(ambiguous)
+        assert.equals("/root2/sub/2026-01-01.00-00-00.001_renamed.md", ordered[1])
+        assert.is_true(ambiguous, "two non-exact matches is still an ambiguity worth reporting")
     end)
 
-    it("does not depend on the order the filesystem returned", function()
-        local a = pick("x.md", { "/c/b.md", "/c/a.md", "/c/c.md" })
-        local b = pick("x.md", { "/c/c.md", "/c/a.md", "/c/b.md" })
-        assert.same(a, b)
+    it("does not reorder within what it was given", function()
+        -- Determinism is the CALLER's job now (it sorts each directory's hits);
+        -- this function must not undo it.
+        local given = { "/c/b.md", "/c/a.md", "/c/c.md" }
+        assert.same(given, (pick("x.md", given)))
     end)
 
     it("does NOT prefer the longest name", function()
         -- The old rule's exact failure: two slugged variants, and length wins.
+        -- Here the longer name is passed SECOND, so a length rule would move it
+        -- to the front and this would go red.
         local ordered = pick("2026-01-01.00-00-00.001.md", {
-            "/c/2026-01-01.00-00-00.001_a-very-long-wordy-topic-indeed.md",
             "/c/2026-01-01.00-00-00.001_brief.md",
+            "/c/2026-01-01.00-00-00.001_a-very-long-wordy-topic-indeed.md",
         })
-        assert.equals("/c/2026-01-01.00-00-00.001_a-very-long-wordy-topic-indeed.md", ordered[1],
-            "lexicographic, and 'a-very...' sorts before 'brief' — the point is that "
-            .. "the rule is the ORDERING, not the length")
+        assert.equals("/c/2026-01-01.00-00-00.001_brief.md", ordered[1],
+            "length must not outrank the order the caller supplied")
     end)
 
     it("handles the empty case without raising", function()

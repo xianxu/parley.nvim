@@ -170,6 +170,34 @@ describe("read-repair on cursor entry", function()
         assert.is_true(parley.repair_reference_at_cursor(buf, lnum))
     end)
 
+    it("the CursorHold autocmd is what drives it", function()
+        -- #224 BR-16: every other arm calls repair_reference_at_cursor
+        -- directly, so the autocmd — its event, its *.md pattern, and its
+        -- ev.buf / nvim_win_get_cursor(0) pairing — was pinned by nothing.
+        -- A test must enter through the path production enters through: the
+        -- trigger, not just the function behind it.
+        local kid, pstamp = stale_pair()
+        local buf, lnum = open_at(kid, "🌿:")
+
+        vim.cmd("doautocmd CursorHold")
+
+        assert.is_truthy(line_at(buf, lnum):find(pstamp .. "_earned-a-topic.md", 1, true),
+            "CursorHold did not reach repair_reference_at_cursor: " .. line_at(buf, lnum))
+    end)
+
+    it("the autocmd leaves a line with no reference alone", function()
+        -- The same entry point, the negative half: firing the event on an
+        -- ordinary line must not rewrite anything or dirty the buffer.
+        local kid = stale_pair()
+        local buf, lnum = open_at(kid, "child q")
+        local before = line_at(buf, lnum)
+
+        vim.cmd("doautocmd CursorHold")
+
+        assert.equals(before, line_at(buf, lnum))
+        assert.is_false(modified(buf))
+    end)
+
     it("the resolver itself performs no repair", function()
         -- Resolution is a READ. This is the property the trigger move bought.
         local kid, pstamp = stale_pair()

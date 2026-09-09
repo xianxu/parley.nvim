@@ -3290,44 +3290,82 @@ local function resolve_chat_path(path, base_dir)
 	local basename = vim.fn.fnamemodify(path, ":t")
 	local ts = chat_slug.parse_filename(basename)
 
+	-- Exact hit short-circuits. This is NOT the tier the Spec deletes: a tier
+	-- changes the answer (exact-first, glob-as-fallback), and this cannot,
+	-- because `resolve_candidates` already prefers an exact basename over every
+	-- other same-timestamp match. With the glob set derived from `candidates`
+	-- above, an existing exact target is always among the matches, so returning
+	-- it here returns exactly what the glob would have chosen.
+	--
+	-- It is here for cost, and the cost is real (#224 BR-15). Globbing every
+	-- chat root on every resolve changed the common case — a reference whose
+	-- parent has not been renamed, which is most of them — from a `filereadable`
+	-- to O(files in the roots): measured 0.033 ms → 2.49 ms at one root of 2000
+	-- files, 0.041 ms → 7.69 ms at three. `<M-t>` resolves once per branch.
+	for _, candidate in ipairs(candidates) do
+		if vim.fn.filereadable(candidate) == 1 then
+			return vim.fn.resolve(candidate)
+		end
+	end
+
 	if ts then
 		local pattern = chat_slug.glob_pattern(ts)
-		-- Deduplicated by RESOLVED path, not by the string the caller passed.
+		-- The glob set is EVERY directory the candidate list can point into,
+		-- derived from `candidates` rather than named one at a time, so it
+		-- cannot go stale when `_resolve_chat_path_candidates` gains a source.
+		-- A missing directory means a renamed target there loses to an
+		-- unrelated same-timestamp file elsewhere — silently, because a single
+		-- non-exact hit makes `resolve_candidates` report no ambiguity. That is
+		-- the sharp form of the rule: **one non-exact glob hit is not evidence
+		-- the reference is stale; it can mean the reference's own directory was
+		-- never searched.** (#224 BR-1 named absolute paths and was fixed with
+		-- `candidates[1]` alone — the instance; BR-14 was `sub/<ts>.md` under a
+		-- second root, the class.)
+		--
+		-- Deduplicated by RESOLVED path, not by the caller's spelling:
 		-- `base_dir` arrives as the referring file's directory (often `/tmp/…`)
 		-- while `get_chat_dirs()` returns it resolved (`/private/tmp/…` on
-		-- macOS), so a plain `d ~= base_dir` skip globs the same directory
-		-- twice — and every hit then looks like a same-timestamp collision.
-		-- The reference's OWN directory is in the search set, not just base_dir
-		-- and the chat roots. Without it, an absolute or `../archive/…`
-		-- reference globs everywhere EXCEPT where it points: `resolve_candidates`
-		-- never sees the exact basename, an unrelated same-timestamp file in a
-		-- chat root wins, and the existence loop below is unreachable because
-		-- the glob already answered. That is a silently WRONG file — the same
-		-- failure this issue exists to remove, from the opposite cause (#224
-		-- BR-1). Adding the directory keeps the one-rule design: the exact hit
-		-- wins through resolve_candidates rather than through a restored tier.
+		-- macOS), so a naive skip globs the same directory twice and every hit
+		-- then looks like a collision.
+		-- Candidate directories FIRST, because search order is the tie-break
+		-- for non-exact matches (see chat_slug.resolve_candidates). They are
+		-- where the reference actually points; `base_dir` is only where it was
+		-- written from. For a bare basename the two coincide (candidates[1] is
+		-- base_dir/<name>); for `sub/<ts>.md` they do not, and leading with
+		-- base_dir resolves a renamed target to whatever sits at the root.
 		local seen_dir, search_dirs = {}, {}
-		local ref_dir = vim.fn.fnamemodify(candidates[1], ":h")
-		for _, d in ipairs(vim.list_extend({ base_dir, ref_dir }, M.get_chat_dirs() or {})) do
+		local dirs = {}
+		for _, c in ipairs(candidates) do
+			dirs[#dirs + 1] = vim.fn.fnamemodify(c, ":h")
+		end
+		dirs[#dirs + 1] = base_dir
+		vim.list_extend(dirs, M.get_chat_dirs() or {})
+		for _, d in ipairs(dirs) do
 			local key = vim.fn.resolve(vim.fn.fnamemodify(d, ":p")):gsub("/+$", "")
 			if not seen_dir[key] then
 				seen_dir[key] = true
 				search_dirs[#search_dirs + 1] = d
 			end
 		end
+		-- Built in SEARCH ORDER (reference's own directories first), because
+		-- that order is resolve_candidates' tie-break for non-exact matches.
+		-- Sorted WITHIN each directory so filesystem order never leaks in.
 		local seen, matched = {}, {}
 		for _, dir in ipairs(search_dirs) do
 			-- safe_glob, not glob: `dir` is a chat root but the slug pattern is
 			-- derived from a transcript filename (#225 round 3 C2).
+			local here = {}
 			for _, m in ipairs(M.helpers.safe_glob(dir .. "/" .. pattern, false, true) or {}) do
 				-- The glob is a prefix match, so `…001*` also catches `…0012`.
 				-- Verify the parsed timestamp is equal, not merely a prefix.
 				local key = vim.fn.resolve(m)
 				if not seen[key] and chat_slug.parse_filename(vim.fn.fnamemodify(m, ":t")) == ts then
 					seen[key] = true
-					matched[#matched + 1] = m
+					here[#here + 1] = m
 				end
 			end
+			table.sort(here)
+			vim.list_extend(matched, here)
 		end
 		local ordered, ambiguous = chat_slug.resolve_candidates(basename, matched)
 		if ambiguous then

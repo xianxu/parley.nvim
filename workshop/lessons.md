@@ -1884,3 +1884,69 @@ enumerations, which was itself a hand-maintained enumeration one level up.
 3. **A guard is inert until you have watched it fire.** Add a deliberate
    violation, in the real file, in the real idiom, and see it named in the
    failure.
+
+## A test that passes against both implementations is not a test (#224)
+
+Three versions of one regression test before it discriminated. The finding was
+"the glob set covers `candidates[1]`'s directory but not the others", and each
+fixture I wrote passed against the broken fix *and* the correct one:
+
+1. One chat root — so `candidates[1]`'s directory was already the right one.
+2. Two roots, target present under its referenced name — so the exact-hit
+   short-circuit answered before the glob ran at all.
+3. Two roots, target *renamed* — no candidate exists, the glob must find it, and
+   only then do the two implementations differ.
+
+Each earlier version was a real test of something. None was a test of the thing
+the finding named.
+
+**Rules.**
+
+1. **Before writing the fixture, name the input where the two implementations
+   give different answers.** If you cannot name it, you do not yet understand
+   the fix, and the test you write will confirm that.
+2. **Run the mutation before believing the test.** Green-with-the-bug-restored
+   is the only evidence that a regression test regresses anything, and it costs
+   one command.
+3. **Watch for an unrelated guard rescuing the case.** A short-circuit, a cache,
+   a fallback — anything that answers earlier than the code under test will make
+   a fixture pass for a reason that has nothing to do with the fix.
+
+## Enter through the trigger, not the function behind it (#224)
+
+`repair_reference_at_cursor` had nine test arms. Its `CursorHold` autocmd — the
+only way it is ever called in production — had none. The event, the `*.md`
+pattern, and the `ev.buf` / `nvim_win_get_cursor(0)` pairing were pinned by
+nothing; breaking any of them broke the feature and no test.
+
+The same round found the same shape one level down: I tested the `<M-t>` outline
+through `_build_tree_outline_items`, which builds *downward* from the path it is
+handed and therefore can never observe a broken parent lookup. The defect was in
+the upward walk.
+
+**Rules.**
+
+1. **At least one arm must enter where production enters.** `doautocmd`, the
+   keymap callback, the command — whatever the real entry is. The other arms can
+   call the function directly for speed.
+2. **Ask which half of the code the defect is in, then check your seam reaches
+   it.** "The test passes and the bug is fixed" is compatible with the test
+   never executing the fixed line.
+3. **Wiring is code.** A pattern string, an event name, an argument pairing — all
+   of it can be wrong, and none of it is covered by testing the callee.
+
+## "Stage by path" was true and not specific enough (#224)
+
+#225's lesson said: *stage by path, never `-A`, in a repo where the working tree
+doubles as someone's notebook.* I then wrote
+`git add -A -- lua tests atlas workshop` and swept 14 of the operator's chat
+transcripts into an implementation commit — the second occurrence of the same
+mistake, through a command that satisfied the letter of the rule.
+
+`workshop` is a path. It also contains `workshop/parley/`.
+
+**Rule.** Name the leaf directories that hold the change:
+`workshop/issues`, `workshop/plans`, `workshop/lessons.md` — never the
+`workshop` parent, and never `-A` even with a pathspec. The check that would
+have caught both occurrences: read `git show --stat` before pushing and ask
+whether every file in it belongs to this change.
