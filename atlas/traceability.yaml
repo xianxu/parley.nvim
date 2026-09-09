@@ -189,6 +189,7 @@ atlas:
     tests:
       - tests/integration/open_reference_spec.lua
       - tests/integration/untrusted_path_spec.lua
+      - tests/arch/untrusted_path_spec.lua
       - tests/unit/parse_at_reference_spec.lua
       - tests/unit/process_directory_pattern_spec.lua
       - tests/unit/glob_base_spec.lua

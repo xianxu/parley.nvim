@@ -82,6 +82,13 @@ extraction and then made the error that precedent exists to prevent —
 | 2 | `@@path: topic` form (`init.lua:4328`) | markdown only | **keep, extend to chat.** Same parser, strictly more forms accepted. Low risk: the chat path already handles bare `@@ref@@`. |
 | 3 | bare-name `resolve_chat_path` (`init.lua:4352`) | markdown only | **keep, extend to chat** — and it is the timestamp-prefix resolver #224 is about, so chat gains slug-tolerance it should already have had. |
 | 4 | directory `Explore` + split-aware edit (`init.lua:4463-4492`) | **chat only** | **keep, chat only.** This is the one that must NOT be flattened: it opens a directory reference in netrw, preferring the other window in a two-split layout. Deleting the "second copy" as originally written would have silently dropped it. Whether markdown should gain it is a separate question, deliberately not answered here. |
+| 5 | `@@` extraction greediness (`init.lua`) | chat greedy, markdown `[^@]+` | **keep chat's, for a line that is wholly one reference.** Found in review round 2: adopting markdown's `[^@]+` wholesale silently broke `@@/tmp/a@b/c.md@@`. A whole-line reference is now taken greedily, guarded so a line carrying two references is not swallowed. |
+| 6 | landing mode after a reference (`init.lua`) | chat restored insert, markdown returned first | **unify on chat's.** Found in review round 3. Markdown's early return meant `<M-o>` from insert in a markdown doc landed in normal; the Spec's own landing-mode policy says a reference is somewhere you went to *write*, so restoring insert is the correct resolution — but it was silently resolved rather than tabulated. The landing tests are now parameterised over both buffer types so the next one is a red test, not a review round. |
+
+Rows 5 and 6 were not in the original measurement. That is the finding: the
+divergence set was hand-written, and a hand-written set is complete only by
+luck. Wherever practical the specs now run the same case over
+`{chat, markdown}` so a difference shows up red.
 
 So the extraction takes the union for 1-3 and preserves 4 as a chat-only arm —
 one function with one explicit branch, not one function that quietly loses a
@@ -327,6 +334,54 @@ the rename made them exactly the alt/`<C-g>` pair `open_file` models as one
 entry. Merging them retires a public `config_key`, which is a release-notes
 change rather than a review fix — it belongs with the keybinding surface work,
 not here.
+
+### 2026-09-08 — close review round 3 (REWORK, 3 Critical)
+
+Round 2's fixes produced round 3's Criticals, the same way round 1's produced
+round 2's. Three rounds, one pattern: **I keep declaring a class closed on the
+strength of a sweep.**
+
+- **C1 — the red suite, again, one commit later, by the identical mechanism.**
+  Round 2 fixed the two unrouted specs BR-13 named and did not ask why they were
+  unrouted; the arch spec it added was then unrouted itself. My `make test` said
+  exit 0 — truthfully — because the new spec was still **untracked**, and the
+  routing guard uses `git diff --diff-filter=A`, which cannot see untracked
+  files. So the guard fires one commit after the mistake, every time.
+  Fixed at the mechanism: the guard now also reads `git ls-files --others`, so
+  it flags a new spec while it is being written. Its sibling guard in the same
+  file already carried this exact lesson ("comparing against the working tree
+  flags it while it is still being written") and it had not been applied here.
+  The process rule stands too: run `make test` **after committing**, read the
+  exit status.
+- **C2 — the rule was over one sink.** `vim.fn.glob` executes backticks as
+  surely as `vim.fn.expand`, and `find_files` concatenates a transcript-derived
+  *pattern* into its glob — a path `glob_base` never touches, so the round-2
+  guard passed it straight through. Reproduced: `@@<dir>/**/`cmd`.md@@` created
+  the marker.
+  The deliverable is not "also guard glob". It is that the **sink set is now
+  probed**: the arch spec runs `expand`, `glob`, `globpath`, `expandcmd`,
+  `resolve`, `filereadable`, `isdirectory`, `simplify`, `fnamemodify` against a
+  live payload and fails if the declared set differs in either direction. One
+  shared predicate (`helper.would_execute`) backs all three guards so a new one
+  cannot disagree with the old ones. Mutation-checked: a raw `vim.fn.glob` in
+  `find_files` reddens the arch guard; `SINKS = { "expand" }` reddens the probe.
+- **C3 — the test certifying round 2's C3 fix could not fail.** It passed a
+  buffer number where `_build_tree_outline_items` wants `root_path`, and put the
+  `🌿:` line before the first exchange so `parsed.branches` was empty anyway.
+  The reviewer reverted `outline.lua` to its vulnerable resolver and the spec
+  stayed 10/10 green.
+  **My own probe had the same bug**: I called it with the same wrong signature,
+  saw `MARKER: false`, and recorded that as confirmation. It was false because
+  nothing ran. The arm now asserts the walk actually reached the branch before
+  asserting it was refused, and was verified by the revert — it goes red.
+
+Minors: the third `prepare_dir` call site (`root_dirs.lua`) now handles `nil`,
+with an arch check that enumerates the consuming call sites mechanically —
+that sweep came up one short twice. The `open_buf` LuaLS annotations are back
+adjacent to `open_buf`, `focus_other_split` logs its target again, and the atlas
+claims that round 2 could not support are corrected: "every arm goes red" was
+false (C3), and "fifteen copies → one" was false (six config-side copies
+remain, now stated).
 
 ## Estimate
 

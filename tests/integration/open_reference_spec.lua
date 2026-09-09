@@ -482,22 +482,38 @@ describe("reference opening: landing mode follows the destination", function()
         return table.concat(cmds, "\n")
     end
 
-    it("a chat reference restores insert", function()
-        local target = write_chat("2026-03-24.14-00-00.001_land-target.md")
-        local line = "@@" .. target .. "@@"
-        local chat = write_chat("2026-03-24.14-00-00.002_land.md", { "", line })
+    -- Parameterised over BOTH buffer types on purpose. The landing-mode
+    -- unification was a SIXTH silently-resolved divergence: markdown used to
+    -- return before the shared `startinsert` tail, so `<M-o>` from insert in a
+    -- markdown doc landed in normal. It conforms to the stated policy, so the
+    -- resolution is right — but it was found by the fifth review round rather
+    -- than by a red test, because every landing case drove a chat buffer.
+    -- Differences should be discovered here, not in review (#225 round 3).
+    local buffer_types = {
+        { name = "chat", make = function(n, body) return write_chat(n .. ".md", body) end },
+        { name = "markdown", make = function(n, body)
+            return write_markdown(n .. ".md", vim.list_extend({ "# Doc", "" }, body))
+        end },
+    }
 
-        local cmds = open_from_insert(chat, line, 3)
-        assert.is_truthy(cmds:match("startinsert"))
-        assert.is_nil(cmds:match("stopinsert"))
-    end)
+    for _, bt in ipairs(buffer_types) do
+        it("a reference restores insert, in " .. bt.name, function()
+            local target = write_chat("2026-03-24.14-00-00.001_land-" .. bt.name .. ".md")
+            local line = "@@" .. target .. "@@"
+            local origin = bt.make("2026-03-24.14-10-00.001_land-from-" .. bt.name, { "", line })
 
-    it("the gf fall-through lands in normal", function()
-        local line = "just some ordinary prose here"
-        local chat = write_chat("2026-03-24.14-00-00.003_land-gf.md", { "", line })
+            local cmds = open_from_insert(origin, line, 3)
+            assert.is_truthy(cmds:match("startinsert"), "no startinsert in " .. bt.name)
+            assert.is_nil(cmds:match("stopinsert"))
+        end)
 
-        local cmds = open_from_insert(chat, line, 12, function() end)
-        assert.is_truthy(cmds:match("stopinsert"))
-        assert.is_nil(cmds:match("startinsert"))
-    end)
+        it("the gf fall-through lands in normal, in " .. bt.name, function()
+            local line = "just some ordinary prose here"
+            local origin = bt.make("2026-03-24.14-20-00.001_land-gf-" .. bt.name, { "", line })
+
+            local cmds = open_from_insert(origin, line, 12, function() end)
+            assert.is_truthy(cmds:match("stopinsert"), "no stopinsert in " .. bt.name)
+            assert.is_nil(cmds:match("startinsert"))
+        end)
+    end
 end)

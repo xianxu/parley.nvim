@@ -71,7 +71,10 @@ function M.create(spec)
                 return
             end
 
-            local prepared = _parley.helpers.prepare_dir(dir, domain)
+            -- `or dir`: prepare_dir returns nil if it refuses (#225). The
+            -- third of three call sites that use the return value, and the one
+            -- the previous sweep missed — resolve_dir_key indexes its argument.
+            local prepared = _parley.helpers.prepare_dir(dir, domain) or dir
             local resolved = M.resolve_dir_key(prepared)
             local existing = seen[resolved]
             if existing then

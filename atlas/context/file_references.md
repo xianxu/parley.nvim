@@ -69,20 +69,40 @@ attacker-influenced text arriving at a command-execution sink. This was
 reproduced end-to-end: a chat line ``@@`touch <path>`@@`` created the file when
 `<M-o>` was pressed on it.
 
-`helper.expand_path(path)` is the **only** expansion a transcript-derived path
-may go through. It refuses (returns `nil`) rather than escaping, because
-`expand()` has two executing constructs (`` `cmd` `` and `` `=expr` ``) with no
-reliable quoting, and no legitimate parley reference needs a backtick.
+Four vim functions execute a backtick in their argument — `expand`, `glob`,
+`globpath`, `expandcmd` — and `resolve` / `filereadable` / `isdirectory` /
+`fnamemodify` / `simplify` do not. That set is **probed, not remembered**:
+`tests/arch/untrusted_path_spec.lua` runs the probe and fails if the declared
+set is wrong in either direction. It exists because the first version of this
+rule covered `expand` only, declared the class closed, and left `glob` live via
+`find_files`' pattern half.
 
-Routed through it: `read_file_content`, `is_directory`, `find_files`,
-`prepare_dir`, `_resolve_chat_path_candidates`, `find_tree_root_file`,
-`collect_tree_files`, `chat_respond.resolve_path`, and both `@@` sites in the
-opening chain. **Config-derived** paths (`chat_dir`, `root.dir`, `src_root`)
-keep plain `vim.fn.expand` — the distinction is provenance, not syntax.
+A transcript-derived string reaches a sink only through:
 
-`tests/integration/untrusted_path_spec.lua` drives each entry point with a real
-`touch` payload and asserts the marker file was not created; every arm goes red
-if the guard is removed.
+| guard | on refusal | use when |
+|---|---|---|
+| `helper.expand_path` | `nil` | you want to REPORT the refusal |
+| `helper.abs_path` | the unexpanded literal (TOTAL) | you just need something for `filereadable` |
+| `helper.safe_glob` | `nil` | globbing |
+
+`helper.would_execute` is the one predicate all three share, so a new guard
+cannot disagree with the old ones about what "dangerous" means. Refusal rather
+than escaping: `expand()` has two executing constructs (`` `cmd` `` and
+`` `=expr` ``) with no reliable quoting, and no legitimate parley reference
+needs a backtick.
+
+**Config-derived** paths (`chat_dir`, `root.dir`, `src_root`) keep the plain
+calls — the distinction is provenance, not syntax — and each such site is
+allowlisted in the arch spec **with the reason it is operator-derived**. That
+allowlist, not a list in this document, is the enforcement: a new unguarded
+sink call fails the suite.
+
+`tests/integration/untrusted_path_spec.lua` additionally drives each entry point
+with a real `touch` payload and asserts three things per arm: no marker file,
+no raise, and the reported diagnostic. (An earlier version of this paragraph
+claimed every arm went red when the guard was removed. One did not — the
+`outline` arm passed a buffer number where a path was wanted and asserted
+nothing. Each arm's revert-and-see-red is now recorded rather than assumed.)
 
 ## Rules
 - Exchanges with `@@` refs MUST be preserved in full during memory management (never summarized)

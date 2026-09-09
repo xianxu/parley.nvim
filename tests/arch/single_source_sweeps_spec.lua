@@ -663,6 +663,16 @@ describe("arch: traceability.yaml lists every file it claims to map (#214)", fun
             pending("git diff unavailable")
             return
         end
+        -- UNTRACKED specs too. `git diff` cannot see them, so a new spec was
+        -- invisible to this guard until it was staged — and it then failed the
+        -- run AFTER the one you checked. That is BR-13, twice, one commit late
+        -- each time (#225). The sibling guard above already carries this exact
+        -- lesson for entities ("comparing against the working tree flags it
+        -- while it is still being written"); it had not been applied here.
+        for _, p in ipairs(vim.fn.systemlist(
+            "git ls-files --others --exclude-standard -- tests/")) do
+            added[#added + 1] = p
+        end
         local listed = {}
         for _, p in ipairs(traceability_paths()) do listed[p] = true end
         local unrouted = {}

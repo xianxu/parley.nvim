@@ -265,13 +265,38 @@ end
 -- Config-derived paths (chat_dir, root.dir, src_root) are operator-controlled
 -- and keep using vim.fn.expand directly — the distinction is provenance, not
 -- syntax.
+-- Would handing this string to a command-executing vim function run a shell
+-- command? One predicate, so a new sink's guard cannot disagree with the old
+-- ones about what "dangerous" means — which is how vim.fn.glob stayed open for
+-- a round after vim.fn.expand was closed.
+---@param s any
+---@return boolean
+_H.would_execute = function(s)
+    return type(s) ~= "string" or s:find("`", 1, true) ~= nil
+end
+
 ---@param path string|nil
 ---@return string|nil # expanded path, or nil if expanding it would execute
 _H.expand_path = function(path)
-    if type(path) ~= "string" or path:find("`", 1, true) then
+    if _H.would_execute(path) then
         return nil
     end
     return vim.fn.expand(path)
+end
+
+-- vim.fn.glob EXECUTES backticks exactly as expand does. That is not a
+-- remembered fact: tests/arch/untrusted_path_spec.lua probes every candidate
+-- sink and fails if this set is wrong in either direction. Round 2 of #225
+-- guarded expand, declared the class closed, and left glob open — a transcript
+-- `@@<dir>/**/` .. "`cmd`" .. `.md@@` reached it through find_files' PATTERN
+-- half, which glob_base does not touch.
+---@param pattern string
+---@return table|nil # matches, or nil when globbing it would execute
+_H.safe_glob = function(pattern, ...)
+    if _H.would_execute(pattern) then
+        return nil
+    end
+    return vim.fn.glob(pattern, ...)
 end
 
 -- Absolute, symlink-resolved form of a path that came out of a transcript.
@@ -283,7 +308,10 @@ end
 -- indexing it (#225 close review C2). Use expand_path when you want to REPORT
 -- the refusal; use abs_path when you just need something to hand filereadable.
 --
--- Also the single copy of `vim.fn.resolve(vim.fn.expand(x))`, which had fifteen.
+-- Also the single TRANSCRIPT-side copy of `vim.fn.resolve(vim.fn.expand(x))`.
+-- Six config-side copies remain (root_dir_picker ×3, root_dirs, super_repo,
+-- init's resolve_dir_key); the earlier version of this line claimed "which had
+-- fifteen" as though all fifteen were gone, and six were not (#225 round 3).
 ---@param path string
 ---@return string
 _H.abs_path = function(path)
@@ -403,8 +431,14 @@ _H.find_files = function(dirpath, pattern, recursive)
 
     logger.debug("Searching with glob pattern: " .. glob_pattern)
 
-    -- Use vim's glob() to find matching files
-    local matches = vim.fn.glob(glob_pattern, false, true)
+    -- Use vim's glob() to find matching files. glob_pattern carries BOTH the
+    -- directory and the pattern half, so one guard here covers both — the
+    -- pattern half is the one that was live (#225 round 3 C2).
+    local matches = _H.safe_glob(glob_pattern, false, true)
+    if not matches then
+        logger.warning("Refusing to glob a pattern containing a backtick: " .. glob_pattern)
+        return {}
+    end
     local files = {}
 
     -- Filter to include only files, not directories

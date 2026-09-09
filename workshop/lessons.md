@@ -1748,3 +1748,82 @@ other four.
    byte-identical functions and shipped, because I was grepping for the
    dangerous call rather than for the duplicated function containing it. Collapse
    the copies first, then guard the one that remains.
+
+## A guard that cannot see untracked files reports one commit late (#225)
+
+The routing guard uses `git diff --name-only --diff-filter=A <base> -- tests/`.
+`git diff` does not list untracked files. So a new spec is invisible to the
+guard until it is staged — `make test` is green while you write it, and red on
+the run *after* you commit.
+
+That happened twice in the same issue, and both times I ran `make test`, saw
+exit 0, and requested a boundary review against a suite that would be red the
+moment the reviewer checked out my commit. The second time, the file that was
+unrouted was the guard I had just added to fix the first time.
+
+The sibling guard in the same file already carried the lesson, written out:
+*"comparing against the working tree flags it while it is still being written."*
+It had not been applied to this one.
+
+**Rules.**
+
+1. **A "what did this branch add" check must union `git diff --diff-filter=A`
+   with `git ls-files --others --exclude-standard`.** Otherwise it is a check on
+   what you have *staged*, not on what exists.
+2. **Run the suite after committing, before requesting review.** Any guard that
+   reads git state answers differently across the commit boundary.
+3. **When a guard fires on N files, ask why those N were invisible until now.**
+   Round 2 routed the two files the failure named. The class was the guard's
+   blind spot, not the two names.
+
+## My probe had the same bug as my test, so both agreed and both were wrong (#225)
+
+To confirm a security fix in `outline.lua` I wrote a standalone probe, ran it,
+and read `MARKER: false` as proof the payload no longer executed. Then I wrote a
+test asserting the same thing, and it passed.
+
+Both called `_build_tree_outline_items(buf, path, config)`. The signature is
+`(root_path, config, expanded_set, depth, visited)`. A buffer *number* went in
+as `root_path`, the walk bailed on an unreadable path, and nothing ran — no
+payload, no fix, no coverage. The reviewer reverted the fix and my test stayed
+green.
+
+The probe and the test were not independent evidence. They were the same
+mistake, written twice, agreeing with each other.
+
+**Rules.**
+
+1. **A test for a fix is not evidence until you have seen it red.** Revert the
+   fix, run it, watch it fail, restore. Every security arm, every time — a
+   passing test proves the code runs *somehow*, not that it runs *the path*.
+2. **Assert that the interesting path was reached, in the test itself.** The
+   outline arm now asserts the walk actually rendered the child branch before
+   asserting the child was refused. A guard-the-guard assertion turns a silent
+   no-op into a failure.
+3. **A hand-rolled probe shares your misconceptions.** It is a way to explore,
+   never a second opinion. If a probe and a test agree, you have one data point.
+
+## "Fix the class" means the ENUMERATION must be executable too (#225)
+
+Round 2 replaced a list of dangerous sites with a rule — an arch test
+allowlisting every `vim.fn.expand(<variable>)`. Genuine progress, and still
+wrong: the rule was over one sink. `vim.fn.glob` executes backticks exactly the
+same way, and a transcript reached it through a code path the guard did not
+model.
+
+I had generalised the *site* enumeration and left the *sink* enumeration
+memorised. The fix is a probe: the arch spec now runs a live payload through
+nine candidate vim functions and fails if the declared executing set differs in
+either direction.
+
+**Rules.**
+
+1. **After writing a rule, ask which of its terms is still a memorised list.**
+   "Every `expand` call is allowlisted" has two quantifiers; I had made one
+   mechanical and left the other in my head.
+2. **Derive capability sets by probing, not by recall.** Four of nine vim
+   functions execute backticks. I would not have guessed `globpath` or
+   `expandcmd`, and I was wrong about `glob`.
+3. **One predicate behind every guard.** `helper.would_execute` is shared by
+   `expand_path`, `safe_glob` and `abs_path` precisely so a new guard cannot
+   quietly adopt a narrower notion of "dangerous" than the existing ones.

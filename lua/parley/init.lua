@@ -2941,15 +2941,14 @@ M.setup_buf_handler = function()
 	highlighter.setup_buf_handler()
 end
 
----@param file_name string
----@param from_chat_finder boolean | nil # whether this is called from ChatFinder
----@return number # buffer number
 -- Move to the other window when the tab has exactly two. Returns whether it
 -- moved. The two-split preference had THREE copies (#225): this one, and two
 -- hand-inlined inside OpenFileUnderCursor. Netrw is why a separate call site
 -- exists — a directory reference does not go through `open_buf` — but that is
 -- a reason for two callers, not for two implementations.
-local function focus_other_split()
+---@param what string|nil # what is being opened, for the debug line
+---@return boolean # whether it moved
+local function focus_other_split(what)
 	local tab_wins = vim.api.nvim_tabpage_list_wins(0)
 	if #tab_wins ~= 2 then
 		return false
@@ -2957,7 +2956,7 @@ local function focus_other_split()
 	local current_win = vim.api.nvim_get_current_win()
 	for _, win in ipairs(tab_wins) do
 		if win ~= current_win then
-			M.logger.debug("Opening in other split")
+			M.logger.debug("Opening in other split: " .. (what or "?"))
 			vim.api.nvim_set_current_win(win)
 			return true
 		end
@@ -2965,6 +2964,9 @@ local function focus_other_split()
 	return false
 end
 
+---@param file_name string
+---@param from_chat_finder boolean | nil # whether this is called from ChatFinder
+---@return number # buffer number
 M.open_buf = function(file_name, from_chat_finder)
 	-- Track file access when opening a file
 	local file_tracker = require("parley.file_tracker")
@@ -2983,7 +2985,7 @@ M.open_buf = function(file_name, from_chat_finder)
 	end
 
 	-- Prefer the other split, unless ChatFinder asked for the current window.
-	if not from_chat_finder and focus_other_split() then
+	if not from_chat_finder and focus_other_split(file_name) then
 		vim.api.nvim_command("edit " .. vim.fn.fnameescape(file_name))
 		return vim.api.nvim_get_current_buf()
 	end
@@ -3231,7 +3233,9 @@ local function resolve_chat_path(path, base_dir, referring_file)
 			end
 		end
 		for _, dir in ipairs(search_dirs) do
-			local matches = vim.fn.glob(dir .. "/" .. pattern, false, true)
+			-- safe_glob, not glob: `dir` is a chat root but the slug pattern
+			-- is derived from a transcript filename (#225 round 3 C2).
+			local matches = M.helpers.safe_glob(dir .. "/" .. pattern, false, true) or {}
 			-- Post-filter: verify each match has the exact same timestamp
 			local verified = {}
 			for _, m in ipairs(matches) do
@@ -4413,7 +4417,7 @@ local function open_reference_under_cursor(buf, current_line, cursor_col, is_cha
 			return "failed"
 		end
 		M.logger.info("Opening directory: " .. dir_path)
-		focus_other_split()
+		focus_other_split(dir_path)
 		vim.cmd("Explore " .. vim.fn.fnameescape(dir_path))
 		return "opened"
 	end

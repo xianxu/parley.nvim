@@ -150,21 +150,36 @@ describe("the sinks a transcript path can reach", function()
     it("the outline tree walk refuses a hostile branch path", function()
         -- The site the round-1 sweep missed: outline.lua had a byte-identical
         -- copy of chat_respond's resolver, reachable from <M-t> (#225 C3).
+        --
+        -- The FIRST version of this test was a no-op twice over, and passed
+        -- with the fix reverted: it passed a buffer number where the signature
+        -- wants `root_path` (so the walk bailed on an unreadable path), and it
+        -- put the 🌿: line before the first exchange (so `parsed.branches` was
+        -- empty anyway). Both are fixed here, and the arm was then verified by
+        -- reverting outline.lua's inline resolver and watching it go red.
         local p, marker = payload(".md")
         local basename = "2026-09-08.20-00-00.010_outline.md"
         local path = chat_dir .. "/" .. basename
         vim.fn.writefile({
             "---", "topic: T", "file: " .. basename, "model: m", "provider: openai", "---",
-            "", "🌿: ~/" .. p .. ": Child", "", "💬: hi", "", "🤖:[A] hello",
+            "", "💬: hi", "", "🤖:[A] hello", "", "🌿: ~/" .. p .. ": Child",
         }, path)
-        vim.cmd("silent! %bwipeout!")
-        vim.cmd("edit " .. vim.fn.fnameescape(path))
-        local buf = vim.api.nvim_get_current_buf()
         local outline = require("parley.outline")
 
+        -- Guard the guard: if the walk does not reach the branch, this arm
+        -- proves nothing. Assert it actually saw the child before asserting
+        -- that the child was refused.
+        local items
         refuses(function()
-            outline._build_tree_outline_items(buf, path, parley.config)
+            items = outline._build_tree_outline_items(path, parley.config)
         end, marker, "the outline tree walk")
+
+        local rendered = ""
+        for _, item in ipairs(items or {}) do
+            rendered = rendered .. tostring(item.display or "") .. "\n"
+        end
+        assert.is_truthy(rendered:match("Child"),
+            "the walk never reached the 🌿: branch, so this arm asserts nothing:\n" .. rendered)
     end)
 
     -- The @@-content-INCLUSION path (chat_respond), a different consumer of the

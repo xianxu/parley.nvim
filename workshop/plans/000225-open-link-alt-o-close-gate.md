@@ -270,6 +270,127 @@ rounds:
           family: doc-consumer-enumeration
           round: 3
       blocked: true
+    - "n": 4
+      timestamp: "2026-09-08T20:54:42-07:00"
+      agent: claude
+      dispose:
+        - id: BR-13
+          disposition: not-addressed
+          note: make test still exits 2 at HEAD; same routing guard, now on tests/arch/untrusted_path_spec.lua, which this round's own fix commit added.
+          round: 4
+        - id: BR-14
+          disposition: addressed
+          note: 'Verified by reverting abs_path to non-total in a scratch copy: 4 arms go red.'
+          round: 4
+        - id: BR-15
+          disposition: addressed
+          note: The rule shipped as tests/arch/untrusted_path_spec.lua and goes red when outline.lua is reverted; its behavioural arm does not (raised separately).
+          round: 4
+        - id: BR-16
+          disposition: addressed
+          note: 'expand_path is now under Integration points with `wraps: vim.fn.expand`, plus a Revisions entry.'
+          round: 4
+        - id: BR-17
+          disposition: addressed
+          note: prepare_dir returns nil; pinned by untrusted_path_spec and red under the guard-removal mutation.
+          round: 4
+        - id: BR-18
+          disposition: addressed
+          note: Greedy form restored with a two-reference guard, recorded in Revisions and covered by two tests.
+          round: 4
+        - id: BR-19
+          disposition: addressed
+          note: Recorded as a deliberate deferral with the release-notes rationale; the two entries remain by decision.
+          round: 4
+        - id: BR-20
+          disposition: addressed
+          note: 'Per-arm wording checked against the code: Chat file not found / File not found / Directory not found all match.'
+          round: 4
+      findings:
+        - id: BR-21
+          severity: Critical
+          title: vim.fn.glob also executes backticks, and the enforced rule covers only vim.fn.expand
+          detail: |-
+            This is the 3rd finding in family `untrusted-path-expansion`. Earlier rounds
+            fixed instances; do NOT fix this instance. The rule shipped as "every
+            vim.fn.expand(<variable>) in lua/ is allowlisted"; the rule needed is "every
+            COMMAND-EXECUTING vim function reached with a transcript-derived argument is
+            allowlisted", with membership established by an executable probe rather than
+            memory. Probed against this tree: vim.fn.expand executes, vim.fn.glob
+            executes, vim.fn.resolve and vim.fn.filereadable do not. Confirmed live:
+            helpers.process_directory_pattern("<dir>/**/`touch <marker>`.md") created the
+            marker. glob_base strips the backtick-free directory so expand_path passes,
+            the backtick survives in the PATTERN half, and find_files concatenates it into
+            glob_pattern at helper.lua:407. Reachable from chat_respond.lua:841 on any
+            @@dir/**/*.ext@@ reference. untrusted_path_spec.lua:180 tests this helper but
+            only with the payload in the directory half.
+          family: untrusted-path-expansion
+          round: 4
+        - id: BR-22
+          severity: Critical
+          title: The outline arm of untrusted_path_spec passes with round 2's C3 fix reverted
+          detail: "tests/integration/untrusted_path_spec.lua:157-172 calls\noutline._build_tree_outline_items(buf, path, parley.config), but the signature\nis (root_path, config, expanded_set, depth, visited) (outline.lua:312) — a\nbuffer number lands in root_path, abs_path yields an unreadable path and the\nwalk returns {} before reading the fixture. Independently the fixture's \U0001F33F:\nline precedes the first exchange, so parsed.branches is empty even with\ncorrect arguments. Verified: with outline.lua reverted to its pre-fix inline\nresolver the spec ran 10 Success / 0 Failed, while the same reverted tree\nexecuted the payload when driven as _build_tree_outline_items(path,\nparley.config) with the \U0001F33F: line after the \U0001F916: answer. Fix the arguments and\nthe fixture, and adopt the rule that every new security arm records a\nrevert-and-see-red before the round closes."
+          family: test-green-without-the-fix
+          round: 4
+        - id: BR-23
+          severity: Minor
+          title: prepare_dir's new nil return is unswept at root_dirs.lua:74, which feeds it to resolve_dir_key
+          detail: |-
+            This is the 3rd finding in family `guard-nil-contract-unswept`. Do NOT fix
+            this instance. BR-17's fix swept two of three assigning call sites
+            (init.lua:830, dispatcher.lua:67) and missed root_dirs.lua:74-75, where
+            `prepared` goes straight into M.resolve_dir_key and would raise on nil.
+            Unreachable today because the argument is config-derived — the same
+            unreachability BR-17 itself carried. The rule: changing a helper's return
+            contract requires a mechanical call-site enumeration (grep -rn '<name>(')
+            with each site dispositioned, which is now the third sweep to come up one
+            site short.
+          family: guard-nil-contract-unswept
+          round: 4
+        - id: BR-24
+          severity: Minor
+          title: Markdown buffers now restore insert mode on a reference exit — a sixth resolved divergence, untested
+          detail: |-
+            This is the 4th finding in family `divergence-not-pinned`. Do NOT fix this
+            instance — the behaviour is correct and matches the Spec's stated
+            landing-mode policy. The old markdown branch returned from
+            OpenFileUnderCursor before the startinsert tail; deleting the early return
+            makes markdown take it. open_file is modes {"n","i"} on parley_buffer scope,
+            so this is observable in a markdown doc. It is unrecorded in the divergence
+            table and untested: open_reference_spec.lua:395-419 drives chat buffers only.
+            The rule: derive the divergence set from a differential harness — parameterise
+            the open_reference cases over {chat, markdown} — instead of a hand-written
+            table that has now been extended twice by review.
+          family: divergence-not-pinned
+          round: 4
+        - id: BR-25
+          severity: Minor
+          title: The atlas claims every untrusted-path arm goes red without the guard, and helper.lua claims abs_path is the single resolve(expand(x))
+          detail: |-
+            This is the 2nd finding in family `unbacked-existing-behavior-claim`. Do NOT
+            fix only these two sentences. atlas/context/file_references.md:88-90 asserts
+            "every arm goes red if the guard is removed" — false for the outline arm — and
+            never names tests/arch/untrusted_path_spec.lua, the file that actually
+            enforces the rule. helper.lua:286 calls abs_path "the single copy of
+            vim.fn.resolve(vim.fn.expand(x)), which had fifteen"; six remain
+            (root_dir_picker.lua:36,38,91, root_dirs.lua:12, init.lua:68,
+            super_repo.lua:26), two of them a duplicated resolve_dir_key. The rule: a
+            prose claim about test or sweep completeness must name the artifact that would
+            fail if the claim stopped being true.
+          family: unbacked-existing-behavior-claim
+          round: 4
+        - id: BR-26
+          severity: Minor
+          title: open_buf's LuaLS annotations now sit above focus_other_split
+          detail: |-
+            lua/parley/init.lua:2944-2966. The ---@param file_name / ---@param
+            from_chat_finder / ---@return number block documents open_buf, but
+            focus_other_split was inserted between it and M.open_buf, so the annotations
+            now precede a nullary function returning a boolean. Move the block back
+            adjacent to M.open_buf.
+          family: docblock-detached-from-symbol
+          round: 4
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#225 (boundary-review)
@@ -434,13 +555,93 @@ later rounds disposed of them. Generated — edit the gate, not this file.
   found: …", but the @@ arm now warns "File not found: …" (init.lua:4432). The 🌿: arm still
   uses the old wording, so the doc is half-right.
 
+## Round 4 — 2026-09-08T20:54:42-07:00 (claude) — BLOCKED
+
+### Disposed
+
+- BR-13 — not-addressed — make test still exits 2 at HEAD; same routing guard, now on tests/arch/untrusted_path_spec.lua, which this round's own fix commit added.
+- BR-14 — addressed — Verified by reverting abs_path to non-total in a scratch copy: 4 arms go red.
+- BR-15 — addressed — The rule shipped as tests/arch/untrusted_path_spec.lua and goes red when outline.lua is reverted; its behavioural arm does not (raised separately).
+- BR-16 — addressed — expand_path is now under Integration points with `wraps: vim.fn.expand`, plus a Revisions entry.
+- BR-17 — addressed — prepare_dir returns nil; pinned by untrusted_path_spec and red under the guard-removal mutation.
+- BR-18 — addressed — Greedy form restored with a two-reference guard, recorded in Revisions and covered by two tests.
+- BR-19 — addressed — Recorded as a deliberate deferral with the release-notes rationale; the two entries remain by decision.
+- BR-20 — addressed — Per-arm wording checked against the code: Chat file not found / File not found / Directory not found all match.
+
+### Raised
+
+- **BR-21** [Critical] `untrusted-path-expansion` vim.fn.glob also executes backticks, and the enforced rule covers only vim.fn.expand
+  This is the 3rd finding in family `untrusted-path-expansion`. Earlier rounds
+  fixed instances; do NOT fix this instance. The rule shipped as "every
+  vim.fn.expand(<variable>) in lua/ is allowlisted"; the rule needed is "every
+  COMMAND-EXECUTING vim function reached with a transcript-derived argument is
+  allowlisted", with membership established by an executable probe rather than
+  memory. Probed against this tree: vim.fn.expand executes, vim.fn.glob
+  executes, vim.fn.resolve and vim.fn.filereadable do not. Confirmed live:
+  helpers.process_directory_pattern("<dir>/**/`touch <marker>`.md") created the
+  marker. glob_base strips the backtick-free directory so expand_path passes,
+  the backtick survives in the PATTERN half, and find_files concatenates it into
+  glob_pattern at helper.lua:407. Reachable from chat_respond.lua:841 on any
+  @@dir/**/*.ext@@ reference. untrusted_path_spec.lua:180 tests this helper but
+  only with the payload in the directory half.
+- **BR-22** [Critical] `test-green-without-the-fix` The outline arm of untrusted_path_spec passes with round 2's C3 fix reverted
+  tests/integration/untrusted_path_spec.lua:157-172 calls
+  outline._build_tree_outline_items(buf, path, parley.config), but the signature
+  is (root_path, config, expanded_set, depth, visited) (outline.lua:312) — a
+  buffer number lands in root_path, abs_path yields an unreadable path and the
+  walk returns {} before reading the fixture. Independently the fixture's 🌿:
+  line precedes the first exchange, so parsed.branches is empty even with
+  correct arguments. Verified: with outline.lua reverted to its pre-fix inline
+  resolver the spec ran 10 Success / 0 Failed, while the same reverted tree
+  executed the payload when driven as _build_tree_outline_items(path,
+  parley.config) with the 🌿: line after the 🤖: answer. Fix the arguments and
+  the fixture, and adopt the rule that every new security arm records a
+  revert-and-see-red before the round closes.
+- **BR-23** [Minor] `guard-nil-contract-unswept` prepare_dir's new nil return is unswept at root_dirs.lua:74, which feeds it to resolve_dir_key
+  This is the 3rd finding in family `guard-nil-contract-unswept`. Do NOT fix
+  this instance. BR-17's fix swept two of three assigning call sites
+  (init.lua:830, dispatcher.lua:67) and missed root_dirs.lua:74-75, where
+  `prepared` goes straight into M.resolve_dir_key and would raise on nil.
+  Unreachable today because the argument is config-derived — the same
+  unreachability BR-17 itself carried. The rule: changing a helper's return
+  contract requires a mechanical call-site enumeration (grep -rn '<name>(')
+  with each site dispositioned, which is now the third sweep to come up one
+  site short.
+- **BR-24** [Minor] `divergence-not-pinned` Markdown buffers now restore insert mode on a reference exit — a sixth resolved divergence, untested
+  This is the 4th finding in family `divergence-not-pinned`. Do NOT fix this
+  instance — the behaviour is correct and matches the Spec's stated
+  landing-mode policy. The old markdown branch returned from
+  OpenFileUnderCursor before the startinsert tail; deleting the early return
+  makes markdown take it. open_file is modes {"n","i"} on parley_buffer scope,
+  so this is observable in a markdown doc. It is unrecorded in the divergence
+  table and untested: open_reference_spec.lua:395-419 drives chat buffers only.
+  The rule: derive the divergence set from a differential harness — parameterise
+  the open_reference cases over {chat, markdown} — instead of a hand-written
+  table that has now been extended twice by review.
+- **BR-25** [Minor] `unbacked-existing-behavior-claim` The atlas claims every untrusted-path arm goes red without the guard, and helper.lua claims abs_path is the single resolve(expand(x))
+  This is the 2nd finding in family `unbacked-existing-behavior-claim`. Do NOT
+  fix only these two sentences. atlas/context/file_references.md:88-90 asserts
+  "every arm goes red if the guard is removed" — false for the outline arm — and
+  never names tests/arch/untrusted_path_spec.lua, the file that actually
+  enforces the rule. helper.lua:286 calls abs_path "the single copy of
+  vim.fn.resolve(vim.fn.expand(x)), which had fifteen"; six remain
+  (root_dir_picker.lua:36,38,91, root_dirs.lua:12, init.lua:68,
+  super_repo.lua:26), two of them a duplicated resolve_dir_key. The rule: a
+  prose claim about test or sweep completeness must name the artifact that would
+  fail if the claim stopped being true.
+- **BR-26** [Minor] `docblock-detached-from-symbol` open_buf's LuaLS annotations now sit above focus_other_split
+  lua/parley/init.lua:2944-2966. The ---@param file_name / ---@param
+  from_chat_finder / ---@return number block documents open_buf, but
+  focus_other_split was inserted between it and M.open_buf, so the annotations
+  now precede a nullary function returning a boolean. Move the block back
+  adjacent to M.open_buf.
+
 ## Open findings
 
 - **BR-13** [Critical] `doc-consumer-enumeration` make test is RED at HEAD — two new spec files are unrouted in atlas/traceability.yaml
-- **BR-14** [Critical] `guard-nil-contract-unswept` The BR-4 guard makes resolve_chat_path return nil; two callers index it and crash
-- **BR-15** [Critical] `untrusted-path-expansion` outline.lua still executes backticks from a transcript-derived branch path — confirmed end-to-end
-- **BR-16** [Important] `pure-label-vs-io` Core-concepts table calls expand_path PURE; it expands the environment, globs the fs, and its tests are integration
-- **BR-17** [Important] `guard-nil-contract-unswept` prepare_dir returns the unusable input on refusal while every sibling sink returns nil
-- **BR-18** [Minor] `divergence-not-pinned` The @@ parser adopted markdown's [^@]+ form, narrowing chat for @-containing paths, unrecorded
-- **BR-19** [Minor] `duplicate-registry-entry-one-action` review_menu(<M-s>) and skill_picker(<C-g>s) are two ids and two config keys for one action
-- **BR-20** [Minor] `doc-consumer-enumeration` atlas quotes a diagnostic the @@ arm no longer emits
+- **BR-21** [Critical] `untrusted-path-expansion` vim.fn.glob also executes backticks, and the enforced rule covers only vim.fn.expand
+- **BR-22** [Critical] `test-green-without-the-fix` The outline arm of untrusted_path_spec passes with round 2's C3 fix reverted
+- **BR-23** [Minor] `guard-nil-contract-unswept` prepare_dir's new nil return is unswept at root_dirs.lua:74, which feeds it to resolve_dir_key
+- **BR-24** [Minor] `divergence-not-pinned` Markdown buffers now restore insert mode on a reference exit — a sixth resolved divergence, untested
+- **BR-25** [Minor] `unbacked-existing-behavior-claim` The atlas claims every untrusted-path arm goes red without the guard, and helper.lua claims abs_path is the single resolve(expand(x))
+- **BR-26** [Minor] `docblock-detached-from-symbol` open_buf's LuaLS annotations now sit above focus_other_split
