@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-09-08
 updated: 2026-09-08
-estimate_hours: 6.00
+estimate_hours: 6.46
 started: 2026-09-08T15:04:07-07:00
 ---
 
@@ -232,6 +232,8 @@ moving off it onto a user action.
 | Name | Lives in | Status | Wraps |
 |---|---|---|---|
 | `repair_reference_at_cursor` | `lua/parley/init.lua` | new | buffer read/write |
+| `_collect_ancestor_messages` | `lua/parley/chat_respond.lua` | new | test seam over the ancestor walk |
+| `_collect_ancestor_chain` | `lua/parley/chat_respond.lua` | new | test seam over the ancestor walk |
 | `resolve_chat_path` | `lua/parley/init.lua` | modified | filesystem glob |
 | `resolve_path` | `lua/parley/chat_respond.lua` | deleted | — |
 | `resolve_path` | `lua/parley/outline.lua` | deleted | — |
@@ -248,6 +250,12 @@ moving off it onto a user action.
     property that makes it unsurprising; a whole-file rewrite triggered by
     resting a cursor would be the behaviour the old design was criticised for,
     moved rather than removed.
+
+- **`_collect_ancestor_messages` / `_collect_ancestor_chain`** — the repo's
+  `M._x = local_fn` seam idiom. The walk is IO (it reads parent files off disk
+  and resolves their references), so the defect it carries is unreachable
+  through `build_ancestor_messages`, which is only the pure half — and that is
+  why a passing `ancestor_messages_spec` never saw this bug.
 
 - **`resolve_chat_path(path, base_dir)`** — prefix identity becomes the primary
   rule, not a fallback tier, and it stops scheduling repair. Resolution becomes
@@ -325,17 +333,32 @@ the first one was the same mistake the block itself was written to avoid:**
   This is a revision of the per-item hours with new evidence, not a back-fit:
   the total moved *because* the items did, not the other way round.
 
+**A third correction, and it is arithmetic rather than judgment.** The 6.00
+block still landed its design line *under* the measurement it had just cited:
+2.60h measured + 3.70h itemized impl is 6.30 before a line of code. Design is
+now 2.4 (→ 2.76 buffered), which covers the 2.60 already spent plus the
+estimate rounds that are themselves design time and are not free.
+
+**Why the design hours sit above `lua-neovim`'s discounted ceiling.** Step 3 of
+the model discounts design ×0.2 for a spec that pre-resolves its decisions, and
+this spec does. The discount assumes design was paid *outside* the measured
+window — but claim-early (AGENTS.md §2) anchors `sdlc actual` at the **claim
+commit**, so on this repo the design sits inside the window and has to stay in
+the estimate. Applying the discount here would estimate a cost the measurement
+will still charge. That is the reconciliation; without it the 0.9s look like a
+split difference between the discounted ceiling and the undiscounted floor.
+
 ```estimate
 model: estimate-logic-v3.1
 familiarity: 1.0
-item: lua-neovim              design=0.8 impl=0.9
-item: lua-neovim              design=0.8 impl=0.8
-item: lua-neovim              design=0.2 impl=0.4
-item: cross-cutting-refactor  design=0.2 impl=0.2
+item: lua-neovim              design=0.9 impl=0.9
+item: lua-neovim              design=0.9 impl=0.8
+item: lua-neovim              design=0.3 impl=0.4
+item: cross-cutting-refactor  design=0.3 impl=0.2
 item: atlas-docs              design=0.0 impl=0.2
 item: milestone-review        design=0.0 impl=1.2
 design-buffer: 0.15
-total: 6.00
+total: 6.46
 ```
 
 `design-buffer: 0.15` (not the 0.30 default) because the plan is thorough: two
@@ -343,11 +366,11 @@ plan-gate rounds, the five consumer sites measured rather than recalled, the
 guard's rule restated after the gate showed it was over the wrong term, and the
 repair trigger's five guards enumerated with a stated disposition each.
 
-Recomputed: (0.8+0.8+0.2+0.2) × 1.15 + (0.9+0.8+0.4+0.2+0.2+1.2) × 1.0
-= 2.00 × 1.15 + 3.70 = 2.30 + 3.70 = **6.00**.
+Recomputed: (0.9+0.9+0.3+0.3) × 1.15 + (0.9+0.8+0.4+0.2+0.2+1.2) × 1.0
+= 2.40 × 1.15 + 3.70 = 2.76 + 3.70 = **6.46**.
 
 Against #225 (est 1.79, actual 3.92) for comparable-but-smaller scope, and with
-2.60h already measured on this one, 6.00 is arithmetic rather than a hedge.
+2.60h already measured on this one, 6.46 is arithmetic rather than a hedge.
 
 ## Done when
 

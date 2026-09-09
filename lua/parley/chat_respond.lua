@@ -229,6 +229,12 @@ local function collect_ancestor_messages(current_file, parsed_chat)
     return M.build_ancestor_messages(chain)
 end
 
+-- Test seam (#224): the ancestor walk is IO — it reads the parent files off
+-- disk and resolves their references — so the defect it carries cannot be
+-- reached through `build_ancestor_messages`, which is the pure half.
+M._collect_ancestor_messages = function(...) return collect_ancestor_messages(...) end
+M._collect_ancestor_chain = function(...) return collect_ancestor_chain(...) end
+
 local function set_chat_topic_line(buf, lines, topic)
     local buffer_edit = require("parley.buffer_edit")
     local header_end = find_chat_header_end(lines)
