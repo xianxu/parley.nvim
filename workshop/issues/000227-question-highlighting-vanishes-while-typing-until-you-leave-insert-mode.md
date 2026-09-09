@@ -22,6 +22,38 @@ The recolour on mode change is a side effect, not the mechanism. Highlighting is
 drawn by a decoration provider on redraw, and it **fails closed** the moment the
 structure cache goes dirty.
 
+### The symptom is instability, not only absence (operator, 5 more screenshots)
+
+The first report showed the block rendering **plain**. A second batch taken
+while typing continuously shows the colouring **changing frame to frame** —
+*"as I typed, the question coloring kept changing"*. Across five captures of the
+same buffer, the ordered-list markers (`1.` `2.` `3.`) render in one colour in
+some frames and another in others, while the body text stays coloured.
+
+That is the same defect seen at different redraw frames rather than a second
+one. A chat buffer is `filetype=markdown` (`init.lua:1707`), so markdown's own
+highlighting sits **underneath** parley's decoration overlay:
+
+- frames where the structure cache is clean → the provider runs → parley's
+  question colours win;
+- frames where an edit has just dirtied it → `on_win` returns `false` → no
+  parley decorations → **markdown's own colours show through**.
+
+Typing alternates between the two states, so the block appears to shimmer rather
+than simply vanish. The first screenshot caught a dirty frame at rest; these
+catch the alternation.
+
+**Stated as a hypothesis, not a finding:** the colour attribution above is read
+off screenshots, and which layer owns the list-marker colour should be confirmed
+at the buffer (`:Inspect` on a marker in a clean vs dirty frame) before the fix
+is designed around it. What is *not* in doubt is the instability itself, which
+the operator observed directly and which the `return false` path fully explains.
+
+**This raises the fix's bar.** "Highlighting is present after typing stops" is
+not enough — the Done-when must assert the rendered result is **stable across
+consecutive redraws during a burst of edits**, since an intermittently-correct
+overlay is what is actually being reported.
+
 ### The chain
 
 **1. `on_lines` invalidates and does not repair.** `rebuild_structure`'s
@@ -120,6 +152,10 @@ assumed.
 
 - Typing in a chat buffer — including pressing Enter — never blanks the
   highlighting; the `💬:` line and its block stay coloured throughout.
+- The rendered highlighting is **stable across consecutive redraws** during a
+  burst of edits — no frame-to-frame alternation between parley's colours and
+  markdown's. Asserted by driving several edits and comparing decorations per
+  frame, not by checking the end state once typing stops.
 - A test drives `on_lines` with a line-count change and asserts the provider
   still returns decorations for rows outside the edit.
 - A test asserts a dirty cache is rebuilt without any `BufEnter` /
