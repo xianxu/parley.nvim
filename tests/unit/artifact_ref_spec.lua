@@ -243,14 +243,24 @@ describe("goto_ref_at_cursor on_no_ref fallback", function()
         assert.is_truthy(notified and notified:match("no artifact ref"))
     end)
 
+    -- #225 BR-3: this used to replace `ar.run_resolve` outright, which faked
+    -- the module rather than the process and meant the real argv construction
+    -- never ran here. `opts.runner` is run_resolve's own documented seam, now
+    -- threaded through goto_ref_at_cursor so a caller can reach it.
     it("does NOT call on_no_ref when a ref is present (resolves instead)", function()
         buf_with("see ariadne#144 here", 10)
         local fell_back = false
-        local prev = ar.run_resolve
-        ar.run_resolve = function() end -- stub: don't spawn
-        ar.goto_ref_at_cursor({ on_no_ref = function() fell_back = true end })
-        ar.run_resolve = prev
+        local argv_seen
+        ar.goto_ref_at_cursor({
+            on_no_ref = function() fell_back = true end,
+            runner = function(argv, on_complete)
+                argv_seen = table.concat(argv, " ")
+                on_complete('{"files":[]}', 0, "")
+            end,
+        })
         assert.is_false(fell_back)
+        assert.is_truthy(argv_seen and argv_seen:match("resolve"), "runner never reached: " .. tostring(argv_seen))
+        assert.is_truthy(argv_seen:match("ariadne#144"), "argv lost the ref: " .. argv_seen)
     end)
 end)
 

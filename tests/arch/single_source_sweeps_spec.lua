@@ -179,6 +179,7 @@ describe("arch: single-source sweeps stay swept", function()
             return
         end
         local missing = {}
+        local survived = {}
         for _, doc in ipairs(docs) do
             if doc ~= "" then
                 local body = read(doc)
@@ -186,10 +187,27 @@ describe("arch: single-source sweeps stay swept", function()
                 for line in body:gmatch("[^\n]+") do
                     -- A `deleted` row names a symbol that by definition no
                     -- longer exists — that is the whole content of the row.
-                    -- `deleted` is in the writing-plans status legend
-                    -- alongside new/modified, so demanding a definition for it
-                    -- makes the legend unusable.
-                    if line:match("^| `") and not line:match("|%s*deleted%s*|") then
+                    -- `deleted` is in the writing-plans status legend alongside
+                    -- new/modified, so demanding a definition for it makes the
+                    -- legend unusable. It inverts rather than exempts: skipping
+                    -- outright would let a plan claim a deletion that never
+                    -- happened (#225 review), so the row asserts the symbol is
+                    -- GONE with the same matcher.
+                    local deleted_row = line:match("^| `") and line:match("|%s*deleted%s*|")
+                    if deleted_row then
+                        for name in line:gmatch("`([%w_]+)`") do
+                            if #name > 3 and not name:match("^lua$") then
+                                local hit = vim.fn.systemlist(
+                                    ("grep -rlE -- %s lua/ scripts/ 2>/dev/null"):format(
+                                        vim.fn.shellescape(definition_pattern(name))))
+                                if #hit > 0 then
+                                    survived[#survived + 1] = doc .. ": " .. name
+                                        .. " (still defined in " .. hit[1] .. ")"
+                                end
+                            end
+                        end
+                    end
+                    if line:match("^| `") and not deleted_row then
                         -- A row names either a SYMBOL or a MODULE. A module is
                         -- checked as a file (its row carries the path in another
                         -- cell); a symbol must have a DEFINITION, not a mention.
@@ -224,6 +242,8 @@ describe("arch: single-source sweeps stay swept", function()
         end
         assert.same({}, missing,
             "these are named in a Core-concepts table but exist nowhere in the tree")
+        assert.same({}, survived,
+            "these are marked `deleted` in a Core-concepts table but are still defined")
     end)
 
     it("the definition matcher accepts every real definition form", function()

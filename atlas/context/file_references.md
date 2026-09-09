@@ -59,8 +59,33 @@ meant stop.
 - `<M-o>` / `<C-g>o`: open the reference under the cursor, else smart `gf`
 - `gf`: smart go-to-file directly (see `context/artifact_refs.md`)
 
+## Untrusted paths (#225)
+
+`vim.fn.expand()` runs shell commands — expanding ``"`touch /tmp/x`"`` executes
+it. A chat buffer holds **model output**, so every path lifted out of one is
+attacker-influenced text arriving at a command-execution sink. This was
+reproduced end-to-end: a chat line ``@@`touch <path>`@@`` created the file when
+`<M-o>` was pressed on it.
+
+`helper.expand_path(path)` is the **only** expansion a transcript-derived path
+may go through. It refuses (returns `nil`) rather than escaping, because
+`expand()` has two executing constructs (`` `cmd` `` and `` `=expr` ``) with no
+reliable quoting, and no legitimate parley reference needs a backtick.
+
+Routed through it: `read_file_content`, `is_directory`, `find_files`,
+`prepare_dir`, `_resolve_chat_path_candidates`, `find_tree_root_file`,
+`collect_tree_files`, `chat_respond.resolve_path`, and both `@@` sites in the
+opening chain. **Config-derived** paths (`chat_dir`, `root.dir`, `src_root`)
+keep plain `vim.fn.expand` — the distinction is provenance, not syntax.
+
+`tests/integration/untrusted_path_spec.lua` drives each entry point with a real
+`touch` payload and asserts the marker file was not created; every arm goes red
+if the guard is removed.
+
 ## Rules
 - Exchanges with `@@` refs MUST be preserved in full during memory management (never summarized)
+- A path that came out of a buffer goes through `helper.expand_path`, never
+  `vim.fn.expand` directly
 - The fall-through has exactly ONE call site, asserted by
   `tests/integration/open_reference_spec.lua`. Appending it per buffer type is
   how the two chains diverged in the first place.

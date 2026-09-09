@@ -175,7 +175,10 @@ end
 -- Resolve a path that may be absolute, ~-prefixed, or relative to base_dir.
 local function resolve_path(path, base_dir)
     if path:match("^~/") or path == "~" then
-        return vim.fn.resolve(vim.fn.expand(path))
+        -- transcript-derived: expand_path refuses a backtick rather than
+        -- running it (see helper.expand_path).
+        local expanded = require("parley.helper").expand_path(path)
+        return expanded and vim.fn.resolve(expanded) or nil
     elseif path:sub(1, 1) == "/" then
         return vim.fn.resolve(path)
     else

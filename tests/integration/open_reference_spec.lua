@@ -160,6 +160,23 @@ describe("reference opening: capabilities that live in only one chain", function
         assert.is_truthy(joined(rec.cmds):match(vim.pesc(dir)))
     end)
 
+    -- The NEGATIVE half, and the one that matters most: the Spec calls D4 "the
+    -- one that must NOT be flattened", and without this the `is_chat` gate can
+    -- be deleted with the whole suite staying green. Asserted by mutation.
+    it("D4 — a directory reference does NOT Explore in a markdown buffer", function()
+        local dir = tmp_dir .. "/somedir3"
+        vim.fn.mkdir(dir, "p")
+        local line = "@@" .. dir .. "/@@"
+        local md = write_markdown("d4-negative.md", { "# Doc", "", line })
+        local rec = open_at(md, line, 3)
+
+        assert.is_nil(joined(rec.cmds):match("Explore"))
+        assert.is_nil(rec.opened)
+        -- It is a recognised reference we could not open, so it reports and
+        -- must not degrade into a gf attempt on a directory.
+        assert.is_truthy(table.concat(rec.warnings, "\n"):match("not found"))
+    end)
+
     it("D4 — the directory Explore prefers the other window in a two-split layout", function()
         local dir = tmp_dir .. "/somedir2"
         vim.fn.mkdir(dir, "p")
@@ -308,14 +325,16 @@ end)
 
 describe("reference opening: the fall-through reaches artifact resolution", function()
     -- The delegation tests above stub `ResolveRefOrGotoFile` and so prove only
-    -- that it is called. This one lets the real command run and stubs one level
-    -- down, so `parse_ref_at_cursor` -> `run_resolve` -> `dispatch_resolve_result`
-    -- -> `open_buf` all execute.
+    -- that it is called. This one lets the whole production chain run —
+    -- `parse_ref_at_cursor` -> `run_resolve` (argv construction, the default
+    -- runner, JSON decode) -> `dispatch_resolve_result` -> `open_buf` — and
+    -- fakes the ONE thing that must not happen for real: the subprocess.
     --
-    -- The stub sits on `run_resolve` rather than on its documented
-    -- `runner(argv, on_complete)` seam because `goto_ref_at_cursor` calls
-    -- `run_resolve` with three arguments — the seam is real but not reachable
-    -- from this caller. Either way no `sdlc` is spawned.
+    -- #225 BR-3: the first version replaced `artifact_ref.run_resolve` itself,
+    -- so test flow and production flow shared no boundary. `vim.system` IS the
+    -- boundary. (`goto_ref_at_cursor` also now accepts `opts.runner`, which is
+    -- the same seam one level up, reachable for callers that have an opts
+    -- table; `OpenFileUnderCursor` does not, hence faking the OS call here.)
     it("an ariadne artifact ref under the cursor resolves and opens", function()
         local target = docs_dir .. "/000015-something.md"
         vim.fn.writefile({ "# issue" }, target)
@@ -333,20 +352,26 @@ describe("reference opening: the fall-through reaches artifact resolution", func
         assert(target_line, "fixture line not found")
         vim.api.nvim_win_set_cursor(0, { target_line, 16 })
 
-        local artifact_ref = require("parley.artifact_ref")
-        local asked_for, opened
-        local real_resolve, real_open = artifact_ref.run_resolve, parley.open_buf
-        artifact_ref.run_resolve = function(ref, _opts, on_done)
-            asked_for = ref
-            on_done({ { path = target } }, nil)
+        local spawned, opened
+        local real_system, real_open = vim.system, parley.open_buf
+        vim.system = function(argv, _opts, on_complete)
+            spawned = table.concat(argv, " ")
+            on_complete({
+                stdout = vim.json.encode({ files = { { path = target, kind = "issue" } } }),
+                code = 0,
+                stderr = "",
+            })
+            return { wait = function() end }
         end
         parley.open_buf = function(path) opened = path end
         local ok, err = pcall(parley.cmd.OpenFileUnderCursor)
         vim.wait(200, function() return opened ~= nil end)
-        artifact_ref.run_resolve, parley.open_buf = real_resolve, real_open
+        vim.system, parley.open_buf = real_system, real_open
         assert(ok, err)
 
-        assert.equals("#15", asked_for)
+        assert.is_truthy(spawned, "no subprocess was attempted")
+        assert.is_truthy(spawned:match("resolve"), "argv is not an sdlc resolve: " .. spawned)
+        assert.is_truthy(spawned:match("#15"), "argv does not carry the ref: " .. spawned)
         same_path(target, opened)
     end)
 end)

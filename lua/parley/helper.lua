@@ -249,11 +249,40 @@ _H.ends_with = function(str, ending)
 	return ending == "" or str:sub(-#ending) == ending
 end
 
+-- Expand a path that came out of a TRANSCRIPT.
+--
+-- `vim.fn.expand()` runs shell commands: expanding "`touch /tmp/x`" executes
+-- it. Chat buffers hold model output, so every path lifted out of one — an
+-- @@reference, a 🌿: link, an inline [🌿:…](file) — is attacker-influenced
+-- text arriving at a command-execution sink. Verified end-to-end: a chat line
+-- `@@`touch /tmp/PWNED`@@` created the file when <M-o> was pressed on it.
+--
+-- Refusal, not escaping: expand() has two executing constructs (`cmd` and
+-- `=expr`) and no reliable quoting for either, while no legitimate parley
+-- reference needs a backtick in a path. Callers treat nil as "this path is not
+-- usable" and take whatever their existing not-found branch is.
+--
+-- Config-derived paths (chat_dir, root.dir, src_root) are operator-controlled
+-- and keep using vim.fn.expand directly — the distinction is provenance, not
+-- syntax.
+---@param path string|nil
+---@return string|nil # expanded path, or nil if expanding it would execute
+_H.expand_path = function(path)
+    if type(path) ~= "string" or path:find("`", 1, true) then
+        return nil
+    end
+    return vim.fn.expand(path)
+end
+
 -- Read file contents into a string if it exists
 ---@param filepath string # path to the file
 ---@return string|nil # file contents or nil if file doesn't exist
 _H.read_file_content = function(filepath)
-    local expanded_path = vim.fn.expand(filepath)
+    local expanded_path = _H.expand_path(filepath)
+    if not expanded_path then
+        logger.warning("Refusing to expand a path containing a backtick: " .. tostring(filepath))
+        return nil
+    end
     if vim.fn.filereadable(expanded_path) == 0 then
         logger.warning("File not found: " .. expanded_path)
         return nil
@@ -271,8 +300,8 @@ end
 ---@param path string # path to check
 ---@return boolean # true if path is a directory
 _H.is_directory = function(path)
-    local expanded_path = vim.fn.expand(path)
-    return vim.fn.isdirectory(expanded_path) == 1
+    local expanded_path = _H.expand_path(path)
+    return expanded_path ~= nil and vim.fn.isdirectory(expanded_path) == 1
 end
 
 -- Check if a path is a remote URL (e.g., Google Docs)
@@ -310,7 +339,11 @@ end
 ---@param recursive boolean # whether to search recursively
 ---@return table # list of matching file paths
 _H.find_files = function(dirpath, pattern, recursive)
-    local expanded_dir = vim.fn.expand(dirpath)
+    local expanded_dir = _H.expand_path(dirpath)
+    if not expanded_dir then
+        logger.warning("Refusing to expand a path containing a backtick: " .. tostring(dirpath))
+        return {}
+    end
     if vim.fn.isdirectory(expanded_dir) == 0 then
         logger.warning("Directory not found: " .. expanded_dir)
         return {}
@@ -354,29 +387,34 @@ end
 -- Process a directory pattern (possibly with glob) and return all matching file contents
 ---@param dirspec string # directory specification (possibly with glob pattern)
 ---@return string # combined contents of all matching files
+-- The directory part of a glob-ish reference. PURE.
+--   "a/b/**/*.md" -> "a/b"   "a/b/**/*" -> "a/b"
+--   "a/b/*.md"    -> "a/b"   "a/b/"     -> "a/b"
+--   "a/b/c.md"    -> unchanged (not a glob)
+--
+-- #225: this derivation had two near-copies — one here and one in the
+-- @@-reference chain in init.lua — differing in which shapes they stripped, so
+-- neither was wrong but the pair could drift. One function, one test.
+---@param spec string
+---@return string
+_H.glob_base = function(spec)
+    local base = spec
+        :gsub("/%*%*/.*$", "")   -- /** and everything after it
+        :gsub("/%*%*?/?.*$", "") -- a remaining /* or /** segment
+        :gsub("/%*%.%w+$", "")   -- /*.ext
+        :gsub("/$", "")          -- trailing slash
+    return base
+end
+
 _H.process_directory_pattern = function(dirspec)
     local result = {}
-    local recursive = false
+    -- ** are literal characters here, not Lua pattern magic, hence the % escapes.
+    local recursive = dirspec:match("%*%*/") ~= nil
     local pattern = nil
-    local dir = dirspec
-
-    -- Check if this is a recursive search pattern with **
-    -- Note: ** are literal characters, not Lua pattern magic, so we escape them with %
-    if dirspec:match("%*%*/") then
-        recursive = true
-        dir = dirspec:gsub("/%*%*/.*$", "") -- Remove /** and anything after
-    end
-
-    -- Extract a filename pattern if it exists
     if dirspec:match("/%*%*?/?.*%.%w+$") or dirspec:match("/%*%.%w+$") then
         pattern = dirspec:match(".*/(%*%*?/?.*%.%w+)$") or dirspec:match(".*/(%*%.%w+)$")
-        dir = dirspec:gsub("/%*%*?/?.*%.%w+$", ""):gsub("/%*%.%w+$", "")
     end
-
-    -- If it ends with a trailing slash, it's a directory without pattern
-    if dirspec:match("/$") then
-        dir = dirspec:gsub("/$", "")
-    end
+    local dir = _H.glob_base(dirspec)
 
     logger.debug("Processed directory pattern: dir=" .. dir ..
                 ", pattern=" .. (pattern or "nil") ..
@@ -570,7 +608,11 @@ end
 ---@return string # returns resolved directory path
 _H.prepare_dir = function(dir, name)
 	local odir = dir
-	dir = vim.fn.expand(dir)
+	dir = _H.expand_path(dir)
+	if not dir then
+		logger.warning("Refusing to create a directory whose path contains a backtick: " .. tostring(odir))
+		return odir
+	end
 	dir = dir:gsub("/$", "")
 	name = name and name .. " " or ""
 	if vim.fn.isdirectory(dir) == 0 then

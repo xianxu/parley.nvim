@@ -362,12 +362,16 @@ describe("markdown buffers obey the same registry contract (#214 C1)", function(
         assert.same({}, missing)
     end)
 
+    -- <M-o> is in this list because the collision #225 fixed lived at the
+    -- BINDING level, not the command level: `open_file` is parley_buffer scope
+    -- and must be live on a markdown buffer too, which is exactly what made
+    -- the old <M-o> skill-picker binding a conflict rather than a coexistence.
     it("the review keys are among them", function()
         setup()
         local buf, path = prepped_markdown()
         local live = parley_maps(buf)
         cleanup(buf, path)
-        for _, k in ipairs({ "<C-g>ve", "<M-s>", "<M-CR>" }) do
+        for _, k in ipairs({ "<C-g>ve", "<M-s>", "<M-CR>", "<M-o>" }) do
             assert.is_truthy(live[canon(k)], k .. " is not mapped on a markdown buffer")
         end
     end)

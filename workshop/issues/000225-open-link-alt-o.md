@@ -129,10 +129,24 @@ possible at all.
 
 ### Pure entities
 
-None. Reference opening is inherently an integration — it reads the filesystem,
-creates buffers and moves windows. The pure parts it leans on
-(`_parse_at_reference`, `_parse_branch_ref`, `extract_inline_branch_links`)
-already exist and are unchanged.
+| Name | Lives in | Status |
+|---|---|---|
+| `glob_base` | `lua/parley/helper.lua` | new |
+| `expand_path` | `lua/parley/helper.lua` | new |
+
+Reference opening is *mostly* an integration — it reads the filesystem, creates
+buffers and moves windows — and the first version of this table said "none",
+which the close review correctly called out as hiding two pure fragments.
+
+- **`glob_base`** — the directory part of a glob-ish reference
+  (`a/b/**/*.md` → `a/b`). It had two near-copies stripping different shapes;
+  neither wrong, but a pair that could drift.
+- **`expand_path`** — the transcript-path guard. Pure in the sense that matters
+  (a string predicate plus one expansion), and the single place a
+  buffer-derived path may be expanded at all.
+
+The other pure parts it leans on (`_parse_at_reference`, `_parse_branch_ref`,
+`extract_inline_branch_links`) already exist and are unchanged.
 
 ### Integration points
 
@@ -140,6 +154,7 @@ already exist and are unchanged.
 |---|---|---|---|
 | `_open_reference_under_cursor` | `lua/parley/init.lua` | new | filesystem + buffer/window opening |
 | `focus_other_split` | `lua/parley/init.lua` | new | window layout |
+| `open_buf` | `lua/parley/init.lua` | modified | — |
 | `open_branch_ref` | `lua/parley/init.lua` | modified | — |
 | `try_open_src_link` | `lua/parley/init.lua` | modified | — |
 | `try_open_inline_branch_link` | `lua/parley/init.lua` | modified | — |
@@ -158,9 +173,11 @@ already exist and are unchanged.
     markdown should ever gain directory `Explore`, the parameter disappears; no
     other caller shape changes.
 
-- **`focus_other_split`** — the two-split preference, previously hand-inlined
-  twice inside `OpenFileUnderCursor`. `open_buf` already had its own copy for
-  files; this one exists because netrw does not go through `open_buf`.
+- **`focus_other_split`** — the two-split preference, which had **three**
+  copies: one in `open_buf` and two hand-inlined in `OpenFileUnderCursor`.
+  Netrw is why a second *call site* is needed (a directory reference does not
+  go through `open_buf`); it was never a reason for a second *implementation*,
+  and the first version of this change stopped at two of three.
 
 - **`open_branch_ref` / `try_open_src_link` / `try_open_inline_branch_link`** —
   each returned `true` for both "opened it" and "recognised it and failed".
@@ -176,6 +193,62 @@ rather than unit because the behaviour under test *is* the IO: real files, real
 buffers, real window layout, with `vim.cmd` / `open_buf` / `logger.warning`
 spied at the boundary. Each of the four one-chain capabilities was
 mutation-checked before the extraction landed.
+
+## Revisions
+
+### 2026-09-08 — close review round 1 (FIX-THEN-SHIP, 4 Important)
+
+All four Importants **fixed** rather than argued down, so the Done-when bullets
+they contradicted are now true as written.
+
+- **BR-4 (`vim.fn.expand` executes backticks).** The serious one, and it is a
+  security bug, not a hygiene nit: chat buffers hold **model output**, so a
+  model can write `@@`cmd`@@` into a transcript and the operator's most-pressed
+  key runs it. Reproduced end-to-end before the fix, and the guard verified by
+  reverting it (all six arms of `untrusted_path_spec` go red).
+  Fixed as a **class**, not the two named sites: `helper.expand_path` is now
+  the only expansion a transcript-derived path may go through, and the sinks
+  routed to it are `read_file_content`, `is_directory`, `find_files`,
+  `prepare_dir`, `_resolve_chat_path_candidates`, `find_tree_root_file`,
+  `collect_tree_files`, `chat_respond.resolve_path` and both `@@` sites. The
+  review's enumeration named three; the sweep found ten. Config-derived paths
+  (`chat_dir`, `root.dir`, `src_root`) keep plain `vim.fn.expand` — the
+  distinction is provenance, not syntax.
+- **BR-5 (the divergence was unpinned).** True and embarrassing: D4 is the arm
+  the Spec calls "the one that must NOT be flattened", and deleting `is_chat`
+  left all tests green. The negative half is now asserted and mutation-checked.
+  The positive-only characterisation was the gap — every D4 test drove a chat
+  buffer, so nothing said what markdown must *not* do.
+- **BR-6 (two of three copies).** `focus_other_split` swept the two instances
+  the issue named and left `open_buf`'s. Instance, not class. `open_buf` calls
+  it now.
+- **BR-3 (the seam was unreachable).** `goto_ref_at_cursor` gained
+  `opts.runner`, so `run_resolve`'s documented seam is reachable from a caller
+  and `artifact_ref_spec` no longer replaces the module function. The `<M-o>`
+  test fakes `vim.system` instead — the OS boundary, so argv construction, the
+  default runner, JSON decode and dispatch all execute for real.
+
+Minors landed: the `deleted`-row sweep now **inverts** (asserts the symbol is
+gone) rather than skipping, `<M-o>` joined the markdown binding assertions, and
+`glob_base` retired the duplicated glob→directory derivation.
+
+Two deliberately **not** folded in:
+
+- **The `sdlc resolve` spawn has no in-flight guard.** Two `<M-o>` presses
+  before the first returns start two subprocesses. Pre-existing on `gf`, but
+  `<M-o>` is pressed far more often, so it matters more now. Cancellation and a
+  dedup key are a design question, not a keybinding fix → filed.
+- **Chat's chain order flipped** — inline `[🌿:…](file)` links are now tried
+  before `open_branch_ref` (markdown's order won). Observable only on a `🌿:`
+  line that also contains an inline link with the cursor inside it, where the
+  inline link is the more specific match and the better answer. Recorded here
+  rather than left implicit.
+
+Commit hygiene: `bb7050a` had swept twelve unrelated `workshop/parley`
+transcripts (~1,300 lines) into the implementation commit via `git add -A`.
+The branch was unpushed, so it was rebuilt without them; the transcripts are
+back to untracked and byte-identical, and the only diff between the old and
+rebuilt branches is those 1,314 lines.
 
 ## Estimate
 

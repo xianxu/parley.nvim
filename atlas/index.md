@@ -28,7 +28,7 @@ This index provides a central directory for all atlas entries of the `parley.nvi
 - [System Prompts](providers/system_prompts.md): Editable system prompts with built-in/custom/modified sources.
 
 ## 3. Context & References
-- [File References (@@)](context/file_references.md): Syntax for local file and directory inclusion; and the one `<M-o>` opening chain (`"opened"`/`"none"`/`"failed"`, only `"none"` falls through to smart `gf`), shared by chat and markdown with directory-`Explore` as its one deliberate chat-only arm.
+- [File References (@@)](context/file_references.md): Syntax for local file and directory inclusion; the transcript-path guard (`helper.expand_path` — `vim.fn.expand` runs backticks and chat buffers hold model output); and the one `<M-o>` opening chain (`"opened"`/`"none"`/`"failed"`, only `"none"` falls through to smart `gf`), shared by chat and markdown with directory-`Explore` as its one deliberate chat-only arm.
 - [Artifact-Ref Navigation](context/artifact_refs.md): Jump from `ariadne#11` / `#15 M4` / `pair#84` under the cursor to its current file (shells to `sdlc resolve`; loose local detector, sdlc owns the grammar); smart `gf` + `ParleyArtifactRef` highlight.
 - [Google Drive Context](context/google_drive.md): Google Docs integration and OAuth flow.
 - [Web Search](context/web_search.md): Provider-specific web search tools.

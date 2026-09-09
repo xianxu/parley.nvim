@@ -2940,6 +2940,27 @@ end
 ---@param file_name string
 ---@param from_chat_finder boolean | nil # whether this is called from ChatFinder
 ---@return number # buffer number
+-- Move to the other window when the tab has exactly two. Returns whether it
+-- moved. The two-split preference had THREE copies (#225): this one, and two
+-- hand-inlined inside OpenFileUnderCursor. Netrw is why a separate call site
+-- exists — a directory reference does not go through `open_buf` — but that is
+-- a reason for two callers, not for two implementations.
+local function focus_other_split()
+	local tab_wins = vim.api.nvim_tabpage_list_wins(0)
+	if #tab_wins ~= 2 then
+		return false
+	end
+	local current_win = vim.api.nvim_get_current_win()
+	for _, win in ipairs(tab_wins) do
+		if win ~= current_win then
+			M.logger.debug("Opening in other split")
+			vim.api.nvim_set_current_win(win)
+			return true
+		end
+	end
+	return false
+end
+
 M.open_buf = function(file_name, from_chat_finder)
 	-- Track file access when opening a file
 	local file_tracker = require("parley.file_tracker")
@@ -2957,30 +2978,10 @@ M.open_buf = function(file_name, from_chat_finder)
 		end
 	end
 
-	-- Get all windows in the current tab
-	local tab_wins = vim.api.nvim_tabpage_list_wins(0)
-
-	-- If we have exactly two splits AND we're not from ChatFinder, open in the other split
-	if #tab_wins == 2 and not from_chat_finder then
-		local current_win = vim.api.nvim_get_current_win()
-		local other_win
-
-		-- Find the other window that's not the current one
-		for _, win in ipairs(tab_wins) do
-			if win ~= current_win then
-				other_win = win
-				break
-			end
-		end
-
-		-- Switch to the other window and open the file
-		if other_win then
-			M.logger.debug("Opening file in other split: " .. file_name)
-			vim.api.nvim_set_current_win(other_win)
-			vim.api.nvim_command("edit " .. vim.fn.fnameescape(file_name))
-			local buf = vim.api.nvim_get_current_buf()
-			return buf
-		end
+	-- Prefer the other split, unless ChatFinder asked for the current window.
+	if not from_chat_finder and focus_other_split() then
+		vim.api.nvim_command("edit " .. vim.fn.fnameescape(file_name))
+		return vim.api.nvim_get_current_buf()
 	end
 
 	-- If from ChatFinder or not using the other split, just open in current window
@@ -3179,7 +3180,9 @@ end
 -- For relative paths, tries base_dir first, then all chat roots.
 M._resolve_chat_path_candidates = function(path, base_dir, dirs)
 	if path:match("^~/") or path == "~" then
-		return { vim.fn.resolve(vim.fn.expand(path)) }
+		-- `path` is a 🌿: / inline-link target lifted out of a transcript.
+		local expanded = M.helpers.expand_path(path)
+		return expanded and { vim.fn.resolve(expanded) } or {}
 	elseif path:sub(1, 1) == "/" then
 		return { vim.fn.resolve(path) }
 	end
@@ -3309,7 +3312,9 @@ end
 local function find_tree_root_file(file_path, depth)
 	depth = depth or 0
 	if depth > 20 then return file_path end
-	local abs_path = vim.fn.resolve(vim.fn.expand(file_path))
+	local expanded = M.helpers.expand_path(file_path)
+	if not expanded then return file_path end
+	local abs_path = vim.fn.resolve(expanded)
 	if vim.fn.filereadable(abs_path) == 0 then return abs_path end
 	local lines = vim.fn.readfile(abs_path)
 	local header_end = M.chat_parser.find_header_end(lines)
@@ -3325,7 +3330,9 @@ end
 -- Collect all file paths in a chat tree (root + all descendants via branches).
 local function collect_tree_files(file_path, visited)
 	visited = visited or {}
-	local abs_path = vim.fn.resolve(vim.fn.expand(file_path))
+	local expanded = M.helpers.expand_path(file_path)
+	if not expanded then return {} end
+	local abs_path = vim.fn.resolve(expanded)
 	if visited[abs_path] then return {} end
 	visited[abs_path] = true
 	if vim.fn.filereadable(abs_path) == 0 then return {} end
@@ -4308,24 +4315,6 @@ local try_open_src_link = function(line, cursor_col, buf)
 	return "failed"
 end
 
--- Move to the other window when the tab has exactly two. `open_buf` does this
--- for files; directory references need it separately, since they open through
--- netrw rather than through `open_buf`.
-local function focus_other_split()
-	local tab_wins = vim.api.nvim_tabpage_list_wins(0)
-	if #tab_wins ~= 2 then
-		return
-	end
-	local current_win = vim.api.nvim_get_current_win()
-	for _, win in ipairs(tab_wins) do
-		if win ~= current_win then
-			M.logger.debug("Opening in other split")
-			vim.api.nvim_set_current_win(win)
-			return
-		end
-	end
-end
-
 --- Open whatever reference sits under the cursor.
 ---
 --- One chain for chat buffers and markdown buffers alike (#225). They used to
@@ -4379,7 +4368,15 @@ local function open_reference_under_cursor(buf, current_line, cursor_col, is_cha
 		return "none"
 	end
 
-	local expanded_path = vim.fn.expand(ref_path)
+	-- `ref_path` is transcript text and vim.fn.expand() runs backticks, so this
+	-- is the sink an @@`cmd`@@ line reaches. "failed", not "none": the cursor
+	-- IS on a reference, we are refusing it, and falling through would hide
+	-- that behind gf.
+	local expanded_path = M.helpers.expand_path(ref_path)
+	if not expanded_path then
+		M.logger.warning("Refusing a reference whose path contains a backtick: " .. ref_path)
+		return "failed"
+	end
 
 	-- Directory references — netrw, preferring the other split. Chat buffers
 	-- only, and checked before chat-root resolution, which searches for files.
@@ -4392,10 +4389,10 @@ local function open_reference_under_cursor(buf, current_line, cursor_col, is_cha
 			or ref_path:match("/%*%.%w+$")
 		)
 	then
-		local base_dir = ref_path:gsub("/%*%*?/?.*$", ""):gsub("/%*%.%w+$", "")
-		local dir_path = vim.fn.expand(base_dir)
-		if vim.fn.isdirectory(dir_path) == 0 then
-			M.logger.warning("Directory not found: " .. dir_path)
+		local base_dir = M.helpers.glob_base(ref_path)
+		local dir_path = M.helpers.expand_path(base_dir)
+		if not dir_path or vim.fn.isdirectory(dir_path) == 0 then
+			M.logger.warning("Directory not found: " .. (dir_path or base_dir))
 			return "failed"
 		end
 		M.logger.info("Opening directory: " .. dir_path)
