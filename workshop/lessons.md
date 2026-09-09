@@ -1601,3 +1601,286 @@ own headline case lives.
    which silently answered for a caller that had not threaded config through.
    Asserting instead immediately exposed that `delete_answer` was reading plugin
    state a unit spec had never set up. (Same shape as #215's `is_partition`.)
+
+## A characterisation test only characterises the side you drove (#225)
+
+`is_chat` gates the one divergence the issue's own Spec calls "the one that must
+NOT be flattened" — directory references open in netrw in chat buffers only. I
+pinned it before the extraction, mutation-checked it, and wrote in the commit
+message that a dropped arm would go red. The close review deleted the gate and
+watched all seventeen tests stay green.
+
+Both D4 tests drove a **chat** buffer. They proved chat *does* `Explore`.
+Nothing anywhere said markdown *must not* — and "must not" is the entire content
+of a divergence. A conditional has two sides; I had tested the side that was
+already working.
+
+The other three arms (D1–D3) were genuinely pinned, because for those the
+mutation was "delete the capability" and the positive test was exactly the right
+oracle. D4 is different in kind: the mutation is "grant the capability to
+everyone", which no positive test can see.
+
+**Rules.**
+
+1. **A gate needs a test on the side where the gate says NO.** For a capability,
+   the positive test suffices — remove the code, the test goes red. For a
+   *restriction*, only the negative test bites, because widening a restriction
+   breaks nothing that currently passes.
+2. **Mutate in the direction of the bug you fear.** I mutated D4 by deleting the
+   arm (the #214 fear: losing a feature). The fear the Spec actually named was
+   flattening — `is_chat` → `true` — and I never ran it. Pick the mutation from
+   the stated risk, not from the previous issue's risk.
+3. **"Characterisation test" means both answers, not both call sites.** Running
+   the same assertion in two buffer types is coverage of the *chain*; asserting
+   opposite outcomes in two buffer types is coverage of the *divergence*.
+
+## Provenance, not syntax, decides whether a path is dangerous (#225)
+
+`vim.fn.expand()` runs backticks. Chat buffers hold model output. Those two
+facts had been true separately for a long time; the close review put them
+together and reproduced `@@`touch /tmp/PWNED`@@` executing on `<M-o>`.
+
+The review named three sites. Sweeping the class found ten — including
+`prepare_dir`, `collect_tree_files` and `chat_respond.resolve_path`, none of
+which look like "path parsing" from the outside.
+
+**Rules.**
+
+1. **Classify sinks by where the string CAME FROM, not by what the call looks
+   like.** `vim.fn.expand(M.config.chat_dir)` and `vim.fn.expand(ref_path)` are
+   the same call and different risks. The sweep that works is "which of these
+   arguments can originate in a buffer", traced backwards.
+2. **Model output is untrusted input.** A transcript is not a config file. Any
+   string lifted out of one and handed to something that shells out is an
+   injection sink, regardless of who owns the file on disk.
+3. **Refuse rather than escape when the escaping is not reliable.** `expand()`
+   has two executing constructs and no quoting that neutralises both; no
+   legitimate reference needs a backtick. A refusal that returns nil is auditable
+   in a way an escape function is not.
+
+## `git add -A` is not a staging command on a repo that holds the operator's notes (#225)
+
+Twelve of the operator's in-progress chat transcripts — ~1,300 lines on pi
+history, special relativity, Io's orbital period — landed inside an
+implementation commit because I staged with `git add -A`. `git log --grep "^#225"`
+then returned a commit whose diff was mostly unrelated prose.
+
+This repo *is* a workshop: `workshop/parley/` fills with untracked files while
+you work, and they are the operator's, not the change's.
+
+**Rule.** Stage by path (`git add lua/ tests/ atlas/ workshop/issues/<this one>`),
+never `-A`, in any repo where the working tree doubles as someone's notebook.
+When a commit's `--stat` has more lines of prose than code, that is the signal.
+
+## "Tests pass" has an oracle, and it is the exit code (#225)
+
+I reported "202/202 tests, lint clean" in a close-gate `--verified` string. The
+suite was red. I had run `make test 2>&1 > log` and grepped the log for
+`^FAIL: ` — a pattern this runner never emits. It prints `=== Failed integration
+test files ===`. The grep found nothing, I read nothing as clean, and the
+verification claim went into the permanent record false.
+
+Worse, the redirection order (`2>&1 > file`) sent stderr to the terminal and
+stdout to the file, so I was not even looking at the whole stream.
+
+**Rules.**
+
+1. **Assert on the exit status, never on a pattern you invented.** `make test;
+   echo "exit=$?"`. A grep for failure text is a guess about the runner's
+   vocabulary; the exit code is the runner's own verdict.
+2. **A grep that finds nothing is not evidence.** Distinguish "the failure
+   string is absent" from "I do not know whether my pattern can match". Before
+   trusting a negative grep, make it match once on purpose.
+3. **Re-establish green after the fix round, not before it.** The round-1 ledger
+   said "full suite clean at HEAD" — true of the window it reviewed, and never
+   re-checked after the fixes that closed it.
+
+## An absent side effect is not a passing test (#225)
+
+The backtick guard shipped with an oracle that could not see its own failure:
+
+```lua
+pcall(parley.cmd.OpenFileUnderCursor)     -- no assert on ok
+assert_not_executed(marker)               -- the only assertion
+```
+
+The guard did stop the command from running `touch`. It stopped it by raising a
+Lua error — `attempt to index local 'expanded' (a nil value)` — because making
+the resolver return `nil` broke two callers that index its result. The security
+property held; the failure mode was a crash. The test passed identically either
+way.
+
+**Rules.**
+
+1. **For a refusal test, assert all three: no side effect, no raise, and the
+   diagnostic.** "Nothing bad happened" is satisfied by the interpreter dying.
+2. **A bare `pcall` in a test is a swallowed oracle.** If you catch, assert on
+   what you caught.
+3. **A guard that returns `nil` changes a contract.** Prefer TOTAL degradation —
+   return the input unexpanded so every existing not-found branch handles it —
+   over a new `nil` that every caller must now know about. Where nil is right,
+   the sweep is "who indexes this result", not "who calls this function".
+
+## Enumeration is the wrong instrument for a provenance class (#225)
+
+Three rounds on one security class. The review named 3 sites; my sweep found 10
+and I called it "the class"; the next review found 4 more, including a
+**byte-identical copy** of a function I had just guarded in another module. A
+fifth copy then turned up in a third module.
+
+Ten out of fourteen is not a class fix. It is a longer list.
+
+What actually closed it was an arch test that allowlists every
+`vim.fn.expand(<variable>)` in `lua/` with a stated reason why the argument is
+operator-derived. It found the fifth copy by itself, during the merge of the
+other four.
+
+**Rules.**
+
+1. **When a finding says "fix the class", the deliverable is an enforcement, not
+   a longer list.** A list is correct until the next commit; a guard is correct
+   until someone deliberately edits it.
+2. **Classify by provenance, and make the allowlist carry the reason.**
+   `expand(config.chat_dir)` and `expand(ref_path)` are the same call and
+   opposite risks. An allowlist entry that says *why* the argument is safe is
+   reviewable; a bare exclusion is not.
+3. **Duplicate implementations defeat any sweep.** I guarded one of two
+   byte-identical functions and shipped, because I was grepping for the
+   dangerous call rather than for the duplicated function containing it. Collapse
+   the copies first, then guard the one that remains.
+
+## A guard that cannot see untracked files reports one commit late (#225)
+
+The routing guard uses `git diff --name-only --diff-filter=A <base> -- tests/`.
+`git diff` does not list untracked files. So a new spec is invisible to the
+guard until it is staged — `make test` is green while you write it, and red on
+the run *after* you commit.
+
+That happened twice in the same issue, and both times I ran `make test`, saw
+exit 0, and requested a boundary review against a suite that would be red the
+moment the reviewer checked out my commit. The second time, the file that was
+unrouted was the guard I had just added to fix the first time.
+
+The sibling guard in the same file already carried the lesson, written out:
+*"comparing against the working tree flags it while it is still being written."*
+It had not been applied to this one.
+
+**Rules.**
+
+1. **A "what did this branch add" check must union `git diff --diff-filter=A`
+   with `git ls-files --others --exclude-standard`.** Otherwise it is a check on
+   what you have *staged*, not on what exists.
+2. **Run the suite after committing, before requesting review.** Any guard that
+   reads git state answers differently across the commit boundary.
+3. **When a guard fires on N files, ask why those N were invisible until now.**
+   Round 2 routed the two files the failure named. The class was the guard's
+   blind spot, not the two names.
+
+## My probe had the same bug as my test, so both agreed and both were wrong (#225)
+
+To confirm a security fix in `outline.lua` I wrote a standalone probe, ran it,
+and read `MARKER: false` as proof the payload no longer executed. Then I wrote a
+test asserting the same thing, and it passed.
+
+Both called `_build_tree_outline_items(buf, path, config)`. The signature is
+`(root_path, config, expanded_set, depth, visited)`. A buffer *number* went in
+as `root_path`, the walk bailed on an unreadable path, and nothing ran — no
+payload, no fix, no coverage. The reviewer reverted the fix and my test stayed
+green.
+
+The probe and the test were not independent evidence. They were the same
+mistake, written twice, agreeing with each other.
+
+**Rules.**
+
+1. **A test for a fix is not evidence until you have seen it red.** Revert the
+   fix, run it, watch it fail, restore. Every security arm, every time — a
+   passing test proves the code runs *somehow*, not that it runs *the path*.
+2. **Assert that the interesting path was reached, in the test itself.** The
+   outline arm now asserts the walk actually rendered the child branch before
+   asserting the child was refused. A guard-the-guard assertion turns a silent
+   no-op into a failure.
+3. **A hand-rolled probe shares your misconceptions.** It is a way to explore,
+   never a second opinion. If a probe and a test agree, you have one data point.
+
+## "Fix the class" means the ENUMERATION must be executable too (#225)
+
+Round 2 replaced a list of dangerous sites with a rule — an arch test
+allowlisting every `vim.fn.expand(<variable>)`. Genuine progress, and still
+wrong: the rule was over one sink. `vim.fn.glob` executes backticks exactly the
+same way, and a transcript reached it through a code path the guard did not
+model.
+
+I had generalised the *site* enumeration and left the *sink* enumeration
+memorised. The fix is a probe: the arch spec now runs a live payload through
+nine candidate vim functions and fails if the declared executing set differs in
+either direction.
+
+**Rules.**
+
+1. **After writing a rule, ask which of its terms is still a memorised list.**
+   "Every `expand` call is allowlisted" has two quantifiers; I had made one
+   mechanical and left the other in my head.
+2. **Derive capability sets by probing, not by recall.** Four of nine vim
+   functions execute backticks. I would not have guessed `globpath` or
+   `expandcmd`, and I was wrong about `glob`.
+3. **One predicate behind every guard.** `helper.would_execute` is shared by
+   `expand_path`, `safe_glob` and `abs_path` precisely so a new guard cannot
+   quietly adopt a narrower notion of "dangerous" than the existing ones.
+
+## Check why the exit code came back, not just what it was (#225)
+
+Three verification steps of mine were buggy in a single round, and each one
+produced a *plausible* result that I nearly accepted:
+
+1. A mutation check reported `exit 2` and I read it as "the guard bites". The
+   `2` came from **lint** — my probe shadowed a variable — and `make test` runs
+   lint first and bails. The guard never ran.
+2. A mutation meant to add a top-level export inserted it *inside* a function,
+   because `s.replace('return _H', …)` matched an earlier `return _H.abs_path(…)`
+   substring. Indented, it was invisible to a `^`-anchored matcher. `exit 0`
+   looked like "the guard is blind"; the guard was fine and the mutation was
+   malformed.
+3. (Round 3) A probe and the test it was meant to corroborate shared the same
+   wrong function signature, so both agreed that nothing executed — because
+   nothing ran at all.
+
+The common shape: a result consistent with my hypothesis, produced by a
+mechanism I had not checked.
+
+**Rules.**
+
+1. **A mutation check needs the failure to name the mutation.** Grep the output
+   for the symbol you introduced. "It went red" is not enough — red for the
+   wrong reason is the same as green.
+2. **Read the failure text, not the exit status, when a step is supposed to
+   fail.** Exit status is the right oracle for "did the suite pass"; it is the
+   wrong oracle for "did MY guard catch MY probe".
+3. **Anchor textual mutations.** `replace(x, y, 1)` finds the first occurrence,
+   which is rarely the one you pictured. Assert on the file's shape
+   (`endswith`, a unique count) before mutating.
+
+## The guard you install to end a pattern will contain the pattern (#225)
+
+Round 2 replaced a list of sites with a rule. Round 3 found the rule covered one
+sink of four. Round 4 found the *matcher* for that rule saw one argument shape,
+and its allowlist keyed on a file rather than a site — so an entry pre-approved
+calls written later. Separately, the sweep meant to catch untabled entities
+matched the `M.` export idiom literally, and was therefore inert across the one
+file where five of the issue's new entities lived.
+
+Every one of those was a mechanism installed to stop hand-maintained
+enumerations, which was itself a hand-maintained enumeration one level up.
+
+**Rules.**
+
+1. **After writing a guard, ask what in it is still a literal.** A hardcoded
+   `M.`, a single sink name, one argument shape, a file-level key. Each is a
+   quantifier you left in your head.
+2. **Test the guard against the thing it is meant to catch, in the shapes the
+   codebase actually writes.** Grep the tree for the spellings in use and drive
+   the matcher over each; a self-test that exercises the handled shape confirms
+   nothing.
+3. **A guard is inert until you have watched it fire.** Add a deliberate
+   violation, in the real file, in the real idiom, and see it named in the
+   failure.

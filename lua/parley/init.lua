@@ -823,7 +823,11 @@ M.setup = function(opts)
 	end
 	for k, v in pairs(M.config) do
 		if not skip_prepare[k] and k:match("_dir$") and type(v) == "string" then
-			M.config[k] = M.helpers.prepare_dir(v, k)
+			-- prepare_dir returns nil if it refuses (a backtick path); keep the
+			-- original rather than nilling a config key. Config paths are
+			-- operator-derived so this should never fire — it is here so the
+			-- refusal contract is uniform across every sink (#225 review I2).
+			M.config[k] = M.helpers.prepare_dir(v, k) or v
 		end
 	end
 
@@ -2849,7 +2853,7 @@ end
 M.setup_markdown_keymaps = function(buf)
 	-- Document review actions. The skill supplies the callbacks; the REGISTRY
 	-- installs them (#214 C1) — it used to install them itself from raw config,
-	-- which put <C-g>ve/<M-o>/<M-CR> outside the master switch and made a
+	-- which put <C-g>ve/<M-s>/<M-CR> outside the master switch and made a
 	-- `shortcut = ""` disable raise on every markdown BufEnter. nil = journal
 	-- sidecar, which gets no review keys.
 	local review_skill = require("parley.skills.review")
@@ -2937,6 +2941,29 @@ M.setup_buf_handler = function()
 	highlighter.setup_buf_handler()
 end
 
+-- Move to the other window when the tab has exactly two. Returns whether it
+-- moved. The two-split preference had THREE copies (#225): this one, and two
+-- hand-inlined inside OpenFileUnderCursor. Netrw is why a separate call site
+-- exists — a directory reference does not go through `open_buf` — but that is
+-- a reason for two callers, not for two implementations.
+---@param what string|nil # what is being opened, for the debug line
+---@return boolean # whether it moved
+local function focus_other_split(what)
+	local tab_wins = vim.api.nvim_tabpage_list_wins(0)
+	if #tab_wins ~= 2 then
+		return false
+	end
+	local current_win = vim.api.nvim_get_current_win()
+	for _, win in ipairs(tab_wins) do
+		if win ~= current_win then
+			M.logger.debug("Opening in other split: " .. (what or "?"))
+			vim.api.nvim_set_current_win(win)
+			return true
+		end
+	end
+	return false
+end
+
 ---@param file_name string
 ---@param from_chat_finder boolean | nil # whether this is called from ChatFinder
 ---@return number # buffer number
@@ -2957,30 +2984,10 @@ M.open_buf = function(file_name, from_chat_finder)
 		end
 	end
 
-	-- Get all windows in the current tab
-	local tab_wins = vim.api.nvim_tabpage_list_wins(0)
-
-	-- If we have exactly two splits AND we're not from ChatFinder, open in the other split
-	if #tab_wins == 2 and not from_chat_finder then
-		local current_win = vim.api.nvim_get_current_win()
-		local other_win
-
-		-- Find the other window that's not the current one
-		for _, win in ipairs(tab_wins) do
-			if win ~= current_win then
-				other_win = win
-				break
-			end
-		end
-
-		-- Switch to the other window and open the file
-		if other_win then
-			M.logger.debug("Opening file in other split: " .. file_name)
-			vim.api.nvim_set_current_win(other_win)
-			vim.api.nvim_command("edit " .. vim.fn.fnameescape(file_name))
-			local buf = vim.api.nvim_get_current_buf()
-			return buf
-		end
+	-- Prefer the other split, unless ChatFinder asked for the current window.
+	if not from_chat_finder and focus_other_split(file_name) then
+		vim.api.nvim_command("edit " .. vim.fn.fnameescape(file_name))
+		return vim.api.nvim_get_current_buf()
 	end
 
 	-- If from ChatFinder or not using the other split, just open in current window
@@ -3178,12 +3185,20 @@ end
 -- For absolute/~ paths, returns a single candidate.
 -- For relative paths, tries base_dir first, then all chat roots.
 M._resolve_chat_path_candidates = function(path, base_dir, dirs)
-	if path:match("^~/") or path == "~" then
-		return { vim.fn.resolve(vim.fn.expand(path)) }
-	elseif path:sub(1, 1) == "/" then
-		return { vim.fn.resolve(path) }
+	-- `path` is a 🌿: / inline-link target lifted out of a transcript, so the
+	-- ~-branch goes through the guard. resolve_relative_path is TOTAL: on a
+	-- refused (backtick) path it returns the literal unexpanded, `filereadable`
+	-- says no, and the caller takes its ordinary not-found branch. Returning
+	-- nil here is what crashed two callers in review round 2 (C2).
+	--
+	-- This was the FIFTH copy of the ~/absolute/relative triage; the arch guard
+	-- in tests/arch/untrusted_path_spec.lua found it while the other four were
+	-- being merged.
+	local first = M.helpers.resolve_relative_path(path, base_dir)
+	if path:match("^~/") or path == "~" or path:sub(1, 1) == "/" then
+		return { first }
 	end
-	local candidates = { vim.fn.resolve(base_dir .. "/" .. path) }
+	local candidates = { first }
 	for _, dir in ipairs(dirs or {}) do
 		local c = vim.fn.resolve(dir .. "/" .. path)
 		if c ~= candidates[1] then
@@ -3218,7 +3233,9 @@ local function resolve_chat_path(path, base_dir, referring_file)
 			end
 		end
 		for _, dir in ipairs(search_dirs) do
-			local matches = vim.fn.glob(dir .. "/" .. pattern, false, true)
+			-- safe_glob, not glob: `dir` is a chat root but the slug pattern
+			-- is derived from a transcript filename (#225 round 3 C2).
+			local matches = M.helpers.safe_glob(dir .. "/" .. pattern, false, true) or {}
 			-- Post-filter: verify each match has the exact same timestamp
 			local verified = {}
 			for _, m in ipairs(matches) do
@@ -3271,6 +3288,8 @@ end
 
 -- Try to open an inline branch link [🌿:text](file) under the cursor.
 -- Returns true if a link was found (and handled), false otherwise.
+--- Try to open an inline `[🌿:anchor](file)` link under the cursor.
+---@return "opened"|"failed"|nil # nil when the cursor is not inside one
 local function try_open_inline_branch_link(current_line, cursor_col, parent_buf)
 	local branch_prefix = M.config.chat_branch_prefix or "🌿:"
 	local chat_parser = require("parley.chat_parser")
@@ -3283,6 +3302,7 @@ local function try_open_inline_branch_link(current_line, cursor_col, parent_buf)
 			local expanded = resolve_chat_path(link.path, current_dir, referring)
 			if vim.fn.filereadable(expanded) == 1 then
 				M.open_buf(expanded)
+				return "opened"
 			elseif expanded:match("%d%d%d%d%-%d%d%-%d%d%.%d%d%-%d%d%-%d%d%.%d+%.md$") then
 				-- Same wording, same owner (#214 M3): this built `what is "X"`
 				-- inline, so the phrase lived in two places and the two branch
@@ -3292,20 +3312,21 @@ local function try_open_inline_branch_link(current_line, cursor_col, parent_buf)
 				M.create_child_chat(expanded, topic, parent_buf,
 					link.topic ~= "" and br_submit.seed_question("define", link.topic) or nil)
 				M.open_buf(expanded)
+				return "opened"
 			else
 				M.logger.warning("Chat file not found: " .. expanded)
+				return "failed"
 			end
-			return true
 		end
 	end
-	return false
+	return nil
 end
 
 -- Walk parent_link chain to find the tree root file path.
 local function find_tree_root_file(file_path, depth)
 	depth = depth or 0
 	if depth > 20 then return file_path end
-	local abs_path = vim.fn.resolve(vim.fn.expand(file_path))
+	local abs_path = M.helpers.abs_path(file_path)
 	if vim.fn.filereadable(abs_path) == 0 then return abs_path end
 	local lines = vim.fn.readfile(abs_path)
 	local header_end = M.chat_parser.find_header_end(lines)
@@ -3321,7 +3342,7 @@ end
 -- Collect all file paths in a chat tree (root + all descendants via branches).
 local function collect_tree_files(file_path, visited)
 	visited = visited or {}
-	local abs_path = vim.fn.resolve(vim.fn.expand(file_path))
+	local abs_path = M.helpers.abs_path(file_path)
 	if visited[abs_path] then return {} end
 	visited[abs_path] = true
 	if vim.fn.filereadable(abs_path) == 0 then return {} end
@@ -3458,7 +3479,7 @@ M.move_chat_tree = function(file_name, target_dir)
 	end
 
 	-- Return the new path of the originally requested file
-	local resolved_file = vim.fn.resolve(vim.fn.expand(file_name))
+	local resolved_file = M.helpers.abs_path(file_name)
 	return path_map[resolved_file] or path_map[tree_root]
 end
 
@@ -4214,10 +4235,12 @@ end
 
 -- Open or create a chat file from a 🌿: branch reference line.
 -- Shared by both chat-buffer and markdown-buffer <C-g>o handlers.
+--- Open a `🌿:` reference line.
+---@return "opened"|"failed"|nil # nil when the line is not a 🌿: reference
 local function open_branch_ref(current_line, buf)
 	local parsed = M._parse_branch_ref(current_line)
 	if parsed == nil then
-		return false
+		return nil
 	end
 
 	local referring = vim.api.nvim_buf_get_name(buf)
@@ -4226,7 +4249,7 @@ local function open_branch_ref(current_line, buf)
 
 	if vim.fn.filereadable(expanded) == 1 then
 		M.open_buf(expanded)
-		return true
+		return "opened"
 	end
 
 	-- Chat file doesn't exist yet — create it if it looks like a chat timestamp
@@ -4256,11 +4279,11 @@ local function open_branch_ref(current_line, buf)
 
 		vim.fn.writefile(file_lines, chat_file)
 		M.open_buf(chat_file)
-		return true
+		return "opened"
 	end
 
 	M.logger.warning("Chat file not found: " .. expanded)
-	return true
+	return "failed"
 end
 
 -- Resolve a src: path to an absolute filesystem path.
@@ -4280,122 +4303,155 @@ local resolve_src_link = function(src_path, buf_file)
 	return nil
 end
 
--- Try to open a src: markdown link under cursor_col (0-indexed). Returns true if handled.
+--- Try to open a src: markdown link under cursor_col (0-indexed).
+---@return "opened"|"failed"|nil # nil when there is no src: link here
 local try_open_src_link = function(line, cursor_col, buf)
 	local link = issues_mod.parse_md_link_at_cursor(line, cursor_col + 1)
-	if not link then return false end
+	if not link then return nil end
 	local src_path = issues_mod.parse_src_url(link.url)
-	if not src_path then return false end
+	if not src_path then return nil end
 	local buf_file = vim.api.nvim_buf_get_name(buf)
 	local abs_path = resolve_src_link(src_path, buf_file)
 	if not abs_path then
 		M.logger.warning("src: link: no git root found and src_root not configured")
-		return true
+		return "failed"
 	end
 	abs_path = vim.fn.simplify(abs_path)
 	if vim.fn.filereadable(abs_path) == 1 or vim.fn.isdirectory(abs_path) == 1 then
 		M.open_buf(abs_path)
-	else
-		M.logger.warning("src: link target not found: " .. abs_path)
+		return "opened"
 	end
-	return true
+	M.logger.warning("src: link target not found: " .. abs_path)
+	return "failed"
 end
 
--- Function to open a chat reference from a markdown file
-M.open_chat_reference = function(current_line, cursor_col, _in_insert_mode, full_line)
-	-- Check for src: links first
-	if try_open_src_link(current_line, cursor_col, vim.api.nvim_get_current_buf()) then
-		return true
+--- Open whatever reference sits under the cursor.
+---
+--- One chain for chat buffers and markdown buffers alike (#225). They used to
+--- be two, and two meant divergent: `src:` links, the `@@path: topic` form and
+--- bare-name chat-root resolution worked only in markdown, while a directory
+--- reference opened in netrw only in chat. The first three were omissions and
+--- are now the union. The fourth is a real policy difference, so it stays,
+--- behind `is_chat` — collapsing it away would have silently deleted a feature.
+---
+--- Three-valued, because letting the caller fall through to `gf` promotes
+--- exits that used to be discarded, and they do not mean the same thing:
+---   "opened" — a reference was recognised and acted on.
+---   "none"   — nothing here looks like a reference; fall through to `gf`.
+---   "failed" — a reference was recognised and could not be opened. The
+---              diagnostic is already reported and the caller must NOT fall
+---              through: `gf` would re-fail on a path we already know is
+---              absent, trading a precise message for a vague one.
+---
+---@param buf integer
+---@param current_line string|nil
+---@param cursor_col integer # 0-indexed
+---@param is_chat boolean # directory references open in netrw only when true
+---@return "opened"|"none"|"failed"
+local function open_reference_under_cursor(buf, current_line, cursor_col, is_chat)
+	if not current_line then
+		return "none"
 	end
 
-	-- Check for inline branch links [🌿:text](file) first
-	if try_open_inline_branch_link(current_line, cursor_col, vim.api.nvim_get_current_buf()) then
-		return true
+	-- Link forms that carry their own target. Each reports its own failure, so
+	-- a non-nil answer is terminal either way.
+	local handled = try_open_src_link(current_line, cursor_col, buf)
+		or try_open_inline_branch_link(current_line, cursor_col, buf)
+		or open_branch_ref(current_line, buf)
+	if handled then
+		return handled
 	end
 
-	-- Check for 🌿: branch reference lines
-	if open_branch_ref(current_line, vim.api.nvim_get_current_buf()) then
-		return true
-	end
-
-	-- Extract the chat path
-	local chat_path
-
-	-- First check if the line begins with @@
+	-- @@ references: accept every form either chain used to accept.
+	local ref_path
 	if current_line:match("^@@") then
-		-- Extract the chat path: prefer @@ref@@ form, then @@path: topic (strip topic), then rest of line
-		chat_path = current_line:match("^@@%s*([^@]+)@@")
-			or current_line:match("^@@%s*([^:]+):")
-			or current_line:match("^@@(.+)$")
-
-		-- Clean up whitespace
-		chat_path = chat_path:gsub("^%s*(.-)%s*$", "%1")
-	else
-		-- Use extracted pure function to find closest @@ reference
-		chat_path = M._parse_at_reference(current_line, cursor_col)
-
-		if not chat_path then
-			M.logger.warning("No chat reference (@@ syntax) found on current line")
-			return
+		-- A line that is ENTIRELY one reference is taken greedily, so a path
+		-- containing an `@` survives (`@@/tmp/a@b/c.md@@`). Chat used to be
+		-- greedy and markdown did not; adopting markdown's `[^@]+` wholesale
+		-- was a fifth divergence resolved the wrong way, silently (#225 review).
+		-- The `not whole:find("@@")` guard keeps it from swallowing a line that
+		-- carries two references.
+		local whole = current_line:match("^@@(.+)@@$")
+		if whole and not whole:find("@@", 1, true) then
+			ref_path = whole
+		else
+			ref_path = current_line:match("^@@%s*([^@]+)@@")
+				or current_line:match("^@@%s*([^:]+):")
+				or current_line:match("^@@(.+)$")
 		end
+		ref_path = ref_path and ref_path:gsub("^%s*(.-)%s*$", "%1")
+	else
+		ref_path = M._parse_at_reference(current_line, cursor_col)
+	end
+	if not ref_path or ref_path == "" then
+		-- Not a reference. Silent by design: the caller falls through to `gf`,
+		-- and warning about @@ syntax on every ordinary word would be noise.
+		return "none"
 	end
 
-	if not chat_path then
-		M.logger.warning("Could not extract chat path from line")
-		return
+	-- `ref_path` is transcript text and vim.fn.expand() runs backticks, so this
+	-- is the sink an @@`cmd`@@ line reaches. "failed", not "none": the cursor
+	-- IS on a reference, we are refusing it, and falling through would hide
+	-- that behind gf.
+	local expanded_path = M.helpers.expand_path(ref_path)
+	if not expanded_path then
+		M.logger.warning("Refusing a reference whose path contains a backtick: " .. ref_path)
+		return "failed"
 	end
 
-	-- Expand ~ and resolve relative paths (searches chat roots for bare filenames)
-	local expanded_path = vim.fn.expand(chat_path)
+	-- Directory references — netrw, preferring the other split. Chat buffers
+	-- only, and checked before chat-root resolution, which searches for files.
+	if
+		is_chat
+		and (
+			M.helpers.is_directory(expanded_path)
+			or ref_path:match("/$")
+			or ref_path:match("/%*%*?/?")
+			or ref_path:match("/%*%.%w+$")
+		)
+	then
+		local base_dir = M.helpers.glob_base(ref_path)
+		local dir_path = M.helpers.expand_path(base_dir)
+		if not dir_path or vim.fn.isdirectory(dir_path) == 0 then
+			M.logger.warning("Directory not found: " .. (dir_path or base_dir))
+			return "failed"
+		end
+		M.logger.info("Opening directory: " .. dir_path)
+		focus_other_split(dir_path)
+		vim.cmd("Explore " .. vim.fn.fnameescape(dir_path))
+		return "opened"
+	end
+
+	-- A bare or relative name is looked up in the chat roots, timestamp-first,
+	-- so a renamed slug still resolves.
 	if expanded_path:sub(1, 1) ~= "/" then
-		local current_dir = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(0), ":p:h")
+		local current_dir = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(buf), ":p:h")
 		expanded_path = resolve_chat_path(expanded_path, current_dir)
 	end
 
-	-- Check if the file exists
 	if vim.fn.filereadable(expanded_path) == 1 then
-		-- Open the chat file
-		M.logger.info("Opening chat file: " .. expanded_path)
+		M.logger.info("Opening file: " .. expanded_path)
 		M.open_buf(expanded_path)
-
-		-- No need to explicitly handle insert mode here as M.open_buf now
-		-- checks for two splits and the caller (OpenFileUnderCursor) handles insert mode
-		return true
-	else
-		-- Check if it's a chat file reference (timestamp format)
-		if expanded_path:match("%d%d%d%d%-%d%d%-%d%d%.%d%d%-%d%d%-%d%d%.%d+%.md$") then
-			-- This is a chat file reference that doesn't exist yet - create it
-			M.logger.info("Creating new chat file: " .. expanded_path)
-
-			-- Determine agent info
-			local agent = M.get_agent()
-
-			-- Create parent directories if they don't exist
-			local parent_dir = vim.fn.fnamemodify(expanded_path, ":h")
-			M.helpers.prepare_dir(parent_dir)
-
-			-- Extract topic from the reference line or use default
-			local topic = "New chat"
-			if full_line and full_line:match("@@[^:]+:%s*(.+)") then
-				topic = full_line:match("@@[^:]+:%s*(.+)")
-			end
-
-			-- Prepare template
-			local template = M.get_default_template(agent, expanded_path)
-			template = template:gsub("{{topic}}", function() return topic end)
-
-			-- Make sure the file has UTF-8 encoding header
-			vim.fn.writefile(vim.split(template, "\n"), expanded_path)
-
-			-- Open the file
-			M.open_buf(expanded_path)
-			return true
-		else
-			M.logger.warning("Chat file not found: " .. expanded_path)
-			return false
-		end
+		return "opened"
 	end
+
+	-- A missing target that names a chat timestamp is a forward reference:
+	-- create the chat rather than complain about it.
+	if expanded_path:match("%d%d%d%d%-%d%d%-%d%d%.%d%d%-%d%d%-%d%d%.%d+%.md$") then
+		M.logger.info("Creating new chat file: " .. expanded_path)
+		M.helpers.prepare_dir(vim.fn.fnamemodify(expanded_path, ":h"))
+		local topic = current_line:match("@@[^:]+:%s*(.+)") or "New chat"
+		local template = M.get_default_template(M.get_agent(), expanded_path)
+		template = template:gsub("{{topic}}", function() return topic end)
+		vim.fn.writefile(vim.split(template, "\n"), expanded_path)
+		M.open_buf(expanded_path)
+		return "opened"
+	end
+
+	M.logger.warning("File not found: " .. expanded_path)
+	return "failed"
 end
+M._open_reference_under_cursor = open_reference_under_cursor
 
 -- Copy commands (delegated to parley.copy module)
 local copy_mod = require("parley.copy")
@@ -4405,200 +4461,40 @@ M.cmd.CopyLocationContent = copy_mod.copy_location_content
 M.cmd.CopyContext = function() copy_mod.copy_context(2, 2) end
 M.cmd.CopyContextWide = function() copy_mod.copy_context(5, 10) end
 
--- Command to extract and open a file referenced with @@ syntax
+-- Open the reference under the cursor, falling back to `gf` (#225). One key
+-- for "go to the thing I am looking at", in chat and markdown buffers alike.
 M.cmd.OpenFileUnderCursor = function()
-	-- Get current buffer and line
 	local buf = vim.api.nvim_get_current_buf()
 	local file_name = vim.api.nvim_buf_get_name(buf)
 	local cursor_pos = vim.api.nvim_win_get_cursor(0)
-	local line_num = cursor_pos[1]
-	local current_line = vim.api.nvim_buf_get_lines(buf, line_num - 1, line_num, false)[1]
+	local current_line = vim.api.nvim_buf_get_lines(buf, cursor_pos[1] - 1, cursor_pos[1], false)[1]
 	local cursor_col = cursor_pos[2]
 
-	-- Check if we're in insert mode
-	local current_mode = vim.api.nvim_get_mode().mode
-	local in_insert_mode = current_mode:match("^i") or current_mode:match("^R")
+	local mode = vim.api.nvim_get_mode().mode
+	local in_insert_mode = (mode:match("^i") or mode:match("^R")) ~= nil
 
-	-- Log the current file name for debugging
-	M.logger.debug("OpenFileUnderCursor called on file: " .. file_name)
-
-	-- Check if it's a markdown file (but not a chat file)
-	if M.is_markdown(buf, file_name) then
-		M.logger.debug("File is recognized as markdown")
-		-- Try to open as a chat reference; return regardless (success or not) since
-		-- the markdown handler owns this case
-		M.open_chat_reference(current_line, cursor_col, in_insert_mode, current_line)
-		return
-	end
-
-	-- If not a markdown file or not a chat reference, check if it's a chat file
-	if M.not_chat(buf, file_name) then
+	local is_chat = M.not_chat(buf, file_name) == nil
+	if not is_chat and not M.is_markdown(buf, file_name) then
 		M.logger.warning("OpenFileUnderCursor command is only available in chat files and markdown files")
 		return
 	end
 
-	-- Handle 🌿: branch reference lines
-	if open_branch_ref(current_line, buf) then
+	local outcome = open_reference_under_cursor(buf, current_line, cursor_col, is_chat)
+
+	if outcome == "none" then
+		-- Nothing here is a parley reference, so hand it to the general
+		-- "go to what's under the cursor" — an ariadne artifact ref if it
+		-- resolves, otherwise native gf. Its destinations are source you went
+		-- to READ, so unlike a chat reference this one lands in normal mode.
+		if in_insert_mode then
+			vim.cmd("stopinsert")
+		end
+		M.cmd.ResolveRefOrGotoFile()
 		return
 	end
 
-	-- Handle inline branch links [🌿:text](file) — check if cursor is within one
-	if try_open_inline_branch_link(current_line, cursor_col, buf) then
-		return
-	end
-
-	-- Process standard @@ file references in chat files
-	local filepath
-
-	-- First check if the line begins with @@
-	if current_line:match("^@@") then
-		filepath = (current_line:match("^@@(.+)@@") or current_line:match("^@@(.+)$")):gsub("^%s*(.-)%s*$", "%1")
-	else
-		-- Use extracted pure function to find closest @@ reference
-		filepath = M._parse_at_reference(current_line, cursor_col)
-
-		if not filepath then
-			M.logger.warning("No file reference (@@ syntax) found on current line")
-			return
-		end
-	end
-
-	-- Expand the path (handle relative paths, ~, etc.)
-	local expanded_path = vim.fn.expand(filepath)
-
-	-- Check if it's a directory or a directory pattern
-	if
-		M.helpers.is_directory(expanded_path)
-		or filepath:match("/$")
-		or filepath:match("/%*%*?/?")
-		or filepath:match("/%*%.%w+$")
-	then
-		-- Open file explorer for the directory
-		-- Try to handle glob patterns by extracting the base directory
-		local base_dir = filepath:gsub("/%*%*?/?.*$", ""):gsub("/%*%.%w+$", "")
-		expanded_path = vim.fn.expand(base_dir)
-
-		if vim.fn.isdirectory(expanded_path) == 0 then
-			M.logger.warning("Directory not found: " .. expanded_path)
-			return
-		end
-
-		M.logger.info("Opening directory: " .. expanded_path)
-
-		-- Get all windows in the current tab
-		local tab_wins = vim.api.nvim_tabpage_list_wins(0)
-
-		-- If we have exactly two splits, open in the other split
-		if #tab_wins == 2 then
-			local current_win = vim.api.nvim_get_current_win()
-			local other_win
-
-			-- Find the other window that's not the current one
-			for _, win in ipairs(tab_wins) do
-				if win ~= current_win then
-					other_win = win
-					break
-				end
-			end
-
-			-- Switch to the other window and open the directory
-			if other_win then
-				M.logger.debug("Opening directory in other split: " .. expanded_path)
-				vim.api.nvim_set_current_win(other_win)
-				vim.cmd("Explore " .. vim.fn.fnameescape(expanded_path))
-
-				-- Restore insert mode if needed
-				if in_insert_mode then
-					vim.schedule(function()
-						vim.cmd("startinsert")
-					end)
-				end
-
-				return
-			end
-		end
-
-		-- Use netrw (built-in file explorer) to view the directory
-		vim.cmd("Explore " .. vim.fn.fnameescape(expanded_path))
-	else
-		-- Handle as a normal file
-		-- Check if file exists
-		if vim.fn.filereadable(expanded_path) == 0 then
-			-- Check if it's a chat file reference (timestamp format)
-			if expanded_path:match("%d%d%d%d%-%d%d%-%d%d%.%d%d%-%d%d%-%d%d%.%d+%.md$") then
-				-- This is a chat file reference that doesn't exist yet - create it
-				M.logger.info("Creating new chat file: " .. expanded_path)
-
-				-- Determine agent info
-				local agent = M.get_agent()
-
-				-- Create parent directories if they don't exist
-				local parent_dir = vim.fn.fnamemodify(expanded_path, ":h")
-				M.helpers.prepare_dir(parent_dir)
-
-				-- Extract topic from the reference line or use default
-				local topic = "New chat"
-				if current_line:match("@@[^:]+:%s*(.+)") then
-					topic = current_line:match("@@[^:]+:%s*(.+)")
-				end
-
-				-- Prepare template
-				local template = M.get_default_template(agent, expanded_path)
-				template = template:gsub("{{topic}}", function() return topic end)
-
-				-- Make sure the file has UTF-8 encoding header
-				vim.fn.writefile(vim.split(template, "\n"), expanded_path)
-
-				-- Open the file
-				M.open_buf(expanded_path)
-				return
-			else
-				M.logger.warning("File not found: " .. expanded_path)
-				return
-			end
-		end
-
-		-- Open the file in a new buffer
-		M.logger.info("Opening file: " .. expanded_path)
-
-		-- Get all windows in the current tab
-		local tab_wins = vim.api.nvim_tabpage_list_wins(0)
-
-		-- If we have exactly two splits, open in the other split
-		if #tab_wins == 2 then
-			local current_win = vim.api.nvim_get_current_win()
-			local other_win
-
-			-- Find the other window that's not the current one
-			for _, win in ipairs(tab_wins) do
-				if win ~= current_win then
-					other_win = win
-					break
-				end
-			end
-
-			-- Switch to the other window and open the file
-			if other_win then
-				M.logger.debug("Opening file in other split: " .. expanded_path)
-				vim.api.nvim_set_current_win(other_win)
-				vim.cmd("edit " .. vim.fn.fnameescape(expanded_path))
-
-				-- Restore insert mode if needed
-				if in_insert_mode then
-					vim.schedule(function()
-						vim.cmd("startinsert")
-					end)
-				end
-
-				return
-			end
-		end
-
-		-- Otherwise open in current window
-		vim.cmd("edit " .. vim.fn.fnameescape(expanded_path))
-	end
-
-	-- Return to insert mode if we were in it before
+	-- A chat reference is somewhere you went to WRITE, so insert is restored.
+	-- Also on "failed", where the cursor has not moved at all.
 	if in_insert_mode then
 		vim.schedule(function()
 			vim.cmd("startinsert")

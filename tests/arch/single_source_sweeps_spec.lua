@@ -132,8 +132,30 @@ describe("arch: single-source sweeps stay swept", function()
             end
         end
         local plan_body = table.concat(table_rows, "\n")
+
+        -- A module's export table is whatever it returns. Reading it from the
+        -- file beats hardcoding `M`, which is what made this guard inert over
+        -- helper.lua's `_H.` idiom.
+        local alias_cache = {}
+        local function alias_for(file)
+            if not file then return nil end
+            if alias_cache[file] ~= nil then return alias_cache[file] or nil end
+            local found = false
+            if vim.fn.filereadable(file) == 1 then
+                for l in io.lines(file) do
+                    local a = l:match("^return ([%w_]+)%s*$")
+                    if a then alias_cache[file] = a found = true break end
+                end
+            end
+            if not found then alias_cache[file] = false end
+            return alias_cache[file] or nil
+        end
+
         local missing = {}
+        local current_file = nil
         for line in diff:gmatch("[^\n]+") do
+            local hdr = line:match("^%+%+%+ b/(.+)$")
+            if hdr then current_file = hdr end
             -- Public FUNCTIONS, in either definition form. Deliberately not
             -- data: `M.AGENT = { … }` is a constant belonging to a module the
             -- tables already name by path, and demanding a row per constant
@@ -141,15 +163,23 @@ describe("arch: single-source sweeps stay swept", function()
             -- already-listed module still needs its row — that is the case the
             -- guard exists for. A bare `fn = function()` is a field in a local
             -- table literal (a picker mapping), not exported surface.
-            local name = line:match("^%+function M%.([%w_]+)%(")
+            -- The module ALIAS, not the literal `M`. helper.lua exports through
+            -- `_H.`, so a guard hardcoded to `M` was inert across that whole
+            -- file — and five of #225's seven new entities live behind `_H.`,
+            -- which is to say the guard was blind exactly where the work was
+            -- (#225 round 4 I2). `alias_for(file)` derives it from the module's
+            -- own `return <X>`, so `_S.` and friends are covered too.
+            local alias = alias_for(current_file) or "M"
+            local esc = vim.pesc(alias)
+            local name = line:match("^%+function " .. esc .. "%.([%w_]+)%(")
             if not name then
-                -- `M.x = <rhs>`: an export, in any of the forms this repo uses.
-                -- Narrowing this to `= function` (the first attempt) dropped the
-                -- 41-site `M._x = local_fn` seam-export idiom — excluding by
-                -- SYNTAX rather than by what the right-hand side actually is.
-                -- Data constants are what should be excluded, and they are
-                -- literals: a table, a string, a number.
-                local n, rhs = line:match("^%+M%.([%w_]+) = (.+)$")
+                -- `<alias>.x = <rhs>`: an export, in any of the forms this repo
+                -- uses. Narrowing this to `= function` (the first attempt)
+                -- dropped the 41-site `M._x = local_fn` seam-export idiom —
+                -- excluding by SYNTAX rather than by what the right-hand side
+                -- actually is. Data constants are what should be excluded, and
+                -- they are literals: a table, a string, a number.
+                local n, rhs = line:match("^%+" .. esc .. "%.([%w_]+) = (.+)$")
                 if n and rhs and not rhs:match('^[{"\'%d]') then
                     name = n
                 end
@@ -179,12 +209,35 @@ describe("arch: single-source sweeps stay swept", function()
             return
         end
         local missing = {}
+        local survived = {}
         for _, doc in ipairs(docs) do
             if doc ~= "" then
                 local body = read(doc)
                 -- table rows only: prose may legitimately discuss removed names
                 for line in body:gmatch("[^\n]+") do
-                    if line:match("^| `") then
+                    -- A `deleted` row names a symbol that by definition no
+                    -- longer exists — that is the whole content of the row.
+                    -- `deleted` is in the writing-plans status legend alongside
+                    -- new/modified, so demanding a definition for it makes the
+                    -- legend unusable. It inverts rather than exempts: skipping
+                    -- outright would let a plan claim a deletion that never
+                    -- happened (#225 review), so the row asserts the symbol is
+                    -- GONE with the same matcher.
+                    local deleted_row = line:match("^| `") and line:match("|%s*deleted%s*|")
+                    if deleted_row then
+                        for name in line:gmatch("`([%w_]+)`") do
+                            if #name > 3 and not name:match("^lua$") then
+                                local hit = vim.fn.systemlist(
+                                    ("grep -rlE -- %s lua/ scripts/ 2>/dev/null"):format(
+                                        vim.fn.shellescape(definition_pattern(name))))
+                                if #hit > 0 then
+                                    survived[#survived + 1] = doc .. ": " .. name
+                                        .. " (still defined in " .. hit[1] .. ")"
+                                end
+                            end
+                        end
+                    end
+                    if line:match("^| `") and not deleted_row then
                         -- A row names either a SYMBOL or a MODULE. A module is
                         -- checked as a file (its row carries the path in another
                         -- cell); a symbol must have a DEFINITION, not a mention.
@@ -219,6 +272,8 @@ describe("arch: single-source sweeps stay swept", function()
         end
         assert.same({}, missing,
             "these are named in a Core-concepts table but exist nowhere in the tree")
+        assert.same({}, survived,
+            "these are marked `deleted` in a Core-concepts table but are still defined")
     end)
 
     it("the definition matcher accepts every real definition form", function()
@@ -637,6 +692,16 @@ describe("arch: traceability.yaml lists every file it claims to map (#214)", fun
         if vim.v.shell_error ~= 0 then
             pending("git diff unavailable")
             return
+        end
+        -- UNTRACKED specs too. `git diff` cannot see them, so a new spec was
+        -- invisible to this guard until it was staged — and it then failed the
+        -- run AFTER the one you checked. That is BR-13, twice, one commit late
+        -- each time (#225). The sibling guard above already carries this exact
+        -- lesson for entities ("comparing against the working tree flags it
+        -- while it is still being written"); it had not been applied here.
+        for _, p in ipairs(vim.fn.systemlist(
+            "git ls-files --others --exclude-standard -- tests/")) do
+            added[#added + 1] = p
         end
         local listed = {}
         for _, p in ipairs(traceability_paths()) do listed[p] = true end

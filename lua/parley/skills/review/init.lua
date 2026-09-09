@@ -739,7 +739,7 @@ end
 -- keybinding registry's job (#214 C1): this function used to read
 -- `cfg.review_shortcut_*.shortcut` and call set_keymap itself, which put it
 -- outside every guarantee the registry provides — `default_keymaps = false`
--- left <M-o>/<M-CR>/<C-g>ve bound on every markdown buffer, a `shortcut = ""`
+-- left <M-s>/<M-CR>/<C-g>ve bound on every markdown buffer, a `shortcut = ""`
 -- disable raised "Invalid (empty) LHS" on each markdown BufEnter, and a key
 -- LIST would have been handed to vim.keymap.set as a table.
 --
@@ -762,11 +762,12 @@ M.registry_callbacks = function(buf)
         review_edit = function()
             M.run_via_invoke(buf, {})
         end,
-        -- <M-o> opens the general SKILL PICKER (review is one of the skills);
+        -- <M-s> opens the general SKILL PICKER (review is one of the skills);
         -- <M-CR> is the DIRECT review trigger — it opens the review-mode menu
         -- (sticky-preselected) and runs a round on submit with the chosen
         -- {mode,instruction}. (#133 — operator: alt+o = skill selector,
-        -- alt+return = review.)
+        -- alt+return = review. #225 moved the picker to <M-s>; <M-o> now opens
+        -- the link under the cursor, in chat and markdown alike.)
         review_menu = function()
             require("parley.skill_picker").open()
         end,

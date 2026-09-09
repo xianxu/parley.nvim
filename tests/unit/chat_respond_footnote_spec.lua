@@ -1,5 +1,18 @@
+-- side-quest (#225): the only spec in tests/unit that called setup() without a
+-- chat_dir/state_dir, so it prepared the REAL XDG dirs and shared them with
+-- every other spec the 8-way runner had in flight. It failed once during #225's
+-- round-3 verification and passed alone — a flake in the suite whose exit code
+-- the close gate trusts. Hermetic now, like its neighbours.
+local tmp_dir = vim.fn.tempname() .. "-parley-footnote"
+vim.fn.mkdir(tmp_dir, "p")
+
 local parley = require("parley")
-parley.setup({ providers = {}, api_keys = {} })
+parley.setup({
+    chat_dir = tmp_dir,
+    state_dir = tmp_dir .. "/state",
+    providers = {},
+    api_keys = {},
+})
 
 local chat_respond = require("parley.chat_respond")
 

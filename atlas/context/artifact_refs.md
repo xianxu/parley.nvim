@@ -41,6 +41,13 @@ open/pick the result, highlight refs.
   handler notifies). Bound in chat + markdown `parley_buffer` scope; disable/remap
   via `config.chat_shortcut_resolve_ref_gf`. (The dedicated `<C-g>r` binding was
   removed once smart-`gf` proved sufficient — operator call.)
+- **Also the tail of `<M-o>`** (#225): `OpenFileUnderCursor` tries the parley
+  reference forms first and, when the cursor is on none of them, calls
+  `ResolveRefOrGotoFile`. So `<M-o>` is "go to the thing under my cursor"
+  whatever kind of thing it is, and this module is its last resort. It is
+  reached only on the `"none"` outcome — a parley reference that was recognised
+  and could not be opened stops with its own diagnostic rather than degrading
+  into a `gf` failure. See `context/file_references.md`.
 - **Picker:** a family ref (issue + plan + reviews) opens the house `float_picker`;
   a single result opens directly.
 - **Cross-repo:** `sdlc resolve` resolves `pair#84` etc. itself; parley only sets

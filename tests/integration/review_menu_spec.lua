@@ -90,11 +90,11 @@ describe("review_menu", function()
         assert.are.equal("free-form", got.mode)
     end)
 
-    it("review.setup_keymaps binds <M-o> (skill picker) + <M-CR> (review menu) on a markdown doc", function()
+    it("review.setup_keymaps binds <M-s> (skill picker) + <M-CR> (review menu) on a markdown doc", function()
         -- parley.setup() isn't run in the unit env, so inject the shortcut config
         -- the binding loop reads (the defaults themselves live in config.lua).
         local p = require("parley")
-        p.config.review_shortcut_menu = { modes = { "n" }, shortcut = "<M-o>" }
+        p.config.review_shortcut_menu = { modes = { "n" }, shortcut = "<M-s>" }
         p.config.review_shortcut_next = { modes = { "n", "i" }, shortcut = "<M-CR>" }
         local b = vim.api.nvim_create_buf(false, true)
         vim.api.nvim_buf_set_name(b, "/tmp/doc-m4.md")
@@ -107,7 +107,7 @@ describe("review_menu", function()
             end
             return false
         end
-        assert.is_true(has_desc("n", "skill picker"), "<M-o> → skill picker (normal)")
+        assert.is_true(has_desc("n", "skill picker"), "<M-s> → skill picker (normal)")
         assert.is_true(has_desc("n", "open mode menu"), "<M-CR> → review menu (normal)")
         assert.is_true(has_desc("i", "open mode menu"), "<M-CR> → review menu (insert)")
         vim.api.nvim_buf_delete(b, { force = true })

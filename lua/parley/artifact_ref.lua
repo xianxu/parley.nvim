@@ -186,6 +186,11 @@ end
 -- opts.kind (optional): resolve kind, e.g. "project" — the always-cross-repo
 -- project class (ariadne#171 M4): jumps to the project record(s) referencing
 -- the issue under the cursor, wherever in the fleet they live.
+-- opts.runner (optional): the `runner(argv, on_complete)` seam that run_resolve
+-- already documents, threaded through so a test can drive this entry point with
+-- a fake `sdlc` instead of replacing run_resolve wholesale (#225 BR-3). Without
+-- it, production and test flows did not share a boundary — the seam existed but
+-- no caller could reach it, which is the shape ARCH-MOCK asks you to avoid.
 -- Delegated to by parley init's M.cmd.ResolveRef* commands.
 function M.goto_ref_at_cursor(opts)
     opts = opts or {}
@@ -225,7 +230,7 @@ function M.goto_ref_at_cursor(opts)
                 end,
             })
         end)
-    end)
+    end, opts.runner)
 end
 
 return M

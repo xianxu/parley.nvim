@@ -323,7 +323,7 @@ describe("keybinding registry vs. reality (#214 M2)", function()
 end)
 
 -- #214 C1: the same agreement, on the buffer type where the shadow installs
--- lived. `default_keymaps = false` left <C-g>ve/<M-o>/<M-CR> bound here, and a
+-- lived. `default_keymaps = false` left <C-g>ve/<M-s>/<M-CR> bound here, and a
 -- `shortcut = ""` disable raised on every BufEnter, because the review skill
 -- installed from raw config instead of through resolve_keys.
 describe("markdown buffers obey the same registry contract (#214 C1)", function()
@@ -362,12 +362,16 @@ describe("markdown buffers obey the same registry contract (#214 C1)", function(
         assert.same({}, missing)
     end)
 
+    -- <M-o> is in this list because the collision #225 fixed lived at the
+    -- BINDING level, not the command level: `open_file` is parley_buffer scope
+    -- and must be live on a markdown buffer too, which is exactly what made
+    -- the old <M-o> skill-picker binding a conflict rather than a coexistence.
     it("the review keys are among them", function()
         setup()
         local buf, path = prepped_markdown()
         local live = parley_maps(buf)
         cleanup(buf, path)
-        for _, k in ipairs({ "<C-g>ve", "<M-o>", "<M-CR>" }) do
+        for _, k in ipairs({ "<C-g>ve", "<M-s>", "<M-CR>", "<M-o>" }) do
             assert.is_truthy(live[canon(k)], k .. " is not mapped on a markdown buffer")
         end
     end)
@@ -394,17 +398,21 @@ describe("markdown buffers obey the same registry contract (#214 C1)", function(
         cleanup(buf, path)
         assert.is_true(ok, "markdown keymap setup raised: " .. tostring(err))
         assert.is_nil(live[canon("<C-g>ve")], "the disabled key is still bound")
-        assert.is_truthy(live[canon("<M-o>")], "disabling one key took out its neighbours")
+        assert.is_truthy(live[canon("<M-s>")], "disabling one key took out its neighbours")
     end)
 
     -- Journal sidecars must never get review keys (#133 M3) — that rule used to
     -- live in the skill's own install path, so moving the install has to keep it.
+    -- REVIEW keys, specifically. #225 put <M-o> on `open_file`, which is
+    -- parley_buffer scope and belongs on a sidecar — following a link out of
+    -- one is not a review action. Checking <M-o> here would assert the wrong
+    -- rule; the skill picker's new key <M-s> is the one that must stay away.
     it("a journal sidecar still gets no review keys", function()
         setup()
         local buf, path = prepped_markdown(".md.parley-journal")
         local live = parley_maps(buf)
         cleanup(buf, path)
-        for _, k in ipairs({ "<C-g>ve", "<M-o>" }) do
+        for _, k in ipairs({ "<C-g>ve", "<M-s>" }) do
             assert.is_nil(live[canon(k)], k .. " leaked onto a journal sidecar")
         end
     end)

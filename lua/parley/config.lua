@@ -377,11 +377,12 @@ local config = {
 	chat_shortcut_follow_cursor = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>l" },
 	chat_shortcut_search = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>n" },
 	-- Follow a link under the cursor: a 🌿: reference to a sub-chat, an inline
-	-- [🌿:…](file), an @@path@@ reference. <M-g> joins the alt family (quote /
-	-- respond / branch / prune / outline); <C-g>o stays a legacy alias so muscle
-	-- memory keeps working. Overriding `shortcut` REPLACES the list — name both
-	-- if you want both.
-	chat_shortcut_open_file = { modes = { "n", "i" }, shortcut = { "<M-g>", "<C-g>o" } },
+	-- [🌿:…](file), an @@path@@ reference, a src: link — and anything else falls
+	-- through to `gf` (#225), so one key means "go to the thing under my
+	-- cursor". <M-o> joins the alt family (quote / respond / branch / prune /
+	-- outline); <C-g>o stays a legacy alias so muscle memory keeps working.
+	-- Overriding `shortcut` REPLACES the list — name both if you want both.
+	chat_shortcut_open_file = { modes = { "n", "i" }, shortcut = { "<M-o>", "<C-g>o" } },
 	-- Outline picker. Ships BOTH keys: <M-t> is the alt-family member users
 	-- actually reach for, <C-g>t the prefix-surface alias. Overriding `shortcut`
 	-- replaces the whole list (it does not merge), so a single-key override here
@@ -455,11 +456,12 @@ local config = {
 	chat_shortcut_reject_drill_in = { modes = { "n" }, shortcut = "<M-r>" },
 	review_shortcut_edit = { modes = { "n" }, shortcut = "<C-g>ve" },
 	review_shortcut_finder = { modes = { "n", "i" }, shortcut = "<C-g>vf" },
-	-- Review bindings (#133): <M-o> opens the general skill picker (review is one
+	-- Review bindings (#133): <M-s> opens the general skill picker (review is one
 	-- of the skills); <M-CR> is the direct review trigger — it opens the review-mode
 	-- menu (sticky-preselected). (Free in markdown docs — chat-respond <M-CR> is
 	-- chat-buffer-only.) `review_shortcut_menu` is the skill-picker alias here.
-	review_shortcut_menu = { modes = { "n" }, shortcut = "<M-o>" },
+	-- #225: the picker was on <M-o> until open_file took it; s = skills.
+	review_shortcut_menu = { modes = { "n" }, shortcut = "<M-s>" },
 	review_shortcut_next = { modes = { "n", "i" }, shortcut = "<M-CR>" },
 	-- Agent for document review. NIL by default (#215): it used to name
 	-- "Claude-Sonnet", which is absent from the shipped roster — and since

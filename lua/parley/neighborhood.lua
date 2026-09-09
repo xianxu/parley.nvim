@@ -192,7 +192,11 @@ function M.completion_candidates(policy, base)
     local items = {}
     -- Glob echoes the pattern prefix verbatim (".." survives textually), so
     -- stripping "<root>/" yields labels in the exact form the user typed.
-    for _, match in ipairs(vim.fn.glob(root .. "/" .. (base or "") .. "*", false, true)) do
+    -- safe_glob: `base` is the fragment typed in a chat buffer, so it carries
+    -- buffer provenance even though a human usually types it (#225 C2).
+    local matches = require("parley.helper").safe_glob(
+        root .. "/" .. (base or "") .. "*", false, true) or {}
+    for _, match in ipairs(matches) do
         local label = match:sub(#root + 2)
         if label ~= "" then
             if vim.fn.isdirectory(match) == 1 then

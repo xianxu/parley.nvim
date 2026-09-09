@@ -865,11 +865,15 @@ describe("malformed shortcuts are reported once, at setup (#214 BR-49)", functio
     end)
 end)
 
--- #214: <M-g> follows a link — a 🌿: reference to a sub-chat, an inline
+-- #214: open_file follows a link — a 🌿: reference to a sub-chat, an inline
 -- [🌿:…](file), an @@path@@ — joining the alt family that already means "act on
 -- this transcript". Same migration shape as M1's <M-p>/<M-i>: the alt spelling
 -- leads because the help float renders keys[1], and the <C-g> spelling stays a
 -- legacy alias rather than being revoked.
+--
+-- #225 moved the alt spelling from <M-g> to <M-o>. <M-g> was chosen because it
+-- was free and in the right family, which is necessary and not sufficient: it
+-- is awkward to press, and it lasted a few hours of real use.
 describe("open_file joins the alt family (#214)", function()
     local parley = require("parley")
     local reg = require("parley.keybinding_registry")
@@ -880,32 +884,84 @@ describe("open_file joins the alt family (#214)", function()
         for _, e in ipairs(reg.entries) do if e.id == id then return e end end
     end
 
-    it("resolves <M-g> first, then the legacy <C-g>o", function()
-        assert.same({ "<M-g>", "<C-g>o" }, reg.resolve_keys(entry("open_file"), parley.config))
+    it("resolves <M-o> first, then the legacy <C-g>o", function()
+        assert.same({ "<M-o>", "<C-g>o" }, reg.resolve_keys(entry("open_file"), parley.config))
     end)
 
     it("config.lua ships both, so a registry-side edit cannot revoke one", function()
         local shipped = dofile("lua/parley/config.lua")
-        assert.same({ "<M-g>", "<C-g>o" }, shipped.chat_shortcut_open_file.shortcut)
+        assert.same({ "<M-o>", "<C-g>o" }, shipped.chat_shortcut_open_file.shortcut)
     end)
 
-    it("the help float leads with <M-g> and still names the alias", function()
+    it("the help float leads with <M-o> and still names the alias", function()
         local shown
         for _, l in ipairs(parley._keybinding_help_lines("chat")) do
             if l:find("Open file reference", 1, true) then shown = l end
         end
         assert.is_truthy(shown, "open_file missing from the chat help")
-        assert.are.equal("<M-g>", shown:match("^%s*(%S+)"))
+        assert.are.equal("<M-o>", shown:match("^%s*(%S+)"))
         assert.is_truthy(shown:find("<C-g>o", 1, true), "the legacy alias is not advertised")
     end)
 
-    it("<M-g> collides with nothing else", function()
+    -- #225 PQ-4: this was hardcoded to <M-g> and so could not catch the NEXT
+    -- collision, which is the whole job. It went red on exactly the collision
+    -- #225 creates — open_file(parley_buffer) vs review_menu(markdown) on
+    -- <M-o> — which is why the skill picker moved to <M-s>.
+    --
+    -- Two entries may share a key when their scopes are DISJOINT — `<M-CR>` is
+    -- respond/define in a chat buffer and the review menu in a markdown one,
+    -- which is deliberate (#133) and cannot conflict at runtime because a
+    -- buffer is never both. What must not happen is two owners whose scopes
+    -- OVERLAP: one being an ancestor of the other means both bindings are live
+    -- in the same buffer, and the later registration silently wins.
+    --
+    -- The first version of this asserted "no key has two owners" while its own
+    -- comment said "unless the scopes are disjoint". It failed on `<M-CR>`
+    -- immediately — the assertion, not the code, was wrong.
+    local function scopes_overlap(a, b)
+        if a == b then return true end
+        local function is_ancestor(anc, s)
+            local cur = reg.scope_parent[s]
+            while cur do
+                if cur == anc then return true end
+                cur = reg.scope_parent[cur]
+            end
+            return false
+        end
+        return is_ancestor(a, b) or is_ancestor(b, a)
+    end
+
+    it("no alt key is live twice in the same buffer", function()
         local owners = {}
         for _, e in ipairs(reg.entries) do
             for _, k in ipairs(reg.resolve_keys(e, parley.config) or {}) do
-                if k == "<M-g>" then owners[#owners + 1] = e.id end
+                if k:match("^<[Mm]%-") then
+                    owners[k] = owners[k] or {}
+                    table.insert(owners[k], e)
+                end
             end
         end
-        assert.same({ "open_file" }, owners)
+        local collisions = {}
+        for key, entries in pairs(owners) do
+            for i = 1, #entries do
+                for j = i + 1, #entries do
+                    if scopes_overlap(entries[i].scope, entries[j].scope) then
+                        collisions[#collisions + 1] = ("%s -> %s(%s) + %s(%s)"):format(
+                            key, entries[i].id, entries[i].scope,
+                            entries[j].id, entries[j].scope)
+                    end
+                end
+            end
+        end
+        table.sort(collisions)
+        assert.same({}, collisions)
+    end)
+
+    it("and the disjoint case is genuinely allowed, not accidentally passing", function()
+        -- <M-CR> in two disjoint scopes must NOT be reported…
+        assert.is_false(scopes_overlap("chat", "markdown"))
+        -- …while a parent/child pair must be, or the guard proves nothing.
+        assert.is_true(scopes_overlap("parley_buffer", "chat"))
+        assert.is_true(scopes_overlap("markdown", "note"))
     end)
 end)
