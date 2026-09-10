@@ -138,6 +138,32 @@ local model_overrides = {
             },
         },
     },
+    -- Claude models: 4096 is far too low, and the failure is silent (#228).
+    --
+    -- max_tokens caps OUTPUT tokens for one response, and on Claude that
+    -- INCLUDES thinking tokens. A prompt that asks the model to reason before
+    -- answering can spend the entire budget on a thinking block and emit no
+    -- text at all — the response then carries stop_reason "max_tokens" with
+    -- zero content, which parley reported as "response is empty: body_bytes=18152".
+    -- Deterministic per prompt, which is why some chats failed every retry.
+    --
+    -- 64000 is Anthropic's documented default for STREAMING requests, which is
+    -- what parley makes (128000 is the ceiling on current Claude models, but
+    -- needs streaming to avoid HTTP timeouts — we already stream, the lower
+    -- number is the recommended default rather than a limit we are near).
+    --
+    -- Keyed on the MODEL, not the provider: the same claude-sonnet-5 arrives
+    -- via `anthropic` and via `cliproxyapi`, while cliproxyapi also proxies
+    -- gpt-* and ollama serves small local models — raising a provider default
+    -- would push a cap those cannot honour.
+    {
+        pattern = "^claude%-",
+        override = {
+            params = {
+                max_tokens = { default = 64000 },
+            },
+        },
+    },
     -- Claude Sonnet 4.6+: temperature and top_p are mutually exclusive.
     {
         pattern = "^claude%-sonnet%-4%-6",

@@ -163,6 +163,43 @@ D._extract_sse_content = function(line, provider)
 	return adapter.parse_sse_content(line)
 end
 
+--- Say WHY a response carried no assistant text. PURE.
+---
+--- "response is empty: body_bytes=18152" is self-contradictory, and it has now
+--- misled twice for two different causes (#197 credential failures, #228 a
+--- token cap). The bytes arrived; what was missing was text. The three cases
+--- are distinguishable and only one of them is a transport problem:
+---
+---   * nothing came back at all — the transport is the story;
+---   * bytes arrived and the model stopped at its OUTPUT CAP before emitting
+---     any text. On Claude that cap counts THINKING tokens, so a prompt that
+---     asks the model to reason first can spend the whole budget on a thinking
+---     block and produce no answer. Deterministic per prompt, which is why some
+---     chats failed on every retry;
+---   * bytes arrived, the model finished normally, and still emitted no text —
+---     the genuinely surprising case, and the only one worth a bug report.
+---
+--- `stop_reason` was already extracted (see finish_stdout) and then thrown
+--- away by the old message: parley knew the answer and printed a contradiction.
+---
+---@param qt table # the query record
+---@return string
+D._empty_response_reason = function(qt)
+    local bytes = #(qt.raw_response or "")
+    if bytes == 0 then
+        return "returned no response at all (the request produced zero bytes)"
+    end
+    if qt.stop_reason == "max_tokens" then
+        return ("stopped at its output-token cap before writing any answer"
+            .. " (stop_reason=max_tokens, body_bytes=%d)."
+            .. " On Claude the cap counts thinking tokens, so a prompt that asks"
+            .. " the model to reason first can spend the whole budget reasoning."
+            .. " Raise max_tokens for this agent."):format(bytes)
+    end
+    return ("returned no assistant text (body_bytes=%d, stop_reason=%s)")
+        :format(bytes, qt.stop_reason or "unknown")
+end
+
 -- Extract progress/status metadata from a single SSE line.
 -- Returns nil if no progress event is available for the provider/line.
 ---@param line string
@@ -524,7 +561,7 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 			-- Only a request that SUCCEEDED can meaningfully be called empty;
 			-- on a failure the diagnosis carries the reason instead (#197).
 			if qt.empty_response then
-				logger.error(provider .. " response is empty: body_bytes=" .. #qt.raw_response)
+				logger.error(provider .. " " .. D._empty_response_reason(qt))
 			end
 			legacy_complete(qid, qt)
 		end

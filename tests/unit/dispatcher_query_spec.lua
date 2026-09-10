@@ -1079,10 +1079,15 @@ describe("dispatcher.query internals", function()
             logger.error = function(m) table.insert(logged, tostring(m)) end
             fail_query('{"error":{"message":"auth_unavailable"}}', "503")
             logger.error = original_error
-            assert.is_falsy(table.concat(logged, "\n"):find("response is empty", 1, true))
+            -- #228 changed the wording ("response is empty" was itself the
+            -- defect — it described an 18 KB body). Matching the OLD literal
+            -- here would now pass vacuously, since that string no longer exists
+            -- anywhere; match what the diagnostic actually says instead.
+            assert.is_falsy(table.concat(logged, "\n"):find("no response at all", 1, true))
+            assert.is_falsy(table.concat(logged, "\n"):find("no assistant text", 1, true))
         end)
 
-        it("J7d: 'response is empty' IS still emitted on a successful empty body", function()
+        it("J7d: the empty-response diagnostic IS still emitted on a successful empty body", function()
             local logged = {}
             local original_error = logger.error
             logger.error = function(m) table.insert(logged, tostring(m)) end
@@ -1091,7 +1096,12 @@ describe("dispatcher.query internals", function()
             captured_out_reader(nil, nil)
             captured_terminal(0, 0, "", status_stderr("200"), nil)
             logger.error = original_error
-            assert.is_truthy(table.concat(logged, "\n"):find("response is empty", 1, true))
+            -- The #197 property is unchanged: a SUCCESSFUL request that carried
+            -- no assistant text still reports. Only the wording moved (#228) —
+            -- this body really is zero bytes, so it says so rather than
+            -- pairing the word "empty" with a byte count.
+            local out = table.concat(logged, "\n")
+            assert.is_truthy(out:find("no response at all", 1, true), out)
         end)
 
         it("J4b: the retry re-issues from a payload snapshot, not the consumed table", function()

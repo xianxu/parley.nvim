@@ -272,3 +272,38 @@ describe("validate_agent", function()
         assert.equals(0, #result.warnings)
     end)
 end)
+
+-- #228: 4096 output tokens is far too low for Claude, and the failure is
+-- silent. max_tokens caps OUTPUT for one response and on Claude that INCLUDES
+-- thinking, so a prompt that asks the model to reason first can spend the whole
+-- budget on a thinking block and emit no text — stop_reason "max_tokens" with
+-- zero content, which parley reported as "response is empty: body_bytes=18152".
+describe("max_tokens default for Claude models (#228)", function()
+    local pp = require("parley.provider_params")
+
+    local function cap(provider, model)
+        local spec = (pp.get_schema(provider, model).params or {}).max_tokens
+        return spec and spec.default
+    end
+
+    it("is 64000 for Claude, on every transport that carries it", function()
+        -- Keyed on the MODEL, not the provider: the same model arrives both
+        -- directly and through the proxy, and the cap belongs to the model.
+        assert.equals(64000, cap("anthropic", "claude-sonnet-5"))
+        assert.equals(64000, cap("cliproxyapi", "claude-sonnet-5"))
+        assert.equals(64000, cap("anthropic", "claude-opus-5"))
+    end)
+
+    it("leaves non-Claude models alone, including behind the same proxy", function()
+        -- cliproxyapi also proxies gpt-*; ollama serves small local models.
+        -- Raising a PROVIDER default would push a cap these cannot honour.
+        assert.equals(4096, cap("cliproxyapi", "gpt-5.6"))
+        assert.equals(4096, cap("ollama", "llama3"))
+        assert.equals(8192, cap("googleai", "gemini-2.5-pro"))
+    end)
+
+    it("does not disturb the gpt-5 rename to max_completion_tokens", function()
+        local schema = pp.get_schema("openai", "gpt-5.6")
+        assert.equals("max_completion_tokens", schema.params.max_tokens.api_name)
+    end)
+end)
