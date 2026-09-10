@@ -1231,6 +1231,22 @@ describe("dispatcher.query internals", function()
             assert.is_nil(out:match("Raise max_tokens"), out)
         end)
 
+        it("J7k: an in-band error after HTTP 200 is surfaced", function()
+            -- #228 BR-7 residue: a mid-stream error event carries NO stop
+            -- reason, so it arrives as nil — which _is_normal_finish treats as
+            -- normal, correctly, since every ordinary non-streaming shape also
+            -- has none. HTTP said 200. The body is the only evidence, and
+            -- without reading it the stream just ends: partial text, no
+            -- diagnosis, nothing in the log.
+            local body = table.concat(vim.fn.readfile(
+                "tests/fixtures/anthropic_inband_error.txt"), "\n") .. "\n"
+            local out, qt = drive("anthropic", "claude-sonnet-5", body)
+            assert.is_truthy(qt.response:match("Starting the answer"), "no text arrived")
+            assert.is_nil(qt.stop_reason, "fixture should carry no stop reason")
+            assert.is_truthy(out:match("TRUNCATED"), "in-band error ended silently: " .. out)
+            assert.is_truthy(out:match("Overloaded"), "the provider's own message is lost: " .. out)
+        end)
+
         it("J4b: the retry re-issues from a payload snapshot, not the consumed table", function()
             -- format_headers consumes payload fields (cliproxyapi nils
             -- _parley_route; googleai nils model). Sharing one table across

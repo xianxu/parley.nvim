@@ -207,6 +207,34 @@ D._is_normal_finish = function(stop_reason)
         or r == "tool_calls" or r == "function_call"
 end
 
+--- An error delivered IN-BAND, after the transport already said 200. PURE.
+---
+--- The gap `_is_normal_finish` cannot close: a mid-stream error event carries
+--- no stop reason at all, so it arrives as `nil` — which that predicate treats
+--- as normal, correctly, since every ordinary non-streaming shape also has no
+--- reason. The body itself is the only evidence (#228 BR-7).
+---
+--- HTTP said 200 and the terminal closure believes it. Without this the stream
+--- simply ends: partial text, no diagnosis, nothing in the log.
+---
+---@param raw string|nil
+---@return string|nil # the provider's message, when the body carries an error
+D._inband_error = function(raw)
+    if type(raw) ~= "string" then
+        return nil
+    end
+    -- anthropic: `event: error` / {"type":"error","error":{"message":...}}
+    -- openai + compatible: a bare {"error":{"message":...}} frame
+    local message = raw:match('"error"%s*:%s*{[^}]-"message"%s*:%s*"([^"]+)"')
+    if message then
+        return message
+    end
+    if raw:match('"type"%s*:%s*"error"') then
+        return "provider sent an error event with no message"
+    end
+    return nil
+end
+
 --- Did generation stop because it hit the OUTPUT-TOKEN CAP? PURE.
 ---
 --- One predicate, because three providers spell it three ways and a diagnosis
@@ -633,6 +661,12 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 			-- on a failure the diagnosis carries the reason instead (#197).
 			if qt.empty_response then
 				logger.error(provider .. " " .. D._empty_response_reason(qt))
+			elseif D._inband_error(qt.raw_response) then
+				-- HTTP 200, and the failure is inside the body. Neither the
+				-- status nor the stop reason can see it (#228 BR-7).
+				logger.warning(("%s answer is TRUNCATED: the provider sent an"
+					.. " error mid-stream after HTTP 200 — %s")
+					:format(provider, D._inband_error(qt.raw_response)))
 			elseif not D._is_normal_finish(qt.stop_reason) then
 				-- The OTHER half of the reported symptom (#228 BR-2), widened to
 				-- the class (BR-7): ANY abnormal ending after some text has
