@@ -29,10 +29,6 @@ local function extract_date(name)
 	return nil
 end
 
-local function resolve_chat_path(path, base_dir)
-	return _parley.resolve_chat_path(path, base_dir)
-end
-
 local function get_parse_config()
 	local cfg = _parley.config or {}
 	return {
@@ -148,7 +144,7 @@ local function find_tree_root(file_path, depth)
 	end
 
 	local parent_dir = vim.fn.fnamemodify(abs_path, ":h")
-	local parent_abs = resolve_chat_path(info.parsed.parent_link.path, parent_dir)
+	local parent_abs = _parley.resolve_chat_path(info.parsed.parent_link.path, parent_dir)
 	if vim.fn.filereadable(parent_abs) == 0 then
 		return abs_path
 	end
@@ -177,7 +173,7 @@ local function collect_tree(file_path, visited)
 	local result = { info }
 	local file_dir = vim.fn.fnamemodify(abs_path, ":h")
 	for _, branch in ipairs(info.parsed.branches) do
-		local child_abs = resolve_chat_path(branch.path, file_dir)
+		local child_abs = _parley.resolve_chat_path(branch.path, file_dir)
 		local child_infos = collect_tree(child_abs, visited)
 		for _, child_info in ipairs(child_infos) do
 			table.insert(result, child_info)
@@ -253,7 +249,7 @@ end
 --- @return table processed_lines, table placeholders (html only; key->html)
 local function process_branch_lines(lines, parsed, format, link_map, file_dir, branch_prefix, resolve_fn)
 	branch_prefix = branch_prefix or "🌿:"
-	resolve_fn = resolve_fn or resolve_chat_path
+	resolve_fn = resolve_fn or _parley.resolve_chat_path
 	local processed = {}
 	local placeholders = {}
 	local placeholder_count = 0
@@ -700,7 +696,7 @@ local function write_html_file(info, export_dir, link_map)
 	local file_dir = vim.fn.fnamemodify(info.abs_path, ":h")
 	local branch_prefix = (_parley.config and _parley.config.chat_branch_prefix) or "🌿:"
 	local processed_lines, placeholders =
-		process_branch_lines(info.lines, info.parsed, "html", link_map, file_dir, branch_prefix, resolve_chat_path)
+		process_branch_lines(info.lines, info.parsed, "html", link_map, file_dir, branch_prefix, _parley.resolve_chat_path)
 
 	local content = table.concat(processed_lines, "\n")
 	content = content:gsub("💬:", "## Question\n\n")
@@ -762,7 +758,7 @@ local function write_markdown_file(info, export_dir, link_map)
 	end
 
 	local branch_prefix = (_parley.config and _parley.config.chat_branch_prefix) or "🌿:"
-	local processed_lines = process_branch_lines(body_lines, info.parsed, "markdown", link_map, file_dir, branch_prefix, resolve_chat_path)
+	local processed_lines = process_branch_lines(body_lines, info.parsed, "markdown", link_map, file_dir, branch_prefix, _parley.resolve_chat_path)
 	local content = table.concat(processed_lines, "\n")
 	content = content:gsub("💬:", "## Question\n\n")
 

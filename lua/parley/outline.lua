@@ -201,14 +201,6 @@ end
 -- Tree-aware outline: recursively build outline items across 🌿: linked files
 --------------------------------------------------------------------------------
 
--- Resolve a path that may be absolute, ~-prefixed, or relative to base_dir.
--- #225 C3: this was byte-identical to chat_respond's copy, and the round that
--- guarded that one missed this one — a transcript branch path still reached a
--- shell here, driven from <M-t>. One implementation now.
-local function resolve_path(path, base_dir)
-  return require("parley.helper").resolve_relative_path(path, base_dir)
-end
-
 -- Walk parent_link chain to find the tree root file path.
 -- Returns absolute path of root.
 local function find_tree_root(file_path, config, depth)
@@ -227,7 +219,12 @@ local function find_tree_root(file_path, config, depth)
   if not parsed.parent_link then return abs_path end
 
   local parent_dir = vim.fn.fnamemodify(abs_path, ":h")
-  local parent_abs = resolve_path(parsed.parent_link.path, parent_dir)
+  -- THE resolver (#224). #225 C3 merged this module's private resolver with
+  -- chat_respond's byte-identical copy — correctly by ARCH-DRY, and onto the
+  -- NAIVE one. A renamed parent then made find_tree_root return the CHILD as
+  -- tree root, so <M-t> never reached the parent. A DRY consolidation has to
+  -- pick the more-correct implementation as the survivor.
+  local parent_abs = require("parley").resolve_chat_path(parsed.parent_link.path, parent_dir)
   if vim.fn.filereadable(parent_abs) == 0 then return abs_path end
 
   return find_tree_root(parent_abs, config, depth + 1)
@@ -268,13 +265,14 @@ local function build_file_outline_items(file_path, config, depth)
     local branch = branch_at_line[i]
 
     if branch then
+      -- Resolved ONCE. Under prefix identity each resolve is a glob per chat
+      -- root, so the old shape paid double on every untopiced branch — on a
+      -- keystroke path (ARCH-CONSTRAINTS, ARCH-DRY).
+      local child_abs = require("parley").resolve_chat_path(branch.path, file_dir)
       local topic = branch.topic
       if topic == "" then
-        local branch_abs = resolve_path(branch.path, file_dir)
-        local parley = require("parley")
-        topic = parley.get_chat_topic(branch_abs) or branch.path
+        topic = require("parley").get_chat_topic(child_abs) or branch.path
       end
-      local child_abs = resolve_path(branch.path, file_dir)
       local branch_indent = branch.inline and (indent .. "    ") or (indent .. "  ")
       table.insert(items, {
         display = branch_indent .. "🌿 " .. topic,
@@ -309,6 +307,11 @@ end
 -- Build tree outline with expand/collapse state.
 -- expanded_set: table of abs_path -> true for files whose children should be shown
 -- Returns flat item list with proper interleaving and indentation.
+-- Test seam (#224): the UPWARD walk. `_build_tree_outline_items` builds
+-- downward from the path it is handed, so a test that drives it can never see
+-- a broken parent lookup — which is how the <M-t> claim shipped unbacked.
+M._find_tree_root = find_tree_root
+
 function M._build_tree_outline_items(root_path, config, expanded_set, depth, visited)
   depth = depth or 0
   visited = visited or {}
