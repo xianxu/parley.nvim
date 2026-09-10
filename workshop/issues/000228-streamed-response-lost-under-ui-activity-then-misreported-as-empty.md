@@ -108,6 +108,54 @@ than to fix anything.
 So the message has now misreported at least twice, for two different underlying
 causes. That is a signal the message itself is the defect, not only its callers.
 
+## Revisions
+
+### 2026-09-09 — the central hypothesis is wrong, and the issue is two defects
+
+The Problem section reasons that the four early returns in the `schedule_wrap`'d
+handler drop chunks, and that dropped chunks explain both the truncation *and*
+the "stream accumulated zero content". **The second half does not hold**, and
+the code says so plainly:
+
+```lua
+-- dispatcher.lua:291-295, inside process_line — the libuv stdout callback,
+-- NOT scheduled, NOT deferred
+local content = D._extract_sse_content(line, qt.provider)
+if content and type(content) == "string" and content ~= "" then
+    qt.response = qt.response .. content   -- accumulation happens HERE
+    handler(qid, content)                  -- display is what gets deferred
+end
+```
+
+`qt.raw_response` (`:369`) and `qt.response` (`:293`) both accumulate
+synchronously on the libuv callback. Only `handler` is `vim.schedule_wrap`'d
+(`:635`). So the guards at `:637-656` can discard a **display** chunk; they
+cannot make `qt.response` empty, because it was already appended one line
+earlier and on a different call stack.
+
+That splits #228 into two defects with different causes:
+
+- **A — "empty" with 18 KB of body.** `qt.response == ""` means
+  `parse_sse_content` returned nothing for *every* line of the body. That is a
+  shape/parsing failure, and the UI-activity correlation does not explain it.
+  Cause still unknown; the raw body is the evidence and we do not have it yet.
+- **B — truncation, and the UI-activity correlation.** A dropped display chunk
+  leaves the *buffer* short of `qt.response`. If nothing reconciles the buffer
+  against the accumulated response at end of stream, the transcript is
+  permanently missing text the model actually sent — the same characters are in
+  `qt.response` and absent from the file. That is the serious half.
+
+**What this changes about the plan.** Step 1 (instrument the guards) still comes
+first, but it now measures **B only** — and its value is higher than the Spec
+credited, because a dropped display chunk is silent *and* the accumulated
+response proves what was lost. **A needs the raw body**, which the Spec already
+asks for as a fixture; without it, the salvage rewrite is a guess about a shape
+we have not seen.
+
+The Spec flagged its own hypothesis as unmeasured (*"This is a hypothesis, not a
+measured finding"*). It was right to, and reading the accumulation path was
+enough to falsify half of it before writing any code.
+
 ## Spec
 
 **1. Never drop a chunk silently.** Every early return in the scheduled handler
