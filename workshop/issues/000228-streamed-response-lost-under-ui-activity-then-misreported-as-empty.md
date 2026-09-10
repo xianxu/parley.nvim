@@ -234,18 +234,35 @@ chosen here, because the measurement should pick.
 
 ## Done when
 
-- A response that streams while the operator scrolls continuously arrives
-  **complete** — asserted by a test that drives redraw/scroll activity during a
-  simulated stream and compares the buffer against the full expected content.
-- No code path discards a stream chunk without counting and logging it.
-- The salvage path extracts content from a real SSE body (fixture from a failing
-  transcript), and its test would fail against today's non-greedy
-  `message.content` version.
-- The failure message distinguishes the three cases above; a body with bytes is
-  never described as "empty".
-- The transcript the operator can reproduce with is captured as a fixture, since
-  *"some chat transcript seems to always result in same error"* means a
-  deterministic case exists and is worth keeping.
+**Revised 2026-09-10**, after the raw log falsified the hypothesis these rows
+were written under. The two rows about dropped chunks moved to #229 rather than
+being deleted — they name a real code path, just not this issue's cause. The
+salvage row is withdrawn with its reasoning below.
+
+- A prompt that reasons past its output budget produces a **diagnosis**, not a
+  contradiction: the message names the cap, says the cap counts thinking, and
+  never describes a body with bytes as empty. ✅
+- The three cases are distinguished — nothing arrived / stopped at the cap
+  before any text / finished normally with no text. ✅
+- `max_tokens` is high enough that a thinking-first prompt reaches its answer:
+  **64000** for Claude models, keyed on the model so non-Claude models behind
+  the same proxy keep their own caps. ✅
+- The operator's reproducible case is a fixture. ✅ — synthesized to the same
+  shape (one thinking block, no `text_delta`, `stop_reason: max_tokens`) rather
+  than committed verbatim, because the captured body is 55 KB of the operator's
+  private transcript and the thing under test is a message string.
+
+**Withdrawn: "the salvage path extracts content from a real SSE body."** The
+salvage only runs when `qt.response == ""`, and the reported instance of that
+was *correct* — there was no text. The salvage's real defects stand (a
+non-greedy `{.-choices.-}` against an arbitrarily large body, and requiring the
+non-streaming `message.content` shape when a stream carries `delta.content`), so
+it cannot rescue an OpenAI SSE body. But no observed failure runs through it:
+fixing it would be speculative work on a path we have never seen fire. Recorded
+here so the next person finds the analysis instead of redoing it.
+
+**Moved to #229:** the buffer-vs-`qt.response` comparison under a busy main
+loop, and counting the four silent discards in the scheduled writer.
 
 ## Plan
 

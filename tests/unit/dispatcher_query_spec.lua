@@ -1104,6 +1104,39 @@ describe("dispatcher.query internals", function()
             assert.is_truthy(out:find("no response at all", 1, true), out)
         end)
 
+        -- #228, the operator's reported failure, end to end. The body is a
+        -- SYNTHESIZED equivalent of the captured one — same shape (a single
+        -- thinking block, no text_delta, stop_reason max_tokens), none of the
+        -- operator's transcript content. Committing the real 55 KB body would
+        -- have put a private chat in the repo to test a message string.
+        it("J7e: a thinking-only body that hit the cap is diagnosed, not called empty", function()
+            local body = table.concat(vim.fn.readfile(
+                "tests/fixtures/anthropic_thinking_only_max_tokens.txt"), "\n") .. "\n"
+            local logged = {}
+            local original_error = logger.error
+            logger.error = function(m) table.insert(logged, tostring(m)) end
+            dispatcher.query(nil, "anthropic", { model = "claude-sonnet-5", messages = {} },
+                function() end)
+            captured_out_reader(nil, body)
+            captured_out_reader(nil, nil)
+            captured_terminal(0, 0, "", status_stderr("200"), nil)
+            logger.error = original_error
+
+            local qt = tasker.get_query(captured_qid)
+            -- The bytes arrived and the accumulated TEXT is legitimately empty:
+            -- the model never emitted a text_delta.
+            assert.is_true(#qt.raw_response > 0)
+            assert.equals("", qt.response)
+            assert.equals("max_tokens", qt.stop_reason)
+
+            local out = table.concat(logged, "\n")
+            assert.is_truthy(out:match("output%-token cap"), out)
+            assert.is_truthy(out:match("thinking"), out)
+            -- the contradiction that sent the operator looking for a limit
+            assert.is_nil(out:match("is empty"),
+                "a body with bytes is still being described as empty: " .. out)
+        end)
+
         it("J4b: the retry re-issues from a payload snapshot, not the consumed table", function()
             -- format_headers consumes payload fields (cliproxyapi nils
             -- _parley_route; googleai nils model). Sharing one table across
