@@ -1,12 +1,13 @@
 ---
 id: 000228
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-09-09
-updated: 2026-09-09
+updated: 2026-09-10
 estimate_hours:
 started: 2026-09-09T21:19:38-07:00
+actual_hours: 2.61
 ---
 
 # streamed response lost under UI activity, then misreported as empty
@@ -298,6 +299,8 @@ are different outcomes and the difference is the finding.
 
 ## Log
 
+
+- 2026-09-10: closed — Round 4. make test exit=0 (366 spec files), make lint 0 warnings / 0 errors in 365 files, verified after the commit. BR-7 residue fixed — the part my whitelist could not reach. A mid-stream error event carries NO stop reason, so it arrives as nil, which _is_normal_finish treats as normal and correctly so (every ordinary non-streaming shape also has none); HTTP said 200 and the terminal closure believes it, so without reading the body the stream simply ends with partial text and nothing logged. D._inband_error reads the body — the only evidence such a failure happened — and surfaces the provider own message. That completes the set: the ending is named by the wire (_extract_stop_reason, three spellings, each with a per-wire test), classified normal or not (_is_normal_finish, a whitelist so unenumerated endings surface), given cap-specific advice when applicable (_is_output_cap), or found in the body when nothing else can see it (_inband_error). New fixture for the in-band shape; mutation-verified lint-clean, disabling the branch reddens J7k by name. BR-8 fixed: atlas/providers/architecture.md now documents the four predicates, why _is_normal_finish is a whitelist rather than the cap question I first asked (a spurious warning is cheap, a silently truncated transcript is not), and that max_tokens is a MODEL property — the same claude-sonnet-5 arrives via anthropic and cliproxyapi while cliproxyapi proxies gpt-* and ollama serves small local models, so the 64000 default is model-keyed. PROCESS NOTE, unchanged: I skipped sdlc change-code on this issue, so no branch was cut and no estimate derived, and the early commits reached origin/main before I noticed; estimate_hours left empty rather than back-fitted. Earlier rounds: root cause diagnosed from the operator raw log which falsified the issue own hypothesis; max_tokens raised to 64000 keyed on the model, goldens regenerated with a structural per-key diff; the misleading empty-response message replaced; truncation after partial text surfaced; per-wire spellings extracted and tested. Done-when and Plan revised with per-row dispositions, two rows moved to #229 and one withdrawn with reasoning.; review verdict: FIX-THEN-SHIP
 ### 2026-09-09
 
 Filed from an operator report at their request, to avoid losing it. The
