@@ -1,11 +1,12 @@
 ---
 id: 000227
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-09-09
-updated: 2026-09-09
+updated: 2026-09-10
 estimate_hours:
+started: 2026-09-10T13:13:23-07:00
 ---
 
 # question highlighting vanishes while typing until you leave insert mode
