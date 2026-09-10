@@ -156,6 +156,57 @@ The Spec flagged its own hypothesis as unmeasured (*"This is a hypothesis, not a
 measured finding"*). It was right to, and reading the accumulation path was
 enough to falsify half of it before writing any code.
 
+### 2026-09-10 — the raw log settles it: a token cap, not a lost stream
+
+Reproduced with `:ParleyToggleRawLog`. The evidence is one turn in
+`workshop/parley/.parley-logs/2026-09-09.12-21-03.569_guide-scope-vs-camera/raw.md`:
+
+| fact | value |
+|---|---|
+| `max_tokens` (request) | **4096** |
+| `stop_reason` | **max_tokens** |
+| `output_tokens` | **4096** |
+| `content_block_start` types | `thinking` × 1 |
+| `text_delta` count | **0** |
+
+The model spent its entire output budget on a single thinking block and never
+emitted a text token. **`qt.response == "" ` was correct** — there was no text.
+The 18 KB was all reasoning.
+
+`max_tokens` caps OUTPUT for one response, and on Claude it **counts thinking
+tokens**. The operator's system prompt mandates a thinking pass — *"Finish the
+thinking process first before proceed to answer my question"* — so a 4096
+budget exhausts itself before the answer starts. That is deterministic per
+prompt, which is exactly the reported *"some chats always fail this way on
+retry"*; and the same cap hit **after** some text has streamed is the
+truncated-mid-answer symptom. One cause, both symptoms.
+
+**The UI-activity correlation is most likely coincidental.** Long answers take
+longer, one scrolls during long generations, and long generations are precisely
+the ones that reach the cap. No evidence of a dropped chunk was found, and the
+mechanism proposed for it is falsified above.
+
+**Two fixes, both landed:**
+
+1. `max_tokens` default 4096 → **64000** for Claude models (Anthropic's
+   documented default for streaming requests, which is what parley makes).
+   Keyed on the MODEL, not the provider — the same `claude-sonnet-5` arrives via
+   `anthropic` and via `cliproxyapi`, while `cliproxyapi` also proxies `gpt-*`
+   and `ollama` serves small local models, so a provider-level default would
+   push a cap those cannot honour.
+2. `_empty_response_reason` replaces *"response is empty: body_bytes=18152"*.
+   Parley extracted `stop_reason` at `dispatcher.lua:309` and then discarded it:
+   it had the answer and printed a contradiction. The three cases are now
+   distinguished, and a body with bytes is never called empty.
+
+**What remains open, and honestly re-scoped.** The four early returns still
+discard a display chunk without counting it, and an `invalid` event finishes the
+session and calls `on_discard` rather than repairing. Whether the complete
+`qt.response` still reaches the buffer in that case is **unmeasured** — and it
+is the only remaining way this issue could involve real data loss. It is a
+different defect from the one reported, so it should be measured on its own
+terms rather than folded in here.
+
 ## Spec
 
 **1. Never drop a chunk silently.** Every early return in the scheduled handler
