@@ -266,13 +266,35 @@ loop, and counting the four silent discards in the scheduled writer.
 
 ## Plan
 
-- [ ] Instrument the four early returns in the scheduled handler; log drops with
-      reason and count. Reproduce while scrolling and read the log.
-- [ ] Capture a failing raw body as a fixture (18 KB SSE case).
-- [ ] Fix the message to distinguish transport-empty / stream-empty / parse-failed.
-- [ ] Rewrite the salvage to reassemble from SSE events including `delta.content`.
-- [ ] Fix the loss per what step 1 shows.
-- [ ] Test: stream + concurrent scroll → complete content.
+**Revised 2026-09-10.** Every row below was written before the raw log existed,
+and step 1 — "make a drop visible rather than fix anything" — did its job: the
+measurement falsified the hypothesis the other rows were built on. Each row is
+dispositioned rather than ticked, because "done" and "no longer the right work"
+are different outcomes and the difference is the finding.
+
+- [x] **Capture a failing raw body as a fixture.** Done, and it is what settled
+      the issue: `stop_reason: max_tokens`, one thinking block, zero
+      `text_delta`. Committed as a synthesized equivalent — the captured body is
+      55 KB of the operator's private transcript and the thing under test is a
+      message string.
+- [x] **Fix the message to distinguish the cases.** Done —
+      `_empty_response_reason`, with the three cases separated and a body with
+      bytes never called empty.
+- [x] **Raise `max_tokens`** (row added; the original plan had no cause to
+      expect it). 64000 for Claude models, keyed on the model rather than the
+      provider.
+- [x] **Instrument the four early returns** → **moved to #229.** They discard a
+      chunk and count nothing, which is worth fixing, but they cannot produce
+      the reported symptom: `qt.response` accumulates on the libuv callback
+      before anything is deferred.
+- [x] **Fix the loss per what step 1 shows** → **moved to #229.** Step 1 showed
+      the loss was a token cap. Whether the display path also loses content is a
+      separate, unobserved question with its own measurement.
+- [x] **Test: stream + concurrent scroll → complete content** → **moved to
+      #229**, where the oracle is stated properly as buffer text vs `qt.response`.
+- [x] **Rewrite the salvage for `delta.content`** → **withdrawn**, with the
+      analysis kept in Done-when. Its defects are real; no observed failure runs
+      through it.
 
 ## Log
 
