@@ -1996,3 +1996,51 @@ ask what is still reachable. The cheap check is to poison the suspect block
 (`error("unreachable")`) and run the suite — if it stays green, the block is
 dead, and dead code that *looks* like a fallback is worse than none, because the
 next reader will believe in it.
+
+## Prose I write about my own code is a third source of bugs (#228)
+
+Three findings in one issue, family `rationale-matches-fact`, all self-inflicted:
+an atlas section claiming "each predicate has its own test" when one had none;
+a list of four accepted spellings when the code accepted six; a code comment
+saying a branch handled in-band errors when the branch above it caught them
+first. Each was written in the same commit as the code it described.
+
+The failure is specific and worth naming: I write the explanation from the
+design I *intended*, at the moment I am most convinced of it, and then the code
+lands slightly different — a case added, a branch reordered — and the prose is
+never re-read against it. Nobody greps a paragraph.
+
+**Rules.**
+
+1. **Re-read the prose against the diff, last, as its own pass.** Not while
+   writing it — the point is to arrive with the finished code in front of you.
+2. **Prefer a pointer to a restatement.** "Read the code for the accepted
+   spellings" cannot drift; a list of four can, and did, inside one commit.
+3. **A claim about tests is a claim to check by running them.** "Each has its
+   own test" is verifiable in one command, and I asserted it instead.
+
+## An ordered if/elseif is a classification you forgot to write down (#228)
+
+The end-of-response diagnosis started as three questions asked in sequence — is
+it empty, was there an in-band error, is the stop reason abnormal — and the
+order silently became the policy. An empty response that *also* carried an error
+could never be reported as an error, because the empty branch ran first. Nothing
+in the code said "emptiness outranks errors"; the ordering said it, invisibly,
+and it was the wrong answer.
+
+Replacing it with `classify(qt) -> {class, detail}` and rendering afterwards
+made the precedence a line of code you can read and a property you can test.
+The test is one sentence: *an in-band error outranks every other signal.* That
+sentence could not be written about the old shape at all.
+
+**Rules.**
+
+1. **When branches answer different questions about the same subject, you have a
+   classification.** Compute it once, name the classes, render from the result.
+   Three `elseif`s over one object is a taxonomy in disguise.
+2. **Ordering that encodes policy must be stated, not arranged.** If swapping
+   two branches changes an answer, that answer is a decision and belongs
+   somewhere a reader and a test can find it.
+3. **The tell is a property you cannot express.** "X outranks Y" is unwritable
+   as a test when precedence lives in control flow, and trivially writable once
+   the classification exists.
