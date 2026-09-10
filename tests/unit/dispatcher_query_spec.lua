@@ -1184,6 +1184,53 @@ describe("dispatcher.query internals", function()
             assert.is_nil(table.concat(logged, "\n"):match("TRUNCATED"))
         end)
 
+        -- #228 BR-1: J7e covered anthropic only, so the other two wires' cap
+        -- handling was unpinned end to end. Bodies are minimal on purpose —
+        -- what is under test is that the wire's spelling reaches the diagnosis.
+        local function drive(provider, model, body)
+            local logged = {}
+            local err, warn = logger.error, logger.warning
+            logger.error = function(m) table.insert(logged, tostring(m)) end
+            logger.warning = function(m) table.insert(logged, tostring(m)) end
+            dispatcher.query(nil, provider, { model = model, messages = {} }, function() end)
+            captured_out_reader(nil, body)
+            captured_out_reader(nil, nil)
+            captured_terminal(0, 0, "", status_stderr("200"), nil)
+            logger.error, logger.warning = err, warn
+            return table.concat(logged, "\n"), tasker.get_query(captured_qid)
+        end
+
+        it("J7h: openai's `length` reaches the cap diagnosis", function()
+            local out, qt = drive("openai", "gpt-4o",
+                'data: {"choices":[{"delta":{},"finish_reason":"length"}]}\n\n')
+            assert.equals("length", qt.stop_reason)
+            assert.is_truthy(out:match("output%-token cap"), out)
+            assert.is_nil(out:match("Claude"), "told an openai user about Claude: " .. out)
+        end)
+
+        it("J7i: googleai's camelCase `finishReason` reaches it too", function()
+            -- The spelling that went unmatched entirely, so no diagnosis was
+            -- even possible for Gemini.
+            local out, qt = drive("googleai", "gemini-2.5-pro",
+                'data: {"candidates":[{"finishReason":"MAX_TOKENS","content":{"parts":[]}}]}\n\n')
+            assert.equals("MAX_TOKENS", qt.stop_reason)
+            assert.is_truthy(out:match("output%-token cap"), out)
+        end)
+
+        it("J7j: a refusal after partial text is surfaced, not just the cap", function()
+            -- #228 BR-7: a refusal, a content filter and an in-band error leave
+            -- the same artefact as a cap — an answer that stops mid-sentence.
+            local body = table.concat(vim.fn.readfile(
+                "tests/fixtures/anthropic_truncated_max_tokens.txt"), "\n")
+                :gsub("max_tokens", "refusal") .. "\n"
+            local out, qt = drive("anthropic", "claude-sonnet-5", body)
+            assert.is_truthy(qt.response:match("guide camera"), "no text arrived")
+            assert.equals("refusal", qt.stop_reason)
+            assert.is_truthy(out:match("TRUNCATED"), "a refusal ended silently: " .. out)
+            -- and it must NOT hand out max_tokens advice for a refusal
+            assert.is_nil(out:match("Raise max_tokens"), out)
+        end)
+
         it("J4b: the retry re-issues from a payload snapshot, not the consumed table", function()
             -- format_headers consumes payload fields (cliproxyapi nils
             -- _parley_route; googleai nils model). Sharing one table across

@@ -26,9 +26,20 @@ describe("dispatcher._empty_response_reason", function()
         assert.is_nil(msg:match("is empty"), "still describes a body with bytes as empty: " .. msg)
     end)
 
-    it("says the cap counts thinking, which is the non-obvious half", function()
+    it("says the cap counts reasoning, which is the non-obvious half", function()
         local msg = reason({ raw_response = "xxxx", stop_reason = "max_tokens" })
-        assert.is_truthy(msg:match("thinking"), msg)
+        assert.is_truthy(msg:match("[Rr]easoning"), msg)
+    end)
+
+    it("does not tell an openai or googleai user about Claude", function()
+        -- #228 BR-1: the advice was worded "On Claude the cap counts thinking
+        -- tokens", which is untrue about the provider the user is actually on —
+        -- and reasoning tokens count on gpt-5 too.
+        for _, r in ipairs({ "length", "MAX_TOKENS" }) do
+            local msg = reason({ raw_response = "xxxx", stop_reason = r })
+            assert.is_nil(msg:match("Claude"), "names the wrong provider: " .. msg)
+            assert.is_truthy(msg:match("output%-token cap"), msg)
+        end
     end)
 
     it("reports the surprising case as surprising", function()
@@ -37,6 +48,58 @@ describe("dispatcher._empty_response_reason", function()
         assert.is_truthy(msg:match("no assistant text"), msg)
         assert.is_truthy(msg:match("end_turn"), msg)
         assert.is_truthy(msg:match("500"), msg)
+    end)
+
+    describe("_extract_stop_reason, per wire", function()
+        -- #228 BR-1: the Gemini line had no test — deleting it left every spec
+        -- green, so the fix was unpinned. Each wire gets its own case.
+        it("anthropic: stop_reason", function()
+            assert.equals("max_tokens", D._extract_stop_reason(
+                '{"type":"message_delta","delta":{"stop_reason":"max_tokens"}}'))
+        end)
+
+        it("openai: finish_reason", function()
+            assert.equals("length", D._extract_stop_reason(
+                '{"choices":[{"finish_reason":"length","delta":{}}]}'))
+        end)
+
+        it("googleai: finishReason (camelCase — the one that went unmatched)", function()
+            assert.equals("MAX_TOKENS", D._extract_stop_reason(
+                '{"candidates":[{"finishReason":"MAX_TOKENS"}]}'))
+        end)
+
+        it("returns nil when no wire spells one, and tolerates a non-string", function()
+            assert.is_nil(D._extract_stop_reason('{"choices":[{"delta":{}}]}'))
+            assert.is_nil(D._extract_stop_reason(nil))
+            assert.is_nil(D._extract_stop_reason(42))
+        end)
+    end)
+
+    describe("_is_normal_finish", function()
+        -- Stated as a whitelist (#228 BR-7): asking "was it the cap?" stayed
+        -- silent for refusals, content filters and in-band errors, which leave
+        -- the same artefact. An unseen ending should surface, not pass.
+        it("accepts the ordinary endings across wires", function()
+            for _, r in ipairs({ "end_turn", "stop", "STOP", "tool_use", "tool_calls" }) do
+                assert.is_true(D._is_normal_finish(r), r)
+            end
+        end)
+
+        it("rejects every abnormal ending, including ones not enumerated", function()
+            for _, r in ipairs({
+                "max_tokens", "length", "MAX_TOKENS",
+                "refusal", "content_filter", "SAFETY", "RECITATION",
+                "some_future_reason_nobody_has_seen",
+            }) do
+                assert.is_false(D._is_normal_finish(r), r .. " passed as a normal finish")
+            end
+        end)
+
+        it("treats an unparsed reason as normal", function()
+            -- Every successful non-streaming shape reaches here; warning on all
+            -- of them would be noise, and the empty path still reports.
+            assert.is_true(D._is_normal_finish(nil))
+        end)
     end)
 
     it("recognises the cap in every provider's spelling", function()

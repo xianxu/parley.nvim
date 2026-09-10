@@ -163,6 +163,50 @@ D._extract_sse_content = function(line, provider)
 	return adapter.parse_sse_content(line)
 end
 
+--- The stop reason a raw body carries, whatever the wire calls it. PURE.
+---
+--- Three keys, three providers. `finishReason` is Gemini's camelCase spelling
+--- and went unmatched entirely, so a Gemini response that hit its cap arrived
+--- with no stop reason at all and no diagnosis was possible (#228 BR-1).
+--- Extracted rather than inlined so each wire has a test.
+---
+---@param raw string|nil
+---@return string|nil
+D._extract_stop_reason = function(raw)
+    if type(raw) ~= "string" then
+        return nil
+    end
+    return raw:match('"stop_reason"%s*:%s*"([^"]+)"')      -- anthropic
+        or raw:match('"finish_reason"%s*:%s*"([^"]+)"')    -- openai
+        or raw:match('"finishReason"%s*:%s*"([^"]+)"')     -- googleai
+end
+
+--- Did generation END NORMALLY? PURE.
+---
+--- Stated as a whitelist on purpose. The first version asked the opposite
+--- question — "was it the cap?" — and so stayed silent for every other
+--- abnormal ending: a refusal, a content filter, an error event delivered
+--- in-band after HTTP 200 (#228 BR-7). Those all leave the same artefact as a
+--- cap: an answer that stops mid-sentence and looks finished.
+---
+--- With a whitelist, an ending nobody has seen before surfaces rather than
+--- passing as normal. That is the right default for a diagnosis: a spurious
+--- warning is cheap, a silently truncated transcript is not.
+---
+---@param stop_reason string|nil
+---@return boolean
+D._is_normal_finish = function(stop_reason)
+    if type(stop_reason) ~= "string" then
+        -- No reason parsed at all. Treated as normal: every successful
+        -- non-streaming shape reaches here, and warning on all of them would
+        -- be noise. The empty-response path still reports separately.
+        return true
+    end
+    local r = stop_reason:lower()
+    return r == "end_turn" or r == "stop" or r == "tool_use" or r == "end_of_turn"
+        or r == "tool_calls" or r == "function_call"
+end
+
 --- Did generation stop because it hit the OUTPUT-TOKEN CAP? PURE.
 ---
 --- One predicate, because three providers spell it three ways and a diagnosis
@@ -211,11 +255,15 @@ D._empty_response_reason = function(qt)
         return "returned no response at all (the request produced zero bytes)"
     end
     if D._is_output_cap(qt.stop_reason) then
+        -- Wire-independent wording (#228 BR-1): reasoning tokens count toward
+        -- this cap on every model that reasons, not only on Claude, and the
+        -- old "On Claude…" phrasing told openai and googleai users something
+        -- untrue about their own provider.
         return ("stopped at its output-token cap before writing any answer"
             .. " (stop_reason=" .. tostring(qt.stop_reason) .. ", body_bytes=%d)."
-            .. " On Claude the cap counts thinking tokens, so a prompt that asks"
-            .. " the model to reason first can spend the whole budget reasoning."
-            .. " Raise max_tokens for this agent."):format(bytes)
+            .. " Reasoning/thinking tokens count toward this cap, so a prompt that"
+            .. " asks the model to think first can spend the whole budget before"
+            .. " the answer starts. Raise max_tokens for this agent."):format(bytes)
     end
     return ("returned no assistant text (body_bytes=%d, stop_reason=%s)")
         :format(bytes, qt.stop_reason or "unknown")
@@ -367,9 +415,7 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 			-- Three spellings, because three providers. `finishReason` is
 			-- Gemini's camelCase key and was not matched at all, so a Gemini
 			-- response that hit its cap arrived with stop_reason nil (#228 BR-1).
-			qt.stop_reason = qt.raw_response:match('"stop_reason"%s*:%s*"([^"]+)"')
-				or qt.raw_response:match('"finish_reason"%s*:%s*"([^"]+)"')
-				or qt.raw_response:match('"finishReason"%s*:%s*"([^"]+)"')
+			qt.stop_reason = D._extract_stop_reason(qt.raw_response)
 
 			local content = qt.response
 			if content == "" and qt.raw_response:match("choices") and qt.raw_response:match("content") then
@@ -587,17 +633,19 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 			-- on a failure the diagnosis carries the reason instead (#197).
 			if qt.empty_response then
 				logger.error(provider .. " " .. D._empty_response_reason(qt))
-			elseif D._is_output_cap(qt.stop_reason) then
-				-- The OTHER half of the reported symptom (#228 BR-2): the cap
-				-- reached AFTER some text streamed. The answer in the buffer is
-				-- cut off mid-sentence and nothing said so — parley already knew
-				-- (stop_reason was extracted above) and reported it only when
-				-- the response was completely empty. A truncated answer that
-				-- looks finished is worse than an empty one that looks broken.
-				logger.warning(("%s answer is TRUNCATED: generation stopped at the"
-					.. " output-token cap (stop_reason=%s). Raise max_tokens for"
-					.. " this agent and re-run to get the rest.")
-					:format(provider, tostring(qt.stop_reason)))
+			elseif not D._is_normal_finish(qt.stop_reason) then
+				-- The OTHER half of the reported symptom (#228 BR-2), widened to
+				-- the class (BR-7): ANY abnormal ending after some text has
+				-- streamed. A cap, a refusal, a content filter and an in-band
+				-- error all leave the same artefact — an answer that stops
+				-- mid-sentence and looks finished — and parley knew the reason
+				-- and said nothing.
+				local advice = D._is_output_cap(qt.stop_reason)
+					and " Raise max_tokens for this agent and re-run to get the rest."
+					or ""
+				logger.warning(("%s answer is TRUNCATED: generation ended early"
+					.. " (stop_reason=%s).%s")
+					:format(provider, tostring(qt.stop_reason), advice))
 			end
 			legacy_complete(qid, qt)
 		end
