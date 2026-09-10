@@ -1,11 +1,12 @@
 ---
 id: 000228
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-09-09
 updated: 2026-09-09
 estimate_hours:
+started: 2026-09-09T21:19:38-07:00
 ---
 
 # streamed response lost under UI activity, then misreported as empty
