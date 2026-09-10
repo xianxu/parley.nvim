@@ -163,6 +163,27 @@ D._extract_sse_content = function(line, provider)
 	return adapter.parse_sse_content(line)
 end
 
+--- Did generation stop because it hit the OUTPUT-TOKEN CAP? PURE.
+---
+--- One predicate, because three providers spell it three ways and a diagnosis
+--- that knows only one of them mislabels the other two as a normal finish
+--- (#228 BR-1 — the first version recognised `max_tokens` alone, which is the
+--- spelling the reported failure happened to use).
+---
+---   anthropic  stop_reason  = "max_tokens"
+---   openai     finish_reason = "length"
+---   googleai   finishReason  = "MAX_TOKENS"
+---
+---@param stop_reason string|nil
+---@return boolean
+D._is_output_cap = function(stop_reason)
+    if type(stop_reason) ~= "string" then
+        return false
+    end
+    local r = stop_reason:lower()
+    return r == "max_tokens" or r == "length" or r == "maxtokens"
+end
+
 --- Say WHY a response carried no assistant text. PURE.
 ---
 --- "response is empty: body_bytes=18152" is self-contradictory, and it has now
@@ -189,9 +210,9 @@ D._empty_response_reason = function(qt)
     if bytes == 0 then
         return "returned no response at all (the request produced zero bytes)"
     end
-    if qt.stop_reason == "max_tokens" then
+    if D._is_output_cap(qt.stop_reason) then
         return ("stopped at its output-token cap before writing any answer"
-            .. " (stop_reason=max_tokens, body_bytes=%d)."
+            .. " (stop_reason=" .. tostring(qt.stop_reason) .. ", body_bytes=%d)."
             .. " On Claude the cap counts thinking tokens, so a prompt that asks"
             .. " the model to reason first can spend the whole budget reasoning."
             .. " Raise max_tokens for this agent."):format(bytes)
@@ -343,8 +364,12 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 			local metrics = adapter.parse_usage(qt.raw_response)
 			tasker.set_cache_metrics(metrics)
 			qt.usage = metrics
+			-- Three spellings, because three providers. `finishReason` is
+			-- Gemini's camelCase key and was not matched at all, so a Gemini
+			-- response that hit its cap arrived with stop_reason nil (#228 BR-1).
 			qt.stop_reason = qt.raw_response:match('"stop_reason"%s*:%s*"([^"]+)"')
 				or qt.raw_response:match('"finish_reason"%s*:%s*"([^"]+)"')
+				or qt.raw_response:match('"finishReason"%s*:%s*"([^"]+)"')
 
 			local content = qt.response
 			if content == "" and qt.raw_response:match("choices") and qt.raw_response:match("content") then
@@ -562,6 +587,17 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 			-- on a failure the diagnosis carries the reason instead (#197).
 			if qt.empty_response then
 				logger.error(provider .. " " .. D._empty_response_reason(qt))
+			elseif D._is_output_cap(qt.stop_reason) then
+				-- The OTHER half of the reported symptom (#228 BR-2): the cap
+				-- reached AFTER some text streamed. The answer in the buffer is
+				-- cut off mid-sentence and nothing said so — parley already knew
+				-- (stop_reason was extracted above) and reported it only when
+				-- the response was completely empty. A truncated answer that
+				-- looks finished is worse than an empty one that looks broken.
+				logger.warning(("%s answer is TRUNCATED: generation stopped at the"
+					.. " output-token cap (stop_reason=%s). Raise max_tokens for"
+					.. " this agent and re-run to get the rest.")
+					:format(provider, tostring(qt.stop_reason)))
 			end
 			legacy_complete(qid, qt)
 		end

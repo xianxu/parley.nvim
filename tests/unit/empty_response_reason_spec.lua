@@ -39,6 +39,26 @@ describe("dispatcher._empty_response_reason", function()
         assert.is_truthy(msg:match("500"), msg)
     end)
 
+    it("recognises the cap in every provider's spelling", function()
+        -- #228 BR-1: the first version knew only "max_tokens", which is the
+        -- spelling the reported failure happened to use. An OpenAI or Gemini
+        -- response that hit its cap was labelled a normal finish.
+        for _, spelling in ipairs({ "max_tokens", "length", "MAX_TOKENS" }) do
+            local msg = reason({ raw_response = "xxxx", stop_reason = spelling })
+            assert.is_truthy(msg:match("output%-token cap"),
+                spelling .. " not recognised as the cap: " .. msg)
+            assert.is_truthy(msg:match(spelling), "the message hides the actual value: " .. msg)
+        end
+    end)
+
+    it("does not treat an ordinary finish as the cap", function()
+        for _, spelling in ipairs({ "end_turn", "stop", "STOP", "tool_use" }) do
+            assert.is_false(D._is_output_cap(spelling), spelling)
+        end
+        assert.is_false(D._is_output_cap(nil))
+        assert.is_false(D._is_output_cap(42))
+    end)
+
     it("does not raise when stop_reason was never parsed", function()
         local msg = reason({ raw_response = "xx" })
         assert.is_truthy(msg:match("unknown"), msg)

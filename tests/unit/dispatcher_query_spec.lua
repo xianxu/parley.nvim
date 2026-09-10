@@ -1137,6 +1137,53 @@ describe("dispatcher.query internals", function()
                 "a body with bytes is still being described as empty: " .. out)
         end)
 
+        -- #228 BR-2: the OTHER half of the reported symptom. The cap reached
+        -- AFTER some text streamed leaves a mid-sentence answer that looks
+        -- finished, and parley said nothing — though stop_reason was already
+        -- extracted. A truncated answer that looks complete is worse than an
+        -- empty one that looks broken.
+        it("J7f: an answer cut off at the cap says so", function()
+            local body = table.concat(vim.fn.readfile(
+                "tests/fixtures/anthropic_truncated_max_tokens.txt"), "\n") .. "\n"
+            local logged = {}
+            local original_warning = logger.warning
+            logger.warning = function(m) table.insert(logged, tostring(m)) end
+            dispatcher.query(nil, "anthropic", { model = "claude-sonnet-5", messages = {} },
+                function() end)
+            captured_out_reader(nil, body)
+            captured_out_reader(nil, nil)
+            captured_terminal(0, 0, "", status_stderr("200"), nil)
+            logger.warning = original_warning
+
+            local qt = tasker.get_query(captured_qid)
+            -- text DID arrive — this is not the empty case
+            assert.is_truthy(qt.response:match("guide camera"))
+            assert.equals("max_tokens", qt.stop_reason)
+
+            local out = table.concat(logged, "\n")
+            assert.is_truthy(out:match("TRUNCATED"), "truncation was silent: " .. out)
+            assert.is_truthy(out:match("[Rr]aise max_tokens"), out)
+        end)
+
+        it("J7g: a normal finish says nothing", function()
+            -- The guard on J7f: a warning on every successful answer would be
+            -- noise, and would make J7f pass for the wrong reason.
+            local body = table.concat(vim.fn.readfile(
+                "tests/fixtures/anthropic_truncated_max_tokens.txt"), "\n")
+                :gsub("max_tokens", "end_turn") .. "\n"
+            local logged = {}
+            local original_warning = logger.warning
+            logger.warning = function(m) table.insert(logged, tostring(m)) end
+            dispatcher.query(nil, "anthropic", { model = "claude-sonnet-5", messages = {} },
+                function() end)
+            captured_out_reader(nil, body)
+            captured_out_reader(nil, nil)
+            captured_terminal(0, 0, "", status_stderr("200"), nil)
+            logger.warning = original_warning
+
+            assert.is_nil(table.concat(logged, "\n"):match("TRUNCATED"))
+        end)
+
         it("J4b: the retry re-issues from a payload snapshot, not the consumed table", function()
             -- format_headers consumes payload fields (cliproxyapi nils
             -- _parley_route; googleai nils model). Sharing one table across
