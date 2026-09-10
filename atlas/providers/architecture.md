@@ -14,24 +14,40 @@ Parley knew the reason in every case and reported none of them, saying only
 word *empty* with a byte count, and that has now misled twice for two unrelated
 causes (#197 credentials, #228 a token cap).
 
-Four predicates in `dispatcher.lua`, each pure and each with its own test:
+**One classification, computed once, rendered afterwards.** The first version
+asked three separate questions in a fixed `if/elseif` order — empty? in-band
+error? abnormal stop reason? — so *order* decided the answer, and an empty
+response that ALSO carried an error could never be reported as an error. That
+is a bug a single classification cannot have.
 
 | function | question |
 |---|---|
 | `_extract_stop_reason(raw)` | what did the wire call the ending? `stop_reason` (anthropic), `finish_reason` (openai), `finishReason` (googleai — camelCase, and unmatched until #228) |
-| `_is_output_cap(r)` | was it the output cap? `max_tokens` / `length` / `MAX_TOKENS` |
-| `_is_normal_finish(r)` | did it end normally? A **whitelist** — `end_turn`, `stop`, `tool_use`, `tool_calls` |
+| `_is_output_cap(r)` | was it the output cap? |
+| `_is_normal_finish(r)` | did it end normally? A **whitelist** |
 | `_inband_error(raw)` | did the body carry an error the status could not see? |
+| `_classify_ending(qt)` | → `done` / `cap` / `filtered` / `error` / `unknown` |
+| `_ending_notice(qt)` | → the line to log, and at what level, or nil |
+
+Each has tests in `tests/unit/empty_response_reason_spec.lua`; the classification
+is table-driven over the endings, and the wire spellings have a case each.
 
 `_is_normal_finish` is a whitelist on purpose. Asking the opposite question —
 *was it the cap?* — stays silent for refusals, content filters and anything not
 yet enumerated. **A spurious warning is cheap; a silently truncated transcript
-is not**, so an unrecognised ending surfaces rather than passing as normal.
+is not**, so an unrecognised ending surfaces rather than passing as normal. Read
+the code for the accepted spellings rather than trusting a list here — an
+earlier revision of this paragraph named four when the code had six.
 
-A `nil` stop reason still counts as normal: every successful non-streaming shape
-has none, and warning on all of them would be noise. That is precisely the gap
-`_inband_error` fills — a mid-stream error event carries no stop reason, so the
-body is the only evidence it happened.
+**An in-band error outranks every other class**, because it explains the whole
+turn including its emptiness. It is also the one ending no stop reason can
+describe: a mid-stream error event carries none, so the body is the only
+evidence it happened.
+
+**`unknown` (no reason at all) surfaces only when text arrived.** An empty
+response with no reason is the empty-diagnosis path's business. Text that
+arrives with no terminal reason is anomalous — every recorded stream fixture
+across all three wires carries exactly one.
 
 ### `max_tokens` is a MODEL property, not a provider one
 

@@ -223,16 +223,67 @@ D._inband_error = function(raw)
     if type(raw) ~= "string" then
         return nil
     end
-    -- anthropic: `event: error` / {"type":"error","error":{"message":...}}
-    -- openai + compatible: a bare {"error":{"message":...}} frame
-    local message = raw:match('"error"%s*:%s*{[^}]-"message"%s*:%s*"([^"]+)"')
-    if message then
-        return message
+    -- anthropic: `event: error` / {"type":"error","error":{...}}
+    -- openai + compatible: a bare {"error":{...}} frame
+    --
+    -- `%b{}` + a real JSON decode, not a character-class match on the message:
+    -- `[^"]+` stops at the first escaped quote, so `Internal \"x\" error`
+    -- was logged as `Internal \` (close review probe P10).
+    local object = raw:match('"error"%s*:%s*(%b{})')
+    if object then
+        local ok, decoded = pcall(vim.json.decode, object)
+        if ok and type(decoded) == "table" and type(decoded.message) == "string" then
+            return decoded.message
+        end
+        return "provider sent an error with an unreadable body"
     end
     if raw:match('"type"%s*:%s*"error"') then
         return "provider sent an error event with no message"
     end
     return nil
+end
+
+--- How did a completed response END? PURE, and computed ONCE.
+---
+--- The first version asked three separate questions in a fixed if/elseif order
+--- — was it empty, was there an in-band error, was the stop reason abnormal —
+--- and order decided the answer. An empty response that ALSO carried an error
+--- could therefore never be reported as an error, because the empty branch ran
+--- first (close review probe P1). One classification, rendered afterwards, is
+--- the shape that cannot have that bug.
+---
+--- Classes: `done` (ended normally), `cap` (output-token limit), `filtered`
+--- (refused or content-filtered), `error` (the body carried one, whatever the
+--- status said), `unknown` (the wire named no reason at all).
+---
+--- `unknown` is NOT folded into `done`. The earlier code exempted it, arguing
+--- that successful non-streaming shapes carry no reason — but every recorded
+--- stream fixture across all three wires carries exactly one, and flipping the
+--- exemption left all 68 dispatcher specs green, so nothing measured the noise
+--- the exemption claimed to avoid. It surfaces only when text arrived: an empty
+--- response with no reason is already the empty path's business.
+---
+---@param qt table
+---@return table # { class = string, detail = string|nil }
+D._classify_ending = function(qt)
+    local raw = (qt or {}).raw_response
+    local detail = D._inband_error(raw)
+    if detail then
+        -- An error explains everything else about the turn, including emptiness,
+        -- so it outranks the other classes rather than losing a race with them.
+        return { class = "error", detail = detail }
+    end
+    local reason = (qt or {}).stop_reason
+    if type(reason) ~= "string" then
+        return { class = "unknown" }
+    end
+    if D._is_output_cap(reason) then
+        return { class = "cap", detail = reason }
+    end
+    if D._is_normal_finish(reason) then
+        return { class = "done", detail = reason }
+    end
+    return { class = "filtered", detail = reason }
 end
 
 --- Did generation stop because it hit the OUTPUT-TOKEN CAP? PURE.
@@ -254,6 +305,68 @@ D._is_output_cap = function(stop_reason)
     end
     local r = stop_reason:lower()
     return r == "max_tokens" or r == "length" or r == "maxtokens"
+end
+
+--- The line to log about how a turn ended, or nil when it ended fine. PURE.
+---
+--- Rendered from the classification plus whether any text arrived, so the two
+--- situations that read identically to a user — "no answer" and "an answer
+--- that stops mid-sentence" — are the same decision made once. The earlier
+--- code had two renderers and duplicated the "Raise max_tokens" advice in both.
+---
+---@param qt table
+---@return string|nil # message
+---@return string|nil # "error"|"warning" — how to log it
+D._ending_notice = function(qt)
+    local ending = D._classify_ending(qt)
+    local has_text = type((qt or {}).response) == "string" and qt.response ~= ""
+    local bytes = #((qt or {}).raw_response or "")
+
+    if ending.class == "done" then
+        return nil, nil
+    end
+    -- No text at all ALWAYS has something to say, whatever the class — that is
+    -- the #197 property, and a first version of this renderer dropped it for a
+    -- zero-byte body by returning nil for `unknown`.
+    if not has_text then
+        if bytes == 0 then
+            return "returned no response at all (the request produced zero bytes)", "error"
+        end
+        if ending.class == "unknown" then
+            return ("returned no assistant text (body_bytes=%d, no stop reason)")
+                :format(bytes), "error"
+        end
+    elseif ending.class == "unknown" then
+        -- Text arrived and the stream never said why it stopped. Every recorded
+        -- fixture across all three wires carries a reason, so its absence is
+        -- worth one line.
+        return ("answer may be incomplete: the stream ended without saying why"
+            .. " (no stop reason in %d bytes)"):format(bytes), "warning"
+    end
+
+    local cause, advice
+    if ending.class == "cap" then
+        cause = ("its output-token cap (stop_reason=%s)"):format(tostring(ending.detail))
+        -- Reasoning tokens count toward this cap on every model that reasons,
+        -- not only on Claude: the first wording said "On Claude…" and so told
+        -- openai and googleai users something untrue about their own provider.
+        advice = " Reasoning/thinking tokens count toward this cap, so a prompt that"
+            .. " asks the model to think first can spend the whole budget before the"
+            .. " answer starts. Raise max_tokens for this agent."
+    elseif ending.class == "error" then
+        cause = ("an error the provider sent in-band — %s"):format(tostring(ending.detail))
+        advice = ""
+    else
+        cause = ("stop_reason=%s"):format(tostring(ending.detail))
+        advice = ""
+    end
+
+    if has_text then
+        return ("answer is TRUNCATED: generation ended early at %s.%s"):format(cause, advice),
+            "warning"
+    end
+    return ("produced no answer: generation ended at %s (body_bytes=%d).%s")
+        :format(cause, bytes, advice), "error"
 end
 
 --- Say WHY a response carried no assistant text. PURE.
@@ -659,27 +772,21 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 		else
 			-- Only a request that SUCCEEDED can meaningfully be called empty;
 			-- on a failure the diagnosis carries the reason instead (#197).
-			if qt.empty_response then
-				logger.error(provider .. " " .. D._empty_response_reason(qt))
-			elseif D._inband_error(qt.raw_response) then
-				-- HTTP 200, and the failure is inside the body. Neither the
-				-- status nor the stop reason can see it (#228 BR-7).
-				logger.warning(("%s answer is TRUNCATED: the provider sent an"
-					.. " error mid-stream after HTTP 200 — %s")
-					:format(provider, D._inband_error(qt.raw_response)))
-			elseif not D._is_normal_finish(qt.stop_reason) then
-				-- The OTHER half of the reported symptom (#228 BR-2), widened to
-				-- the class (BR-7): ANY abnormal ending after some text has
-				-- streamed. A cap, a refusal, a content filter and an in-band
-				-- error all leave the same artefact — an answer that stops
-				-- mid-sentence and looks finished — and parley knew the reason
-				-- and said nothing.
-				local advice = D._is_output_cap(qt.stop_reason)
-					and " Raise max_tokens for this agent and re-run to get the rest."
-					or ""
-				logger.warning(("%s answer is TRUNCATED: generation ended early"
-					.. " (stop_reason=%s).%s")
-					:format(provider, tostring(qt.stop_reason), advice))
+			-- ONE classification, rendered once (#228 BR-7). The earlier shape
+			-- read three signals in a fixed if/elseif order, so an empty
+			-- response that ALSO carried an error could never be reported as an
+			-- error — the empty branch won the race.
+			--
+			-- `empty_response` still gates the no-text case: it knows about
+			-- tool-only turns (#198), which are a legitimate answerless reply.
+			local notice, level = D._ending_notice(qt)
+			if notice and (level == "warning" or qt.empty_response) then
+				local line = provider .. " " .. notice
+				if level == "error" then
+					logger.error(line)
+				else
+					logger.warning(line)
+				end
 			end
 			legacy_complete(qid, qt)
 		end

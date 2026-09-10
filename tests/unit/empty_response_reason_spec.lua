@@ -131,3 +131,105 @@ describe("dispatcher._empty_response_reason", function()
         assert.is_truthy(reason({}):match("no response at all"))
     end)
 end)
+
+-- One classification, computed once, rendered from (class, has_text).
+--
+-- #228 close review: the first version asked three separate questions in a
+-- fixed if/elseif order — empty? in-band error? abnormal stop reason? — so
+-- ORDER decided the answer, and an empty response that ALSO carried an error
+-- could never be reported as an error. A single classification cannot have
+-- that bug, which is the point of the refactor.
+describe("dispatcher._classify_ending / _ending_notice", function()
+    local D = require("parley.dispatcher")
+
+    local function qt(o)
+        return {
+            raw_response = o.raw or "",
+            response = o.text or "",
+            stop_reason = o.reason,
+        }
+    end
+
+    describe("classification", function()
+        local cases = {
+            { name = "normal finish",     reason = "end_turn",   class = "done" },
+            { name = "openai normal",     reason = "stop",       class = "done" },
+            { name = "cap, anthropic",    reason = "max_tokens", class = "cap" },
+            { name = "cap, openai",       reason = "length",     class = "cap" },
+            { name = "cap, googleai",     reason = "MAX_TOKENS", class = "cap" },
+            { name = "refusal",           reason = "refusal",    class = "filtered" },
+            { name = "content filter",    reason = "content_filter", class = "filtered" },
+            { name = "unseen reason",     reason = "some_new_thing", class = "filtered" },
+            { name = "no reason at all",  reason = nil,          class = "unknown" },
+        }
+        for _, c in ipairs(cases) do
+            it(c.name .. " -> " .. c.class, function()
+                assert.equals(c.class, D._classify_ending(qt({ reason = c.reason })).class)
+            end)
+        end
+
+        it("an in-band error OUTRANKS every other signal", function()
+            -- The ordering bug, stated as a property. An error explains the
+            -- whole turn including its emptiness, so it must not lose a race
+            -- with the empty branch.
+            local e = D._classify_ending(qt({
+                raw = '{"error":{"message":"Overloaded"}}', reason = "end_turn", text = "",
+            }))
+            assert.equals("error", e.class)
+            assert.equals("Overloaded", e.detail)
+        end)
+
+        it("does not flag an ordinary answer that happens to quote error JSON", function()
+            -- The text arrived and is about errors; the body is not an error.
+            local e = D._classify_ending(qt({
+                raw = 'data: {"delta":{"text":"use {\\"error\\": null} to reset"}}',
+                reason = "end_turn", text = "use ...",
+            }))
+            assert.equals("done", e.class)
+        end)
+
+        it("keeps a message containing escaped quotes intact", function()
+            -- `[^"]+` stopped at the first escaped quote and logged `Internal \`.
+            assert.equals([[Internal "x" error]],
+                D._inband_error('{"error":{"message":"Internal \\"x\\" error"}}'))
+        end)
+    end)
+
+    describe("rendering", function()
+        it("says nothing at all when the turn ended normally with text", function()
+            local msg = D._ending_notice(qt({ reason = "end_turn", text = "hi", raw = "xx" }))
+            assert.is_nil(msg)
+        end)
+
+        it("warns about truncation when text arrived, errors when none did", function()
+            local trunc, lvl1 = D._ending_notice(qt({ reason = "max_tokens", text = "hi", raw = "xx" }))
+            assert.is_truthy(trunc:match("TRUNCATED"), trunc)
+            assert.equals("warning", lvl1)
+
+            local none, lvl2 = D._ending_notice(qt({ reason = "max_tokens", text = "", raw = "xx" }))
+            assert.is_truthy(none:match("no answer"), none)
+            assert.equals("error", lvl2)
+        end)
+
+        it("gives max_tokens advice for the cap and withholds it otherwise", function()
+            assert.is_truthy(D._ending_notice(qt({ reason = "length", text = "x", raw = "y" }))
+                :match("Raise max_tokens"))
+            assert.is_nil(D._ending_notice(qt({ reason = "refusal", text = "x", raw = "y" }))
+                :match("Raise max_tokens"))
+        end)
+
+        it("keeps the #197 property: a successful zero-byte body still reports", function()
+            local msg, lvl = D._ending_notice(qt({ raw = "", text = "" }))
+            assert.is_truthy(msg:match("no response at all"), msg)
+            assert.equals("error", lvl)
+        end)
+
+        it("mentions an unexplained ending only when an answer arrived", function()
+            assert.is_truthy(D._ending_notice(qt({ raw = "xxxx", text = "hi" }))
+                :match("without saying why"))
+            -- with no text it is the empty diagnosis's business, not this one
+            assert.is_truthy(D._ending_notice(qt({ raw = "xxxx", text = "" }))
+                :match("no assistant text"))
+        end)
+    end)
+end)

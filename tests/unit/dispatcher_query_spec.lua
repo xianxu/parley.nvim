@@ -1188,6 +1188,12 @@ describe("dispatcher.query internals", function()
         -- handling was unpinned end to end. Bodies are minimal on purpose —
         -- what is under test is that the wire's spelling reaches the diagnosis.
         local function drive(provider, model, body)
+            -- Set the endpoint HERE rather than inheriting one that Groups C, D
+            -- and G happen to leave behind. Without this these cases only pass
+            -- when the whole file runs in order, and raise
+            -- "attempt to index a nil value" alone (close review probe).
+            dispatcher.providers[provider] = dispatcher.providers[provider]
+                or { endpoint = "https://example.invalid/v1" }
             local logged = {}
             local err, warn = logger.error, logger.warning
             logger.error = function(m) table.insert(logged, tostring(m)) end
