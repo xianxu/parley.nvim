@@ -4,7 +4,7 @@ status: open
 deps: []
 github_issue:
 created: 2026-09-06
-updated: 2026-09-06
+updated: 2026-09-11
 estimate_hours:
 ---
 
@@ -100,3 +100,40 @@ Reliable cleanup, since `pgrep -f` misses them:
 
     ps -Ao pid=,args= | grep '[f]ake_cliproxy' | awk '{print $1}' | xargs kill
     ps -Ao pid=,args= | grep '[n]vim --headless' | awk '{print $1}' | xargs kill
+
+### 2026-09-11
+
+RECURRED, five days later. Found the same way — from outside the repo, by an
+operator who noticed the laptop fan, not by anything in the suite. Measured and
+swept:
+
+    897 x fake_cliproxy  (ppid 1)   9847 MB RSS   ~18-23h old
+    145 x nvim --headless (ppid 1)  1192 MB RSS   up to 2 days old
+
+**The cost is memory, not CPU**, which is why nobody sees it until the machine
+swaps. Every one of those processes was idle: the nvim orphans had burned
+0.05 s of CPU EACH, so they wedged at startup and never ran a spec. The machine
+was 89% idle with 1042 orphans resident. After the sweep:
+
+    PhysMem   84G used / 11G unused  ->  78G used / 17G unused
+    compressor         15G           ->  11G
+    load avg (1-min)   8.46          ->  3.95
+    processes          2311          ->  1262
+
+So state the symptom as ~11 GB held and the compressor working, not as load
+average. 2026-09-06's load-585 reading was a machine already deep in swap.
+
+On the Spec's open question (one harness leaking both, or two causes): still not
+answered, and the ratio moved — 430:130 (3.3:1) then, 897:145 (6.2:1) now. Both
+kinds appear together both times, so a common trigger remains the better guess,
+but the proportion is not fixed and should not be leaned on.
+
+New datum for the second half of the Spec: all 145 nvim orphans trace to
+throwaway review worktrees — 107 from `/private/tmp/claude-501/rv224` alone, the
+rest spread over ~10 more (`rev224`, `parley-rev`, `br227r3`, `p205-review`, …).
+These are killed review agents, which makes the interrupted run the DOMINANT
+case, not merely the common one. A teardown that only runs on the normal path
+cannot fix this; the suite-level sweep is the load-bearing half.
+
+The `pgrep` caveat still holds on this macOS, re-tested today:
+`pgrep -fc plenary.busted` matched nothing while `ps` found 145.
