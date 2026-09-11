@@ -1,11 +1,12 @@
 ---
 id: 000237
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-09-11
 updated: 2026-09-11
 estimate_hours:
+started: 2026-09-11T12:35:20-07:00
 ---
 
 # ParleyProxy update fetches the latest release unless pinned; status shows the version
