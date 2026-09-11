@@ -142,9 +142,11 @@ obsolete callbacks and reused buffer handles are harmless.
 Ordinary insert keystrokes do not rebuild document-wide timezone or managed
 footnote diagnostics. Those diagnostics may remain stale during `TextChangedI`
 and are synchronously current before the next convergence event returns.
-Structural-marker edits mark decorations dirty in bounded changed-row work and
-may suppress them until convergence; ordinary prose edits keep the current
-structure valid.
+Every edit splices the decoration structure in bounded work, so decorations
+never drop out while typing. Ordinary typing, Enter included, keeps it exact;
+a structural-marker edit leaves it approximate but still rendering, and one
+rebuild follows 250 ms after the burst — or at the next convergence event,
+whichever comes first (see [ui/highlights](../ui/highlights.md)).
 
 `lua/parley/highlight_structure.lua` owns the pure canonical prefix/fence/tool/
 reasoning structure. `lua/parley/highlighter.lua` keeps one buffer-owned

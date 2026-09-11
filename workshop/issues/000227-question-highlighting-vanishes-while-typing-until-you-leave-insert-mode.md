@@ -221,12 +221,12 @@ total: 4.30
 Detailed plan: `workshop/plans/000227-question-highlighting-vanishes-while-typing-until-you-leave-insert-mode-plan.md`.
 Single-pass work — one `sdlc close`, no milestones.
 
-- [ ] Split `highlight_structure.build` into shared per-row steps (`enter_row`/`leave_row`, markers, `derive`); behavior unchanged.
-- [ ] `replace` returns an aligned splice for every edit, exact when inert + converged; shape table + property test; see each guard fail.
-- [ ] Shared decoration test helpers (`tests/helpers/decoration.lua`).
-- [ ] Highlighter: fail-open `on_win`, splice in `on_lines`, debounced repair (injectable deferral), `on_reload` resync, splice-failure/row-count resync; delete `renderable`; `highlight_typing_spec.lua` per Done-when.
-- [ ] `make perf` reports `structure_splice` + `structure_rebuild`; record numbers and the one-rebuild-per-burst result in Log.
-- [ ] Atlas (`ui/highlights`, `chat/lifecycle`), `TOOLING.md`, traceability; full `make test`.
+- [x] Split `highlight_structure.build` into shared per-row steps (`enter_row`/`leave_row`, markers, `derive`); behavior unchanged.
+- [x] `replace` returns an aligned splice for every edit, exact when inert + converged; shape table + property test; see each guard fail.
+- [x] Shared decoration test helpers (`tests/helpers/decoration.lua`).
+- [x] Highlighter: fail-open `on_win`, splice in `on_lines`, debounced repair (injectable deferral), `on_reload` resync, splice-failure/row-count resync; delete `renderable`; `highlight_typing_spec.lua` per Done-when.
+- [x] `make perf` reports `structure_splice` + `structure_rebuild`; record numbers and the one-rebuild-per-burst result in Log.
+- [x] Atlas (`ui/highlights`, `chat/lifecycle`), `TOOLING.md`, traceability; full `make test`.
 - [ ] Operator e2e check (list typing with Enter above a footer; fence + pause; markdown draft).
 
 ## Log
@@ -326,6 +326,14 @@ structure into a blank one.
   `highlight_typing_spec` (a fence + 21 keystrokes → 22 restarts, 1 pending,
   0 builds until it fires, then exactly 1); a plain-text burst with Enter
   schedules none.
+- Task 6: atlas (`ui/highlights` new section, `chat/lifecycle`), `TOOLING.md`,
+  traceability (both entries). The first full `make test` went red on one
+  file — `single_source_sweeps_spec`: the plan's Core-concepts Name cells
+  (`highlight_structure.build`, `M._set_repair_deferral`, `on_win`) were not
+  the bare grep-able names its table↔code guards match (lesson #186). I had run
+  only the targeted specs after Task 4; the arch suite runs only in the full
+  `make test`. Cells renamed (`on_win` via `setup_buf_handler`, the function
+  that registers it); guard 21/21.
 
 ## Revisions
 

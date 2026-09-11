@@ -45,8 +45,8 @@ checkout) or a distinct `TEST_ENV_ROOT` for concurrent suites.
 
 `make perf` opens normally attached Parley chat buffers at 100, 1,000, and
 5,000 lines, performs 5 warmups and 20 measured samples, and reports the real
-insert-event/redraw interval plus isolated timezone, footnote, decoration, and
-spell phases. Inclusive `edit_total` overlaps the isolated measurements; do not
+insert-event/redraw interval plus isolated timezone, footnote, decoration,
+spell, structure-splice (one Enter), and structure-rebuild phases. Inclusive `edit_total` overlaps the isolated measurements; do not
 add or subtract the isolated phase timings as if they decomposed it.
 
 The command prints median/p95 timings and scaling ratios, then overwrites
@@ -77,8 +77,9 @@ ordinary prose edits process the same bounded structure rows. Timezone and
 managed-footnote diagnostics deliberately remain stale during `TextChangedI`,
 then converge synchronously on `InsertLeave`, normal `TextChanged`,
 `BufWritePost`, `BufEnter`, `WinEnter`, and stream-leg finalization. Structural
-marker edits may suppress decorations during insertion; the same convergence
-events rebuild structure before returning. Redraw itself consumes only the
+marker edits never suppress decorations: they leave the structure approximate
+and still rendering, and it is rebuilt 250 ms after the burst or at the next
+convergence event. Redraw itself consumes only the
 buffer-owned bounded structure snapshot and visible/context rows.
 
 For an optional manual comparison, repeat ordinary typing with

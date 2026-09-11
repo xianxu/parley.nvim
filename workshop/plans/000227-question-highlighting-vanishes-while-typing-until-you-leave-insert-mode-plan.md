@@ -56,8 +56,8 @@ measured O(n) cost: a shallow reference copy on line-count edits.
 
 | Name | Lives in | Status |
 |------|----------|--------|
-| `highlight_structure.replace` | `lua/parley/highlight_structure.lua` | modified |
-| `highlight_structure.build` | `lua/parley/highlight_structure.lua` | modified |
+| `replace` (`highlight_structure.replace`) | `lua/parley/highlight_structure.lua` | modified |
+| `build` (`highlight_structure.build`) | `lua/parley/highlight_structure.lua` | modified |
 | `derive` (local) | `lua/parley/highlight_structure.lua` | new |
 | `enter_row` / `leave_row` (locals) | `lua/parley/highlight_structure.lua` | new |
 | `new_markers` / `add_marker` / `finish_markers` (locals) | `lua/parley/highlight_structure.lua` | new |
@@ -120,13 +120,13 @@ measured O(n) cost: a shallow reference copy on line-count edits.
 | Name | Lives in | Status | Wraps |
 |------|----------|--------|-------|
 | `rebuild_structure` | `lua/parley/highlighter.lua` | modified | `line_reader` full read, `nvim_buf_attach` |
-| structure cache `on_lines` | `lua/parley/highlighter.lua` | modified | `nvim_buf_attach` on_lines |
-| structure cache `on_reload` | `lua/parley/highlighter.lua` | new | `nvim_buf_attach` on_reload |
+| `on_lines` (structure cache) | `lua/parley/highlighter.lua` | modified | `nvim_buf_attach` on_lines |
+| `on_reload` (structure cache) | `lua/parley/highlighter.lua` | new | `nvim_buf_attach` on_reload |
 | `arm_repair` + `new_uv_deferral` | `lua/parley/highlighter.lua` | new | `vim.uv` timer, `vim.schedule_wrap`, `nvim__redraw` |
-| `M._set_repair_deferral` | `lua/parley/highlighter.lua` | new | test seam over the deferral factory + delay |
-| decoration provider `on_win` | `lua/parley/highlighter.lua` | modified | decoration provider |
+| `_set_repair_deferral` (`highlighter._set_repair_deferral`) | `lua/parley/highlighter.lua` | new | test seam over the deferral factory + delay |
+| `setup_buf_handler` (its decoration provider's on_win) | `lua/parley/highlighter.lua` | modified | decoration provider |
 | `forget_structure` (local) | `lua/parley/highlighter.lua` | new | cache entry + deferral teardown |
-| `tests/helpers/decoration.lua` | `tests/helpers/decoration.lua` | new | provider capture / frame capture for specs |
+| `capture_provider` / `frame` / `has` / `manual_deferrals` | `tests/helpers/decoration.lua` | new | provider capture, frame capture, hand-fired repair deferral for specs |
 
 - **`on_lines`** — splices every edit. A throwing splice, a `"misaligned"`
   result, or a spliced row count that differs from `nvim_buf_line_count`
@@ -247,7 +247,7 @@ oracle.
 - Modify: `lua/parley/highlight_structure.lua:115-349` (`copy_state` … `M.build`)
 - Test: `tests/unit/highlight_structure_spec.lua`
 
-- [ ] **Step 1: Write the guard for the one semantic substitution**
+- [x] **Step 1: Write the guard for the one semantic substitution**
 
 The refactor swaps the blank-line test `lines[row + 1]:match("^%s*$")` for
 `token == "_"`. Pin whitespace-only lines, which are the only place the two
@@ -263,12 +263,12 @@ could disagree. Append inside the top `describe("highlight_structure", …)`:
     end)
 ```
 
-- [ ] **Step 2: Run it — expect PASS on the current code** (it guards a refactor, so it must be green before and after)
+- [x] **Step 2: Run it — expect PASS on the current code** (it guards a refactor, so it must be green before and after)
 
 Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c 'PlenaryBustedFile tests/unit/highlight_structure_spec.lua' -c 'qa!'`
 Expected: all green.
 
-- [ ] **Step 3: Refactor**
+- [x] **Step 3: Refactor**
 
 Replace `M.build` (and add helpers above it, after `M.reset_partition`) with:
 
@@ -396,7 +396,7 @@ end
 `build` still visits each row three times (classify, lookahead, walk), so the
 existing `rows_visited = #lines * 3` assertion must stay green unchanged.
 
-- [ ] **Step 4: Run the unit spec plus every highlighting integration spec**
+- [x] **Step 4: Run the unit spec plus every highlighting integration spec**
 
 Run each (all must pass):
 ```
@@ -405,7 +405,7 @@ nvim -n --headless --noplugin -u tests/minimal_init.vim -c 'PlenaryBustedFile te
 nvim -n --headless --noplugin -u tests/minimal_init.vim -c 'PlenaryBustedFile tests/integration/fence_containment_spec.lua' -c 'qa!'
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add lua/parley/highlight_structure.lua tests/unit/highlight_structure_spec.lua
@@ -418,7 +418,7 @@ git commit -m "#227: split structure build into shared per-row steps"
 - Modify: `lua/parley/highlight_structure.lua` (`M.replace`, new locals `is_inert`, `same_state`, `exit_state`)
 - Test: `tests/unit/highlight_structure_spec.lua` — rewrite the three tests that pin the old refusal (lines 123-151 and 251-259), add the shape table and the property test
 
-- [ ] **Step 1: Rewrite the tests that pinned refusal, and add the shape table**
+- [x] **Step 1: Rewrite the tests that pinned refusal, and add the shape table**
 
 Replace the test `"separates cardinality rejection's contract count from actual visits"` with:
 
@@ -568,7 +568,7 @@ In the `#218` describe, change `"replace: editing a fence's WIDTH invalidates th
     end)
 ```
 
-- [ ] **Step 2: Add the property test**
+- [x] **Step 2: Add the property test**
 
 Append at the end of the file:
 
@@ -629,12 +629,12 @@ describe("replace splices stay aligned and honest about exactness (#227)", funct
 end)
 ```
 
-- [ ] **Step 3: Run — expect RED**
+- [x] **Step 3: Run — expect RED**
 
 Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c 'PlenaryBustedFile tests/unit/highlight_structure_spec.lua' -c 'qa!'`
 Expected: the new tests fail (current `replace` returns `nil` for every line-count change).
 
-- [ ] **Step 4: Implement**
+- [x] **Step 4: Implement**
 
 Replace `M.replace` with:
 
@@ -781,14 +781,14 @@ function M.replace(structure, first0, old_last0, new_lines, patterns)
 end
 ```
 
-- [ ] **Step 5: Run — expect GREEN**
+- [x] **Step 5: Run — expect GREEN**
 
 Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c 'PlenaryBustedFile tests/unit/highlight_structure_spec.lua' -c 'qa!'`
 Expected: all pass. If a shape-table row's expected reason disagrees, do not
 edit the expectation to match — derive by hand whether the edit can change
 later state, and fix whichever side is wrong.
 
-- [ ] **Step 6: Break the invariant and watch it fail** (lessons 2026-08-22: a guard is finished when you have seen it red)
+- [x] **Step 6: Break the invariant and watch it fail** (lessons 2026-08-22: a guard is finished when you have seen it red)
 
 One at a time, re-run the spec after each temporary change, confirm RED, revert:
 1. `local converged = true` with the `if old_last0 < old_n` block deleted → property test and "delete the blank that ends legacy reasoning" go red.
@@ -800,7 +800,7 @@ One at a time, re-run the spec after each temporary change, confirm RED, revert:
 
 Record the three observed failures in the issue `## Log`.
 
-- [ ] **Step 7: Lint and commit**
+- [x] **Step 7: Lint and commit**
 
 ```bash
 make lint
@@ -816,7 +816,7 @@ git commit -m "#227: splice every edit into an aligned structure, exact when ine
 - Create: `tests/helpers/decoration.lua`
 - Modify: `tests/integration/highlighting_spec.lua:71-83` (its local `capture_decoration_provider` delegates to the helper)
 
-- [ ] **Step 1: Create the helper**
+- [x] **Step 1: Create the helper**
 
 ```lua
 -- Decoration-provider fixtures shared by the highlighting specs.
@@ -863,7 +863,7 @@ end
 return M
 ```
 
-- [ ] **Step 2: Point `highlighting_spec.lua` at it**
+- [x] **Step 2: Point `highlighting_spec.lua` at it**
 
 Replace lines 71-83 of `tests/integration/highlighting_spec.lua` with:
 
@@ -875,9 +875,9 @@ local function capture_decoration_provider()
 end
 ```
 
-- [ ] **Step 3: Run `highlighting_spec.lua`** — expect unchanged pass/fail (green).
+- [x] **Step 3: Run `highlighting_spec.lua`** — expect unchanged pass/fail (green).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add tests/helpers/decoration.lua tests/integration/highlighting_spec.lua
@@ -892,7 +892,7 @@ git commit -m "#227: share decoration-provider test fixtures"
 - Create: `tests/integration/highlight_typing_spec.lua`
 - Modify: `tests/perf/chat_typing.lua:300` (`cache.renderable` → `cache.structure`)
 
-- [ ] **Step 1: Write `tests/integration/highlight_typing_spec.lua` (RED)**
+- [x] **Step 1: Write `tests/integration/highlight_typing_spec.lua` (RED)**
 
 ```lua
 -- #227: highlighting must not blank or shimmer while typing. Every edit splices
@@ -1280,13 +1280,13 @@ end)
 Note for the real-clock test: `open` and `oracle` are file-level locals, so the
 second `describe` can use them.
 
-- [ ] **Step 2: Run it — expect RED**
+- [x] **Step 2: Run it — expect RED**
 
 Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c 'PlenaryBustedFile tests/integration/highlight_typing_spec.lua' -c 'qa!'`
 Expected: fails — `_set_repair_deferral` does not exist; after stubbing that
 mentally, the first test fails on `cache.dirty` after the first Enter.
 
-- [ ] **Step 3: Implement in `lua/parley/highlighter.lua`**
+- [x] **Step 3: Implement in `lua/parley/highlighter.lua`**
 
 Constants, next to `HIGHLIGHT_VIEWPORT_MARGIN`:
 
@@ -1477,7 +1477,7 @@ In `on_win`, replace the dirty/renderable refusal with:
             assert(cache and cache.structure, "decoration structure cache has no structure")
 ```
 
-- [ ] **Step 4: Update the `highlighting_spec.lua` tests that pinned fail-closed**
+- [x] **Step 4: Update the `highlighting_spec.lua` tests that pinned fail-closed**
 
 Every site, by current line number (verified with
 `grep -n "renderable\|local prior" tests/integration/highlighting_spec.lua`):
@@ -1514,7 +1514,7 @@ Then confirm no reference to the deleted field survives:
 Run: `grep -rn "renderable" lua tests`
 Expected: no output.
 
-- [ ] **Step 5: Run — expect GREEN**
+- [x] **Step 5: Run — expect GREEN**
 
 ```
 nvim -n --headless --noplugin -u tests/minimal_init.vim -c 'PlenaryBustedFile tests/integration/highlight_typing_spec.lua' -c 'qa!'
@@ -1527,7 +1527,7 @@ nvim -n --headless --noplugin -u tests/minimal_init.vim -c 'PlenaryBustedFile te
 character into prose, which is the shared fast path (one structure row, zero
 full reads).
 
-- [ ] **Step 6: Break each new guard and watch it fail**
+- [x] **Step 6: Break each new guard and watch it fail**
 
 One at a time, confirm RED, revert:
 1. Delete the `on_reload` key from the `nvim_buf_attach` opts → the checktime test fails ("reload detached").
@@ -1541,7 +1541,7 @@ One at a time, confirm RED, revert:
 
 Record the observed failures in the issue `## Log`.
 
-- [ ] **Step 7: Lint and commit**
+- [x] **Step 7: Lint and commit**
 
 ```bash
 make lint
@@ -1558,7 +1558,7 @@ git commit -m "#227: render while typing, repair structure on a timer, resync on
 - Modify: `tests/perf/chat_typing.lua` (`isolated_phases`)
 - Modify: `workshop/issues/000227-question-highlighting-vanishes-while-typing-until-you-leave-insert-mode.md` (`## Log`)
 
-- [ ] **Step 1: Add two isolated phases** to the table `isolated_phases(scenario)` returns:
+- [x] **Step 1: Add two isolated phases** to the table `isolated_phases(scenario)` returns:
 
 ```lua
         -- #227: an Enter at the end of the target row, spliced onto the cached
@@ -1578,19 +1578,19 @@ git commit -m "#227: render while typing, repair structure on a timer, resync on
         end,
 ```
 
-- [ ] **Step 2: Run the report**
+- [x] **Step 2: Run the report**
 
 Run: `make perf PERF_OUTPUT="$TMPDIR/parley-227-perf.json"`
 Expected: exit 0 (hard gates unchanged: `edit_total` zero full reads and one
 structure row; `decoration_redraw` zero full reads); the table lists
 `structure_splice` and `structure_rebuild` at 100/1,000/5,000 lines.
 
-- [ ] **Step 3: Record** median/p95 of `edit_total`, `decoration_redraw`,
+- [x] **Step 3: Record** median/p95 of `edit_total`, `decoration_redraw`,
 `structure_splice`, and `structure_rebuild` at 1,000 and 5,000 lines in the
 issue `## Log`, alongside the one-rebuild-per-burst result from Task 4's
 5,000-line test.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add tests/perf/chat_typing.lua workshop/issues/000227-question-highlighting-vanishes-while-typing-until-you-leave-insert-mode.md
@@ -1605,7 +1605,7 @@ git commit -m "#227: report splice and rebuild cost in make perf"
 - Modify: `TOOLING.md:72-82` (perf section) and the phase list at `:46-49`
 - Modify: `atlas/traceability.yaml` (add `tests/integration/highlight_typing_spec.lua` beside `tests/integration/highlighting_spec.lua`)
 
-- [ ] **Step 1: `atlas/ui/highlights.md`** — add after the #218 section:
+- [x] **Step 1: `atlas/ui/highlights.md`** — add after the #218 section:
 
 ```markdown
 ## The structure cache while typing (#227)
@@ -1637,7 +1637,7 @@ row-indexed.
   synchronously; a cache that cannot be realigned is dropped rather than drawn.
 ```
 
-- [ ] **Step 2: `atlas/chat/lifecycle.md`** — replace the sentence
+- [x] **Step 2: `atlas/chat/lifecycle.md`** — replace the sentence
 "Structural-marker edits mark decorations dirty in bounded changed-row work and
 may suppress them until convergence; ordinary prose edits keep the current
 structure valid." with:
@@ -1650,7 +1650,7 @@ rebuild follows 250 ms after the burst — or at the next convergence event,
 whichever comes first (see [ui/highlights](../ui/highlights.md)).
 ```
 
-- [ ] **Step 3: `TOOLING.md`** — in the perf section, replace "Structural
+- [x] **Step 3: `TOOLING.md`** — in the perf section, replace "Structural
 marker edits may suppress decorations during insertion; the same convergence
 events rebuild structure before returning." with:
 
@@ -1664,24 +1664,24 @@ and extend the phase sentence at `:46-49` to name the new isolated phases:
 "…reports the real insert-event/redraw interval plus isolated timezone,
 footnote, decoration, spell, structure-splice, and structure-rebuild phases."
 
-- [ ] **Step 4: README discoverability check** (lessons #176/#187)
+- [x] **Step 4: README discoverability check** (lessons #176/#187)
 
 Run: `grep -n -i -e "insert mode" -e "highlight" README.md`
 Expected: no sentence describing highlighting disappearing in insert mode. If
 one exists, update it in this commit.
 
-- [ ] **Step 5: Stale-wording sweep** (lesson 2026-06-17)
+- [x] **Step 5: Stale-wording sweep** (lesson 2026-06-17)
 
 Run: `grep -rn -i -e "suppress them" -e "suppress decorations" -e "renderable" atlas TOOLING.md README.md lua tests`
 Expected: no output.
 
-- [ ] **Step 6: Full suite**
+- [x] **Step 6: Full suite**
 
 Run: `make test`
 Expected: exit 0 (lint + unit + integration). Paste the summary into the issue
 `## Log`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add atlas/ui/highlights.md atlas/chat/lifecycle.md TOOLING.md atlas/traceability.yaml \
@@ -1709,3 +1709,29 @@ git commit -m "#227: atlas and tooling for highlighting that survives typing"
 - [ ] **Step 2: Close** via `sdlc close --issue 227 --verified '<make test summary + operator confirmation>'`
   (the binary runs the mandatory boundary review; fix Critical/Important before
   crossing).
+
+## Revisions
+
+### 2026-09-10 — during implementation
+
+Reason: the plan-quality gate's three Minor findings (disposed in code, not by
+editing the gated plan), plus one defect the Task 4 mutation step exposed.
+Delta:
+- `manual_deferrals` lives in `tests/helpers/decoration.lua` (not inline in the
+  typing spec) and `highlighting_spec.lua` installs it file-wide, so its
+  structural-edit tests never arm a real 250 ms timer while later tests pump
+  the loop with `vim.wait` (gate finding: injected clock).
+- The new spec is listed under **both** traceability entries that own
+  `highlighting_spec.lua` — `chat/lifecycle` and `ui/highlights` (gate finding).
+- The issue's two drifted `init.lua` pointers were corrected (gate finding).
+- Every stub in `highlight_typing_spec.lua` is registered on a cleanup stack
+  that `after_each` unwinds. The fail-closed mutation showed why: the failing
+  test died before its inline restore of `vim.api.nvim__redraw`, and the
+  leaked stub made the real-clock test fail too. With the stack, that mutation
+  reddens only the intended test.
+- `on_detach` teardown is tested by calling the attachment's callback directly
+  (plan review recommendation), not through buffer deletion.
+- Core-concepts Name cells now lead with each symbol's bare grep-able name
+  (`build`, `replace`, `_set_repair_deferral`, …): the
+  `single_source_sweeps_spec` table-vs-diff guard looks for the backticked
+  bare name, and `highlight_structure.build` did not match it (lesson #186).
