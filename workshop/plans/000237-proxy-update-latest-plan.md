@@ -102,8 +102,9 @@ real redirect are checked by conformance specs.
 ## Non-goals
 
 - Making `download()` asynchronous. It still blocks the editor while fetching,
-  bounded by curl's timeouts. The audit's B5 (unprompted download on the main
-  loop) belongs to #209, which owns the auto_download default.
+  bounded by curl's timeouts. The operator accepted the blocking fetch on
+  2026-09-11 when approving this plan. The audit's B5 (unprompted download on
+  the main loop) belongs to #209, which owns the auto_download default.
 - Changing `stop()`, which reaps any cliproxy on the managed port.
 - Using the proxy's `latest-version` management route.
 - Windows auto-download (unchanged).
