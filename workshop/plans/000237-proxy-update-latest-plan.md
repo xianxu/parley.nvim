@@ -313,6 +313,23 @@ starts a process has an `after_each` that reaps it. The watchdog is opt-in for
 `fake_cliproxy` because other specs share that fixture; #220 owns making it the
 default, alongside its suite-level sweep and exit-time survivor count.
 
+An owner only owns what exists when it runs, so the rule is also temporal
+(PQ-5): **an `it` body must not return while an async leg it started can still
+spawn** — it awaits the callback, or keeps the spawner stubbed for the whole
+body. The cases with such a leg, and how each holds the rule:
+
+| Case | Async leg that can spawn | How it holds |
+|---|---|---|
+| `start_managed` (update and status cases) | `ensure_running` | `await` |
+| restarts parley's own proxy | `update` → `restart_managed` | `await`, via `update()` |
+| refuses a second update | the first update's `restart_managed` | waits for the first update before any assertion |
+| restart-deadline case | `restart_managed` | stubbed for the whole body; restored only after both calls |
+| first-run auto_download | `ensure_running` → download → spawn | `await`, via `ensure()` |
+
+`await` gives up after 25 s, above `UPDATE_RESTART_DEADLINE_MS` (20 s) and
+`restart_managed`'s ~13 s worst case, so it cannot return while the leg it waits
+on is still bound to answer.
+
 ## Running tests
 
 - One spec (TDD loop):
@@ -1309,13 +1326,15 @@ local server = fake_releases.start()
 cliproxy._set_releases_url(server.url)
 
 -- Run an async fn(done) and block until it calls done(result); return result.
+-- 25 s: above UPDATE_RESTART_DEADLINE_MS (20 s), so a wait never gives up while
+-- the leg it waits on is still bound to answer (PQ-5).
 local function await(fn, ms)
     local result, got = nil, false
     fn(function(r)
         result = r
         got = true
     end)
-    vim.wait(ms or 12000, function()
+    vim.wait(ms or 25000, function()
         return got
     end, 20)
     assert(got, "async call timed out")
@@ -2015,10 +2034,12 @@ describe(":ParleyProxy update", function()
         cliproxy.update(function(ok, msg)
             second = { ok = ok, msg = msg }
         end)
-        assert.same({ ok = false, msg = "an update is already running" }, second)
-        vim.wait(12000, function()
+        -- Wait for the first update's restart BEFORE any assertion: returning
+        -- early would leave its spawn in flight past after_each (PQ-5).
+        vim.wait(25000, function()
             return first ~= nil
         end, 20)
+        assert.same({ ok = false, msg = "an update is already running" }, second)
         assert.is_true(first and first.ok, first and first.msg)
     end)
 
@@ -2027,12 +2048,15 @@ describe(":ParleyProxy update", function()
         fake_releases.publish(server, "9.9.8")
         cliproxy._set_update_restart_deadline_ms(300)
         local saved = cliproxy.restart_managed
-        cliproxy.restart_managed = function() end -- an async leg that raised and never answered
+        -- An async leg that raised and never answered. Stubbed for the WHOLE
+        -- body, so nothing this case starts can spawn after after_each (PQ-5).
+        cliproxy.restart_managed = function() end
         local r = update()
+        local again = update()
         cliproxy.restart_managed = saved
         assert.is_false(r.ok)
         assert.is_truthy(r.msg:find("the restart did not answer", 1, true))
-        assert.are_not.equal("an update is already running", update().msg)
+        assert.are_not.equal("an update is already running", again.msg)
     end)
 
     it("no longer offers the restart that skips the port wait", function()
@@ -2878,3 +2902,17 @@ Minor findings. All four are fixed here rather than carried to the close review.
   later update is accepted after the deadline fires.
 - PQ-4: the ARCH-ORDER table splits "not ours" from "nothing listening" to match
   what `plan_update` says.
+
+### 2026-09-11 — plan-quality round 2
+
+**Reason.** The gate cleared the plan and recorded one Minor, PQ-5, the second
+finding in `fixture-process-leak`: ownership was enumerated by who starts a
+process, not by when, so a case could return while an async leg it started could
+still spawn.
+
+**Delta.** Process ownership gains the temporal rule — an `it` body must not
+return while an async leg it started can still spawn — and a table of every case
+with such a leg. The restart-deadline case keeps `restart_managed` stubbed across
+both calls; the second-update case waits for the first update before asserting;
+and `await`'s timeout rises to 25 s, above `UPDATE_RESTART_DEADLINE_MS`, so no
+wait can give up while the leg it waits on is still bound to answer.

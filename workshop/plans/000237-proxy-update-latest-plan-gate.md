@@ -51,6 +51,43 @@ rounds:
           family: ordering-table-matches-code
           round: 1
       blocked: true
+    - "n": 2
+      timestamp: "2026-09-11T13:40:01-07:00"
+      agent: claude
+      dispose:
+        - id: PQ-1
+          disposition: addressed
+          note: Process ownership table + stated rule + fixture_watchdog.py; every new spawn is asserted and reaped in after_each.
+          round: 2
+        - id: PQ-2
+          disposition: addressed
+          note: M.status gates the latest read on info.managed, with a request-log assertion on the release fake.
+          round: 2
+        - id: PQ-3
+          disposition: addressed
+          note: 20s deadline above restart_managed's ~13s worst case, test seam, and a released-guard test.
+          round: 2
+        - id: PQ-4
+          disposition: addressed
+          note: The ARCH-ORDER table now splits "listener not ours" from "nothing listening" and matches plan_update.
+          round: 2
+      findings:
+        - id: PQ-5
+          severity: Minor
+          title: Ownership is enumerated by who starts a process, not by when — an async leg can spawn after after_each
+          detail: |-
+            Task 7's restart-deadline case restores the real restart_managed before its
+            second update() while the 300ms deadline seam is still armed, so the it body
+            returns with a real restart in flight; its spawn can land after reap() /
+            stop() / _reset_spawned(), into the next test's rendered endpoint. Second
+            finding in this family: state the temporal rule in Process ownership — an it
+            body must not return while an async leg it started can still spawn (await the
+            callback, or keep the spawner stubbed for the whole body) — and let that rule,
+            not this one line, drive the sweep.
+          family: fixture-process-leak
+          round: 2
+      blocked: false
+content_hash: c4d1c178406106abe9d9868e5c3f00925dd198b9e14353e82c0344d60daf666f
 ---
 
 # Gate ledger — parley.nvim#237 (plan-quality)
@@ -86,9 +123,27 @@ later rounds disposed of them. Generated — edit the gate, not this file.
   dispatch spawns the new binary, but plan_update and its tests emit only
   "updated X to Y" when running is nil. Reconcile the table with the code.
 
+## Round 2 — 2026-09-11T13:40:01-07:00 (claude) — passed
+
+### Disposed
+
+- PQ-1 — addressed — Process ownership table + stated rule + fixture_watchdog.py; every new spawn is asserted and reaped in after_each.
+- PQ-2 — addressed — M.status gates the latest read on info.managed, with a request-log assertion on the release fake.
+- PQ-3 — addressed — 20s deadline above restart_managed's ~13s worst case, test seam, and a released-guard test.
+- PQ-4 — addressed — The ARCH-ORDER table now splits "listener not ours" from "nothing listening" and matches plan_update.
+
+### Raised
+
+- **PQ-5** [Minor] `fixture-process-leak` Ownership is enumerated by who starts a process, not by when — an async leg can spawn after after_each
+  Task 7's restart-deadline case restores the real restart_managed before its
+  second update() while the 300ms deadline seam is still armed, so the it body
+  returns with a real restart in flight; its spawn can land after reap() /
+  stop() / _reset_spawned(), into the next test's rendered endpoint. Second
+  finding in this family: state the temporal rule in Process ownership — an it
+  body must not return while an async leg it started can still spawn (await the
+  callback, or keep the spawner stubbed for the whole body) — and let that rule,
+  not this one line, drive the sweep.
+
 ## Open findings
 
-- **PQ-1** [Important] `fixture-process-leak` New specs kill spawned fake_cliproxy handles after the assertion, so a failing case orphans the process
-- **PQ-2** [Minor] `opt-out-respected` status reaches github.com even when cliproxy.manage is off or no endpoint is set
-- **PQ-3** [Minor] `terminal-path-clears-guard` _update_in_flight has no reset path or test seam if the async restart leg never answers
-- **PQ-4** [Minor] `ordering-table-matches-code` ARCH-ORDER row promises a message plan_update never produces for "nothing listening"
+- **PQ-5** [Minor] `fixture-process-leak` Ownership is enumerated by who starts a process, not by when — an async leg can spawn after after_each
