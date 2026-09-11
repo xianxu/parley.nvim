@@ -87,7 +87,16 @@ rounds:
           family: fixture-process-leak
           round: 2
       blocked: false
-content_hash: c4d1c178406106abe9d9868e5c3f00925dd198b9e14353e82c0344d60daf666f
+    - "n": 3
+      timestamp: "2026-09-11T13:44:35-07:00"
+      agent: claude
+      dispose:
+        - id: PQ-5
+          disposition: addressed
+          note: Process ownership now states the timing rule and covers every case with an async spawning step; the deadline case keeps restart_managed stubbed through both calls; the 13 s restart, 20 s deadline and 25 s await margins hold against cliproxy.lua:378-430.
+          round: 3
+      blocked: false
+content_hash: c6359580980b200663edbcf497569ecce12dab256934c01df410a5eeffabe77f
 ---
 
 # Gate ledger — parley.nvim#237 (plan-quality)
@@ -144,6 +153,12 @@ later rounds disposed of them. Generated — edit the gate, not this file.
   callback, or keep the spawner stubbed for the whole body) — and let that rule,
   not this one line, drive the sweep.
 
+## Round 3 — 2026-09-11T13:44:35-07:00 (claude) — passed
+
+### Disposed
+
+- PQ-5 — addressed — Process ownership now states the timing rule and covers every case with an async spawning step; the deadline case keeps restart_managed stubbed through both calls; the 13 s restart, 20 s deadline and 25 s await margins hold against cliproxy.lua:378-430.
+
 ## Open findings
 
-- **PQ-5** [Minor] `fixture-process-leak` Ownership is enumerated by who starts a process, not by when — an async leg can spawn after after_each
+(none — every finding has been disposed)
