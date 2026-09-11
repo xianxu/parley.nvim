@@ -68,18 +68,10 @@ local function cleanup_extra_windows()
     end
 end
 
+local decoration = require("tests.helpers.decoration")
+
 local function capture_decoration_provider()
-    local original = vim.api.nvim_set_decoration_provider
-    local captured_provider = nil
-
-    vim.api.nvim_set_decoration_provider = function(_, provider)
-        captured_provider = provider
-    end
-
-    parley.setup_buf_handler()
-    vim.api.nvim_set_decoration_provider = original
-
-    return captured_provider
+    return decoration.capture_provider(parley)
 end
 
 local function render_window(provider, ...)
