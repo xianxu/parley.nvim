@@ -83,6 +83,8 @@ Status:
   running version is behind. When the proxy is not running, say so, with the
   installed version if parley recorded one, rather than a guess.
 - Report a managed-dir binary as `managed`, not `PATH`.
+- When `cliproxy.manage` is off, status does not check GitHub: an opted-out
+  install makes no request on parley's behalf.
 
 This is an external-service feature, so it ships a stateful fake of the release
 endpoints (latest redirect, assets, checksums, request log) behind the same URL
@@ -155,3 +157,10 @@ defects on the same path.
   proxy parley did not launch.
 - Done when: added the first-run and failure-leaves-it-unchanged criteria.
 - Plan rows regrouped into M1 (update) and M2 (status).
+
+### 2026-09-11 — plan-quality round 1
+
+The change-code gate refused on a fixture-process leak (PQ-1) and noted three
+Minor findings; all four are fixed in the plan, whose Revisions has the detail.
+The one Spec-level change: status no longer checks GitHub when
+`cliproxy.manage` is off.
