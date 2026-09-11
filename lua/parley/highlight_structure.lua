@@ -263,89 +263,127 @@ function M.reset_partition(state, token)
     return true
 end
 
-function M.build(lines, patterns)
-    lines = lines or {}
-    patterns = patterns or M.patterns()
-    local result = {
-        fingerprints = {},
-        state_before = {},
-        footer_start0 = nil,
-        draft_ranges = {},
-    }
-    local work = { rows_visited = 0, entries_copied = 0 }
-    for row = 0, #lines - 1 do
-        work.rows_visited = work.rows_visited + 1
-        local classified = M.classify(lines[row + 1], patterns)
-        result.fingerprints[row + 1] = classified.token
-        if not result.footer_start0 and classified.kind == "footnote" then
-            result.footer_start0 = row
-        end
-    end
-
-    local reasoning_explicit = {}
-    local end_ahead = false
-    for index = #result.fingerprints, 1, -1 do
-        work.rows_visited = work.rows_visited + 1
-        local token = result.fingerprints[index]
-        if token == TOKENS.reasoning then
-            reasoning_explicit[index] = end_ahead
-        elseif token == TOKENS.reasoning_end then
-            end_ahead = true
-        elseif token == TOKENS.user or token == TOKENS.assistant
-            or token == TOKENS["local"] or token == TOKENS.branch
-            or token == TOKENS.summary or token == TOKENS.tool_use
-            or token == TOKENS.tool_result then
-            end_ahead = false
-        end
-    end
-
-    local state = copy_state({
+local function initial_state()
+    return copy_state({
         in_question = false, in_code = false, in_reasoning = false,
         reasoning_explicit_end = false, in_tool = false,
     })
-    local draft_start
-    for row = 0, #lines - 1 do
-        work.rows_visited = work.rows_visited + 1
-        if result.footer_start0 and row >= result.footer_start0 then
-            state.in_question = false
-            state.in_reasoning = false
-        end
-        local token = result.fingerprints[row + 1]
+end
 
-        -- PRE-snapshot: a partition line is not itself inside a code block, so
-        -- the containment reset must land before the row is recorded (#218).
-        M.reset_partition(state, token)
-        result.state_before[row + 1] = copy_state(state)
+--- Footer start and draft ranges, accumulated one token at a time so `build`
+--- (from classified lines) and `replace` (from a spliced token array) derive
+--- them with the same code.
+local function new_markers()
+    return { footer_start0 = nil, draft_ranges = {}, draft_start = nil }
+end
 
-        if token == TOKENS.draft_open and draft_start == nil then
-            draft_start = row
-        elseif token == TOKENS.draft_end and draft_start ~= nil then
-            result.draft_ranges[#result.draft_ranges + 1] = {
-                start_row = draft_start, end_row_exclusive = row + 1,
-            }
-            draft_start = nil
-        end
-
-        M.advance(state, token)
-
-        -- Reasoning's blank-line terminator is lookahead-dependent, so it stays
-        -- here rather than in the shared transition.
-        if token == TOKENS.reasoning_end then
-            state.in_reasoning = false
-            state.reasoning_explicit_end = false
-        elseif token == TOKENS.reasoning then
-            state.in_reasoning = true
-            state.reasoning_explicit_end = reasoning_explicit[row + 1] or false
-        elseif state.in_reasoning and lines[row + 1]:match("^%s*$") and not state.reasoning_explicit_end then
-            state.in_reasoning = false
-        end
+local function add_marker(markers, row0, token)
+    if markers.footer_start0 == nil and token == TOKENS.footnote then
+        markers.footer_start0 = row0
     end
-    if draft_start ~= nil then
-        result.draft_ranges[#result.draft_ranges + 1] = {
-            start_row = draft_start, end_row_exclusive = #lines,
+    if token == TOKENS.draft_open and markers.draft_start == nil then
+        markers.draft_start = row0
+    elseif token == TOKENS.draft_end and markers.draft_start ~= nil then
+        markers.draft_ranges[#markers.draft_ranges + 1] = {
+            start_row = markers.draft_start, end_row_exclusive = row0 + 1,
+        }
+        markers.draft_start = nil
+    end
+end
+
+local function finish_markers(markers, row_count)
+    if markers.draft_start ~= nil then
+        markers.draft_ranges[#markers.draft_ranges + 1] = {
+            start_row = markers.draft_start, end_row_exclusive = row_count,
         }
     end
-    return result, #lines, work
+    return markers.footer_start0, markers.draft_ranges
+end
+
+--- PRE-snapshot half of a row's forward step: what the row resets on entry.
+--- The footer ends exchange colouring; a partition clears code state (#218),
+--- and must land before the row is recorded — a partition line is not itself
+--- inside a code block.
+local function enter_row(state, row0, token, footer_start0)
+    if footer_start0 and row0 >= footer_start0 then
+        state.in_question = false
+        state.in_reasoning = false
+    end
+    M.reset_partition(state, token)
+end
+
+--- POST-snapshot half: the row's own transition. `explicit` is the lookahead
+--- verdict for a 🧠: row — does its 🧠:[END] arrive before the next marker.
+--- Blank rows are the `_` token: `classify` gives it to exactly the lines the
+--- old `^%s*$` test matched, so the walk needs no line text.
+local function leave_row(state, token, explicit)
+    M.advance(state, token)
+    -- Reasoning's blank-line terminator is lookahead-dependent, so it stays
+    -- here rather than in the shared transition.
+    if token == TOKENS.reasoning_end then
+        state.in_reasoning = false
+        state.reasoning_explicit_end = false
+    elseif token == TOKENS.reasoning then
+        state.in_reasoning = true
+        state.reasoning_explicit_end = explicit or false
+    elseif state.in_reasoning and token == TOKENS.blank and not state.reasoning_explicit_end then
+        state.in_reasoning = false
+    end
+end
+
+--- Backward 🧠: lookahead. The markers that end it are STRUCTURAL_TOKENS —
+--- the same set chat_parser terminates reasoning on — not a second list.
+local function reasoning_explicit_of(fingerprints, work)
+    local explicit, end_ahead = {}, false
+    for index = #fingerprints, 1, -1 do
+        work.rows_visited = work.rows_visited + 1
+        local token = fingerprints[index]
+        if token == TOKENS.reasoning then
+            explicit[index] = end_ahead
+        elseif token == TOKENS.reasoning_end then
+            end_ahead = true
+        elseif STRUCTURAL_TOKENS[token] then
+            end_ahead = false
+        end
+    end
+    return explicit
+end
+
+--- Everything a structure holds beyond its tokens, derived from them alone.
+--- `build` is classify + derive; `replace` derives when an edit leaves no row
+--- to reuse, so the two cannot disagree about what a token sequence means.
+local function derive(fingerprints, footer_start0, draft_ranges, work)
+    local explicit = reasoning_explicit_of(fingerprints, work)
+    local state_before = {}
+    local state = initial_state()
+    for row0 = 0, #fingerprints - 1 do
+        work.rows_visited = work.rows_visited + 1
+        local token = fingerprints[row0 + 1]
+        enter_row(state, row0, token, footer_start0)
+        state_before[row0 + 1] = copy_state(state)
+        leave_row(state, token, explicit[row0 + 1])
+    end
+    return {
+        fingerprints = fingerprints,
+        state_before = state_before,
+        footer_start0 = footer_start0,
+        draft_ranges = draft_ranges,
+    }
+end
+
+function M.build(lines, patterns)
+    lines = lines or {}
+    patterns = patterns or M.patterns()
+    local work = { rows_visited = 0, entries_copied = 0 }
+    local fingerprints, markers = {}, new_markers()
+    for row0 = 0, #lines - 1 do
+        work.rows_visited = work.rows_visited + 1
+        local token = M.classify(lines[row0 + 1], patterns).token
+        fingerprints[row0 + 1] = token
+        add_marker(markers, row0, token)
+    end
+    local footer_start0, draft_ranges = finish_markers(markers, #lines)
+    return derive(fingerprints, footer_start0, draft_ranges, work), #lines, work
 end
 
 function M.replace(structure, first0, old_last0, new_lines, patterns)

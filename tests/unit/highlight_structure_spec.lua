@@ -158,6 +158,14 @@ describe("highlight_structure", function()
         assert.are.same({ { start_row = 4, end_row_exclusive = 7 } }, structure.draft_blocks_in(after, 0, 8))
         assert.is_true(structure.state_before(after, 2).in_question)
     end)
+
+    it("terminates legacy reasoning on whitespace-only lines, not just empty ones", function()
+        for _, blank in ipairs({ "", "   ", "\t" }) do
+            local built = structure.build({ "🧠: thought", "more", blank, "after" }, patterns)
+            assert.is_true(structure.state_before(built, 2).in_reasoning, vim.inspect(blank))
+            assert.is_false(structure.state_before(built, 3).in_reasoning, vim.inspect(blank))
+        end
+    end)
 end)
 
 -- #203 BR-18: STRUCTURAL_KINDS had three hand-maintained restatements — the set
