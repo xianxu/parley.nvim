@@ -1,12 +1,13 @@
 ---
 id: 000227
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-09-09
 updated: 2026-09-10
 estimate_hours: 4.30
 started: 2026-09-10T13:13:23-07:00
+actual_hours: 3.35
 ---
 
 # question highlighting vanishes while typing until you leave insert mode
@@ -243,6 +244,7 @@ line count. The provider's `return false` on a dirty cache is what turns a stale
 structure into a blank one.
 
 ### 2026-09-10 — design
+- 2026-09-10: closed — make test exit 0 (210 spec files PASS, incl. lint + arch guards). highlight_typing_spec 17/17 (was 14/14 red on main in a throwaway worktree: list-typing fails at the first Enter = operator repro). Round-1 BR-4 fixed at the class: on_lines records rows visited + structure_entries_copied; pinned by the sharing unit test (red on a vim.deepcopy splice), the observer integration test (red when copy reported as 0), and exact make perf gates (edit_total 1 row/0 copied; structure_splice 6 rows at 1k and 5k, exactly 4002/20002 copied, 0 full reads; make perf exit 0). BR-1/BR-6 fixed as a rule: repair inert under $PARLEY_TEST_MODE (red when removed). BR-5 guarded (red when unguarded). BR-7 deferred to #234. Operator e2e confirmed 2026-09-10 ("yes, seems fixed it").; review verdict: SHIP
 
 - The blank-on-dirty behavior was a deliberate #170 trade-off (its plan: "Dirty
   redraw returns false"; `TOOLING.md` even documents "structural marker edits
@@ -397,6 +399,20 @@ and blocked on one Important. Each finding, by class:
   then reverted: accounting reported as 0 → the observer test; harness default
   removed → the harness-default test; redraw unguarded → the refusing-redraw
   test; `vim.deepcopy` splice → the sharing unit test.
+
+### 2026-09-10 — close round 2: SHIP
+
+- Riders in this window (not #227 work; they ride its merge): `5596d22` — the
+  operator's own `lua/parley/config.lua` defaults (codex live models gpt-6 /
+  gpt-5; `max_full_exchanges` 42 → 242), committed on their request; `f00b1de`
+  — the operator's #233 issue file. Every other commit from the branch point
+  starts `#227`.
+- Advisory round-2 findings: the rider rule (declared above); the round-2
+  lessons (added to `workshop/lessons.md`); and `file_tracker` still reading
+  `g:parley_test_mode`, which never reaches a spec. That last one is the second
+  production reader of the harness signal, but unifying them turns on
+  `file_tracker`'s test-mode guards across the whole suite. It is filed as
+  its own reviewed change (#235) rather than landed after this close review.
 
 ## Revisions
 

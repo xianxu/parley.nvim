@@ -126,6 +126,8 @@ measured O(n) cost: a shallow reference copy on line-count edits.
 | `_set_repair_deferral` (`highlighter._set_repair_deferral`) | `lua/parley/highlighter.lua` | new | test seam over the deferral factory + delay |
 | `setup_buf_handler` (its decoration provider's on_win) | `lua/parley/highlighter.lua` | modified | decoration provider |
 | `forget_structure` (local) | `lua/parley/highlighter.lua` | new | cache entry + deferral teardown |
+| `new_default_deferral` (local) | `lua/parley/highlighter.lua` | new | inert under `$PARLEY_TEST_MODE`, else the `vim.uv` deferral |
+| `WORK_FIELDS` (`harness.WORK_FIELDS`) | `tests/perf/harness.lua` | new | the single work-counter list: schema, counter, gates |
 | `capture_provider` / `frame` / `has` / `manual_deferrals` | `tests/helpers/decoration.lua` | new | provider capture, frame capture, hand-fired repair deferral for specs |
 
 - **`on_lines`** — splices every edit. A throwing splice, a `"misaligned"`
@@ -1750,3 +1752,12 @@ inert under `$PARLEY_TEST_MODE` (exported by `tests/minimal_init.vim`, because
 `g:` does not reach plenary's per-spec child), replacing the per-file install.
 `nvim__redraw` is guarded. BR-7 (render walk's duplicate reasoning rules) is
 deferred to #234.
+
+### 2026-09-10 — close round 2 (SHIP)
+
+Reason: review plan-revision recommendations.
+Delta: the `replace` contract holds only relative to an exact input (`nil` →
+exact *provided the input structure was exact*; the cache's `dirty` is sticky),
+as the code's docstring now says. `new_default_deferral` and `WORK_FIELDS` are
+added to the Integration-points table. The `file_tracker` harness-signal
+unification is split out as #235.

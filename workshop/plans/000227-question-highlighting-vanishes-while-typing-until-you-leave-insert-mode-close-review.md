@@ -131,3 +131,151 @@ findings:
       this review window. Harmless (tracker artifact, excluded by the diff pathspec) but it
       will land under #227's merge.
 ```
+
+---
+
+## Re-review — 2026-09-10T18:31:16-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 227 — question highlighting vanishes while typing until you leave insert mode |
+| repo | parley.nvim |
+| issue file | workshop/issues/000227-question-highlighting-vanishes-while-typing-until-you-leave-insert-mode.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 555b81a2b0b8cbcbaef556acc382a2cf37c7391d..caa4a510e9cc431750e98ef4599ad1f91bea25b0 |
+| command | sdlc close --issue 227 |
+| reviewer | claude |
+| timestamp | 2026-09-10T18:31:16-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+Round 2 fixed what it said it fixed, and I checked each claim by reverting it rather than trusting the Log. In a scratch export of `caa4a51`, I reverted each fix separately and each time its test went red. That covers the observer test in `make test`, the `make perf` hard gate, the unit reference-sharing test, the refusing-redraw test and the harness-default test, so every claimed fix is reachable. The full `make test` on that scratch copy exits 0 with 210 files PASS, and `make perf` exits 0 with the gated counts the Log reports (1 row / 0 copied for `edit_total`; 6 rows and exactly 4,002 / 20,002 copied for `structure_splice`). Nothing Critical or Important remains. Three Minor findings are new: two repeat families from round 2, and a missing lessons entry. None blocks the boundary.
+
+### 1. Strengths
+
+- **BR-4 is fixed for the whole class, not just the site.** Structure work is recorded in exactly two places, `build_structure` (`lua/parley/highlighter.lua:955`) and `on_lines` (`:1038`), and both now carry `structure_entries_copied`. Every LineReader event defaults the field. The gate is exact in both directions (`tests/perf/chat_typing.lua:130`), so a copy that goes unreported again fails it just as an extra copy does. I confirmed that with the M1 mutation: perf aborts with "structure_splice must report exactly the two-array copy".
+- **The unit test pins the mechanism, not only the result** (`tests/unit/highlight_structure_spec.lua:173`). It checks that every untouched row is shared by reference (`rawequal`) at 100, 1k and 5k lines. That is the only test that can tell a shallow splice from `vim.deepcopy`, and it went red under M2 while every integration test stayed green, which is exactly the gap round 1 described.
+- **The harness signal is chosen from evidence.** I reproduced the probe: inside a spec, `vim.g.parley_test_mode` is nil and `$PARLEY_TEST_MODE` is `"1"`. The env-var design is correct, and `atlas/infra/test_harness.md:37` records why.
+- **`WORK_FIELDS` is single-sourced** (`tests/perf/harness.lua:8`). The schema check, `empty_work` and `max_work` all derive from it, and a sample missing the new field is rejected (`perf_chat_typing_spec.lua:48`).
+- **The #234 deferral is legitimate.** It has a concrete Spec that includes sweeping the third copy in `chat_parser`, and the render walk's duplicate predates #227 and is separable from the blank-while-typing fix (ARCH-PURPOSE).
+
+### 2. Critical findings
+
+None.
+
+### 3. Important findings
+
+None.
+
+### 4. Minor findings
+
+**a. `lua/parley/file_tracker.lua:10-12` still reads the harness signal this diff shows never reaches a spec.** This is the **2nd finding in family `class-not-instance`**. BR-6's fix moved one reader of "am I under the harness" to `$PARLEY_TEST_MODE` and wrote the rule into the atlas: "signals to spec code travel through the environment, not `g:`". The only other production reader, `file_tracker.is_test_mode()`, still reads `vim.g.parley_test_mode`, which is nil in every spec except `chat_move_spec`. Its guards in `load_data`, `save_data` and `init` are therefore dead across the suite.
+  - I saw the effect: after my `make test` run, `…/xdg/data/nvim/parley/file_access.json` held `topic_gen_spec`'s chat paths. That is persisted state shared by specs running in parallel, which none of them set up.
+  - The measured class has two production readers (`highlighter.lua:91` and `file_tracker.lua:11`); one was migrated.
+  - **Rule:** the harness signal gets exactly one production reader, a single helper keyed on `$PARLEY_TEST_MODE`. Both consumers call it, and a guard in `single_source_sweeps_spec` fails if any other module in `lua/` reads `parley_test_mode` or `PARLEY_TEST_MODE`. After that, delete `tests/minimal_init.vim:24` and `chat_move_spec.lua:5`'s workaround.
+  - Turning the guard on may expose specs that silently depended on the leaked persistence, so run the full suite. If it grows, split it out as its own issue.
+
+**b. `5596d22` changes shipping defaults inside #227's window and the tracker never mentions it.** This is the **2nd finding in family `unrelated-work-in-window`**.
+  - It changes `lua/parley/config.lua:576` (`max_full_exchanges` 42 → 242, which means more tokens per long-chat request for every user) and `:145` (live-model providers).
+  - The commit message says "Not part of #227", but neither the issue nor the plan names it. Unlike BR-8's issue file, it is product code inside the diff pathspec, so the close verdict and the merge will read as covering it.
+  - Measured prevalence: 2 riders in a 12-commit window; `f00b1de` is now declared in the Log, `5596d22` is not.
+  - **Rule:** every commit between the branch point and HEAD either starts with `#227` or is listed in the issue Log as a rider (sha plus one line). The `#N` commit convention makes this checkable (`git log --format=%s base..HEAD | grep -v '^#227'`).
+  - Fix now: declare `5596d22` in the Log, or cherry-pick it to main before merging.
+
+**c. No lessons entry for round 2's findings.** `workshop/lessons.md` is unchanged in `caa4a51`; the #227 entries come from `dcbebfb`, before round 2. AGENTS.md §4 asks for a rule for each mistake a review finds. Two candidates:
+  - Equal results cannot tell a shallow splice from a deep copy or a rebuild. A cost added to a gated hot path has to go through the accounting seam, and its test has to pin the mechanism.
+  - `g:` variables set in `minimal_init.vim` never reach plenary's per-spec child process.
+
+### 5. Test coverage notes
+
+Mutations run on the scratch copy, each reverted afterwards:
+
+| Mutation | What went red |
+|---|---|
+| M1: `on_lines` reports 0 copied | the observer test, plus a `make perf` abort |
+| M2: `vim.deepcopy` splice | the unit sharing test only |
+| M3: `nvim__redraw` unguarded | the refusing-redraw test only |
+| M4: harness default removed | the harness-default test only |
+
+- Specs in the neighbourhood pass on HEAD: `highlighting_spec` 47/47 with its per-file install gone, `perf_chat_typing_spec` 13/13, `branch_child_spec` 49/49, `chat_move_spec` and `fence_containment_spec` 2/2 each, arch sweeps 21/21.
+- The harness-default test proves the absence of a 250 ms timer with one 600 ms wall-clock wait. That's adequate for an absence claim, and M4 shows it isn't vacuous.
+
+### 6. Architectural notes
+
+- **ARCH-DRY: flag, Minor.** Two harness signals now coexist; that is finding (a). BR-7 remains deferred to #234. `new_counter.observe` (`chat_typing.lua:29`) still lists fields by hand, which is justified because the fields aggregate differently.
+- **ARCH-PURE: pass.** The accounting travels as data returned from the pure `replace`; the glue only forwards it.
+- **ARCH-PURPOSE: pass** for the work-accounting class, since both record sites are swept. **Flag** for the harness-signal class, which is finding (a).
+- **ARCH-MOCK: pass.** Production and tests share the `new_deferral` boundary, and the real-clock test is the conformance check.
+- **ARCH-CONSTRAINTS: pass.** The splice envelope is now machine-enforced (exact copy count, no full read, flat row work from 1k to 5k), not just reported.
+- **ARCH-SECURE: pass, with a note.** Production code reading `$PARLEY_TEST_MODE` means a stray value in a user's shell would silently disable the repair. It degrades to approximate-until-convergence, never to a blank screen, so the risk is acceptable.
+- **ARCH-ORDER: pass.** Under the harness, no repair fires unless the spec arranges it. One undocumented detail: `cache.repair` is fixed when a cache first arms a repair, so swapping the factory only affects caches created afterwards. The current specs all swap before `open()`.
+
+### 7. Plan revision recommendations
+
+- Add a Revisions entry bringing the `replace` contract up to date. Plan line 73 ("`reason == nil` → `out` equals `build(post_edit_lines)`") is missing the clause "provided the input structure was exact" that the code now carries (`highlight_structure.lua:421-424`).
+- Add `new_default_deferral` (`lua/parley/highlighter.lua`) and `WORK_FIELDS` (`tests/perf/harness.lua`) to the Integration-points table, using bare, grep-able names (lesson #186).
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Per-file install replaced by the harness default that covers highlighting_spec; M4 reddens highlight_typing_spec.lua:375.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      Both traceability entries list the new spec (atlas/traceability.yaml:53 and :626).
+  - id: BR-3
+    disposition: addressed
+    note: |
+      Issue now cites init.lua:1714 and :2872, both correct at HEAD.
+  - id: BR-4
+    disposition: addressed
+    note: |
+      Verified by reverting: 0-copied reporting reddens the observer test and aborts make perf at chat_typing.lua:130; a deepcopy splice reddens the unit sharing test.
+  - id: BR-5
+    disposition: addressed
+    note: |
+      Unguarding nvim__redraw reddens the refusing-redraw test (highlight_typing_spec.lua:233).
+  - id: BR-6
+    disposition: addressed
+    note: |
+      Harness default keyed on the env var every spec inherits (probe: g is nil, env is 1); removing it reddens the harness-default test.
+  - id: BR-7
+    disposition: not-addressed
+    note: |
+      Deferred to issue 234 with a concrete Spec incl. the chat_parser sweep; a separable, acceptable deferral for a Minor, non-blocking.
+  - id: BR-8
+    disposition: addressed
+    note: |
+      The issue Log now declares f00b1de as a rider; the family rule is stated in the new finding on 5596d22.
+findings:
+  - id: new
+    severity: Minor
+    family: class-not-instance
+    title: |
+      file_tracker still reads g:parley_test_mode, which this diff proved never reaches a spec
+    detail: |
+      2nd in family. lua/parley/file_tracker.lua:10-12 guards load_data/save_data/init on vim.g.parley_test_mode, nil in every spec but chat_move_spec; a make test run leaves topic_gen_spec paths in the shared scratch file_access.json. Class measured at 2 production readers of the harness signal (highlighter.lua:91, file_tracker.lua:11), 1 migrated. Rule: one helper keyed on $PARLEY_TEST_MODE is the only production reader, enforced by an arch guard; then drop minimal_init.vim:24 and chat_move_spec.lua:5.
+  - id: new
+    severity: Minor
+    family: unrelated-work-in-window
+    title: |
+      5596d22 changes shipping config defaults inside the issue window and is undeclared in the tracker
+    detail: |
+      2nd in family. lua/parley/config.lua:576 max_full_exchanges 42 to 242 and :145 live-model providers ride this issue's close verdict and merge; neither the issue nor the plan names the commit. Prevalence: 2 riders in a 12-commit window, 1 declared. Rule: every commit from branch point to HEAD starts with the issue tag or is listed in the Log as a rider (sha plus one line), checkable via git log subjects; declare it or cherry-pick it to main.
+  - id: new
+    severity: Minor
+    family: review-lesson-unrecorded
+    title: |
+      round-2 findings (work-accounting blind spot, g: not reaching spec children) have no lessons.md rule
+    detail: |
+      AGENTS.md section 4 requires review-found mistakes to become lessons; caa4a51 fixed BR-4 and BR-6 without one (the lessons in dcbebfb predate round 2). Candidates: equal results cannot tell a shallow splice from a deep copy, so a cost added to a gated hot path must flow through the accounting seam and be pinned by mechanism; harness signals travel via the environment, not g: variables.
+```

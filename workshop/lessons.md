@@ -27,6 +27,24 @@
   definition form at all; name the function that registers it
   (`setup_buf_handler`). It only runs in the full `make test`, so a green run
   of the targeted specs said nothing about it (reinforces #160, #186).
+- **Equal results cannot tell a shallow splice from a deep copy or a rebuild,
+  so a cost added to a gated hot path must flow through the accounting seam.**
+  #227 put an O(n) copy on every line-count keystroke and computed
+  `entries_copied` — then `on_lines` dropped it on the floor, so #170's gates
+  certified a path whose real cost they could not see (close round 1,
+  Important). Rule: when a change adds work to a path a perf gate owns, route
+  the new cost into the recorded work, gate it *exactly* (an upper bound alone
+  passes when the count goes blind again), and pin the mechanism itself — here
+  reference-identity of untouched rows — since only that distinguishes a
+  shallow splice from `vim.deepcopy` (`ARCH-CONSTRAINTS`).
+- **`g:` variables set in `tests/minimal_init.vim` never reach a spec.**
+  `PlenaryBustedFile` runs each spec in a child nvim started without that init;
+  the child inherits only the environment. A test-mode default keyed on
+  `g:parley_test_mode` was silently off in every spec (the probe printed nil),
+  which is also why `chat_move_spec` sets it again itself. Rule: signals from
+  the harness to spec code travel as environment variables
+  (`$PARLEY_TEST_MODE`); before trusting any harness flag inside a spec,
+  assert it from the spec.
 
 ## 2026-08-22 (#203)
 

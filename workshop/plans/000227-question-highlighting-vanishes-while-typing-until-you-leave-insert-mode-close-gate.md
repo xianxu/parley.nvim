@@ -110,6 +110,62 @@ rounds:
           family: unrelated-work-in-window
           round: 2
       blocked: true
+    - "n": 3
+      timestamp: "2026-09-10T18:31:16-07:00"
+      agent: claude
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: Per-file install replaced by the harness default that covers highlighting_spec; M4 reddens highlight_typing_spec.lua:375.
+          round: 3
+        - id: BR-2
+          disposition: addressed
+          note: Both traceability entries list the new spec (atlas/traceability.yaml:53 and :626).
+          round: 3
+        - id: BR-3
+          disposition: addressed
+          note: Issue now cites init.lua:1714 and :2872, both correct at HEAD.
+          round: 3
+        - id: BR-4
+          disposition: addressed
+          note: 'Verified by reverting: 0-copied reporting reddens the observer test and aborts make perf at chat_typing.lua:130; a deepcopy splice reddens the unit sharing test.'
+          round: 3
+        - id: BR-5
+          disposition: addressed
+          note: Unguarding nvim__redraw reddens the refusing-redraw test (highlight_typing_spec.lua:233).
+          round: 3
+        - id: BR-6
+          disposition: addressed
+          note: 'Harness default keyed on the env var every spec inherits (probe: g is nil, env is 1); removing it reddens the harness-default test.'
+          round: 3
+        - id: BR-7
+          disposition: not-addressed
+          note: Deferred to issue 234 with a concrete Spec incl. the chat_parser sweep; a separable, acceptable deferral for a Minor, non-blocking.
+          round: 3
+        - id: BR-8
+          disposition: addressed
+          note: The issue Log now declares f00b1de as a rider; the family rule is stated in the new finding on 5596d22.
+          round: 3
+      findings:
+        - id: BR-9
+          severity: Minor
+          title: file_tracker still reads g:parley_test_mode, which this diff proved never reaches a spec
+          detail: '2nd in family. lua/parley/file_tracker.lua:10-12 guards load_data/save_data/init on vim.g.parley_test_mode, nil in every spec but chat_move_spec; a make test run leaves topic_gen_spec paths in the shared scratch file_access.json. Class measured at 2 production readers of the harness signal (highlighter.lua:91, file_tracker.lua:11), 1 migrated. Rule: one helper keyed on $PARLEY_TEST_MODE is the only production reader, enforced by an arch guard; then drop minimal_init.vim:24 and chat_move_spec.lua:5.'
+          family: class-not-instance
+          round: 3
+        - id: BR-10
+          severity: Minor
+          title: 5596d22 changes shipping config defaults inside the issue window and is undeclared in the tracker
+          detail: '2nd in family. lua/parley/config.lua:576 max_full_exchanges 42 to 242 and :145 live-model providers ride this issue''s close verdict and merge; neither the issue nor the plan names the commit. Prevalence: 2 riders in a 12-commit window, 1 declared. Rule: every commit from branch point to HEAD starts with the issue tag or is listed in the Log as a rider (sha plus one line), checkable via git log subjects; declare it or cherry-pick it to main.'
+          family: unrelated-work-in-window
+          round: 3
+        - id: BR-11
+          severity: Minor
+          title: 'round-2 findings (work-accounting blind spot, g: not reaching spec children) have no lessons.md rule'
+          detail: 'AGENTS.md section 4 requires review-found mistakes to become lessons; caa4a51 fixed BR-4 and BR-6 without one (the lessons in dcbebfb predate round 2). Candidates: equal results cannot tell a shallow splice from a deep copy, so a cost added to a gated hot path must flow through the accounting seam and be pinned by mechanism; harness signals travel via the environment, not g: variables.'
+          family: review-lesson-unrecorded
+          round: 3
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#227 (boundary-review)
@@ -182,13 +238,31 @@ later rounds disposed of them. Generated — edit the gate, not this file.
   this review window. Harmless (tracker artifact, excluded by the diff pathspec) but it
   will land under #227's merge.
 
+## Round 3 — 2026-09-10T18:31:16-07:00 (claude) — passed
+
+### Disposed
+
+- BR-1 — addressed — Per-file install replaced by the harness default that covers highlighting_spec; M4 reddens highlight_typing_spec.lua:375.
+- BR-2 — addressed — Both traceability entries list the new spec (atlas/traceability.yaml:53 and :626).
+- BR-3 — addressed — Issue now cites init.lua:1714 and :2872, both correct at HEAD.
+- BR-4 — addressed — Verified by reverting: 0-copied reporting reddens the observer test and aborts make perf at chat_typing.lua:130; a deepcopy splice reddens the unit sharing test.
+- BR-5 — addressed — Unguarding nvim__redraw reddens the refusing-redraw test (highlight_typing_spec.lua:233).
+- BR-6 — addressed — Harness default keyed on the env var every spec inherits (probe: g is nil, env is 1); removing it reddens the harness-default test.
+- BR-7 — not-addressed — Deferred to issue 234 with a concrete Spec incl. the chat_parser sweep; a separable, acceptable deferral for a Minor, non-blocking.
+- BR-8 — addressed — The issue Log now declares f00b1de as a rider; the family rule is stated in the new finding on 5596d22.
+
+### Raised
+
+- **BR-9** [Minor] `class-not-instance` file_tracker still reads g:parley_test_mode, which this diff proved never reaches a spec
+  2nd in family. lua/parley/file_tracker.lua:10-12 guards load_data/save_data/init on vim.g.parley_test_mode, nil in every spec but chat_move_spec; a make test run leaves topic_gen_spec paths in the shared scratch file_access.json. Class measured at 2 production readers of the harness signal (highlighter.lua:91, file_tracker.lua:11), 1 migrated. Rule: one helper keyed on $PARLEY_TEST_MODE is the only production reader, enforced by an arch guard; then drop minimal_init.vim:24 and chat_move_spec.lua:5.
+- **BR-10** [Minor] `unrelated-work-in-window` 5596d22 changes shipping config defaults inside the issue window and is undeclared in the tracker
+  2nd in family. lua/parley/config.lua:576 max_full_exchanges 42 to 242 and :145 live-model providers ride this issue's close verdict and merge; neither the issue nor the plan names the commit. Prevalence: 2 riders in a 12-commit window, 1 declared. Rule: every commit from branch point to HEAD starts with the issue tag or is listed in the Log as a rider (sha plus one line), checkable via git log subjects; declare it or cherry-pick it to main.
+- **BR-11** [Minor] `review-lesson-unrecorded` round-2 findings (work-accounting blind spot, g: not reaching spec children) have no lessons.md rule
+  AGENTS.md section 4 requires review-found mistakes to become lessons; caa4a51 fixed BR-4 and BR-6 without one (the lessons in dcbebfb predate round 2). Candidates: equal results cannot tell a shallow splice from a deep copy, so a cost added to a gated hot path must flow through the accounting seam and be pinned by mechanism; harness signals travel via the environment, not g: variables.
+
 ## Open findings
 
-- **BR-1** [Minor] `injected-clock-in-tests` highlighting_spec.lua keeps production 250ms timers while the same file pumps the loop
-- **BR-2** [Minor] `class-not-instance` traceability lists highlighting_spec.lua at two sites, Task 6 names one
-- **BR-3** [Minor] `stale-file-line-pointer` two init.lua pointers in the issue's diagnosis are off by 5-7 lines
-- **BR-4** [Important] `work-accounting-blind-spot` on_lines discards replace's work, so the splice's O(n) copy is invisible to every gate
-- **BR-5** [Minor] `private-api-unguarded` nvim__redraw is a private API called unprotected inside a scheduled callback
-- **BR-6** [Minor] `injected-clock-in-tests` the repair seam is installed per spec file, so the next spec re-opens the real-timer hole
 - **BR-7** [Minor] `duplicated-state-machine` the render walk keeps a second hand-written copy of leave_row's reasoning rules
-- **BR-8** [Minor] `unrelated-work-in-window` an unrelated issue file for #233 is committed on #227's branch
+- **BR-9** [Minor] `class-not-instance` file_tracker still reads g:parley_test_mode, which this diff proved never reaches a spec
+- **BR-10** [Minor] `unrelated-work-in-window` 5596d22 changes shipping config defaults inside the issue window and is undeclared in the tracker
+- **BR-11** [Minor] `review-lesson-unrecorded` round-2 findings (work-accounting blind spot, g: not reaching spec children) have no lessons.md rule
