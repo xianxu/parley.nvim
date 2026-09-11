@@ -1,10 +1,10 @@
 ---
 id: 000216
-status: open
+status: punt
 deps: []
 github_issue:
 created: 2026-09-04
-updated: 2026-09-04
+updated: 2026-09-11
 estimate_hours:
 ---
 
@@ -175,3 +175,27 @@ appends), and truncation (the cap is correctly raised).
 The operator's `"what's in current repo"` test is what converted this from
 theory to diagnosis: it holds every variable constant except whether a tool call
 was the *only* way to answer. That is the whole bug.
+
+### 2026-09-11 — punted
+
+Not reproduced since #215. Both logged failures (15:37 and 15:53 on 09-04)
+came before #215's fix landed at 16:14, while define ran on a roster-order
+fallback agent, and the operator has not seen one since. The only define run
+left in the log (2026-09-11 12:08, `claude-opus-5` via cliproxyapi's anthropic
+route, unforced) returned normally.
+
+The mechanism is still unproven. The "wire mismatch: No" row above rested on the
+usage parser, which does not test the tool-call decoder. The "second defect"
+cannot fire either: `skill_invoke` builds the request (`:283`) and decodes the
+reply (`:347`) from the same `agent.provider` and `agent.model`, and did before
+#215 too (`b7d4595`, lines 196, 208, 272).
+
+The proposed fix would now do harm. Forced `tool_choice` returns a 400 on Claude
+Fable 5.1 and Mythos 5.1 (confirmed in the Claude API reference), the agent
+picker offers Fable by default (`config.lua:145`), and since #215 define runs on
+the chat's agent. If define fails again, first make the `skill define: model
+returned no tool call (response may be truncated)` warning use #228's stop
+reason, so the log says whether the model answered in prose or was cut off.
+
+The Fable 400 on forced `tool_choice` for review and voice_apply is still
+unfiled. It becomes reachable once #237 lets Fable through cliproxyapi.
