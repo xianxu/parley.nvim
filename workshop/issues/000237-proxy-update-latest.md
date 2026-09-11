@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-09-11
 updated: 2026-09-11
-estimate_hours: 5.7
+estimate_hours: 5.76
 started: 2026-09-11T12:35:20-07:00
 ---
 
@@ -113,18 +113,20 @@ conformance spec, and the real redirect behind `PARLEY_LIVE_GITHUB=1`.
 model: estimate-logic-v3.1
 familiarity: 1.0
 item: issue-spec design=1.0 impl=0.08
-item: lua-neovim design=0.4 impl=0.4
-item: lua-neovim design=0.4 impl=0.6
+item: lua-neovim design=0.2 impl=0.4
+item: lua-neovim design=0.2 impl=0.6
 item: lua-neovim design=0.2 impl=0.3
-item: api-integration design=0.3 impl=0.4
+item: api-integration design=0.2 impl=0.6
+item: real-api-discovery design=0.0 impl=0.18
 item: real-api-discovery design=0.0 impl=0.18
 item: atlas-docs design=0.1 impl=0.05
 item: atlas-docs design=0.1 impl=0.05
 item: milestone-review design=0.1 impl=0.14
 item: milestone-review design=0.1 impl=0.14
 item: milestone-review design=0.1 impl=0.14
+item: milestone-review design=0.1 impl=0.14
 design-buffer: 0.15
-total: 5.70
+total: 5.76
 ```
 
 *Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against
@@ -142,17 +144,27 @@ range (v3.1).
 - `lua-neovim` ×3 — the pure `cliproxy_release` module with `parse_ps`; the
   update IO (resolve, atomic install, update and restart with its deadline,
   first-run, command glue), the largest piece, at the top of v2's 0.5–1.5
-  impl; and the status version, the smallest.
+  impl; and the status version, the smallest. Design at the ×0.2 floor: the
+  plan carries every task's code.
 - `api-integration` — the stateful release fake, its helper, the watchdog,
-  `fake_cliproxy`'s stamp, and the integration specs built on them.
-- `real-api-discovery` — the one surface still unverified: the header with
-  management disabled, the live redirect, and the live Fable check.
+  `fake_cliproxy`'s stamp, and the integration specs built on them. Design at
+  the floor; impl at the top of the range, because async fixture ownership is
+  where this module's time goes (#205 ran 3× over; PQ-1 and PQ-5 were both in
+  that family).
+- `real-api-discovery` ×2 — two external surfaces: GitHub's redirect, and the
+  real binary's header (the management-disabled case may flip the fake), plus
+  the live Fable check.
 - `atlas-docs` ×2 — the M1 and M2 doc passes.
-- `milestone-review` ×3 — M1, M2, and one rework round; the plan gate alone took
-  two rounds.
+- `milestone-review` ×4 — M1, M2, and two rework rounds; recent parley issues on
+  this module needed four or five gate rounds (#205, #214, #225).
 - Step 2.5 (library check) does not apply: no new stack. Familiarity 1.0: the
   cliproxy module, its fakes and its conformance spec are recent, familiar code
   (#131, #197, #205).
+
+Revised 2026-09-11 after the estimate-quality review (INFO): design moved to the
+floor where the plan already holds the code, and the hours it freed moved to
+integration-spec debugging, a second rework round and a second external
+surface — 5.70 → 5.76.
 
 ## Plan
 
