@@ -68,7 +68,9 @@ real redirect are checked by conformance specs.
 2. **"Latest" comes from GitHub's redirect, fetched by parley**, for `update` and
    `status` alike (`ARCH-DRY`: one source). It works with the proxy down and
    needs no key. The proxy's `latest-version` route needs the management key and
-   answers 401 on a proxy parley did not launch.
+   answers 401 on a proxy parley did not launch. `status` skips the read when
+   `cliproxy.manage` is off, so an opted-out install makes no request on
+   parley's behalf (PQ-2).
 3. **Running version = `X-Cpa-Version`** from an unauthenticated GET to
    `/v0/management/latest-version`, body discarded. The header rides on the 401,
    so no credential leaves parley (`ARCH-SECURE`).
@@ -151,7 +153,8 @@ first-run auto_download above).
   `$PARLEY_CLIPROXY_RELEASES_URL` at a dead local port, so a spec that forgets
   the seam fails fast instead of reaching github.com. The live GitHub check is
   opt-in (`PARLEY_LIVE_GITHUB=1`). Specs keep the restricted PATH so no real
-  brew binary is spawned (#197).
+  brew binary is spawned (#197). Every process a spec starts has an owner that
+  outlives its assertions — see Process ownership.
 
 ## State and ordering (ARCH-ORDER)
 
@@ -169,9 +172,11 @@ across external events:
 | installing | nvim dies mid-download | only temp files (tempname); old binary intact |
 | installing | dies between rename and record | new binary, stale record → the next update reinstalls (idempotent) |
 | installed | listener is ours | restarting (`restart_managed`) |
-| installed | listener not ours, or none | idle; message (replace it yourself / the next dispatch spawns the new binary) |
+| installed | listener not ours | idle; the message says it still runs the old version and how to replace it |
+| installed | nothing listening | idle; the message names the versions — the next request starts the new binary, so nothing more is said (PQ-4) |
 | restarting | old proxy slow to exit | `restart_managed` waits for the port before `ensure_running` |
 | restarting | `ensure_running` fails | idle; error "…; the restart failed — …" |
+| restarting | no answer at all (a raise inside an async leg) | idle after `UPDATE_RESTART_DEADLINE_MS` (20 s, above `restart_managed`'s ~11 s budget); error "…; the restart did not answer"; `finish` drops the late answer (PQ-3) |
 | any | unexpected Lua error | idle; bounded error; details to the log (pcall boundary around the whole sequence) |
 
 The event most likely to be mishandled is restarting before the old proxy
@@ -257,6 +262,8 @@ which the existing `_spawned` table owns.
 | `fake_github_releases` | `tests/fixtures/fake_github_releases` | new | GitHub release endpoints |
 | `fake_cliproxy` | `tests/fixtures/fake_cliproxy` | modified | + `X-CPA-*` headers, `latest-version` route |
 | `fake_releases` | `tests/helpers/fake_releases.lua` | new | builds releases, runs the release fake |
+| `fixture_watchdog` | `tests/fixtures/fixture_watchdog.py` | new | parent-death exit for the Python fixtures |
+| `M._set_update_restart_deadline_ms` | `lua/parley/cliproxy.lua` | new | test seam (update's restart deadline) |
 
 - **`M.latest_release` / `M.version_probe`** — sync when called without a
   callback (for `update` and first-run), async with one (for `status`); both go
@@ -282,6 +289,29 @@ which the existing `_spawned` table owns.
   binary's header with management on and off (runs whenever a binary is
   discoverable, pending otherwise), and the real redirect behind
   `PARLEY_LIVE_GITHUB=1`, run at each milestone close.
+
+## Process ownership (PQ-1: fixture-process-leak)
+
+#220 measured what an unowned fixture costs on this machine: hundreds of
+`fake_cliproxy` orphaned to init, ~10 GB resident. The class is every process a
+spec starts, and each needs an owner for both ways a spec ends early: a failing
+assertion, and a crashed or killed nvim — the case #220 found dominant (killed
+review agents). The enumeration for this plan:
+
+| Process | Started by | Owner on a failing assertion | Owner on a crash or kill |
+|---|---|---|---|
+| `fake_github_releases`, shared | file scope of the update and download specs | lives for the file | `fixture_watchdog` (exits with its nvim); `VimLeavePre` as a backstop |
+| `fake_github_releases`, `slow` | the status-ordering case (`start_server`) | `after_each` → `reap()` | `fixture_watchdog` |
+| `fake_cliproxy`, direct | the `version_probe` cases and the foreign-proxy case (`spawn_fake`) | `after_each` → `reap()` | `fixture_watchdog` (`PARLEY_FAKE_EXIT_WITH_PARENT=1`) |
+| managed proxy (a published release → `fake_cliproxy`) | `ensure_running`/`restart_managed` in the update, status and first-run cases | `after_each` → `cliproxy.stop()` | `fixture_watchdog` (the release wrapper exports `PARLEY_FAKE_EXIT_WITH_PARENT=1`) |
+| real `cliproxyapi` | conformance `boot()` | the spec's existing `after_each` | unchanged; #220's suite-level sweep |
+
+Rules every task follows: no `kill` as the last line of an `it` body; every
+handle is asserted (`fixture_process.spawn` returns `handle, exited, err`, and a
+nil handle would make `kill` raise rather than report); every describe that
+starts a process has an `after_each` that reaps it. The watchdog is opt-in for
+`fake_cliproxy` because other specs share that fixture; #220 owns making it the
+default, alongside its suite-level sweep and exit-time survivor count.
 
 ## Running tests
 
@@ -911,10 +941,39 @@ git commit -m "#237 M1: the update decision table, pure and table-tested"
 ### Task 4: The fakes
 
 **Files:**
+- Create: `tests/fixtures/fixture_watchdog.py`
 - Create: `tests/fixtures/fake_github_releases` (executable)
 - Create: `tests/helpers/fake_releases.lua`
-- Modify: `tests/fixtures/fake_cliproxy` (the `Handler` class and `do_GET`)
+- Modify: `tests/fixtures/fake_cliproxy` (imports, its entry point, the `Handler` class and `do_GET`)
 - Modify: `tests/minimal_init.vim` (next to the `$PARLEY_TEST_MODE` export, line 28)
+
+- [ ] **Step 0: Write `tests/fixtures/fixture_watchdog.py`** (imported, not executable)
+
+```python
+"""Exit a test fixture when the process that started it is gone (#237, #220).
+
+A fixture reparented to init outlives its spec forever: #220 measured 897
+orphaned fake_cliproxy processes holding ~10 GB. after_each teardown covers a
+failing assertion, but not a crashed or killed nvim, which #220 found to be the
+dominant case. This covers that one: the fixture polls its parent pid and exits
+the moment it changes (reparenting to init, or to a subreaper).
+"""
+import os
+import threading
+import time
+
+
+def exit_with_parent(poll_seconds=1.0):
+    parent = os.getppid()
+
+    def watch():
+        while True:
+            time.sleep(poll_seconds)
+            if os.getppid() != parent:
+                os._exit(0)
+
+    threading.Thread(target=watch, daemon=True).start()
+```
 
 - [ ] **Step 1: Write `tests/fixtures/fake_github_releases`**
 
@@ -949,6 +1008,10 @@ import sys
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
+sys.dont_write_bytecode = True  # never write __pycache__ into the repo (#202)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from fixture_watchdog import exit_with_parent  # noqa: E402
+
 PREFIX = "/router-for-me/CLIProxyAPI/releases"
 
 
@@ -975,6 +1038,7 @@ def parse_args(argv):
 
 def main():
     port, root, mode = parse_args(sys.argv[1:])
+    exit_with_parent()  # a crashed or killed spec must not orphan this server (#220)
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *_a):
@@ -1100,7 +1164,9 @@ function M.publish(server, ver, opts)
     vim.fn.writefile({
         "#!/bin/sh",
         "PARLEY_FAKE_CPA_VERSION=" .. vim.fn.shellescape(ver),
-        "export PARLEY_FAKE_CPA_VERSION",
+        -- parley spawns this detached; it must still exit with the spec's nvim (#220)
+        "PARLEY_FAKE_EXIT_WITH_PARENT=1",
+        "export PARLEY_FAKE_CPA_VERSION PARLEY_FAKE_EXIT_WITH_PARENT",
         "exec " .. vim.fn.shellescape(FAKE_PROXY) .. ' "$@"',
     }, stage .. "/cli-proxy-api")
     vim.fn.system({ "chmod", "+x", stage .. "/cli-proxy-api" })
@@ -1128,7 +1194,25 @@ end
 return M
 ```
 
-- [ ] **Step 3: Teach `fake_cliproxy` the `X-CPA-*` stamp and the `latest-version` route**
+- [ ] **Step 3: Teach `fake_cliproxy` the `X-CPA-*` stamp, the `latest-version` route, and to exit with its parent on request**
+
+After `fake_cliproxy`'s imports:
+
+```python
+sys.dont_write_bytecode = True  # never write __pycache__ into the repo (#202)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from fixture_watchdog import exit_with_parent  # noqa: E402
+```
+
+At the top of its entry point, before the login-mode branch and the server
+start:
+
+```python
+    # Opt-in (#237 sets it for every fake it starts); #220 owns making it the
+    # default, alongside its suite-level sweep.
+    if os.environ.get("PARLEY_FAKE_EXIT_WITH_PARENT") == "1":
+        exit_with_parent()
+```
 
 In `tests/fixtures/fake_cliproxy`, beside the other env reads inside the
 function that defines `Handler` (where `mode` and `mgmt_key` are bound), add:
@@ -1192,8 +1276,8 @@ Expected: PASS — the new header and route are additive.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add tests/fixtures/fake_github_releases tests/helpers/fake_releases.lua \
-  tests/fixtures/fake_cliproxy tests/minimal_init.vim
+git add tests/fixtures/fixture_watchdog.py tests/fixtures/fake_github_releases \
+  tests/helpers/fake_releases.lua tests/fixtures/fake_cliproxy tests/minimal_init.vim
 git commit -m "#237 M1: a stateful GitHub releases fake, and fake_cliproxy stamps its version"
 ```
 
@@ -1240,6 +1324,39 @@ end
 
 local function dead_url()
     return ("http://127.0.0.1:%d/router-for-me/CLIProxyAPI/releases"):format(ready_port.free_port())
+end
+
+-- Every process a case starts is registered here and reaped in after_each, so a
+-- failing assertion cannot orphan it (PQ-1, #220). The fixtures also exit when
+-- this nvim does (fixture_watchdog.py), which covers a crashed or killed run.
+local spawned, servers = {}, {}
+
+local function spawn_fake(args, env)
+    local handle, _, err = fixture_process.spawn(FAKE, args,
+        vim.tbl_extend("force", { PARLEY_FAKE_EXIT_WITH_PARENT = "1" }, env or {}))
+    assert(handle, "failed to spawn fake_cliproxy: " .. tostring(err))
+    spawned[#spawned + 1] = handle
+    return handle
+end
+
+local function start_server(mode)
+    local s = fake_releases.start(mode)
+    servers[#servers + 1] = s
+    return s
+end
+
+local function reap()
+    for _, h in ipairs(spawned) do
+        pcall(function()
+            if not h:is_closing() then
+                h:kill("sigterm")
+            end
+        end)
+    end
+    for _, s in ipairs(servers) do
+        fake_releases.stop(s)
+    end
+    spawned, servers = {}, {}
 end
 
 it("the harness keeps every spec off GitHub", function()
@@ -1312,21 +1429,20 @@ describe("resolve_target", function()
 end)
 
 describe("version_probe", function()
+    after_each(reap)
+
     it("reads the version a management-enabled proxy stamps, without a credential", function()
         local port = ready_port.free_port()
-        local handle = fixture_process.spawn(FAKE, { "--port", tostring(port), "--management-key", "k" },
-            { PARLEY_FAKE_CPA_VERSION = "9.9.9" })
+        spawn_fake({ "--port", tostring(port), "--management-key", "k" }, { PARLEY_FAKE_CPA_VERSION = "9.9.9" })
         ready_port.wait_listening(port)
         assert.same({ "9.9.9" }, { cliproxy.version_probe("127.0.0.1", port) })
-        handle:kill("sigterm")
     end)
 
     it("says no_header when the proxy answers without one", function()
         local port = ready_port.free_port()
-        local handle = fixture_process.spawn(FAKE, { "--port", tostring(port) })
+        spawn_fake({ "--port", tostring(port) })
         ready_port.wait_listening(port)
         assert.same({ nil, "no_header" }, { cliproxy.version_probe("127.0.0.1", port) })
-        handle:kill("sigterm")
     end)
 
     it("says down when nothing listens", function()
@@ -1776,9 +1892,12 @@ describe(":ParleyProxy update", function()
         fake_releases.clear_requests(server)
     end)
 
+    -- Owns every process a case starts (Process ownership, PQ-1).
     after_each(function()
+        reap()
         cliproxy.stop()
         cliproxy._reset_spawned()
+        cliproxy._set_update_restart_deadline_ms(nil)
         parley.config, vim.env.PATH = saved_config, saved_path
     end)
 
@@ -1855,9 +1974,10 @@ describe(":ParleyProxy update", function()
         assert.same({}, fake_releases.requests(server))
     end)
 
-    it("refuses when parley does not manage the proxy", function()
+    it("refuses when parley does not manage the proxy, before asking GitHub", function()
         parley.config = { cliproxy = { manage = false } }
         assert.is_truthy(update().msg:find("cliproxy.manage is off", 1, true))
+        assert.same({}, fake_releases.requests(server))
     end)
 
     it("restarts parley's own proxy onto the new release", function()
@@ -1875,8 +1995,7 @@ describe(":ParleyProxy update", function()
         cliproxy.download({ version = "9.9.4" })
         fake_releases.publish(server, "9.9.6")
         -- a cliproxy parley did not launch holds the port (think brew services)
-        local handle = fixture_process.spawn(FAKE,
-            { "--port", tostring(proxy_port), "--management-key", "k" }, { PARLEY_FAKE_CPA_VERSION = "1.0.0" })
+        spawn_fake({ "--port", tostring(proxy_port), "--management-key", "k" }, { PARLEY_FAKE_CPA_VERSION = "1.0.0" })
         ready_port.wait_listening(proxy_port)
         local r = update()
         assert.is_true(r.ok, r.msg)
@@ -1884,7 +2003,6 @@ describe(":ParleyProxy update", function()
         assert.is_truthy(r.msg:find("was not started by parley", 1, true))
         assert.is_truthy(r.msg:find("still runs 1.0.0", 1, true))
         assert.same({ "1.0.0" }, { cliproxy.version_probe("127.0.0.1", proxy_port) }) -- untouched
-        handle:kill("sigterm")
     end)
 
     it("refuses a second update while the first is still restarting", function()
@@ -1902,6 +2020,19 @@ describe(":ParleyProxy update", function()
             return first ~= nil
         end, 20)
         assert.is_true(first and first.ok, first and first.msg)
+    end)
+
+    it("answers, and releases the guard, when the restart never does", function()
+        start_managed("9.9.4")
+        fake_releases.publish(server, "9.9.8")
+        cliproxy._set_update_restart_deadline_ms(300)
+        local saved = cliproxy.restart_managed
+        cliproxy.restart_managed = function() end -- an async leg that raised and never answered
+        local r = update()
+        cliproxy.restart_managed = saved
+        assert.is_false(r.ok)
+        assert.is_truthy(r.msg:find("the restart did not answer", 1, true))
+        assert.are_not.equal("an update is already running", update().msg)
     end)
 
     it("no longer offers the restart that skips the port wait", function()
@@ -1960,6 +2091,16 @@ Delete `M.restart` (lines 799-803). At the end of the release section:
 
 ```lua
 local _update_in_flight = false
+-- Longer than restart_managed's own budget (PORT_RELEASE_MS + POLL_BUDGET_MS +
+-- probes, ~11 s), so it fires only when the restart truly never answers (PQ-3).
+local UPDATE_RESTART_DEADLINE_MS = 20000
+local _update_restart_deadline_ms = UPDATE_RESTART_DEADLINE_MS
+
+--- Test seam: shorten update's restart deadline (nil restores the default).
+---@param ms number|nil
+function M._set_update_restart_deadline_ms(ms)
+    _update_restart_deadline_ms = ms or UPDATE_RESTART_DEADLINE_MS
+end
 
 --- :ParleyProxy update (#237): install cliproxy.download_version, else the
 --- latest release, and restart the proxy when parley launched it. Everything
@@ -2008,6 +2149,13 @@ function M.update(cb)
             end
         end
         if plan.restart == "managed" then
+            -- restart_managed answers within its own budget, but a raise inside
+            -- one of its async legs would never reach finish and would wedge the
+            -- guard for the session (PQ-3). The deadline is the terminal owner of
+            -- last resort; finish drops whichever answer arrives second.
+            vim.defer_fn(function()
+                finish(false, plan.message .. "; the restart did not answer — check :ParleyProxy status")
+            end, _update_restart_deadline_ms)
             return M.restart_managed(function()
                 finish(true, plan.message)
             end, function(msg)
@@ -2425,7 +2573,28 @@ two describes need them):
 
 ```lua
 describe("status version", function()
-    -- (before_each/after_each as in the ":ParleyProxy update" describe)
+    -- set_endpoint, start_managed and proxy_port are shared with the
+    -- ":ParleyProxy update" describe: lift them to file scope, above both.
+    local parley = require("parley")
+    local saved_config, saved_path
+
+    before_each(function()
+        saved_config, saved_path = parley.config, vim.env.PATH
+        vim.env.PATH = "/usr/bin:/bin:/usr/sbin:/sbin" -- no brew binary (#197)
+        proxy_port = ready_port.free_port()
+        set_endpoint(proxy_port)
+        parley.config = { cliproxy = { manage = true } }
+        cliproxy._set_releases_url(server.url)
+    end)
+
+    -- Owns every process a case starts (Process ownership, PQ-1).
+    after_each(function()
+        reap()
+        cliproxy.stop()
+        cliproxy._reset_spawned()
+        cliproxy._set_releases_url(server.url)
+        parley.config, vim.env.PATH = saved_config, saved_path
+    end)
 
     it("reports the running version against the latest", function()
         start_managed("9.9.4")
@@ -2440,7 +2609,7 @@ describe("status version", function()
     end)
 
     it("answers once, after the slowest read, whatever the order", function()
-        local slow = fake_releases.start("slow")
+        local slow = start_server("slow")
         fake_releases.publish(slow, "9.9.5")
         cliproxy._set_releases_url(slow.url)
         local calls = 0
@@ -2457,7 +2626,6 @@ describe("status version", function()
         end) -- a second callback would land here
         assert.equals(1, calls)
         assert.equals("9.9.5", info.version.latest)
-        fake_releases.stop(slow)
     end)
 
     it("says the proxy is not running rather than guessing", function()
@@ -2466,6 +2634,17 @@ describe("status version", function()
         end)
         assert.is_nil(info.version.running)
         assert.equals("down", info.version.running_err)
+    end)
+
+    it("does not contact GitHub when parley does not manage the proxy", function()
+        parley.config = { cliproxy = { manage = false } }
+        fake_releases.clear_requests(server)
+        local info = await(function(done)
+            cliproxy.status(done)
+        end)
+        assert.is_nil(info.version.latest)
+        assert.equals("not checked: cliproxy.manage is off", info.version.latest_err)
+        assert.same({}, fake_releases.requests(server))
     end)
 end)
 ```
@@ -2526,10 +2705,16 @@ function M.status(cb)
             landed()
         end)
     end
-    M.latest_release(function(v, err)
-        info.version.latest, info.version.latest_err = v, err
+    if not info.managed then
+        -- Opted out: status must not reach github.com on parley's behalf (PQ-2).
+        info.version.latest_err = "not checked: cliproxy.manage is off"
         landed()
-    end, M.STATUS_LATEST_MAX_TIME)
+    else
+        M.latest_release(function(v, err)
+            info.version.latest, info.version.latest_err = v, err
+            landed()
+        end, M.STATUS_LATEST_MAX_TIME)
+    end
 end
 ```
 
@@ -2664,3 +2849,32 @@ every checkbox in this plan against commits (#186). Then
 `sdlc milestone-close --issue 237 --milestone M2`, and `sdlc close --issue 237
 --verified '<make test result; conformance + live GitHub result; the three live
 outputs>'`.
+
+---
+
+## Revisions
+
+### 2026-09-11 — plan-quality round 1
+
+**Reason.** The change-code gate refused on PQ-1 (Important) and recorded three
+Minor findings. All four are fixed here rather than carried to the close review.
+
+**Delta.**
+
+- PQ-1 (`fixture-process-leak`), fixed as a class. The Process ownership
+  section enumerates every process the plan's specs start and names its owner
+  for a failing assertion and for a crashed nvim. New
+  `tests/fixtures/fixture_watchdog.py` makes a fixture exit with the nvim that
+  started it: always on for `fake_github_releases`, opt-in
+  (`PARLEY_FAKE_EXIT_WITH_PARENT=1`) for `fake_cliproxy`, which the release
+  wrapper and `spawn_fake` both set. The update spec registers every spawned
+  handle and server and reaps them in `after_each`; no `kill` remains as the
+  last line of an `it`, and every handle is asserted.
+- PQ-2: `status` skips the latest-release read when `cliproxy.manage` is off,
+  with a test that the release fake sees no request.
+- PQ-3: `update` arms a deadline (`UPDATE_RESTART_DEADLINE_MS`, 20 s) when it
+  restarts, so an async leg that never answers cannot wedge the in-flight
+  guard. `_set_update_restart_deadline_ms` is the test seam, and a test proves a
+  later update is accepted after the deadline fires.
+- PQ-4: the ARCH-ORDER table splits "not ours" from "nothing listening" to match
+  what `plan_update` says.
