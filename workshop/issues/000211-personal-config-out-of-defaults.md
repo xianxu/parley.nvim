@@ -4,7 +4,7 @@ status: open
 deps: []
 github_issue:
 created: 2026-09-02
-updated: 2026-09-02
+updated: 2026-09-11
 estimate_hours:
 ---
 
@@ -22,7 +22,7 @@ Defaults:
 | `chat_dir` / `notes_dir` | `~/Library/Mobile Documents/.../parley` and `.../notes` | `config.lua:259,265` |
 | `export_html_dir` / `export_markdown_dir` | `~/blogs/static`, `~/blogs/posts` | `config.lua:273-274` |
 | notes path | hardcoded **in code**, not config | `lualine.lua:138,184` |
-| voice skill source | `~/.personal/<slug>-writing-style.md`, no config key | `skills/voice_apply/init.lua:8,44` |
+| voice skill source | `~/.personal/<slug>-writing-style.md`, no config key | `skills/voice_apply/init.lua:7,48` |
 
 The `_dir$` sweep at `init.lua:725-728` auto-creates these at setup, so every
 fresh install silently creates `~/blogs/` and, on Linux, a literal
@@ -48,8 +48,9 @@ publishing private working material.
 - Give export directories a neutral default, and do not create any directory at
   setup that the user has not used. Creating `~/blogs/` on install is
   unrequested filesystem writing (`ARCH-PURPOSE`).
-- Give the voice skill a config key with a sane fallback, or move it out of the
-  shipped skill root — see #213.
+- Give the voice skill (`voice_apply`) a config key with a sane fallback, or
+  move it out of the shipped skill root. Owned here alone since 2026-09-11; it
+  was also listed in #213.
 - Decide what of `workshop/` is public. Archived issue records arguably belong in
   a repo that documents its own process; 11 real chat transcripts and
   `pensive/` are private working material. Untrack what should not ship, and
@@ -72,6 +73,7 @@ publishing private working material.
 
 - [ ] Replace iCloud and blog defaults; stop auto-creating unused directories.
 - [ ] Remove the hardcoded path from `lualine.lua`; single-source the notes root.
+- [ ] Resolve `voice_apply`: a config key with a fallback, or remove it from the shipped skill root.
 - [ ] Enumerate and sweep every remaining author-specific absolute path; pin with a test.
 - [ ] Decide and apply the `workshop/` publication boundary; untrack private material.
 
@@ -82,3 +84,13 @@ publishing private working material.
 Split out of the `workshop/plans/000206-shipping-surface-inventory.md` audit as blockers B6 and B7.
 The two are one issue because they are the same mistake at two altitudes: the
 author's environment leaking into what other people receive.
+
+## Revisions
+
+### 2026-09-11 — sole owner of `voice_apply`
+
+**Reason.** #213 was narrowed to the v1 checkhealth and copilot work. Its
+`voice_apply` item duplicated this issue's voice-skill row.
+
+**Delta.** The Spec bullet no longer defers to #213; one Plan row added; the
+skill's line references corrected to `init.lua:7,48`.
