@@ -405,7 +405,9 @@ and blocked on one Important. Each finding, by class:
 - Riders in this window (not #227 work; they ride its merge): `5596d22` — the
   operator's own `lua/parley/config.lua` defaults (codex live models gpt-6 /
   gpt-5; `max_full_exchanges` 42 → 242), committed on their request; `f00b1de`
-  — the operator's #233 issue file. Every other commit from the branch point
+  — the operator's #233 issue file; `ea57922` — the operator's two parley chat
+  sessions (astrophotography plan, right ascension), committed on request so
+  `sdlc merge` had a clean tree. Every other commit from the branch point
   starts `#227`.
 - Advisory round-2 findings: the rider rule (declared above); the round-2
   lessons (added to `workshop/lessons.md`); and `file_tracker` still reading
