@@ -313,6 +313,19 @@ structure into a blank one.
   now reddens exactly the one intended test. The real code repaints during
   `vim.wait` (17 lines before any explicit `:redraw`), i.e. the main loop
   flushes the invalidation on its own.
+- Task 5 — `make perf` (exit 0, hard gates unchanged), median / p95 ms:
+
+  | phase | 1,000 lines | 5,000 lines |
+  |---|---|---|
+  | `edit_total` (inclusive, one prose char) | 2.81 / 3.41 | 2.77 / 3.17 |
+  | `decoration_redraw` | 0.30 / 0.37 | 0.35 / 0.80 |
+  | `structure_splice` (one Enter) | 0.02 / 0.09 | 0.10 / 0.19 |
+  | `structure_rebuild` (the one per burst) | 1.20 / 1.63 | 5.67 / 6.97 |
+
+  One rebuild per burst on the 5,000-line chat is asserted in
+  `highlight_typing_spec` (a fence + 21 keystrokes → 22 restarts, 1 pending,
+  0 builds until it fires, then exactly 1); a plain-text burst with Enter
+  schedules none.
 
 ## Revisions
 

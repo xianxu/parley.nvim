@@ -301,6 +301,21 @@ local function isolated_phases(scenario)
             highlighter._compute_window_decorations(win, buf, top, top + 40, reader, cache.structure)
         end,
         spell_typeahead = function() require("parley.spell").suggest({ reader = reader }) end,
+        -- #227: an Enter at the end of the target row, spliced onto the cached
+        -- structure — the per-keystroke cost of a line-count edit.
+        structure_splice = function()
+            local model = require("parley.highlight_structure")
+            local cache = require("parley.highlighter")._structure_cache(buf)
+            local row0 = scenario.target_line - 1
+            model.replace(cache.structure, row0, row0 + 1, { scenario.original_line, "" },
+                model.patterns(require("parley").config))
+        end,
+        -- #227: the one rebuild a burst of approximate edits costs.
+        structure_rebuild = function()
+            local highlighter = require("parley.highlighter")
+            highlighter._structure_cache(buf).dirty = true
+            assert(highlighter.rebuild_structure(buf))
+        end,
     }
 end
 
