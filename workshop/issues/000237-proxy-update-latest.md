@@ -125,6 +125,12 @@ Once Fable 5.1 works through the proxy, review and voice_apply force a tool call
 and will hit Fable 5.1's 400 on forced `tool_choice` (recorded in #216's "Not
 fixed here").
 
+### 2026-09-11 — plan approved
+
+The operator approved `workshop/plans/000237-proxy-update-latest-plan.md`, and
+accepted that `download()` stays synchronous: `:ParleyProxy update` blocks the
+editor while it fetches, bounded by curl's timeouts.
+
 ## Revisions
 
 ### 2026-09-11 — planned: two milestones, auto_download settled, two defects added
