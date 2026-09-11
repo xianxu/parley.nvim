@@ -418,7 +418,10 @@ end
 ---
 --- Tokens, footer and draft ranges are always exact. `reason` says whether
 --- `state_before` is:
----   nil           exact — identical to build() of the edited buffer
+---   nil           exact — identical to build() of the edited buffer, provided
+---                 `structure` was itself exact. The verdict is about this edit
+---                 only: a splice onto an approximate structure stays
+---                 approximate, which is why the cache's `dirty` is sticky.
 ---   "structural"  some rows may keep pre-edit state: below the edit via the
 ---                 forward walk, above it via the 🧠: lookahead; rebuild
 ---   "misaligned"  (no structure) the range does not fit; rebuild

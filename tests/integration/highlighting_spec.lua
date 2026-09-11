@@ -70,13 +70,6 @@ end
 
 local decoration = require("tests.helpers.decoration")
 
--- #227: structural edits below arm the structure repair, and later tests pump
--- the event loop (vim.wait), so a real 250 ms timer could rebuild an earlier
--- test's buffer mid-test. A never-fired manual deferral keeps every ordering
--- in this file constructed rather than sampled. Each spec file runs in its
--- own nvim, so there is nothing to restore.
-require("parley.highlighter")._set_repair_deferral(decoration.manual_deferrals().factory)
-
 local function capture_decoration_provider()
     return decoration.capture_provider(parley)
 end

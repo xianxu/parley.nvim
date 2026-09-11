@@ -34,6 +34,16 @@ spec has to defend itself and no lint has to police traversal roots. `nvim`'s
 `directory` (swap) follows `$TMPDIR` for the same reason
 (`tests/minimal_init.vim`).
 
+**Signals to spec code travel through the environment, not `g:`.** Each spec
+runs in a child nvim that `PlenaryBustedFile` starts *without*
+`tests/minimal_init.vim`, so the init's `g:parley_test_mode` never reaches a
+spec (`chat_move_spec` sets it again itself). The child does inherit the
+environment, so the init also exports `$PARLEY_TEST_MODE=1`. The highlight
+structure's scheduled repair (#227) keys on it: under the harness no repair
+timer fires on its own, and a spec opts into the real clock with
+`highlighter._set_repair_deferral(nil, ms)` or fires one by hand
+(`tests/helpers/decoration.lua`).
+
 `tests/arch/scratch_placement_spec.lua` is the guard: it asserts
 `vim.fn.tempname()`, `'directory'`, `$HOME`, and the `$XDG_*` dirs all resolve
 outside `getcwd()`. It guards the *writer*, which — unlike a lint over spec

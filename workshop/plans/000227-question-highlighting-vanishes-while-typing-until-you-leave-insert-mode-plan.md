@@ -1735,3 +1735,18 @@ Delta:
   (`build`, `replace`, `_set_repair_deferral`, …): the
   `single_source_sweeps_spec` table-vs-diff guard looks for the backticked
   bare name, and `highlight_structure.build` did not match it (lesson #186).
+
+### 2026-09-10 — close round 1 (FIX-THEN-SHIP)
+
+Reason: the boundary review's blocking BR-4 (the splice's copy was invisible
+to the work-accounting gates) and the repeat family BR-1/BR-6 (real repair
+timers reachable from specs).
+Delta: `on_lines` records `work.rows_visited` and `structure_entries_copied`
+(every LineReader event carries the field); `tests/perf/harness.lua` owns the
+single `WORK_FIELDS` list; `make perf` gains a real-attachment
+`structure_splice` phase gated exactly (`4n+2` copied, no full read, equal row
+work at 1k/5k) and `edit_total` copies nothing. The repair deferral defaults to
+inert under `$PARLEY_TEST_MODE` (exported by `tests/minimal_init.vim`, because
+`g:` does not reach plenary's per-spec child), replacing the per-file install.
+`nvim__redraw` is guarded. BR-7 (render walk's duplicate reasoning rules) is
+deferred to #234.

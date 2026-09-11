@@ -210,6 +210,35 @@ describe("highlighting while typing (#227)", function()
         assert.are.same(oracle(buf), highlighter._structure_cache(buf).structure)
     end)
 
+    it("reports each splice's real work to the observer the #170 gates read", function()
+        -- BR-4: the O(n) copy of a line-count edit must reach record_work, or
+        -- a rebuild or deep copy could land on the keystroke path unseen.
+        local lines, target = require("tests.perf.chat_typing").build_fixture(5000)
+        local buf = open(lines)
+        local events = {}
+        require("parley.line_reader").set_observer(buf, function(event)
+            if event.operation == "structure_replace" then events[#events + 1] = event end
+        end)
+        type_text(buf, target - 1, #lines[target], "\n") -- Enter: one row becomes two
+        type_text(buf, target, 0, "xy")                   -- blank → text, then text → text
+        assert.equals(3, #events)
+        assert.equals(4, events[1].structure_rows_processed) -- 2 classified + 2 walked
+        assert.equals(2 * 5001, events[1].structure_entries_copied)
+        assert.equals(2, events[2].structure_rows_processed) -- the token changed: a splice
+        assert.equals(2 * 5001, events[2].structure_entries_copied)
+        assert.equals(1, events[3].structure_rows_processed) -- same token: shared, no copy
+        assert.equals(0, events[3].structure_entries_copied)
+    end)
+
+    it("keeps a repair when the experimental redraw API refuses", function()
+        local buf = open(CHAT)
+        patch(vim.api, "nvim__redraw", function() error("E5555: nvim__redraw is gone") end)
+        vim.api.nvim_buf_set_lines(buf, 14, 15, false, { "```lua" })
+        assert.has_no.errors(function() deferrals.fire() end)
+        assert.is_false(highlighter._structure_cache(buf).dirty)
+        assert.are.same(oracle(buf), highlighter._structure_cache(buf).structure)
+    end)
+
     it("closes a pending repair on teardown so a late fire touches nothing", function()
         local buf = open(CHAT)
         vim.api.nvim_buf_set_lines(buf, 14, 15, false, { "💬: new" })
@@ -334,6 +363,25 @@ describe("highlighting while typing (#227)", function()
         assert.is_truthy(cache, "reload detached the structure cache")
         assert.is_false(cache.dirty)
         assert.are.same(oracle(buf), cache.structure)
+    end)
+end)
+
+describe("the test harness's repair default (#227)", function()
+    after_each(function()
+        run_cleanups()
+        delete_scratch_bufs()
+    end)
+
+    it("arms no real repair unless a spec opts into the clock", function()
+        -- The rule for every spec, not an install in each one: any spec that
+        -- edits a parley buffer and pumps the loop would otherwise take a
+        -- 250 ms rebuild it never ordered.
+        assert.equals("1", vim.env.PARLEY_TEST_MODE, "tests/minimal_init.vim must export the harness signal")
+        local buf = open(CHAT)
+        vim.api.nvim_buf_set_lines(buf, 14, 15, false, { "```lua" })
+        assert.is_true(highlighter._structure_cache(buf).dirty)
+        vim.wait(600, function() return false end)
+        assert.is_true(highlighter._structure_cache(buf).dirty, "a real repair fired under the test harness")
     end)
 end)
 

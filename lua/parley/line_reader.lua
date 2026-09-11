@@ -62,6 +62,7 @@ function M.record_work(buf, event)
     copy.lines_requested = copy.lines_requested or 0
     copy.full_buffer = copy.full_buffer or false
     copy.structure_rows_processed = copy.structure_rows_processed or 0
+    copy.structure_entries_copied = copy.structure_entries_copied or 0
     observe(buf, copy)
 end
 
@@ -108,6 +109,7 @@ function M.for_buffer(buf, opts)
             lines_requested = requested_count,
             full_buffer = start0 == 0 and end0 == -1,
             structure_rows_processed = 0,
+            structure_entries_copied = 0,
         }, function() return delegate.lines(buf, start0, end0, strict) end)
     end
 
@@ -119,6 +121,7 @@ function M.for_buffer(buf, opts)
             lines_requested = touched,
             full_buffer = false,
             structure_rows_processed = 0,
+            structure_entries_copied = 0,
         }, function() return delegate.text(buf, sr, sc, er, ec, text_opts) end)
     end
 
@@ -129,6 +132,7 @@ function M.for_buffer(buf, opts)
             lines_requested = 1,
             full_buffer = false,
             structure_rows_processed = 0,
+            structure_entries_copied = 0,
         }, function() return delegate.line(buf, row0) end)
     end
 

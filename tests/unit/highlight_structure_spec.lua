@@ -170,6 +170,29 @@ describe("highlight_structure", function()
         assert.are.same({ rows_visited = 2, entries_copied = 6 }, work)
     end)
 
+    it("splices by sharing every untouched state table and copying only the two arrays", function()
+        -- #227 BR-4: equal RESULTS cannot tell a shallow splice from a deep copy
+        -- or a rebuild, so pin the mechanism — reference identity for every
+        -- untouched row, and exactly the accounted copy — at three sizes.
+        for _, count in ipairs({ 100, 1000, 5000 }) do
+            local lines = { "💬: q" }
+            for i = 2, count do lines[i] = "prose " .. i end
+            local original = structure.build(lines, patterns)
+            local k = math.floor(count / 2)
+            -- Enter at the end of row k: one row becomes the row plus a blank.
+            local out, _, reason, work = structure.replace(original, k, k + 1, { lines[k + 1], "" }, patterns)
+            assert.is_nil(reason)
+            for r = 1, k do
+                assert.is_true(rawequal(original.state_before[r], out.state_before[r]), "prefix row " .. r)
+            end
+            for r = k + 2, count do
+                assert.is_true(rawequal(original.state_before[r], out.state_before[r + 1]), "suffix row " .. r)
+            end
+            -- 2 classified + 2 walked; one token slot and one state slot per row.
+            assert.are.same({ rows_visited = 4, entries_copied = 2 * (count + 1) }, work)
+        end
+    end)
+
     it("returns an aligned structure for every edit shape, exact exactly when promised", function()
         local cases = {
             -- name, first0, old_last0, new_lines, expected reason

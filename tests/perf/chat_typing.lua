@@ -2,12 +2,12 @@ local harness = require("tests.perf.harness")
 
 local M = {}
 
-local WORK_FIELDS = {
-    "line_read_calls", "lines_requested", "full_buffer_reads", "structure_rows_processed",
-}
+local WORK_FIELDS = harness.WORK_FIELDS
 
 local function empty_work()
-    return { line_read_calls = 0, lines_requested = 0, full_buffer_reads = 0, structure_rows_processed = 0 }
+    local work = {}
+    for _, field in ipairs(WORK_FIELDS) do work[field] = 0 end
+    return work
 end
 
 function M.build_fixture(n)
@@ -32,6 +32,8 @@ function M.new_counter()
             values.full_buffer_reads = values.full_buffer_reads + (event.full_buffer and 1 or 0)
             values.structure_rows_processed = values.structure_rows_processed
                 + (event.structure_rows_processed or 0)
+            values.structure_entries_copied = values.structure_entries_copied
+                + (event.structure_entries_copied or 0)
         end,
         snapshot = function()
             return vim.deepcopy(values)
@@ -108,16 +110,28 @@ function M.assert_hard_gates(report)
     local indexed = {}
     for _, scenario in ipairs(report.scenarios or {}) do
         indexed[scenario.phase .. ":" .. scenario.line_count] = scenario.work
-        if scenario.phase == "edit_total" or scenario.phase == "decoration_redraw" then
+        if scenario.phase == "edit_total" or scenario.phase == "decoration_redraw"
+            or scenario.phase == "structure_splice" then
             assert(scenario.work.full_buffer_reads == 0,
                 scenario.phase .. " must perform zero full-buffer reads")
         end
         if scenario.phase == "edit_total" then
             assert(scenario.work.structure_rows_processed == 1,
                 "edit_total must process exactly one structure row")
+            -- #227: a fingerprint-identical edit shares the structure's arrays.
+            assert(scenario.work.structure_entries_copied == 0,
+                "edit_total must copy no structure entries")
+        end
+        if scenario.phase == "structure_splice" then
+            -- #227: an Enter and the join that undoes it each splice two
+            -- n-slot arrays — the one O(n) cost a line-count keystroke may pay:
+            -- 2(n+1) + 2n. Exact, both ways: more is a rebuild or extra copy on
+            -- the keystroke path; less means the copy went unreported again.
+            assert(scenario.work.structure_entries_copied == 4 * scenario.line_count + 2,
+                "structure_splice must report exactly the two-array copy of each splice")
         end
     end
-    for _, phase in ipairs({ "edit_total", "decoration_redraw" }) do
+    for _, phase in ipairs({ "edit_total", "decoration_redraw", "structure_splice" }) do
         for _, line_count in ipairs({ 1000, 5000 }) do
             assert(indexed[phase .. ":" .. line_count],
                 string.format("hard gates requires %s at %d lines", phase, line_count))
@@ -127,6 +141,11 @@ function M.assert_hard_gates(report)
         assert(one.lines_requested == five.lines_requested,
             phase .. " lines_requested must match at 1000 and 5000 lines")
     end
+    -- The splice classifies and walks only the rows it touches; its copy may
+    -- scale with the document, its row work may not.
+    assert(indexed["structure_splice:1000"].structure_rows_processed
+        == indexed["structure_splice:5000"].structure_rows_processed,
+        "structure_splice structure_rows_processed must match at 1000 and 5000 lines")
 end
 
 local setup_root
@@ -301,14 +320,13 @@ local function isolated_phases(scenario)
             highlighter._compute_window_decorations(win, buf, top, top + 40, reader, cache.structure)
         end,
         spell_typeahead = function() require("parley.spell").suggest({ reader = reader }) end,
-        -- #227: an Enter at the end of the target row, spliced onto the cached
-        -- structure — the per-keystroke cost of a line-count edit.
+        -- #227: an Enter at the end of the target row and the join that undoes
+        -- it, through the real buffer attachment — the per-keystroke cost of a
+        -- line-count edit, with its copy visible to the gates.
         structure_splice = function()
-            local model = require("parley.highlight_structure")
-            local cache = require("parley.highlighter")._structure_cache(buf)
             local row0 = scenario.target_line - 1
-            model.replace(cache.structure, row0, row0 + 1, { scenario.original_line, "" },
-                model.patterns(require("parley").config))
+            vim.api.nvim_buf_set_lines(buf, row0, row0 + 1, false, { scenario.original_line, "" })
+            vim.api.nvim_buf_set_lines(buf, row0, row0 + 2, false, { scenario.original_line })
         end,
         -- #227: the one rebuild a burst of approximate edits costs.
         structure_rebuild = function()

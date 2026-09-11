@@ -13,6 +13,7 @@ local function scenario(line_count, phase, attribution, median, p95)
             lines_requested = line_count,
             full_buffer_reads = 0,
             structure_rows_processed = line_count,
+            structure_entries_copied = 0,
         },
     }
 end

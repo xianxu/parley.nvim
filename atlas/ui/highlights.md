@@ -76,8 +76,13 @@ row-indexed.
   (`STRUCTURE_REPAIR_MS`); every further edit restarts it, and any successful
   rebuild — including the `buffer_lifecycle` convergence events — stops it. It
   repaints with `nvim__redraw({ buf, valid = false })`; `valid = true` re-runs
-  `on_win` but redraws no lines of an unedited buffer. Tests swap the deferral
-  through `highlighter._set_repair_deferral`.
+  `on_win` but redraws no lines of an unedited buffer (a guarded call: it is
+  experimental API). Under the test harness (`$PARLEY_TEST_MODE`) no repair
+  fires on its own; specs fire one by hand or opt into the real clock through
+  `highlighter._set_repair_deferral` — see [infra/test_harness](../infra/test_harness.md).
+- **Accounted.** Each splice reports its real work — rows classified/walked and
+  `structure_entries_copied` — to the LineReader observer, and `make perf`
+  gates it: a prose edit copies nothing, an Enter copies exactly two arrays.
 - **Resync.** A splice that throws or no longer matches the buffer's line count
   (Nvim reports emptying a buffer as zero lines though one remains), and a
   `:checktime` reload (`on_reload` — without it Nvim detaches the attachment),

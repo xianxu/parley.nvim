@@ -337,6 +337,67 @@ structure into a blank one.
 - Full `make test` (lint + unit + integration + arch): exit 0, 210 spec files PASS.
 - Operator e2e (2026-09-10): "yes, seems fixed it" — typing with Enter keeps the question colouring in insert mode.
 
+### 2026-09-10 — close round 1: FIX-THEN-SHIP → dispositions
+
+The review re-verified the fix (5 mutations, 60k-edit exactness run, full suite)
+and blocked on one Important. Each finding, by class:
+
+- **BR-4 (Important, work-accounting-blind-spot) — fixed at the class.** The
+  record sites for structure work are `build_structure` and `on_lines`; the
+  resync and repair paths both go through `build_structure`. Both now report
+  what the work actually was: `on_lines` sends `work.rows_visited` and a new
+  `structure_entries_copied`, which every LineReader event now carries. Three
+  layers of guard:
+  - The unit test pins the mechanism — reference-shared state tables, exactly
+    `2(n+1)` copied at 100/1k/5k lines — and goes red on a `vim.deepcopy`
+    splice.
+  - The integration test pins what `on_lines` records for an Enter,
+    blank→text, and text→text edit, and goes red when the copy is reported as
+    0. It runs in `make test`, not just `make perf`.
+  - `make perf` gates `edit_total` (copies nothing) and a new real-attachment
+    `structure_splice` phase (Enter + join: no full read, equal row work at
+    1k/5k, *exactly* `4n+2` copied). The gate is exact both ways, so the
+    blind-again direction fails too.
+  The work-field list was written out three times (schema ×2, counter); it is
+  now `harness.WORK_FIELDS`.
+- **BR-1 / BR-6 (Minor, injected-clock-in-tests — the repeat family) — fixed
+  as a rule.** Under the test harness, the repair deferral now defaults to one
+  that never fires. Specs opt into the real clock with
+  `_set_repair_deferral(nil, ms)`. The per-file install in
+  `highlighting_spec.lua` is removed. The default could not key on
+  `g:parley_test_mode`: `PlenaryBustedFile` runs each spec in a child nvim
+  without `minimal_init.vim`, so that `g:` never reaches a spec. The test
+  printed nil, which is also why `chat_move_spec` sets it again itself.
+  `minimal_init.vim` now exports `$PARLEY_TEST_MODE`, which the child
+  inherits. Guard: a spec with no seam waits 600 ms after a structural edit
+  and requires the cache still dirty; it goes red when the default is removed.
+- **BR-5 (Minor, private-api-unguarded) — fixed.** `nvim__redraw` is the only
+  `nvim__` call in `lua/`, and it is now `pcall`ed. The guard is a refusing
+  stub: the repair must still land. It goes red when the call is unguarded.
+- **BR-7 (Minor, duplicated-state-machine) — deferred to #234.** The render
+  walk's reasoning rules are routed through `leave_row` there, with a parity
+  property test and a sweep of `chat_parser`'s copy. The render walk's phases
+  differ per field (code/tool advance before painting, question/reasoning
+  after), so this is a render-path refactor, separable from the
+  blank-while-typing fix.
+- **BR-8 (Minor) — no change.** `f00b1de` is the operator's own #233 issue
+  commit on this branch; it lands on main with the merge, where issue files
+  belong.
+- **BR-2, BR-3 (carried plan-gate) — already addressed** (both traceability
+  entries; `init.lua:1714`/`:2872`), as the round-1 review confirmed.
+- Review notes also taken: `replace`'s contract says `nil` is exact only
+  relative to an exact input structure (the cache's `dirty` is sticky), and the
+  long line in `TOOLING.md` is rewrapped. TOOLING and the atlas
+  (`infra/test_harness`, `ui/highlights`) now document the new work field, the
+  gates and the harness signal.
+- Round-2 verification: `make test` exit 0 (210 files). `make perf` exit 0; its
+  gated counts on real runs were `edit_total` 1 row / 0 copied, and
+  `structure_splice` 6 rows at both sizes / exactly 4,002 and 20,002 copied /
+  0 full reads (median 0.04 / 0.11 ms at 1k / 5k). Mutations, each seen red
+  then reverted: accounting reported as 0 → the observer test; harness default
+  removed → the harness-default test; redraw unguarded → the refusing-redraw
+  test; `vim.deepcopy` splice → the sharing unit test.
+
 ## Revisions
 
 ### 2026-09-10 — planning (before implementation)

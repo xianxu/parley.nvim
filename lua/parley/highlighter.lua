@@ -81,10 +81,22 @@ local function new_uv_deferral()
         close = function() stop_and_close_timer(timer) end,
     }
 end
-local new_deferral = new_uv_deferral
+-- Under the test harness no repair fires on its own: a 250 ms rebuild landing
+-- inside some other spec's vim.wait is an ordering that spec never
+-- constructed. A spec opts into the real clock with
+-- `_set_repair_deferral(nil, ms)` or fires one by hand. The signal is
+-- $PARLEY_TEST_MODE, exported by tests/minimal_init.vim: plenary runs each
+-- spec in a child nvim that inherits the environment but not `g:` variables.
+local function new_default_deferral()
+    if vim.env.PARLEY_TEST_MODE == "1" then
+        return { start = function() end, stop = function() end, close = function() end }
+    end
+    return new_uv_deferral()
+end
+local new_deferral = new_default_deferral
 
 --- Test seam: swap the repair deferral factory and/or its delay. `nil`
---- keeps the production factory. Returns a function restoring both.
+--- opts into the production timer. Returns a function restoring both.
 function M._set_repair_deferral(factory, delay_ms)
     local prev_factory, prev_delay = new_deferral, STRUCTURE_REPAIR_MS
     new_deferral = factory or new_uv_deferral
@@ -943,6 +955,7 @@ local function build_structure(buf)
     require("parley.line_reader").record_work(buf, {
         operation = "structure_build",
         structure_rows_processed = work and work.rows_visited or rows,
+        structure_entries_copied = work and work.entries_copied or 0,
     })
     return structure
 end
@@ -964,7 +977,9 @@ local function arm_repair(buf, cache)
         end
         -- Decorations are ephemeral and an unedited buffer is not redrawn on
         -- its own. `valid = true` would re-run on_win yet redraw no lines.
-        vim.api.nvim__redraw({ buf = buf, valid = false })
+        -- nvim__redraw is experimental API: if it is renamed or refuses, the
+        -- repair still stands and the next redraw shows it.
+        pcall(vim.api.nvim__redraw, { buf = buf, valid = false })
     end)
 end
 
@@ -1005,7 +1020,7 @@ function M.rebuild_structure(buf)
             if not current then return true end
             local model = require("parley.highlight_structure")
             local line_reader = require("parley.line_reader")
-            local ok_splice, replaced, rows, reason = pcall(function()
+            local ok_splice, replaced, _, reason, work = pcall(function()
                 local new_lines = line_reader.for_buffer(changed_buf):lines(firstline, new_lastline, false)
                 return model.replace(current.structure, firstline, lastline, new_lines,
                     model.patterns(_parley.config))
@@ -1018,8 +1033,12 @@ function M.rebuild_structure(buf)
                 resync(changed_buf, current)
                 return
             end
+            -- The work replace actually did, copy included (#227 BR-4): the
+            -- #170 gates can only hold a cost they are shown.
             line_reader.record_work(changed_buf, {
-                operation = "structure_replace", structure_rows_processed = rows,
+                operation = "structure_replace",
+                structure_rows_processed = work.rows_visited,
+                structure_entries_copied = work.entries_copied,
             })
             current.structure = replaced
             current.dirty = current.dirty or reason ~= nil

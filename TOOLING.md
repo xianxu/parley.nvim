@@ -46,8 +46,10 @@ checkout) or a distinct `TEST_ENV_ROOT` for concurrent suites.
 `make perf` opens normally attached Parley chat buffers at 100, 1,000, and
 5,000 lines, performs 5 warmups and 20 measured samples, and reports the real
 insert-event/redraw interval plus isolated timezone, footnote, decoration,
-spell, structure-splice (one Enter), and structure-rebuild phases. Inclusive `edit_total` overlaps the isolated measurements; do not
-add or subtract the isolated phase timings as if they decomposed it.
+spell, structure-splice (an Enter and its join, through the real buffer
+attachment), and structure-rebuild phases. Inclusive `edit_total` overlaps the
+isolated measurements; do not add or subtract the isolated phase timings as if
+they decomposed it.
 
 The command prints median/p95 timings and scaling ratios, then overwrites
 `$(TEST_TMP)/perf/parley-chat-typing.json` — see *Test Scratch Directories*
@@ -65,22 +67,34 @@ The JSON envelope has `schema_version: 1`, `generated_at`,
 git `commit`), and `scenarios`. Every scenario records `name`, `phase`,
 `attribution` (`inclusive` or `isolated`), `line_count`, `iteration_count`,
 `elapsed_ms` (`samples`, `median`, `p95`), and `work`
-(`line_read_calls`, `lines_requested`, `full_buffer_reads`, and
-`structure_rows_processed`). Generated reports are ignored artifacts; durable
-baseline/optimized summaries belong in the issue log.
+(`line_read_calls`, `lines_requested`, `full_buffer_reads`,
+`structure_rows_processed`, and `structure_entries_copied` — the slots a
+structure splice copies, which row counts cannot see; the list is single-sourced
+as `tests/perf/harness.lua`'s `WORK_FIELDS`). Generated reports are ignored
+artifacts; durable baseline/optimized summaries belong in the issue log.
 
 Elapsed timings are report-only and never fail CI. Scenario validity and
 structural bounds are correctness gates: the measured insert event must not
 perform a full-buffer read; decoration reads stay within the viewport/context
-allowances; matched 1,000/5,000-line viewports request identical work; and
-ordinary prose edits process the same bounded structure rows. Timezone and
+allowances; matched 1,000/5,000-line viewports request identical work;
+ordinary prose edits process the same bounded structure rows and copy nothing;
+and an Enter-and-join splice reads no full buffer, does the same row work at
+both sizes, and reports exactly its two-array copy (`4n + 2` slots). Timezone and
 managed-footnote diagnostics deliberately remain stale during `TextChangedI`,
 then converge synchronously on `InsertLeave`, normal `TextChanged`,
 `BufWritePost`, `BufEnter`, `WinEnter`, and stream-leg finalization. Structural
 marker edits never suppress decorations: they leave the structure approximate
 and still rendering, and it is rebuilt 250 ms after the burst or at the next
-convergence event. Redraw itself consumes only the
-buffer-owned bounded structure snapshot and visible/context rows.
+convergence event. Redraw itself consumes only the buffer-owned bounded
+structure snapshot and visible/context rows.
+
+Under the test harness that scheduled rebuild never fires on its own:
+`tests/minimal_init.vim` exports `$PARLEY_TEST_MODE`, and a spec that wants the
+real clock opts in with `highlighter._set_repair_deferral(nil, ms)` or fires a
+repair by hand (`tests/helpers/decoration.lua` `manual_deferrals`). It is an
+environment variable, not `g:parley_test_mode`, because `PlenaryBustedFile`
+runs each spec in a child nvim that inherits the environment but not this
+init's `g:` variables.
 
 For an optional manual comparison, repeat ordinary typing with
 `:MarkdownPreview` enabled. The automated report intentionally excludes that
