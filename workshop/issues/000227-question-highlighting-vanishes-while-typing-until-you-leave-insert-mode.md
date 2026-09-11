@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-09-09
 updated: 2026-09-10
-estimate_hours: 3.95
+estimate_hours: 4.30
 started: 2026-09-10T13:13:23-07:00
 ---
 
@@ -32,7 +32,7 @@ same buffer, the ordered-list markers (`1.` `2.` `3.`) render in one colour in
 some frames and another in others, while the body text stays coloured.
 
 That is the same defect seen at different redraw frames rather than a second
-one. A chat buffer is `filetype=markdown` (`init.lua:1707`), so markdown's own
+one. A chat buffer is `filetype=markdown` (`init.lua:1714`), so markdown's own
 highlighting sits **underneath** parley's decoration overlay:
 
 - frames where the structure cache is clean → the provider runs → parley's
@@ -106,7 +106,7 @@ line is wrong".
 
 **4. Recovery is incidental.** The cache is only rebuilt when something else
 calls `rebuild_structure` — `BufEnter` (`highlighter.lua:1051`), or
-`highlight_question_block` (`:851`, reached via `init.lua:2865`). Leaving insert
+`highlight_question_block` (`:851`, reached via `init.lua:2872`). Leaving insert
 mode happens to reach one of those, so the colour returns and the mode change
 gets the blame.
 
@@ -186,29 +186,35 @@ assumed.
 
 ## Estimate
 
-Two `lua-neovim` primitives — the pure splice in `highlight_structure`, and the
-highlighter glue (fail-open, repair deferral, reload/resync) with its
-integration spec — plus atlas/docs and the one close review. Design takes the
-mid-density ×0.5 spec discount, not ×0.2: the pre-claim issue settled the
-diagnosis and direction, but the design decisions (aligned splice, exactness
-rule, the class sweep, the state table) were made after `claim`, inside the
-window `sdlc actual` measures. Per v2.1, a ×0.5 discount keeps the +30% design
-buffer. `impl=` is 40% of the v2 table (v3.1): lua-neovim 1.0 h and 1.5 h (the
-glue carries the timer/reload integration tests), atlas 0.2 h, review 0.35 h.
-Familiar territory (#170, #218 touched the same modules) → familiarity 1.0.
+One item per Plan task family: the `build` split (Task 1, a behavior-preserving
+`cross-cutting-refactor`); two `lua-neovim` primitives — the pure splice, and
+the highlighter glue (fail-open, repair deferral, reload/resync) that also
+carries the test helper and the perf phases (Tasks 3–5); atlas/docs; one
+operator e2e round (Task 7, `ux-rename-iteration`: the Done-when is a visual
+stability claim reported from screenshots, so one round is the likely case);
+and the one close review. Design takes the mid-density ×0.5 spec discount, not
+×0.2: the pre-claim issue settled the diagnosis and direction, but the design
+decisions (aligned splice, exactness rule, the class sweep, the state table)
+were made after `claim`, inside the window `sdlc actual` measures. The operator
+round takes no discount. `impl=` is 40% of the v2 table (v3.1). Design buffer
+0.15 for baseline consistency — `baseline-v3.1.md` prices every row as
+`est_design * 1.15` (the rule #215 and #218 settled). Familiar territory (#170,
+#218 touched the same modules) → familiarity 1.0.
 
 ```estimate
 model: estimate-logic-v3.1
 familiarity: 1.0
+item: cross-cutting-refactor design=0.1 impl=0.12
 item: lua-neovim design=1.0 impl=0.4
 item: lua-neovim design=1.0 impl=0.6
 item: atlas-docs design=0.1 impl=0.08
+item: ux-rename-iteration design=0.3 impl=0.08
 item: milestone-review design=0.0 impl=0.14
-design-buffer: 0.30
-total: 3.95
+design-buffer: 0.15
+total: 4.30
 ```
 
-*Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against `baseline-v3.1.md`. Method A only.*
+*Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against `baseline-v3.1.md`. Method A only. `sdlc estimate-source` reports the calibration doc `[stale]` (ledger newer than the doc) — per-primitive hours are provisional.*
 
 ## Plan
 
@@ -268,6 +274,15 @@ structure into a blank one.
   `"structural"` contract said stale rows are only at/after the edit, but the
   `🧠:` lookahead reaches rows *above* it — pinned with a new unit test that
   isolates the inertness rule.
+- `sdlc change-code`: plan-quality passed round 1 (no blocking; judge re-ran
+  the probes and a 60k-edit exactness run). Three Minor findings, disposed in
+  implementation rather than by editing the gated plan: (1) install the manual
+  repair deferral file-wide in `highlighting_spec.lua` too, since that file
+  pumps the loop (`vim.wait(700)`) while structural-edit tests would arm real
+  250 ms timers — the helper moves to `tests/helpers/decoration.lua`; (2) add
+  the new spec to **both** traceability entries that list
+  `highlighting_spec.lua`; (3) `init.lua` pointers corrected (`:1714`,
+  `:2872`). Ledger: `workshop/plans/…-plan-gate.md`.
 
 ## Revisions
 
@@ -281,3 +296,13 @@ added (reload, splice failure, empty-buffer report, failed rebuild) as the
 enumerated class; one Done-when bullet added for alignment and reload. The
 "worth considering" incremental path is adopted in its inert-edit form, on the
 measurement above rather than deferred.
+
+### 2026-09-10 — estimate (after change-code)
+
+Reason: estimate-quality (INFO) noted the +30% buffer breaks consistency with
+`baseline-v3.1.md`, which prices every row at `est_design * 1.15` (settled on
+#215 and #218), and that Task 1 (build split) and Task 7 (operator e2e round)
+had no line item.
+Delta: `estimate_hours` 3.95 → 4.30 — buffer 0.30 → 0.15; added
+`cross-cutting-refactor` (0.1/0.12) and `ux-rename-iteration` (0.3/0.08);
+provenance now carries the `[stale]` calibration caveat.
