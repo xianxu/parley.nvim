@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-09-09
 updated: 2026-09-10
-estimate_hours:
+estimate_hours: 3.95
 started: 2026-09-10T13:13:23-07:00
 ---
 
@@ -132,6 +132,15 @@ keeps its highlighting. Requires keeping the previous structure rather than
 discarding it on invalidation, and distinguishing "stale but usable" from
 "absent".
 
+**The stale structure must stay aligned** (revised 2026-09-10). Footer start,
+draft ranges and `state_before` are row-indexed, so a structure rendered
+unchanged after an Enter paints the footnote colour N rows too high — over the
+lines being typed. Every edit is therefore spliced into the structure (rows
+inserted/removed, tokens re-derived): tokens, footer and drafts are always
+exact, and the splice is fully exact whenever the edit touches only inert rows
+(text, blank, fence, draft delimiter) and the first row below it is entered in
+the same state as before. Only marker/`🧠:`/footnote edits leave it approximate.
+
 **2. Schedule the repair.** `on_lines` should mark dirty **and** schedule a
 debounced `rebuild_structure`, so correctness catches up within a frame or two
 instead of waiting for an unrelated event. Debounce so a burst of keystrokes
@@ -139,6 +148,13 @@ costs one rebuild, not one per character.
 
 Together the operator never sees plain text, and the structure converges without
 an O(buffer) scan per keystroke.
+
+**3. Close the rest of the class** (added 2026-09-10). Every path that leaves
+the structure not matching its buffer must repair it rather than wait for an
+unrelated event: a `:checktime`/autoread reload (today Nvim *detaches* the
+attachment, blanking non-current windows), a splice that throws, and Nvim's
+empty-buffer `on_lines` report (zero lines, though one remains). A failed
+rebuild keeps rendering the aligned structure instead of going blank.
 
 ### Worth considering, not required
 
@@ -164,14 +180,48 @@ assumed.
 - Rebuild cost under a burst of keystrokes is measured on a long chat and
   recorded; one rebuild per burst, not per character.
 - No regression in what the provider draws once clean.
+- The structure's row count equals the buffer's after every edit, including
+  emptying the buffer; a `:checktime` reload leaves the cache attached and
+  current without any `BufEnter`/`TextChanged`.
+
+## Estimate
+
+Two `lua-neovim` primitives — the pure splice in `highlight_structure`, and the
+highlighter glue (fail-open, repair deferral, reload/resync) with its
+integration spec — plus atlas/docs and the one close review. Design takes the
+mid-density ×0.5 spec discount, not ×0.2: the pre-claim issue settled the
+diagnosis and direction, but the design decisions (aligned splice, exactness
+rule, the class sweep, the state table) were made after `claim`, inside the
+window `sdlc actual` measures. Per v2.1, a ×0.5 discount keeps the +30% design
+buffer. `impl=` is 40% of the v2 table (v3.1): lua-neovim 1.0 h and 1.5 h (the
+glue carries the timer/reload integration tests), atlas 0.2 h, review 0.35 h.
+Familiar territory (#170, #218 touched the same modules) → familiarity 1.0.
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: lua-neovim design=1.0 impl=0.4
+item: lua-neovim design=1.0 impl=0.6
+item: atlas-docs design=0.1 impl=0.08
+item: milestone-review design=0.0 impl=0.14
+design-buffer: 0.30
+total: 3.95
+```
+
+*Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against `baseline-v3.1.md`. Method A only.*
 
 ## Plan
 
-- [ ] Retain the last good structure on invalidation; teach the provider to
-      render from it while dirty.
-- [ ] Schedule a debounced rebuild from `on_lines`.
-- [ ] Tests for both, per Done-when.
-- [ ] Measure rebuild cost on a long chat under a typing burst; record it.
+Detailed plan: `workshop/plans/000227-question-highlighting-vanishes-while-typing-until-you-leave-insert-mode-plan.md`.
+Single-pass work — one `sdlc close`, no milestones.
+
+- [ ] Split `highlight_structure.build` into shared per-row steps (`enter_row`/`leave_row`, markers, `derive`); behavior unchanged.
+- [ ] `replace` returns an aligned splice for every edit, exact when inert + converged; shape table + property test; see each guard fail.
+- [ ] Shared decoration test helpers (`tests/helpers/decoration.lua`).
+- [ ] Highlighter: fail-open `on_win`, splice in `on_lines`, debounced repair (injectable deferral), `on_reload` resync, splice-failure/row-count resync; delete `renderable`; `highlight_typing_spec.lua` per Done-when.
+- [ ] `make perf` reports `structure_splice` + `structure_rebuild`; record numbers and the one-rebuild-per-burst result in Log.
+- [ ] Atlas (`ui/highlights`, `chat/lifecycle`), `TOOLING.md`, traceability; full `make test`.
+- [ ] Operator e2e check (list typing with Enter above a footer; fence + pause; markdown draft).
 
 ## Log
 
@@ -185,3 +235,49 @@ incidental, and the real trigger is any edit `M.replace` cannot apply
 incrementally — which includes every newline, since it requires an unchanged
 line count. The provider's `return false` on a dirty cache is what turns a stale
 structure into a blank one.
+
+### 2026-09-10 — design
+
+- The blank-on-dirty behavior was a deliberate #170 trade-off (its plan: "Dirty
+  redraw returns false"; `TOOLING.md` even documents "structural marker edits
+  may suppress decorations during insertion"). `buffer_lifecycle` converges on
+  `InsertLeave` but owns no `TextChangedI` handler — which is exactly why
+  leaving insert mode "recolours". #170's hard gates (zero full reads per
+  keystroke, one structure row per prose character) are kept.
+- Measured (pure LuaJIT, perf fixture): full `build` 1.1 ms @1k, 5.5 ms @5k,
+  21.8 ms @20k lines; a shallow two-array splice for an Enter at the top of the
+  buffer 0.005 / 0.019 / 0.09 ms — ~250× cheaper. That is what makes an aligned
+  splice per keystroke affordable and the Spec's "worth considering" fast path
+  fall out of the fix (ARCH-CONSTRAINTS).
+- Probes (headless nvim 0.11.7): `:checktime` reload with no `on_reload`
+  handler **detaches** the attachment (only `on_detach` fires); with a handler,
+  `on_reload` fires and already sees the new text. `:e!` detaches but fires
+  `BufEnter` during the command, which rebuilds — no change needed. Emptying a
+  buffer reports `on_lines 0 2 0` with `line_count == 1`. `nvim__redraw({buf,
+  valid=true})` re-ran `on_win` but redrew 0 lines; `valid=false` redrew all.
+- The backward `🧠:` lookahead's terminator list is identical to the module's
+  `STRUCTURAL_TOKENS`; the refactor reuses the set instead of a second list
+  (ARCH-DRY).
+- Fresh-context plan review (ran the plan's code on a scratch copy): exactness
+  rule held — no `reason == nil` counterexample in a 60k-edit run; property
+  test exercised 974 exact / 2,626 approximate splices; refactored `build`
+  matched the old one on 3,000 random docs; all 24 shape rows hand-verified.
+  Fixed from its findings: Task 4's test-update list missed `renderable` at
+  `highlighting_spec.lua:1282,1306` and two `prior` captures that a splice
+  invalidates; two mutation steps named tests that would not go red; the
+  `"structural"` contract said stale rows are only at/after the edit, but the
+  `🧠:` lookahead reaches rows *above* it — pinned with a new unit test that
+  isolates the inertness rule.
+
+## Revisions
+
+### 2026-09-10 — planning (before implementation)
+
+Reason: rendering the last good structure *unchanged* (Spec 1 as written)
+misplaces every row-indexed value after a line-count edit — most visibly the
+footnote footer, which would colour the lines being typed.
+Delta: Spec 1 now requires an aligned splice (exact for inert edits); Spec 3
+added (reload, splice failure, empty-buffer report, failed rebuild) as the
+enumerated class; one Done-when bullet added for alignment and reload. The
+"worth considering" incremental path is adopted in its inert-edit form, on the
+measurement above rather than deferred.
