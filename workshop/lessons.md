@@ -1,5 +1,33 @@
 # Lessons
 
+## 2026-09-10 (#227)
+
+- **Fail-open is only safe for a cache that is still aligned with what it
+  describes.** #170 made a dirty structure cache draw nothing, so every Enter
+  in insert mode blanked the chat until an unrelated event (`InsertLeave`)
+  rebuilt it. The obvious fix — render the last good structure — would have
+  moved the symptom, not removed it: the structure is row-indexed (footer
+  start, draft ranges, `state_before`), so after an Enter the footnote colour
+  lands on the lines being typed. Rule: before relaxing a fail-closed guard,
+  list what the cached value is *indexed by*; if the index moves with edits,
+  keep it aligned (splice) and render that, and give every invalidation an
+  owner that schedules the repair rather than waiting for an incidental event
+  (`ARCH-PURPOSE`, `ARCH-ORDER`).
+- **A stub restored inline after an assertion that can fail leaks into every
+  later test in the file.** A mutation made one test fail before it restored
+  `vim.api.nvim__redraw`; the real-clock test then failed with "0 lines
+  redrawn", which looked like a Neovim redraw quirk until an isolated probe
+  showed Neovim repainting correctly. Rule: register each stub's undo on a
+  cleanup stack that `after_each` unwinds; when a mutation reddens a test you
+  did not expect, suspect state leaked from the test it did break before
+  suspecting the runtime.
+- **The Core-concepts table↔code guard matches the bare backticked symbol in a
+  definition form.** `highlight_structure.build` and `M._set_repair_deferral`
+  did not satisfy it, and `on_win` — a field in a table literal — has no
+  definition form at all; name the function that registers it
+  (`setup_buf_handler`). It only runs in the full `make test`, so a green run
+  of the targeted specs said nothing about it (reinforces #160, #186).
+
 ## 2026-08-22 (#203)
 
 - **A span-based text edit is only as safe as the boundary you assume — and an

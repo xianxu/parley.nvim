@@ -227,7 +227,7 @@ Single-pass work — one `sdlc close`, no milestones.
 - [x] Highlighter: fail-open `on_win`, splice in `on_lines`, debounced repair (injectable deferral), `on_reload` resync, splice-failure/row-count resync; delete `renderable`; `highlight_typing_spec.lua` per Done-when.
 - [x] `make perf` reports `structure_splice` + `structure_rebuild`; record numbers and the one-rebuild-per-burst result in Log.
 - [x] Atlas (`ui/highlights`, `chat/lifecycle`), `TOOLING.md`, traceability; full `make test`.
-- [ ] Operator e2e check (list typing with Enter above a footer; fence + pause; markdown draft).
+- [x] Operator e2e check (list typing with Enter above a footer; fence + pause; markdown draft).
 
 ## Log
 
@@ -335,6 +335,7 @@ structure into a blank one.
   `make test`. Cells renamed (`on_win` via `setup_buf_handler`, the function
   that registers it); guard 21/21.
 - Full `make test` (lint + unit + integration + arch): exit 0, 210 spec files PASS.
+- Operator e2e (2026-09-10): "yes, seems fixed it" — typing with Enter keeps the question colouring in insert mode.
 
 ## Revisions
 

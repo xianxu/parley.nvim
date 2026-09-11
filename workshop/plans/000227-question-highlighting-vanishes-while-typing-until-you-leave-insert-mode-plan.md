@@ -1691,7 +1691,7 @@ git commit -m "#227: atlas and tooling for highlighting that survives typing"
 
 ### Task 7: Manual check with the operator, then close
 
-- [ ] **Step 1: Hand the operator the e2e steps** (ask; do not claim done before they confirm):
+- [x] **Step 1: Hand the operator the e2e steps** (ask; do not claim done before they confirm):
   1. Open a chat with a managed footnote footer. In the last question, type a
      numbered list, pressing Enter between items, without leaving insert mode.
      Expect: the `💬:` line, the list, and its `1.` `2.` `3.` markers keep the
@@ -1706,7 +1706,7 @@ git commit -m "#227: atlas and tooling for highlighting that survives typing"
   colour flicker was markdown showing through): with the overlay present on
   every frame, the markers must hold one colour.
 
-- [ ] **Step 2: Close** via `sdlc close --issue 227 --verified '<make test summary + operator confirmation>'`
+- [x] **Step 2: Prepare and invoke the close boundary** via `sdlc close --issue 227 --verified '<make test summary + operator confirmation>'`
   (the binary runs the mandatory boundary review; fix Critical/Important before
   crossing).
 
