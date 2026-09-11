@@ -334,6 +334,7 @@ structure into a blank one.
   only the targeted specs after Task 4; the arch suite runs only in the full
   `make test`. Cells renamed (`on_win` via `setup_buf_handler`, the function
   that registers it); guard 21/21.
+- Full `make test` (lint + unit + integration + arch): exit 0, 210 spec files PASS.
 
 ## Revisions
 
