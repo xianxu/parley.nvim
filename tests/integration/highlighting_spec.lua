@@ -70,6 +70,13 @@ end
 
 local decoration = require("tests.helpers.decoration")
 
+-- #227: structural edits below arm the structure repair, and later tests pump
+-- the event loop (vim.wait), so a real 250 ms timer could rebuild an earlier
+-- test's buffer mid-test. A never-fired manual deferral keeps every ordering
+-- in this file constructed rather than sampled. Each spec file runs in its
+-- own nvim, so there is nothing to restore.
+require("parley.highlighter")._set_repair_deferral(decoration.manual_deferrals().factory)
+
 local function capture_decoration_provider()
     return decoration.capture_provider(parley)
 end
@@ -534,7 +541,7 @@ describe("decoration provider cache", function()
             end
             assert.equals(1, total_rows)
             assert.equals(0, full_reads)
-            assert.is_true(require("parley.highlighter")._structure_cache(buf).renderable)
+            assert.is_false(require("parley.highlighter")._structure_cache(buf).dirty)
             return { requested = 30, structure_rows = total_rows }
         end
 
@@ -561,7 +568,7 @@ describe("decoration provider cache", function()
         assert.equals(30, events[2].lines_requested)
     end)
 
-    it("marks structural edits dirty until lifecycle convergence rebuilds", function()
+    it("renders while a structural edit is pending and converges on InsertLeave", function()
         local provider = capture_decoration_provider()
         local buf = vim.api.nvim_create_buf(false, true)
         vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "💬: q", "body", "🤖: a" })
@@ -572,12 +579,11 @@ describe("decoration provider cache", function()
         vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "🧠: changed marker" })
         local cache = require("parley.highlighter")._structure_cache(buf)
         assert.is_true(cache.dirty)
-        assert.is_false(provider.on_win(nil, win, buf, 0, 2))
+        assert.is_nil(provider.on_win(nil, win, buf, 0, 2))
 
         require("parley.buffer_lifecycle").converge(buf, "InsertLeave")
         cache = require("parley.highlighter")._structure_cache(buf)
         assert.is_false(cache.dirty)
-        assert.is_true(cache.renderable)
         assert.is_nil(provider.on_win(nil, win, buf, 0, 2))
     end)
 
@@ -615,15 +621,17 @@ describe("decoration provider cache", function()
         assert.is_false(require("parley.highlighter")._structure_cache(buf).dirty)
     end)
 
-    it("keeps failed rebuilds unrenderable and retries transactionally", function()
+    it("keeps rendering the aligned structure when a rebuild fails, and retries", function()
         local highlighter = require("parley.highlighter")
         local model = require("parley.highlight_structure")
         local buf = vim.api.nvim_create_buf(false, true)
         vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "💬: q", "body" })
         parley._parley_bufs[buf] = "chat"
         assert.is_truthy(highlighter.rebuild_structure(buf))
-        local prior = highlighter._structure_cache(buf).structure
         vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "🧠: structural replacement" })
+        -- What a failed rebuild must keep is the aligned splice this edit
+        -- installed, not the pre-edit object (#227).
+        local prior = highlighter._structure_cache(buf).structure
         assert.is_true(highlighter._structure_cache(buf).dirty)
         local original = model.build
         model.build = function() error("forced rebuild failure") end
@@ -633,9 +641,9 @@ describe("decoration provider cache", function()
         assert.matches("forced rebuild failure", err)
         assert.equals(prior, highlighter._structure_cache(buf).structure)
         assert.is_true(highlighter._structure_cache(buf).dirty)
-        assert.is_false(highlighter._structure_cache(buf).renderable)
+        assert.is_nil(capture_decoration_provider().on_win(nil, vim.api.nvim_get_current_win(), buf, 0, 1))
         assert.is_truthy(highlighter.rebuild_structure(buf))
-        assert.is_true(highlighter._structure_cache(buf).renderable)
+        assert.is_false(highlighter._structure_cache(buf).dirty)
     end)
 
     it("rejects an initial failed build and renders only after retry", function()
@@ -850,8 +858,9 @@ describe("decoration provider cache", function()
         vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "💬: q", "body" })
         parley._parley_bufs[buf] = "chat"
         lifecycle.setup(buf)
-        local prior = highlighter._structure_cache(buf).structure
         vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "🧠: replacement" })
+        -- The aligned splice this edit installed is what a failure must keep.
+        local prior = highlighter._structure_cache(buf).structure
         local original = model.build
         model.build = function() error("integrated candidate failure") end
         local ok, err = pcall(lifecycle.converge, buf, "InsertLeave")
@@ -861,7 +870,6 @@ describe("decoration provider cache", function()
         assert.matches("integrated candidate failure", notifications[1])
         assert.equals(prior, highlighter._structure_cache(buf).structure)
         assert.is_true(highlighter._structure_cache(buf).dirty)
-        assert.is_false(highlighter._structure_cache(buf).renderable)
         assert.has_no.errors(function() lifecycle.converge(buf, "InsertLeave retry") end)
         assert.is_not.equals(prior, highlighter._structure_cache(buf).structure)
         assert.equals("r", highlighter._structure_cache(buf).structure.fingerprints[2])
@@ -1271,7 +1279,7 @@ describe("production first-entry convergence", function()
             assert.equals(case.name, parley._parley_bufs[buf])
             local cache = require("parley.highlighter")._structure_cache(buf)
             assert.is_truthy(cache)
-            assert.is_true(cache.renderable)
+            assert.is_false(cache.dirty)
             local timezone = require("parley.timezone_diagnostics")
             assert.equals(1, #vim.diagnostic.get(buf, { namespace = timezone.diag_namespace() }))
         end)
@@ -1295,7 +1303,7 @@ describe("production first-entry convergence", function()
         assert.equals("chat", parley._parley_bufs[buf])
         local cache = require("parley.highlighter")._structure_cache(buf)
         assert.is_truthy(cache)
-        assert.is_true(cache.renderable)
+        assert.is_false(cache.dirty)
         pcall(vim.fn.delete, source)
         pcall(vim.fn.delete, chat_path)
     end)

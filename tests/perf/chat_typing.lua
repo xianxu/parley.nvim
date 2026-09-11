@@ -297,7 +297,7 @@ local function isolated_phases(scenario)
             local top = math.max(0, scenario.target_line - 20)
             local highlighter = require("parley.highlighter")
             local cache = highlighter._structure_cache(buf)
-            assert(cache and cache.renderable, "decoration structure cache is not renderable")
+            assert(cache and cache.structure, "decoration structure cache has no structure")
             highlighter._compute_window_decorations(win, buf, top, top + 40, reader, cache.structure)
         end,
         spell_typeahead = function() require("parley.spell").suggest({ reader = reader }) end,

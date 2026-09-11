@@ -293,6 +293,26 @@ structure into a blank one.
   reverted: convergence forced true → shape table + fence-width + property;
   `is_inert` always true → shape table + lookahead-above + property; marker
   derivation dropped from the splice → shape table + property.
+- Task 4 (highlighter): the new typing spec was run against `main` in a
+  throwaway worktree (seam stubbed) — all 14 red, the list-typing test at the
+  first Enter with "ordinary typing must splice exactly" (the operator's repro).
+  On this branch after Task 2 alone, 4 of them already passed: the splice makes
+  Enter exact and the old `on_lines` installs it. GREEN 14/14 after Task 4;
+  `highlighting_spec` 47/47 after updating the fail-closed pins (incl.
+  `:1274,:1298` and the two `prior` captures); `perf_chat_typing_spec` 13/13
+  unchanged. Mutations, each seen red then reverted: no `on_reload` → checktime
+  test; no `nvim__redraw` → spy test + real-clock "0 lines redrawn"; no-op
+  `arm_repair` → 6 repair/teardown/alignment tests; no row-count check →
+  empty-buffer test; fail-closed `on_win` → the fail-open repair test.
+- Found by the mutation step: under fail-closed, the real-clock test *also*
+  failed with 0 lines redrawn — not a Neovim quirk (an isolated two-provider
+  probe repainted 12/12 either way) but a stub leak: the failing test had
+  replaced `vim.api.nvim__redraw` and died before its inline restore, so every
+  later test in the file called a recorder. Every stub in the spec now goes
+  through a cleanup stack that `after_each` unwinds; the fail-closed mutation
+  now reddens exactly the one intended test. The real code repaints during
+  `vim.wait` (17 lines before any explicit `:redraw`), i.e. the main loop
+  flushes the invalidation on its own.
 
 ## Revisions
 
