@@ -585,7 +585,7 @@ local config = {
 	-- memory preferences: per-tag user preference profiles from chat history
 	memory_prefs = {
 		-- enable auto-generation and system prompt injection
-		enable = true,
+		enable = false,
 		-- max recent files per tag to include summaries from
 		max_files = 100,
 		-- max age in days before re-generating
