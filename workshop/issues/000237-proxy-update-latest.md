@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-09-11
 updated: 2026-09-11
-estimate_hours:
+estimate_hours: 5.7
 started: 2026-09-11T12:35:20-07:00
 ---
 
@@ -106,6 +106,53 @@ conformance spec, and the real redirect behind `PARLEY_LIVE_GITHUB=1`.
 - `atlas/providers/cliproxy-managed.md` and the `:ParleyProxy` help no longer say
   update fetches a pin.
 - `make test` passes.
+
+## Estimate
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: issue-spec design=1.0 impl=0.08
+item: lua-neovim design=0.4 impl=0.4
+item: lua-neovim design=0.4 impl=0.6
+item: lua-neovim design=0.2 impl=0.3
+item: api-integration design=0.3 impl=0.4
+item: real-api-discovery design=0.0 impl=0.18
+item: atlas-docs design=0.1 impl=0.05
+item: atlas-docs design=0.1 impl=0.05
+item: milestone-review design=0.1 impl=0.14
+item: milestone-review design=0.1 impl=0.14
+item: milestone-review design=0.1 impl=0.14
+design-buffer: 0.15
+total: 5.70
+```
+
+*Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against
+`baseline-v3.1.md`. Method A only.* `sdlc estimate-source` flags that doc as
+stale (the calibration ledger is newer, #127), so the per-primitive hours are
+provisional.
+
+How each item was picked, from the v2 table's ranges: design ×0.2 where the plan
+already resolves the decisions (v2 Step 3), and `impl=` at 40% of the v2/v2.1
+range (v3.1).
+
+- `issue-spec` — the spec and plan were written after the claim (12:35), inside
+  the measured window, with two plan-gate rounds: the middle of 0.5–1.5 design,
+  undiscounted, because this item is the design work itself.
+- `lua-neovim` ×3 — the pure `cliproxy_release` module with `parse_ps`; the
+  update IO (resolve, atomic install, update and restart with its deadline,
+  first-run, command glue), the largest piece, at the top of v2's 0.5–1.5
+  impl; and the status version, the smallest.
+- `api-integration` — the stateful release fake, its helper, the watchdog,
+  `fake_cliproxy`'s stamp, and the integration specs built on them.
+- `real-api-discovery` — the one surface still unverified: the header with
+  management disabled, the live redirect, and the live Fable check.
+- `atlas-docs` ×2 — the M1 and M2 doc passes.
+- `milestone-review` ×3 — M1, M2, and one rework round; the plan gate alone took
+  two rounds.
+- Step 2.5 (library check) does not apply: no new stack. Familiarity 1.0: the
+  cliproxy module, its fakes and its conformance spec are recent, familiar code
+  (#131, #197, #205).
 
 ## Plan
 
