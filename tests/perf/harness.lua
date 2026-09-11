@@ -1,5 +1,14 @@
 local M = {}
 
+--- The work counters every scenario reports — one list, so the schema, the
+--- counter and the gates cannot disagree about what a sample contains.
+--- `structure_entries_copied` (#227) is the splice's O(n) copy, which
+--- `structure_rows_processed` cannot see.
+M.WORK_FIELDS = {
+    "line_read_calls", "lines_requested", "full_buffer_reads", "structure_rows_processed",
+    "structure_entries_copied",
+}
+
 local function copy(value)
     if type(value) ~= "table" then
         return value
@@ -132,12 +141,8 @@ function M.add_scenario(report, scenario)
     if scenario.elapsed_ms.p95 ~= summary.p95 then
         error("scenario.elapsed_ms.p95 must match the sample p95", 2)
     end
-    require_exact_fields(scenario.work, "scenario.work", {
-        "line_read_calls", "lines_requested", "full_buffer_reads", "structure_rows_processed",
-    })
-    for _, field in ipairs({
-        "line_read_calls", "lines_requested", "full_buffer_reads", "structure_rows_processed",
-    }) do
+    require_exact_fields(scenario.work, "scenario.work", M.WORK_FIELDS)
+    for _, field in ipairs(M.WORK_FIELDS) do
         require_integer(scenario.work[field], 0, "scenario.work." .. field)
     end
     table.insert(report.scenarios, copy(scenario))

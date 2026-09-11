@@ -21,19 +21,21 @@ describe("chat typing performance scenario", function()
     it("aggregates observer work component-wise and resets every sample", function()
         local counter = chat_typing.new_counter()
         counter:observe({ phase = "edit_total", operation = "lines", lines_requested = 8,
-            full_buffer = true, structure_rows_processed = 2 })
+            full_buffer = true, structure_rows_processed = 2, structure_entries_copied = 3 })
         counter:observe({ phase = "edit_total", operation = "line", lines_requested = 1,
             full_buffer = false, structure_rows_processed = 4 })
         assert.same({ line_read_calls = 2, lines_requested = 9, full_buffer_reads = 1,
-            structure_rows_processed = 6 }, counter:snapshot())
+            structure_rows_processed = 6, structure_entries_copied = 3 }, counter:snapshot())
         counter:reset()
         assert.same({ line_read_calls = 0, lines_requested = 0, full_buffer_reads = 0,
-            structure_rows_processed = 0 }, counter:snapshot())
+            structure_rows_processed = 0, structure_entries_copied = 0 }, counter:snapshot())
 
         assert.same({ line_read_calls = 4, lines_requested = 20, full_buffer_reads = 2,
-            structure_rows_processed = 7 }, chat_typing.max_work({
-            { line_read_calls = 4, lines_requested = 2, full_buffer_reads = 2, structure_rows_processed = 1 },
-            { line_read_calls = 1, lines_requested = 20, full_buffer_reads = 0, structure_rows_processed = 7 },
+            structure_rows_processed = 7, structure_entries_copied = 9 }, chat_typing.max_work({
+            { line_read_calls = 4, lines_requested = 2, full_buffer_reads = 2, structure_rows_processed = 1,
+                structure_entries_copied = 9 },
+            { line_read_calls = 1, lines_requested = 20, full_buffer_reads = 0, structure_rows_processed = 7,
+                structure_entries_copied = 0 },
         }))
     end)
 
@@ -43,6 +45,8 @@ describe("chat typing performance scenario", function()
             { line_read_calls = 1.5, lines_requested = 0, full_buffer_reads = 0, structure_rows_processed = 0 },
             { line_read_calls = 1, lines_requested = 0, full_buffer_reads = 2, structure_rows_processed = 0 },
             { line_read_calls = 1, lines_requested = 0, full_buffer_reads = 0 },
+            -- #227: the copy count is a required field, not an optional extra.
+            { line_read_calls = 1, lines_requested = 0, full_buffer_reads = 0, structure_rows_processed = 0 },
         }
         for _, sample in ipairs(invalid) do
             local ok, err = pcall(chat_typing.max_work, { sample })
@@ -104,9 +108,11 @@ describe("chat typing performance scenario", function()
         local report = chat_typing.new_report({ os = "test", nvim = "test", commit = "test" })
         chat_typing.add_result(report, "edit_total", "inclusive", 100, { 1, 2 }, {
             line_read_calls = 1, lines_requested = 2, full_buffer_reads = 0, structure_rows_processed = 0,
+            structure_entries_copied = 0,
         })
         chat_typing.add_result(report, "timezone_refresh", "isolated", 100, { 3, 4 }, {
             line_read_calls = 1, lines_requested = 100, full_buffer_reads = 1, structure_rows_processed = 0,
+            structure_entries_copied = 0,
         })
         local decoded = vim.json.decode(require("tests.perf.harness").encode(report))
         assert.equals(1, decoded.schema_version)
@@ -130,14 +136,24 @@ describe("chat typing performance scenario", function()
             for _, n in ipairs({ 1000, 5000 }) do
                 chat_typing.add_result(report, "edit_total", "inclusive", n, { 1 }, {
                     line_read_calls = 2, lines_requested = 88, full_buffer_reads = 0,
-                    structure_rows_processed = 1,
+                    structure_rows_processed = 1, structure_entries_copied = 0,
                 })
                 chat_typing.add_result(report, "decoration_redraw", "isolated", n, { 1 }, {
                     line_read_calls = 1, lines_requested = 61, full_buffer_reads = 0,
-                    structure_rows_processed = 0,
+                    structure_rows_processed = 0, structure_entries_copied = 0,
+                })
+                chat_typing.add_result(report, "structure_splice", "isolated", n, { 1 }, {
+                    line_read_calls = 2, lines_requested = 3, full_buffer_reads = 0,
+                    structure_rows_processed = 6, structure_entries_copied = 4 * n + 2,
                 })
             end
             return report
+        end
+        local function scenario_of(report, phase, n)
+            for _, scenario in ipairs(report.scenarios) do
+                if scenario.phase == phase and scenario.line_count == n then return scenario end
+            end
+            error("no scenario " .. phase .. ":" .. n)
         end
         assert.has_no.errors(function() chat_typing.assert_hard_gates(valid_report()) end)
 
@@ -154,16 +170,47 @@ describe("chat typing performance scenario", function()
         assert.matches("exactly one structure row", err)
 
         local unequal = valid_report()
-        unequal.scenarios[3].work.lines_requested = 89
+        scenario_of(unequal, "edit_total", 5000).work.lines_requested = 89
         ok, err = pcall(chat_typing.assert_hard_gates, unequal)
         assert.is_false(ok)
         assert.matches("lines_requested must match", err)
+
+        -- #227: the splice's copy is gated, not merely reported.
+        local copied = valid_report()
+        scenario_of(copied, "edit_total", 1000).work.structure_entries_copied = 1
+        ok, err = pcall(chat_typing.assert_hard_gates, copied)
+        assert.is_false(ok)
+        assert.matches("edit_total must copy no structure entries", err)
+
+        local splice_read = valid_report()
+        scenario_of(splice_read, "structure_splice", 5000).work.full_buffer_reads = 1
+        ok, err = pcall(chat_typing.assert_hard_gates, splice_read)
+        assert.is_false(ok)
+        assert.matches("structure_splice must perform zero full%-buffer reads", err)
+
+        for _, copies in ipairs({ 4 * 5000 + 3, 0 }) do
+            -- Over: a rebuild or extra copy on the keystroke path. Zero: the
+            -- copy is invisible to the gates again (BR-4's own failure mode).
+            local miscounted = valid_report()
+            scenario_of(miscounted, "structure_splice", 5000).work.structure_entries_copied = copies
+            ok, err = pcall(chat_typing.assert_hard_gates, miscounted)
+            assert.is_false(ok, tostring(copies))
+            assert.matches("structure_splice must report exactly the two%-array copy of each splice", err)
+        end
+
+        local scaling = valid_report()
+        scenario_of(scaling, "structure_splice", 5000).work.structure_rows_processed = 7
+        ok, err = pcall(chat_typing.assert_hard_gates, scaling)
+        assert.is_false(ok)
+        assert.matches("structure_splice structure_rows_processed must match", err)
 
         for _, missing in ipairs({
             { phase = "edit_total", lines = 1000 },
             { phase = "edit_total", lines = 5000 },
             { phase = "decoration_redraw", lines = 1000 },
             { phase = "decoration_redraw", lines = 5000 },
+            { phase = "structure_splice", lines = 1000 },
+            { phase = "structure_splice", lines = 5000 },
         }) do
             local incomplete = chat_typing.new_report({ os = "test", nvim = "test", commit = "test" })
             for _, scenario in ipairs(valid_report().scenarios) do
@@ -224,6 +271,7 @@ describe("chat typing performance scenario", function()
         assert.is_true(sample.restored)
         assert.equals(0, sample.work.full_buffer_reads)
         assert.equals(1, sample.work.structure_rows_processed)
+        assert.equals(0, sample.work.structure_entries_copied)
         vim.fn.delete(output)
     end)
 

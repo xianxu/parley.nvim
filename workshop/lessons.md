@@ -1,5 +1,51 @@
 # Lessons
 
+## 2026-09-10 (#227)
+
+- **Fail-open is only safe for a cache that is still aligned with what it
+  describes.** #170 made a dirty structure cache draw nothing, so every Enter
+  in insert mode blanked the chat until an unrelated event (`InsertLeave`)
+  rebuilt it. The obvious fix — render the last good structure — would have
+  moved the symptom, not removed it: the structure is row-indexed (footer
+  start, draft ranges, `state_before`), so after an Enter the footnote colour
+  lands on the lines being typed. Rule: before relaxing a fail-closed guard,
+  list what the cached value is *indexed by*; if the index moves with edits,
+  keep it aligned (splice) and render that, and give every invalidation an
+  owner that schedules the repair rather than waiting for an incidental event
+  (`ARCH-PURPOSE`, `ARCH-ORDER`).
+- **A stub restored inline after an assertion that can fail leaks into every
+  later test in the file.** A mutation made one test fail before it restored
+  `vim.api.nvim__redraw`; the real-clock test then failed with "0 lines
+  redrawn", which looked like a Neovim redraw quirk until an isolated probe
+  showed Neovim repainting correctly. Rule: register each stub's undo on a
+  cleanup stack that `after_each` unwinds; when a mutation reddens a test you
+  did not expect, suspect state leaked from the test it did break before
+  suspecting the runtime.
+- **The Core-concepts table↔code guard matches the bare backticked symbol in a
+  definition form.** `highlight_structure.build` and `M._set_repair_deferral`
+  did not satisfy it, and `on_win` — a field in a table literal — has no
+  definition form at all; name the function that registers it
+  (`setup_buf_handler`). It only runs in the full `make test`, so a green run
+  of the targeted specs said nothing about it (reinforces #160, #186).
+- **Equal results cannot tell a shallow splice from a deep copy or a rebuild,
+  so a cost added to a gated hot path must flow through the accounting seam.**
+  #227 put an O(n) copy on every line-count keystroke and computed
+  `entries_copied` — then `on_lines` dropped it on the floor, so #170's gates
+  certified a path whose real cost they could not see (close round 1,
+  Important). Rule: when a change adds work to a path a perf gate owns, route
+  the new cost into the recorded work, gate it *exactly* (an upper bound alone
+  passes when the count goes blind again), and pin the mechanism itself — here
+  reference-identity of untouched rows — since only that distinguishes a
+  shallow splice from `vim.deepcopy` (`ARCH-CONSTRAINTS`).
+- **`g:` variables set in `tests/minimal_init.vim` never reach a spec.**
+  `PlenaryBustedFile` runs each spec in a child nvim started without that init;
+  the child inherits only the environment. A test-mode default keyed on
+  `g:parley_test_mode` was silently off in every spec (the probe printed nil),
+  which is also why `chat_move_spec` sets it again itself. Rule: signals from
+  the harness to spec code travel as environment variables
+  (`$PARLEY_TEST_MODE`); before trusting any harness flag inside a spec,
+  assert it from the spec.
+
 ## 2026-08-22 (#203)
 
 - **A span-based text edit is only as safe as the boundary you assume — and an

@@ -50,6 +50,7 @@ atlas:
       - tests/integration/perf_chat_typing_spec.lua
       - tests/integration/diagnostic_refresh_spec.lua
       - tests/integration/highlighting_spec.lua
+      - tests/integration/highlight_typing_spec.lua
       - tests/arch/performance_line_reader_spec.lua
       - tests/integration/chat_lease_spec.lua
       - tests/integration/chat_pending_spec.lua
@@ -622,6 +623,7 @@ atlas:
       - lua/parley/highlight_structure.lua
     tests:
       - tests/integration/highlighting_spec.lua
+      - tests/integration/highlight_typing_spec.lua
       - tests/unit/timezone_diagnostics_spec.lua
       - tests/unit/render_spec.lua
       - tests/integration/fence_containment_spec.lua

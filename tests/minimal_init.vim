@@ -22,3 +22,7 @@ runtime plugin/plenary.vim
 set noswapfile
 execute 'set directory=' . fnameescape(empty($TMPDIR) ? '/tmp' : $TMPDIR) . '//'
 let g:parley_test_mode = v:true
+" PlenaryBustedFile runs each spec in a child nvim started WITHOUT this init,
+" so g: variables set here never reach a spec; the environment does. Code that
+" must know it is under the harness reads $PARLEY_TEST_MODE (#227).
+let $PARLEY_TEST_MODE = '1'

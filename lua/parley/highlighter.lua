@@ -60,8 +60,62 @@ local function stop_and_close_timer(timer)
 end
 
 local HIGHLIGHT_VIEWPORT_MARGIN = 20
+-- Quiet time after the last edit before an approximate structure is rebuilt
+-- (#227). Longer than the gap between keystrokes, so a burst costs one
+-- rebuild; short enough that a pause converges almost at once.
+local STRUCTURE_REPAIR_MS = 250
 local structure_caches = {}
 
+-- A restartable one-shot run-later (#227): each `start` replaces the pending
+-- run. Production rides a libuv timer and hops to the main loop before calling
+-- Neovim; tests swap the factory for one they fire by hand.
+local function new_uv_deferral()
+    local timer = vim.uv.new_timer()
+    if not timer then return nil end
+    return {
+        start = function(_, delay_ms, fn)
+            timer:stop()
+            timer:start(delay_ms, 0, vim.schedule_wrap(fn))
+        end,
+        stop = function() timer:stop() end,
+        close = function() stop_and_close_timer(timer) end,
+    }
+end
+-- Under the test harness no repair fires on its own: a 250 ms rebuild landing
+-- inside some other spec's vim.wait is an ordering that spec never
+-- constructed. A spec opts into the real clock with
+-- `_set_repair_deferral(nil, ms)` or fires one by hand. The signal is
+-- $PARLEY_TEST_MODE, exported by tests/minimal_init.vim: plenary runs each
+-- spec in a child nvim that inherits the environment but not `g:` variables.
+local function new_default_deferral()
+    if vim.env.PARLEY_TEST_MODE == "1" then
+        return { start = function() end, stop = function() end, close = function() end }
+    end
+    return new_uv_deferral()
+end
+local new_deferral = new_default_deferral
+
+--- Test seam: swap the repair deferral factory and/or its delay. `nil`
+--- opts into the production timer. Returns a function restoring both.
+function M._set_repair_deferral(factory, delay_ms)
+    local prev_factory, prev_delay = new_deferral, STRUCTURE_REPAIR_MS
+    new_deferral = factory or new_uv_deferral
+    STRUCTURE_REPAIR_MS = delay_ms or STRUCTURE_REPAIR_MS
+    return function()
+        new_deferral, STRUCTURE_REPAIR_MS = prev_factory, prev_delay
+    end
+end
+
+-- Drop a cache whose structure may no longer line up with its buffer. Its
+-- attachment sees the missing entry on its next event and detaches.
+local function forget_structure(buf)
+    local cache = structure_caches[buf]
+    if cache and cache.repair then
+        cache.repair:close()
+        cache.repair = nil
+    end
+    structure_caches[buf] = nil
+end
 
 
 
@@ -901,63 +955,115 @@ local function build_structure(buf)
     require("parley.line_reader").record_work(buf, {
         operation = "structure_build",
         structure_rows_processed = work and work.rows_visited or rows,
+        structure_entries_copied = work and work.entries_copied or 0,
     })
     return structure
+end
+
+-- (Re)start the one scheduled rebuild that brings an approximate structure
+-- back to exact. Restarting on every edit that leaves the cache dirty is what
+-- makes a burst of keystrokes cost one rebuild, after the burst.
+local function arm_repair(buf, cache)
+    cache.repair = cache.repair or new_deferral()
+    if not cache.repair then return end
+    cache.repair:start(STRUCTURE_REPAIR_MS, function()
+        if structure_caches[buf] ~= cache or not cache.dirty or not vim.api.nvim_buf_is_valid(buf) then
+            return
+        end
+        local rebuilt, err = M.rebuild_structure(buf)
+        if not rebuilt then
+            _parley.logger.debug("structure repair failed: " .. tostring(err):sub(1, 200))
+            return
+        end
+        -- Decorations are ephemeral and an unedited buffer is not redrawn on
+        -- its own. `valid = true` would re-run on_win yet redraw no lines.
+        -- nvim__redraw is experimental API: if it is renamed or refuses, the
+        -- repair still stands and the next redraw shows it.
+        pcall(vim.api.nvim__redraw, { buf = buf, valid = false })
+    end)
 end
 
 function M.rebuild_structure(buf)
     if not vim.api.nvim_buf_is_valid(buf) then return nil, "invalid buffer" end
     local existing = structure_caches[buf]
-    if existing and existing.renderable and not existing.dirty then
+    if existing and not existing.dirty then
         return existing.structure
     end
     local ok, candidate = pcall(build_structure, buf)
     if not ok then
-        local cache = structure_caches[buf]
-        if cache then cache.dirty = true; cache.renderable = false end
+        -- An existing cache keeps its structure: every edit spliced it, so it
+        -- still lines up with the buffer and keeps rendering while dirty (#227).
         return nil, candidate
     end
-    local cache = structure_caches[buf] or {}
+    local cache = existing or {}
     cache.structure = candidate
     cache.dirty = false
-    cache.renderable = true
+    if cache.repair then cache.repair:stop() end
     structure_caches[buf] = cache
     if not cache.attached then
         local generation = {}
         cache.generation = generation
-        cache.on_lines = function(_, changed_buf, _, firstline, lastline, new_lastline)
+        local function owned(changed_buf)
             local current = structure_caches[changed_buf]
-            if not current or current.generation ~= generation or not vim.api.nvim_buf_is_valid(changed_buf) then
-                return true
-            end
-            local reader = require("parley.line_reader").for_buffer(changed_buf)
-            local new_lines = reader:lines(firstline, new_lastline, false)
-            local replaced, rows, reason = require("parley.highlight_structure").replace(
-                current.structure, firstline, lastline, new_lines,
-                require("parley.highlight_structure").patterns(_parley.config))
-            require("parley.line_reader").record_work(changed_buf, {
-                operation = "structure_replace", structure_rows_processed = rows,
-            })
-            if reason then
-                current.dirty = true
-                current.renderable = false
-            else
-                current.structure = replaced
+            if current and current.generation == generation and vim.api.nvim_buf_is_valid(changed_buf) then
+                return current
             end
         end
+        -- A structure that cannot be spliced onto an edit is rebuilt now, and
+        -- dropped if even that fails: a misaligned structure is worse than none.
+        local function resync(changed_buf, current)
+            current.dirty = true
+            if not M.rebuild_structure(changed_buf) then forget_structure(changed_buf) end
+        end
+        cache.on_lines = function(_, changed_buf, _, firstline, lastline, new_lastline)
+            local current = owned(changed_buf)
+            if not current then return true end
+            local model = require("parley.highlight_structure")
+            local line_reader = require("parley.line_reader")
+            local ok_splice, replaced, _, reason, work = pcall(function()
+                local new_lines = line_reader.for_buffer(changed_buf):lines(firstline, new_lastline, false)
+                return model.replace(current.structure, firstline, lastline, new_lines,
+                    model.patterns(_parley.config))
+            end)
+            -- Nvim reports emptying a buffer as zero lines though it keeps one,
+            -- so a self-consistent splice can still miss the buffer: check the
+            -- one fact rendering depends on.
+            if not ok_splice or not replaced
+                or #replaced.fingerprints ~= vim.api.nvim_buf_line_count(changed_buf) then
+                resync(changed_buf, current)
+                return
+            end
+            -- The work replace actually did, copy included (#227 BR-4): the
+            -- #170 gates can only hold a cost they are shown.
+            line_reader.record_work(changed_buf, {
+                operation = "structure_replace",
+                structure_rows_processed = work.rows_visited,
+                structure_entries_copied = work.entries_copied,
+            })
+            current.structure = replaced
+            current.dirty = current.dirty or reason ~= nil
+            if current.dirty then arm_repair(changed_buf, current) end
+        end
+        -- :checktime/autoread replaces the text without on_lines. Without this
+        -- handler Nvim detaches instead, leaving every window on the buffer but
+        -- the current one plain until an unrelated event rebuilt it.
+        cache.on_reload = function(_, reloaded_buf)
+            local current = owned(reloaded_buf)
+            if current then resync(reloaded_buf, current) end
+        end
         cache.on_detach = function(_, detached_buf)
-            if structure_caches[detached_buf] and structure_caches[detached_buf].generation == generation then
-                structure_caches[detached_buf] = nil
+            local current = structure_caches[detached_buf]
+            if current and current.generation == generation then
+                forget_structure(detached_buf)
             end
         end
         local attached = vim.api.nvim_buf_attach(buf, false, {
             on_lines = cache.on_lines,
-            on_detach = function(_, detached_buf)
-                cache.on_detach(nil, detached_buf)
-            end,
+            on_reload = function(_, reloaded_buf) cache.on_reload(nil, reloaded_buf) end,
+            on_detach = function(_, detached_buf) cache.on_detach(nil, detached_buf) end,
         })
         if not attached then
-            structure_caches[buf] = nil
+            forget_structure(buf)
             return nil, "failed to attach structure cache"
         end
         cache.attached = true
@@ -966,7 +1072,7 @@ function M.rebuild_structure(buf)
 end
 
 function M.clear_structure(buf)
-    structure_caches[buf] = nil
+    forget_structure(buf)
     require("parley.line_reader").clear_buffer(buf)
 end
 
@@ -993,8 +1099,11 @@ M.setup_buf_handler = function()
             if not _parley._parley_bufs[bufnr] then
                 return false
             end
+            -- A dirty cache still renders (#227): every edit splices it, so it
+            -- lines up with the buffer and only its state can lag, until the
+            -- scheduled repair.
             local structure_cache = structure_caches[bufnr]
-            if not structure_cache or structure_cache.dirty or not structure_cache.renderable then
+            if not structure_cache then
                 return false
             end
             local line_reader = require("parley.line_reader")

@@ -51,6 +51,44 @@ anchored at column zero, indented content never matches, so a correctly
 formatted quoted transcript still nests. Both shapes are pinned by tests, so the
 convention degrades safely when a model ignores it.
 
+## The structure cache while typing (#227)
+
+Decorations are computed on redraw from a buffer-owned structure
+(`highlight_structure`), and that structure must line up with the buffer
+row-for-row: the footer start, draft ranges and `state_before` are all
+row-indexed.
+
+- **Every edit is spliced.** `highlight_structure.replace` splices the edit's
+  rows in and re-derives tokens, footer and drafts, so the cache never renders a
+  misaligned structure. Fingerprint-identical edits share the old arrays;
+  anything else costs one shallow O(n) copy (0.10 ms at 5,000 lines, `make perf`
+  `structure_splice`).
+- **Exact vs approximate.** A splice is exact when every touched row is inert —
+  text, blank, fence, draft delimiter — and the first row below the edit is
+  entered in the same state as before. That covers ordinary typing, Enter and
+  joins. Turn markers, `📝`/`🔧`/`📎`, `🧠:`, `🧠:[END]` and footnotes can move
+  state a splice cannot see; those leave the cache *approximate*.
+- **Fail open.** The provider renders approximate structures. Its visible rows
+  are walked from the actual lines, so what can lag is limited to `🧠:`
+  lookahead (which can reach rows above the edit) and windows whose top is
+  below the edit. Only a missing cache draws nothing.
+- **One repair per burst.** An approximate cache arms a 250 ms deferral
+  (`STRUCTURE_REPAIR_MS`); every further edit restarts it, and any successful
+  rebuild — including the `buffer_lifecycle` convergence events — stops it. It
+  repaints with `nvim__redraw({ buf, valid = false })`; `valid = true` re-runs
+  `on_win` but redraws no lines of an unedited buffer (a guarded call: it is
+  experimental API). Under the test harness (`$PARLEY_TEST_MODE`) no repair
+  fires on its own; specs fire one by hand or opt into the real clock through
+  `highlighter._set_repair_deferral` — see [infra/test_harness](../infra/test_harness.md).
+- **Accounted.** Each splice reports its real work — rows classified/walked and
+  `structure_entries_copied` — to the LineReader observer, and `make perf`
+  gates it: a prose edit copies nothing, an Enter copies exactly two arrays.
+- **Resync.** A splice that throws or no longer matches the buffer's line count
+  (Nvim reports emptying a buffer as zero lines though one remains), and a
+  `:checktime` reload (`on_reload` — without it Nvim detaches the attachment),
+  rebuild synchronously; a cache that cannot be realigned is dropped rather
+  than drawn.
+
 ## Key Behaviors
 - Applied via decoration providers with ephemeral extmarks per window viewport
 - Multi-window safe: independent redraw cache per window

@@ -1,12 +1,13 @@
 ---
 id: 000227
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-09-09
 updated: 2026-09-10
-estimate_hours: 3.95
+estimate_hours: 4.30
 started: 2026-09-10T13:13:23-07:00
+actual_hours: 3.35
 ---
 
 # question highlighting vanishes while typing until you leave insert mode
@@ -32,7 +33,7 @@ same buffer, the ordered-list markers (`1.` `2.` `3.`) render in one colour in
 some frames and another in others, while the body text stays coloured.
 
 That is the same defect seen at different redraw frames rather than a second
-one. A chat buffer is `filetype=markdown` (`init.lua:1707`), so markdown's own
+one. A chat buffer is `filetype=markdown` (`init.lua:1714`), so markdown's own
 highlighting sits **underneath** parley's decoration overlay:
 
 - frames where the structure cache is clean → the provider runs → parley's
@@ -106,7 +107,7 @@ line is wrong".
 
 **4. Recovery is incidental.** The cache is only rebuilt when something else
 calls `rebuild_structure` — `BufEnter` (`highlighter.lua:1051`), or
-`highlight_question_block` (`:851`, reached via `init.lua:2865`). Leaving insert
+`highlight_question_block` (`:851`, reached via `init.lua:2872`). Leaving insert
 mode happens to reach one of those, so the colour returns and the mode change
 gets the blame.
 
@@ -186,42 +187,48 @@ assumed.
 
 ## Estimate
 
-Two `lua-neovim` primitives — the pure splice in `highlight_structure`, and the
-highlighter glue (fail-open, repair deferral, reload/resync) with its
-integration spec — plus atlas/docs and the one close review. Design takes the
-mid-density ×0.5 spec discount, not ×0.2: the pre-claim issue settled the
-diagnosis and direction, but the design decisions (aligned splice, exactness
-rule, the class sweep, the state table) were made after `claim`, inside the
-window `sdlc actual` measures. Per v2.1, a ×0.5 discount keeps the +30% design
-buffer. `impl=` is 40% of the v2 table (v3.1): lua-neovim 1.0 h and 1.5 h (the
-glue carries the timer/reload integration tests), atlas 0.2 h, review 0.35 h.
-Familiar territory (#170, #218 touched the same modules) → familiarity 1.0.
+One item per Plan task family: the `build` split (Task 1, a behavior-preserving
+`cross-cutting-refactor`); two `lua-neovim` primitives — the pure splice, and
+the highlighter glue (fail-open, repair deferral, reload/resync) that also
+carries the test helper and the perf phases (Tasks 3–5); atlas/docs; one
+operator e2e round (Task 7, `ux-rename-iteration`: the Done-when is a visual
+stability claim reported from screenshots, so one round is the likely case);
+and the one close review. Design takes the mid-density ×0.5 spec discount, not
+×0.2: the pre-claim issue settled the diagnosis and direction, but the design
+decisions (aligned splice, exactness rule, the class sweep, the state table)
+were made after `claim`, inside the window `sdlc actual` measures. The operator
+round takes no discount. `impl=` is 40% of the v2 table (v3.1). Design buffer
+0.15 for baseline consistency — `baseline-v3.1.md` prices every row as
+`est_design * 1.15` (the rule #215 and #218 settled). Familiar territory (#170,
+#218 touched the same modules) → familiarity 1.0.
 
 ```estimate
 model: estimate-logic-v3.1
 familiarity: 1.0
+item: cross-cutting-refactor design=0.1 impl=0.12
 item: lua-neovim design=1.0 impl=0.4
 item: lua-neovim design=1.0 impl=0.6
 item: atlas-docs design=0.1 impl=0.08
+item: ux-rename-iteration design=0.3 impl=0.08
 item: milestone-review design=0.0 impl=0.14
-design-buffer: 0.30
-total: 3.95
+design-buffer: 0.15
+total: 4.30
 ```
 
-*Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against `baseline-v3.1.md`. Method A only.*
+*Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against `baseline-v3.1.md`. Method A only. `sdlc estimate-source` reports the calibration doc `[stale]` (ledger newer than the doc) — per-primitive hours are provisional.*
 
 ## Plan
 
 Detailed plan: `workshop/plans/000227-question-highlighting-vanishes-while-typing-until-you-leave-insert-mode-plan.md`.
 Single-pass work — one `sdlc close`, no milestones.
 
-- [ ] Split `highlight_structure.build` into shared per-row steps (`enter_row`/`leave_row`, markers, `derive`); behavior unchanged.
-- [ ] `replace` returns an aligned splice for every edit, exact when inert + converged; shape table + property test; see each guard fail.
-- [ ] Shared decoration test helpers (`tests/helpers/decoration.lua`).
-- [ ] Highlighter: fail-open `on_win`, splice in `on_lines`, debounced repair (injectable deferral), `on_reload` resync, splice-failure/row-count resync; delete `renderable`; `highlight_typing_spec.lua` per Done-when.
-- [ ] `make perf` reports `structure_splice` + `structure_rebuild`; record numbers and the one-rebuild-per-burst result in Log.
-- [ ] Atlas (`ui/highlights`, `chat/lifecycle`), `TOOLING.md`, traceability; full `make test`.
-- [ ] Operator e2e check (list typing with Enter above a footer; fence + pause; markdown draft).
+- [x] Split `highlight_structure.build` into shared per-row steps (`enter_row`/`leave_row`, markers, `derive`); behavior unchanged.
+- [x] `replace` returns an aligned splice for every edit, exact when inert + converged; shape table + property test; see each guard fail.
+- [x] Shared decoration test helpers (`tests/helpers/decoration.lua`).
+- [x] Highlighter: fail-open `on_win`, splice in `on_lines`, debounced repair (injectable deferral), `on_reload` resync, splice-failure/row-count resync; delete `renderable`; `highlight_typing_spec.lua` per Done-when.
+- [x] `make perf` reports `structure_splice` + `structure_rebuild`; record numbers and the one-rebuild-per-burst result in Log.
+- [x] Atlas (`ui/highlights`, `chat/lifecycle`), `TOOLING.md`, traceability; full `make test`.
+- [x] Operator e2e check (list typing with Enter above a footer; fence + pause; markdown draft).
 
 ## Log
 
@@ -237,6 +244,7 @@ line count. The provider's `return false` on a dirty cache is what turns a stale
 structure into a blank one.
 
 ### 2026-09-10 — design
+- 2026-09-10: closed — make test exit 0 (210 spec files PASS, incl. lint + arch guards). highlight_typing_spec 17/17 (was 14/14 red on main in a throwaway worktree: list-typing fails at the first Enter = operator repro). Round-1 BR-4 fixed at the class: on_lines records rows visited + structure_entries_copied; pinned by the sharing unit test (red on a vim.deepcopy splice), the observer integration test (red when copy reported as 0), and exact make perf gates (edit_total 1 row/0 copied; structure_splice 6 rows at 1k and 5k, exactly 4002/20002 copied, 0 full reads; make perf exit 0). BR-1/BR-6 fixed as a rule: repair inert under $PARLEY_TEST_MODE (red when removed). BR-5 guarded (red when unguarded). BR-7 deferred to #234. Operator e2e confirmed 2026-09-10 ("yes, seems fixed it").; review verdict: SHIP
 
 - The blank-on-dirty behavior was a deliberate #170 trade-off (its plan: "Dirty
   redraw returns false"; `TOOLING.md` even documents "structural marker edits
@@ -268,6 +276,145 @@ structure into a blank one.
   `"structural"` contract said stale rows are only at/after the edit, but the
   `🧠:` lookahead reaches rows *above* it — pinned with a new unit test that
   isolates the inertness rule.
+- `sdlc change-code`: plan-quality passed round 1 (no blocking; judge re-ran
+  the probes and a 60k-edit exactness run). Three Minor findings, disposed in
+  implementation rather than by editing the gated plan: (1) install the manual
+  repair deferral file-wide in `highlighting_spec.lua` too, since that file
+  pumps the loop (`vim.wait(700)`) while structural-edit tests would arm real
+  250 ms timers — the helper moves to `tests/helpers/decoration.lua`; (2) add
+  the new spec to **both** traceability entries that list
+  `highlighting_spec.lua`; (3) `init.lua` pointers corrected (`:1714`,
+  `:2872`). Ledger: `workshop/plans/…-plan-gate.md`.
+
+### 2026-09-10 — implementation
+
+- Task 1 (`build` split): unit 22/22, `highlighting_spec` 47/47,
+  `fence_containment_spec` 2/2 green before and after; whitespace-only blank
+  lines pinned first.
+- Task 2 (`replace` splice): RED 6 → GREEN 25/25. Mutations, each seen red then
+  reverted: convergence forced true → shape table + fence-width + property;
+  `is_inert` always true → shape table + lookahead-above + property; marker
+  derivation dropped from the splice → shape table + property.
+- Task 4 (highlighter): the new typing spec was run against `main` in a
+  throwaway worktree (seam stubbed) — all 14 red, the list-typing test at the
+  first Enter with "ordinary typing must splice exactly" (the operator's repro).
+  On this branch after Task 2 alone, 4 of them already passed: the splice makes
+  Enter exact and the old `on_lines` installs it. GREEN 14/14 after Task 4;
+  `highlighting_spec` 47/47 after updating the fail-closed pins (incl.
+  `:1274,:1298` and the two `prior` captures); `perf_chat_typing_spec` 13/13
+  unchanged. Mutations, each seen red then reverted: no `on_reload` → checktime
+  test; no `nvim__redraw` → spy test + real-clock "0 lines redrawn"; no-op
+  `arm_repair` → 6 repair/teardown/alignment tests; no row-count check →
+  empty-buffer test; fail-closed `on_win` → the fail-open repair test.
+- Found by the mutation step: under fail-closed, the real-clock test *also*
+  failed with 0 lines redrawn — not a Neovim quirk (an isolated two-provider
+  probe repainted 12/12 either way) but a stub leak: the failing test had
+  replaced `vim.api.nvim__redraw` and died before its inline restore, so every
+  later test in the file called a recorder. Every stub in the spec now goes
+  through a cleanup stack that `after_each` unwinds; the fail-closed mutation
+  now reddens exactly the one intended test. The real code repaints during
+  `vim.wait` (17 lines before any explicit `:redraw`), i.e. the main loop
+  flushes the invalidation on its own.
+- Task 5 — `make perf` (exit 0, hard gates unchanged), median / p95 ms:
+
+  | phase | 1,000 lines | 5,000 lines |
+  |---|---|---|
+  | `edit_total` (inclusive, one prose char) | 2.81 / 3.41 | 2.77 / 3.17 |
+  | `decoration_redraw` | 0.30 / 0.37 | 0.35 / 0.80 |
+  | `structure_splice` (one Enter) | 0.02 / 0.09 | 0.10 / 0.19 |
+  | `structure_rebuild` (the one per burst) | 1.20 / 1.63 | 5.67 / 6.97 |
+
+  One rebuild per burst on the 5,000-line chat is asserted in
+  `highlight_typing_spec` (a fence + 21 keystrokes → 22 restarts, 1 pending,
+  0 builds until it fires, then exactly 1); a plain-text burst with Enter
+  schedules none.
+- Task 6: atlas (`ui/highlights` new section, `chat/lifecycle`), `TOOLING.md`,
+  traceability (both entries). The first full `make test` went red on one
+  file — `single_source_sweeps_spec`: the plan's Core-concepts Name cells
+  (`highlight_structure.build`, `M._set_repair_deferral`, `on_win`) were not
+  the bare grep-able names its table↔code guards match (lesson #186). I had run
+  only the targeted specs after Task 4; the arch suite runs only in the full
+  `make test`. Cells renamed (`on_win` via `setup_buf_handler`, the function
+  that registers it); guard 21/21.
+- Full `make test` (lint + unit + integration + arch): exit 0, 210 spec files PASS.
+- Operator e2e (2026-09-10): "yes, seems fixed it" — typing with Enter keeps the question colouring in insert mode.
+
+### 2026-09-10 — close round 1: FIX-THEN-SHIP → dispositions
+
+The review re-verified the fix (5 mutations, 60k-edit exactness run, full suite)
+and blocked on one Important. Each finding, by class:
+
+- **BR-4 (Important, work-accounting-blind-spot) — fixed at the class.** The
+  record sites for structure work are `build_structure` and `on_lines`; the
+  resync and repair paths both go through `build_structure`. Both now report
+  what the work actually was: `on_lines` sends `work.rows_visited` and a new
+  `structure_entries_copied`, which every LineReader event now carries. Three
+  layers of guard:
+  - The unit test pins the mechanism — reference-shared state tables, exactly
+    `2(n+1)` copied at 100/1k/5k lines — and goes red on a `vim.deepcopy`
+    splice.
+  - The integration test pins what `on_lines` records for an Enter,
+    blank→text, and text→text edit, and goes red when the copy is reported as
+    0. It runs in `make test`, not just `make perf`.
+  - `make perf` gates `edit_total` (copies nothing) and a new real-attachment
+    `structure_splice` phase (Enter + join: no full read, equal row work at
+    1k/5k, *exactly* `4n+2` copied). The gate is exact both ways, so the
+    blind-again direction fails too.
+  The work-field list was written out three times (schema ×2, counter); it is
+  now `harness.WORK_FIELDS`.
+- **BR-1 / BR-6 (Minor, injected-clock-in-tests — the repeat family) — fixed
+  as a rule.** Under the test harness, the repair deferral now defaults to one
+  that never fires. Specs opt into the real clock with
+  `_set_repair_deferral(nil, ms)`. The per-file install in
+  `highlighting_spec.lua` is removed. The default could not key on
+  `g:parley_test_mode`: `PlenaryBustedFile` runs each spec in a child nvim
+  without `minimal_init.vim`, so that `g:` never reaches a spec. The test
+  printed nil, which is also why `chat_move_spec` sets it again itself.
+  `minimal_init.vim` now exports `$PARLEY_TEST_MODE`, which the child
+  inherits. Guard: a spec with no seam waits 600 ms after a structural edit
+  and requires the cache still dirty; it goes red when the default is removed.
+- **BR-5 (Minor, private-api-unguarded) — fixed.** `nvim__redraw` is the only
+  `nvim__` call in `lua/`, and it is now `pcall`ed. The guard is a refusing
+  stub: the repair must still land. It goes red when the call is unguarded.
+- **BR-7 (Minor, duplicated-state-machine) — deferred to #234.** The render
+  walk's reasoning rules are routed through `leave_row` there, with a parity
+  property test and a sweep of `chat_parser`'s copy. The render walk's phases
+  differ per field (code/tool advance before painting, question/reasoning
+  after), so this is a render-path refactor, separable from the
+  blank-while-typing fix.
+- **BR-8 (Minor) — no change.** `f00b1de` is the operator's own #233 issue
+  commit on this branch; it lands on main with the merge, where issue files
+  belong.
+- **BR-2, BR-3 (carried plan-gate) — already addressed** (both traceability
+  entries; `init.lua:1714`/`:2872`), as the round-1 review confirmed.
+- Review notes also taken: `replace`'s contract says `nil` is exact only
+  relative to an exact input structure (the cache's `dirty` is sticky), and the
+  long line in `TOOLING.md` is rewrapped. TOOLING and the atlas
+  (`infra/test_harness`, `ui/highlights`) now document the new work field, the
+  gates and the harness signal.
+- Round-2 verification: `make test` exit 0 (210 files). `make perf` exit 0; its
+  gated counts on real runs were `edit_total` 1 row / 0 copied, and
+  `structure_splice` 6 rows at both sizes / exactly 4,002 and 20,002 copied /
+  0 full reads (median 0.04 / 0.11 ms at 1k / 5k). Mutations, each seen red
+  then reverted: accounting reported as 0 → the observer test; harness default
+  removed → the harness-default test; redraw unguarded → the refusing-redraw
+  test; `vim.deepcopy` splice → the sharing unit test.
+
+### 2026-09-10 — close round 2: SHIP
+
+- Riders in this window (not #227 work; they ride its merge): `5596d22` — the
+  operator's own `lua/parley/config.lua` defaults (codex live models gpt-6 /
+  gpt-5; `max_full_exchanges` 42 → 242), committed on their request; `f00b1de`
+  — the operator's #233 issue file; `ea57922` — the operator's two parley chat
+  sessions (astrophotography plan, right ascension), committed on request so
+  `sdlc merge` had a clean tree. Every other commit from the branch point
+  starts `#227`.
+- Advisory round-2 findings: the rider rule (declared above); the round-2
+  lessons (added to `workshop/lessons.md`); and `file_tracker` still reading
+  `g:parley_test_mode`, which never reaches a spec. That last one is the second
+  production reader of the harness signal, but unifying them turns on
+  `file_tracker`'s test-mode guards across the whole suite. It is filed as
+  its own reviewed change (#235) rather than landed after this close review.
 
 ## Revisions
 
@@ -281,3 +428,13 @@ added (reload, splice failure, empty-buffer report, failed rebuild) as the
 enumerated class; one Done-when bullet added for alignment and reload. The
 "worth considering" incremental path is adopted in its inert-edit form, on the
 measurement above rather than deferred.
+
+### 2026-09-10 — estimate (after change-code)
+
+Reason: estimate-quality (INFO) noted the +30% buffer breaks consistency with
+`baseline-v3.1.md`, which prices every row at `est_design * 1.15` (settled on
+#215 and #218), and that Task 1 (build split) and Task 7 (operator e2e round)
+had no line item.
+Delta: `estimate_hours` 3.95 → 4.30 — buffer 0.30 → 0.15; added
+`cross-cutting-refactor` (0.1/0.12) and `ux-rename-iteration` (0.3/0.08);
+provenance now carries the `[stale]` calibration caveat.
