@@ -142,7 +142,7 @@ local config = {
 		-- stale. A configured provider you are not logged into shows as
 		-- "(logged out)" and selecting it starts its login.
 		live_models = {
-			providers = { "claude:opus,sonnet,fable", "codex:gpt-5.6", "antigravity" },
+			providers = { "claude:opus,sonnet,fable", "codex:gpt-6,gpt-5", "antigravity" },
 			per_provider = 3,
 		},
 		-- Raw cliproxyapi config, rendered into the proxy's config.yaml. This is
@@ -573,7 +573,7 @@ local config = {
 		-- enable summary feature for older messages
 		enable = true,
 		-- maximum number of full exchanges to keep (a user and assistant pair)
-		max_full_exchanges = 42,
+		max_full_exchanges = 242,
 		-- prefix for note lines in assistant responses (used to extract summaries)
 		summary_prefix = "📝:",
 		-- prefix for reasoning lines in assistant responses (used to ignore reasoning in subsequent requests)
