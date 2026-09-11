@@ -386,29 +386,145 @@ function M.build(lines, patterns)
     return derive(fingerprints, footer_start0, draft_ranges, work), #lines, work
 end
 
+--- Inert tokens never feed the 🧠: lookahead or move the footer, so an edit
+--- made only of them can change other rows solely through the forward walk —
+--- which `replace` checks directly. Every other token can move state a splice
+--- cannot see, above the edit as well as below it.
+local function is_inert(token)
+    return token == TOKENS.text or token == TOKENS.blank
+        or token == TOKENS.draft_open or token == TOKENS.draft_end
+        or token:sub(1, 1) == TOKENS.fence
+end
+
+local function same_state(a, b)
+    return a.in_question == b.in_question and a.in_code == b.in_code
+        and a.code_fence_len == b.code_fence_len and a.in_reasoning == b.in_reasoning
+        and a.reasoning_explicit_end == b.reasoning_explicit_end and a.in_tool == b.in_tool
+end
+
+--- The state LEAVING `row0`. `state_before` holds the state entering each row
+--- (after that row's own resets), so a row's exit is recomputed from its entry.
+--- A 🧠: row's lookahead verdict rides in the next row's entering state, which
+--- `enter_row` never touches; the last row has nothing ahead of it.
+local function exit_state(structure, row0)
+    local state = copy_state(structure.state_before[row0 + 1])
+    local after = structure.state_before[row0 + 2]
+    leave_row(state, structure.fingerprints[row0 + 1], after and after.reasoning_explicit_end or false)
+    return state
+end
+
+--- Apply one buffer edit — rows [first0, old_last0) replaced by `new_lines` —
+--- and return a structure ALIGNED with the edited buffer (#227).
+---
+--- Tokens, footer and draft ranges are always exact. `reason` says whether
+--- `state_before` is:
+---   nil           exact — identical to build() of the edited buffer
+---   "structural"  some rows may keep pre-edit state: below the edit via the
+---                 forward walk, above it via the 🧠: lookahead; rebuild
+---   "misaligned"  (no structure) the range does not fit; rebuild
+--- Never writes `structure`.
 function M.replace(structure, first0, old_last0, new_lines, patterns)
     new_lines = new_lines or {}
     patterns = patterns or M.patterns()
-    if old_last0 - first0 ~= #new_lines then
-        return nil, #new_lines, "structural", { rows_visited = 0, entries_copied = 0 }
+    local old_n = #structure.fingerprints
+    local m = #new_lines
+    local work = { rows_visited = 0, entries_copied = 0 }
+    if first0 < 0 or first0 > old_last0 or old_last0 > old_n then
+        return nil, m, "misaligned", work
     end
-    local work = { rows_visited = #new_lines, entries_copied = 0 }
-    local fingerprints = {}
-    local identical = true
+    local inserted = {}
     for i, line in ipairs(new_lines) do
-        fingerprints[i] = M.fingerprint(line, patterns)
-        if fingerprints[i] ~= structure.fingerprints[first0 + i] then
-            identical = false
+        work.rows_visited = work.rows_visited + 1
+        inserted[i] = M.fingerprint(line, patterns)
+    end
+
+    -- Same span, same tokens: every derived value is unchanged, so share it.
+    if old_last0 - first0 == m then
+        local identical = true
+        for i = 1, m do
+            if inserted[i] ~= structure.fingerprints[first0 + i] then
+                identical = false
+                break
+            end
+        end
+        if identical then
+            return {
+                fingerprints = structure.fingerprints,
+                state_before = structure.state_before,
+                footer_start0 = structure.footer_start0,
+                draft_ranges = structure.draft_ranges,
+            }, m, nil, work
         end
     end
-    if not identical then return nil, #new_lines, "structural", work end
-    local out = {
-        fingerprints = structure.fingerprints,
-        state_before = structure.state_before,
-        footer_start0 = structure.footer_start0,
-        draft_ranges = structure.draft_ranges,
-    }
-    return out, #new_lines, nil, work
+
+    -- Splice the tokens; footer and drafts are re-derived in the same pass.
+    local delta = m - (old_last0 - first0)
+    local new_n = old_n + delta
+    local fingerprints, markers = {}, new_markers()
+    for row0 = 0, new_n - 1 do
+        local token
+        if row0 < first0 then
+            token = structure.fingerprints[row0 + 1]
+        elseif row0 < first0 + m then
+            token = inserted[row0 - first0 + 1]
+        else
+            token = structure.fingerprints[row0 - delta + 1]
+        end
+        fingerprints[row0 + 1] = token
+        add_marker(markers, row0, token)
+    end
+    work.entries_copied = work.entries_copied + new_n
+    local footer_start0, draft_ranges = finish_markers(markers, new_n)
+
+    -- Nothing above or below survives: derive the whole thing.
+    if first0 == 0 and old_last0 == old_n then
+        return derive(fingerprints, footer_start0, draft_ranges, work), m, nil, work
+    end
+
+    -- Walk the inserted rows forward from the state leaving the row above.
+    local state = first0 == 0 and initial_state() or exit_state(structure, first0 - 1)
+    local walked = {}
+    for i = 1, m do
+        work.rows_visited = work.rows_visited + 1
+        enter_row(state, first0 + i - 1, inserted[i], footer_start0)
+        walked[i] = copy_state(state)
+        -- An inserted 🧠: row's verdict is unknown here. It is not inert, so
+        -- the result is already approximate and the caller's rebuild settles it.
+        leave_row(state, inserted[i], false)
+    end
+
+    -- Converged when the first surviving row below is entered exactly as before.
+    local converged = true
+    if old_last0 < old_n then
+        enter_row(state, first0 + m, structure.fingerprints[old_last0 + 1], footer_start0)
+        converged = same_state(state, structure.state_before[old_last0 + 1])
+    end
+
+    local state_before = {}
+    for row0 = 0, new_n - 1 do
+        if row0 < first0 then
+            state_before[row0 + 1] = structure.state_before[row0 + 1]
+        elseif row0 < first0 + m then
+            state_before[row0 + 1] = walked[row0 - first0 + 1]
+        else
+            state_before[row0 + 1] = structure.state_before[row0 - delta + 1]
+        end
+    end
+    work.entries_copied = work.entries_copied + new_n
+
+    local exact = converged
+    for i = 1, m do
+        if not is_inert(inserted[i]) then exact = false end
+    end
+    for row = first0 + 1, old_last0 do
+        if not is_inert(structure.fingerprints[row]) then exact = false end
+    end
+    return {
+        fingerprints = fingerprints,
+        state_before = state_before,
+        footer_start0 = footer_start0,
+        draft_ranges = draft_ranges,
+    }, m, (not exact) and "structural" or nil, work
 end
 
 function M.state_before(structure, row0, opts)

@@ -284,6 +284,16 @@ structure into a blank one.
   `highlighting_spec.lua`; (3) `init.lua` pointers corrected (`:1714`,
   `:2872`). Ledger: `workshop/plans/…-plan-gate.md`.
 
+### 2026-09-10 — implementation
+
+- Task 1 (`build` split): unit 22/22, `highlighting_spec` 47/47,
+  `fence_containment_spec` 2/2 green before and after; whitespace-only blank
+  lines pinned first.
+- Task 2 (`replace` splice): RED 6 → GREEN 25/25. Mutations, each seen red then
+  reverted: convergence forced true → shape table + fence-width + property;
+  `is_inert` always true → shape table + lookahead-above + property; marker
+  derivation dropped from the splice → shape table + property.
+
 ## Revisions
 
 ### 2026-09-10 — planning (before implementation)

@@ -23,6 +23,46 @@ local function state(question, code, reasoning, explicit_end, tool, fence_len)
     }
 end
 
+-- One document exercising every structural feature a splice must keep right:
+-- a question block, a legacy 🧠: block (blank-terminated), a fence, an
+-- explicit 🧠: block (🧠:[END]), a draft, a second question, and a footer.
+-- The turn markers at 11-12 matter: a 🧠: row does not end the lookahead, so
+-- without a marker between them the [END] at 15 would make row 4 explicit too.
+local DOC = {
+    "💬: q",            -- 0
+    "question body",    -- 1
+    "",                 -- 2
+    "🤖: a",            -- 3
+    "🧠: legacy",       -- 4
+    "legacy more",      -- 5
+    "",                 -- 6  ends the legacy block
+    "answer prose",     -- 7
+    "```lua",           -- 8
+    "code",             -- 9
+    "```",              -- 10
+    "💬: middle",       -- 11
+    "🤖: a2",           -- 12
+    "🧠: explicit",     -- 13
+    "",                 -- 14 inside the explicit block
+    "🧠:[END]",         -- 15
+    "=== draft ===",    -- 16
+    "draft body",       -- 17
+    "=== end ===",      -- 18
+    "💬: q2",           -- 19
+    "typing here",      -- 20
+    "",                 -- 21
+    "[^x]: footnote",   -- 22
+    "[^y]: second",     -- 23
+}
+
+local function splice_lines(lines, first0, old_last0, new_lines)
+    local out = {}
+    for i = 1, first0 do out[#out + 1] = lines[i] end
+    for _, line in ipairs(new_lines) do out[#out + 1] = line end
+    for i = old_last0 + 1, #lines do out[#out + 1] = lines[i] end
+    return out
+end
+
 describe("highlight_structure", function()
     it("classifies canonical decoration grammar into compact fingerprints", function()
         local cases = {
@@ -120,33 +160,81 @@ describe("highlight_structure", function()
         assert.is_true(structure.state_before(built, 2000).reasoning_explicit_end)
     end)
 
-    it("separates cardinality rejection's contract count from actual visits", function()
+    it("splices a pure insertion exactly and accounts its copy", function()
         local original = structure.build({ "💬: q", "body" }, patterns)
-        local replaced, rows_processed, reason, work =
-            structure.replace(original, 1, 1, { "inserted" }, patterns)
-        assert.is_nil(replaced)
-        assert.equals(1, rows_processed)
-        assert.equals("structural", reason)
-        assert.are.same({ rows_visited = 0, entries_copied = 0 }, work)
+        local replaced, rows, reason, work = structure.replace(original, 1, 1, { "inserted" }, patterns)
+        assert.is_nil(reason)
+        assert.equals(1, rows)
+        assert.are.same(structure.build({ "💬: q", "inserted", "body" }, patterns), replaced)
+        -- 1 classified + 1 walked; 3 token slots + 3 state slots written.
+        assert.are.same({ rows_visited = 2, entries_copied = 6 }, work)
     end)
 
-    it("rejects structural replacements without suffix work or mutation", function()
-        local lines = { "💬: q", "body", "🤖: a", "🧠: thought", "continued" }
-        local original = structure.build(lines, patterns)
-        for _, edit in ipairs({
-            { 1, 2, { "🤖: changed" } },
-            { 1, 1, { "new line" } },
-            { 1, 3, {} },
-            { 1, 2, { "[^x]: footer" } },
-            { 1, 2, { "=== draft ===" } },
-            { 1, 2, { "" } },
-        }) do
+    it("returns an aligned structure for every edit shape, exact exactly when promised", function()
+        local cases = {
+            -- name, first0, old_last0, new_lines, expected reason
+            { "Enter mid-line in a question", 1, 2, { "question", " body" }, nil },
+            { "Enter at the end of the typing line", 20, 21, { "typing here", "" }, nil },
+            { "join a line with the blank below it", 20, 22, { "typing here" }, nil },
+            { "first character on a blank line", 21, 22, { "x" }, nil },
+            { "pure insertion of prose", 2, 2, { "new" }, nil },
+            { "pure deletion of prose", 7, 8, {}, nil },
+            { "insertion at row 0", 0, 0, { "preamble" }, nil },
+            { "append at EOF", 24, 24, { "tail" }, nil },
+            { "blank inside explicit reasoning", 14, 14, { "" }, nil },
+            { "Enter inside a draft", 17, 18, { "draft", " body" }, nil },
+            { "delete the draft closer", 18, 19, {}, nil },
+            { "body line becomes a draft opener", 1, 2, { "=== draft ===" }, nil },
+            { "body line becomes blank", 1, 2, { "" }, nil },
+            { "whole buffer replaced", 0, 24, { "💬: fresh", "🧠: t", "", "x" }, nil },
+            { "delete the blank that ends legacy reasoning", 6, 7, {}, "structural" },
+            { "open a fence in prose", 7, 8, { "```" }, "structural" },
+            { "widen a fence", 8, 9, { "````lua" }, "structural" },
+            { "insert a turn marker", 7, 8, { "💬: new" }, "structural" },
+            { "delete a turn marker", 1, 4, {}, "structural" },
+            { "insert a 🧠: line", 7, 7, { "🧠: new" }, "structural" },
+            { "delete 🧠:[END]", 15, 16, {}, "structural" },
+            { "insert a footnote above the footer", 20, 20, { "[^z]: early" }, "structural" },
+            { "delete the first footnote", 22, 23, {}, "structural" },
+            { "body line becomes a footnote", 1, 2, { "[^x]: footer" }, "structural" },
+        }
+        local original = structure.build(DOC, patterns)
+        for _, case in ipairs(cases) do
+            local name, first0, old_last0, new_lines, want_reason = unpack(case, 1, 5)
             local snapshot = vim.deepcopy(original)
-            local replaced, rows, reason = structure.replace(original, edit[1], edit[2], edit[3], patterns)
-            assert.is_nil(replaced)
-            assert.equals(#edit[3], rows)
-            assert.equals("structural", reason)
-            assert.are.same(snapshot, original)
+            local out, rows, reason = structure.replace(original, first0, old_last0, new_lines, patterns)
+            local want = structure.build(splice_lines(DOC, first0, old_last0, new_lines), patterns)
+            assert.are.same(snapshot, original, name .. ": mutated its input")
+            assert.equals(#new_lines, rows, name)
+            assert.equals(want_reason, reason, name)
+            assert.are.same(want.fingerprints, out.fingerprints, name)
+            assert.equals(want.footer_start0, out.footer_start0, name)
+            assert.are.same(want.draft_ranges, out.draft_ranges, name)
+            if want_reason == nil then
+                assert.are.same(want.state_before, out.state_before, name)
+            end
+        end
+    end)
+
+    it("never claims exact when an edit changes the lookahead of a 🧠: row above it", function()
+        -- Inserting 🧠:[END] turns the legacy block at row 0 explicit, so the
+        -- blank at row 1 stops terminating it: rows 1-2 change state ABOVE the
+        -- edit, where the convergence check (which looks below) cannot see.
+        -- Only the inertness rule rejects this.
+        local lines = { "🧠: a", "", "x", "[^f]: n" }
+        local original = structure.build(lines, patterns)
+        local out, _, reason = structure.replace(original, 3, 3, { "🧠:[END]" }, patterns)
+        assert.equals("structural", reason)
+        local want = structure.build({ "🧠: a", "", "x", "🧠:[END]", "[^f]: n" }, patterns)
+        assert.are_not.same(want.state_before, out.state_before, "fixture must exercise stale rows above")
+    end)
+
+    it("refuses an edit range that does not fit the structure", function()
+        local original = structure.build({ "a" }, patterns)
+        for _, edit in ipairs({ { 0, 2 }, { 1, 0 }, { 2, 2 } }) do
+            local out, _, reason = structure.replace(original, edit[1], edit[2], { "x" }, patterns)
+            assert.is_nil(out)
+            assert.equals("misaligned", reason)
         end
     end)
 
@@ -256,14 +344,16 @@ describe("fence containment across exchange partitions (#218)", function()
         assert.is_false(structure.state_before(built, 5).in_code, "```` closes ````")
     end)
 
-    it("replace: editing a fence's WIDTH invalidates the fast path", function()
+    it("replace: editing a fence's WIDTH is never claimed exact", function()
         -- PQ-2. TOKENS.fence used to be one token for every width, so this edit
         -- kept an identical fingerprint and M.replace served stale state for the
-        -- rest of the buffer.
+        -- rest of the buffer. Now it splices, and must say the state is stale.
         local lines = { "🤖: a", "```", "body", "```", "after" }
         local built = structure.build(lines, P)
-        local out = structure.replace(built, 1, 2, { "````" }, P)
-        assert.is_nil(out, "a width edit must force a rebuild, not reuse state_before")
+        local out, _, reason = structure.replace(built, 1, 2, { "````" }, P)
+        assert.equals("structural", reason, "a width edit must force a rebuild")
+        assert.are.same(structure.build({ "🤖: a", "````", "body", "```", "after" }, P).fingerprints,
+            out.fingerprints)
     end)
 
     it("is_partition recognises the turn prefixes and nothing else", function()
@@ -336,5 +426,60 @@ describe("is_partition fast path equals the classifier (#218)", function()
             assert.are.equal(via_classify, structure.is_partition(line, P),
                 "fast path disagrees with classify on: " .. vim.inspect(line))
         end
+    end)
+end)
+
+-- #227: the splice's whole contract, over random documents and edit
+-- sequences. Tokens, footer and drafts must ALWAYS match a fresh build; state
+-- must match whenever replace claims exactness. The vocabulary is weighted to
+-- inert rows so both outcomes are exercised heavily.
+describe("replace splices stay aligned and honest about exactness (#227)", function()
+    local VOCAB = {
+        "prose", "prose", "prose", "prose", "more prose", "", "", "   ",
+        "```", "````", "=== d ===", "=== end ===",
+        "💬: q", "🤖: a", "🧠: r", "🧠:[END]", "[^n]: f", "📝: s", "🔧: t", "📎: r",
+        "🌿: b", "🔒: l",
+    }
+    local function random_lines(count)
+        local out = {}
+        for i = 1, count do out[i] = VOCAB[math.random(#VOCAB)] end
+        return out
+    end
+
+    it("matches build() on tokens/footer/drafts always, and on state whenever exact", function()
+        math.randomseed(227)
+        local exact, approximate = 0, 0
+        for _ = 1, 300 do
+            local lines = random_lines(math.random(0, 24))
+            local current = structure.build(lines, patterns)
+            for _ = 1, 12 do
+                local first0 = math.random(0, #lines)
+                local old_last0 = math.random(first0, math.min(#lines, first0 + 3))
+                local inserted = random_lines(math.random(0, 3))
+                local post = splice_lines(lines, first0, old_last0, inserted)
+                local context = string.format("\nedit [%d,%d) <- %s\nlines:\n%s", first0, old_last0,
+                    vim.inspect(inserted), table.concat(lines, "\n"))
+                local snapshot = vim.deepcopy(current)
+                local out, _, reason = structure.replace(current, first0, old_last0, inserted, patterns)
+                local want = structure.build(post, patterns)
+                assert.are.same(snapshot, current, "replace mutated its input" .. context)
+                assert.are.same(want.fingerprints, out.fingerprints, context)
+                assert.equals(want.footer_start0, out.footer_start0, context)
+                assert.are.same(want.draft_ranges, out.draft_ranges, context)
+                if reason == nil then
+                    exact = exact + 1
+                    assert.are.same(want.state_before, out.state_before, context)
+                    current = out
+                else
+                    approximate = approximate + 1
+                    assert.equals("structural", reason, context)
+                    current = want -- what the caller's repair does
+                end
+                lines = post
+            end
+        end
+        -- Non-vacuity: a property test that never reaches a branch proves nothing.
+        assert.is_true(exact >= 150, "exact splices exercised: " .. exact)
+        assert.is_true(approximate >= 150, "approximate splices exercised: " .. approximate)
     end)
 end)
