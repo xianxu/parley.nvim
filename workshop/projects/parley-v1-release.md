@@ -78,6 +78,7 @@ product they document must be settled first.
 - [ ] **#212** — gate the ariadne surface behind repo detection *(B8, B9, Tier 3)*
 - [ ] **#213** — make checkhealth honest and remove the copilot adapter *(B10; Tier 4 moved to #236, outside v1)*
 - [x] **#214** — audit and curate the default keybinding surface *(policy on top of #212's mechanism)* — **closed 2026-09-08, 17.14h** (est 3.83h, 0.2×)
+- [ ] **#237** — ParleyProxy update fetches the latest release unless pinned; status shows the version *(a stale pin locks out the newest models)*
 - [ ] **#206** — rebuild Parley user documentation *(step 1 done: the audit)*
 - [ ] **#207** — produce Parley introduction video *(depends on #206)*
 - [ ] **#162** — split parley into two plugins — **deferred**, see Log
@@ -161,3 +162,13 @@ pieces this project's requirements call for: an honest `:checkhealth`
 own client against an undocumented internal API. The rest of Tier 4 moved to
 #236 and `voice_apply` to #211; #115 and #236 are recorded in `explicitly_out`.
 #206 still depends on #213, which is now smaller.
+
+### 2026-09-11 — #237 added: the pinned proxy locks out the newest models
+
+Operator decision: using the latest model is a v1 requirement. Parley pins
+CLIProxyAPI 7.1.71, which presents itself to Anthropic as Claude Code 2.1.63.
+Anthropic refuses Fable to anything below 2.1.251, and `:ParleyProxy update`
+only re-fetches the pin. #237 makes `update` install the latest release unless
+`cliproxy.download_version` pins one, and shows the running version in
+`:ParleyProxy status`. It sits before #206 so the rebuilt docs describe the new
+behavior.
