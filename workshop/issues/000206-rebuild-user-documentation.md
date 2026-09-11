@@ -132,3 +132,11 @@ single source (`keybinding_registry.lua`) and did not drift; commands have none
 and did.
 
 Plan step 1 is complete. Steps 2–4 are blocked on the Tier 0 sweep.
+
+### 2026-09-11
+
+One more stale line for the rewrite: README:223's `live_models` example still
+quotes `"codex:gpt-5.6"`, while `config.lua`'s default is now
+`"codex:gpt-6,gpt-5"` (`5596d22`). Deliberately not patched in place — the
+README is being rewritten here; don't carry the old example forward.
+
