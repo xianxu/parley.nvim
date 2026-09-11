@@ -4,8 +4,9 @@ name: "parley-v1-release"
 goal: "Make parley.nvim installable, safe, and comprehensible for a public audience as a Neovim chat product, separating the shipped user product from ariadne development infrastructure."
 done_when: "A user on a supported Neovim baseline installs parley.nvim from a fresh clone with no ariadne repo present, completes a first persisted Markdown chat against one documented provider path, and encounters no unprompted network egress, no unrequested filesystem writes outside the chat directory, and no bound keybinding for an inert feature."
 status: ideation
+explicitly_out: [parley.nvim#115, parley.nvim#236]
 created: 2026-09-02
-updated: 2026-09-02
+updated: 2026-09-11
 ---
 
 # parley-v1-release
@@ -75,7 +76,7 @@ product they document must be settled first.
 - [ ] **#210** — consent model for write-capable tools *(B3; revisits #157)*
 - [ ] **#211** — remove personal configuration from product defaults *(B6, B7)*
 - [ ] **#212** — gate the ariadne surface behind repo detection *(B8, B9, Tier 3)*
-- [ ] **#213** — delete dead code and make checkhealth honest *(Tier 4, B10)*
+- [ ] **#213** — make checkhealth honest and remove the copilot adapter *(B10; Tier 4 moved to #236, outside v1)*
 - [x] **#214** — audit and curate the default keybinding surface *(policy on top of #212's mechanism)* — **closed 2026-09-08, 17.14h** (est 3.83h, 0.2×)
 - [ ] **#206** — rebuild Parley user documentation *(step 1 done: the audit)*
 - [ ] **#207** — produce Parley introduction video *(depends on #206)*
@@ -150,3 +151,13 @@ source** (`keybinding_registry.lua` drives both help and registration, so they
 cannot diverge) and every documented key is correct except one — while
 **commands have no such seam**, being ad-hoc `M.cmd.X = ...` assignments
 scattered across `init.lua`. #206 should fix the seam, not just the text.
+
+### 2026-09-11 — #213 narrowed; #115 and the dead-code sweep ruled out of v1
+
+Operator decision: neither #115 (faceted typed finder) nor the Tier 4 dead-code
+sweep blocks the release. Unused modules cost a user nothing. #213 keeps the two
+pieces this project's requirements call for: an honest `:checkhealth`
+(Requirement 4, B10), and removing the Copilot adapter, which poses as GitHub's
+own client against an undocumented internal API. The rest of Tier 4 moved to
+#236 and `voice_apply` to #211; #115 and #236 are recorded in `explicitly_out`.
+#206 still depends on #213, which is now smaller.
