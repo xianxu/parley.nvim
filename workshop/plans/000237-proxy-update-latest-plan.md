@@ -253,16 +253,16 @@ which the existing `_spawned` table owns.
 | `M.latest_release` | `lua/parley/cliproxy.lua` | new | curl → GitHub `releases/latest` |
 | `M.resolve_target` | `lua/parley/cliproxy.lua` | new | config pin + `latest_release` |
 | `M.installed_version` | `lua/parley/cliproxy.lua` | new | the version record file |
-| `M.download` | `lua/parley/cliproxy.lua` | modified | curl + sha256 + tar + `fs_rename` |
+| `M.download` | `lua/parley/cliproxy.lua` | modified | curl + sha256 + tar + `uv.fs_rename` |
 | `M.update` | `lua/parley/cliproxy.lua` | modified | orchestration |
 | `M.status` | `lua/parley/cliproxy.lua` | modified | orchestration |
 | `M.ensure_running` | `lua/parley/cliproxy.lua` | modified | first-run auto_download target |
 | `M.restart` | `lua/parley/cliproxy.lua` | deleted | — |
 | `M.register_proxy_command` | `lua/parley/init.lua` | modified | `:ParleyProxy` glue |
-| `fake_github_releases` | `tests/fixtures/fake_github_releases` | new | GitHub release endpoints |
-| `fake_cliproxy` | `tests/fixtures/fake_cliproxy` | modified | + `X-CPA-*` headers, `latest-version` route |
+| `tests/fixtures/fake_github_releases` | `tests/fixtures/fake_github_releases` | new | GitHub release endpoints |
+| `tests/fixtures/fake_cliproxy` | `tests/fixtures/fake_cliproxy` | modified | + `X-CPA-*` headers, `latest-version` route |
 | `fake_releases` | `tests/helpers/fake_releases.lua` | new | builds releases, runs the release fake |
-| `fixture_watchdog` | `tests/fixtures/fixture_watchdog.py` | new | parent-death exit for the Python fixtures |
+| `tests/fixtures/fixture_watchdog.py` | `tests/fixtures/fixture_watchdog.py` | new | parent-death exit for the Python fixtures |
 | `M._set_update_restart_deadline_ms` | `lua/parley/cliproxy.lua` | new | test seam (update's restart deadline) |
 
 - **`M.latest_release` / `M.version_probe`** — sync when called without a
@@ -300,9 +300,9 @@ review agents). The enumeration for this plan:
 
 | Process | Started by | Owner on a failing assertion | Owner on a crash or kill |
 |---|---|---|---|
-| `fake_github_releases`, shared | file scope of the update and download specs | lives for the file | `fixture_watchdog` (exits with its nvim); `VimLeavePre` as a backstop |
-| `fake_github_releases`, `slow` | the status-ordering case (`start_server`) | `after_each` → `reap()` | `fixture_watchdog` |
-| `fake_cliproxy`, direct | the `version_probe` cases and the foreign-proxy case (`spawn_fake`) | `after_each` → `reap()` | `fixture_watchdog` (`PARLEY_FAKE_EXIT_WITH_PARENT=1`) |
+| release fake (`fake_github_releases`), shared | file scope of the update and download specs | lives for the file | `fixture_watchdog` (exits with its nvim); `VimLeavePre` as a backstop |
+| release fake (`fake_github_releases`), `slow` | the status-ordering case (`start_server`) | `after_each` → `reap()` | `fixture_watchdog` |
+| proxy fake (`fake_cliproxy`), direct | the `version_probe` cases and the foreign-proxy case (`spawn_fake`) | `after_each` → `reap()` | `fixture_watchdog` (`PARLEY_FAKE_EXIT_WITH_PARENT=1`) |
 | managed proxy (a published release → `fake_cliproxy`) | `ensure_running`/`restart_managed` in the update, status and first-run cases | `after_each` → `cliproxy.stop()` | `fixture_watchdog` (the release wrapper exports `PARLEY_FAKE_EXIT_WITH_PARENT=1`) |
 | real `cliproxyapi` | conformance `boot()` | the spec's existing `after_each` | unchanged; #220's suite-level sweep |
 
@@ -2916,3 +2916,21 @@ with such a leg. The restart-deadline case keeps `restart_managed` stubbed acros
 both calls; the second-update case waits for the first update before asserting;
 and `await`'s timeout rises to 25 s, above `UPDATE_RESTART_DEADLINE_MS`, so no
 wait can give up while the leg it waits on is still bound to answer.
+
+### 2026-09-12 — implementation: the plan-symbol arch check
+
+**Reason.** `tests/arch/single_source_sweeps_spec.lua` requires every plain
+backticked name in a plan table row that starts with a backticked cell to have a
+Lua definition in the tree. Three kinds of name in these tables could never
+satisfy it, and one would have turned M1's boundary red.
+
+**Delta.**
+
+- Task 10's pure `version_summary` moves into M1, so M1 closes with every symbol
+  its tables name defined; M2 is Tasks 11–13 (the status wiring, docs, live
+  checks).
+- Fixture rows name the fixture by path (`tests/fixtures/…`): the check resolves
+  Lua definitions, and a Python fixture has none.
+- Process-ownership rows start with plain words, since that table is not a
+  symbol inventory and its cells name plenary's `after_each`.
+- The `M.download` row writes `uv.fs_rename`, the libuv call it wraps.
