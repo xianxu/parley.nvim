@@ -13,6 +13,7 @@ local uv = vim.uv or vim.loop
 local cc = require("parley.cliproxy_config")
 local ca = require("parley.cliproxy_auth")
 local logger = require("parley.logger")
+local rel = require("parley.cliproxy_release")
 
 local M = {}
 
@@ -139,18 +140,37 @@ M._classify = classify -- exposed for unit testing
 
 -- Build the curl argv for a GET against host:port with an optional bearer.
 -- Single source of truth for the request shape (ARCH-DRY): the health probe,
--- the stop-time identity check, list_models, and the management-API reader all
--- go through here. `-w "\n%{http_code}"` appends the status code on its own
--- line so callers can split body from code.
+-- the stop-time identity check, list_models, the management-API reader and the
+-- version probe all go through here. `-w "\n%{http_code}"` appends the status
+-- code on its own line so callers can split body from code. `opts.dump_headers`
+-- (the version probe, #237) sends the response HEADERS to stdout and discards
+-- the body, so split_status still splits header block from code.
 ---@param route string|nil # defaults to /v1/models
-local function api_argv(host, port, secret, route)
+---@param opts table|nil # { dump_headers: boolean }
+local function api_argv(host, port, secret, route, opts)
     local args = { "curl", "-s", "-w", "\n%{http_code}", "--max-time", tostring(CURL_MAX_TIME) }
+    if opts and opts.dump_headers then
+        vim.list_extend(args, { "-D", "-", "-o", "/dev/null" })
+    end
     if type(secret) == "string" and secret ~= "" then
         table.insert(args, "-H")
         table.insert(args, "Authorization: Bearer " .. secret)
     end
     table.insert(args, ("http://%s:%s%s"):format(host, port, route or "/v1/models"))
     return args
+end
+
+-- Run argv: async when `cb` is given (cb(obj) on the main loop), else
+-- synchronously, returning the vim.system result.
+local function run(argv, cb)
+    if not cb then
+        return vim.system(argv, { text = true }):wait()
+    end
+    vim.system(argv, { text = true }, function(obj)
+        vim.schedule(function()
+            cb(obj)
+        end)
+    end)
 end
 
 --- Probe http://host:port/v1/models with the client bearer and classify.
@@ -165,6 +185,24 @@ function M.health_probe(host, port, secret, cb)
         vim.schedule(function()
             cb(state)
         end)
+    end)
+end
+
+--- The running proxy's version (#237), from the X-Cpa-Version header on a
+--- /v0/management/* response. An unauthenticated request draws a 401 that
+--- still carries it (verified live on 7.1.71), so no credential is sent.
+--- Sync when `cb` is nil (returns version, reason); else cb(version, reason)
+--- on the main loop. reason: "down" (no answer) | "no_header" (no version).
+---@param host string
+---@param port number
+---@param cb fun(version: string|nil, reason: string|nil)|nil
+function M.version_probe(host, port, cb)
+    local argv = api_argv(host, port, nil, "/v0/management/latest-version", { dump_headers = true })
+    if not cb then
+        return rel.parse_version_probe(run(argv))
+    end
+    run(argv, function(obj)
+        cb(rel.parse_version_probe(obj))
     end)
 end
 
@@ -1755,12 +1793,77 @@ function M.fetch_catalog(cb)
 end
 
 --------------------------------------------------------------------------------
--- M2: auto_download — fetch a pinned release, checksum-verify, extract
+-- Releases: resolve, install, update (#131 M2, #237)
 --------------------------------------------------------------------------------
 
-local RELEASE_BASE = "https://github.com/router-for-me/CLIProxyAPI/releases/download"
-local PINNED_VERSION = "7.1.71" -- pinned, NOT "latest" — reproducible
+-- Root of CLIProxyAPI's GitHub releases: `/latest` redirects to the newest tag,
+-- `/download/v<ver>/<asset>` serves it. Specs point it at
+-- tests/fixtures/fake_github_releases through _set_releases_url; the harness
+-- points it at a dead local port through $PARLEY_CLIPROXY_RELEASES_URL
+-- (tests/minimal_init.vim), so a spec that forgets the seam fails fast instead
+-- of reaching github.com.
+local RELEASES_URL = "https://github.com/router-for-me/CLIProxyAPI/releases"
+local LATEST_MAX_TIME = 10 -- seconds: :ParleyProxy update and first-run resolve
+M.STATUS_LATEST_MAX_TIME = 5 -- seconds: :ParleyProxy status waits less
 local BIN_NAME = "cli-proxy-api" -- the executable inside the release tarball
+
+local _releases_url_override = nil
+
+--- Test seam: point release lookups and downloads at `url` (nil restores).
+---@param url string|nil
+function M._set_releases_url(url)
+    _releases_url_override = url
+end
+
+local function releases_url()
+    local env = vim.env.PARLEY_CLIPROXY_RELEASES_URL
+    return _releases_url_override or (env ~= nil and env ~= "" and env) or RELEASES_URL
+end
+
+--- The newest published release, from GitHub's releases/latest redirect: no
+--- API token, no rate-limit quota (#237). Sync when `cb` is nil (returns
+--- version, err); else cb(version, err) on the main loop.
+---@param cb fun(version: string|nil, err: string|nil)|nil
+---@param max_time number|nil # seconds; default LATEST_MAX_TIME
+function M.latest_release(cb, max_time)
+    local argv = { "curl", "-sS", "-o", "/dev/null", "-w", "%{redirect_url}\n%{http_code}",
+        "--connect-timeout", "5", "--max-time", tostring(max_time or LATEST_MAX_TIME),
+        releases_url() .. "/latest" }
+    if not cb then
+        return rel.parse_latest_response(run(argv))
+    end
+    run(argv, function(obj)
+        cb(rel.parse_latest_response(obj))
+    end)
+end
+
+--- The release parley should install (#237): cliproxy.download_version when
+--- set, else the latest release. One rule for :ParleyProxy update and the
+--- first-run auto_download (ARCH-DRY). Sync when `cb` is nil (returns version,
+--- err, pinned); else cb(version, err, pinned).
+---@param cb fun(version: string|nil, err: string|nil, pinned: boolean)|nil
+function M.resolve_target(cb)
+    local pin = (cfg() or {}).download_version
+    if pin ~= nil then
+        local v = rel.parse_version(pin)
+        local err = nil
+        if not v then
+            err = ("cliproxy.download_version %q is not a release version (expected e.g. 7.2.158)")
+                :format(tostring(pin))
+        end
+        if cb then
+            return cb(v, err, true)
+        end
+        return v, err, true
+    end
+    if cb then
+        return M.latest_release(function(v, err)
+            cb(v, err, false)
+        end)
+    end
+    local v, err = M.latest_release()
+    return v, err, false
+end
 
 local function bin_dir()
     local dir = data_root() .. "/bin"
@@ -1786,16 +1889,38 @@ local function sha256_of(path)
     return (res.stdout or ""):match("^(%x+)")
 end
 
---- Download + checksum-verify + extract the pinned release into the managed
---- bin dir. Synchronous (one-time setup; used by auto_download / :ParleyProxy
---- update). Refuses to install on a checksum mismatch.
----@param opts table|nil # { version, base_url } — base_url overridable for tests
+local function version_record()
+    return bin_dir() .. "/" .. BIN_NAME .. ".version"
+end
+
+--- The version parley recorded when it installed the managed binary, or nil:
+--- no binary, or a record that is missing, truncated, hand-edited or otherwise
+--- not a version — all of which mean "unknown" (ARCH-SECURE).
+---@return string|nil
+function M.installed_version()
+    if not M.managed_binary() then
+        return nil
+    end
+    local ok, lines = pcall(vim.fn.readfile, version_record(), "", 1)
+    return ok and rel.parse_version(lines[1]) or nil
+end
+
+--- Download, checksum-verify and install release `opts.version` as the managed
+--- binary (#131 M2, #237). The tarball is extracted into a staging dir beside
+--- the bin dir and renamed over the binary, so a running proxy keeps its old
+--- file and an interrupted install leaves the previous binary in place; the
+--- version is recorded last. Synchronous: it blocks the editor for the fetch,
+--- bounded by curl's timeouts (the audit's B5, owned by #209; the operator
+--- accepted the blocking fetch for #237). Refuses a value that is not a version
+--- and a checksum mismatch.
+---@param opts table # { version: string }
 ---@return string|nil binary_path, string|nil err
 function M.download(opts)
-    opts = opts or {}
-    local c = cfg() or {}
-    local version = opts.version or c.download_version or PINNED_VERSION
-    local base = opts.base_url or RELEASE_BASE
+    local raw = (opts or {}).version
+    local version = rel.parse_version(raw)
+    if not version then
+        return nil, "not a release version: " .. tostring(raw)
+    end
     local plat = cc.platform()
     if not plat then
         return nil, "no published cliproxy release for this platform"
@@ -1804,11 +1929,10 @@ function M.download(opts)
         return nil, "auto_download does not support Windows (.zip) — install cliproxyapi manually"
     end
     local asset = cc.asset_name(version, plat)
-    local tarball_url = ("%s/v%s/%s"):format(base, version, asset)
-    local sums_url = ("%s/v%s/checksums.txt"):format(base, version)
+    local base = ("%s/download/v%s"):format(releases_url(), version)
+    local tarball_url = base .. "/" .. asset
+    local sums_url = base .. "/checksums.txt"
 
-    -- Bounded: download() runs synchronously on the main loop (opt-in, one-time),
-    -- so a stalled fetch must not freeze the editor indefinitely.
     local tmp = vim.fn.tempname() .. ".tar.gz"
     local dl = vim.system({ "curl", "-fsSL", "--connect-timeout", "10", "--max-time", "300",
         "-o", tmp, tarball_url }, { text = true }):wait()
@@ -1833,22 +1957,42 @@ function M.download(opts)
         return nil, "checksum mismatch for " .. asset .. " — refusing to install (expected "
             .. expected .. ", got " .. tostring(actual) .. ")"
     end
-    local dir = bin_dir()
-    local ex = vim.system({ "tar", "-xzf", tmp, "-C", dir, BIN_NAME }, { text = true }):wait()
+
+    -- Stage beside the bin dir: the same filesystem, so the rename is atomic.
+    -- `stage` is a leaf this function constructs under the data root, which is
+    -- never empty — the only path the recursive delete can reach.
+    local stage = data_root() .. "/staging"
+    vim.fn.delete(stage, "rf")
+    vim.fn.mkdir(stage, "p")
+    local ex = vim.system({ "tar", "-xzf", tmp, "-C", stage, BIN_NAME }, { text = true }):wait()
     os.remove(tmp)
     if ex.code ~= 0 then
+        vim.fn.delete(stage, "rf")
         return nil, "extract failed: " .. tostring(ex.stderr)
     end
-    local bin = dir .. "/" .. BIN_NAME
-    local fs_chmod = uv.fs_chmod or vim.loop.fs_chmod
-    fs_chmod(bin, tonumber("755", 8))
+    local staged = stage .. "/" .. BIN_NAME
+    uv.fs_chmod(staged, tonumber("755", 8))
+    local bin = bin_dir() .. "/" .. BIN_NAME
+    local renamed, rerr = uv.fs_rename(staged, bin)
+    vim.fn.delete(stage, "rf")
+    if not renamed then
+        return nil, "install failed: " .. tostring(rerr)
+    end
+    local record = version_record()
+    vim.fn.writefile({ version }, record .. ".tmp")
+    uv.fs_rename(record .. ".tmp", record)
     return bin
 end
 
---- Re-fetch the pinned binary (for :ParleyProxy update).
+-- Interim until plan Task 7 (#237) replaces it with the full update: install
+-- the resolved target so :ParleyProxy update keeps working between commits.
 ---@return string|nil binary_path, string|nil err
 function M.update()
-    return M.download()
+    local version, err = M.resolve_target()
+    if not version then
+        return nil, err
+    end
+    return M.download({ version = version })
 end
 
 return M

@@ -447,6 +447,7 @@ atlas:
       - tests/integration/cliproxy_command_spec.lua
       - tests/integration/cliproxy_caller_teardown_spec.lua
       - tests/integration/cliproxy_download_spec.lua
+      - tests/integration/cliproxy_update_spec.lua
       - tests/integration/cliproxy_auth_login_spec.lua
       - tests/integration/cliproxy_conformance_spec.lua
       - tests/integration/cliproxy_recovery_e2e_spec.lua
