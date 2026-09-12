@@ -81,25 +81,26 @@ end
 --- Locate the cliproxy binary: explicit binary_path → PATH (brew name
 --- `cliproxyapi`, then release-tarball name `cli-proxy-api`). M2 inserts the
 --- managed download dir between binary_path and PATH.
----@return string|nil
+---@return string|nil path
+---@return string source # "binary_path" | "managed" | "PATH" | "none" (one precedence, one place)
 function M.discover_binary()
     local c = cfg() or {}
     if type(c.binary_path) == "string" and c.binary_path ~= "" then
         if vim.fn.executable(c.binary_path) == 1 then
-            return c.binary_path
+            return c.binary_path, "binary_path"
         end
     end
     local managed = M.managed_binary() -- M2 auto-downloaded binary
     if managed then
-        return managed
+        return managed, "managed"
     end
     for _, name in ipairs({ "cliproxyapi", "cli-proxy-api" }) do
         local p = vim.fn.exepath(name)
         if p ~= nil and p ~= "" then
-            return p
+            return p, "PATH"
         end
     end
-    return nil
+    return nil, "none"
 end
 
 --------------------------------------------------------------------------------
@@ -193,15 +194,19 @@ function M.health_probe(host, port, secret, cb)
 end
 
 --- The running proxy's version (#237), from the X-Cpa-Version header on a
---- /v0/management/* response. An unauthenticated request draws a 401 that
---- still carries it (verified live on 7.1.71), so no credential is sent.
+--- /v0/management/* response. The request carries parley's management key:
+--- 7.2.x bans the client from its whole management API for 30 minutes after
+--- five failed attempts, keyed requests included, and an unauthenticated probe
+--- IS a failed attempt. Parley's own proxy accepts the key (no attempt spent);
+--- a proxy parley did not configure rejects it with a 401 that still carries
+--- the header, at the cost of one attempt there.
 --- Sync when `cb` is nil (returns version, reason); else cb(version, reason)
 --- on the main loop. reason: "down" (no answer) | "no_header" (no version).
 ---@param host string
 ---@param port number
 ---@param cb fun(version: string|nil, reason: string|nil)|nil
 function M.version_probe(host, port, cb)
-    local argv = api_argv(host, port, nil, "/v0/management/latest-version", { dump_headers = true })
+    local argv = api_argv(host, port, M.management_key(), "/v0/management/latest-version", { dump_headers = true })
     if not cb then
         return rel.parse_version_probe(run(argv))
     end
@@ -380,8 +385,14 @@ function M.auth_files(cb, channel)
                     return cb({ state = "unknown", reason = "management_key_mismatch",
                         message = "management key rejected by the running proxy" })
                 elseif http ~= 200 then
+                    -- Carry the proxy's own words: "HTTP 403" is not actionable;
+                    -- "IP banned due to too many failed attempts. Try again in
+                    -- 30m0s" is (7.2.x's management lockout, #237).
+                    local ok_json, payload = pcall(vim.json.decode, body or "")
+                    local why = ok_json and type(payload) == "table" and type(payload.error) == "string"
+                        and payload.error or nil
                     return cb({ state = "unknown", reason = "http_" .. tostring(http),
-                        message = "management API returned HTTP " .. tostring(http) })
+                        message = "management API returned HTTP " .. tostring(http) .. (why and (": " .. why) or "") })
                 end
                 local ok, decoded = pcall(vim.json.decode, body or "")
                 if not ok or type(decoded) ~= "table" then
@@ -906,19 +917,9 @@ end
 --- answers.
 ---@param cb fun(info: table)
 function M.status(cb)
-    local bin = M.discover_binary()
+    local bin, source = M.discover_binary()
     local c = cfg() or {}
     local opts = render_opts()
-    local source = "none"
-    if bin then
-        if c.binary_path == bin then
-            source = "binary_path"
-        elseif bin == M.managed_binary() then
-            source = "managed"
-        else
-            source = "PATH"
-        end
-    end
     local info = {
         managed = M.is_managed(),
         binary = bin,

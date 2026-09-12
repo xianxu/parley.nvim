@@ -286,6 +286,15 @@ the real binary takes to release its port after SIGTERM mid-stream (round 4's
 forward note). restart_managed reports a proxy still answering after 2 s rather
 than reusing it, so a long drain shows up as an honest error.
 
+### 2026-09-12 — M2 review round 1: REWORK
+
+The review found that 7.2.x bans the client from its management API after five
+failed logins, and parley's unauthenticated version probe was spending them;
+the operator's proxy was banned. Fixed with a keyed probe, a fake that keeps
+the failure counter, and conformance cases for both. Conformance now also
+downloads the latest release itself under PARLEY_LIVE_GITHUB=1. Details are in
+the plan's Revisions.
+
 ## Revisions
 
 ### 2026-09-11 — planned: two milestones, auto_download settled, two defects added
@@ -324,3 +333,11 @@ The plan-symbol arch check requires every symbol a plan table names to be
 defined, so M2's pure `version_summary` would have turned M1's boundary red. It
 is small and pure, so it lands in M1; M2 keeps the status wiring. The plan's
 Revisions has the table-naming detail.
+
+### 2026-09-12 — scope added by the live check and the M2 review
+
+- Claude's cliproxy route: 7.2.x removed `/api/provider/anthropic/v1/messages`,
+  where parley posted claude requests, so moving users to the latest release
+  meant moving claude to `/v1/messages`.
+- The version probe sends parley's management key: 7.2.x bans the client after
+  five failed management attempts, and the unauthenticated probe was one.

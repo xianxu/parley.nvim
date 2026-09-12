@@ -71,9 +71,12 @@ real redirect are checked by conformance specs.
    answers 401 on a proxy parley did not launch. `status` skips the read when
    `cliproxy.manage` is off, so an opted-out install makes no request on
    parley's behalf (PQ-2).
-3. **Running version = `X-Cpa-Version`** from an unauthenticated GET to
-   `/v0/management/latest-version`, body discarded. The header rides on the 401,
-   so no credential leaves parley (`ARCH-SECURE`).
+3. **Running version = `X-Cpa-Version`** from a GET to
+   `/v0/management/latest-version` carrying parley's management key, body
+   discarded. (Amended at the M2 review: 7.2.x bans the client after five
+   failed management attempts, and the unauthenticated probe first chosen here
+   was one. Parley's own proxy accepts the key; a proxy parley did not
+   configure rejects it with a 401 that still carries the header.)
 4. **Parley's proxy = launched with parley's rendered config.** The process
    listening on the managed port is "ours" when its command line carries
    `-config <parley's config.yaml>` as a whole token, from this nvim session or
@@ -124,6 +127,7 @@ real redirect are checked by conformance specs.
 | first-run auto_download | first dispatch with no binary | +1 synchronous resolve (≤10 s) before the existing synchronous download | existing path | existing `on_error` |
 | disk | install | one staged copy of the binary (~60 MB) under the data root, removed after the rename | measured (7.2.158: 60,244,866 B) | error before the rename removes staging |
 | network | per `update` / `status` | one GitHub HTTPS request, no API quota | — | — |
+| management API | every version probe and `auth_files` read | 5 failed attempts per client, then 30 min of 403 on the whole management API, keyed requests included | measured on 7.2.159 (M2 review) | parley sends its key, so its own proxy counts none; a ban shows in `auth_files`' message |
 
 N/A: memory and CPU (trivial); keystroke and dispatch paths (untouched except
 first-run auto_download above).
@@ -145,8 +149,9 @@ first-run auto_download above).
   never logged; only the listener's row is used. A read that fails, or a
   listener missing from the table, means "could not tell": update never
   restarts it and says so, naming the reason (BR-8).
-- **Credentials**: the version probe sends none. The management key and client
-  bearer are untouched; no new secret-bearing process argument is added.
+- **Credentials**: the version probe sends parley's management key the way
+  `auth_files` already does (a curl header, to the endpoint parley manages). No
+  new secret and no new destination; the client bearer is untouched.
 - **Destructive calls**: `vim.fn.delete(stage, "rf")` removes only
   `<data root>/staging`, a leaf `download` constructs; the data root is never
   empty (stdpath or the test override).
@@ -274,6 +279,7 @@ which the existing `_spawned` table owns.
 | `update` | `lua/parley/cliproxy.lua` | modified | orchestration |
 | `status` | `lua/parley/cliproxy.lua` | modified | orchestration |
 | `ensure_running` | `lua/parley/cliproxy.lua` | modified | first-run auto_download target |
+| `discover_binary` | `lua/parley/cliproxy.lua` | modified | also returns where the binary came from, for status |
 | `cliproxy_anthropic_endpoint` | `lua/parley/providers.lua` | modified | the Anthropic Messages route claude requests post to (`/v1/messages`) |
 | `M.restart` | `lua/parley/cliproxy.lua` | deleted | — |
 | `register_proxy_command` | `lua/parley/init.lua` | modified | `:ParleyProxy` glue |
@@ -3126,3 +3132,36 @@ a Fable chat all answer through cliproxyapi. The mid-stream port-release timing
 (round 4's forward note) was not measured. It stays open for a follow-up; the
 restart path reports a proxy still answering after 2 s instead of reusing it,
 so a long drain surfaces as an honest error.
+
+### 2026-09-12 — M2 review round 1 (REWORK): 7.2.x's management lockout
+
+The review measured what no spec modelled: 7.2.x counts failed management
+logins per client, and after five it answers 403 on the whole management API
+for 30 minutes, keyed requests included ("IP banned due to too many failed
+attempts. Try again in 30m0s"). Decision 3's unauthenticated version probe
+spent one failed attempt per `:ParleyProxy status` and two per `update`, so
+parley banned itself from its own proxy, and credential health, recovery and
+login read "unknown" until the ban lapsed. The operator's proxy was banned this
+way. Decision 3 had been verified on 7.1.71 only, against a fake whose 401 had
+no memory.
+
+- **BR-14 (Critical).** `version_probe` sends parley's management key, as
+  `auth_files` does: parley's own proxy accepts it, so no attempt is spent; a
+  proxy parley did not configure rejects it with a 401 that still carries the
+  header, one attempt there. `fake_cliproxy` keeps the real binary's failure
+  counter, so any parley path that spends failed attempts trips it in tests.
+  Conformance pins the keyed and rejected header and the lockout itself.
+  `auth_files` reports a non-200 in the proxy's own words. Decision 3, the
+  envelope (new row) and the trust boundaries are amended.
+- **BR-15 (Important).** Conformance could not see parley's own download, so
+  its live cases were pending wherever no binary sat on `PATH`. With
+  `PARLEY_LIVE_GITHUB=1` it now installs the latest release through parley's
+  own `download` into its throwaway data dir, and every real-binary case
+  reports why it is pending instead of printing "SKIP". Task 13's "the managed
+  download or brew" was wrong in the same way.
+- **Minors.** A recovery case drives a claude request on the Anthropic route
+  through the fake over HTTP, so the fake's 404 rule has a driver.
+  `PARLEY_FAKE_GET_DELAY_MS` lets the status join run with the proxy legs
+  landing last. `discover_binary` returns where the binary came from, and
+  status reads that instead of re-walking the precedence. The issue's
+  Revisions carry the scope the live check added.

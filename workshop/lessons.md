@@ -2133,3 +2133,8 @@ download.
    the unit tests and the conformance spec all accepted any path. Make the fake
    refuse what the real binary refuses, and give every upstream route parley
    depends on a conformance case.
+7. **A fake must keep the dependency's state, not just echo its answers.** The
+   fake's 401 had no memory; the real binary counts failures and bans the
+   client after five. Parley's own status probe spent them, and every spec
+   passed. When a dependency rate-limits, locks out or counts, the fake counts
+   too.

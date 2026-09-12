@@ -160,6 +160,45 @@ rounds:
           round: 4
       boundary: M1
       blocked: false
+    - "n": 5
+      timestamp: "2026-09-12T16:09:00-07:00"
+      agent: claude
+      findings:
+        - id: BR-14
+          severity: Critical
+          title: 'Unauthenticated version_probe trips 7.2.x''s management lockout: 5 failed attempts ban 127.0.0.1 from keyed management reads for 30 min'
+          detail: 'Measured on the installed 7.2.159: five unauthenticated GET /v0/management/latest-version answer 401, the sixth onward 403 "IP banned due to too many failed attempts. Try again in 30m0s", and a request with the correct management key is then 403 too. Each :ParleyProxy status is one failed attempt, each update two (cliproxy.lua:949, :2150, :2181), so auth_files/recovery/login read "unknown" after a few uses; the operator''s live proxy was already banned. Send M.management_key() as auth_files does (cliproxy.lua:368), model the counter in fake_cliproxy, pin it in conformance, carry the 403 body in auth_files'' message, fix atlas/decision 3.'
+          family: stateless-fake-for-stateful-dependency
+          round: 5
+        - id: BR-15
+          severity: Important
+          title: Conformance discovers the binary after _set_data_dir(tempname), so parley's managed download is never seen and every M2 live case is pending on a brew-less machine
+          detail: 'cliproxy_conformance_spec.lua:22 overrides the data dir before :38 discovers, so only a PATH binary counts; the atlas claim "parley''s download, or one on PATH" is false. 2nd finding in env-gated-coverage: the rule is that a gated check must be satisfiable by the environment the project itself produces — resolve BINARY from the real data root first, and report the gate as pending rather than a print.'
+          family: env-gated-coverage
+          round: 5
+        - id: BR-16
+          severity: Minor
+          title: fake_cliproxy's new 404 rule has no spec that posts the anthropic route through it; the unit pin is the only protection
+          family: fake-rule-without-driver
+          round: 5
+        - id: BR-17
+          severity: Minor
+          title: The status join is reproducible only with the latest leg slow; health/version legs have no delay seam in fake_cliproxy
+          detail: '2nd finding in interleaving-seam. Rule: every async join gets a per-leg delay seam so each leg can be made to land last. Counter is symmetric, so coverage note only.'
+          family: interleaving-seam
+          round: 5
+        - id: BR-18
+          severity: Minor
+          title: status re-walks discover_binary's precedence to label binary_source; return (path, source) from discover_binary instead
+          family: binary-provenance-single-source
+          round: 5
+        - id: BR-19
+          severity: Minor
+          title: The claude /v1/messages route change is recorded in the Log and plan Revisions but not in the issue Spec or its Revisions
+          family: spec-carries-discovered-scope
+          round: 5
+      boundary: M2
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#237 (boundary-review)
@@ -235,6 +274,26 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-13** [Minor] `readme-surface-drift` The atlas still says the identity cases report pending where ps is refused, which round 3 made false, and never names fake_ps
   atlas/providers/cliproxy-managed.md:447-449. 2nd finding in this family; the rule is: sweep every doc sentence that restates a behaviour the commit changes, in the same commit, by grepping for the old behaviour's key phrase. Replace the sentence with the fake_ps mechanism (PARLEY_FAKE_PS_ROWS via _set_process_tools) so the atlas Testing paragraph matches the spec.
 
+## Round 5 — 2026-09-12T16:09:00-07:00 (claude) — BLOCKED
+
+### Raised
+
+- **BR-14** [Critical] `stateless-fake-for-stateful-dependency` Unauthenticated version_probe trips 7.2.x's management lockout: 5 failed attempts ban 127.0.0.1 from keyed management reads for 30 min
+  Measured on the installed 7.2.159: five unauthenticated GET /v0/management/latest-version answer 401, the sixth onward 403 "IP banned due to too many failed attempts. Try again in 30m0s", and a request with the correct management key is then 403 too. Each :ParleyProxy status is one failed attempt, each update two (cliproxy.lua:949, :2150, :2181), so auth_files/recovery/login read "unknown" after a few uses; the operator's live proxy was already banned. Send M.management_key() as auth_files does (cliproxy.lua:368), model the counter in fake_cliproxy, pin it in conformance, carry the 403 body in auth_files' message, fix atlas/decision 3.
+- **BR-15** [Important] `env-gated-coverage` Conformance discovers the binary after _set_data_dir(tempname), so parley's managed download is never seen and every M2 live case is pending on a brew-less machine
+  cliproxy_conformance_spec.lua:22 overrides the data dir before :38 discovers, so only a PATH binary counts; the atlas claim "parley's download, or one on PATH" is false. 2nd finding in env-gated-coverage: the rule is that a gated check must be satisfiable by the environment the project itself produces — resolve BINARY from the real data root first, and report the gate as pending rather than a print.
+- **BR-16** [Minor] `fake-rule-without-driver` fake_cliproxy's new 404 rule has no spec that posts the anthropic route through it; the unit pin is the only protection
+- **BR-17** [Minor] `interleaving-seam` The status join is reproducible only with the latest leg slow; health/version legs have no delay seam in fake_cliproxy
+  2nd finding in interleaving-seam. Rule: every async join gets a per-leg delay seam so each leg can be made to land last. Counter is symmetric, so coverage note only.
+- **BR-18** [Minor] `binary-provenance-single-source` status re-walks discover_binary's precedence to label binary_source; return (path, source) from discover_binary instead
+- **BR-19** [Minor] `spec-carries-discovered-scope` The claude /v1/messages route change is recorded in the Log and plan Revisions but not in the issue Spec or its Revisions
+
 ## Open findings
 
 - **BR-13** [Minor] `readme-surface-drift` The atlas still says the identity cases report pending where ps is refused, which round 3 made false, and never names fake_ps
+- **BR-14** [Critical] `stateless-fake-for-stateful-dependency` Unauthenticated version_probe trips 7.2.x's management lockout: 5 failed attempts ban 127.0.0.1 from keyed management reads for 30 min
+- **BR-15** [Important] `env-gated-coverage` Conformance discovers the binary after _set_data_dir(tempname), so parley's managed download is never seen and every M2 live case is pending on a brew-less machine
+- **BR-16** [Minor] `fake-rule-without-driver` fake_cliproxy's new 404 rule has no spec that posts the anthropic route through it; the unit pin is the only protection
+- **BR-17** [Minor] `interleaving-seam` The status join is reproducible only with the latest leg slow; health/version legs have no delay seam in fake_cliproxy
+- **BR-18** [Minor] `binary-provenance-single-source` status re-walks discover_binary's precedence to label binary_source; return (path, source) from discover_binary instead
+- **BR-19** [Minor] `spec-carries-discovered-scope` The claude /v1/messages route change is recorded in the Log and plan Revisions but not in the issue Spec or its Revisions

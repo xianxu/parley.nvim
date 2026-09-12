@@ -118,6 +118,17 @@ describe("cliproxy recovery end to end", function()
         assert.is_nil(out.notice:find("body_bytes", 1, true))
     end)
 
+    it("posts a claude request on the Anthropic route to a path the proxy serves", function()
+        -- The fake 404s any path the real binary does not serve (#237), so a
+        -- request on the removed /api/provider/anthropic alias fails here.
+        serve("no_auth", { unavailable = true, status = "error",
+            status_message = "OAuth access token has expired. Re-authenticate to continue." })
+        dispatcher.providers.cliproxyapi.web_search_strategy = "anthropic_tools_route"
+        local out = query()
+        assert.is_truthy(out.failure, "the query never reported a failure")
+        assert.equals(503, out.failure.http_status)
+    end)
+
     it("names the claude login for an expired token with NO alias block", function()
         -- The load-bearing case for M4. Every other case here builds its own
         -- oauth-model-alias, so they pass whether or not the block is required —

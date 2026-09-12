@@ -138,7 +138,7 @@ end)
 describe("version_probe", function()
     after_each(reap)
 
-    it("reads the version a management-enabled proxy stamps, without a credential", function()
+    it("reads the version off a rejected key, from a proxy parley did not configure", function()
         local port = ready_port.free_port()
         spawn_fake({ "--port", tostring(port), "--management-key", "k" }, { PARLEY_FAKE_CPA_VERSION = "9.9.9" })
         ready_port.wait_listening(port)
@@ -607,6 +607,30 @@ describe("status version", function()
         assert.equals("9.9.5", info.version.latest)
     end)
 
+    it("answers once when the proxy legs land last", function()
+        -- Every GET on this proxy waits 700 ms, so health and version finish
+        -- after the latest release (single-threaded: 1.4 s, inside curl's 2 s).
+        spawn_fake({ "--port", tostring(proxy_port), "--management-key", "k" },
+            { PARLEY_FAKE_CPA_VERSION = "9.9.4", PARLEY_FAKE_GET_DELAY_MS = "700" })
+        ready_port.wait_listening(proxy_port)
+        fake_releases.publish(server, "9.9.5")
+        local calls, info = 0, nil
+        cliproxy.status(function(i)
+            calls = calls + 1
+            info = i
+        end)
+        vim.wait(8000, function()
+            return info ~= nil
+        end, 20)
+        vim.wait(300, function()
+            return false
+        end) -- a second callback would land here
+        assert.equals(1, calls)
+        assert.equals("9.9.4", info.version.running)
+        assert.equals("9.9.5", info.version.latest)
+        assert.is_not_nil(info.health)
+    end)
+
     it("says the proxy is not running rather than guessing", function()
         local info = status()
         assert.is_nil(info.version.running)
@@ -624,5 +648,58 @@ describe("status version", function()
     it("carries the pin, normalised, for the version line", function()
         parley.config = { cliproxy = { manage = true, download_version = "v9.9.4" } }
         assert.equals("9.9.4", status().version.pinned)
+    end)
+end)
+
+describe("management lockout (7.2.x)", function()
+    local saved_config, saved_path
+
+    before_each(function()
+        saved_config, saved_path = parley.config, vim.env.PATH
+        vim.env.PATH = "/usr/bin:/bin:/usr/sbin:/sbin" -- no brew binary (#197)
+        proxy_port = ready_port.free_port()
+        set_endpoint(proxy_port)
+        parley.config = { cliproxy = { manage = true } }
+    end)
+
+    after_each(function()
+        reap()
+        parley.config, vim.env.PATH = saved_config, saved_path
+    end)
+
+    local function unauthenticated_attempt()
+        return vim.system({ "curl", "-s", "-o", "/dev/null", "-w", "%{http_code}", "--max-time", "2",
+            ("http://127.0.0.1:%d/v0/management/latest-version"):format(proxy_port) }, { text = true }):wait().stdout
+    end
+
+    local function auth_files()
+        return await(function(done)
+            cliproxy.auth_files(done)
+        end)
+    end
+
+    it("never spends a failed attempt on parley's own proxy, however often it probes", function()
+        spawn_fake({ "--port", tostring(proxy_port), "--management-key", cliproxy.management_key() },
+            { PARLEY_FAKE_CPA_VERSION = "9.9.9" })
+        ready_port.wait_listening(proxy_port)
+        for _ = 1, 8 do
+            assert.same({ "9.9.9" }, { cliproxy.version_probe("127.0.0.1", proxy_port) })
+        end
+        assert.are_not.equal("http_403", auth_files().reason)
+    end)
+
+    it("says the proxy banned parley once five attempts have failed, as 7.2.x does", function()
+        spawn_fake({ "--port", tostring(proxy_port), "--management-key", cliproxy.management_key() },
+            { PARLEY_FAKE_CPA_VERSION = "9.9.9" })
+        ready_port.wait_listening(proxy_port)
+        for i = 1, 5 do
+            assert.equals("401", unauthenticated_attempt(), "attempt " .. i)
+        end
+        local r = auth_files()
+        assert.equals("http_403", r.reason)
+        assert.equals("management API returned HTTP 403: IP banned due to too many failed attempts. "
+            .. "Try again in 30m0s", r.message)
+        -- the version still rides on the ban, as it does on the real binary
+        assert.same({ "9.9.9" }, { cliproxy.version_probe("127.0.0.1", proxy_port) })
     end)
 end)

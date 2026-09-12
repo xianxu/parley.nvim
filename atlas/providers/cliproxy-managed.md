@@ -457,12 +457,16 @@ answer once, when the last lands: health, the running version, and the latest
 release. The `binary:` line names where the binary came from (`binary_path`,
 `managed` for parley's download, or `PATH`).
 
-- **Running version.** `version_probe` reads the `X-Cpa-Version` header from an
-  unauthenticated `GET /v0/management/latest-version`. The proxy stamps it on a
-  management response even when it answers 401, so no credential is sent. With
-  remote management disabled it sends none, and the line says so rather than
-  guessing. The conformance spec pins both against the real binary (7.1.71 and
-  7.2.158, checked 2026-09-12).
+- **Running version.** `version_probe` reads the `X-Cpa-Version` header from
+  `GET /v0/management/latest-version`, sent with parley's management key. The
+  proxy stamps the header on 200 and 401 alike; with remote management
+  disabled it sends none, and the line says so rather than guessing.
+- **Management lockout.** 7.2.x bans the client from its whole management API
+  for 30 minutes after five failed attempts, keyed requests included, and an
+  unauthenticated request is a failed attempt. So the probe and `auth_files`
+  both send parley's key, and parley's own proxy never counts a failure. A proxy
+  parley did not configure rejects the key, so each probe there spends one
+  attempt. A ban shows up in `auth_files`' message in the proxy's own words.
 - **Across releases.** 7.2.x stamps a credential's `updated_at` with its own
   load clock, where 7.1.71 copied the file's mtime. The staleness rung compares
   `modtime > updated_at + skew`, which reads both the same way.
@@ -480,7 +484,8 @@ release. The `binary:` line names where the binary came from (`binary_path`,
   7.2.158; latest 7.2.158)`; `unknown — the proxy sent no version header (…)`;
   `… (latest unknown: <why>)`.
 - **Live checks.** `tests/integration/cliproxy_conformance_spec.lua` boots a
-  real binary (parley's download, or one on `PATH`) to pin that the header
-  exists and whether it survives with management disabled; the cases report
-  `pending` when no binary is found. `PARLEY_LIVE_GITHUB=1` adds a check
-  against the real redirect.
+  real binary: one on `PATH` (or `cliproxy.binary_path`), else, with
+  `PARLEY_LIVE_GITHUB=1`, the latest release installed through parley's own
+  `download` into a throwaway data dir. It pins the keyed and rejected version
+  header, the lockout, both chat routes and the release redirect. Without a
+  binary, each case reports pending with the reason.

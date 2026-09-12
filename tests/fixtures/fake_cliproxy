@@ -275,6 +275,16 @@ def main():
     # The build the proxy reports in X-CPA-VERSION. A published fake release
     # (tests/helpers/fake_releases.lua) sets it to its own version (#237).
     CPA_VERSION = os.environ.get("PARLEY_FAKE_CPA_VERSION", "7.1.71")
+    # 7.2.x's management lockout: five failed /v0/management/* attempts ban the
+    # client from the whole management API for 30 minutes, keyed requests
+    # included (measured on 7.2.159, #237). The counter lives per process, as
+    # the real binary's does, so a spec that spends five failures sees the ban.
+    MGMT_FAILURE_BUDGET = 5
+    MGMT_BAN_BODY = {"error": "IP banned due to too many failed attempts. Try again in 30m0s"}
+    mgmt_failures = {"n": 0}
+    # PARLEY_FAKE_GET_DELAY_MS: answer every GET this much later, so a spec can
+    # make the health and version legs of a status join land last.
+    get_delay_ms = int(os.environ.get("PARLEY_FAKE_GET_DELAY_MS") or "0")
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *_a):
@@ -303,6 +313,18 @@ def main():
 
         def _bearer(self):
             return (self.headers.get("Authorization") or "").replace("Bearer ", "", 1)
+
+        def _mgmt_gate(self):
+            """Apply the failed-attempt lockout to a management request; True
+            when it may proceed (the right key, and no ban in force)."""
+            if mgmt_failures["n"] >= MGMT_FAILURE_BUDGET:
+                self._json(403, MGMT_BAN_BODY)
+                return False
+            if self._bearer() != mgmt_key:
+                mgmt_failures["n"] += 1
+                self._json(401, {"error": "unauthorized"})
+                return False
+            return True
 
         # Real 7.1.71 error bodies, captured from ~/.cli-proxy-api/logs during
         # the #197 outage. Selected by --error-mode so the recovery ladder can be
@@ -421,13 +443,14 @@ def main():
             if mode == "slow":
                 time.sleep(30)
                 return
+            if get_delay_ms > 0:
+                time.sleep(get_delay_ms / 1000.0)
             if self.path.startswith("/v0/management/latest-version"):
                 if not mgmt_key:
                     self.send_response(404)
                     self.end_headers()
                     return
-                if self._bearer() != mgmt_key:
-                    self._json(401, {"error": "unauthorized"})
+                if not self._mgmt_gate():
                     return
                 self._json(200, {"latest-version": "v" + os.environ.get("PARLEY_FAKE_LATEST", CPA_VERSION)})
                 return
@@ -438,8 +461,7 @@ def main():
                     self.send_response(404)
                     self.end_headers()
                     return
-                if self._bearer() != mgmt_key:
-                    self._json(401, {"error": "unauthorized"})
+                if not self._mgmt_gate():
                     return
                 self._json(200, {"files": read_auth_store(auth_store)})
                 return
