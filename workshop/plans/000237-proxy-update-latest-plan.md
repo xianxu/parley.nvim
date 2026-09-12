@@ -2610,7 +2610,7 @@ end
 - Modify: `lua/parley/cliproxy.lua` (`M.status`, lines 826-855)
 - Test: `tests/integration/cliproxy_update_spec.lua`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `tests/integration/cliproxy_update_spec.lua` (reuse the
 `start_managed` shape from Task 7 — lift it and `set_endpoint` to file scope if
@@ -2694,9 +2694,9 @@ describe("status version", function()
 end)
 ```
 
-- [ ] **Step 2: Run to verify they fail** — `info.version` is nil.
+- [x] **Step 2: Run to verify they fail** — `info.version` is nil.
 
-- [ ] **Step 3: Implement.** Replace `M.status` with:
+- [x] **Step 3: Implement.** Replace `M.status` with:
 
 ```lua
 --- Gather a status snapshot (#131, #237). Health, the running version and the
@@ -2763,11 +2763,11 @@ function M.status(cb)
 end
 ```
 
-- [ ] **Step 4: Run the update spec and the lifecycle spec** (its status test
+- [x] **Step 4: Run the update spec and the lifecycle spec** (its status test
 at 451-471 must stay green; its latest read now fails fast against the harness's
 dead URL). `make lint`.
 
-- [ ] **Step 5: Commit** — `#237 M2: status reads the running version and the latest in parallel`.
+- [x] **Step 5: Commit** — `#237 M2: status reads the running version and the latest in parallel`.
 
 ### Task 12: `:ParleyProxy status` prints the version
 

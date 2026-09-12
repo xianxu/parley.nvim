@@ -548,3 +548,81 @@ describe("first-run auto_download", function()
         assert.is_truthy(r.msg:find("auto_download could not choose a release", 1, true))
     end)
 end)
+
+describe("status version", function()
+    local saved_config, saved_path
+
+    before_each(function()
+        saved_config, saved_path = parley.config, vim.env.PATH
+        vim.env.PATH = "/usr/bin:/bin:/usr/sbin:/sbin" -- no brew binary (#197)
+        proxy_port = ready_port.free_port()
+        set_endpoint(proxy_port)
+        parley.config = { cliproxy = { manage = true } }
+        cliproxy._set_releases_url(server.url)
+        fake_releases.clear_requests(server)
+    end)
+
+    -- Owns every process a case starts (Process ownership, PQ-1).
+    after_each(function()
+        reap()
+        cliproxy.stop()
+        cliproxy._reset_spawned()
+        cliproxy._set_releases_url(server.url)
+        parley.config, vim.env.PATH = saved_config, saved_path
+    end)
+
+    local function status()
+        return await(function(done)
+            cliproxy.status(done)
+        end)
+    end
+
+    it("reports the running version against the latest", function()
+        start_managed("9.9.4")
+        fake_releases.publish(server, "9.9.5")
+        local info = status()
+        assert.equals("9.9.4", info.version.running)
+        assert.equals("9.9.5", info.version.latest)
+        assert.equals("9.9.4", info.version.installed)
+        assert.equals("managed", info.binary_source)
+    end)
+
+    it("answers once, after the slowest read, whatever the order", function()
+        local slow = fake_releases.start("slow") -- /latest answers after 1.5 s
+        servers[#servers + 1] = slow
+        fake_releases.publish(slow, "9.9.5")
+        cliproxy._set_releases_url(slow.url)
+        local calls, info = 0, nil
+        cliproxy.status(function(i)
+            calls = calls + 1
+            info = i
+        end)
+        vim.wait(8000, function()
+            return info ~= nil
+        end, 20)
+        vim.wait(300, function()
+            return false
+        end) -- a second callback would land here
+        assert.equals(1, calls)
+        assert.equals("9.9.5", info.version.latest)
+    end)
+
+    it("says the proxy is not running rather than guessing", function()
+        local info = status()
+        assert.is_nil(info.version.running)
+        assert.equals("down", info.version.running_err)
+    end)
+
+    it("does not contact GitHub when parley does not manage the proxy", function()
+        parley.config = { cliproxy = { manage = false } }
+        local info = status()
+        assert.is_nil(info.version.latest)
+        assert.equals("not checked: cliproxy.manage is off", info.version.latest_err)
+        assert.same({}, fake_releases.requests(server))
+    end)
+
+    it("carries the pin, normalised, for the version line", function()
+        parley.config = { cliproxy = { manage = true, download_version = "v9.9.4" } }
+        assert.equals("9.9.4", status().version.pinned)
+    end)
+end)

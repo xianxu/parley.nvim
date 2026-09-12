@@ -900,7 +900,10 @@ local function config_drift()
     return not vim.deep_equal(on_disk, cc.render(opts))
 end
 
---- Gather a status snapshot. Async (health is probed); calls cb(info).
+--- Gather a status snapshot (#131, #237). Health, the running version and the
+--- latest release are read in parallel and complete in IO order; cb(info) runs
+--- once, when the last lands (ARCH-ORDER). Each read is bounded, so this always
+--- answers.
 ---@param cb fun(info: table)
 function M.status(cb)
     local bin = M.discover_binary()
@@ -908,7 +911,13 @@ function M.status(cb)
     local opts = render_opts()
     local source = "none"
     if bin then
-        source = (c.binary_path == bin) and "binary_path" or "PATH"
+        if c.binary_path == bin then
+            source = "binary_path"
+        elseif bin == M.managed_binary() then
+            source = "managed"
+        else
+            source = "PATH"
+        end
     end
     local info = {
         managed = M.is_managed(),
@@ -920,15 +929,38 @@ function M.status(cb)
         config_path = config_path(),
         spawned_by_parley = #M.spawned_pids() > 0,
         config_drift = config_drift(),
+        version = { installed = M.installed_version(), pinned = rel.parse_version(c.download_version) },
     }
+    local reads = opts.host and 3 or 1
+    local function landed()
+        reads = reads - 1
+        if reads == 0 then
+            cb(info)
+        end
+    end
     if not opts.host then
         info.health = "unknown"
-        return cb(info)
+        info.version.running_err = "no cliproxyapi endpoint is configured"
+    else
+        M.health_probe(opts.host, opts.port, opts.secret, function(state)
+            info.health = state
+            landed()
+        end)
+        M.version_probe(opts.host, opts.port, function(v, reason)
+            info.version.running, info.version.running_err = v, reason
+            landed()
+        end)
     end
-    M.health_probe(opts.host, opts.port, opts.secret, function(state)
-        info.health = state
-        cb(info)
-    end)
+    if not info.managed then
+        -- Opted out: status must not reach github.com on parley's behalf (PQ-2).
+        info.version.latest_err = "not checked: cliproxy.manage is off"
+        landed()
+    else
+        M.latest_release(function(v, err)
+            info.version.latest, info.version.latest_err = v, err
+            landed()
+        end, M.STATUS_LATEST_MAX_TIME)
+    end
 end
 
 -- Per-provider login flags (NOT a `login` subcommand — confirmed Task 2.0).
