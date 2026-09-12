@@ -168,7 +168,7 @@ surface — 5.70 → 5.76.
 
 ## Plan
 
-- [ ] M1 — `:ParleyProxy update` installs `download_version`, else the latest release, atomically, and restarts parley's own proxy; first-run auto_download follows the same rule; `:ParleyProxy restart` waits for the port (plan Tasks 1–10; Task 10's pure `version_summary` lands here).
+- [x] M1 — `:ParleyProxy update` installs `download_version`, else the latest release, atomically, and restarts parley's own proxy; first-run auto_download follows the same rule; `:ParleyProxy restart` waits for the port (plan Tasks 1–10; Task 10's pure `version_summary` lands here).
 - [ ] M2 — `:ParleyProxy status` shows the running version against the latest; conformance and live checks; docs; live Fable check (plan Tasks 11–13).
 
 ## Log
@@ -193,6 +193,7 @@ accepted that `download()` stays synchronous: `:ParleyProxy update` blocks the
 editor while it fetches, bounded by curl's timeouts.
 
 ### 2026-09-12 — M1 implemented
+- 2026-09-12: closed M1 — M1 (plan Tasks 1-8, 10), review rounds 1-3 fixed. At d12f553 in the harness isolation: update 32/0 with none pending both inside the sandbox where ps is refused (tests/fixtures/fake_ps) and against the real ps, release 50/0, all 8 arch specs pass, lint 0/0 in 372 files. At 8c16e76 (round 3 changed only tests, a fixture and one reason string): auth 78/0, lifecycle 53/0, recovery_e2e 5/0, caller_teardown 5/0, dispatch 3/0, command 15/0, login 13/0, auth_login 21/0, download 6/0, catalog 22/0, conformance 7/0 (2 pending, no real binary); make test JOBS=4: 211 of 212 spec files pass, the one failure (fold_invariants) comes from an uncommitted chat rename in the operator worktree and passes 38/0 in a clean worktree; review verdict: SHIP
 
 Plan Tasks 1–8, plus Task 10's pure `version_summary`, are in. Verified one spec
 at a time in the harness's isolation, unsandboxed so the identity cases run: all
@@ -239,6 +240,17 @@ after SIGTERM. It raised BR-12: the six identity cases ran only where a real
 a case. The review agent edited two Lua files in the worktree by mistake (its
 sandbox refused `mktemp`) and reverted them itself; afterwards `git status`
 showed only the review ledger, its sidecar and the operator's own deletion.
+
+### 2026-09-12 — M1 closed: review round 4 SHIP
+
+Round 4 revert-verified round 3 in a shell that refuses `ps` (update 32/0, none
+pending; dropping the fake's rows turns the six identity cases red) and shipped.
+Its one advisory finding, a stale atlas sentence about pending identity cases,
+is fixed in the close commit. Two observations for other owners. M2's live
+check should time the real binary's port release mid-stream (plan Revisions).
+And `cliproxy_recovery_e2e_spec` fails 4/5 in a fresh test env until
+`$XDG_CACHE_HOME/nvim/parley/query` exists: it depends on another spec having
+created that directory, which predates #237 and is a harness matter for #220.
 
 ## Revisions
 

@@ -139,6 +139,27 @@ rounds:
           round: 3
       boundary: M1
       blocked: true
+    - "n": 4
+      timestamp: "2026-09-12T13:33:31-07:00"
+      agent: claude
+      dispose:
+        - id: BR-10
+          disposition: addressed
+          note: pids_on_port's pcall is pinned by "says why, and does not raise, when lsof cannot run"; reverting the guard in a scratch copy turns exactly that case red (31/1), and it asserts stop() does not raise.
+          round: 4
+        - id: BR-12
+          disposition: addressed
+          note: needs_ps is gone; tests/fixtures/fake_ps behind _set_process_tools makes all six identity cases execute in this ps-refused shell (32/0, none pending), and dropping the fake's rows turns all six red (26/6), so they read it rather than pass vacuously.
+          round: 4
+      findings:
+        - id: BR-13
+          severity: Minor
+          title: The atlas still says the identity cases report pending where ps is refused, which round 3 made false, and never names fake_ps
+          detail: 'atlas/providers/cliproxy-managed.md:447-449. 2nd finding in this family; the rule is: sweep every doc sentence that restates a behaviour the commit changes, in the same commit, by grepping for the old behaviour''s key phrase. Replace the sentence with the fake_ps mechanism (PARLEY_FAKE_PS_ROWS via _set_process_tools) so the atlas Testing paragraph matches the spec.'
+          family: readme-surface-drift
+          round: 4
+      boundary: M1
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#237 (boundary-review)
@@ -202,7 +223,18 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-12** [Important] `env-gated-coverage` Six update cases, the pins for BR-6, BR-8 and BR-9, only run where a real ps is permitted, although _set_process_tools already accepts a fake one
   cliproxy_update_spec.lua needs_ps gates restarts-ours, not-ours, second-update, deadline, restart-failed and slow-exit; they went pending in two of three review shells. A tests/fixtures/fake_ps that prints rows from an env var built with spawned_pids() and the rendered config path would let them run everywhere (ARCH-PURPOSE: the seam fixed one case, not the class; ARCH-MOCK: ps has no fake).
 
+## Round 4 — 2026-09-12T13:33:31-07:00 (claude) — passed
+
+### Disposed
+
+- BR-10 — addressed — pids_on_port's pcall is pinned by "says why, and does not raise, when lsof cannot run"; reverting the guard in a scratch copy turns exactly that case red (31/1), and it asserts stop() does not raise.
+- BR-12 — addressed — needs_ps is gone; tests/fixtures/fake_ps behind _set_process_tools makes all six identity cases execute in this ps-refused shell (32/0, none pending), and dropping the fake's rows turns all six red (26/6), so they read it rather than pass vacuously.
+
+### Raised
+
+- **BR-13** [Minor] `readme-surface-drift` The atlas still says the identity cases report pending where ps is refused, which round 3 made false, and never names fake_ps
+  atlas/providers/cliproxy-managed.md:447-449. 2nd finding in this family; the rule is: sweep every doc sentence that restates a behaviour the commit changes, in the same commit, by grepping for the old behaviour's key phrase. Replace the sentence with the fake_ps mechanism (PARLEY_FAKE_PS_ROWS via _set_process_tools) so the atlas Testing paragraph matches the spec.
+
 ## Open findings
 
-- **BR-10** [Minor] `degrade-at-the-io-seam` pids_on_port calls vim.system unguarded, so a refused lsof raises out of stop() and restart_managed while ps_output and port_identity degrade
-- **BR-12** [Important] `env-gated-coverage` Six update cases, the pins for BR-6, BR-8 and BR-9, only run where a real ps is permitted, although _set_process_tools already accepts a fake one
+- **BR-13** [Minor] `readme-surface-drift` The atlas still says the identity cases report pending where ps is refused, which round 3 made false, and never names fake_ps

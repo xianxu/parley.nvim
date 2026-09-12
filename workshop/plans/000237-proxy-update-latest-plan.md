@@ -3058,3 +3058,19 @@ pinned:
   asserts that update says "lsof unreadable" and that `stop()` does not raise.
 - `running_identity`'s empty-lsof reason says what was observed: "lsof lists no
   process on the port" (a root-owned holder is invisible to a user's lsof).
+
+### 2026-09-12 — M1 closed (review round 4: SHIP)
+
+Round 4 revert-verified both round-3 fixes in a `ps`-refused shell and shipped
+M1. Its one advisory finding (readme-surface-drift, the family's second) is
+swept in the close commit: the atlas said the identity cases go pending where
+`ps` is refused, and now names `fake_ps`. A grep for the old phrase found no
+other site.
+
+Carried into M2's live check (Task 13 Step 3): `restart_managed` now fails,
+for all four callers, when a cliproxyapi still answers 2 s after SIGTERM. The
+real binary drains in-flight requests on shutdown, so a restart during a
+streaming chat may report "the restart failed — … still answers 2 s after …"
+and then exit on its own. Measure the real binary's port release after
+SIGTERM, idle and mid-stream; if the drain routinely takes longer than 2 s,
+raise `PORT_RELEASE_MS` or word the message for a request still streaming.

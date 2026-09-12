@@ -338,3 +338,81 @@ findings:
     detail: |
       cliproxy_update_spec.lua needs_ps gates restarts-ours, not-ours, second-update, deadline, restart-failed and slow-exit; they went pending in two of three review shells. A tests/fixtures/fake_ps that prints rows from an env var built with spawned_pids() and the rendered config path would let them run everywhere (ARCH-PURPOSE: the seam fixed one case, not the class; ARCH-MOCK: ps has no fake).
 ```
+
+---
+
+## Re-review — 2026-09-12T13:33:31-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 237 — ParleyProxy update fetches the latest release unless pinned; status shows the version |
+| repo | parley.nvim |
+| issue file | workshop/issues/000237-proxy-update-latest.md |
+| boundary | milestone M1 |
+| milestone | M1 |
+| window | 27bac4f4ba965e52f1026b0f1809036bbdfd41e4..d12f553a83e456bfed312d30c3159d0877ec7a7d |
+| command | sdlc milestone-close --issue 237 --milestone M1 |
+| reviewer | claude |
+| timestamp | 2026-09-12T13:33:31-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+**Summary.** Round 3's two claims hold under execution, not just reading, and this shell is the environment BR-12 was about: `ps` is refused here (`operation not permitted: ps`), yet the update spec runs 32/0 with **zero pending**. I verified both fixes by reverting them in scratch copies outside the worktree (`git archive` of head into `$TMPDIR`): removing the `pcall` from `pids_on_port` turns "says why, and does not raise, when lsof cannot run" red (31/1); making `fake_ps` print no rows turns all six identity cases red (26/6), which proves those cases are reading the fake's rows here rather than passing vacuously. Also green: release unit 50/0, auth 78/0, download 6/0, command 15/0, lifecycle 53/0, login 13/0, auth-login 21/0, arch sweep 21/0, luacheck 0/0 across 372 files. Plan Tasks 1–10 are fully ticked; the only unticked rows are Tasks 11–13 (M2). The one thing left is a stale sentence in the atlas that still describes the pre-round-3 behaviour; it is Minor and does not block the boundary. No files in the worktree were modified by this review (`git status` shows only the operator's pre-existing `workshop/parley/` deletion and untracked chats).
+
+**1. Strengths**
+- `tests/fixtures/fake_ps` + `ps_sees()` (`cliproxy_update_spec.lua:203-239`) fix BR-12 as a class: `needs_ps` is gone, every identity case runs everywhere, and where a real `ps` works the cases still read the real table — so the fake cannot silently drift from the real grammar on machines that have one (ARCH-MOCK, ARCH-PURPOSE).
+- The lsof pin (`cliproxy_update_spec.lua:409-426`) uses a missing-interpreter shebang, which passes `executable()` yet makes `vim.system` raise — the same failure shape as a refused `lsof`. It fails without the guard (verified) and also asserts `stop()` does not raise, covering the `:ParleyProxy restart` path BR-10 named.
+- `running_identity`'s empty-lsof reason now says what was observed ("lsof lists no process on the port"), consistent with the message-provenance rule the round-2 Revisions table established; the unit case was updated with it.
+- `lua/parley/cliproxy_release.lua` remains a genuinely pure decision core: `plan_update` and `restart_outcome` word every outcome from an observation, and `M.update` is thin orchestration with one terminal owner (`finish`) and a deadline of last resort.
+- Round 3's plan Revisions entry matches the code exactly (fake_ps row in Integration points, `needs_ps` deletion, the BR-10 recipe).
+
+**2. Critical findings** — none.
+
+**3. Important findings** — none.
+
+**4. Minor findings**
+- `atlas/providers/cliproxy-managed.md:447-449` still says "The identity cases need `ps`, which an agent sandbox may refuse: there they report pending, and they run wherever `ps` is permitted", and the Testing paragraph never names `fake_ps`. Round 3 made that sentence false. **This is the 2nd finding in family `readme-surface-drift`.** The rule: when a commit changes a behaviour, every doc sentence that restates the old behaviour is swept in that same commit — README, atlas (its Testing paragraphs included), config comments, error strings, plan tables. Round 1 swept "how the binary arrives"; round 3 changed "where the identity cases run" and swept the plan and the issue but not the atlas. Measured prevalence this round: one stale sentence; README, plan and Log are consistent. Fix the rule, not the sentence: before committing a behaviour change, grep the tree for the old behaviour's key phrase (here `pending` / `wherever ps is permitted`) and include every hit in the commit; then replace the two sentences with "where `ps` is refused, the spec points `_set_process_tools` at `tests/fixtures/fake_ps`, which prints the rows in `PARLEY_FAKE_PS_ROWS`, so every identity case runs in every shell."
+
+**5. Test coverage notes**
+- Executed green in this `ps`-refused shell: the full update spec (32, none pending — the six formerly gated cases included), plus every other cliproxy spec in the mapped group except conformance (needs a real binary) and catalog/caller-teardown (untouched by this diff).
+- Revert-verified: BR-10's guard (1 red without it) and BR-12's fake path (6 red without rows).
+- Observation outside this window: `cliproxy_recovery_e2e_spec` fails 4/5 in a *fresh* hermetic env because `$XDG_CACHE_HOME/nvim/parley/query` does not exist ("Failed to open file for writing"); it passes 5/0 once that directory exists, and the base commit behaves identically, so it is pre-existing harness behaviour, not this diff. Worth a note for the harness owner (#220 or the test_harness atlas), since a spec that depends on another spec having created the cache dir is order-dependent.
+
+**6. Architectural notes**
+- ARCH-DRY: pass. One `ps` grammar (`parse_ps`), one ps fake, one `ps_sees` helper for all six cases, one `is_cliproxy_state`, one `NO_BINARY`.
+- ARCH-PURE: pass. Identity and outcome wording are pure; `port_identity`/`ps_output`/`pids_on_port` are thin IO with degradation at the seam.
+- ARCH-PURPOSE: pass. Round 3 swept the enumeration (all six gated cases, `needs_ps` deleted) rather than one site.
+- ARCH-MOCK: pass. `ps` now has a fake behind the production seam; it is stateless, which is right for a single-shot table read, and the real-`ps` path where available acts as a standing conformance check.
+- ARCH-CONSTRAINTS: pass, one forward note. `restart_managed` now turns "port still answers after `PORT_RELEASE_MS` (2 s)" into a hard error for all four callers. The real cliproxyapi's graceful shutdown drains in-flight requests; a streaming chat can hold it well past 2 s, so an `update` or `restart` during a stream will report "the restart failed — … still answers 2 s after…" and the proxy then exits on its own, leaving nothing serving until the next request lazily spawns. That is honest and self-healing, but worth measuring on the real binary in M2's live check and, if the drain is routinely longer, either raising `PORT_RELEASE_MS` or wording the message with "a request may still be streaming".
+- ARCH-SECURE: pass. `PARLEY_FAKE_PS_ROWS` is read only by the fixture; `_set_process_tools` is inert unless a spec calls it; the broken-interpreter file is a `tempname()` leaf.
+- ARCH-ORDER: pass. The slow-exit and restart-failed interleavings are now observable in every shell (observed here), closing the oracle gap round 3 flagged.
+- For `workshop/lessons.md`: consider recording round 3's rule alongside rule 4: a case that goes `pending` on an environment capability is a hole in the oracle, not a pass; the fix is a fake for that capability behind the existing seam, not a skip.
+
+**7. Plan revision recommendations**
+- None required. The round-3 Revisions entry and the Core-concepts tables match the code. The atlas sentence above is the only artifact out of step.
+
+```findings
+dispose:
+  - id: BR-10
+    disposition: addressed
+    note: |
+      pids_on_port's pcall is pinned by "says why, and does not raise, when lsof cannot run"; reverting the guard in a scratch copy turns exactly that case red (31/1), and it asserts stop() does not raise.
+  - id: BR-12
+    disposition: addressed
+    note: |
+      needs_ps is gone; tests/fixtures/fake_ps behind _set_process_tools makes all six identity cases execute in this ps-refused shell (32/0, none pending), and dropping the fake's rows turns all six red (26/6), so they read it rather than pass vacuously.
+findings:
+  - id: new
+    severity: Minor
+    family: readme-surface-drift
+    title: |
+      The atlas still says the identity cases report pending where ps is refused, which round 3 made false, and never names fake_ps
+    detail: |
+      atlas/providers/cliproxy-managed.md:447-449. 2nd finding in this family; the rule is: sweep every doc sentence that restates a behaviour the commit changes, in the same commit, by grepping for the old behaviour's key phrase. Replace the sentence with the fake_ps mechanism (PARLEY_FAKE_PS_ROWS via _set_process_tools) so the atlas Testing paragraph matches the spec.
+```

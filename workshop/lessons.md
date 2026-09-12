@@ -2124,3 +2124,7 @@ download.
    that surface beside the observation behind it, before fixing any.** Round 1
    fixed the message the review named; round 2 found two siblings the same list
    would have shown.
+5. **A case that goes `pending` on a missing capability is a hole in the oracle,
+   not a pass.** Six cases pinning three fixes skipped wherever `ps` was
+   refused, which was every review shell. Give the capability a fake behind the
+   seam the code already has, and keep reading the real one where it exists.

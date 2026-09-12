@@ -445,5 +445,6 @@ names a missing `ps` or `lsof` to reproduce a machine without one.
 `tests/fixtures/fixture_watchdog.py` makes a fixture exit when the nvim that
 started it dies — always for the release fake, and for `fake_cliproxy` when
 `PARLEY_FAKE_EXIT_WITH_PARENT=1` (#220 owns making that the default). The
-identity cases need `ps`, which an agent sandbox may refuse: there they report
-pending, and they run wherever `ps` is permitted.
+identity cases run in every shell: where an agent sandbox refuses `ps`,
+`tests/fixtures/fake_ps` prints the rows a real `ps` would (`PARLEY_FAKE_PS_ROWS`,
+through `_set_process_tools`), and where `ps` works they read the real table.
