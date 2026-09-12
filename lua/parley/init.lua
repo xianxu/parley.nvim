@@ -329,7 +329,7 @@ M.register_proxy_command = function(prefix)
 		{ name = "providers", desc = "list the supported provider names" },
 		{ name = "login", arg = "<provider>", desc = "run an interactive OAuth login for a provider" },
 		{ name = "reap", desc = "stop other cliproxy processes racing this one's auth-dir" },
-		{ name = "update", desc = "download the pinned cliproxyapi release" },
+		{ name = "update", desc = "install the latest cliproxyapi release (or cliproxy.download_version), restarting parley's proxy" },
 	}
 	local SUBS = vim.tbl_map(function(e)
 		return e.name
@@ -372,15 +372,14 @@ M.register_proxy_command = function(prefix)
 			local n = cliproxy.stop()
 			vim.notify("cliproxy: stopped " .. n .. " parley-spawned proxy(ies)", vim.log.levels.INFO)
 		elseif sub == "update" then
-			vim.notify("cliproxy: downloading pinned release…", vim.log.levels.INFO)
-			local bin, err = cliproxy.update()
-			if bin then
-				vim.notify("cliproxy: updated → " .. bin, vim.log.levels.INFO)
-			else
-				vim.notify("cliproxy: update failed — " .. tostring(err), vim.log.levels.ERROR)
-			end
+			vim.notify("cliproxy: finding the release to install…", vim.log.levels.INFO)
+			cliproxy.update(function(ok, msg)
+				vim.notify("cliproxy: " .. msg, ok and vim.log.levels.INFO or vim.log.levels.ERROR)
+			end)
 		elseif sub == "restart" then
-			cliproxy.restart(function()
+			-- restart_managed waits for the old proxy to release the port; the
+			-- no-wait restart could reuse a proxy still shutting down (#237).
+			cliproxy.restart_managed(function()
 				vim.notify("cliproxy: restarted", vim.log.levels.INFO)
 			end, function(msg)
 				vim.notify(msg, vim.log.levels.ERROR)

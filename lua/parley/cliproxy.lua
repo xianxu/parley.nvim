@@ -834,12 +834,6 @@ function M.stop()
     return vim.tbl_count(killed)
 end
 
---- Restart: stop our own daemon, then ensure-running (re-renders config).
-function M.restart(callback, on_error)
-    M.stop()
-    M.ensure_running(callback or function() end, on_error)
-end
-
 -- Does the on-disk rendered config differ from a fresh render of the current
 -- Lua config? Compares decoded tables (NOT encoded strings — key order is
 -- unstable across renders).
@@ -984,25 +978,43 @@ function M._arm_peer_scan()
     _peer_warning_shown = true
 end
 
+-- `ps ax -o pid,lstart,command`, or nil when the process table is unreadable.
+-- pcall: vim.system RAISES (EPERM) rather than returning an error when the
+-- process table is unreadable — sandboxes and hardened runtimes do this.
+local function ps_output()
+    if vim.fn.executable("ps") ~= 1 then
+        return nil
+    end
+    local ok, res = pcall(function()
+        return vim.system({ "ps", "ax", "-o", "pid,lstart,command" }, { text = true }):wait()
+    end)
+    return (ok and res) and res.stdout or nil
+end
+
+-- Who holds the managed port: { ours, exe } or nil (cliproxy_release.
+-- running_identity). Synchronous ps + lsof (~80-150 ms); :ParleyProxy update
+-- only, never the dispatch path. Any failure to read yields "not ours", so
+-- update never restarts a process it could not identify (#237).
+local function port_identity(port)
+    local ok, id = pcall(function()
+        return rel.running_identity(ca.parse_ps(ps_output()), pids_on_port(port), config_path())
+    end)
+    return ok and id or { ours = false }
+end
+
 --- Every cliproxy process on this machine that parley neither spawned nor
 --- manages. Best-effort: an empty list when `ps` is unavailable.
 ---@return table[] # { pid, started, command }
 function M.peers()
-    if vim.fn.executable("ps") ~= 1 then
-        return {}
-    end
-    -- pcall: vim.system RAISES (EPERM) rather than returning an error when the
-    -- process table is unreadable — sandboxes and hardened runtimes do this.
-    -- Peer detection is advisory, so it must never break a dispatch.
-    local ok, res = pcall(function()
-        return vim.system({ "ps", "ax", "-o", "pid,lstart,command" }, { text = true }):wait()
-    end)
-    if not ok or not res then
+    -- Peer detection is advisory, so an unreadable process table (ps_output's
+    -- nil) must never break a dispatch.
+    local out = ps_output()
+    if not out then
         return {}
     end
     local opts = render_opts()
     local port_pids = (opts.host and opts.port) and pids_on_port(opts.port) or {}
-    return ca.parse_peers(res.stdout, M.spawned_pids(), port_pids)
+    return ca.parse_peers(out, M.spawned_pids(), port_pids)
 end
 
 --- Warn ONCE per session that peer proxies exist, naming the mechanism rather
@@ -1984,15 +1996,84 @@ function M.download(opts)
     return bin
 end
 
--- Interim until plan Task 7 (#237) replaces it with the full update: install
--- the resolved target so :ParleyProxy update keeps working between commits.
----@return string|nil binary_path, string|nil err
-function M.update()
-    local version, err = M.resolve_target()
-    if not version then
-        return nil, err
+local _update_in_flight = false
+-- Longer than restart_managed's own budget (PORT_RELEASE_MS + POLL_BUDGET_MS +
+-- probes, ~13 s), so it fires only when the restart truly never answers (PQ-3).
+local UPDATE_RESTART_DEADLINE_MS = 20000
+local _update_restart_deadline_ms = UPDATE_RESTART_DEADLINE_MS
+
+--- Test seam: shorten update's restart deadline (nil restores the default).
+---@param ms number|nil
+function M._set_update_restart_deadline_ms(ms)
+    _update_restart_deadline_ms = ms or UPDATE_RESTART_DEADLINE_MS
+end
+
+--- :ParleyProxy update (#237): install cliproxy.download_version, else the
+--- latest release, and restart the proxy when parley launched it. Everything
+--- up to the restart is synchronous (the editor blocks for the fetch); the
+--- restart is not, so an in-flight guard refuses a second update until this one
+--- has answered. cb(ok, message) runs exactly once, on every path.
+---@param cb fun(ok: boolean, message: string)
+function M.update(cb)
+    if _update_in_flight then
+        return cb(false, "an update is already running")
     end
-    return M.download({ version = version })
+    local refusal = rel.update_refusal({ managed = M.is_managed(), binary_path = (cfg() or {}).binary_path })
+    if refusal then
+        return cb(false, refusal)
+    end
+    _update_in_flight = true
+    local answered = false
+    local function finish(ok, msg)
+        if answered then
+            return
+        end
+        answered = true
+        _update_in_flight = false
+        cb(ok, msg)
+    end
+    local ok, err = pcall(function()
+        local target, target_err, pinned = M.resolve_target()
+        local ep = endpoint_opts()
+        local running
+        if ep.host then
+            local version, reason = M.version_probe(ep.host, ep.port)
+            if reason ~= "down" then
+                local id = port_identity(ep.port)
+                running = { version = version, ours = id ~= nil and id.ours, exe = id and id.exe, port = ep.port }
+            end
+        end
+        local plan = rel.plan_update({ target = target, target_err = target_err, pinned = pinned,
+            installed = M.installed_version(), running = running })
+        if not plan.ok then
+            return finish(false, plan.message)
+        end
+        if plan.install then
+            local bin, derr = M.download({ version = plan.install })
+            if not bin then
+                return finish(false, "update failed — " .. tostring(derr))
+            end
+        end
+        if plan.restart == "managed" then
+            -- restart_managed answers within its own budget, but a raise inside
+            -- one of its async legs would never reach finish and would wedge the
+            -- guard for the session (PQ-3). The deadline is the terminal owner of
+            -- last resort; finish drops whichever answer arrives second.
+            vim.defer_fn(function()
+                finish(false, plan.message .. "; the restart did not answer — check :ParleyProxy status")
+            end, _update_restart_deadline_ms)
+            return M.restart_managed(function()
+                finish(true, plan.message)
+            end, function(msg)
+                finish(false, plan.message .. "; the restart failed — " .. tostring(msg))
+            end)
+        end
+        finish(true, plan.message)
+    end)
+    if not ok then
+        logger.error("cliproxy update: " .. tostring(err))
+        finish(false, "update failed — unexpected error (details in the parley log)")
+    end
 end
 
 return M
