@@ -242,4 +242,39 @@ describe(":ParleyProxy command", function()
             assert.is_truthy(msgs[1].msg:find("install the latest cliproxyapi release", 1, true))
         end)
     end)
+
+    -- #237: status prints the running version against the latest.
+    describe("status", function()
+        local cliproxy = require("parley.cliproxy")
+        local saved_status
+
+        before_each(function()
+            saved_status = cliproxy.status
+        end)
+
+        after_each(function()
+            cliproxy.status = saved_status
+        end)
+
+        it("prints the version line and names a managed binary", function()
+            cliproxy.status = function(cb)
+                cb({ managed = true, health = "healthy", binary = "/b", binary_source = "managed",
+                    host = "127.0.0.1", port = 8317, config_path = "/c", spawned_by_parley = true,
+                    config_drift = false, version = { running = "7.1.71", latest = "7.2.158" } })
+            end
+            local msgs = capture_notify(function()
+                vim.cmd("ParleyProxy status")
+            end)
+            local out = msgs[1].msg
+            assert.is_truthy(out:find("version:       7.1.71 (latest 7.2.158 — run :ParleyProxy update)", 1, true))
+            assert.is_truthy(out:find("/b (managed)", 1, true))
+        end)
+
+        it("the help says status shows the version", function()
+            local msgs = capture_notify(function()
+                vim.cmd("ParleyProxy")
+            end)
+            assert.is_truthy(msgs[1].msg:find("version vs latest", 1, true))
+        end)
+    end)
 end)

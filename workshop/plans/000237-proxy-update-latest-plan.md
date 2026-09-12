@@ -2775,7 +2775,7 @@ dead URL). `make lint`.
 - Modify: `lua/parley/init.lua` (`SUBS_HELP` status row; the `status` branch, lines 351-364)
 - Test: `tests/integration/cliproxy_command_spec.lua`
 
-- [ ] **Step 1: Write the failing test** (inside the `update and restart`
+- [x] **Step 1: Write the failing test** (inside the `update and restart`
 describe, or a sibling):
 
 ```lua
@@ -2796,9 +2796,9 @@ describe, or a sibling):
         end)
 ```
 
-- [ ] **Step 2: Run to verify it fails** — no `version:` line.
+- [x] **Step 2: Run to verify it fails** — no `version:` line.
 
-- [ ] **Step 3: Implement.** In the `status` branch, insert after the `health`
+- [x] **Step 3: Implement.** In the `status` branch, insert after the `health`
 line:
 
 ```lua
@@ -2809,9 +2809,9 @@ line:
 and change the `SUBS_HELP` status row to
 `{ name = "status", desc = "show proxy health, version vs latest, endpoint, binary, drift" },`.
 
-- [ ] **Step 4: Run the command spec** — PASS; `make lint`.
+- [x] **Step 4: Run the command spec** — PASS; `make lint`.
 
-- [ ] **Step 5: Commit** — `#237 M2: :ParleyProxy status shows the version`.
+- [x] **Step 5: Commit** — `#237 M2: :ParleyProxy status shows the version`.
 
 ### Task 13: Conformance, docs, live check, close
 

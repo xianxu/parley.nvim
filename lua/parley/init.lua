@@ -321,7 +321,7 @@ M.register_proxy_command = function(prefix)
 	-- completion list (ARCH-DRY). `arg` is the per-subcommand argument shown in
 	-- usage; nil for the no-arg ones.
 	local SUBS_HELP = {
-		{ name = "status", desc = "show managed-proxy health, endpoint, binary, drift" },
+		{ name = "status", desc = "show proxy health, version vs latest, endpoint, binary, drift" },
 		{ name = "start", desc = "ensure the proxy is running (spawn if needed)" },
 		{ name = "stop", desc = "stop parley-spawned proxies (+ reap a leftover on the port)" },
 		{ name = "restart", desc = "stop, then start with a freshly rendered config" },
@@ -354,6 +354,8 @@ M.register_proxy_command = function(prefix)
 					"cliproxy status",
 					"  managed:       " .. tostring(info.managed),
 					"  health:        " .. tostring(info.health),
+					"  version:       " .. require("parley.cliproxy_release").version_summary(
+						info.version, ":" .. prefix .. "Proxy update"),
 					"  binary:        " .. tostring(info.binary) .. " (" .. info.binary_source .. ")",
 					"  endpoint:      " .. tostring(info.host) .. ":" .. tostring(info.port),
 					"  auth-dir:      " .. tostring(info.auth_dir),
