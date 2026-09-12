@@ -110,6 +110,35 @@ rounds:
           round: 2
       boundary: M1
       blocked: true
+    - "n": 3
+      timestamp: "2026-09-12T13:14:05-07:00"
+      agent: claude
+      dispose:
+        - id: BR-8
+          disposition: addressed
+          note: Tri-state identity with reason, restart="unknown" never restarts, restart_managed errors on a still-answering proxy, restart_outcome fed by a post-restart probe; reverting the unknown branch turns two tests red, and a direct drive against a 4 s-exit fake showed on_error at 2.2 s with the old version still on the port.
+          round: 3
+        - id: BR-9
+          disposition: addressed
+          note: PARLEY_FAKE_EXIT_DELAY_MS in fake_cliproxy, propagated through the managed spawn (observed); the spec case exists but is ps-gated and pending here.
+          round: 3
+        - id: BR-10
+          disposition: not-addressed
+          note: The pcall is in pids_on_port, but no test pins it; a script with a missing-interpreter shebang passes executable() and makes vim.system raise, so the case is writable anywhere.
+          round: 3
+        - id: BR-11
+          disposition: addressed
+          note: settle and await rows are in the Integration points table.
+          round: 3
+      findings:
+        - id: BR-12
+          severity: Important
+          title: Six update cases, the pins for BR-6, BR-8 and BR-9, only run where a real ps is permitted, although _set_process_tools already accepts a fake one
+          detail: 'cliproxy_update_spec.lua needs_ps gates restarts-ours, not-ours, second-update, deadline, restart-failed and slow-exit; they went pending in two of three review shells. A tests/fixtures/fake_ps that prints rows from an env var built with spawned_pids() and the rendered config path would let them run everywhere (ARCH-PURPOSE: the seam fixed one case, not the class; ARCH-MOCK: ps has no fake).'
+          family: env-gated-coverage
+          round: 3
+      boundary: M1
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#237 (boundary-review)
@@ -159,9 +188,21 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-11** [Minor] `plan-checkbox-tracking` The Core-concepts tables omit the one entity round 1 added, tests/helpers/await.lua (settle, await)
   The arch sweep inventories lua/ only, so it did not catch the gap; add the row so the table stays the inventory the review reads against.
 
+## Round 3 — 2026-09-12T13:14:05-07:00 (claude) — BLOCKED
+
+### Disposed
+
+- BR-8 — addressed — Tri-state identity with reason, restart="unknown" never restarts, restart_managed errors on a still-answering proxy, restart_outcome fed by a post-restart probe; reverting the unknown branch turns two tests red, and a direct drive against a 4 s-exit fake showed on_error at 2.2 s with the old version still on the port.
+- BR-9 — addressed — PARLEY_FAKE_EXIT_DELAY_MS in fake_cliproxy, propagated through the managed spawn (observed); the spec case exists but is ps-gated and pending here.
+- BR-10 — not-addressed — The pcall is in pids_on_port, but no test pins it; a script with a missing-interpreter shebang passes executable() and makes vim.system raise, so the case is writable anywhere.
+- BR-11 — addressed — settle and await rows are in the Integration points table.
+
+### Raised
+
+- **BR-12** [Important] `env-gated-coverage` Six update cases, the pins for BR-6, BR-8 and BR-9, only run where a real ps is permitted, although _set_process_tools already accepts a fake one
+  cliproxy_update_spec.lua needs_ps gates restarts-ours, not-ours, second-update, deadline, restart-failed and slow-exit; they went pending in two of three review shells. A tests/fixtures/fake_ps that prints rows from an env var built with spawned_pids() and the rendered config path would let them run everywhere (ARCH-PURPOSE: the seam fixed one case, not the class; ARCH-MOCK: ps has no fake).
+
 ## Open findings
 
-- **BR-8** [Important] `message-provenance` update still asserts what it did not observe: an unreadable identity is worded as "not started by parley", and a restart's success is reported without re-probing the version
-- **BR-9** [Minor] `interleaving-seam` The "old proxy slow to exit" ordering has no seam: fake_cliproxy exits instantly on SIGTERM, so only the fast-exit interleaving is ever observed
 - **BR-10** [Minor] `degrade-at-the-io-seam` pids_on_port calls vim.system unguarded, so a refused lsof raises out of stop() and restart_managed while ps_output and port_identity degrade
-- **BR-11** [Minor] `plan-checkbox-tracking` The Core-concepts tables omit the one entity round 1 added, tests/helpers/await.lua (settle, await)
+- **BR-12** [Important] `env-gated-coverage` Six update cases, the pins for BR-6, BR-8 and BR-9, only run where a real ps is permitted, although _set_process_tools already accepts a fake one

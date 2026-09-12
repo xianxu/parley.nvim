@@ -230,6 +230,16 @@ the plan's Revisions; three Minor findings fixed alongside. Round 1's fixes had
 been verified unsandboxed at 1a5905d: update 29/0 with none pending, so the
 `ps`-gated cases, BR-6's included, executed.
 
+### 2026-09-12 — M1 review round 3: FIX-THEN-SHIP (converging)
+
+Round 3 disposed BR-8: the reviewer reverted the unknown-identity branch and saw
+two tests go red, and drove `restart_managed` against a fake that exits 4 s
+after SIGTERM. It raised BR-12: the six identity cases ran only where a real
+`ps` does. Fixed with `tests/fixtures/fake_ps`, and BR-10's `lsof` guard now has
+a case. The review agent edited two Lua files in the worktree by mistake (its
+sandbox refused `mktemp`) and reverted them itself; afterwards `git status`
+showed only the review ledger, its sidecar and the operator's own deletion.
+
 ## Revisions
 
 ### 2026-09-11 — planned: two milestones, auto_download settled, two defects added

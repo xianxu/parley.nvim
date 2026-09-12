@@ -203,23 +203,40 @@ local function start_managed(version)
 end
 
 -- Telling parley's own proxy from another one reads `ps`, which an agent
--- sandbox can refuse (EPERM). Production then degrades to "not ours" and never
--- restarts — safe, but those cases cannot be observed there. They run wherever
--- `ps` is permitted and say so loudly where it is not, as the conformance spec
--- does for a missing binary.
+-- sandbox can refuse (EPERM); production then says it could not tell and never
+-- restarts. So the identity cases do not depend on the shell they run in: where
+-- ps is refused, tests/fixtures/fake_ps prints the rows a real ps would, and
+-- where it works they read the real table.
 local PS_OK = (function()
     local ok, res = pcall(function()
         return vim.system({ "ps", "-p", tostring(vim.fn.getpid()) }, { text = true }):wait()
     end)
     return ok and res ~= nil and res.code == 0
 end)()
+local FAKE_PS = vim.fn.getcwd() .. "/tests/fixtures/fake_ps"
 
-local function needs_ps()
+-- One row as `ps ax -o pid,lstart,command` prints it.
+local function ps_row(pid, command)
+    return ("%d Sat Sep 12 12:00:00 2026 %s"):format(pid, command)
+end
+
+-- Let identity read `rows` where the real ps is refused. `lsof` optionally
+-- names the lsof executable, for the cases where it cannot run.
+local function ps_sees(rows, lsof)
+    local ps = "ps"
     if not PS_OK then
-        pending("ps is not permitted here (sandbox): parley's own proxy cannot be identified")
-        return true
+        vim.env.PARLEY_FAKE_PS_ROWS = table.concat(rows, "\n")
+        ps = FAKE_PS
     end
-    return false
+    cliproxy._set_process_tools({ ps = ps, lsof = lsof })
+end
+
+-- The row parley's own managed proxy shows: its binary with the rendered config.
+local function ours_row()
+    local info = await(function(done)
+        cliproxy.status(done)
+    end)
+    return ps_row(cliproxy.spawned_pids()[1], cliproxy.managed_binary() .. " -config " .. info.config_path)
 end
 
 describe(":ParleyProxy update", function()
@@ -243,6 +260,7 @@ describe(":ParleyProxy update", function()
         cliproxy._reset_spawned()
         cliproxy._set_update_restart_deadline_ms(nil)
         cliproxy._set_process_tools(nil)
+        vim.env.PARLEY_FAKE_PS_ROWS = nil
         vim.env.PARLEY_FAKE_EXIT_DELAY_MS = nil
         parley.config, vim.env.PATH = saved_config, saved_path
     end)
@@ -327,10 +345,8 @@ describe(":ParleyProxy update", function()
     end)
 
     it("restarts parley's own proxy onto the new release", function()
-        if needs_ps() then
-            return
-        end
         start_managed("9.9.4")
+        ps_sees({ ours_row() })
         fake_releases.publish(server, "9.9.5")
         local r = update()
         assert.is_true(r.ok, r.msg)
@@ -340,16 +356,15 @@ describe(":ParleyProxy update", function()
     end)
 
     it("leaves a proxy parley did not start running, and says how to replace it", function()
-        if needs_ps() then -- "not started by parley" is a claim only an identity read supports
-            return
-        end
         wipe_install()
         fake_releases.publish(server, "9.9.4", { latest = false })
         cliproxy.download({ version = "9.9.4" })
         fake_releases.publish(server, "9.9.6")
         -- a cliproxy parley did not launch holds the port (think brew services)
-        spawn_fake({ "--port", tostring(proxy_port), "--management-key", "k" }, { PARLEY_FAKE_CPA_VERSION = "1.0.0" })
+        local holder = spawn_fake({ "--port", tostring(proxy_port), "--management-key", "k" },
+            { PARLEY_FAKE_CPA_VERSION = "1.0.0" })
         ready_port.wait_listening(proxy_port)
+        ps_sees({ ps_row(holder:get_pid(), "python3 " .. FAKE .. " --port " .. proxy_port) })
         local r = update()
         assert.is_true(r.ok, r.msg)
         assert.is_truthy(r.msg:find("updated 9.9.4 → 9.9.6", 1, true))
@@ -391,11 +406,28 @@ describe(":ParleyProxy update", function()
         assert.same({ "1.0.0" }, { cliproxy.version_probe("127.0.0.1", proxy_port) }) -- untouched
     end)
 
+    it("says why, and does not raise, when lsof cannot run", function()
+        -- An executable whose interpreter is missing: executable() passes and
+        -- vim.system raises (ENOENT), as it does for a refused lsof.
+        local broken = vim.fn.tempname()
+        vim.fn.writefile({ "#!/nonexistent/parley-test-interpreter" }, broken)
+        vim.fn.setfperm(broken, "rwx------")
+        wipe_install()
+        fake_releases.publish(server, "9.9.4", { latest = false })
+        cliproxy.download({ version = "9.9.4" })
+        fake_releases.publish(server, "9.9.6")
+        spawn_fake({ "--port", tostring(proxy_port), "--management-key", "k" }, { PARLEY_FAKE_CPA_VERSION = "1.0.0" })
+        ready_port.wait_listening(proxy_port)
+        ps_sees({}, broken) -- ps readable, so the identity read reaches lsof
+        local r = update()
+        assert.is_true(r.ok, r.msg)
+        assert.is_truthy(r.msg:find("(lsof unreadable)", 1, true), r.msg)
+        assert.is_true(pcall(cliproxy.stop), "stop() raised on an lsof that cannot run")
+    end)
+
     it("refuses a second update while the first is still restarting", function()
-        if needs_ps() then
-            return
-        end
         start_managed("9.9.4")
+        ps_sees({ ours_row() })
         fake_releases.publish(server, "9.9.7")
         local first, second
         cliproxy.update(function(ok, msg)
@@ -414,10 +446,8 @@ describe(":ParleyProxy update", function()
     end)
 
     it("answers, and releases the guard, when the restart never does", function()
-        if needs_ps() then
-            return
-        end
         start_managed("9.9.4")
+        ps_sees({ ours_row() })
         fake_releases.publish(server, "9.9.8")
         cliproxy._set_update_restart_deadline_ms(300)
         local saved = cliproxy.restart_managed
@@ -433,10 +463,8 @@ describe(":ParleyProxy update", function()
     end)
 
     it("reports a restart that fails, and releases the guard", function()
-        if needs_ps() then
-            return
-        end
         start_managed("9.9.4")
+        ps_sees({ ours_row() })
         fake_releases.publish(server, "9.9.10")
         local saved = cliproxy.restart_managed
         -- Fails at once, so nothing this case starts can spawn after after_each.
@@ -453,14 +481,12 @@ describe(":ParleyProxy update", function()
     end)
 
     it("does not reuse an old proxy that outlives the restart, and says so", function()
-        if needs_ps() then
-            return
-        end
         -- The real binary shuts down gracefully; this fake keeps serving 4 s
         -- after SIGTERM, past restart_managed's 2 s wait for the port.
         vim.env.PARLEY_FAKE_EXIT_DELAY_MS = "4000"
         start_managed("9.9.4")
         vim.env.PARLEY_FAKE_EXIT_DELAY_MS = nil
+        ps_sees({ ours_row() })
         fake_releases.publish(server, "9.9.11")
         local r = update()
         assert.is_false(r.ok, r.msg)

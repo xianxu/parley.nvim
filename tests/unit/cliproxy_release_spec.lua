@@ -112,7 +112,7 @@ describe("running_identity", function()
     end
 
     it("cannot tell, and says why, when no listener pid is found", function()
-        assert.same({ nil, "no process found listening on the port" },
+        assert.same({ nil, "lsof lists no process on the port" },
             { rel.running_identity({ row(1, "/b/cli-proxy-api -config " .. CFG) }, {}, CFG) })
     end)
 

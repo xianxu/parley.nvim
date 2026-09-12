@@ -103,7 +103,7 @@ end
 ---   who holds the port, and says so rather than guessing (#237 BR-8)
 function M.running_identity(rows, port_pids, config_path)
     if not port_pids or #port_pids == 0 then
-        return nil, "no process found listening on the port"
+        return nil, "lsof lists no process on the port"
     end
     local on_port = {}
     for _, pid in ipairs(port_pids) do

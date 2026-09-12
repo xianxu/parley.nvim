@@ -282,6 +282,7 @@ which the existing `_spawned` table owns.
 | `settle` | `tests/helpers/await.lua` | new | waits for an async call; returns settled, result |
 | `await` | `tests/helpers/await.lua` | new | the same, failing the spec on timeout |
 | `tests/fixtures/fixture_watchdog.py` | `tests/fixtures/fixture_watchdog.py` | new | parent-death exit for the Python fixtures |
+| `tests/fixtures/fake_ps` | `tests/fixtures/fake_ps` | new | prints the `ps` rows a spec gives it, where the real `ps` is refused |
 | `_set_update_restart_deadline_ms` | `lua/parley/cliproxy.lua` | new | test seam (update's restart deadline) |
 
 - **`M.latest_release` / `M.version_probe`** — sync when called without a
@@ -3039,3 +3040,21 @@ and the update spec drives a restart through a slow shutdown; `settle` and
 `await` join the Integration points table. New seam `_set_process_tools` names
 a missing `ps`, so the "could not tell" case runs in every environment; the case
 that says "not started by parley" now needs `ps`.
+
+### 2026-09-12 — M1 review round 3 (FIX-THEN-SHIP, converging)
+
+Round 3 disposed BR-8, BR-9 and BR-11 and found two gaps in how the fixes are
+pinned:
+
+- **BR-12 (Important): six identity cases ran only where a real `ps` is
+  permitted.** The pins for BR-6, BR-8 and BR-9 went pending in two of three
+  review shells. `tests/fixtures/fake_ps` prints the rows a real `ps` would; the
+  spec's `ps_sees(rows)` points `_set_process_tools` at it only where `ps` is
+  refused, so every identity case runs in every shell and reads the real table
+  where it can. `needs_ps` is gone.
+- **BR-10 (Minor): `pids_on_port`'s guard was unpinned.** A case points
+  `_set_process_tools` at an executable whose interpreter is missing (it passes
+  `executable()`, and `vim.system` raises, as it does for a refused `lsof`) and
+  asserts that update says "lsof unreadable" and that `stop()` does not raise.
+- `running_identity`'s empty-lsof reason says what was observed: "lsof lists no
+  process on the port" (a root-owned holder is invisible to a user's lsof).

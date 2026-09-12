@@ -248,3 +248,93 @@ findings:
     detail: |
       The arch sweep inventories lua/ only, so it did not catch the gap; add the row so the table stays the inventory the review reads against.
 ```
+
+---
+
+## Re-review — 2026-09-12T13:14:05-07:00 (FIX-THEN-SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 237 — ParleyProxy update fetches the latest release unless pinned; status shows the version |
+| repo | parley.nvim |
+| issue file | workshop/issues/000237-proxy-update-latest.md |
+| boundary | milestone M1 |
+| milestone | M1 |
+| window | 27bac4f4ba965e52f1026b0f1809036bbdfd41e4..8c16e763532ff24282212affcdb51c2e38880f82 |
+| command | sdlc milestone-close --issue 237 --milestone M1 |
+| reviewer | claude |
+| timestamp | 2026-09-12T13:14:05-07:00 |
+| verdict | FIX-THEN-SHIP |
+
+## Review
+
+```verdict
+verdict: FIX-THEN-SHIP
+confidence: medium
+```
+
+**Summary.** M1 delivers what the Spec and the plan's Tasks 1–9 (+10) promise, and round 2's fixes are real: identity is tri-state with a reason, `plan_update` never restarts what it could not identify, `restart_managed` reports a cliproxyapi that outlives its 2 s wait instead of reusing it, and `update` confirms a restart with one probe through pure `restart_outcome`. I verified by execution where this shell allows: lint 0/0; release unit 50/0; auth 78/0; download 6/0; command 15/0; login 13/0; lifecycle 53/0; recovery 5/0; arch sweep 21/0; update spec 31/0 with **6 pending** (`ps` is refused here, also from inside nvim). I drove `restart_managed` directly against a fake serving 4 s after SIGTERM: it answered through `on_error` at 2.2 s and the port still reported the old version, never reused. Reverting the `restart = "unknown"` branch turned the "could not tell" integration case and one unit case red, so the identity half is pinned by tests that fail without it. What keeps this from SHIP: BR-10's guard has no pinning test, and the six cases that pin BR-6, BR-8's restart half and BR-9 cannot execute anywhere `ps` is refused, which so far includes two of three review shells, although the seam to make them run everywhere already exists. Confidence is medium for that reason only.
+
+**Operator notice.** The sandbox refused `mktemp`, so a scratch copy I meant to revert-test in was never created and two `sed` edits landed in the real worktree (`lua/parley/cliproxy.lua`, `lua/parley/cliproxy_release.lua`). I reversed both in place with the inverse edits, not `git checkout`, and `git diff -- lua/ tests/ atlas/ README.md workshop/` is empty except your pre-existing deletion of `workshop/parley/2026-09-10.11-10-24.522.md`. No untracked file was touched. Lesson 1 in `workshop/lessons.md` (snapshot WIP before dispatching a review) applies to this round too.
+
+**1. Strengths**
+- `lua/parley/cliproxy_release.lua:104-133` and `:163-198`: identity is `{ours}` or `nil, why`, and `plan_update` maps `ours == nil` to `restart = "unknown"` with `warn`. The 2^N flag constellation BR-8 named is now a three-valued enum with a reason (ARCH-ORDER).
+- `lua/parley/cliproxy.lua:475-486`: `restart_managed` reads `wait_port_released`'s state through the shared `is_cliproxy_state` and errors instead of reusing; I observed this on the real tree with the exit-delay seam, which propagates through the managed spawn as designed.
+- `lua/parley/cliproxy.lua:2143-2156`: after `on_ready`, one `version_probe` feeds `restart_outcome`; the deadline still owns the never-answers path and `finish` drops the second answer.
+- `tests/integration/cliproxy_update_spec.lua:372-390`: the "could not tell" case runs in every environment via `_set_process_tools`, asserts the exact message, and goes red without the fix (verified).
+- The Revisions entry for round 2 enumerates every outcome message beside its observation, and `workshop/lessons.md` records the rule. That is the class fix the family asked for.
+
+**2. Critical findings** — none.
+
+**3. Important findings**
+- `tests/integration/cliproxy_update_spec.lua:214-231` (`PS_OK` / `needs_ps`) — six cases are gated on a real `ps`: restarts-ours, not-ours, second-update guard, deadline release, restart-failed (BR-6), slow-exit (BR-9). They are the pins for three claimed fixes and went pending in this shell and in round 2's. `_set_process_tools` already accepts a `ps` path (`cliproxy.lua:818`), and `lsof` works here, so a `tests/fixtures/fake_ps` that prints `ps ax -o pid,lstart,command` rows from an env var (the spec builds the row from `cliproxy.spawned_pids()` and the rendered config path, e.g. `PARLEY_FAKE_PS_TABLE="<pid> Mon Jan  1 00:00:00 2026 /x/cli-proxy-api -config <path>"`) would let all six run everywhere and drop `needs_ps`. Round 2 added the seam for the one negative case; the enumeration of the gated cases was not swept (ARCH-PURPOSE instance vs class; ARCH-MOCK: `ps` is an external binary read without a fake).
+
+**4. Minor findings**
+- BR-10 (disposed `not-addressed` below): `pids_on_port` is now guarded (`cliproxy.lua:826-835`) but nothing pins it. Recipe that works in any environment (verified): an executable file whose shebang names a missing interpreter passes `vim.fn.executable()` yet makes `vim.system` raise `ENOENT`; point `_set_process_tools({ lsof = <that file> })` at it and assert `stop()` returns and `port_identity` yields "lsof unreadable".
+- `running_identity`'s reason "no process found listening on the port" is reached only after the port answered a probe; "lsof lists no process on the port" says what was observed (a root-owned holder is invisible to a user's `lsof`).
+
+**5. Test coverage notes**
+- Executed green here: target rule with request-log proofs, atomic install by inode, checksum refusal, refusals before network, env-seam gating, no-version holder, could-not-tell wording, first-run auto_download both ways, command-layer severities, `await`/`settle` consumers.
+- Pending here, verified by reading plus my direct drive of `restart_managed`: the six `ps`-gated cases above.
+- Unit coverage of `restart_outcome` covers all five branches; `plan_update` covers `unknown` with and without a version.
+
+**6. Architectural notes**
+- ARCH-DRY: pass. One `ps` grammar, one `is_cliproxy_state`, one `NO_BINARY`, one `await`. `spawn_fake`/`reap` deferral to #220 stands.
+- ARCH-PURE: pass. `port_identity` and `update` are thin; every decision and every message is pure and unit-tested without IO.
+- ARCH-PURPOSE: flag, the Important finding: the seam fixed one case, its siblings stay gated.
+- ARCH-MOCK: pass for GitHub and the proxy; flag for `ps` (no fake). Live conformance for the redirect and the real header remains M2 Task 13 as planned.
+- ARCH-CONSTRAINTS: pass. `restart_managed`'s worst case (~15 s with the confirming probe) stays under the 20 s deadline; identity read is update-only.
+- ARCH-SECURE: pass. Env seam gated on the harness signal; versions parsed before any URL; probe sends no credential.
+- ARCH-ORDER: pass on the code; flag on the oracle, since the slow-exit and restart-failed interleavings are unobservable wherever `ps` is refused.
+
+**7. Plan revision recommendations**
+- Add to Process ownership / Test surface: the `ps`-gated cases and how they run in a sandbox (a `fake_ps` fixture row under Integration points once added).
+- Record the BR-10 pinning recipe under Task 7 or the round-3 Revisions.
+
+```findings
+dispose:
+  - id: BR-8
+    disposition: addressed
+    note: |
+      Tri-state identity with reason, restart="unknown" never restarts, restart_managed errors on a still-answering proxy, restart_outcome fed by a post-restart probe; reverting the unknown branch turns two tests red, and a direct drive against a 4 s-exit fake showed on_error at 2.2 s with the old version still on the port.
+  - id: BR-9
+    disposition: addressed
+    note: |
+      PARLEY_FAKE_EXIT_DELAY_MS in fake_cliproxy, propagated through the managed spawn (observed); the spec case exists but is ps-gated and pending here.
+  - id: BR-10
+    disposition: not-addressed
+    note: |
+      The pcall is in pids_on_port, but no test pins it; a script with a missing-interpreter shebang passes executable() and makes vim.system raise, so the case is writable anywhere.
+  - id: BR-11
+    disposition: addressed
+    note: |
+      settle and await rows are in the Integration points table.
+findings:
+  - id: new
+    severity: Important
+    family: env-gated-coverage
+    title: |
+      Six update cases, the pins for BR-6, BR-8 and BR-9, only run where a real ps is permitted, although _set_process_tools already accepts a fake one
+    detail: |
+      cliproxy_update_spec.lua needs_ps gates restarts-ours, not-ours, second-update, deadline, restart-failed and slow-exit; they went pending in two of three review shells. A tests/fixtures/fake_ps that prints rows from an env var built with spawned_pids() and the rendered config path would let them run everywhere (ARCH-PURPOSE: the seam fixed one case, not the class; ARCH-MOCK: ps has no fake).
+```
