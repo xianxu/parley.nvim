@@ -448,3 +448,33 @@ started it dies — always for the release fake, and for `fake_cliproxy` when
 identity cases run in every shell: where an agent sandbox refuses `ps`,
 `tests/fixtures/fake_ps` prints the rows a real `ps` would (`PARLEY_FAKE_PS_ROWS`,
 through `_set_process_tools`), and where `ps` works they read the real table.
+
+### Versions and status
+
+`:ParleyProxy status` prints a `version:` line, built by
+`cliproxy_release.version_summary` from three reads that run in parallel and
+answer once, when the last lands: health, the running version, and the latest
+release. The `binary:` line names where the binary came from (`binary_path`,
+`managed` for parley's download, or `PATH`).
+
+- **Running version.** `version_probe` reads the `X-Cpa-Version` header from an
+  unauthenticated `GET /v0/management/latest-version`. The proxy stamps it on a
+  management response even when it answers 401, so no credential is sent. With
+  remote management disabled it sends none, and the line says so rather than
+  guessing. The conformance spec pins both against the real binary (7.1.71 and
+  7.2.158, checked 2026-09-12).
+- **Across releases.** 7.2.x stamps a credential's `updated_at` with its own
+  load clock, where 7.1.71 copied the file's mtime. The staleness rung compares
+  `modtime > updated_at + skew`, which reads both the same way.
+- **Latest release.** The same `releases/latest` redirect that update uses,
+  bounded at 5 s for status. When `cliproxy.manage` is off, status does not
+  contact GitHub.
+- **Forms.** `7.2.158 (latest)`; `7.1.71 (latest 7.2.158 — run :ParleyProxy
+  update)`; `7.1.71 (pinned to 7.1.71; latest 7.2.158)`; `not running (installed
+  7.2.158; latest 7.2.158)`; `unknown — the proxy sent no version header (…)`;
+  `… (latest unknown: <why>)`.
+- **Live checks.** `tests/integration/cliproxy_conformance_spec.lua` boots a
+  real binary (parley's download, or one on `PATH`) to pin that the header
+  exists and whether it survives with management disabled; the cases report
+  `pending` when no binary is found. `PARLEY_LIVE_GITHUB=1` adds a check
+  against the real redirect.

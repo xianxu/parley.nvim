@@ -172,9 +172,13 @@ describe("cliproxyapi management API conformance", function()
         local r1 = vim.json.decode(body1).files[1]
         assert.is_string(r1.modtime)
         assert.is_string(r1.updated_at)
-        -- On a never-reloaded credential the proxy stamps updated_at FROM the
-        -- file's mtime, so they are equal here. That is the "not stale" state.
-        assert.equals(r1.modtime, r1.updated_at)
+        -- A credential the proxy has just loaded must not read as stale. 7.1.71
+        -- stamps updated_at FROM the file's mtime on that first load (equal);
+        -- 7.2.x stamps its own load clock, a moment later (#237). Both keep
+        -- `modtime > updated_at` false, which is all the staleness rung reads.
+        assert.is_true(ca.rfc3339_sec(r1.modtime) <= ca.rfc3339_sec(r1.updated_at),
+            "a credential the proxy just loaded reads as stale: modtime " .. r1.modtime
+                .. " is after updated_at " .. r1.updated_at)
 
         -- Move the file's mtime into the future. The proxy re-stats modtime; if
         -- it also reloads, updated_at takes the reload's own wall clock — a
@@ -279,5 +283,51 @@ describe("cliproxyapi management API conformance", function()
         local reached, _body, code = get("conformance")
         assert.is_true(reached)
         assert.equals("401", code)
+    end)
+
+    -- #237: the running version comes from X-Cpa-Version on a /v0/management/*
+    -- response, read WITHOUT a credential. The fake stamps it; only the real
+    -- binary can say the header still exists.
+    local function probe_until_up(p)
+        local v, reason
+        vim.wait(20000, function()
+            v, reason = cliproxy.version_probe("127.0.0.1", p)
+            return reason ~= "down"
+        end, 250)
+        return v, reason
+    end
+
+    it("stamps X-Cpa-Version on an unauthenticated management response", function()
+        if not binary then
+            pending("cliproxyapi binary not available")
+            return
+        end
+        local p = boot()
+        local v, reason = probe_until_up(p)
+        assert.is_string(v, "no X-Cpa-Version from the real binary (reason: " .. tostring(reason) .. ")")
+    end)
+
+    it("pins whether the header survives with management disabled", function()
+        if not binary then
+            pending("cliproxyapi binary not available")
+            return
+        end
+        local p = boot(true)
+        local v = probe_until_up(p)
+        -- fake_cliproxy stamps only when a management key is configured. If
+        -- this fails, the real binary stamps regardless: change the fake's
+        -- end_headers to match, then flip this assertion.
+        assert.is_nil(v, "the real binary sends X-Cpa-Version with management disabled")
+    end)
+
+    it("resolves the real latest release from GitHub (PARLEY_LIVE_GITHUB=1)", function()
+        if vim.env.PARLEY_LIVE_GITHUB ~= "1" then
+            pending("set PARLEY_LIVE_GITHUB=1 to check the real releases/latest redirect")
+            return
+        end
+        cliproxy._set_releases_url("https://github.com/router-for-me/CLIProxyAPI/releases")
+        local v, err = cliproxy.latest_release()
+        cliproxy._set_releases_url(nil)
+        assert.is_string(v, err)
     end)
 end)

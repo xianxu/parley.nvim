@@ -2819,7 +2819,7 @@ and change the `SUBS_HELP` status row to
 - Modify: `tests/integration/cliproxy_conformance_spec.lua`
 - Modify: `atlas/providers/cliproxy-managed.md`, `README.md` (line 221)
 
-- [ ] **Step 1: Conformance cases** — append inside the conformance `describe`:
+- [x] **Step 1: Conformance cases** — append inside the conformance `describe`:
 
 ```lua
     -- #237: the running version comes from X-Cpa-Version on a /v0/management/*
@@ -2875,7 +2875,7 @@ the comment says, and record it in the Log. Then run
 `PARLEY_LIVE_GITHUB=1 nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/integration/cliproxy_conformance_spec.lua" -c "qa!"`
 — the live check overrides the harness URL itself.
 
-- [ ] **Step 2: Docs.** Atlas: a `### Versions and status` subsection under the
+- [x] **Step 2: Docs.** Atlas: a `### Versions and status` subsection under the
 Releases section (the `X-Cpa-Version` source and why no credential is sent; the
 latest from the same redirect; the `version:` line's forms; the live checks and
 how to run them). README line 221: after the subcommand list add "`update`
@@ -3074,3 +3074,27 @@ streaming chat may report "the restart failed — … still answers 2 s after �
 and then exit on its own. Measure the real binary's port release after
 SIGTERM, idle and mid-stream; if the drain routinely takes longer than 2 s,
 raise `PORT_RELEASE_MS` or word the message for a request still streaming.
+
+### 2026-09-12 — M2 Task 13: conformance against the real binary
+
+With the real binary on `PATH` (7.2.158 from the release, and a copy of the
+installed 7.1.71), the three new cases pass on both. 7.2.158 stamps
+`X-Cpa-Version` on an unauthenticated management response and sends none with
+remote management disabled, as the fake assumes; the live GitHub redirect
+resolves 7.2.158.
+
+The same runs surfaced two things the harness never saw, because no real
+binary had been on its `PATH`:
+
+- **`updated_at` changed meaning in 7.2.x.** 7.1.71 copies the credential
+  file's mtime into `updated_at` on first load; 7.2.158 stamps its own load
+  clock, a moment later. The staleness rung (`modtime > updated_at + skew`)
+  reads both as "not stale", so parley is unaffected. The conformance case
+  pinned 7.1.71's equality and now pins the property the rung needs.
+- **The two #205 catalog cases cannot pass with this spec's fabricated
+  credential**, on either build: the proxy registers no models for it, so
+  `/v1beta/models` is empty. They predate #237 and ran `pending` until now.
+  Left unchanged here for a follow-up; the live check covers the catalog with a
+  real login meanwhile.
+
+Two conformance runs each left a plenary child nvim orphaned: a datum for #220.

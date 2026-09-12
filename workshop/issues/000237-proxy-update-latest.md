@@ -252,6 +252,20 @@ And `cliproxy_recovery_e2e_spec` fails 4/5 in a fresh test env until
 `$XDG_CACHE_HOME/nvim/parley/query` exists: it depends on another spec having
 created that directory, which predates #237 and is a harness matter for #220.
 
+### 2026-09-12 — M2 Tasks 11–13 (code and docs)
+
+Status reads health, the running version and the latest in parallel; the
+command prints the `version:` line. The new status tests were shown red with the
+implementation parked (update 5 failed, command 2) and green with it.
+
+Conformance ran against the real 7.2.158 (with the live GitHub check) and a copy
+of the installed 7.1.71: 8/2 on each. The three new cases pass on both. The
+`updated_at` case failed on 7.2.158 because 7.2.x stamps its load clock where
+7.1.71 copied the file's mtime; the staleness rung reads both alike, so the case
+now pins that property. The two failures on both builds are the #205 catalog
+cases, which cannot pass with the spec's fabricated credential; they predate
+#237 and need a follow-up. The live check (Task 13 Step 3) waits on the operator.
+
 ## Revisions
 
 ### 2026-09-11 — planned: two milestones, auto_download settled, two defects added
