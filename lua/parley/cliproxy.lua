@@ -755,24 +755,34 @@ function M.ensure_running(callback, on_error)
             return on_error("cliproxy: port " .. port .. " is held by a non-cliproxy process")
         end
         -- down → spawn our own
+        local function spawn_and_poll(bin)
+            local pid, err = M.spawn(bin, path)
+            if not pid then
+                return on_error("cliproxy: failed to spawn " .. bin .. ": " .. tostring(err))
+            end
+            poll_until_healthy(host, port, secret, pid, callback, on_error)
+        end
         local bin = M.discover_binary()
         if not bin and (cfg() or {}).auto_download then
-            vim.notify("cliproxy: downloading binary (one-time)…", vim.log.levels.INFO)
-            local dlbin, derr = M.download()
+            -- The same target rule as :ParleyProxy update (#237). Synchronous,
+            -- like the download after it, so this branch keeps the interleavings
+            -- it had.
+            local version, verr = M.resolve_target()
+            if not version then
+                return on_error("cliproxy: auto_download could not choose a release — " .. tostring(verr))
+            end
+            vim.notify(("cliproxy: downloading %s (one-time)…"):format(version), vim.log.levels.INFO)
+            local dlbin, derr = M.download({ version = version })
             if not dlbin then
                 return on_error("cliproxy: auto_download failed — " .. tostring(derr))
             end
-            bin = dlbin
+            return spawn_and_poll(dlbin)
         end
         if not bin then
             return on_error("cliproxy: no cliproxy binary found — `brew install cliproxyapi`, "
                 .. "set cliproxy.binary_path, or enable auto_download")
         end
-        local pid, err = M.spawn(bin, path)
-        if not pid then
-            return on_error("cliproxy: failed to spawn " .. bin .. ": " .. tostring(err))
-        end
-        poll_until_healthy(host, port, secret, pid, callback, on_error)
+        spawn_and_poll(bin)
     end)
 end
 

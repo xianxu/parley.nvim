@@ -393,3 +393,51 @@ describe(":ParleyProxy update", function()
         assert.is_nil(cliproxy.restart)
     end)
 end)
+
+describe("first-run auto_download", function()
+    local saved_config, saved_path
+
+    before_each(function()
+        saved_config, saved_path = parley.config, vim.env.PATH
+        vim.env.PATH = "/usr/bin:/bin:/usr/sbin:/sbin" -- no brew binary (#197)
+        proxy_port = ready_port.free_port()
+        set_endpoint(proxy_port)
+        wipe_install()
+        parley.config = { cliproxy = { manage = true, auto_download = true } }
+        cliproxy._set_releases_url(server.url)
+    end)
+
+    -- Owns every process a case starts (Process ownership, PQ-1).
+    after_each(function()
+        reap()
+        cliproxy.stop()
+        cliproxy._reset_spawned()
+        cliproxy._set_releases_url(server.url)
+        parley.config, vim.env.PATH = saved_config, saved_path
+    end)
+
+    local function ensure()
+        return await(function(done)
+            cliproxy.ensure_running(function()
+                done({ ok = true })
+            end, function(msg)
+                done({ ok = false, msg = msg })
+            end)
+        end)
+    end
+
+    it("installs the latest release, not a version baked into parley", function()
+        fake_releases.publish(server, "9.9.8")
+        local r = ensure()
+        assert.is_true(r.ok, r.msg)
+        assert.equals("9.9.8", cliproxy.installed_version())
+        assert.same({ "9.9.8" }, { cliproxy.version_probe("127.0.0.1", proxy_port) })
+    end)
+
+    it("fails clearly when no release can be chosen", function()
+        cliproxy._set_releases_url(dead_url())
+        local r = ensure()
+        assert.is_false(r.ok)
+        assert.is_truthy(r.msg:find("auto_download could not choose a release", 1, true))
+    end)
+end)
