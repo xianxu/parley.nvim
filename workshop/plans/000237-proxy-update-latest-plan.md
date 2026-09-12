@@ -246,24 +246,25 @@ which the existing `_spawned` table owns.
 |------|----------|--------|-------|
 | `api_argv` | `lua/parley/cliproxy.lua` | modified | curl argv (optional header dump) |
 | `run` | `lua/parley/cliproxy.lua` | new | `vim.system` sync/async |
-| `M.version_probe` | `lua/parley/cliproxy.lua` | new | curl → proxy `/v0/management/latest-version` headers |
+| `version_probe` | `lua/parley/cliproxy.lua` | new | curl → proxy `/v0/management/latest-version` headers |
 | `ps_output` | `lua/parley/cliproxy.lua` | new (extracted from `M.peers`) | `ps ax -o pid,lstart,command` |
 | `port_identity` | `lua/parley/cliproxy.lua` | new | `ps_output` + `pids_on_port` |
-| `M._set_releases_url` | `lua/parley/cliproxy.lua` | new | test seam (releases root) |
-| `M.latest_release` | `lua/parley/cliproxy.lua` | new | curl → GitHub `releases/latest` |
-| `M.resolve_target` | `lua/parley/cliproxy.lua` | new | config pin + `latest_release` |
-| `M.installed_version` | `lua/parley/cliproxy.lua` | new | the version record file |
-| `M.download` | `lua/parley/cliproxy.lua` | modified | curl + sha256 + tar + `uv.fs_rename` |
-| `M.update` | `lua/parley/cliproxy.lua` | modified | orchestration |
-| `M.status` | `lua/parley/cliproxy.lua` | modified | orchestration |
-| `M.ensure_running` | `lua/parley/cliproxy.lua` | modified | first-run auto_download target |
+| `peers` | `lua/parley/cliproxy.lua` | modified | reads through `ps_output` |
+| `_set_releases_url` | `lua/parley/cliproxy.lua` | new | test seam (releases root) |
+| `latest_release` | `lua/parley/cliproxy.lua` | new | curl → GitHub `releases/latest` |
+| `resolve_target` | `lua/parley/cliproxy.lua` | new | config pin + `latest_release` |
+| `installed_version` | `lua/parley/cliproxy.lua` | new | the version record file |
+| `download` | `lua/parley/cliproxy.lua` | modified | curl + sha256 + tar + `uv.fs_rename` |
+| `update` | `lua/parley/cliproxy.lua` | modified | orchestration |
+| `status` | `lua/parley/cliproxy.lua` | modified | orchestration |
+| `ensure_running` | `lua/parley/cliproxy.lua` | modified | first-run auto_download target |
 | `M.restart` | `lua/parley/cliproxy.lua` | deleted | — |
-| `M.register_proxy_command` | `lua/parley/init.lua` | modified | `:ParleyProxy` glue |
+| `register_proxy_command` | `lua/parley/init.lua` | modified | `:ParleyProxy` glue |
 | `tests/fixtures/fake_github_releases` | `tests/fixtures/fake_github_releases` | new | GitHub release endpoints |
 | `tests/fixtures/fake_cliproxy` | `tests/fixtures/fake_cliproxy` | modified | + `X-CPA-*` headers, `latest-version` route |
 | `fake_releases` | `tests/helpers/fake_releases.lua` | new | builds releases, runs the release fake |
 | `tests/fixtures/fixture_watchdog.py` | `tests/fixtures/fixture_watchdog.py` | new | parent-death exit for the Python fixtures |
-| `M._set_update_restart_deadline_ms` | `lua/parley/cliproxy.lua` | new | test seam (update's restart deadline) |
+| `_set_update_restart_deadline_ms` | `lua/parley/cliproxy.lua` | new | test seam (update's restart deadline) |
 
 - **`M.latest_release` / `M.version_probe`** — sync when called without a
   callback (for `update` and first-run), async with one (for `status`); both go
@@ -2934,3 +2935,20 @@ satisfy it, and one would have turned M1's boundary red.
 - Process-ownership rows start with plain words, since that table is not a
   symbol inventory and its cells name plenary's `after_each`.
 - The `M.download` row writes `uv.fs_rename`, the libuv call it wraps.
+
+### 2026-09-12 — implementation: M1 notes
+
+- The branch-scoped arch check also runs code→table: every module function the
+  branch adds, or whose definition line changes, must appear by bare name in a
+  Core-concepts row. The integration-point rows now name `version_probe`,
+  `update` and the rest bare (a dotted `M.x` does not match), and `peers` gets a
+  row because it now reads through `ps_output`. `M.restart` stays dotted: a bare
+  `restart` in its `deleted` row would match the quoted `"restart"` subcommand
+  name in `init.lua`.
+- Identity needs `ps`, which an agent sandbox refuses (EPERM). `port_identity`
+  degrades to "not ours", so update never restarts on doubt; the three identity
+  cases in the update spec report `pending` where `ps` is unavailable, following
+  the conformance spec's precedent, and were run unsandboxed in the harness's
+  isolation (26/0/0, none pending).
+- `port_identity` wraps its whole read in `pcall`, so a refused `lsof` cannot
+  raise into `update`.

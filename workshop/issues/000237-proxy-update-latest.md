@@ -192,6 +192,21 @@ The operator approved `workshop/plans/000237-proxy-update-latest-plan.md`, and
 accepted that `download()` stays synchronous: `:ParleyProxy update` blocks the
 editor while it fetches, bounded by curl's timeouts.
 
+### 2026-09-12 — M1 implemented
+
+Plan Tasks 1–8, plus Task 10's pure `version_summary`, are in. Verified one spec
+at a time in the harness's isolation, unsandboxed so the identity cases run: all
+14 cliproxy specs pass (update 26/0/0, none pending), both plan-symbol arch
+checks pass, lint 0/0; an orphaned fixture exits within 1 s under the watchdog.
+
+Two findings that belong to other issues:
+
+- The agent sandbox refuses `ps` (EPERM). Production degrades to "not ours";
+  the three identity cases report `pending` there instead of failing.
+- `cliproxy_catalog_spec` orphans three `fake_cliproxy` per run: bare
+  `uv.spawn(FAKE, { args = { "--port", … } })` at lines 19, 360 and 441, without
+  the watchdog flag. A concrete source for #220.
+
 ## Revisions
 
 ### 2026-09-11 — planned: two milestones, auto_download settled, two defects added
