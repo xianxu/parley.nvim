@@ -151,7 +151,9 @@ first-run auto_download above).
 - **Tests**: `_set_data_dir` and `_set_releases_url` keep specs off the real
   data dir and off GitHub. `tests/minimal_init.vim` points
   `$PARLEY_CLIPROXY_RELEASES_URL` at a dead local port, so a spec that forgets
-  the seam fails fast instead of reaching github.com. The live GitHub check is
+  the seam fails fast instead of reaching github.com; parley reads that
+  variable only when `$PARLEY_TEST_MODE` is `1`, so outside the harness it
+  cannot redirect a download. The live GitHub check is
   opt-in (`PARLEY_LIVE_GITHUB=1`). Specs keep the restricted PATH so no real
   brew binary is spawned (#197). Every process a spec starts has an owner that
   outlives its assertions — see Process ownership.
@@ -251,6 +253,7 @@ which the existing `_spawned` table owns.
 | `port_identity` | `lua/parley/cliproxy.lua` | new | `ps_output` + `pids_on_port` |
 | `peers` | `lua/parley/cliproxy.lua` | modified | reads through `ps_output` |
 | `_set_releases_url` | `lua/parley/cliproxy.lua` | new | test seam (releases root) |
+| `_releases_url` | `lua/parley/cliproxy.lua` | new | test accessor: the releases root in force |
 | `latest_release` | `lua/parley/cliproxy.lua` | new | curl → GitHub `releases/latest` |
 | `resolve_target` | `lua/parley/cliproxy.lua` | new | config pin + `latest_release` |
 | `installed_version` | `lua/parley/cliproxy.lua` | new | the version record file |
@@ -353,7 +356,7 @@ Commit subjects use `#237 M1: …` / `#237 M2: …`. Stage explicit paths only
 - Create: `lua/parley/cliproxy_release.lua`
 - Create: `tests/unit/cliproxy_release_spec.lua`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```lua
 -- Unit tests for lua/parley/cliproxy_release.lua (#237). Pure: no IO, no mocks.
@@ -464,12 +467,12 @@ describe("parse_version_probe", function()
 end)
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/cliproxy_release_spec.lua" -c "qa!"`
 Expected: FAIL — `module 'parley.cliproxy_release' not found`.
 
-- [ ] **Step 3: Write the module**
+- [x] **Step 3: Write the module**
 
 ```lua
 -- cliproxy_release.lua — pure release/version logic for the managed
@@ -566,11 +569,11 @@ end
 return M
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: the Step 2 command. Expected: PASS, 0 failures. Then `make lint`: 0 warnings.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add lua/parley/cliproxy_release.lua tests/unit/cliproxy_release_spec.lua
@@ -584,7 +587,7 @@ git commit -m "#237 M1: pure version and response parsers for cliproxy releases"
 - Modify: `lua/parley/cliproxy_release.lua`
 - Test: `tests/unit/cliproxy_auth_spec.lua`, `tests/unit/cliproxy_release_spec.lua`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append to `tests/unit/cliproxy_auth_spec.lua` (use the spec's existing
 `cliproxy_auth` module local; it is `ca` if the file follows the module's
@@ -668,14 +671,14 @@ describe("running_identity", function()
 end)
 ```
 
-- [ ] **Step 2: Run both specs to verify they fail**
+- [x] **Step 2: Run both specs to verify they fail**
 
 Run the Step 2 command of Task 1 for `tests/unit/cliproxy_auth_spec.lua` and
 `tests/unit/cliproxy_release_spec.lua`.
 Expected: FAIL — `attempt to call field 'parse_ps' (a nil value)` and
 `attempt to call field 'running_identity' (a nil value)`.
 
-- [ ] **Step 3: Extract `parse_ps` and rewrite `parse_peers` on it**
+- [x] **Step 3: Extract `parse_ps` and rewrite `parse_peers` on it**
 
 In `lua/parley/cliproxy_auth.lua`, add above `M.parse_peers` and replace its
 body:
@@ -727,7 +730,7 @@ end
 
 Keep `parse_peers`'s existing docstring above it.
 
-- [ ] **Step 4: Add `running_identity`**
+- [x] **Step 4: Add `running_identity`**
 
 In `lua/parley/cliproxy_release.lua`, before `return M`:
 
@@ -770,12 +773,12 @@ function M.running_identity(rows, port_pids, config_path)
 end
 ```
 
-- [ ] **Step 5: Run both specs to verify they pass**
+- [x] **Step 5: Run both specs to verify they pass**
 
 Expected: PASS, including every pre-existing `parse_peers` case (lines
 453-523) unchanged. `make lint`: 0 warnings.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add lua/parley/cliproxy_auth.lua lua/parley/cliproxy_release.lua \
@@ -789,7 +792,7 @@ git commit -m "#237 M1: one ps grammar, and the identity of the proxy on the por
 - Modify: `lua/parley/cliproxy_release.lua`
 - Test: `tests/unit/cliproxy_release_spec.lua`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```lua
 describe("update_refusal", function()
@@ -882,9 +885,9 @@ describe("plan_update", function()
 end)
 ```
 
-- [ ] **Step 2: Run to verify they fail** — `attempt to call field 'update_refusal' (a nil value)`.
+- [x] **Step 2: Run to verify they fail** — `attempt to call field 'update_refusal' (a nil value)`.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `lua/parley/cliproxy_release.lua`, before `return M`:
 
@@ -947,9 +950,9 @@ function M.plan_update(s)
 end
 ```
 
-- [ ] **Step 4: Run to verify they pass** — PASS; `make lint` clean.
+- [x] **Step 4: Run to verify they pass** — PASS; `make lint` clean.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add lua/parley/cliproxy_release.lua tests/unit/cliproxy_release_spec.lua
@@ -965,7 +968,7 @@ git commit -m "#237 M1: the update decision table, pure and table-tested"
 - Modify: `tests/fixtures/fake_cliproxy` (imports, its entry point, the `Handler` class and `do_GET`)
 - Modify: `tests/minimal_init.vim` (next to the `$PARLEY_TEST_MODE` export, line 28)
 
-- [ ] **Step 0: Write `tests/fixtures/fixture_watchdog.py`** (imported, not executable)
+- [x] **Step 0: Write `tests/fixtures/fixture_watchdog.py`** (imported, not executable)
 
 ```python
 """Exit a test fixture when the process that started it is gone (#237, #220).
@@ -993,7 +996,7 @@ def exit_with_parent(poll_seconds=1.0):
     threading.Thread(target=watch, daemon=True).start()
 ```
 
-- [ ] **Step 1: Write `tests/fixtures/fake_github_releases`**
+- [x] **Step 1: Write `tests/fixtures/fake_github_releases`**
 
 ```python
 #!/usr/bin/env python3
@@ -1106,7 +1109,7 @@ if __name__ == "__main__":
 
 Run: `chmod +x tests/fixtures/fake_github_releases`.
 
-- [ ] **Step 2: Write `tests/helpers/fake_releases.lua`**
+- [x] **Step 2: Write `tests/helpers/fake_releases.lua`**
 
 ```lua
 -- Build CLIProxyAPI-shaped releases on disk and serve them with
@@ -1212,7 +1215,7 @@ end
 return M
 ```
 
-- [ ] **Step 3: Teach `fake_cliproxy` the `X-CPA-*` stamp, the `latest-version` route, and to exit with its parent on request**
+- [x] **Step 3: Teach `fake_cliproxy` the `X-CPA-*` stamp, the `latest-version` route, and to exit with its parent on request**
 
 After `fake_cliproxy`'s imports:
 
@@ -1275,7 +1278,7 @@ In `do_GET`, before the `/v0/management/auth-files` branch:
 
 Add `latest-version` and the header to the module docstring's route list.
 
-- [ ] **Step 4: Point the harness away from GitHub**
+- [x] **Step 4: Point the harness away from GitHub**
 
 In `tests/minimal_init.vim`, after line 28 (`let $PARLEY_TEST_MODE = '1'`):
 
@@ -1286,12 +1289,12 @@ In `tests/minimal_init.vim`, after line 28 (`let $PARLEY_TEST_MODE = '1'`):
 let $PARLEY_CLIPROXY_RELEASES_URL = 'http://127.0.0.1:9/router-for-me/CLIProxyAPI/releases'
 ```
 
-- [ ] **Step 5: Confirm the existing specs still pass with the fake change**
+- [x] **Step 5: Confirm the existing specs still pass with the fake change**
 
 Run: `make test-spec SPEC=providers/cliproxy-managed`
 Expected: PASS — the new header and route are additive.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add tests/fixtures/fixture_watchdog.py tests/fixtures/fake_github_releases \
@@ -1305,7 +1308,7 @@ git commit -m "#237 M1: a stateful GitHub releases fake, and fake_cliproxy stamp
 - Modify: `lua/parley/cliproxy.lua` (top-level requires; `api_argv`; beside `M.health_probe`; the release section at the end)
 - Create: `tests/integration/cliproxy_update_spec.lua`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `tests/integration/cliproxy_update_spec.lua`:
 
@@ -1476,12 +1479,12 @@ Add `tests/integration/cliproxy_update_spec.lua` to
 `tests/unit/cliproxy_release_spec.lua`, and `lua/parley/cliproxy_release.lua`
 under `code`) so `make test-spec SPEC=providers/cliproxy-managed` runs them.
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/integration/cliproxy_update_spec.lua" -c "qa!"`
 Expected: FAIL — `attempt to call field '_set_releases_url' (a nil value)`.
 
-- [ ] **Step 3: Implement the IO**
+- [x] **Step 3: Implement the IO**
 
 In `lua/parley/cliproxy.lua`:
 
@@ -1633,12 +1636,12 @@ end
 `RELEASE_BASE` and `PINNED_VERSION` are gone; `download` still names them until
 Task 6, so do Task 6 before running `make lint`.
 
-- [ ] **Step 4: Run the spec to verify it passes**
+- [x] **Step 4: Run the spec to verify it passes**
 
 Expected: PASS for the harness check, `latest_release`, `resolve_target` and
 `version_probe`.
 
-- [ ] **Step 5: Commit** (after Task 6 compiles; commit Tasks 5 and 6 together if
+- [x] **Step 5: Commit** (after Task 6 compiles; commit Tasks 5 and 6 together if
 lint blocks) — `#237 M1: resolve the release from GitHub's redirect, and read the running version`.
 
 ### Task 6: Install a version atomically, and record it
@@ -1647,7 +1650,7 @@ lint blocks) — `#237 M1: resolve the release from GitHub's redirect, and read 
 - Modify: `lua/parley/cliproxy.lua` (`bin_dir`, `M.managed_binary`, `sha256_of`, `M.download`)
 - Modify: `tests/integration/cliproxy_download_spec.lua` (rewrite)
 
-- [ ] **Step 1: Rewrite the download spec against the fake**
+- [x] **Step 1: Rewrite the download spec against the fake**
 
 ```lua
 -- Integration test for installing a CLIProxyAPI release (#131 M2, #237).
@@ -1724,10 +1727,10 @@ describe("cliproxy download", function()
 end)
 ```
 
-- [ ] **Step 2: Run to verify it fails** — `installed_version` is nil; the
+- [x] **Step 2: Run to verify it fails** — `installed_version` is nil; the
 rename case fails (tar overwrote in place; no record).
 
-- [ ] **Step 3: Rewrite `download` and add `installed_version`**
+- [x] **Step 3: Rewrite `download` and add `installed_version`**
 
 Keep `bin_dir`, `M.managed_binary` and `sha256_of` as they are. Add after
 `sha256_of`:
@@ -1834,11 +1837,11 @@ end
 
 (`M.update` is rewritten in Task 7; delete the old one-line version here.)
 
-- [ ] **Step 4: Run the download and update specs, then `make lint`**
+- [x] **Step 4: Run the download and update specs, then `make lint`**
 
 Expected: PASS; lint clean (no `PINNED_VERSION`/`RELEASE_BASE` left).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add lua/parley/cliproxy.lua tests/integration/cliproxy_download_spec.lua \
@@ -1853,7 +1856,7 @@ git commit -m "#237 M1: install a release by staged rename, and record its versi
 - Modify: `lua/parley/init.lua` (`register_proxy_command`: `SUBS_HELP`, the `update` and `restart` branches)
 - Test: `tests/integration/cliproxy_update_spec.lua`, `tests/integration/cliproxy_command_spec.lua`
 
-- [ ] **Step 1: Write the failing update tests**
+- [x] **Step 1: Write the failing update tests**
 
 Append to `tests/integration/cliproxy_update_spec.lua`:
 
@@ -2066,10 +2069,10 @@ describe(":ParleyProxy update", function()
 end)
 ```
 
-- [ ] **Step 2: Run to verify they fail** — `update` still returns synchronously
+- [x] **Step 2: Run to verify they fail** — `update` still returns synchronously
 without a callback; the restart and foreign-proxy cases fail.
 
-- [ ] **Step 3: Share the ps read, and name the port's owner**
+- [x] **Step 3: Share the ps read, and name the port's owner**
 
 In `lua/parley/cliproxy.lua`, directly above `M.peers`:
 
@@ -2110,7 +2113,7 @@ function M.peers()
 end
 ```
 
-- [ ] **Step 4: Write `M.update`; delete `M.restart`**
+- [x] **Step 4: Write `M.update`; delete `M.restart`**
 
 Delete `M.restart` (lines 799-803). At the end of the release section:
 
@@ -2196,7 +2199,7 @@ function M.update(cb)
 end
 ```
 
-- [ ] **Step 5: Wire the command**
+- [x] **Step 5: Wire the command**
 
 In `lua/parley/init.lua` `register_proxy_command`:
 
@@ -2274,9 +2277,9 @@ Append to `tests/integration/cliproxy_command_spec.lua`, inside the top-level
     end)
 ```
 
-- [ ] **Step 6: Run the update and command specs, then `make lint`** — PASS.
+- [x] **Step 6: Run the update and command specs, then `make lint`** — PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add lua/parley/cliproxy.lua lua/parley/init.lua \
@@ -2290,7 +2293,7 @@ git commit -m "#237 M1: update installs the latest release and restarts only par
 - Modify: `lua/parley/cliproxy.lua` (`M.ensure_running`, the down branch, lines 719-737)
 - Test: `tests/integration/cliproxy_lifecycle_spec.lua` (lines 361-393), `tests/integration/cliproxy_update_spec.lua`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 In `tests/integration/cliproxy_lifecycle_spec.lua`, change the first
 auto_download case (lines 361-376) so it pins and asserts what `download` was
@@ -2378,10 +2381,10 @@ describe("first-run auto_download", function()
 end)
 ```
 
-- [ ] **Step 2: Run both specs to verify they fail** — `dl_opts` is `nil`/`{}`
+- [x] **Step 2: Run both specs to verify they fail** — `dl_opts` is `nil`/`{}`
 (download still called with no version); the first-run case installs nothing.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 Replace the down branch of `ensure_running` (lines 719-737) with:
 
@@ -2417,9 +2420,9 @@ Replace the down branch of `ensure_running` (lines 719-737) with:
         spawn_and_poll(bin)
 ```
 
-- [ ] **Step 4: Run both specs** — PASS; `make lint` clean.
+- [x] **Step 4: Run both specs** — PASS; `make lint` clean.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add lua/parley/cliproxy.lua tests/integration/cliproxy_lifecycle_spec.lua \
@@ -2434,7 +2437,7 @@ git commit -m "#237 M1: first-run auto_download installs the latest release too"
 - Modify: `atlas/providers/cliproxy-managed.md` (lines 24-29, 62, 370-381)
 - Modify: `atlas/traceability.yaml` (already updated in Task 5 — confirm)
 
-- [ ] **Step 1: Config comment.** Replace the `auto_download` comment lines
+- [x] **Step 1: Config comment.** Replace the `auto_download` comment lines
 (119-125) with:
 
 ```lua
@@ -2447,7 +2450,7 @@ git commit -m "#237 M1: first-run auto_download installs the latest release too"
 		--   set `download_version = "7.2.158"` to pin one instead.
 ```
 
-- [ ] **Step 2: Atlas.** In `atlas/providers/cliproxy-managed.md`:
+- [x] **Step 2: Atlas.** In `atlas/providers/cliproxy-managed.md`:
   - Pieces: add a bullet for **`cliproxy_release.lua`** (pure, #237): version
     grammar, redirect and header parsers, `running_identity`, `update_refusal`,
     `plan_update`, `version_summary`. In the `cliproxy.lua` bullet, make the
@@ -2469,10 +2472,10 @@ git commit -m "#237 M1: first-run auto_download installs the latest release too"
     and walk every hit, not only the named lines (the #128 lesson: a name-only
     sweep missed behavior lines four times).
 
-- [ ] **Step 3: Gate.** Run `make test`. Expected: exit 0, lint 0 warnings.
+- [x] **Step 3: Gate.** Run `make test`. Expected: exit 0, lint 0 warnings.
 Then `PARLEY_LIVE_GITHUB=1` is not yet wired (Task 13); skip.
 
-- [ ] **Step 4: Commit and cross the boundary**
+- [x] **Step 4: Commit and cross the boundary**
 
 ```bash
 git add lua/parley/config.lua atlas/providers/cliproxy-managed.md atlas/traceability.yaml
@@ -2492,7 +2495,7 @@ Fix every Critical/Important finding before M2; log the verdict in the issue.
 - Modify: `lua/parley/cliproxy_release.lua`
 - Test: `tests/unit/cliproxy_release_spec.lua`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```lua
 describe("version_summary", function()
@@ -2541,9 +2544,9 @@ describe("version_summary", function()
 end)
 ```
 
-- [ ] **Step 2: Run to verify they fail** — `version_summary` is nil.
+- [x] **Step 2: Run to verify they fail** — `version_summary` is nil.
 
-- [ ] **Step 3: Implement** (before `return M`):
+- [x] **Step 3: Implement** (before `return M`):
 
 ```lua
 --- The `version:` value :ParleyProxy status prints (#237).
@@ -2580,9 +2583,9 @@ function M.version_summary(v, update_cmd)
 end
 ```
 
-- [ ] **Step 4: Run to verify they pass**; `make lint`.
+- [x] **Step 4: Run to verify they pass**; `make lint`.
 
-- [ ] **Step 5: Commit** — `#237 M2: the status version line, pure`.
+- [x] **Step 5: Commit** — `#237 M2: the status version line, pure`.
 
 ### Task 11: `status` joins health, version and latest
 
@@ -2952,3 +2955,34 @@ satisfy it, and one would have turned M1's boundary red.
   isolation (26/0/0, none pending).
 - `port_identity` wraps its whole read in `pcall`, so a refused `lsof` cannot
   raise into `update`.
+
+### 2026-09-12 — M1 review round 1 (FIX-THEN-SHIP)
+
+The boundary review (window 27bac4f4..615dd8a1) raised one Important finding and
+six Minor ones. Each is fixed as a class, except one deferral:
+
+- **README drift (BR-1, Important).** Every text that told a new machine it
+  needs `brew install` now names `:ParleyProxy update` first: README line 221,
+  the atlas intro, the `config.lua` comment, and both "no cliproxy binary found"
+  errors, which now share one `NO_BINARY` text. The README's `update` sentence
+  moves here from Task 13; M2 adds only the `status` half.
+- **Test seam in production.** `releases_url()` honours
+  `$PARLEY_CLIPROXY_RELEASES_URL` only when `$PARLEY_TEST_MODE` is `1`, the
+  signal `tests/minimal_init.vim` already exports (#227). New row
+  `_releases_url`: the accessor the harness case uses to check which root wins
+  without contacting it. Trust boundaries updated.
+- **Outcome severity.** `plan_update` marks the manual case `warn`; `update`
+  passes it to its callback as a third value, and `:ParleyProxy update` shows it
+  at WARN.
+- **Message provenance.** A port holder that sends no `X-Cpa-Version` is no
+  longer called an older cliproxyapi with a brew hint; the message says only
+  that parley did not start it and that it reports no version.
+- **Helper duplication.** The wait loop behind `await` lives once, in
+  `tests/helpers/await.lua` (`await` fails on timeout; `settle` returns
+  `settled, result`). The update, lifecycle and login specs bind their own
+  budgets to it. Deferred: the `spawn_fake`/`reap` ownership registry goes to
+  #220, whose subject is who owns a spec's fixture processes.
+- **Error-path coverage.** A case for update's "the restart failed" cell.
+- **Plan tracking.** The M1 steps are ticked at this close.
+- **Notice before a blocking call.** `:ParleyProxy update` and first-run
+  auto_download redraw after their notice, so it shows before the fetch blocks.

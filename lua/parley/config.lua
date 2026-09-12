@@ -111,7 +111,8 @@ local config = {
 	-- if you don't use cliproxyapi. host:port come from providers.cliproxyapi.endpoint
 	-- (single source of truth); the generated config is a derived 0600 artifact
 	-- under stdpath('data') — your committed Lua is the source of truth, no secret
-	-- in it. A new machine needs only: `brew install cliproxyapi` + one-time
+	-- in it. A new machine needs a binary (`:ParleyProxy update`, auto_download
+	-- below, or `brew install cliproxyapi`) + one-time
 	-- `:ParleyProxy login <provider>` (OAuth). Set manage=false to opt out.
 	cliproxy = {
 		manage = true,

@@ -211,6 +211,17 @@ describe(":ParleyProxy command", function()
             assert.equals(vim.log.levels.ERROR, msgs[#msgs].level)
         end)
 
+        it("update shows a success the operator must still act on as WARN", function()
+            cliproxy.update = function(cb)
+                cb(true, "updated 7.1.71 → 7.2.158 — the proxy on port 8317 (/opt/homebrew/bin/cliproxyapi) "
+                    .. "was not started by parley and still runs 7.1.71; …", true)
+            end
+            local msgs = capture_notify(function()
+                vim.cmd("ParleyProxy update")
+            end)
+            assert.equals(vim.log.levels.WARN, msgs[#msgs].level)
+        end)
+
         it("restart goes through restart_managed, which waits for the old proxy", function()
             local called = false
             cliproxy.restart_managed = function(on_ready)

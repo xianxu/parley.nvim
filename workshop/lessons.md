@@ -2090,3 +2090,33 @@ sentence could not be written about the old shape at all.
 3. **The tell is a property you cannot express.** "X outranks Y" is unwritable
    as a test when precedence lives in control flow, and trivially writable once
    the classification exists.
+
+## A review agent shares your worktree (#237)
+
+At the M1 boundary, the fresh-context review agent ran `git checkout <head> -- .`
+where it meant `git diff`. Everything the branch owned was already committed, so
+the branch lost nothing; the operator lost an uncommitted edit to a chat file in
+`workshop/parley/`, which only a root-mounted Time Machine snapshot still held.
+The review runs in the live worktree, so the operator's WIP is inside its blast
+radius every time.
+
+The same review found two classes worth a rule. The README still told a new
+machine to `brew install` after the branch made `:ParleyProxy update` the way in:
+the Task 9 sweep walked the atlas for "update/download", not every place that
+says how the binary arrives (README, a config comment, two error strings). And
+`$PARLEY_CLIPROXY_RELEASES_URL`, added so plenary's child nvims stay off GitHub,
+was read in production too: an environment variable redirecting an executable
+download.
+
+**Rules.**
+
+1. **Snapshot operator WIP before dispatching a review.** `git stash create`
+   records tracked edits and deletions as a commit without touching the worktree
+   or the stash list; keep the SHA until the review returns, and restore with
+   `git checkout <sha> -- <path>`.
+2. **When a change moves how a user gets something, sweep every place that says
+   how they get it** — README, atlas, config comments and error messages — not
+   only the paragraphs that name the feature.
+3. **A test seam read from the environment is a production input.** Gate it on
+   the harness signal (`$PARLEY_TEST_MODE`), or list it in the trust boundaries
+   as a supported override.

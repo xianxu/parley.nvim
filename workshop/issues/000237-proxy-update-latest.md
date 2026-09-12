@@ -207,6 +207,19 @@ Two findings that belong to other issues:
   `uv.spawn(FAKE, { args = { "--port", … } })` at lines 19, 360 and 441, without
   the watchdog flag. A concrete source for #220.
 
+### 2026-09-12 — M1 review round 1: FIX-THEN-SHIP
+
+One Important finding (the README still said a new machine needs `brew
+install`; BR-1) and six Minor ones. The fixes, and the one deferral (the
+fixture-ownership registry, to #220), are in the plan's Revisions.
+
+The review agent ran `git checkout <head> -- .` in this worktree ("where I meant
+`git diff`", in its own words). That reverted the operator's uncommitted edit to
+`workshop/parley/2026-09-09.11-40-59.150_astrophotography-plan.md` and restored
+a chat file the operator had deleted. The restored file is deleted again. The
+edit needs root to recover: it is in the local Time Machine snapshot of
+2026-09-12 12:10, taken six minutes before the revert.
+
 ## Revisions
 
 ### 2026-09-11 — planned: two milestones, auto_download settled, two defects added

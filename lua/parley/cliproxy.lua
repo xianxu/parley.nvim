@@ -15,6 +15,10 @@ local ca = require("parley.cliproxy_auth")
 local logger = require("parley.logger")
 local rel = require("parley.cliproxy_release")
 
+-- The one answer to "no binary found", for every caller that hits it (#237).
+local NO_BINARY = "no cliproxy binary found — `:ParleyProxy update` installs the latest release, "
+    .. "or `brew install cliproxyapi`, or set cliproxy.binary_path"
+
 local M = {}
 
 -- pid -> uv process handle for proxies PARLEY spawned (so stop() is scoped to
@@ -772,6 +776,7 @@ function M.ensure_running(callback, on_error)
                 return on_error("cliproxy: auto_download could not choose a release — " .. tostring(verr))
             end
             vim.notify(("cliproxy: downloading %s (one-time)…"):format(version), vim.log.levels.INFO)
+            vim.cmd("redraw") -- the download blocks: show the notice first
             local dlbin, derr = M.download({ version = version })
             if not dlbin then
                 return on_error("cliproxy: auto_download failed — " .. tostring(derr))
@@ -779,8 +784,7 @@ function M.ensure_running(callback, on_error)
             return spawn_and_poll(dlbin)
         end
         if not bin then
-            return on_error("cliproxy: no cliproxy binary found — `brew install cliproxyapi`, "
-                .. "set cliproxy.binary_path, or enable auto_download")
+            return on_error("cliproxy: " .. NO_BINARY .. ", or enable cliproxy.auto_download")
         end
         spawn_and_poll(bin)
     end)
@@ -943,7 +947,7 @@ end
 function M.login_argv(provider)
     local bin = M.discover_binary()
     if not bin then
-        return nil, "no cliproxy binary found — `brew install cliproxyapi` or set cliproxy.binary_path"
+        return nil, NO_BINARY
     end
     local flag = LOGIN_FLAGS[provider]
     if not flag then
@@ -1823,7 +1827,9 @@ end
 -- tests/fixtures/fake_github_releases through _set_releases_url; the harness
 -- points it at a dead local port through $PARLEY_CLIPROXY_RELEASES_URL
 -- (tests/minimal_init.vim), so a spec that forgets the seam fails fast instead
--- of reaching github.com.
+-- of reaching github.com. The variable counts only under $PARLEY_TEST_MODE,
+-- which the harness also exports: outside it, a stray environment variable must
+-- not choose where parley downloads an executable from.
 local RELEASES_URL = "https://github.com/router-for-me/CLIProxyAPI/releases"
 local LATEST_MAX_TIME = 10 -- seconds: :ParleyProxy update and first-run resolve
 M.STATUS_LATEST_MAX_TIME = 5 -- seconds: :ParleyProxy status waits less
@@ -1838,8 +1844,21 @@ function M._set_releases_url(url)
 end
 
 local function releases_url()
+    if _releases_url_override then
+        return _releases_url_override
+    end
     local env = vim.env.PARLEY_CLIPROXY_RELEASES_URL
-    return _releases_url_override or (env ~= nil and env ~= "" and env) or RELEASES_URL
+    if vim.env.PARLEY_TEST_MODE == "1" and env ~= nil and env ~= "" then
+        return env
+    end
+    return RELEASES_URL
+end
+
+--- Test seam: the releases root in force, so a spec can check which one wins
+--- without contacting it.
+---@return string
+function M._releases_url()
+    return releases_url()
 end
 
 --- The newest published release, from GitHub's releases/latest redirect: no
@@ -2022,8 +2041,9 @@ end
 --- latest release, and restart the proxy when parley launched it. Everything
 --- up to the restart is synchronous (the editor blocks for the fetch); the
 --- restart is not, so an in-flight guard refuses a second update until this one
---- has answered. cb(ok, message) runs exactly once, on every path.
----@param cb fun(ok: boolean, message: string)
+--- has answered. cb(ok, message, warn) runs exactly once, on every path; warn
+--- marks a success the operator must still act on (plan_update's `warn`).
+---@param cb fun(ok: boolean, message: string, warn: boolean|nil)
 function M.update(cb)
     if _update_in_flight then
         return cb(false, "an update is already running")
@@ -2034,13 +2054,13 @@ function M.update(cb)
     end
     _update_in_flight = true
     local answered = false
-    local function finish(ok, msg)
+    local function finish(ok, msg, warn)
         if answered then
             return
         end
         answered = true
         _update_in_flight = false
-        cb(ok, msg)
+        cb(ok, msg, warn)
     end
     local ok, err = pcall(function()
         local target, target_err, pinned = M.resolve_target()
@@ -2078,7 +2098,7 @@ function M.update(cb)
                 finish(false, plan.message .. "; the restart failed — " .. tostring(msg))
             end)
         end
-        finish(true, plan.message)
+        finish(true, plan.message, plan.warn)
     end)
     if not ok then
         logger.error("cliproxy update: " .. tostring(err))

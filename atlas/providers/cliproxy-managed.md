@@ -10,8 +10,10 @@ so users stop hand-maintaining `/opt/homebrew/etc/cliproxyapi.conf` and
 it **reuses** an already-running proxy (e.g. `brew services`) when one answers
 healthy. So the default is safe for users who don't use cliproxyapi (it never
 fires) and cooperative for those who run their own (it reuses it). Set
-`cliproxy = { manage = false }` to opt out. A new machine needs only
-`brew install cliproxyapi` + a one-time `:ParleyProxy login <provider>`.
+`cliproxy = { manage = false }` to opt out. A new machine needs a binary —
+`:ParleyProxy update` downloads the latest release (the first chat does too,
+via `auto_download`), or `brew install cliproxyapi` — and a one-time
+`:ParleyProxy login <provider>`.
 
 ## Pieces
 
@@ -415,8 +417,9 @@ what it installs. It then resolves the target, reads the running version
 line carries parley's rendered `-config <config.yaml>`, from any nvim session,
 read with `ps` through the same grammar as `peers()` (`cliproxy_auth.parse_ps`).
 A proxy parley did not launch (a brew service, say) is left running, and the
-message says how to replace it; if `ps` cannot be read, the proxy is treated as
-not ours. The restart goes through `restart_managed` behind a 20 s deadline, and
+message says how to replace it, shown as a warning since the old version still
+serves; a port holder that reports no version is not assumed to be a
+cliproxyapi. If `ps` cannot be read, the proxy is treated as not ours. The restart goes through `restart_managed` behind a 20 s deadline, and
 an in-flight guard refuses a second update until the first has answered.
 Messages name the versions: "updated 7.1.71 → 7.2.158 — restarting the proxy",
 "already at 7.2.158", "… (pinned by cliproxy.download_version)".
@@ -427,7 +430,9 @@ directory the spec owns. `tests/helpers/fake_releases.lua` publishes releases
 whose `cli-proxy-api` execs `fake_cliproxy` stamping that version, so "which
 release is running" is observable end to end. Specs point lookups at the fake
 with `_set_releases_url`; `tests/minimal_init.vim` points them at a dead local
-port (`$PARLEY_CLIPROXY_RELEASES_URL`) so no spec reaches GitHub by accident.
+port (`$PARLEY_CLIPROXY_RELEASES_URL`) so no spec reaches GitHub by accident;
+parley reads that variable only under `$PARLEY_TEST_MODE`, which the harness
+also exports.
 `tests/fixtures/fixture_watchdog.py` makes a fixture exit when the nvim that
 started it dies — always for the release fake, and for `fake_cliproxy` when
 `PARLEY_FAKE_EXIT_WITH_PARENT=1` (#220 owns making that the default). The

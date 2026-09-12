@@ -149,7 +149,9 @@ end
 ---   pinned      boolean     target came from cliproxy.download_version
 ---   installed   string|nil  version recorded for the managed binary
 ---   running     table|nil   { version?, ours, exe?, port } — nil when nothing answers
----@return table # { ok, install?, restart?: "managed"|"manual", target?, message }
+---@return table # { ok, install?, restart?: "managed"|"manual", warn?, target?, message }
+---   warn is true when the operator must still act: a proxy parley did not
+---   start holds the port, so the new version is not yet what serves requests.
 function M.plan_update(s)
     local target = s.target
     if not target then
@@ -175,12 +177,19 @@ function M.plan_update(s)
     end
     if restart == "managed" then
         msg = msg .. " — restarting the proxy"
-    elseif restart == "manual" then
+    elseif restart == "manual" and r.version then
         msg = msg .. (" — the proxy on port %s (%s) was not started by parley and still runs %s; stop it "
             .. "(e.g. `brew services stop cliproxyapi`) so parley can start %s, or upgrade it"):format(
-            tostring(r.port), r.exe or "another process", r.version or "an older version", target)
+            tostring(r.port), r.exe or "another process", r.version, target)
+    elseif restart == "manual" then
+        -- No X-Cpa-Version: a cliproxyapi without remote management, or not a
+        -- cliproxyapi at all. Say only what is known.
+        msg = msg .. (" — port %s is held by a process parley did not start%s, and it reports no "
+            .. "cliproxyapi version; stop it so parley can start %s"):format(
+            tostring(r.port), r.exe and (" (%s)"):format(r.exe) or "", target)
     end
-    return { ok = true, install = install, restart = restart, target = target, message = msg }
+    return { ok = true, install = install, restart = restart, warn = restart == "manual" or nil,
+        target = target, message = msg }
 end
 
 --- The `version:` value :ParleyProxy status prints (#237).

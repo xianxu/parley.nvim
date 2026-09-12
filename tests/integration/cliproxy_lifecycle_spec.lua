@@ -26,18 +26,11 @@ local function start_fake(port, mode)
     return pid
 end
 
+local waits = require("tests.helpers.await")
+
 -- Run an async fn(done) and block until it calls done(result); return result.
 local function await(fn)
-    local result, got = nil, false
-    fn(function(r)
-        result = r
-        got = true
-    end)
-    vim.wait(8000, function()
-        return got
-    end, 20)
-    assert(got, "async call timed out")
-    return result
+    return waits.await(fn, 8000)
 end
 
 

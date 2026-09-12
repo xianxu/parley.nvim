@@ -373,8 +373,12 @@ M.register_proxy_command = function(prefix)
 			vim.notify("cliproxy: stopped " .. n .. " parley-spawned proxy(ies)", vim.log.levels.INFO)
 		elseif sub == "update" then
 			vim.notify("cliproxy: finding the release to install…", vim.log.levels.INFO)
-			cliproxy.update(function(ok, msg)
-				vim.notify("cliproxy: " .. msg, ok and vim.log.levels.INFO or vim.log.levels.ERROR)
+			vim.cmd("redraw") -- update blocks while it fetches: show the notice first
+			cliproxy.update(function(ok, msg, warn)
+				-- warn: installed, but a proxy parley did not start still serves the old
+				-- version until the operator acts
+				local levels = vim.log.levels
+				vim.notify("cliproxy: " .. msg, not ok and levels.ERROR or warn and levels.WARN or levels.INFO)
 			end)
 		elseif sub == "restart" then
 			-- restart_managed waits for the old proxy to release the port; the

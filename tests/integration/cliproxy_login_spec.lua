@@ -9,14 +9,13 @@ local FAKE = vim.fn.getcwd() .. "/tests/fixtures/fake_cliproxy"
 
 cliproxy._set_data_dir(vim.fn.tempname())
 
+local waits = require("tests.helpers.await")
+
 describe("cliproxy login", function()
     local saved_config, saved_notify, saved_open, saved_path, notices, opened, store
 
     local function await(fn, timeout)
-        local out, got = nil, false
-        fn(function(r) out = r; got = true end)
-        vim.wait(timeout or 15000, function() return got end, 25)
-        return got, out
+        return waits.settle(fn, timeout or 15000)
     end
 
     before_each(function()

@@ -199,16 +199,30 @@ describe("plan_update", function()
         assert.equals(T, p.install)
         assert.equals("managed", p.restart)
         assert.equals("updated 7.1.71 → 7.2.158 — restarting the proxy", p.message)
+        assert.is_nil(p.warn)
     end)
 
     it("upgrades but leaves a proxy parley did not launch running, and says how to replace it", function()
         local p = rel.plan_update({ target = T, installed = "7.1.71",
             running = { version = "7.1.71", ours = false, exe = "/opt/homebrew/bin/cliproxyapi", port = 8317 } })
         assert.equals("manual", p.restart)
+        assert.is_true(p.warn)
         assert.is_truthy(p.message:find("/opt/homebrew/bin/cliproxyapi", 1, true))
         assert.is_truthy(p.message:find("was not started by parley", 1, true))
         assert.is_truthy(p.message:find("still runs 7.1.71", 1, true))
         assert.is_truthy(p.message:find("brew services stop cliproxyapi", 1, true))
+    end)
+
+    it("says only what it knows of a port holder that reports no version", function()
+        local p = rel.plan_update({ target = T, installed = "7.1.71",
+            running = { ours = false, exe = "/usr/bin/python3", port = 8317 } })
+        assert.equals("manual", p.restart)
+        assert.is_true(p.warn)
+        assert.equals("updated 7.1.71 → 7.2.158 — port 8317 is held by a process parley did not start "
+            .. "(/usr/bin/python3), and it reports no cliproxyapi version; stop it so parley can start "
+            .. "7.2.158", p.message)
+        local unnamed = rel.plan_update({ target = T, installed = "7.1.71", running = { ours = false, port = 8317 } })
+        assert.is_truthy(unnamed.message:find("held by a process parley did not start, and it", 1, true))
     end)
 
     it("does nothing when the installed and running versions are current", function()

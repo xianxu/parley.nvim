@@ -6,6 +6,7 @@ local cliproxy = require("parley.cliproxy")
 local fake_releases = require("tests.helpers.fake_releases")
 local fixture_process = require("tests.helpers.fixture_process")
 local ready_port = require("tests.helpers.ready_port")
+local waits = require("tests.helpers.await")
 
 local FAKE = vim.fn.getcwd() .. "/tests/fixtures/fake_cliproxy"
 
@@ -17,16 +18,7 @@ cliproxy._set_releases_url(server.url)
 -- 25 s: above UPDATE_RESTART_DEADLINE_MS (20 s), so a wait never gives up while
 -- the leg it waits on is still bound to answer (PQ-5).
 local function await(fn, ms)
-    local result, got = nil, false
-    fn(function(r)
-        result = r
-        got = true
-    end)
-    vim.wait(ms or 25000, function()
-        return got
-    end, 20)
-    assert(got, "async call timed out")
-    return result
+    return waits.await(fn, ms or 25000)
 end
 
 local function dead_url()
@@ -65,6 +57,18 @@ describe("harness", function()
         -- A harness flag is only evidence once a spec has seen it (#227).
         assert.equals("http://127.0.0.1:9/router-for-me/CLIProxyAPI/releases",
             vim.env.PARLEY_CLIPROXY_RELEASES_URL)
+    end)
+
+    it("reads that variable only under the harness's PARLEY_TEST_MODE", function()
+        cliproxy._set_releases_url(nil)
+        local inside = cliproxy._releases_url()
+        local saved = vim.env.PARLEY_TEST_MODE
+        vim.env.PARLEY_TEST_MODE = nil
+        local outside = cliproxy._releases_url()
+        vim.env.PARLEY_TEST_MODE = saved
+        cliproxy._set_releases_url(server.url)
+        assert.equals(vim.env.PARLEY_CLIPROXY_RELEASES_URL, inside)
+        assert.equals("https://github.com/router-for-me/CLIProxyAPI/releases", outside)
     end)
 end)
 
@@ -177,8 +181,8 @@ end
 
 local function update()
     return await(function(done)
-        cliproxy.update(function(ok, msg)
-            done({ ok = ok, msg = msg })
+        cliproxy.update(function(ok, msg, warn)
+            done({ ok = ok, msg = msg, warn = warn })
         end)
     end)
 end
@@ -329,6 +333,7 @@ describe(":ParleyProxy update", function()
         local r = update()
         assert.is_true(r.ok, r.msg)
         assert.equals("updated 9.9.4 → 9.9.5 — restarting the proxy", r.msg)
+        assert.is_nil(r.warn)
         assert.same({ "9.9.5" }, { cliproxy.version_probe("127.0.0.1", proxy_port) })
     end)
 
@@ -345,7 +350,23 @@ describe(":ParleyProxy update", function()
         assert.is_truthy(r.msg:find("updated 9.9.4 → 9.9.6", 1, true))
         assert.is_truthy(r.msg:find("was not started by parley", 1, true))
         assert.is_truthy(r.msg:find("still runs 1.0.0", 1, true))
+        assert.is_true(r.warn, "the old version still serves, so this is a warning")
         assert.same({ "1.0.0" }, { cliproxy.version_probe("127.0.0.1", proxy_port) }) -- untouched
+    end)
+
+    it("does not take a port holder that reports no version for a cliproxyapi", function()
+        wipe_install()
+        fake_releases.publish(server, "9.9.4", { latest = false })
+        cliproxy.download({ version = "9.9.4" })
+        fake_releases.publish(server, "9.9.6")
+        -- No management key, so no X-Cpa-Version: to parley this is any server.
+        spawn_fake({ "--port", tostring(proxy_port) })
+        ready_port.wait_listening(proxy_port)
+        local r = update()
+        assert.is_true(r.ok, r.msg)
+        assert.is_true(r.warn)
+        assert.is_truthy(r.msg:find("reports no cliproxyapi version", 1, true))
+        assert.is_nil(r.msg:find("brew", 1, true))
     end)
 
     it("refuses a second update while the first is still restarting", function()
@@ -386,6 +407,26 @@ describe(":ParleyProxy update", function()
         cliproxy.restart_managed = saved
         assert.is_false(r.ok)
         assert.is_truthy(r.msg:find("the restart did not answer", 1, true))
+        assert.are_not.equal("an update is already running", again.msg)
+    end)
+
+    it("reports a restart that fails, and releases the guard", function()
+        if needs_ps() then
+            return
+        end
+        start_managed("9.9.4")
+        fake_releases.publish(server, "9.9.10")
+        local saved = cliproxy.restart_managed
+        -- Fails at once, so nothing this case starts can spawn after after_each.
+        cliproxy.restart_managed = function(_, on_error)
+            on_error("the old proxy never released the port")
+        end
+        local r = update()
+        local again = update()
+        cliproxy.restart_managed = saved
+        assert.is_false(r.ok)
+        assert.equals("updated 9.9.4 → 9.9.10 — restarting the proxy; the restart failed — "
+            .. "the old proxy never released the port", r.msg)
         assert.are_not.equal("an update is already running", again.msg)
     end)
 
