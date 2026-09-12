@@ -26,3 +26,7 @@ let g:parley_test_mode = v:true
 " so g: variables set here never reach a spec; the environment does. Code that
 " must know it is under the harness reads $PARLEY_TEST_MODE (#227).
 let $PARLEY_TEST_MODE = '1'
+" #237: cliproxy's release lookups go to github.com by default. Point them at a
+" dead local port so a spec that forgets cliproxy._set_releases_url fails fast
+" instead of reaching the network; plenary's child nvims inherit this.
+let $PARLEY_CLIPROXY_RELEASES_URL = 'http://127.0.0.1:9/router-for-me/CLIProxyAPI/releases'

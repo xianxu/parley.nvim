@@ -9,6 +9,11 @@ Invocation mirrors the real binary closely enough for the module to spawn it:
     fake_cliproxy -config <path.yaml>        # reads `port` from the JSON config
     fake_cliproxy --port <p> [--mode <m>]    # direct, for health_probe tests
 
+Every /v0/management/* response carries X-CPA-VERSION (PARLEY_FAKE_CPA_VERSION,
+default 7.1.71) when a management key is configured, as the real binary's does,
+and GET /v0/management/latest-version answers like the real route (#237). With
+PARLEY_FAKE_EXIT_WITH_PARENT=1 the fake exits when its parent does (#220).
+
 Mode is taken from --mode or the PARLEY_FAKE_MODE env var (default: healthy),
 so the module's spawn path (which only passes `-config <path>`) can still
 select a behavior by setting the env before spawning.
@@ -57,6 +62,10 @@ import os
 import sys
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
+
+sys.dont_write_bytecode = True  # never write __pycache__ into the repo (#202)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from fixture_watchdog import exit_with_parent  # noqa: E402
 
 
 def parse_args(argv):
@@ -241,6 +250,10 @@ def main():
             sys.stdout.write("  %s\n" % flag)
         sys.exit(0)
     port, mode, mgmt_key, auth_store, error_mode, response_mode = parse_args(sys.argv[1:])
+    # Opt-in (#237 sets it for every fake it starts); #220 owns making it the
+    # default, alongside its suite-level sweep.
+    if os.environ.get("PARLEY_FAKE_EXIT_WITH_PARENT") == "1":
+        exit_with_parent()
     login_mode = os.environ.get("PARLEY_FAKE_LOGIN_MODE")
     if login_mode or any(a.endswith("-login") for a in sys.argv[1:]):
         run_login(login_mode or "success", auth_store)
@@ -257,10 +270,26 @@ def main():
     # the fixture content and the scope guard sees a path inside its root.
     TOOL_PATH_A = os.environ.get("PARLEY_FAKE_TOOL_PATH_A", "/dev/null")
     TOOL_PATH_B = os.environ.get("PARLEY_FAKE_TOOL_PATH_B", "/dev/null")
+    # The build the proxy reports in X-CPA-VERSION. A published fake release
+    # (tests/helpers/fake_releases.lua) sets it to its own version (#237).
+    CPA_VERSION = os.environ.get("PARLEY_FAKE_CPA_VERSION", "7.1.71")
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *_a):
             pass
+
+        def end_headers(self):
+            # The real binary stamps its build on every /v0/management/*
+            # response — 200, 401 and 404 alike — and on nothing else (captured
+            # live from 7.1.71 on 2026-09-11, #237). Whether it still does with
+            # management DISABLED is pinned by the conformance spec; this fake
+            # stamps only when a management key is configured until that spec
+            # says otherwise.
+            if self.path.startswith("/v0/management/") and mgmt_key:
+                self.send_header("X-CPA-VERSION", CPA_VERSION)
+                self.send_header("X-CPA-COMMIT", "fake")
+                self.send_header("X-CPA-BUILD-DATE", "2026-01-01T00:00:00Z")
+            BaseHTTPRequestHandler.end_headers(self)
 
         def _json(self, status, obj):
             body = json.dumps(obj).encode()
@@ -377,6 +406,16 @@ def main():
         def do_GET(self):
             if mode == "slow":
                 time.sleep(30)
+                return
+            if self.path.startswith("/v0/management/latest-version"):
+                if not mgmt_key:
+                    self.send_response(404)
+                    self.end_headers()
+                    return
+                if self._bearer() != mgmt_key:
+                    self._json(401, {"error": "unauthorized"})
+                    return
+                self._json(200, {"latest-version": "v" + os.environ.get("PARLEY_FAKE_LATEST", CPA_VERSION)})
                 return
             if self.path.startswith("/v0/management/auth-files"):
                 # No key rendered ⇒ the route was never registered. The real
