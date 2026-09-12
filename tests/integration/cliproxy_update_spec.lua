@@ -242,6 +242,8 @@ describe(":ParleyProxy update", function()
         cliproxy.stop()
         cliproxy._reset_spawned()
         cliproxy._set_update_restart_deadline_ms(nil)
+        cliproxy._set_process_tools(nil)
+        vim.env.PARLEY_FAKE_EXIT_DELAY_MS = nil
         parley.config, vim.env.PATH = saved_config, saved_path
     end)
 
@@ -332,12 +334,15 @@ describe(":ParleyProxy update", function()
         fake_releases.publish(server, "9.9.5")
         local r = update()
         assert.is_true(r.ok, r.msg)
-        assert.equals("updated 9.9.4 → 9.9.5 — restarting the proxy", r.msg)
+        assert.equals("updated 9.9.4 → 9.9.5 — restarting the proxy; now serving 9.9.5", r.msg)
         assert.is_nil(r.warn)
         assert.same({ "9.9.5" }, { cliproxy.version_probe("127.0.0.1", proxy_port) })
     end)
 
     it("leaves a proxy parley did not start running, and says how to replace it", function()
+        if needs_ps() then -- "not started by parley" is a claim only an identity read supports
+            return
+        end
         wipe_install()
         fake_releases.publish(server, "9.9.4", { latest = false })
         cliproxy.download({ version = "9.9.4" })
@@ -367,6 +372,23 @@ describe(":ParleyProxy update", function()
         assert.is_true(r.warn)
         assert.is_truthy(r.msg:find("reports no cliproxyapi version", 1, true))
         assert.is_nil(r.msg:find("brew", 1, true))
+    end)
+
+    it("leaves a proxy it cannot identify running, and says it could not tell", function()
+        wipe_install()
+        fake_releases.publish(server, "9.9.4", { latest = false })
+        cliproxy.download({ version = "9.9.4" })
+        fake_releases.publish(server, "9.9.6")
+        spawn_fake({ "--port", tostring(proxy_port), "--management-key", "k" }, { PARLEY_FAKE_CPA_VERSION = "1.0.0" })
+        ready_port.wait_listening(proxy_port)
+        cliproxy._set_process_tools({ ps = "parley-test-no-such-ps" }) -- a machine without ps
+        local r = update()
+        assert.is_true(r.ok, r.msg)
+        assert.is_true(r.warn)
+        assert.equals("updated 9.9.4 → 9.9.6 — could not tell whether parley started the proxy on port "
+            .. proxy_port .. " (ps unavailable), so it was left running (it still runs 1.0.0); if parley "
+            .. "started it, :ParleyProxy restart replaces it", r.msg)
+        assert.same({ "1.0.0" }, { cliproxy.version_probe("127.0.0.1", proxy_port) }) -- untouched
     end)
 
     it("refuses a second update while the first is still restarting", function()
@@ -428,6 +450,24 @@ describe(":ParleyProxy update", function()
         assert.equals("updated 9.9.4 → 9.9.10 — restarting the proxy; the restart failed — "
             .. "the old proxy never released the port", r.msg)
         assert.are_not.equal("an update is already running", again.msg)
+    end)
+
+    it("does not reuse an old proxy that outlives the restart, and says so", function()
+        if needs_ps() then
+            return
+        end
+        -- The real binary shuts down gracefully; this fake keeps serving 4 s
+        -- after SIGTERM, past restart_managed's 2 s wait for the port.
+        vim.env.PARLEY_FAKE_EXIT_DELAY_MS = "4000"
+        start_managed("9.9.4")
+        vim.env.PARLEY_FAKE_EXIT_DELAY_MS = nil
+        fake_releases.publish(server, "9.9.11")
+        local r = update()
+        assert.is_false(r.ok, r.msg)
+        assert.is_truthy(r.msg:find("the restart failed — the old proxy on port " .. proxy_port
+            .. " still answers 2 s after it was told to stop", 1, true), r.msg)
+        assert.equals("9.9.11", cliproxy.installed_version()) -- installed; the next restart serves it
+        assert.same({ "9.9.4" }, { cliproxy.version_probe("127.0.0.1", proxy_port) }) -- never taken for new
     end)
 
     it("no longer offers the restart that skips the port wait", function()

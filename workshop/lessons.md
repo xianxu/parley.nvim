@@ -2120,3 +2120,7 @@ download.
 3. **A test seam read from the environment is a production input.** Gate it on
    the harness signal (`$PARLEY_TEST_MODE`), or list it in the trust boundaries
    as a supported override.
+4. **When a finding says a message over-claims, list every outcome message on
+   that surface beside the observation behind it, before fixing any.** Round 1
+   fixed the message the review named; round 2 found two siblings the same list
+   would have shown.

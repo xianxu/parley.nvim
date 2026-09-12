@@ -59,7 +59,9 @@ spec — a spawned holder would outlive the test.)
 """
 import json
 import os
+import signal
 import sys
+import threading
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
@@ -463,6 +465,14 @@ def main():
             self.send_response(404)
             self.end_headers()
 
+    # PARLEY_FAKE_EXIT_DELAY_MS: on SIGTERM keep serving this long, then exit.
+    # The real cliproxyapi shuts down gracefully; without a delay no spec could
+    # observe a restart racing a proxy that has not exited yet (#237).
+    exit_delay_ms = int(os.environ.get("PARLEY_FAKE_EXIT_DELAY_MS") or "0")
+    if exit_delay_ms > 0:
+        def exit_later(_signum, _frame):
+            threading.Timer(exit_delay_ms / 1000.0, lambda: os._exit(0)).start()
+        signal.signal(signal.SIGTERM, exit_later)
     HTTPServer(("127.0.0.1", port), Handler).serve_forever()
 
 

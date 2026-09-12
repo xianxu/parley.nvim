@@ -141,8 +141,10 @@ first-run auto_download above).
   naming the value.
 - **`checksums.txt` and the tarball**: the existing sha256 check runs before
   extraction; only the `cli-proxy-api` member is extracted, into staging.
-- **`ps` output**: parsed by the existing grammar (`cliproxy_auth`), never
-  logged; only the listener's row is used. A failed read means "not ours".
+- **`ps` and `lsof` output**: parsed by the existing grammar (`cliproxy_auth`),
+  never logged; only the listener's row is used. A read that fails, or a
+  listener missing from the table, means "could not tell": update never
+  restarts it and says so, naming the reason (BR-8).
 - **Credentials**: the version probe sends none. The management key and client
   bearer are untouched; no new secret-bearing process argument is added.
 - **Destructive calls**: `vim.fn.delete(stage, "rf")` removes only
@@ -175,15 +177,19 @@ across external events:
 | installing | dies between rename and record | new binary, stale record → the next update reinstalls (idempotent) |
 | installed | listener is ours | restarting (`restart_managed`) |
 | installed | listener not ours | idle; the message says it still runs the old version and how to replace it |
+| installed | listener identity unknown (`ps`/`lsof` unreadable, or the listener not in the table) | idle; warn "could not tell whether parley started the proxy on port P (why), so it was left running (…); if parley started it, :ParleyProxy restart replaces it" |
 | installed | nothing listening | idle; the message names the versions — the next request starts the new binary, so nothing more is said (PQ-4) |
-| restarting | old proxy slow to exit | `restart_managed` waits for the port before `ensure_running` |
+| restarting | old proxy slow to exit | `restart_managed` waits ≤2 s for the port; a cliproxyapi still answering is reported ("…; the restart failed — the old proxy on port P still answers 2 s after…"), never reused |
 | restarting | `ensure_running` fails | idle; error "…; the restart failed — …" |
-| restarting | no answer at all (a raise inside an async leg) | idle after `UPDATE_RESTART_DEADLINE_MS` (20 s, above `restart_managed`'s ~11 s budget); error "…; the restart did not answer"; `finish` drops the late answer (PQ-3) |
+| restarting | `ensure_running` answers | one `version_probe`: the target → "…; now serving T"; another version → warn "…; the proxy still reports V, so the old process has not exited"; no version → warn "…; could not confirm what it now serves (why)" |
+| restarting | no answer at all (a raise inside an async leg) | idle after `UPDATE_RESTART_DEADLINE_MS` (20 s, above `restart_managed`'s ~13 s budget plus the 2 s confirming probe); error "…; the restart did not answer"; `finish` drops the late answer (PQ-3) |
 | any | unexpected Lua error | idle; bounded error; details to the log (pcall boundary around the whole sequence) |
 
 The event most likely to be mishandled is restarting before the old proxy
 releases the port, which reuses the dying process. `restart_managed` handles it,
-and `:ParleyProxy restart` now uses it too.
+and `:ParleyProxy restart` now uses it too. Since BR-8 it reports a cliproxyapi
+still answering when its wait ends, and the fake's `PARLEY_FAKE_EXIT_DELAY_MS`
+reproduces that interleaving.
 
 `status` holds no state between events, because each call builds a fresh `info`
 and answers once. Its three reads (health, version, latest) complete in IO
@@ -206,6 +212,7 @@ which the existing `_spawned` table owns.
 | `running_identity` | `lua/parley/cliproxy_release.lua` | new |
 | `update_refusal` | `lua/parley/cliproxy_release.lua` | new |
 | `plan_update` | `lua/parley/cliproxy_release.lua` | new |
+| `restart_outcome` | `lua/parley/cliproxy_release.lua` | new |
 | `version_summary` | `lua/parley/cliproxy_release.lua` | new |
 | `parse_ps` | `lua/parley/cliproxy_auth.lua` | new (extracted from `parse_peers`) |
 | `parse_peers` | `lua/parley/cliproxy_auth.lua` | modified (consumes `parse_ps`) |
@@ -251,6 +258,12 @@ which the existing `_spawned` table owns.
 | `version_probe` | `lua/parley/cliproxy.lua` | new | curl → proxy `/v0/management/latest-version` headers |
 | `ps_output` | `lua/parley/cliproxy.lua` | new (extracted from `M.peers`) | `ps ax -o pid,lstart,command` |
 | `port_identity` | `lua/parley/cliproxy.lua` | new | `ps_output` + `pids_on_port` |
+| `pids_on_port` | `lua/parley/cliproxy.lua` | modified | `lsof`, guarded; returns why it cannot answer |
+| `_set_process_tools` | `lua/parley/cliproxy.lua` | new | test seam (the ps and lsof executables) |
+| `is_cliproxy_state` | `lua/parley/cliproxy.lua` | new | the health states that mean a cliproxyapi answers |
+| `port_holds_cliproxy` | `lua/parley/cliproxy.lua` | modified | reads through `is_cliproxy_state` |
+| `wait_port_released` | `lua/parley/cliproxy.lua` | modified | passes the last health state |
+| `restart_managed` | `lua/parley/cliproxy.lua` | modified | reports a cliproxyapi that outlives the port wait |
 | `peers` | `lua/parley/cliproxy.lua` | modified | reads through `ps_output` |
 | `_set_releases_url` | `lua/parley/cliproxy.lua` | new | test seam (releases root) |
 | `_releases_url` | `lua/parley/cliproxy.lua` | new | test accessor: the releases root in force |
@@ -264,8 +277,10 @@ which the existing `_spawned` table owns.
 | `M.restart` | `lua/parley/cliproxy.lua` | deleted | — |
 | `register_proxy_command` | `lua/parley/init.lua` | modified | `:ParleyProxy` glue |
 | `tests/fixtures/fake_github_releases` | `tests/fixtures/fake_github_releases` | new | GitHub release endpoints |
-| `tests/fixtures/fake_cliproxy` | `tests/fixtures/fake_cliproxy` | modified | + `X-CPA-*` headers, `latest-version` route |
+| `tests/fixtures/fake_cliproxy` | `tests/fixtures/fake_cliproxy` | modified | + `X-CPA-*` headers, `latest-version` route, an exit delay after SIGTERM |
 | `fake_releases` | `tests/helpers/fake_releases.lua` | new | builds releases, runs the release fake |
+| `settle` | `tests/helpers/await.lua` | new | waits for an async call; returns settled, result |
+| `await` | `tests/helpers/await.lua` | new | the same, failing the spec on timeout |
 | `tests/fixtures/fixture_watchdog.py` | `tests/fixtures/fixture_watchdog.py` | new | parent-death exit for the Python fixtures |
 | `_set_update_restart_deadline_ms` | `lua/parley/cliproxy.lua` | new | test seam (update's restart deadline) |
 
@@ -328,6 +343,7 @@ body. The cases with such a leg, and how each holds the rule:
 | restarts parley's own proxy | `update` → `restart_managed` | `await`, via `update()` |
 | refuses a second update | the first update's `restart_managed` | waits for the first update before any assertion |
 | restart-deadline case | `restart_managed` | stubbed for the whole body; restored only after both calls |
+| an old proxy outlives the restart | `update` → `restart_managed`, which errors before `ensure_running` | `await`, via `update()`; the old proxy exits on its own 4 s after SIGTERM, and its watchdog covers a crash |
 | first-run auto_download | `ensure_running` → download → spawn | `await`, via `ensure()` |
 
 `await` gives up after 25 s, above `UPDATE_RESTART_DEADLINE_MS` (20 s) and
@@ -2986,3 +3002,40 @@ six Minor ones. Each is fixed as a class, except one deferral:
 - **Plan tracking.** The M1 steps are ticked at this close.
 - **Notice before a blocking call.** `:ParleyProxy update` and first-run
   auto_download redraw after their notice, so it shows before the fetch blocks.
+
+### 2026-09-12 — M1 review round 2 (FIX-THEN-SHIP)
+
+Round 2 disposed round 1's seven findings and found the rule behind BR-4
+unswept (BR-8, Important): every claim in an outcome message must come from an
+observation the call made; where none was possible, the message says so and
+names what to check. The outcome messages on this issue's surface, and what
+backs each:
+
+| Message | Observation | Before | Now |
+|---|---|---|---|
+| refusals; "an update is already running" | config; the guard | backed | backed |
+| "could not find the latest …"; "update failed — …" | curl, checksum, tar | backed | backed |
+| "installed X", "updated A → B", "already at X" | the version record, after the download | backed | backed |
+| "was not started by parley … still runs V" | `ps` + `lsof` identity | a failed read counted as "not ours" | a failed read, or a listener missing from the table, is "could not tell (why)"; never restarted |
+| "— restarting the proxy", then success | nothing after the restart | asserted | one `version_probe`: "now serving T", or a warning (still the old version; unconfirmed) |
+| `:ParleyProxy restart` "restarted" | `restart_managed`'s on_ready | a cliproxyapi still answering after the 2 s wait was reused | reported through on_error, never reused |
+| "the restart failed — …"; "did not answer — check …" | the error; the deadline | backed | backed, one renderer |
+| status "not running (…)" | `version_probe` said down | also said for a probe never made | only for "down"; otherwise "unknown — why" |
+
+Code: `running_identity` returns `nil, why` when it cannot tell, and
+`port_identity` carries the reason (`ps unavailable`, `ps unreadable`, `lsof
+unavailable`, …). `plan_update` adds `restart = "unknown"` (warn; never
+restarts). `restart_outcome` (new, pure) words the restart's result from the
+probe, the error or the deadline. `restart_managed` reports a cliproxyapi still
+answering after `PORT_RELEASE_MS` (`is_cliproxy_state`, shared with
+`port_holds_cliproxy`); its other callers, the management-route repair and the
+recovery ladder's restart rung, get that error instead of a reused dying proxy,
+and their specs use the instant-exit fake. `version_summary` says "unknown —
+why" for anything but "down".
+
+Minor findings: `pids_on_port` degrades at the IO seam, so a refused `lsof` no
+longer raises out of `stop`; `fake_cliproxy` gains `PARLEY_FAKE_EXIT_DELAY_MS`,
+and the update spec drives a restart through a slow shutdown; `settle` and
+`await` join the Integration points table. New seam `_set_process_tools` names
+a missing `ps`, so the "could not tell" case runs in every environment; the case
+that says "not started by parley" now needs `ps`.

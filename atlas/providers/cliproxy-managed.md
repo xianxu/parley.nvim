@@ -75,7 +75,8 @@ It **identity-probes the port first** (the same `/v1/models` classifier as
 a process that actually answers as cliproxy. `:ParleyProxy restart` is
 `restart_managed`: `stop`, wait (≤2 s) for the old proxy to release the port,
 then ensure — without the wait a proxy still shutting down could be reused
-(#237).
+(#237). A cliproxyapi still answering when the wait ends is reported as an
+error, never taken for the replacement.
 
 ## Model catalog (#205)
 
@@ -419,9 +420,15 @@ read with `ps` through the same grammar as `peers()` (`cliproxy_auth.parse_ps`).
 A proxy parley did not launch (a brew service, say) is left running, and the
 message says how to replace it, shown as a warning since the old version still
 serves; a port holder that reports no version is not assumed to be a
-cliproxyapi. If `ps` cannot be read, the proxy is treated as not ours. The restart goes through `restart_managed` behind a 20 s deadline, and
-an in-flight guard refuses a second update until the first has answered.
-Messages name the versions: "updated 7.1.71 → 7.2.158 — restarting the proxy",
+cliproxyapi. **Every claim in the message comes from an observation.** If `ps`
+or `lsof` cannot be read, or the listener is missing from the process table,
+update says it could not tell who started the proxy, names the reason, and
+leaves it running. The restart goes through `restart_managed` behind a 20 s
+deadline, and an in-flight guard refuses a second update until the first has
+answered. Once the restart answers, one `version_probe` confirms what the port
+serves: "updated 7.1.71 → 7.2.158 — restarting the proxy; now serving 7.2.158",
+or a warning that it still reports the old version, or that it could not
+confirm (`cliproxy_release.restart_outcome`). Other messages name the versions:
 "already at 7.2.158", "… (pinned by cliproxy.download_version)".
 
 **Testing.** `tests/fixtures/fake_github_releases` is a stateful fake of the
@@ -432,7 +439,9 @@ release is running" is observable end to end. Specs point lookups at the fake
 with `_set_releases_url`; `tests/minimal_init.vim` points them at a dead local
 port (`$PARLEY_CLIPROXY_RELEASES_URL`) so no spec reaches GitHub by accident;
 parley reads that variable only under `$PARLEY_TEST_MODE`, which the harness
-also exports.
+also exports. `PARLEY_FAKE_EXIT_DELAY_MS` keeps `fake_cliproxy` serving after
+SIGTERM, as the real binary's graceful shutdown does, and `_set_process_tools`
+names a missing `ps` or `lsof` to reproduce a machine without one.
 `tests/fixtures/fixture_watchdog.py` makes a fixture exit when the nvim that
 started it dies — always for the release fake, and for `fake_cliproxy` when
 `PARLEY_FAKE_EXIT_WITH_PARENT=1` (#220 owns making that the default). The

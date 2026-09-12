@@ -98,19 +98,22 @@ end
 ---@param rows table[] # cliproxy_auth.parse_ps rows: { pid, command, exe }
 ---@param port_pids number[] # pids listening on the managed port
 ---@param config_path string|nil # parley's rendered config.yaml
----@return table|nil # { ours: boolean, exe: string|nil } — nil when nothing listens
+---@return table|nil identity # { ours: boolean, exe: string|nil }
+---@return string|nil why_unknown # set when identity is nil: parley cannot tell
+---   who holds the port, and says so rather than guessing (#237 BR-8)
 function M.running_identity(rows, port_pids, config_path)
     if not port_pids or #port_pids == 0 then
-        return nil
+        return nil, "no process found listening on the port"
     end
     local on_port = {}
     for _, pid in ipairs(port_pids) do
         on_port[pid] = true
     end
     local needle = config_path and ("-config " .. config_path) or nil
-    local exe
+    local exe, seen
     for _, r in ipairs(rows or {}) do
         if on_port[r.pid] then
+            seen = true
             exe = exe or r.exe
             if needle then
                 -- Two locals from ONE call: `needle and cmd:find(...)` would
@@ -122,6 +125,9 @@ function M.running_identity(rows, port_pids, config_path)
                 end
             end
         end
+    end
+    if not seen then
+        return nil, "the listener is not in the process table"
     end
     return { ours = false, exe = exe }
 end
@@ -148,10 +154,12 @@ end
 ---   target_err  string|nil  why target is nil
 ---   pinned      boolean     target came from cliproxy.download_version
 ---   installed   string|nil  version recorded for the managed binary
----   running     table|nil   { version?, ours, exe?, port } — nil when nothing answers
----@return table # { ok, install?, restart?: "managed"|"manual", warn?, target?, message }
----   warn is true when the operator must still act: a proxy parley did not
----   start holds the port, so the new version is not yet what serves requests.
+---   running     table|nil   { version?, ours?, identity_err?, exe?, port } — nil when
+---               nothing answers; ours is nil when parley could not tell who started it
+---@return table # { ok, install?, restart?: "managed"|"manual"|"unknown", warn?, target?, message }
+---   warn is true when the operator must still act: the listener is not
+---   parley's, or parley could not tell, so the new version is not yet what
+---   serves requests.
 function M.plan_update(s)
     local target = s.target
     if not target then
@@ -164,7 +172,13 @@ function M.plan_update(s)
     local install = s.installed ~= target and target or nil
     local r, restart = s.running, nil
     if r and (install or (r.version and r.version ~= target)) then
-        restart = r.ours and "managed" or "manual"
+        if r.ours == true then
+            restart = "managed"
+        elseif r.ours == false then
+            restart = "manual"
+        else
+            restart = "unknown" -- never restart what parley could not identify
+        end
     end
     local msg
     if install then
@@ -187,9 +201,43 @@ function M.plan_update(s)
         msg = msg .. (" — port %s is held by a process parley did not start%s, and it reports no "
             .. "cliproxyapi version; stop it so parley can start %s"):format(
             tostring(r.port), r.exe and (" (%s)"):format(r.exe) or "", target)
+    elseif restart == "unknown" then
+        msg = msg .. (" — could not tell whether parley started the proxy on port %s (%s), so it was left "
+            .. "running (%s); if parley started it, :ParleyProxy restart replaces it"):format(
+            tostring(r.port), tostring(r.identity_err or "identity unreadable"),
+            r.version and ("it still runs " .. r.version) or "it reports no cliproxyapi version")
     end
-    return { ok = true, install = install, restart = restart, warn = restart == "manual" or nil,
-        target = target, message = msg }
+    return { ok = true, install = install, restart = restart,
+        warn = (restart == "manual" or restart == "unknown") or nil, target = target, message = msg }
+end
+
+--- What update tells the operator once its restart has answered (#237 BR-8).
+--- Every claim comes from an observation: the version probed on the port after
+--- the restart, the restart's own error, or its silence. Where nothing could be
+--- observed, the message says so and names what to check.
+---@param message string # plan_update's message for a managed restart
+---@param target string # the version just installed
+---@param o table # { timeout = true } | { err = string } | { version?: string, reason?: string }
+---@return table # { ok: boolean, warn?: true, message: string }
+function M.restart_outcome(message, target, o)
+    if o.timeout then
+        return { ok = false, message = message .. "; the restart did not answer — check :ParleyProxy status" }
+    end
+    if o.err then
+        -- The error's own "cliproxy:" prefix would repeat the one :ParleyProxy adds.
+        local err = tostring(o.err):gsub("^cliproxy: ", "")
+        return { ok = false, message = message .. "; the restart failed — " .. err }
+    end
+    if o.version == target then
+        return { ok = true, message = message .. "; now serving " .. target }
+    end
+    if o.version then
+        return { ok = true, warn = true, message = ("%s; the proxy still reports %s, so the old process has "
+            .. "not exited — run :ParleyProxy restart"):format(message, o.version) }
+    end
+    local why = ({ down = "nothing answers on the port", no_header = "it sent no version header" })[o.reason]
+    return { ok = true, warn = true, message = ("%s; could not confirm what it now serves (%s) — check "
+        .. ":ParleyProxy status"):format(message, why or tostring(o.reason or "no answer")) }
 end
 
 --- The `version:` value :ParleyProxy status prints (#237).
@@ -202,6 +250,11 @@ function M.version_summary(v, update_cmd)
     if not v.running then
         if v.running_err == "no_header" then
             return ("unknown — the proxy sent no version header (%s)"):format(latest)
+        end
+        if v.running_err ~= "down" then
+            -- Only "down" was observed as not running; anything else is a read
+            -- that did not happen, so say which (#237 BR-8).
+            return ("unknown — %s (%s)"):format(tostring(v.running_err or "not read"), latest)
         end
         local parts = {}
         if v.installed then

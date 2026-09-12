@@ -111,8 +111,9 @@ describe("running_identity", function()
         return { pid = pid, command = command, exe = command:match("^(%S+)") }
     end
 
-    it("is nil when nothing holds the port", function()
-        assert.is_nil(rel.running_identity({ row(1, "/b/cli-proxy-api -config " .. CFG) }, {}, CFG))
+    it("cannot tell, and says why, when no listener pid is found", function()
+        assert.same({ nil, "no process found listening on the port" },
+            { rel.running_identity({ row(1, "/b/cli-proxy-api -config " .. CFG) }, {}, CFG) })
     end)
 
     it("is ours when the listener was launched with parley's rendered config", function()
@@ -147,8 +148,8 @@ describe("running_identity", function()
         assert.is_false(id.ours)
     end)
 
-    it("is not ours when the process table could not be read", function()
-        assert.same({ ours = false }, rel.running_identity({}, { 7 }, CFG))
+    it("cannot tell, never guesses, when the listener is not in the process table", function()
+        assert.same({ nil, "the listener is not in the process table" }, { rel.running_identity({}, { 7 }, CFG) })
     end)
 end)
 
@@ -225,6 +226,20 @@ describe("plan_update", function()
         assert.is_truthy(unnamed.message:find("held by a process parley did not start, and it", 1, true))
     end)
 
+    it("leaves a listener it could not identify running, and says it could not tell", function()
+        local p = rel.plan_update({ target = T, installed = "7.1.71",
+            running = { version = "7.1.71", identity_err = "ps unavailable", port = 8317 } })
+        assert.equals("unknown", p.restart)
+        assert.is_true(p.warn)
+        assert.equals("updated 7.1.71 → 7.2.158 — could not tell whether parley started the proxy on port 8317 "
+            .. "(ps unavailable), so it was left running (it still runs 7.1.71); if parley started it, "
+            .. ":ParleyProxy restart replaces it", p.message)
+        assert.is_nil(p.message:find("was not started by parley", 1, true))
+        local versionless = rel.plan_update({ target = T, installed = "7.1.71",
+            running = { identity_err = "lsof unavailable", port = 8317 } })
+        assert.is_truthy(versionless.message:find("(it reports no cliproxyapi version)", 1, true))
+    end)
+
     it("does nothing when the installed and running versions are current", function()
         assert.same({ ok = true, target = T, message = "already at 7.2.158" },
             rel.plan_update({ target = T, installed = T, running = { version = T, ours = true, port = 8317 } }))
@@ -252,6 +267,40 @@ describe("plan_update", function()
     it("restarts after an install even when the running version is unknown", function()
         assert.equals("managed", rel.plan_update({ target = T, installed = "7.1.71",
             running = { ours = true, port = 8317 } }).restart)
+    end)
+end)
+
+describe("restart_outcome", function()
+    local MSG = "updated 7.1.71 → 7.2.158 — restarting the proxy"
+    local T = "7.2.158"
+
+    it("confirms the new version from the port", function()
+        assert.same({ ok = true, message = MSG .. "; now serving 7.2.158" },
+            rel.restart_outcome(MSG, T, { version = T }))
+    end)
+
+    it("says the old process is still serving when the port reports the old version", function()
+        local o = rel.restart_outcome(MSG, T, { version = "7.1.71" })
+        assert.same({ ok = true, warn = true, message = MSG .. "; the proxy still reports 7.1.71, so the old "
+            .. "process has not exited — run :ParleyProxy restart" }, o)
+    end)
+
+    it("says it could not confirm when the port gives no version", function()
+        local o = rel.restart_outcome(MSG, T, { reason = "no_header" })
+        assert.same({ ok = true, warn = true, message = MSG .. "; could not confirm what it now serves (it sent "
+            .. "no version header) — check :ParleyProxy status" }, o)
+        local down = rel.restart_outcome(MSG, T, { reason = "down" })
+        assert.is_truthy(down.message:find("(nothing answers on the port)", 1, true))
+    end)
+
+    it("passes a failed restart's reason through, without a second prefix", function()
+        local o = rel.restart_outcome(MSG, T, { err = "cliproxy: the old proxy on port 8317 still answers" })
+        assert.same({ ok = false, message = MSG .. "; the restart failed — the old proxy on port 8317 still answers" }, o)
+    end)
+
+    it("names what to check when the restart never answers", function()
+        assert.same({ ok = false, message = MSG .. "; the restart did not answer — check :ParleyProxy status" },
+            rel.restart_outcome(MSG, T, { timeout = true }))
     end)
 end)
 
@@ -297,5 +346,10 @@ describe("version_summary", function()
     it("says when a running proxy reports no version", function()
         assert.equals("unknown — the proxy sent no version header (latest 7.2.158)",
             rel.version_summary({ running_err = "no_header", latest = "7.2.158" }, CMD))
+    end)
+
+    it("does not call a proxy it could not read 'not running'", function()
+        assert.equals("unknown — no cliproxyapi endpoint is configured (latest 7.2.158)",
+            rel.version_summary({ running_err = "no cliproxyapi endpoint is configured", latest = "7.2.158" }, CMD))
     end)
 end)

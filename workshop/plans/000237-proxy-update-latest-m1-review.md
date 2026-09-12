@@ -116,3 +116,135 @@ findings:
     detail: |
       0 of 68 `- [ ]` rows in the plan are ticked; tick the M1 steps at milestone close.
 ```
+
+---
+
+## Re-review — 2026-09-12T12:49:03-07:00 (FIX-THEN-SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 237 — ParleyProxy update fetches the latest release unless pinned; status shows the version |
+| repo | parley.nvim |
+| issue file | workshop/issues/000237-proxy-update-latest.md |
+| boundary | milestone M1 |
+| milestone | M1 |
+| window | 27bac4f4ba965e52f1026b0f1809036bbdfd41e4..1a5905dd81a447586907ca28223c6a9b9f1a29dd |
+| command | sdlc milestone-close --issue 237 --milestone M1 |
+| reviewer | claude |
+| timestamp | 2026-09-12T12:49:03-07:00 |
+| verdict | FIX-THEN-SHIP |
+
+## Review
+
+Everything I need is in hand. I'm writing up the review now.
+
+```verdict
+verdict: FIX-THEN-SHIP
+confidence: medium
+```
+
+**Summary.** The round-1 fixes are real, not cosmetic, and I checked each against its pinning test rather than the commit message: the README, atlas, config comment and both "no binary" error strings now say `:ParleyProxy update` is the way in; the release-URL environment seam is gated on `$PARLEY_TEST_MODE` with a test that would fail without the gate; the manual-restart outcome carries `warn` end to end; the no-version port holder no longer gets the brew hint; `await`/`settle` live once in `tests/helpers/await.lua`; the "restart failed" cell has a case; and the 14 unticked plan steps are all in M2's Tasks 11–13. Runs in this session: lint 0/0, release unit 43/0, auth 78/0, download 6/0, command 15/0, login 13/0, lifecycle 53/0, arch sweep green, update spec 29/0 with **4 pending** — `ps` is refused in this shell (EPERM even for `/bin/ps`, also from inside nvim), so the four identity-gated cases, including the new BR-6 case, went pending here and I verified them by reading, not by execution. Confidence is medium for that reason only. What keeps this from SHIP is one Important repeat of the `message-provenance` family: BR-4 fixed the instance, but two sibling sites still assert facts the call never observed, and one of them is the Spec's own Done-when ("the proxy serving requests is the new binary").
+
+**1. Strengths**
+- `lua/parley/cliproxy.lua:1846-1855` — the env override is now read only under the harness signal, and the `harness` case in `cliproxy_update_spec.lua:63` proves both branches without contacting either URL. Trust boundaries and atlas say the same thing.
+- `NO_BINARY` (`cliproxy.lua:19`) is the class fix for BR-1: one text, three callers, so the next "how does the binary arrive" change cannot drift again.
+- `plan_update` (`cliproxy_release.lua:154-193`) remains the single place that decides and words the outcome; the new `warn` flag rides the same table, and `init.lua:376-382` maps `ok/warn` to ERROR/WARN/INFO with a command-spec case per level.
+- The two "changes nothing" cases compare inodes and re-read the record; the checksum refusal is tested at the seam the real download uses.
+- `tests/helpers/await.lua` exposes both `settle` (for specs asserting on the timeout themselves) and `await` (fails on timeout) — the right split, and each spec keeps its own budget.
+
+**2. Critical findings** — none.
+
+**3. Important findings**
+
+- `lua/parley/cliproxy.lua:2070-2073` and `:2095-2096` (with `cliproxy_release.lua:180-183`) — **2nd finding in family `message-provenance`.** BR-4 fixed one instance; the rule it belongs to is: *every claim in an outcome message derives from an observation this call made; where the observation is unavailable, the message says so and names what to check.* Two sites still violate it:
+  1. `port_identity` returns `{ ours = false }` when `ps` raises (this sandbox), when `lsof` is absent (default on many Linux installs: `pids_on_port` returns `{}` → `running_identity` returns nil → `ours = false`), or when `ps` is unreadable. `plan_update` then tells the operator the proxy "was not started by parley … stop it (e.g. `brew services stop cliproxyapi`)" as a fact, when parley launched it and simply could not confirm that. `ours` is a boolean carrying three states (ARCH-ORDER).
+  2. After `restart_managed` calls `on_ready`, `update` reports ok "— restarting the proxy" without re-probing the version. `restart_managed` ignores `wait_port_released`'s boolean (`cliproxy.lua:469`) and proceeds to `ensure_running` after 2 s, which *reuses* a still-healthy dying proxy — the code's own comment at `:439-446` says the real binary shuts down gracefully, and the Python fake exits instantly, so the shipped test observes only the fast-exit interleaving. The Done-when says the serving proxy must be the new binary after `update`.
+  Fix the rule, not the sites: make identity tri-state (`ours: true | false | nil` plus an `identity_err` such as "ps unreadable" / "lsof unavailable"), let `plan_update` word the unknown case as "could not tell whether parley started it (…); `:ParleyProxy restart` replaces it if it is parley's", and after `on_ready` feed one `version_probe` result into a pure `restart_outcome(target, probed)` that yields ok/warn text ("now serving 7.2.158" vs "the proxy still reports 7.1.71 — the old process has not exited; run `:ParleyProxy restart`"). Unit-test both in `cliproxy_release_spec.lua`.
+
+**4. Minor findings**
+- `tests/fixtures/fake_cliproxy` has no slow-shutdown seam (no SIGTERM handler, no exit delay), so the "old proxy slow to exit" row of the plan's ARCH-ORDER table cannot be reproduced; add e.g. `PARLEY_FAKE_EXIT_DELAY_MS` and a case that asserts the post-restart probe (ARCH-ORDER: a test that can only observe one interleaving).
+- `cliproxy.lua:800-811` `pids_on_port` calls `vim.system` unguarded; `ps_output` and `port_identity` degrade on EPERM but `stop()` → `restart_managed` still raise, and `:ParleyProxy restart` now routes through it. Pre-existing; the pcall belongs in the IO wrapper, not its callers.
+- The plan's Core-concepts tables do not list `tests/helpers/await.lua` (`settle`, `await`), the one new entity round 1 added; the arch sweep passed because it only inventories `lua/`.
+- The Log's "26/0/0, none pending" predates the round-1 fix commit; the four `ps`-gated cases (now including BR-6's) have no recorded unsandboxed run at head.
+
+**5. Test coverage notes**
+- Verified by execution: target rule with request-log proofs, atomic install, checksum refusal, unknown record, refusals before network, env-seam gating, warn severity at the command layer, no-version port holder, first-run auto_download both ways, `await` consolidation (lifecycle and login specs green on the shared helper).
+- Verified by reading only (pending here): restart-ours, second-update guard, deadline release, restart-failed. The BR-6 case pins the path: a stub `restart_managed` that calls `on_error` must produce `ok=false` with the "; the restart failed — …" suffix and release the guard; a broken path would either time out the 25 s await or fail `is_false`.
+- Not covered: post-restart version confirmation (finding above); identity-unknown wording (finding above); `lsof`-absent degradation (only the empty-rows unit case).
+- Live conformance for the redirect and the real binary's header remains M2 Task 13, as planned; the conformance spec at head has no `X-Cpa` case yet.
+
+**6. Architectural notes**
+- ARCH-DRY: pass — `NO_BINARY`, one `await`, one target rule, one `ps` grammar. `spawn_fake`/`reap` remain spec-local, deferred to #220 with the reason recorded.
+- ARCH-PURE: pass — `update` is orchestration over `plan_update`; the identity and restart-outcome words should also be pure (see the Important finding) rather than assembled in `update`.
+- ARCH-PURPOSE: flag — BR-4's family was fixed at the instance; the enumeration ("where does a message assert what the call did not observe") was not written, and two siblings remain. That is exactly the class-vs-instance pattern `workshop/lessons.md` and the memory note describe.
+- ARCH-MOCK: pass — stateful release fake behind the production URL seam with a request log; live checks scheduled for M2.
+- ARCH-CONSTRAINTS: pass — the synchronous fetch is operator-accepted and bounded; identity read is off the dispatch path; the 20 s deadline sits above the ~13 s restart budget.
+- ARCH-SECURE: pass — env seam gated on the harness signal; versions parsed before entering any URL; the probe sends no credential; `delete(stage, "rf")` is a constructed leaf.
+- ARCH-ORDER: flag — `running.ours` is a boolean carrying an unknown state, and the slow-exit interleaving has no seam; both are named in the Important finding.
+- For M2: `status` should reuse the same tri-state identity and the post-restart probe rather than a second comparison; `binary_source` still says `"PATH"` for the managed dir (`cliproxy.lua:876`, Task 12).
+
+**7. Plan revision recommendations**
+- Add a `## Revisions` entry for this round: identity becomes tri-state and `update` re-probes after restart (Trust boundaries: "ps/lsof unreadable → unknown, never restart, say so"; ARCH-ORDER rows "listener identity unknown" and "old proxy still serving after restart" with their messages).
+- Add `settle` / `await` (`tests/helpers/await.lua`, new) to the Integration points table.
+- Record `PARLEY_FAKE_EXIT_DELAY_MS` (or whatever the slow-shutdown seam is named) under `tests/fixtures/fake_cliproxy` in the table and in Process ownership.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      README.md:221, atlas intro, config.lua comment and both "no cliproxy binary found" errors (one NO_BINARY text) now name :ParleyProxy update first; swept as a class.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      releases_url() reads the env var only when $PARLEY_TEST_MODE is "1"; the harness case fails without the gate; plan Trust boundaries and atlas updated.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      plan_update sets warn on the manual path, update forwards it, init.lua notifies at WARN; pinned by unit, integration and command-spec cases.
+  - id: BR-4
+    disposition: addressed
+    note: |
+      A port holder with no X-Cpa-Version gets a message that says only that; unit and integration cases assert no "brew". The family's rule is still unswept — see the new finding.
+  - id: BR-5
+    disposition: addressed
+    note: |
+      await/settle live once in tests/helpers/await.lua and all three specs bind to it; the spawn_fake/reap ownership registry is deferred to #220 with the reason recorded in the plan.
+  - id: BR-6
+    disposition: addressed
+    note: |
+      "reports a restart that fails, and releases the guard" exists and pins the on_error path; it is ps-gated and went pending in this shell, so verified by reading, not execution.
+  - id: BR-7
+    disposition: addressed
+    note: |
+      54 of 68 steps ticked; the 14 unticked rows are all in M2 Tasks 11–13.
+findings:
+  - id: new
+    severity: Important
+    family: message-provenance
+    title: |
+      update still asserts what it did not observe: an unreadable identity is worded as "not started by parley", and a restart's success is reported without re-probing the version
+    detail: |
+      2nd finding in this family. Rule: every claim in an outcome message derives from an observation the call made; otherwise say "could not tell" and name what to check. Sites: port_identity collapses ps-EPERM / no-lsof into ours=false and plan_update words it as fact with the brew hint (cliproxy.lua:2072, cliproxy_release.lua:180); after restart_managed's on_ready, update reports ok "restarting the proxy" while restart_managed ignores wait_port_released's result and ensure_running reuses a still-dying old proxy (cliproxy.lua:469, :2095) — the Done-when says the serving proxy must be the new binary. Fix the class: tri-state identity with a reason, and a pure restart_outcome fed by a post-restart version_probe.
+  - id: new
+    severity: Minor
+    family: interleaving-seam
+    title: |
+      The "old proxy slow to exit" ordering has no seam: fake_cliproxy exits instantly on SIGTERM, so only the fast-exit interleaving is ever observed
+    detail: |
+      Add an exit-delay seam to tests/fixtures/fake_cliproxy and a case that drives update through a slow shutdown and asserts what version_probe reports afterwards (ARCH-ORDER: a green run of a one-interleaving test is a sample of size one).
+  - id: new
+    severity: Minor
+    family: degrade-at-the-io-seam
+    title: |
+      pids_on_port calls vim.system unguarded, so a refused lsof raises out of stop() and restart_managed while ps_output and port_identity degrade
+    detail: |
+      cliproxy.lua:800-811; pre-existing, but :ParleyProxy restart and update's managed restart now route through it. Put the pcall in the wrapper, as ps_output does, rather than in each caller.
+  - id: new
+    severity: Minor
+    family: plan-checkbox-tracking
+    title: |
+      The Core-concepts tables omit the one entity round 1 added, tests/helpers/await.lua (settle, await)
+    detail: |
+      The arch sweep inventories lua/ only, so it did not catch the gap; add the row so the table stays the inventory the review reads against.
+```

@@ -220,6 +220,16 @@ a chat file the operator had deleted. The restored file is deleted again. The
 edit needs root to recover: it is in the local Time Machine snapshot of
 2026-09-12 12:10, taken six minutes before the revert.
 
+### 2026-09-12 — M1 review round 2: FIX-THEN-SHIP
+
+Round 2 disposed all seven round-1 findings and raised BR-8 (Important): update
+still claimed what it had not observed. An unreadable identity was reported as
+"not started by parley", and a restart as a success without checking what the
+port serves. Fixed as a rule, with the enumeration of every outcome message in
+the plan's Revisions; three Minor findings fixed alongside. Round 1's fixes had
+been verified unsandboxed at 1a5905d: update 29/0 with none pending, so the
+`ps`-gated cases, BR-6's included, executed.
+
 ## Revisions
 
 ### 2026-09-11 — planned: two milestones, auto_download settled, two defects added
