@@ -21,15 +21,26 @@ fires) and cooperative for those who run their own (it reuses it). Set
   (JSON-as-YAML — valid YAML 1.2, no emitter needed), and the model-discovery
   trio `providers`/`provider_owned_by`/`filter_models_by_owner` (#132 — see Models
   & providers). Unit-tested, no mocks.
-- **`cliproxy.lua`** (IO): `discover_binary` (`cliproxy.binary_path` → `cliproxyapi`/
-  `cli-proxy-api` on PATH), `health_probe` (`GET /v1/models` with the bearer →
-  `healthy`/`needs_login`/`client_key_mismatch`/`foreign`/`down`), `spawn`
-  (detached, PID-tracked), `ensure_running` (reuse-if-healthy → else
-  discover/spawn/poll, bounded — never hangs), `list_models` (#132), and
-  `status`/`start`/`stop`/`restart`/`login_argv`. The curl argv is built once in
-  `api_argv` (route-parameterized since #197) and shared by `health_probe`, the
-  stop-time identity check, `list_models`, and the management read (ARCH-DRY).
-  Tested against a process-level fake.
+- **`cliproxy_release.lua`** (pure, #237): the release version grammar
+  (`parse_version`/`compare_versions`), the parsers for GitHub's
+  `releases/latest` redirect and the proxy's `X-Cpa-Version` header,
+  `running_identity` (who holds the managed port), the update decision table
+  (`update_refusal`, `plan_update`), and the status text (`version_summary`).
+  Unit-tested, no mocks.
+- **`cliproxy.lua`** (IO): `discover_binary` (`cliproxy.binary_path` → parley's
+  managed download → `cliproxyapi`/`cli-proxy-api` on PATH), `health_probe`
+  (`GET /v1/models` with the bearer →
+  `healthy`/`needs_login`/`client_key_mismatch`/`foreign`/`down`),
+  `version_probe` (#237: the running version from `X-Cpa-Version`, no
+  credential), `spawn` (detached, PID-tracked), `ensure_running`
+  (reuse-if-healthy → else discover/spawn/poll, bounded — never hangs),
+  `list_models` (#132), the release IO (`latest_release`, `resolve_target`,
+  `download`, `installed_version`, `update` — see Releases), and
+  `status`/`start`/`stop`/`restart_managed`/`login_argv`. The curl argv is built
+  once in `api_argv` (route-parameterized since #197; `dump_headers` since #237)
+  and shared by `health_probe`, the stop-time identity check, `list_models`, the
+  management read and `version_probe` (ARCH-DRY). Tested against process-level
+  fakes.
 - **`cliproxy_auth.lua`** (pure, #197): the auth-failure vocabulary, credential
   health, and the diagnosis text — see Auth-failure → diagnosis and recovery.
 
@@ -59,7 +70,10 @@ leftover cliproxy on the managed port spawned by an earlier nvim (parley's
 proxies are detached + survive nvim exit, so `_spawned` alone can't reach them).
 It **identity-probes the port first** (the same `/v1/models` classifier as
 `health_probe`), so a *foreign* process holding the port is never killed — only
-a process that actually answers as cliproxy. `restart` = `stop` + ensure.
+a process that actually answers as cliproxy. `:ParleyProxy restart` is
+`restart_managed`: `stop`, wait (≤2 s) for the old proxy to release the port,
+then ensure — without the wait a proxy still shutting down could be reused
+(#237).
 
 ## Model catalog (#205)
 
@@ -367,15 +381,55 @@ has `codex-device` — a login flow, not a distinct provider. Completion for
 `models <X>` and `login <X>` draws from the matching axis, so neither leaks the
 other's extras.
 
-## auto_download (M2)
+## Releases: auto_download and update (#131 M2, #237)
 
-`cliproxy = { manage = true, auto_download = true }` removes the
-`brew install` step: when `discover_binary` finds nothing, `ensure_running`
-fetches the **pinned** release (`cliproxy.lua` `PINNED_VERSION`, overridable via
-`cliproxy.download_version`) for the host platform — `cliproxy_config.platform`
-+ `asset_name` build the asset name, `download()` curls the tarball +
-`checksums.txt`, **sha256-verifies (refuses to install on mismatch)**, and
-extracts `cli-proxy-api` into `stdpath('data')/parley/cliproxy/bin/`. That dir
-sits between `binary_path` and PATH in `discover_binary`'s chain.
-`:ParleyProxy update` re-fetches. The download is synchronous + one-time (cached
-after first fetch). Windows (`.zip`) is not auto-downloaded — install manually.
+**One target rule.** `:ParleyProxy update` and the first-run `auto_download`
+(`cliproxy = { manage = true, auto_download = true }`, which removes the
+`brew install` step) both install `cliproxy.download_version` when it is set
+(the pin), else the **latest** release. There is no pin in code. CLIProxyAPI
+presents itself to Anthropic as a Claude Code version, and Anthropic refuses
+newer models to builds below a minimum: the old built-in 7.1.71 (Claude Code
+2.1.63) could not reach Fable. `resolve_target` applies the rule;
+`latest_release` reads GitHub's `releases/latest` redirect
+(`curl -w %{redirect_url}`: no API token, no quota), and
+`cliproxy_release.parse_latest_response` turns it into `X.Y.Z` or an error. If
+the latest cannot be resolved, update fails and suggests `download_version`.
+
+**Install.** `download({ version })` builds the asset URL only from a parsed
+version (`cliproxy_config.platform` + `asset_name`), curls the tarball and
+`checksums.txt`, **sha256-verifies (refuses on mismatch)**, extracts
+`cli-proxy-api` into `<data root>/staging`, and **renames** it over
+`stdpath('data')/parley/cliproxy/bin/cli-proxy-api` — so a running proxy keeps
+its old file and an interrupted install leaves the previous binary. It then
+records the version in `cli-proxy-api.version`; `installed_version` reads it
+back and treats a missing or garbled record as unknown. The fetch is
+synchronous (it blocks the editor, bounded by curl's timeouts). Windows (`.zip`)
+is not auto-downloaded — install manually.
+
+**Update** (`:ParleyProxy update`, `M.update(cb)`). It refuses first when
+`cliproxy.manage` is off or `binary_path` is set, since parley would not run
+what it installs. It then resolves the target, reads the running version
+(`version_probe`) and who holds the port, and lets
+`cliproxy_release.plan_update` decide what to install and whether to restart.
+**Parley restarts only its own proxy**: the listener is "ours" when its command
+line carries parley's rendered `-config <config.yaml>`, from any nvim session,
+read with `ps` through the same grammar as `peers()` (`cliproxy_auth.parse_ps`).
+A proxy parley did not launch (a brew service, say) is left running, and the
+message says how to replace it; if `ps` cannot be read, the proxy is treated as
+not ours. The restart goes through `restart_managed` behind a 20 s deadline, and
+an in-flight guard refuses a second update until the first has answered.
+Messages name the versions: "updated 7.1.71 → 7.2.158 — restarting the proxy",
+"already at 7.2.158", "… (pinned by cliproxy.download_version)".
+
+**Testing.** `tests/fixtures/fake_github_releases` is a stateful fake of the
+release endpoints (latest redirect, assets, checksums, and a request log) over a
+directory the spec owns. `tests/helpers/fake_releases.lua` publishes releases
+whose `cli-proxy-api` execs `fake_cliproxy` stamping that version, so "which
+release is running" is observable end to end. Specs point lookups at the fake
+with `_set_releases_url`; `tests/minimal_init.vim` points them at a dead local
+port (`$PARLEY_CLIPROXY_RELEASES_URL`) so no spec reaches GitHub by accident.
+`tests/fixtures/fixture_watchdog.py` makes a fixture exit when the nvim that
+started it dies — always for the release fake, and for `fake_cliproxy` when
+`PARLEY_FAKE_EXIT_WITH_PARENT=1` (#220 owns making that the default). The
+identity cases need `ps`, which an agent sandbox may refuse: there they report
+pending, and they run wherever `ps` is permitted.

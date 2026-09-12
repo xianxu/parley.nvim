@@ -117,12 +117,13 @@ local config = {
 		manage = true,
 		-- auth_dir defaults to cliproxy's own ~/.cli-proxy-api when omitted.
 		-- binary_path = nil,  -- else `cliproxyapi` / `cli-proxy-api` on PATH
-		auto_download = true,  -- if no cliproxy binary is found, fetch a pinned,
+		auto_download = true,  -- if no cliproxy binary is found, fetch the latest
 		--   checksum-verified release into stdpath('data') (skips `brew install`).
 		--   ON in this config. NOTE: auto-fetching an executable is a trust
 		--   decision — a general distribution may prefer to comment this out (the
 		--   original opt-in default; see issue #131 spec). `:ParleyProxy update`
-		--   re-fetches; `download_version` overrides the pin.
+		--   installs the latest release and restarts a proxy parley launched;
+		--   set `download_version = "7.2.158"` to pin one instead.
 		-- Which providers the agent picker offers LIVE models for (#205), and how
 		-- many of each. cliproxyapi already advertises its catalog and that set
 		-- moves on its own — an antigravity login registered 13 new models with
