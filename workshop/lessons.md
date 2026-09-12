@@ -2128,3 +2128,8 @@ download.
    not a pass.** Six cases pinning three fixes skipped wherever `ps` was
    refused, which was every review shell. Give the capability a fake behind the
    seam the code already has, and keep reading the real one where it exists.
+6. **A fake that answers every path cannot catch a removed route.** Claude broke
+   on 7.2.x because parley posted to a route upstream dropped, and the fake,
+   the unit tests and the conformance spec all accepted any path. Make the fake
+   refuse what the real binary refuses, and give every upstream route parley
+   depends on a conformance case.

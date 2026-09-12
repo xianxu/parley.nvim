@@ -189,24 +189,26 @@ local function get_cliproxy_strategy(model_config)
     return "none"
 end
 
+-- cliproxyapi's Anthropic Messages route, where anthropic-shaped payloads post.
+-- 7.2.x removed the provider-prefixed alias parley used through 7.1.71 (it
+-- answers a bare 404 there), and /v1/messages serves the same requests on both
+-- releases (#237). A configured endpoint on the old alias is mapped too.
+local CLIPROXY_ANTHROPIC_ROUTE = "/v1/messages"
+local CLIPROXY_ANTHROPIC_FROM = {
+    "/api/provider/anthropic/v1/messages",
+    "/v1/chat/completions",
+    "/v1/responses",
+}
+
 local function cliproxy_anthropic_endpoint(endpoint)
     if type(endpoint) ~= "string" then
         return endpoint
     end
-    if endpoint:find("/api/provider/anthropic/v1/messages", 1, true) then
-        return endpoint
+    for _, suffix in ipairs(CLIPROXY_ANTHROPIC_FROM) do
+        if endpoint:sub(-#suffix) == suffix then
+            return endpoint:sub(1, -#suffix - 1) .. CLIPROXY_ANTHROPIC_ROUTE
+        end
     end
-
-    local swapped = endpoint:gsub("/v1/chat/completions$", "/api/provider/anthropic/v1/messages")
-    if swapped ~= endpoint then
-        return swapped
-    end
-
-    swapped = endpoint:gsub("/v1/responses$", "/api/provider/anthropic/v1/messages")
-    if swapped ~= endpoint then
-        return swapped
-    end
-
     return endpoint
 end
 

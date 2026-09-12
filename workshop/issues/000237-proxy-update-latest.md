@@ -266,6 +266,16 @@ now pins that property. The two failures on both builds are the #205 catalog
 cases, which cannot pass with the spec's fabricated credential; they predate
 #237 and need a follow-up. The live check (Task 13 Step 3) waits on the operator.
 
+### 2026-09-12 — live check: claude 404 after the update
+
+The operator ran `:ParleyProxy update` (it installed 7.2.159, newer than
+7.2.158, so the latest-release rule works) and claude then failed with HTTP 404;
+codex still worked. Probed read-only: the proxy lists 17 claude models, so the
+credential loaded, but `/api/provider/anthropic/v1/messages`, where parley sent
+claude requests, is a bare 404 on 7.2.158 and 7.2.159 and a live handler on
+7.1.71. `/v1/messages` is live on both. Parley now posts claude there; details
+and the pins added in the plan's Revisions.
+
 ## Revisions
 
 ### 2026-09-11 — planned: two milestones, auto_download settled, two defects added

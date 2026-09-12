@@ -357,6 +357,18 @@ def main():
             length = int(self.headers.get("Content-Length") or 0)
             raw_body = self.rfile.read(length) if length else b""
 
+            # The POST routes the real binary serves. Any other path is a bare
+            # 404, as 7.2.x answers /api/provider/anthropic/v1/messages, the
+            # alias parley used to post claude requests to (#237). A fake that
+            # answers every path could never have caught that route's removal.
+            route = self.path.split("?", 1)[0]
+            if (route not in ("/v1/chat/completions", "/v1/messages", "/v1/responses")
+                    and not route.startswith("/v0/management/")):
+                self.send_response(404)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+
             # STATEFUL tool mode. Which round we are in is read from the REQUEST
             # rather than from a counter: a request carrying a role:"tool"
             # message is by definition the second leg, which makes this correct

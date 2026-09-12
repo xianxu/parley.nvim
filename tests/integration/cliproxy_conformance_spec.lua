@@ -330,4 +330,32 @@ describe("cliproxyapi management API conformance", function()
         cliproxy._set_releases_url(nil)
         assert.is_string(v, err)
     end)
+
+    -- #237: 7.2.x removed the provider-prefixed Anthropic alias parley posted
+    -- claude requests to, and nothing noticed: the fake answered every path.
+    -- Derive each chat route the way dispatch does and ask the real binary
+    -- whether it exists. A handler answers even an empty body with its own
+    -- error; a missing route answers a bare 404.
+    it("serves the chat routes parley posts to", function()
+        if not binary then
+            pending("cliproxyapi binary not available")
+            return
+        end
+        boot()
+        assert.is_true((get("conformance", "/v1/models")), "the real binary never answered")
+        local cliproxyapi = require("parley.providers").get("cliproxyapi")
+        local configured = ("http://127.0.0.1:%d/v1/chat/completions"):format(port)
+        for _, case in ipairs({
+            { route = "anthropic", model = "claude-opus-5" }, -- claude
+            { route = "openai", model = "gpt-5.6-sol" }, -- gpt, codex
+        }) do
+            local _, endpoint = cliproxyapi.format_headers("conformance", { model = case.model },
+                { _parley_route = case.route }, configured)
+            local res = vim.system({ "curl", "-s", "-o", "/dev/null", "-w", "%{http_code}", "--max-time", "5",
+                "-X", "POST", "-H", "Authorization: Bearer conformance", "-H", "Content-Type: application/json",
+                "-d", "{}", endpoint }, { text = true }):wait()
+            assert.are_not.equal("404", res.stdout,
+                ("the %s route %s is not a route on this build"):format(case.route, endpoint))
+        end
+    end)
 end)

@@ -466,6 +466,12 @@ release. The `binary:` line names where the binary came from (`binary_path`,
 - **Across releases.** 7.2.x stamps a credential's `updated_at` with its own
   load clock, where 7.1.71 copied the file's mtime. The staleness rung compares
   `modtime > updated_at + skew`, which reads both the same way.
+- **Claude's route.** 7.2.x removed `/api/provider/anthropic/v1/messages`, the
+  alias parley posted claude requests to; it now answers a bare 404. Parley
+  posts them to `/v1/messages`, which both releases serve. A unit case pins the
+  endpoint, `fake_cliproxy` refuses the paths the real binary refuses, and the
+  conformance spec asks the real binary whether both chat routes parley derives
+  exist (Anthropic for claude, OpenAI for gpt).
 - **Latest release.** The same `releases/latest` redirect that update uses,
   bounded at 5 s for status. When `cliproxy.manage` is off, status does not
   contact GitHub.

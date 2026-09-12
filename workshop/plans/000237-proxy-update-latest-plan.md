@@ -274,6 +274,7 @@ which the existing `_spawned` table owns.
 | `update` | `lua/parley/cliproxy.lua` | modified | orchestration |
 | `status` | `lua/parley/cliproxy.lua` | modified | orchestration |
 | `ensure_running` | `lua/parley/cliproxy.lua` | modified | first-run auto_download target |
+| `cliproxy_anthropic_endpoint` | `lua/parley/providers.lua` | modified | the Anthropic Messages route claude requests post to (`/v1/messages`) |
 | `M.restart` | `lua/parley/cliproxy.lua` | deleted | — |
 | `register_proxy_command` | `lua/parley/init.lua` | modified | `:ParleyProxy` glue |
 | `tests/fixtures/fake_github_releases` | `tests/fixtures/fake_github_releases` | new | GitHub release endpoints |
@@ -3098,3 +3099,21 @@ binary had been on its `PATH`:
   real login meanwhile.
 
 Two conformance runs each left a plenary child nvim orphaned: a datum for #220.
+
+### 2026-09-12 — M2 live check: claude answered 404 on 7.2.159
+
+The operator's live check found claude requests failing with HTTP 404 after
+`:ParleyProxy update` installed 7.2.159, a release newer than 7.2.158; codex
+still worked. `cliproxy_anthropic_endpoint` rewrote claude requests to
+`/api/provider/anthropic/v1/messages`, an alias 7.2.x removed (a bare 404 there;
+7.1.71 served it). `/v1/messages` serves the same requests on both releases, so
+claude now posts there, and a configured endpoint on the old alias is mapped
+too.
+
+The class is an upstream route that nothing pinned. The route was chosen when
+cliproxyapi came in (9089ab4) with no test, the fake answered every POST path,
+and no conformance case named it. Now a unit case pins the endpoint a claude
+request uses, `fake_cliproxy` refuses the paths the real binary refuses, and a
+conformance case asks the real binary whether both chat routes parley derives
+exist (Anthropic for claude, OpenAI for gpt); the OpenAI route had no pin
+either.
