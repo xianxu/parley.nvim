@@ -276,6 +276,16 @@ claude requests, is a bare 404 on 7.2.158 and 7.2.159 and a live handler on
 7.1.71. `/v1/messages` is live on both. Parley now posts claude there; details
 and the pins added in the plan's Revisions.
 
+### 2026-09-12 — live check passed
+
+After the route fix (593270d) and an nvim reload, the operator confirmed that
+claude answers through cliproxyapi again, the smoke test passes, and a Fable
+chat answers: the model 7.1.71 refused ("Claude Code 2.1.63 does not support
+this model"). The running proxy reports X-Cpa-Version 7.2.159. Not measured: how long
+the real binary takes to release its port after SIGTERM mid-stream (round 4's
+forward note). restart_managed reports a proxy still answering after 2 s rather
+than reusing it, so a long drain shows up as an honest error.
+
 ## Revisions
 
 ### 2026-09-11 — planned: two milestones, auto_download settled, two defects added

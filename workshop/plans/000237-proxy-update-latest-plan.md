@@ -2884,7 +2884,7 @@ installs the latest release (pin one with `cliproxy.download_version`); `status`
 shows the running version against the latest." Grep README and atlas for
 `ParleyProxy` and walk every hit (#187, #176).
 
-- [ ] **Step 3: Live check (operator, or with consent — it touches the real
+- [x] **Step 3: Live check (operator, or with consent — it touches the real
 proxy and data dir).** With no `download_version` set: `:ParleyProxy update` →
 expect "updated 7.1.71 → 7.2.158 — restarting the proxy"; `:ParleyProxy status`
 → `version: 7.2.158 (latest)`; then a Fable chat through cliproxyapi answers.
@@ -3117,3 +3117,12 @@ request uses, `fake_cliproxy` refuses the paths the real binary refuses, and a
 conformance case asks the real binary whether both chat routes parley derives
 exist (Anthropic for claude, OpenAI for gpt); the OpenAI route had no pin
 either.
+
+### 2026-09-12 — M2 live check passed (Task 13 Step 3)
+
+Update installed 7.2.159. Claude failed with 404 until the route fix (593270d, the
+entry above); after it, the operator confirmed that claude, the smoke test and
+a Fable chat all answer through cliproxyapi. The mid-stream port-release timing
+(round 4's forward note) was not measured. It stays open for a follow-up; the
+restart path reports a proxy still answering after 2 s instead of reusing it,
+so a long drain surfaces as an honest error.
