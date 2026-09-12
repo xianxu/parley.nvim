@@ -183,4 +183,37 @@ function M.plan_update(s)
     return { ok = true, install = install, restart = restart, target = target, message = msg }
 end
 
+--- The `version:` value :ParleyProxy status prints (#237).
+---@param v table # { running?, running_err?, installed?, latest?, latest_err?, pinned? }
+---@param update_cmd string # e.g. ":ParleyProxy update"
+---@return string
+function M.version_summary(v, update_cmd)
+    local latest = v.latest and ("latest " .. v.latest)
+        or ("latest unknown: " .. tostring(v.latest_err or "not checked"))
+    if not v.running then
+        if v.running_err == "no_header" then
+            return ("unknown — the proxy sent no version header (%s)"):format(latest)
+        end
+        local parts = {}
+        if v.installed then
+            parts[#parts + 1] = "installed " .. v.installed
+        end
+        parts[#parts + 1] = latest
+        return ("not running (%s)"):format(table.concat(parts, "; "))
+    end
+    local run = v.running
+    if v.pinned then
+        local pin = run == v.pinned and ("pinned to " .. v.pinned)
+            or ("pinned to %s — run %s"):format(v.pinned, update_cmd)
+        return ("%s (%s; %s)"):format(run, pin, latest)
+    end
+    if v.latest and M.compare_versions(run, v.latest) < 0 then
+        return ("%s (latest %s — run %s)"):format(run, v.latest, update_cmd)
+    end
+    if v.latest and run == v.latest then
+        return run .. " (latest)"
+    end
+    return ("%s (%s)"):format(run, latest)
+end
+
 return M

@@ -240,3 +240,48 @@ describe("plan_update", function()
             running = { ours = true, port = 8317 } }).restart)
     end)
 end)
+
+describe("version_summary", function()
+    local CMD = ":ParleyProxy update"
+
+    it("marks a current proxy", function()
+        assert.equals("7.2.158 (latest)", rel.version_summary({ running = "7.2.158", latest = "7.2.158" }, CMD))
+    end)
+
+    it("tells the user how to catch up", function()
+        assert.equals("7.1.71 (latest 7.2.158 — run :ParleyProxy update)",
+            rel.version_summary({ running = "7.1.71", latest = "7.2.158" }, CMD))
+    end)
+
+    it("does not nag when a pin is what holds the version back", function()
+        assert.equals("7.1.71 (pinned to 7.1.71; latest 7.2.158)",
+            rel.version_summary({ running = "7.1.71", latest = "7.2.158", pinned = "7.1.71" }, CMD))
+    end)
+
+    it("points at update when the running version is not the pin", function()
+        assert.equals("7.2.158 (pinned to 7.1.71 — run :ParleyProxy update; latest 7.2.158)",
+            rel.version_summary({ running = "7.2.158", latest = "7.2.158", pinned = "7.1.71" }, CMD))
+    end)
+
+    it("does not call a build newer than the latest stale", function()
+        assert.equals("7.3.0 (latest 7.2.158)",
+            rel.version_summary({ running = "7.3.0", latest = "7.2.158" }, CMD))
+    end)
+
+    it("says why the latest is unknown", function()
+        assert.equals("7.1.71 (latest unknown: unreachable: curl: (7) x)",
+            rel.version_summary({ running = "7.1.71", latest_err = "unreachable: curl: (7) x" }, CMD))
+    end)
+
+    it("reports a stopped proxy with the installed version, never a guess", function()
+        assert.equals("not running (installed 7.2.158; latest 7.2.158)",
+            rel.version_summary({ running_err = "down", installed = "7.2.158", latest = "7.2.158" }, CMD))
+        assert.equals("not running (latest 7.2.158)",
+            rel.version_summary({ running_err = "down", latest = "7.2.158" }, CMD))
+    end)
+
+    it("says when a running proxy reports no version", function()
+        assert.equals("unknown — the proxy sent no version header (latest 7.2.158)",
+            rel.version_summary({ running_err = "no_header", latest = "7.2.158" }, CMD))
+    end)
+end)
