@@ -168,8 +168,8 @@ surface — 5.70 → 5.76.
 
 ## Plan
 
-- [ ] M1 — `:ParleyProxy update` installs `download_version`, else the latest release, atomically, and restarts parley's own proxy; first-run auto_download follows the same rule; `:ParleyProxy restart` waits for the port (plan Tasks 1–9).
-- [ ] M2 — `:ParleyProxy status` shows the running version against the latest; conformance and live checks; docs; live Fable check (plan Tasks 10–13).
+- [ ] M1 — `:ParleyProxy update` installs `download_version`, else the latest release, atomically, and restarts parley's own proxy; first-run auto_download follows the same rule; `:ParleyProxy restart` waits for the port (plan Tasks 1–10; Task 10's pure `version_summary` lands here).
+- [ ] M2 — `:ParleyProxy status` shows the running version against the latest; conformance and live checks; docs; live Fable check (plan Tasks 11–13).
 
 ## Log
 
@@ -223,3 +223,10 @@ The change-code gate refused on a fixture-process leak (PQ-1) and noted three
 Minor findings; all four are fixed in the plan, whose Revisions has the detail.
 The one Spec-level change: status no longer checks GitHub when
 `cliproxy.manage` is off.
+
+### 2026-09-12 — Task 10 moves into M1
+
+The plan-symbol arch check requires every symbol a plan table names to be
+defined, so M2's pure `version_summary` would have turned M1's boundary red. It
+is small and pure, so it lands in M1; M2 keeps the status wiring. The plan's
+Revisions has the table-naming detail.
