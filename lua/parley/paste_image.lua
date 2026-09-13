@@ -121,7 +121,7 @@ function M.paste(buf, deps)
             -- The buffer's CURRENT name: a rename or move may have finished meanwhile.
             local chat_now = vim.api.nvim_buf_get_name(buf)
             local created = folders_created_by(assets.folder_for(chat_now))
-            local rel, abs, save_err = assets.save(chat_now, bytes, "png")
+            local rel, abs, save_err, outcome = assets.save(chat_now, bytes, "png")
             if not rel then
                 return finish("Parley: nothing pasted — " .. save_err, "error")
             end
@@ -133,7 +133,8 @@ function M.paste(buf, deps)
                 rollback(abs, created)
                 return finish("Parley: nothing pasted — could not insert the link: " .. tostring(ierr), "error")
             end
-            finish("Parley: pasted " .. rel, "info")
+            local suffix = require("parley.image_shrink").outcome_suffix(outcome)
+            finish("Parley: pasted " .. rel .. suffix, (outcome and outcome.note) and "warn" or "info")
         end)
         if not ok then
             finish("Parley: paste failed: " .. tostring(err), "error")

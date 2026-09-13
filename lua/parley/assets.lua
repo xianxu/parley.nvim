@@ -306,9 +306,9 @@ end
 -- Standalone markers (SOI, EOI, TEM, RST0–7) carry no length; every other
 -- marker has a length ≥ 2 that must fit. Fill bytes (extra 0xFF) may precede
 -- a marker. A frame header (SOF0–15, excluding DHT/JPG/DAC which share the
--- 0xC range) must precede the first SOS; after SOS the scan runs to the EOI,
--- which is the last two bytes. Stuffed 0xFF00 and RST markers inside the
--- scan are data and are not walked.
+-- 0xC range) must precede the first SOS. Each scan ends at the next structural
+-- marker; stuffed 0xFF00 and restart markers remain scan data. Walking resumes
+-- between progressive scans through EOI, which must be the last two bytes.
 -- SOF payload: precision(1) 8 or 12; height(2) ≥ 1 — a zero height is only
 -- legal when a DNL segment supplies it later, which no image the wires
 -- accept relies on, so it is refused here; width(2) ≥ 1; Nf(1) 1, 3 or 4;
@@ -341,26 +341,53 @@ local function jpeg_sof(bytes, pos, len)
     end
     return nf, width, height
 end
-local function is_jpeg(bytes)
+-- Return the next structural marker after nonempty entropy-coded data.
+-- Escaped FF00 is a pixel byte; restart/TEM markers and their fill bytes stay
+-- with the scan. No pixel decoding is needed to locate subsequent segments.
+local function jpeg_scan_end(bytes, pos)
+    local data = false
+    while true do
+        local first = bytes:find("\255", pos, true)
+        if not first then
+            return nil
+        end
+        data = data or first > pos
+        local at = first + 1
+        while bytes:byte(at) == 0xFF do
+            at = at + 1
+        end
+        local marker = bytes:byte(at)
+        if marker == 0 then
+            data = true
+        elseif marker ~= 0x01 and not (marker and marker >= 0xD0 and marker <= 0xD7) then
+            return data and first or nil
+        end
+        pos = at + 1
+    end
+end
+
+-- Optional visitor receives every marker record including fill bytes; each
+-- SOS record includes its entropy data, escaped bytes and restart markers.
+local function is_jpeg(bytes, visit)
     local n = #bytes
     if bytes:find("^\255\216") == nil or bytes:sub(-2) ~= "\255\217" then
         return false
     end
-    local pos, nf = 3, nil
+    local pos, nf, scanned = 3, nil, false
     local width, height
     while true do
         if bytes:byte(pos) ~= 0xFF then
             return false
         end
+        local record_start = pos
         while bytes:byte(pos + 1) == 0xFF do
             pos = pos + 1 -- fill bytes
         end
         local marker = bytes:byte(pos + 1)
-        if marker == nil then
+        if marker == nil or marker == 0 then
             return false
         end
         if marker == 0xDA then
-            -- SOS: header segment, then at least one byte of scan data, then EOI.
             if nf == nil or pos + 3 > n then
                 return false
             end
@@ -370,13 +397,29 @@ local function is_jpeg(bytes)
                 return false
             end
             local ns = bytes:byte(pos + 4)
-            if ns >= 1 and ns <= 4 and ns <= nf and len == 6 + 2 * ns then
-                return true, width, height
+            if ns < 1 or ns > 4 or ns > nf or len ~= 6 + 2 * ns then
+                return false
             end
-            return false
+            local next_marker = jpeg_scan_end(bytes, scan)
+            if not next_marker then
+                return false
+            end
+            if visit then
+                visit(marker, record_start, next_marker - 1)
+            end
+            pos, scanned = next_marker, true
         elseif marker == 0xD9 then
-            return false -- EOI before any scan
+            if not scanned or pos + 1 ~= n then
+                return false
+            end
+            if visit then
+                visit(marker, record_start, n)
+            end
+            return true, width, height
         elseif JPEG_STANDALONE[marker] then
+            if visit then
+                visit(marker, record_start, pos + 1)
+            end
             pos = pos + 2
         else
             if pos + 3 > n then
@@ -391,6 +434,9 @@ local function is_jpeg(bytes)
                 if nf == nil then
                     return false
                 end
+            end
+            if visit then
+                visit(marker, record_start, pos + 1 + len)
             end
             pos = pos + 2 + len
         end
@@ -592,6 +638,28 @@ function M.dimensions(media_type, bytes)
         end
     end
     return nil
+end
+
+--- Remove JPEG APP1..APP13, APP15 and COM metadata, including between
+--- progressive scans. Preserve APP0 (JFIF), APP14 (Adobe), coding segments
+--- and entropy bytes via the shared structural walker. Invalid input is nil. PURE.
+---@param bytes string|nil
+---@return string|nil cleaned
+function M.strip_jpeg_metadata(bytes)
+    if type(bytes) ~= "string" then
+        return nil
+    end
+    local parts = { bytes:sub(1, 2) } -- SOI
+    local ok = is_jpeg(bytes, function(marker, first, last)
+        local metadata = (marker >= 0xE1 and marker <= 0xED) or marker == 0xEF or marker == 0xFE
+        if not metadata then
+            parts[#parts + 1] = bytes:sub(first, last)
+        end
+    end)
+    if not ok then
+        return nil
+    end
+    return table.concat(parts)
 end
 
 --- The one sentence for bytes that fail looks_like.

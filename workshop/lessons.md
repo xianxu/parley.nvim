@@ -1,5 +1,21 @@
 # Lessons
 
+## 2026-09-13 (#244 plan review)
+
+- A codec successfully shrinking a screenshot says nothing about its metadata
+  policy. Seed a real metadata field and inspect the transformed image before
+  claiming metadata is removed; enforce shared output policy after conversion.
+- A compressed-byte cap does not bound decoded image work. Define pixel and
+  dimension admission before spawning a codec, and distinguish a bounded read
+  from subprocess disk growth and memory assumptions (ARCH-CONSTRAINTS).
+- A successful transformation must satisfy its promised postconditions.
+  Validate output dimensions as well as format and size before claiming an
+  image was shrunk (ARCH-PURPOSE).
+- Keep token documentation, validation and substitution on one grammar;
+  embedded numeric tokens must not imply embedded path substitution.
+- Plans carry contracts and test strategies; avoid duplicating executable
+  implementation/test bodies when the plan-quality gate rejects that form.
+
 ## 2026-09-13 (#231 M2 — three boundary rounds)
 
 - **Delete the owner before the thing it owns.** The first delete door removed

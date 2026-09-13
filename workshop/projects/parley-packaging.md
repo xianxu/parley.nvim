@@ -98,3 +98,21 @@ track releases, so a tag→formula bump script is in #247's scope.
 Sequenced after `parley-v1-release`'s blockers rather than duplicating them:
 #245 needs #213's honest checkhealth, #246 needs #211's neutral defaults and
 #209's posture, and #247 is the end state of both projects.
+
+## Revisions
+
+### 2026-09-13T11:50:00-07:00 — today's deployment goal and starter source
+
+**Reason:** Operator confirmed that today's goal is an easy deployment that
+works on a machine under a new Neovim app profile, and asked to use
+`~/.config/nvim` as the packaged default configuration's base.
+
+**Delta:** #244's plan is approved and entering its implementation gate.
+For #246, derive the portable chat experience from Moonfly, wrapped prose,
+system clipboard, space leader, and wrapped-line navigation. Use a released
+plugin specification and profile-local paths, including cliproxy auth storage.
+Personal development paths and credential bindings are not starter defaults.
+The local `showbreak` intent needs a quoted Lua string. Keep the current
+profile intact. #208/#209/#211/#213 remain installation prerequisites; verify
+them before declaring the clean-machine acceptance complete. State/cache,
+as well as config/data, belong to the app profile's lifecycle.

@@ -1815,3 +1815,83 @@ describe("assets: shrink before saving (#244)", function()
         assert.same({ "source!", "png", { note = "kept" } }, result)
     end)
 end)
+
+
+describe("assets: strip_jpeg_metadata (#244)", function()
+    local function segment(marker, payload)
+        local len = #payload + 2
+        return string.char(255, marker, math.floor(len / 256), len % 256) .. payload
+    end
+
+    it("removes pre-scan metadata while preserving coding bytes, APP0 and APP14", function()
+        local adobe = segment(0xEE, "Adobe\0\100\0\0\0\0\0")
+        local metadata = {}
+        for marker = 0xE1, 0xED do
+            metadata[#metadata + 1] = segment(marker, "EXIF/ICC_SENTINEL_" .. marker)
+        end
+        metadata[#metadata + 1] = segment(0xEF, "APP15_SENTINEL")
+        metadata[#metadata + 1] = segment(0xFE, "COMMENT_SENTINEL")
+        -- Existing fixture APP0/JFIF remains byte-for-byte, as does Adobe.
+        local expected = JPEG_BYTES:sub(1, 89) .. adobe .. JPEG_BYTES:sub(90)
+        local source = JPEG_BYTES:sub(1, 89) .. table.concat(metadata) .. adobe .. JPEG_BYTES:sub(90)
+        local cleaned = assets.strip_jpeg_metadata(source)
+        assert.equals(expected, cleaned)
+        assert.is_true(assets.looks_like("image/jpeg", cleaned))
+        assert.same({ 1, 1 }, { assets.dimensions("image/jpeg", cleaned) })
+        assert.equals(cleaned, assets.strip_jpeg_metadata(cleaned))
+    end)
+
+    it("preserves marker fill bytes on retained segments", function()
+        local source = JPEG_BYTES:sub(1, 2) .. "\255" .. JPEG_BYTES:sub(3)
+        assert.equals(source, assets.strip_jpeg_metadata(source))
+        local with_comment = source:sub(1, 2) .. "\255\255" .. segment(0xFE, "comment") .. source:sub(3)
+        assert.equals(source, assets.strip_jpeg_metadata(with_comment))
+    end)
+
+    it("refuses unsupported and structurally malformed bytes", function()
+        assert.is_nil(assets.strip_jpeg_metadata(nil))
+        assert.is_nil(assets.strip_jpeg_metadata({}))
+        assert.is_nil(assets.strip_jpeg_metadata(PNG_BYTES))
+        for n = 0, #JPEG_BYTES - 1 do
+            assert.is_nil(assets.strip_jpeg_metadata(JPEG_BYTES:sub(1, n)))
+        end
+        local source = JPEG_BYTES:sub(1, 2) .. "\255\225\255\255broken" .. JPEG_BYTES:sub(3)
+        assert.is_nil(assets.strip_jpeg_metadata(source))
+        assert.is_nil(assets.strip_jpeg_metadata(JPEG_BYTES .. "trailing"))
+    end)
+
+    it("removes metadata after scan data and between progressive scans", function()
+        local source = JPEG_BYTES:sub(1, -3) .. segment(0xFE, "after scan") .. JPEG_BYTES:sub(-2)
+        assert.equals(JPEG_BYTES, assets.strip_jpeg_metadata(source))
+        -- SOF2 progressive header and separate DC/AC SOS records.
+        local header = JPEG_BYTES:sub(1, 90) .. "\194" .. JPEG_BYTES:sub(92, 110)
+        local dc = segment(0xDA, "\1\1\0\0\0\0") .. "dc scan"
+        local ac = segment(0xDA, "\1\1\0\1\63\0") .. "ac scan"
+        local expected = header .. dc .. ac .. "\255\217"
+        local progressive = header .. dc .. segment(0xE1, "EXIF_BETWEEN")
+            .. segment(0xFE, "COMMENT_BETWEEN") .. ac .. segment(0xEF, "AFTER") .. "\255\217"
+        assert.equals(expected, assets.strip_jpeg_metadata(progressive))
+        assert.is_true(assets.looks_like("image/jpeg", expected))
+        assert.same({ 1, 1 }, { assets.dimensions("image/jpeg", expected) })
+    end)
+
+    it("preserves escaped FF00, restart markers and fill bytes inside scans", function()
+        local scan = "a\255\0\225EXIF_PIXELS\255\208b\255\255\215c"
+        local expected = JPEG_BYTES:sub(1, 120) .. scan .. "\255\255\217"
+        local source = JPEG_BYTES:sub(1, 120) .. scan .. segment(0xFE, "comment") .. "\255\255\217"
+        assert.equals(expected, assets.strip_jpeg_metadata(source))
+    end)
+
+    it("rejects malformed later segments and empty later scans", function()
+        local head = JPEG_BYTES:sub(1, -3)
+        for _, tail in ipairs({
+            "\255\225\255\255broken\255\217", -- metadata overruns
+            "\255\218\0\2\255\217", -- truncated SOS
+            JPEG_BYTES:sub(111, 120) .. "\255\217", -- empty second scan
+            "\255\217garbage\255\217", -- early EOI
+            "\255\254\0\1\255\217", -- invalid metadata length
+        }) do
+            assert.is_nil(assets.strip_jpeg_metadata(head .. tail))
+        end
+    end)
+end)

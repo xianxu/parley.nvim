@@ -107,11 +107,11 @@ recipe `select`/`argv_for` — decision tables (same shape as
 `assets.save` (success / non-zero / empty / invalid → original kept,
 notification named); live conformance opt-in.
 
-- [ ] `assets.dimensions` (pure) + the shrink policy (pure)
-- [ ] `image_shrink` module: recipes as data, `select`, `argv_for`, `run` seam
-- [ ] `assets.save` calls the shrink step; extension follows the output; notice carries sizes
-- [ ] Fixture `tests/fixtures/fake_sips` + the outcome matrix; live spec
-- [ ] Atlas (`atlas/chat/attachments.md`) + README: the commit-vs-ignore note
+- [x] `assets.dimensions` (pure) + the shrink policy (pure)
+- [x] `image_shrink` module: recipes as data, `select`, `argv_for`, `run` seam
+- [x] `assets.save` calls the shrink step; extension follows the output; notice carries sizes
+- [x] Fixture `tests/fixtures/fake_sips` + the outcome matrix; live spec
+- [x] Atlas (`atlas/chat/attachments.md`) + README: the commit-vs-ignore note
       for `workshop/parley/assets/` (write-once binaries; `.gitignore` is a
       per-repo choice; LFS is a later switch on the fixed path)
 
@@ -160,6 +160,26 @@ output-dimension validation, and consistent embedded `{max}` grammar. The
 revised canonical plan addresses PQ-1 through PQ-4; the original design is
 preserved as `workshop/plans/000244-shrink-images-on-save-design-record.md`.
 
+### 2026-09-13 — implementation verification
+
+All five tasks implemented. `make test` exits 0: 225 spec files passed;
+luacheck reports 0 warnings/errors across 391 files. Focused asset suite 105
+cases and paste integration 18 cases pass. Engine tests cover actual five-second
+process timeout, OS-enforced output growth limit, cleanup faults, resource
+admission, and metadata removal. Golden side quest has 7 regression guards.
+
+`PARLEY_LIVE_SHRINK=1` passes for installed sips: 6,481,758-byte 1800×1200
+PNG → 27,699-byte 1600×1066 JPEG in 54.1 ms; 400×300 stays 400×300 (no
+upscale), 360,393 → 2,703 bytes in 17.0 ms. Independent sips probes confirm
+dimensions and removal of a description sentinel that sips alone retained.
+ImageMagick/convert/ffmpeg/libvips are absent and explicitly pending; the
+conformance estimate covered sips on this host, not installing other codecs.
+
+The metadata correction shares one JPEG record walk through all scans; tests
+preserve escaped entropy bytes and restart markers and remove metadata even
+between progressive scans. Initial metadata tests were red before the fix.
+Operator's untracked chat work was snapshotted locally before boundary review.
+
 ## Revisions
 
 ### 2026-09-13T11:50:00-07:00 — approved refinements and gate corrections
@@ -170,3 +190,11 @@ Conversion is skipped above 32 million pixels or a 16384-pixel dimension;
 the subprocess gets a file-size limit and output must meet its requested edge.
 Paths remain whole-argument tokens; `{max}` may be embedded. The canonical
 plan supersedes the original Spec where these refinements differ.
+
+## Side quests
+
+- Baseline golden-payload portability: all 11 cases failed before #244 code
+  because ripgrep upgraded 15.1.0 → 15.2.0. Pinning only the version probe made
+  all 11 pass. Shared comparison normalization now ignores that volatile
+  version while preserving tool behavior text and payload content; 7 new
+  guards and all 11 existing cases pass. No captured fixtures refreshed.
