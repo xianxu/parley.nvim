@@ -138,3 +138,12 @@ them. Next prerequisite is #208 fresh-clone installability before the starter
 profile and clean-machine packaging acceptance.
 
 [parley.nvim#244]: #parley-nvim-244
+
+### 2026-09-13 — fresh-clone plan and maintainer prerequisite
+
+**Reason:** #244 shipped; #208 is the next installation blocker. Its plan review
+found that weave would replace a real portable Makefile with a sibling link.
+**Delta:** #208 is claimed with a durable plan awaiting approval; ariadne#225
+tracks safe seeded Makefile delivery and bootstrap preservation. This affects
+maintainer preparation only, adding no runtime dependency to the packaged app.
+The starter profile remains to be built from the recorded operator settings.
