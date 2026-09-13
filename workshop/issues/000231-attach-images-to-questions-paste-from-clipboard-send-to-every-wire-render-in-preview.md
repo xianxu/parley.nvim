@@ -36,7 +36,7 @@ doing so.
 | question | decision |
 |---|---|
 | keybinding | **`<M-v>`** — `v` for paste, free, joins the alt family |
-| storage | **`<chat-root>/images/<chat-basename>/`** — per chat, not flat |
+| storage | **`<chat-root>/assets/<chat-timestamp>/`** — per chat, not flat; keyed by timestamp, no slug (2026-09-12) |
 | lifetime | **images follow `chat_memory`** — dropped when their exchange is summarized |
 
 **`<M-i>` was the request and is not available**: it is `branch_ref`
@@ -48,7 +48,9 @@ the cost of rebinding or unbinding prune. Recorded rather than taken, because
 
 ### Storage, and why per-chat
 
-`<chat-root>/images/<chat-basename>/2026-09-10.14-22-31.487.png`.
+`<chat-root>/assets/<chat-timestamp>/2026-09-10.14-22-31.487.png` — e.g.
+`assets/2026-09-10.14-20-03.112/2026-09-10.14-22-31.487.png` for the chat
+`2026-09-10.14-20-03.112_ui-bug.md`.
 
 The flat `<chat-root>/images/` the request described is simpler to write and
 breaks on the operations parley already has: `:ParleyChatMove` moves a chat tree
@@ -57,17 +59,20 @@ has the same problem. That is #224's failure shape — a reference that resolves
 until someone moves the thing it names. A per-chat subfolder moves with its
 chat and leaves no orphan when a chat is deleted.
 
-**Consequence to design for:** the chat basename contains the slug, and slugs
-change (#224). An images folder named after the basename is a second thing that
-must be renamed when `ParleySlug` fires. Two candidate answers — name the folder
-by the **timestamp prefix only** (stable, never renamed), or rename it alongside
-the chat. The timestamp-prefix form is preferred for exactly the reason #224
-established: the timestamp is the identity and the slug is decoration.
+**Decided 2026-09-12 — timestamp prefix, no slug, folder named `assets/`.**
+The chat basename contains the slug, and slugs change (#224); a folder named
+after the basename would be a second thing `ParleySlug` must rename. The
+operator's reasoning: slugs exist for human consumption, and humans reach an
+asset *through the transcript* (the index document), so the folder never needs
+a slug to remind anyone of anything. The timestamp is the identity; the slug is
+decoration — #224's lesson applied. `assets/`, not `images/`, because the same
+sidecar will hold whatever else cannot live in markdown (#239's model-generated
+images first; other binary kinds later) — one folder, one rule, one writer.
 
 ### Transcript representation
 
-Ordinary markdown: `![](images/<ts>/2026-09-10.14-22-31.487.png)`, relative to
-the chat file. This is not a cosmetic choice — it is what makes part 3 free,
+Ordinary markdown: `![](assets/<chat-ts>/2026-09-10.14-22-31.487.png)`, relative
+to the chat file. This is not a cosmetic choice — it is what makes part 3 free,
 keeps the file readable in any editor, and means an operator can delete or
 reorder an attachment with normal editing.
 
@@ -126,8 +131,8 @@ holds an unsupported format).
 
 ## Plan
 
-- [ ] Decide the folder-name form (timestamp prefix vs full basename) and
-      record it — it determines whether ParleySlug has a second thing to rename
+- [x] Decide the folder-name form — **`assets/<chat-timestamp>/`, no slug**
+      (2026-09-12, see Spec); ParleySlug has nothing extra to rename
 - [ ] Clipboard read behind a seam, with a fake: image present / text present /
       no binary / unsupported format
 - [ ] Write + insert: unique name, per-chat folder, relative link at the cursor
@@ -135,7 +140,7 @@ holds an unsupported format).
 - [ ] `build_messages`: emit per wire, shapes read from current provider docs
 - [ ] Memory window: attachments drop with their summarized exchange, and the
       summary records that an image was present
-- [ ] ChatMove + tree export carry the images folder
+- [ ] ChatMove + tree export carry the assets folder
 - [ ] Keybinding through the registry (`<M-v>`, `parley_buffer` scope), with the
       collision guard covering it
 
@@ -152,7 +157,6 @@ holds an unsupported format).
   **#239**, `deps: [000231]`; its precondition is this issue's writer
   (`images.save(chat, bytes, ext) → relative link`), so that writer must be
   caller-agnostic — not coupled to the clipboard or to the question block.
-- Taking the spec's stated preference as the decision for Plan step 1: the
-  images folder is named by the **timestamp prefix**, not the full basename
-  (`images/2026-09-10.14-22-31.487/`). ParleySlug then has nothing extra to
-  rename. Revisit only if the plan turns up a reason.
+- Operator confirmed Plan step 1 and sharpened it: the sidecar is an **asset**
+  folder, `assets/<chat-timestamp>/`, no slug — slugs are for humans, and humans
+  reach assets through the transcript. Same folder serves #239. Ticked.
