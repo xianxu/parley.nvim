@@ -214,6 +214,24 @@ rounds:
           round: 6
       boundary: M1
       blocked: false
+    - "n": 7
+      timestamp: "2026-09-13T00:34:12-07:00"
+      agent: codex
+      findings:
+        - id: BR-8
+          severity: Critical
+          title: Failed chat deletion silently destroys its assets
+          detail: 'lua/parley/init.lua:3567 removes assets before helper.lua:94 attempts chat removal and ignores its failure. Production-code failure injection left the chat present, assets absent, and no notification. ARCH-ORDER / ARCH-FUNERAL: confirm owner deletion before irreversible cleanup; sweep all deletion callers and test filesystem refusal plus buffer-deletion exceptions.'
+          family: deletion-commit-before-cleanup
+          round: 7
+        - id: BR-9
+          severity: Critical
+          title: Recursive placeholder restoration permits HTML event-handler injection
+          detail: 'lua/parley/exporter.lua:457-464 rescans restored tags. Input ![XIMGX2XIMGX](missing.png) ![](onerror=alert`1`//) produces an onerror attribute on the first image, verified by parsing the generated HTML. ARCH-SECURE: use collision-free placeholders with non-recursive restoration and regression tests for literal tokens and tokens inside attributes.'
+          family: html-placeholder-isolation
+          round: 7
+      boundary: M2
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#231 (boundary-review)
@@ -301,6 +319,16 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - BR-6 — addressed — README documents the paste binding, override, and clipboard requirements.
 - BR-7 — addressed — Dispatcher removes image-bearing transport files on terminal paths.
 
+## Round 7 — 2026-09-13T00:34:12-07:00 (codex) — BLOCKED
+
+### Raised
+
+- **BR-8** [Critical] `deletion-commit-before-cleanup` Failed chat deletion silently destroys its assets
+  lua/parley/init.lua:3567 removes assets before helper.lua:94 attempts chat removal and ignores its failure. Production-code failure injection left the chat present, assets absent, and no notification. ARCH-ORDER / ARCH-FUNERAL: confirm owner deletion before irreversible cleanup; sweep all deletion callers and test filesystem refusal plus buffer-deletion exceptions.
+- **BR-9** [Critical] `html-placeholder-isolation` Recursive placeholder restoration permits HTML event-handler injection
+  lua/parley/exporter.lua:457-464 rescans restored tags. Input ![XIMGX2XIMGX](missing.png) ![](onerror=alert`1`//) produces an onerror attribute on the first image, verified by parsing the generated HTML. ARCH-SECURE: use collision-free placeholders with non-recursive restoration and regression tests for literal tokens and tokens inside attributes.
+
 ## Open findings
 
-(none — every finding has been disposed)
+- **BR-8** [Critical] `deletion-commit-before-cleanup` Failed chat deletion silently destroys its assets
+- **BR-9** [Critical] `html-placeholder-isolation` Recursive placeholder restoration permits HTML event-handler injection
