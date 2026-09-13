@@ -1088,7 +1088,8 @@ end
 M.pandoc_export_html = function()
 	-- Check pandoc is available
 	if vim.fn.executable("pandoc") ~= 1 then
-		_parley.logger.error("pandoc not found. Install with: brew install pandoc")
+		_parley.logger.error("pandoc not found. "
+            .. require("parley.deps").advice("pandoc", require("parley.deps_probe").host()))
 		return
 	end
 

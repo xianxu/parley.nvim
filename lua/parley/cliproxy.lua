@@ -16,8 +16,7 @@ local logger = require("parley.logger")
 local rel = require("parley.cliproxy_release")
 
 -- The one answer to "no binary found", for every caller that hits it (#237).
-local NO_BINARY = "no cliproxy binary found — `:ParleyProxy update` installs the latest release, "
-    .. "or `brew install cliproxyapi`, or set cliproxy.binary_path"
+local NO_BINARY = "no cliproxy binary found — " .. require("parley.deps").advice("cliproxyapi")
 
 local M = {}
 
@@ -1987,9 +1986,7 @@ function M.resolve_target(cb)
 end
 
 local function bin_dir()
-    local dir = data_root() .. "/bin"
-    require("parley.fs").ensure_dir(dir)
-    return dir
+    return data_root() .. "/bin"
 end
 
 --- Path to the auto-downloaded binary, if present + executable.
@@ -2093,6 +2090,7 @@ function M.download(opts)
     end
     local staged = stage .. "/" .. BIN_NAME
     uv.fs_chmod(staged, tonumber("755", 8))
+    require("parley.fs").ensure_dir(bin_dir())
     local bin = bin_dir() .. "/" .. BIN_NAME
     local renamed, rerr = uv.fs_rename(staged, bin)
     vim.fn.delete(stage, "rf")

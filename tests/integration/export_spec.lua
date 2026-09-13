@@ -495,3 +495,31 @@ def hello():
         end)
     end)
 end)
+
+describe('pandoc install advice', function()
+    it('uses the observed host instead of assuming Homebrew', function()
+        local exporter = require('parley.exporter')
+        local uv = vim.uv or vim.loop
+        local saved_path, saved_uname = vim.env.PATH, uv.os_uname
+        local root = vim.fn.tempname()
+        local messages = {}
+        local ok, err = pcall(function()
+            vim.fn.mkdir(root, 'p')
+            vim.fn.writefile({'#!/bin/sh', 'exit 99'}, root .. '/apt')
+            uv.fs_chmod(root .. '/apt', 493)
+            vim.env.PATH = root
+            uv.os_uname = function() return {sysname='Linux'} end
+            exporter.setup({logger={error=function(message) messages[#messages+1]=message end}})
+            exporter.pandoc_export_html()
+            assert.is_truthy(messages[1]:find('apt install pandoc', 1, true))
+            uv.os_uname = function() return {sysname='FreeBSD'} end
+            exporter.pandoc_export_html()
+            assert.is_nil(messages[2]:find('brew install', 1, true))
+            assert.is_nil(messages[2]:find('apt install', 1, true))
+        end)
+        vim.env.PATH, uv.os_uname = saved_path, saved_uname
+        exporter.setup(M)
+        vim.fn.delete(root, 'rf')
+        assert.is_true(ok, err)
+    end)
+end)

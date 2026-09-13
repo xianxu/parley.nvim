@@ -58,14 +58,29 @@ Part of the `parley-packaging` project.
 
 ## Plan
 
-- [ ] Registry as data with a decision-table test over tiers × detection
-- [ ] checkhealth section derived from it (after #213's honesty work)
+- [x] Registry as data with a decision-table test over tiers × detection
+- [x] checkhealth section derived independently (approved revision below)
 - [ ] Recipes (#231 clipboard, #244 shrink) read advice from the registry
 - [ ] Formula-vs-registry parity test (lands with #247)
 
 ## Log
 
 ### 2026-09-13
+
+- Plan-quality PQ-1 resolved after compressing test instructions and correcting
+  function names; change-code passed on the approved design. Estimate-quality
+  was informational: allocation may be optimistic; tests are included in each
+  implementation primitive and measured actuals will be adopted at close.
+- Registry and read-only dependency health implemented (ARCH-DRY, ARCH-PURE).
+  TDD reproduced directory creation during absent managed discovery, then moved
+  that write into download. Probe tests cover changing executable state,
+  source precedence and managed-only version attribution; health forbids process
+  launches and preserves the absent data directory without setup.
+- Targeted checks so far: deps 8, probe 4, health 3, managed download 6 and export
+  15 tests pass; lint reports 407 files without warnings. Runtime recipe advice
+  and clipboard notice integration remain in progress.
+- Package names checked against Homebrew Formulae and Debian trixie package
+  pages; notably Homebrew `vips` corresponds to Debian `libvips-tools`.
 
 ## Revisions
 

@@ -112,14 +112,14 @@ local config = {
 	-- (single source of truth); the generated config is a derived 0600 artifact
 	-- under stdpath('data') — your committed Lua is the source of truth, no secret
 	-- in it. A new machine needs a binary (`:ParleyProxy update`, auto_download
-	-- below, or `brew install cliproxyapi`) + one-time
+	-- below; see `:checkhealth parley` for install advice) + one-time
 	-- `:ParleyProxy login <provider>` (OAuth). Set manage=false to opt out.
 	cliproxy = {
 		manage = true,
 		-- auth_dir defaults to cliproxy's own ~/.cli-proxy-api when omitted.
 		-- binary_path = nil,  -- else `cliproxyapi` / `cli-proxy-api` on PATH
 		auto_download = true,  -- if no cliproxy binary is found, fetch the latest
-		--   checksum-verified release into stdpath('data') (skips `brew install`).
+		--   checksum-verified release into stdpath('data') (no package manager required).
 		--   ON in this config. NOTE: auto-fetching an executable is a trust
 		--   decision — a general distribution may prefer to comment this out (the
 		--   original opt-in default; see issue #131 spec). `:ParleyProxy update`

@@ -157,3 +157,13 @@ checkout and archive, four startup variants, 1.81h measured). Next is #245,
 then #246 and #247. #245's dependency health section can land independently of
 #213's broader diagnostics; its reviewed design awaits approval of the default
 formula package subset. #209 remains a separate, unimplemented proposal.
+
+### 2026-09-13 — operator defines the core spine and first tester
+
+Reason: operator approved #245 and clarified the immediate outcome. Delta:
+#245 (dependencies) → #246 (starter profile) → #247 (Homebrew launcher) is the
+core spine. Together they should let the operator's high-school daughter try
+Parley without prior Neovim setup. Keep first installation, login, and first
+chat instructions suitable for that audience. #245's selected macOS formula
+projection includes ripgrep; alternate image backends and pandoc stay optional.
+Broader v1-release tasks are not an automatic prerequisite for this trial.

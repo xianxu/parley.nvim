@@ -8,7 +8,7 @@
 
 **Tech Stack:** Lua, Neovim health API, Plenary/Busted; existing clipboard/shrink and release fixtures.
 
-**State:** Reviewed proposal awaiting approval; no implementation or estimate yet.
+**State:** Operator approved; entering implementation gates.
 
 ## Scope and approval
 
@@ -75,37 +75,38 @@ Missing managed tool names `:ParleyProxy update`; detection never calls `status`
 
 Files: create `lua/parley/deps.lua`, `tests/unit/deps_spec.lua`.
 
-- [ ] Write direct tests for `deps.advice` and `deps.packages`: tiers × host × manager; aliases deduplicate; unsupported advice is honest; macOS selection matches the approved policy.
-- [ ] Run the new spec and observe the missing-module failure, then implement the data and pure projections. No production IO in this module.
-- [ ] Rerun until green and commit `#245: Centralize dependency data and host advice`.
+- [x] Add the pure registry and its advice/package projections with unit coverage.
 
 ### Task 2 — managed discovery and health
 
-Files: modify `lua/parley/cliproxy.lua`, `lua/parley/health.lua`; create
-`lua/parley/deps_probe.lua`, `tests/unit/deps_probe_spec.lua`,
-`tests/integration/health_dependencies_spec.lua`; extend
-`tests/integration/cliproxy_download_spec.lua`.
+Files: `lua/parley/{cliproxy,deps_probe,health}.lua`,
+`tests/unit/deps_probe_spec.lua`,
+`tests/integration/{health_dependencies,cliproxy_download}_spec.lua`.
 
-- [ ] First reproduce that `discover_binary`/`installed_version` create an absent data directory. Test explicit, managed, PATH and missing source precedence; malformed/missing version record means unknown.
-- [ ] Make `bin_dir()` compute only a path; ensure the directory at `download()`'s write boundary. Existing managed installation tests must still pass.
-- [ ] Test `observe` using a stateful temp filesystem: executable stubs appear/disappear and version records change, without executing those stubs. Assert custom/PATH versions are not attributed from a managed record.
-- [ ] Test `health.check()` output for present, missing and non-applicable rows, including no-setup. Snapshot the data directory and fail on subprocess/network/package-manager execution; preserve existing require/setup/lualine checks.
-- [ ] Implement the probe adapter and dependency section; rerun these tests and existing download specs; commit `#245: Report dependencies without discovery writes`.
+- [x] Separate discovery from directory creation at the download write boundary; add the read-only observation adapter and dependency health section.
 
 ### Task 3 — every existing install-advice consumer
 
-Files: modify `lua/parley/clipboard_image.lua`, `lua/parley/image_shrink.lua`,
-`lua/parley/argv_recipe.lua` only if required by the advice seam,
-`lua/parley/paste_image.lua`, `lua/parley/exporter.lua`, `lua/parley/cliproxy.lua`,
-`lua/parley/config.lua`, `lua/parley/init.lua`; extend
+Files: `lua/parley/{clipboard_image,image_shrink,argv_recipe,paste_image,exporter,cliproxy,config,init}.lua`,
 `tests/unit/{clipboard_image,image_shrink,argv_recipe}_spec.lua`,
-`tests/integration/paste_image_spec.lua`, `tests/integration/export_spec.lua`.
+`tests/integration/{paste_image,export}_spec.lua`.
 
-- [ ] Pin missing-tool advice for clipboard and shrink on Darwin and apt Linux, preserving candidate order and configured argv behavior. Recipes resolve advice from dependency ids at selection, not module-load host snapshots.
-- [ ] Pin repeated missing clipboard attempts: one notice per missing capability per setup generation, still probing so an installed tool works immediately. Reset notice state from the existing setup path; repeated invalid custom configuration keeps its actionable validation behavior.
-- [ ] Implement registry advice use, retaining shrink's existing resolution cache. Reuse shared recipe selection; add no second executable selection policy.
-- [ ] Centralize pandoc's missing message and cliproxy's shared NO_BINARY guidance; replace literal install commands in config comments with pointers to checkhealth. Sweep all `lua/parley` package-manager advice so only registry data contains commands.
-- [ ] Run targeted specs and existing live clipboard/shrink conformance tests; commit `#245: Derive runtime installation advice from registry`.
+- [ ] Route recipe, exporter and managed-binary advice through the registry; preserve recipe selection and custom argv validation.
+- [ ] Bound missing clipboard notices by capability and setup generation while retaining fresh probes; preserve shrink's configure-owned cache.
+
+### Function test strategies
+
+| Function | Adversarial input class → mechanical guard |
+|---|---|
+| `deps.advice` | Unsupported host/manager and inapplicable dependency combinations → table-driven pure assertions forbid misleading commands. |
+| `deps.packages` | Overlapping executable alternatives and selection tiers → set equality and uniqueness assertions enforce approved projection. |
+| `cliproxy.discover_binary`, `cliproxy.installed_version` | Absent/conflicting binary sources and malformed records → real temporary filesystem precedence assertions plus unchanged-directory snapshots. |
+| `cliproxy.download` | Absent install directory and rejected release artifacts → existing stateful release fake verifies successful installation and failure atomicity. |
+| `deps_probe.host`, `deps_probe.observe` | Changing executable files and misleading managed records → stateful filesystem fixtures verify fresh source attribution with executable stubs that fail if run. |
+| `health.check` | Missing setup, tools and unsupported hosts → captured health reports verify severity/applicability; filesystem snapshots and forbidden-process guards enforce read-only behavior. |
+| `clipboard_image.select`, `image_shrink.resolve`, `argv_recipe.select` | Unavailable candidates and malformed custom argv → pure selection assertions preserve precedence, token validation and host-correct advice. |
+| `paste_image.paste`, proposed `paste_image.reset_notices`, `parley.setup` | Repeated absence, later installation and repeated setup → stateful attempts assert bounded notices and recovery without restart. |
+| `exporter.pandoc_export_html`, `cliproxy.login_argv`, `cliproxy.ensure_running` | Missing executable on unsupported hosts → existing integration entry points assert registry-derived guidance. |
 
 ### Task 4 — verification, map and single close boundary
 
@@ -138,3 +139,19 @@ responses. Clipboard and shrink keep their current fake/live process boundaries.
 Integrated origin/main after #208 shipped and archived (`da6f6db`). Preserved
 #245’s independent dependency section and reviewed proposal; refreshed the state
 label. Implementation remains gated on design and formula-policy approval.
+
+### 2026-09-13 — operator approval and project spine
+
+Operator approved #245 and the recommended formula policy: ripgrep is the
+additional default macOS tool; alternate converters and pandoc stay optional.
+#245 → #246 → #247 is the core project spine, delivering a setup the operator's
+high-school daughter can try. Keep installation advice understandable to a new
+user and preserve that sequence; broader v1-release work is separate.
+
+### 2026-09-13 — plan-quality PQ-1
+
+Compressed procedural test inventories into named function strategies with an
+adversarial input class and mechanical guard for each risky surface. Approved
+behavior, scope and implementation sequence are unchanged.
+
+PQ-1 follow-through: named existing `image_shrink.resolve` and public runtime entry points; explicitly named the proposed clipboard notice-reset function.
