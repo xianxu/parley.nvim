@@ -196,7 +196,7 @@ and per-function test strategies; two review boundaries).
 - [x] M1 — parser: an image link in a question block is an attachment (Task 5)
 - [x] M1 — both builders: one retention rule, one budget, send guard, elided logs (Task 6)
 - [x] M1 — three wires, three shapes (Task 7)
-- [ ] M1 — gate: atlas, traceability, full suite, manual paste + per-wire send (Task 8)
+- [x] M1 — gate: atlas, traceability, full suite, manual paste + per-wire send (Task 8)
 - [ ] M2 — both movers carry the folder; all five deleters remove it; prompts name it (Task 9)
 - [ ] M2 — tree export copies the folder and renders `<img>` (Task 10)
 - [ ] M2 — docs: memory, format, providers, export, keybindings, README (Task 11)
@@ -261,3 +261,28 @@ and per-function test strategies; two review boundaries).
   pasted — no image on the clipboard (… Can’t make some data into the expected
   type. (-2700))" and wrote nothing. Outstanding for the gate: the per-wire
   send (anthropic, openai, googleai, cliproxy) — needs the operator's keys.
+- Per-wire send (operator-approved, headless nvim with the operator's real
+  config and keys, agent sandbox off, cwd = repo so `workshop/parley/` was
+  the chat root; a 96×96 PNG, red left half / blue right half, generated for
+  the purpose; test chats and their assets removed afterwards). All three
+  cliproxy logins, each via a `provider: cliproxyapi` + `model:` header:
+  - claude → `claude-haiku-4-5-20251001` (anthropic route): "The image shows
+    a vertical split with red on the left half and blue on the right half."
+  - codex → `gpt-5.5` (openai route): "The image is split vertically with red
+    on the left and blue on the right."
+  - agy → `gemini-3.7-flash-high` (antigravity, openai route): "…a square
+    vertically divided into two equal halves, with solid red on the left and
+    solid blue on the right."
+  Native anthropic/openai/googleai endpoints: not exercised — the operator
+  routes everything through the managed cliproxy.
+- The first send exposed two things. (1) My headless script left the cursor on
+  the header, so `find_exchange_at_line` returned nil and `build_messages`
+  crashed on a nil range — identical on main, not a regression; the key
+  always runs with the cursor on the question. (2) The log-sink enumeration
+  ("three sites in chat_respond") was one file short: `dispatcher.lua` logs
+  the payload and the encoded query, and raw-request mode logs its parsed
+  YAML — the image's base64 landed in `parley.log` six times. Fixed at all of
+  them and guarded repo-wide by `tests/arch/log_sinks_spec.lua` (any logger
+  call serializing payload/messages/final_payload/raw_payload must elide);
+  a second send showed zero new image bytes in the log and twelve elided
+  markers. `make lint && make test` green after the plan-doc symbol fix.
