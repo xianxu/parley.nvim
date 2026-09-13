@@ -15,6 +15,36 @@ atlas:
       - tests/unit/build_messages_spec.lua
       - tests/integration/chat_respond_spec.lua
 
+  chat/attachments:
+    code:
+      - lua/parley/assets.lua
+      - lua/parley/clipboard_image.lua
+      - lua/parley/paste_image.lua
+      - lua/parley/chat_parser.lua
+      - lua/parley/chat_respond.lua
+      - lua/parley/providers.lua
+      - lua/parley/tools/wire_openai.lua
+      - lua/parley/init.lua
+      - lua/parley/config.lua
+      - lua/parley/keybinding_registry.lua
+      - lua/parley/dispatcher.lua
+      - lua/parley/chat_finder.lua
+      - lua/parley/exporter.lua
+    tests:
+      - tests/unit/assets_spec.lua
+      - tests/unit/clipboard_image_spec.lua
+      - tests/unit/wire_images_spec.lua
+      - tests/unit/parse_chat_spec.lua
+      - tests/unit/build_messages_spec.lua
+      - tests/integration/paste_image_spec.lua
+      - tests/arch/log_sinks_spec.lua
+      - tests/integration/query_cache_spec.lua
+      - tests/arch/chat_delete_sweep_spec.lua
+      - tests/integration/chat_move_spec.lua
+      - tests/integration/tree_export_spec.lua
+      - tests/unit/exporter_tree_spec.lua
+      - tests/integration/clipboard_live_spec.lua
+
   chat/lifecycle:
     code:
       - lua/parley/chat_slug.lua

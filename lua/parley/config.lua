@@ -409,6 +409,9 @@ local config = {
 	-- so leading with <M-S-CR> would advertise a key that silently does nothing
 	-- for most users. Portable key first, mnemonic second, <C-g>i legacy alias.
 	chat_shortcut_branch_ref = { modes = { "n", "i", "v" }, shortcut = { "<M-i>", "<M-S-CR>", "<C-g>i" } },
+	-- #231: paste the clipboard image as an attachment. <M-v> — v for paste,
+	-- free, joins the alt family. (<M-i> was the request; it is branch_ref.)
+	chat_shortcut_paste_image = { modes = { "n", "i" }, shortcut = "<M-v>" },
 	chat_shortcut_export_markdown = { modes = { "n" }, shortcut = "<C-g>em" },
 	chat_shortcut_export_html = { modes = { "n" }, shortcut = "<C-g>eh" },
 	chat_shortcut_exchange_cut = { modes = { "n", "v" }, shortcut = "<C-g>X" },
@@ -569,6 +572,16 @@ local config = {
 	chat_free_cursor = true,
 	-- use prompt buftype for chats (:h prompt-buffer)
 	chat_prompt_buf_type = false,
+
+	-- #231: chat assets — the per-chat sidecar folder `assets/<chat-timestamp>/`
+	-- for what markdown cannot hold (pasted images now; #239's generated images
+	-- next). `assets.clipboard_cmd` overrides the platform recipe (osascript /
+	-- wl-paste / xclip): an argv list whose "{out}" token is replaced by the PNG
+	-- path to write. Contract: exit 0 + a non-empty file = image; exit 0 + empty,
+	-- or exit 1 = no image on the clipboard; anything else = failure (stderr shown).
+	-- setup() REPLACES this table wholesale (as for `outline`/`drill_in`): keep
+	-- it free of defaults; anything #239 adds resolves in code with `or`.
+	assets = {},
 
 	-- chat memory configuration (for summarizing older messages)
 	chat_memory = {

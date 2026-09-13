@@ -1,0 +1,41 @@
+#!/usr/bin/env python3
+"""A stand-in for the macOS clipboard recipe (#231).
+
+Models `osascript` writing «class PNGf» to the path in argv[1], as measured on
+2026-09-12: an image → the bytes land and it exits 0; a text clipboard → a
+0-byte file is left, stderr says "Can’t make some data into the expected
+type. (-2700)" and it exits 1. Which state the clipboard is in comes from
+PARLEY_FAKE_CLIPBOARD:
+    png:<path>   copy that file to argv[1], exit 0
+    slow:<path>  sleep PARLEY_FAKE_CLIPBOARD_DELAY_MS (default 300), then as png:
+    text         empty argv[1], the osascript sentence on stderr, exit 1
+    broken       exit 2 with "boom"
+Every call appends "<state>\t<argv[1]>" to $PARLEY_FAKE_CLIPBOARD_LOG when set,
+so a spec can count reads.
+"""
+import os
+import shutil
+import sys
+import time
+
+sys.dont_write_bytecode = True  # never write __pycache__ into the repo (#202)
+
+state = os.environ.get("PARLEY_FAKE_CLIPBOARD", "text")
+out = sys.argv[1] if len(sys.argv) > 1 else ""
+log = os.environ.get("PARLEY_FAKE_CLIPBOARD_LOG")
+if log:
+    with open(log, "a") as fh:
+        fh.write(state + "\t" + out + "\n")
+
+if state.startswith("slow:"):
+    time.sleep(int(os.environ.get("PARLEY_FAKE_CLIPBOARD_DELAY_MS", "300")) / 1000.0)
+    state = "png:" + state[5:]
+if state.startswith("png:"):
+    shutil.copyfile(state[4:], out)
+    sys.exit(0)
+if state == "broken":
+    sys.stderr.write("boom\n")
+    sys.exit(2)
+open(out, "wb").close()
+sys.stderr.write("207:208: execution error: Can’t make some data into the expected type. (-2700)\n")
+sys.exit(1)

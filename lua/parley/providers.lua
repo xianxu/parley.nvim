@@ -838,6 +838,29 @@ local googleai = {
     cache_metrics = { read = false, creation = false },
 }
 
+--- #231: parley's internal content — a string, or Anthropic-shaped blocks —
+--- as Gemini parts. camelCase is what generateContent's REST JSON expects
+--- (docs read 2026-09-12): {text=…} and {inlineData={mimeType=…, data=…}}.
+--- A string yields exactly the pre-#231 `{{ text }}` (pinned).
+---@param content string|table[]
+---@return table[]
+local function googleai_parts(content)
+    if type(content) ~= "table" then
+        return { { text = content } }
+    end
+    local parts = {}
+    for _, block in ipairs(content) do
+        if block.type == "text" then
+            parts[#parts + 1] = { text = block.text or "" }
+        elseif block.type == "image" and block.source and block.source.type == "base64" then
+            parts[#parts + 1] = { inlineData = { mimeType = block.source.media_type, data = block.source.data } }
+        else
+            logger.warning("googleai.format_payload: dropping unsupported content block of type " .. tostring(block.type))
+        end
+    end
+    return parts
+end
+
 googleai.format_payload = function(messages, model, _provider_name)
     -- Convert roles and message format
     for i, message in ipairs(messages) do
@@ -848,20 +871,19 @@ googleai.format_payload = function(messages, model, _provider_name)
             messages[i].role = "model"
         end
         if message.content then
-            messages[i].parts = {
-                { text = message.content },
-            }
+            messages[i].parts = googleai_parts(message.content)
             messages[i].content = nil
         end
     end
 
-    -- Merge consecutive same-role messages (Google API requirement)
+    -- Merge consecutive same-role messages (Google API requirement): append
+    -- the whole parts list, so an image part survives the merge (#231).
     local i = 1
     while i < #messages do
         if messages[i].role == messages[i + 1].role then
-            table.insert(messages[i].parts, {
-                text = messages[i + 1].parts[1].text,
-            })
+            for _, part in ipairs(messages[i + 1].parts or {}) do
+                table.insert(messages[i].parts, part)
+            end
             table.remove(messages, i + 1)
         else
             i = i + 1

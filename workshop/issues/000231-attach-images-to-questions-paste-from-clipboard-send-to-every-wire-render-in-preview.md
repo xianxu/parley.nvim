@@ -1,12 +1,13 @@
 ---
 id: 000231
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-09-10
-updated: 2026-09-12
-estimate_hours:
+updated: 2026-09-13
+estimate_hours: 6.93
 started: 2026-09-12T18:17:30-07:00
+actual_hours: 4.89
 ---
 
 # Attach images to questions: paste from clipboard, send to every wire, render in preview
@@ -129,23 +130,83 @@ holds an unsupported format).
 - A missing clipboard binary produces a diagnosis naming what to install, not a
   stack trace.
 
+## Estimate
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: issue-spec design=1.0 impl=0.08
+item: lua-neovim design=0.2 impl=0.5
+item: lua-neovim design=0.2 impl=0.6
+item: lua-neovim design=0.2 impl=0.6
+item: lua-neovim design=0.2 impl=0.3
+item: lua-neovim design=0.2 impl=0.5
+item: lua-neovim design=0.2 impl=0.3
+item: real-api-discovery design=0.0 impl=0.18
+item: real-api-discovery design=0.0 impl=0.18
+item: real-api-discovery design=0.0 impl=0.18
+item: atlas-docs design=0.1 impl=0.05
+item: atlas-docs design=0.1 impl=0.05
+item: milestone-review design=0.1 impl=0.14
+item: milestone-review design=0.1 impl=0.14
+item: milestone-review design=0.0 impl=0.14
+design-buffer: 0.15
+total: 6.93
+```
+
+*Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against
+`baseline-v3.1.md`. Method A only.* `sdlc estimate-source` flags that doc as
+stale (#127), so the per-primitive hours are provisional.
+
+How each item was picked, from the v2 table's ranges: design ×0.2 where the
+plan resolves the decisions (v2 Step 3 — the plan carries every contract and
+strategy), `impl=` at 40% of the v2/v2.1 range (v3.1), design buffer 0.15
+because the ×0.2 discount applies across the code primitives (v2.1 halves the
+buffer then). Familiarity 1.0: the parser, both builders, the wires, the
+movers/deleters and the exporter were read end to end during planning.
+
+- `issue-spec` — the spec predates the claim, but inside the window are the
+  durable plan, five fresh-eyes plan reviews over two rounds and four
+  plan-quality rounds: the middle of 0.5–1.5, undiscounted.
+- `lua-neovim` ×6, one per focused module or seam, impl in the scaled
+  0.2–0.6 range by size: `assets` pure + checked IO (0.5); clipboard recipes +
+  paste flow + key + fixture (0.6); parser + both builders + retention +
+  budget + send guard + log elision (0.6); the three wire shapes (0.3); both
+  movers + five deleters + sweep + prompts (0.5); export placeholder + copy
+  (0.3).
+- `real-api-discovery` ×3 — the M1 gate sends a real image through each wire
+  family (anthropic, openai, googleai/cliproxy); 0.3–0.6 ×0.4.
+- `atlas-docs` ×2 — the attachments doc at M1, the M2 lines and one-liners.
+- `milestone-review` ×3 — M1, M2 and the close boundary (the estimate-quality
+  judge caught the omitted M2 close; its design side is 0 because M2 has no
+  design left, only the review).
+- The live clipboard spec (Task 12) is inside the clipboard/paste item; the
+  verification effort of each `lua-neovim` item (fakes, failure matrices,
+  differential specs) is inside its impl hours — v3.1 impl hours are
+  ship-wall-clock, tests included.
+
 ## Plan
 
-- [x] Decide the folder-name form — **`assets/<chat-timestamp>/`, no slug**
-      (2026-09-12, see Spec); ParleySlug has nothing extra to rename
-- [ ] Clipboard read behind a seam, with a fake: image present / text present /
-      no binary / unsupported format
-- [ ] Write + insert: unique name, per-chat folder, relative link at the cursor
-- [ ] Parser: an image link in a question block is an attachment
-- [ ] `build_messages`: emit per wire, shapes read from current provider docs
-- [ ] Memory window: attachments drop with their summarized exchange, and the
-      summary records that an image was present
-- [ ] ChatMove + tree export carry the assets folder
-- [ ] Keybinding through the registry (`<M-v>`, `parley_buffer` scope), with the
-      collision guard covering it
+Durable plan: `workshop/plans/000231-chat-image-attachments-plan.md` (contracts
+and per-function test strategies; two review boundaries).
+
+- [x] M1 — Decide the folder-name form: `assets/<chat-timestamp>/`, no slug
+- [x] M1 — `assets`: layout, grammar, budget, content, checked IO (Tasks 1–2)
+- [x] M1 — `clipboard_image`: recipes as data, one classify rule, seam (Task 3)
+- [x] M1 — `<M-v>`: fixture, paste flow, key in both buffer scopes (Task 4)
+- [x] M1 — parser: an image link in a question block is an attachment (Task 5)
+- [x] M1 — both builders: one retention rule, one budget, send guard, elided logs (Task 6)
+- [x] M1 — three wires, three shapes (Task 7)
+- [x] M1 — gate: atlas, traceability, full suite, manual paste + per-wire send (Task 8)
+- [x] M2 — both movers carry the folder; all five deleters remove it; prompts name it (Task 9)
+- [x] M2 — tree export copies the folder and renders `<img>` (Task 10)
+- [x] M2 — docs: memory, format, providers, export, keybindings, README (Task 11)
+- [x] M2 — live clipboard conformance (opt-in), close (Task 12)
 
 ## Log
 
+
+- 2026-09-13: closed M1 — rework round 6: make lint 0 warnings + make test green (219 spec files); BR-4 invariant stated once and enforced per walker — header bytes are not image data — with exact-header-length WebP rows (VP8L, VP8, both inside VP8X, bitstream-less VP8X) pinned three ways and mutation-checked red against the previous walker; live per-wire send after this round via managed cliproxy (claude-haiku-4-5-20251001, gpt-5.5, gemini-3.7-flash-high) each described the red/blue image; zero image transport files under query_dir; zero image bytes in parley.log; review verdict: SHIP
 ### 2026-09-10
 
 ### 2026-09-12
@@ -173,3 +234,109 @@ holds an unsupported format).
   closed buffer orphans bytes. Wire shapes read live from the three
   providers' docs today (Anthropic `image`/base64, OpenAI `image_url` data
   URL, Gemini `inlineData`). Awaiting plan approval → `sdlc change-code`.
+
+### 2026-09-12 (implementation, M1)
+
+- Plan cleared plan-quality after four codex rounds (PQ-1..PQ-4: shared
+  retention across both builders, a request-wide budget in encoded bytes with
+  a refusal guard on the final payload, checked IO outcomes, and a plan of
+  contracts + strategies rather than a script). Estimate 6.93 h (v3.1).
+- Tasks 1–7 implemented by parallel subagents on disjoint files, each TDD red
+  first, committed per task: assets (64 cases), clipboard_image (33), wires
+  (11 + dispatcher/golden/tool-loop unchanged), parser (59), paste flow + key
+  (9 integration + keybinding guards), builders (73 + chat_respond 67). Lint
+  clean throughout. Subagent interpretations accepted and recorded in their
+  code comments: `argv_for` replaces every `{out}`; exit code is the classify
+  rule; `plan_budget` charges every candidate's note up front (conservative);
+  `text_bytes` is the encoded size of the request as built (≥ the UTF-8 sum);
+  `read_bounded` refuses absolute/`..` paths as a second lock; the send guard
+  reuses the existing pre-start abort path (two notifications, as today).
+- The provider docs were read live on 2026-09-12 (Anthropic `image`/base64,
+  10 MB per image, 100 per request, 32 MB per request; OpenAI Chat
+  Completions `image_url` data URL; Gemini `inlineData`, 20 MB inline total).
+- M1 gate evidence so far: `make lint` 0 warnings; `make test` green (216
+  files) after one plan-doc fix for the document-wide symbol guard. Real
+  clipboard, real `osascript` recipe, headless nvim against a temp chat dir
+  (agent sandbox off, operator's clipboard text saved and restored): `<M-v>`
+  wrote `assets/2026-09-12.22-00-00.000/2026-09-12.22-58-11.950.png`
+  (`file`: PNG 1×1; `cmp` identical to the fixture) and inserted the link
+  under the question; with text on the clipboard it declined with "nothing
+  pasted — no image on the clipboard (… Can’t make some data into the expected
+  type. (-2700))" and wrote nothing. Outstanding for the gate: the per-wire
+  send (anthropic, openai, googleai, cliproxy) — needs the operator's keys.
+- Per-wire send (operator-approved, headless nvim with the operator's real
+  config and keys, agent sandbox off, cwd = repo so `workshop/parley/` was
+  the chat root; a 96×96 PNG, red left half / blue right half, generated for
+  the purpose; test chats and their assets removed afterwards). All three
+  cliproxy logins, each via a `provider: cliproxyapi` + `model:` header:
+  - claude → `claude-haiku-4-5-20251001` (anthropic route): "The image shows
+    a vertical split with red on the left half and blue on the right half."
+  - codex → `gpt-5.5` (openai route): "The image is split vertically with red
+    on the left and blue on the right."
+  - agy → `gemini-3.7-flash-high` (antigravity, openai route): "…a square
+    vertically divided into two equal halves, with solid red on the left and
+    solid blue on the right."
+  Native anthropic/openai/googleai endpoints: not exercised — the operator
+  routes everything through the managed cliproxy.
+- The first send exposed two things. (1) My headless script left the cursor on
+  the header, so `find_exchange_at_line` returned nil and `build_messages`
+  crashed on a nil range — identical on main, not a regression; the key
+  always runs with the cursor on the question. (2) The log-sink enumeration
+  ("three sites in chat_respond") was one file short: `dispatcher.lua` logs
+  the payload and the encoded query, and raw-request mode logs its parsed
+  YAML — the image's base64 landed in `parley.log` six times. Fixed at all of
+  them and guarded repo-wide by `tests/arch/log_sinks_spec.lua` (any logger
+  call serializing payload/messages/final_payload/raw_payload must elide);
+  a second send showed zero new image bytes in the log and twelve elided
+  markers. `make lint && make test` green after the plan-doc symbol fix.
+- M1 boundary review round 1 (codex): REWORK with six findings, all
+  reproduced by the reviewer's read-only probes — occurrence-keyed budget
+  (21 references to one image emitted 21 blocks under the 20 cap), divergent
+  retention inputs on the continuation builder (total = target_idx; file
+  refs pinned to false), paste transactions that could leave the in-flight
+  mark set or an orphan asset, reads that turned a directory into "" and
+  plain text into a PNG block, IO-dependent entities tabled as PURE, and the
+  README deferred to M2. All six addressed in dedicated commits; the review
+  sidecar is `workshop/plans/000231-…-m1-review.md`.
+- Behaviour choice surfaced by the rework (operator may override): the budget
+  planner is a strict newest-first prefix — the first image that does not fit
+  closes the budget to every older one — rather than first-fit (skip the
+  newer image that does not fit, keep taking older smaller ones). Strict
+  prefix matches the plan's wording and is deterministic to explain; first-fit
+  would send more images in edge cases. Also: the budget property test's LCG
+  was degenerate (199 of 200 trials empty) — replaced by Park–Miller, and the
+  live property then exposed the prefix/first-fit gap.
+
+### 2026-09-13 (implementation, M2)
+- 2026-09-13: closed — M1 SHIP (6 rounds) + M2 SHIP (3 rounds); make lint 0 warnings + make test green (221 spec files); real osascript paste on the real clipboard; live per-wire send via managed cliproxy after every M1 rework round (claude-haiku-4-5-20251001, gpt-5.5, gemini-3.7-flash-high each described the red/blue image); zero image bytes in parley.log and zero image transport files under query_dir; movers/deleters/export covered by chat_move 14, chat_delete_sweep 1, exporter_tree 37, tree_export 12; live clipboard conformance run with the text restored; review verdict: SHIP
+- 2026-09-13: closed M2 — rework round 3: make lint 0 warnings + make test green (221 spec files); BR-9 cross-family — image and branch placeholders restored together in one left-to-right pass that never rescans an emitted record (exporter._restore_all), pinned both directions in unit and through the real ExportHTML (E4, E5: no nav div or html inside any <img>, alt keeps the literal token); BR-10 — the live clipboard check skips before any mutation unless the clipboard is text, verifies its read-back, policy driven by a stateful fake (3 cases) and the live case run once on the real clipboard with the text restored; exporter_tree 37, tree_export 12, clipboard_live 4, chat_move 14, chat_delete_sweep 1; review verdict: SHIP
+
+- M1 closed SHIP after six boundary rounds (the review sidecar carries all
+  seven findings and their disposition; lessons recorded in
+  `workshop/lessons.md`). M2 implemented by two parallel subagents on disjoint
+  files: movers/deleters (chat_move_spec 10, chat_delete_sweep 1 — the sweep
+  reported six `helpers.delete_file` sites before the door and one after;
+  chat_finder_logic 48 unchanged) and export (exporter_tree 27, tree_export
+  10 incl. a reported copy failure). One arch fix: `gsub-safe` markers on the
+  image placeholder restore. Docs: attachments/memory/format/providers/
+  export/keybindings atlas pages; README carried the surface since M1.
+- Live clipboard conformance (`tests/integration/clipboard_live_spec.lua`,
+  `PARLEY_LIVE_CLIPBOARD=1`, agent sandbox off) ran once on this machine: the
+  darwin recipe read back a structurally valid PNG from the real clipboard
+  and declined text with osascript's own sentence; the operator's clipboard
+  text was restored afterwards.
+- Subagent notes worth keeping: a first `move_conflict` caller mis-read its
+  `src, dst` return as a clash (caught red); the 🌿 rewrite after a move is
+  not byte-observable with bare-basename refs post-#224, so the test asserts
+  tree consistency via `get_chat_tree_files` instead.
+- M2 boundary review round 1 (codex): REWORK — BR-8 (the delete door removed
+  the folder before the chat file and ignored the file's failure) and BR-9
+  (placeholder restore rescanned restored tags: a token-shaped alt text pulled
+  a later image's `src` into an `onerror` attribute). Both fixed: owner
+  deletion first with a checked outcome (`helpers.delete_file` now returns
+  `ok, err`), tree deleters tally refused files; collision-free image tokens
+  and single-pass restoration for both placeholder families. Found while
+  fixing BR-9, out of #231's scope, to file from main after the merge:
+  `exporter.make_branch_div` inserts the branch **topic** into HTML unescaped
+  (pre-existing output-escaping gap; a topic containing `<script>` lands raw
+  in the export).

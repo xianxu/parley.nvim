@@ -15,3 +15,8 @@ Front matter (`---`/`---`) with `topic`, `file` (required) and optional override
 - First `🌿:` after header = parent back-link; later ones = child forward-links
 - `<M-i>` (legacy `<C-g>i`) inserts link; `<C-g>o` navigates
 - Inline variant: `[🌿:text](file.md)` — see `inline_branch_links.md`
+
+## Attachments (#231)
+- A line that is exactly `![…](assets/<chat-timestamp>/<file>.<png|jpg|jpeg|gif|webp>)`
+  inside a question is an attachment (sent to the model); anywhere else, or
+  in any other form, it is prose. See [Chat Attachments](attachments.md).

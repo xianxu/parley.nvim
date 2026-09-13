@@ -1,5 +1,65 @@
 # Lessons
 
+## 2026-09-13 (#231 M2 — three boundary rounds)
+
+- **Delete the owner before the thing it owns.** The first delete door removed
+  the assets folder and then called a file delete whose result nobody read:
+  a refused `os.remove` left the chat present and its images gone, silently.
+  Rule: irreversible cleanup runs only after the owner's deletion has
+  returned success; make the low-level helper return `ok, err` and read it.
+- **Placeholders are only safe if every family is restored in one pass.**
+  Restoring images, then scanning the whole HTML for branch tokens, let a
+  branch token typed inside an image's `alt` be substituted inside the
+  attribute — after the image-only recursion had already been fixed. Rule:
+  restoration is a single left-to-right scan over the union of token
+  families that never rescans an emitted record; a fix that restores one
+  family at a time is the instance, not the class.
+- **A test that mutates external state needs a stated precondition.** The live
+  clipboard check snapshotted only text and mutated the clipboard even when
+  the snapshot failed, so an image on the clipboard would have been replaced
+  for good. Rule: skip *before* mutating when preservation is unavailable,
+  verify the restore by reading back, and drive the policy with a stateful
+  fake so it is tested where the live check never runs.
+
+
+## 2026-09-13 (#231 M1 — six boundary-review rounds)
+
+- **"Validates the image" is a class with five layers, and each one was a
+  separate round:** signature → structure (records walk to the end) →
+  image-bearing record present → record non-empty with valid header fields →
+  header bytes are not image data. Rule: when a plan says "validate X at the
+  boundary", write the invariant as a sentence *before* coding ("an
+  image-bearing record carries at least one byte beyond its mandatory
+  header") and derive the matrix from it — signature checks are what the
+  fingers reach for, and a reviewer with a hex editor will walk the rest.
+- **A real send is the only oracle for a wire.** Every unit spec was green
+  when the first live send crashed on a nil range (my harness, not the code)
+  and then wrote 13 MB of base64 into `parley.log` six times (the code): the
+  "three sinks" enumeration was one file short. Rule: when a change puts new
+  bytes into a request, grep every `logger`/serialize call repo-wide for the
+  payload names, guard the class with an arch spec, and run one real request
+  per route before calling the milestone done.
+- **Residue hides in transport, not just logs.** The dispatcher's request
+  body file (`query_dir/*.json`) is the request itself and was pruned only
+  at setup; image bodies would have accumulated by the gigabyte. Rule:
+  ARCH-FUNERAL's enumeration must include every file the request touches on
+  its way out, not only what is written *about* it.
+- **Nested sandboxes silently blind a judge.** A codex review dispatched from
+  inside the harness sandbox reports "sandbox_apply: Operation not permitted"
+  on every `git diff` and returns REWORK with no code finding. Rule: run
+  `sdlc` verbs that dispatch codex with the harness sandbox off, and read the
+  verdict's own words before treating a REWORK as a defect.
+- **Occurrence, not path, is the unit a cap counts.** The budget keyed
+  inclusion by asset path, so twenty-one references to one image sent
+  twenty-one blocks under a cap of twenty. Rule: when a limit counts things,
+  key the plan by the thing's occurrence identity, and test duplicates.
+- **A property test can be vacuous for a numeric reason.** The budget
+  property's LCG overflowed double precision and produced empty candidate
+  lists in 199 of 200 trials — green forever, testing nothing. Rule: assert
+  the generator's output has the shape the property needs (a minimum count
+  of duplicates, of near-limit items) before asserting the property.
+
+
 ## 2026-09-12 (#232, and the #231 plan reviews)
 
 - **A judge that runs under your sandbox cannot start its own.** The codex

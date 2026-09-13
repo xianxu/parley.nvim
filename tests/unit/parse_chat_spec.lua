@@ -664,6 +664,19 @@ describe("parse_chat: @@ file references", function()
         local refs = result.exchanges[1].question.file_references
         assert.equals(2, #refs)
     end)
+
+    -- #231: extract_file_refs is exported (the continuation builder pins
+    -- exchanges with it) and is the same function the parse applies.
+    it("extract_file_refs is exported and agrees with the parse", function()
+        local sample = "💬: Compare @@/file/a.lua@@, @@ ~/b.lua @@, @@./c@@ and @@/file/a.lua@@; not @@bare@@ or @@https://x@@?"
+        assert.same({ "/file/a.lua", "~/b.lua", "./c", "https://x" }, chat_parser.extract_file_refs(sample))
+        local lines, header_end = make_chat(std_header, { sample })
+        local parsed = {}
+        for _, r in ipairs(parse_chat(lines, header_end).exchanges[1].question.file_references) do
+            parsed[#parsed + 1] = r.path
+        end
+        assert.same(chat_parser.extract_file_refs(sample), parsed)
+    end)
 end)
 
 
@@ -818,5 +831,63 @@ describe("parse_chat: 🌿: branch links", function()
         local result = parse_chat(lines, header_end)
         assert.equals("parent.md", result.parent_link.path)
         assert.equals("", result.parent_link.topic)
+    end)
+end)
+
+describe("attachments (#231)", function()
+    local TS = "2026-09-10.14-20-03.112"
+    local link = "![](assets/" .. TS .. "/2026-09-10.14-22-31.487.png)"
+
+    it("collects image links in the question body, with their lines", function()
+        local lines, header_end = make_chat(std_header, {
+            "💬: what is this?",
+            link,
+            "and this one",
+            "![](assets/" .. TS .. "/b.gif)",
+            "",
+            "🤖: an answer",
+        })
+        local parsed = parse_chat(lines, header_end)
+        local q = parsed.exchanges[1].question
+        assert.equals(2, #q.attachments)
+        assert.equals("assets/" .. TS .. "/2026-09-10.14-22-31.487.png", q.attachments[1].path)
+        assert.equals("image/png", q.attachments[1].media_type)
+        assert.equals(header_end + 3, q.attachments[1].line)
+        assert.equals("image/gif", q.attachments[2].media_type)
+        assert.equals(header_end + 5, q.attachments[2].line)
+        assert.matches(vim.pesc(link), q.content, "the link text stays in the content")
+    end)
+
+    it("collects a link on the 💬: prefix line itself", function()
+        local lines, header_end = make_chat(std_header, { "💬: " .. link })
+        local q = parse_chat(lines, header_end).exchanges[1].question
+        assert.equals(1, #q.attachments)
+        assert.equals(header_end + 2, q.attachments[1].line)
+        assert.equals("image/png", q.attachments[1].media_type)
+    end)
+
+    it("an image link in an answer is prose, not an attachment", function()
+        local lines, header_end = make_chat(std_header, {
+            "💬: draw", "", "🤖: here", link,
+        })
+        local ex = parse_chat(lines, header_end).exchanges[1]
+        assert.equals(0, #ex.question.attachments)
+        assert.is_nil(ex.answer.attachments)
+    end)
+
+    it("a link that is not the grammar is prose", function()
+        local lines, header_end = make_chat(std_header, {
+            "💬: q", "![](/etc/passwd.png)", "see ![](assets/" .. TS .. "/x.png) inline",
+        })
+        assert.equals(0, #parse_chat(lines, header_end).exchanges[1].question.attachments)
+    end)
+
+    it("every exchange has an attachments list, even when empty", function()
+        local lines, header_end = make_chat(std_header, { "💬: q", "", "🤖: a", "", "💬: q2" })
+        local exchanges = parse_chat(lines, header_end).exchanges
+        assert.equals(2, #exchanges)
+        for _, ex in ipairs(exchanges) do
+            assert.same({}, ex.question.attachments)
+        end
     end)
 end)

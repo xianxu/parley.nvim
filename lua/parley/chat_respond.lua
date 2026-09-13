@@ -417,6 +417,105 @@ function M.cancel_for_history(buf, mutate_history, deps)
 end
 
 --------------------------------------------------------------------------------
+-- Retention rule and attachment budget (#231) — ONE rule for BOTH builders.
+--------------------------------------------------------------------------------
+
+--- The memory window: how many trailing exchanges are sent in full. The chat
+--- header's `max_full_exchanges` overrides the config value; memory disabled
+--- means everything. Extracted unchanged from build_messages.
+--- @param headers table  parsed chat headers
+--- @param config table   plugin config
+--- @return integer max_exchanges
+M.window_size = function(headers, config)
+    local memory = config and config.chat_memory
+    if not (memory and memory.enable) then
+        return 999999
+    end
+    if headers and headers.config_max_full_exchanges then
+        return headers.config_max_full_exchanges
+    end
+    return memory.max_full_exchanges
+end
+
+--- ONE retention rule: an exchange is sent in full when it is the current
+--- question, inside the trailing window, or pinned by @@ file references.
+--- Attachments do NOT pin (decision 5). Extracted unchanged from build_messages.
+--- @param idx integer            this exchange (1-based)
+--- @param exchange_idx integer   the exchange being answered
+--- @param total integer          exchanges in the chat
+--- @param max_exchanges integer  window_size()
+--- @param has_file_refs boolean
+--- @return boolean
+M.preserve_exchange = function(idx, exchange_idx, total, max_exchanges, has_file_refs)
+    return idx == exchange_idx or idx > total - max_exchanges or has_file_refs == true
+end
+
+--- Size of an asset named by its transcript-relative path, resolved against
+--- the chat file's directory; nil + reason when it cannot be stat'ed. Without
+--- a chat path every attachment becomes a visible note, never a silent drop.
+local function asset_size(chat_path, rel)
+    if chat_path == nil or chat_path == "" then
+        return nil, "chat_path not supplied to build_messages"
+    end
+    local dir = chat_path:match("^(.*)/[^/]+$")
+    if not dir then
+        return nil, "chat path has no directory: " .. tostring(chat_path)
+    end
+    return require("parley.assets").default_io.stat(dir .. "/" .. rel)
+end
+
+--- Resolve one request's deferred question slots against ONE budget
+--- (decision 6). A slot is a retained user message still holding its plain
+--- question text, plus that question's attachments and exchange order. The
+--- budget is charged with the request as it stands — `payload_size(messages)`,
+--- the send guard's own unit, which bounds the retained UTF-8 text from above
+--- — then each slot becomes question_content: image blocks for the planned
+--- attachments first, the text last, a note for every attachment not sent.
+--- No slot → nothing changes, so a text-only request stays byte-identical.
+---
+--- The budget's identity is the OCCURRENCE (BR-1): every attachment gets
+--- `id = "<order>:<n>"` (n = its position within the question) here, in the
+--- one place both builders share, so the parser's and attachments_in's
+--- id-less tables are never handed to plan_budget/question_content, and the
+--- same image linked twice is two candidates — each counted and charged.
+--- The slot's attachments are copied, not mutated: the parse result is the
+--- caller's.
+local function attach_question_images(messages, slots, chat_path, logger)
+    if #slots == 0 then
+        return
+    end
+    local assets = require("parley.assets")
+    local candidates = {}
+    for _, slot in ipairs(slots) do
+        local keyed = {}
+        for n, att in ipairs(slot.attachments) do
+            keyed[n] = vim.tbl_extend("force", att, { id = slot.order .. ":" .. n })
+            local size, err = asset_size(chat_path, att.path)
+            candidates[#candidates + 1] = { id = keyed[n].id, order = slot.order, path = att.path, size = size, err = err }
+        end
+        slot.attachments = keyed
+    end
+    local plan = assets.plan_budget(candidates, assets.payload_size(messages), {
+        max_bytes = assets.MAX_BYTES,
+        max_request_bytes = assets.MAX_REQUEST_BYTES,
+        max_images = assets.MAX_REQUEST_IMAGES,
+        block_overhead = assets.BLOCK_OVERHEAD,
+    })
+    if plan.warning then
+        logger.warning(plan.warning)
+    end
+    local function read(rel)
+        if chat_path == nil or chat_path == "" then
+            return nil, "chat_path not supplied to build_messages"
+        end
+        return assets.read_bounded(chat_path, rel)
+    end
+    for _, slot in ipairs(slots) do
+        slot.message.content = assets.question_content(slot.message.content, slot.attachments, plan, read)
+    end
+end
+
+--------------------------------------------------------------------------------
 -- build_messages_from_model — reads content directly from buffer using
 -- the model's block positions. No re-parsing. Used by recursive tool-loop
 -- calls where the live model is the source of truth.
@@ -428,12 +527,21 @@ end
 --- @param model Model  live exchange model
 --- @param target_idx integer  exchange to include up to (inclusive)
 --- @param agent_info table  { system_prompt, ... }
+--- @param opts table|nil  { chat_path, max_exchanges } (#231: where attachments
+---   resolve, and the caller's window_size(); absent → every attachment is a
+---   visible note / everything retained, this path's pre-#231 behaviour)
 --- @return table[] messages
-M.build_messages_from_model = function(buf, model, target_idx, agent_info)
+M.build_messages_from_model = function(buf, model, target_idx, agent_info, opts)
+    opts = opts or {}
     local serialize = require("parley.tools.serialize")
     local system_prompt_msgs = require("parley.system_prompt_msgs")
     local prov = require("parley.providers")
     local define = require("parley.define")
+    local assets = require("parley.assets")
+    local chat_parser = require("parley.chat_parser")
+    local max_exchanges = opts.max_exchanges or 999999
+    local total_exchanges = #model.exchanges
+    local slots = {}
     append_neighborhood_context(agent_info, agent_info and agent_info.root_policy)
     local messages = system_prompt_msgs.build(agent_info, function(provider)
         return prov.has_feature(provider, "cache_control")
@@ -479,7 +587,25 @@ M.build_messages_from_model = function(buf, model, target_idx, agent_info)
                     -- Defensive: an answer never precedes its question, but
                     -- flush any accumulated answer blocks to keep ordering stable.
                     flush_answer()
-                    table.insert(messages, { role = "user", content = text })
+                    -- #231: same grammar, same retention rule, same budget AND
+                    -- the same inputs as the parse path (BR-2): the chat's
+                    -- total exchange count (not the target — answering 3 of 4
+                    -- must not widen the window) and the question's @@ file
+                    -- references, read from the block text with the parser's
+                    -- own extract_file_refs, which pin it exactly as they pin
+                    -- the initial send. Text is re-sent as before — only the
+                    -- image bytes are subject to the window and budget.
+                    local message = { role = "user", content = text }
+                    local attachments = assets.attachments_in(text)
+                    if #attachments > 0 then
+                        local pinned = #chat_parser.extract_file_refs(text) > 0
+                        if M.preserve_exchange(k, target_idx, total_exchanges, max_exchanges, pinned) then
+                            slots[#slots + 1] = { message = message, order = k, attachments = attachments }
+                        else
+                            message.content = assets.omitted_text(text, attachments)
+                        end
+                    end
+                    table.insert(messages, message)
                 end
 
             elseif blk.kind == "agent_header" or blk.kind == "spinner" then
@@ -533,6 +659,8 @@ M.build_messages_from_model = function(buf, model, target_idx, agent_info)
         flush_answer()
     end
 
+    attach_question_images(messages, slots, opts.chat_path,
+        (_parley and _parley.logger) or { warning = function() end })
     return messages
 end
 
@@ -725,16 +853,13 @@ M.build_messages = function(opts)
     -- Prepare for summary extraction
     local memory_enabled = opts_config.chat_memory and opts_config.chat_memory.enable
 
-    -- Use header-defined max_full_exchanges if available, otherwise use config value
-    local max_exchanges = 999999
-    if memory_enabled then
-        if headers.config_max_full_exchanges then
-            max_exchanges = headers.config_max_full_exchanges
-            logger.debug("Using header-defined max_full_exchanges: " .. tostring(max_exchanges))
-        else
-            max_exchanges = opts_config.chat_memory.max_full_exchanges
-        end
-    end
+    -- #231: ONE retention rule, shared with build_messages_from_model.
+    local max_exchanges = M.window_size(headers, opts_config)
+    logger.debug("Memory window: " .. tostring(max_exchanges) .. " full exchanges")
+    local assets = require("parley.assets")
+    -- Retained questions with attachments; resolved after the loop against
+    -- one budget (attach_question_images).
+    local slots = {}
 
     local omit_user_text = memory_enabled and opts_config.chat_memory.omit_user_text or "[Previous messages omitted]"
 
@@ -775,25 +900,11 @@ M.build_messages = function(opts)
     -- Single pass through all exchanges
     for idx, exchange in ipairs(parsed_chat.exchanges) do
         if exchange.question and exchange.question.line_start >= start_index and idx <= exchange_idx then
-            -- Determine if this exchange should be preserved in full
-            local should_preserve = false
-
-            -- Preserve if this is the current question
-            if idx == exchange_idx then
-                should_preserve = true
-                logger.debug("Exchange #" .. idx .. " preserved as current question")
-            end
-            -- Preserve if it's a recent exchange (within max_full_exchanges from the end)
-            if idx > total_exchanges - max_exchanges then
-                should_preserve = true
-                logger.debug("Exchange #" .. idx .. " preserved as recent exchange")
-            end
-
-            -- Preserve if it contains file references
-            if #exchange.question.file_references > 0 then
-                should_preserve = true
-                logger.debug("Exchange #" .. idx .. " preserved due to file references")
-            end
+            -- Preserve in full: the current question, a recent exchange, or
+            -- one pinned by file references (M.preserve_exchange).
+            local should_preserve = M.preserve_exchange(
+                idx, exchange_idx, total_exchanges, max_exchanges, #exchange.question.file_references > 0)
+            logger.debug("Exchange #" .. idx .. (should_preserve and " preserved in full" or " summarized"))
 
                 -- Process the question
                 if should_preserve then
@@ -812,7 +923,8 @@ M.build_messages = function(opts)
                             local payload, err = require("parley.log_emit").parse_yaml(yaml_content)
                             if payload and type(payload) == "table" then
                                 exchange.question.raw_payload = payload
-                                logger.debug("Successfully parsed YAML payload: " .. vim.inspect(payload))
+                                logger.debug("Successfully parsed YAML payload: "
+                                    .. vim.inspect(assets.elide_image_data(payload)))
                             else
                                 logger.warning("Failed to parse YAML in raw request mode: " .. tostring(err))
                             end
@@ -848,6 +960,15 @@ M.build_messages = function(opts)
                         end
                     end
 
+                    -- #231: the question is a SLOT — a plain-text user message
+                    -- that attach_question_images turns into image blocks once
+                    -- the retained text is known and one budget is planned.
+                    local user_message = { role = "user", content = question_content }
+                    local attachments = exchange.question.attachments
+                    if attachments and #attachments > 0 then
+                        slots[#slots + 1] = { message = user_message, order = idx, attachments = attachments }
+                    end
+
                     -- Handle provider-specific file reference processing for questions with file references
                     if exchange.question.file_references and #exchange.question.file_references > 0 then
                         -- split user question with file inclusion (@@ pattern) into two messages.
@@ -859,14 +980,18 @@ M.build_messages = function(opts)
                             content = table.concat(file_content_parts, "\n") .. "\n",
                             cache_control = { type = "ephemeral" },
                         })
-                        table.insert(messages, { role = "user", content = question_content })
+                        table.insert(messages, user_message)
                     else
                         -- No file references, just add the question as user message
-                        table.insert(messages, { role = "user", content = question_content })
+                        table.insert(messages, user_message)
                     end
                 else
-                    -- Use the placeholder text for summarized questions
-                    table.insert(messages, { role = "user", content = omit_user_text })
+                    -- The placeholder for a summarized question; it says an
+                    -- image was there, so the model is not left inferring it.
+                    table.insert(messages, {
+                        role = "user",
+                        content = assets.omitted_text(omit_user_text, exchange.question.attachments),
+                    })
                 end
 
             -- Process the answer if it exists and is within our range.
@@ -948,6 +1073,10 @@ M.build_messages = function(opts)
     for i = #leading, 1, -1 do
         table.insert(messages, 1, leading[i])
     end
+
+    -- #231: after trimming and the leading messages, so the budget sees the
+    -- request as it will go out and the text blocks carry the trimmed text.
+    attach_question_images(messages, slots, opts.chat_path, logger)
 
     return messages
 end
@@ -1449,7 +1578,10 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
         -- tool-loop call), otherwise parse-based build (initial call).
         local messages
         if live_model then
-            messages = M.build_messages_from_model(buf, live_model, live_target_idx, agent_info)
+            messages = M.build_messages_from_model(buf, live_model, live_target_idx, agent_info, {
+                chat_path = vim.api.nvim_buf_get_name(buf), -- #231: attachments resolve here
+                max_exchanges = M.window_size(parsed_chat.headers, _parley.config),
+            })
         else
             messages = M.build_messages({
                 parsed_chat = parsed_chat,
@@ -1462,6 +1594,7 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                 logger = _parley.logger,
                 resolved_remote_content = resolved_remote_content,
                 root_policy = agent_info.root_policy,
+                chat_path = vim.api.nvim_buf_get_name(buf), -- #231: attachments resolve here
             })
         end
 
@@ -1636,7 +1769,9 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
             return true
         end
 
-        _parley.logger.debug("messages to send: " .. vim.inspect(messages))
+        -- #231 (decision 14): a log line never holds image bytes.
+        local assets = require("parley.assets")
+        _parley.logger.debug("messages to send: " .. vim.inspect(assets.elide_image_data(messages)))
 
         -- Check if we're in raw request mode and have a raw payload to use
         local raw_payload = nil
@@ -1646,7 +1781,8 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
             and parsed_chat.exchanges[exchange_idx].question.raw_payload
         then
             raw_payload = parsed_chat.exchanges[exchange_idx].question.raw_payload
-            _parley.logger.debug("Using raw payload for request: " .. vim.inspect(raw_payload))
+            _parley.logger.debug("Using raw payload for request: "
+                .. vim.inspect(require("parley.assets").elide_image_data(raw_payload)))
         end
 
         -- Compute payload once for both display and query.
@@ -1655,6 +1791,18 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
         -- payload. Vanilla agents have agent_info.tools = nil and stay
         -- byte-identical to pre-#81 behavior.
         local final_payload = raw_payload or _parley.dispatcher.prepare_payload(messages, agent_info.model, agent_info.provider, agent_info.tools)
+
+        -- #231 send guard (decision 6): the planner keeps a request under the
+        -- limit; this is the hard rule, measured on the bytes that would go
+        -- out. A request without an image is not this guard's to govern.
+        local refusal
+        if assets.has_image(final_payload) then
+            local size = assets.payload_size(final_payload)
+            if size > assets.MAX_REQUEST_BYTES then
+                refusal = ("request refused: %d bytes with images exceeds the %d-byte limit"):format(
+                    size, assets.MAX_REQUEST_BYTES)
+            end
+        end
 
         -- Compute response_start_line from the model. This is always
         -- correct because any prior inserts (fence, etc.) updated the
@@ -1794,6 +1942,15 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                 teardown_chat_leg(discard_notice)
             end,
         })
+
+        if refusal then
+            -- The same qid-free pre-start abort the dispatcher takes when it
+            -- cannot start: logged, the response shell torn down exactly once,
+            -- nothing posted.
+            _parley.logger.error(refusal)
+            on_abort(refusal)
+            return
+        end
 
         -- call the model and write response
         _parley.dispatcher.query(
@@ -2018,7 +2175,7 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                         if chat_path == "" then return end
                         local raw_log = require("parley.raw_log")
                         if rm.log_exchange then
-                            raw_log.write_exchange_turn(chat_path, messages)
+                            raw_log.write_exchange_turn(chat_path, assets.elide_image_data(messages))
                         end
                         if rm.log_raw then
                             local sse_lines
@@ -2031,7 +2188,7 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                                 usage = qt.usage,
                             }
                             raw_log.write_raw_turn(chat_path, {
-                                request = final_payload,
+                                request = assets.elide_image_data(final_payload),
                                 assembled = assembled,
                                 sse_lines = sse_lines,
                             })

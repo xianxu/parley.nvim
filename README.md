@@ -186,6 +186,16 @@ outside every exchange (the frontmatter, for instance) are left alone.
   **your branch references and `🔒:` notes inside it survive**. An inline
   `[🌿:…](file)` becomes a standalone `🌿:` line, since the sentence around it
   belonged to the answer being replaced.
+- `<M-v>` **paste the clipboard image as an attachment** of the question: the
+  image is saved under `<chat-dir>/assets/<chat-timestamp>/` and a
+  `![](assets/<ts>/<file>.png)` line is inserted under the cursor. The
+  attachment is sent to the model (Anthropic, OpenAI and Gemini shapes; via
+  cliproxyapi for all three), follows the memory window like the text it
+  belongs to, and travels with the chat. Reads the clipboard through
+  `osascript` on macOS, `wl-paste` or `xclip` on Linux; set
+  `assets.clipboard_cmd = { "<tool>", "…", "{out}" }` to use your own tool
+  (`{out}` is replaced by the PNG path to write; exit 0 + a non-empty file =
+  image, exit 1 = no image, anything else = failure).
 - `<M-o>` (or `<C-g>o`) open the thing under the cursor — a `🌿:` reference to a
   sub-chat, an inline `[🌿:…](file)`, an `@@path@@` file reference, a `src:` link,
   a directory. Anything else falls through to smart `gf` below, so it is one key
@@ -246,7 +256,7 @@ Merge behavior in `setup(opts)`:
   flush-left `💬:` inside a fence will have it treated as a turn. Append
   `require("parley.defaults").fence_indent_convention` to a custom prompt to keep
   the behaviour.
-- Most other top-level keys are replaced when provided (for example `chat_dir`, `chat_dirs`, `notes_dir`, `chat_template`, `raw_mode`, `highlight`, `chat_memory`, `providers`, `api_keys`).
+- Most other top-level keys are replaced when provided (for example `chat_dir`, `chat_dirs`, `notes_dir`, `chat_template`, `raw_mode`, `highlight`, `chat_memory`, `assets`, `providers`, `api_keys`).
 - Practical rule: for non-merged tables, provide the full table you want, not just one nested field.
 - Reference [lua/parley/config.lua](https://github.com/xianxu/parley.nvim/blob/main/lua/parley/config.lua) for full defaults and examples.
 

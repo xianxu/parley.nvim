@@ -69,7 +69,8 @@ the **portable key leads** where portability is the issue, so `branch_ref` shows
 `<CR>`.
 
 The alt family means "act on this transcript": quote, respond/define, accept,
-reject, branch, prune, outline, skill picker (`<M-s>`), and follow-a-link
+reject, branch, prune, outline, skill picker (`<M-s>`), paste an image as an
+attachment (`<M-v>`, `paste_image`, #231), and follow-a-link
 (`<M-o>`, #225 — one key for "go to what I'm looking at", falling through to
 smart `gf` when the cursor is not on a parley reference). `<C-g>` is
 the prefix surface for everything else. Help takes its keys from

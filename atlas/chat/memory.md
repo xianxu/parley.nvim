@@ -12,6 +12,8 @@
 - Current question being sent
 - Within most recent `max_full_exchanges`
 - Questions containing `@@` file/directory references
+- NOT image attachments (#231): they drop with their exchange on both
+  builders, and the placeholder says an image was there
 
 ## Per-Chat Override
 - Header `max_full_exchanges: <number>` overrides global config
