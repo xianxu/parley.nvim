@@ -2949,9 +2949,10 @@ M.setup_markdown_keymaps = function(buf)
 				local file = vim.api.nvim_buf_get_name(buf)
 				if file ~= "" then
 					local rel = vim.fn.fnamemodify(file, ":~:.")
-					local choice = vim.fn.confirm("Delete " .. rel .. "?", "&Yes\n&No", 2)
+					local note = require("parley.assets").removal_note(file)
+					local choice = vim.fn.confirm("Delete " .. rel .. note .. "?", "&Yes\n&No", 2)
 					if choice == 1 then
-						M.helpers.delete_file(file)
+						M.delete_chat_file(file)
 					end
 				end
 			end,
@@ -3229,6 +3230,15 @@ M.move_chat = function(file_name, target_dir)
 		return nil, "target chat already exists: " .. target_file
 	end
 
+	-- #231: the assets folder moves with its chat. A clash is refused BEFORE
+	-- the .md moves (the same rule move_with applies), so a refusal leaves
+	-- everything in place.
+	local assets = require("parley.assets")
+	local src_folder, clash = assets.move_conflict(resolved_file, target_root)
+	if not src_folder and clash then
+		return nil, clash
+	end
+
 	sync_moved_chat_buffers(resolved_file, nil)
 
 	local ok, err = os.rename(resolved_file, target_file)
@@ -3238,11 +3248,18 @@ M.move_chat = function(file_name, target_dir)
 
 	sync_moved_chat_buffers(resolved_file, target_file)
 
+	-- The .md move is done and stays done: the folder failing to follow is
+	-- reported only after the state and tracking have followed the file.
+	local carried, aerr = assets.move_with(resolved_file, target_file)
+
 	if M._state.last_chat and resolve_dir_key(M._state.last_chat) == resolved_file then
 		M.refresh_state({ last_chat = target_file })
 	end
 
 	require("parley.file_tracker").track_file_access(target_file)
+	if not carried then
+		return nil, "moved the chat but not its assets: " .. tostring(aerr)
+	end
 	return target_file
 end
 
@@ -3514,17 +3531,44 @@ M.delete_chat_tree = function(buf)
 	local tree_files = collect_tree_files(root)
 	if #tree_files == 0 then return end
 
+	-- #231: the operator consents to what the prompt names — every assets
+	-- folder the tree owns is listed with the files.
+	local assets = require("parley.assets")
+	local folders = {}
+	for _, f in ipairs(tree_files) do
+		local folder = assets.folder_for(f)
+		if folder and vim.fn.isdirectory(folder) == 1 then
+			folders[#folders + 1] = folder
+		end
+	end
 	local root_rel = vim.fn.fnamemodify(root, ":~:.")
-	local msg = "Delete " .. #tree_files .. " chat file(s) in tree rooted at " .. root_rel .. "?\n\n"
+	local msg = "Delete " .. #tree_files .. " chat file(s) in tree rooted at " .. root_rel
+		.. (#folders > 0 and (" and " .. #folders .. " assets folder(s)") or "") .. "?\n\n"
 	for _, f in ipairs(tree_files) do
 		msg = msg .. "  " .. vim.fn.fnamemodify(f, ":~:.") .. "\n"
+	end
+	for _, d in ipairs(folders) do
+		msg = msg .. "  " .. vim.fn.fnamemodify(d, ":~:.") .. "/\n"
 	end
 	local choice = vim.fn.confirm(msg, "&Yes\n&No", 2)
 	if choice == 1 then
 		for _, f in ipairs(tree_files) do
-			M.helpers.delete_file(f)
+			M.delete_chat_file(f)
 		end
 	end
+end
+
+-- #231: THE door for deleting a chat file — assets/<ts>/ goes with it.
+-- delete_with is a no-op for a non-timestamp name, so every caller is safe;
+-- a folder that cannot be removed is reported (never assumed gone) and the
+-- file is still deleted. tests/arch/chat_delete_sweep_spec.lua allows exactly
+-- one helpers.delete_file call under lua/parley/**: this one.
+M.delete_chat_file = function(path)
+	local ok, err = require("parley.assets").delete_with(path)
+	if not ok then
+		vim.notify("Deleted " .. path .. " but " .. tostring(err), vim.log.levels.WARN)
+	end
+	M.helpers.delete_file(path)
 end
 
 -- #231: paste the clipboard image as an attachment of the chat in `buf`.
@@ -3573,6 +3617,17 @@ M.move_chat_tree = function(file_name, target_dir)
 		end
 	end
 
+	-- #231: refuse an assets clash BEFORE any .md moves — the same rule
+	-- move_with applies, checked for every file so a refusal moves nothing.
+	local assets = require("parley.assets")
+	for _, src in ipairs(tree_files) do
+		local src_folder, clash = assets.move_conflict(src, target_root)
+		if not src_folder and clash then
+			return nil, clash
+		end
+	end
+	local asset_errors = {}
+
 	-- Build old_path -> new_path mapping
 	local path_map = {}  -- old_abs -> new_abs
 	for _, src in ipairs(tree_files) do
@@ -3588,6 +3643,13 @@ M.move_chat_tree = function(file_name, target_dir)
 			return nil, "failed to move " .. src .. ": " .. tostring(err)
 		end
 		sync_moved_chat_buffers(src, path_map[src])
+
+		-- The .md move stays done: a folder that fails to follow is collected
+		-- and reported after the state refresh and the 🌿 rewrite complete.
+		local carried, aerr = assets.move_with(src, path_map[src])
+		if not carried then
+			asset_errors[#asset_errors + 1] = tostring(aerr)
+		end
 
 		if M._state.last_chat and resolve_dir_key(M._state.last_chat) == resolve_dir_key(src) then
 			M.refresh_state({ last_chat = path_map[src] })
@@ -3631,6 +3693,10 @@ M.move_chat_tree = function(file_name, target_dir)
 				end
 			end
 		end
+	end
+
+	if #asset_errors > 0 then
+		return nil, "moved the tree but not every assets folder: " .. table.concat(asset_errors, "; ")
 	end
 
 	-- Return the new path of the originally requested file
@@ -3885,14 +3951,15 @@ M.cmd.ChatDelete = function()
 
 	-- delete without confirmation
 	if not M.config.chat_confirm_delete then
-		M.helpers.delete_file(file_name)
+		M.delete_chat_file(file_name)
 		return
 	end
 
-	-- ask for confirmation
-	vim.ui.input({ prompt = "Delete " .. file_name .. "? [y/N] " }, function(input)
+	-- ask for confirmation; the prompt names the assets folder it removes (#231)
+	local note = require("parley.assets").removal_note(file_name)
+	vim.ui.input({ prompt = "Delete " .. file_name .. note .. "? [y/N] " }, function(input)
 		if input and input:lower() == "y" then
-			M.helpers.delete_file(file_name)
+			M.delete_chat_file(file_name)
 		end
 	end)
 end

@@ -212,7 +212,7 @@ M.handle_delete_response = function(input, item_value, selected_index, items_cou
 		tostring(source_win)
 	))
 	if input and input:lower() == "y" then
-		_parley.helpers.delete_file(item_value)
+		_parley.delete_chat_file(item_value)
 		M.invalidate_path(item_value)
 		if close_fn then
 			close_fn()
@@ -270,7 +270,9 @@ M.prompt_delete_confirmation = function(item_value, selected_index, items_count,
 		vim.api.nvim_set_current_win(source_win)
 	end
 
-	vim.ui.input({ prompt = "Delete " .. item_value .. "? [y/N] " }, function(input)
+	-- #231: the prompt names the assets folder the delete removes.
+	local note = require("parley.assets").removal_note(item_value)
+	vim.ui.input({ prompt = "Delete " .. item_value .. note .. "? [y/N] " }, function(input)
 		_parley._handle_chat_finder_delete_response(
 			input,
 			item_value,
@@ -286,7 +288,7 @@ end
 M.handle_delete_tree_response = function(input, item_value, tree_files, selected_index, items_count, source_win, close_fn, context)
 	if input and input:lower() == "y" then
 		for _, f in ipairs(tree_files) do
-			_parley.helpers.delete_file(f)
+			_parley.delete_chat_file(f)
 			M.invalidate_path(f)
 		end
 		if close_fn then
@@ -334,9 +336,11 @@ M.prompt_delete_tree_confirmation = function(item_value, selected_index, items_c
 		return
 	end
 
+	-- #231: each file's entry names the assets folder that goes with it.
+	local assets = require("parley.assets")
 	local rel_files = {}
 	for _, f in ipairs(tree_files) do
-		table.insert(rel_files, vim.fn.fnamemodify(f, ":~:."))
+		table.insert(rel_files, vim.fn.fnamemodify(f, ":~:.") .. assets.removal_note(f))
 	end
 	local prompt = "Delete " .. #tree_files .. " file(s) in tree? [" .. table.concat(rel_files, ", ") .. "] [y/N] "
 
