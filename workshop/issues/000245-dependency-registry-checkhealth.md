@@ -1,12 +1,13 @@
 ---
 id: 000245
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-09-13
 updated: 2026-09-13
 estimate_hours: 1.76
 started: 2026-09-13T13:20:58-07:00
+actual_hours: 0.04
 ---
 
 # Dependency registry and honest install advice: managed cliproxyapi, platform tools, brew one-liners in checkhealth
@@ -66,6 +67,7 @@ Part of the `parley-packaging` project.
 ## Log
 
 ### 2026-09-13
+- 2026-09-13: closed — make test: 236 spec files pass, lint 407 files clean; git diff --check clean; live sips resize and metadata conformance pass; optional converters absent; clipboard live check skipped before mutation by preservation guard. Registry projection verified; actual formula parity is the approved #247 handoff.; review verdict: SHIP
 
 - Plan-quality PQ-1 resolved after compressing test instructions and correcting
   function names; change-code passed on the approved design. Estimate-quality
@@ -102,6 +104,12 @@ Part of the `parley-packaging` project.
   for the additional formula dependency set, currently `{ 'ripgrep' }`; Neovim
   is the host runtime, CLIProxyAPI is managed, other image backends/pandoc optional.
   No formula exists in #245; #247 must enforce the actual formula parity test.
+
+- Close review round 1: SHIP, no Critical/Important findings. BR-1 (Minor)
+  addressed by explicit PURE/INTEGRATION classifications in every Core concepts
+  row. Reviewer independently passed 129 focused tests and lint; its sandbox
+  could not bind the download fixture socket. The authoring environment's
+  download six-test run and complete 236-file suite passed without that restriction.
 
 ## Revisions
 

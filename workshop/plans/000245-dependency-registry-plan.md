@@ -8,7 +8,7 @@
 
 **Tech Stack:** Lua, Neovim health API, Plenary/Busted; existing clipboard/shrink and release fixtures.
 
-**State:** Implemented and verified; entering the single close review.
+**State:** Implemented and verified; close review SHIP.
 
 ## Scope and approval
 
@@ -27,11 +27,11 @@ before code.** Formula generation and parity tests land with #247, not this issu
 
 ## Core concepts
 
-| Name | Lives in | Status |
-|---|---|---|
-| `get`, `applicable` — dependency lookup and host applicability | `lua/parley/deps.lua` | new |
-| `advice`, `packages` — host-specific advice and package projection | `lua/parley/deps.lua` | new |
-| Recipe advice reference | `lua/parley/clipboard_image.lua`, `lua/parley/image_shrink.lua` | modified |
+| Name | Lives in | Kind | Status |
+|---|---|---|---|
+| `get`, `applicable` — dependency lookup and host applicability | `lua/parley/deps.lua` | PURE | new |
+| `advice`, `packages` — host-specific advice and package projection | `lua/parley/deps.lua` | PURE | new |
+| Recipe advice reference | `lua/parley/clipboard_image.lua`, `lua/parley/image_shrink.lua` | PURE | modified |
 
 Entries are pure data: stable id, executable alternatives, tier, applicable hosts,
 feature, package names per supported manager, managed guidance and proposed formula
@@ -50,13 +50,13 @@ Darwin system tools get platform guidance. Linux apt advice is selected only for
 an apt host; unsupported OS/package-manager combinations report unavailability
 of tested advice, never invent an apt command. Verify package names during implementation.
 
-| Name | Lives in | Status | Wraps |
-|---|---|---|---|
-| `host`, `observe` — dependency observation | `lua/parley/deps_probe.lua` | new | executable/platform and managed-record reads |
-| Dependency health section | `lua/parley/health.lua` | modified | vim.health reporting |
-| Managed binary paths | `lua/parley/cliproxy.lua` | modified | existing local binary/version record |
-| `reset_notices` — clipboard missing-notice generation | `lua/parley/paste_image.lua` | modified | existing notification callback |
-| Export installation advice | `lua/parley/exporter.lua` | modified | existing missing-pandoc error |
+| Name | Lives in | Kind | Status | Wraps |
+|---|---|---|---|---|
+| `host`, `observe` — dependency observation | `lua/parley/deps_probe.lua` | INTEGRATION | new | executable/platform and managed-record reads |
+| Dependency health section | `lua/parley/health.lua` | INTEGRATION | modified | vim.health reporting |
+| Managed binary paths | `lua/parley/cliproxy.lua` | INTEGRATION | modified | existing local binary/version record |
+| `reset_notices` — clipboard missing-notice generation | `lua/parley/paste_image.lua` | INTEGRATION | modified | existing notification callback |
+| Export installation advice | `lua/parley/exporter.lua` | INTEGRATION | modified | existing missing-pandoc error |
 
 `deps_probe.host()` reads uname and package-manager executability only;
 `deps_probe.observe(entry, host)` returns applicability, presence, source and
@@ -113,7 +113,7 @@ Files: `lua/parley/{clipboard_image,image_shrink,argv_recipe,paste_image,exporte
 - [x] Create `tests/arch/dependency_registry_spec.lua` rejecting package-install command literals outside `deps.lua`; assert every builtin clipboard/shrink recipe's dependency id exists. Missing advisory tools degrade gracefully; no package manager may execute.
 - [x] Update `atlas/infra/test_harness.md` only if commands change; document the registry and health in the relevant existing atlas page, linking any new page from `atlas/index.md`.
 - [x] Run targeted specs, `make lint`, then `make test`; inspect `git diff --check`. Test commands for individual specs: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c 'PlenaryBustedFile <spec>' -c 'qa!'`; use the existing hermetic environment from Makefile.parley.
-- [ ] Log evidence and formula policy handoff to #247, tick issue/plan tasks, then use `sdlc close --issue 245 --verified '<actual commands and results>'`. One atomic issue, no artificial milestone tags; close owns the fresh-context review.
+- [x] Log evidence and formula policy handoff to #247, tick issue/plan tasks, then use `sdlc close --issue 245 --verified '<actual commands and results>'`. One atomic issue, no artificial milestone tags; close owns the fresh-context review.
 
 ## Constraints and lifecycle
 
@@ -161,3 +161,10 @@ PQ-1 follow-through: named existing `image_shrink.resolve` and public runtime en
 The repository's public-surface guard requires exported functions in the Core
 concepts tables. Added the concrete names to their existing entity rows; kept
 test strategies in the separate strategy table. No behavior or scope changed.
+
+### 2026-09-13 — close review classification correction
+
+SHIP review BR-1 (Minor) requested explicit concept kinds. Classified registry
+lookup/projections and recipe data as PURE; local observations, health reporting,
+managed paths, notice lifecycle and exporter wiring as INTEGRATION. All rows now
+carry the distinction; no runtime change was required.
