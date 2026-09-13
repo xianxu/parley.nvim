@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-09-13
 updated: 2026-09-13
-estimate_hours:
+estimate_hours: 1.76
 started: 2026-09-13T13:20:58-07:00
 ---
 
@@ -96,3 +96,43 @@ reset once per configure. The durable plan specifies tests for both findings.
 
 Fresh-context design review: Approved; no important correctness gaps. Formula
 policy remains explicitly pending operator approval before implementation.
+
+### 2026-09-13 — approved implementation
+
+Operator said “go ahead with #245” after reviewing the optional-backend
+recommendation. This approves registry-selected default formula dependencies
+(ripgrep), with ImageMagick/ffmpeg/vips/pandoc optional. The prior all-advisory
+wording is superseded; #247 owns formula parity against the selected projection.
+The core project spine is #245, #246, #247, ending in a first-time user trial by
+the operator's high-school daughter. No broader v1-release scope is implied.
+
+## Estimate
+
+*Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against `baseline-v3.1.md`. Method A only.*
+
+Approved plan resolves the design: apply ×0.2 design discount, ×0.40 implementation
+scale, familiar Lua/Neovim ×1.0, and 15% design buffer. No novel stack or new
+service: use existing Neovim filesystem/health APIs, recipe selector and release
+fake, so no additional library-discovery primitive applies.
+
+| Work | Primitive | Base design / impl | Scaled design / impl |
+|---|---|---|---|
+| Registry, observations and health | lua-neovim | 1.5 / 1.0 | 0.30 / 0.40 |
+| Recipe advice and clipboard notice lifecycle | lua-neovim | 1.0 / 0.75 | 0.20 / 0.30 |
+| Remaining advice consumers and architecture guard | cross-cutting-refactor | 0.4 / 0.3 | 0.08 / 0.12 |
+| User guidance and atlas | atlas-docs | 0.15 / 0.15 | 0.03 / 0.06 |
+| Single close review and verification | milestone-review | 0.1 / 0.4 | 0.02 / 0.16 |
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: lua-neovim design=0.30 impl=0.40
+item: lua-neovim design=0.20 impl=0.30
+item: cross-cutting-refactor design=0.08 impl=0.12
+item: atlas-docs design=0.03 impl=0.06
+item: milestone-review design=0.02 impl=0.16
+design-buffer: 0.15
+total: 1.76
+```
+
+Design 0.63 × 1.15 + implementation 1.04 = 1.7645 hours.
