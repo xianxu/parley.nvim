@@ -440,7 +440,7 @@ M.cmd_note_new_from_template = function()
         _parley.logger.info("Creating templates directory: " .. template_dir)
 
         -- Create the templates directory
-        vim.fn.mkdir(template_dir, "p")
+        require("parley.fs").ensure_dir(template_dir)
 
         -- Create some default templates
         M.create_default_templates(template_dir)

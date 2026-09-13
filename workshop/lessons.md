@@ -1,5 +1,9 @@
 # Lessons
 
+## 2026-09-13 (#219 plan review)
+
+- Test plans name risky functions and their adversarial strategy; executable test cases belong in the spec file, not duplicated in prose.
+
 ## 2026-09-13 (#244 plan review)
 
 - A codec successfully shrinking a screenshot says nothing about its metadata

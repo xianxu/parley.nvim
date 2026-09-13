@@ -702,7 +702,7 @@ _H.prepare_dir = function(dir, name)
 	name = name and name .. " " or ""
 	if vim.fn.isdirectory(dir) == 0 then
 		logger.debug("creating " .. name .. "directory: " .. dir)
-		vim.fn.mkdir(dir, "p")
+		require("parley.fs").ensure_dir(dir)
 	end
 
 	dir = vim.fn.resolve(dir)

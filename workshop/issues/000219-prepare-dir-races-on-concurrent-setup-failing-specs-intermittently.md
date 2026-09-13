@@ -63,10 +63,10 @@ already use — the finding is whether any caller bypasses it.
 
 ## Plan
 
-- [ ] Enumerate check-then-act `mkdir` sites in `lua/`
-- [ ] Make `prepare_dir` idempotent; keep the file-in-the-way case an error
-- [ ] Test: two calls racing the same path both succeed; a file at the path fails
-- [ ] Route or justify each other site
+- [x] Enumerate check-then-act `mkdir` sites in `lua/`
+- [x] Make `prepare_dir` idempotent; keep the file-in-the-way case an error
+- [x] Test: two calls racing the same path both succeed; a file at the path fails
+- [x] Route or justify each other site
 
 ## Log
 
@@ -97,3 +97,13 @@ total: 0.988
 ```
 
 Derived after plan-quality passed: focused Lua seam 1.0h design ×0.2 and 0.75h implementation ×0.4; mechanical consumer sweep 0.4h ×0.2 and 0.3h ×0.4; atlas 0.1h ×0.2 and 0.1h ×0.4; review 0.1h ×0.2 and 0.4h ×0.4. Existing Neovim mkdir/isdirectory supplies the IO, no novel library. Design subtotal 0.32h with 15% buffer plus implementation 0.62h = 0.988h.
+
+### 2026-09-13 — implementation and sweep
+
+Plan-quality accepted round 2 (PQ-1 addressed). Estimate-quality INFO: the Lua allocation includes deterministic seam/helper regressions; cross-cutting includes the writer audit and singleton-source guard; review includes verification/shipping. No novel library or new content-write policy.
+
+ARCH-DRY/ORDER: the shared literal-path `fs.ensure_dir` owns one mkdir attempt and postcondition check. `helper.prepare_dir` delegates after its existing expansion/rejection. Logger and file_tracker retain their existence fast paths; notes retains default-template content policy. All direct writers now delegate: tools/builtin/write_file parent, raw_log parent, issues child-issue directory, cliproxy config/key/catalog/bin/staging, and assets' mkdir adapter (preserving false,error). There are no remaining raw mkdir sites outside fs.lua.
+
+The writefile sweep covered memory_prefs, issue_finder, issues, notes, file_tracker, init, and cliproxy. These writes persist content or apply edits; their readable/existence checks choose content or prevent accidental overwrite, not an alternative directory creator. Their content concurrency contracts are unchanged.
+
+TDD evidence: `/tmp/parley219-red.log` has the deterministic real competing creator raising E739 through old prepare_dir (3 pass, 1 fail); `/tmp/parley219-green.log` has 8 passing directory regression tests. Baseline helper suite passed 19 tests before changes. Parent #208 will run complete integrated archive suite before close.

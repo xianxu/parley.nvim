@@ -26,7 +26,7 @@ local access_data_file = vim.fn.stdpath("data"):gsub("/$", "") .. "/parley/file_
 local function ensure_dir_exists(filepath)
     local dir = vim.fn.fnamemodify(filepath, ":h")
     if vim.fn.isdirectory(dir) == 0 then
-        vim.fn.mkdir(dir, "p")
+        require("parley.fs").ensure_dir(dir)
     end
 end
 

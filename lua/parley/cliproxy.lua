@@ -238,7 +238,7 @@ end
 
 local function config_path()
     local dir = data_root()
-    vim.fn.mkdir(dir, "p")
+    require("parley.fs").ensure_dir(dir)
     return dir .. "/config.yaml"
 end
 
@@ -246,7 +246,7 @@ M._config_path = config_path -- exposed for tests
 
 local function management_key_path()
     local dir = data_root()
-    vim.fn.mkdir(dir, "p")
+    require("parley.fs").ensure_dir(dir)
     return dir .. "/management.key"
 end
 
@@ -1702,7 +1702,7 @@ end
 ---@param models table[]
 ---@param fetched_at number|nil
 function M._write_catalog(models, fetched_at)
-    vim.fn.mkdir(data_root(), "p")
+    require("parley.fs").ensure_dir(data_root())
     local fd = io.open(catalog_path(), "w")
     if not fd then
         -- Debug, not error: this runs on a picker-open path. But it must be
@@ -1988,7 +1988,7 @@ end
 
 local function bin_dir()
     local dir = data_root() .. "/bin"
-    vim.fn.mkdir(dir, "p")
+    require("parley.fs").ensure_dir(dir)
     return dir
 end
 
@@ -2084,7 +2084,7 @@ function M.download(opts)
     -- never empty — the only path the recursive delete can reach.
     local stage = data_root() .. "/staging"
     vim.fn.delete(stage, "rf")
-    vim.fn.mkdir(stage, "p")
+    require("parley.fs").ensure_dir(stage)
     local ex = vim.system({ "tar", "-xzf", tmp, "-C", stage, BIN_NAME }, { text = true }):wait()
     os.remove(tmp)
     if ex.code ~= 0 then
