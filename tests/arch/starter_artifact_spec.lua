@@ -5,7 +5,8 @@ describe('portable starter artifact', function()
         assert.equals(0, actual.code, actual.stderr)
         local fixture = vim.fn.tempname()
         for _, marker in ipairs({ '/Users/person/private', 'Mobile Documents', '~/blogs',
-            'OPENAI_API_KEY', 'require("core.options")', 'person@example.com' }) do
+            'OPENAI_API_KEY', 'require("core.options")', 'person@example.com',
+            '~/notes', '~/workspace/ariadne', 'require("ariadne")', 'require[[ariadne]]' }) do
             vim.fn.writefile({ marker }, fixture)
             local result = vim.system({ 'python3', scanner, fixture }, { text = true }):wait()
             assert.equals(1, result.code, marker)

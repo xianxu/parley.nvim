@@ -18,7 +18,8 @@ function M.options(roots, key)
             { name = 'Choose a model', provider = 'cliproxyapi', model = { model = 'choose-a-model' },
                 system_prompt = 'You are a helpful assistant. Explain ideas clearly.', tools = {} },
         },
-        default_agent = 'Choose a model',
+        -- The sole configured learner is the first-use fallback. Setting
+        -- default_agent would override a restored live selection on every start.
         chat_dir = roots.data .. '/chats', chat_dirs = {}, chat_roots = {},
         notes_dir = roots.data .. '/notes', note_dirs = {}, note_roots = {},
         export_html_dir = roots.data .. '/exports/html',

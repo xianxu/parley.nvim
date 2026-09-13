@@ -7,9 +7,9 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 FILES = ("packaging/starter-config/init.lua", "lua/parley/starter_config.lua")
 PERSONAL = re.compile(
-    r"/Users/|/home/[^/\s]+/|Mobile Documents|com~apple~CloudDocs|~/blogs"
+    r"/Users/|/home/[^/\s]+/|Mobile Documents|com~apple~CloudDocs|~/"
     r"|(?:OPENAI|ANTHROPIC|GOOGLEAI)_API_KEY|GITHUB_TOKEN"
-    r"|require\s*\(?\s*['\"](?:core|helpers)\."
+    r"|require\s*\(?\s*['\"](?:core|helpers)\.|\bariadne\b"
     r"|[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}"
 )
 
@@ -18,6 +18,11 @@ def main(paths):
     failures = []
     for path in paths:
         for number, line in enumerate(path.read_text().splitlines(), 1):
+            # This one installation hint is prose, not a configured user path.
+            if path.resolve() == ROOT / FILES[0] and line == (
+                '-- Copy this file to ~/.config/parley/init.lua and launch NVIM_APPNAME=parley nvim.'
+            ):
+                continue
             if PERSONAL.search(line):
                 failures.append(f"{path}:{number}: personal configuration marker")
     if failures:

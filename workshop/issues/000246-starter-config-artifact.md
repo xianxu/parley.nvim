@@ -116,3 +116,12 @@ connection via :ParleyConnect, and isolated config/data/state/cache/auth storage
 This supersedes the original one-directory lifecycle shorthand and raw-login
 first-use hint. Fresh-context plan review completed; implementation approval is
 pending. No implementation or estimate has been recorded yet.
+
+### 2026-09-13 — boundary review round 1 corrections
+
+BR-1: removed the unconditional default_agent override; the only configured learner
+is naturally the first-use fallback. A real two-process startup test reproduced
+saved model replacement before the fix and now verifies selection persistence.
+BR-2: artifact guard now rejects all home-relative paths and ariadne imports,
+except the exact installation comment in the shipped entry. New negative fixtures
+reproduced the omissions. Re-running the full suite before the next close review.

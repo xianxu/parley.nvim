@@ -49,6 +49,13 @@ describe('isolated starter runtime', function()
         assert.same({ 'My notes' }, vim.fn.readfile(file))
     end)
 
+    it('preserves a selected live model across complete startup', function()
+        local first = run(nil, { STARTER_PICK_MODEL = 'claude-opus-5' })
+        assert.equals(0, first.code, first.stderr)
+        local second = run(nil, { STARTER_EXPECT_MODEL = 'claude-opus-5*' })
+        assert.equals(0, second.code, second.stderr)
+    end)
+
     it('rejects an incomplete welcome without overwriting it', function()
         local dir = scratch .. '/data/parley/chats/welcome'
         vim.fn.mkdir(dir, 'p')

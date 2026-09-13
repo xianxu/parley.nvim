@@ -2314,3 +2314,8 @@ download.
 
 - Effective configuration tests must inspect persisted logs for generated secrets;
   a `log_sensitive=false` option cannot protect a sink that omitted its flag.
+
+- Test selection persistence through complete startup, not only the state reader;
+  a later default assignment can overwrite a correctly restored model.
+- An artifact denylist must cover each promised category; test generic home-relative
+  paths and prohibited module imports, not just known personal examples.

@@ -1,5 +1,11 @@
 local ok, why = pcall(function()
     local p = require('parley')
+    if vim.env.STARTER_PICK_MODEL then
+        p.register_live_agent({ id = vim.env.STARTER_PICK_MODEL, owner = 'anthropic' })
+    end
+    if vim.env.STARTER_EXPECT_MODEL then
+        assert(p._state.agent == vim.env.STARTER_EXPECT_MODEL, 'saved model was replaced: ' .. tostring(p._state.agent))
+    end
     assert(p.config.default_keymaps == false)
     assert(p.config.web_search == false)
     assert(vim.tbl_count(p.dispatcher.providers) == 1)
