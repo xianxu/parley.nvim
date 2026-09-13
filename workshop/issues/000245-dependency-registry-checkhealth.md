@@ -1,11 +1,12 @@
 ---
 id: 000245
-status: open
-deps: [000213]
+status: working
+deps: []
 github_issue:
 created: 2026-09-13
 updated: 2026-09-13
 estimate_hours:
+started: 2026-09-13T13:20:58-07:00
 ---
 
 # Dependency registry and honest install advice: managed cliproxyapi, platform tools, brew one-liners in checkhealth
@@ -65,3 +66,30 @@ Part of the `parley-packaging` project.
 ## Log
 
 ### 2026-09-13
+
+## Revisions
+
+### 2026-09-13 — independent packaging dependency section; design pending approval
+
+**Reason.** The operator confirmed project order #208 → #245 → #246 → #247.
+The existing health entry point accepts a dependency section without #213's
+credential/provider diagnostics or Copilot removal. Those remain v1-release work.
+
+**Delta.** Removed the blocking dependency on #213. The original Plan row saying
+“after #213” is superseded by the independent section designed in
+`workshop/plans/000245-dependency-registry-plan.md`. Centralization includes the
+existing pandoc install message and cliproxy advice; it does not expand into
+#213's broad external-tool or credential audit. Discovery must not create folders.
+
+**Approval pending.** #245's all-advisory formula parity conflicts with #247's
+“ImageMagick only if needed beyond sips.” Recommend a registry-marked default
+macOS package subset (ripgrep), with alternative converters and optional pandoc
+remaining advisory. The operator must approve this delta before implementation;
+until then the original all-advisory requirement has not been silently waived.
+The formula parity test still lands with #247, against whichever policy is approved.
+
+**Design checkpoint.** Claimed in isolated `/tmp/parley245-plan`, then ran
+`sdlc start-plan --issue 245`. No runtime changes or estimate made. Read-only
+code evidence: `cliproxy.managed_binary()` currently creates its directory;
+clipboard missing-tool notices currently repeat, while shrink notices already
+reset once per configure. The durable plan specifies tests for both findings.
