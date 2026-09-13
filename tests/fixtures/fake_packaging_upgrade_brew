@@ -36,15 +36,21 @@ elif command in ('install', 'upgrade'):
             sys.exit(42)
     formula = (store / 'tap/Formula/parley-upgrade-fixture.rb').read_text()
     archive = Path(unquote(urlparse(re.search(r'  url "([^"]+)"', formula)[1]).path))
-    runtime = store / 'installed'
-    if runtime.exists():
-        shutil.rmtree(runtime)
-    runtime.mkdir()
+    prefix = store / 'installed'
+    runtime = prefix / 'libexec'
+    if prefix.exists():
+        shutil.rmtree(prefix)
+    runtime.mkdir(parents=True)
     with tarfile.open(archive) as content:
         content.extractall(runtime, filter='data')
+    # Pathname.install moves the starter out of libexec into the formula's share tree.
+    starter = prefix / 'share/parley/config/init.lua'
+    starter.parent.mkdir(parents=True)
+    shutil.move(runtime / 'packaging/starter-config/init.lua', starter)
+    assert not (runtime / 'packaging/starter-config/init.lua').exists()
     wrapper = store / 'fixture-parley'
     wrapper.write_text('#!/bin/sh\nexport PARLEY_RUNTIME=' + __import__('shlex').quote(str(runtime))
-                       + '\nexport PARLEY_STARTER=' + __import__('shlex').quote(str(runtime / 'packaging/starter-config/init.lua'))
+                       + '\nexport PARLEY_STARTER=' + __import__('shlex').quote(str(starter))
                        + '\nexport PARLEY_NVIM=' + __import__('shlex').quote(os.environ['FAKE_UPGRADE_NVIM'])
                        + '\nexec "$PARLEY_RUNTIME/packaging/parley" "$@"\n')
     wrapper.chmod(0o755)

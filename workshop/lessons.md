@@ -2325,3 +2325,8 @@ download.
   explicit abandoned-lock recovery; test the gap with a real process barrier.
 - When a new source directory is introduced, include it in architecture scans
   and route its specs in traceability before the full-suite run.
+
+- Package fixtures must reproduce install-time moves and generated wrappers,
+  not merely copy the source tree; consumers must use the installed layout.
+- Keep external syntax checks with integration tests. Pure projection tests
+  assert metadata and rendered output without creating files or subprocesses.

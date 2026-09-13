@@ -60,6 +60,9 @@ describe('immutable Homebrew release workflow', function()
         local result = release()
         assert.are.equal(0, result.code, result.stderr)
         local formula = table.concat(vim.fn.readfile(scratch .. '/tap/Formula/parley.rb'), '\n')
+        if vim.fn.executable('ruby') == 1 then
+            run({ 'ruby', '-c', scratch .. '/tap/Formula/parley.rb' })
+        end
         assert.is_truthy(formula:find('depends_on "archive-ripgrep"', 1, true))
         assert.are.equal(before, run({ 'git', 'rev-parse', 'HEAD' }, scratch .. '/tap'))
         local digest = run({ 'shasum', '-a', '256', scratch .. '/archives/v2.3.0.tar.gz' }):match('^%w+')

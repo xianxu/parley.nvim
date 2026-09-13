@@ -222,3 +222,13 @@ so it could not see real functions in the new packaging tree. Include packaging
 in both definition and added-export scans, and replace the provisional
 run_acceptance name with the implemented command surface. Map all five new
 specs to infra/packaging. These are guard/map corrections, not waived checks.
+
+### 2026-09-13 — boundary review installed-layout corrections
+
+BR-1: Homebrew installs the starter by moving it from libexec to the formula
+prefix's `share/parley/config/init.lua`. The upgrade harness must read that
+installed location, then reconstruct the source archive before rendering fixture
+versions. Its filesystem-backed fake must perform the same move, so an accidental
+source-layout assumption fails before real publication (ARCH-MOCK/PURPOSE).
+BR-2: Ruby syntax validation runs in release integration coverage. The pure
+renderer unit tests contain only input/output and registry-parity assertions.

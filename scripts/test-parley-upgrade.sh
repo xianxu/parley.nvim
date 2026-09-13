@@ -62,7 +62,10 @@ try:
     source = owned / 'runtime'
     shutil.copytree(runtime, source, symlinks=True, ignore=shutil.ignore_patterns('.git'))
     starter = source / 'packaging/starter-config/init.lua'
-    starter_original = starter.read_bytes()
+    # Homebrew moves this file from libexec into share during formula install.
+    # Reconstruct the release source from that same installed prefix, not another version.
+    starter_original = (runtime.parent / 'share/parley/config/init.lua').read_bytes()
+    starter.parent.mkdir(parents=True, exist_ok=True)
     launcher = Path(run('brew', '--prefix')) / 'bin/parley'
     initial.write_bytes(edited)
     run('brew', 'unlink', 'parley')

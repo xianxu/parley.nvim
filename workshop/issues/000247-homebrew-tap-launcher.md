@@ -132,6 +132,17 @@ the approved plan; these remain unchecked and must precede merge. The local tap
 README and generated formula shape are reviewable; the real archive SHA is only
 available after the reviewed immutable tag is published.
 
+### 2026-09-13 — close review round 1 repaired
+
+BR-1 installed-layout-conformance: reproduced the missing-starter failure with
+an actual prefix/share vs libexec fixture, then read the installed share source
+and made both fixture versions move it as Homebrew does. Public restoration now
+runs the real launcher. All 3 upgrade cases pass, including a failure assertion
+that proves brew upgrade itself was reached. BR-2 pure-test-io-separation:
+moved Ruby syntax execution to release integration; 2 pure renderer and 6 release
+cases pass. Lint remains clean across 431 files. Both finding classes are recorded
+in lessons; public/live acceptance is still pending the reviewed release.
+
 ## Revisions
 
 ### 2026-09-13T14:43:00-07:00 — packaging execution scope
