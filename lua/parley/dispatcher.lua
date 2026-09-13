@@ -32,7 +32,8 @@ local D = {
 
 ---@param opts table #	user config
 D.setup = function(opts)
-	logger.debug("dispatcher setup started\n" .. vim.inspect(opts))
+	-- Provider setup carries resolved client secrets; honor sensitive-log policy.
+	logger.debug("dispatcher setup started\n" .. vim.inspect(opts), true)
 
 	D.config.curl_params = opts.curl_params or default_config.curl_params
 

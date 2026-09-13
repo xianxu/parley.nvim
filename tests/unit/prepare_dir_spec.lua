@@ -58,6 +58,12 @@ describe("directory preparation", function()
         assert.equals(vim.fn.resolve(path), helper.prepare_dir(path))
     end)
 
+    it("creates a private directory when a permission mode is supplied", function()
+        local path = root .. '/private'
+        require('parley.fs').ensure_dir(path, 448)
+        assert.equals(448, vim.uv.fs_stat(path).mode % 512)
+    end)
+
     it("rejects a file obstructing directory creation", function()
         local path = root .. "/file"
         vim.fn.writefile({ "keep" }, path)

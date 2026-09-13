@@ -3,6 +3,27 @@ version: 1
 # Maps a feature entry to the code and tests that verify it.
 # Key format intentionally omits the leading "atlas/" and trailing ".md".
 atlas:
+  infra/starter:
+    code:
+      - lua/parley/dispatcher.lua
+      - lua/parley/fs.lua
+      - packaging/starter-config/init.lua
+      - lua/parley/starter.lua
+      - lua/parley/starter_config.lua
+      - lua/parley/starter_profile.lua
+      - lua/parley/cliproxy_catalog.lua
+      - lua/parley/init.lua
+      - scripts/check-starter.py
+    tests:
+      - tests/unit/prepare_dir_spec.lua
+      - tests/unit/starter_config_spec.lua
+      - tests/unit/cliproxy_catalog_spec.lua
+      - tests/unit/live_agent_state_spec.lua
+      - tests/integration/starter_profile_spec.lua
+      - tests/integration/starter_config_spec.lua
+      - tests/integration/starter_bootstrap_spec.lua
+      - tests/arch/starter_artifact_spec.lua
+
   infra/dependencies:
     code:
       - lua/parley/deps.lua

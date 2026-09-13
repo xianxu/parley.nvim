@@ -1425,6 +1425,13 @@ local function adopt_agent(agent, keep_existing)
 	return agent.name
 end
 
+--- Project the same current tool policy for live selection and session restore.
+local function live_agent_options()
+	local cliproxy = M.config.cliproxy or {}
+	local live_models = cliproxy.live_models or {}
+	return { tools = live_models.tools }
+end
+
 --- Reconcile in-memory state with what is on disk, apply `update`, persist.
 ---@param update table | nil # table with options
 M.refresh_state = function(update)
@@ -1520,7 +1527,7 @@ M.refresh_state = function(update)
 	-- M._agents[1], so a live pick would silently evaporate on every restart.
 	if type(M._state.live_agent) == "table" and type(M._state.live_agent.id) == "string" then
 		local ok, agent = pcall(function()
-			return require("parley.cliproxy_catalog").build_agent(M._state.live_agent)
+			return require("parley.cliproxy_catalog").build_agent(M._state.live_agent, live_agent_options())
 		end)
 		if ok then
 			adopt_agent(agent, true) -- config wins over a persisted pick
@@ -4912,7 +4919,7 @@ end
 --- missing from M.agents and silently reset to the first configured agent.
 ---@param model table # a parsed catalog row { id, owner, display, … }
 M.register_live_agent = function(model)
-	local agent = require("parley.cliproxy_catalog").build_agent(model)
+	local agent = require("parley.cliproxy_catalog").build_agent(model, live_agent_options())
 	if not adopt_agent(agent) then
 		M.logger.warning("cliproxy: catalog row has no usable model id; not registering")
 		return

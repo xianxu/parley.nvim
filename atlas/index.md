@@ -50,6 +50,8 @@ This index provides a central directory for all atlas entries of the `parley.nvi
 - [Syntax Highlighting](ui/highlights.md): Highlighting groups and rules; exchange partitions contain fence state (`advance`/`reset_partition`/`is_partition`), and the two deliberately-separate fence grammars — `fence.lua` for tool bodies, CommonMark for prose.
 
 ## 7. Infrastructure & Security
+
+- [Starter profile](infra/starter.md): Isolated app configuration, pinned bootstrap and managed first-use login.
 - [Repo Mode](infra/repo_mode.md): Marker-file detection for parley-enabled repos with auto-created local directories.
 - [Configuration System](infra/config.md): Settings and merging logic.
 - [Vault (Secret Management)](infra/vault.md): Secret retrieval and storage.

@@ -290,6 +290,21 @@ end)
 -- build_agent
 --------------------------------------------------------------------------------
 describe("build_agent", function()
+    it("disables local tools for an explicit empty policy", function()
+        local a = cat.build_agent({ id = "claude-opus-5" }, { tools = {} })
+        assert.same({}, a.tools)
+    end)
+
+    it("copies a custom tool policy without sharing it across agents", function()
+        local policy = { "read_file" }
+        local a = cat.build_agent({ id = "claude-opus-5" }, { tools = policy })
+        local b = cat.build_agent({ id = "gpt-5.6-sol" }, { tools = policy })
+        assert.same(policy, a.tools)
+        table.insert(a.tools, "write_file")
+        assert.same({ "read_file" }, policy)
+        assert.same({ "read_file" }, b.tools)
+    end)
+
     it("routes anthropic models over the anthropic wire", function()
         local a = cat.build_agent({ id = "claude-opus-5", owner = "anthropic",
                                     display = "Claude Opus 5" })

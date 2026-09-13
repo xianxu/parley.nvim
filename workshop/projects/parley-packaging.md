@@ -201,3 +201,11 @@ configuration and tool policy; #209/#211 remain separate broader work. #247’s
 live VM acceptance must use the shipped managed-proxy login and an image response,
 not substitute a direct keyed-provider test. Guest authentication choice remains
 pending. Plans await implementation approval; neither issue is complete or costed.
+
+### 2026-09-13 — starter implementation verified locally
+
+#246 now implements the isolated profile, private client key, welcome/connect UI
+and persistent live-model tool policy. 241 spec files and lint pass; live GitHub
+dependency bootstrap passed against the candidate runtime. Close review and the
+released-plugin bootstrap remain before publication acceptance. #247 follows;
+its operator VM authentication input is still pending.

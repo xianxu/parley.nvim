@@ -215,7 +215,7 @@ end
 --- decides the SEARCH TOOL for the families whose wire it cannot affect; the
 --- whole decision is single-sourced in providers.lua.
 ---@param m table # a parsed Model
----@param opts table|nil # { system_prompt = string }
+---@param opts table|nil # { system_prompt = string, tools = string[] }; nil tools defaults to @all
 ---@return table # a parley agent
 function M.build_agent(m, opts)
     opts = opts or {}
@@ -235,7 +235,7 @@ function M.build_agent(m, opts)
         },
         system_prompt = opts.system_prompt or require("parley.defaults").chat_system_prompt,
         synthetic_system_prompt = true,
-        tools = { "@all" },
+        tools = vim.deepcopy(opts.tools or { "@all" }),
     }
 end
 

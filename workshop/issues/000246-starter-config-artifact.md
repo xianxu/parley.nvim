@@ -77,14 +77,28 @@ total: 3.823
 
 ## Plan
 
-- [ ] Derive the artifact from the operator config; strip per the denylist
-- [ ] Personal-marker test; pin lazy.nvim
-- [ ] First-run hint and default provider route
-- [ ] README section (with #206)
+- [x] Derive the artifact from the operator config; strip per the denylist
+- [x] Personal-marker test; pin lazy.nvim
+- [x] First-run hint and default provider route
+- [x] README section (with #206)
 
 ## Log
 
 ### 2026-09-13
+
+Implemented the isolated starter and live-model policy. Tests cover real competing
+initializers/key creators, abrupt owner death, effective provider/path/tool policy,
+secret absence from logs, and managed download→login with stateful release/proxy
+fixtures. Full `make test`: 241 specs pass; lint 419 Lua files with zero warnings
+or errors. Bootstrap entry lint also passes. Real GitHub dependency bootstrap in
+a fresh HOME/XDG profile passed with the local reviewed runtime; final released
+plugin bootstrap remains pending until the close review and release publication.
+
+Full-suite checks required reuse of fs.ensure_dir (optional creation permissions)
+and literal welcome directory scanning. Effective setup exposed an existing
+unmarked sensitive dispatcher diagnostic; its flag now protects the client key.
+In-session review findings and regression lessons are recorded. No user chat
+files were staged. ARCH-DRY/ORDER/SECURE shaped these corrections.
 
 ## Revisions
 
