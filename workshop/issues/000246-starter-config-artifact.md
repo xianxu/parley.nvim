@@ -1,11 +1,12 @@
 ---
 id: 000246
-status: open
+status: working
 deps: [000211, 000209]
 github_issue:
 created: 2026-09-13
 updated: 2026-09-13
 estimate_hours:
+started: 2026-09-13T14:26:23-07:00
 ---
 
 # Starter config as a product artifact: NVIM_APPNAME=parley, lazy.nvim bootstrap, derived from the operator config without personal data
