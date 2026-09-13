@@ -111,3 +111,19 @@ decision; nothing here depends on it.
   annotations at the question level — the side-quest `8213799` set the
   indentation this issue's merged row inherits). Motivated by astro, where
   the outline is meant to read as a syllabus.
+- **Measured: tags ARE sent to the model.** Headless probe through
+  `chat_parser.parse_chat` with the unit-test config, tags mid-answer,
+  end-of-answer (i.e. the line above the next question), and `@@_@@`:
+
+      exchange 1 answer = "answer line A\n@@mid tag@@\nanswer line B\n@@end tag@@"
+      exchange 2 answer = "answer two\n\n@@_@@"
+
+  So the "obvious next question" in the Spec has a measured premise. If tags
+  are to be withheld like `🔒:`, the rule cannot be "every `@@…@@` line" —
+  `@@./path@@` / `@@https://…@@` are file references that inject content
+  (`chat_parser.lua:513-519`). It would have to be "a standalone `@@…@@`
+  line whose body is not a path or URL". Still a separate decision.
+- Probe artifact worth a glance, not part of this issue: text on the `🤖:`
+  prefix line itself (`🤖: first answer line one.`) was dropped from the
+  answer content, while text on the `💬:` line is kept. parley never writes
+  answers that way, so it is likely inert; noted so it is not rediscovered.
