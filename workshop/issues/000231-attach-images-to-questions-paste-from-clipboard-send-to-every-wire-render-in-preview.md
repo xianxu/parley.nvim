@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-09-10
 updated: 2026-09-12
-estimate_hours: 6.79
+estimate_hours: 6.93
 started: 2026-09-12T18:17:30-07:00
 ---
 
@@ -148,8 +148,9 @@ item: atlas-docs design=0.1 impl=0.05
 item: atlas-docs design=0.1 impl=0.05
 item: milestone-review design=0.1 impl=0.14
 item: milestone-review design=0.1 impl=0.14
+item: milestone-review design=0.0 impl=0.14
 design-buffer: 0.15
-total: 6.79
+total: 6.93
 ```
 
 *Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against
@@ -175,7 +176,13 @@ movers/deleters and the exporter were read end to end during planning.
 - `real-api-discovery` ×3 — the M1 gate sends a real image through each wire
   family (anthropic, openai, googleai/cliproxy); 0.3–0.6 ×0.4.
 - `atlas-docs` ×2 — the attachments doc at M1, the M2 lines and one-liners.
-- `milestone-review` ×2 — M1 and the close boundary.
+- `milestone-review` ×3 — M1, M2 and the close boundary (the estimate-quality
+  judge caught the omitted M2 close; its design side is 0 because M2 has no
+  design left, only the review).
+- The live clipboard spec (Task 12) is inside the clipboard/paste item; the
+  verification effort of each `lua-neovim` item (fakes, failure matrices,
+  differential specs) is inside its impl hours — v3.1 impl hours are
+  ship-wall-clock, tests included.
 
 ## Plan
 
