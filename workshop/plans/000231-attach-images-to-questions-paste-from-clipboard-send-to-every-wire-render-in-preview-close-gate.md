@@ -232,6 +232,27 @@ rounds:
           round: 7
       boundary: M2
       blocked: true
+    - "n": 8
+      timestamp: "2026-09-13T00:49:01-07:00"
+      agent: codex
+      dispose:
+        - id: BR-8
+          disposition: addressed
+          note: helper.lua:102-114 checks buffer deletion and os.remove; init.lua:3588-3598 removes assets only after success. Regression tests cover filesystem refusal and buffer exceptions. Read-only production-function probes passed; restoring asset-first ordering failed the preservation assertion.
+          round: 8
+        - id: BR-9
+          disposition: not-addressed
+          note: exporter.lua:284 retains forgeable branch tokens, and :807 restores them after image HTML is emitted. Rendering ![XBRANCHX1XBRANCHX](missing.png) alongside a branch substitutes its navigation div inside the image alt attribute. The original image-to-image attack is fixed, but cross-family restoration still violates attribute isolation. Fix html-placeholder-isolation across both families and test their full composition.
+          round: 8
+      findings:
+        - id: BR-10
+          severity: Important
+          title: Live conformance overwrites clipboard contents it cannot restore
+          detail: 'tests/integration/clipboard_live_spec.lua:21-27 saves only a text representation, but :40-48 overwrites the clipboard even when that read failed. An image-only clipboard is therefore replaced permanently with test text. ARCH-SECURE / ARCH-ORDER: skip before mutation when preservation is unavailable, or snapshot and restore all supported clipboard representations; check restoration failures and test this path with a stateful fake.'
+          family: external-state-restoration
+          round: 8
+      boundary: M2
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#231 (boundary-review)
@@ -328,7 +349,19 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-9** [Critical] `html-placeholder-isolation` Recursive placeholder restoration permits HTML event-handler injection
   lua/parley/exporter.lua:457-464 rescans restored tags. Input ![XIMGX2XIMGX](missing.png) ![](onerror=alert`1`//) produces an onerror attribute on the first image, verified by parsing the generated HTML. ARCH-SECURE: use collision-free placeholders with non-recursive restoration and regression tests for literal tokens and tokens inside attributes.
 
+## Round 8 — 2026-09-13T00:49:01-07:00 (codex) — BLOCKED
+
+### Disposed
+
+- BR-8 — addressed — helper.lua:102-114 checks buffer deletion and os.remove; init.lua:3588-3598 removes assets only after success. Regression tests cover filesystem refusal and buffer exceptions. Read-only production-function probes passed; restoring asset-first ordering failed the preservation assertion.
+- BR-9 — not-addressed — exporter.lua:284 retains forgeable branch tokens, and :807 restores them after image HTML is emitted. Rendering ![XBRANCHX1XBRANCHX](missing.png) alongside a branch substitutes its navigation div inside the image alt attribute. The original image-to-image attack is fixed, but cross-family restoration still violates attribute isolation. Fix html-placeholder-isolation across both families and test their full composition.
+
+### Raised
+
+- **BR-10** [Important] `external-state-restoration` Live conformance overwrites clipboard contents it cannot restore
+  tests/integration/clipboard_live_spec.lua:21-27 saves only a text representation, but :40-48 overwrites the clipboard even when that read failed. An image-only clipboard is therefore replaced permanently with test text. ARCH-SECURE / ARCH-ORDER: skip before mutation when preservation is unavailable, or snapshot and restore all supported clipboard representations; check restoration failures and test this path with a stateful fake.
+
 ## Open findings
 
-- **BR-8** [Critical] `deletion-commit-before-cleanup` Failed chat deletion silently destroys its assets
 - **BR-9** [Critical] `html-placeholder-isolation` Recursive placeholder restoration permits HTML event-handler injection
+- **BR-10** [Important] `external-state-restoration` Live conformance overwrites clipboard contents it cannot restore
