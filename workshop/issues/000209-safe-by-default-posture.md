@@ -1,11 +1,12 @@
 ---
 id: 000209
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-09-02
-updated: 2026-09-02
+updated: 2026-09-13
 estimate_hours:
+started: 2026-09-13T13:08:24-07:00
 ---
 
 # safe-by-default posture for a public release
