@@ -102,12 +102,38 @@ Fix the one-`@` display slice while here.
 
 ## Plan
 
-- [ ] Fixture: a chat with a question, an annotation, a branch, and a fenced block
-      containing an `@@…@@` line that must *not* become an entry.
-- [ ] Parity test between the two builders (red first).
-- [ ] Route the tree extractor's line classification through `is_outline_item`.
-- [ ] Fix the display slice.
-- [ ] Verify on the operator's file.
+Single-pass atomic work (one module, one spec, one atlas line) — plain
+checkboxes, one `sdlc close`.
+
+- [ ] Fixture + parity test (red first) in `tests/unit/picker_items_spec.lua`,
+      beside the #218 tree-outline describe (same `cfg` shape, tempdir files):
+      a chat with a question, an `@@…@@` annotation, a `🌿:` branch to a child
+      chat, a fenced block containing an `@@fenced@@` line, and a trailing empty
+      `💬:`. Build both outlines for the root file — flat via a scratch buffer
+      holding the same lines (`_build_picker_items(buf, cfg, { is_chat = true })`),
+      tree via `_build_tree_outline_items(path, cfg, {})` with the child
+      collapsed — and assert the tree minus its `📋` root equals the flat list
+      on `(lnum, type, display)`. Assert the fenced `@@fenced@@` and the empty
+      trailing question are in neither.
+- [ ] Nested case: expand the child; the child's `@@child note@@` appears after
+      the `🌿` row, indented one level (`"  → child note"`), with
+      `value.file` = the child's path.
+- [ ] Display slice: `@@my note@@` → `→ my note` (a unit case on
+      `outline._is_outline_item` with `all_lines`; red first).
+- [ ] Route `build_file_outline_items` through `is_outline_item(nil, i, config,
+      code_memo, file_lines, { is_chat = true })` for every non-branch line:
+      display = `indent .. formatted_line`, `type = item_type`, value
+      `{ lnum = i, file = abs_path }`. Delete its private `user_prefix` match
+      (`ARCH-DRY`: one item rule). The trailing-empty-question drop stays as
+      is. Keep the branch rows exactly as they are (they come from
+      `parsed.branches`, which the shared rule does not know).
+- [ ] Fix the slice (`3, -3`).
+- [ ] Atlas: `atlas/ui/outline.md` Logic section — one sentence: both builders
+      classify lines through `is_outline_item`; the tree adds root, branch rows
+      and indentation only.
+- [ ] Verify on the operator's file
+      (`workshop/parley/2026-09-09.11-40-59.150_astrophotography-plan.md`):
+      `<M-t>` shows `→ plan for 9/10/2026` at its position. Record in `## Log`.
 
 ## Log
 
