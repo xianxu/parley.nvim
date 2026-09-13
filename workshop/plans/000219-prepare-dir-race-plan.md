@@ -24,14 +24,18 @@ ARCH-DRY/PURE: centralize IO without introducing helper/logger cycles or a new p
 
 ## Plan
 
-- [ ] Add `tests/unit/prepare_dir_spec.lua`: ensure_dir competing filesystem mutations and mkdir failures → deterministic injected interleaving on isolated temporary roots with postcondition/error assertions. helper.prepare_dir delegation → the same race through the existing path-policy boundary. Observe the race test red before implementation.
-- [ ] Add `lua/parley/fs.lua` ensure_dir and delegate helper.prepare_dir's creation to it. Run the focused regression green.
-- [ ] Route mkdir sites in `logger.lua`, `file_tracker.lua`, `notes.lua`, `tools/builtin/write_file.lua`, `raw_log.lua`, `issues.lua`, `cliproxy.lua`, and assets.lua through the literal seam. Keep caller return conventions. Test the seam directly and retain full-suite consumer coverage; add a source guard for the singleton mkdir boundary.
-- [ ] Enumerate writefile guards: missing note templates and user-created files carry content policy, not directory postconditions; preserve these write semantics. Document every mkdir site in issue Log.
-- [ ] Update `atlas/infra/test_harness.md` with regression coverage, run `make -f Makefile.parley test-spec SPEC=prepare_dir`, lint and the complete suite using a temporary forwarding Makefile if inherited peer symlinks are broken. Commit, close via SDLC review, PR and merge.
+- [x] Add `tests/unit/prepare_dir_spec.lua`: ensure_dir competing filesystem mutations and mkdir failures → deterministic injected interleaving on isolated temporary roots with postcondition/error assertions. helper.prepare_dir delegation → the same race through the existing path-policy boundary. Observe the race test red before implementation.
+- [x] Add `lua/parley/fs.lua` ensure_dir and delegate helper.prepare_dir's creation to it. Run the focused regression green.
+- [x] Route mkdir sites in `logger.lua`, `file_tracker.lua`, `notes.lua`, `tools/builtin/write_file.lua`, `raw_log.lua`, `issues.lua`, `cliproxy.lua`, and assets.lua through the literal seam. Keep caller return conventions. Test the seam directly and retain full-suite consumer coverage; add a source guard for the singleton mkdir boundary.
+- [x] Enumerate writefile guards: missing note templates and user-created files carry content policy, not directory postconditions; preserve these write semantics. Document every mkdir site in issue Log.
+- [x] Update `atlas/infra/test_harness.md` with regression coverage, run `make -f Makefile.parley test-spec SPEC=prepare_dir`, lint and the complete suite using a temporary forwarding Makefile if inherited peer symlinks are broken. Commit, close via SDLC review, PR and merge.
 
 ## Revisions
 
 ### 2026-09-13 — PQ-1
 
 Compressed test inventory into named-function strategies; executable cases belong in tests.
+
+### 2026-09-13 — verification delegation
+
+Focused specs, affected consumers and lint ran in the isolated worktree; parent #208 ran full archive acceptance against the integrated candidate. All unit files passed; unrelated integration fixture failures remain under #208 investigation. SDLC close/PR/merge own the remaining publication actions.
