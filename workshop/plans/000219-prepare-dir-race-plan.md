@@ -12,9 +12,9 @@
 
 There is no new pure entity: this operation is a thin filesystem integration.
 
-| Name | Lives in | Status | Wraps |
-|------|----------|--------|-------|
-| `ensure_dir` | `lua/parley/fs.lua` | new | Neovim mkdir and isdirectory |
+| Name | Lives in | Status | Kind | Wraps |
+|------|----------|--------|------|-------|
+| `ensure_dir` | `lua/parley/fs.lua` | new | INTEGRATION | Neovim mkdir and isdirectory |
 
 The seam takes a literal path, returns normally only for an existing directory, and raises the original mkdir failure otherwise (or a contextual error if mkdir returns without creating it). Callers own path policy. Assets preserves its boolean/error interface with pcall.
 
@@ -28,7 +28,7 @@ ARCH-DRY/PURE: centralize IO without introducing helper/logger cycles or a new p
 - [x] Add `lua/parley/fs.lua` ensure_dir and delegate helper.prepare_dir's creation to it. Run the focused regression green.
 - [x] Route mkdir sites in `logger.lua`, `file_tracker.lua`, `notes.lua`, `tools/builtin/write_file.lua`, `raw_log.lua`, `issues.lua`, `cliproxy.lua`, and assets.lua through the literal seam. Keep caller return conventions. Test the seam directly and retain full-suite consumer coverage; add a source guard for the singleton mkdir boundary.
 - [x] Enumerate writefile guards: missing note templates and user-created files carry content policy, not directory postconditions; preserve these write semantics. Document every mkdir site in issue Log.
-- [x] Update `atlas/infra/test_harness.md` with regression coverage, run `make -f Makefile.parley test-spec SPEC=prepare_dir`, lint and the complete suite using a temporary forwarding Makefile if inherited peer symlinks are broken. Commit, close via SDLC review, PR and merge.
+- [x] Update `atlas/infra/test_harness.md` with regression coverage, run `nvim --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/prepare_dir_spec.lua" -c "qa!"`, lint and the complete suite using a temporary forwarding Makefile if inherited peer symlinks are broken. Commit, close via SDLC review, PR and merge.
 
 ## Revisions
 
@@ -39,3 +39,7 @@ Compressed test inventory into named-function strategies; executable cases belon
 ### 2026-09-13 — verification delegation
 
 Focused specs, affected consumers and lint ran in the isolated worktree; parent #208 ran full archive acceptance against the integrated candidate. All unit files passed; unrelated integration fixture failures remain under #208 investigation. SDLC close/PR/merge own the remaining publication actions.
+
+### 2026-09-13 — close review advisory corrections
+
+Corrected the unregistered test-spec key to the direct Plenary invocation actually used and added the explicit INTEGRATION Kind column. Runtime remains the reviewed commit.

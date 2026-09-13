@@ -1,12 +1,13 @@
 ---
 id: 000219
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-09-05
 updated: 2026-09-13
 estimate_hours: 0.988
 started: 2026-09-13T13:03:44-07:00
+actual_hours: N/A
 ---
 
 # prepare_dir races on concurrent setup, failing specs intermittently
@@ -70,6 +71,8 @@ already use — the finding is whether any caller bypasses it.
 
 ## Log
 
+
+- 2026-09-13: closed — Deterministic E739 regression red then 8/8 green; six affected consumer suites pass; lint 395 files clean; integrated archive all unit specs pass, unrelated chat_move E95 and branch_child path fixture failures under #208 investigation. No measurable delegated worktree activity; --no-actual avoids invented hours.; review verdict: SHIP
 ### 2026-09-05
 
 Surfaced by #218's close run. Frequency unknown — one occurrence in roughly a

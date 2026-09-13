@@ -1,7 +1,8 @@
 # Lessons
 
-## 2026-09-13 (#219 plan review)
+## 2026-09-13 (#219 plan and close review)
 
+- Copy the command actually executed into verification instructions; a plausible spec key can have no mapping and run nothing.
 - Test plans name risky functions and their adversarial strategy; executable test cases belong in the spec file, not duplicated in prose.
 
 ## 2026-09-13 (#244 plan review)
