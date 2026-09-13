@@ -2,3 +2,6 @@
 # This file is included by Makefile — add your own targets here.
 
 include Makefile.parley
+
+# Product help is available even without the optional maintainer overlay.
+help: help-parley

@@ -1,0 +1,198 @@
+{
+    "categories": {
+        "open": [
+            "open"
+        ],
+        "active": [
+            "working",
+            "blocked",
+            "codecomplete"
+        ],
+        "terminal": [
+            "done",
+            "wontfix",
+            "punt"
+        ]
+    },
+    "when": {
+        "open": "created, not yet started",
+        "working": "actively in progress",
+        "blocked": "waiting on another tracked issue",
+        "codecomplete": "code complete; passed local acceptance review, awaiting merge",
+        "done": "complete and closed",
+        "wontfix": "rejected; will not be done",
+        "punt": "deferred"
+    },
+    "discovery": {
+        "home": "workshop/issues",
+        "glob": "*.md",
+        "archive": "workshop/history",
+        "plans": "workshop/plans"
+    },
+    "scaffold": {
+        "sections": [
+            {
+                "name": "Problem"
+            },
+            {
+                "name": "Spec"
+            },
+            {
+                "name": "Done when",
+                "seed": "-"
+            },
+            {
+                "name": "Plan",
+                "seed": "- [ ]"
+            },
+            {
+                "name": "Log"
+            }
+        ]
+    },
+    "lifecycle": [
+        {
+            "from": "open",
+            "to": "working",
+            "event": "claim",
+            "guards": []
+        },
+        {
+            "from": "working",
+            "to": "blocked",
+            "event": "block",
+            "guards": []
+        },
+        {
+            "from": "blocked",
+            "to": "working",
+            "event": "unblock",
+            "guards": []
+        },
+        {
+            "from": "working",
+            "to": "codecomplete",
+            "event": "close",
+            "guards": [
+                "actual-recorded",
+                "verified",
+                "atlas-updated"
+            ]
+        },
+        {
+            "from": "blocked",
+            "to": "codecomplete",
+            "event": "close",
+            "guards": [
+                "actual-recorded",
+                "verified",
+                "atlas-updated"
+            ]
+        },
+        {
+            "from": "codecomplete",
+            "to": "done",
+            "event": "merge",
+            "guards": [
+                "reviewed-head-unchanged"
+            ]
+        },
+        {
+            "from": "codecomplete",
+            "to": "working",
+            "event": "reopen",
+            "guards": []
+        },
+        {
+            "from": "working",
+            "to": "wontfix",
+            "event": "abandon",
+            "guards": []
+        },
+        {
+            "from": "working",
+            "to": "punt",
+            "event": "defer",
+            "guards": []
+        },
+        {
+            "from": "done",
+            "to": "working",
+            "event": "reopen",
+            "guards": []
+        },
+        {
+            "from": "open",
+            "to": "wontfix",
+            "event": "abandon",
+            "guards": []
+        },
+        {
+            "from": "open",
+            "to": "punt",
+            "event": "defer",
+            "guards": []
+        },
+        {
+            "from": "punt",
+            "to": "working",
+            "event": "reopen",
+            "guards": []
+        },
+        {
+            "from": "wontfix",
+            "to": "working",
+            "event": "reopen",
+            "guards": []
+        },
+        {
+            "from": "blocked",
+            "to": "wontfix",
+            "event": "abandon",
+            "guards": []
+        },
+        {
+            "from": "blocked",
+            "to": "punt",
+            "event": "defer",
+            "guards": []
+        },
+        {
+            "from": "codecomplete",
+            "to": "wontfix",
+            "event": "abandon",
+            "guards": []
+        },
+        {
+            "from": "codecomplete",
+            "to": "punt",
+            "event": "defer",
+            "guards": []
+        }
+    ],
+    "laws": {
+        "documented-value": {
+            "open": "created, not yet started",
+            "working": "actively in progress",
+            "blocked": "waiting on another tracked issue",
+            "codecomplete": "code complete; passed local acceptance review, awaiting merge",
+            "done": "complete and closed",
+            "wontfix": "rejected; will not be done",
+            "punt": "deferred"
+        },
+        "reachable": {
+            "working": true,
+            "blocked": true,
+            "codecomplete": true,
+            "done": true,
+            "wontfix": true,
+            "punt": true
+        },
+        "escapable": {
+            "open": true,
+            "working": true,
+            "blocked": true,
+            "codecomplete": true
+        }
+    }
+}

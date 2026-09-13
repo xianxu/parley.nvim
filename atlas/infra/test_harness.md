@@ -140,6 +140,30 @@ the tree currently holds.
 - [Linting](linting.md) — `make lint`, which `make test` runs first.
 - `TOOLING.md` — the developer-facing command list and perf report.
 
+## Standalone release acceptance
+
+`PLENARY=/absolute/path/to/plenary.nvim` overrides the test dependency across
+all child Neovim processes. `check-test-deps` checks it before test fan-out.
+The root Makefile is a real upstream seed; optional workflow links and agent
+infrastructure are restored by maintainer bootstrap, excluded from releases.
+
+`scripts/check-fresh-clone.sh --runtime --worktree` snapshots tracked/staged
+files using a private git index, rejects escaping/dangling links, and runs actual
+load/setup/chat creation from the archive cwd with empty HOME/XDG/profile state.
+It repeats with intact, missing, corrupt, and malformed vocabulary. Runtime
+acceptance needs no Plenary and disallows unexpected subprocesses. `--full`
+adds an independently extracted, indexed tree and runs `make test` there;
+normal specs never recursively request that full mode. Every invocation owns
+and cleans its scratch directory, including on failures. `--ref <commit>` pins
+release acceptance instead of the current tracked working tree.
+
+The vocabulary drift check exports current CUE data into scratch and compares
+full JSON semantics, independent of formatting and source stamps. It never
+repairs inputs. Portable tests use `fake_vocabulary` with file-backed export
+results and recorded calls; CI provisions the real exporter/CUE through the
+repo-owned setup hook and executes the same check. Runtime/data validation
+remains independent of those maintainer tools.
+
 ### Concurrent directory creation
 
 `tests/unit/prepare_dir_spec.lua` reproduces a competing directory creator at the mkdir boundary using real temporary directories. `lua/parley/fs.lua` owns the literal-path directory postcondition; helper path expansion remains in `helper.prepare_dir`. A source guard keeps all production directory creators on that seam.

@@ -21,7 +21,14 @@ The philosophy behind Parley is Keep Things Simple, and Local, and a bit of Unix
 - Leverage Neovim, and all its goodies
 - Minimal dependencies, install and it works, all you need is your API keys
 
-## Developer performance testing
+## Developer testing and performance
+
+A standalone checkout includes its runtime data and contributor test targets;
+no ariadne checkout is required. With the test prerequisites installed, run
+`make test PLENARY=/absolute/path/to/plenary.nvim`. Use `make help` to list
+targets, including `make check-fresh-clone` for isolated archive acceptance.
+See [standalone contributor setup](TOOLING.md#standalone-contributor-setup)
+for prerequisites, dependency overrides, and maintainer verification commands.
 
 Run `make perf` to collect Parley's report-only chat-typing benchmark. See
 [TOOLING.md](TOOLING.md#chat-typing-performance-report) for the scenario, output schema,

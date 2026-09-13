@@ -1,1 +1,0 @@
-../../../ariadne/construct/scripts/clone-data-deps.sh

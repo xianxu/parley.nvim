@@ -1,5 +1,7 @@
-local primary_dir = vim.fn.tempname() .. "-parley-chat-move-primary"
-local secondary_dir = vim.fn.tempname() .. "-parley-chat-move-secondary"
+-- Buffer names are canonicalized by Neovim; cleanup must use the same spelling
+-- even when TMPDIR has symlinks or redundant separators (fresh-clone archives).
+local primary_dir = vim.fn.resolve(vim.fn.tempname() .. "-parley-chat-move-primary")
+local secondary_dir = vim.fn.resolve(vim.fn.tempname() .. "-parley-chat-move-secondary")
 vim.fn.mkdir(primary_dir, "p")
 vim.fn.mkdir(secondary_dir, "p")
 vim.g.parley_test_mode = true

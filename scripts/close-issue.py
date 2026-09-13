@@ -1,1 +1,0 @@
-../../ariadne/scripts/close-issue.py

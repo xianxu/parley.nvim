@@ -15,6 +15,19 @@ the issue **home**: `config.issues_dir` is seeded at setup from the cue
 `discovery.home` (precedence: explicit user override > cue home > built-in
 default), so every reader derives from the one cue source.
 
+The generated JSON ships with Parley and resolves from the plugin's own root,
+never the launch directory. The loader validates category/lifecycle structure
+and limits regular-file reads to 1 MiB. A ready or unavailable result is cached;
+explicit `setup()` reloads it so a repaired installation recovers.
+
+Missing or invalid data does not prevent chat startup. Raw issue records remain
+readable and sort by ID (archive order still uses mtime), without fabricated
+statuses or categories. Creation, decomposition, next-runnable selection, and
+status cycling report the unavailable capability before changing files or
+buffers. Finder status actions follow the same rule. The optional sdlc runner
+supports PATH executables and interactive-shell functions/aliases; command
+arguments remain literal, and missing tooling produces setup advice.
+
 ## Commands
 - `:ParleyIssueNew` (`<C-y>c`): **delegates to `sdlc issue new`** (M3 #116) — the canonical creator (id allocation + the cue/sdlc-owned template + broadcast to origin/main per ariadne#82) — then opens the created file. The title prompt is prefixed with the destination repo — `[<repo>] Issue title: ` — where `<repo>` is the basename of the git root `issues_dir` resolves against (the editor's cwd root), so issues aren't created in the wrong repo (#142)
 - `:ParleyIssueFinder` (`<C-y>f`): opens immediately with cancellable `scanning…`, then atomically installs asynchronously parsed issue metadata. `<Tab>` (natural key; `<C-a>` kept for back-compat) toggles between `issues` (all of `workshop/issues/`, done items visible — the default, vocabulary status/ID/path order) and `history` (archived items in `workshop/history/issues/`, mtime/ID/path order so the newest archive row sits closest to the bottom-anchored prompt) (#158, superseding the tri-state all/active/all+history from #152). Full payload reads occur only on canonical path-plus-mtime cache misses; parsing reuses `issues.parse_frontmatter`/`extract_title`. The complete prompt query is kept verbatim across repaint and later invocations; clearing persists the empty query (#177). In super-repo mode, a completely labelled root set with at least two distinct repositories adds `[ALL] [NONE]   [repo…]`; choices persist across views, newly discovered repos default on, temporarily absent choices are retained, and facet updates leave the live query untouched. Incomplete labels, one unique repo, and ordinary mode omit the bar. Persisted NONE still opens the empty picker so ALL remains reachable (#186, #189, #191).

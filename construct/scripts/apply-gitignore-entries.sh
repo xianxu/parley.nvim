@@ -1,1 +1,0 @@
-../../../ariadne/construct/scripts/apply-gitignore-entries.sh

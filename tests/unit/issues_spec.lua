@@ -197,7 +197,7 @@ describe("build_spawn_argv (#116 M3 — sdlc as PATH binary vs shell function)",
         assert.are.same("/bin/zsh", out[1])
         assert.are.same("-i", out[2])
         assert.are.same("-c", out[3])
-        assert.is_truthy(out[4]:find("'sdlc' 'issue' 'new'", 1, true)) -- each word shellescaped
+        assert.is_truthy(out[4]:find("sdlc 'issue' 'new'", 1, true)) -- command expands aliases; arguments stay quoted
         assert.is_truthy(out[4]:find("'my title'", 1, true)) -- title quoted intact (space preserved)
     end)
 end)

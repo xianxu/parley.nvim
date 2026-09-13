@@ -197,6 +197,31 @@ describe("IssueFinder asynchronous discovery", function()
         issue_finder.setup(parley)
     end)
 
+    it("refuses status cycling without changing file bytes when vocabulary is unavailable", function()
+        local vocab = require("parley.issue_vocabulary")
+        local path = vim.fn.tempname() .. ".md"
+        local lines = {"---", "id: 1", "status: working", "updated: 2000-01-01", "---", "# Issue"}
+        vim.fn.writefile(lines, path)
+        local ok, why = pcall(function()
+            vocab.reload({path=path .. ".missing"})
+            issue_finder.open()
+            local key = require("parley.keybinding_registry").key_for("if_cycle_status", fake.config)
+            local mapping
+            for _, entry in ipairs(captured.mappings) do
+                if entry.key == key then mapping = entry end
+            end
+            assert.is_not_nil(mapping)
+            mapping.fn({value=path, issue={id="1",status="working"}}, function()
+                error("unavailable action must not close/reopen picker")
+            end)
+            assert.same(lines, vim.fn.readfile(path))
+            assert.matches("unavailable", warnings[#warnings])
+        end)
+        vocab.reset_for_tests()
+        os.remove(path)
+        assert.is_true(ok, why)
+    end)
+
     it("opens scanning before disk acquisition and settles parsed rows without changing the query", function()
         issue_finder.open()
 

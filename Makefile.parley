@@ -11,6 +11,9 @@ help-parley:
 	"  make test-integration Run integration + arch tests" \
 	"  make test-spec SPEC=  Run tests for a specific spec key" \
 	"  make test-changed     Run tests for changed spec files" \
+	"  make check-fresh-clone Verify startup and tests in an isolated archive" \
+	"  make check-vocabulary Compare shipped data to upstream (maintainer tools)" \
+	"  make check-sdlc-conformance Check optional sdlc discovery (maintainers)" \
 	"  make perf             Report real headless chat-typing performance" \
 	"  make lint             Run luacheck on lua/ and tests/" \
 	"  make fixtures         Refresh SSE fixture files from real APIs" \
@@ -20,7 +23,7 @@ help-parley:
 
 # ── Test environment ─────────────────────────────────────────────────────────
 
-PLENARY = ~/.local/share/nvim/lazy/plenary.nvim
+PLENARY ?= $(HOME)/.local/share/nvim/lazy/plenary.nvim
 REAL_HOME = $(HOME)
 
 # The harness scratch trees live OUTSIDE $(CURDIR) on purpose — see
@@ -43,7 +46,7 @@ TEST_TMP = $(TEST_ENV_ROOT)/tmp
 # Quoted individually at the use site: an unquoted list word-splits, and a
 # checkout under a path with a space would make `rm -rf` target the fragments.
 LEGACY_TEST_DIRS = "$(CURDIR)/.test-home" "$(CURDIR)/.test-xdg" "$(CURDIR)/.test-tmp"
-TEST_ENV = HOME="$(TEST_HOME)" XDG_DATA_HOME="$(TEST_XDG)/data" XDG_STATE_HOME="$(TEST_XDG)/state" XDG_CACHE_HOME="$(TEST_XDG)/cache" TMPDIR="$(TEST_TMP)" NVIM_TEST_PLENARY="$(REAL_HOME)/.local/share/nvim/lazy/plenary.nvim"
+TEST_ENV = HOME="$(TEST_HOME)" XDG_DATA_HOME="$(TEST_XDG)/data" XDG_STATE_HOME="$(TEST_XDG)/state" XDG_CACHE_HOME="$(TEST_XDG)/cache" TMPDIR="$(TEST_TMP)" NVIM_TEST_PLENARY="$(PLENARY)"
 
 define PREP_TEST_ENV
 mkdir -p "$(TEST_HOME)" "$(TEST_XDG)/data" "$(TEST_XDG)/state" "$(TEST_XDG)/cache" "$(TEST_TMP)"
@@ -229,3 +232,23 @@ model-checker: model-check
 # quoted individually so a path containing a space stays one word.
 test-clean-env:
 	@rm -rf "$(TEST_HOME)" "$(TEST_XDG)" "$(TEST_TMP)" $(LEGACY_TEST_DIRS)
+
+# Public contributors may keep Plenary anywhere; normal tests need no ariadne.
+.PHONY: check-test-deps check-vocabulary check-fresh-clone check-sdlc-conformance
+check-test-deps:
+	@test -r "$(PLENARY)/plugin/plenary.vim" || { \
+	  echo "Missing plenary.nvim. Clone nvim-lua/plenary.nvim, then run make test PLENARY=/absolute/path/to/plenary.nvim" >&2; exit 1; }
+
+test-unit test-integration test-spec test-changed: check-test-deps
+
+check-vocabulary:
+	@scripts/check-vocabulary.sh
+
+check-fresh-clone:
+	@PLENARY="$(PLENARY)" scripts/check-fresh-clone.sh --full --worktree
+
+check-sdlc-conformance:
+	@command -v sdlc >/dev/null 2>&1 || { echo "Install sdlc to run the maintainer conformance check" >&2; exit 1; }
+	@sdlc --help >/dev/null
+	@sdlc issue new --help >/dev/null
+	@echo "sdlc command discovery/help conformance passed (read-only)"

@@ -384,7 +384,7 @@ M.open = function(_options)
     end
 
     local function render_issue(issue)
-        local prefix = issue.archived and "[archived]" or string.format("[%s]", issue.status)
+        local prefix = issue.archived and "[archived]" or string.format("[%s]", issue.status or "?")
         local label = issue.title ~= "" and issue.title or issue.slug
         local repo_prefix = issue.repo_name and ("{" .. issue.repo_name .. "} ") or ""
         local display = string.format("%s%s %s %s", repo_prefix, prefix, issue.id, label)
@@ -396,7 +396,7 @@ M.open = function(_options)
         end
         return {
             display = display,
-            search_text = string.format("%s%s %s %s %s", repo_prefix, issue.status, issue.id, issue.title, issue.slug),
+            search_text = string.format("%s%s %s %s %s", repo_prefix, issue.status or "", issue.id, issue.title, issue.slug),
             value = issue.path,
             issue = issue,
         }
@@ -573,7 +573,11 @@ M.open = function(_options)
                     local lines = vim.fn.readfile(item.value)
                     local fm = issues_mod.parse_frontmatter(lines)
                     if fm then
-                        local new_status = issues_mod.cycle_status_value(fm.status)
+                        local new_status, err = issues_mod.cycle_status_value(fm.status)
+                        if not new_status then
+                            _parley.logger.warning(err)
+                            return
+                        end
                         for i = 2, fm.header_end - 1 do
                             if lines[i]:match("^status:") then
                                 lines[i] = "status: " .. new_status

@@ -147,3 +147,13 @@ found that weave would replace a real portable Makefile with a sibling link.
 tracks safe seeded Makefile delivery and bootstrap preservation. This affects
 maintainer preparation only, adding no runtime dependency to the packaged app.
 The starter profile remains to be built from the recorded operator settings.
+
+### 2026-09-13 — standalone acceptance complete; packaging sequence reaffirmed
+
+Reason: #208 passed close review after #219's directory race and archive fixture
+repairs; the operator reaffirmed this project's sequence rather than the wider
+v1-release roadmap. Delta: #208 acceptance is complete (232 specs in both
+checkout and archive, four startup variants, 1.81h measured). Next is #245,
+then #246 and #247. #245's dependency health section can land independently of
+#213's broader diagnostics; its reviewed design awaits approval of the default
+formula package subset. #209 remains a separate, unimplemented proposal.

@@ -6,7 +6,7 @@ done_when: "A user on a supported Neovim baseline installs parley.nvim from a fr
 status: ideation
 explicitly_out: [parley.nvim#115, parley.nvim#236]
 created: 2026-09-02
-updated: 2026-09-12
+updated: 2026-09-13
 ---
 
 # parley-v1-release
@@ -71,17 +71,33 @@ open. Sequencing below is dependency order, not a schedule.
 Dependency order. #208 unblocks everything; #206 and #207 are last because the
 product they document must be settled first.
 
-- [ ] **#208** — parley must install and load from a fresh clone *(B1 + the dev/user separation)*
-- [ ] **#209** — safe-by-default posture for a public release *(B2, B4, B5)*
-- [ ] **#210** — consent model for write-capable tools *(B3; revisits #157)*
-- [ ] **#211** — remove personal configuration from product defaults *(B6, B7)*
-- [ ] **#212** — gate the ariadne surface behind repo detection *(B8, B9, Tier 3)*
-- [ ] **#213** — make checkhealth honest and remove the copilot adapter *(B10; Tier 4 moved to #236, outside v1)*
-- [x] **#214** — audit and curate the default keybinding surface *(policy on top of #212's mechanism)* — **closed 2026-09-08, 17.14h** (est 3.83h, 0.2×)
-- [x] **#237** — ParleyProxy update fetches the latest release unless pinned; status shows the version *(a stale pin locks out the newest models)*
-- [ ] **#206** — rebuild Parley user documentation *(step 1 done: the audit)*
-- [ ] **#207** — produce Parley introduction video *(depends on #206)*
-- [ ] **#162** — split parley into two plugins — **deferred**, see Log
+- [x] [parley.nvim#208] — parley must install and load from a fresh clone *(B1 + the dev/user separation)*
+- [ ] [parley.nvim#209] — safe-by-default posture for a public release *(B2, B4, B5)*
+- [ ] [parley.nvim#210] — consent model for write-capable tools *(B3; revisits #157)*
+- [ ] [parley.nvim#211] — remove personal configuration from product defaults *(B6, B7)*
+- [ ] [parley.nvim#212] — gate the ariadne surface behind repo detection *(B8, B9, Tier 3)*
+- [ ] [parley.nvim#213] — make checkhealth honest and remove the copilot adapter *(B10; Tier 4 moved to #236, outside v1)*
+- [x] [parley.nvim#214] — audit and curate the default keybinding surface *(policy on top of #212's mechanism)* — **closed 2026-09-08, 17.14h** (est 3.83h, 0.2×)
+- [x] [parley.nvim#237] — ParleyProxy update fetches the latest release unless pinned; status shows the version *(a stale pin locks out the newest models)*
+- [ ] [parley.nvim#206] — rebuild Parley user documentation *(step 1 done: the audit)*
+- [ ] [parley.nvim#207] — produce Parley introduction video *(depends on #206)*
+- [ ] [parley.nvim#162] — split parley into two plugins — **deferred**, see Log
+
+<a id="parley.nvim-208"></a>
+### parley.nvim#208 — fresh-clone installability
+
+**est:** 2.494h
+**started:** 2026-09-13
+
+Runtime changes and portable build/test infrastructure are committed. Isolated
+startup passes with intact, missing, corrupt, and malformed vocabulary; focused
+issue/harness suites, drift, conformance, and lint pass. The full archive suite
+exposed the existing directory-creation race tracked as #219. Its isolated fix
+is in progress; #208 is not closed or published.
+
+**Progress 2026-09-13:** #219 merged; full checkout and standalone archive
+acceptance each pass 232 spec files. Startup also passes all four vocabulary
+variants. Earlier blocker is resolved; review and publication remain.
 
 ## Log
 
@@ -185,3 +201,14 @@ changes surfaced on the way and were fixed in #237: claude's route moved to
 #205 catalog conformance cases cannot pass with a fabricated credential (to be
 filed), and the real binary's port-release time mid-stream is unmeasured.
 Estimate 5.76 h, actual 7.20 h.
+
+## Revisions
+
+### 2026-09-13 — recover task discovery and record installation progress
+
+Reason: `sdlc project find --issue parley.nvim#208` could not find this
+project's bare bold issue references. Delta: qualify task references throughout
+the existing breakdown without changing scope or completion state; add #208's
+current progress and blocker so close can update this portfolio record.
+
+[parley.nvim#208]: #parley.nvim-208

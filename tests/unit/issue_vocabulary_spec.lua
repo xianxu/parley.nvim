@@ -88,6 +88,110 @@ describe("issue_vocabulary", function()
         end
     end)
 
+    describe("validation and unavailable cache", function()
+        local scratch
+        before_each(function()
+            scratch = vim.fn.tempname()
+            vocab.reset_for_tests()
+        end)
+        after_each(function()
+            vim.fn.delete(scratch, "rf")
+            vocab.reset_for_tests()
+        end)
+
+        it("rejects malformed categories and transitions", function()
+            local changes = {
+                function(v) v.categories.open = {} end,
+                function(v) v.categories.open = { [2] = "open" } end,
+                function(v) v.categories.active = { "working", 3 } end,
+                function(v) v.categories.active = { "open" } end,
+                function(v) v.categories.active = { "working", "working" } end,
+                function(v) v.categories.open.extra = "open" end,
+                function(v) v.lifecycle = { [2] = v.lifecycle[1] } end,
+                function(v) v.lifecycle[1].from = "unknown" end,
+                function(v) v.lifecycle[1].to = false end,
+                function(v) v.lifecycle[1] = "transition" end,
+            }
+            for _, change in ipairs(changes) do
+                local raw = sample_vocab()
+                change(raw)
+                assert.has_error(function() vocab.from_table(raw) end)
+            end
+        end)
+
+        it("accepts unknown metadata and derives the fallback from the open category", function()
+            local raw = sample_vocab()
+            raw.categories.open = { "queued" }
+            raw.lifecycle[1].from = "queued"
+            raw.future_metadata = { flag = true }
+            assert.equals("queued", vocab.from_table(raw):next_status("unrecognized"))
+        end)
+
+        it("strictly rejects missing, directory, oversized, and malformed JSON files", function()
+            assert.has_error(function() vocab.load({ path = scratch }) end)
+            vim.fn.mkdir(scratch)
+            assert.has_error(function() vocab.load({ path = scratch }) end)
+            vim.fn.delete(scratch, "d")
+            vim.fn.writefile({ vim.json.encode(sample_vocab()) .. string.rep(" ", 1024 * 1024) }, scratch)
+            assert.has_error(function() vocab.load({ path = scratch }) end)
+            vim.fn.writefile({ "{" }, scratch)
+            assert.has_error(function() vocab.load({ path = scratch }) end)
+            vim.fn.writefile({ vim.json.encode(sample_vocab()) }, scratch)
+            assert.equals("working", vocab.load({ path = scratch }):next_status("open"))
+        end)
+
+        it("rejects growth beyond the cap before attempting JSON decode", function()
+            vim.fn.writefile({ vim.json.encode(sample_vocab()) .. string.rep(" ", 1024 * 1024) }, scratch)
+            local original_stat, original_fstat = vim.loop.fs_stat, vim.loop.fs_fstat
+            local original_decode = vim.json.decode
+            local decoded = false
+            -- Both metadata snapshots precede a concurrent append. The bounded
+            -- read must still detect excess bytes independently of those sizes.
+            vim.loop.fs_stat = function() return { type = "file", size = 1 } end
+            vim.loop.fs_fstat = function() return { type = "file", size = 1 } end
+            vim.json.decode = function(json)
+                decoded = true
+                return original_decode(json)
+            end
+            local ok, err = pcall(vocab.load, { path = scratch })
+            vim.loop.fs_stat, vim.loop.fs_fstat = original_stat, original_fstat
+            vim.json.decode = original_decode
+            assert.is_false(ok)
+            assert.is_truthy(tostring(err):find("exceeds 1 MiB", 1, true))
+            assert.is_false(decoded)
+        end)
+
+        it("caches unavailable and ready results until explicit reload", function()
+            local model, reason = vocab.reload({ path = scratch })
+            assert.is_nil(model)
+            assert.equals("string", type(reason))
+            vim.fn.writefile({ vim.json.encode(sample_vocab()) }, scratch)
+            local cached, cached_reason = vocab.default()
+            assert.is_nil(cached)
+            assert.equals(reason, cached_reason)
+            local ready = vocab.reload({ path = scratch })
+            assert.equals("working", ready:next_status("open"))
+            vim.fn.writefile({ "{" }, scratch)
+            assert.equals(ready, vocab.default())
+            assert.is_nil(vocab.reload({ path = scratch }))
+            assert.is_nil(vocab.home())
+        end)
+
+        it("anchors the default path to the loaded plugin rather than cwd or runtime shadow", function()
+            local old_cwd = vim.fn.getcwd()
+            local old_rtp = vim.o.runtimepath
+            vim.fn.mkdir(scratch .. "/construct/generated/vocabulary", "p")
+            vim.fn.writefile({ "{}" }, scratch .. "/construct/generated/vocabulary/issue.json")
+            vim.cmd("cd " .. vim.fn.fnameescape(scratch))
+            vim.opt.runtimepath:prepend(scratch)
+            local ok, model = pcall(vocab.load)
+            vim.cmd("cd " .. vim.fn.fnameescape(old_cwd))
+            vim.o.runtimepath = old_rtp
+            assert.is_true(ok)
+            assert.equals("working", model:next_status("open"))
+        end)
+    end)
+
     -- #116 M2: issue home sourced from the cue `discovery` block (relative).
     local function vocab_with_discovery(home)
         local v = sample_vocab()

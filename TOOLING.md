@@ -8,7 +8,42 @@
 - Run tests for changed specs: `make test-changed` (runs mapped tests for changed `atlas/*/*.md` files), this is faster than full test run
 - Run the report-only real chat-typing benchmark: `make perf` (details below).
 - Refresh SSE fixtures: `ANTHROPIC_API_KEY=... OPENAI_API_KEY=... make fixtures`
-- Test files live in `tests/unit/` (pure logic, no Neovim APIs) and `tests/integration/` (full Neovim runtime)
+- Test files live in `tests/unit/` (focused module contracts) and `tests/integration/` (full Neovim runtime)
+
+## Standalone Contributor Setup
+
+A public checkout includes its runtime vocabulary and a real root Makefile.
+Neovim, git, Python 3, ripgrep, luacheck, and Plenary are the test dependencies;
+ariadne, Go, CUE, and sdlc are not required for ordinary plugin tests.
+Point the harness at an existing Plenary checkout explicitly:
+
+```sh
+make test PLENARY=/absolute/path/to/plenary.nvim
+```
+
+The default remains `~/.local/share/nvim/lazy/plenary.nvim` for existing users.
+A missing dependency fails early with setup advice. The override is also used
+by the child Neovim processes, including from paths with spaces.
+
+`make check-fresh-clone PLENARY=/absolute/path/to/plenary.nvim` snapshots only
+tracked/staged files into an isolated archive, boots and creates a chat without
+a `.git` directory, tests missing/damaged vocabulary, then runs the full suite
+in a second indexed extraction. It leaves the actual git index and untracked
+chat work alone. Stage new code/tests before this check; unstaged changes to
+already tracked files are included. For a specific release tree use
+`scripts/check-fresh-clone.sh --full --ref <commit>` with `PLENARY` exported.
+
+Maintainers can run `./bootstrap.sh` to restore ignored infrastructure. The
+upstream-owned root Makefile remains a real seeded file; product targets live
+in Makefile.local/Makefile.parley. `make check-vocabulary` regenerates from the
+CUE source and compares the complete JSON without modifying it. This requires
+ariadne plus its vocabulary exporter and CUE. The generic CI workflow invokes
+`scripts/ci-setup.sh` to provision those tools before the merge check.
+
+Run `make check-sdlc-conformance` whenever the optional command runner changes
+and before closing such work. It checks real command discovery/help without
+creating issues. Missing sdlc makes this explicit maintainer check fail; normal
+tests use the filesystem-backed `tests/fixtures/fake_sdlc` instead.
 
 ## Test Scratch Directories
 

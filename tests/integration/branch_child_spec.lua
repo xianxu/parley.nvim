@@ -284,7 +284,8 @@ describe("residual M1 fixes, pinned (#214)", function()
     before_each(function() parley.setup({}) end)
 
     it("BR-10: a NON-chat parent gets an absolute back-link, not a bare basename", function()
-        local tmpdir = vim.fn.tempname(); vim.fn.mkdir(tmpdir, "p")
+        -- Redundant separators model a valid TMPDIR spelling from an archive.
+        local tmpdir = vim.fn.tempname() .. "//branch-parent"; vim.fn.mkdir(tmpdir, "p")
         local parent = tmpdir .. "/plain-notes.md"     -- no parseable timestamp
         vim.fn.writefile({ "# Notes" }, parent)
         vim.cmd("edit! " .. vim.fn.fnameescape(parent))
@@ -292,7 +293,7 @@ describe("residual M1 fixes, pinned (#214)", function()
         local child = tmpdir .. "/2026-09-06.14-00-00.000.md"
         parley.create_child_chat(child, "?", pb, nil)
         local body = table.concat(vim.fn.readfile(child), "\n")
-        assert.is_truthy(body:find(tmpdir, 1, true),
+        assert.is_truthy(body:find(vim.fn.resolve(parent), 1, true),
             "a basename back-link is unresolvable for a parent that is not a "
             .. "timestamped chat file; got: " .. body:sub(1, 200))
         vim.fn.delete(tmpdir, "rf")

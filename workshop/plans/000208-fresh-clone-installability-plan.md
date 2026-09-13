@@ -21,8 +21,6 @@ This fulfills #208 and unblocks the isolated starter profile. Provider defaults,
 | Name | Lives in | Status | Contract |
 |------|----------|--------|----------|
 | `IssueVocabulary`, `from_table` | `lua/parley/issue_vocabulary.lua` | modified | Validate category arrays and lifecycle endpoints before deriving indexes; no invented statuses |
-| `parse_frontmatter`, status predicates, `cycle_status_value`, completion values, `topo_sort` | `lua/parley/issues.lua` | modified | Preserve raw text without vocabulary; lifecycle operations return an unavailable diagnostic |
-| `materialize` / status ordering | `lua/parley/issue_finder_records.lua` | modified | Deterministic ID ordering when vocabulary unavailable; valid models retain category order |
 
 One vocabulary owns all lifecycle semantics (ARCH-DRY). Validate strings, dense arrays, disjoint categories, at least one open status, and known transition endpoints. Unknown extra JSON fields remain compatible with upstream evolution. Preserve existing first-transition ordering. The from_table strategy below verifies this pure boundary without IO mocks.
 
@@ -32,8 +30,10 @@ Without a model, parsing retains a supplied status and leaves a missing one abse
 
 | Name | Lives in | Status | Wraps |
 |------|----------|--------|-------|
+| `default_status`, `parse_frontmatter`, status predicates, `cycle_status_value`, completion values, `topo_sort` | `lua/parley/issues.lua` | modified | Preserve raw text without vocabulary; lifecycle operations return an unavailable diagnostic |
+| `materialize` / status ordering | `lua/parley/issue_finder_records.lua` | modified | Deterministic ID ordering when vocabulary unavailable; valid models retain category order |
 | `load`, `default`, `reload` | `lua/parley/issue_vocabulary.lua` | modified/new | JSON read/decode and one tagged cache: unprobed, ready(model), unavailable(reason) |
-| `setup`, issue action handlers | `lua/parley/issues.lua`, `lua/parley/issue_finder.lua`, `lua/parley/init.lua` | modified | Optional capability wiring and user diagnostics |
+| `get_cache`, `scan_issues`, `setup`, issue action handlers | `lua/parley/issues.lua`, `lua/parley/issue_finder.lua`, `lua/parley/init.lua` | modified | Optional capability wiring and user diagnostics |
 | `run_sdlc_issue_new`, `build_spawn_argv` | `lua/parley/issues.lua` | modified | Existing async runner; retain PATH executable and interactive-shell alias/function support |
 | Vendored vocabulary | `construct/generated/vocabulary/issue.json`, `.gitignore` | new | Release runtime data generated from upstream CUE |
 | Vocabulary drift check | `scripts/check-vocabulary.sh`, `scripts/merge-checks.d/20-vocabulary.sh` | new | Export into scratch and compare content; never repair during a check |
@@ -48,11 +48,11 @@ The issue creation runner already handles process-start errors and exit codes. P
 
 | Function / boundary | Adversarial input class | Mechanical guard |
 |---|---|---|
+| `materialize` | Same issue records shuffled while vocabulary is unavailable | Sorting every permutation yields the same deduplicated IDs; archived mtime ordering remains unchanged; ready-model controls retain category order |
 | `from_table` | Mutate one structural invariant of a minimal valid model at a time: category membership/array shape or transition endpoint | Every mutant is rejected before indexing; valid models preserve derived membership and first-transition order without IO |
 | `load` | Files whose bytes violate the read bound, JSON grammar, or model shape | Real scratch files fail explicitly; the valid control produces exactly the expected model, and no read borrows workspace data |
 | `default`, `reload` | Filesystem changes between cache events | Drive unprobed→ready/unavailable and explicit reload transitions against scratch files; repeated default calls retain the cached outcome, reload observes the new bytes |
 | Lifecycle helpers and callers | Absent model while raw issue text remains present | Table-driven helper checks plus each actual buffer/finder creation/cycle handler: compare bytes and timestamps before/after and require the unavailable diagnostic; enumerate direct and indirect callers with rg |
-| `materialize` | Same issue records shuffled while vocabulary is unavailable | Sorting every permutation yields the same deduplicated IDs; archived mtime ordering remains unchanged; ready-model controls retain category order |
 | `build_spawn_argv`, `run_sdlc_issue_new` | Command availability differs between PATH and the interactive shell | Filesystem-backed fake records argv and created files; exact quoted titles survive both routes, unavailable/failed routes return failure and leave the issue directory unchanged |
 | Drift checker | Committed content changes without source-stamp changes | Same export command passes the control, fails the mutated copy, and never repairs either input |
 | Standalone smoke | Hidden dependency available only outside the extracted product | Launch from the archive cwd under isolated HOME/XDG/runtimepath and assert load/setup/chat succeeds without external runtime data; missing-data variants additionally prove safe issue-action refusal |
@@ -97,11 +97,11 @@ Go nor CUE.
 
 ## Tasks
 
-- [ ] **Runtime data and degradation.** Implement the from_table/load/cache/lifecycle/materialize strategies in `tests/unit/issue_vocabulary_spec.lua`, `tests/unit/issues_spec.lua`, and finder tests, first observing red. Vendor the actual exporter output; expose only the required JSON through the existing generated-directory ignore. Implement capability handling across the enumerated consumers, then run all vocabulary/issue/finder specs and the chat lifecycle smoke tests. Keep the CUE lifecycle unchanged.
-- [ ] **Enforced derivation.** Implement regeneration into a temporary directory and semantic content comparison, including categories, transitions, and discovery. A source hash alone is insufficient. With ariadne absent, regular contributor tests validate the shipped artifact; the explicit maintainer drift command fails with setup advice. Wire the drift command into merge checks where CI bootstraps ariadne. Tests modify a scratch committed artifact and must go red even with an unchanged source stamp; restore and prove green. Use the real exporter for conformance, with a scratch fixture exporter for portable mutation tests.
-- [ ] **Portable development tree.** After ariadne#225 ships, replace the root link with its portable seeded Makefile; Makefile.local includes Makefile.parley exactly once. Verify help/local targets without peers, and initial bootstrap plus repeated weave from a scratch consumer with every maintainer link absent. Assert the root stays a real file and upstream bytes/modes do not change; keep maintainer targets through the new sibling-overlay fallback. Make `PLENARY` overridable and actually feed it into `NVIM_TEST_PLENARY`; fail early with dependency advice if missing. Untrack the 28 enumerated escaping links while retaining local files and ignoring their exact paths; replace root Makefile rather than ignoring it. Consume ariadne#225’s updated seeded CI shim and keep Parley setup in scripts/ci-setup.sh, so removing the tracked runner link does not break CI or get undone by weave. Verify the maintainer bootstrap path still restores its optional tools. Document prerequisites in `TOOLING.md`.
-- [ ] **Standalone acceptance.** Archive the tracked candidate tree into scratch outside the workspace with no `.git` or sibling. Run real Neovim require/setup/new-chat with network-triggering settings disabled, once with intact vocabulary and again with missing/corrupt/malformed variants. Assert issue mutations fail clearly and chat still works. Validate no tracked symlink escapes the archive; include a deliberate escaping-link fixture that the guard rejects. The recursive full-suite acceptance runs in a second extracted tree initialized as a temporary git repo (arch tests require git); do not recursively invoke it from the normal spec. Supply Plenary explicitly from a declared dependency location, never hardcode the operator path. Run `make test` there and in the development checkout.
-- [ ] **Documentation and close.** Update `atlas/issues/issue-management.md`, `atlas/infra/test_harness.md`, `atlas/index.md` if a page is added, `atlas/traceability.yaml`, and issue/project logs with the independent-install contract and exact commands/evidence. Run diff/lint checks and `sdlc close --issue 208 --verified '<evidence>'`; fix its findings before `sdlc pr` and `sdlc merge --yes`.
+- [x] **Runtime data and degradation.** Implement the from_table/load/cache/lifecycle/materialize strategies in `tests/unit/issue_vocabulary_spec.lua`, `tests/unit/issues_spec.lua`, and finder tests, first observing red. Vendor the actual exporter output; expose only the required JSON through the existing generated-directory ignore. Implement capability handling across the enumerated consumers, then run all vocabulary/issue/finder specs and the chat lifecycle smoke tests. Keep the CUE lifecycle unchanged.
+- [x] **Enforced derivation.** Implement regeneration into a temporary directory and semantic content comparison, including categories, transitions, and discovery. A source hash alone is insufficient. With ariadne absent, regular contributor tests validate the shipped artifact; the explicit maintainer drift command fails with setup advice. Wire the drift command into merge checks where CI bootstraps ariadne. Tests modify a scratch committed artifact and must go red even with an unchanged source stamp; restore and prove green. Use the real exporter for conformance, with a scratch fixture exporter for portable mutation tests.
+- [x] **Portable development tree.** After ariadne#225 ships, replace the root link with its portable seeded Makefile; Makefile.local includes Makefile.parley exactly once. Verify help/local targets without peers, and initial bootstrap plus repeated weave from a scratch consumer with every maintainer link absent. Assert the root stays a real file and upstream bytes/modes do not change; keep maintainer targets through the new sibling-overlay fallback. Make `PLENARY` overridable and actually feed it into `NVIM_TEST_PLENARY`; fail early with dependency advice if missing. Untrack the 28 enumerated escaping links while retaining local files and ignoring their exact paths; replace root Makefile rather than ignoring it. Consume ariadne#225’s updated seeded CI shim and keep Parley setup in scripts/ci-setup.sh, so removing the tracked runner link does not break CI or get undone by weave. Verify the maintainer bootstrap path still restores its optional tools. Document prerequisites in `TOOLING.md`.
+- [x] **Standalone acceptance.** Archive the tracked candidate tree into scratch outside the workspace with no `.git` or sibling. Run real Neovim require/setup/new-chat with network-triggering settings disabled, once with intact vocabulary and again with missing/corrupt/malformed variants. Assert issue mutations fail clearly and chat still works. Validate no tracked symlink escapes the archive; include a deliberate escaping-link fixture that the guard rejects. The recursive full-suite acceptance runs in a second extracted tree initialized as a temporary git repo (arch tests require git); do not recursively invoke it from the normal spec. Supply Plenary explicitly from a declared dependency location, never hardcode the operator path. Run `make test` there and in the development checkout.
+- [x] **Documentation and close.** Update `atlas/issues/issue-management.md`, `atlas/infra/test_harness.md`, `atlas/index.md` if a page is added, `atlas/traceability.yaml`, and issue/project logs with the independent-install contract and exact commands/evidence. Run diff/lint checks and `sdlc close --issue 208 --verified '<evidence>'`; fix its findings before `sdlc pr` and `sdlc merge --yes`.
 
 For each implementation task: run the new failing regression first, implement the smallest contract-preserving change, rerun the focused tests, then commit that coherent slice. Use `make test-spec SPEC=<matching-spec>` or the isolated Plenary runner; full verification is `make test` plus `scripts/check-fresh-clone.sh` and the maintainer drift check. Do not accept green tests that borrowed generated files from this checkout.
 
@@ -110,6 +110,25 @@ For each implementation task: run the new failing regression first, implement th
 Prepared for operator review; no #208 implementation has started. Derive estimate only after approval and `sdlc change-code` plan-quality acceptance.
 
 ## Revisions
+
+### 2026-09-13 — close review discoverability repairs
+
+Reason: BR-1 found README omitted the standalone contributor entry; BR-2
+reproduced empty help without the overlay. Delta: link README to the standalone
+tooling guide with the PLENARY invocation, wire product help in Makefile.local,
+and list the verification commands in help-parley. A portable make regression
+fails on the missing help and passes after the product-owned prerequisite is
+added. No upstream seed divergence or plugin runtime change.
+
+### 2026-09-13 — full archive exposes path-spelling assumptions
+
+Reason: with #219 integrated, full archive units pass but two integration
+fixtures assume raw temp paths match Neovim's canonical buffer paths. A trailing
+TMPDIR slash produces redundant separators in nested scratch. Delta: normalize
+chat-move fixture roots for buffer cleanup and compare the full resolved parent
+path in the backlink assertion. Keep a deliberate redundant separator in that
+fixture to reproduce the failure in ordinary runs. This changes test oracles,
+not product behavior; rerun the full archive and combined checkout suites.
 
 ### 2026-09-13 — deployment-goal investigation
 
@@ -140,3 +159,31 @@ and make read-only command conformance a maintainer target required at this
 close and whenever the runner seam changes. Isolated archive reproduction
 confirmed that launch cwd must also be isolated to avoid borrowing vocabulary.
 Operator-approved scope is unchanged.
+
+### 2026-09-13 — runtime implementation discoveries
+
+Reason: isolated reproduction borrowed cwd data, and real shell-route testing
+showed the quoted command name suppressed aliases. Delta: resolve vocabulary
+only from this plugin’s module root; share `default_status` across parsers and
+templates; leave only safe command identifiers bare for shell alias expansion,
+with every argument quoted. The fake verified literal injection-like titles
+through executable, function, and alias routes; unavailable-command diagnostics
+include setup advice. These repairs fulfill the approved boundaries.
+
+### 2026-09-13 — cache-generation and scan sweep
+
+Reason: a missing-status disk scan still fabricated open, and cached defaults
+could survive a vocabulary reload. Delta: scanners share default_status;
+get_cache clears parsed records when the model identity changes. Direct
+next-runnable and status-write helpers also refuse unavailable data. Display
+uses a question-mark label for absent status without altering stored values.
+These adapters read the model cache and are classified as integration; only
+the validated model and its calculations are pure. Added red→green regressions
+for the scan and ready→unavailable cache transition.
+
+### 2026-09-13 — close review plan-table repair
+
+Reason: BR-3 found the materialize test strategy in the core-concepts table.
+Delta: move that existing row into Function-level test strategies without
+changing its inputs, oracle, or the implementation entity row. Close round 2
+returned SHIP; this is a prose-only repair before the close commit.

@@ -1,12 +1,13 @@
 ---
 id: 000208
-status: working
+status: codecomplete
 deps: [ariadne#225]
 github_issue:
 created: 2026-09-02
 updated: 2026-09-13
 estimate_hours: 2.494
 started: 2026-09-13T12:19:41-07:00
+actual_hours: 1.81
 ---
 
 # parley must install and load from a fresh clone
@@ -82,11 +83,11 @@ fresh clone loads and a fresh contributor can run the tests.
 
 ## Plan
 
-- [ ] Vendor `construct/generated/vocabulary/issue.json`; add the regenerate-and-diff drift check.
-- [ ] Make `issue_vocabulary.default()` non-fatal; guard `issues.lua:382`.
-- [ ] Add a fresh-clone load spec that runs against an extracted archive.
-- [ ] Real `Makefile` including `Makefile.parley`, `-include` ariadne overlay.
-- [ ] Untrack maintainer-only symlinks; gitignore them; verify no escaping symlink remains.
+- [x] Vendor `construct/generated/vocabulary/issue.json`; add the regenerate-and-diff drift check.
+- [x] Make `issue_vocabulary.default()` non-fatal; guard `issues.lua:382`.
+- [x] Add a fresh-clone load spec that runs against an extracted archive.
+- [x] Real `Makefile` including `Makefile.parley`, `-include` ariadne overlay.
+- [x] Untrack maintainer-only symlinks; gitignore them; verify no escaping symlink remains.
 
 ## Log
 
@@ -104,7 +105,78 @@ asked how isolated the two halves are; the coupling grep answers "concentrated i
 is step one of a split either way, and is what the launch actually requires —
 see #212.
 
+### 2026-09-13 — implementation checkpoint
+- 2026-09-13: closed — 232 spec files and lint pass in final checkout and independent full archive; four vocabulary startup/chat variants pass; real drift and read-only sdlc conformance pass. BR-1 README entry and BR-2 standalone help repaired; portable help regression red→green, full mapped harness suite and targeted lint pass after repairs. Evidence /tmp/parley208-final-checkout.log, /tmp/parley208-resume-archive-fixed.log, /tmp/parley208-help-green.log, /tmp/parley208-review-harness.log.; review verdict: SHIP
+
+Runtime commit `3e2daf4` vendors the bounded module-root vocabulary and makes
+optional issue failures nonfatal. Follow-up staged changes invalidate parsed
+records on model reload and remove remaining invented status defaults.
+Focused vocabulary, unavailable-data, shell binary/function/alias, drift, and
+portable Make specs passed. Runtime archive acceptance passed all four variants
+(intact/missing/corrupt/malformed data) with an isolated HOME and real chat creation.
+Real exporter drift, read-only sdlc conformance, and isolated CI tool provisioning
+also passed. New test-map entries now pass the focused architecture suite.
+
+The full archive run failed in `parley_harness_spec.lua`: concurrent setup hit
+E739 creating the shared harness state directory. This is the existing #219
+check-then-mkdir race, not missing archive dependencies; do not rerun until green
+and dismiss it. Evidence: `/tmp/parley208-archive-full.log`, lines 501–523.
+The remaining acceptance work includes resolving that race through #219, then
+running full archive verification. Staged build cleanup preserves all maintainer
+links locally while untracking 28 escaping links (root Makefile becomes real).
+
+ariadne#225 merged as PR 122 at `2aff87d`, hosted CI green. Its root Makefile
+source was already adopted; Parley's seeded `.github/workflows/merge-check.yml`
+still needs the merged source bytes so CI invokes the local provisioning hook
+and upstream runner fallback. Do not fork the generic workflow or weave the
+whole live consumer unnecessarily. #208 is not closed or ready to publish yet.
+
+### 2026-09-13 — resumed verification and CI adoption
+
+Adopted the exact merged upstream `.github/workflows/merge-check.yml` seed,
+including declared Go selection, the repo setup hook, and the sibling runner
+fallback. Resumed checks pass: standalone startup for intact/missing/corrupt/
+malformed vocabulary, real exporter drift, read-only sdlc conformance, the
+issue-management and test-harness mapped suites, and lint (399 files, zero
+warnings/errors). Evidence is in `/tmp/parley208-resume-{runtime,issues,harness,lint}.log`.
+The #219 fix is proceeding in an isolated worktree; full-suite acceptance
+remains pending its integration. No release claim is made from these focused
+checks.
+
+### 2026-09-13 — complete integration acceptance
+
+#219 shipped in PR177 and is integrated at `5d7a3c5`; no open race remains.
+`make test` passes 232 spec files in the final development checkout, with zero
+lint warnings/errors. The independent full archive passes the same 232 specs
+and all four load/setup/new-chat variants. Runtime, tests, scripts, Makefiles,
+and CI bytes match that tested archive candidate (`48a5858`). Logs:
+`/tmp/parley208-final-checkout.log` and `/tmp/parley208-resume-archive-fixed.log`.
+The two archive-only fixture failures were reproduced and fixed by canonical
+path comparisons (`100ed4c`), with a deliberately redundant separator retained
+as a regression. `make check-vocabulary`, `make check-sdlc-conformance`, exact
+upstream seed comparisons, and `git diff --check` also pass. Ready for the
+whole-issue close review; publishing remains after that gate.
+
+### 2026-09-13 — close accepted
+
+Round 2 returned SHIP and disposed BR-1/BR-2. Reviewer independently reran all
+232 archive specs, four startup variants and 401-file lint, and mutation-tested
+standalone help. The sole new Minor, BR-3, is repaired by relocating the
+materialize strategy into its proper table. Measured actual adopted by close:
+1.81h. Packaging continues with #245; #209's separate proposal is deferred.
+
 ## Revisions
+
+### 2026-09-13 — close round 1 repairs
+
+Boundary review reproduced the pinned 232-spec full archive pass and found no
+critical runtime defects. BR-1 (README discoverability) is addressed with the
+standalone test invocation and tooling link. BR-2 (empty standalone help) is
+addressed in the product-owned Makefile.local, with a red→green portable help
+test and verification commands in help-parley. `make WF_WORKFLOW= help`, ordinary
+overlay help, the portable make spec, targeted lint and diff check pass. Detailed
+evidence: `/tmp/parley208-help-{red,green}.log`. Rerun close to dispose both
+findings; the prior REWORK did not finalize the issue.
 
 ### 2026-09-13 — deployment implementation design
 
