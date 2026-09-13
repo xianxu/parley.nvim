@@ -22,6 +22,10 @@
 -- (default `vim.system`, `TIMEOUT_MS`), stats the file with `uv.fs_stat`
 -- inside the libuv callback, classifies, and SCHEDULES `on_done` onto the
 -- main loop — so callers may use `vim.fn` / `vim.api` freely in `on_done`.
+-- A LAUNCH failure (vim.system raises ENOENT for a missing executable in a
+-- user's `clipboard_cmd`) is not an exception either: it settles as
+-- `failed, "could not start <tool>: …"` through the same scheduled `on_done`,
+-- exactly once — every outcome reaches completion by one path (ARCH-ORDER).
 --
 -- PURE except `read_png` (spawn) and `host_env` (probes the host).
 
@@ -191,7 +195,10 @@ end
 
 --- Spawn the recipe to write a PNG at out_path, then `on_done(status, msg)`
 --- on the main loop (always via vim.schedule — never inline, even when the
---- runner answers synchronously).
+--- runner answers synchronously). Never raises: a runner that throws on
+--- launch settles as `failed` with "could not start <tool>: <err>". `on_done`
+--- fires exactly once — a runner that answers and THEN throws does not
+--- settle twice.
 --- @param recipe table  from select()
 --- @param out_path string  where the tool writes; the caller owns the file
 --- @param on_done fun(status: "ok"|"no_image"|"failed", msg: string|nil)
@@ -200,14 +207,24 @@ end
 function M.read_png(recipe, out_path, on_done, runner)
     local argv = M.argv_for(recipe, out_path)
     local run = runner or system_runner(recipe.tool)
-    run(argv, function(code, stderr)
-        -- uv.fs_stat is safe in a libuv callback; vim.fn is not.
-        local st = uv.fs_stat(out_path)
-        local status, msg = M.classify(code, stderr, st and st.size or nil)
+    local settled = false
+    local function settle(status, msg)
+        if settled then
+            return
+        end
+        settled = true
         vim.schedule(function()
             on_done(status, msg)
         end)
+    end
+    local ok, err = pcall(run, argv, function(code, stderr)
+        -- uv.fs_stat is safe in a libuv callback; vim.fn is not.
+        local st = uv.fs_stat(out_path)
+        settle(M.classify(code, stderr, st and st.size or nil))
     end)
+    if not ok then
+        settle("failed", "could not start " .. tostring(recipe.tool) .. ": " .. tostring(err))
+    end
 end
 
 return M

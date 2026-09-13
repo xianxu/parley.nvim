@@ -391,6 +391,62 @@ describe("clipboard_image: read_png", function()
         assert.matches("no such type", msg)
     end)
 
+    it("a runner that throws on launch settles as failed through on_done, scheduled (C3)", function()
+        local out = tmp_png()
+        local runner = function()
+            error("ENOENT: no such file or directory")
+        end
+        local status, msg
+        ci.read_png(recipe, out, function(s, m)
+            status, msg = s, m
+        end, runner)
+        assert.is_nil(status, "the launch error is routed onto the main loop, not raised inline")
+        vim.wait(500, function()
+            return status ~= nil
+        end, 10)
+        assert.equals("failed", status)
+        assert.matches("^could not start t: ", msg)
+        assert.matches("ENOENT", msg)
+    end)
+
+    it("a runner that throws AFTER answering does not settle twice", function()
+        local out = tmp_png()
+        local runner = function(_, on_complete)
+            on_complete(1, "")
+            error("late boom")
+        end
+        local calls = 0
+        local status
+        ci.read_png(recipe, out, function(s)
+            calls = calls + 1
+            status = s
+        end, runner)
+        vim.wait(300, function()
+            return calls > 0
+        end, 10)
+        vim.wait(100, function()
+            return calls > 1
+        end, 10)
+        assert.equals(1, calls, "on_done fires exactly once")
+        assert.equals("no_image", status, "the answer that arrived first wins")
+    end)
+
+    it("the default runner reports a nonexistent executable as could-not-start, not an exception", function()
+        local out = tmp_png()
+        local missing = "/nonexistent/parley-clipboard-tool"
+        local bad = { tool = missing, argv = { missing, "{out}" } }
+        local status, msg
+        local ok, err = pcall(ci.read_png, bad, out, function(s, m)
+            status, msg = s, m
+        end)
+        assert.is_true(ok, "read_png raised: " .. tostring(err))
+        vim.wait(2000, function()
+            return status ~= nil
+        end, 10)
+        assert.equals("failed", status)
+        assert.matches("could not start " .. vim.pesc(missing), msg)
+    end)
+
     it("the default runner synthesizes the timeout message on a silent 124", function()
         local out = tmp_png()
         local saved = ci.TIMEOUT_MS

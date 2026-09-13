@@ -179,6 +179,111 @@ describe("paste image (#231)", function()
         assert.equals(1, reads())
     end)
 
+    -- C3 (BR-3): every launch or insertion failure is a complete terminal
+    -- transition — in-flight cleared, temp removed, one notice, no residue —
+    -- proven by a successful paste on the same buffer straight afterwards.
+
+    it("a clipboard_cmd that cannot be launched is one notice, and the next paste is accepted", function()
+        local buf = open_chat(TS .. "_nolaunch.md", chat_lines())
+        vim.api.nvim_win_set_cursor(0, { 8, 0 })
+        local saved_cmd = parley.config.assets.clipboard_cmd
+        parley.config.assets.clipboard_cmd = { "/nonexistent/parley-clipboard-tool", "{out}" }
+        local ok, err = pcall(function()
+            parley.paste_image(buf, { notify = notify })
+            assert.is_true(wait_for(function() return #notices > 0 end), "the launch failure notifies")
+        end)
+        parley.config.assets.clipboard_cmd = saved_cmd
+        assert.is_true(ok, tostring(err))
+        assert.equals(1, #notices)
+        assert.matches("nothing pasted — could not start /nonexistent/parley%-clipboard%-tool", notices[1].msg)
+        assert.equals("warn", notices[1].level)
+        assert.equals(9, line_count(buf))
+        assert.equals(0, vim.fn.isdirectory(root .. "/assets"))
+
+        -- The flight is over: the same buffer pastes again, no "already in progress".
+        vim.env.PARLEY_FAKE_CLIPBOARD = "png:" .. png
+        parley.paste_image(buf, { notify = notify })
+        assert.is_true(wait_for(function() return line_count(buf) == 10 end), "second paste inserted its link")
+        for _, n in ipairs(notices) do
+            assert.is_nil(n.msg:find("already in progress", 1, true), n.msg)
+        end
+        assert.equals(1, reads())
+    end)
+
+    it("a nomodifiable buffer is refused BEFORE saving: no file, no folder, buffer unchanged", function()
+        vim.env.PARLEY_FAKE_CLIPBOARD = "png:" .. png
+        local buf = open_chat(TS .. "_nomod.md", chat_lines())
+        vim.api.nvim_win_set_cursor(0, { 8, 0 })
+        vim.bo[buf].modifiable = false
+        local ok, err = pcall(function()
+            parley.paste_image(buf, { notify = notify })
+            assert.is_true(wait_for(function() return #notices > 0 end))
+        end)
+        vim.bo[buf].modifiable = true
+        assert.is_true(ok, tostring(err))
+        assert.equals(1, #notices)
+        assert.matches("nothing pasted", notices[1].msg)
+        assert.matches("modifiable", notices[1].msg)
+        assert.equals(9, line_count(buf), "buffer unchanged")
+        assert.equals(0, vim.fn.isdirectory(root .. "/assets"), "nothing saved for a link that cannot land")
+        assert.equals(1, reads())
+
+        parley.paste_image(buf, { notify = notify })
+        assert.is_true(wait_for(function() return line_count(buf) == 10 end), "the next paste is accepted")
+        assert.equals(2, reads())
+    end)
+
+    it("an insertion failure after the save rolls the asset back: no file, no empty folder", function()
+        vim.env.PARLEY_FAKE_CLIPBOARD = "png:" .. png
+        local buf = open_chat(TS .. "_noinsert.md", chat_lines())
+        vim.api.nvim_win_set_cursor(0, { 8, 0 })
+        local buffer_edit = require("parley.buffer_edit")
+        local saved_insert = buffer_edit.insert_lines_at
+        buffer_edit.insert_lines_at = function()
+            error("E21: Cannot make changes (simulated)")
+        end
+        local ok, err = pcall(function()
+            parley.paste_image(buf, { notify = notify })
+            assert.is_true(wait_for(function() return #notices > 0 end))
+        end)
+        buffer_edit.insert_lines_at = saved_insert
+        assert.is_true(ok, tostring(err))
+        assert.equals(1, #notices)
+        assert.matches("nothing pasted — could not insert the link", notices[1].msg)
+        assert.matches("E21", notices[1].msg, "the insertion error is shown")
+        assert.equals("error", notices[1].level)
+        assert.equals(9, line_count(buf), "no link")
+        assert.same({}, vim.fn.glob(root .. "/assets/**", false, true), "no file under assets/")
+        assert.equals(0, vim.fn.isdirectory(root .. "/assets/" .. TS), "the folder this paste created is gone")
+        assert.equals(0, vim.fn.isdirectory(root .. "/assets"), "and so is the empty parent")
+        assert.equals(1, reads())
+
+        parley.paste_image(buf, { notify = notify })
+        assert.is_true(wait_for(function() return line_count(buf) == 10 end), "the next paste is accepted")
+        assert.matches("pasted assets/", notices[#notices].msg)
+    end)
+
+    it("an insertion failure never removes a folder that existed before the paste", function()
+        vim.env.PARLEY_FAKE_CLIPBOARD = "png:" .. png
+        local folder = root .. "/assets/" .. TS
+        vim.fn.mkdir(folder, "p")
+        vim.fn.writefile({ "older" }, folder .. "/older.png")
+        local buf = open_chat(TS .. "_keepfolder.md", chat_lines())
+        local buffer_edit = require("parley.buffer_edit")
+        local saved_insert = buffer_edit.insert_lines_at
+        buffer_edit.insert_lines_at = function()
+            error("simulated")
+        end
+        local ok, err = pcall(function()
+            parley.paste_image(buf, { notify = notify })
+            assert.is_true(wait_for(function() return #notices > 0 end))
+        end)
+        buffer_edit.insert_lines_at = saved_insert
+        assert.is_true(ok, tostring(err))
+        assert.matches("could not insert", notices[1].msg)
+        assert.same({ "older.png" }, vim.fn.readdir(folder), "only the rolled-back file is gone")
+    end)
+
     it("<M-v> is a parley_buffer entry resolving to n/i through the registry", function()
         local reg = require("parley.keybinding_registry")
         local entry
