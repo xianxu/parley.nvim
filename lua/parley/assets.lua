@@ -165,27 +165,74 @@ function M.too_big(n)
     return ("%d bytes exceeds the %d-byte limit"):format(n, M.MAX_BYTES)
 end
 
--- Magic bytes per media type, as anchored Lua patterns (`.` matches any byte,
--- NUL included). PNG: 8-byte signature; JPEG: SOI + marker prefix; GIF: the
--- two versions; WebP: a RIFF container whose form type at offset 8 is WEBP.
-local SIGNATURES = {
-    ["image/png"] = "^\137PNG\r\n\26\n",
-    ["image/jpeg"] = "^\255\216\255",
-    ["image/gif"] = "^GIF8[79]a",
-    ["image/webp"] = "^RIFF....WEBP",
+-- Structural checks per media type (BR-4): the signature alone is not an
+-- image — the eight PNG bytes, or any prefix of a real file, would otherwise
+-- become outbound image content. Each check reads only fixed-offset header
+-- and trailer fields (no pixel decoding, no CRC): enough to refuse an empty,
+-- truncated, corrupt, or mismatched file, cheap enough to run on every send.
+-- `.` in a pattern matches any byte, NUL included.
+
+--- Little-endian u32 at 1-based offset `i` (caller guarantees the bytes exist).
+local function u32le(bytes, i)
+    local a, b, c, d = bytes:byte(i, i + 3)
+    return ((d * 256 + c) * 256 + b) * 256 + a
+end
+
+-- PNG: signature, then IHDR must be the first chunk (length 13), and the
+-- file must end with an IEND chunk (zero length + type + CRC = 12 bytes).
+-- Minimum: 8 (signature) + 25 (IHDR chunk) + 12 (IEND chunk).
+local PNG_MIN = 8 + 25 + 12
+local function is_png(bytes)
+    return #bytes >= PNG_MIN
+        and bytes:find("^\137PNG\r\n\26\n") ~= nil
+        and bytes:sub(9, 16) == "\0\0\0\13IHDR"
+        and bytes:sub(-12, -5) == "\0\0\0\0IEND"
+end
+
+-- JPEG: SOI + a marker prefix at the start, EOI at the end.
+local function is_jpeg(bytes)
+    return #bytes >= 4 and bytes:find("^\255\216\255") ~= nil and bytes:sub(-2) == "\255\217"
+end
+
+-- GIF: header (6) + logical screen descriptor (7), then at least the
+-- trailer byte `;` — so 14 bytes minimum, the last of which is the trailer.
+local GIF_MIN = 6 + 7 + 1
+local function is_gif(bytes)
+    return #bytes >= GIF_MIN and bytes:find("^GIF8[79]a") ~= nil and bytes:sub(-1) == ";"
+end
+
+-- WebP: a RIFF container whose size field (bytes 5–8, little-endian) is the
+-- file size minus the 8-byte RIFF header, form type WEBP at 9–12, and a
+-- first chunk that is one of the three WebP bitstream chunks.
+local WEBP_CHUNKS = { ["VP8 "] = true, VP8L = true, VP8X = true }
+local function is_webp(bytes)
+    return #bytes >= 16
+        and bytes:sub(1, 4) == "RIFF"
+        and u32le(bytes, 5) == #bytes - 8
+        and bytes:sub(9, 12) == "WEBP"
+        and WEBP_CHUNKS[bytes:sub(13, 16)] == true
+end
+
+local VALIDATORS = {
+    ["image/png"] = is_png,
+    ["image/jpeg"] = is_jpeg,
+    ["image/gif"] = is_gif,
+    ["image/webp"] = is_webp,
 }
 
---- Do these bytes begin with the signature of `media_type`? False for empty,
---- truncated or mismatched bytes and for a type no wire accepts. PURE.
+--- Do these bytes have the structure of a `media_type` image — signature,
+--- required first header, and end-of-file trailer? False for empty,
+--- truncated, corrupt or mismatched bytes and for a type no wire accepts.
+--- Header and trailer fields only; pixels and CRCs are not decoded. PURE.
 ---@param media_type string|nil
 ---@param bytes string|nil
 ---@return boolean
 function M.looks_like(media_type, bytes)
-    local pattern = media_type and SIGNATURES[media_type]
-    if not pattern or type(bytes) ~= "string" then
+    local valid = media_type and VALIDATORS[media_type]
+    if not valid or type(bytes) ~= "string" then
         return false
     end
-    return bytes:find(pattern) ~= nil
+    return valid(bytes) == true
 end
 
 --- The one sentence for bytes that fail looks_like.

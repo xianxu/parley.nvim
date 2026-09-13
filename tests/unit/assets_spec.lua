@@ -99,6 +99,20 @@ local function seeded(opts)
     return fake_io({ [FOLDER .. "/a.png"] = "A", [FOLDER .. "/b.png"] = "BB" }, { [FOLDER] = true }, opts)
 end
 
+--- Real 1x1 images from tests/fixtures (BR-4: looks_like checks structure,
+--- so a fabricated "signature .. body" is no longer an image).
+local REPO = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h:h:h")
+local function fixture(name)
+    local f = assert(io.open(REPO .. "/tests/fixtures/" .. name, "rb"))
+    local bytes = f:read("*a")
+    f:close()
+    return bytes
+end
+local PNG_BYTES = fixture("one_pixel.png")
+local GIF_BYTES = fixture("one_pixel.gif")
+local JPEG_BYTES = fixture("one_pixel.jpg")
+local WEBP_BYTES = fixture("one_pixel.webp")
+
 local function keys_of(set)
     local out = {}
     for k in pairs(set) do
@@ -497,8 +511,7 @@ end)
 describe("assets: question content", function()
     local A = "assets/" .. TS .. "/a.png"
     local B = "assets/" .. TS .. "/b.gif"
-    local PNG = "\137PNG\r\n\26\n" .. "PNGBYTES"
-    local GIF = "GIF89a" .. "GIFBYTES"
+    local PNG, GIF = PNG_BYTES, GIF_BYTES
     -- Attachments carry the occurrence id the builder assigned ("<order>:<n>").
     local atts = {
         { id = "1:1", path = A, media_type = "image/png" },
@@ -627,30 +640,89 @@ describe("assets: question content", function()
     end)
 end)
 
-describe("assets: looks_like (C4 — bytes must match the declared type)", function()
-    local PNG = "\137PNG\r\n\26\n"
-    local JPEG = "\255\216\255\224"
-    local GIF87, GIF89 = "GIF87a", "GIF89a"
-    local WEBP = "RIFF\0\0\0\0WEBPVP8 "
+describe("assets: looks_like (C4/BR-4 — bytes must be a structurally valid image of the declared type)", function()
+    local PNG_SIG = "\137PNG\r\n\26\n"
+    local JPEG_SIG = "\255\216\255"
+    local GIF87_SIG, GIF89_SIG = "GIF87a", "GIF89a"
+    local WEBP_SIG = "RIFF\0\0\0\0WEBPVP8 "
 
-    it("accepts each wire-accepted format's signature", function()
-        assert.is_true(assets.looks_like("image/png", PNG .. "body"))
-        assert.is_true(assets.looks_like("image/jpeg", JPEG .. "body"))
-        assert.is_true(assets.looks_like("image/gif", GIF87 .. "body"))
-        assert.is_true(assets.looks_like("image/gif", GIF89 .. "body"))
-        assert.is_true(assets.looks_like("image/webp", WEBP .. "body"))
+    --- Flip the bytes at 1-based [i, j] to "?" — a corruption that keeps the length.
+    local function corrupt(bytes, i, j)
+        return bytes:sub(1, i - 1) .. string.rep("?", j - i + 1) .. bytes:sub(j + 1)
+    end
+
+    -- One row per format: the real fixture, its bare signature, a truncation
+    -- (trailer dropped), a corruption (header field flipped), and a body of
+    -- another format under this media type.
+    local rows = {
+        {
+            mime = "image/png",
+            valid = PNG_BYTES,
+            signature = PNG_SIG,
+            truncated = PNG_BYTES:sub(1, -13), -- IEND chunk dropped
+            corrupted = corrupt(PNG_BYTES, 13, 16), -- IHDR fourcc
+            other = GIF_BYTES,
+        },
+        {
+            mime = "image/jpeg",
+            valid = JPEG_BYTES,
+            signature = JPEG_SIG .. "\224",
+            truncated = JPEG_BYTES:sub(1, -3), -- EOI dropped
+            corrupted = corrupt(JPEG_BYTES, 2, 2), -- SOI second byte
+            other = PNG_BYTES,
+        },
+        {
+            mime = "image/gif",
+            valid = GIF_BYTES,
+            signature = GIF89_SIG,
+            truncated = GIF_BYTES:sub(1, -2), -- trailer `;` dropped
+            corrupted = corrupt(GIF_BYTES, 5, 5), -- version "89a" → "8?a"
+            other = WEBP_BYTES,
+        },
+        {
+            mime = "image/webp",
+            valid = WEBP_BYTES,
+            signature = WEBP_SIG,
+            truncated = WEBP_BYTES:sub(1, -13), -- RIFF size no longer matches
+            corrupted = corrupt(WEBP_BYTES, 13, 16), -- VP8L fourcc
+            other = JPEG_BYTES,
+        },
+    }
+
+    it("accepts each wire-accepted format's real fixture", function()
+        for _, r in ipairs(rows) do
+            assert.is_true(assets.looks_like(r.mime, r.valid), r.mime)
+        end
+        assert.is_true(assets.looks_like("image/gif", GIF87_SIG .. GIF_BYTES:sub(7)), "GIF87a")
     end)
 
-    it("rejects empty, text, truncated, mismatched and unknown", function()
+    it("rejects the bare signature, a signature plus filler, a truncation, a corruption and another format", function()
+        for _, r in ipairs(rows) do
+            assert.is_false(assets.looks_like(r.mime, r.signature), r.mime .. " signature alone")
+            assert.is_false(assets.looks_like(r.mime, r.signature .. string.rep("x", 64)), r.mime .. " signature + filler")
+            assert.is_false(assets.looks_like(r.mime, r.truncated), r.mime .. " truncated")
+            assert.is_false(assets.looks_like(r.mime, r.corrupted), r.mime .. " corrupted")
+            assert.is_false(assets.looks_like(r.mime, r.other), r.mime .. " other format's bytes")
+            assert.is_false(assets.looks_like(r.mime, r.valid:sub(1, 5)), r.mime .. " truncated header")
+        end
+    end)
+
+    it("checks structure beyond the trailer, not just the last bytes", function()
+        assert.is_false(assets.looks_like("image/png", PNG_SIG .. PNG_BYTES:sub(-12)), "signature + IEND only")
+        assert.is_false(assets.looks_like("image/png", corrupt(PNG_BYTES, 12, 12)), "IHDR length != 13")
+        assert.is_false(assets.looks_like("image/gif", GIF89_SIG .. ";"), "header + trailer, no screen descriptor")
+        assert.is_false(assets.looks_like("image/webp", corrupt(WEBP_BYTES, 5, 8)), "RIFF size mismatch")
+        assert.is_false(assets.looks_like("image/webp", WEBP_BYTES .. "\0"), "trailing byte breaks the RIFF size")
+    end)
+
+    it("rejects empty, text, mismatched container and unknown", function()
         assert.is_false(assets.looks_like("image/png", ""))
         assert.is_false(assets.looks_like("image/png", "hello"))
-        assert.is_false(assets.looks_like("image/png", PNG:sub(1, 5)), "truncated header")
-        assert.is_false(assets.looks_like("image/jpeg", PNG .. "body"), "png bytes declared jpeg")
-        assert.is_false(assets.looks_like("image/gif", "GIF88a"), "not a gif version")
+        assert.is_false(assets.looks_like("image/gif", "GIF88a" .. GIF_BYTES:sub(7)), "not a gif version")
         assert.is_false(assets.looks_like("image/webp", "RIFF\0\0\0\0WAVE"), "RIFF but not WEBP")
         assert.is_false(assets.looks_like("image/webp", "RIFFWEBP"), "WEBP not at offset 8")
         assert.is_false(assets.looks_like("image/svg+xml", "<svg/>"), "unknown media type")
-        assert.is_false(assets.looks_like(nil, PNG))
+        assert.is_false(assets.looks_like(nil, PNG_BYTES))
         assert.is_false(assets.looks_like("image/png", nil))
     end)
 end)
@@ -692,7 +764,7 @@ describe("assets: elide_image_data", function()
 end)
 
 describe("assets: save and read_bounded", function()
-    local PNG = "\137PNG\r\n\26\n" .. "PNGBYTES"
+    local PNG = PNG_BYTES
 
     it("creates the folder, mints a unique name, writes, and returns the link", function()
         local io_ = fake_io()
@@ -801,6 +873,8 @@ describe("assets: save and read_bounded", function()
             { name = "trunc.png", bytes = "\137PN", err = "not a image/png image" },
             { name = "wrong.jpg", bytes = PNG, err = "not a image/jpeg image" },
             { name = "riff.webp", bytes = "RIFF\0\0\0\0WAVEfmt ", err = "not a image/webp image" },
+            { name = "sig.png", bytes = "\137PNG\r\n\26\n", err = "not a image/png image" },
+            { name = "noend.gif", bytes = GIF_BYTES:sub(1, -2), err = "not a image/gif image" },
         }
         for _, c in ipairs(cases) do
             local io_ = fake_io({ [FOLDER .. "/" .. c.name] = c.bytes }, { [FOLDER] = true })
@@ -810,9 +884,9 @@ describe("assets: save and read_bounded", function()
         end
         local ok_io = fake_io({
             [FOLDER .. "/ok.png"] = PNG,
-            [FOLDER .. "/ok.gif"] = "GIF87a!",
-            [FOLDER .. "/ok.webp"] = "RIFF\0\0\0\0WEBPVP8 ",
-            [FOLDER .. "/ok.jpeg"] = "\255\216\255\224",
+            [FOLDER .. "/ok.gif"] = GIF_BYTES,
+            [FOLDER .. "/ok.webp"] = WEBP_BYTES,
+            [FOLDER .. "/ok.jpeg"] = JPEG_BYTES,
         }, { [FOLDER] = true })
         for _, name in ipairs({ "ok.png", "ok.gif", "ok.webp", "ok.jpeg" }) do
             assert.equals(ok_io.files[FOLDER .. "/" .. name], assets.read_bounded(CHAT, "assets/" .. TS .. "/" .. name, ok_io), name)
@@ -1032,7 +1106,44 @@ describe("assets: default_io", function()
         vim.fn.delete(root, "rf")
     end)
 
-    local PNG = "\137PNG\r\n\26\n" .. "PNGBYTES"
+    local PNG = PNG_BYTES
+
+    it("read_bounded through the real io accepts each fixture and refuses signature-only, truncated and mismatched files (BR-4)", function()
+        local chat = root .. "/" .. TS .. ".md"
+        local folder = root .. "/assets/" .. TS
+        vim.fn.mkdir(folder, "p")
+        local function put(name, bytes)
+            assert(assets.default_io.write(folder .. "/" .. name, bytes))
+            return "assets/" .. TS .. "/" .. name
+        end
+        local valid = {
+            { name = "ok.png", bytes = PNG_BYTES },
+            { name = "ok.jpg", bytes = JPEG_BYTES },
+            { name = "ok.gif", bytes = GIF_BYTES },
+            { name = "ok.webp", bytes = WEBP_BYTES },
+        }
+        for _, v in ipairs(valid) do
+            local got, err = assets.read_bounded(chat, put(v.name, v.bytes))
+            assert.equals(v.bytes, got, v.name .. ": " .. tostring(err))
+        end
+        local rejected = {
+            { name = "sig.png", bytes = "\137PNG\r\n\26\n", err = "not a image/png image" },
+            { name = "trunc.png", bytes = PNG_BYTES:sub(1, -13), err = "not a image/png image" },
+            { name = "sig.jpg", bytes = "\255\216\255\224", err = "not a image/jpeg image" },
+            { name = "trunc.jpeg", bytes = JPEG_BYTES:sub(1, -3), err = "not a image/jpeg image" },
+            { name = "sig.gif", bytes = "GIF89a", err = "not a image/gif image" },
+            { name = "trunc.gif", bytes = GIF_BYTES:sub(1, -2), err = "not a image/gif image" },
+            { name = "sig.webp", bytes = "RIFF\0\0\0\0WEBPVP8 ", err = "not a image/webp image" },
+            { name = "trunc.webp", bytes = WEBP_BYTES:sub(1, -13), err = "not a image/webp image" },
+            { name = "gif_as.png", bytes = GIF_BYTES, err = "not a image/png image" },
+            { name = "png_as.webp", bytes = PNG_BYTES, err = "not a image/webp image" },
+        }
+        for _, r in ipairs(rejected) do
+            local got, err = assets.read_bounded(chat, put(r.name, r.bytes))
+            assert.is_nil(got, r.name)
+            assert.equals(r.err, err, r.name)
+        end
+    end)
 
     it("round-trips save, read_bounded, move, copy and delete on a real directory", function()
         local chat = root .. "/" .. TS .. ".md"

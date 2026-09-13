@@ -1792,7 +1792,10 @@ describe("attachments (#231): both builders, one budget", function()
     local TS = "2026-09-10.14-20-03.112"
     local chat_dir = tmp_dir .. "/chats-231"
     local chat_path = chat_dir .. "/" .. TS .. "_att.md"
-    local PNG = "\137PNG\r\n\26\n" .. string.rep("x", 24)
+    -- The real 1x1 fixture: looks_like checks image structure (BR-4), so a
+    -- signature followed by filler is refused as "not a image/png image".
+    local repo = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h:h:h")
+    local PNG = assert(io.open(repo .. "/tests/fixtures/one_pixel.png", "rb")):read("*a")
 
     local function rel(name) return "assets/" .. TS .. "/" .. name end
     local function write_asset(name, bytes)
@@ -2009,12 +2012,19 @@ describe("attachments (#231): both builders, one budget", function()
     end)
 
     describe("budget", function()
-        -- 30000 bytes behind a real PNG signature (BR-4: read_bounded and
-        -- question_content reject bytes that do not look like the declared
-        -- type). base64 40000 + BLOCK_OVERHEAD 256 = 40256 per image: two fit
-        -- under 100000 with the retained text and notes, three never do.
-        local PNG_SIG = "\137PNG\r\n\26\n"
-        local BIG = PNG_SIG .. string.rep("b", 30000 - #PNG_SIG)
+        -- A structurally valid 30000-byte PNG (BR-4: read_bounded and
+        -- question_content reject bytes that are not an image of the declared
+        -- type): the real fixture with a padded ancillary tEXt chunk inserted
+        -- before IEND. Its length field is correct; its CRC is not (looks_like
+        -- checks header and trailer structure, never CRCs). base64 40000 +
+        -- BLOCK_OVERHEAD 256 = 40256 per image: two fit under 100000 with the
+        -- retained text and notes, three never do.
+        local IEND = PNG:sub(-12)
+        local pad = 30000 - #PNG - 12 -- chunk = length(4) + "tEXt"(4) + pad + crc(4)
+        local BIG = PNG:sub(1, -13)
+            .. string.char(math.floor(pad / 16777216) % 256, math.floor(pad / 65536) % 256, math.floor(pad / 256) % 256, pad % 256)
+            .. "tEXt" .. string.rep("b", pad) .. "\0\0\0\0" .. IEND
+        assert(#BIG == 30000, "BIG must stay 30000 bytes for the budget arithmetic below")
         local headers = { config_max_full_exchanges = 10 } -- keep all three retained
 
         before_each(function()
