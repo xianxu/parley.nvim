@@ -541,6 +541,9 @@ M.setup = function(opts)
 		opts = {}
 	end
 
+	-- Recheck optional runtime data on explicit setup, including repaired installs.
+	require("parley.issue_vocabulary").reload()
+
 	-- reset M.config
 	M.config = vim.deepcopy(config)
 

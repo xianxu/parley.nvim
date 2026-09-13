@@ -21,7 +21,7 @@ This fulfills #208 and unblocks the isolated starter profile. Provider defaults,
 | Name | Lives in | Status | Contract |
 |------|----------|--------|----------|
 | `IssueVocabulary`, `from_table` | `lua/parley/issue_vocabulary.lua` | modified | Validate category arrays and lifecycle endpoints before deriving indexes; no invented statuses |
-| `parse_frontmatter`, status predicates, `cycle_status_value`, completion values, `topo_sort` | `lua/parley/issues.lua` | modified | Preserve raw text without vocabulary; lifecycle operations return an unavailable diagnostic |
+| `default_status`, `parse_frontmatter`, status predicates, `cycle_status_value`, completion values, `topo_sort` | `lua/parley/issues.lua` | modified | Preserve raw text without vocabulary; lifecycle operations return an unavailable diagnostic |
 | `materialize` / status ordering | `lua/parley/issue_finder_records.lua` | modified | Deterministic ID ordering when vocabulary unavailable; valid models retain category order |
 
 One vocabulary owns all lifecycle semantics (ARCH-DRY). Validate strings, dense arrays, disjoint categories, at least one open status, and known transition endpoints. Unknown extra JSON fields remain compatible with upstream evolution. Preserve existing first-transition ordering. The from_table strategy below verifies this pure boundary without IO mocks.
@@ -140,3 +140,13 @@ and make read-only command conformance a maintainer target required at this
 close and whenever the runner seam changes. Isolated archive reproduction
 confirmed that launch cwd must also be isolated to avoid borrowing vocabulary.
 Operator-approved scope is unchanged.
+
+### 2026-09-13 — runtime implementation discoveries
+
+Reason: isolated reproduction borrowed cwd data, and real shell-route testing
+showed the quoted command name suppressed aliases. Delta: resolve vocabulary
+only from this plugin’s module root; share `default_status` across parsers and
+templates; leave only safe command identifiers bare for shell alias expansion,
+with every argument quoted. The fake verified literal injection-like titles
+through executable, function, and alias routes; unavailable-command diagnostics
+include setup advice. These repairs fulfill the approved boundaries.

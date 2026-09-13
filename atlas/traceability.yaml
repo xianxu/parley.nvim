@@ -648,6 +648,8 @@ atlas:
       - lua/parley/init.lua
     tests:
       - tests/unit/issue_vocabulary_spec.lua
+      - tests/unit/issue_unavailable_spec.lua
+      - tests/integration/issue_command_spec.lua
       - tests/unit/issues_spec.lua
       - tests/unit/finder_facets_spec.lua
       - tests/unit/issue_finder_spec.lua

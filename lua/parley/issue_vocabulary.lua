@@ -5,7 +5,11 @@ local M = {}
 local VOCAB_PATH = "construct/generated/vocabulary/issue.json"
 local CATEGORY_ORDER = { "open", "active", "terminal" }
 
-local default_model = nil
+local MAX_BYTES = 1024 * 1024
+local module_source = debug.getinfo(1, "S").source
+local module_root = module_source:sub(1, 1) == "@"
+    and vim.fn.fnamemodify(module_source:sub(2), ":p:h:h:h") or nil
+local cache = { state = "unprobed" }
 
 local function copy_list(values)
     local out = {}
@@ -23,30 +27,30 @@ local function index_set(values)
     return set
 end
 
-local function find_git_root(start)
-    local dir = start
-    while dir and dir ~= "" do
-        local git_dir = dir .. "/.git"
-        if vim.loop.fs_stat(git_dir) then
-            return dir
-        end
-        local parent = vim.fn.fnamemodify(dir, ":h")
-        if parent == dir then
-            break
-        end
-        dir = parent
+local function resolve_vocab_path()
+    if not module_root then
+        error("cannot locate the loaded parley issue vocabulary module")
     end
-    return start
+    return module_root .. "/" .. VOCAB_PATH
 end
 
-local function resolve_vocab_path()
-    local runtime_matches = vim.api.nvim_get_runtime_file(VOCAB_PATH, false)
-    if runtime_matches and runtime_matches[1] then
-        return runtime_matches[1]
+local function dense_array(values, label)
+    if type(values) ~= "table" then
+        error("issue vocabulary missing " .. label)
     end
-
-    local root = find_git_root(vim.fn.getcwd())
-    return root .. "/" .. VOCAB_PATH
+    local count = 0
+    for key in pairs(values) do
+        if type(key) ~= "number" or key < 1 or key % 1 ~= 0 then
+            error("issue vocabulary " .. label .. " must be a dense array")
+        end
+        count = count + 1
+    end
+    for i = 1, count do
+        if values[i] == nil then
+            error("issue vocabulary " .. label .. " must be a dense array")
+        end
+    end
+    return count
 end
 
 local IssueVocabulary = {}
@@ -104,24 +108,32 @@ M.from_table = function(raw)
     local sort_rank = {}
 
     for _, name in ipairs(CATEGORY_ORDER) do
-        if type(raw.categories[name]) ~= "table" then
-            error("issue vocabulary missing category: " .. name)
+        local count = dense_array(raw.categories[name], "category: " .. name)
+        if name == "open" and count == 0 then
+            error("issue vocabulary open category must not be empty")
         end
         categories[name] = copy_list(raw.categories[name])
         sets[name] = index_set(categories[name])
         for _, status in ipairs(categories[name]) do
-            if not sort_rank[status] then
-                table.insert(status_values, status)
-                sort_rank[status] = #status_values
+            if type(status) ~= "string" or status == "" then
+                error("issue vocabulary statuses must be nonempty strings")
             end
+            if sort_rank[status] then
+                error("issue vocabulary duplicate status: " .. status)
+            end
+            table.insert(status_values, status)
+            sort_rank[status] = #status_values
         end
     end
 
+    dense_array(raw.lifecycle, "lifecycle")
     local next_status = {}
     for _, transition in ipairs(raw.lifecycle) do
-        if type(transition) == "table" and type(transition.from) == "string" and type(transition.to) == "string" then
-            next_status[transition.from] = next_status[transition.from] or transition.to
+        if type(transition) ~= "table" or type(transition.from) ~= "string"
+            or type(transition.to) ~= "string" or not sort_rank[transition.from] or not sort_rank[transition.to] then
+            error("issue vocabulary lifecycle endpoints must be known statuses")
         end
+        next_status[transition.from] = next_status[transition.from] or transition.to
     end
 
     return setmetatable({
@@ -131,7 +143,7 @@ M.from_table = function(raw)
         _status_values = status_values,
         _sort_rank = sort_rank,
         _next_status = next_status,
-        _default_status = categories.open[1] or "open",
+        _default_status = categories.open[1],
     }, IssueVocabulary)
 end
 
@@ -142,33 +154,62 @@ M.load = function(opts)
     end
 
     local path = opts.path or resolve_vocab_path()
-    local ok, lines = pcall(vim.fn.readfile, path)
-    if not ok then
-        error("failed to read issue vocabulary: " .. path)
+    local stat = vim.loop.fs_stat(path)
+    if not stat or stat.type ~= "file" then
+        error("issue vocabulary must be a regular file: " .. path)
     end
-
-    local json = table.concat(lines, "\n")
+    if stat.size > MAX_BYTES then
+        error("issue vocabulary exceeds 1 MiB: " .. path)
+    end
+    local fd, open_error = vim.loop.fs_open(path, "r", 0)
+    if not fd then
+        error("failed to read issue vocabulary: " .. path .. ": " .. tostring(open_error))
+    end
+    local opened_stat = vim.loop.fs_fstat(fd)
+    if not opened_stat or opened_stat.type ~= "file" or opened_stat.size > MAX_BYTES then
+        vim.loop.fs_close(fd)
+        error("issue vocabulary must be a regular file no larger than 1 MiB: " .. path)
+    end
+    local json, read_error = vim.loop.fs_read(fd, MAX_BYTES + 1, 0)
+    vim.loop.fs_close(fd)
+    if not json then
+        error("failed to read issue vocabulary: " .. path .. ": " .. tostring(read_error))
+    end
+    if #json > MAX_BYTES then
+        error("issue vocabulary exceeds 1 MiB: " .. path)
+    end
     local decode_ok, decoded = pcall(vim.json.decode, json)
     if not decode_ok then
         error("failed to decode issue vocabulary: " .. path)
     end
-
     return M.from_table(decoded)
 end
 
-M.default = function()
-    if not default_model then
-        default_model = M.load()
+-- Refresh explicitly on setup, including failed lookups. Hot consumers never
+-- repeatedly probe an unavailable file; repairing it takes effect at reload.
+M.reload = function(opts)
+    local ok, result = pcall(M.load, opts)
+    if ok then
+        cache = { state = "ready", model = result }
+    else
+        cache = { state = "unavailable", reason = tostring(result) }
     end
-    return default_model
+    return cache.model, cache.reason
+end
+
+M.default = function()
+    if cache.state == "unprobed" then
+        return M.reload()
+    end
+    return cache.model, cache.reason
 end
 
 M.set_default_for_tests = function(model)
-    default_model = model
+    cache = model and { state = "ready", model = model } or { state = "unprobed" }
 end
 
 M.reset_for_tests = function()
-    default_model = nil
+    cache = { state = "unprobed" }
 end
 
 -- #116 M2: the repo-RELATIVE home folder for issue instances, sourced from the

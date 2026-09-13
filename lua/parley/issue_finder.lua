@@ -573,7 +573,11 @@ M.open = function(_options)
                     local lines = vim.fn.readfile(item.value)
                     local fm = issues_mod.parse_frontmatter(lines)
                     if fm then
-                        local new_status = issues_mod.cycle_status_value(fm.status)
+                        local new_status, err = issues_mod.cycle_status_value(fm.status)
+                        if not new_status then
+                            _parley.logger.warning(err)
+                            return
+                        end
                         for i = 2, fm.header_end - 1 do
                             if lines[i]:match("^status:") then
                                 lines[i] = "status: " .. new_status

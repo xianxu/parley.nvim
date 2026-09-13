@@ -22,7 +22,6 @@ local _file_cache = {}
 
 M.setup = function(parley)
     _parley = parley
-    issue_vocabulary.default()
 end
 
 M.clear_cache = function()
@@ -46,7 +45,26 @@ local function trim(str)
 end
 
 local function vocab()
-    return issue_vocabulary.default()
+    local model, err = issue_vocabulary.default()
+    if not model then
+        return nil, "Issue features unavailable: " .. tostring(err)
+            .. ". Reinstall/update Parley, then rerun setup()."
+    end
+    return model
+end
+
+local function can_use_issue_actions()
+    local model, err = vocab()
+    if not model then
+        _parley.logger.warning(err)
+        return false
+    end
+    return true
+end
+
+M.default_status = function()
+    local model, err = vocab()
+    return model and model:category("open")[1] or nil, err
 end
 
 -- Slugify a title into a filename-safe string
@@ -92,7 +110,7 @@ M.parse_frontmatter = function(lines)
 
     local result = {
         id = nil,
-        status = vocab():category("open")[1] or "open",
+        status = M.default_status(),
         deps = {},
         created = "",
         updated = "",
@@ -142,30 +160,36 @@ end
 
 -- Cycle status by the first lifecycle transition in generated vocabulary order.
 M.cycle_status_value = function(current)
-    return vocab():next_status(current)
+    local model, err = vocab()
+    return model and model:next_status(current) or nil, err
 end
 
 -- All valid status values (used for completion/typeahead)
 M.status_values = function()
-    return vocab():status_values()
+    local model = vocab()
+    return model and model:status_values() or {}
 end
 
 M.is_active_status = function(status)
-    return vocab():is_active(status)
+    local model = vocab()
+    return model and model:is_active(status) or false
 end
 
 M.is_open_status = function(status)
-    return vocab():is_open(status)
+    local model = vocab()
+    return model and model:is_open(status) or false
 end
 
 M.is_terminal_status = function(status)
-    return vocab():is_terminal(status)
+    local model = vocab()
+    return model and model:is_terminal(status) or false
 end
 
 M.complete_frontmatter_values = function(field, partial)
     partial = partial or ""
     local matches = {}
-    for _, value in ipairs(vocab():enumerable_values(field)) do
+    local model = vocab()
+    for _, value in ipairs(model and model:enumerable_values(field) or {}) do
         if value:sub(1, #partial) == partial then
             table.insert(matches, value)
         end
@@ -233,9 +257,10 @@ M.topo_sort = function(issues)
     for _, issue in ipairs(issues) do
         table.insert(sorted, issue)
     end
+    local model = vocab()
     table.sort(sorted, function(a, b)
-        local pa = vocab():sort_rank(a.status)
-        local pb = vocab():sort_rank(b.status)
+        local pa = model and model:sort_rank(a.status) or 0
+        local pb = model and model:sort_rank(b.status) or 0
         if pa ~= pb then
             return pa < pb
         end
@@ -371,13 +396,21 @@ M.build_spawn_argv = function(argv, is_exec, shell)
         return argv -- real binary: spawn directly, no shell, no quoting
     end
     local escaped = {}
-    for _, word in ipairs(argv) do
-        escaped[#escaped + 1] = vim.fn.shellescape(word)
+    for index, word in ipairs(argv) do
+        -- A quoted command name suppresses shell alias expansion. Only a safe
+        -- identifier may stay bare; arguments always remain literal data.
+        escaped[#escaped + 1] = index == 1 and word:match("^[%a_][%w_%-]*$")
+            and word or vim.fn.shellescape(word)
     end
     return { shell or "sh", "-i", "-c", table.concat(escaped, " ") }
 end
 
 M.run_sdlc_issue_new = function(title, opts, on_done, runner)
+    local model, err = vocab()
+    if not model then
+        on_done(nil, err)
+        return
+    end
     opts = opts or {}
     local argv = { "sdlc", "issue", "new" }
     -- #116 M3 (I1 fix): anchor creation at the git root, not nvim's cwd. sdlc's
@@ -436,7 +469,8 @@ M.run_sdlc_issue_new = function(title, opts, on_done, runner)
     end
     runner(argv, function(output, code)
         if code ~= 0 then
-            on_done(nil, "sdlc issue new failed (exit " .. tostring(code) .. "): " .. trim(output or ""))
+            local advice = code == 127 and "Install sdlc or define it in your shell startup file. " or ""
+            on_done(nil, advice .. "sdlc issue new failed (exit " .. tostring(code) .. "): " .. trim(output or ""))
             return
         end
         local path = M.parse_issue_new_output(output)
@@ -657,7 +691,8 @@ updated: {{date}}
 -- flow (a separate refactor); ariadne#145 unifies the template onto cue.
 M.render_issue_template = function(values)
     values = values or {}
-    local default_status = vocab():category("open")[1] or "open"
+    local default_status, err = M.default_status()
+    if not default_status then return nil, err end
     return ISSUE_TEMPLATE
         :gsub("{{id}}", values.id or "")
         :gsub("{{status}}", values.status or default_status)
@@ -667,6 +702,8 @@ end
 
 -- Update frontmatter status in the current buffer
 M.write_status = function(buf, new_status)
+    local model, err = vocab()
+    if not model then return false, err end
     local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
     local fm = M.parse_frontmatter(lines)
     if not fm then
@@ -750,6 +787,7 @@ M.start_cmdline_spinner = function(message)
 end
 
 M.cmd_issue_new = function()
+    if not can_use_issue_actions() then return end
     -- #142: show the destination repo so issues don't land in the wrong one
     -- (issues_dir resolves against the editor's cwd git root).
     local label = M.repo_label(M.get_issues_repo_root())
@@ -779,6 +817,7 @@ M.cmd_issue_new = function()
 end
 
 M.cmd_issue_status = function()
+    if not can_use_issue_actions() then return end
     local buf = vim.api.nvim_get_current_buf()
     local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
     local fm = M.parse_frontmatter(lines)
@@ -794,6 +833,7 @@ M.cmd_issue_status = function()
 end
 
 M.cmd_issue_next = function()
+    if not can_use_issue_actions() then return end
     local issues_dir = M.get_issues_dir()
     if not issues_dir then
         _parley.logger.warning("issues_dir is not configured")
@@ -819,6 +859,7 @@ M.cmd_issue_next = function()
 end
 
 M.cmd_issue_decompose = function()
+    if not can_use_issue_actions() then return end
     local buf = vim.api.nvim_get_current_buf()
     local cursor = vim.api.nvim_win_get_cursor(0)
     local line_nr = cursor[1]

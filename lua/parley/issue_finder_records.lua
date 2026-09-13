@@ -67,7 +67,7 @@ M.adapt = function(input)
             id = id,
             slug = slug,
             title = title,
-            status = frontmatter and frontmatter.status or "open",
+            status = frontmatter and frontmatter.status or issues.default_status(),
             deps = copy_list(frontmatter and frontmatter.deps),
             created = frontmatter and frontmatter.created or "",
             updated = frontmatter and frontmatter.updated or "",
@@ -96,7 +96,7 @@ M.materialize = function(records, options)
         if archived and left.mtime ~= right.mtime then
             return left.mtime < right.mtime
         end
-        if not archived then
+        if not archived and vocabulary then
             local left_rank = vocabulary:sort_rank(left.status)
             local right_rank = vocabulary:sort_rank(right.status)
             if left_rank ~= right_rank then
