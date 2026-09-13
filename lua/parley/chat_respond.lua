@@ -906,7 +906,8 @@ M.build_messages = function(opts)
                             local payload, err = require("parley.log_emit").parse_yaml(yaml_content)
                             if payload and type(payload) == "table" then
                                 exchange.question.raw_payload = payload
-                                logger.debug("Successfully parsed YAML payload: " .. vim.inspect(payload))
+                                logger.debug("Successfully parsed YAML payload: "
+                                    .. vim.inspect(assets.elide_image_data(payload)))
                             else
                                 logger.warning("Failed to parse YAML in raw request mode: " .. tostring(err))
                             end
@@ -1763,7 +1764,8 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
             and parsed_chat.exchanges[exchange_idx].question.raw_payload
         then
             raw_payload = parsed_chat.exchanges[exchange_idx].question.raw_payload
-            _parley.logger.debug("Using raw payload for request: " .. vim.inspect(raw_payload))
+            _parley.logger.debug("Using raw payload for request: "
+                .. vim.inspect(require("parley.assets").elide_image_data(raw_payload)))
         end
 
         -- Compute payload once for both display and query.

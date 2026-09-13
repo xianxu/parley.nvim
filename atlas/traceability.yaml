@@ -27,6 +27,7 @@ atlas:
       - lua/parley/init.lua
       - lua/parley/config.lua
       - lua/parley/keybinding_registry.lua
+      - lua/parley/dispatcher.lua
     tests:
       - tests/unit/assets_spec.lua
       - tests/unit/clipboard_image_spec.lua
@@ -34,6 +35,7 @@ atlas:
       - tests/unit/parse_chat_spec.lua
       - tests/unit/build_messages_spec.lua
       - tests/integration/paste_image_spec.lua
+      - tests/arch/log_sinks_spec.lua
 
   chat/lifecycle:
     code:

@@ -148,7 +148,8 @@ D.prepare_payload = function(messages, model, provider, agent_tools)
 	-- cliproxyapi.format_headers does with `_parley_route`.
 	payload._parley_tool_wire = wire.name_for(provider, model)
 
-	logger.debug("payload: " .. vim.inspect(payload))
+	-- #231: a log line is never an image — elide before serializing.
+	logger.debug("payload: " .. vim.inspect(require("parley.assets").elide_image_data(payload)))
 	return payload
 end
 
@@ -448,7 +449,8 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 	local tool_wire = payload._parley_tool_wire
 	payload._parley_tool_wire = nil
 
-    logger.debug("query to send is: " .. vim.json.encode(payload))
+    -- #231: a log line is never an image — elide before serializing.
+    logger.debug("query to send is: " .. vim.json.encode(require("parley.assets").elide_image_data(payload)))
 
 	local qid = helpers.uuid()
 	tasker.set_query(qid, {
