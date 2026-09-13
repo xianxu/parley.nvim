@@ -260,6 +260,7 @@ a spawned tool and a temp file.
 | reading | second key on the same buffer | reading; "already in progress" (ignored: a queue would land links in completion order) |
 | reading | tool `ok` | buffer invalid or not `modifiable` → idle, temp removed, **nothing saved**; else `save` under the buffer's current name; save fails → idle, partial removed by `save`, message; insert fails → the saved asset removed, message; else insert after the anchor, idle |
 | idle | key, but the tool cannot be launched (missing executable) | idle via the same completion path: "could not start <tool>"; mark cleared; a retry is accepted |
+| reading | tool `ok`, insertion fails after the save | the saved file and the folders this paste created (`assets/<ts>`, and `assets/` if it was new) are removed — a pre-existing folder and its siblings are never touched; idle; "could not insert the link"; a retry is accepted |
 | reading | `no_image` / `failed` / 124 | idle; temp removed; message with the tool's words |
 | reading | buffer closed, rename or move finished, lines inserted above | handled at completion: validity check; current name; the extmark follows |
 | reading | nvim dies | temp leaks (bounded); no asset |
