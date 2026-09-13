@@ -186,18 +186,21 @@ movers/deleters and the exporter were read end to end during planning.
 
 ## Plan
 
-- [x] Decide the folder-name form — **`assets/<chat-timestamp>/`, no slug**
-      (2026-09-12, see Spec); ParleySlug has nothing extra to rename
-- [ ] Clipboard read behind a seam, with a fake: image present / text present /
-      no binary / unsupported format
-- [ ] Write + insert: unique name, per-chat folder, relative link at the cursor
-- [ ] Parser: an image link in a question block is an attachment
-- [ ] `build_messages`: emit per wire, shapes read from current provider docs
-- [ ] Memory window: attachments drop with their summarized exchange, and the
-      summary records that an image was present
-- [ ] ChatMove + tree export carry the assets folder
-- [ ] Keybinding through the registry (`<M-v>`, `parley_buffer` scope), with the
-      collision guard covering it
+Durable plan: `workshop/plans/000231-chat-image-attachments-plan.md` (contracts
+and per-function test strategies; two review boundaries).
+
+- [x] M1 — Decide the folder-name form: `assets/<chat-timestamp>/`, no slug
+- [ ] M1 — `assets`: layout, grammar, budget, content, checked IO (Tasks 1–2)
+- [ ] M1 — `clipboard_image`: recipes as data, one classify rule, seam (Task 3)
+- [ ] M1 — `<M-v>`: fixture, paste flow, key in both buffer scopes (Task 4)
+- [ ] M1 — parser: an image link in a question block is an attachment (Task 5)
+- [ ] M1 — both builders: one retention rule, one budget, send guard, elided logs (Task 6)
+- [ ] M1 — three wires, three shapes (Task 7)
+- [ ] M1 — gate: atlas, traceability, full suite, manual paste + per-wire send (Task 8)
+- [ ] M2 — both movers carry the folder; all five deleters remove it; prompts name it (Task 9)
+- [ ] M2 — tree export copies the folder and renders `<img>` (Task 10)
+- [ ] M2 — docs: memory, format, providers, export, keybindings, README (Task 11)
+- [ ] M2 — live clipboard conformance (opt-in), close (Task 12)
 
 ## Log
 
