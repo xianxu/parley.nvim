@@ -8,7 +8,7 @@ updated: 2026-09-12
 estimate_hours:
 ---
 
-# Model-generated images: save to the chat images folder, link from the answer
+# Model-generated images: save to the chat assets folder, link from the answer
 
 ## Problem
 
@@ -35,7 +35,7 @@ bytes, one writer for both directions.
    tool-call arguments, and these models emit images as content parts. The
    sink is parley's response handler (`chat_respond.lua` + the per-wire stream
    decoder), which must recognise a non-text part, decode it, save it through
-   #231's writer, and splice `![](images/<ts>/<file>.png)` into the streamed
+   #231's writer, and splice `![](assets/<chat-ts>/<file>.png)` into the streamed
    answer at that position. The operator's judgement (2026-09-12): this is the
    more valuable half — one model that reasons *and* draws in the same turn,
    with the picture landing in the transcript where it was said, beats a
@@ -77,7 +77,7 @@ or copied per chunk; budget and bound behaviour go in the plan.
 
 ### One writer, shared with #231
 
-#231 owns the folder (`<chat-root>/images/<chat-id>/`), the unique timestamp
+#231 owns the folder (`<chat-root>/assets/<chat-timestamp>/`, no slug — decided 2026-09-12), the unique timestamp
 filename, the relative-link form, and the ChatMove/tree-export carry. This
 issue adds a second *caller* of that writer and must not grow a second
 folder-naming or link-forming path (`ARCH-DRY`). Hence `deps: [000231]` —
@@ -114,7 +114,7 @@ existing fake SSE server gains a fixture that emits an image part.
 ## Done when
 
 - An agent on a Gemini image-output model, asked to draw, streams text and an
-  image; the image lands in the chat's images folder with a #231-form name
+  image; the image lands in the chat's assets folder with a #231-form name
   and the answer contains a relative link **at the position the part
   arrived**, rendering in `:MarkdownPreview`.
 - The fake SSE server serves a fixture with an interleaved image part; the
@@ -145,7 +145,7 @@ existing fake SSE server gains a fixture that emits an image part.
 - [ ] Answer-side attachments: parser marks them; `build_messages` re-sends in
       the model role where the wire accepts it, link text elsewhere; memory
       window drops them with the exchange
-- [ ] Atlas: `atlas/providers/googleai.md` + the images doc #231 creates
+- [ ] Atlas: `atlas/providers/googleai.md` + the assets doc #231 creates
 - [ ] (M2, optional) `generate_image` builtin behind an image-provider seam
       with a stateful fake; `atlas/providers/tool_use.md` tool table
 
