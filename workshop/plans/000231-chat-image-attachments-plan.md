@@ -124,6 +124,28 @@ test fixture.
   `tests/helpers/await.lua`; `$PARLEY_TEST_MODE` reaches child nvims, `g:`
   variables do not (#227). `chat_move_spec.lua`'s `create_chat` makes a
   scratch buffer (`nofile`), so `:write` on it raises E382.
+- **Three logging sinks see the outgoing messages**: the unconditional
+  `logger.debug("messages to send: " .. vim.inspect(messages))`
+  (`chat_respond.lua:1639`; `logger.log` writes every level to `parley.log`,
+  truncated at startup by line count only), and raw mode's
+  `raw_log.write_exchange_turn(chat_path, messages)` / `write_raw_turn(…, {
+  request = final_payload })` (`:2020-2030`, via `log_emit.format_exchange_turn`
+  `:309`, which YAML-emits table content verbatim). With one 10 MB image in the
+  window each is a ≈13 MB write per turn.
+- The finder's delete handlers end by calling `_parley._reopen_chat_finder`
+  (`chat_finder.lua:239,258,302,321`), which `vim.defer_fn`s a real
+  `ChatFinder` 100 ms later; `tests/unit/chat_finder_logic_spec.lua:128-207`
+  saves, stubs and restores both it and `M.helpers.delete_file`. The finder's
+  single-file prompt is `prompt_delete_confirmation` (`:260`,
+  `vim.ui.input({ prompt = "Delete " .. item_value .. "? [y/N] " })`) and the
+  tree prompt is `prompt_delete_tree_confirmation` (`:324-341`).
+- `init.lua:1438 os.remove(last)` removes the legacy `<chat_dir>/last.md`
+  state file — a deletion of a non-chat, never a timestamp chat.
+- Ollama resolves to `wire_openai` (`wire.lua:39`), so it would receive
+  `image_url` parts; Ollama's native chat API wants an `images` array.
+- `collect_ancestor_messages` (`chat_respond.lua:225`) builds ancestor user
+  turns from `exchange.question.content` strings, so an ancestor chat's
+  attachment reaches the model as link text only.
 
 ## Design decisions
 
@@ -191,8 +213,9 @@ test fixture.
     reaches every wire and drops correctly out of the memory window (Tasks
     1–8). M2 carries the folder through move, delete and export, and lands the
     docs and the live conformance check (Tasks 9–12). Two boundaries, two
-    reviews. Execution chunks are smaller than milestones: Chunk 1 = capture
-    (Tasks 1–4), Chunk 2 = send (Tasks 5–8), Chunk 3 = M2 (Tasks 9–12).
+    reviews. Execution chunks are smaller than milestones: Chunk 1 = the pure
+    modules (Tasks 1–3), Chunk 2 = the key (Task 4), Chunk 3 = send (Tasks
+    5–8), Chunk 4 = M2 (Tasks 9–12).
 
 ## Non-goals
 
@@ -206,8 +229,15 @@ test fixture.
 - A `wire_googleai` for tool use.
 - Windows clipboard; `clipboard_cmd` is the escape hatch.
 - Dragging or `:read`-ing image files; paste from the clipboard only.
-- `![](…)` inside fenced or inline code in the HTML export: every inline rule
-  already reaches code bodies today (pre-existing); the image rule is no worse.
+- `![](…)` inside fenced or inline code in the HTML export: the image
+  tokenisation runs before the fence pass, so such a sample becomes a live
+  `<img>` inside `<pre><code>` rather than literal text. Every other inline
+  rule already reaches code bodies today; this one joins them. Accepted.
+- Ollama agents: they ride `wire_openai` and would get `image_url` parts,
+  which Ollama's native API does not take. An attachment on an ollama agent
+  is not supported by this issue; the openai-compatible endpoint may accept it.
+- Ancestor chats (tree-of-chat context): an ancestor's attachment reaches the
+  model as its link text only — consistent with "images follow the window".
 
 ## Operating envelope (ARCH-CONSTRAINTS)
 
@@ -215,7 +245,7 @@ test fixture.
 |---|---|---|---|---|
 | `<M-v>` → link inserted | UI response, one-shot | tool ≤ 5 s (`vim.system` timeout); osascript measured 60–70 ms; editor never blocks | measured / operator choice | "nothing pasted — exit 124: <tool> timed out"; temp file removed; nothing written |
 | paste size | per image | ≤ 10 MB (`assets.MAX_BYTES`) | Anthropic per-image cap | refuse with the size and the limit; nothing written |
-| `build_messages` with attachments | per request | one file read + base64 per attachment in the window; ≤ 10 MB each; no caching | domain-informed: window ≤ `max_full_exchanges` exchanges | oversized → note, not block; unreadable → note |
+| `build_messages` with attachments | per request | one file read + base64 per attachment in the window; ≤ 10 MB each; no caching | domain-informed: window ≤ `chat_memory.max_full_exchanges` exchanges | oversized → note, not block; unreadable → note |
 | request growth | per turn | each attached image re-sent while its exchange is in the window; 10 MB base64 ≈ 13 MB on the wire | operator decision (#231 spec) | drops with the exchange when summarized |
 | move / delete / export | one-shot | one `os.rename` (or copy) per asset folder | existing tree walk | error names the folder; `.md` moves and 🌿 rewrites already done stay done |
 | keystroke, redraw, parse | untouched | `parse_attachment` is one anchored `string.match` per question line, only inside a question | — | N/A |
@@ -235,6 +265,11 @@ paste, collected only when the chat is deleted. No sweep is planned (Non-goals);
 if it ever matters, the sweep is "files in `assets/<ts>/` not named by any
 `![](…)` line of `<ts>*.md`", and it lives in `assets`.
 
+**Logs are a second residue** and are bounded here: the three sinks in Facts
+receive `assets.elide_image_data(...)` — image bytes replaced by
+`<image/png, N bytes>` — so `parley.log` and the raw-mode logs grow by a few
+dozen bytes per image per turn, never by the image.
+
 ## Trust boundaries (ARCH-SECURE)
 
 - **Transcript lines** (model-writable, hand-editable): `assets.parse_attachment`
@@ -253,7 +288,12 @@ if it ever matters, the sweep is "files in `assets/<ts>/` not named by any
 - **Destructive calls**: `delete_chat_file` removes `assets/<ts>` only for a
   path `assets.folder_for` constructed from the chat file being deleted (a
   non-timestamp name removes nothing); `vim.fn.delete(…, "rf")` does not follow
-  symlinks; every confirmation lists the folders. Export copies, never moves.
+  symlinks. The operator consents to what the prompt names: all four
+  single/tree prompts (`ChatDelete`, `md_delete_file`, the finder's two)
+  append `assets.removal_note(path)` when a folder exists, and
+  `delete_chat_tree` lists each folder. Export copies, never moves.
+- **Logs**: image bytes never reach `parley.log` or the raw-mode logs
+  (`elide_image_data` at all three sinks).
   Temp files come from `vim.fn.tempname()` (outside the repo) and are removed
   on every path.
 - **HTML export**: `alt` and `src` are attribute-escaped (`"` → `&quot;`) on
@@ -308,6 +348,7 @@ its callback to reproduce any interleaving).
 | `question_content` | `lua/parley/assets.lua` | new |
 | `omitted_text` | `lua/parley/assets.lua` | new |
 | `move_conflict` | `lua/parley/assets.lua` | new |
+| `elide_image_data` | `lua/parley/assets.lua` | new |
 | `select` | `lua/parley/clipboard_image.lua` | new |
 | `argv_for` | `lua/parley/clipboard_image.lua` | new |
 | `classify` | `lua/parley/clipboard_image.lua` | new |
@@ -355,6 +396,18 @@ its callback to reproduce any interleaving).
 - **`move_conflict`** — `(chat_src, dst_dir, io_) → src, dst | nil`: the
   source folder (when it exists) and its destination, or `nil, err` when the
   destination already exists. The one rule the pre-check and `move_with` share.
+- **`elide_image_data`** — any messages/payload table → a deep copy in which
+  every image payload (`source.data` of an `image` block, `inlineData.data`, a
+  `data:` `image_url.url`) is `"<mime, N bytes>"`. Applied at the three log
+  sinks so a log line is never an image (`ARCH-FUNERAL`; one helper, three
+  sinks — `ARCH-DRY`).
+- **The M2 rows** (`removal_note` in Pure entities; `delete_chat_file` in
+  Integration points) are **appended to these tables by Task 9, Step 1**, not
+  listed here: `tests/arch/single_source_sweeps_spec.lua` "every symbol the
+  plan tables name exists" is document-wide and would be red at the M1 gate
+  for a name M2 creates. Until then the sibling rows below say "the one
+  delete door" in prose. Likewise, within M1 the table is only fully green
+  once Task 7 lands (`googleai_parts`, `image_url`) — expected, not a surprise.
 - **`select`** — `(config_cmd, env) → recipe|nil, err`: config override, else
   first executable platform recipe; the error names what to install.
   **`argv_for`** — `(recipe, out_path) → argv` with `{out}` substituted.
@@ -377,12 +430,11 @@ its callback to reproduce any interleaving).
 | `read_png` | `lua/parley/clipboard_image.lua` | new | `vim.system` (the clipboard tool) |
 | `paste` | `lua/parley/paste_image.lua` | new | buffer, current window's cursor, notify |
 | `paste_image` | `lua/parley/init.lua` | new | `paste_image.paste` with real deps |
-| `delete_chat_file` | `lua/parley/init.lua` | new | `assets.delete_with` + `helpers.delete_file` |
 | `move_chat` | `lua/parley/init.lua` | modified | `assets.move_conflict` / `move_with` |
 | `move_chat_tree` | `lua/parley/init.lua` | modified | `assets.move_conflict` / `move_with` |
-| `delete_chat_tree` | `lua/parley/init.lua` | modified | `delete_chat_file`; confirmation lists folders |
-| `handle_delete_response` | `lua/parley/chat_finder.lua` | modified | `delete_chat_file` |
-| `handle_delete_tree_response` | `lua/parley/chat_finder.lua` | modified | `delete_chat_file` |
+| `delete_chat_tree` | `lua/parley/init.lua` | modified | the one delete door (Task 9); confirmation lists folders |
+| `handle_delete_response` | `lua/parley/chat_finder.lua` | modified | the one delete door (Task 9) |
+| `handle_delete_tree_response` | `lua/parley/chat_finder.lua` | modified | the one delete door (Task 9) |
 | `export_tree` | `lua/parley/exporter.lua` | modified | `assets.copy_into` |
 | `fake_clipboard` | `tests/fixtures/fake_clipboard` | new | stands in for `osascript` |
 
@@ -407,9 +459,9 @@ its callback to reproduce any interleaving).
   flow of decision 10 and the ordering table. The cursor row is read from the
   **current window**, which must be showing `buf` (true for the key; a caller
   with another window active gets the wrong row — documented, not guarded).
-- **`delete_chat_file`** — `(path)`: `assets.delete_with(path)` then
-  `helpers.delete_file(path)`; the only permitted deleter of a chat path
-  (`tests/arch/chat_delete_sweep_spec.lua`).
+- **The one delete door** (Task 9 adds its row) — `(path)`:
+  `assets.delete_with(path)` then `helpers.delete_file(path)`; the only
+  permitted deleter of a chat path (`tests/arch/chat_delete_sweep_spec.lua`).
 - **`fake_clipboard`** — Python 3; models **osascript** (says so in its
   docstring): `PARLEY_FAKE_CLIPBOARD=png:<file>` copies that file to
   `argv[1]` and exits 0; `text` creates an empty `argv[1]`, prints the measured
@@ -434,7 +486,7 @@ its callback to reproduce any interleaving).
 
 ---
 
-## Chunk 1: capture — assets, clipboard, the key (M1, Tasks 1–4)
+## Chunk 1: the pure modules — assets, clipboard (M1, Tasks 1–3)
 
 ### Task 1: `assets` — layout, grammar, content blocks (pure)
 
@@ -971,6 +1023,8 @@ Expected: FAIL — `attempt to call field 'save' (a nil value)`.
 -- IO shell. Every function below takes `io_` (defaults to default_io) so the
 -- clipboard flow, #239, both movers, every deleter and export share one
 -- writer and the unit tests run on an in-memory table.
+-- MAIN LOOP ONLY: default_io uses vim.fn, which a libuv callback refuses;
+-- clipboard_image.read_png schedules its on_done before any of this runs.
 --------------------------------------------------------------------------------
 
 M.default_io = {
@@ -1266,6 +1320,20 @@ describe("clipboard_image: read_png", function()
         vim.wait(500, function() return status ~= nil end, 10)
         assert.equals("no_image", status)
     end)
+
+    it("a held callback reproduces the in-flight interleaving (ARCH-ORDER seam)", function()
+        local out = vim.fn.tempname() .. ".png"
+        local held
+        local runner = function(_, on_complete) held = on_complete end
+        local status
+        ci.read_png({ tool = "t", argv = { "t", "{out}" } }, out, function(s) status = s end, runner)
+        assert.is_nil(status, "nothing settles until the tool answers")
+        local f = assert(io.open(out, "wb")); f:write("PNG"); f:close()
+        held(0, "")
+        vim.wait(500, function() return status ~= nil end, 10)
+        assert.equals("ok", status)
+        os.remove(out)
+    end)
 end)
 ```
 
@@ -1455,6 +1523,10 @@ git commit -m "#231 M1: clipboard_image — platform recipes as data, one classi
 Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 ```
 
+---
+
+## Chunk 2: the key — fixture, paste flow, `<M-v>` (M1, Task 4)
+
 ### Task 4: the fixture, the paste flow, the key
 
 **Files:**
@@ -1532,7 +1604,9 @@ Expected: `67 bytes`; `file tests/fixtures/one_pixel.png` says `PNG image data, 
 local root = vim.fn.tempname() .. "-parley-paste"
 vim.fn.mkdir(root, "p")
 local repo = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h:h:h")
-local fixture = repo .. "/tests/fixtures/fake_clipboard"
+-- Named so the plan's Integration-points row `fake_clipboard` resolves to a
+-- definition (tests/arch/single_source_sweeps_spec.lua "every symbol … exists").
+local fake_clipboard = repo .. "/tests/fixtures/fake_clipboard"
 local png = repo .. "/tests/fixtures/one_pixel.png"
 local log = root .. "/clipboard.log"
 
@@ -1542,7 +1616,7 @@ parley.setup({
     state_dir = root .. "/state",
     providers = {},
     api_keys = {},
-    assets = { clipboard_cmd = { fixture, "{out}" } },
+    assets = { clipboard_cmd = { fake_clipboard, "{out}" } },
 })
 local assets = require("parley.assets")
 
@@ -1668,9 +1742,13 @@ describe("paste image (#231)", function()
         assert.matches("already in progress", notices[1].msg)
         assert.is_true(wait_for(function() return #vim.api.nvim_buf_get_lines(buf, 0, -1, false) == 10 end))
         assert.equals(1, reads(), "the second key spawned nothing")
-        -- and the flight is over: a third paste is accepted
+        -- and the flight is over: a third paste is accepted. Wait for ITS link,
+        -- not the log line — the fixture logs before it sleeps, and a paste
+        -- still in flight when this case returns would notify into the next
+        -- case's table (nothing outlives a paste: ARCH-ORDER).
         parley.paste_image(buf, { notify = notify })
-        assert.is_true(wait_for(function() return reads() == 2 end))
+        assert.is_true(wait_for(function() return #vim.api.nvim_buf_get_lines(buf, 0, -1, false) == 11 end))
+        assert.equals(2, reads())
     end)
 
     it("<M-v> is a parley_buffer entry resolving to n/i through the registry", function()
@@ -1698,6 +1776,8 @@ end)
 	-- wl-paste / xclip): an argv list whose "{out}" token is replaced by the PNG
 	-- path to write. Contract: exit 0 + a non-empty file = image; exit 0 + empty,
 	-- or exit 1 = no image on the clipboard; anything else = failure (stderr shown).
+	-- setup() REPLACES this table wholesale (as for `outline`/`drill_in`): keep
+	-- it free of defaults; anything #239 adds resolves in code with `or`.
 	assets = {},
 ```
 
@@ -1734,7 +1814,9 @@ end)
 -- buffer discards the image — no bytes without a transcript line. The chat
 -- path is re-read at completion so a rename or move that finished meanwhile
 -- is honoured. The cursor row comes from the CURRENT window, which the key
--- guarantees is showing `buf`.
+-- guarantees is showing `buf`. In insert mode the key does NOT stopinsert
+-- (helper.set_keymap does not, unlike register_global): the row is still the
+-- right one, and a stopinsert here would pull the cursor left — leave it.
 --
 -- deps = { config, notify(msg, level), runner? } — init.lua supplies the real
 -- ones; specs pass a recording notify.
@@ -1774,9 +1856,7 @@ function M.paste(buf, deps)
     local function finish(msg, level)
         inflight[buf] = nil
         os.remove(tmp)
-        if not anchor.dead then
-            buffer_edit.handle_invalidate(anchor)
-        end
+        buffer_edit.handle_invalidate(anchor) -- checks `dead` and pcalls itself
         deps.notify(msg, level)
     end
 
@@ -1853,7 +1933,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 
 ---
 
-## Chunk 2: send — parser, build_messages, wires, M1 gate (M1, Tasks 5–8)
+## Chunk 3: send — parser, build_messages, wires, M1 gate (M1, Tasks 5–8)
 
 ### Task 5: the parser — an image link in a question is an attachment
 
@@ -1861,7 +1941,9 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 - Modify: `lua/parley/chat_parser.lua:637-660` and `:845-866`
 - Test: `tests/unit/parse_chat_spec.lua` (append)
 
-- [ ] **Step 1: Write the failing tests**
+- [ ] **Step 1: Write the failing tests** (`std_header` is the header table
+  every other case in this spec passes to `make_chat`; use it so
+  `parse_header_metadata` sees a real header)
 
 ```lua
 -- append to tests/unit/parse_chat_spec.lua
@@ -1870,7 +1952,7 @@ describe("attachments (#231)", function()
     local link = "![](assets/" .. TS .. "/2026-09-10.14-22-31.487.png)"
 
     it("collects image links in the question body, with their lines", function()
-        local lines, header_end = make_chat({ "---", "topic: t" }, {
+        local lines, header_end = make_chat(std_header, {
             "💬: what is this?",
             link,
             "and this one",
@@ -1889,13 +1971,13 @@ describe("attachments (#231)", function()
     end)
 
     it("collects a link on the 💬: prefix line itself", function()
-        local lines, header_end = make_chat({ "---", "topic: t" }, { "💬: " .. link })
+        local lines, header_end = make_chat(std_header, { "💬: " .. link })
         local q = parse_chat(lines, header_end).exchanges[1].question
         assert.equals(1, #q.attachments)
     end)
 
     it("an image link in an answer is prose, not an attachment", function()
-        local lines, header_end = make_chat({ "---", "topic: t" }, {
+        local lines, header_end = make_chat(std_header, {
             "💬: draw", "", "🤖: here", link,
         })
         local ex = parse_chat(lines, header_end).exchanges[1]
@@ -1904,14 +1986,14 @@ describe("attachments (#231)", function()
     end)
 
     it("a link that is not the grammar is prose", function()
-        local lines, header_end = make_chat({ "---", "topic: t" }, {
+        local lines, header_end = make_chat(std_header, {
             "💬: q", "![](/etc/passwd.png)", "see ![](assets/" .. TS .. "/x.png) inline",
         })
         assert.equals(0, #parse_chat(lines, header_end).exchanges[1].question.attachments)
     end)
 
     it("every exchange has an attachments list, even when empty", function()
-        local lines, header_end = make_chat({ "---", "topic: t" }, { "💬: q", "", "🤖: a", "", "💬: q2" })
+        local lines, header_end = make_chat(std_header, { "💬: q", "", "🤖: a", "", "💬: q2" })
         for _, ex in ipairs(parse_chat(lines, header_end).exchanges) do
             assert.same({}, ex.question.attachments)
         end
@@ -2048,9 +2130,47 @@ describe("attachments (#231)", function()
         end
     end)
 
-    it("attachments do not pin an exchange in the window", function()
+    -- A PIN, not a red/green case: the case above already proves it; this one
+    -- names the rule so a future "preserve if attachments" change goes red here.
+    it("attachments do not pin an exchange in the window (pin)", function()
         local exchanges = { att_exchange("old", "a1"), exchange("b", "a2"), exchange("c", "a3"), exchange("now") }
         assert.matches("^%[Previous messages omitted%]", first_user(build(exchanges)).content)
+    end)
+
+    it("elide_image_data replaces bytes in every wire shape and leaves the rest", function()
+        local data = vim.base64.encode(string.rep("x", 30))
+        local elided = assets.elide_image_data({
+            { role = "user", content = {
+                { type = "image", source = { type = "base64", media_type = "image/png", data = data } },
+                { type = "text", text = "q" } } },
+            { role = "user", content = { { type = "image_url", image_url = { url = "data:image/png;base64," .. data, detail = "auto" } } } },
+            { role = "user", parts = { { inlineData = { mimeType = "image/png", data = data } }, { text = "t" } } },
+            { role = "assistant", content = "plain" },
+        })
+        assert.equals("<image/png, 40 bytes>", elided[1].content[1].source.data)
+        assert.equals("q", elided[1].content[2].text)
+        assert.equals("<image/png, 40 bytes>", elided[2].content[1].image_url.url)
+        assert.equals("auto", elided[2].content[1].image_url.detail)
+        assert.equals("<image/png, 40 bytes>", elided[3].parts[1].inlineData.data)
+        assert.equals("plain", elided[4].content)
+        assert.is_nil(vim.inspect(elided):find(data, 1, true), "no base64 survives")
+    end)
+
+    it("the messages-to-send debug line never carries image bytes", function()
+        -- stub_logger records; the real logger.debug is what production calls,
+        -- so this asserts through the seam build_messages' caller uses.
+        local seen = {}
+        local logger = require("parley.logger")
+        local saved = logger.debug
+        logger.debug = function(msg) seen[#seen + 1] = msg end
+        local ok, err = pcall(function()
+            local messages = build({ att_exchange("q") })
+            logger.debug("messages to send: " .. vim.inspect(assets.elide_image_data(messages)))
+        end)
+        logger.debug = saved
+        assert(ok, err)
+        assert.is_nil(seen[#seen]:find(vim.base64.encode("PNGBYTES"), 1, true))
+        assert.is_not_nil(seen[#seen]:find("<image/png, 8 bytes>", 1, true))
     end)
 
     it("a missing file degrades to a note, not a block", function()
@@ -2075,6 +2195,49 @@ end)
 - [ ] **Step 2: Run to verify it fails** — the first case fails with `content` being a string.
 
 - [ ] **Step 3: Implement**
+
+First the eliding helper, appended to `lua/parley/assets.lua` (pure) — one
+helper, three sinks:
+```lua
+--- A deep copy of any messages/payload table with every image payload
+--- replaced by "<mime, N bytes>": an Anthropic `image` block's source.data,
+--- a Gemini inlineData.data, an OpenAI data-URL image_url.url. For the logs
+--- (ARCH-FUNERAL): a log line is never an image.
+function M.elide_image_data(value)
+    if type(value) ~= "table" then
+        return value
+    end
+    local out = {}
+    for k, v in pairs(value) do
+        out[k] = M.elide_image_data(v)
+    end
+    local function elided(mime, b64)
+        return "<" .. tostring(mime) .. ", " .. tostring(#(b64 or "")) .. " bytes>"
+    end
+    if out.type == "image" and type(out.source) == "table" and type(out.source.data) == "string" then
+        out.source.data = elided(out.source.media_type, out.source.data)
+    end
+    if type(out.inlineData) == "table" and type(out.inlineData.data) == "string" then
+        out.inlineData.data = elided(out.inlineData.mimeType, out.inlineData.data)
+    end
+    if type(out.image_url) == "table" and type(out.image_url.url) == "string" then
+        local mime, b64 = out.image_url.url:match("^data:([^;]+);base64,(.*)$")
+        if mime then
+            out.image_url.url = elided(mime, b64)
+        end
+    end
+    return out
+end
+```
+The three sinks in `chat_respond.lua`:
+```lua
+        -- :1639
+        _parley.logger.debug("messages to send: " .. vim.inspect(require("parley.assets").elide_image_data(messages)))
+        -- :2021
+                            raw_log.write_exchange_turn(chat_path, require("parley.assets").elide_image_data(messages))
+        -- :2030
+                                request = require("parley.assets").elide_image_data(final_payload),
+```
 
 In `build_messages`, after `local define = require("parley.define")` (`:709`):
 ```lua
@@ -2123,7 +2286,10 @@ The caller (`:1454`) gains one field:
                 chat_path = vim.api.nvim_buf_get_name(buf),  -- #231: attachments resolve here
             })
 ```
-In `build_messages_from_model` (`:474-484`), replace the question branch body:
+In `build_messages_from_model`, add `local assets = require("parley.assets")`
+to the function's require block (`:433-436`) and
+`local chat_path = vim.api.nvim_buf_get_name(buf)` beside it; then replace the
+question branch body (`:474-484`):
 ```lua
             if blk.kind == "question" then
                 local text = read_block_text(k, b)
@@ -2132,8 +2298,6 @@ In `build_messages_from_model` (`:474-484`), replace the question branch body:
                 if text ~= "" then
                     flush_answer()
                     -- #231: same grammar and same builder as the parse path.
-                    local assets = require("parley.assets")
-                    local chat_path = vim.api.nvim_buf_get_name(buf)
                     local content = assets.question_content(text, assets.attachments_in(text), function(rel)
                         return assets.read(chat_path, rel)
                     end)
@@ -2141,16 +2305,17 @@ In `build_messages_from_model` (`:474-484`), replace the question branch body:
                 end
 ```
 
-- [ ] **Step 4: Run to verify it passes** — `tests/unit/build_messages_spec.lua` all PASS, including the pre-existing cases (a question without attachments is byte-identical: `question_content` returns the string).
+- [ ] **Step 4: Run to verify it passes** — `tests/unit/build_messages_spec.lua` all PASS, including the pre-existing cases (a question without attachments is byte-identical: `question_content` returns the string). Then `grep -n "elide_image_data" lua/parley/chat_respond.lua` shows exactly three sites (`:1639`, `:2021`, `:2030`).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add lua/parley/chat_respond.lua tests/unit/build_messages_spec.lua
+git add lua/parley/assets.lua lua/parley/chat_respond.lua tests/unit/build_messages_spec.lua
 git commit -m "#231 M1: build_messages — attachments as image blocks; summarized ones become a note
 
 Both the parse path and the buffer-block rebuild use assets.question_content,
-so a resubmit cannot lose an image the first send carried.
+so a resubmit cannot lose an image the first send carried. The three log
+sinks elide image bytes: a log line is never an image.
 
 Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 ```
@@ -2173,6 +2338,10 @@ local tmp_dir = (os.getenv("TMPDIR") or "/tmp") .. "/claude/parley-test-wire-ima
 local parley = require("parley")
 parley.setup({ chat_dir = tmp_dir, state_dir = tmp_dir .. "/state", providers = {}, api_keys = {} })
 local dispatcher = require("parley.dispatcher")
+
+-- As dispatcher_spec does: a truthy web_search would append server tools to
+-- the anthropic/googleai payloads and muddy the pinned shapes.
+before_each(function() parley._state.web_search = false end)
 
 local DATA = vim.base64.encode("PNGBYTES")
 local function image_user(text)
@@ -2308,16 +2477,14 @@ end)
                         .. tostring(block.type))
                 end
             end
+            local text = #texts > 0 and table.concat(texts, "\n\n") or nil
             if #parts > 0 then
-                if #texts > 0 then
-                    table.insert(parts, { type = "text", text = table.concat(texts, "\n\n") })
+                if text then
+                    table.insert(parts, { type = "text", text = text })
                 end
                 table.insert(out, { role = msg.role or "user", content = parts })
-            elseif #texts > 0 then
-                table.insert(out, {
-                    role = msg.role or "user",
-                    content = table.concat(texts, "\n\n"),
-                })
+            elseif text then
+                table.insert(out, { role = msg.role or "user", content = text })
             end
         end
 ```
@@ -2426,11 +2593,15 @@ slug: `ParleySlug` renames nothing here, and the folder moves with its chat.
   googleai `inlineData`. Unreadable or >10 MB files become a one-line note.
 - Memory: attachments do NOT pin an exchange; a summarized question's
   placeholder gains "[An image was attached to this question; it is no longer included.]".
+  An ancestor chat's attachment (tree-of-chat context) reaches the model as
+  its link text only.
+- Logs: `parley.log` and the raw-mode logs receive `assets.elide_image_data`
+  output — `<image/png, N bytes>` in place of the base64 — at all three sinks.
 
 ## Lifecycle
 An asset lives as long as a transcript line references it, and is removed
 with its chat. A link line deleted by hand leaves the file until then; there
-is no sweep.
+is no sweep. Logs never hold the bytes.
 
 ## Tests
 `tests/unit/assets_spec.lua`, `clipboard_image_spec.lua`, `wire_images_spec.lua`;
@@ -2479,7 +2650,7 @@ Expected: green, including `tests/arch/single_source_sweeps_spec.lua` (every
 new `M.` export above has a Core-concepts row) and `untrusted_path_spec.lua`
 (no `vim.fn.expand`/`glob` was added).
 
-- [ ] **Step 5: Manual check on this machine** (osascript, real clipboard)
+- [ ] **Step 5: Manual check on this machine** (osascript, real clipboard, real wires)
 
 1. Copy any image (e.g. `⌘⇧4` a region, or copy an image from a browser).
 2. In a chat buffer, `<M-v>` on the question line.
@@ -2487,7 +2658,17 @@ new `M.` export above has a Core-concepts row) and `untrusted_path_spec.lua`
    under `<chat-dir>/assets/<ts>/`, and `:MarkdownPreview` showing it.
 4. Copy some text, `<M-v>` again: expect "nothing pasted — no image on the
    clipboard (…expected type…)" and no new file.
-Record the outcome in `## Log`.
+5. **Send it, per wire family.** The spec warns a wrong envelope fails with a
+   400 at runtime, and the unit specs only assert parley's own payload table.
+   With the pasted question "What is in this image?", respond once with an
+   agent on each family configured on this machine — anthropic, openai,
+   googleai, and cliproxy (the daily route) — and confirm the model describes
+   the picture. Before sending, re-read the Anthropic vision page for the
+   per-image cap `MAX_BYTES` rests on (it has been quoted lower than the Files
+   API limit before). Record each family's result in `## Log`; a family with
+   no key on this machine is recorded as "not exercised", not assumed.
+6. `tail -c 2000 <state_dir>/parley.log` after the send: the debug line shows
+   `<image/png, N bytes>`, never base64.
 
 - [ ] **Step 6: Commit docs, log, close M1**
 
@@ -2502,7 +2683,7 @@ Fix Critical/Important findings before proceeding; record the verdict in `## Log
 
 ---
 
-## Chunk 3: M2 — the folder follows the chat; export; docs; live conformance (Tasks 9–12)
+## Chunk 4: M2 — the folder follows the chat; export; docs; live conformance (Tasks 9–12)
 
 ### Task 9: every mover carries the folder; every deleter removes it
 
@@ -2512,7 +2693,13 @@ Fix Critical/Important findings before proceeding; record the verdict in `## Log
 - Create: `tests/arch/chat_delete_sweep_spec.lua`
 - Test: `tests/integration/chat_move_spec.lua` (append)
 
-- [ ] **Step 1: Write the failing tests**
+- [ ] **Step 1: Append the M2 rows to the plan's Core-concepts tables, then write the failing tests**
+
+Pure entities: `| \`removal_note\` | \`lua/parley/assets.lua\` | new |`.
+Integration points: `| \`delete_chat_file\` | \`lua/parley/init.lua\` | new | \`assets.delete_with\` + \`helpers.delete_file\` |`,
+and replace "the one delete door (Task 9)" on the three sibling rows with
+`` `delete_chat_file` ``. (The document-wide symbol guard needs the names to
+exist in the tree; this is the commit where they do.)
 
 ```lua
 -- append inside describe("chat move") in tests/integration/chat_move_spec.lua
@@ -2586,50 +2773,135 @@ Fix Critical/Important findings before proceeding; record the verdict in `## Log
     it("the finder's tree delete removes the folders", function()
         local _, path = create_chat(TS .. "_finder-del.md")
         seed_assets(primary_dir)
-        require("parley.chat_finder").handle_delete_tree_response("y", path, { path }, 1, 1, nil, nil, nil)
+        -- The handler ends by re-opening the finder on a 100 ms timer
+        -- (chat_finder.lua:302 → _reopen_chat_finder → vim.defer_fn); stub it
+        -- as tests/unit/chat_finder_logic_spec.lua:128 does, so no effect
+        -- outlives this case.
+        local saved_reopen = parley._reopen_chat_finder
+        parley._reopen_chat_finder = function() end
+        local ok, err = pcall(require("parley.chat_finder").handle_delete_tree_response,
+            "y", path, { path }, 1, 1, nil, nil, nil)
+        parley._reopen_chat_finder = saved_reopen
+        assert.is_true(ok, err)
+        assert.equals(0, vim.fn.filereadable(path))
+        assert.equals(0, vim.fn.isdirectory(primary_dir .. "/assets/" .. TS))
+    end)
+
+    it(":ParleyChatDelete's prompt names the folder it will remove", function()
+        local _, path = create_chat(TS .. "_prompt.md")
+        seed_assets(primary_dir)
+        local saved_confirm, saved_input = parley.config.chat_confirm_delete, vim.ui.input
+        parley.config.chat_confirm_delete = true
+        local prompt
+        vim.ui.input = function(opts, on_done) prompt = opts.prompt on_done("y") end
+        local ok, err = pcall(parley.cmd.ChatDelete)
+        parley.config.chat_confirm_delete, vim.ui.input = saved_confirm, saved_input
+        assert.is_true(ok, err)
+        assert.matches(" and assets/" .. TS:gsub("%-", "%%-"):gsub("%.", "%%.") .. "/ %(1 file%)", prompt)
         assert.equals(0, vim.fn.filereadable(path))
         assert.equals(0, vim.fn.isdirectory(primary_dir .. "/assets/" .. TS))
     end)
 ```
-(If `handle_delete_tree_response`'s post-delete navigation needs a `context`,
-pass `{ chat_finder_items = {} }` as the last argument — read the function's
-tail at `chat_finder.lua:289-310` and give it what it dereferences.)
+`tests/unit/chat_finder_logic_spec.lua` Group E keeps passing unchanged: it
+stubs `M.helpers.delete_file`, which `delete_chat_file` resolves at call time,
+and `assets.delete_with("/tmp/chat-b.md")` is a no-op for a non-timestamp name.
 
 ```lua
 -- tests/arch/chat_delete_sweep_spec.lua
 --
 -- #231: a chat is deleted through ONE door. `helpers.delete_file` on a chat
--- path orphans `assets/<ts>/`; the five sites that used to call it now call
--- `parley.delete_chat_file`, and this guard keeps a sixth from appearing.
+-- path orphans `assets/<ts>/`, so exactly one call may exist in lua/parley/**:
+-- the one inside M.delete_chat_file. A count assertion, not an allow-list:
+-- tests/arch/arch_helper.lua:assert_pattern_scoping is file-granular and
+-- cannot say "one call inside one function".
+--
+-- Enumerated and excluded, with reasons:
+--   dispatcher.lua    — deletes query-cache JSON, never a chat
+--   issue_finder.lua  — deletes issue files (workshop/issues), never a chat
+--   note_finder.lua   — deletes notes, never a timestamp chat
+--   init.lua:1438 os.remove(last) — the legacy <chat_dir>/last.md state file
+local EXCLUDED = {
+    ["lua/parley/dispatcher.lua"] = "query cache",
+    ["lua/parley/issue_finder.lua"] = "issues",
+    ["lua/parley/note_finder.lua"] = "notes",
+}
+
 describe("chat deletion goes through delete_chat_file (#231)", function()
-    it("no chat module calls helpers.delete_file outside the one door", function()
-        local offenders = {}
-        for _, file in ipairs({ "lua/parley/init.lua", "lua/parley/chat_finder.lua" }) do
-            local n = 0
-            for line in io.lines(file) do
-                n = n + 1
-                if line:find("helpers.delete_file(", 1, true) and not line:find("-- the one door", 1, true) then
-                    offenders[#offenders + 1] = file .. ":" .. n
+    it("exactly one helpers.delete_file call exists, inside M.delete_chat_file", function()
+        local hits = {}
+        for _, file in ipairs(vim.fn.glob("lua/parley/**/*.lua", false, true)) do
+            if not EXCLUDED[file] then
+                local n, inside_door = 0, false
+                for line in io.lines(file) do
+                    n = n + 1
+                    if line:match("^M%.delete_chat_file = function") then inside_door = true end
+                    if inside_door and line:match("^end%s*$") then inside_door = false end
+                    if line:find("helpers.delete_file(", 1, true) then
+                        hits[#hits + 1] = { site = file .. ":" .. n, in_door = inside_door and file == "lua/parley/init.lua" }
+                    end
                 end
             end
         end
-        assert.same({}, offenders, "call M.delete_chat_file / _parley.delete_chat_file instead")
+        assert.equals(1, #hits, "sites: " .. vim.inspect(vim.tbl_map(function(h) return h.site end, hits))
+            .. " — call M.delete_chat_file / _parley.delete_chat_file instead")
+        assert.is_true(hits[1].in_door, "the one call must be inside M.delete_chat_file: " .. hits[1].site)
     end)
 end)
 ```
+Verify the guard goes red for the right reason: with the five call sites still
+in place it must report six hits; restore one after the sweep and it must
+report two. (lessons.md: a guard is finished when you have seen it red.)
 
-- [ ] **Step 2: Run to verify it fails** — folders stay under `primary_dir`; the sweep lists five sites.
+- [ ] **Step 2: Run to verify it fails** — folders stay under `primary_dir`; the sweep counts five sites; the prompt lacks the note.
 
 - [ ] **Step 3: Implement**
+
+`assets.lua` (append; pure given `io_`):
+```lua
+--- The suffix a single-file delete prompt appends when the chat owns a
+--- folder: " and assets/<ts>/ (N files)". Empty when there is nothing more
+--- to remove — the operator consents to what the prompt names.
+function M.removal_note(chat_path, io_)
+    io_ = io_ or M.default_io
+    local folder = M.folder_for(chat_path)
+    if not folder or not io_.exists(folder) then
+        return ""
+    end
+    return " and " .. M.relative_path(M.key_for(chat_path), "") .. " (" .. #io_.list(folder) .. " files)"
+end
+```
+Unit test (append to `assets_spec.lua`'s "move, delete, copy" describe):
+```lua
+    it("removal_note names the folder and its count, or nothing", function()
+        assert.equals(" and assets/" .. TS .. "/ (2 files)", assets.removal_note(CHAT, seeded()))
+        assert.equals("", assets.removal_note(CHAT, fake_io()))
+        assert.equals("", assets.removal_note("/roots/notes/todo.md", seeded()))
+    end)
+```
 
 `init.lua`, next to `delete_chat_tree`:
 ```lua
 -- #231: THE door for deleting a chat file — the assets folder goes with it.
 -- delete_with is a no-op for a non-timestamp name, so every caller is safe.
+-- tests/arch/chat_delete_sweep_spec.lua allows exactly one helpers.delete_file
+-- call in lua/parley/**, this one.
 M.delete_chat_file = function(path)
 	require("parley.assets").delete_with(path)
-	M.helpers.delete_file(path) -- the one door
+	M.helpers.delete_file(path)
 end
+```
+The four single/tree prompts gain the note (`assets` required locally at each):
+```lua
+-- cmd.ChatDelete (:3878)
+	vim.ui.input({ prompt = "Delete " .. file_name .. require("parley.assets").removal_note(file_name) .. "? [y/N] " }, function(input)
+-- md_delete_file (:2949)
+					local choice = vim.fn.confirm("Delete " .. rel .. require("parley.assets").removal_note(file) .. "?", "&Yes\n&No", 2)
+-- chat_finder.prompt_delete_confirmation (:272)
+	vim.ui.input({ prompt = "Delete " .. item_value .. require("parley.assets").removal_note(item_value) .. "? [y/N] " }, function(input)
+-- chat_finder.prompt_delete_tree_confirmation (:338-341): append each file's note
+	for _, f in ipairs(tree_files) do
+		table.insert(rel_files, vim.fn.fnamemodify(f, ":~:.") .. require("parley.assets").removal_note(f))
+	end
 ```
 `delete_chat_tree` — list the folders and use the door:
 ```lua
@@ -2671,12 +2943,17 @@ end
 		return nil, clash
 	end
 ```
-and after `sync_moved_chat_buffers(resolved_file, target_file)`:
+and after `sync_moved_chat_buffers(resolved_file, target_file)`, carry the
+folder but let the state refresh and file tracking (`:3238-3244`) complete
+first — the `.md` move stays done and the state must follow it (the same rule
+`move_chat_tree` applies below):
 ```lua
 	local carried, aerr = assets.move_with(resolved_file, target_file)
+	-- … the existing refresh_state / track_file_access lines stay here …
 	if not carried then
 		return nil, "moved the chat but not its assets: " .. aerr
 	end
+	return target_file
 ```
 `move_chat_tree` — after the `.md` conflict loop (`:3556`):
 ```lua
@@ -2709,16 +2986,17 @@ and at the function's end, before the final `return`:
 is a cross-device or permission failure, which the `.md` rename would have hit
 first. Reporting rather than aborting keeps the tree's references consistent.)
 
-- [ ] **Step 4: Run to verify it passes** — `tests/integration/chat_move_spec.lua` and `tests/arch/chat_delete_sweep_spec.lua` PASS. Append both spec paths and `lua/parley/chat_finder.lua` to the `chat/attachments` traceability key.
+- [ ] **Step 4: Run to verify it passes** — `tests/unit/assets_spec.lua`, `tests/integration/chat_move_spec.lua`, `tests/unit/chat_finder_logic_spec.lua` (unchanged, still green) and `tests/arch/chat_delete_sweep_spec.lua` PASS. Append both new spec paths and `lua/parley/chat_finder.lua` to the `chat/attachments` traceability key.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add lua/parley/init.lua lua/parley/chat_finder.lua tests/integration/chat_move_spec.lua tests/arch/chat_delete_sweep_spec.lua atlas/traceability.yaml
+git add lua/parley/assets.lua lua/parley/init.lua lua/parley/chat_finder.lua tests/unit/assets_spec.lua tests/integration/chat_move_spec.lua tests/arch/chat_delete_sweep_spec.lua atlas/traceability.yaml
 git commit -m "#231 M2: both movers carry assets/<ts>/; all five deleters remove it
 
-One door for chat deletion, guarded by an arch sweep; one conflict rule
-shared by the pre-check and the move.
+One door for chat deletion, guarded by an arch sweep that allows exactly one
+helpers.delete_file call; every delete prompt names the folder it removes;
+one conflict rule shared by the pre-check and the move.
 
 Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 ```
@@ -2779,9 +3057,9 @@ end)
 		end)
 	end)
 ```
-(The exported HTML filename is `<post_date>-<slug>.html`; read `build_link_map`
-at `exporter.lua:186` to confirm the date/slug form for this fixture and adjust
-the expected name if it differs.)
+The expected HTML name is a verified fact: `extract_date` takes the
+`YYYY-MM-DD` from the basename, `sanitize_title("Img")` gives `img`, and
+`build_link_map` joins them as `2026-09-10-img.html`.
 
 - [ ] **Step 2: Run to verify it fails.**
 
@@ -2813,8 +3091,8 @@ and at the very end of the function, after the last cleanup gsub, before `return
 		html = html:gsub("XIMGX" .. n .. "XIMGX", repl)
 	end
 ```
-(`src:gsub` returns two values; wrap as `(src:gsub(...))` if the concatenation
-complains.) In `html_css` add: `.asset-image { max-width: 100%; height: auto; }`.
+(`src:gsub(...)` inside a `..` chain is truncated to its first value, so no
+wrapping is needed.) In `html_css` add: `.asset-image { max-width: 100%; height: auto; }`.
 In `export_tree`, inside the per-info loop after `write_fn` succeeds (`:872`):
 ```lua
 			-- #231: the folder travels with the export so relative links keep
@@ -3009,3 +3287,29 @@ sdlc close --issue 231 --verified '<the make test line, the manual <M-v> check, 
   (13) The build_messages tests use the spec's own `stub_helpers`/`stub_logger`.
   (14) The live spec trims the saved text, skips restore on a non-text
   clipboard, and restores on assertion failure.
+
+### 2026-09-12 — after the second review (three reviewers, one per chunk)
+
+- **Reason:** round-2 findings, all verified against the tree.
+- **Delta:** (1) The three log sinks (`logger.debug` at send, raw-mode
+  exchange and raw logs) would have written ≈13 MB of base64 per image per
+  turn: `assets.elide_image_data` at all three, with a unit test per wire
+  shape and a Lifecycle line (ARCH-FUNERAL). (2) The M1 gate now sends the
+  pasted question through each configured wire family and records the result;
+  a docs-only shape was not evidence for "reaches every wire". (3) The finder
+  tree-delete test stubs `_reopen_chat_finder` (the handler would have opened
+  a real finder 100 ms after the case ended). (4) The delete sweep counts
+  exactly one `helpers.delete_file` call across `lua/parley/**`, inside the
+  door, with named exclusions — no comment-marker exemption. (5) All four
+  single/tree delete prompts append `assets.removal_note`; a test reads the
+  `ChatDelete` prompt. (6) `move_chat` finishes its state refresh before
+  reporting an assets failure. (7) `fake_clipboard` is a named local in the
+  spec and `chat_memory.max_full_exchanges` is dotted, so the document-wide
+  symbol guard resolves every table name; the two M2-only rows are appended
+  by Task 9. (8) The third-paste test waits for its link, so no paste outlives
+  its case. (9) Chunks re-cut to four. (10) Smaller: `std_header` in the
+  parser spec, `web_search = false` in the wire spec, `text` computed once in
+  `wire_openai`, the assets require hoisted in `build_messages_from_model`, a
+  held-callback unit case in `read_png`, config/insert-mode/main-loop notes,
+  Ollama and ancestor-context non-goals, the fenced-code non-goal stated
+  precisely, E2's filename and the `src:gsub` note stated as facts.
