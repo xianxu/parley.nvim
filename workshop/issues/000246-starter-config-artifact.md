@@ -1,7 +1,7 @@
 ---
 id: 000246
 status: working
-deps: [000211, 000209]
+deps: [000245]
 github_issue:
 created: 2026-09-13
 updated: 2026-09-13
@@ -59,3 +59,20 @@ this repo, derived from the operator's config with personal data removed.
 ## Log
 
 ### 2026-09-13
+
+## Revisions
+
+### 2026-09-13T14:43:00-07:00 — packaging execution scope
+
+The operator confirmed the packaging spine #245 → #246 → #247. This
+supersedes the original #209/#211 prerequisites: the starter explicitly supplies
+profile-local paths, credentials and a no-local-tools policy without waiting for
+those broader default changes. The existing native live model picker and restore
+path will honor that policy through one shared option seam (ARCH-DRY).
+
+The implementation plan is [starter-config](../plans/000246-starter-config-plan.md).
+It specifies one editable init.lua, pinned lazy bootstrap, managed first-use proxy
+connection via :ParleyConnect, and isolated config/data/state/cache/auth storage.
+This supersedes the original one-directory lifecycle shorthand and raw-login
+first-use hint. Fresh-context plan review completed; implementation approval is
+pending. No implementation or estimate has been recorded yet.
