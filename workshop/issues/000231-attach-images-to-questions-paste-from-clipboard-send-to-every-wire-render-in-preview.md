@@ -251,3 +251,13 @@ and per-function test strategies; two review boundaries).
 - The provider docs were read live on 2026-09-12 (Anthropic `image`/base64,
   10 MB per image, 100 per request, 32 MB per request; OpenAI Chat
   Completions `image_url` data URL; Gemini `inlineData`, 20 MB inline total).
+- M1 gate evidence so far: `make lint` 0 warnings; `make test` green (216
+  files) after one plan-doc fix for the document-wide symbol guard. Real
+  clipboard, real `osascript` recipe, headless nvim against a temp chat dir
+  (agent sandbox off, operator's clipboard text saved and restored): `<M-v>`
+  wrote `assets/2026-09-12.22-00-00.000/2026-09-12.22-58-11.950.png`
+  (`file`: PNG 1×1; `cmp` identical to the fixture) and inserted the link
+  under the question; with text on the clipboard it declined with "nothing
+  pasted — no image on the clipboard (… Can’t make some data into the expected
+  type. (-2700))" and wrote nothing. Outstanding for the gate: the per-wire
+  send (anthropic, openai, googleai, cliproxy) — needs the operator's keys.
