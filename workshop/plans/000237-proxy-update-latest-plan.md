@@ -2902,7 +2902,7 @@ expect "updated 7.1.71 → 7.2.158 — restarting the proxy"; `:ParleyProxy stat
 → `version: 7.2.158 (latest)`; then a Fable chat through cliproxyapi answers.
 Record the three outputs in the Log.
 
-- [ ] **Step 4: Gate and close.** `make test` exit 0 (lint included). Reconcile
+- [x] **Step 4: Gate and close.** `make test` exit 0 (lint included). Reconcile
 every checkbox in this plan against commits (#186). Then
 `sdlc milestone-close --issue 237 --milestone M2`, and `sdlc close --issue 237
 --verified '<make test result; conformance + live GitHub result; the three live

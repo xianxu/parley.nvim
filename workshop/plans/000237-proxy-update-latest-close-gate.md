@@ -248,6 +248,27 @@ rounds:
           round: 7
       boundary: M2
       blocked: false
+    - "n": 8
+      timestamp: "2026-09-12T17:37:34-07:00"
+      agent: claude
+      dispose:
+        - id: BR-13
+          disposition: addressed
+          note: atlas/providers/cliproxy-managed.md:447-450 now says the identity cases run in every shell and names fake_ps, PARLEY_FAKE_PS_ROWS and _set_process_tools; the old "report pending" phrase survives only in the conformance sentence, where it is true.
+          round: 8
+        - id: BR-16
+          disposition: addressed
+          note: Reverting CLIPROXY_ANTHROPIC_ROUTE to the old alias in a scratch copy turns the recovery case red (5/1, HTTP 404 instead of 503) and the dispatcher pin red (64/1); the driver posts through the fake over HTTP.
+          round: 8
+        - id: BR-20
+          disposition: addressed
+          note: cliproxy_conformance_spec.lua now decodes the 403 body and asserts decoded.error is a string containing "banned"; it passed live on 7.2.159 in this shell.
+          round: 8
+        - id: BR-21
+          disposition: addressed
+          note: Plan line 288 names the lockout counter, the POST 404 rule and the GET delay on the fake_cliproxy row; line 264 adds the auth_files modified row; line 263 says version_probe is keyed.
+          round: 8
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#237 (boundary-review)
@@ -359,9 +380,15 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-21** [Minor] `plan-checkbox-tracking` Core-concepts rows lag the diff: the fake_cliproxy row omits the lockout counter, the POST 404 rule and the GET delay seam, and auth_files has no modified row
   3rd finding in this family. Rule: every entity the diff modifies gets its table row amended in the same commit; the arch sweep fires only on definition-line changes, so a contract change inside a function (auth_files' message) or inside a fixture never trips it. Sweep the fake's row (plan line 287) and add the auth_files row.
 
+## Round 8 — 2026-09-12T17:37:34-07:00 (claude) — passed
+
+### Disposed
+
+- BR-13 — addressed — atlas/providers/cliproxy-managed.md:447-450 now says the identity cases run in every shell and names fake_ps, PARLEY_FAKE_PS_ROWS and _set_process_tools; the old "report pending" phrase survives only in the conformance sentence, where it is true.
+- BR-16 — addressed — Reverting CLIPROXY_ANTHROPIC_ROUTE to the old alias in a scratch copy turns the recovery case red (5/1, HTTP 404 instead of 503) and the dispatcher pin red (64/1); the driver posts through the fake over HTTP.
+- BR-20 — addressed — cliproxy_conformance_spec.lua now decodes the 403 body and asserts decoded.error is a string containing "banned"; it passed live on 7.2.159 in this shell.
+- BR-21 — addressed — Plan line 288 names the lockout counter, the POST 404 rule and the GET delay on the fake_cliproxy row; line 264 adds the auth_files modified row; line 263 says version_probe is keyed.
+
 ## Open findings
 
-- **BR-13** [Minor] `readme-surface-drift` The atlas still says the identity cases report pending where ps is refused, which round 3 made false, and never names fake_ps
-- **BR-16** [Minor] `fake-rule-without-driver` fake_cliproxy's new 404 rule has no spec that posts the anthropic route through it; the unit pin is the only protection
-- **BR-20** [Minor] `conformance-pins-parsed-fields` The conformance lockout case pins the 403 code but not the error body field auth_files now parses
-- **BR-21** [Minor] `plan-checkbox-tracking` Core-concepts rows lag the diff: the fake_cliproxy row omits the lockout counter, the POST 404 rule and the GET delay seam, and auth_files has no modified row
+(none — every finding has been disposed)

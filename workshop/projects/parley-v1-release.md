@@ -6,7 +6,7 @@ done_when: "A user on a supported Neovim baseline installs parley.nvim from a fr
 status: ideation
 explicitly_out: [parley.nvim#115, parley.nvim#236]
 created: 2026-09-02
-updated: 2026-09-11
+updated: 2026-09-12
 ---
 
 # parley-v1-release
@@ -78,7 +78,7 @@ product they document must be settled first.
 - [ ] **#212** — gate the ariadne surface behind repo detection *(B8, B9, Tier 3)*
 - [ ] **#213** — make checkhealth honest and remove the copilot adapter *(B10; Tier 4 moved to #236, outside v1)*
 - [x] **#214** — audit and curate the default keybinding surface *(policy on top of #212's mechanism)* — **closed 2026-09-08, 17.14h** (est 3.83h, 0.2×)
-- [ ] **#237** — ParleyProxy update fetches the latest release unless pinned; status shows the version *(a stale pin locks out the newest models)*
+- [x] **#237** — ParleyProxy update fetches the latest release unless pinned; status shows the version *(a stale pin locks out the newest models)*
 - [ ] **#206** — rebuild Parley user documentation *(step 1 done: the audit)*
 - [ ] **#207** — produce Parley introduction video *(depends on #206)*
 - [ ] **#162** — split parley into two plugins — **deferred**, see Log
@@ -172,3 +172,16 @@ only re-fetches the pin. #237 makes `update` install the latest release unless
 `cliproxy.download_version` pins one, and shows the running version in
 `:ParleyProxy status`. It sits before #206 so the rebuilt docs describe the new
 behavior.
+
+### 2026-09-12 — #237 codecomplete
+
+`:ParleyProxy update` now installs the latest cliproxyapi release, or the one
+`cliproxy.download_version` pins, and restarts only the proxy parley started.
+`:ParleyProxy status` shows the running version against the latest. The live
+check installed 7.2.159, and Fable now answers through cliproxyapi. Two 7.2.x
+changes surfaced on the way and were fixed in #237: claude's route moved to
+`/v1/messages`, and the version probe sends parley's management key, since
+7.2.x bans a client after five failed management logins. Follow-ups: the two
+#205 catalog conformance cases cannot pass with a fabricated credential (to be
+filed), and the real binary's port-release time mid-stream is unmeasured.
+Estimate 5.76 h, actual 7.20 h.
