@@ -854,6 +854,252 @@ describe("assets: looks_like walks records (BR-4 round 3 — boundaries and imag
     end)
 end)
 
+describe("assets: looks_like checks mandatory headers (BR-4 round 4 — empty image records and header fields)", function()
+    local PNG_SIG = "\137PNG\r\n\26\n"
+
+    local function u16be(n)
+        return string.char(math.floor(n / 256) % 256, n % 256)
+    end
+    local function u16le(n)
+        return string.char(n % 256, math.floor(n / 256) % 256)
+    end
+    local function u32be(n)
+        return string.char(math.floor(n / 16777216) % 256, math.floor(n / 65536) % 256, math.floor(n / 256) % 256, n % 256)
+    end
+    local function u32le(n)
+        return string.char(n % 256, math.floor(n / 256) % 256, math.floor(n / 65536) % 256, math.floor(n / 16777216) % 256)
+    end
+    local function png_chunk(kind, data)
+        return u32be(#data) .. kind .. data .. "\0\0\0\0" -- CRC is never checked
+    end
+    local function riff(chunks)
+        local body = "WEBP" .. chunks
+        return "RIFF" .. u32le(#body) .. body
+    end
+    local function webp_chunk(fourcc, data)
+        return fourcc .. u32le(#data) .. data .. (#data % 2 == 1 and "\0" or "")
+    end
+
+    -- PNG by record. The fixture's IHDR is 1x1, depth 8, colour 2 (truecolour).
+    local PNG_IDAT = PNG_BYTES:sub(34, 57)
+    local PNG_IEND = PNG_BYTES:sub(-12)
+    local function ihdr(w, h, depth, colour, comp, filt, inter)
+        return png_chunk("IHDR", u32be(w) .. u32be(h) .. string.char(depth, colour, comp or 0, filt or 0, inter or 0))
+    end
+    local function png(header, body)
+        return PNG_SIG .. header .. (body or PNG_IDAT) .. PNG_IEND
+    end
+    local PLTE = png_chunk("PLTE", "\0\0\0\255\255\255")
+
+    -- JPEG by segment. The fixture is SOI, APP0, DQT, SOF9 (8-bit 1x1, one
+    -- component), DAC, SOS (one component), three scan bytes, EOI.
+    local JPEG_HEAD = JPEG_BYTES:sub(1, 89) -- SOI, APP0, DQT
+    local JPEG_SOF = JPEG_BYTES:sub(90, 102)
+    local JPEG_DAC = JPEG_BYTES:sub(103, 110)
+    local JPEG_SOS = JPEG_BYTES:sub(111, 120)
+    local JPEG_SCAN = JPEG_BYTES:sub(121, 123)
+    assert(JPEG_SOF:sub(1, 4) == "\255\201\0\11" and JPEG_SOS:sub(1, 4) == "\255\218\0\8", "fixture layout")
+    --- A SOF9 segment; `len` overrides the computed 8 + 3 * #comps, with the
+    --- payload padded or cut to match so the segment walk stays aligned.
+    local function sof(precision, height, width, comps, len)
+        local payload = string.char(precision) .. u16be(height) .. u16be(width) .. string.char(#comps)
+        for _, c in ipairs(comps) do
+            payload = payload .. string.char(c, 0x11, 0)
+        end
+        if len then
+            payload = (payload .. string.rep("\0", len)):sub(1, len - 2)
+        end
+        return "\255\201" .. u16be(2 + #payload) .. payload
+    end
+    --- A SOS segment; `len` overrides the computed 6 + 2 * #comps.
+    local function sos(comps, len)
+        local payload = string.char(#comps)
+        for _, c in ipairs(comps) do
+            payload = payload .. string.char(c, 0)
+        end
+        return "\255\218" .. u16be(len or (2 + #payload + 3)) .. payload .. "\0\63\0"
+    end
+    local function jpeg(frame, scan_header, scan)
+        return JPEG_HEAD .. frame .. JPEG_DAC .. scan_header .. (scan or JPEG_SCAN) .. "\255\217"
+    end
+
+    -- GIF by record. The fixture is a 1x1 screen with a 2-entry global colour
+    -- table, one 1x1 image at (0,0), LZW code size 2, one 2-byte sub-block.
+    local GIF_GCT = GIF_BYTES:sub(14, 19)
+    local GIF_SUB = GIF_BYTES:sub(31, 34) -- length 2, two data bytes, terminator
+    assert(GIF_BYTES:sub(20, 20) == "," and GIF_BYTES:sub(30, 30) == "\2" and GIF_SUB == "\2\68\1\0", "fixture layout")
+    local function screen(w, h)
+        return "GIF89a" .. u16le(w) .. u16le(h) .. "\128\0\0" .. GIF_GCT
+    end
+    local function image(left, top, w, h, lzw, sub_blocks)
+        return "," .. u16le(left) .. u16le(top) .. u16le(w) .. u16le(h) .. "\0" .. string.char(lzw) .. (sub_blocks or GIF_SUB)
+    end
+    local function gif(head, img)
+        return head .. img .. ";"
+    end
+
+    -- WebP by chunk. The fixture is one VP8L chunk: 0x2F, 1x1 with alpha, version 0.
+    local WEBP_VP8L_DATA = WEBP_BYTES:sub(21, 33)
+    assert(#WEBP_VP8L_DATA == 13 and WEBP_VP8L_DATA:byte(1) == 0x2F, "fixture layout")
+    --- VP8L header: signature, 14-bit width-1, 14-bit height-1, alpha bit, 3-bit version, then the fixture's bits.
+    local function vp8l(w, h, version, signature)
+        local bits = (w - 1) + (h - 1) * 16384 + (version or 0) * 536870912
+        return (signature or "\47") .. u32le(bits) .. WEBP_VP8L_DATA:sub(6)
+    end
+    --- VP8 key frame header: 3-byte frame tag (bit 0 clear = key frame), start code, 14-bit width and height, then filler.
+    local function vp8(w, h, tag, start_code)
+        return (tag or "\16\2\0") .. (start_code or "\157\1\42") .. u16le(w) .. u16le(h) .. string.rep("\0", 6)
+    end
+    --- VP8X header: flags, 24 reserved bits, 24-bit canvas width-1 and height-1.
+    local function vp8x(w, h)
+        return "\0\0\0\0" .. u32le(w - 1):sub(1, 3) .. u32le(h - 1):sub(1, 3)
+    end
+
+    -- The reviewer's three executed probes: empty image-bearing records.
+    local probes = {
+        { mime = "image/png", name = "empty_idat.png", bytes = png(ihdr(1, 1, 8, 2), png_chunk("IDAT", "")), why = "PNG with a zero-length IDAT" },
+        { mime = "image/jpeg", name = "empty_headers.jpg", bytes = JPEG_HEAD .. "\255\201\0\2" .. JPEG_DAC .. "\255\218\0\2" .. JPEG_SCAN .. "\255\217", why = "JPEG with empty SOF and SOS segments" },
+        { mime = "image/gif", name = "empty_sub_blocks.gif", bytes = gif(screen(1, 1), image(0, 0, 1, 1, 2, "\0")), why = "GIF image whose sub-blocks are only the terminator" },
+    }
+
+    -- Per format: empty image record, zero width, zero height, an invalid
+    -- header field, and a header/record length mismatch.
+    local rows = {
+        -- PNG
+        { mime = "image/png", bytes = png(ihdr(1, 1, 8, 2), png_chunk("IDAT", "") .. png_chunk("IDAT", "")), why = "PNG whose IDAT chunks total zero bytes" },
+        { mime = "image/png", bytes = png(ihdr(0, 1, 8, 2)), why = "PNG zero width" },
+        { mime = "image/png", bytes = png(ihdr(1, 0, 8, 2)), why = "PNG zero height" },
+        { mime = "image/png", bytes = png(ihdr(2147483648, 1, 8, 2)), why = "PNG width above 2^31 - 1" },
+        { mime = "image/png", bytes = png(ihdr(1, 1, 4, 2)), why = "PNG bit depth 4 with truecolour" },
+        { mime = "image/png", bytes = png(ihdr(1, 1, 16, 3)), why = "PNG bit depth 16 with a palette" },
+        { mime = "image/png", bytes = png(ihdr(1, 1, 3, 0)), why = "PNG bit depth 3" },
+        { mime = "image/png", bytes = png(ihdr(1, 1, 8, 1)), why = "PNG colour type 1" },
+        { mime = "image/png", bytes = png(ihdr(1, 1, 8, 2, 1, 0, 0)), why = "PNG compression method 1" },
+        { mime = "image/png", bytes = png(ihdr(1, 1, 8, 2, 0, 1, 0)), why = "PNG filter method 1" },
+        { mime = "image/png", bytes = png(ihdr(1, 1, 8, 2, 0, 0, 2)), why = "PNG interlace method 2" },
+        { mime = "image/png", bytes = png(ihdr(1, 1, 8, 3)), why = "PNG palette colour type without PLTE" },
+        { mime = "image/png", bytes = png(ihdr(1, 1, 8, 3) .. png_chunk("PLTE", "")), why = "PNG palette colour type with an empty PLTE" },
+        { mime = "image/png", bytes = png(ihdr(1, 1, 8, 3) .. png_chunk("PLTE", "\0\0\0\0")), why = "PNG PLTE length not a multiple of three" },
+        { mime = "image/png", bytes = png(ihdr(1, 1, 8, 3), PNG_IDAT .. PLTE), why = "PNG PLTE after IDAT" },
+        { mime = "image/png", bytes = png(png_chunk("IHDR", u32be(1) .. u32be(1) .. "\8\2\0\0")), why = "PNG IHDR length 12" },
+        { mime = "image/png", bytes = png(png_chunk("IHDR", u32be(1) .. u32be(1) .. "\8\2\0\0\0\0")), why = "PNG IHDR length 14" },
+        -- JPEG
+        { mime = "image/jpeg", bytes = jpeg(JPEG_SOF, JPEG_SOS, ""), why = "JPEG with zero scan bytes" },
+        { mime = "image/jpeg", bytes = jpeg(sof(8, 1, 0, { 1 }), JPEG_SOS), why = "JPEG zero width" },
+        { mime = "image/jpeg", bytes = jpeg(sof(8, 0, 1, { 1 }), JPEG_SOS), why = "JPEG zero height (DNL-defined height is not accepted)" },
+        { mime = "image/jpeg", bytes = jpeg(sof(9, 1, 1, { 1 }), JPEG_SOS), why = "JPEG precision 9" },
+        { mime = "image/jpeg", bytes = jpeg(sof(0, 1, 1, { 1 }), JPEG_SOS), why = "JPEG precision 0" },
+        { mime = "image/jpeg", bytes = jpeg(sof(8, 1, 1, {}), JPEG_SOS), why = "JPEG frame with zero components" },
+        { mime = "image/jpeg", bytes = jpeg(sof(8, 1, 1, { 1, 2 }), JPEG_SOS), why = "JPEG frame with two components" },
+        { mime = "image/jpeg", bytes = jpeg(sof(8, 1, 1, { 1 }, 12), JPEG_SOS), why = "JPEG SOF length not 8 + 3 * components" },
+        { mime = "image/jpeg", bytes = jpeg(sof(8, 1, 1, { 1 }, 8), JPEG_SOS), why = "JPEG SOF length below its fixed fields" },
+        { mime = "image/jpeg", bytes = jpeg(JPEG_SOF, sos({})), why = "JPEG scan with zero components" },
+        { mime = "image/jpeg", bytes = jpeg(JPEG_SOF, sos({ 1, 2 })), why = "JPEG scan with more components than the frame" },
+        { mime = "image/jpeg", bytes = jpeg(sof(8, 1, 1, { 1, 2, 3, 4 }), sos({ 1, 2, 3, 4, 5 })), why = "JPEG scan with five components" },
+        { mime = "image/jpeg", bytes = jpeg(JPEG_SOF, sos({ 1 }, 10) .. "\0\0"), why = "JPEG SOS length not 6 + 2 * components" },
+        { mime = "image/jpeg", bytes = jpeg(JPEG_SOF, sos({ 1 }, 6)), why = "JPEG SOS length below its fixed fields" },
+        -- GIF
+        { mime = "image/gif", bytes = gif(screen(1, 1), image(0, 0, 1, 1, 2, "\0")), why = "GIF image sub-blocks with no data" },
+        { mime = "image/gif", bytes = gif(screen(0, 1), image(0, 0, 1, 1, 2)), why = "GIF zero screen width" },
+        { mime = "image/gif", bytes = gif(screen(1, 0), image(0, 0, 1, 1, 2)), why = "GIF zero screen height" },
+        { mime = "image/gif", bytes = gif(screen(1, 1), image(0, 0, 0, 1, 2)), why = "GIF zero image width" },
+        { mime = "image/gif", bytes = gif(screen(1, 1), image(0, 0, 1, 0, 2)), why = "GIF zero image height" },
+        { mime = "image/gif", bytes = gif(screen(1, 1), image(0, 0, 1, 1, 1)), why = "GIF LZW minimum code size 1" },
+        { mime = "image/gif", bytes = gif(screen(1, 1), image(0, 0, 1, 1, 9)), why = "GIF LZW minimum code size 9" },
+        { mime = "image/gif", bytes = gif(screen(1, 1), image(0, 0, 2, 1, 2)), why = "GIF image wider than the logical screen" },
+        { mime = "image/gif", bytes = gif(screen(1, 1), image(1, 0, 1, 1, 2)), why = "GIF image offset past the logical screen" },
+        { mime = "image/gif", bytes = gif(screen(2, 2), image(1, 1, 2, 1, 2)), why = "GIF image extends past the logical screen" },
+        { mime = "image/gif", bytes = gif(screen(1, 1), image(0, 0, 1, 1, 2) .. GIF_SUB), why = "GIF image sub-block data past the terminator" },
+        -- WebP
+        { mime = "image/webp", bytes = riff(webp_chunk("VP8L", "")), why = "WebP VP8L chunk with zero length" },
+        { mime = "image/webp", bytes = riff(webp_chunk("VP8L", vp8l(1, 1, 0, "\46"))), why = "WebP VP8L without its signature byte" },
+        { mime = "image/webp", bytes = riff(webp_chunk("VP8L", vp8l(1, 1, 1))), why = "WebP VP8L version 1" },
+        { mime = "image/webp", bytes = riff(webp_chunk("VP8L", vp8l(1, 1):sub(1, 4))), why = "WebP VP8L shorter than its header" },
+        { mime = "image/webp", bytes = riff(webp_chunk("VP8 ", vp8(0, 1))), why = "WebP VP8 zero width" },
+        { mime = "image/webp", bytes = riff(webp_chunk("VP8 ", vp8(1, 0))), why = "WebP VP8 zero height" },
+        { mime = "image/webp", bytes = riff(webp_chunk("VP8 ", vp8(1, 1, "\17\2\0"))), why = "WebP VP8 interframe (key-frame bit set)" },
+        { mime = "image/webp", bytes = riff(webp_chunk("VP8 ", vp8(1, 1, nil, "\157\1\43"))), why = "WebP VP8 wrong start code" },
+        { mime = "image/webp", bytes = riff(webp_chunk("VP8 ", vp8(1, 1):sub(1, 9))), why = "WebP VP8 shorter than its header" },
+        { mime = "image/webp", bytes = riff(webp_chunk("VP8X", vp8x(1, 1):sub(1, 9)) .. webp_chunk("VP8L", vp8l(1, 1))), why = "WebP VP8X shorter than its header" },
+        { mime = "image/webp", bytes = riff(webp_chunk("VP8X", vp8x(1, 1)) .. webp_chunk("VP8L", "")), why = "WebP VP8X with an empty bitstream" },
+    }
+
+    -- Header fields at the other end of each valid range must still pass.
+    local accepted = {
+        { mime = "image/png", bytes = png(ihdr(1, 1, 16, 0)), why = "PNG 16-bit greyscale" },
+        { mime = "image/png", bytes = png(ihdr(1, 1, 1, 3) .. PLTE), why = "PNG 1-bit palette with PLTE" },
+        { mime = "image/png", bytes = png(ihdr(1, 1, 8, 6, 0, 0, 1)), why = "PNG interlaced truecolour with alpha" },
+        { mime = "image/png", bytes = png(ihdr(2147483647, 2147483647, 8, 2)), why = "PNG dims at 2^31 - 1" },
+        { mime = "image/jpeg", bytes = jpeg(sof(12, 1, 1, { 1 }), JPEG_SOS), why = "JPEG 12-bit precision" },
+        { mime = "image/jpeg", bytes = jpeg(sof(8, 65535, 65535, { 1, 2, 3 }), sos({ 1, 2, 3 })), why = "JPEG three components at maximum dims" },
+        { mime = "image/jpeg", bytes = jpeg(sof(8, 1, 1, { 1, 2, 3, 4 }), sos({ 1 })), why = "JPEG scan of one of four components" },
+        { mime = "image/gif", bytes = gif(screen(2, 2), image(1, 1, 1, 1, 8)), why = "GIF image in the screen's far corner, LZW code size 8" },
+        { mime = "image/gif", bytes = gif(screen(1, 1), image(0, 0, 1, 1, 2, "\1\68\1\1\0")), why = "GIF image across two sub-blocks" },
+        { mime = "image/webp", bytes = riff(webp_chunk("VP8L", vp8l(16384, 16384))), why = "WebP VP8L at maximum dims" },
+        { mime = "image/webp", bytes = riff(webp_chunk("VP8 ", vp8(16383, 16383))), why = "WebP VP8 key frame at maximum dims" },
+        { mime = "image/webp", bytes = riff(webp_chunk("VP8X", vp8x(1, 1)) .. webp_chunk("VP8 ", vp8(1, 1))), why = "WebP VP8X followed by a VP8 key frame" },
+    }
+
+    it("rejects the reviewer's three probes", function()
+        for _, p in ipairs(probes) do
+            assert.is_false(assets.looks_like(p.mime, p.bytes), p.why)
+        end
+    end)
+
+    it("rejects empty image records, zero dims, invalid header fields and header/record length mismatches", function()
+        for _, r in ipairs(rows) do
+            assert.is_false(assets.looks_like(r.mime, r.bytes), r.why)
+        end
+    end)
+
+    it("accepts header fields at the far end of each valid range", function()
+        for _, a in ipairs(accepted) do
+            assert.is_true(assets.looks_like(a.mime, a.bytes), a.why)
+        end
+    end)
+
+    it("read_bounded through the real io refuses each probe and row with the one sentence", function()
+        local root = vim.fn.tempname()
+        vim.fn.mkdir(root .. "/assets/" .. TS, "p")
+        local chat = root .. "/" .. TS .. ".md"
+        local function refuse(name, mime, bytes, why)
+            assert(assets.default_io.write(root .. "/assets/" .. TS .. "/" .. name, bytes))
+            local got, err = assets.read_bounded(chat, "assets/" .. TS .. "/" .. name)
+            assert.is_nil(got, why)
+            assert.equals("not a " .. mime .. " image", err, why)
+        end
+        for _, p in ipairs(probes) do
+            refuse(p.name, p.mime, p.bytes, p.why)
+        end
+        for i, r in ipairs(rows) do
+            refuse(("h%d.%s"):format(i, r.mime:match("/(%w+)$"):gsub("jpeg", "jpg")), r.mime, r.bytes, r.why)
+        end
+        for i, a in ipairs(accepted) do
+            local name = ("ok%d.%s"):format(i, a.mime:match("/(%w+)$"):gsub("jpeg", "jpg"))
+            assert(assets.default_io.write(root .. "/assets/" .. TS .. "/" .. name, a.bytes))
+            assert.equals(a.bytes, (assets.read_bounded(chat, "assets/" .. TS .. "/" .. name)), a.why)
+        end
+        vim.fn.delete(root, "rf")
+    end)
+
+    it("question_content turns each probe and row into a note, never a block", function()
+        local function note_for(mime, bytes, why)
+            local rel = "assets/" .. TS .. "/x." .. mime:match("/(%w+)$")
+            local att = { id = "1:1", path = rel, media_type = mime }
+            local content = assets.question_content("q", { att }, { included = { ["1:1"] = true }, notes = {} }, function()
+                return bytes
+            end)
+            assert.equals("[attachment " .. rel .. " not a " .. mime .. " image]\nq", content, why)
+        end
+        for _, p in ipairs(probes) do
+            note_for(p.mime, p.bytes, p.why)
+        end
+        for _, r in ipairs(rows) do
+            note_for(r.mime, r.bytes, r.why)
+        end
+    end)
+end)
+
 describe("assets: elide_image_data", function()
     local B64 = vim.base64.encode(string.rep("\1\2\3", 400)) -- 1200 raw bytes
 

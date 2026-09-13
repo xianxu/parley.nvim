@@ -167,13 +167,16 @@ end
 
 -- Structural checks per media type (BR-4). One rule for all four formats:
 -- the container's records must parse from the first byte to the last with
--- correct boundaries, AND at least one image-bearing record must be present.
--- A signature, a header, or a header+trailer pair is not an image — each
--- would otherwise become outbound image content. Every walker is pure and
--- bounded: it reads record lengths and steps over record bodies, never
--- decoding pixels or verifying CRCs; a record that overruns the buffer, a
--- trailer that is not the last byte, or a missing image record is `false`.
--- `.` in a pattern matches any byte, NUL included.
+-- correct boundaries, AND at least one image-bearing record must be present,
+-- non-empty, with its mandatory header fields valid (dimensions ≥ 1, the
+-- format's fixed-value fields, and a header length that matches its record).
+-- A signature, a header, a header+trailer pair, or an image record with no
+-- data is not an image — each would otherwise become outbound image content.
+-- Every walker is pure and bounded: it reads record lengths and header
+-- fields and steps over record bodies, never decoding pixels or verifying
+-- CRCs; a record that overruns the buffer, a trailer that is not the last
+-- byte, a missing or empty image record, or an out-of-range header field is
+-- `false`. `.` in a pattern matches any byte, NUL included.
 
 --- Big-endian u32 at 1-based offset `i` (caller guarantees the bytes exist).
 local function u32be(bytes, i)
@@ -193,17 +196,52 @@ local function u16be(bytes, i)
     return a * 256 + b
 end
 
+--- Little-endian u16 at 1-based offset `i` (caller guarantees the bytes exist).
+local function u16le(bytes, i)
+    local a, b = bytes:byte(i, i + 1)
+    return b * 256 + a
+end
+
 -- PNG grammar:  signature(8)  chunk*
 --   chunk = length(4 BE) type(4) data(length) crc(4)
 -- The first chunk is IHDR with length 13; at least one IDAT carries the
 -- image; the last chunk is IEND (length 0) and its end is the end of the
 -- buffer.
+-- IHDR fields: width(4) height(4) — each 1..2^31-1; bit-depth(1) valid for
+-- colour-type(1) per the table below; compression(1) 0; filter(1) 0;
+-- interlace(1) 0 or 1. The IDAT chunks must total ≥ 1 byte (a single
+-- zero-length IDAT is an empty image), and colour type 3 needs a PLTE chunk
+-- (1..256 three-byte entries) before the first IDAT.
+local PNG_MAX_DIM = 0x7FFFFFFF
+local PNG_DEPTHS = {
+    [0] = { [1] = true, [2] = true, [4] = true, [8] = true, [16] = true }, -- greyscale
+    [2] = { [8] = true, [16] = true }, -- truecolour
+    [3] = { [1] = true, [2] = true, [4] = true, [8] = true }, -- indexed
+    [4] = { [8] = true, [16] = true }, -- greyscale + alpha
+    [6] = { [8] = true, [16] = true }, -- truecolour + alpha
+}
+--- Validate the 13 IHDR data bytes at `pos`; returns ok, colour type.
+local function png_ihdr(bytes, pos)
+    local width, height = u32be(bytes, pos), u32be(bytes, pos + 4)
+    local depth, colour, compression, filter, interlace = bytes:byte(pos + 8, pos + 12)
+    local depths = PNG_DEPTHS[colour]
+    local ok = width >= 1
+        and width <= PNG_MAX_DIM
+        and height >= 1
+        and height <= PNG_MAX_DIM
+        and depths ~= nil
+        and depths[depth] == true
+        and compression == 0
+        and filter == 0
+        and interlace <= 1
+    return ok, colour
+end
 local function is_png(bytes)
     local n = #bytes
     if bytes:find("^\137PNG\r\n\26\n") == nil then
         return false
     end
-    local pos, first, idat = 9, true, false
+    local pos, first, colour, plte, idat_bytes = 9, true, nil, false, 0
     while true do
         if pos + 8 > n + 1 then
             return false -- no room for length + type
@@ -218,11 +256,18 @@ local function is_png(bytes)
             if kind ~= "IHDR" or len ~= 13 then
                 return false
             end
+            local ok
+            ok, colour = png_ihdr(bytes, pos + 8)
+            if not ok then
+                return false
+            end
             first = false
         elseif kind == "IDAT" then
-            idat = true
+            idat_bytes = idat_bytes + len
+        elseif kind == "PLTE" and idat_bytes == 0 then
+            plte = len >= 3 and len <= 768 and len % 3 == 0
         elseif kind == "IEND" then
-            return len == 0 and nxt == n + 1 and idat
+            return len == 0 and nxt == n + 1 and idat_bytes >= 1 and (colour ~= 3 or plte)
         end
         pos = nxt
     end
@@ -236,20 +281,43 @@ end
 -- 0xC range) must precede the first SOS; after SOS the scan runs to the EOI,
 -- which is the last two bytes. Stuffed 0xFF00 and RST markers inside the
 -- scan are data and are not walked.
+-- SOF payload: precision(1) 8 or 12; height(2) ≥ 1 — a zero height is only
+-- legal when a DNL segment supplies it later, which no image the wires
+-- accept relies on, so it is refused here; width(2) ≥ 1; Nf(1) 1, 3 or 4;
+-- then 3 bytes per component, so length = 8 + 3·Nf.
+-- SOS payload: Ns(1) 1..4 and ≤ Nf; 2 bytes per component; then 3 fixed
+-- bytes, so length = 6 + 2·Ns; at least one scan byte must follow.
 local JPEG_STANDALONE = { [0xD8] = true, [0xD9] = true, [0x01] = true }
 for m = 0xD0, 0xD7 do
     JPEG_STANDALONE[m] = true
 end
 local JPEG_NOT_SOF = { [0xC4] = true, [0xC8] = true, [0xCC] = true }
+local JPEG_PRECISION = { [8] = true, [12] = true }
+local JPEG_COMPONENTS = { [1] = true, [3] = true, [4] = true }
 local function is_sof(marker)
     return marker >= 0xC0 and marker <= 0xCF and not JPEG_NOT_SOF[marker]
+end
+--- Validate the SOF segment whose 0xFF is at `pos` with segment length
+--- `len` (the segment is known to fit); returns Nf, or nil when invalid.
+local function jpeg_sof(bytes, pos, len)
+    if len < 8 then
+        return nil
+    end
+    local nf = bytes:byte(pos + 9)
+    if len ~= 8 + 3 * nf or not JPEG_COMPONENTS[nf] or not JPEG_PRECISION[bytes:byte(pos + 4)] then
+        return nil
+    end
+    if u16be(bytes, pos + 5) < 1 or u16be(bytes, pos + 7) < 1 then
+        return nil
+    end
+    return nf
 end
 local function is_jpeg(bytes)
     local n = #bytes
     if bytes:find("^\255\216") == nil or bytes:sub(-2) ~= "\255\217" then
         return false
     end
-    local pos, sof = 3, false
+    local pos, nf = 3, nil
     while true do
         if bytes:byte(pos) ~= 0xFF then
             return false
@@ -263,12 +331,16 @@ local function is_jpeg(bytes)
         end
         if marker == 0xDA then
             -- SOS: header segment, then at least one byte of scan data, then EOI.
-            if pos + 3 > n then
+            if nf == nil or pos + 3 > n then
                 return false
             end
             local len = u16be(bytes, pos + 2)
             local scan = pos + 2 + len
-            return sof and len >= 2 and scan <= n - 2
+            if len < 6 or scan > n - 2 then
+                return false
+            end
+            local ns = bytes:byte(pos + 4)
+            return ns >= 1 and ns <= 4 and ns <= nf and len == 6 + 2 * ns
         elseif marker == 0xD9 then
             return false -- EOI before any scan
         elseif JPEG_STANDALONE[marker] then
@@ -282,7 +354,10 @@ local function is_jpeg(bytes)
                 return false
             end
             if is_sof(marker) then
-                sof = true
+                nf = jpeg_sof(bytes, pos, len)
+                if nf == nil then
+                    return false
+                end
             end
             pos = pos + 2 + len
         end
@@ -296,6 +371,11 @@ end
 --   color-table = 3 * 2^(size + 1) bytes when the packed byte's high bit is set
 -- The trailer 0x3B must be the last byte; at least one image descriptor
 -- must be present.
+-- Screen descriptor: width(2 LE) height(2 LE) ≥ 1. Image descriptor:
+-- left(2) top(2) width(2) height(2) with width/height ≥ 1 and the image
+-- inside the logical screen; LZW minimum code size 2..8 (the spec's range —
+-- 2 is the floor even for 1-bit images, 8 the ceiling for 256 colours);
+-- the image's sub-blocks must carry ≥ 1 data byte in total.
 local function gif_color_table(packed)
     if packed >= 0x80 then
         return 3 * 2 ^ (packed % 8 + 1)
@@ -303,16 +383,18 @@ local function gif_color_table(packed)
     return 0
 end
 --- Step over sub-blocks starting at `pos`; returns the position after the
---- terminator, or nil when they overrun.
+--- terminator and the total data bytes, or nil when they overrun.
 local function gif_sub_blocks(bytes, pos, n)
+    local total = 0
     while true do
         local len = bytes:byte(pos)
         if len == nil then
             return nil
         elseif len == 0 then
-            return pos + 1
+            return pos + 1, total
         end
         pos = pos + 1 + len
+        total = total + len
         if pos > n then
             return nil
         end
@@ -321,6 +403,10 @@ end
 local function is_gif(bytes)
     local n = #bytes
     if bytes:find("^GIF8[79]a") == nil or n < 13 then
+        return false
+    end
+    local screen_w, screen_h = u16le(bytes, 7), u16le(bytes, 9)
+    if screen_w < 1 or screen_h < 1 then
         return false
     end
     local pos = 14 + gif_color_table(bytes:byte(11))
@@ -336,7 +422,21 @@ local function is_gif(bytes)
             if packed == nil then
                 return false
             end
-            pos = gif_sub_blocks(bytes, pos + 10 + gif_color_table(packed) + 1, n)
+            local left, top = u16le(bytes, pos + 1), u16le(bytes, pos + 3)
+            local width, height = u16le(bytes, pos + 5), u16le(bytes, pos + 7)
+            local code_size_at = pos + 10 + gif_color_table(packed)
+            local code_size = bytes:byte(code_size_at)
+            if width < 1 or height < 1 or left + width > screen_w or top + height > screen_h then
+                return false
+            end
+            if code_size == nil or code_size < 2 or code_size > 8 then
+                return false
+            end
+            local data
+            pos, data = gif_sub_blocks(bytes, code_size_at + 1, n)
+            if pos == nil or data < 1 then
+                return false
+            end
             image = true
         else
             return false
@@ -350,9 +450,39 @@ end
 -- WebP grammar:  "RIFF" size(4 LE) "WEBP" chunk*
 --   chunk = fourcc(4) length(4 LE) data(length) [pad to even]
 -- The RIFF size is the buffer length minus 8 and the chunks walk to the
--- end exactly. A `VP8 ` or `VP8L` chunk with data is the image; a `VP8X`
--- extended header is not — it must be followed by a `VP8 `/`VP8L` chunk
--- with data (alpha or animation alone is not an image).
+-- end exactly. A `VP8 ` or `VP8L` chunk with a valid header is the image;
+-- a `VP8X` extended header is not — it must be followed by a `VP8 `/`VP8L`
+-- chunk (alpha or animation alone is not an image).
+-- VP8L data: signature byte 0x2F, then 14-bit width-1, 14-bit height-1,
+-- an alpha bit and a 3-bit version that must be 0 — 5 bytes minimum, and
+-- the minus-one encoding makes the dimensions ≥ 1 by construction.
+-- `VP8 ` data: a 3-byte frame tag whose bit 0 is clear (a key frame — an
+-- interframe has nothing to show on its own), the start code 9D 01 2A at
+-- bytes 4–6, then 14-bit width and height (each ≥ 1) in two 16-bit LE
+-- words — 10 bytes minimum.
+-- VP8X data: flags(1), reserved(3), 24-bit canvas width-1 and height-1 —
+-- 10 bytes; the canvas dimensions are ≥ 1 by construction, so the header
+-- check is that the 10 bytes exist.
+local VP8_START_CODE = "\157\1\42"
+local function webp_vp8l(bytes, pos, len)
+    if len < 5 or bytes:byte(pos) ~= 0x2F then
+        return false
+    end
+    return math.floor(u32le(bytes, pos + 1) / 2 ^ 29) == 0
+end
+local function webp_vp8(bytes, pos, len)
+    if len < 10 or bytes:byte(pos) % 2 ~= 0 or bytes:sub(pos + 3, pos + 5) ~= VP8_START_CODE then
+        return false
+    end
+    return u16le(bytes, pos + 6) % 16384 >= 1 and u16le(bytes, pos + 8) % 16384 >= 1
+end
+local WEBP_HEADERS = {
+    ["VP8L"] = webp_vp8l,
+    ["VP8 "] = webp_vp8,
+    ["VP8X"] = function(_, _, len)
+        return len >= 10
+    end,
+}
 local function is_webp(bytes)
     local n = #bytes
     if n < 12 or bytes:sub(1, 4) ~= "RIFF" or bytes:sub(9, 12) ~= "WEBP" or u32le(bytes, 5) ~= n - 8 then
@@ -369,8 +499,12 @@ local function is_webp(bytes)
         if nxt > n + 1 then
             return false -- chunk (or its pad byte) overruns the buffer
         end
-        if (fourcc == "VP8 " or fourcc == "VP8L") and len > 0 then
-            bitstream = true
+        local header = WEBP_HEADERS[fourcc]
+        if header then
+            if not header(bytes, pos + 8, len) then
+                return false
+            end
+            bitstream = bitstream or fourcc ~= "VP8X"
         end
         pos = nxt
     end
