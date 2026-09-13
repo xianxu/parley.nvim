@@ -326,3 +326,14 @@ and per-function test strategies; two review boundaries).
   `src, dst` return as a clash (caught red); the 🌿 rewrite after a move is
   not byte-observable with bare-basename refs post-#224, so the test asserts
   tree consistency via `get_chat_tree_files` instead.
+- M2 boundary review round 1 (codex): REWORK — BR-8 (the delete door removed
+  the folder before the chat file and ignored the file's failure) and BR-9
+  (placeholder restore rescanned restored tags: a token-shaped alt text pulled
+  a later image's `src` into an `onerror` attribute). Both fixed: owner
+  deletion first with a checked outcome (`helpers.delete_file` now returns
+  `ok, err`), tree deleters tally refused files; collision-free image tokens
+  and single-pass restoration for both placeholder families. Found while
+  fixing BR-9, out of #231's scope, to file from main after the merge:
+  `exporter.make_branch_div` inserts the branch **topic** into HTML unescaped
+  (pre-existing output-escaping gap; a topic containing `<script>` lands raw
+  in the export).
