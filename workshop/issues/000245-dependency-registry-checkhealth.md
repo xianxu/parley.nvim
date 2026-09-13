@@ -7,7 +7,7 @@ created: 2026-09-13
 updated: 2026-09-13
 estimate_hours: 1.76
 started: 2026-09-13T13:20:58-07:00
-actual_hours: 0.04
+actual_hours: 0.77
 ---
 
 # Dependency registry and honest install advice: managed cliproxyapi, platform tools, brew one-liners in checkhealth
@@ -180,3 +180,15 @@ total: 1.76
 ```
 
 Design 0.63 × 1.15 + implementation 1.04 = 1.7645 hours.
+
+### 2026-09-13 — primary-checkout bookkeeping correction
+
+The close invocation used temporary checkout name `parley245-plan`, so its
+project sweep missed `parley.nvim#245` and its telemetry omitted the main
+session. After the reviewed close commit, moved publication to the primary
+checkout and re-ran `sdlc actual --issue 245`: measured 0.77h, adopted here
+without guessing. The engine reports shared-window mention-fallback attribution;
+this remains a measured estimate, not stopwatch precision. Updated the project
+row/detail manually because close cannot override its basename-derived repo
+identity. The original temporary-checkout calibration ledger was skipped; no
+fabricated calibration row was written. Runtime code is unchanged after review.
