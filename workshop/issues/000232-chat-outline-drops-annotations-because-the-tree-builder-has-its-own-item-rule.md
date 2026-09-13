@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-09-10
 updated: 2026-09-12
-estimate_hours:
+estimate_hours: 1.45
 started: 2026-09-12T19:44:52-07:00
 ---
 
@@ -99,6 +99,40 @@ Fix the one-`@` display slice while here.
 - `@@my note@@` displays as `→ my note`.
 - Chat outlines are otherwise unchanged: no headings in chats, code-block lines still
   skipped.
+
+## Estimate
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: issue-spec design=0.4 impl=0.04
+item: lua-neovim design=0.2 impl=0.3
+item: atlas-docs design=0.1 impl=0.05
+item: milestone-review design=0.1 impl=0.14
+design-buffer: 0.15
+total: 1.45
+```
+
+*Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against
+`baseline-v3.1.md`. Method A only.* `sdlc estimate-source` flags that doc as
+stale (#127), so the per-primitive hours are provisional.
+
+How each item was picked, from the v2 table's ranges: design ×0.2 where the
+plan already resolves the decisions (v2 Step 3), `impl=` at 40% of the v2/v2.1
+range (v3.1), design buffer 0.15 because the ×0.2 discount applies to the code
+primitive (v2.1 halves the buffer then). Familiarity 1.0: the outline module
+and its #218 tests were read end to end before planning.
+
+- `issue-spec` — the spec itself predates the claim (written 2026-09-10,
+  outside the measured window); inside the window are the plan rewrite and
+  three plan-gate rounds — below the 0.5–1.5 design range's low end, so 0.4;
+  impl at the 0.1–0.3 ×0.4 floor.
+- `lua-neovim` — one focused change: route `build_file_outline_items` through
+  `is_outline_item`, fix the slice, two describes of tests. Design at the ×0.2
+  floor of 1–3 (the plan carries the exact call); impl low in the 0.2–0.6
+  scaled range because the change is a dozen lines plus tests.
+- `atlas-docs` — one sentence in `atlas/ui/outline.md`.
+- `milestone-review` — the single close boundary; 0.2–0.5 impl ×0.4 = 0.14.
 
 ## Plan
 
