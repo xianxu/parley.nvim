@@ -123,3 +123,9 @@ unavailable. CI needs explicit Go/CUE/exporter provisioning. The portable-root
 Makefile needs ariadne#225: weave currently replaces real roots and follows
 seed destination links. Record that prerequisite rather than ship a local
 workaround. Updated durable plan is awaiting operator approval.
+
+### 2026-09-13 — operator approval
+
+Operator approved the reviewed #208 plan including ariadne#225 with “go ahead.”
+The prerequisite is being implemented in its owning repo. Begin #208's runtime
+work through change-code; portable maintainer integration waits for #225.
