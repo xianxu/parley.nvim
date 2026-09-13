@@ -5,7 +5,7 @@ deps: [ariadne#225]
 github_issue:
 created: 2026-09-02
 updated: 2026-09-13
-estimate_hours:
+estimate_hours: 2.494
 started: 2026-09-13T12:19:41-07:00
 ---
 
@@ -129,3 +129,36 @@ workaround. Updated durable plan is awaiting operator approval.
 Operator approved the reviewed #208 plan including ariadne#225 with “go ahead.”
 The prerequisite is being implemented in its owning repo. Begin #208's runtime
 work through change-code; portable maintainer integration waits for #225.
+
+## Estimate
+
+*Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against
+`baseline-v3.1.md`. Method A only.* Derived after plan-quality round 2 passed.
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: lua-neovim design=0.30 impl=0.60
+item: lua-neovim design=0.20 impl=0.40
+item: cross-cutting-refactor design=0.10 impl=0.20
+item: cross-repo-refactor-small design=0.04 impl=0.08
+item: real-api-discovery design=0.00 impl=0.20
+item: atlas-docs design=0.03 impl=0.06
+item: milestone-review design=0.02 impl=0.16
+design-buffer: 0.15
+total: 2.494
+```
+
+Two focused Lua surfaces are the validated vocabulary/cache and its runtime
+consumers: base design 1.5/1.0h ×0.2 for the accepted detailed plan, base impl
+1.5/1.0h ×0.4 for v3.1. Cross-cutting build/archive/drift wiring uses 0.5h
+design ×0.2 and 0.5h impl ×0.4; small peer-artifact integration uses 0.2/0.2h
+similarly. Read-only external conformance uses 0.5h ×0.4. Docs use 0.15/0.15h
+with the same design/impl transforms; one close review uses 0.1/0.4h. Design
+subtotal 0.69h ×1.15 plus impl 1.70h = 2.4935h, rounded to 2.494h.
+
+This is familiar Lua/shell work using vim.json, existing runners, real scratch
+files, git archive, and the vocabulary exporter; no novel library is needed.
+The upstream implementation of ariadne#225 is estimated in that issue, not
+counted twice here. Calibration is flagged stale by estimate-source and remains
+provisional, as directed by that source.
