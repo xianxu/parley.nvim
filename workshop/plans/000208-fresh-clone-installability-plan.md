@@ -21,7 +21,7 @@ This fulfills #208 and unblocks the isolated starter profile. Provider defaults,
 | Name | Lives in | Status | Contract |
 |------|----------|--------|----------|
 | `IssueVocabulary`, `from_table` | `lua/parley/issue_vocabulary.lua` | modified | Validate category arrays and lifecycle endpoints before deriving indexes; no invented statuses |
-| `parse_frontmatter`, status predicates, `cycle_status_value`, completion values, `sort_issues` | `lua/parley/issues.lua` | modified | Preserve raw text without vocabulary; lifecycle operations return an unavailable diagnostic |
+| `parse_frontmatter`, status predicates, `cycle_status_value`, completion values, `topo_sort` | `lua/parley/issues.lua` | modified | Preserve raw text without vocabulary; lifecycle operations return an unavailable diagnostic |
 | `materialize` / status ordering | `lua/parley/issue_finder_records.lua` | modified | Deterministic ID ordering when vocabulary unavailable; valid models retain category order |
 
 One vocabulary owns all lifecycle semantics (ARCH-DRY). Validate strings, dense arrays, disjoint categories, at least one open status, and known transition endpoints. Unknown extra JSON fields remain compatible with upstream evolution. Preserve existing first-transition ordering. Pure tests use minimal valid tables and malformed variants; they do not mock IO.
@@ -37,7 +37,7 @@ Without a model, parsing retains a supplied status and leaves a missing one abse
 | `run_sdlc_issue_new`, `build_spawn_argv` | `lua/parley/issues.lua` | modified | Existing async runner; retain PATH executable and interactive-shell alias/function support |
 | Vendored vocabulary | `construct/generated/vocabulary/issue.json`, `.gitignore` | new | Release runtime data generated from upstream CUE |
 | Vocabulary drift check | `scripts/check-vocabulary.sh`, `scripts/merge-checks.d/20-vocabulary.sh` | new | Export into scratch and compare content; never repair during a check |
-| Portable build | `Makefile`, `Makefile.local`, `Makefile.parley`, `.github/workflows/merge-check.yml` | modified | Local tests plus explicit optional ariadne maintainer targets |
+| Portable build | `Makefile`, `Makefile.local`, `Makefile.parley`, `scripts/ci-setup.sh` | modified | Local tests plus explicit optional ariadne maintainer targets |
 | Standalone smoke harness | `tests/integration/fresh_clone_spec.lua`, `scripts/check-fresh-clone.sh` | new | Real isolated Neovim and tracked-tree archive |
 
 `load` stays strict for direct callers. `default` returns model or nil/reason and caches either outcome; `reload` re-reads on explicit setup so repairs can recover without restarting. Startup must not notify about optional issue data until an issue action needs it. Retry/reset tests cover unavailable→ready and ready→unavailable (ARCH-ORDER).
@@ -53,13 +53,19 @@ fallback after bootstrap clones peers. It also fixes seed migration to unlink
 destination symlinks before writes/chmod, including identical-content links;
 old targets must remain unchanged. Parley keeps its existing product targets in
 Makefile.local; the root is the generated upstream artifact, not a divergent
-copy. This peer issue must ship before task 3. Its implementation needs its own
+copy. The upstream manifest also owns the seeded CI workflow. ariadne#225 therefore
+updates that generic shim to discover the bootstrapped runner and invoke an
+optional executable repo-owned `scripts/ci-setup.sh` before checks. Parley's
+hook owns its exporter prerequisites; do not locally fork the seeded workflow.
+Repeated weave must preserve both the portable root and effective CI behavior.
+This peer issue must ship before tasks 2 and 3. Its implementation needs its own
 durable plan and gate; no peer code is included in this issue.
 
-CI explicitly provisions Go from the bootstrapped ariadne go.mod and CUE
-v0.16.1 (the locally verified exporter version), builds `./cmd/vocabulary` in
-that peer, and places the resulting binary and CUE on PATH before running the
-drift check from Parley's root. Merely cloning the peer is insufficient. Verify
+Parley's `scripts/ci-setup.sh` uses the CI host Go with `GOTOOLCHAIN=auto`
+and the bootstrapped ariadne go.mod to select its declared Go version, installs
+CUE v0.16.1 (the locally verified exporter version), builds `./cmd/vocabulary`
+in that peer, and exposes both binaries via GITHUB_PATH before the check step.
+The drift check runs from Parley's root. Merely cloning the peer is insufficient. Verify
 a clean isolated runner succeeds before deliberately altering the JSON and
 checking that the same command fails; ordinary public tests require neither
 Go nor CUE.
@@ -74,7 +80,7 @@ Go nor CUE.
 
 - [ ] **Runtime data and degradation.** Add red cases in `tests/unit/issue_vocabulary_spec.lua`, `tests/unit/issues_spec.lua`, and finder tests for malformed categories/transitions, missing/corrupt/oversized files, raw status preservation, unavailable actions, and cache recovery. Vendor the actual exporter output; expose only the required JSON through the existing generated-directory ignore. Implement capability handling across the enumerated consumers, then run all vocabulary/issue/finder specs and the chat lifecycle smoke tests. Keep the CUE lifecycle unchanged.
 - [ ] **Enforced derivation.** Implement regeneration into a temporary directory and semantic content comparison, including categories, transitions, and discovery. A source hash alone is insufficient. With ariadne absent, regular contributor tests validate the shipped artifact; the explicit maintainer drift command fails with setup advice. Wire the drift command into merge checks where CI bootstraps ariadne. Tests modify a scratch committed artifact and must go red even with an unchanged source stamp; restore and prove green. Use the real exporter for conformance, with a scratch fixture exporter for portable mutation tests.
-- [ ] **Portable development tree.** After ariadne#225 ships, replace the root link with its portable seeded Makefile; Makefile.local includes Makefile.parley exactly once. Verify help/local targets without peers, and initial bootstrap plus repeated weave from a scratch consumer with every maintainer link absent. Assert the root stays a real file and upstream bytes/modes do not change; keep maintainer targets through the new sibling-overlay fallback. Make `PLENARY` overridable and actually feed it into `NVIM_TEST_PLENARY`; fail early with dependency advice if missing. Untrack the 28 enumerated escaping links while retaining local files and ignoring their exact paths; replace root Makefile rather than ignoring it. Update the CI runner reference to the explicitly bootstrapped upstream path, so removing `scripts/run-merge-checks.sh` does not break CI. Verify the maintainer bootstrap path still restores its optional tools. Document prerequisites in `TOOLING.md`.
+- [ ] **Portable development tree.** After ariadne#225 ships, replace the root link with its portable seeded Makefile; Makefile.local includes Makefile.parley exactly once. Verify help/local targets without peers, and initial bootstrap plus repeated weave from a scratch consumer with every maintainer link absent. Assert the root stays a real file and upstream bytes/modes do not change; keep maintainer targets through the new sibling-overlay fallback. Make `PLENARY` overridable and actually feed it into `NVIM_TEST_PLENARY`; fail early with dependency advice if missing. Untrack the 28 enumerated escaping links while retaining local files and ignoring their exact paths; replace root Makefile rather than ignoring it. Consume ariadne#225’s updated seeded CI shim and keep Parley setup in scripts/ci-setup.sh, so removing the tracked runner link does not break CI or get undone by weave. Verify the maintainer bootstrap path still restores its optional tools. Document prerequisites in `TOOLING.md`.
 - [ ] **Standalone acceptance.** Archive the tracked candidate tree into scratch outside the workspace with no `.git` or sibling. Run real Neovim require/setup/new-chat with network-triggering settings disabled, once with intact vocabulary and again with missing/corrupt/malformed variants. Assert issue mutations fail clearly and chat still works. Validate no tracked symlink escapes the archive; include a deliberate escaping-link fixture that the guard rejects. The recursive full-suite acceptance runs in a second extracted tree initialized as a temporary git repo (arch tests require git); do not recursively invoke it from the normal spec. Supply Plenary explicitly from a declared dependency location, never hardcode the operator path. Run `make test` there and in the development checkout.
 - [ ] **Documentation and close.** Update `atlas/issues/issue-management.md`, `atlas/infra/test_harness.md`, `atlas/index.md` if a page is added, `atlas/traceability.yaml`, and issue/project logs with the independent-install contract and exact commands/evidence. Run diff/lint checks and `sdlc close --issue 208 --verified '<evidence>'`; fix its findings before `sdlc pr` and `sdlc merge --yes`.
 
@@ -97,3 +103,11 @@ prerequisites, and weave overwriting the proposed real root. Delta: include
 issue_finder's cycle handler and unchanged-file assertions; explicitly provision
 Go/CUE/exporter in CI; track the narrowly scoped portable-seed prerequisite as
 ariadne#225. The main runtime work remains local to Parley.
+
+### 2026-09-13 — CI ownership review
+
+Reason: the upstream manifest also seeds the generic CI workflow. Delta:
+ariadne#225 owns its runner fallback and optional setup-hook invocation;
+Parley owns only scripts/ci-setup.sh and its drift check. Re-weave tests cover
+both root Makefile and effective CI behavior, avoiding a downstream fork of
+an upstream-owned file.
