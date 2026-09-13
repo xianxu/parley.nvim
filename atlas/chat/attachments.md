@@ -6,8 +6,8 @@ slug: `ParleySlug` renames nothing here, and the folder moves with its chat.
 
 ## Surface
 - `<M-v>` (`paste_image`, `parley_buffer` scope, n/i): reads a PNG off the
-  clipboard, saves it as `assets/<ts>/<stamp>.png`, inserts
-  `![<stamp>.png](assets/<ts>/<stamp>.png)` on its own line after the cursor
+  clipboard, saves it as `assets/<ts>/<stamp>.<png|jpg>`, inserts
+  `![<stamp>.<ext>](assets/<ts>/<stamp>.<ext>)` on its own line after the cursor
   line (the alt is the file name so markdown conceal shows a label rather than
   a blank line; edit it freely).
   Declines with a message when the clipboard holds no image, when no tool is
@@ -21,12 +21,31 @@ slug: `ParleySlug` renames nothing here, and the folder moves with its chat.
   Contract: exit 0 + non-empty file = image; exit 0 + empty, or exit 1 = no
   image; else failure with stderr shown. `setup()` replaces the `assets`
   table wholesale.
+- `assets.shrink = false` disables conversion; `assets.shrink_cmd` supplies
+  an argv recipe with whole-argument `{in}`/`{out}` and numeric `{max}` (which
+  may be embedded). PNGs above 300 KiB or a 1600-pixel edge, and JPEGs above
+  that edge, become JPEGs only if the result is smaller and meets the target
+  dimensions. The notice shows sizes or why the original was retained;
+  missing tools warn once per setup. GIF/WebP stay untouched. PNG alpha is
+  flattened. Inputs above 32 million pixels or a 16384-pixel dimension skip
+  conversion with a notice; the existing 10 MiB source cap still applies.
 
 ## Model
 - `lua/parley/assets.lua` — layout, link, attachment grammar, request budget,
   content blocks, log elision, and THE writer (`save`) behind one injectable
   io that reports what happened (`read_bounded`, `move_with`, `delete_with`,
   `copy_into`). #239 (model-generated images) calls the same writer.
+  `dimensions` reuses the format validators; `save` invokes `io_.shrink` and
+  returns its outcome alongside the path whose extension matches saved bytes.
+  The shared JPEG walk traverses progressive scans; `strip_jpeg_metadata`
+  removes APP1–13, APP15 and comment records from converter output while
+  retaining JFIF/Adobe interpretation records and image coding bytes.
+- `lua/parley/argv_recipe.lua` — shared token grammar and command selection.
+- `lua/parley/image_shrink.lua` — pure policy and output postconditions;
+  ordered sips/ImageMagick/ffmpeg/libvips recipes, session probe state, and
+  one subprocess seam. It waits synchronously, with a five-second timeout
+  and a subprocess file-size limit of at most 10 MiB. Pixel admission bounds
+  ordinary decoder workload; this is not an RSS sandbox for installed tools.
 - `lua/parley/clipboard_image.lua` — recipes as data; one classify rule;
   `vim.system` seam. `lua/parley/paste_image.lua` — the async flow.
 - Parser: a line that is exactly `![…](assets/<ts>/<name>.<png|jpg|jpeg|gif|webp>)`
@@ -66,6 +85,9 @@ slug: `ParleySlug` renames nothing here, and the folder moves with its chat.
 An asset lives as long as a transcript line references it, and is removed
 with its chat. A link line deleted by hand leaves the file until then; there
 is no sweep. Logs never hold the bytes.
+Shrink input/output temporary files are both removed on every completed attempt
+(or a cleanup failure is reported);
+abnormal editor death leaves them to the operating system's temp cleanup.
 
 ## Tests
 `tests/unit/assets_spec.lua`, `clipboard_image_spec.lua`, `wire_images_spec.lua`,
@@ -75,3 +97,14 @@ models osascript through the config seam); `tests/integration/chat_move_spec.lua
 `tree_export_spec.lua`, `query_cache_spec.lua`; `tests/arch/log_sinks_spec.lua`,
 `chat_delete_sweep_spec.lua`; `tests/integration/clipboard_live_spec.lua`
 (opt-in `PARLEY_LIVE_CLIPBOARD=1`, darwin, real recipe on the real clipboard).
+`tests/unit/argv_recipe_spec.lua`, `image_shrink_spec.lua`;
+`tests/fixtures/fake_sips` models converter outcomes through the configured
+command seam; `tests/helpers/png_gen.lua` generates codec-valid test images.
+`tests/integration/image_shrink_live_spec.lua` checks available recipes with
+`PARLEY_LIVE_SHRINK=1`. Independent dimensions come from each recipe’s tool
+(or its companion `ffprobe`/`vipsheader`), via `tests/helpers/image_probe.lua`;
+a missing companion fails the opted-in conformance case. Probe dispatch and
+malformed/failing reports have portable coverage in `image_probe_spec.lua`.
+Output reads preserve complete JPEGs up to the 10 MiB cap before metadata
+stripping and size comparison. Both temporary removals are attempted; ENOENT
+is harmless, while other removal failures produce an original-kept diagnostic.

@@ -579,6 +579,11 @@ local config = {
 	-- wl-paste / xclip): an argv list whose "{out}" token is replaced by the PNG
 	-- path to write. Contract: exit 0 + a non-empty file = image; exit 0 + empty,
 	-- or exit 1 = no image on the clipboard; anything else = failure (stderr shown).
+	-- `assets.shrink = false` keeps original images. `assets.shrink_cmd` supplies
+	-- a conversion argv with whole-argument "{in}"/"{out}" and numeric "{max}"
+	-- (which may be embedded). Otherwise sips / magick / convert / ffmpeg /
+	-- vipsthumbnail is selected once per setup. Only a smaller JPEG within the
+	-- requested edge replaces the original; the paste notice reports outcomes.
 	-- setup() REPLACES this table wholesale (as for `outline`/`drill_in`): keep
 	-- it free of defaults; anything #239 adds resolves in code with `or`.
 	assets = {},

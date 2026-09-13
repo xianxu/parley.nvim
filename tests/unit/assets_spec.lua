@@ -1701,3 +1701,197 @@ describe("assets: default_io", function()
         assert.is_string(assets.key_for("/x/" .. assets.default_io.now() .. ".md"), "now mints a chat-shaped stamp")
     end)
 end)
+
+
+describe("assets: dimensions and formatting (#244)", function()
+    local png_gen = require("tests.helpers.png_gen")
+
+    it("returns dimensions from validated PNG and JPEG headers", function()
+        assert.same({ 1, 1 }, { assets.dimensions("image/png", PNG_BYTES) })
+        assert.same({ 1, 1 }, { assets.dimensions("image/jpeg", JPEG_BYTES) })
+        -- SOF9 fixture: height then width at bytes 95..98 (big-endian).
+        assert.equals("\255\201\0\11", JPEG_BYTES:sub(90, 93))
+        local rectangular = JPEG_BYTES:sub(1, 94) .. "\1\44\6\164" .. JPEG_BYTES:sub(99)
+        assert.same({ 1700, 300 }, { assets.dimensions("image/jpeg", rectangular) })
+        assert.same({ 1700, 3 }, { assets.dimensions("image/png", png_gen.png_bytes(1700, 3)) })
+        assert.same({ 300, 300 }, { assets.dimensions("image/png", png_gen.png_bytes(300, 300)) })
+    end)
+
+    it("agrees with structural validation across every truncation and byte mutation", function()
+        for mime, original in pairs({ ["image/png"] = PNG_BYTES, ["image/jpeg"] = JPEG_BYTES }) do
+            local function check(bytes)
+                local width, height = assets.dimensions(mime, bytes)
+                assert.equals(assets.looks_like(mime, bytes), width ~= nil)
+                assert.equals(width ~= nil, height ~= nil)
+            end
+            for n = 0, #original do
+                check(original:sub(1, n))
+            end
+            for pos = 1, #original do
+                for _, byte in ipairs({ 0, 255 }) do
+                    check(original:sub(1, pos - 1) .. string.char(byte) .. original:sub(pos + 1))
+                end
+            end
+            check(original .. "trailing")
+        end
+    end)
+
+    it("returns nil for unsupported media and non-string bytes", function()
+        assert.is_nil(assets.dimensions("image/gif", GIF_BYTES))
+        assert.is_nil(assets.dimensions("image/webp", WEBP_BYTES))
+        assert.is_nil(assets.dimensions(nil, PNG_BYTES))
+        assert.is_nil(assets.dimensions("image/png", nil))
+        assert.is_nil(assets.dimensions("image/jpeg", {}))
+    end)
+
+    it("formats byte units and rounding boundaries", function()
+        for _, case in ipairs({
+            { 0, "0 B" }, { 512, "512 B" }, { 1023, "1023 B" },
+            { 1024, "1.0 KB" }, { 9.94 * 1024, "9.9 KB" },
+            { 10 * 1024, "10 KB" }, { 10.5 * 1024, "11 KB" },
+            { 180 * 1024 + 300, "180 KB" }, { 1024 * 1024, "1.0 MB" },
+            { 4.1 * 1024 * 1024, "4.1 MB" }, { 12 * 1024 * 1024, "12 MB" },
+        }) do
+            assert.equals(case[2], assets.human_size(case[1]))
+        end
+    end)
+end)
+
+describe("assets: shrink before saving (#244)", function()
+    it("names and writes the chosen bytes and returns the outcome", function()
+        local io_ = fake_io()
+        local expected = { from = #PNG_BYTES, to = #JPEG_BYTES }
+        io_.shrink = function(bytes, ext)
+            assert.equals(PNG_BYTES, bytes)
+            assert.equals("png", ext)
+            assert.same({}, io_.files)
+            assert.same({}, io_.dirs)
+            return JPEG_BYTES, "jpg", expected
+        end
+        local rel, abs, err, outcome = assets.save(CHAT, PNG_BYTES, "png", io_)
+        assert.is_nil(err)
+        assert.matches("%.jpg$", rel)
+        assert.matches("%.jpg$", abs)
+        assert.equals(JPEG_BYTES, io_.files[abs])
+        assert.same(expected, outcome)
+    end)
+
+    it("keeps the source without an optional shrink dependency", function()
+        local io_ = fake_io()
+        local rel, abs, err, outcome = assets.save(CHAT, PNG_BYTES, "png", io_)
+        assert.is_nil(err)
+        assert.is_nil(outcome)
+        assert.matches("%.png$", rel)
+        assert.equals(PNG_BYTES, io_.files[abs])
+    end)
+
+    it("rejects over-cap sources before invoking shrink or creating files", function()
+        local io_ = fake_io()
+        local called = false
+        io_.shrink = function()
+            called = true
+            return "small", "jpg"
+        end
+        local rel, _, err = assets.save(CHAT, string.rep("x", assets.MAX_BYTES + 1), "png", io_)
+        assert.is_nil(rel)
+        assert.matches("exceeds", err)
+        assert.is_false(called)
+        assert.same({}, io_.files)
+        assert.same({}, io_.dirs)
+    end)
+
+    it("delegates default shrinking lazily and forwards all return values", function()
+        local old = package.loaded["parley.image_shrink"]
+        package.loaded["parley.image_shrink"] = {
+            shrink = function(bytes, ext)
+                return bytes .. "!", ext, { note = "kept" }
+            end,
+        }
+        local ok, result = pcall(function()
+            return { assets.default_io.shrink("source", "png") }
+        end)
+        package.loaded["parley.image_shrink"] = old
+        assert.is_true(ok, tostring(result))
+        assert.same({ "source!", "png", { note = "kept" } }, result)
+    end)
+end)
+
+
+describe("assets: strip_jpeg_metadata (#244)", function()
+    local function segment(marker, payload)
+        local len = #payload + 2
+        return string.char(255, marker, math.floor(len / 256), len % 256) .. payload
+    end
+
+    it("removes pre-scan metadata while preserving coding bytes, APP0 and APP14", function()
+        local adobe = segment(0xEE, "Adobe\0\100\0\0\0\0\0")
+        local metadata = {}
+        for marker = 0xE1, 0xED do
+            metadata[#metadata + 1] = segment(marker, "EXIF/ICC_SENTINEL_" .. marker)
+        end
+        metadata[#metadata + 1] = segment(0xEF, "APP15_SENTINEL")
+        metadata[#metadata + 1] = segment(0xFE, "COMMENT_SENTINEL")
+        -- Existing fixture APP0/JFIF remains byte-for-byte, as does Adobe.
+        local expected = JPEG_BYTES:sub(1, 89) .. adobe .. JPEG_BYTES:sub(90)
+        local source = JPEG_BYTES:sub(1, 89) .. table.concat(metadata) .. adobe .. JPEG_BYTES:sub(90)
+        local cleaned = assets.strip_jpeg_metadata(source)
+        assert.equals(expected, cleaned)
+        assert.is_true(assets.looks_like("image/jpeg", cleaned))
+        assert.same({ 1, 1 }, { assets.dimensions("image/jpeg", cleaned) })
+        assert.equals(cleaned, assets.strip_jpeg_metadata(cleaned))
+    end)
+
+    it("preserves marker fill bytes on retained segments", function()
+        local source = JPEG_BYTES:sub(1, 2) .. "\255" .. JPEG_BYTES:sub(3)
+        assert.equals(source, assets.strip_jpeg_metadata(source))
+        local with_comment = source:sub(1, 2) .. "\255\255" .. segment(0xFE, "comment") .. source:sub(3)
+        assert.equals(source, assets.strip_jpeg_metadata(with_comment))
+    end)
+
+    it("refuses unsupported and structurally malformed bytes", function()
+        assert.is_nil(assets.strip_jpeg_metadata(nil))
+        assert.is_nil(assets.strip_jpeg_metadata({}))
+        assert.is_nil(assets.strip_jpeg_metadata(PNG_BYTES))
+        for n = 0, #JPEG_BYTES - 1 do
+            assert.is_nil(assets.strip_jpeg_metadata(JPEG_BYTES:sub(1, n)))
+        end
+        local source = JPEG_BYTES:sub(1, 2) .. "\255\225\255\255broken" .. JPEG_BYTES:sub(3)
+        assert.is_nil(assets.strip_jpeg_metadata(source))
+        assert.is_nil(assets.strip_jpeg_metadata(JPEG_BYTES .. "trailing"))
+    end)
+
+    it("removes metadata after scan data and between progressive scans", function()
+        local source = JPEG_BYTES:sub(1, -3) .. segment(0xFE, "after scan") .. JPEG_BYTES:sub(-2)
+        assert.equals(JPEG_BYTES, assets.strip_jpeg_metadata(source))
+        -- SOF2 progressive header and separate DC/AC SOS records.
+        local header = JPEG_BYTES:sub(1, 90) .. "\194" .. JPEG_BYTES:sub(92, 110)
+        local dc = segment(0xDA, "\1\1\0\0\0\0") .. "dc scan"
+        local ac = segment(0xDA, "\1\1\0\1\63\0") .. "ac scan"
+        local expected = header .. dc .. ac .. "\255\217"
+        local progressive = header .. dc .. segment(0xE1, "EXIF_BETWEEN")
+            .. segment(0xFE, "COMMENT_BETWEEN") .. ac .. segment(0xEF, "AFTER") .. "\255\217"
+        assert.equals(expected, assets.strip_jpeg_metadata(progressive))
+        assert.is_true(assets.looks_like("image/jpeg", expected))
+        assert.same({ 1, 1 }, { assets.dimensions("image/jpeg", expected) })
+    end)
+
+    it("preserves escaped FF00, restart markers and fill bytes inside scans", function()
+        local scan = "a\255\0\225EXIF_PIXELS\255\208b\255\255\215c"
+        local expected = JPEG_BYTES:sub(1, 120) .. scan .. "\255\255\217"
+        local source = JPEG_BYTES:sub(1, 120) .. scan .. segment(0xFE, "comment") .. "\255\255\217"
+        assert.equals(expected, assets.strip_jpeg_metadata(source))
+    end)
+
+    it("rejects malformed later segments and empty later scans", function()
+        local head = JPEG_BYTES:sub(1, -3)
+        for _, tail in ipairs({
+            "\255\225\255\255broken\255\217", -- metadata overruns
+            "\255\218\0\2\255\217", -- truncated SOS
+            JPEG_BYTES:sub(111, 120) .. "\255\217", -- empty second scan
+            "\255\217garbage\255\217", -- early EOI
+            "\255\254\0\1\255\217", -- invalid metadata length
+        }) do
+            assert.is_nil(assets.strip_jpeg_metadata(head .. tail))
+        end
+    end)
+end)

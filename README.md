@@ -198,6 +198,19 @@ outside every exchange (the frontmatter, for instance) are left alone.
   `assets.clipboard_cmd = { "<tool>", "…", "{out}" }` to use your own tool
   (`{out}` is replaced by the PNG path to write; exit 0 + a non-empty file =
   image, exit 1 = no image, anything else = failure).
+  Large images are shrunk to JPEGs with a long edge of at most 1600 pixels,
+  using `sips` on macOS or ImageMagick, ffmpeg, or libvips where installed.
+  The notice shows the size change. Small images, GIFs and WebP stay intact;
+  PNG transparency is flattened when converted. If conversion is unavailable
+  or fails, the original is kept. Set `assets.shrink = false` to keep all
+  originals, or `assets.shrink_cmd` to provide a recipe with `{in}`, `{out}`,
+  and `{max}` tokens. Images above 32 million pixels or a 16384-pixel dimension
+  skip conversion; the existing 10 MiB input cap remains.
+
+  Assets are write-once binaries. Committing `assets/` with chats keeps their
+  images available in other clones and adds their stored size to git history.
+  Ignoring that folder saves repository space but leaves image links unresolved
+  elsewhere. Choose per repository; Git LFS can later use the same asset paths.
 - `<M-o>` (or `<C-g>o`) open the thing under the cursor — a `🌿:` reference to a
   sub-chat, an inline `[🌿:…](file)`, an `@@path@@` file reference, a `src:` link,
   a directory. Anything else falls through to smart `gf` below, so it is one key

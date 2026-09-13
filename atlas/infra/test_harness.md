@@ -13,6 +13,10 @@ How `make test` runs, and the one invariant it defends.
 - `tests/unit/` = pure logic, `tests/integration/` = full runtime,
   `tests/arch/` = fitness functions, `tests/helpers/` = shared spec helpers
   (not collected — the runners glob `*_spec.lua`).
+- Golden payload comparisons use `scripts/golden_fixture.lua` to normalize
+  ripgrep version tokens only in the two search-tool descriptions. Captures
+  retain their real wire text; substantive descriptions, schemas, and messages
+  still compare exactly (`tests/unit/golden_fixture_spec.lua`).
 
 ## Scratch placement is the determinism invariant
 

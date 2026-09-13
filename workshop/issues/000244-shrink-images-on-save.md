@@ -1,12 +1,13 @@
 ---
 id: 000244
-status: working
+status: codecomplete
 deps: [000231]
 github_issue:
 created: 2026-09-13
 updated: 2026-09-13
 estimate_hours: 1.623
 started: 2026-09-13T11:25:16-07:00
+actual_hours: 1.70
 ---
 
 # Shrink pasted and generated images before saving: sips first, probe other tools, keep the original when none
@@ -107,17 +108,18 @@ recipe `select`/`argv_for` — decision tables (same shape as
 `assets.save` (success / non-zero / empty / invalid → original kept,
 notification named); live conformance opt-in.
 
-- [ ] `assets.dimensions` (pure) + the shrink policy (pure)
-- [ ] `image_shrink` module: recipes as data, `select`, `argv_for`, `run` seam
-- [ ] `assets.save` calls the shrink step; extension follows the output; notice carries sizes
-- [ ] Fixture `tests/fixtures/fake_sips` + the outcome matrix; live spec
-- [ ] Atlas (`atlas/chat/attachments.md`) + README: the commit-vs-ignore note
+- [x] `assets.dimensions` (pure) + the shrink policy (pure)
+- [x] `image_shrink` module: recipes as data, `select`, `argv_for`, `run` seam
+- [x] `assets.save` calls the shrink step; extension follows the output; notice carries sizes
+- [x] Fixture `tests/fixtures/fake_sips` + the outcome matrix; live spec
+- [x] Atlas (`atlas/chat/attachments.md`) + README: the commit-vs-ignore note
       for `workshop/parley/assets/` (write-once binaries; `.gitignore` is a
       per-repo choice; LFS is a later switch on the fixed path)
 
 ## Log
 
 ### 2026-09-13
+- 2026-09-13: closed — make test: 226 spec files pass, lint clean; engine 27 and probe 7 regressions pass; live sips 6.48MB to27.7KB at1600x1066 in59.6ms, no-upscale and metadata removal pass; other4 codecs absent and pending; review verdict: SHIP
 Claimed; `sdlc start-plan` run. Durable plan: `workshop/plans/000244-shrink-images-on-save-plan.md`
 (3 chunks, 8 tasks, TDD steps with code). Not yet through `sdlc change-code`
 — the next agent should run it (plan-quality gate, then derive `estimate_hours`).
@@ -160,6 +162,26 @@ output-dimension validation, and consistent embedded `{max}` grammar. The
 revised canonical plan addresses PQ-1 through PQ-4; the original design is
 preserved as `workshop/plans/000244-shrink-images-on-save-design-record.md`.
 
+### 2026-09-13 — implementation verification
+
+All five tasks implemented. `make test` exits 0: 225 spec files passed;
+luacheck reports 0 warnings/errors across 391 files. Focused asset suite 105
+cases and paste integration 18 cases pass. Engine tests cover actual five-second
+process timeout, OS-enforced output growth limit, cleanup faults, resource
+admission, and metadata removal. Golden side quest has 7 regression guards.
+
+`PARLEY_LIVE_SHRINK=1` passes for installed sips: 6,481,758-byte 1800×1200
+PNG → 27,699-byte 1600×1066 JPEG in 54.1 ms; 400×300 stays 400×300 (no
+upscale), 360,393 → 2,703 bytes in 17.0 ms. Independent sips probes confirm
+dimensions and removal of a description sentinel that sips alone retained.
+ImageMagick/convert/ffmpeg/libvips are absent and explicitly pending; the
+conformance estimate covered sips on this host, not installing other codecs.
+
+The metadata correction shares one JPEG record walk through all scans; tests
+preserve escaped entropy bytes and restart markers and remove metadata even
+between progressive scans. Initial metadata tests were red before the fix.
+Operator's untracked chat work was snapshotted locally before boundary review.
+
 ## Revisions
 
 ### 2026-09-13T11:50:00-07:00 — approved refinements and gate corrections
@@ -170,3 +192,22 @@ Conversion is skipped above 32 million pixels or a 16384-pixel dimension;
 the subprocess gets a file-size limit and output must meet its requested edge.
 Paths remain whole-argument tokens; `{max}` may be embedded. The canonical
 plan supersedes the original Spec where these refinements differ.
+
+## Side quests
+
+- Baseline golden-payload portability: all 11 cases failed before #244 code
+  because ripgrep upgraded 15.1.0 → 15.2.0. Pinning only the version probe made
+  all 11 pass. Shared comparison normalization now ignores that volatile
+  version while preserving tool behavior text and payload content; 7 new
+  guards and all 11 existing cases pass. No captured fixtures refreshed.
+
+### 2026-09-13 — boundary review round 1 repairs
+
+Reason: BR-1–BR-3 found truncated-output misclassification, hidden cleanup
+failures, and an independent-probe gap on non-sips hosts. Delta: preserve
+complete output within the 10 MiB bound through metadata stripping and size
+comparison (ARCH-PURPOSE); attempt both removals and surface non-ENOENT
+failures (ARCH-FUNERAL); independently probe every installed recipe with its
+own tool or ffprobe/vipsheader companion (ARCH-MOCK). Regression tests cover
+larger output, metadata-heavy output, failed/thrown cleanup, timeout context,
+and probe dispatch without relying on sips.

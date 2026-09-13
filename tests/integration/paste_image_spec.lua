@@ -297,3 +297,117 @@ describe("paste image (#231)", function()
         assert.same({ "n", "i" }, modes)
     end)
 end)
+
+describe("paste image: shrink on save (#244)", function()
+    local png_gen = require("tests.helpers.png_gen")
+    local fake_sips = repo .. "/tests/fixtures/fake_sips"
+    local jpg = repo .. "/tests/fixtures/one_pixel.jpg"
+    local slog = root .. "/sips.log"
+    local big_png = root .. "/big.png"
+
+    local function shrink_runs()
+        return vim.fn.filereadable(slog) == 1 and vim.fn.readfile(slog) or {}
+    end
+    local function setup_with(assets_cfg)
+        parley.setup({
+            chat_dir = root, state_dir = vim.fn.tempname() .. "-parley-paste-state",
+            providers = {}, api_keys = {},
+            assets = vim.tbl_extend("force", { clipboard_cmd = { fake_clipboard, "{out}" } }, assets_cfg),
+        })
+    end
+    local function paste_and_wait(buf)
+        parley.paste_image(buf, { notify = notify })
+        assert.is_true(wait_for(function() return #notices > 0 end), "a notice arrived")
+        return notices[#notices]
+    end
+
+    before_each(function()
+        notices = {}
+        os.remove(slog)
+        vim.env.PARLEY_FAKE_SIPS_LOG = slog
+        vim.fn.mkdir(root, "p")
+        assets.default_io.write(big_png, png_gen.png_bytes(1800, 4)) -- over the edge, small in bytes
+        vim.env.PARLEY_FAKE_CLIPBOARD = "png:" .. big_png
+    end)
+    after_each(function()
+        vim.env.PARLEY_FAKE_SIPS = nil
+        vim.env.PARLEY_FAKE_SIPS_LOG = nil
+        vim.env.PARLEY_FAKE_CLIPBOARD = nil
+        vim.env.PARLEY_FAKE_CLIPBOARD_LOG = nil
+        vim.cmd("silent! %bwipeout!")
+        vim.fn.delete(root, "rf")
+        setup_with({})
+    end)
+
+    it("a PNG over the edge lands as .jpg with both sizes in the notice; the tool got the capped edge", function()
+        setup_with({ shrink_cmd = { fake_sips, "--resampleHeightWidthMax", "{max}", "{in}", "--out", "{out}" } })
+        vim.env.PARLEY_FAKE_SIPS = "ok:" .. jpg
+        local buf = open_chat(TS .. "_big.md", chat_lines())
+        vim.api.nvim_win_set_cursor(0, { 8, 0 })
+        local n = paste_and_wait(buf)
+        assert.matches("pasted assets/.*%.jpg %(", n.msg)
+        assert.matches("→", n.msg)
+        assert.equals("info", n.level)
+        local att = assets.parse_attachment(vim.api.nvim_buf_get_lines(buf, 8, 9, false)[1])
+        assert.equals(bytes_of(jpg), bytes_of(root .. "/" .. att.path))
+        local runs = shrink_runs()
+        assert.equals(1, #runs)
+        local args = vim.json.decode(runs[1])
+        assert.same({ "--resampleHeightWidthMax", "1600" }, { args[1], args[2] })
+    end)
+
+    it("a small PNG is stored byte-identical and the tool is never run", function()
+        setup_with({ shrink_cmd = { fake_sips, "--resampleHeightWidthMax", "{max}", "{in}", "--out", "{out}" } })
+        vim.env.PARLEY_FAKE_SIPS = "ok:" .. jpg
+        local small = root .. "/small.png"
+        assert(assets.default_io.write(small, png_gen.png_bytes(200, 200))) -- about 120 KB
+        vim.env.PARLEY_FAKE_CLIPBOARD = "png:" .. small
+        local buf = open_chat(TS .. "_small.md", chat_lines())
+        vim.api.nvim_win_set_cursor(0, { 8, 0 })
+        local n = paste_and_wait(buf)
+        assert.matches("pasted assets/.*%.png$", n.msg)
+        local att = assets.parse_attachment(vim.api.nvim_buf_get_lines(buf, 8, 9, false)[1])
+        assert.equals(bytes_of(small), bytes_of(root .. "/" .. att.path))
+        assert.same({}, shrink_runs())
+    end)
+
+    it("a tool that returns garbage keeps the original PNG and says which tool", function()
+        setup_with({ shrink_cmd = { fake_sips, "--resampleHeightWidthMax", "{max}", "{in}", "--out", "{out}" } })
+        vim.env.PARLEY_FAKE_SIPS = "garbage"
+        local buf = open_chat(TS .. "_garbage.md", chat_lines())
+        vim.api.nvim_win_set_cursor(0, { 8, 0 })
+        local n = paste_and_wait(buf)
+        assert.matches("pasted assets/.*%.png — original kept: .*fake_sips wrote something that is not a JPEG", n.msg)
+        assert.equals("warn", n.level)
+        local att = assets.parse_attachment(vim.api.nvim_buf_get_lines(buf, 8, 9, false)[1])
+        assert.equals(bytes_of(big_png), bytes_of(root .. "/" .. att.path))
+    end)
+
+    it("no tool at all: original stored, one warning names what to install, the next paste is quiet", function()
+        setup_with({ shrink_cmd = nil })
+        -- Hide every real tool from the probe for this case.
+        require("parley.image_shrink").configure(parley.config.assets, { executable = function() return false end })
+        local buf = open_chat(TS .. "_notool.md", chat_lines())
+        vim.api.nvim_win_set_cursor(0, { 8, 0 })
+        local n1 = paste_and_wait(buf)
+        assert.matches("original kept: no image shrink tool found: sips ships with macOS or install ImageMagick", n1.msg)
+        assert.equals("warn", n1.level)
+        notices = {}
+        vim.api.nvim_win_set_cursor(0, { 8, 0 })
+        local n2 = paste_and_wait(buf)
+        assert.matches("pasted assets/.*%.png$", n2.msg)
+        assert.equals("info", n2.level)
+    end)
+
+    it("disabling shrinking preserves a large PNG and never runs the configured tool", function()
+        setup_with({ shrink = false, shrink_cmd = { fake_sips, "{in}", "{out}", "{max}" } })
+        vim.env.PARLEY_FAKE_SIPS = "garbage"
+        local buf = open_chat(TS .. "_disabled.md", chat_lines())
+        vim.api.nvim_win_set_cursor(0, { 8, 0 })
+        local notice = paste_and_wait(buf)
+        local att = assets.parse_attachment(vim.api.nvim_buf_get_lines(buf, 8, 9, false)[1])
+        assert.equals(bytes_of(big_png), bytes_of(root .. "/" .. att.path))
+        assert.matches("%.png$", notice.msg)
+        assert.same({}, shrink_runs())
+    end)
+end)

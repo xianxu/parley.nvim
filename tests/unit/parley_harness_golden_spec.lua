@@ -37,8 +37,8 @@ describe("parley_harness golden round-trip", function()
                 "tests/fixtures/transcripts/" .. name .. ".md",
                 { agent = GOLDEN_AGENT, tools = READONLY_TOOLS }
             )
-            local golden = read_json("tests/fixtures/golden_payloads/" .. name .. ".json")
-            assert.same(golden, payload)
+            local expected = read_json("tests/fixtures/golden_payloads/" .. name .. ".json")
+            assert.same(golden.normalize_payload(expected), golden.normalize_payload(payload))
         end)
     end
 end)
@@ -63,8 +63,8 @@ describe("parley_harness golden round-trip (openai wire)", function()
                     model = golden.OPENAI_WIRE.model,
                 }
             )
-            local golden = read_json("tests/fixtures/golden_payloads/openai-" .. name .. ".json")
-            assert.same(golden, payload)
+            local expected = read_json("tests/fixtures/golden_payloads/openai-" .. name .. ".json")
+            assert.same(golden.normalize_payload(expected), golden.normalize_payload(payload))
         end)
     end
 end)

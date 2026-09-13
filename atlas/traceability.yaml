@@ -18,6 +18,8 @@ atlas:
   chat/attachments:
     code:
       - lua/parley/assets.lua
+      - lua/parley/argv_recipe.lua
+      - lua/parley/image_shrink.lua
       - lua/parley/clipboard_image.lua
       - lua/parley/paste_image.lua
       - lua/parley/chat_parser.lua
@@ -32,6 +34,10 @@ atlas:
       - lua/parley/exporter.lua
     tests:
       - tests/unit/assets_spec.lua
+      - tests/unit/argv_recipe_spec.lua
+      - tests/unit/image_shrink_spec.lua
+      - tests/unit/image_probe_spec.lua
+      - tests/integration/image_shrink_live_spec.lua
       - tests/unit/clipboard_image_spec.lua
       - tests/unit/wire_images_spec.lua
       - tests/unit/parse_chat_spec.lua
@@ -306,6 +312,7 @@ atlas:
 
   infra/test_harness:
     code:
+      - scripts/golden_fixture.lua
       - Makefile.parley
       - tests/minimal_init.vim
       - tests/helpers/ready_port.lua
@@ -313,6 +320,7 @@ atlas:
       - tests/fixtures/fake_sse_server
       - tests/perf/chat_typing.lua
     tests:
+      - tests/unit/golden_fixture_spec.lua
       - tests/arch/scratch_placement_spec.lua
       - tests/arch/destructive_recipe_spec.lua
       - tests/arch/superseded_comment_spec.lua

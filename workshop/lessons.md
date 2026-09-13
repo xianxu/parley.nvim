@@ -1,5 +1,21 @@
 # Lessons
 
+## 2026-09-13 (#244 plan review)
+
+- A codec successfully shrinking a screenshot says nothing about its metadata
+  policy. Seed a real metadata field and inspect the transformed image before
+  claiming metadata is removed; enforce shared output policy after conversion.
+- A compressed-byte cap does not bound decoded image work. Define pixel and
+  dimension admission before spawning a codec, and distinguish a bounded read
+  from subprocess disk growth and memory assumptions (ARCH-CONSTRAINTS).
+- A successful transformation must satisfy its promised postconditions.
+  Validate output dimensions as well as format and size before claiming an
+  image was shrunk (ARCH-PURPOSE).
+- Keep token documentation, validation and substitution on one grammar;
+  embedded numeric tokens must not imply embedded path substitution.
+- Plans carry contracts and test strategies; avoid duplicating executable
+  implementation/test bodies when the plan-quality gate rejects that form.
+
 ## 2026-09-13 (#231 M2 — three boundary rounds)
 
 - **Delete the owner before the thing it owns.** The first delete door removed
@@ -2238,3 +2254,14 @@ download.
    arch sweep compares definition lines, so a new message inside `auth_files`
    or a new rule inside a fixture changes a contract without tripping it. Three
    review findings in one issue were rows that lagged the diff.
+
+9. **Bounded reads must preserve the outcome being classified.** Reading only
+   the input length makes larger valid converter output look corrupt. Read
+   through a fixed resource cap with an overflow sentinel, then transform and
+   compare complete bytes.
+10. **Cleanup is observable work.** Attempt every removal, distinguish missing
+    files from failed deletion, and retain cleanup diagnostics alongside the
+    primary error.
+11. **Live conformance needs a platform-local oracle.** A macOS-only dimension
+    probe leaves Linux recipes unchecked; select an independent probe for
+    each backend and test its dispatch without macOS tools.

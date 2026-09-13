@@ -1,3 +1,4 @@
+-- luacheck: globals vim
 -- The agent goldens are built with, and the tool list they pin.
 --
 -- ONE definition, required by both the regenerator (scripts/refresh_goldens.lua)
@@ -46,5 +47,23 @@ M.OPENAI_FIXTURES = {
     "tool-error",
     "mixed-text-and-tools",
 }
+
+-- Compare captured wire payloads without depending on the installed ripgrep
+-- version. Keep normalization at comparison time: the regenerator
+-- can retain the real wire description, and older captures remain comparable.
+-- Restrict this to the two tools that advertise the detected backend version;
+-- message text, schemas, other tools, and substantive descriptions still count.
+function M.normalize_payload(payload)
+    local normalized = vim.deepcopy(payload)
+    for _, tool in ipairs(normalized.tools or {}) do
+        local definition = tool.type == "function" and tool["function"] or tool
+        if definition.name == "grep" or definition.name == "chat_history_search" then
+            definition.description = definition.description:gsub(
+                "%(ripgrep %d+%.%d+%.%d+%)", "(ripgrep <version>)"
+            )
+        end
+    end
+    return normalized
+end
 
 return M

@@ -27,8 +27,10 @@
 -- `failed, "could not start <tool>: …"` through the same scheduled `on_done`,
 -- exactly once — every outcome reaches completion by one path (ARCH-ORDER).
 --
+-- Shared token grammar and selection: parley.argv_recipe.
 -- PURE except `read_png` (spawn) and `host_env` (probes the host).
 
+local argv_recipe = require("parley.argv_recipe")
 local uv = vim.uv or vim.loop
 
 local M = {}
@@ -96,17 +98,6 @@ function M.host_env()
     }
 end
 
--- True when some element of argv IS the token (an embedded "{out}" inside a
--- longer argument does not count — the path is only ever a whole argument).
-local function has_out_token(argv)
-    for _, a in ipairs(argv) do
-        if a == M.OUT then
-            return true
-        end
-    end
-    return false
-end
-
 -- Platform order: Darwin → darwin only; Wayland → wayland then x11; else
 -- x11 then wayland.
 local function platform_order(env)
@@ -125,21 +116,16 @@ end
 --- @param env table  from host_env(), or a test's own
 --- @return table|nil recipe, string|nil err
 function M.select(config_cmd, env)
-    if type(config_cmd) == "table" and #config_cmd > 0 then
-        if not has_out_token(config_cmd) then
-            return nil, "assets.clipboard_cmd must contain the " .. M.OUT .. " token (as its own argument) for the PNG path to write"
-        end
-        return { tool = config_cmd[1], argv = config_cmd, install = nil }
-    end
-    local hints = {}
+    local candidates = {}
     for _, key in ipairs(platform_order(env)) do
-        local recipe = M.RECIPES[key]
-        if env.executable(recipe.tool) then
-            return recipe
-        end
-        hints[#hints + 1] = recipe.install
+        candidates[#candidates + 1] = M.RECIPES[key]
     end
-    return nil, "no clipboard image tool found: " .. table.concat(hints, " or ")
+    return argv_recipe.select(config_cmd, candidates, env.executable, {
+        config_key = "assets.clipboard_cmd",
+        tokens = { M.OUT },
+        purpose = "for the PNG path to write",
+        none = "no clipboard image tool found",
+    })
 end
 
 --- The recipe's argv with every whole-argument `{out}` replaced by out_path.
@@ -148,11 +134,7 @@ end
 --- @param out_path string
 --- @return string[] argv
 function M.argv_for(recipe, out_path)
-    local argv = {}
-    for i, a in ipairs(recipe.argv) do
-        argv[i] = (a == M.OUT) and out_path or a
-    end
-    return argv
+    return argv_recipe.substitute(recipe.argv, { [M.OUT] = out_path })
 end
 
 --- The one rule for every recipe (see the module header).
