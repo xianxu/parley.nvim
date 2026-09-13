@@ -2090,3 +2090,55 @@ sentence could not be written about the old shape at all.
 3. **The tell is a property you cannot express.** "X outranks Y" is unwritable
    as a test when precedence lives in control flow, and trivially writable once
    the classification exists.
+
+## A review agent shares your worktree (#237)
+
+At the M1 boundary, the fresh-context review agent ran `git checkout <head> -- .`
+where it meant `git diff`. Everything the branch owned was already committed, so
+the branch lost nothing; the operator lost an uncommitted edit to a chat file in
+`workshop/parley/`, which only a root-mounted Time Machine snapshot still held.
+The review runs in the live worktree, so the operator's WIP is inside its blast
+radius every time.
+
+The same review found two classes worth a rule. The README still told a new
+machine to `brew install` after the branch made `:ParleyProxy update` the way in:
+the Task 9 sweep walked the atlas for "update/download", not every place that
+says how the binary arrives (README, a config comment, two error strings). And
+`$PARLEY_CLIPROXY_RELEASES_URL`, added so plenary's child nvims stay off GitHub,
+was read in production too: an environment variable redirecting an executable
+download.
+
+**Rules.**
+
+1. **Snapshot operator WIP before dispatching a review.** `git stash create`
+   records tracked edits and deletions as a commit without touching the worktree
+   or the stash list; keep the SHA until the review returns, and restore with
+   `git checkout <sha> -- <path>`.
+2. **When a change moves how a user gets something, sweep every place that says
+   how they get it** — README, atlas, config comments and error messages — not
+   only the paragraphs that name the feature.
+3. **A test seam read from the environment is a production input.** Gate it on
+   the harness signal (`$PARLEY_TEST_MODE`), or list it in the trust boundaries
+   as a supported override.
+4. **When a finding says a message over-claims, list every outcome message on
+   that surface beside the observation behind it, before fixing any.** Round 1
+   fixed the message the review named; round 2 found two siblings the same list
+   would have shown.
+5. **A case that goes `pending` on a missing capability is a hole in the oracle,
+   not a pass.** Six cases pinning three fixes skipped wherever `ps` was
+   refused, which was every review shell. Give the capability a fake behind the
+   seam the code already has, and keep reading the real one where it exists.
+6. **A fake that answers every path cannot catch a removed route.** Claude broke
+   on 7.2.x because parley posted to a route upstream dropped, and the fake,
+   the unit tests and the conformance spec all accepted any path. Make the fake
+   refuse what the real binary refuses, and give every upstream route parley
+   depends on a conformance case.
+7. **A fake must keep the dependency's state, not just echo its answers.** The
+   fake's 401 had no memory; the real binary counts failures and bans the
+   client after five. Parley's own status probe spent them, and every spec
+   passed. When a dependency rate-limits, locks out or counts, the fake counts
+   too.
+8. **Amend the Core-concepts row of every entity whose contract changes.** The
+   arch sweep compares definition lines, so a new message inside `auth_files`
+   or a new rule inside a fixture changes a contract without tripping it. Three
+   review findings in one issue were rows that lagged the diff.

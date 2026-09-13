@@ -321,7 +321,7 @@ M.register_proxy_command = function(prefix)
 	-- completion list (ARCH-DRY). `arg` is the per-subcommand argument shown in
 	-- usage; nil for the no-arg ones.
 	local SUBS_HELP = {
-		{ name = "status", desc = "show managed-proxy health, endpoint, binary, drift" },
+		{ name = "status", desc = "show proxy health, version vs latest, endpoint, binary, drift" },
 		{ name = "start", desc = "ensure the proxy is running (spawn if needed)" },
 		{ name = "stop", desc = "stop parley-spawned proxies (+ reap a leftover on the port)" },
 		{ name = "restart", desc = "stop, then start with a freshly rendered config" },
@@ -329,7 +329,7 @@ M.register_proxy_command = function(prefix)
 		{ name = "providers", desc = "list the supported provider names" },
 		{ name = "login", arg = "<provider>", desc = "run an interactive OAuth login for a provider" },
 		{ name = "reap", desc = "stop other cliproxy processes racing this one's auth-dir" },
-		{ name = "update", desc = "download the pinned cliproxyapi release" },
+		{ name = "update", desc = "install the latest cliproxyapi release (or cliproxy.download_version), restarting parley's proxy" },
 	}
 	local SUBS = vim.tbl_map(function(e)
 		return e.name
@@ -354,6 +354,8 @@ M.register_proxy_command = function(prefix)
 					"cliproxy status",
 					"  managed:       " .. tostring(info.managed),
 					"  health:        " .. tostring(info.health),
+					"  version:       " .. require("parley.cliproxy_release").version_summary(
+						info.version, ":" .. prefix .. "Proxy update"),
 					"  binary:        " .. tostring(info.binary) .. " (" .. info.binary_source .. ")",
 					"  endpoint:      " .. tostring(info.host) .. ":" .. tostring(info.port),
 					"  auth-dir:      " .. tostring(info.auth_dir),
@@ -372,15 +374,18 @@ M.register_proxy_command = function(prefix)
 			local n = cliproxy.stop()
 			vim.notify("cliproxy: stopped " .. n .. " parley-spawned proxy(ies)", vim.log.levels.INFO)
 		elseif sub == "update" then
-			vim.notify("cliproxy: downloading pinned release…", vim.log.levels.INFO)
-			local bin, err = cliproxy.update()
-			if bin then
-				vim.notify("cliproxy: updated → " .. bin, vim.log.levels.INFO)
-			else
-				vim.notify("cliproxy: update failed — " .. tostring(err), vim.log.levels.ERROR)
-			end
+			vim.notify("cliproxy: finding the release to install…", vim.log.levels.INFO)
+			vim.cmd("redraw") -- update blocks while it fetches: show the notice first
+			cliproxy.update(function(ok, msg, warn)
+				-- warn: installed, but a proxy parley did not start still serves the old
+				-- version until the operator acts
+				local levels = vim.log.levels
+				vim.notify("cliproxy: " .. msg, not ok and levels.ERROR or warn and levels.WARN or levels.INFO)
+			end)
 		elseif sub == "restart" then
-			cliproxy.restart(function()
+			-- restart_managed waits for the old proxy to release the port; the
+			-- no-wait restart could reuse a proxy still shutting down (#237).
+			cliproxy.restart_managed(function()
 				vim.notify("cliproxy: restarted", vim.log.levels.INFO)
 			end, function(msg)
 				vim.notify(msg, vim.log.levels.ERROR)

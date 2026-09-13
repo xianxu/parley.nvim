@@ -20,7 +20,7 @@ This index provides a central directory for all atlas entries of the `parley.nvi
 - [Provider Architecture](providers/architecture.md): Transport layer, payload construction, and streaming.
 - [OpenAI Provider](providers/openai.md): Implementation for OpenAI-compatible backends.
 - [CLIProxyAPI Provider](providers/cliproxyapi.md): OpenAI-compatible local proxy provider for multi-vendor models.
-- [Managed cliproxyapi](providers/cliproxy-managed.md): Opt-in lifecycle + config management for a local cliproxyapi (render from Lua, lazy start/reuse, `:ParleyProxy`).
+- [Managed cliproxyapi](providers/cliproxy-managed.md): Lifecycle + config management for a local cliproxyapi, on by default (render from Lua, lazy start/reuse, `:ParleyProxy`; `update` installs the latest release, `status` shows its version).
 - [Anthropic Provider](providers/anthropic.md): Implementation for Claude models.
 - [Google AI Provider](providers/googleai.md): Implementation for Gemini models.
 - [Agents](providers/agents.md): Agent configuration and selection mechanisms.

@@ -342,6 +342,33 @@ function M.lstart_sec(lstart)
         tonumber(year), mm, tonumber(day), tonumber(h), tonumber(mi), tonumber(sec)))
 end
 
+--- Parse `ps ax -o pid,lstart,command` into rows. The executable is the
+--- command's first token — the only safe identity (see parse_peers). Shared by
+--- parse_peers and cliproxy_release.running_identity (#237, ARCH-DRY: one ps
+--- grammar).
+---@param ps_output string|nil
+---@return table[] # { pid, started, command, exe }
+function M.parse_ps(ps_output)
+    local rows = {}
+    if type(ps_output) ~= "string" then
+        return rows
+    end
+    for line in ps_output:gmatch("[^\n]+") do
+        -- pid, lstart (Www Mmm DD HH:MM:SS YYYY), then the command
+        local pid, started, command = line:match(
+            "^%s*(%d+)%s+(%a+%s+%a+%s+%d+%s+[%d:]+%s+%d+)%s+(.+)$")
+        if pid and command then
+            rows[#rows + 1] = {
+                pid = tonumber(pid),
+                started = started,
+                command = command,
+                exe = command:match("^(%S+)"),
+            }
+        end
+    end
+    return rows
+end
+
 --- Parse `ps -o pid,lstart,command` into the cliproxy processes parley neither
 --- spawned nor manages — the ones quietly sharing an auth-dir with it.
 ---
@@ -354,9 +381,6 @@ end
 ---@param managed_port_pids number[] # pids holding the managed port
 ---@return table[] # { pid, started, command }
 function M.parse_peers(ps_output, own_pids, managed_port_pids)
-    if type(ps_output) ~= "string" then
-        return {}
-    end
     local exclude = {}
     for _, list in ipairs({ own_pids or {}, managed_port_pids or {} }) do
         for _, pid in ipairs(list) do
@@ -364,20 +388,10 @@ function M.parse_peers(ps_output, own_pids, managed_port_pids)
         end
     end
     local peers = {}
-    for line in ps_output:gmatch("[^\n]+") do
-        -- pid, lstart (Www Mmm DD HH:MM:SS YYYY), then the command
-        local pid, started, command = line:match(
-            "^%s*(%d+)%s+(%a+%s+%a+%s+%d+%s+[%d:]+%s+%d+)%s+(.+)$")
-        if pid and command then
-            local exe = command:match("^(%S+)")
-            local base = exe and exe:match("([^/]+)$")
-            if base and PROXY_BINARIES[base] and not exclude[tonumber(pid)] then
-                peers[#peers + 1] = {
-                    pid = tonumber(pid),
-                    started = started,
-                    command = command,
-                }
-            end
+    for _, r in ipairs(M.parse_ps(ps_output)) do
+        local base = r.exe and r.exe:match("([^/]+)$")
+        if base and PROXY_BINARIES[base] and not exclude[r.pid] then
+            peers[#peers + 1] = { pid = r.pid, started = r.started, command = r.command }
         end
     end
     return peers

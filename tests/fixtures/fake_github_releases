@@ -1,0 +1,109 @@
+#!/usr/bin/env python3
+"""Stateful fake of GitHub's release endpoints for CLIProxyAPI (issue #237).
+
+Serves the same path shape as github.com, so parley's URL builder runs
+unchanged; only the host differs:
+
+  GET /router-for-me/CLIProxyAPI/releases/latest
+        302 to .../releases/tag/v<ver>, where <ver> is read from <root>/latest
+        on EVERY request (a spec publishes a new release mid-test by rewriting
+        it); 404 when that file is absent.
+  GET /router-for-me/CLIProxyAPI/releases/tag/v<ver>
+        200 with a stub page (parley never follows the redirect; modelled so
+        the shape is complete).
+  GET /router-for-me/CLIProxyAPI/releases/download/v<ver>/<file>
+        <root>/v<ver>/<file>, else 404.
+
+State is the directory --root, owned by the spec. Every request is appended to
+<root>/requests.log as "GET <path>", which is how a spec proves what parley did
+and did not fetch.
+
+The server exits when the nvim that started it does (fixture_watchdog), so a
+crashed or killed spec cannot orphan it (#220).
+
+Modes (--mode, or PARLEY_FAKE_RELEASES_MODE):
+  normal   default
+  slow     wait 1.5s before answering /latest, so a status spec can prove it
+           waits for the slowest of its reads
+"""
+import os
+import sys
+import time
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+sys.dont_write_bytecode = True  # never write __pycache__ into the repo (#202)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from fixture_watchdog import exit_with_parent  # noqa: E402
+
+PREFIX = "/router-for-me/CLIProxyAPI/releases"
+
+
+def parse_args(argv):
+    port, root = None, None
+    mode = os.environ.get("PARLEY_FAKE_RELEASES_MODE", "normal")
+    i = 0
+    while i < len(argv):
+        if argv[i] == "--port":
+            port = int(argv[i + 1])
+            i += 2
+        elif argv[i] == "--root":
+            root = argv[i + 1]
+            i += 2
+        elif argv[i] == "--mode":
+            mode = argv[i + 1]
+            i += 2
+        else:
+            i += 1
+    if port is None or root is None:
+        sys.exit("usage: fake_github_releases --port <p> --root <dir> [--mode normal|slow]")
+    return port, root, mode
+
+
+def main():
+    port, root, mode = parse_args(sys.argv[1:])
+    exit_with_parent()  # a crashed or killed spec must not orphan this server (#220)
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *_a):
+            pass
+
+        def _send(self, status, body=b"", headers=None):
+            self.send_response(status)
+            for name, value in (headers or {}).items():
+                self.send_header(name, value)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_GET(self):
+            with open(os.path.join(root, "requests.log"), "a") as log:
+                log.write("GET " + self.path + "\n")
+            if not self.path.startswith(PREFIX + "/"):
+                return self._send(404)
+            rest = self.path[len(PREFIX):]
+            if rest == "/latest":
+                if mode == "slow":
+                    time.sleep(1.5)
+                try:
+                    with open(os.path.join(root, "latest")) as f:
+                        ver = f.read().strip()
+                except FileNotFoundError:
+                    return self._send(404)
+                location = "http://127.0.0.1:%d%s/tag/v%s" % (port, PREFIX, ver)
+                return self._send(302, headers={"Location": location})
+            if rest.startswith("/tag/"):
+                return self._send(200, b"<html>release</html>", {"Content-Type": "text/html"})
+            parts = rest.split("/")  # ["", "download", "v<ver>", "<file>"]
+            if (len(parts) == 4 and parts[1] == "download" and parts[2].startswith("v")
+                    and parts[3] not in ("", ".", "..")):
+                path = os.path.join(root, parts[2], parts[3])
+                if os.path.isfile(path):
+                    with open(path, "rb") as f:
+                        return self._send(200, f.read(), {"Content-Type": "application/octet-stream"})
+            return self._send(404)
+
+    HTTPServer(("127.0.0.1", port), Handler).serve_forever()
+
+
+if __name__ == "__main__":
+    main()

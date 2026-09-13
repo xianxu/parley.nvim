@@ -521,6 +521,33 @@ describe("parse_peers", function()
     end)
 end)
 
+-- #237: the ps grammar parse_peers used, extracted so the update path's
+-- running_identity reads the same rows instead of a second parser.
+describe("parse_ps", function()
+    local PS = table.concat({
+        "  PID STARTED                      COMMAND",
+        "  101 Fri Sep 11 09:00:00 2026     /Users/me/.local/share/nvim/parley/cliproxy/bin/cli-proxy-api -config /x/config.yaml",
+        "  202 Thu Sep 10 18:14:54 2026     /opt/homebrew/bin/cliproxyapi -config /opt/homebrew/etc/cliproxyapi.conf",
+    }, "\n")
+
+    it("reads pid, start time, full command and the executable token", function()
+        local rows = ca.parse_ps(PS)
+        assert.equals(2, #rows)
+        assert.same({
+            pid = 101,
+            started = "Fri Sep 11 09:00:00 2026",
+            command = "/Users/me/.local/share/nvim/parley/cliproxy/bin/cli-proxy-api -config /x/config.yaml",
+            exe = "/Users/me/.local/share/nvim/parley/cliproxy/bin/cli-proxy-api",
+        }, rows[1])
+        assert.equals("/opt/homebrew/bin/cliproxyapi", rows[2].exe)
+    end)
+
+    it("skips the header and malformed lines, and tolerates non-strings", function()
+        assert.same({}, ca.parse_ps(nil))
+        assert.same({}, ca.parse_ps("garbage\n  PID STARTED COMMAND"))
+    end)
+end)
+
 
 describe("_usage_has_flag", function()
     local cliproxy = require("parley.cliproxy")

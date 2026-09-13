@@ -13,6 +13,11 @@ local uv = vim.uv or vim.loop
 local cc = require("parley.cliproxy_config")
 local ca = require("parley.cliproxy_auth")
 local logger = require("parley.logger")
+local rel = require("parley.cliproxy_release")
+
+-- The one answer to "no binary found", for every caller that hits it (#237).
+local NO_BINARY = "no cliproxy binary found — `:ParleyProxy update` installs the latest release, "
+    .. "or `brew install cliproxyapi`, or set cliproxy.binary_path"
 
 local M = {}
 
@@ -76,25 +81,26 @@ end
 --- Locate the cliproxy binary: explicit binary_path → PATH (brew name
 --- `cliproxyapi`, then release-tarball name `cli-proxy-api`). M2 inserts the
 --- managed download dir between binary_path and PATH.
----@return string|nil
+---@return string|nil path
+---@return string source # "binary_path" | "managed" | "PATH" | "none" (one precedence, one place)
 function M.discover_binary()
     local c = cfg() or {}
     if type(c.binary_path) == "string" and c.binary_path ~= "" then
         if vim.fn.executable(c.binary_path) == 1 then
-            return c.binary_path
+            return c.binary_path, "binary_path"
         end
     end
     local managed = M.managed_binary() -- M2 auto-downloaded binary
     if managed then
-        return managed
+        return managed, "managed"
     end
     for _, name in ipairs({ "cliproxyapi", "cli-proxy-api" }) do
         local p = vim.fn.exepath(name)
         if p ~= nil and p ~= "" then
-            return p
+            return p, "PATH"
         end
     end
-    return nil
+    return nil, "none"
 end
 
 --------------------------------------------------------------------------------
@@ -139,18 +145,37 @@ M._classify = classify -- exposed for unit testing
 
 -- Build the curl argv for a GET against host:port with an optional bearer.
 -- Single source of truth for the request shape (ARCH-DRY): the health probe,
--- the stop-time identity check, list_models, and the management-API reader all
--- go through here. `-w "\n%{http_code}"` appends the status code on its own
--- line so callers can split body from code.
+-- the stop-time identity check, list_models, the management-API reader and the
+-- version probe all go through here. `-w "\n%{http_code}"` appends the status
+-- code on its own line so callers can split body from code. `opts.dump_headers`
+-- (the version probe, #237) sends the response HEADERS to stdout and discards
+-- the body, so split_status still splits header block from code.
 ---@param route string|nil # defaults to /v1/models
-local function api_argv(host, port, secret, route)
+---@param opts table|nil # { dump_headers: boolean }
+local function api_argv(host, port, secret, route, opts)
     local args = { "curl", "-s", "-w", "\n%{http_code}", "--max-time", tostring(CURL_MAX_TIME) }
+    if opts and opts.dump_headers then
+        vim.list_extend(args, { "-D", "-", "-o", "/dev/null" })
+    end
     if type(secret) == "string" and secret ~= "" then
         table.insert(args, "-H")
         table.insert(args, "Authorization: Bearer " .. secret)
     end
     table.insert(args, ("http://%s:%s%s"):format(host, port, route or "/v1/models"))
     return args
+end
+
+-- Run argv: async when `cb` is given (cb(obj) on the main loop), else
+-- synchronously, returning the vim.system result.
+local function run(argv, cb)
+    if not cb then
+        return vim.system(argv, { text = true }):wait()
+    end
+    vim.system(argv, { text = true }, function(obj)
+        vim.schedule(function()
+            cb(obj)
+        end)
+    end)
 end
 
 --- Probe http://host:port/v1/models with the client bearer and classify.
@@ -165,6 +190,28 @@ function M.health_probe(host, port, secret, cb)
         vim.schedule(function()
             cb(state)
         end)
+    end)
+end
+
+--- The running proxy's version (#237), from the X-Cpa-Version header on a
+--- /v0/management/* response. The request carries parley's management key:
+--- 7.2.x bans the client from its whole management API for 30 minutes after
+--- five failed attempts, keyed requests included, and an unauthenticated probe
+--- IS a failed attempt. Parley's own proxy accepts the key (no attempt spent);
+--- a proxy parley did not configure rejects it with a 401 that still carries
+--- the header, at the cost of one attempt there.
+--- Sync when `cb` is nil (returns version, reason); else cb(version, reason)
+--- on the main loop. reason: "down" (no answer) | "no_header" (no version).
+---@param host string
+---@param port number
+---@param cb fun(version: string|nil, reason: string|nil)|nil
+function M.version_probe(host, port, cb)
+    local argv = api_argv(host, port, M.management_key(), "/v0/management/latest-version", { dump_headers = true })
+    if not cb then
+        return rel.parse_version_probe(run(argv))
+    end
+    run(argv, function(obj)
+        cb(rel.parse_version_probe(obj))
     end)
 end
 
@@ -338,8 +385,14 @@ function M.auth_files(cb, channel)
                     return cb({ state = "unknown", reason = "management_key_mismatch",
                         message = "management key rejected by the running proxy" })
                 elseif http ~= 200 then
+                    -- Carry the proxy's own words: "HTTP 403" is not actionable;
+                    -- "IP banned due to too many failed attempts. Try again in
+                    -- 30m0s" is (7.2.x's management lockout, #237).
+                    local ok_json, payload = pcall(vim.json.decode, body or "")
+                    local why = ok_json and type(payload) == "table" and type(payload.error) == "string"
+                        and payload.error or nil
                     return cb({ state = "unknown", reason = "http_" .. tostring(http),
-                        message = "management API returned HTTP " .. tostring(http) })
+                        message = "management API returned HTTP " .. tostring(http) .. (why and (": " .. why) or "") })
                 end
                 local ok, decoded = pcall(vim.json.decode, body or "")
                 if not ok or type(decoded) ~= "table" then
@@ -389,11 +442,17 @@ function M._reset_management_restart() -- test seam
     _management_restart_done = false
 end
 
+-- A health state that means a cliproxyapi answers on the port (any account state).
+local function is_cliproxy_state(state)
+    return state == "healthy" or state == "needs_login" or state == "client_key_mismatch"
+end
+
 -- Wait (bounded) for a port to stop answering after SIGTERM. M.stop() returns
 -- immediately, and the REAL cliproxyapi shuts down gracefully — so without this
 -- the follow-up probe can still see the dying proxy, take ensure_running's
 -- reuse-if-healthy branch, and never spawn the replacement. The Python fake
--- dies instantly, which is why a test alone would not surface this.
+-- dies instantly unless PARLEY_FAKE_EXIT_DELAY_MS keeps it serving, which is how
+-- the update spec reproduces this (#237).
 local function wait_port_released(host, port, secret, cb)
     -- WALL-CLOCK deadline, not a count of sleeps: each health_probe is a curl
     -- with --max-time 2, so counting only the defer interval would let this run
@@ -406,7 +465,7 @@ local function wait_port_released(host, port, secret, cb)
     local function poll()
         M.health_probe(host, port, secret, function(state)
             if state == "down" or uv.now() >= deadline then
-                return cb(state == "down")
+                return cb(state == "down", state)
             end
             vim.defer_fn(poll, 150)
         end)
@@ -415,16 +474,23 @@ local function wait_port_released(host, port, secret, cb)
 end
 
 --- Stop the managed proxy, WAIT for the port to be released, then ensure a new
---- one is running. One sequence, two callers (the management-route repair and
---- the recovery ladder's `restart` rung) — the wait is the part that is easy to
---- omit and impossible to catch with the Python fake, which dies instantly while
---- the real cliproxyapi shuts down gracefully (ARCH-DRY).
+--- one is running. One sequence, four callers (the management-route repair, the
+--- recovery ladder's `restart` rung, :ParleyProxy restart and update) — the wait
+--- is the part that is easy to omit, and the fake's PARLEY_FAKE_EXIT_DELAY_MS
+--- reproduces the graceful shutdown that makes it matter (ARCH-DRY). A
+--- cliproxyapi still answering when the wait ends is reported through on_error,
+--- never reused: ensure_running would take it for the replacement (#237 BR-8).
 ---@param on_ready fun()
 ---@param on_error fun(msg: string)
 function M.restart_managed(on_ready, on_error)
     local opts = render_opts()
     M.stop()
-    wait_port_released(opts.host, opts.port, opts.secret, function()
+    wait_port_released(opts.host, opts.port, opts.secret, function(released, state)
+        if not released and is_cliproxy_state(state) then
+            return on_error(("cliproxy: the old proxy on port %s still answers %d s after it was told to "
+                .. "stop, so no replacement was started — try again once it has exited"):format(
+                tostring(opts.port), math.floor(PORT_RELEASE_MS / 1000)))
+        end
         M.ensure_running(on_ready, on_error)
     end)
 end
@@ -717,24 +783,34 @@ function M.ensure_running(callback, on_error)
             return on_error("cliproxy: port " .. port .. " is held by a non-cliproxy process")
         end
         -- down → spawn our own
+        local function spawn_and_poll(bin)
+            local pid, err = M.spawn(bin, path)
+            if not pid then
+                return on_error("cliproxy: failed to spawn " .. bin .. ": " .. tostring(err))
+            end
+            poll_until_healthy(host, port, secret, pid, callback, on_error)
+        end
         local bin = M.discover_binary()
         if not bin and (cfg() or {}).auto_download then
-            vim.notify("cliproxy: downloading binary (one-time)…", vim.log.levels.INFO)
-            local dlbin, derr = M.download()
+            -- The same target rule as :ParleyProxy update (#237). Synchronous,
+            -- like the download after it, so this branch keeps the interleavings
+            -- it had.
+            local version, verr = M.resolve_target()
+            if not version then
+                return on_error("cliproxy: auto_download could not choose a release — " .. tostring(verr))
+            end
+            vim.notify(("cliproxy: downloading %s (one-time)…"):format(version), vim.log.levels.INFO)
+            vim.cmd("redraw") -- the download blocks: show the notice first
+            local dlbin, derr = M.download({ version = version })
             if not dlbin then
                 return on_error("cliproxy: auto_download failed — " .. tostring(derr))
             end
-            bin = dlbin
+            return spawn_and_poll(dlbin)
         end
         if not bin then
-            return on_error("cliproxy: no cliproxy binary found — `brew install cliproxyapi`, "
-                .. "set cliproxy.binary_path, or enable auto_download")
+            return on_error("cliproxy: " .. NO_BINARY .. ", or enable cliproxy.auto_download")
         end
-        local pid, err = M.spawn(bin, path)
-        if not pid then
-            return on_error("cliproxy: failed to spawn " .. bin .. ": " .. tostring(err))
-        end
-        poll_until_healthy(host, port, secret, pid, callback, on_error)
+        spawn_and_poll(bin)
     end)
 end
 
@@ -744,12 +820,31 @@ end
 
 M.start = M.ensure_running
 
--- PIDs listening on `port` (best-effort via lsof; empty if lsof is absent).
+-- The process tools identity reads through. A spec names a missing executable
+-- to reproduce a machine without one (#237).
+local _ps_cmd, _lsof_cmd = "ps", "lsof"
+
+--- Test seam: the ps and lsof executables (nil restores both).
+---@param tools table|nil # { ps?: string, lsof?: string }
+function M._set_process_tools(tools)
+    tools = tools or {}
+    _ps_cmd, _lsof_cmd = tools.ps or "ps", tools.lsof or "lsof"
+end
+
+-- PIDs listening on `port`, plus why the list cannot be trusted when it cannot:
+-- lsof absent, or refused (vim.system RAISES on EPERM — degrade here, at the IO
+-- seam, so stop() and restart_managed never raise). lsof exits 1 when nothing
+-- matches, so its exit code is not an error.
 local function pids_on_port(port)
-    if vim.fn.executable("lsof") ~= 1 then
-        return {}
+    if vim.fn.executable(_lsof_cmd) ~= 1 then
+        return {}, "lsof unavailable"
     end
-    local res = vim.system({ "lsof", "-nP", "-iTCP:" .. port, "-sTCP:LISTEN", "-t" }, { text = true }):wait()
+    local ok, res = pcall(function()
+        return vim.system({ _lsof_cmd, "-nP", "-iTCP:" .. port, "-sTCP:LISTEN", "-t" }, { text = true }):wait()
+    end)
+    if not (ok and res) then
+        return {}, "lsof unreadable"
+    end
     local pids = {}
     for s in (res.stdout or ""):gmatch("%d+") do
         pids[#pids + 1] = tonumber(s)
@@ -763,8 +858,7 @@ end
 -- (client_key_mismatch) still means a cliproxy is there, so it counts.
 local function port_holds_cliproxy(host, port, secret)
     local res = vim.system(api_argv(host, port, secret), { text = true }):wait()
-    local state = classify(res.code, res.stdout)
-    return state == "healthy" or state == "needs_login" or state == "client_key_mismatch"
+    return is_cliproxy_state(classify(res.code, res.stdout))
 end
 
 --- Stop the managed proxy. Kills proxies this session spawned AND reaps a
@@ -796,12 +890,6 @@ function M.stop()
     return vim.tbl_count(killed)
 end
 
---- Restart: stop our own daemon, then ensure-running (re-renders config).
-function M.restart(callback, on_error)
-    M.stop()
-    M.ensure_running(callback or function() end, on_error)
-end
-
 -- Does the on-disk rendered config differ from a fresh render of the current
 -- Lua config? Compares decoded tables (NOT encoded strings — key order is
 -- unstable across renders).
@@ -823,16 +911,15 @@ local function config_drift()
     return not vim.deep_equal(on_disk, cc.render(opts))
 end
 
---- Gather a status snapshot. Async (health is probed); calls cb(info).
+--- Gather a status snapshot (#131, #237). Health, the running version and the
+--- latest release are read in parallel and complete in IO order; cb(info) runs
+--- once, when the last lands (ARCH-ORDER). Each read is bounded, so this always
+--- answers.
 ---@param cb fun(info: table)
 function M.status(cb)
-    local bin = M.discover_binary()
+    local bin, source = M.discover_binary()
     local c = cfg() or {}
     local opts = render_opts()
-    local source = "none"
-    if bin then
-        source = (c.binary_path == bin) and "binary_path" or "PATH"
-    end
     local info = {
         managed = M.is_managed(),
         binary = bin,
@@ -843,15 +930,38 @@ function M.status(cb)
         config_path = config_path(),
         spawned_by_parley = #M.spawned_pids() > 0,
         config_drift = config_drift(),
+        version = { installed = M.installed_version(), pinned = rel.parse_version(c.download_version) },
     }
+    local reads = opts.host and 3 or 1
+    local function landed()
+        reads = reads - 1
+        if reads == 0 then
+            cb(info)
+        end
+    end
     if not opts.host then
         info.health = "unknown"
-        return cb(info)
+        info.version.running_err = "no cliproxyapi endpoint is configured"
+    else
+        M.health_probe(opts.host, opts.port, opts.secret, function(state)
+            info.health = state
+            landed()
+        end)
+        M.version_probe(opts.host, opts.port, function(v, reason)
+            info.version.running, info.version.running_err = v, reason
+            landed()
+        end)
     end
-    M.health_probe(opts.host, opts.port, opts.secret, function(state)
-        info.health = state
-        cb(info)
-    end)
+    if not info.managed then
+        -- Opted out: status must not reach github.com on parley's behalf (PQ-2).
+        info.version.latest_err = "not checked: cliproxy.manage is off"
+        landed()
+    else
+        M.latest_release(function(v, err)
+            info.version.latest, info.version.latest_err = v, err
+            landed()
+        end, M.STATUS_LATEST_MAX_TIME)
+    end
 end
 
 -- Per-provider login flags (NOT a `login` subcommand — confirmed Task 2.0).
@@ -901,7 +1011,7 @@ end
 function M.login_argv(provider)
     local bin = M.discover_binary()
     if not bin then
-        return nil, "no cliproxy binary found — `brew install cliproxyapi` or set cliproxy.binary_path"
+        return nil, NO_BINARY
     end
     local flag = LOGIN_FLAGS[provider]
     if not flag then
@@ -946,25 +1056,59 @@ function M._arm_peer_scan()
     _peer_warning_shown = true
 end
 
+-- `ps ax -o pid,lstart,command`, or nil and why when the process table is
+-- unreadable. pcall: vim.system RAISES (EPERM) rather than returning an error
+-- when the process table is unreadable — sandboxes and hardened runtimes do this.
+local function ps_output()
+    if vim.fn.executable(_ps_cmd) ~= 1 then
+        return nil, "ps unavailable"
+    end
+    local ok, res = pcall(function()
+        return vim.system({ _ps_cmd, "ax", "-o", "pid,lstart,command" }, { text = true }):wait()
+    end)
+    if not (ok and res and res.code == 0) then
+        return nil, "ps unreadable"
+    end
+    return res.stdout
+end
+
+-- Who holds the managed port: { ours = true|false, exe? } when the listener's
+-- command line was read, else { err = why } (cliproxy_release.running_identity).
+-- Never a guess: a read that failed is "could not tell", which update reports as
+-- such and never restarts (#237 BR-8). Synchronous ps + lsof (~80-150 ms);
+-- :ParleyProxy update only, never the dispatch path.
+local function port_identity(port)
+    local ok, id, why = pcall(function()
+        local out, ps_err = ps_output()
+        if not out then
+            return nil, ps_err
+        end
+        local pids, lsof_err = pids_on_port(port)
+        if lsof_err then
+            return nil, lsof_err
+        end
+        return rel.running_identity(ca.parse_ps(out), pids, config_path())
+    end)
+    if not ok then
+        logger.debug("cliproxy port_identity: " .. tostring(id))
+        return { err = "identity read failed" }
+    end
+    return id or { err = why }
+end
+
 --- Every cliproxy process on this machine that parley neither spawned nor
 --- manages. Best-effort: an empty list when `ps` is unavailable.
 ---@return table[] # { pid, started, command }
 function M.peers()
-    if vim.fn.executable("ps") ~= 1 then
-        return {}
-    end
-    -- pcall: vim.system RAISES (EPERM) rather than returning an error when the
-    -- process table is unreadable — sandboxes and hardened runtimes do this.
-    -- Peer detection is advisory, so it must never break a dispatch.
-    local ok, res = pcall(function()
-        return vim.system({ "ps", "ax", "-o", "pid,lstart,command" }, { text = true }):wait()
-    end)
-    if not ok or not res then
+    -- Peer detection is advisory, so an unreadable process table (ps_output's
+    -- nil) must never break a dispatch.
+    local out = ps_output()
+    if not out then
         return {}
     end
     local opts = render_opts()
     local port_pids = (opts.host and opts.port) and pids_on_port(opts.port) or {}
-    return ca.parse_peers(res.stdout, M.spawned_pids(), port_pids)
+    return ca.parse_peers(out, M.spawned_pids(), port_pids)
 end
 
 --- Warn ONCE per session that peer proxies exist, naming the mechanism rather
@@ -1755,12 +1899,92 @@ function M.fetch_catalog(cb)
 end
 
 --------------------------------------------------------------------------------
--- M2: auto_download — fetch a pinned release, checksum-verify, extract
+-- Releases: resolve, install, update (#131 M2, #237)
 --------------------------------------------------------------------------------
 
-local RELEASE_BASE = "https://github.com/router-for-me/CLIProxyAPI/releases/download"
-local PINNED_VERSION = "7.1.71" -- pinned, NOT "latest" — reproducible
+-- Root of CLIProxyAPI's GitHub releases: `/latest` redirects to the newest tag,
+-- `/download/v<ver>/<asset>` serves it. Specs point it at
+-- tests/fixtures/fake_github_releases through _set_releases_url; the harness
+-- points it at a dead local port through $PARLEY_CLIPROXY_RELEASES_URL
+-- (tests/minimal_init.vim), so a spec that forgets the seam fails fast instead
+-- of reaching github.com. The variable counts only under $PARLEY_TEST_MODE,
+-- which the harness also exports: outside it, a stray environment variable must
+-- not choose where parley downloads an executable from.
+local RELEASES_URL = "https://github.com/router-for-me/CLIProxyAPI/releases"
+local LATEST_MAX_TIME = 10 -- seconds: :ParleyProxy update and first-run resolve
+M.STATUS_LATEST_MAX_TIME = 5 -- seconds: :ParleyProxy status waits less
 local BIN_NAME = "cli-proxy-api" -- the executable inside the release tarball
+
+local _releases_url_override = nil
+
+--- Test seam: point release lookups and downloads at `url` (nil restores).
+---@param url string|nil
+function M._set_releases_url(url)
+    _releases_url_override = url
+end
+
+local function releases_url()
+    if _releases_url_override then
+        return _releases_url_override
+    end
+    local env = vim.env.PARLEY_CLIPROXY_RELEASES_URL
+    if vim.env.PARLEY_TEST_MODE == "1" and env ~= nil and env ~= "" then
+        return env
+    end
+    return RELEASES_URL
+end
+
+--- Test seam: the releases root in force, so a spec can check which one wins
+--- without contacting it.
+---@return string
+function M._releases_url()
+    return releases_url()
+end
+
+--- The newest published release, from GitHub's releases/latest redirect: no
+--- API token, no rate-limit quota (#237). Sync when `cb` is nil (returns
+--- version, err); else cb(version, err) on the main loop.
+---@param cb fun(version: string|nil, err: string|nil)|nil
+---@param max_time number|nil # seconds; default LATEST_MAX_TIME
+function M.latest_release(cb, max_time)
+    local argv = { "curl", "-sS", "-o", "/dev/null", "-w", "%{redirect_url}\n%{http_code}",
+        "--connect-timeout", "5", "--max-time", tostring(max_time or LATEST_MAX_TIME),
+        releases_url() .. "/latest" }
+    if not cb then
+        return rel.parse_latest_response(run(argv))
+    end
+    run(argv, function(obj)
+        cb(rel.parse_latest_response(obj))
+    end)
+end
+
+--- The release parley should install (#237): cliproxy.download_version when
+--- set, else the latest release. One rule for :ParleyProxy update and the
+--- first-run auto_download (ARCH-DRY). Sync when `cb` is nil (returns version,
+--- err, pinned); else cb(version, err, pinned).
+---@param cb fun(version: string|nil, err: string|nil, pinned: boolean)|nil
+function M.resolve_target(cb)
+    local pin = (cfg() or {}).download_version
+    if pin ~= nil then
+        local v = rel.parse_version(pin)
+        local err = nil
+        if not v then
+            err = ("cliproxy.download_version %q is not a release version (expected e.g. 7.2.158)")
+                :format(tostring(pin))
+        end
+        if cb then
+            return cb(v, err, true)
+        end
+        return v, err, true
+    end
+    if cb then
+        return M.latest_release(function(v, err)
+            cb(v, err, false)
+        end)
+    end
+    local v, err = M.latest_release()
+    return v, err, false
+end
 
 local function bin_dir()
     local dir = data_root() .. "/bin"
@@ -1786,16 +2010,38 @@ local function sha256_of(path)
     return (res.stdout or ""):match("^(%x+)")
 end
 
---- Download + checksum-verify + extract the pinned release into the managed
---- bin dir. Synchronous (one-time setup; used by auto_download / :ParleyProxy
---- update). Refuses to install on a checksum mismatch.
----@param opts table|nil # { version, base_url } — base_url overridable for tests
+local function version_record()
+    return bin_dir() .. "/" .. BIN_NAME .. ".version"
+end
+
+--- The version parley recorded when it installed the managed binary, or nil:
+--- no binary, or a record that is missing, truncated, hand-edited or otherwise
+--- not a version — all of which mean "unknown" (ARCH-SECURE).
+---@return string|nil
+function M.installed_version()
+    if not M.managed_binary() then
+        return nil
+    end
+    local ok, lines = pcall(vim.fn.readfile, version_record(), "", 1)
+    return ok and rel.parse_version(lines[1]) or nil
+end
+
+--- Download, checksum-verify and install release `opts.version` as the managed
+--- binary (#131 M2, #237). The tarball is extracted into a staging dir beside
+--- the bin dir and renamed over the binary, so a running proxy keeps its old
+--- file and an interrupted install leaves the previous binary in place; the
+--- version is recorded last. Synchronous: it blocks the editor for the fetch,
+--- bounded by curl's timeouts (the audit's B5, owned by #209; the operator
+--- accepted the blocking fetch for #237). Refuses a value that is not a version
+--- and a checksum mismatch.
+---@param opts table # { version: string }
 ---@return string|nil binary_path, string|nil err
 function M.download(opts)
-    opts = opts or {}
-    local c = cfg() or {}
-    local version = opts.version or c.download_version or PINNED_VERSION
-    local base = opts.base_url or RELEASE_BASE
+    local raw = (opts or {}).version
+    local version = rel.parse_version(raw)
+    if not version then
+        return nil, "not a release version: " .. tostring(raw)
+    end
     local plat = cc.platform()
     if not plat then
         return nil, "no published cliproxy release for this platform"
@@ -1804,11 +2050,10 @@ function M.download(opts)
         return nil, "auto_download does not support Windows (.zip) — install cliproxyapi manually"
     end
     local asset = cc.asset_name(version, plat)
-    local tarball_url = ("%s/v%s/%s"):format(base, version, asset)
-    local sums_url = ("%s/v%s/checksums.txt"):format(base, version)
+    local base = ("%s/download/v%s"):format(releases_url(), version)
+    local tarball_url = base .. "/" .. asset
+    local sums_url = base .. "/checksums.txt"
 
-    -- Bounded: download() runs synchronously on the main loop (opt-in, one-time),
-    -- so a stalled fetch must not freeze the editor indefinitely.
     local tmp = vim.fn.tempname() .. ".tar.gz"
     local dl = vim.system({ "curl", "-fsSL", "--connect-timeout", "10", "--max-time", "300",
         "-o", tmp, tarball_url }, { text = true }):wait()
@@ -1833,22 +2078,120 @@ function M.download(opts)
         return nil, "checksum mismatch for " .. asset .. " — refusing to install (expected "
             .. expected .. ", got " .. tostring(actual) .. ")"
     end
-    local dir = bin_dir()
-    local ex = vim.system({ "tar", "-xzf", tmp, "-C", dir, BIN_NAME }, { text = true }):wait()
+
+    -- Stage beside the bin dir: the same filesystem, so the rename is atomic.
+    -- `stage` is a leaf this function constructs under the data root, which is
+    -- never empty — the only path the recursive delete can reach.
+    local stage = data_root() .. "/staging"
+    vim.fn.delete(stage, "rf")
+    vim.fn.mkdir(stage, "p")
+    local ex = vim.system({ "tar", "-xzf", tmp, "-C", stage, BIN_NAME }, { text = true }):wait()
     os.remove(tmp)
     if ex.code ~= 0 then
+        vim.fn.delete(stage, "rf")
         return nil, "extract failed: " .. tostring(ex.stderr)
     end
-    local bin = dir .. "/" .. BIN_NAME
-    local fs_chmod = uv.fs_chmod or vim.loop.fs_chmod
-    fs_chmod(bin, tonumber("755", 8))
+    local staged = stage .. "/" .. BIN_NAME
+    uv.fs_chmod(staged, tonumber("755", 8))
+    local bin = bin_dir() .. "/" .. BIN_NAME
+    local renamed, rerr = uv.fs_rename(staged, bin)
+    vim.fn.delete(stage, "rf")
+    if not renamed then
+        return nil, "install failed: " .. tostring(rerr)
+    end
+    local record = version_record()
+    vim.fn.writefile({ version }, record .. ".tmp")
+    uv.fs_rename(record .. ".tmp", record)
     return bin
 end
 
---- Re-fetch the pinned binary (for :ParleyProxy update).
----@return string|nil binary_path, string|nil err
-function M.update()
-    return M.download()
+local _update_in_flight = false
+-- Longer than restart_managed's own budget (PORT_RELEASE_MS + POLL_BUDGET_MS +
+-- probes, ~13 s) plus the version probe that confirms it (2 s), so it fires
+-- only when the restart truly never answers (PQ-3).
+local UPDATE_RESTART_DEADLINE_MS = 20000
+local _update_restart_deadline_ms = UPDATE_RESTART_DEADLINE_MS
+
+--- Test seam: shorten update's restart deadline (nil restores the default).
+---@param ms number|nil
+function M._set_update_restart_deadline_ms(ms)
+    _update_restart_deadline_ms = ms or UPDATE_RESTART_DEADLINE_MS
+end
+
+--- :ParleyProxy update (#237): install cliproxy.download_version, else the
+--- latest release, and restart the proxy when parley launched it. Everything
+--- up to the restart is synchronous (the editor blocks for the fetch); the
+--- restart is not, so an in-flight guard refuses a second update until this one
+--- has answered. cb(ok, message, warn) runs exactly once, on every path; warn
+--- marks a success the operator must still act on (plan_update's `warn`).
+---@param cb fun(ok: boolean, message: string, warn: boolean|nil)
+function M.update(cb)
+    if _update_in_flight then
+        return cb(false, "an update is already running")
+    end
+    local refusal = rel.update_refusal({ managed = M.is_managed(), binary_path = (cfg() or {}).binary_path })
+    if refusal then
+        return cb(false, refusal)
+    end
+    _update_in_flight = true
+    local answered = false
+    local function finish(ok, msg, warn)
+        if answered then
+            return
+        end
+        answered = true
+        _update_in_flight = false
+        cb(ok, msg, warn)
+    end
+    local ok, err = pcall(function()
+        local target, target_err, pinned = M.resolve_target()
+        local ep = endpoint_opts()
+        local running
+        if ep.host then
+            local version, reason = M.version_probe(ep.host, ep.port)
+            if reason ~= "down" then
+                local id = port_identity(ep.port)
+                running = { version = version, ours = id.ours, exe = id.exe, identity_err = id.err, port = ep.port }
+            end
+        end
+        local plan = rel.plan_update({ target = target, target_err = target_err, pinned = pinned,
+            installed = M.installed_version(), running = running })
+        if not plan.ok then
+            return finish(false, plan.message)
+        end
+        if plan.install then
+            local bin, derr = M.download({ version = plan.install })
+            if not bin then
+                return finish(false, "update failed — " .. tostring(derr))
+            end
+        end
+        if plan.restart == "managed" then
+            -- restart_managed answers within its own budget, but a raise inside
+            -- one of its async legs would never reach finish and would wedge the
+            -- guard for the session (PQ-3). The deadline is the terminal owner of
+            -- last resort; finish drops whichever answer arrives second.
+            local function answer(o)
+                local out = rel.restart_outcome(plan.message, plan.target, o)
+                finish(out.ok, out.message, out.warn)
+            end
+            vim.defer_fn(function()
+                answer({ timeout = true })
+            end, _update_restart_deadline_ms)
+            return M.restart_managed(function()
+                -- Confirm, do not assume: ask the port what it now serves (BR-8).
+                M.version_probe(ep.host, ep.port, function(version, reason)
+                    answer({ version = version, reason = reason })
+                end)
+            end, function(msg)
+                answer({ err = msg })
+            end)
+        end
+        finish(true, plan.message, plan.warn)
+    end)
+    if not ok then
+        logger.error("cliproxy update: " .. tostring(err))
+        finish(false, "update failed — unexpected error (details in the parley log)")
+    end
 end
 
 return M

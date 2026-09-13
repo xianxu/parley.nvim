@@ -111,18 +111,20 @@ local config = {
 	-- if you don't use cliproxyapi. host:port come from providers.cliproxyapi.endpoint
 	-- (single source of truth); the generated config is a derived 0600 artifact
 	-- under stdpath('data') — your committed Lua is the source of truth, no secret
-	-- in it. A new machine needs only: `brew install cliproxyapi` + one-time
+	-- in it. A new machine needs a binary (`:ParleyProxy update`, auto_download
+	-- below, or `brew install cliproxyapi`) + one-time
 	-- `:ParleyProxy login <provider>` (OAuth). Set manage=false to opt out.
 	cliproxy = {
 		manage = true,
 		-- auth_dir defaults to cliproxy's own ~/.cli-proxy-api when omitted.
 		-- binary_path = nil,  -- else `cliproxyapi` / `cli-proxy-api` on PATH
-		auto_download = true,  -- if no cliproxy binary is found, fetch a pinned,
+		auto_download = true,  -- if no cliproxy binary is found, fetch the latest
 		--   checksum-verified release into stdpath('data') (skips `brew install`).
 		--   ON in this config. NOTE: auto-fetching an executable is a trust
 		--   decision — a general distribution may prefer to comment this out (the
 		--   original opt-in default; see issue #131 spec). `:ParleyProxy update`
-		--   re-fetches; `download_version` overrides the pin.
+		--   installs the latest release and restarts a proxy parley launched;
+		--   set `download_version = "7.2.158"` to pin one instead.
 		-- Which providers the agent picker offers LIVE models for (#205), and how
 		-- many of each. cliproxyapi already advertises its catalog and that set
 		-- moves on its own — an antigravity login registered 13 new models with
@@ -585,7 +587,7 @@ local config = {
 	-- memory preferences: per-tag user preference profiles from chat history
 	memory_prefs = {
 		-- enable auto-generation and system prompt injection
-		enable = true,
+		enable = false,
 		-- max recent files per tag to include summaries from
 		max_files = 100,
 		-- max age in days before re-generating

@@ -34,8 +34,37 @@ local REQUIRED_FIELDS = {
 
 
 -- Resolved at load time: plenary's busted has no setup/teardown, only
--- before_each/after_each.
-local BINARY = cliproxy.discover_binary()
+-- before_each/after_each. The harness isolates the data dir, so parley's own
+-- managed download is never visible here. A binary comes from PATH (or
+-- binary_path), or, with PARLEY_LIVE_GITHUB=1, from parley's own download of the
+-- latest release into this spec's throwaway data dir: what a new machine gets
+-- (#237). Otherwise every real-binary case reports why it is pending.
+local BINARY, BINARY_WHY = cliproxy.discover_binary(), nil
+if not BINARY then
+    BINARY_WHY = "no cliproxyapi binary: put one on PATH, or set PARLEY_LIVE_GITHUB=1 to download the latest release"
+    if vim.env.PARLEY_LIVE_GITHUB == "1" then
+        cliproxy._set_releases_url("https://github.com/router-for-me/CLIProxyAPI/releases")
+        local version, err = cliproxy.latest_release()
+        local bin, derr = nil, err
+        if version then
+            bin, derr = cliproxy.download({ version = version })
+        end
+        cliproxy._set_releases_url(nil)
+        BINARY = bin
+        BINARY_WHY = not bin and ("PARLEY_LIVE_GITHUB=1, but the latest release could not be installed: "
+            .. tostring(derr)) or nil
+    end
+end
+
+-- A real-binary case says why it is pending rather than passing silently: a
+-- silent pass would let the contract rot unnoticed.
+local function needs_binary()
+    if BINARY then
+        return false
+    end
+    pending(BINARY_WHY)
+    return true
+end
 
 describe("cliproxyapi management API conformance", function()
     local binary, proc, port, mgmt_key, auth_dir_path
@@ -106,9 +135,7 @@ describe("cliproxyapi management API conformance", function()
     end
 
     it("serves the auth-file fields parley classifies", function()
-        if not binary then
-            -- Loud skip: a silent pass would let the contract rot unnoticed.
-            print("SKIP: no cliproxyapi binary discoverable — conformance not verified")
+        if needs_binary() then
             return
         end
         boot()
@@ -133,8 +160,7 @@ describe("cliproxyapi management API conformance", function()
     end)
 
     it("404s the management route when no secret-key is configured", function()
-        if not binary then
-            print("SKIP: no cliproxyapi binary discoverable — conformance not verified")
+        if needs_binary() then
             return
         end
         -- The ENTIRE unattended repair branches on this 404 meaning "the running
@@ -148,8 +174,7 @@ describe("cliproxyapi management API conformance", function()
     end)
 
     it("reports updated_at as a load stamp distinct from the file's modtime", function()
-        if not binary then
-            print("SKIP: no cliproxyapi binary discoverable — conformance not verified")
+        if needs_binary() then
             return
         end
         -- The staleness rung branches on `modtime > updated_at`, so what must
@@ -172,9 +197,13 @@ describe("cliproxyapi management API conformance", function()
         local r1 = vim.json.decode(body1).files[1]
         assert.is_string(r1.modtime)
         assert.is_string(r1.updated_at)
-        -- On a never-reloaded credential the proxy stamps updated_at FROM the
-        -- file's mtime, so they are equal here. That is the "not stale" state.
-        assert.equals(r1.modtime, r1.updated_at)
+        -- A credential the proxy has just loaded must not read as stale. 7.1.71
+        -- stamps updated_at FROM the file's mtime on that first load (equal);
+        -- 7.2.x stamps its own load clock, a moment later (#237). Both keep
+        -- `modtime > updated_at` false, which is all the staleness rung reads.
+        assert.is_true(ca.rfc3339_sec(r1.modtime) <= ca.rfc3339_sec(r1.updated_at),
+            "a credential the proxy just loaded reads as stale: modtime " .. r1.modtime
+                .. " is after updated_at " .. r1.updated_at)
 
         -- Move the file's mtime into the future. The proxy re-stats modtime; if
         -- it also reloads, updated_at takes the reload's own wall clock — a
@@ -196,8 +225,7 @@ describe("cliproxyapi management API conformance", function()
     end)
 
     it("declares the login flags parley claims it supports", function()
-        if not binary then
-            print("SKIP: no cliproxyapi binary discoverable — conformance not verified")
+        if needs_binary() then
             return
         end
         -- LOGIN_FLAGS was the one dependency surface with no conformance check,
@@ -231,8 +259,7 @@ describe("cliproxyapi management API conformance", function()
     -- pass — the fixture is consistent with itself and the fake restates the
     -- same assumption. Only the real binary can catch that.
     it("serves /v1beta/models with the naming fields parse() joins on", function()
-        if not binary then
-            pending("cliproxyapi binary not available")
+        if needs_binary() then
             return
         end
         boot()
@@ -250,8 +277,7 @@ describe("cliproxyapi management API conformance", function()
     end)
 
     it("joins its two model routes onto each other for real", function()
-        if not binary then
-            pending("cliproxyapi binary not available")
+        if needs_binary() then
             return
         end
         boot()
@@ -269,8 +295,7 @@ describe("cliproxyapi management API conformance", function()
     end)
 
     it("rejects the api-key bearer on the management route", function()
-        if not binary then
-            print("SKIP: no cliproxyapi binary discoverable — conformance not verified")
+        if needs_binary() then
             return
         end
         boot()
@@ -279,5 +304,113 @@ describe("cliproxyapi management API conformance", function()
         local reached, _body, code = get("conformance")
         assert.is_true(reached)
         assert.equals("401", code)
+    end)
+
+    -- #237: the running version comes from X-Cpa-Version on a /v0/management/*
+    -- response, read WITHOUT a credential. The fake stamps it; only the real
+    -- binary can say the header still exists.
+    local function probe_until_up(p)
+        local v, reason
+        vim.wait(20000, function()
+            v, reason = cliproxy.version_probe("127.0.0.1", p)
+            return reason ~= "down"
+        end, 250)
+        return v, reason
+    end
+
+    it("stamps X-Cpa-Version on a keyed management response, and on a rejected one", function()
+        if needs_binary() then
+            return
+        end
+        local p = boot()
+        -- parley's own proxy: parley's key is accepted, so no attempt is spent
+        local v, reason = probe_until_up(p)
+        assert.is_string(v, "no X-Cpa-Version from the real binary (reason: " .. tostring(reason) .. ")")
+        -- a proxy parley did not configure rejects the key; the header still rides
+        local rejected = vim.system({ "curl", "-s", "-o", "/dev/null", "-D", "-", "--max-time", "3",
+            "-H", "Authorization: Bearer not-this-proxys-key",
+            ("http://127.0.0.1:%d/v0/management/latest-version"):format(p) }, { text = true }):wait()
+        assert.is_truthy((rejected.stdout or ""):lower():find("x-cpa-version", 1, true),
+            "a rejected management request carried no X-Cpa-Version")
+    end)
+
+    it("pins whether the header survives with management disabled", function()
+        if needs_binary() then
+            return
+        end
+        local p = boot(true)
+        local v = probe_until_up(p)
+        -- fake_cliproxy stamps only when a management key is configured. If
+        -- this fails, the real binary stamps regardless: change the fake's
+        -- end_headers to match, then flip this assertion.
+        assert.is_nil(v, "the real binary sends X-Cpa-Version with management disabled")
+    end)
+
+    it("resolves the real latest release from GitHub (PARLEY_LIVE_GITHUB=1)", function()
+        if vim.env.PARLEY_LIVE_GITHUB ~= "1" then
+            pending("set PARLEY_LIVE_GITHUB=1 to check the real releases/latest redirect")
+            return
+        end
+        cliproxy._set_releases_url("https://github.com/router-for-me/CLIProxyAPI/releases")
+        local v, err = cliproxy.latest_release()
+        cliproxy._set_releases_url(nil)
+        assert.is_string(v, err)
+    end)
+
+    -- #237: 7.2.x removed the provider-prefixed Anthropic alias parley posted
+    -- claude requests to, and nothing noticed: the fake answered every path.
+    -- Derive each chat route the way dispatch does and ask the real binary
+    -- whether it exists. A handler answers even an empty body with its own
+    -- error; a missing route answers a bare 404.
+    it("serves the chat routes parley posts to", function()
+        if needs_binary() then
+            return
+        end
+        boot()
+        assert.is_true((get("conformance", "/v1/models")), "the real binary never answered")
+        local cliproxyapi = require("parley.providers").get("cliproxyapi")
+        local configured = ("http://127.0.0.1:%d/v1/chat/completions"):format(port)
+        for _, case in ipairs({
+            { route = "anthropic", model = "claude-opus-5" }, -- claude
+            { route = "openai", model = "gpt-5.6-sol" }, -- gpt, codex
+        }) do
+            local _, endpoint = cliproxyapi.format_headers("conformance", { model = case.model },
+                { _parley_route = case.route }, configured)
+            local res = vim.system({ "curl", "-s", "-o", "/dev/null", "-w", "%{http_code}", "--max-time", "5",
+                "-X", "POST", "-H", "Authorization: Bearer conformance", "-H", "Content-Type: application/json",
+                "-d", "{}", endpoint }, { text = true }):wait()
+            assert.are_not.equal("404", res.stdout,
+                ("the %s route %s is not a route on this build"):format(case.route, endpoint))
+        end
+    end)
+
+    -- #237: 7.2.x counts failed management logins per client: after five, the
+    -- whole management API answers 403 for 30 minutes, keyed requests included.
+    -- fake_cliproxy models that counter; this pins that the real binary keeps it.
+    it("bans the client after five failed management attempts, keyed requests included", function()
+        if needs_binary() then
+            return
+        end
+        local p = boot()
+        probe_until_up(p)
+        local function attempt(bearer)
+            local args = { "curl", "-s", "-w", "\n%{http_code}", "--max-time", "3" }
+            if bearer then
+                vim.list_extend(args, { "-H", "Authorization: Bearer " .. bearer })
+            end
+            args[#args + 1] = ("http://127.0.0.1:%d/v0/management/latest-version"):format(p)
+            local body, code = (vim.system(args, { text = true }):wait().stdout or ""):match("^(.*)\n(%d+)$")
+            return code, body
+        end
+        for i = 1, 5 do
+            assert.equals("401", (attempt(nil)), "unauthenticated attempt " .. i)
+        end
+        local code, body = attempt(mgmt_key)
+        assert.equals("403", code, "the right key still worked after five failed attempts")
+        -- auth_files shows the operator this field, in the proxy's own words.
+        local ok, decoded = pcall(vim.json.decode, body or "")
+        assert.is_true(ok and type(decoded) == "table" and type(decoded.error) == "string",
+            "the ban body carries no `error` string for auth_files to show: " .. tostring(body))
+        assert.is_truthy(decoded.error:find("banned", 1, true), decoded.error)
     end)
 end)

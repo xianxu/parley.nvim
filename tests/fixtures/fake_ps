@@ -1,0 +1,18 @@
+#!/usr/bin/env python3
+"""A stand-in for `ps ax -o pid,lstart,command` (#237).
+
+An agent sandbox refuses `ps` (EPERM), so the update spec's identity cases could
+not run there. Where the real `ps` is refused, the spec points
+cliproxy._set_process_tools at this script and puts the rows a real ps would
+print in PARLEY_FAKE_PS_ROWS, one per line: `<pid> <lstart> <command>`. The
+arguments are accepted and ignored; the header matches the real one.
+"""
+import os
+import sys
+
+sys.dont_write_bytecode = True  # never write __pycache__ into the repo (#202)
+
+sys.stdout.write("  PID STARTED                      COMMAND\n")
+for row in os.environ.get("PARLEY_FAKE_PS_ROWS", "").splitlines():
+    if row.strip():
+        sys.stdout.write(row + "\n")

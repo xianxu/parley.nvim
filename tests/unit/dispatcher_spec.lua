@@ -367,6 +367,32 @@ describe("prepare_payload: anthropic client-side tools (Task 1.5)", function()
         assert.is_true(found)
     end)
 
+    -- #237: 7.2.x removed the provider-prefixed alias parley posted claude
+    -- requests to (a bare 404), and nothing pinned the route, so the upgrade
+    -- broke claude silently. /v1/messages serves them on 7.1.71 and 7.2.x.
+    it("cliproxyapi routing: the anthropic route posts to /v1/messages", function()
+        local cliproxyapi = require("parley.providers").get("cliproxyapi")
+        local anthropic_model = vim.tbl_extend("force", model,
+            { web_search_strategy = "anthropic_tools_route" })
+        local payload = dispatcher.prepare_payload(
+            msgs(user("hi")), anthropic_model, "cliproxyapi", { "read_file" })
+        assert.equals("anthropic", payload._parley_route)
+        for _, configured in ipairs({
+            "http://127.0.0.1:8317/v1/chat/completions",
+            "http://127.0.0.1:8317/v1/responses",
+            "http://127.0.0.1:8317/api/provider/anthropic/v1/messages",
+            "http://127.0.0.1:8317/v1/messages",
+        }) do
+            local _, endpoint = cliproxyapi.format_headers("k", anthropic_model, vim.deepcopy(payload), configured)
+            assert.equals("http://127.0.0.1:8317/v1/messages", endpoint, configured)
+        end
+        local gpt = vim.tbl_extend("force", model, { model = "gpt-5.6-sol" })
+        local gpt_payload = dispatcher.prepare_payload(msgs(user("hi")), gpt, "cliproxyapi", { "read_file" })
+        local _, gpt_endpoint = cliproxyapi.format_headers("k", gpt, gpt_payload,
+            "http://127.0.0.1:8317/v1/chat/completions")
+        assert.equals("http://127.0.0.1:8317/v1/chat/completions", gpt_endpoint)
+    end)
+
     it("cliproxyapi routing: a non-anthropic model now encodes instead of raising", function()
         local openai_model = { model = "gpt-5.6-sol", temperature = 0.8, max_tokens = 1024 }
         local payload = dispatcher.prepare_payload(

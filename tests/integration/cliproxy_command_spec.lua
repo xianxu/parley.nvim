@@ -176,4 +176,105 @@ describe(":ParleyProxy command", function()
         assert.equals(2, vim.fn.exists(":ZedProxy"))
         pcall(vim.api.nvim_del_user_command, "ZedProxy")
     end)
+
+    -- #237: update answers through a callback, restart waits for the port.
+    describe("update and restart", function()
+        local cliproxy = require("parley.cliproxy")
+        local saved_update, saved_restart
+
+        before_each(function()
+            saved_update, saved_restart = cliproxy.update, cliproxy.restart_managed
+        end)
+
+        after_each(function()
+            cliproxy.update, cliproxy.restart_managed = saved_update, saved_restart
+        end)
+
+        it("update reports the outcome as INFO", function()
+            cliproxy.update = function(cb)
+                cb(true, "updated 7.1.71 → 7.2.158 — restarting the proxy")
+            end
+            local msgs = capture_notify(function()
+                vim.cmd("ParleyProxy update")
+            end)
+            assert.equals("cliproxy: updated 7.1.71 → 7.2.158 — restarting the proxy", msgs[#msgs].msg)
+            assert.equals(vim.log.levels.INFO, msgs[#msgs].level)
+        end)
+
+        it("update reports a failure as ERROR", function()
+            cliproxy.update = function(cb)
+                cb(false, "could not find the latest cliproxyapi release (unreachable: x)")
+            end
+            local msgs = capture_notify(function()
+                vim.cmd("ParleyProxy update")
+            end)
+            assert.equals(vim.log.levels.ERROR, msgs[#msgs].level)
+        end)
+
+        it("update shows a success the operator must still act on as WARN", function()
+            cliproxy.update = function(cb)
+                cb(true, "updated 7.1.71 → 7.2.158 — the proxy on port 8317 (/opt/homebrew/bin/cliproxyapi) "
+                    .. "was not started by parley and still runs 7.1.71; …", true)
+            end
+            local msgs = capture_notify(function()
+                vim.cmd("ParleyProxy update")
+            end)
+            assert.equals(vim.log.levels.WARN, msgs[#msgs].level)
+        end)
+
+        it("restart goes through restart_managed, which waits for the old proxy", function()
+            local called = false
+            cliproxy.restart_managed = function(on_ready)
+                called = true
+                on_ready()
+            end
+            local msgs = capture_notify(function()
+                vim.cmd("ParleyProxy restart")
+            end)
+            assert.is_true(called)
+            assert.equals("cliproxy: restarted", msgs[#msgs].msg)
+        end)
+
+        it("the help says update installs the latest release", function()
+            local msgs = capture_notify(function()
+                vim.cmd("ParleyProxy")
+            end)
+            assert.is_truthy(msgs[1].msg:find("install the latest cliproxyapi release", 1, true))
+        end)
+    end)
+
+    -- #237: status prints the running version against the latest.
+    describe("status", function()
+        local cliproxy = require("parley.cliproxy")
+        local saved_status
+
+        before_each(function()
+            saved_status = cliproxy.status
+        end)
+
+        after_each(function()
+            cliproxy.status = saved_status
+        end)
+
+        it("prints the version line and names a managed binary", function()
+            cliproxy.status = function(cb)
+                cb({ managed = true, health = "healthy", binary = "/b", binary_source = "managed",
+                    host = "127.0.0.1", port = 8317, config_path = "/c", spawned_by_parley = true,
+                    config_drift = false, version = { running = "7.1.71", latest = "7.2.158" } })
+            end
+            local msgs = capture_notify(function()
+                vim.cmd("ParleyProxy status")
+            end)
+            local out = msgs[1].msg
+            assert.is_truthy(out:find("version:       7.1.71 (latest 7.2.158 — run :ParleyProxy update)", 1, true))
+            assert.is_truthy(out:find("/b (managed)", 1, true))
+        end)
+
+        it("the help says status shows the version", function()
+            local msgs = capture_notify(function()
+                vim.cmd("ParleyProxy")
+            end)
+            assert.is_truthy(msgs[1].msg:find("version vs latest", 1, true))
+        end)
+    end)
 end)

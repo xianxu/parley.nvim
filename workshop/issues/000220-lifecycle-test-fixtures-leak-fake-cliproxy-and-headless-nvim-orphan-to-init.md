@@ -137,3 +137,26 @@ cannot fix this; the suite-level sweep is the load-bearing half.
 
 The `pgrep` caveat still holds on this macOS, re-tested today:
 `pgrep -fc plenary.busted` matched nothing while `ps` found 145.
+
+### 2026-09-12 — datum from #237 (verification runs and four boundary reviews)
+
+- **Red and failing runs orphan the plenary child.** A spec that errors at load
+  (a fresh worktree has no `construct/vocabulary`), or a conformance run with
+  failing cases, leaves its `plenary.busted` child nvim alive under init, and
+  that child keeps its fixture alive: the fixture's watchdog cannot fire while
+  its parent lives. 13 were stopped today, 11 in one sweep: at least five from
+  #237's review agents' `git archive` copies
+  (`/private/tmp/claude-501/parley-scratch-237*`), the rest from red and
+  conformance runs.
+- **`cliproxy_catalog_spec` orphans three `fake_cliproxy` on every run**: bare
+  `uv.spawn(FAKE, { args = { "--port", … } })` at lines 19, 360 and 441, without
+  `PARLEY_FAKE_EXIT_WITH_PARENT`. Seen after every full run today. The same bare
+  spawn is in `cliproxy_lifecycle_spec` (21, 612, 707, 817),
+  `cliproxy_dispatch_spec` (27), `cliproxy_caller_teardown_spec` (36) and
+  `cliproxy_recovery_e2e_spec` (35).
+- **Order dependence:** `cliproxy_recovery_e2e_spec` fails 4/5 in a fresh test
+  env until `$XDG_CACHE_HOME/nvim/parley/query` exists; another spec creates it.
+- Pieces #237 added that a fix can reuse: `tests/fixtures/fixture_watchdog.py`
+  (parent-death exit), the spec-local `spawned`/`reap()` registry in
+  `cliproxy_update_spec` (its consolidation was deferred here by #237's review,
+  BR-5), and `tests/helpers/await.lua`.

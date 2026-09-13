@@ -26,18 +26,11 @@ local function start_fake(port, mode)
     return pid
 end
 
+local waits = require("tests.helpers.await")
+
 -- Run an async fn(done) and block until it calls done(result); return result.
 local function await(fn)
-    local result, got = nil, false
-    fn(function(r)
-        result = r
-        got = true
-    end)
-    vim.wait(8000, function()
-        return got
-    end, 20)
-    assert(got, "async call timed out")
-    return result
+    return waits.await(fn, 8000)
 end
 
 
@@ -358,20 +351,22 @@ describe("cliproxy IO lifecycle", function()
             vim.env.PATH = bindir
         end
 
-        it("auto_download=true triggers download when no binary is found, then proceeds", function()
+        it("auto_download=true downloads the target release when no binary is found, then proceeds", function()
             local port = ready_port.free_port()
             set_endpoint(port)
             path_without_cliproxy()
             vim.env.PARLEY_FAKE_MODE = "healthy"
-            parley.config = { cliproxy = { manage = true, auto_download = true, binary_path = "/no/such" } }
-            local saved_dl, dl_called = cliproxy.download, false
-            cliproxy.download = function() -- stand in for the network fetch; hand back a spawnable binary
-                dl_called = true
+            -- download_version pins the target, so resolve_target needs no network (#237)
+            parley.config = { cliproxy = { manage = true, auto_download = true,
+                binary_path = "/no/such", download_version = "9.9.9" } }
+            local saved_dl, dl_opts = cliproxy.download, nil
+            cliproxy.download = function(o) -- stand in for the network fetch; hand back a spawnable binary
+                dl_opts = o
                 return FAKE
             end
             local outcome = run_ensure()
             cliproxy.download = saved_dl
-            assert.is_true(dl_called) -- the auto_download branch fired
+            assert.same({ version = "9.9.9" }, dl_opts) -- resolve_target chose the pin
             assert.is_true(outcome.ok) -- the downloaded binary spawned + became healthy
         end)
 
