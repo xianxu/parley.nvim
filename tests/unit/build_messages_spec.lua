@@ -1755,3 +1755,421 @@ describe("_emit_content_blocks_as_messages: orphan tool_result dropped (#156)", 
         assert.equals("after", msgs[1].content[2].text)
     end)
 end)
+
+--------------------------------------------------------------------------------
+-- #231: attachments — ONE retention rule (window_size + preserve_exchange),
+-- ONE budget (assets.plan_budget) on both builders, elided logs, a send guard.
+-- Characterization: every case above this line is unchanged — a question
+-- without attachments is byte-identical to before.
+--------------------------------------------------------------------------------
+
+describe("retention rule: window_size / preserve_exchange (#231)", function()
+    local chat_respond = require("parley.chat_respond")
+
+    it("window_size: header overrides config; disabled memory is unbounded", function()
+        local cfg = { chat_memory = { enable = true, max_full_exchanges = 2 } }
+        assert.equals(2, chat_respond.window_size({}, cfg))
+        assert.equals(5, chat_respond.window_size({ config_max_full_exchanges = 5 }, cfg))
+        assert.equals(999999, chat_respond.window_size({ config_max_full_exchanges = 5 }, { chat_memory = { enable = false } }))
+        assert.equals(999999, chat_respond.window_size({}, {}))
+    end)
+
+    it("preserve_exchange: the current question, a recent exchange, or file references", function()
+        local p = chat_respond.preserve_exchange
+        assert.is_true(p(4, 4, 4, 2, false))      -- current question
+        assert.is_true(p(3, 4, 4, 2, false))      -- inside the window
+        assert.is_false(p(2, 4, 4, 2, false))     -- outside the window
+        assert.is_true(p(1, 4, 4, 2, true))       -- pinned by @@ file references
+        assert.is_false(p(1, 4, 4, 0, false))     -- a zero window keeps only the current question
+        assert.is_true(p(1, 4, 4, 999999, false)) -- memory disabled: everything
+    end)
+end)
+
+describe("attachments (#231): both builders, one budget", function()
+    local assets = require("parley.assets")
+    local chat_respond = require("parley.chat_respond")
+    local exchange_model = require("parley.exchange_model")
+    local TS = "2026-09-10.14-20-03.112"
+    local chat_dir = tmp_dir .. "/chats-231"
+    local chat_path = chat_dir .. "/" .. TS .. "_att.md"
+    local PNG = "\137PNG\r\n\26\n" .. string.rep("x", 24)
+
+    local function rel(name) return "assets/" .. TS .. "/" .. name end
+    local function write_asset(name, bytes)
+        vim.fn.mkdir(chat_dir .. "/assets/" .. TS, "p")
+        assert(assets.default_io.write(chat_dir .. "/" .. rel(name), bytes or PNG))
+    end
+
+    before_each(function()
+        vim.fn.delete(chat_dir, "rf")
+        write_asset("a.png")
+    end)
+
+    -- A parsed exchange whose question carries attachment lines — the shape
+    -- chat_parser produces (question.attachments = parse_attachment per line).
+    local function att_exchange(q, answer, names)
+        names = names or { "a.png" }
+        local text, atts = q, {}
+        for _, n in ipairs(names) do
+            text = text .. "\n![](" .. rel(n) .. ")"
+            atts[#atts + 1] = { path = rel(n), ts = TS, name = n, media_type = "image/png" }
+        end
+        local ex = exchange(text, answer)
+        ex.question.attachments = atts
+        return ex
+    end
+
+    local function build(exchanges, opts)
+        opts = opts or {}
+        return chat_respond.build_messages({
+            parsed_chat = parsed_chat(exchanges, opts.headers),
+            start_index = 1, end_index = 999, exchange_idx = opts.exchange_idx or #exchanges,
+            agent = agent(), config = parley.config,
+            helpers = stub_helpers, logger = opts.logger or stub_logger,
+            chat_path = (not opts.no_chat_path) and chat_path or nil,
+        })
+    end
+
+    local function user_messages(messages)
+        local out = {}
+        for _, m in ipairs(messages) do
+            if m.role == "user" then out[#out + 1] = m end
+        end
+        return out
+    end
+
+    local function image_count(content)
+        if type(content) ~= "table" then return 0 end
+        local n = 0
+        for _, b in ipairs(content) do
+            if b.type == "image" then n = n + 1 end
+        end
+        return n
+    end
+
+    local function total_images(messages)
+        local n = 0
+        for _, m in ipairs(messages) do n = n + image_count(m.content) end
+        return n
+    end
+
+    local function text_of(content)
+        if type(content) == "string" then return content end
+        return content[#content].text
+    end
+
+    -- Inclusion + notes per user message — the differential shape the two
+    -- builders must agree on (answers differ in shape by design: flat string
+    -- on the parse path, text blocks on the live path).
+    local function shape(messages)
+        local out = {}
+        for _, m in ipairs(user_messages(messages)) do
+            local notes = {}
+            for line in (text_of(m.content) .. "\n"):gmatch("([^\n]*)\n") do
+                if line:match("^%[attachment ") then notes[#notes + 1] = line end
+            end
+            out[#out + 1] = { images = image_count(m.content), notes = notes }
+        end
+        return out
+    end
+
+    -- Temporarily lower the request limits (pcall + restore).
+    local function with_limits(overrides, fn)
+        local saved = {}
+        for k, v in pairs(overrides) do saved[k] = assets[k]; assets[k] = v end
+        local ok, err = pcall(fn)
+        for k, v in pairs(saved) do assets[k] = v end
+        assert(ok, err)
+    end
+
+    -- Record every bounded read and every stat the builders make.
+    local function recording_io(fn)
+        local reads, stats = {}, {}
+        local saved_read, saved_stat = assets.read_bounded, assets.default_io.stat
+        assets.read_bounded = function(cp, r, io_)
+            reads[#reads + 1] = r
+            return saved_read(cp, r, io_)
+        end
+        assets.default_io.stat = function(p)
+            stats[#stats + 1] = p
+            return saved_stat(p)
+        end
+        local ok, err = pcall(fn, reads, stats)
+        assets.read_bounded, assets.default_io.stat = saved_read, saved_stat
+        assert(ok, err)
+        return reads, stats
+    end
+
+    -- A live buffer + exchange model that agree on positions, for the
+    -- continuation builder. spec = { { q = {lines}, a = {lines}|nil }, ... }.
+    local function live_chat(spec)
+        local header = { "topic: t", "---" }
+        local model = exchange_model.new(#header)
+        local lines = {}
+        for i = 1, #header do lines[i] = header[i] end
+        local function put(start0, block_lines)
+            for i, l in ipairs(block_lines) do lines[start0 + i] = l end
+        end
+        for k, ex in ipairs(spec) do
+            model:add_exchange(#ex.q)
+            if ex.a then
+                model:add_block(k, "agent_header", 1)
+                model:add_block(k, "text", #ex.a)
+            end
+        end
+        local total = 0
+        for k = 1, #spec do
+            total = math.max(total, model:block_end(k, #model.exchanges[k].blocks) + 1)
+        end
+        for i = #header + 1, total do lines[i] = "" end
+        for k, ex in ipairs(spec) do
+            put(model:block_start(k, 1), ex.q)
+            if ex.a then
+                put(model:block_start(k, 2), { "🤖: [assistant]" })
+                put(model:block_start(k, 3), ex.a)
+            end
+        end
+        local buf = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+        return buf, model
+    end
+
+    local agent_info = { system_prompt = "You are a helpful assistant.", model = "gpt-4o", provider = "openai" }
+
+    it("a preserved question carries image blocks first, then the text", function()
+        local messages = build({ att_exchange("what?") })
+        local user = messages[#messages]
+        assert.equals("user", user.role)
+        assert.equals("table", type(user.content))
+        assert.equals(2, #user.content)
+        assert.equals("image", user.content[1].type)
+        assert.equals("base64", user.content[1].source.type)
+        assert.equals("image/png", user.content[1].source.media_type)
+        assert.equals(vim.base64.encode(PNG), user.content[1].source.data)
+        assert.equals("text", user.content[2].type)
+        assert.equals("what?\n![](" .. rel("a.png") .. ")", user.content[2].text)
+    end)
+
+    it("a question with @@ file references AND an attachment keeps both", function()
+        local ex = att_exchange("q")
+        ex.question.file_references = { { line = "@@/x@@", path = "/x", original_line_index = 1 } }
+        local messages = build({ ex })
+        assert.equals("system", messages[#messages - 1].role)
+        assert.matches("File content: /x", messages[#messages - 1].content)
+        assert.equals("image", messages[#messages].content[1].type)
+    end)
+
+    it("a summarized attachment exchange drops the image, says so, and never touches the file", function()
+        local exchanges = { att_exchange("old", "a1"), exchange("mid", "a2"), exchange("new", "a3"), exchange("now") }
+        local reads, stats = recording_io(function()
+            local messages = build(exchanges) -- max_full_exchanges = 2 in this spec's setup
+            local first = user_messages(messages)[1]
+            assert.equals("string", type(first.content))
+            assert.equals("[Previous messages omitted]\n" .. assets.OMITTED_NOTE, first.content)
+            assert.equals(0, total_images(messages))
+        end)
+        assert.same({}, reads)
+        assert.same({}, stats)
+    end)
+
+    -- A PIN: attachments must not widen the window (file references do).
+    it("attachments do not pin an exchange in the window (pin)", function()
+        local exchanges = { att_exchange("old", "a1"), exchange("b", "a2"), exchange("c", "a3"), exchange("now") }
+        assert.matches("^%[Previous messages omitted%]", user_messages(build(exchanges))[1].content)
+    end)
+
+    it("a missing file degrades to a visible note, not a block", function()
+        os.remove(chat_dir .. "/" .. rel("a.png"))
+        local messages = build({ att_exchange("q") })
+        local user = messages[#messages]
+        assert.equals("string", type(user.content))
+        assert.matches("%[attachment " .. vim.pesc(rel("a.png")) .. " could not be read", user.content)
+        assert.matches("q\n!%[%]", user.content)
+    end)
+
+    it("without chat_path every attachment is a visible note", function()
+        local messages = build({ att_exchange("q") }, { no_chat_path = true })
+        local user = messages[#messages]
+        assert.equals("string", type(user.content))
+        assert.matches("chat_path not supplied", user.content)
+    end)
+
+    it("an oversized persisted file is a note and is never read", function()
+        local reads = recording_io(function()
+            local saved = assets.default_io.stat
+            assets.default_io.stat = function() return assets.MAX_BYTES + 1 end
+            local ok, err = pcall(function()
+                local messages = build({ att_exchange("q") })
+                assert.matches("not sent: %d+ bytes exceeds", messages[#messages].content)
+            end)
+            assets.default_io.stat = saved
+            assert(ok, err)
+        end)
+        assert.same({}, reads)
+    end)
+
+    describe("budget", function()
+        -- base64 40000 + BLOCK_OVERHEAD 256 = 40256 per image: two fit under
+        -- 100000 with the retained text and notes, three never do.
+        local BIG = string.rep("b", 30000)
+        local headers = { config_max_full_exchanges = 10 } -- keep all three retained
+
+        before_each(function()
+            for _, n in ipairs({ "one.png", "two.png", "three.png" }) do write_asset(n, BIG) end
+        end)
+
+        local function three()
+            return {
+                att_exchange("q1", "a1", { "one.png" }),
+                att_exchange("q2", "a2", { "two.png" }),
+                att_exchange("q3", nil, { "three.png" }),
+            }
+        end
+
+        it("over the request bytes: the oldest are dropped with a note, the newest sent", function()
+            with_limits({ MAX_REQUEST_BYTES = 100000 }, function()
+                local users = user_messages(build(three(), { headers = headers }))
+                assert.equals(3, #users)
+                assert.equals("string", type(users[1].content))
+                assert.matches("%[attachment " .. vim.pesc(rel("one.png")) .. " not sent: request budget%]", users[1].content)
+                assert.equals(1, image_count(users[2].content))
+                assert.equals(1, image_count(users[3].content))
+            end)
+        end)
+
+        it("over the image count: only the newest are sent", function()
+            with_limits({ MAX_REQUEST_IMAGES = 1 }, function()
+                local users = user_messages(build(three(), { headers = headers }))
+                assert.matches("not sent: request budget", users[1].content)
+                assert.matches("not sent: request budget", users[2].content)
+                assert.equals(1, image_count(users[3].content))
+            end)
+        end)
+
+        it("text alone over the limit: no images, every attachment noted, the warning logged", function()
+            local warnings = {}
+            local logger = { debug = function() end, warning = function(m) warnings[#warnings + 1] = m end }
+            with_limits({ MAX_REQUEST_BYTES = 10 }, function()
+                local messages = build(three(), { headers = headers, logger = logger })
+                assert.equals(0, total_images(messages))
+                for _, u in ipairs(user_messages(messages)) do
+                    assert.matches("not sent: request budget", u.content)
+                end
+            end)
+            assert.equals(1, #warnings)
+            assert.matches("retained text alone is %d+ bytes", warnings[1])
+        end)
+
+        it("the continuation builder plans the same inclusion and notes (differential)", function()
+            local buf, model = live_chat({
+                { q = { "💬: q1", "![](" .. rel("one.png") .. ")" }, a = { "a1" } },
+                { q = { "💬: q2", "![](" .. rel("two.png") .. ")" }, a = { "a2" } },
+                { q = { "💬: q3", "![](" .. rel("three.png") .. ")" } },
+            })
+            with_limits({ MAX_REQUEST_BYTES = 100000 }, function()
+                local parsed = build(three(), { headers = headers })
+                local live = chat_respond.build_messages_from_model(buf, model, 3, agent_info,
+                    { chat_path = chat_path, max_exchanges = 10 })
+                assert.same(shape(parsed), shape(live))
+                assert.equals(2, total_images(live))
+                local users = user_messages(live)
+                assert.matches("not sent: request budget", users[1].content)
+                assert.equals("image/png", users[3].content[1].source.media_type)
+                assert.equals("q3\n![](" .. rel("three.png") .. ")", users[3].content[2].text)
+            end)
+            vim.api.nvim_buf_delete(buf, { force = true })
+        end)
+    end)
+
+    describe("continuation (build_messages_from_model)", function()
+        it("an image exchange outside the window sends no image, reads nothing, keeps its text", function()
+            local buf, model = live_chat({
+                { q = { "💬: q1", "![](" .. rel("a.png") .. ")" }, a = { "a1" } },
+                { q = { "💬: q2" }, a = { "a2" } },
+                { q = { "💬: q3" } },
+            })
+            local reads, stats = recording_io(function()
+                local live = chat_respond.build_messages_from_model(buf, model, 3, agent_info,
+                    { chat_path = chat_path, max_exchanges = 2 })
+                assert.equals(0, total_images(live))
+                local users = user_messages(live)
+                assert.equals(3, #users)
+                assert.equals("q1\n![](" .. rel("a.png") .. ")\n" .. assets.OMITTED_NOTE, users[1].content)
+                assert.equals("q2", users[2].content)
+                assert.equals("q3", users[3].content)
+            end)
+            assert.same({}, reads)
+            assert.same({}, stats)
+            vim.api.nvim_buf_delete(buf, { force = true })
+        end)
+
+        it("an image exchange inside the window is sent as image blocks first", function()
+            local buf, model = live_chat({
+                { q = { "💬: q1" }, a = { "a1" } },
+                { q = { "💬: q2", "![](" .. rel("a.png") .. ")" } },
+            })
+            local live = chat_respond.build_messages_from_model(buf, model, 2, agent_info,
+                { chat_path = chat_path, max_exchanges = 2 })
+            local users = user_messages(live)
+            assert.equals("q1", users[1].content)
+            assert.equals("image", users[2].content[1].type)
+            assert.equals(vim.base64.encode(PNG), users[2].content[1].source.data)
+            assert.equals("q2\n![](" .. rel("a.png") .. ")", users[2].content[2].text)
+            vim.api.nvim_buf_delete(buf, { force = true })
+        end)
+
+        it("without opts, text behaviour is unchanged and an attachment is a visible note", function()
+            local buf, model = live_chat({
+                { q = { "💬: q1", "![](" .. rel("a.png") .. ")" } },
+            })
+            local live = chat_respond.build_messages_from_model(buf, model, 1, agent_info)
+            local user = user_messages(live)[1]
+            assert.equals("string", type(user.content))
+            assert.matches("chat_path not supplied", user.content)
+            vim.api.nvim_buf_delete(buf, { force = true })
+        end)
+    end)
+
+    describe("send guard", function()
+        -- Drives the real send path: a chat file on disk, the dispatcher's
+        -- prepare_payload stubbed to hand back an image payload over a lowered
+        -- limit, and query stubbed to record whether anything was posted.
+        it("refuses to post an image payload over the request limit; the shell is torn down as on any pre-start abort", function()
+            vim.fn.mkdir(chat_dir, "p")
+            local file = chat_dir .. "/" .. TS .. "_guard.md"
+            vim.fn.writefile(vim.split("# topic: Guard\n- file: test.md\n---\n\n💬: look\n![](" .. rel("a.png") .. ")\n", "\n"), file)
+            vim.cmd("edit " .. file)
+            local buf = vim.api.nvim_get_current_buf()
+            vim.api.nvim_win_set_cursor(0, { 5, 0 })
+
+            local saved_prepare, saved_query, saved_notify = parley.dispatcher.prepare_payload, parley.dispatcher.query, vim.notify
+            local posted, notices = 0, {}
+            parley.dispatcher.prepare_payload = function()
+                return { messages = { { role = "user", content = {
+                    { type = "image", source = { type = "base64", media_type = "image/png", data = string.rep("A", 400) } },
+                } } } }
+            end
+            parley.dispatcher.query = function() posted = posted + 1 end
+            vim.notify = function(msg) notices[#notices + 1] = tostring(msg) end
+
+            with_limits({ MAX_REQUEST_BYTES = 200 }, function()
+                parley.chat_respond({ range = 0 })
+                vim.wait(500, function() return #notices > 0 end, 10)
+            end)
+            parley.dispatcher.prepare_payload, parley.dispatcher.query, vim.notify = saved_prepare, saved_query, saved_notify
+
+            assert.equals(0, posted)
+            local refused = false
+            for _, n in ipairs(notices) do
+                if n:find("request refused", 1, true) and n:find("200-byte limit", 1, true) then refused = true end
+            end
+            assert.is_true(refused, "expected a refusal notice, got: " .. vim.inspect(notices))
+            -- The dispatcher's own pre-start abort leaves exactly this: the
+            -- empty stream placeholder (and its margin) collapsed, the agent
+            -- header line kept. Same teardown, same residue.
+            local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+            assert.matches("^🤖:", lines[#lines], "placeholder must be collapsed; got:\n" .. table.concat(lines, "\n"))
+            pcall(vim.api.nvim_buf_delete, buf, { force = true })
+        end)
+    end)
+end)
