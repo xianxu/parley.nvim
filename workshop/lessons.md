@@ -1,5 +1,27 @@
 # Lessons
 
+## 2026-09-13 (#231 M2 — three boundary rounds)
+
+- **Delete the owner before the thing it owns.** The first delete door removed
+  the assets folder and then called a file delete whose result nobody read:
+  a refused `os.remove` left the chat present and its images gone, silently.
+  Rule: irreversible cleanup runs only after the owner's deletion has
+  returned success; make the low-level helper return `ok, err` and read it.
+- **Placeholders are only safe if every family is restored in one pass.**
+  Restoring images, then scanning the whole HTML for branch tokens, let a
+  branch token typed inside an image's `alt` be substituted inside the
+  attribute — after the image-only recursion had already been fixed. Rule:
+  restoration is a single left-to-right scan over the union of token
+  families that never rescans an emitted record; a fix that restores one
+  family at a time is the instance, not the class.
+- **A test that mutates external state needs a stated precondition.** The live
+  clipboard check snapshotted only text and mutated the clipboard even when
+  the snapshot failed, so an image on the clipboard would have been replaced
+  for good. Rule: skip *before* mutating when preservation is unavailable,
+  verify the restore by reading back, and drive the policy with a stateful
+  fake so it is tested where the live check never runs.
+
+
 ## 2026-09-13 (#231 M1 — six boundary-review rounds)
 
 - **"Validates the image" is a class with five layers, and each one was a

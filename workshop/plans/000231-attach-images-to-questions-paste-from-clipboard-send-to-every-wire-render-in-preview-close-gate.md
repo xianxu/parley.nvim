@@ -253,6 +253,24 @@ rounds:
           round: 8
       boundary: M2
       blocked: true
+    - "n": 9
+      timestamp: "2026-09-13T00:57:08-07:00"
+      agent: codex
+      dispose:
+        - id: BR-9
+          disposition: addressed
+          note: Export restores both placeholder families together without rescanning emitted records. Regression tests pass; sequential-family restoration makes the cross-family isolation test fail.
+          round: 9
+        - id: BR-10
+          disposition: addressed
+          note: Clipboard preservation failure skips before mutation; restoration verifies read-back. All three fake tests pass, and removing the preservation precondition makes its regression fail.
+          round: 9
+        - id: BR-8
+          disposition: addressed
+          note: 'Prior disposition retained: asset cleanup follows successful transcript deletion, with filesystem-refusal and buffer-exception regression coverage.'
+          round: 9
+      boundary: M2
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#231 (boundary-review)
@@ -361,7 +379,14 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-10** [Important] `external-state-restoration` Live conformance overwrites clipboard contents it cannot restore
   tests/integration/clipboard_live_spec.lua:21-27 saves only a text representation, but :40-48 overwrites the clipboard even when that read failed. An image-only clipboard is therefore replaced permanently with test text. ARCH-SECURE / ARCH-ORDER: skip before mutation when preservation is unavailable, or snapshot and restore all supported clipboard representations; check restoration failures and test this path with a stateful fake.
 
+## Round 9 — 2026-09-13T00:57:08-07:00 (codex) — passed
+
+### Disposed
+
+- BR-9 — addressed — Export restores both placeholder families together without rescanning emitted records. Regression tests pass; sequential-family restoration makes the cross-family isolation test fail.
+- BR-10 — addressed — Clipboard preservation failure skips before mutation; restoration verifies read-back. All three fake tests pass, and removing the preservation precondition makes its regression fail.
+- BR-8 — addressed — Prior disposition retained: asset cleanup follows successful transcript deletion, with filesystem-refusal and buffer-exception regression coverage.
+
 ## Open findings
 
-- **BR-9** [Critical] `html-placeholder-isolation` Recursive placeholder restoration permits HTML event-handler injection
-- **BR-10** [Important] `external-state-restoration` Live conformance overwrites clipboard contents it cannot restore
+(none — every finding has been disposed)

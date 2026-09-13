@@ -181,3 +181,74 @@ findings:
 7. **Plan revision recommendations**
 
    Append a timestamped `## Revisions` entry requiring placeholder isolation across the **whole pipeline**, with the cross-family test matrix. Clarify Task 12’s preservation precondition and behavior when clipboard snapshot or restoration fails.
+
+---
+
+## Re-review — 2026-09-13T00:57:08-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 231 — Attach images to questions: paste from clipboard, send to every wire, render in preview |
+| repo | parley.nvim |
+| issue file | workshop/issues/000231-attach-images-to-questions-paste-from-clipboard-send-to-every-wire-render-in-preview.md |
+| boundary | milestone M2 |
+| milestone | M2 |
+| window | f03ef6dbb7ae007360e3069f7b5a27ec1db45935..e19998ee5f006a3a7d679bd4f463a4fad98f6e9b |
+| command | sdlc milestone-close --issue 231 --milestone M2 |
+| reviewer | codex |
+| timestamp | 2026-09-13T00:57:08-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: medium
+```
+
+The pinned M2 range matches the documented move, delete, and export contracts. BR-9 and BR-10 are addressed, with regressions that fail under in-memory mutations removing their protections. No new blocking findings. Confidence is limited by the read-only sandbox: filesystem integration tests and live clipboard conformance were inspected but not rerun.
+
+```findings
+dispose:
+  - id: BR-9
+    disposition: addressed
+    note: |
+      Export restores both placeholder families together without rescanning emitted records. Regression tests pass; sequential-family restoration makes the cross-family isolation test fail.
+  - id: BR-10
+    disposition: addressed
+    note: |
+      Clipboard preservation failure skips before mutation; restoration verifies read-back. All three fake tests pass, and removing the preservation precondition makes its regression fail.
+  - id: BR-8
+    disposition: addressed
+    note: |
+      Prior disposition retained: asset cleanup follows successful transcript deletion, with filesystem-refusal and buffer-exception regression coverage.
+```
+
+1. **Strengths**
+   - Both movers check asset conflicts before moving transcripts and report asset failures after completing tracking/state updates.
+   - All chat deletion sites share the checked `delete_chat_file` entry point.
+   - Export restores image and branch records in one non-recursive pass.
+   - Atlas updates cover M2’s surface; README already documents attachments from M1.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** None.
+
+4. **Minor findings:** None.
+
+5. **Test coverage**
+   - Executed 13 pure exporter regressions and three clipboard preservation tests: all passed.
+   - In-memory mutations confirmed failures for cross-family restoration and the clipboard preservation precondition.
+   - Inspected move/delete/export integration coverage; did not execute tests requiring filesystem writes or clipboard mutation.
+
+6. **Architecture**
+   - **ARCH-DRY — pass:** shared asset operations and deletion entry point.
+   - **ARCH-PURE — pass:** rendering/restoration tests execute without filesystem fixtures; M2 lifecycle functions are classified as integration.
+   - **ARCH-PURPOSE — pass:** both movers, all deletion sites, and both export formats are covered.
+   - **ARCH-MOCK — pass:** clipboard preservation uses an injected stateful fake; live conformance is opt-in.
+   - **ARCH-CONSTRAINTS — pass:** inspected behavior matches the declared M2 operating envelope.
+   - **ARCH-SECURE — pass:** attribute escaping, non-recursive restoration, and clipboard preservation guards are exercised.
+   - **ARCH-ORDER — pass:** deletion checks owner removal before cleanup; move failures preserve documented partial-progress semantics.
+   - **ARCH-FUNERAL — pass:** attachment ownership, movement, deletion, export copies, and retained residue are documented.
+
+7. **Plan revision recommendations:** None required for this boundary.

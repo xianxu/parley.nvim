@@ -307,6 +307,7 @@ and per-function test strategies; two review boundaries).
   live property then exposed the prefix/first-fit gap.
 
 ### 2026-09-13 (implementation, M2)
+- 2026-09-13: closed M2 — rework round 3: make lint 0 warnings + make test green (221 spec files); BR-9 cross-family — image and branch placeholders restored together in one left-to-right pass that never rescans an emitted record (exporter._restore_all), pinned both directions in unit and through the real ExportHTML (E4, E5: no nav div or html inside any <img>, alt keeps the literal token); BR-10 — the live clipboard check skips before any mutation unless the clipboard is text, verifies its read-back, policy driven by a stateful fake (3 cases) and the live case run once on the real clipboard with the text restored; exporter_tree 37, tree_export 12, clipboard_live 4, chat_move 14, chat_delete_sweep 1; review verdict: SHIP
 
 - M1 closed SHIP after six boundary rounds (the review sidecar carries all
   seven findings and their disposition; lessons recorded in
