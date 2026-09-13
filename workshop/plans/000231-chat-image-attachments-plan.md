@@ -415,8 +415,14 @@ Contracts (IO; every function takes `io_` defaulting to `default_io`, which is
   present — PNG needs an `IDAT` and `IEND` last; JPEG needs a frame (SOF) and
   a scan (SOS) and EOI last; GIF needs an image descriptor before the trailer;
   WebP's chunks must fit the RIFF size and the bitstream chunk must carry
-  data. Pixel decoding and CRCs are out of scope. Anything else → `nil, "not a
-  <mime> image"`.
+  data. **And the image-bearing record must be non-empty with valid
+  mandatory header fields**: dimensions ≥ 1 everywhere (PNG IHDR, JPEG SOF,
+  GIF screen and image descriptors, WebP VP8/VP8L/VP8X headers), PNG bit
+  depth valid for its colour type (PLTE before IDAT for palette images),
+  JPEG precision/component counts consistent with segment lengths, GIF LZW
+  minimum code size in range, WebP VP8L signature byte and VP8 key-frame
+  start code present. Pixel decoding and CRCs are out of scope. Anything else
+  → `nil, "not a <mime> image"`.
 - `question_content(text, attachments, plan, read) → string|blocks`: image
   blocks for the attachments whose `id` is in `plan.included`, one text block
   last; notes prepended (from `plan.notes` and from a read that fails after
@@ -790,3 +796,15 @@ on every path).
   `question_content`; image-bearing transport files are removed on every
   terminal path of the curl job, text-only ones unchanged, named in Lifecycle
   as the third residue with its owner and bound.
+
+### 2026-09-13 — M1 boundary review round 4 (codex; BR-4 narrowed)
+
+- **Reason:** the record walk accepted empty image records (zero-length IDAT,
+  empty sub-blocks) and ignored mandatory header contents (zero dimensions,
+  invalid bit depth/colour, bad precision, LZW code size out of range,
+  missing VP8L signature / VP8 start code).
+- **Delta:** each walker validates its image-bearing record's header fields
+  and non-emptiness (contract above); a four-format regression matrix (empty
+  record, zero width, zero height, invalid header field, header/record
+  length mismatch) is pinned through `looks_like`, `read_bounded` on the real
+  adapter and `question_content`.
