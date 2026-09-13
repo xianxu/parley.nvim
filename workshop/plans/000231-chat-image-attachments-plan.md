@@ -258,7 +258,8 @@ a spawned tool and a temp file.
 | idle | key on non-chat buffer / no tool | idle; message; nothing spawned |
 | idle | key | reading: mark, anchor, spawn |
 | reading | second key on the same buffer | reading; "already in progress" (ignored: a queue would land links in completion order) |
-| reading | tool `ok` | buffer invalid → idle, temp removed, **nothing saved**; else `save` under the buffer's current name; save fails → idle, partial removed by `save`, message; else insert after the anchor, idle |
+| reading | tool `ok` | buffer invalid or not `modifiable` → idle, temp removed, **nothing saved**; else `save` under the buffer's current name; save fails → idle, partial removed by `save`, message; insert fails → the saved asset removed, message; else insert after the anchor, idle |
+| idle | key, but the tool cannot be launched (missing executable) | idle via the same completion path: "could not start <tool>"; mark cleared; a retry is accepted |
 | reading | `no_image` / `failed` / 124 | idle; temp removed; message with the tool's words |
 | reading | buffer closed, rename or move finished, lines inserted above | handled at completion: validity check; current name; the extmark follows |
 | reading | nvim dies | temp leaks (bounded); no asset |
@@ -292,27 +293,22 @@ tool until its timeout. Nondeterminism enters at IO completion; the fixture's
 | `attachments_in` | `lua/parley/assets.lua` | new |
 | `encoded_size` | `lua/parley/assets.lua` | new |
 | `plan_budget` | `lua/parley/assets.lua` | new |
+| `looks_like` | `lua/parley/assets.lua` | new |
 | `payload_size` | `lua/parley/assets.lua` | new |
 | `has_image` | `lua/parley/assets.lua` | new |
-| `question_content` | `lua/parley/assets.lua` | new |
 | `omitted_text` | `lua/parley/assets.lua` | new |
-| `move_conflict` | `lua/parley/assets.lua` | new |
 | `elide_image_data` | `lua/parley/assets.lua` | new |
-| `removal_note` | `lua/parley/assets.lua` | new (exported with Task 2; consumed by Task 9) |
 | `select` | `lua/parley/clipboard_image.lua` | new |
 | `argv_for` | `lua/parley/clipboard_image.lua` | new |
 | `classify` | `lua/parley/clipboard_image.lua` | new |
-| `host_env` | `lua/parley/clipboard_image.lua` | new |
 | `preserve_exchange` | `lua/parley/chat_respond.lua` | new (extracted from `build_messages` `:779-798`) |
 | `window_size` | `lua/parley/chat_respond.lua` | new (extracted from `:735-747`) |
 | `parse_chat` | `lua/parley/chat_parser.lua` | modified (question gains `attachments`) |
-| `build_messages` | `lua/parley/chat_respond.lua` | modified (uses the predicate, the budget, `opts.chat_path`) |
-| `build_messages_from_model` | `lua/parley/chat_respond.lua` | modified (attachments under the same predicate and budget) |
 | `translate_messages` | `lua/parley/tools/wire_openai.lua` | modified (image blocks → `image_url` parts) |
 | `googleai_parts` | `lua/parley/providers.lua` | new (local) |
 | `simple_markdown_to_html` | `lua/parley/exporter.lua` | modified (`![alt](src)` → `<img>` via placeholder) |
 
-Contracts (all pure; unit-tested without IO):
+Contracts (pure — unit-tested without IO; the reader-driven and probing functions moved to Integration points below, with their injected dependency named):
 
 - `key_for(chat_path) → ts|nil`; `folder_for(chat_path) → abs|nil, err`;
   `folder_in(dir, ts)`; `relative_path(ts, name)`; `markdown_link(rel)`;
@@ -323,9 +319,11 @@ Contracts (all pure; unit-tested without IO):
   `attachments_in(text)` applies it per line — the parser and the buffer-block
   builder share the grammar.
 - `encoded_size(n) → ⌈n/3⌉·4` (base64 length of `n` raw bytes).
-  `plan_budget(candidates, text_bytes, limits) → { included = set(path), notes
-  = { [path] = reason }, warning|nil }` where `candidates = { { order, path,
-  size|nil, err|nil } }` in exchange order, `text_bytes` is the UTF-8 length of
+  `plan_budget(candidates, text_bytes, limits) → { included = set(id), notes
+  = { [id] = reason }, warning|nil }` where `candidates = { { id, order, path,
+  size|nil, err|nil } }` in exchange order — `id` is the **occurrence**
+  (`"<order>:<n>"`), so twenty-one references to one path are twenty-one
+  candidates and the count cap holds — `text_bytes` is the UTF-8 length of
   every retained text the request carries, and `limits = { max_bytes,
   max_request_bytes, max_images, block_overhead }`. The budget starts charged
   with `text_bytes`; each candidate is charged the bytes of the note it would
@@ -339,10 +337,7 @@ Contracts (all pure; unit-tested without IO):
   `chat_respond` applies to the built payload before posting — refuse when
   `has_image` and `payload_size > MAX_REQUEST_BYTES`. Tests exercise the guard
   on boundary-sized content against the actual encoded payload of each wire.
-- `question_content(text, attachments, plan, read) → string|blocks`: image
-  blocks for `plan.included`, one text block last; notes prepended (from
-  `plan.notes` and from a read that fails after planning); `read(rel) →
-  bytes|nil, err` is the bounded reader injected by the caller.
+- (`question_content` is an integration point: it calls the injected reader.)
 - `omitted_text(omit_user_text, attachments)`: the placeholder plus
   `OMITTED_NOTE` when an image was attached.
 - `move_conflict(chat_src, dst_dir, io_) → src, dst | nil, err | nil` — the one
@@ -361,6 +356,12 @@ Contracts (all pure; unit-tested without IO):
 | Name | Lives in | Status | Wraps |
 |------|----------|--------|-------|
 | `default_io` | `lua/parley/assets.lua` | new | filesystem (`io.open`, `uv.fs_stat`, `vim.fn.mkdir/delete/readdir`, `os.rename/remove`) |
+| `question_content` | `lua/parley/assets.lua` | new | the injected `read` (bounded, validated) — pure given a plan and a reader |
+| `move_conflict` | `lua/parley/assets.lua` | new | `io_.exists` |
+| `removal_note` | `lua/parley/assets.lua` | new | `io_.exists`, `io_.list` |
+| `host_env` | `lua/parley/clipboard_image.lua` | new | `uv.os_uname`, `$WAYLAND_DISPLAY`, `vim.fn.executable` |
+| `build_messages` | `lua/parley/chat_respond.lua` | modified | the parsed chat, `assets.read_bounded`, `default_io.stat` via `opts.chat_path` |
+| `build_messages_from_model` | `lua/parley/chat_respond.lua` | modified | the buffer's block text, the same readers |
 | `save` | `lua/parley/assets.lua` | new | `default_io` |
 | `read_bounded` | `lua/parley/assets.lua` | new | `default_io` |
 | `move_with` | `lua/parley/assets.lua` | new | `default_io` |
@@ -386,21 +387,33 @@ Contracts (IO; every function takes `io_` defaulting to `default_io`, which is
 - `save(chat_path, bytes, ext, io_) → rel, abs | nil, nil, err`: refuses a
   non-chat path and `> MAX_BYTES` (with `too_big`) before touching disk; mkdir
   failure → error, nothing written; write failure → partial removed, error.
-- `read_bounded(chat_path, rel, io_) → bytes|nil, err`: `stat` first; larger
-  than `MAX_BYTES` → `nil, too_big(size)` without reading; else
-  `read(p, MAX_BYTES + 1)` and a second size check.
+- `read_bounded(chat_path, rel, io_) → bytes|nil, err`: `stat` first (a
+  size only for a **regular file**); larger than `MAX_BYTES` → `nil,
+  too_big(size)` without reading; else `read(p, MAX_BYTES + 1)` (a failed
+  read is `nil, err`, never `""`), a second size check, and `looks_like(mime,
+  bytes)` — the bytes must carry the signature of the type the extension
+  claims (PNG/JPEG/GIF/WebP), else `nil, "not a <mime> image"`.
+- `question_content(text, attachments, plan, read) → string|blocks`: image
+  blocks for the attachments whose `id` is in `plan.included`, one text block
+  last; notes prepended (from `plan.notes` and from a read that fails after
+  planning); attachments without an id are unplanned → note.
 - `move_with(chat_src, chat_dst, io_) → ok, err`: nothing to move → `true`;
   clash → `nil, err` (nothing done); mkdir/rename failure → `nil, err`.
 - `delete_with(chat_path, io_) → ok, err`: no folder → `true`; removal
   failure → `nil, err` (reported by the caller; file deletion proceeds).
 - `copy_into(chat_path, export_dir, io_) → n, errs[]`: `n` counts successful
   writes only; every failed mkdir/read/write is an entry in `errs`.
-- `read_png(recipe, out, on_done, runner)`: spawn; `uv.fs_stat` the file;
-  classify; `vim.schedule(on_done(status, msg))`. `runner(argv, on_complete)`
-  defaults to `vim.system` with a 5 s timeout.
+- `read_png(recipe, out, on_done, runner)`: spawn under `pcall` — a launch
+  error (missing executable) reaches `on_done("failed", "could not start
+  <tool>: …")` like any other outcome; `uv.fs_stat` the file; classify;
+  `vim.schedule(on_done(status, msg))`. `runner(argv, on_complete)` defaults
+  to `vim.system` with a 5 s timeout.
 - `paste(buf, deps)` with `deps = { config, notify, runner? }`: decision 12
-  and the ordering table; every terminal path clears the in-flight mark,
-  removes the temp file and notifies.
+  and the ordering table; insertion prerequisites (valid, `modifiable`) are
+  checked **before** saving; an insertion that still fails removes the saved
+  asset (and its empty folder) — no bytes without a transcript line; every
+  terminal path, launch failure included, clears the in-flight mark, removes
+  the temp file and notifies.
 - `delete_chat_file(path)` (Task 9): `assets.delete_with` then
   `helpers.delete_file`; a removal error is notified, the file is still deleted.
 - `fake_clipboard`: models osascript (says so): `PARLEY_FAKE_CLIPBOARD =
@@ -517,7 +530,11 @@ answer-block links stay prose; every exchange has the list.
 (`encoded_size`, `plan_budget`, `request_size`, `elide_image_data`),
 `tests/unit/build_messages_spec.lua` (append).
 **Contract:** `window_size` and `preserve_exchange` are the retention rule,
-extracted unchanged from `build_messages`; both builders call them. Each
+extracted unchanged from `build_messages`; both builders call them **with the
+same inputs** — the chat's total exchange count and the question's `@@` file
+references (the continuation builder extracts them from the block text with
+the parser's exported `extract_file_refs`), so an image the initial send
+omitted stays omitted on continuation and a pinned one stays pinned. Each
 builder plans one budget over the request's retained attachments (charged with
 its retained text bytes) before emitting, reads through `read_bounded` relative
 to the buffer's chat path (the initial builder via `opts.chat_path`, the
@@ -705,3 +722,24 @@ on every path).
   limit (`payload_size`, `has_image`), tested against the actual encoded
   payload of each wire. Facts name functions, not lines; Tasks 4, 10 and 12
   are contracts with acceptance.
+
+### 2026-09-12 — M1 boundary review round 1 (codex; six findings)
+
+- **Reason:** BR-1..BR-6, each reproduced by the reviewer with read-only probes.
+- **Delta:** (BR-1) budget identity is the **occurrence** — candidates and
+  `plan.included`/`notes` are keyed by `id = "<order>:<n>"`, attachments carry
+  it, and twenty-one references to one image yield the cap in blocks and the
+  rest as notes. (BR-2) the continuation builder passes the same retention
+  inputs as the initial one: the chat's total exchanges and the question's
+  `@@` references (parser's `extract_file_refs` exported); differential tests
+  for a resurrected omitted image and a lost pinned one. (BR-3) `read_png`
+  routes launch errors through completion; `paste` checks `modifiable` before
+  saving and removes the saved asset when insertion fails; retry after every
+  failure is accepted. (BR-4) `default_io.read` never returns `""` for a
+  failed read, `stat` sizes only regular files, and `read_bounded` validates
+  the image signature (`looks_like`) — empty, text, truncated, directory and
+  failed reads are notes, tested against the real adapter. (BR-5) the
+  Core-concepts tables reclassify `question_content`, `move_conflict`,
+  `removal_note`, `host_env` and both builders as integration points with
+  their injected dependency named. (BR-6) README documents `<M-v>`,
+  `assets.clipboard_cmd` and the tool requirements at M1.
