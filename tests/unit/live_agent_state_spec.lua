@@ -76,6 +76,18 @@ describe("live agent state", function()
         assert.equals("none", parley.agents["gemini-3-flash*"].model.web_search_strategy)
     end)
 
+    it("restores a saved live pick using the current empty tool policy", function()
+        parley.config = vim.deepcopy(parley.config)
+        parley.config.cliproxy.live_models.tools = {}
+        persist({ agent = "claude-opus-5*",
+                  live_agent = { id = "claude-opus-5", owner = "anthropic" } })
+
+        parley.refresh_state()
+
+        assert.equals("claude-opus-5*", parley._state.agent)
+        assert.same({}, parley.agents["claude-opus-5*"].tools)
+    end)
+
     it("still falls back when there is no live agent to restore", function()
         persist({ agent = "long-gone*" })
         parley.refresh_state()
@@ -114,6 +126,20 @@ describe("register_live_agent", function()
         assert.is_true(vim.tbl_contains(parley._agents, "claude-opus-5*"))
         -- the ROW, not just the name — build_agent needs `owner`
         assert.equals("anthropic", parley._state.live_agent.owner)
+    end)
+
+    it("selects and persists a live model with local tools disabled", function()
+        parley.config = vim.deepcopy(parley.config)
+        parley.config.cliproxy.live_models.tools = {}
+        require("parley.agent_picker")._select(parley, {
+            kind = "live", name = "claude-opus-5*",
+            model = { id = "claude-opus-5", owner = "anthropic" },
+        })
+
+        assert.equals("claude-opus-5*", parley._state.agent)
+        assert.same({}, parley.agents["claude-opus-5*"].tools)
+        local disk = parley.helpers.file_to_table(SPEC_STATE_DIR .. "/state.json")
+        assert.equals("claude-opus-5", disk.live_agent.id)
     end)
 
     it("refuses a row with no usable id instead of raising", function()

@@ -2303,3 +2303,19 @@ download.
 13. **Acceptance must exercise the shipped authentication route.** A successful
     response through a substitute provider does not prove managed-proxy login.
     Keep live acceptance pending until the actual product path succeeds.
+
+
+## 2026-09-13 (#246 in-session review)
+
+- Validate the opened inode before reading a secret and apply permissions through
+  that descriptor. A prior path lstat does not constrain a subsequent open/chmod.
+- Exclusive creation alone exposes incomplete bytes to concurrent readers;
+  publish a completed private file without replacing the winner.
+
+- Effective configuration tests must inspect persisted logs for generated secrets;
+  a `log_sensitive=false` option cannot protect a sink that omitted its flag.
+
+- Test selection persistence through complete startup, not only the state reader;
+  a later default assignment can overwrite a correctly restored model.
+- An artifact denylist must cover each promised category; test generic home-relative
+  paths and prohibited module imports, not just known personal examples.

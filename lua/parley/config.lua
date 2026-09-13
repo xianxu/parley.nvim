@@ -146,6 +146,9 @@ local config = {
 		live_models = {
 			providers = { "claude:opus,sonnet,fable", "codex:gpt-6,gpt-5", "antigravity" },
 			per_provider = 3,
+			-- Local tool policy for live picks, including restored selections.
+			-- Omit for { "@all" }; set {} to disable local tools, or list tools/groups.
+			-- tools = {},
 		},
 		-- Raw cliproxyapi config, rendered into the proxy's config.yaml. This is
 		-- where parley drives cliproxyapi as a wrapped dependency — tinker here in

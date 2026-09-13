@@ -73,7 +73,7 @@ Prerequisites owned by `parley-v1-release` (tracked there, listed for order):
 
 - [x] [parley.nvim#244] — shrink pasted and generated images before saving *(sips first; probe others; keep the original)*
 - [x] [parley.nvim#245] — dependency registry and honest install advice *(independent dependency health; feeds the formula)*
-- [ ] [parley.nvim#246] — starter config as a product artifact *(after #211 and #209; `NVIM_APPNAME=parley`)*
+- [x] [parley.nvim#246] — starter config as a product artifact *(after #211 and #209; `NVIM_APPNAME=parley`)*
 - [ ] [parley.nvim#247] — Homebrew tap and `parley` launcher, tested on a clean tart VM *(after #245, #246; the project's done_when)*
 - [ ] [parley.nvim#206] — user documentation *(v1-release's row; the brew path becomes its install section)*
 
@@ -201,3 +201,18 @@ configuration and tool policy; #209/#211 remain separate broader work. #247’s
 live VM acceptance must use the shipped managed-proxy login and an image response,
 not substitute a direct keyed-provider test. Guest authentication choice remains
 pending. Plans await implementation approval; neither issue is complete or costed.
+
+### 2026-09-13 — starter implementation verified locally
+
+#246 now implements the isolated profile, private client key, welcome/connect UI
+and persistent live-model tool policy. 241 spec files and lint pass; live GitHub
+dependency bootstrap passed against the candidate runtime. Close review and the
+released-plugin bootstrap remain before publication acceptance. #247 follows;
+its operator VM authentication input is still pending.
+
+### 2026-09-13 — released starter accepted
+
+#246 passed close review SHIP and published v2.2.0. Remote starter bootstrap and
+restart passed against the exact tagged plugin in a fresh profile; existing nvim
+bytes stayed unchanged. Measured local-close actual: 1.18h against 3.82h estimate.
+PR #180 awaits CI/merge. #247 is next, using this released runtime.

@@ -69,6 +69,8 @@ release failure or acceptance failure prevents declaring this issue shipped.
 
 | Name | Lives in | Kind | Status | Wraps |
 |---|---|---|---|---|
+| `ensure_dir` — optional creation permissions | `lua/parley/fs.lua` | INTEGRATION | modified | existing shared directory creation seam |
+| Dispatcher setup diagnostic | `lua/parley/dispatcher.lua` | INTEGRATION | modified | existing sensitive-log policy |
 | Bootstrap entry | `packaging/starter-config/init.lua` | INTEGRATION | new | app-name check, bounded git bootstrap, lazy setup |
 | `client_key` | `lua/parley/starter_profile.lua` | INTEGRATION | new | exclusive 0600 creation and bounded validated read |
 | `start`, `connect` | `lua/parley/starter.lua` | INTEGRATION | new | editor startup, welcome chat, existing managed login |
@@ -91,10 +93,10 @@ restoration callers in `init.lua:4915` and `init.lua:1523`.
 
 ## Chunk 1: One starter profile and its required policy seam
 
-- [ ] Add optional live-model tools policy, preserving current behavior when absent; thread it through both selection and restart restoration.
-- [ ] Implement pure starter configuration/spec data, bounded bootstrap and profile key lifecycle; add the welcome/connect UI using existing chat/login APIs.
-- [ ] Add hermetic startup, artifact scanning and policy integration checks to `make test`; map all new exports and specs in atlas/traceability.
-- [ ] Add the concise standalone install/login guide to README and `packaging/starter-config/README.md`; update the packaging project.
+- [x] Add optional live-model tools policy, preserving current behavior when absent; thread it through both selection and restart restoration.
+- [x] Implement pure starter configuration/spec data, bounded bootstrap and profile key lifecycle; add the welcome/connect UI using existing chat/login APIs.
+- [x] Add hermetic startup, artifact scanning and policy integration checks to `make test`; map all new exports and specs in atlas/traceability.
+- [x] Add the concise standalone install/login guide to README and `packaging/starter-config/README.md`; update the packaging project.
 - [ ] Run full verification and SDLC close review, publish the reviewed release, run remote-bootstrap acceptance, then merge and archive #246. Re-close if live acceptance requires code changes.
 
 ## Function test strategies
@@ -155,3 +157,69 @@ loaded only by the starter and preserve ordinary plugin setup behavior.
 
 Fresh-context review approved after dependency and live-authentication corrections.
 Operator implementation approval remains pending.
+
+### 2026-09-13T15:24:00-07:00 — implementation approved
+
+Operator said “continue” after the concrete plans were presented for approval.
+Proceed through #246 then #247; no further plan approval is required.
+
+### 2026-09-13 — PQ-1 initialization ownership
+
+Acquire a profile-local initializer directory with atomic mkdir before bootstrap;
+its owner record contains the current PID, and its staging lives inside it. A
+competitor waits at most the remaining five-minute startup budget, then reports
+that another initializer is active. Never automatically steal a lock: missing,
+malformed or dead-owner records fail closed with the precise lock path and advice
+to close all Parley instances, remove that initializer directory and retry.
+This explicit recovery also handles death between mkdir and owner publication
+without a stale-reaper race. Normal exit/failure removes only this invocation’s
+owned staging/lock; no PID-wide or prefix-wide cleanup. Releasing after plugin
+installation means the complete shared plugin set is visible before another
+initializer proceeds (ARCH-ORDER/CONSTRAINTS/FUNERAL).
+
+Welcome creation uses a separate runtime initialization lock with the same
+fail-closed protocol. Store its sole chat in a dedicated profile welcome directory;
+recover its existing chat by directory discovery before calling new_chat, rather
+than depending on a second record publication. Temporarily direct new_chat there
+and restore chat_dir afterwards. Thus a crash after chat creation cannot produce
+a second welcome on retry. An incomplete sole file is reported for explicit
+repair, never overwritten; multiple files also fail closed. The timestamped
+welcome is otherwise an ordinary user chat. These decisions supersede the
+separate welcome-record wording above.
+
+Extend bootstrap/start strategies with controlled competing-process and abrupt
+owner-death interleavings: no foreign staging deletion, no partial installed
+checkout accepted, and no duplicate welcome after explicit lock recovery.
+
+### 2026-09-13 — implementation entities
+
+The artifact scanner is `scripts/check-starter.py` (`main`, PURE scan decisions
+with a thin file-reading integration entry), exercised by the discovered
+`tests/arch/starter_artifact_spec.lua`. The key publishes complete bytes via a
+private temporary file and no-clobber hard link; readers validate opened inode
+identity before reading or changing descriptor permissions. This strengthens
+exclusive-publication semantics so concurrent readers cannot see truncated keys.
+
+### 2026-09-13 — preserve the directory creation owner
+
+The full-suite architecture check requires every runtime directory creation to
+use fs.ensure_dir. Extend that existing seam with optional creation permissions
+and route the starter through it (ARCH-DRY); do not add parallel mkdir wrappers.
+Bootstrap remains self-contained because it runs before the runtime is available.
+Key staging is one private file per active creator; abrupt-death staging recovery
+is explicitly operator-owned after closing all instances, documented in the guide.
+
+### 2026-09-13 — effective setup logging and literal paths
+
+The effective-profile test found the existing dispatcher setup diagnostic included
+resolved provider secrets without its sensitive flag. Mark that existing sink as
+sensitive and assert the generated key is absent from the written profile log
+(ARCH-SECURE). Welcome discovery uses a literal uv directory scan, capped after
+two matching files, instead of a command-expanding glob (ARCH-CONSTRAINTS).
+
+### 2026-09-13 — release acceptance complete
+
+v2.2.0 (fb685b5) passed two fresh-profile remote starter launches with exact
+released-plugin identity, effective policy/log checks and decoy preservation.
+All implementation and release acceptance work is complete; SDLC owns the final
+PR #180 merge/archive after CI. No code changed after the accepted close.

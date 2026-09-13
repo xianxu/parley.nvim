@@ -51,6 +51,9 @@ Despite of such simple interface, it's very powerful, sometimes more so than off
 
 ## Quick Install
 
+New to Neovim? Use the [standalone starter profile](packaging/starter-config/README.md)
+for an isolated chat setup with account login and a short first-use guide.
+
 Run `:checkhealth parley` to see which external tools are available and what
 missing tools enable. It shows install advice for your detected package manager;
 Parley does not run those commands for you. CLIProxyAPI is managed by Parley:

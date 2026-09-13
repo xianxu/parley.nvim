@@ -1,12 +1,13 @@
 ---
 id: 000246
-status: working
+status: codecomplete
 deps: [000245]
 github_issue:
 created: 2026-09-13
 updated: 2026-09-13
 estimate_hours: 3.823
 started: 2026-09-13T14:26:23-07:00
+actual_hours: 1.18
 ---
 
 # Starter config as a product artifact: NVIM_APPNAME=parley, lazy.nvim bootstrap, derived from the operator config without personal data
@@ -77,14 +78,29 @@ total: 3.823
 
 ## Plan
 
-- [ ] Derive the artifact from the operator config; strip per the denylist
-- [ ] Personal-marker test; pin lazy.nvim
-- [ ] First-run hint and default provider route
-- [ ] README section (with #206)
+- [x] Derive the artifact from the operator config; strip per the denylist
+- [x] Personal-marker test; pin lazy.nvim
+- [x] First-run hint and default provider route
+- [x] README section (with #206)
 
 ## Log
 
 ### 2026-09-13
+- 2026-09-13: closed — make test: 241 specs pass; lint 419 files zero warnings/errors and bootstrap entry lint passes; git diff --check clean. BR-1 full startup restart regression reproduced then fixed saved-model replacement. BR-2 negative artifact fixtures reproduced then fixed home-relative and ariadne marker omissions. Real upstream dependency bootstrap passed with candidate runtime; release publication and final remote released-plugin bootstrap remain after local close review, before merge per approved plan.; review verdict: SHIP
+
+Implemented the isolated starter and live-model policy. Tests cover real competing
+initializers/key creators, abrupt owner death, effective provider/path/tool policy,
+secret absence from logs, and managed download→login with stateful release/proxy
+fixtures. Full `make test`: 241 specs pass; lint 419 Lua files with zero warnings
+or errors. Bootstrap entry lint also passes. Real GitHub dependency bootstrap in
+a fresh HOME/XDG profile passed with the local reviewed runtime; final released
+plugin bootstrap remains pending until the close review and release publication.
+
+Full-suite checks required reuse of fs.ensure_dir (optional creation permissions)
+and literal welcome directory scanning. Effective setup exposed an existing
+unmarked sensitive dispatcher diagnostic; its flag now protects the client key.
+In-session review findings and regression lessons are recorded. No user chat
+files were staged. ARCH-DRY/ORDER/SECURE shaped these corrections.
 
 ## Revisions
 
@@ -102,3 +118,21 @@ connection via :ParleyConnect, and isolated config/data/state/cache/auth storage
 This supersedes the original one-directory lifecycle shorthand and raw-login
 first-use hint. Fresh-context plan review completed; implementation approval is
 pending. No implementation or estimate has been recorded yet.
+
+### 2026-09-13 — boundary review round 1 corrections
+
+BR-1: removed the unconditional default_agent override; the only configured learner
+is naturally the first-use fallback. A real two-process startup test reproduced
+saved model replacement before the fix and now verifies selection persistence.
+BR-2: artifact guard now rejects all home-relative paths and ariadne imports,
+except the exact installation comment in the shipped entry. New negative fixtures
+reproduced the omissions. Re-running the full suite before the next close review.
+
+### 2026-09-13 — released-plugin acceptance
+
+Published v2.2.0 at fb685b5 after SHIP review, with PR #180 open. A fresh HOME/XDG
+profile downloaded init.lua from that tag and bootstrapped Parley through the
+released version specification (no PARLEY_RUNTIME override). Two launches passed;
+the installed plugin HEAD equals v2.2.0, one welcome was reused, effective profile
+policy/log checks passed, and decoy nvim bytes were unchanged. CI is the remaining
+publication gate; the approved acceptance is complete.
