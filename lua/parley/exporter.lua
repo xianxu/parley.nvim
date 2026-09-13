@@ -212,6 +212,78 @@ local function check_filename_collisions(link_map)
 end
 
 --------------------------------------------------------------------------------
+-- Opaque placeholders (#231 BR-9)
+--------------------------------------------------------------------------------
+-- HTML that must ride through simple_markdown_to_html untouched (rendered
+-- <img> tags, branch-nav divs) is parked as a numbered token and restored
+-- after the inline rules ran. One shape per family; two properties keep user
+-- text that merely LOOKS like a token harmless:
+--
+--   1. Non-recursive restoration. `restore` is a single gsub whose replacement
+--      is a record lookup, and gsub never rescans its own output — so a record
+--      whose alt/src/topic contains a token-shaped string stays literal instead
+--      of being swapped for another record's tag (BR-9: that swap put a second
+--      image's attacker-chosen src inside the first image's alt, past the
+--      quote, yielding an `onerror` attribute). The <p> unwrap runs BEFORE the
+--      lookup and emits only the token itself, never record content. A token
+--      with no record restores as "" — never left in the page as a tag.
+--   2. Collision-free form where the pipeline allows it. Image tokens are
+--      minted AFTER the HTML escape and carry a raw `<`/`>`, which escaped
+--      text cannot contain. Branch tokens are minted BEFORE the escape (on the
+--      chat's lines), so no form is unforgeable there: raw chat text typed to
+--      match a token escapes identically to the token. Property 1 is what
+--      makes that safe — a forged branch token restores to that branch's own
+--      record (a duplicated nav link) or to "", never to text the forger
+--      controls.
+--
+-- No inline rule in simple_markdown_to_html can alter either form: neither
+-- contains `*`, `_`, or a backtick (bold/italic/inline code), `#`/`- `/`> `
+-- after a newline (heading/list/blockquote), or a blank line (paragraphs);
+-- the paragraph cleanups target the lowercase `<p`, `<h`, `<div`, `<ul`,
+-- `<blockquote` and Lua patterns are case-sensitive, so `<PARLEY-IMG:n>` is
+-- not `<p[^>]*>`.
+--
+--- @param open string literal text before the number
+--- @param close string literal text after the number
+--- @return table shape { token = fn(n) -> string, restore = fn(text, records) -> string }
+local function placeholder_shape(open, close)
+	local function escape_pattern(str)
+		return (str:gsub("%W", "%%%0"))
+	end
+	local token_pat = escape_pattern(open) .. "%d+" .. escape_pattern(close)
+	local shape = {}
+
+	--- The n-th token of this family.
+	function shape.token(n)
+		return open .. n .. close
+	end
+
+	--- Swap every token in `text` for its record. `records` maps token -> html.
+	function shape.restore(text, records)
+		-- Unwrap the paragraph the converter puts around a lone token. The
+		-- replacement is the captured token itself: no record content enters
+		-- the text here, so the lookup below never scans restored HTML.
+		-- gsub-safe: "%1" re-emits the captured token, never user text
+		text = text:gsub("<p[^>]*>%s*(" .. token_pat .. ")%s*</p>", "%1")
+		-- The one pass that emits record content. Function replacement: records
+		-- carry user text, and a `%` in a string replacement corrupts silently
+		-- under LuaJIT (#214 BR-34).
+		-- gsub-safe: inline function replacement; gsub does not rescan its output
+		text = text:gsub("(" .. token_pat .. ")", function(token)
+			return records[token] or ""
+		end)
+		return text
+	end
+
+	return shape
+end
+
+-- Minted after the HTML escape: a raw `<` cannot occur in escaped text.
+local IMG_PLACEHOLDER = placeholder_shape("<PARLEY-IMG:", ">")
+-- Minted before the HTML escape (on chat lines); see property 2 above.
+local BRANCH_PLACEHOLDER = placeholder_shape("XBRANCHX", "XBRANCHX")
+
+--------------------------------------------------------------------------------
 -- Branch line processing
 --------------------------------------------------------------------------------
 
@@ -246,7 +318,7 @@ end
 --- @param file_dir string directory containing this chat file
 --- @param branch_prefix string the prefix for branch lines (e.g. "🌿:")
 --- @param resolve_fn function(path, base_dir) -> abs_path resolver
---- @return table processed_lines, table placeholders (html only; key->html)
+--- @return table processed_lines, table placeholders (html only; token->html), function restore(html, placeholders)
 local function process_branch_lines(lines, parsed, format, link_map, file_dir, branch_prefix, resolve_fn)
 	branch_prefix = branch_prefix or "🌿:"
 	resolve_fn = resolve_fn or _parley.resolve_chat_path
@@ -280,7 +352,7 @@ local function process_branch_lines(lines, parsed, format, link_map, file_dir, b
 
 			if format == "html" then
 				placeholder_count = placeholder_count + 1
-				local key = "XBRANCHX" .. placeholder_count .. "XBRANCHX"
+				local key = BRANCH_PLACEHOLDER.token(placeholder_count)
 				placeholders[key] = make_branch_div(class, arrow_html, topic, target_filename)
 				table.insert(processed, key)
 			elseif format == "markdown" then
@@ -310,7 +382,7 @@ local function process_branch_lines(lines, parsed, format, link_map, file_dir, b
 						replacement = link.topic
 					elseif format == "html" then
 						placeholder_count = placeholder_count + 1
-						local key = "XBRANCHX" .. placeholder_count .. "XBRANCHX"
+						local key = BRANCH_PLACEHOLDER.token(placeholder_count)
 						placeholders[key] = '<a href="' .. target_filename .. '" class="branch-inline">' .. link.topic .. "</a>"
 						replacement = key
 					elseif format == "markdown" then
@@ -328,7 +400,7 @@ local function process_branch_lines(lines, parsed, format, link_map, file_dir, b
 		end
 	end
 
-	return processed, placeholders
+	return processed, placeholders, BRANCH_PLACEHOLDER.restore
 end
 
 --------------------------------------------------------------------------------
@@ -348,16 +420,18 @@ M.simple_markdown_to_html = function(markdown)
 	-- inline rule below runs over the whole string, so an early <img> would
 	-- get <em> inside its attributes (a `_x_y_` filename is exactly what the
 	-- italic rule eats). Same mechanism as the branch placeholders
-	-- (`XBRANCHX<n>XBRANCHX`, write_html_file). `&`, `<`, `>` are already
+	-- (BRANCH_PLACEHOLDER, write_html_file). `&`, `<`, `>` are already
 	-- escaped above; `"` is the one attribute delimiter still live.
 	-- Function replacement: alt/src are user text, and a `%` in a string
 	-- replacement corrupts silently under LuaJIT (#214 BR-34).
-	local images = {}
+	local images, image_count = {}, 0
 	html = html:gsub("!%[([^%]]*)%]%(([^%)%s]+)%)", function(alt, src)
 		local safe_src = src:gsub('"', "&quot;")
 		local safe_alt = alt:gsub('"', "&quot;")
-		images[#images + 1] = '<img src="' .. safe_src .. '" alt="' .. safe_alt .. '" class="asset-image">'
-		return "XIMGX" .. #images .. "XIMGX"
+		image_count = image_count + 1
+		local token = IMG_PLACEHOLDER.token(image_count)
+		images[token] = '<img src="' .. safe_src .. '" alt="' .. safe_alt .. '" class="asset-image">'
+		return token
 	end)
 
 	-- Convert code blocks with language-specific styling.
@@ -452,19 +526,9 @@ M.simple_markdown_to_html = function(markdown)
 	html = html:gsub("</blockquote>%s*</p>", "</blockquote>")
 	html = html:gsub("<p[^>]*>%s*</p>", "")
 
-	-- #231: restore the image tags, the <p>-wrapped form first, exactly as
+	-- #231: restore the image tags — one non-recursive pass (BR-9), exactly as
 	-- write_html_file restores the branch placeholders.
-	for n, tag in ipairs(images) do
-		local function repl()
-			return tag
-		end
-		-- gsub-safe: `repl` is a function replacement (#214 BR-34)
-		html = html:gsub("<p[^>]*>%s*XIMGX" .. n .. "XIMGX%s*</p>", repl)
-		-- gsub-safe: same function replacement
-		html = html:gsub("XIMGX" .. n .. "XIMGX", repl)
-	end
-
-	return html
+	return IMG_PLACEHOLDER.restore(html, images)
 end
 
 --------------------------------------------------------------------------------
@@ -726,7 +790,7 @@ local html_css = [[
 local function write_html_file(info, export_dir, link_map)
 	local file_dir = vim.fn.fnamemodify(info.abs_path, ":h")
 	local branch_prefix = (_parley.config and _parley.config.chat_branch_prefix) or "🌿:"
-	local processed_lines, placeholders =
+	local processed_lines, placeholders, restore_placeholders =
 		process_branch_lines(info.lines, info.parsed, "html", link_map, file_dir, branch_prefix, _parley.resolve_chat_path)
 
 	local content = table.concat(processed_lines, "\n")
@@ -737,17 +801,10 @@ local function write_html_file(info, export_dir, link_map)
 
 	local body_html = M.simple_markdown_to_html(content)
 
-	-- Replace branch placeholders (they may be wrapped in <p> tags)
-	for key, replacement in pairs(placeholders) do
-		-- Function replacements: these carry chat topics, which are user text,
-		-- and a `%` in a gsub replacement corrupts silently under LuaJIT
-		-- (#214 BR-34).
-		local function repl() return replacement end
-		-- gsub-safe: `repl` is a function replacement (#214 BR-34)
-		body_html = body_html:gsub("<p[^>]*>%s*" .. key .. "%s*</p>", repl)
-		-- gsub-safe: same function replacement
-		body_html = body_html:gsub(key, repl)
-	end
+	-- Restore the branch placeholders (they may be wrapped in <p> tags) in one
+	-- non-recursive pass: topics are user text and a token-shaped topic must
+	-- stay literal (#231 BR-9).
+	body_html = restore_placeholders(body_html, placeholders)
 
 	local html_template = [[
 <!DOCTYPE html>

@@ -368,10 +368,10 @@ file: 2024-01-10-parent.md
 				[vim.fn.resolve(tmpdir .. "/2024-01-10-parent.md")] = "2024-01-10-parent_topic.html",
 			}
 			local result, placeholders = exporter._process_branch_lines(lines, parsed, "html", link_map, tmpdir)
-			-- First line should be a placeholder
-			assert.is_truthy(result[1]:find("XBRANCHX"))
-			-- Placeholder should map to HTML with link
+			-- First line should be a placeholder that the map resolves
 			local key = result[1]
+			assert.is_not_nil(placeholders[key], "line 1 is a placeholder: " .. key)
+			-- Placeholder should map to HTML with link
 			assert.is_truthy(placeholders[key]:find("parent%-link"))
 			assert.is_truthy(placeholders[key]:find("parent_topic%.html"))
 		end)
@@ -458,6 +458,115 @@ describe("images in simple_markdown_to_html (#231)", function()
 	it("unwraps the paragraph around a lone image link", function()
 		local html = exporter.simple_markdown_to_html("before\n\n![](a.png)\n\nafter")
 		assert.is_not_nil(html:find('<img src="a.png" alt="" class="asset-image">', 1, true), html)
-		assert.is_nil(html:find("XIMGX", 1, true), html)
+		assert.is_nil(html:find("PARLEY-IMG", 1, true), html)
+		assert.is_nil(html:find("<p class='paragraph'>\n<img", 1, true), "lone image is not paragraph-wrapped: " .. html)
+	end)
+
+	it("keeps an inline image inside its paragraph", function()
+		local html = exporter.simple_markdown_to_html("see ![](a.png) here")
+		assert.equals('<p class="paragraph">see <img src="a.png" alt="" class="asset-image"> here</p>', html)
+	end)
+end)
+
+--- Parse every <img …> tag in `html` into a list of attribute maps. The
+--- residue check is the point: anything inside the tag that is not a
+--- `name="value"` pair (an unquoted `onerror=…` smuggled in via a broken
+--- alt) fails the test instead of being skipped over.
+local function img_attrs(html)
+	local tags = {}
+	for body in html:gmatch("<img([^>]*)>") do
+		local attrs = {}
+		local residue = body:gsub('%s*([%w%-]+)="([^"]*)"', function(k, v)
+			attrs[k] = v
+			return ""
+		end)
+		assert.equals("", residue, "img tag has non-attribute residue in: " .. body)
+		tags[#tags + 1] = attrs
+	end
+	return tags
+end
+
+describe("placeholder restoration is non-recursive (#231 BR-9)", function()
+	-- Branch targets resolve by path arithmetic: no files, no chat dirs.
+	local DIR = "/fake"
+	local function resolve_fn(path, base_dir)
+		return base_dir .. "/" .. path
+	end
+
+	it("does not let the literal token in an alt text pull a later image's src into the tag", function()
+		-- The reviewer's exact input.
+		local html = exporter.simple_markdown_to_html("![XIMGX2XIMGX](missing.png) ![](onerror=alert`1`//)")
+		local imgs = img_attrs(html)
+		assert.equals(2, #imgs, html)
+		assert.equals("missing.png", imgs[1].src)
+		assert.equals("XIMGX2XIMGX", imgs[1].alt)
+		assert.is_nil(imgs[1].onerror)
+		assert.equals("onerror=alert`1`//", imgs[2].src)
+		assert.is_nil(imgs[2].onerror)
+	end)
+
+	it("keeps a token-shaped alt literal: escaping makes it collision-free", function()
+		-- Alt names a LATER image's token (ordering: 1 is restored before 2 exists in the text).
+		local html = exporter.simple_markdown_to_html("![<PARLEY-IMG:2>](a.png) ![](b.png)")
+		local imgs = img_attrs(html)
+		assert.equals(2, #imgs, html)
+		assert.equals("&lt;PARLEY-IMG:2&gt;", imgs[1].alt)
+		assert.equals("a.png", imgs[1].src)
+		assert.equals("b.png", imgs[2].src)
+		-- And an EARLIER image's token in a later alt.
+		html = exporter.simple_markdown_to_html("![](a.png) ![<PARLEY-IMG:1>](b.png)")
+		imgs = img_attrs(html)
+		assert.equals(2, #imgs, html)
+		assert.equals("a.png", imgs[1].src)
+		assert.equals("&lt;PARLEY-IMG:1&gt;", imgs[2].alt)
+		assert.equals("b.png", imgs[2].src)
+	end)
+
+	it("keeps a token-shaped link destination literal", function()
+		for _, dest in ipairs({ "<PARLEY-IMG:2>", "XIMGX2XIMGX" }) do
+			local html = exporter.simple_markdown_to_html("![first](" .. dest .. ") ![second](b.png)")
+			local imgs = img_attrs(html)
+			assert.equals(2, #imgs, html)
+			assert.equals("first", imgs[1].alt)
+			assert.equals((dest:gsub("<", "&lt;"):gsub(">", "&gt;")), imgs[1].src)
+			assert.equals("second", imgs[2].alt)
+			assert.equals("b.png", imgs[2].src)
+		end
+	end)
+
+	it("keeps a branch topic that equals a branch token literal, and one nav div per branch", function()
+		local lines = {
+			"🌿: 2024-01-10-parent.md: Parent Topic",
+			"",
+			"💬: Question",
+			"",
+			"🌿: 2024-01-15-child.md: XBRANCHX1XBRANCHX",
+		}
+		local parsed = {
+			parent_link = { path = "2024-01-10-parent.md", topic = "Parent Topic" },
+			branches = { { path = "2024-01-15-child.md", topic = "XBRANCHX1XBRANCHX" } },
+		}
+		local link_map = {
+			[DIR .. "/2024-01-10-parent.md"] = "2024-01-10-parent_topic.html",
+			[DIR .. "/2024-01-15-child.md"] = "2024-01-15-child.html",
+		}
+		local result, placeholders, restore =
+			exporter._process_branch_lines(lines, parsed, "html", link_map, DIR, "🌿:", resolve_fn)
+		local html = restore(exporter.simple_markdown_to_html(table.concat(result, "\n")), placeholders)
+		local _, divs = html:gsub('<div class="branch%-nav ', "")
+		assert.equals(2, divs, html)
+		assert.is_not_nil(html:find("&rarr; XBRANCHX1XBRANCHX</a></div>", 1, true), html)
+		-- Neither placeholder survives, and no nav div nests inside another.
+		assert.is_nil(html:find("<p class='paragraph'>\nXBRANCHX", 1, true), html)
+		assert.is_nil(html:find('<div class="branch%-nav [^\n]-<div class="branch%-nav'), html)
+	end)
+
+	it("restores a branch token with no record as the empty string, never as a tag", function()
+		local lines = { "💬: Question", "", "XBRANCHX9XBRANCHX", "", "🤖: Answer" }
+		local parsed = { parent_link = nil, branches = {} }
+		local result, placeholders, restore =
+			exporter._process_branch_lines(lines, parsed, "html", {}, DIR, "🌿:", resolve_fn)
+		local html = restore(exporter.simple_markdown_to_html(table.concat(result, "\n")), placeholders)
+		assert.is_nil(html:find("XBRANCHX", 1, true), html)
 	end)
 end)
