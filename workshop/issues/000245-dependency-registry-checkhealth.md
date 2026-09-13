@@ -1,11 +1,12 @@
 ---
 id: 000245
-status: open
+status: working
 deps: [000213]
 github_issue:
 created: 2026-09-13
 updated: 2026-09-13
 estimate_hours:
+started: 2026-09-13T13:20:58-07:00
 ---
 
 # Dependency registry and honest install advice: managed cliproxyapi, platform tools, brew one-liners in checkhealth
