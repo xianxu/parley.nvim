@@ -286,3 +286,20 @@ and per-function test strategies; two review boundaries).
   call serializing payload/messages/final_payload/raw_payload must elide);
   a second send showed zero new image bytes in the log and twelve elided
   markers. `make lint && make test` green after the plan-doc symbol fix.
+- M1 boundary review round 1 (codex): REWORK with six findings, all
+  reproduced by the reviewer's read-only probes — occurrence-keyed budget
+  (21 references to one image emitted 21 blocks under the 20 cap), divergent
+  retention inputs on the continuation builder (total = target_idx; file
+  refs pinned to false), paste transactions that could leave the in-flight
+  mark set or an orphan asset, reads that turned a directory into "" and
+  plain text into a PNG block, IO-dependent entities tabled as PURE, and the
+  README deferred to M2. All six addressed in dedicated commits; the review
+  sidecar is `workshop/plans/000231-…-m1-review.md`.
+- Behaviour choice surfaced by the rework (operator may override): the budget
+  planner is a strict newest-first prefix — the first image that does not fit
+  closes the budget to every older one — rather than first-fit (skip the
+  newer image that does not fit, keep taking older smaller ones). Strict
+  prefix matches the plan's wording and is deterministic to explain; first-fit
+  would send more images in edge cases. Also: the budget property test's LCG
+  was degenerate (199 of 200 trials empty) — replaced by Park–Miller, and the
+  live property then exposed the prefix/first-fit gap.
