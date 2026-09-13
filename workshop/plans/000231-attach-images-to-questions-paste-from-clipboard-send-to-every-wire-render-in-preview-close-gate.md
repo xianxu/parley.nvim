@@ -75,6 +75,43 @@ rounds:
           round: 2
       boundary: M1
       blocked: true
+    - "n": 3
+      timestamp: "2026-09-12T23:52:43-07:00"
+      agent: codex
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: Existing disposition retained; occurrence-keyed budgeting remains shared by both builders.
+          round: 3
+        - id: BR-2
+          disposition: addressed
+          note: Existing disposition retained; continuation uses total exchanges and extracted file references.
+          round: 3
+        - id: BR-3
+          disposition: addressed
+          note: Existing disposition retained; launch failure and insertion rollback paths remain present.
+          round: 3
+        - id: BR-4
+          disposition: not-addressed
+          note: lua/parley/assets.lua:185–213 still accepts image-less containers in all four formats, and question_content emits them. Error propagation is repaired, but structural image validation remains incomplete.
+          round: 3
+        - id: BR-5
+          disposition: addressed
+          note: Core-concepts tables now classify the named effectful callback consumers as integration points and record the classification rule and revision.
+          round: 3
+        - id: BR-6
+          disposition: addressed
+          note: Existing disposition retained; README documents the paste binding, dependencies, and clipboard override.
+          round: 3
+      findings:
+        - id: BR-7
+          severity: Important
+          title: Full image payloads accumulate in the persistent request cache.
+          detail: lua/parley/dispatcher.lua:652–654 writes complete image-bearing payloads into query_dir without terminal cleanup. The setup-only count sweep at lines 69–78 leaves long-running sessions unbounded; 100 near-limit requests retain roughly 2 GiB. Delete transport files after subprocess completion on every terminal path, or enforce a writer-side retention budget, with lifecycle documentation and regression coverage. ARCH-FUNERAL.
+          family: request-artifact-retention
+          round: 3
+      boundary: M1
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#231 (boundary-review)
@@ -110,7 +147,23 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - BR-5 — not-addressed — workshop/plans/000231-chat-image-attachments-plan.md:290 still labels unique_name PURE despite its filesystem-backed exists callback; :302 likewise labels select PURE despite env.executable calling vim.fn.executable. The named reclassifications landed, but the classification rule was not swept across the table.
 - BR-6 — addressed — README.md now documents M-v, platform tools, assets.clipboard_cmd, its output-token contract, and setup table replacement.
 
+## Round 3 — 2026-09-12T23:52:43-07:00 (codex) — BLOCKED
+
+### Disposed
+
+- BR-1 — addressed — Existing disposition retained; occurrence-keyed budgeting remains shared by both builders.
+- BR-2 — addressed — Existing disposition retained; continuation uses total exchanges and extracted file references.
+- BR-3 — addressed — Existing disposition retained; launch failure and insertion rollback paths remain present.
+- BR-4 — not-addressed — lua/parley/assets.lua:185–213 still accepts image-less containers in all four formats, and question_content emits them. Error propagation is repaired, but structural image validation remains incomplete.
+- BR-5 — addressed — Core-concepts tables now classify the named effectful callback consumers as integration points and record the classification rule and revision.
+- BR-6 — addressed — Existing disposition retained; README documents the paste binding, dependencies, and clipboard override.
+
+### Raised
+
+- **BR-7** [Important] `request-artifact-retention` Full image payloads accumulate in the persistent request cache.
+  lua/parley/dispatcher.lua:652–654 writes complete image-bearing payloads into query_dir without terminal cleanup. The setup-only count sweep at lines 69–78 leaves long-running sessions unbounded; 100 near-limit requests retain roughly 2 GiB. Delete transport files after subprocess completion on every terminal path, or enforce a writer-side retention budget, with lifecycle documentation and regression coverage. ARCH-FUNERAL.
+
 ## Open findings
 
 - **BR-4** [Critical] `persisted-input-validation` Read errors and invalid image bytes are submitted as image content.
-- **BR-5** [Critical] `core-concept-classification` The Core concepts table labels IO-dependent functions PURE.
+- **BR-7** [Important] `request-artifact-retention` Full image payloads accumulate in the persistent request cache.

@@ -211,3 +211,118 @@ dispose:
 7. **Plan revision recommendations**
 
    Append timestamped `## Revisions` entries defining the image-validity contract and correcting the complete PURE/INTEGRATION classification sweep. Mark M2-only Core concepts rows as planned rather than already modified.
+
+---
+
+## Re-review — 2026-09-12T23:52:43-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 231 — Attach images to questions: paste from clipboard, send to every wire, render in preview |
+| repo | parley.nvim |
+| issue file | workshop/issues/000231-attach-images-to-questions-paste-from-clipboard-send-to-every-wire-render-in-preview.md |
+| boundary | milestone M1 |
+| milestone | M1 |
+| window | 80fb39110267a500b8645d71196ac39955815757..b5ae70bacc466225516d0ab6f1c46b54ed37b560 |
+| command | sdlc milestone-close --issue 231 --milestone M1 |
+| reviewer | codex |
+| timestamp | 2026-09-12T23:52:43-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+M1’s shared budget, wire translations, and read-error handling are sound improvements. BR-5’s classification changes are addressed. BR-4 remains reproducible across all four formats: containers without image data become outbound image blocks. Request-cache retention also needs attention now that each persisted request can contain megabytes of image data.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Existing disposition retained; occurrence-keyed budgeting remains shared by both builders.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      Existing disposition retained; continuation uses total exchanges and extracted file references.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      Existing disposition retained; launch failure and insertion rollback paths remain present.
+  - id: BR-4
+    disposition: not-addressed
+    note: |
+      lua/parley/assets.lua:185–213 still accepts image-less containers in all four formats, and question_content emits them. Error propagation is repaired, but structural image validation remains incomplete.
+  - id: BR-5
+    disposition: addressed
+    note: |
+      Core-concepts tables now classify the named effectful callback consumers as integration points and record the classification rule and revision.
+  - id: BR-6
+    disposition: addressed
+    note: |
+      Existing disposition retained; README documents the paste binding, dependencies, and clipboard override.
+findings:
+  - id: new
+    severity: Important
+    family: request-artifact-retention
+    title: |
+      Full image payloads accumulate in the persistent request cache.
+    detail: |
+      lua/parley/dispatcher.lua:652–654 writes complete image-bearing payloads into query_dir without terminal cleanup. The setup-only count sweep at lines 69–78 leaves long-running sessions unbounded; 100 near-limit requests retain roughly 2 GiB. Delete transport files after subprocess completion on every terminal path, or enforce a writer-side retention budget, with lifecycle documentation and regression coverage. ARCH-FUNERAL.
+```
+
+1. **Strengths**
+
+   - Both builders share attachment budgeting and occurrence identity.
+   - OpenAI and GoogleAI transformations preserve image parts and existing text-only shapes.
+   - Real-adapter probes confirmed directory rejection and preservation of an injected read error.
+   - README and atlas updates cover the new M1 surface.
+
+2. **Critical findings**
+
+   **BR-4 — incomplete validation**, [assets.lua:185](/Users/xianxu/workspace/parley.nvim/lua/parley/assets.lua:185), **ARCH-SECURE / ARCH-PURPOSE**.
+
+   Executed probes returned `looks_like=true` and emitted an image block for each:
+
+   - PNG containing IHDR and IEND but no IDAT.
+   - Four-byte JPEG `FF D8 FF D9`, with no frame or scan.
+   - GIF containing only its header, screen descriptor, and trailer.
+   - WebP containing a RIFF header and chunk name, without chunk length or data.
+
+   This remains BR-4 in `persisted-input-validation`, not a new finding. Apply one rule across all four formats: require complete structural image records, including image-bearing data and valid record boundaries. Pixel decoding and CRC verification need not be added. Pin these cases through `read_bounded` and outbound content construction.
+
+3. **Important findings**
+
+   **Request-cache retention**, [dispatcher.lua:652](/Users/xianxu/workspace/parley.nvim/lua/parley/dispatcher.lua:652): described in the machine-readable finding above. Eliding logger output does not limit these full-payload files.
+
+4. **Minor findings**
+
+   None.
+
+5. **Test coverage notes**
+
+   - Executed 71 existing asset cases through a read-only harness, excluding the filesystem-writing `default_io` group: **71 passed**.
+   - Replacing validation in memory with signature-only checks made **three existing tests fail**. The fix has meaningful regression coverage, but its oracle misses the four cases above.
+   - Real-reader probes accepted all four fixtures and confirmed directory/read-error handling.
+   - `git diff --check` passed. Full integration suites were not rerun under the read-only sandbox.
+
+6. **Architectural notes**
+
+   - **ARCH-DRY — pass:** shared grammar, retention, budget, and wire recognition.
+   - **ARCH-PURE — pass:** named callback consumers are reclassified as integration points.
+   - **ARCH-PURPOSE — flag:** BR-4’s invalid-input class remains incompletely addressed.
+   - **ARCH-MOCK — pass:** injected IO and clipboard fake exist; live conformance is explicitly scheduled for M2.
+   - **ARCH-CONSTRAINTS — pass:** bounded reads, request planning, and final payload refusal are present.
+   - **ARCH-SECURE — flag:** incomplete image containers cross the outbound boundary.
+   - **ARCH-ORDER — pass:** held completion tests and paste rollback cover relevant ordering.
+   - **ARCH-FUNERAL — flag:** expanded request-cache residue lacks a writer-side bound.
+
+7. **Plan revision recommendations**
+
+   Append dated `## Revisions` entries that:
+
+   - Strengthen the image-validation contract to require complete image-bearing structures across all four formats.
+   - Enumerate request-cache files alongside assets and logs, naming their cleanup owner, terminal paths, retention bound, and test strategy.
