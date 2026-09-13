@@ -111,6 +111,16 @@ Prepared for operator review; no #208 implementation has started. Derive estimat
 
 ## Revisions
 
+### 2026-09-13 — full archive exposes path-spelling assumptions
+
+Reason: with #219 integrated, full archive units pass but two integration
+fixtures assume raw temp paths match Neovim's canonical buffer paths. A trailing
+TMPDIR slash produces redundant separators in nested scratch. Delta: normalize
+chat-move fixture roots for buffer cleanup and compare the full resolved parent
+path in the backlink assertion. Keep a deliberate redundant separator in that
+fixture to reproduce the failure in ordinary runs. This changes test oracles,
+not product behavior; rerun the full archive and combined checkout suites.
+
 ### 2026-09-13 — deployment-goal investigation
 
 Reason: #244 shipped and today's goal requires a usable separate app profile. Delta from the original issue sketch: preserve shell-function support, define explicit unavailable vocabulary semantics rather than guessing statuses, compare generated contents rather than only stamps, expose the actual Plenary override, and repair CI's reference to an untracked maintainer link. These are necessary to deliver the existing fresh-clone acceptance.

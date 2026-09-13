@@ -1,5 +1,14 @@
 # Lessons
 
+## 2026-09-13 (#208 archive acceptance)
+
+- Filesystem identity is not raw path spelling. A trailing slash in macOS's
+  TMPDIR became a doubled separator in nested archive scratch. Neovim normalized
+  buffer names, while fixture cleanup and a backlink assertion kept the original
+  spelling, causing leaked buffers and false failures. Compare resolved paths
+  at identity boundaries; include a redundant-separator fixture so the normal
+  suite exercises the archive case (ARCH-PURPOSE).
+
 ## 2026-09-13 (#244 plan review)
 
 - A codec successfully shrinking a screenshot says nothing about its metadata
