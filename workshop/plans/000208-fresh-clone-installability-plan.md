@@ -111,6 +111,15 @@ Prepared for operator review; no #208 implementation has started. Derive estimat
 
 ## Revisions
 
+### 2026-09-13 — close review discoverability repairs
+
+Reason: BR-1 found README omitted the standalone contributor entry; BR-2
+reproduced empty help without the overlay. Delta: link README to the standalone
+tooling guide with the PLENARY invocation, wire product help in Makefile.local,
+and list the verification commands in help-parley. A portable make regression
+fails on the missing help and passes after the product-owned prerequisite is
+added. No upstream seed divergence or plugin runtime change.
+
 ### 2026-09-13 — full archive exposes path-spelling assumptions
 
 Reason: with #219 integrated, full archive units pass but two integration

@@ -2,6 +2,11 @@
 
 ## 2026-09-13 (#208 archive acceptance)
 
+- Removing an optional build overlay also removes the help prerequisites it
+  supplied. Product-owned targets must wire their own help; test `make help`
+  with the overlay absent. Surface new contributor commands in README with a
+  link to the detailed tooling guide, so discoverability has an entry point.
+
 - Filesystem identity is not raw path spelling. A trailing slash in macOS's
   TMPDIR became a doubled separator in nested archive scratch. Neovim normalized
   buffer names, while fixture cleanup and a backlink assertion kept the original

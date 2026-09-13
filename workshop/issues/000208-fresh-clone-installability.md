@@ -157,6 +157,17 @@ whole-issue close review; publishing remains after that gate.
 
 ## Revisions
 
+### 2026-09-13 — close round 1 repairs
+
+Boundary review reproduced the pinned 232-spec full archive pass and found no
+critical runtime defects. BR-1 (README discoverability) is addressed with the
+standalone test invocation and tooling link. BR-2 (empty standalone help) is
+addressed in the product-owned Makefile.local, with a red→green portable help
+test and verification commands in help-parley. `make WF_WORKFLOW= help`, ordinary
+overlay help, the portable make spec, targeted lint and diff check pass. Detailed
+evidence: `/tmp/parley208-help-{red,green}.log`. Rerun close to dispose both
+findings; the prior REWORK did not finalize the issue.
+
 ### 2026-09-13 — deployment implementation design
 
 Reason: operator asked to continue packaging toward an easily installed separate
