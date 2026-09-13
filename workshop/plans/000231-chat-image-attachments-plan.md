@@ -223,7 +223,15 @@ export, removed by whichever of the five deleters removes its chat. Bound: one
 file per paste, ≤ 10 MB, never rewritten. **Residue named:** a link line the
 operator deletes by hand leaves an unreferenced file until the chat is deleted;
 no sweep (Non-goals). A removal that fails is **reported**, not assumed, and
-the folder stays for the next delete. Logs are bounded by elision. The paste's
+the folder stays for the next delete. Logs are bounded by elision: every logger call that serializes a request
+value goes through `assets.elide_image_data` (`tests/arch/log_sinks_spec.lua`
+enumerates the class). **Transport files are a third residue.** The
+dispatcher writes each request body to `query_dir/<stamp>.json` for curl and,
+before #231, kept it as a debug aid pruned only at setup (100 kept when
+>200). An image-bearing body is ~1000× a text one, so its owner is the
+request itself: on every terminal path of the curl job (exit, error, abort)
+an image-bearing transport file is removed; text-only files keep today's
+behaviour. Bound: at most the in-flight requests' bodies on disk at once. The paste's
 temp file is removed on every path; if nvim dies mid-read it leaks one file in
 the OS temp dir.
 
@@ -401,8 +409,14 @@ Contracts (IO; every function takes `io_` defaulting to `default_io`, which is
   the extension claims, not just its signature — PNG: signature, a first
   `IHDR` chunk of length 13, and a closing `IEND` chunk; JPEG: SOI … EOI;
   GIF: `GIF8?a` + screen descriptor … trailer `;`; WebP: `RIFF`, a size field
-  matching the body, `WEBP`, a `VP8 `/`VP8L`/`VP8X` chunk. Pixel decoding and
-  CRCs are out of scope. Anything else → `nil, "not a <mime> image"`.
+  matching the body, `WEBP`, a `VP8 `/`VP8L`/`VP8X` chunk. **One rule across
+  the four:** the container's records must walk from the first byte to the
+  last with correct boundaries, and at least one image-bearing record must be
+  present — PNG needs an `IDAT` and `IEND` last; JPEG needs a frame (SOF) and
+  a scan (SOS) and EOI last; GIF needs an image descriptor before the trailer;
+  WebP's chunks must fit the RIFF size and the bitstream chunk must carry
+  data. Pixel decoding and CRCs are out of scope. Anything else → `nil, "not a
+  <mime> image"`.
 - `question_content(text, attachments, plan, read) → string|blocks`: image
   blocks for the attachments whose `id` is in `plan.included`, one text block
   last; notes prepended (from `plan.notes` and from a read that fails after
@@ -764,3 +778,15 @@ on every path).
   type-mismatch variants through the real adapter. One classification rule is
   stated and applied to every row: callback consumers are integration points.
   M2-only rows are marked planned, not modified.
+
+### 2026-09-12 — M1 boundary review round 3 (codex; BR-4 open, BR-7 new)
+
+- **Reason:** header/trailer checks still admitted a PNG without IDAT, a
+  four-byte JPEG, a GIF without an image descriptor and a WebP without chunk
+  data; the dispatcher's transport files kept full image payloads on disk
+  with only a setup-time prune.
+- **Delta:** the validators walk the container records (contract above) with
+  the four probes and boundary overruns pinned through `read_bounded` and
+  `question_content`; image-bearing transport files are removed on every
+  terminal path of the curl job, text-only ones unchanged, named in Lifecycle
+  as the third residue with its owner and bound.
