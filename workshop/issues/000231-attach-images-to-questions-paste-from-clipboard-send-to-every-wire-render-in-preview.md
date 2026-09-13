@@ -190,12 +190,12 @@ Durable plan: `workshop/plans/000231-chat-image-attachments-plan.md` (contracts
 and per-function test strategies; two review boundaries).
 
 - [x] M1 — Decide the folder-name form: `assets/<chat-timestamp>/`, no slug
-- [ ] M1 — `assets`: layout, grammar, budget, content, checked IO (Tasks 1–2)
-- [ ] M1 — `clipboard_image`: recipes as data, one classify rule, seam (Task 3)
-- [ ] M1 — `<M-v>`: fixture, paste flow, key in both buffer scopes (Task 4)
-- [ ] M1 — parser: an image link in a question block is an attachment (Task 5)
-- [ ] M1 — both builders: one retention rule, one budget, send guard, elided logs (Task 6)
-- [ ] M1 — three wires, three shapes (Task 7)
+- [x] M1 — `assets`: layout, grammar, budget, content, checked IO (Tasks 1–2)
+- [x] M1 — `clipboard_image`: recipes as data, one classify rule, seam (Task 3)
+- [x] M1 — `<M-v>`: fixture, paste flow, key in both buffer scopes (Task 4)
+- [x] M1 — parser: an image link in a question block is an attachment (Task 5)
+- [x] M1 — both builders: one retention rule, one budget, send guard, elided logs (Task 6)
+- [x] M1 — three wires, three shapes (Task 7)
 - [ ] M1 — gate: atlas, traceability, full suite, manual paste + per-wire send (Task 8)
 - [ ] M2 — both movers carry the folder; all five deleters remove it; prompts name it (Task 9)
 - [ ] M2 — tree export copies the folder and renders `<img>` (Task 10)
@@ -231,3 +231,23 @@ and per-function test strategies; two review boundaries).
   closed buffer orphans bytes. Wire shapes read live from the three
   providers' docs today (Anthropic `image`/base64, OpenAI `image_url` data
   URL, Gemini `inlineData`). Awaiting plan approval → `sdlc change-code`.
+
+### 2026-09-12 (implementation, M1)
+
+- Plan cleared plan-quality after four codex rounds (PQ-1..PQ-4: shared
+  retention across both builders, a request-wide budget in encoded bytes with
+  a refusal guard on the final payload, checked IO outcomes, and a plan of
+  contracts + strategies rather than a script). Estimate 6.93 h (v3.1).
+- Tasks 1–7 implemented by parallel subagents on disjoint files, each TDD red
+  first, committed per task: assets (64 cases), clipboard_image (33), wires
+  (11 + dispatcher/golden/tool-loop unchanged), parser (59), paste flow + key
+  (9 integration + keybinding guards), builders (73 + chat_respond 67). Lint
+  clean throughout. Subagent interpretations accepted and recorded in their
+  code comments: `argv_for` replaces every `{out}`; exit code is the classify
+  rule; `plan_budget` charges every candidate's note up front (conservative);
+  `text_bytes` is the encoded size of the request as built (≥ the UTF-8 sum);
+  `read_bounded` refuses absolute/`..` paths as a second lock; the send guard
+  reuses the existing pre-start abort path (two notifications, as today).
+- The provider docs were read live on 2026-09-12 (Anthropic `image`/base64,
+  10 MB per image, 100 per request, 32 MB per request; OpenAI Chat
+  Completions `image_url` data URL; Gemini `inlineData`, 20 MB inline total).
