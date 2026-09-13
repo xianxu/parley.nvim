@@ -51,6 +51,7 @@ This index provides a central directory for all atlas entries of the `parley.nvi
 
 ## 7. Infrastructure & Security
 
+- [macOS packaging](infra/packaging.md): Homebrew formula, isolated launcher, immutable releases and owned VM acceptance.
 - [Starter profile](infra/starter.md): Isolated app configuration, pinned bootstrap and managed first-use login.
 - [Repo Mode](infra/repo_mode.md): Marker-file detection for parley-enabled repos with auto-created local directories.
 - [Configuration System](infra/config.md): Settings and merging logic.

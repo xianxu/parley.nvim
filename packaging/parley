@@ -1,0 +1,12 @@
+#!/bin/sh
+# Homebrew's wrapper supplies these fixed paths from the installed release.
+set -eu
+: "${PARLEY_NVIM:?Use the installed parley launcher}"
+: "${PARLEY_RUNTIME:?Missing installed Parley runtime}"
+: "${PARLEY_STARTER:?Missing installed starter configuration}"
+export NVIM_APPNAME=parley
+parley_config="${XDG_CONFIG_HOME:-${HOME:?Missing HOME}/.config}/parley"
+case "$parley_config" in /*) ;; *) echo 'Parley requires an absolute XDG_CONFIG_HOME' >&2; exit 1 ;; esac
+export PARLEY_CONFIG="$parley_config"
+"$PARLEY_NVIM" --headless -n --noplugin -u NONE -i NONE -l "$PARLEY_RUNTIME/packaging/launcher.lua"
+exec "$PARLEY_NVIM" -u "$parley_config/init.lua" "$@"

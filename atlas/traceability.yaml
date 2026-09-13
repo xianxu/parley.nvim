@@ -3,6 +3,28 @@ version: 1
 # Maps a feature entry to the code and tests that verify it.
 # Key format intentionally omits the leading "atlas/" and trailing ".md".
 atlas:
+  infra/packaging:
+    code:
+      - packaging/formula.lua
+      - packaging/parley
+      - packaging/launcher.lua
+      - scripts/release-parley.sh
+      - scripts/test-parley-vm.sh
+      - scripts/test-parley-vm.py
+      - scripts/test-parley-upgrade.sh
+      - tests/packaging/vm_acceptance.lua
+      - tests/packaging/vm_chat.lua
+      - tests/packaging/vm_chat_probe.lua
+      - tests/packaging/vm_stop.lua
+      - tests/packaging/vm_uninstall.py
+    tests:
+      - tests/arch/single_source_sweeps_spec.lua
+      - tests/unit/packaging_formula_spec.lua
+      - tests/integration/packaging_launcher_spec.lua
+      - tests/integration/packaging_release_spec.lua
+      - tests/integration/packaging_upgrade_spec.lua
+      - tests/integration/packaging_vm_spec.lua
+
   infra/starter:
     code:
       - lua/parley/dispatcher.lua

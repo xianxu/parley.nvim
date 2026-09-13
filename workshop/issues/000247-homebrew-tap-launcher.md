@@ -91,13 +91,46 @@ total: 4.159
 ## Plan
 
 - [ ] Tap repo + formula skeleton depending on neovim; launcher script
-- [ ] First-run copy of the starter config; upgrade never overwrites
+- [x] First-run copy of the starter config; upgrade never overwrites
 - [ ] tart VM recipe: image, install, scripted first chat, decoy-config check
 - [ ] Release bump script; README install section (brew path first)
 
 ## Log
 
-### 2026-09-13
+### 2026-09-13 — implementation and VM checkpoint
+
+Operator approved implementation with “continue”; #246 is merged as PR #180
+and released v2.2.0. #247 passed change-code plan quality round 1 and estimate
+gates. Formula/release tests pass (8 cases); launcher passes 10 adversarial
+filesystem/process cases, including the owner-record initialization race found
+and repaired during testing. VM harness tests pass 7 cases; actual upgrade and
+final removal verification are being integrated.
+
+One owned clean VM is booted and guest Homebrew is ready. Its manifest is
+`/private/tmp/parley-vm-247-20260913/manifest.json`; reservation is
+`~/.cache/parley-vm-acceptance.owner`. Resume through the harness; preserve
+`tools-test` and the cached image. Clone observed 184320 bytes additional disk
+allocation with auto-pruning disabled. No public tap has been created yet.
+Actual managed-proxy OAuth and image response remain pending guest login.
+
+### 2026-09-13 — local checks
+
+Launcher preparation measured over 20 warm runs: median 16.1 ms, maximum 20.1 ms.
+Lint passed 428 Lua files plus all three packaging Lua files. First full suite
+passed behavioral specs; the architecture-only failure identified omitted
+packaging scan scope and missing traceability. Corrected both; all 21 focused
+architecture checks now pass. Final VM reducer and guest upgrade conformance
+remain in progress before the local close review.
+
+### 2026-09-13 — local implementation accepted by tests
+
+Final make test passed all 246 spec files and lint across 431 Lua files.
+The owned VM harness now requires five evidence records and successful VM
+removal before reporting completion. Actual public tap installation, real guest
+Homebrew upgrade and managed OAuth/image response follow the local review under
+the approved plan; these remain unchecked and must precede merge. The local tap
+README and generated formula shape are reviewable; the real archive SHA is only
+available after the reviewed immutable tag is published.
 
 ## Revisions
 

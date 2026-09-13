@@ -51,7 +51,17 @@ Despite of such simple interface, it's very powerful, sometimes more so than off
 
 ## Quick Install
 
-New to Neovim? Use the [standalone starter profile](packaging/starter-config/README.md)
+On macOS with Homebrew:
+
+```sh
+brew install xianxu/parley/parley
+parley
+```
+
+Follow the welcome chat to connect your account and choose a model. See the
+[package guide](packaging/README.md) for updates, settings and removal.
+
+For a manual installation, use the [standalone starter profile](packaging/starter-config/README.md)
 for an isolated chat setup with account login and a short first-use guide.
 
 Run `:checkhealth parley` to see which external tools are available and what

@@ -2319,3 +2319,9 @@ download.
   a later default assignment can overwrite a correctly restored model.
 - An artifact denylist must cover each promised category; test generic home-relative
   paths and prohibited module imports, not just known personal examples.
+
+- An atomic lock directory becomes visible before its owner file. Competing
+  processes must tolerate that initialization gap with bounded retries and
+  explicit abandoned-lock recovery; test the gap with a real process barrier.
+- When a new source directory is introduced, include it in architecture scans
+  and route its specs in traceability before the full-suite run.

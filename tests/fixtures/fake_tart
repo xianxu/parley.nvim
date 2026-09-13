@@ -1,0 +1,48 @@
+#!/usr/bin/env python3
+"""Stateful VM fixture; guest commands are recorded and can fail by phase."""
+import json
+import os
+import pathlib
+import sys
+root = pathlib.Path(os.environ['FAKE_TART_STATE'])
+root.mkdir(parents=True, exist_ok=True)
+statefile = root / 'vms.json'
+state = json.loads(statefile.read_text()) if statefile.exists() else {'tools-test': 'running'}
+args = sys.argv[1:]
+with (root / 'calls.jsonl').open('a') as log:
+    log.write(json.dumps({'args': args, 'no_prune': os.getenv('TART_NO_AUTO_PRUNE')}) + '\n')
+command = args[0]
+if os.getenv('FAKE_TART_FAIL') == command:
+    sys.exit(1)
+if command == 'list':
+    print(json.dumps([{'Name': name, 'State': status} for name, status in state.items()]))
+elif command == 'clone':
+    assert args[2] not in state
+    state[args[2]] = 'stopped'
+elif command == 'run':
+    state[args[-1]] = 'running'
+elif command == 'stop':
+    assert args[1] != 'tools-test'
+    state[args[1]] = 'stopped'
+elif command == 'delete':
+    assert args[1] != 'tools-test'
+    state.pop(args[1], None)
+elif command == 'exec':
+    script = ' '.join(args[2:])
+    if 'cat "$HOME/.parley-acceptance/boot.json"' in script:
+        print(json.dumps({'boot': True, 'containment': True, 'decoy_unchanged': True}))
+    if 'cat "$HOME/.parley-acceptance/upgrade/upgrade.json"' in script:
+        print(json.dumps({'status': 'passed', 'versions': ['0.0.1', '0.0.2'], 'edited_init_sha256': 'a' * 64,
+                          'candidate_b_sha256': 'b' * 64, 'decoy_unchanged': True, 'public_restored': True}))
+    if 'cat "$HOME/.parley-acceptance/uninstall.json"' in script:
+        print(json.dumps({'status': 'passed', 'package_removed': True, 'profile_roots_removed': ['cache', 'config', 'data', 'state'],
+                          'owned_proxy_absent': True, 'decoy_unchanged': True}))
+    if 'PARLEY_VM_PHASE=' in ' '.join(args):
+        status = os.getenv('FAKE_TART_PROBE_STATUS', 'auth_pending')
+        print(json.dumps({'status': status, 'managed_route': True, 'response_nonempty': True, 'image_sent': True, 'fake': True, 'first_use': True}))
+        sys.exit(75 if status == 'auth_pending' else 1 if status == 'failed' else 0)
+    if os.getenv('FAKE_TART_FAIL') and os.environ['FAKE_TART_FAIL'] in ' '.join(args[2:]):
+        sys.exit(1)
+else:
+    sys.exit(2)
+statefile.write_text(json.dumps(state))

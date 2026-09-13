@@ -112,7 +112,7 @@ describe("arch: single-source sweeps stay swept", function()
         -- appeared: `make test` passed pre-commit and the same run failed once
         -- committed, which is a guard that reports one commit late. Comparing
         -- against the working tree flags it while it is still being written.
-        local diff = vim.fn.system(("git diff %s -- lua/ scripts/"):format(base))
+        local diff = vim.fn.system(("git diff %s -- lua/ scripts/ packaging/"):format(base))
         if vim.v.shell_error ~= 0 then
             pending("git diff unavailable")
             return
@@ -228,7 +228,7 @@ describe("arch: single-source sweeps stay swept", function()
                         for name in line:gmatch("`([%w_]+)`") do
                             if #name > 3 and not name:match("^lua$") then
                                 local hit = vim.fn.systemlist(
-                                    ("grep -rlE -- %s lua/ scripts/ 2>/dev/null"):format(
+                                    ("grep -rlE -- %s lua/ scripts/ packaging/ 2>/dev/null"):format(
                                         vim.fn.shellescape(definition_pattern(name))))
                                 if #hit > 0 then
                                     survived[#survived + 1] = doc .. ": " .. name
@@ -259,7 +259,7 @@ describe("arch: single-source sweeps stay swept", function()
                         for _, name in ipairs(names) do
                             if #name > 3 and not name:match("^lua$") then
                                 local hit = vim.fn.systemlist(
-                                    ("grep -rlE -- %s lua/ tests/ scripts/ 2>/dev/null"):format(
+                                    ("grep -rlE -- %s lua/ tests/ scripts/ packaging/ 2>/dev/null"):format(
                                         vim.fn.shellescape(definition_pattern(name))))
                                 if #hit == 0 then
                                     missing[#missing + 1] = doc .. ": " .. name

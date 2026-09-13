@@ -55,10 +55,11 @@ personal tap and one source-owned generator (ARCH-DRY/PURPOSE).
 
 | Name | Lives in | Kind | Status | Wraps |
 |---|---|---|---|---|
-| `prepare_profile`, launcher entry | `packaging/parley` | INTEGRATION | new | filesystem publication and exec of formula Neovim |
+| `prepare_profile`, launcher entry | `packaging/launcher.lua`, `packaging/parley` | INTEGRATION | new | filesystem publication and exec of formula Neovim |
 | Release/tap update command | `scripts/release-parley.sh` | INTEGRATION | new | tagged archives, sha256, Git and gh |
 | Generated `Parley` formula | tap `Formula/parley.rb` | INTEGRATION | new | Homebrew install and formula test |
-| `run_acceptance` and guest checks | `scripts/test-parley-vm.sh`, `tests/packaging/vm_acceptance.lua` | INTEGRATION | new | disposable Tart VM, real brew/Neovim/provider |
+| VM acceptance command and guest checks | `scripts/test-parley-vm.sh`, `tests/packaging/vm_acceptance.lua` | INTEGRATION | new | disposable Tart VM, real brew/Neovim/provider |
+| Guest proxy stop and profile removal | `tests/packaging/vm_stop.lua`, `tests/packaging/vm_uninstall.py` | INTEGRATION | new | identity-checked stop, Homebrew uninstall and bounded profile removal |
 | Stateful launcher/release fixtures | `tests/fixtures/fake_packaging_*`, `tests/packaging/` | INTEGRATION | new | recorded argv, local git/tap and archive state |
 
 One executable source owns profile publication and argv forwarding. Formula tests
@@ -69,7 +70,7 @@ CLIProxyAPI. No hand-maintained second dependency list.
 
 ## Chunk 1: Package, publish and prove the app
 
-- [ ] Implement formula projection and launcher with atomic initial config/candidate publication; add stateful filesystem/argv tests and registry parity coverage to `make test`.
+- [x] Implement formula projection and launcher with atomic initial config/candidate publication; add stateful filesystem/argv tests and registry parity coverage to `make test`.
 - [ ] Implement release/tap tooling using local git repositories and archive fixtures for deterministic retry/failure coverage; generate the exact reviewable formula and tap README locally.
 - [ ] Add isolated VM acceptance and uninstall checks, document commands and artifact ownership in atlas/README, and update the project.
 - [ ] Run local checks and SDLC close review. Publish the reviewed release/tap and run the actual clean-VM installation; fix/re-close on new code changes. Merge/archive only with the full acceptance evidence, then verify the public install command again.
@@ -82,7 +83,7 @@ CLIProxyAPI. No hand-maintained second dependency list.
 | `prepare_profile` | Existing edits, interrupted writes, races, spaced paths and symlinks → real temporary filesystem/process tests assert no partial config and no overwritten user file. |
 | Launcher exec | Shell metacharacters and nonzero child exits → stateful executable fixture records exact argv/environment and propagates status without shell reinterpretation. |
 | Release/tap command | Existing tags, dirty/wrong tap and interrupted publication → real local git repos and stateful gh/archive fixture assert fail-closed, idempotent publication. |
-| `run_acceptance` | Boot/guest-agent failure and failed guest phases → fixture-owned VM state records cleanup and preserves other VMs; one real pinned-image run checks conformance. |
+| VM acceptance command | Boot/guest-agent failure and failed guest phases → fixture-owned VM state records cleanup and preserves other VMs; one real pinned-image run checks conformance. |
 | Guest startup/login/chat | Empty profile, decoy nvim config and absent proxy → real installed launcher plus existing fake provider checks, followed by actual authenticated image response in the disposable guest. |
 
 ## Clean-machine acceptance
@@ -158,3 +159,66 @@ Operator implementation approval remains pending.
 
 Operator said “continue” after the concrete plans were presented for approval.
 Proceed through #246 then #247; no further plan approval is required.
+
+### 2026-09-13 — verified preflight and execution contracts
+
+#246 merged as PR #180 and released v2.2.0. The packaging release will use a new
+immutable tag after review. Formula rendering runs through headless Neovim
+(`-u NONE -i NONE`) against the selected release tree, loading that tree’s registry;
+no standalone Lua interpreter becomes a runtime dependency. Its pure input is
+{tag, sha256}; output is the complete formula string. Release tooling takes a tag
+and tap checkout path, validates remote identity and tag commit, fetches the tagged
+archive, computes its SHA256, and uses that archive’s renderer/registry. Generation
+is local by default; an explicit publish mode commits/pushes the exact generated
+formula only after clean tap identity checks. Retry is a no-op for identical bytes;
+conflicting immutable tags are errors, never moved (ARCH-DRY/ORDER).
+
+Launcher staging is inside an atomically acquired profile publication directory
+with owner PID, bounded waiting and no automatic lock stealing. As in #246,
+dead/malformed ownership reports the precise path and requires closing all app
+instances before explicit cleanup. Normal failures clean only owned staging;
+first init uses no-clobber publication, candidate replacement uses atomic rename,
+and the lock serializes candidate comparison/notice/publication. This supersedes
+unconditional orphan reaping: a later launch never deletes another’s active work.
+Tests exercise actual competing and killed publishers, including explicit recovery.
+
+Tart 2.32.1, Homebrew 6.0.22 and Neovim 0.11.7 are installed; the exact OCI digest
+is cached, and 122 GiB is free. Set TART_NO_AUTO_PRUNE=1 for clone to preserve other
+images. Require at least 60 GiB free before cloning and report observed allocation.
+The VM is the only additional instance; tools-test remains untouched. Verify guest
+agent and brew inside the clone. Upgrade acceptance uses two controlled, distinct
+local package versions built from the reviewed release fixture, with different
+starter bytes, then restores the public formula for final live acceptance. This
+exercises real brew upgrade without publishing a meaningless extra public release.
+Guest OAuth authentication remains pending operator input; it is not waived.
+
+### 2026-09-13 — portable atomic publication shell
+
+The POSIX launcher uses the already-required installed Neovim in a profile-free
+headless preparation process, then execs the interactive invocation. File
+publication lives in `packaging/launcher.lua`, using libuv atomic link/rename;
+this avoids platform-specific shell mv directory/symlink behavior and adds no
+runtime dependency. Neovim argument forwarding stays in one shell entry. The
+formula supplies fixed PARLEY_NVIM/PARLEY_RUNTIME/PARLEY_STARTER paths with
+Homebrew write_env_script. Measure the extra preparation startup overhead.
+The VM shell entry delegates host orchestration to `scripts/test-parley-vm.py`;
+Python is a maintainer harness dependency only, never a launcher dependency.
+
+### 2026-09-13 — acceptance implementation map
+
+The VM integration consists of `scripts/test-parley-vm.py` (owned clone and
+phase evidence), `tests/packaging/vm_acceptance.lua` (installed boot isolation),
+`vm_chat.lua` and `vm_chat_probe.lua` (fake/managed live image chat). Controlled
+upgrade is `scripts/test-parley-upgrade.sh`, exercising guest Homebrew with two
+fixture versions and restoring the public launcher even after failure. All are
+INTEGRATION surfaces; filesystem-backed fake Tart and fake brew cover failures,
+and the retained real guest provides conformance. Final verify requires each
+phase's measured evidence before deleting the owned VM and reporting success.
+
+### 2026-09-13 — architectural guard scope correction
+
+The first full suite found the symbol guard searched only lua/scripts/tests,
+so it could not see real functions in the new packaging tree. Include packaging
+in both definition and added-export scans, and replace the provisional
+run_acceptance name with the implemented command surface. Map all five new
+specs to infra/packaging. These are guard/map corrections, not waived checks.
