@@ -76,11 +76,11 @@ Points that need deciding in code rather than left to the implementer:
   occur at adjacent line numbers; nothing to special-case. An annotation as
   the last item (no following question) renders as today.
 
-**Not in scope, but recorded as the obvious next question:** `@@…@@` lines
-are ordinary content to the parser — they sit at the end of the previous
-answer and are sent to the model (`annotation.lua` covers `🌿:`/`🔒:` only).
-Whether tags should be withheld from context like `🔒:` is a separate
-decision; nothing here depends on it.
+**Context is untouched, by rule.** `@@…@@` lines are ordinary content to the
+parser — they sit at the end of the previous answer and are sent to the
+model — and the operator's rule is that everything authored is in context
+except `🔒:`. Tags, `@@_@@` included, stay in. This issue changes only what
+the outline shows.
 
 ## Done when
 
@@ -118,11 +118,13 @@ decision; nothing here depends on it.
       exchange 1 answer = "answer line A\n@@mid tag@@\nanswer line B\n@@end tag@@"
       exchange 2 answer = "answer two\n\n@@_@@"
 
-  So the "obvious next question" in the Spec has a measured premise. If tags
-  are to be withheld like `🔒:`, the rule cannot be "every `@@…@@` line" —
-  `@@./path@@` / `@@https://…@@` are file references that inject content
-  (`chat_parser.lua:513-519`). It would have to be "a standalone `@@…@@`
-  line whose body is not a path or URL". Still a separate decision.
+  **Settled by the operator (2026-09-12): everything is in context except
+  `🔒:`.** Tags stay in what the model sees, `@@_@@` included; the outline
+  conventions in this issue are display-only and that is the whole of it.
+  (`🌿:` is the other line withheld today, per `annotation.lua`, and it is
+  a reference rather than content — the operator's rule is about authored
+  text.) The "obvious next question" in the Spec is closed: not a decision
+  to make later, a rule already made.
 - Probe artifact worth a glance, not part of this issue: text on the `🤖:`
   prefix line itself (`🤖: first answer line one.`) was dropped from the
   answer content, while text on the `💬:` line is kept. parley never writes
