@@ -91,13 +91,27 @@ _H.delete_buffer = function(file_name)
 end
 
 ---@param file string | nil # name of the file to delete
+---@return boolean | nil ok # true only once os.remove succeeded
+---@return string | nil err # the OS's words, or the buffer-deletion error
+-- Reports what happened (#231 BR-8): a caller that owns dependent state
+-- (delete_chat_file and its assets folder) must not clean up after a
+-- deletion that did not take. A buffer-deletion exception is folded into
+-- `nil, err` rather than escaping; the buffer goes before the file so a
+-- stale buffer can never re-write a file that was already removed.
 _H.delete_file = function(file)
 	logger.debug("deleting file: " .. vim.inspect(file))
 	if file == nil then
-		return
+		return nil, "no file name"
 	end
-	_H.delete_buffer(file)
-	os.remove(file)
+	local bok, berr = pcall(_H.delete_buffer, file)
+	if not bok then
+		return nil, tostring(berr)
+	end
+	local ok, err = os.remove(file)
+	if not ok then
+		return nil, tostring(err)
+	end
+	return true
 end
 
 ---@param file_name string # name of the file for which to get buffer

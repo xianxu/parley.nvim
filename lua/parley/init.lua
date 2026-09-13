@@ -3551,24 +3551,51 @@ M.delete_chat_tree = function(buf)
 		msg = msg .. "  " .. vim.fn.fnamemodify(d, ":~:.") .. "/\n"
 	end
 	local choice = vim.fn.confirm(msg, "&Yes\n&No", 2)
-	if choice == 1 then
-		for _, f in ipairs(tree_files) do
-			M.delete_chat_file(f)
+	if choice ~= 1 then
+		return
+	end
+	-- A refused file does not stop the others (each is its own owner, BR-8);
+	-- the door names each failure as it happens, the tally comes at the end.
+	local deleted, failed = 0, {}
+	for _, f in ipairs(tree_files) do
+		if M.delete_chat_file(f) then
+			deleted = deleted + 1
+		else
+			failed[#failed + 1] = f
 		end
 	end
+	if #failed > 0 then
+		local kept = vim.tbl_map(function(f) return vim.fn.fnamemodify(f, ":~:.") end, failed)
+		vim.notify("Deleted " .. deleted .. " of " .. #tree_files .. " chat file(s); not deleted: "
+			.. table.concat(kept, ", "), vim.log.levels.WARN)
+	end
+	return deleted, failed
 end
 
 -- #231: THE door for deleting a chat file — assets/<ts>/ goes with it.
--- delete_with is a no-op for a non-timestamp name, so every caller is safe;
--- a folder that cannot be removed is reported (never assumed gone) and the
--- file is still deleted. tests/arch/chat_delete_sweep_spec.lua allows exactly
--- one helpers.delete_file call under lua/parley/**: this one.
+-- The transcript is the index, so the chat goes FIRST (BR-8, ARCH-ORDER):
+-- once it is gone nothing references the folder, and only then is the
+-- irreversible cleanup safe. A refused chat deletion is an ERROR naming the
+-- path, returns nil, err, and leaves the folder untouched — never assume the
+-- owner is gone. delete_with is a no-op for a non-timestamp name, so every
+-- caller is safe; a folder that cannot be removed after the chat is gone is a
+-- WARN naming the folder (it stays for the next delete) and the deletion still
+-- counts as done. tests/arch/chat_delete_sweep_spec.lua allows exactly one
+-- helpers.delete_file call under lua/parley/**: this one.
+---@param path string
+---@return boolean | nil ok # true once the chat file is gone
+---@return string | nil err
 M.delete_chat_file = function(path)
-	local ok, err = require("parley.assets").delete_with(path)
+	local ok, err = M.helpers.delete_file(path)
 	if not ok then
-		vim.notify("Deleted " .. path .. " but " .. tostring(err), vim.log.levels.WARN)
+		vim.notify("not deleted: " .. tostring(path) .. " (" .. tostring(err) .. ")", vim.log.levels.ERROR)
+		return nil, err
 	end
-	M.helpers.delete_file(path)
+	local fok, ferr = require("parley.assets").delete_with(path)
+	if not fok then
+		vim.notify("Deleted " .. path .. " but " .. tostring(ferr), vim.log.levels.WARN)
+	end
+	return true
 end
 
 -- #231: paste the clipboard image as an attachment of the chat in `buf`.

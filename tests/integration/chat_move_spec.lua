@@ -34,6 +34,13 @@ local function create_chat(filename)
 end
 
 local function cleanup()
+    -- The refusal cases (#231 BR-8) make a directory non-writable; give it
+    -- back before the delete below, or the tree removal is refused too.
+    for _, d in ipairs({ primary_dir .. "/sub", primary_dir, secondary_dir }) do
+        if vim.fn.isdirectory(d) == 1 then
+            vim.fn.setfperm(d, "rwxr-xr-x")
+        end
+    end
     for _, buf in ipairs(vim.api.nvim_list_bufs()) do
         if vim.api.nvim_buf_is_valid(buf) then
             local name = vim.api.nvim_buf_get_name(buf)
@@ -238,5 +245,115 @@ describe("chat move", function()
         assert.equals(vim.log.levels.WARN, notices[1].level)
         assert.matches(vim.pesc(folder), notices[1].msg)
         assert.matches("EPERM", notices[1].msg)
+    end)
+
+    -- #231 BR-8: the chat is the owner and the transcript is the index, so the
+    -- chat file goes first and its folder only after that succeeded. A refused
+    -- chat deletion keeps the folder, is notified as an error, and returns
+    -- nil, err — nothing is assumed gone.
+    local function recording_notify()
+        local notices = {}
+        return notices, function(msg, level)
+            notices[#notices + 1] = { msg = msg, level = level }
+        end
+    end
+
+    local function assert_untouched(path, folder)
+        assert.equals(1, vim.fn.filereadable(path), "the chat must still exist")
+        assert.equals(1, vim.fn.isdirectory(folder), "the assets folder must be untouched")
+        assert.equals(1, vim.fn.filereadable(folder .. "/a.png"), "the asset must be untouched")
+    end
+
+    it("a chat the filesystem refuses to delete keeps its assets and is notified as an error", function()
+        local _, path = create_chat(TS .. "_refused.md")
+        local folder = seed_assets(primary_dir)
+        local notices, notify = recording_notify()
+        local saved_notify = vim.notify
+        vim.notify = notify
+        vim.fn.setfperm(primary_dir, "r-xr-xr-x")
+        local ok, res, err = pcall(parley.delete_chat_file, path)
+        vim.fn.setfperm(primary_dir, "rwxr-xr-x")
+        vim.notify = saved_notify
+        assert.is_true(ok, res)
+        assert.is_nil(res)
+        assert.is_string(err)
+        assert_untouched(path, folder)
+        assert.equals(1, #notices, vim.inspect(notices))
+        assert.equals(vim.log.levels.ERROR, notices[1].level)
+        assert.matches(vim.pesc(path), notices[1].msg)
+        assert.matches("not deleted", notices[1].msg)
+    end)
+
+    it("a buffer-deletion exception is folded into the error: chat and folder stay, nothing escapes", function()
+        local _, path = create_chat(TS .. "_bufraise.md")
+        local folder = seed_assets(primary_dir)
+        local notices, notify = recording_notify()
+        local saved_delete_buffer, saved_notify = parley.helpers.delete_buffer, vim.notify
+        parley.helpers.delete_buffer = function() error("buffer refused") end
+        vim.notify = notify
+        local ok, res, err = pcall(parley.delete_chat_file, path)
+        parley.helpers.delete_buffer, vim.notify = saved_delete_buffer, saved_notify
+        assert.is_true(ok, res)
+        assert.is_nil(res)
+        assert.matches("buffer refused", err)
+        assert_untouched(path, folder)
+        assert.equals(1, #notices, vim.inspect(notices))
+        assert.equals(vim.log.levels.ERROR, notices[1].level)
+        assert.matches(vim.pesc(path), notices[1].msg)
+    end)
+
+    it("delete_chat_file succeeds silently: chat gone, folder gone, true", function()
+        local _, path = create_chat(TS .. "_ok.md")
+        local folder = seed_assets(primary_dir)
+        local notices, notify = recording_notify()
+        local saved_notify = vim.notify
+        vim.notify = notify
+        local ok = parley.delete_chat_file(path)
+        vim.notify = saved_notify
+        assert.is_true(ok)
+        assert.equals(0, vim.fn.filereadable(path))
+        assert.equals(0, vim.fn.isdirectory(folder))
+        assert.same({}, notices)
+    end)
+
+    it("a tree delete continues past a refused file and reports it at the end", function()
+        -- The child lives in sub/ so that one directory can refuse while the
+        -- root's directory still allows: root + its folder go, child keeps both.
+        local sub = primary_dir .. "/sub"
+        vim.fn.mkdir(sub, "p")
+        local buf, root_path = create_chat(TS .. "_tree-root.md")
+        local child_name = CHILD_TS .. "_tree-child.md"
+        -- The tree walker hands back resolved paths (/private/tmp on macOS).
+        local child_path = vim.fn.resolve(sub .. "/" .. child_name)
+        vim.fn.writefile({ "---", "topic: child", "file: " .. child_name, "model: test-model",
+            "provider: openai", "---", "", "💬: Hi" }, child_path)
+        vim.fn.writefile({ "🌿: sub/" .. child_name .. ": child" }, root_path, "a")
+        local root_folder = seed_assets(primary_dir)
+        local child_folder = seed_assets(sub, CHILD_TS)
+        local notices, notify = recording_notify()
+        local saved_confirm, saved_notify = vim.fn.confirm, vim.notify
+        vim.fn.confirm = function() return 1 end
+        vim.notify = notify
+        vim.fn.setfperm(sub, "r-xr-xr-x")
+        local ok, deleted, failed = pcall(parley.delete_chat_tree, buf)
+        vim.fn.setfperm(sub, "rwxr-xr-x")
+        vim.fn.confirm, vim.notify = saved_confirm, saved_notify
+        assert.is_true(ok, deleted)
+        assert.equals(1, deleted)
+        assert.same({ child_path }, failed)
+        assert.equals(0, vim.fn.filereadable(root_path), "the root must be deleted")
+        assert.equals(0, vim.fn.isdirectory(root_folder), "the root's folder must be deleted")
+        assert_untouched(child_path, child_folder)
+        local per_file, summary
+        for _, n in ipairs(notices) do
+            if n.level == vim.log.levels.ERROR and n.msg:find(child_path, 1, true) and n.msg:find("not deleted", 1, true) then
+                per_file = n
+            elseif n.msg:find("1 of 2", 1, true) then
+                summary = n
+            end
+        end
+        assert.is_not_nil(per_file, "no per-file error names the refused chat: " .. vim.inspect(notices))
+        assert.is_not_nil(summary, "no end-of-tree report: " .. vim.inspect(notices))
+        assert.matches(vim.pesc(vim.fn.fnamemodify(child_path, ":~:.")), summary.msg)
     end)
 end)
