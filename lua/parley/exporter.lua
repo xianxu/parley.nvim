@@ -455,11 +455,12 @@ M.simple_markdown_to_html = function(markdown)
 	-- #231: restore the image tags, the <p>-wrapped form first, exactly as
 	-- write_html_file restores the branch placeholders.
 	for n, tag in ipairs(images) do
-		-- gsub-safe: function replacement (#214 BR-34)
 		local function repl()
 			return tag
 		end
+		-- gsub-safe: `repl` is a function replacement (#214 BR-34)
 		html = html:gsub("<p[^>]*>%s*XIMGX" .. n .. "XIMGX%s*</p>", repl)
+		-- gsub-safe: same function replacement
 		html = html:gsub("XIMGX" .. n .. "XIMGX", repl)
 	end
 
