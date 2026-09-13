@@ -29,6 +29,7 @@ atlas:
       - lua/parley/keybinding_registry.lua
       - lua/parley/dispatcher.lua
       - lua/parley/chat_finder.lua
+      - lua/parley/exporter.lua
     tests:
       - tests/unit/assets_spec.lua
       - tests/unit/clipboard_image_spec.lua
@@ -40,6 +41,9 @@ atlas:
       - tests/integration/query_cache_spec.lua
       - tests/arch/chat_delete_sweep_spec.lua
       - tests/integration/chat_move_spec.lua
+      - tests/integration/tree_export_spec.lua
+      - tests/unit/exporter_tree_spec.lua
+      - tests/integration/clipboard_live_spec.lua
 
   chat/lifecycle:
     code:
