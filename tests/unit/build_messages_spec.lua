@@ -2009,9 +2009,12 @@ describe("attachments (#231): both builders, one budget", function()
     end)
 
     describe("budget", function()
-        -- base64 40000 + BLOCK_OVERHEAD 256 = 40256 per image: two fit under
-        -- 100000 with the retained text and notes, three never do.
-        local BIG = string.rep("b", 30000)
+        -- 30000 bytes behind a real PNG signature (BR-4: read_bounded and
+        -- question_content reject bytes that do not look like the declared
+        -- type). base64 40000 + BLOCK_OVERHEAD 256 = 40256 per image: two fit
+        -- under 100000 with the retained text and notes, three never do.
+        local PNG_SIG = "\137PNG\r\n\26\n"
+        local BIG = PNG_SIG .. string.rep("b", 30000 - #PNG_SIG)
         local headers = { config_max_full_exchanges = 10 } -- keep all three retained
 
         before_each(function()
@@ -2127,6 +2130,76 @@ describe("attachments (#231): both builders, one budget", function()
             assert.equals("string", type(user.content))
             assert.matches("chat_path not supplied", user.content)
             vim.api.nvim_buf_delete(buf, { force = true })
+        end)
+
+        -- C2 (BR-2): the continuation builder applies the retention rule with
+        -- the SAME inputs as the initial send — the chat's total exchange
+        -- count and the question's @@ file references — so an image the
+        -- initial send omitted stays omitted and a pinned one stays pinned.
+        it("answering exchange 3 of 4 keeps the initial send's omissions (total = #exchanges, not target)", function()
+            write_asset("b.png")
+            local buf, model = live_chat({
+                { q = { "💬: q1", "![](" .. rel("a.png") .. ")" }, a = { "a1" } },
+                { q = { "💬: q2", "![](" .. rel("b.png") .. ")" }, a = { "a2" } },
+                { q = { "💬: q3" }, a = { "a3" } },
+                { q = { "💬: q4" } },
+            })
+            assert.equals(4, #model.exchanges)
+            -- The initial send for exchange 3 (window 2 of 4): 1 and 2 omitted.
+            local parsed = build({
+                att_exchange("q1", "a1"), att_exchange("q2", "a2", { "b.png" }), exchange("q3", "a3"), exchange("q4"),
+            }, { exchange_idx = 3 })
+            assert.equals(0, total_images(parsed))
+            local reads = recording_io(function()
+                local live = chat_respond.build_messages_from_model(buf, model, 3, agent_info,
+                    { chat_path = chat_path, max_exchanges = 2 })
+                assert.same(shape(parsed), shape(live))
+                assert.equals(0, total_images(live))
+                local users = user_messages(live)
+                assert.equals(3, #users)
+                assert.equals("q1\n![](" .. rel("a.png") .. ")\n" .. assets.OMITTED_NOTE, users[1].content)
+                -- Exchange 2 is the one a total of 3 resurrects (2 > 3 - 2).
+                assert.equals("q2\n![](" .. rel("b.png") .. ")\n" .. assets.OMITTED_NOTE, users[2].content)
+                assert.equals("q3", users[3].content)
+            end)
+            assert.same({}, reads)
+            vim.api.nvim_buf_delete(buf, { force = true })
+        end)
+
+        it("an old exchange pinned by @@ file references keeps its image on continuation", function()
+            local buf, model = live_chat({
+                { q = { "💬: q1 @@/some/path@@", "![](" .. rel("a.png") .. ")" }, a = { "a1" } },
+                { q = { "💬: q2" }, a = { "a2" } },
+                { q = { "💬: q3" } },
+            })
+            local pinned = att_exchange("q1 @@/some/path@@", "a1")
+            pinned.question.file_references = { { line = "@@/some/path@@", path = "/some/path", original_line_index = 1 } }
+            local parsed = build({ pinned, exchange("q2", "a2"), exchange("q3") })
+            assert.equals(1, total_images(parsed))
+            local live = chat_respond.build_messages_from_model(buf, model, 3, agent_info,
+                { chat_path = chat_path, max_exchanges = 2 })
+            assert.same(shape(parsed), shape(live))
+            local users = user_messages(live)
+            assert.equals(3, #users)
+            assert.equals("image", users[1].content[1].type)
+            assert.equals(vim.base64.encode(PNG), users[1].content[1].source.data)
+            assert.equals("q1 @@/some/path@@\n![](" .. rel("a.png") .. ")", users[1].content[2].text)
+            assert.equals("q2", users[2].content)
+            assert.equals("q3", users[3].content)
+            vim.api.nvim_buf_delete(buf, { force = true })
+        end)
+    end)
+
+    -- BR-1: the budget's identity is the OCCURRENCE ("<order>:<n>"), so one
+    -- image linked three times is three candidates and the cap counts each.
+    it("the same image linked three times in one question: the cap counts occurrences", function()
+        with_limits({ MAX_REQUEST_IMAGES = 2 }, function()
+            local messages = build({ att_exchange("q", nil, { "a.png", "a.png", "a.png" }) })
+            local user = messages[#messages]
+            assert.equals(2, image_count(user.content))
+            local notes = shape(messages)[1].notes
+            assert.equals(1, #notes)
+            assert.equals("[attachment " .. rel("a.png") .. " not sent: request budget]", notes[1])
         end)
     end)
 

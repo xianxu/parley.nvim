@@ -472,6 +472,14 @@ end
 --- — then each slot becomes question_content: image blocks for the planned
 --- attachments first, the text last, a note for every attachment not sent.
 --- No slot → nothing changes, so a text-only request stays byte-identical.
+---
+--- The budget's identity is the OCCURRENCE (BR-1): every attachment gets
+--- `id = "<order>:<n>"` (n = its position within the question) here, in the
+--- one place both builders share, so the parser's and attachments_in's
+--- id-less tables are never handed to plan_budget/question_content, and the
+--- same image linked twice is two candidates — each counted and charged.
+--- The slot's attachments are copied, not mutated: the parse result is the
+--- caller's.
 local function attach_question_images(messages, slots, chat_path, logger)
     if #slots == 0 then
         return
@@ -479,10 +487,13 @@ local function attach_question_images(messages, slots, chat_path, logger)
     local assets = require("parley.assets")
     local candidates = {}
     for _, slot in ipairs(slots) do
-        for _, att in ipairs(slot.attachments) do
+        local keyed = {}
+        for n, att in ipairs(slot.attachments) do
+            keyed[n] = vim.tbl_extend("force", att, { id = slot.order .. ":" .. n })
             local size, err = asset_size(chat_path, att.path)
-            candidates[#candidates + 1] = { order = slot.order, path = att.path, size = size, err = err }
+            candidates[#candidates + 1] = { id = keyed[n].id, order = slot.order, path = att.path, size = size, err = err }
         end
+        slot.attachments = keyed
     end
     local plan = assets.plan_budget(candidates, assets.payload_size(messages), {
         max_bytes = assets.MAX_BYTES,
@@ -527,7 +538,9 @@ M.build_messages_from_model = function(buf, model, target_idx, agent_info, opts)
     local prov = require("parley.providers")
     local define = require("parley.define")
     local assets = require("parley.assets")
+    local chat_parser = require("parley.chat_parser")
     local max_exchanges = opts.max_exchanges or 999999
+    local total_exchanges = #model.exchanges
     local slots = {}
     append_neighborhood_context(agent_info, agent_info and agent_info.root_policy)
     local messages = system_prompt_msgs.build(agent_info, function(provider)
@@ -574,15 +587,19 @@ M.build_messages_from_model = function(buf, model, target_idx, agent_info, opts)
                     -- Defensive: an answer never precedes its question, but
                     -- flush any accumulated answer blocks to keep ordering stable.
                     flush_answer()
-                    -- #231: same grammar, same retention rule and same budget
-                    -- as the parse path. @@ file references are not visible
-                    -- here (the parser resolves them), so they cannot pin:
-                    -- has_file_refs is false. Text is re-sent as before — only
-                    -- the image bytes are subject to the window and budget.
+                    -- #231: same grammar, same retention rule, same budget AND
+                    -- the same inputs as the parse path (BR-2): the chat's
+                    -- total exchange count (not the target — answering 3 of 4
+                    -- must not widen the window) and the question's @@ file
+                    -- references, read from the block text with the parser's
+                    -- own extract_file_refs, which pin it exactly as they pin
+                    -- the initial send. Text is re-sent as before — only the
+                    -- image bytes are subject to the window and budget.
                     local message = { role = "user", content = text }
                     local attachments = assets.attachments_in(text)
                     if #attachments > 0 then
-                        if M.preserve_exchange(k, target_idx, target_idx, max_exchanges, false) then
+                        local pinned = #chat_parser.extract_file_refs(text) > 0
+                        if M.preserve_exchange(k, target_idx, total_exchanges, max_exchanges, pinned) then
                             slots[#slots + 1] = { message = message, order = k, attachments = attachments }
                         else
                             message.content = assets.omitted_text(text, attachments)

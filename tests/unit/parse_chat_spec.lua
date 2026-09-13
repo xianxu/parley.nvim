@@ -664,6 +664,19 @@ describe("parse_chat: @@ file references", function()
         local refs = result.exchanges[1].question.file_references
         assert.equals(2, #refs)
     end)
+
+    -- #231: extract_file_refs is exported (the continuation builder pins
+    -- exchanges with it) and is the same function the parse applies.
+    it("extract_file_refs is exported and agrees with the parse", function()
+        local sample = "💬: Compare @@/file/a.lua@@, @@ ~/b.lua @@, @@./c@@ and @@/file/a.lua@@; not @@bare@@ or @@https://x@@?"
+        assert.same({ "/file/a.lua", "~/b.lua", "./c", "https://x" }, chat_parser.extract_file_refs(sample))
+        local lines, header_end = make_chat(std_header, { sample })
+        local parsed = {}
+        for _, r in ipairs(parse_chat(lines, header_end).exchanges[1].question.file_references) do
+            parsed[#parsed + 1] = r.path
+        end
+        assert.same(chat_parser.extract_file_refs(sample), parsed)
+    end)
 end)
 
 

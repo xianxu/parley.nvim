@@ -253,6 +253,31 @@ function M.last_section_in_answer(parsed, exchange_idx)
 	return ex.answer.sections[#ex.answer.sections]
 end
 
+--- Extract @@ref@@ file references from a text. Canonical form: @@<ref>@@
+--- where ref starts with https://, /, ~/, ./, or ../; whitespace inside the
+--- markers is trimmed and repeats collapse, in order of first appearance.
+--- Exported (#231) so the continuation builder pins an exchange by the SAME
+--- rule the parse applies (chat_respond.build_messages_from_model reads the
+--- question text straight from the buffer, where the parse's
+--- `question.file_references` do not exist).
+--- @param text string
+--- @return string[] refs
+local function extract_file_refs(text)
+	local refs = {}
+	local seen = {}
+	for ref in text:gmatch("@@([^@]+)@@") do
+		ref = ref:gsub("^%s*(.-)%s*$", "%1")
+		if ref:match("^https?://") or ref:match("^/") or ref:match("^~/") or ref:match("^%./") or ref:match("^%.%./") then
+			if not seen[ref] then
+				seen[ref] = true
+				table.insert(refs, ref)
+			end
+		end
+	end
+	return refs
+end
+M.extract_file_refs = extract_file_refs
+
 M.parse_chat = function(lines, header_end, config)
 	local result = {
 		header_end = header_end,
@@ -511,22 +536,8 @@ local fence = require("parley.fence")
 		cb_state = nil
 	end
 
-	-- Helper to extract @@ref@@ file references from a line of text.
-	-- Canonical form: @@<ref>@@ where ref starts with https://, /, ~/, ./, or ../
-	local function extract_file_refs(text)
-		local refs = {}
-		local seen = {}
-		for ref in text:gmatch("@@([^@]+)@@") do
-			ref = ref:gsub("^%s*(.-)%s*$", "%1")
-			if ref:match("^https?://") or ref:match("^/") or ref:match("^~/") or ref:match("^%./") or ref:match("^%.%./") then
-				if not seen[ref] then
-					seen[ref] = true
-					table.insert(refs, ref)
-				end
-			end
-		end
-		return refs
-	end
+	-- @@ref@@ file references come from the module-level extract_file_refs
+	-- (exported as M.extract_file_refs, #231).
 
 	-- Loop through content lines
 	-- #200: structural markers inside a tool body are CONTENT. Tool output
