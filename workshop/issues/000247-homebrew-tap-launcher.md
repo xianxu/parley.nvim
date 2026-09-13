@@ -1,7 +1,7 @@
 ---
 id: 000247
 status: working
-deps: []
+deps: [000246]
 github_issue:
 created: 2026-09-13
 updated: 2026-09-13
@@ -66,3 +66,23 @@ and no API key typed.
 ## Log
 
 ### 2026-09-13
+
+## Revisions
+
+### 2026-09-13T14:43:00-07:00 — packaging execution scope
+
+The operator confirmed #246 then #247. The formula uses #245's default
+Darwin projection (ripgrep) plus Neovim; alternate image backends stay optional.
+This supersedes all-advisory dependency parity in the original spec.
+
+The implementation plan is [Homebrew launcher](../plans/000247-homebrew-launcher-plan.md).
+The launcher respects standard XDG roots, preserves editable init.lua and offers
+one atomic init.lua.new candidate. Removal covers config/data/state/cache after
+explicitly stopping the owned proxy. These supersede the original XDG_CONFIG_HOME
+wording and two-directory removal shorthand.
+
+Live VM acceptance must complete the shipped managed-proxy login → live model →
+image-response path. A direct keyed-provider response cannot substitute for it.
+A VM credential is usable only if it authenticates that same managed proxy;
+otherwise the operator completes OAuth in the guest. That input remains pending.
+Fresh-context plan review completed; implementation approval is pending.
