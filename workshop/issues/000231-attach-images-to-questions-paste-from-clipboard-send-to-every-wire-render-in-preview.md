@@ -197,10 +197,10 @@ and per-function test strategies; two review boundaries).
 - [x] M1 — both builders: one retention rule, one budget, send guard, elided logs (Task 6)
 - [x] M1 — three wires, three shapes (Task 7)
 - [x] M1 — gate: atlas, traceability, full suite, manual paste + per-wire send (Task 8)
-- [ ] M2 — both movers carry the folder; all five deleters remove it; prompts name it (Task 9)
-- [ ] M2 — tree export copies the folder and renders `<img>` (Task 10)
-- [ ] M2 — docs: memory, format, providers, export, keybindings, README (Task 11)
-- [ ] M2 — live clipboard conformance (opt-in), close (Task 12)
+- [x] M2 — both movers carry the folder; all five deleters remove it; prompts name it (Task 9)
+- [x] M2 — tree export copies the folder and renders `<img>` (Task 10)
+- [x] M2 — docs: memory, format, providers, export, keybindings, README (Task 11)
+- [x] M2 — live clipboard conformance (opt-in), close (Task 12)
 
 ## Log
 
@@ -305,3 +305,24 @@ and per-function test strategies; two review boundaries).
   would send more images in edge cases. Also: the budget property test's LCG
   was degenerate (199 of 200 trials empty) — replaced by Park–Miller, and the
   live property then exposed the prefix/first-fit gap.
+
+### 2026-09-13 (implementation, M2)
+
+- M1 closed SHIP after six boundary rounds (the review sidecar carries all
+  seven findings and their disposition; lessons recorded in
+  `workshop/lessons.md`). M2 implemented by two parallel subagents on disjoint
+  files: movers/deleters (chat_move_spec 10, chat_delete_sweep 1 — the sweep
+  reported six `helpers.delete_file` sites before the door and one after;
+  chat_finder_logic 48 unchanged) and export (exporter_tree 27, tree_export
+  10 incl. a reported copy failure). One arch fix: `gsub-safe` markers on the
+  image placeholder restore. Docs: attachments/memory/format/providers/
+  export/keybindings atlas pages; README carried the surface since M1.
+- Live clipboard conformance (`tests/integration/clipboard_live_spec.lua`,
+  `PARLEY_LIVE_CLIPBOARD=1`, agent sandbox off) ran once on this machine: the
+  darwin recipe read back a structurally valid PNG from the real clipboard
+  and declined text with osascript's own sentence; the operator's clipboard
+  text was restored afterwards.
+- Subagent notes worth keeping: a first `move_conflict` caller mis-read its
+  `src, dst` return as a clash (caught red); the 🌿 rewrite after a move is
+  not byte-observable with bare-basename refs post-#224, so the test asserts
+  tree consistency via `get_chat_tree_files` instead.
