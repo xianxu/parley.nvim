@@ -5,7 +5,7 @@ deps: [000231]
 github_issue:
 created: 2026-09-13
 updated: 2026-09-13
-estimate_hours:
+estimate_hours: 1.623
 started: 2026-09-13T11:25:16-07:00
 ---
 
@@ -74,6 +74,30 @@ per-platform recipe, like the clipboard read.
   are never shrunk.
 - `PARLEY_LIVE_SHRINK=1` passes on this machine via `sips`.
 
+## Estimate
+
+Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md`
+against `baseline-v3.1.md`. Method A only; calibration currently flagged stale.
+Derived after plan-quality round 2 passed. One focused Lua feature includes
+policy, dimensions, IO, fixture and integration (base design 1.5h, impl 1.5h);
+shared clipboard grammar is a cross-cutting refactor (0.4h / 0.4h); real-tool
+conformance is discovery (0 / 0.45h); docs (0.1h / 0.1h) and one close review
+(0.1h / 0.4h). Thorough-plan design discount 0.2, familiar-stack multiplier 1,
+v3.1 implementation scale 0.4, design buffer 15%. Existing validators and
+Neovim process IO are reused; no novel codec/library implementation.
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: lua-neovim design=0.3 impl=0.6
+item: cross-cutting-refactor design=0.08 impl=0.16
+item: real-api-discovery design=0 impl=0.18
+item: atlas-docs design=0.02 impl=0.04
+item: milestone-review design=0.02 impl=0.16
+design-buffer: 0.15
+total: 1.623
+```
+
 ## Plan
 
 Test strategy: `dimensions` — table over the four fixtures + truncated
@@ -124,3 +148,25 @@ config-wins selection that `clipboard_image` and `image_shrink` share;
 `config.assets.shrink_cmd`; opt-in `PARLEY_LIVE_SHRINK=1` per recipe.
 ARCH-ORDER: one tagged session field (`nil | {recipe} | {missing, warned}`),
 reset by `configure` from `parley.setup`.
+
+### 2026-09-13 — implementation resumed
+
+Operator approved the plan and all three refinements. Today's project goal is
+a usable installation under a separate Neovim app profile, with packaged
+defaults based on the existing `~/.config/nvim` configuration.
+
+Plan-quality round 1 requested a compact plan, decoder resource admission,
+output-dimension validation, and consistent embedded `{max}` grammar. The
+revised canonical plan addresses PQ-1 through PQ-4; the original design is
+preserved as `workshop/plans/000244-shrink-images-on-save-design-record.md`.
+
+## Revisions
+
+### 2026-09-13T11:50:00-07:00 — approved refinements and gate corrections
+
+Reason: operator approval and plan-quality findings. Delta: JPEG resize is
+edge-driven only, non-smaller output keeps silently, source cap remains first.
+Conversion is skipped above 32 million pixels or a 16384-pixel dimension;
+the subprocess gets a file-size limit and output must meet its requested edge.
+Paths remain whole-argument tokens; `{max}` may be embedded. The canonical
+plan supersedes the original Spec where these refinements differ.
