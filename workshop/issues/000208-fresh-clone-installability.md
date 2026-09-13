@@ -1,11 +1,12 @@
 ---
 id: 000208
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-09-02
-updated: 2026-09-02
+updated: 2026-09-13
 estimate_hours:
+started: 2026-09-13T12:19:41-07:00
 ---
 
 # parley must install and load from a fresh clone
