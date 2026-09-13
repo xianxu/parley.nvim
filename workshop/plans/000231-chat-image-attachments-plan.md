@@ -136,9 +136,11 @@ test fixture.
   (`chat_finder.lua:239,258,302,321`), which `vim.defer_fn`s a real
   `ChatFinder` 100 ms later; `tests/unit/chat_finder_logic_spec.lua:128-207`
   saves, stubs and restores both it and `M.helpers.delete_file`. The finder's
-  single-file prompt is `prompt_delete_confirmation` (`:260`,
-  `vim.ui.input({ prompt = "Delete " .. item_value .. "? [y/N] " })`) and the
-  tree prompt is `prompt_delete_tree_confirmation` (`:324-341`).
+  single-file prompt is `prompt_delete_confirmation` (`:260`; its
+  `vim.ui.input({ prompt = "Delete " .. item_value .. "? [y/N] " })` at `:273`)
+  and the tree prompt is `prompt_delete_tree_confirmation` (`:324-341`).
+  `cmd.ChatDelete`'s prompt is at `init.lua:3878`, `md_delete_file`'s confirm
+  at `:2950`.
 - `init.lua:1438 os.remove(last)` removes the legacy `<chat_dir>/last.md`
   state file — a deletion of a non-chat, never a timestamp chat.
 - Ollama resolves to `wire_openai` (`wire.lua:39`), so it would receive
@@ -2340,8 +2342,9 @@ parley.setup({ chat_dir = tmp_dir, state_dir = tmp_dir .. "/state", providers = 
 local dispatcher = require("parley.dispatcher")
 
 -- As dispatcher_spec does: a truthy web_search would append server tools to
--- the anthropic/googleai payloads and muddy the pinned shapes.
-before_each(function() parley._state.web_search = false end)
+-- the anthropic/googleai payloads and muddy the pinned shapes. Set once at
+-- file scope (no spec here toggles it); this repo has no top-level before_each.
+parley._state.web_search = false
 
 local DATA = vim.base64.encode("PNGBYTES")
 local function image_user(text)
@@ -2894,9 +2897,9 @@ The four single/tree prompts gain the note (`assets` required locally at each):
 ```lua
 -- cmd.ChatDelete (:3878)
 	vim.ui.input({ prompt = "Delete " .. file_name .. require("parley.assets").removal_note(file_name) .. "? [y/N] " }, function(input)
--- md_delete_file (:2949)
+-- md_delete_file (:2950)
 					local choice = vim.fn.confirm("Delete " .. rel .. require("parley.assets").removal_note(file) .. "?", "&Yes\n&No", 2)
--- chat_finder.prompt_delete_confirmation (:272)
+-- chat_finder.prompt_delete_confirmation (:273)
 	vim.ui.input({ prompt = "Delete " .. item_value .. require("parley.assets").removal_note(item_value) .. "? [y/N] " }, function(input)
 -- chat_finder.prompt_delete_tree_confirmation (:338-341): append each file's note
 	for _, f in ipairs(tree_files) do
