@@ -1,11 +1,12 @@
 ---
 id: 000219
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-09-05
-updated: 2026-09-05
+updated: 2026-09-13
 estimate_hours:
+started: 2026-09-13T13:03:44-07:00
 ---
 
 # prepare_dir races on concurrent setup, failing specs intermittently
