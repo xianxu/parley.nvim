@@ -5,7 +5,7 @@ deps: [000245]
 github_issue:
 created: 2026-09-13
 updated: 2026-09-13
-estimate_hours:
+estimate_hours: 3.823
 started: 2026-09-13T14:26:23-07:00
 ---
 
@@ -48,6 +48,32 @@ this repo, derived from the operator's config with personal data removed.
 - The same machine's `~/.config/nvim` is byte-identical before and after.
 - The personal-marker test passes and is wired into `make test`.
 - The README's install section points here for non-Neovim users.
+
+## Estimate
+
+Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against
+`baseline-v3.1.md`. Method A only; calibration is provisional (source stale).
+Four focused Lua/Neovim primitives: live policy, profile settings/key, bootstrap,
+and welcome/connect. Each uses midpoint design 2h ×0.2 for the approved detailed
+plan and implementation 1h ×0.4 for v3.1. Existing libuv, Lazy and Parley owners
+cover the integrations; no novel library is needed. Familiarity 1.0. One docs
+primitive uses 0.1h ×0.2 design and 0.1h ×0.4 implementation; one boundary review
+uses 0 design and 0.35h ×0.4 implementation; GitHub bootstrap discovery uses
+0 design and 0.45h ×0.4 implementation. Design buffer is 15%.
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: lua-neovim design=0.4 impl=0.4
+item: lua-neovim design=0.4 impl=0.4
+item: lua-neovim design=0.4 impl=0.4
+item: lua-neovim design=0.4 impl=0.4
+item: atlas-docs design=0.02 impl=0.04
+item: milestone-review design=0 impl=0.14
+item: real-api-discovery design=0 impl=0.18
+design-buffer: 0.15
+total: 3.823
+```
 
 ## Plan
 
