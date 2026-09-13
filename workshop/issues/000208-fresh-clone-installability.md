@@ -82,11 +82,11 @@ fresh clone loads and a fresh contributor can run the tests.
 
 ## Plan
 
-- [ ] Vendor `construct/generated/vocabulary/issue.json`; add the regenerate-and-diff drift check.
-- [ ] Make `issue_vocabulary.default()` non-fatal; guard `issues.lua:382`.
-- [ ] Add a fresh-clone load spec that runs against an extracted archive.
-- [ ] Real `Makefile` including `Makefile.parley`, `-include` ariadne overlay.
-- [ ] Untrack maintainer-only symlinks; gitignore them; verify no escaping symlink remains.
+- [x] Vendor `construct/generated/vocabulary/issue.json`; add the regenerate-and-diff drift check.
+- [x] Make `issue_vocabulary.default()` non-fatal; guard `issues.lua:382`.
+- [x] Add a fresh-clone load spec that runs against an extracted archive.
+- [x] Real `Makefile` including `Makefile.parley`, `-include` ariadne overlay.
+- [x] Untrack maintainer-only symlinks; gitignore them; verify no escaping symlink remains.
 
 ## Log
 
@@ -140,6 +140,20 @@ warnings/errors). Evidence is in `/tmp/parley208-resume-{runtime,issues,harness,
 The #219 fix is proceeding in an isolated worktree; full-suite acceptance
 remains pending its integration. No release claim is made from these focused
 checks.
+
+### 2026-09-13 — complete integration acceptance
+
+#219 shipped in PR177 and is integrated at `5d7a3c5`; no open race remains.
+`make test` passes 232 spec files in the final development checkout, with zero
+lint warnings/errors. The independent full archive passes the same 232 specs
+and all four load/setup/new-chat variants. Runtime, tests, scripts, Makefiles,
+and CI bytes match that tested archive candidate (`48a5858`). Logs:
+`/tmp/parley208-final-checkout.log` and `/tmp/parley208-resume-archive-fixed.log`.
+The two archive-only fixture failures were reproduced and fixed by canonical
+path comparisons (`100ed4c`), with a deliberately redundant separator retained
+as a regression. `make check-vocabulary`, `make check-sdlc-conformance`, exact
+upstream seed comparisons, and `git diff --check` also pass. Ready for the
+whole-issue close review; publishing remains after that gate.
 
 ## Revisions
 

@@ -87,7 +87,7 @@ product they document must be settled first.
 ### parley.nvim#208 — fresh-clone installability
 
 **est:** 2.494h
-**status:** in progress — full archive acceptance awaits #219
+**status:** acceptance passed — awaiting close review and publication
 **started:** 2026-09-13
 
 Runtime changes and portable build/test infrastructure are committed. Isolated
@@ -95,6 +95,10 @@ startup passes with intact, missing, corrupt, and malformed vocabulary; focused
 issue/harness suites, drift, conformance, and lint pass. The full archive suite
 exposed the existing directory-creation race tracked as #219. Its isolated fix
 is in progress; #208 is not closed or published.
+
+**Progress 2026-09-13:** #219 merged; full checkout and standalone archive
+acceptance each pass 232 spec files. Startup also passes all four vocabulary
+variants. Earlier blocker is resolved; review and publication remain.
 
 ## Log
 
