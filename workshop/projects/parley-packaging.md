@@ -190,3 +190,14 @@ skipped live mutation. #247 owns formula parity against the default projection
 (ripgrep); alternate backends and pandoc remain optional.
 
 [parley.nvim#245]: #parley-nvim-245
+
+### 2026-09-13T14:43:00-07:00 — starter and launcher plans prepared
+
+Reason: operator requested #246 then #247 after #245 shipped. Delta: both issues
+are claimed, with durable plans prepared and fresh-context review corrections
+applied. The current dependency chain is #245 → #246 → #247, superseding the
+original Breakdown prerequisite wording. #246 explicitly isolates the starter’s
+configuration and tool policy; #209/#211 remain separate broader work. #247’s
+live VM acceptance must use the shipped managed-proxy login and an image response,
+not substitute a direct keyed-provider test. Guest authentication choice remains
+pending. Plans await implementation approval; neither issue is complete or costed.

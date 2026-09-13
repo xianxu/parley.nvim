@@ -2296,3 +2296,10 @@ download.
 11. **Live conformance needs a platform-local oracle.** A macOS-only dimension
     probe leaves Linux recipes unchecked; select an independent probe for
     each backend and test its dispatch without macOS tools.
+
+12. **Sequence changes must reach executable metadata.** When an approved scope
+    removes prerequisites, update issue deps as well as appending the plan/project
+    revision; otherwise the gates enforce an obsolete dependency chain.
+13. **Acceptance must exercise the shipped authentication route.** A successful
+    response through a substitute provider does not prove managed-proxy login.
+    Keep live acceptance pending until the actual product path succeeds.
