@@ -41,9 +41,11 @@ local function is_outline_item(bufnr, line_number, config, code_block_memo, all_
     return true, "question", "  " .. line
   -- Match annotations
   elseif line:match("^@@.+@@$") then
-    -- Both delimiters are two characters: `@@my note@@` → `→ my note` (#232;
-    -- the old 2,-2 slice left one `@` on each side).
-    return true, "annotation", "→ " .. string.sub(line, 3, -3)
+    -- Both delimiters are two characters: `@@my note@@` → `  → my note` (#232;
+    -- the old 2,-2 slice left one `@` on each side). Indented like a question:
+    -- an annotation is a navigation entry at the conversation's own level, not
+    -- a heading above it (operator, 2026-09-12).
+    return true, "annotation", "  → " .. string.sub(line, 3, -3)
   -- Match branch references
   elseif line:match("^" .. vim.pesc(config.chat_branch_prefix or "🌿:")) then
     return true, "branch", "🌿 " .. line

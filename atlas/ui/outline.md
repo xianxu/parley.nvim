@@ -14,7 +14,8 @@
   tree adds only its `📋` root row, the branch rows it takes from the parser
   (a child's upward parent link is therefore never a row), and indentation.
   `tests/unit/outline_parity_spec.lua` is the differential oracle. An
-  annotation displays as `→ text` (both `@@` delimiters stripped).
+  annotation displays as `  → text` (both `@@` delimiters stripped), at the
+  same level as the questions of its file.
 - Headings indented by level: `#` → 2sp, `##` → 4sp, `###` → 6sp
 - Lines inside code blocks (``` / ~~~) are excluded — but a `💬:`/`🤖:` turn
   marker at column zero ENDS an open fence (#218), so an unmatched fence in one
