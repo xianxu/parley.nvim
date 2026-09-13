@@ -17,6 +17,18 @@
 -- chat movers, every chat deleter and the tree export all go through this
 -- module (ARCH-DRY) — never through their own `mkdir`/`rename`/`delete`.
 --
+-- EVERY OCCURRENCE IS AN IMAGE ON THE WIRE. A transcript may link one file
+-- many times; each link is its own block, so the request budget and the
+-- content are keyed by an occurrence `id` the builder assigns ("<order>:<n>",
+-- n = position within that question), never by path (#231 review C1). Twenty-
+-- one links to one file are twenty-one candidates and stop at the cap.
+--
+-- BYTES MUST LOOK LIKE THEIR TYPE (#231 review C4, ARCH-SECURE): the folder is
+-- writable by anything, so `read_bounded` refuses a non-regular file, relays
+-- every read error, and checks the magic bytes against the extension's media
+-- type; `question_content` checks them again before it forms a block. Empty,
+-- truncated, text-as-.png or a directory named x.png is a note, never a block.
+--
 -- Everything above `default_io` is PURE (string work, plus vim.base64 and
 -- vim.json for the content and the send guard). The IO functions (save /
 -- read_bounded / move_with / delete_with / copy_into / removal_note) take an
@@ -153,6 +165,34 @@ function M.too_big(n)
     return ("%d bytes exceeds the %d-byte limit"):format(n, M.MAX_BYTES)
 end
 
+-- Magic bytes per media type, as anchored Lua patterns (`.` matches any byte,
+-- NUL included). PNG: 8-byte signature; JPEG: SOI + marker prefix; GIF: the
+-- two versions; WebP: a RIFF container whose form type at offset 8 is WEBP.
+local SIGNATURES = {
+    ["image/png"] = "^\137PNG\r\n\26\n",
+    ["image/jpeg"] = "^\255\216\255",
+    ["image/gif"] = "^GIF8[79]a",
+    ["image/webp"] = "^RIFF....WEBP",
+}
+
+--- Do these bytes begin with the signature of `media_type`? False for empty,
+--- truncated or mismatched bytes and for a type no wire accepts. PURE.
+---@param media_type string|nil
+---@param bytes string|nil
+---@return boolean
+function M.looks_like(media_type, bytes)
+    local pattern = media_type and SIGNATURES[media_type]
+    if not pattern or type(bytes) ~= "string" then
+        return false
+    end
+    return bytes:find(pattern) ~= nil
+end
+
+--- The one sentence for bytes that fail looks_like.
+local function not_an_image(media_type)
+    return "not a " .. tostring(media_type) .. " image"
+end
+
 --------------------------------------------------------------------------------
 -- Attachment grammar (ARCH-SECURE — the transcript is model-writable)
 --------------------------------------------------------------------------------
@@ -242,20 +282,29 @@ local function pre_reason(c, max_bytes)
     return nil
 end
 
---- Decide which attachments a request carries. PURE and total.
+--- Decide which attachment OCCURRENCES a request carries. PURE and
+--- deterministic; total over well-formed candidates.
+---
+--- A candidate is one occurrence of a link — `id` is the caller-assigned key
+--- ("<order>:<n>", n = the link's position within that question) and must be
+--- unique across the list; `path` may repeat, and each repeat is charged and
+--- counted on its own (one link = one image block on the wire). A missing or
+--- duplicate `id` is a caller bug and raises — silently merging occurrences
+--- is exactly the cap bypass this key exists to prevent.
 ---
 --- The budget starts charged with `text_bytes` and with the note every
 --- candidate WOULD get if excluded (a conservative margin — an included
 --- image keeps its note charge). Then images are taken NEWEST FIRST (highest
 --- `order`, then latest position) while `encoded_size(size) + block_overhead`
---- and the image count still fit. A missing size (stat failed) or a size over
---- `max_bytes` is a note and never consumes the count. Text alone over the
---- request limit includes nothing and sets `warning`.
+--- and the image count still fit — a strict prefix: the first image that
+--- does not fit closes the request to every older one. A missing size (stat
+--- failed) or a size over `max_bytes` is a note and never consumes the count.
+--- Text alone over the request limit includes nothing and sets `warning`.
 ---
----@param candidates table[] # { order, path, size|nil, err|nil } in exchange order
+---@param candidates table[] # { id, order, path, size|nil, err|nil } in exchange order
 ---@param text_bytes integer # UTF-8 length of every retained text the request carries
 ---@param limits table|nil # { max_bytes, max_request_bytes, max_images, block_overhead }
----@return table # { included = { [path] = true }, notes = { [path] = reason }, warning|nil }
+---@return table # { included = { [id] = true }, notes = { [id] = reason }, warning|nil }
 function M.plan_budget(candidates, text_bytes, limits)
     limits = limits or {}
     local max_bytes = limits.max_bytes or M.MAX_BYTES
@@ -267,11 +316,18 @@ function M.plan_budget(candidates, text_bytes, limits)
     local used = text_bytes or 0
 
     -- Charge every note up front; settle the pre-decided ones now.
-    local fitting = {}
+    local fitting, seen = {}, {}
     for i, c in ipairs(candidates or {}) do
+        if type(c.id) ~= "string" or c.id == "" then
+            error(("plan_budget: candidate %d (%s) has no id"):format(i, tostring(c.path)))
+        end
+        if seen[c.id] then
+            error(("plan_budget: duplicate candidate id %q"):format(c.id))
+        end
+        seen[c.id] = true
         local reason = pre_reason(c, max_bytes)
         if reason then
-            plan.notes[c.path] = reason
+            plan.notes[c.id] = reason
             used = used + #note_line(c.path, reason) + 1
         else
             used = used + #note_line(c.path, NOTE_BUDGET) + 1
@@ -294,15 +350,19 @@ function M.plan_budget(candidates, text_bytes, limits)
         return a.pos > b.pos
     end)
 
-    local count = 0
+    -- A strict prefix: the first image that does not fit (bytes or count)
+    -- closes the request to every older one, so an older image is never sent
+    -- while a newer one is withheld.
+    local count, closed = 0, plan.warning ~= nil
     for _, f in ipairs(fitting) do
         local cost = M.encoded_size(f.c.size) + overhead
-        if not plan.warning and count < max_images and used + cost <= max_request then
-            plan.included[f.c.path] = true
+        if not closed and count < max_images and used + cost <= max_request then
+            plan.included[f.c.id] = true
             used = used + cost
             count = count + 1
-        elseif not plan.notes[f.c.path] then
-            plan.notes[f.c.path] = NOTE_BUDGET
+        else
+            closed = true
+            plan.notes[f.c.id] = NOTE_BUDGET
         end
     end
     return plan
@@ -358,13 +418,15 @@ end
 -- Content blocks
 --------------------------------------------------------------------------------
 
---- Internal (Anthropic-shaped) content for a preserved question: image blocks
---- for `plan.included` first, one text block last. Notes come first in the
---- text — the plan's, then one for any read that fails or overflows AFTER
---- planning — visible to the model and in the log, never a dangling block.
---- An attachment the plan never saw is noted as such, not read.
+--- Internal (Anthropic-shaped) content for a preserved question: one image
+--- block per attachment OCCURRENCE whose `id` is in `plan.included`, first;
+--- one text block last. Notes come first in the text — the plan's, then one
+--- for any read that fails, overflows or yields bytes that do not look like
+--- the declared media type AFTER planning — visible to the model and in the
+--- log, never a dangling block. An occurrence the plan never saw (its id is
+--- neither included nor noted, or it has no id) is noted as such, not read.
 ---@param text string
----@param attachments table[]|nil # { path, media_type }
+---@param attachments table[]|nil # { id, path, media_type } — `id` as given to plan_budget
 ---@param plan table|nil # from plan_budget
 ---@param read fun(rel: string): string|nil, string|nil # the bounded reader
 ---@return string|table
@@ -376,12 +438,14 @@ function M.question_content(text, attachments, plan, read)
     local planned_notes = plan and plan.notes or {}
     local blocks, notes = {}, {}
     for _, att in ipairs(attachments) do
-        if included[att.path] then
+        if att.id ~= nil and included[att.id] then
             local bytes, err = read(att.path)
             if not bytes then
                 notes[#notes + 1] = note_line(att.path, "could not be read: " .. tostring(err))
             elseif #bytes > M.MAX_BYTES then
                 notes[#notes + 1] = note_line(att.path, "not sent: " .. M.too_big(#bytes))
+            elseif not M.looks_like(att.media_type, bytes) then
+                notes[#notes + 1] = note_line(att.path, not_an_image(att.media_type))
             else
                 blocks[#blocks + 1] = {
                     type = "image",
@@ -389,7 +453,7 @@ function M.question_content(text, attachments, plan, read)
                 }
             end
         else
-            notes[#notes + 1] = note_line(att.path, planned_notes[att.path] or NOTE_UNPLANNED)
+            notes[#notes + 1] = note_line(att.path, att.id ~= nil and planned_notes[att.id] or NOTE_UNPLANNED)
         end
     end
     local body = text
@@ -454,18 +518,28 @@ end
 -- MAIN LOOP ONLY: default_io uses vim.fn, which a libuv callback refuses.
 --------------------------------------------------------------------------------
 
+--- Size of a REGULAR file, or nil + reason. A directory, socket, fifo or
+--- device is not something to read as an image (io.open on a directory
+--- succeeds on macOS; the failure would surface only at f:read, or not at
+--- all for an empty read). One check, shared by stat and read.
+local function regular_size(p)
+    local st, err = vim.uv.fs_stat(p)
+    if not st then
+        return nil, err or ("cannot stat " .. p)
+    end
+    if st.type ~= "file" then
+        return nil, "not a regular file: " .. p
+    end
+    return st.size
+end
+
 M.default_io = {
     exists = function(p)
         return vim.fn.filereadable(p) == 1 or vim.fn.isdirectory(p) == 1
     end,
-    -- Size in bytes, or nil + reason. Stat before read keeps a read bounded.
-    stat = function(p)
-        local st, err = vim.uv.fs_stat(p)
-        if not st then
-            return nil, err or ("cannot stat " .. p)
-        end
-        return st.size
-    end,
+    -- Size in bytes of a regular file, or nil + reason. Stat before read
+    -- keeps a read bounded and keeps a directory out of a read.
+    stat = regular_size,
     -- "p": create parents; an existing directory is not an error.
     mkdir = function(p)
         local ok, err = pcall(vim.fn.mkdir, p, "p")
@@ -492,15 +566,27 @@ M.default_io = {
         end
         return true
     end,
-    -- At most `max` bytes; an empty file reads as "" (f:read(n) yields nil at EOF).
+    -- At most `max` bytes of a regular file. A failed f:read is nil, err —
+    -- never "". Only a genuinely empty regular file reads as "" (f:read(n)
+    -- yields a bare nil at EOF; a failure carries a message).
     read = function(p, max)
+        local size, serr = regular_size(p)
+        if not size then
+            return nil, serr
+        end
         local f, err = io.open(p, "rb")
         if not f then
             return nil, tostring(err)
         end
-        local data = f:read(max)
+        local data, rerr = f:read(max)
         f:close()
-        return data or ""
+        if data == nil then
+            if rerr then
+                return nil, "read failed: " .. tostring(rerr)
+            end
+            return ""
+        end
+        return data
     end,
     rename = function(a, b)
         local ok, err = os.rename(a, b)
@@ -573,11 +659,14 @@ function M.save(chat_path, bytes, ext, io_)
     return M.relative_path(M.key_for(chat_path), name), abs
 end
 
---- Bytes of an asset named by its transcript-relative path, bounded: stat
---- first (over MAX_BYTES → refused without reading), then read at most
---- MAX_BYTES + 1 and check again in case the file grew. The relative path
---- must stay inside the chat's directory — the grammar already guarantees
---- that for parsed lines; this is the second lock on the door.
+--- Bytes of an asset named by its transcript-relative path, bounded and
+--- checked: stat first (a non-regular file or one over MAX_BYTES → refused
+--- without reading), then read at most MAX_BYTES + 1 and check the size
+--- again in case the file grew, then check the bytes begin with the
+--- signature of the media type the extension declares (`looks_like`) — an
+--- empty, truncated, or mismatched file is `nil, "not a <mime> image"`. The
+--- relative path must stay inside the chat's directory — the grammar already
+--- guarantees that for parsed lines; this is the second lock on the door.
 ---@param chat_path string
 ---@param relative string
 ---@param io_ table|nil
@@ -606,6 +695,10 @@ function M.read_bounded(chat_path, relative, io_)
     end
     if #bytes > M.MAX_BYTES then
         return nil, M.too_big(#bytes)
+    end
+    local media_type = M.media_type(relative)
+    if not M.looks_like(media_type, bytes) then
+        return nil, not_an_image(media_type)
     end
     return bytes
 end

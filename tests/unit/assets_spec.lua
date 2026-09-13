@@ -252,13 +252,15 @@ end)
 describe("assets: plan_budget", function()
     local LIMITS = { max_bytes = 100, max_request_bytes = 1000, max_images = 3, block_overhead = 10 }
 
-    local function cand(order, name, size, err)
-        return { order = order, path = "assets/" .. TS .. "/" .. name, size = size, err = err }
+    -- One OCCURRENCE of an attachment: `id` is "<order>:<n>" (n = position in
+    -- that question), the key the plan is keyed by; `path` may repeat.
+    local function cand(id, name, size, err)
+        return { id = id, order = tonumber(id:match("^(%d+):")), path = "assets/" .. TS .. "/" .. name, size = size, err = err }
     end
 
     it("includes everything when it all fits and notes nothing", function()
-        local plan = assets.plan_budget({ cand(1, "a.png", 30), cand(2, "b.png", 30) }, 100, LIMITS)
-        assert.same({ "assets/" .. TS .. "/a.png", "assets/" .. TS .. "/b.png" }, keys_of(plan.included))
+        local plan = assets.plan_budget({ cand("1:1", "a.png", 30), cand("2:1", "b.png", 30) }, 100, LIMITS)
+        assert.same({ "1:1", "2:1" }, keys_of(plan.included))
         assert.same({}, plan.notes)
         assert.is_nil(plan.warning)
     end)
@@ -267,64 +269,129 @@ describe("assets: plan_budget", function()
         -- each image costs encoded_size(60) + 10 = 90; text 500; the three
         -- notes that could be emitted are charged too (77 bytes each, 231),
         -- so 731 + 90 + 90 = 911 fits and the third (1001) does not.
-        local plan = assets.plan_budget({ cand(1, "old.png", 60), cand(2, "mid.png", 60), cand(3, "new.png", 60) }, 500, LIMITS)
-        assert.same({ "assets/" .. TS .. "/mid.png", "assets/" .. TS .. "/new.png" }, keys_of(plan.included))
-        assert.equals("not sent: request budget", plan.notes["assets/" .. TS .. "/old.png"])
+        local plan = assets.plan_budget({ cand("1:1", "old.png", 60), cand("2:1", "mid.png", 60), cand("3:1", "new.png", 60) }, 500, LIMITS)
+        assert.same({ "2:1", "3:1" }, keys_of(plan.included))
+        assert.equals("not sent: request budget", plan.notes["1:1"])
         assert.is_nil(plan.warning)
+    end)
+
+    it("is a strict newest-first prefix: a newer image that does not fit closes the request to older ones", function()
+        -- 0 text + 3 notes (77, 77, 80 bytes + newlines = 237); new.png costs
+        -- encoded_size(60) + 10 = 90 (327); huge.png costs encoded_size(100)
+        -- + 10 = 146 — it would fit (473 <= 1000) if it were the only rule,
+        -- so shrink the request to make it the first that does not.
+        local limits = { max_bytes = 100, max_request_bytes = 400, max_images = 3, block_overhead = 10 }
+        local plan = assets.plan_budget({ cand("1:1", "old.png", 1), cand("2:1", "huge.png", 100), cand("3:1", "new.png", 60) }, 0, limits)
+        assert.same({ "3:1" }, keys_of(plan.included), "old.png would fit but sits behind huge.png")
+        assert.equals("not sent: request budget", plan.notes["2:1"])
+        assert.equals("not sent: request budget", plan.notes["1:1"])
     end)
 
     it("stops at the image count, oldest excluded first", function()
         local cands = {}
         for i = 1, 5 do
-            cands[#cands + 1] = cand(i, "i" .. i .. ".png", 1)
+            cands[#cands + 1] = cand(i .. ":1", "i" .. i .. ".png", 1)
         end
         local plan = assets.plan_budget(cands, 0, LIMITS)
-        assert.same({ "assets/" .. TS .. "/i3.png", "assets/" .. TS .. "/i4.png", "assets/" .. TS .. "/i5.png" }, keys_of(plan.included))
-        assert.equals("not sent: request budget", plan.notes["assets/" .. TS .. "/i1.png"])
-        assert.equals("not sent: request budget", plan.notes["assets/" .. TS .. "/i2.png"])
+        assert.same({ "3:1", "4:1", "5:1" }, keys_of(plan.included))
+        assert.equals("not sent: request budget", plan.notes["1:1"])
+        assert.equals("not sent: request budget", plan.notes["2:1"])
     end)
 
     it("never counts an oversized or stat-failed candidate as an image", function()
         local plan = assets.plan_budget({
-            cand(1, "big.png", LIMITS.max_bytes + 1),
-            cand(2, "gone.png", nil, "ENOENT"),
-            cand(3, "ok.png", 1),
-            cand(4, "ok2.png", 1),
-            cand(5, "ok3.png", 1),
+            cand("1:1", "big.png", LIMITS.max_bytes + 1),
+            cand("2:1", "gone.png", nil, "ENOENT"),
+            cand("3:1", "ok.png", 1),
+            cand("4:1", "ok2.png", 1),
+            cand("5:1", "ok3.png", 1),
         }, 0, LIMITS)
-        assert.same({ "assets/" .. TS .. "/ok.png", "assets/" .. TS .. "/ok2.png", "assets/" .. TS .. "/ok3.png" }, keys_of(plan.included),
-            "the two non-images do not consume the count of 3")
-        assert.equals("not sent: " .. assets.too_big(LIMITS.max_bytes + 1), plan.notes["assets/" .. TS .. "/big.png"])
-        assert.equals("could not be read: ENOENT", plan.notes["assets/" .. TS .. "/gone.png"])
+        assert.same({ "3:1", "4:1", "5:1" }, keys_of(plan.included), "the two non-images do not consume the count of 3")
+        assert.equals("not sent: " .. assets.too_big(LIMITS.max_bytes + 1), plan.notes["1:1"])
+        assert.equals("could not be read: ENOENT", plan.notes["2:1"])
     end)
 
     it("text alone over the request limit includes nothing and warns", function()
-        local plan = assets.plan_budget({ cand(1, "a.png", 1) }, LIMITS.max_request_bytes + 1, LIMITS)
+        local plan = assets.plan_budget({ cand("1:1", "a.png", 1) }, LIMITS.max_request_bytes + 1, LIMITS)
         assert.same({}, plan.included)
-        assert.equals("not sent: request budget", plan.notes["assets/" .. TS .. "/a.png"])
+        assert.equals("not sent: request budget", plan.notes["1:1"])
         assert.is_string(plan.warning)
         assert.matches("1001", plan.warning)
         assert.matches("1000", plan.warning)
     end)
 
+    -- C1: every OCCURRENCE is budgeted. Twenty-one links to one file are
+    -- twenty-one images on the wire, so they are twenty-one candidates.
+    it("N references to one path within a question yield exactly the cap, newest last positions kept", function()
+        local cands = {}
+        for n = 1, 5 do
+            cands[#cands + 1] = cand("1:" .. n, "same.png", 1)
+        end
+        local plan = assets.plan_budget(cands, 0, LIMITS)
+        assert.same({ "1:3", "1:4", "1:5" }, keys_of(plan.included))
+        assert.equals("not sent: request budget", plan.notes["1:1"])
+        assert.equals("not sent: request budget", plan.notes["1:2"])
+    end)
+
+    it("N references to one path across questions yield exactly the cap, oldest question first out", function()
+        local plan = assets.plan_budget({
+            cand("1:1", "same.png", 1),
+            cand("1:2", "same.png", 1),
+            cand("2:1", "same.png", 1),
+            cand("2:2", "same.png", 1),
+        }, 0, LIMITS)
+        assert.same({ "1:2", "2:1", "2:2" }, keys_of(plan.included))
+        assert.equals("not sent: request budget", plan.notes["1:1"])
+    end)
+
+    it("repeated references are charged per occurrence against the request bytes", function()
+        -- 500 text + 3 notes (78 each = 234) = 734; one 60-byte image is 90:
+        -- 824, 914 fit, 1004 does not — the same arithmetic as distinct paths.
+        local plan = assets.plan_budget({ cand("1:1", "same.png", 60), cand("1:2", "same.png", 60), cand("1:3", "same.png", 60) }, 500, LIMITS)
+        assert.same({ "1:2", "1:3" }, keys_of(plan.included))
+        assert.equals("not sent: request budget", plan.notes["1:1"])
+    end)
+
+    it("refuses a candidate without an id or with a duplicate id (a caller bug, never a silent merge)", function()
+        assert.has_error(function()
+            assets.plan_budget({ { order = 1, path = "assets/" .. TS .. "/a.png", size = 1 } }, 0, LIMITS)
+        end)
+        assert.has_error(function()
+            assets.plan_budget({ cand("1:1", "a.png", 1), cand("1:1", "b.png", 1) }, 0, LIMITS)
+        end)
+    end)
+
     it("every candidate is either included or noted, and the two never overlap (property)", function()
+        -- Park-Miller: 16807 * 2^31 < 2^53, so the product stays exact in a
+        -- double (the previous 1103515245 multiplier overflowed and collapsed
+        -- the sequence — 199 of 200 trials drew zero candidates).
         local rng = 12345
         local function rand(n)
-            rng = (rng * 1103515245 + 12345) % 2147483648
+            rng = (rng * 16807) % 2147483647
             return rng % n
         end
+        local dup_trials = 0
         for trial = 1, 200 do
             local cands = {}
             local count = rand(8)
+            local seen_paths = {}
             for i = 1, count do
                 local kind = rand(4)
+                -- a pool of three names, so paths repeat within and across orders
+                local name = "c" .. rand(3) .. ".png"
+                local order = 1 + rand(3)
+                local id = order .. ":" .. i
                 if kind == 0 then
-                    cands[#cands + 1] = cand(i, "c" .. i .. ".png", nil, "EIO")
+                    cands[#cands + 1] = cand(id, name, nil, "EIO")
                 elseif kind == 1 then
-                    cands[#cands + 1] = cand(i, "c" .. i .. ".png", LIMITS.max_bytes + rand(50))
+                    cands[#cands + 1] = cand(id, name, LIMITS.max_bytes + rand(50))
                 else
-                    cands[#cands + 1] = cand(i, "c" .. i .. ".png", rand(LIMITS.max_bytes + 1))
+                    cands[#cands + 1] = cand(id, name, rand(LIMITS.max_bytes + 1))
                 end
+                if seen_paths[name] then
+                    dup_trials = dup_trials + 1
+                end
+                seen_paths[name] = true
             end
             local text = rand(LIMITS.max_request_bytes + 200)
             local plan = assets.plan_budget(cands, text, LIMITS)
@@ -333,9 +400,9 @@ describe("assets: plan_budget", function()
 
             local included_count, charged = 0, text
             for _, c in ipairs(cands) do
-                local inc = plan.included[c.path] == true
-                local note = plan.notes[c.path]
-                assert.is_true(inc ~= (note ~= nil), ("trial %d: %s must be exactly one of included/noted"):format(trial, c.path))
+                local inc = plan.included[c.id] == true
+                local note = plan.notes[c.id]
+                assert.is_true(inc ~= (note ~= nil), ("trial %d: %s must be exactly one of included/noted"):format(trial, c.id))
                 if inc then
                     included_count = included_count + 1
                     assert.is_true(c.size ~= nil and c.size <= LIMITS.max_bytes, "only a fitting image is included")
@@ -353,27 +420,39 @@ describe("assets: plan_budget", function()
                 assert.is_string(plan.warning)
             end
 
-            -- newest-first prefix: once a fitting image is excluded, no OLDER
-            -- fitting image is included.
+            -- newest-first prefix: once a fitting occurrence is excluded, no
+            -- OLDER fitting occurrence (lower order, then lower position) is
+            -- included.
+            local by_age = {}
+            for i, c in ipairs(cands) do
+                by_age[#by_age + 1] = { c = c, pos = i }
+            end
+            table.sort(by_age, function(a, b)
+                if a.c.order ~= b.c.order then
+                    return a.c.order > b.c.order
+                end
+                return a.pos > b.pos
+            end)
             local seen_excluded = false
-            for i = #cands, 1, -1 do
-                local c = cands[i]
+            for _, e in ipairs(by_age) do
+                local c = e.c
                 if c.size and c.size <= LIMITS.max_bytes then
-                    if plan.included[c.path] then
-                        assert.is_false(seen_excluded, ("trial %d: %s included after a newer one was excluded"):format(trial, c.path))
+                    if plan.included[c.id] then
+                        assert.is_false(seen_excluded, ("trial %d: %s included after a newer one was excluded"):format(trial, c.id))
                     else
                         seen_excluded = true
                     end
                 end
             end
         end
+        assert.is_true(dup_trials > 50, "the generator must exercise duplicate paths")
     end)
 
     it("defaults its limits to the module constants", function()
-        local plan = assets.plan_budget({ cand(1, "a.png", 10) }, 0)
-        assert.is_true(plan.included["assets/" .. TS .. "/a.png"])
-        plan = assets.plan_budget({ cand(1, "a.png", assets.MAX_BYTES + 1) }, 0)
-        assert.equals("not sent: " .. assets.too_big(assets.MAX_BYTES + 1), plan.notes["assets/" .. TS .. "/a.png"])
+        local plan = assets.plan_budget({ cand("1:1", "a.png", 10) }, 0)
+        assert.is_true(plan.included["1:1"])
+        plan = assets.plan_budget({ cand("1:1", "a.png", assets.MAX_BYTES + 1) }, 0)
+        assert.equals("not sent: " .. assets.too_big(assets.MAX_BYTES + 1), plan.notes["1:1"])
     end)
 end)
 
@@ -418,15 +497,18 @@ end)
 describe("assets: question content", function()
     local A = "assets/" .. TS .. "/a.png"
     local B = "assets/" .. TS .. "/b.gif"
+    local PNG = "\137PNG\r\n\26\n" .. "PNGBYTES"
+    local GIF = "GIF89a" .. "GIFBYTES"
+    -- Attachments carry the occurrence id the builder assigned ("<order>:<n>").
     local atts = {
-        { path = A, media_type = "image/png" },
-        { path = B, media_type = "image/gif" },
+        { id = "1:1", path = A, media_type = "image/png" },
+        { id = "1:2", path = B, media_type = "image/gif" },
     }
     local function no_read()
         error("must not read")
     end
     local function plan_all()
-        return { included = { [A] = true, [B] = true }, notes = {} }
+        return { included = { ["1:1"] = true, ["1:2"] = true }, notes = {} }
     end
 
     it("returns the text unchanged with no attachments", function()
@@ -435,22 +517,22 @@ describe("assets: question content", function()
     end)
 
     it("puts images first, base64-encoded, then one text block", function()
-        local files = { [A] = "PNGBYTES", [B] = "GIFBYTES" }
+        local files = { [A] = PNG, [B] = GIF }
         local content = assets.question_content("what is this?", atts, plan_all(), function(rel)
             return files[rel]
         end)
         assert.equals(3, #content)
-        assert.same({ type = "image", source = { type = "base64", media_type = "image/png", data = vim.base64.encode("PNGBYTES") } }, content[1])
-        assert.same({ type = "image", source = { type = "base64", media_type = "image/gif", data = vim.base64.encode("GIFBYTES") } }, content[2])
+        assert.same({ type = "image", source = { type = "base64", media_type = "image/png", data = vim.base64.encode(PNG) } }, content[1])
+        assert.same({ type = "image", source = { type = "base64", media_type = "image/gif", data = vim.base64.encode(GIF) } }, content[2])
         assert.same({ type = "text", text = "what is this?" }, content[3])
     end)
 
     it("prepends the plan's notes and never reads an excluded attachment", function()
-        local plan = { included = { [A] = true }, notes = { [B] = "not sent: request budget" } }
+        local plan = { included = { ["1:1"] = true }, notes = { ["1:2"] = "not sent: request budget" } }
         local reads = {}
         local content = assets.question_content("q", atts, plan, function(rel)
             reads[#reads + 1] = rel
-            return "A"
+            return PNG
         end)
         assert.same({ A }, reads)
         assert.equals(2, #content)
@@ -459,7 +541,7 @@ describe("assets: question content", function()
     end)
 
     it("is a plain string when nothing is included", function()
-        local plan = { included = {}, notes = { [A] = "could not be read: ENOENT", [B] = "not sent: request budget" } }
+        local plan = { included = {}, notes = { ["1:1"] = "could not be read: ENOENT", ["1:2"] = "not sent: request budget" } }
         local content = assets.question_content("q", atts, plan, no_read)
         assert.equals("string", type(content))
         assert.equals("[attachment " .. A .. " could not be read: ENOENT]\n[attachment " .. B .. " not sent: request budget]\nq", content)
@@ -473,17 +555,28 @@ describe("assets: question content", function()
     end)
 
     it("a file that grew past the cap after planning gets the one size sentence", function()
-        local big = string.rep("x", assets.MAX_BYTES + 1)
+        local big = PNG .. string.rep("x", assets.MAX_BYTES + 1)
         local content = assets.question_content("q", { atts[1] }, plan_all(), function()
             return big
         end)
-        assert.equals("[attachment " .. A .. " not sent: " .. assets.too_big(assets.MAX_BYTES + 1) .. "]\nq", content)
+        assert.equals("[attachment " .. A .. " not sent: " .. assets.too_big(#big) .. "]\nq", content)
+    end)
+
+    -- C4: bytes that do not look like the attachment's media type are a note,
+    -- never a block — whatever reader the caller injected.
+    it("bytes that are not the declared image type become a note, never a block", function()
+        for _, bad in ipairs({ "", "hello, world", "\137PN", GIF }) do
+            local content = assets.question_content("q", { atts[1] }, plan_all(), function()
+                return bad
+            end)
+            assert.equals("[attachment " .. A .. " not a image/png image]\nq", content, ("%q"):format(bad))
+        end
     end)
 
     it("keeps readable images when a sibling failed", function()
         local content = assets.question_content("q", atts, plan_all(), function(rel)
             if rel == A then
-                return "A"
+                return PNG
             end
             return nil, "gone"
         end)
@@ -498,10 +591,67 @@ describe("assets: question content", function()
         assert.equals("[attachment " .. A .. " not sent: not planned]\nq", assets.question_content("q", { atts[1] }, nil, no_read))
     end)
 
+    it("an attachment without an id is unplanned by definition, not read", function()
+        local content = assets.question_content("q", { { path = A, media_type = "image/png" } }, plan_all(), no_read)
+        assert.equals("[attachment " .. A .. " not sent: not planned]\nq", content)
+    end)
+
+    -- C1 end to end: repeated links to one file, a cap of 3, exactly 3 blocks.
+    it("N references to one path emit exactly the planned occurrences, the rest as notes", function()
+        local repeated, cands = {}, {}
+        for n = 1, 5 do
+            repeated[n] = { id = "1:" .. n, path = A, media_type = "image/png" }
+            cands[n] = { id = "1:" .. n, order = 1, path = A, size = #PNG }
+        end
+        local plan = assets.plan_budget(cands, 0, { max_images = 3 })
+        local reads = 0
+        local content = assets.question_content("q", repeated, plan, function()
+            reads = reads + 1
+            return PNG
+        end)
+        assert.equals(4, #content, "3 image blocks + 1 text block")
+        assert.equals(3, reads)
+        for i = 1, 3 do
+            assert.equals("image", content[i].type)
+        end
+        assert.equals(
+            "[attachment " .. A .. " not sent: request budget]\n[attachment " .. A .. " not sent: request budget]\nq",
+            content[4].text
+        )
+    end)
+
     it("omitted_text appends the note only when an image was attached", function()
         assert.equals("[omitted]", assets.omitted_text("[omitted]", {}))
         assert.equals("[omitted]", assets.omitted_text("[omitted]", nil))
         assert.equals("[omitted]\n" .. assets.OMITTED_NOTE, assets.omitted_text("[omitted]", atts))
+    end)
+end)
+
+describe("assets: looks_like (C4 — bytes must match the declared type)", function()
+    local PNG = "\137PNG\r\n\26\n"
+    local JPEG = "\255\216\255\224"
+    local GIF87, GIF89 = "GIF87a", "GIF89a"
+    local WEBP = "RIFF\0\0\0\0WEBPVP8 "
+
+    it("accepts each wire-accepted format's signature", function()
+        assert.is_true(assets.looks_like("image/png", PNG .. "body"))
+        assert.is_true(assets.looks_like("image/jpeg", JPEG .. "body"))
+        assert.is_true(assets.looks_like("image/gif", GIF87 .. "body"))
+        assert.is_true(assets.looks_like("image/gif", GIF89 .. "body"))
+        assert.is_true(assets.looks_like("image/webp", WEBP .. "body"))
+    end)
+
+    it("rejects empty, text, truncated, mismatched and unknown", function()
+        assert.is_false(assets.looks_like("image/png", ""))
+        assert.is_false(assets.looks_like("image/png", "hello"))
+        assert.is_false(assets.looks_like("image/png", PNG:sub(1, 5)), "truncated header")
+        assert.is_false(assets.looks_like("image/jpeg", PNG .. "body"), "png bytes declared jpeg")
+        assert.is_false(assets.looks_like("image/gif", "GIF88a"), "not a gif version")
+        assert.is_false(assets.looks_like("image/webp", "RIFF\0\0\0\0WAVE"), "RIFF but not WEBP")
+        assert.is_false(assets.looks_like("image/webp", "RIFFWEBP"), "WEBP not at offset 8")
+        assert.is_false(assets.looks_like("image/svg+xml", "<svg/>"), "unknown media type")
+        assert.is_false(assets.looks_like(nil, PNG))
+        assert.is_false(assets.looks_like("image/png", nil))
     end)
 end)
 
@@ -542,14 +692,16 @@ describe("assets: elide_image_data", function()
 end)
 
 describe("assets: save and read_bounded", function()
+    local PNG = "\137PNG\r\n\26\n" .. "PNGBYTES"
+
     it("creates the folder, mints a unique name, writes, and returns the link", function()
         local io_ = fake_io()
-        local rel, abs = assets.save(CHAT, "PNG", "png", io_)
+        local rel, abs = assets.save(CHAT, PNG, "png", io_)
         assert.equals("assets/" .. TS .. "/2026-09-12.10-00-00.001.png", rel)
         assert.equals(FOLDER .. "/2026-09-12.10-00-00.001.png", abs)
         assert.is_true(io_.dirs[FOLDER])
-        assert.equals("PNG", io_.files[abs])
-        assert.equals("PNG", assets.read_bounded(CHAT, rel, io_))
+        assert.equals(PNG, io_.files[abs])
+        assert.equals(PNG, assets.read_bounded(CHAT, rel, io_))
     end)
 
     it("two saves in the same millisecond do not collide", function()
@@ -640,6 +792,44 @@ describe("assets: save and read_bounded", function()
         bytes, err = assets.read_bounded(CHAT, "assets/" .. TS .. "/a.png", seeded({ fail = { read = "EIO" } }))
         assert.is_nil(bytes)
         assert.equals("EIO", err)
+    end)
+
+    it("read_bounded refuses bytes that are not the declared image type (C4)", function()
+        local cases = {
+            { name = "empty.png", bytes = "", err = "not a image/png image" },
+            { name = "text.png", bytes = "hello, world\n", err = "not a image/png image" },
+            { name = "trunc.png", bytes = "\137PN", err = "not a image/png image" },
+            { name = "wrong.jpg", bytes = PNG, err = "not a image/jpeg image" },
+            { name = "riff.webp", bytes = "RIFF\0\0\0\0WAVEfmt ", err = "not a image/webp image" },
+        }
+        for _, c in ipairs(cases) do
+            local io_ = fake_io({ [FOLDER .. "/" .. c.name] = c.bytes }, { [FOLDER] = true })
+            local bytes, err = assets.read_bounded(CHAT, "assets/" .. TS .. "/" .. c.name, io_)
+            assert.is_nil(bytes, c.name)
+            assert.equals(c.err, err, c.name)
+        end
+        local ok_io = fake_io({
+            [FOLDER .. "/ok.png"] = PNG,
+            [FOLDER .. "/ok.gif"] = "GIF87a!",
+            [FOLDER .. "/ok.webp"] = "RIFF\0\0\0\0WEBPVP8 ",
+            [FOLDER .. "/ok.jpeg"] = "\255\216\255\224",
+        }, { [FOLDER] = true })
+        for _, name in ipairs({ "ok.png", "ok.gif", "ok.webp", "ok.jpeg" }) do
+            assert.equals(ok_io.files[FOLDER .. "/" .. name], assets.read_bounded(CHAT, "assets/" .. TS .. "/" .. name, ok_io), name)
+        end
+    end)
+
+    it("read_bounded relays a non-regular file from stat and never reads it (C4)", function()
+        local io_ = seeded()
+        io_.stat = function(p)
+            return nil, "not a regular file: " .. p
+        end
+        io_.read = function()
+            error("must not read")
+        end
+        local bytes, err = assets.read_bounded(CHAT, "assets/" .. TS .. "/a.png", io_)
+        assert.is_nil(bytes)
+        assert.equals("not a regular file: " .. FOLDER .. "/a.png", err)
     end)
 
     it("read_bounded refuses a relative path outside the chat's directory", function()
@@ -842,12 +1032,14 @@ describe("assets: default_io", function()
         vim.fn.delete(root, "rf")
     end)
 
+    local PNG = "\137PNG\r\n\26\n" .. "PNGBYTES"
+
     it("round-trips save, read_bounded, move, copy and delete on a real directory", function()
         local chat = root .. "/" .. TS .. ".md"
-        local rel, abs, err = assets.save(chat, "PNGBYTES", "png")
+        local rel, abs, err = assets.save(chat, PNG, "png")
         assert.is_string(rel, err)
         assert.equals(1, vim.fn.filereadable(abs))
-        assert.equals("PNGBYTES", assets.read_bounded(chat, rel))
+        assert.equals(PNG, assets.read_bounded(chat, rel))
 
         vim.fn.mkdir(root .. "/moved", "p")
         local ok, merr = assets.move_with(chat, root .. "/moved/" .. TS .. ".md")
@@ -879,7 +1071,37 @@ describe("assets: default_io", function()
         assert.is_nil(bytes)
         assert.is_string(rerr)
         assert.is_true(assets.default_io.write(root .. "/empty", ""))
-        assert.equals("", assets.default_io.read(root .. "/empty", 5), "an empty file reads as an empty string")
+        assert.equals("", assets.default_io.read(root .. "/empty", 5), "an empty regular file reads as an empty string")
+    end)
+
+    it("stat and read report a directory as an error, never as an empty file (C4)", function()
+        local d = root .. "/dir.png"
+        vim.fn.mkdir(d, "p")
+        local size, serr = assets.default_io.stat(d)
+        assert.is_nil(size)
+        assert.matches("not a regular file", serr)
+        local bytes, rerr = assets.default_io.read(d, 5)
+        assert.is_nil(bytes, "io.open on a directory succeeds on macOS; read must still fail")
+        assert.is_string(rerr)
+    end)
+
+    it("read_bounded on real files: a directory, an empty file and a text file are errors; a PNG is bytes (C4)", function()
+        local chat = root .. "/" .. TS .. ".md"
+        local folder = root .. "/assets/" .. TS
+        vim.fn.mkdir(folder .. "/dir.png", "p")
+        assert.is_true(assets.default_io.write(folder .. "/empty.png", ""))
+        assert.is_true(assets.default_io.write(folder .. "/text.png", "just some text\n"))
+        assert.is_true(assets.default_io.write(folder .. "/ok.png", PNG))
+        for _, name in ipairs({ "dir.png", "empty.png", "text.png" }) do
+            local bytes, err = assets.read_bounded(chat, "assets/" .. TS .. "/" .. name)
+            assert.is_nil(bytes, name)
+            assert.is_string(err, name)
+            assert.is_not.equals("", bytes, name)
+        end
+        assert.matches("not a regular file", select(2, assets.read_bounded(chat, "assets/" .. TS .. "/dir.png")))
+        assert.equals("not a image/png image", select(2, assets.read_bounded(chat, "assets/" .. TS .. "/empty.png")))
+        assert.equals("not a image/png image", select(2, assets.read_bounded(chat, "assets/" .. TS .. "/text.png")))
+        assert.equals(PNG, assets.read_bounded(chat, "assets/" .. TS .. "/ok.png"))
     end)
 
     it("write into a missing directory fails and leaves nothing", function()
