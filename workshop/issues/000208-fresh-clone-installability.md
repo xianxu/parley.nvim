@@ -1,7 +1,7 @@
 ---
 id: 000208
 status: working
-deps: []
+deps: [ariadne#225]
 github_issue:
 created: 2026-09-02
 updated: 2026-09-13
@@ -115,3 +115,11 @@ vocabulary behavior without invented lifecycle semantics; preserves existing
 shell aliases/functions for sdlc; uses regenerate-and-content-compare drift
 checks; repairs Plenary configuration and CI after untracking maintainer links.
 The plan is prepared for approval; implementation has not started.
+
+### 2026-09-13 — fresh-eyes plan review
+
+The indirect finder cycle handler must refuse unchanged when vocabulary is
+unavailable. CI needs explicit Go/CUE/exporter provisioning. The portable-root
+Makefile needs ariadne#225: weave currently replaces real roots and follows
+seed destination links. Record that prerequisite rather than ship a local
+workaround. Updated durable plan is awaiting operator approval.
