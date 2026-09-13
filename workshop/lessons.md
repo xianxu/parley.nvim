@@ -2138,3 +2138,7 @@ download.
    client after five. Parley's own status probe spent them, and every spec
    passed. When a dependency rate-limits, locks out or counts, the fake counts
    too.
+8. **Amend the Core-concepts row of every entity whose contract changes.** The
+   arch sweep compares definition lines, so a new message inside `auth_files`
+   or a new rule inside a fixture changes a contract without tripping it. Three
+   review findings in one issue were rows that lagged the diff.

@@ -66,10 +66,10 @@ describe("cliproxy recovery end to end", function()
     end
 
     -- Drive one real query and collect what the operator would be told.
-    local function query()
+    local function query(payload)
         local out = { notices = {}, done = false }
         dispatcher.query(nil, "cliproxyapi",
-            { model = "claude-opus-4-8", messages = {}, stream = false },
+            payload or { model = "claude-opus-4-8", messages = {}, stream = false },
             function() end, nil, nil, nil, nil, nil,
             function(_qid, failure)
                 out.failure = failure
@@ -123,8 +123,9 @@ describe("cliproxy recovery end to end", function()
         -- request on the removed /api/provider/anthropic alias fails here.
         serve("no_auth", { unavailable = true, status = "error",
             status_message = "OAuth access token has expired. Re-authenticate to continue." })
-        dispatcher.providers.cliproxyapi.web_search_strategy = "anthropic_tools_route"
-        local out = query()
+        -- dispatcher.query takes the payload as built, so hand it the route that
+        -- providers' format_payload stamps on a claude request for the Anthropic route.
+        local out = query({ model = "claude-opus-4-8", messages = {}, stream = false, _parley_route = "anthropic" })
         assert.is_truthy(out.failure, "the query never reported a failure")
         assert.equals(503, out.failure.http_status)
     end)

@@ -169,7 +169,7 @@ surface — 5.70 → 5.76.
 ## Plan
 
 - [x] M1 — `:ParleyProxy update` installs `download_version`, else the latest release, atomically, and restarts parley's own proxy; first-run auto_download follows the same rule; `:ParleyProxy restart` waits for the port (plan Tasks 1–10; Task 10's pure `version_summary` lands here).
-- [ ] M2 — `:ParleyProxy status` shows the running version against the latest; conformance and live checks; docs; live Fable check (plan Tasks 11–13).
+- [x] M2 — `:ParleyProxy status` shows the running version against the latest; conformance and live checks; docs; live Fable check (plan Tasks 11–13).
 
 ## Log
 
@@ -193,6 +193,7 @@ accepted that `download()` stays synchronous: `:ParleyProxy update` blocks the
 editor while it fetches, bounded by curl's timeouts.
 
 ### 2026-09-12 — M1 implemented
+- 2026-09-12: closed M2 — M2 (plan Tasks 11-13) with review round 1 fixed; round 2 ended without a verdict (the reviewer backgrounded its checks), re-run at the operator direction. Conformance on the real binary: the keyed and rejected version header, the five-failure lockout, both chat routes and the header with management disabled pass on 7.2.158 and 7.1.71; with PARLEY_LIVE_GITHUB=1 and nothing on PATH the spec installs the latest release through parley download and passes the same cases plus the live redirect; the two #205 catalog cases fail on every build with the fabricated credential (pre-existing, follow-up). update 40/0, recovery_e2e 6/0 (a claude Anthropic-route request posts through the fake), lifecycle 53/0, command 17/0; make test JOBS=4: 211 of 212 spec files pass, the one failure (fold_invariants) is an uncommitted chat rename in the operator worktree; lint 0/0. Operator live check: update installed 7.2.159; claude and Fable answer after the /v1/messages fix. Actual: the M2 window as sdlc active-time measures it since the M1 close.; review verdict: FIX-THEN-SHIP
 - 2026-09-12: closed M1 — M1 (plan Tasks 1-8, 10), review rounds 1-3 fixed. At d12f553 in the harness isolation: update 32/0 with none pending both inside the sandbox where ps is refused (tests/fixtures/fake_ps) and against the real ps, release 50/0, all 8 arch specs pass, lint 0/0 in 372 files. At 8c16e76 (round 3 changed only tests, a fixture and one reason string): auth 78/0, lifecycle 53/0, recovery_e2e 5/0, caller_teardown 5/0, dispatch 3/0, command 15/0, login 13/0, auth_login 21/0, download 6/0, catalog 22/0, conformance 7/0 (2 pending, no real binary); make test JOBS=4: 211 of 212 spec files pass, the one failure (fold_invariants) comes from an uncommitted chat rename in the operator worktree and passes 38/0 in a clean worktree; review verdict: SHIP
 
 Plan Tasks 1–8, plus Task 10's pure `version_summary`, are in. Verified one spec

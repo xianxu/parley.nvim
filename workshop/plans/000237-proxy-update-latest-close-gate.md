@@ -199,6 +199,55 @@ rounds:
           round: 5
       boundary: M2
       blocked: true
+    - "n": 6
+      timestamp: "2026-09-12T16:28:46-07:00"
+      agent: claude
+      boundary: M2
+      blocked: true
+      protocol_error: no valid findings block
+    - "n": 7
+      timestamp: "2026-09-12T17:24:57-07:00"
+      agent: claude
+      dispose:
+        - id: BR-14
+          disposition: addressed
+          note: 'Keyed probe pinned: reverting the key turns the lockout case red (39/1); re-measured on 7.2.159 today, the fake''s counter and ban body match the real binary.'
+          round: 7
+        - id: BR-15
+          disposition: addressed
+          note: Every real-binary case now reports the reason it is pending, and PARLEY_LIVE_GITHUB=1 installs the latest release through parley's own download; the milestone close on a brew-less machine must set that flag.
+          round: 7
+        - id: BR-16
+          disposition: not-addressed
+          note: 'The recovery case posts to /v1/chat/completions (fake''s POST log: 7 of 7); dispatcher.query never calls format_payload, so _parley_route is never "anthropic" and the case stays green with the route fix reverted.'
+          round: 7
+        - id: BR-17
+          disposition: addressed
+          note: PARLEY_FAKE_GET_DELAY_MS lands the proxy legs last; the case asserts a single callback with all three reads filled.
+          round: 7
+        - id: BR-18
+          disposition: addressed
+          note: discover_binary returns (path, source); status reads it; lifecycle 53/0 and download 6/0 with the extra return value.
+          round: 7
+        - id: BR-19
+          disposition: addressed
+          note: The issue's Revisions carry both the route change and the keyed probe.
+          round: 7
+      findings:
+        - id: BR-20
+          severity: Minor
+          title: The conformance lockout case pins the 403 code but not the error body field auth_files now parses
+          detail: cliproxy.lua:388-396 reads payload.error from a non-200 management body; cliproxy_conformance_spec.lua:386-407 asserts only "403". Pin the field the way REQUIRED_FIELDS pins auth-files, so drift in the ban body is caught live rather than by an operator reading "HTTP 403".
+          family: conformance-pins-parsed-fields
+          round: 7
+        - id: BR-21
+          severity: Minor
+          title: 'Core-concepts rows lag the diff: the fake_cliproxy row omits the lockout counter, the POST 404 rule and the GET delay seam, and auth_files has no modified row'
+          detail: '3rd finding in this family. Rule: every entity the diff modifies gets its table row amended in the same commit; the arch sweep fires only on definition-line changes, so a contract change inside a function (auth_files'' message) or inside a fixture never trips it. Sweep the fake''s row (plan line 287) and add the auth_files row.'
+          family: plan-checkbox-tracking
+          round: 7
+      boundary: M2
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#237 (boundary-review)
@@ -288,12 +337,31 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-18** [Minor] `binary-provenance-single-source` status re-walks discover_binary's precedence to label binary_source; return (path, source) from discover_binary instead
 - **BR-19** [Minor] `spec-carries-discovered-scope` The claude /v1/messages route change is recorded in the Log and plan Revisions but not in the issue Spec or its Revisions
 
+## Round 6 — 2026-09-12T16:28:46-07:00 (claude) — BLOCKED
+
+**Protocol error:** no valid findings block — this round contributed no findings.
+
+## Round 7 — 2026-09-12T17:24:57-07:00 (claude) — passed
+
+### Disposed
+
+- BR-14 — addressed — Keyed probe pinned: reverting the key turns the lockout case red (39/1); re-measured on 7.2.159 today, the fake's counter and ban body match the real binary.
+- BR-15 — addressed — Every real-binary case now reports the reason it is pending, and PARLEY_LIVE_GITHUB=1 installs the latest release through parley's own download; the milestone close on a brew-less machine must set that flag.
+- BR-16 — not-addressed — The recovery case posts to /v1/chat/completions (fake's POST log: 7 of 7); dispatcher.query never calls format_payload, so _parley_route is never "anthropic" and the case stays green with the route fix reverted.
+- BR-17 — addressed — PARLEY_FAKE_GET_DELAY_MS lands the proxy legs last; the case asserts a single callback with all three reads filled.
+- BR-18 — addressed — discover_binary returns (path, source); status reads it; lifecycle 53/0 and download 6/0 with the extra return value.
+- BR-19 — addressed — The issue's Revisions carry both the route change and the keyed probe.
+
+### Raised
+
+- **BR-20** [Minor] `conformance-pins-parsed-fields` The conformance lockout case pins the 403 code but not the error body field auth_files now parses
+  cliproxy.lua:388-396 reads payload.error from a non-200 management body; cliproxy_conformance_spec.lua:386-407 asserts only "403". Pin the field the way REQUIRED_FIELDS pins auth-files, so drift in the ban body is caught live rather than by an operator reading "HTTP 403".
+- **BR-21** [Minor] `plan-checkbox-tracking` Core-concepts rows lag the diff: the fake_cliproxy row omits the lockout counter, the POST 404 rule and the GET delay seam, and auth_files has no modified row
+  3rd finding in this family. Rule: every entity the diff modifies gets its table row amended in the same commit; the arch sweep fires only on definition-line changes, so a contract change inside a function (auth_files' message) or inside a fixture never trips it. Sweep the fake's row (plan line 287) and add the auth_files row.
+
 ## Open findings
 
 - **BR-13** [Minor] `readme-surface-drift` The atlas still says the identity cases report pending where ps is refused, which round 3 made false, and never names fake_ps
-- **BR-14** [Critical] `stateless-fake-for-stateful-dependency` Unauthenticated version_probe trips 7.2.x's management lockout: 5 failed attempts ban 127.0.0.1 from keyed management reads for 30 min
-- **BR-15** [Important] `env-gated-coverage` Conformance discovers the binary after _set_data_dir(tempname), so parley's managed download is never seen and every M2 live case is pending on a brew-less machine
 - **BR-16** [Minor] `fake-rule-without-driver` fake_cliproxy's new 404 rule has no spec that posts the anthropic route through it; the unit pin is the only protection
-- **BR-17** [Minor] `interleaving-seam` The status join is reproducible only with the latest leg slow; health/version legs have no delay seam in fake_cliproxy
-- **BR-18** [Minor] `binary-provenance-single-source` status re-walks discover_binary's precedence to label binary_source; return (path, source) from discover_binary instead
-- **BR-19** [Minor] `spec-carries-discovered-scope` The claude /v1/messages route change is recorded in the Log and plan Revisions but not in the issue Spec or its Revisions
+- **BR-20** [Minor] `conformance-pins-parsed-fields` The conformance lockout case pins the 403 code but not the error body field auth_files now parses
+- **BR-21** [Minor] `plan-checkbox-tracking` Core-concepts rows lag the diff: the fake_cliproxy row omits the lockout counter, the POST 404 rule and the GET delay seam, and auth_files has no modified row

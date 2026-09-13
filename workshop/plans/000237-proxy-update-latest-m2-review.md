@@ -122,3 +122,138 @@ findings:
     title: |
       The claude /v1/messages route change is recorded in the Log and plan Revisions but not in the issue Spec or its Revisions
 ```
+
+---
+
+## Re-review — 2026-09-12T16:28:46-07:00 (unknown)
+
+| field | value |
+|-------|-------|
+| issue | 237 — ParleyProxy update fetches the latest release unless pinned; status shows the version |
+| repo | parley.nvim |
+| issue file | workshop/issues/000237-proxy-update-latest.md |
+| boundary | milestone M2 |
+| milestone | M2 |
+| window | 00dbd4365d60c19e9ca4231d3b1264a32ffd1d68..88d97dd518e8c21350541d1dc006d7959211d4aa |
+| command | sdlc milestone-close --issue 237 --milestone M2 |
+| reviewer | claude |
+| timestamp | 2026-09-12T16:28:46-07:00 |
+| verdict | unknown |
+
+## Review
+
+Nothing else is independent of the two background runs still going (revert checks and the full suite). Both notify on completion, so I'm waiting for those before writing the verdict.
+
+---
+
+## Re-review — 2026-09-12T17:24:57-07:00 (FIX-THEN-SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 237 — ParleyProxy update fetches the latest release unless pinned; status shows the version |
+| repo | parley.nvim |
+| issue file | workshop/issues/000237-proxy-update-latest.md |
+| boundary | milestone M2 |
+| milestone | M2 |
+| window | 00dbd4365d60c19e9ca4231d3b1264a32ffd1d68..88d97dd518e8c21350541d1dc006d7959211d4aa |
+| command | sdlc milestone-close --issue 237 --milestone M2 |
+| reviewer | claude |
+| timestamp | 2026-09-12T17:24:57-07:00 |
+| verdict | FIX-THEN-SHIP |
+
+## Review
+
+```verdict
+verdict: FIX-THEN-SHIP
+confidence: high
+```
+
+Round 2 of the M2 gate. The blocking finding from round 1 is genuinely fixed: `version_probe` now sends parley's management key, the fake carries the real binary's failure counter, and reverting the key in a scratch worktree turns the lockout case red (update spec 39/1). I re-measured the installed 7.2.159 against a throwaway config and it behaves exactly as the fake now models it (keyed 200; five unauthenticated 401s; then 403 with `{"error":"IP banned due to too many failed attempts. Try again in 30m0s"}` on keyed and wrong-key requests alike, header still present). Conformance runs 10/2 against that binary with the two failures being the pre-existing #205 catalog cases the Log already names; without a binary every real-binary case reports why it is pending. `make test` exits 2 only on `fold_invariants_spec`, which reads the operator's uncommitted deletion of `workshop/parley/2026-09-10.11-10-24.522.md` (outside this window; lint 0/0 in 372 files). What keeps this from SHIP is one claimed fix that does not do what it says: the new recovery-e2e case, offered as the HTTP driver for the fake's 404 rule, posts to `/v1/chat/completions` (I logged the fake's POST paths: seven requests, all on the OpenAI route), so it stays green with the route fix reverted. Minor, cheap, and the fix is a one-liner.
+
+## Strengths
+
+- `lua/parley/cliproxy.lua:208-216` — the keyed probe reuses `api_argv` and `management_key()` exactly as `auth_files` does; no new credential path, and the confirming probe after an update restart no longer spends an attempt either.
+- `tests/fixtures/fake_cliproxy:278-327` — `_mgmt_gate` is one seam for both management routes, and the counter is per process like the real binary's; the lockout spec (`cliproxy_update_spec.lua:654-704`) pins both the no-failure path and the ban message in the proxy's own words.
+- `tests/integration/cliproxy_conformance_spec.lua:386-407` pins the lockout on the real binary, so the fake's new state model has a live check. Confirmed against 7.2.159 today.
+- `lua/parley/cliproxy.lua:388-396` — the 403 body reaches the operator; "HTTP 403" alone would have sent them to the logs.
+- `discover_binary` returning `(path, source)` (`cliproxy.lua:83-104`) removed the duplicated precedence walk cleanly; lifecycle 53/0 and download 6/0 confirm the extra return value breaks no caller.
+- `workshop/lessons.md` 6 and 7 name the classes (a fake that answers every path; a fake that does not keep the dependency's state), not the incidents.
+
+## Critical findings
+
+None.
+
+## Important findings
+
+None.
+
+## Minor findings
+
+- **BR-16 not addressed.** `tests/integration/cliproxy_recovery_e2e_spec.lua:121-130` sets `web_search_strategy` on the provider, but `dispatcher.query` takes a raw payload and never calls `format_payload`, which is where `_parley_route = "anthropic"` is stamped (`providers.lua:1129`). The request goes out on `/v1/chat/completions`, so the fake's 404 rule is still unexercised over HTTP. Fix: put `_parley_route = "anthropic"` on the payload `query()` passes (`format_headers` reads and strips it), then the case answers 503 on `/v1/messages` and 404 with the old alias. Verify by reverting `providers.lua` and watching it go red, which today it does not.
+- **Conformance pins the ban's status but not the field parley parses.** `auth_files` now reads `payload.error` from a non-200 body; the lockout case asserts only `"403"`. Add `assert.equals("IP banned…", vim.json.decode(body).error)` style check, the same rule `REQUIRED_FIELDS` applies to auth-files. New family `conformance-pins-parsed-fields`.
+- **Core-concepts rows lag the diff.** This is the 3rd finding in `plan-checkbox-tracking`. Rule: every entity the diff modifies gets its table row amended in the same commit, because the arch sweep only fires on definition-line changes. Sites: the `tests/fixtures/fake_cliproxy` row (plan line 287) omits the lockout counter, the POST 404 rule and `PARLEY_FAKE_GET_DELAY_MS`; `auth_files` has no `modified` row although its message contract changed.
+- `atlas/providers/cliproxy-managed.md:484` now says conformance downloads under `PARLEY_LIVE_GITHUB=1`, which is correct, but the milestone-close routine in the plan's Test surface still says "runs whenever a binary is discoverable"; the close should run with that flag set on this brew-less machine.
+
+## Test coverage notes
+
+- Run at head: dispatcher 65/0, command 17/0, recovery_e2e 6/0, update 40/0 (none pending), lifecycle 53/0, download 6/0, conformance 10/2 with 7.2.159 on PATH, arch sweeps green apart from the XDG cases my direct invocation cannot satisfy (they pass under `make test`).
+- Revert checks: keyed probe removed → update 39/1 (lockout case red). Route fix removed → dispatcher 64/1 (unit pin red), recovery_e2e 6/0 (the claimed driver stays green; BR-16 above).
+- `make test`: one failure, `fold_invariants_spec`, caused by the operator's uncommitted chat deletion, not the window.
+
+## Architectural notes
+
+- ARCH-DRY: pass. One key source, one gate in the fake, one precedence walk.
+- ARCH-PURE: pass. `status` stays glue; the new logic is a counter and a JSON field read at the IO seam.
+- ARCH-PURPOSE: pass on the fix's class (both management routes share the gate; both probe sites are keyed). Flag on BR-16: the site was answered with a test that does not reach it.
+- ARCH-MOCK: pass. The fake now counts, conformance pins the counter and the header on 200 and 401, and I reproduced the fake's model on the real binary.
+- ARCH-CONSTRAINTS: pass. The envelope gained the failed-attempt budget row with a measured basis.
+- ARCH-SECURE: pass. `render_opts` already minted the key before `status` reached the probe, so no new secret is created as a side effect; the key goes only to the loopback port the client bearer already reaches. The foreign-proxy cost (one attempt per status) is documented in the atlas, and the ladder branches only on `no_management_route`, so a 403 there changes nothing.
+- ARCH-ORDER: pass. `PARLEY_FAKE_GET_DELAY_MS` gives the join its third ordering; the two ordering cases assert exactly one callback.
+
+## Plan revision recommendations
+
+1. `## Revisions` — "M2 review round 2": BR-16 re-opened; the recovery case must stamp `_parley_route` on the payload it hands `dispatcher.query`, and its revert check recorded.
+2. Same entry: amend the `fake_cliproxy` row (lockout counter, POST 404 rule, GET delay seam) and add an `auth_files | modified | carries the proxy's error body on non-200` row; add the body-field pin to the Test surface.
+
+```findings
+dispose:
+  - id: BR-14
+    disposition: addressed
+    note: |
+      Keyed probe pinned: reverting the key turns the lockout case red (39/1); re-measured on 7.2.159 today, the fake's counter and ban body match the real binary.
+  - id: BR-15
+    disposition: addressed
+    note: |
+      Every real-binary case now reports the reason it is pending, and PARLEY_LIVE_GITHUB=1 installs the latest release through parley's own download; the milestone close on a brew-less machine must set that flag.
+  - id: BR-16
+    disposition: not-addressed
+    note: |
+      The recovery case posts to /v1/chat/completions (fake's POST log: 7 of 7); dispatcher.query never calls format_payload, so _parley_route is never "anthropic" and the case stays green with the route fix reverted.
+  - id: BR-17
+    disposition: addressed
+    note: |
+      PARLEY_FAKE_GET_DELAY_MS lands the proxy legs last; the case asserts a single callback with all three reads filled.
+  - id: BR-18
+    disposition: addressed
+    note: |
+      discover_binary returns (path, source); status reads it; lifecycle 53/0 and download 6/0 with the extra return value.
+  - id: BR-19
+    disposition: addressed
+    note: |
+      The issue's Revisions carry both the route change and the keyed probe.
+findings:
+  - id: new
+    severity: Minor
+    family: conformance-pins-parsed-fields
+    title: |
+      The conformance lockout case pins the 403 code but not the error body field auth_files now parses
+    detail: |
+      cliproxy.lua:388-396 reads payload.error from a non-200 management body; cliproxy_conformance_spec.lua:386-407 asserts only "403". Pin the field the way REQUIRED_FIELDS pins auth-files, so drift in the ban body is caught live rather than by an operator reading "HTTP 403".
+  - id: new
+    severity: Minor
+    family: plan-checkbox-tracking
+    title: |
+      Core-concepts rows lag the diff: the fake_cliproxy row omits the lockout counter, the POST 404 rule and the GET delay seam, and auth_files has no modified row
+    detail: |
+      3rd finding in this family. Rule: every entity the diff modifies gets its table row amended in the same commit; the arch sweep fires only on definition-line changes, so a contract change inside a function (auth_files' message) or inside a fixture never trips it. Sweep the fake's row (plan line 287) and add the auth_files row.
+```

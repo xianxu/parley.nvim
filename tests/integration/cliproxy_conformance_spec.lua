@@ -393,17 +393,24 @@ describe("cliproxyapi management API conformance", function()
         end
         local p = boot()
         probe_until_up(p)
-        local function code_of(bearer)
-            local args = { "curl", "-s", "-o", "/dev/null", "-w", "%{http_code}", "--max-time", "3" }
+        local function attempt(bearer)
+            local args = { "curl", "-s", "-w", "\n%{http_code}", "--max-time", "3" }
             if bearer then
                 vim.list_extend(args, { "-H", "Authorization: Bearer " .. bearer })
             end
             args[#args + 1] = ("http://127.0.0.1:%d/v0/management/latest-version"):format(p)
-            return vim.system(args, { text = true }):wait().stdout
+            local body, code = (vim.system(args, { text = true }):wait().stdout or ""):match("^(.*)\n(%d+)$")
+            return code, body
         end
         for i = 1, 5 do
-            assert.equals("401", code_of(nil), "unauthenticated attempt " .. i)
+            assert.equals("401", (attempt(nil)), "unauthenticated attempt " .. i)
         end
-        assert.equals("403", code_of(mgmt_key), "the right key still worked after five failed attempts")
+        local code, body = attempt(mgmt_key)
+        assert.equals("403", code, "the right key still worked after five failed attempts")
+        -- auth_files shows the operator this field, in the proxy's own words.
+        local ok, decoded = pcall(vim.json.decode, body or "")
+        assert.is_true(ok and type(decoded) == "table" and type(decoded.error) == "string",
+            "the ban body carries no `error` string for auth_files to show: " .. tostring(body))
+        assert.is_truthy(decoded.error:find("banned", 1, true), decoded.error)
     end)
 end)

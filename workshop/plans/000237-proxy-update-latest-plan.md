@@ -260,7 +260,8 @@ which the existing `_spawned` table owns.
 |------|----------|--------|-------|
 | `api_argv` | `lua/parley/cliproxy.lua` | modified | curl argv (optional header dump) |
 | `run` | `lua/parley/cliproxy.lua` | new | `vim.system` sync/async |
-| `version_probe` | `lua/parley/cliproxy.lua` | new | curl → proxy `/v0/management/latest-version` headers |
+| `version_probe` | `lua/parley/cliproxy.lua` | new | curl → proxy `/v0/management/latest-version` headers, sent with parley's management key |
+| `auth_files` | `lua/parley/cliproxy.lua` | modified | carries the proxy's own error text on a non-200, so a 7.2.x ban reads as one |
 | `ps_output` | `lua/parley/cliproxy.lua` | new (extracted from `M.peers`) | `ps ax -o pid,lstart,command` |
 | `port_identity` | `lua/parley/cliproxy.lua` | new | `ps_output` + `pids_on_port` |
 | `pids_on_port` | `lua/parley/cliproxy.lua` | modified | `lsof`, guarded; returns why it cannot answer |
@@ -284,7 +285,7 @@ which the existing `_spawned` table owns.
 | `M.restart` | `lua/parley/cliproxy.lua` | deleted | — |
 | `register_proxy_command` | `lua/parley/init.lua` | modified | `:ParleyProxy` glue |
 | `tests/fixtures/fake_github_releases` | `tests/fixtures/fake_github_releases` | new | GitHub release endpoints |
-| `tests/fixtures/fake_cliproxy` | `tests/fixtures/fake_cliproxy` | modified | + `X-CPA-*` headers, `latest-version` route, an exit delay after SIGTERM |
+| `tests/fixtures/fake_cliproxy` | `tests/fixtures/fake_cliproxy` | modified | + `X-CPA-*` headers, `latest-version` route, an exit delay after SIGTERM, the management failed-attempt lockout, a bare 404 for POST paths the real binary does not serve, a GET delay |
 | `fake_releases` | `tests/helpers/fake_releases.lua` | new | builds releases, runs the release fake |
 | `settle` | `tests/helpers/await.lua` | new | waits for an async call; returns settled, result |
 | `await` | `tests/helpers/await.lua` | new | the same, failing the spec on timeout |
@@ -313,9 +314,12 @@ which the existing `_spawned` table owns.
   `tests/integration/cliproxy_lifecycle_spec.lua` (auto_download cases),
   `tests/integration/cliproxy_command_spec.lua` (update/restart/status glue).
 - Live conformance: `tests/integration/cliproxy_conformance_spec.lua` — the real
-  binary's header with management on and off (runs whenever a binary is
-  discoverable, pending otherwise), and the real redirect behind
-  `PARLEY_LIVE_GITHUB=1`, run at each milestone close.
+  binary's version header (keyed and rejected, and with management off), the
+  management lockout, both chat routes, and the real redirect. It needs a
+  binary on `PATH`, or `PARLEY_LIVE_GITHUB=1`, which downloads the latest
+  release through parley's own `download` (the harness hides the managed
+  download); otherwise each case reports why it is pending. Run at each
+  milestone close with `PARLEY_LIVE_GITHUB=1` (M2 review).
 
 ## Process ownership (PQ-1: fixture-process-leak)
 
@@ -2876,9 +2880,11 @@ and change the `SUBS_HELP` status row to
     end)
 ```
 
-Run the conformance spec with a real binary discoverable (the managed download
-or brew). If "management disabled" fails, align the fake and the assertion as
-the comment says, and record it in the Log. Then run
+Run the conformance spec with a real binary: one on `PATH`, or
+`PARLEY_LIVE_GITHUB=1`, which downloads the latest release (the harness hides
+parley's managed download, M2 review). If "management disabled" fails, align
+the fake and the assertion as the comment says, and record it in the Log. Then
+run
 `PARLEY_LIVE_GITHUB=1 nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/integration/cliproxy_conformance_spec.lua" -c "qa!"`
 — the live check overrides the harness URL itself.
 
@@ -3165,3 +3171,26 @@ no memory.
   landing last. `discover_binary` returns where the binary came from, and
   status reads that instead of re-walking the precedence. The issue's
   Revisions carry the scope the live check added.
+
+### 2026-09-12 — M2 review rounds 2 and 3 (FIX-THEN-SHIP)
+
+Round 2 ended without a verdict: the reviewer backgrounded its checks, and a
+headless session cannot wait on them (logged on ariadne#204). Round 3, re-run at
+the operator's direction, shipped M2 after re-measuring the lockout on 7.2.159
+and revert-checking the keyed probe. Its Minor findings, fixed here:
+
+- **BR-16, a recovery driver that did not drive.** `dispatcher.query` takes a
+  payload as built, so the provider's `web_search_strategy` never reached it,
+  and the request went out on `/v1/chat/completions`. The case now hands
+  `query()` the payload that `format_payload` would stamp
+  (`_parley_route = "anthropic"`), posts to `/v1/messages`, and goes red with
+  the old route.
+- **The field parley parses.** The conformance lockout case pins that the ban
+  body carries the `error` string `auth_files` shows, not only the 403.
+- **Rows that lag the diff** (the family's third). The `fake_cliproxy` row names
+  the lockout counter, the POST 404 rule and the GET delay; `version_probe`'s
+  row says it is keyed; `auth_files` gets a `modified` row for its message
+  contract. The arch sweep fires only on definition lines, so a contract change
+  inside a function or a fixture needs its row amended by hand.
+- The close runs conformance under `PARLEY_LIVE_GITHUB=1`, since this machine
+  has no binary on `PATH`.
