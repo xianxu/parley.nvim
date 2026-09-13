@@ -305,6 +305,7 @@ tool until its timeout. Nondeterminism enters at IO completion; the fixture's
 | `preserve_exchange` | `lua/parley/chat_respond.lua` | new (extracted from `build_messages` `:779-798`) |
 | `window_size` | `lua/parley/chat_respond.lua` | new (extracted from `:735-747`) |
 | `parse_chat` | `lua/parley/chat_parser.lua` | modified (question gains `attachments`) |
+| `extract_file_refs` | `lua/parley/chat_parser.lua` | new (the `@@` grammar, hoisted from a local and exported so the continuation builder pins by file references exactly as the parser does) |
 | `translate_messages` | `lua/parley/tools/wire_openai.lua` | modified (image blocks → `image_url` parts) |
 | `googleai_parts` | `lua/parley/providers.lua` | new (local) |
 | `simple_markdown_to_html` | `lua/parley/exporter.lua` | modified (`![alt](src)` → `<img>` via placeholder) |
