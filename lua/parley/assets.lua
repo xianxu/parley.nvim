@@ -464,14 +464,21 @@ end
 -- 10 bytes; the canvas dimensions are ≥ 1 by construction, so the header
 -- check is that the 10 bytes exist.
 local VP8_START_CODE = "\157\1\42"
+-- Header bytes are not image data (the invariant every walker enforces: an
+-- image-bearing record must carry at least one byte BEYOND its mandatory
+-- header — a PNG IDAT byte, a JPEG scan byte, a GIF sub-block byte, a WebP
+-- bitstream byte after the VP8L/VP8 header). VP8L: 1 signature + 4 header
+-- bytes, so len >= 6.
 local function webp_vp8l(bytes, pos, len)
-    if len < 5 or bytes:byte(pos) ~= 0x2F then
+    if len < 6 or bytes:byte(pos) ~= 0x2F then
         return false
     end
     return math.floor(u32le(bytes, pos + 1) / 2 ^ 29) == 0
 end
+-- VP8: 3-byte frame tag + 3-byte start code + 4 bytes of dims = 10 header
+-- bytes; the first partition must follow, so len >= 11.
 local function webp_vp8(bytes, pos, len)
-    if len < 10 or bytes:byte(pos) % 2 ~= 0 or bytes:sub(pos + 3, pos + 5) ~= VP8_START_CODE then
+    if len < 11 or bytes:byte(pos) % 2 ~= 0 or bytes:sub(pos + 3, pos + 5) ~= VP8_START_CODE then
         return false
     end
     return u16le(bytes, pos + 6) % 16384 >= 1 and u16le(bytes, pos + 8) % 16384 >= 1

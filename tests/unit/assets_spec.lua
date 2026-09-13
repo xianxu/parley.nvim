@@ -1022,6 +1022,12 @@ describe("assets: looks_like checks mandatory headers (BR-4 round 4 — empty im
         { mime = "image/webp", bytes = riff(webp_chunk("VP8 ", vp8(1, 1):sub(1, 9))), why = "WebP VP8 shorter than its header" },
         { mime = "image/webp", bytes = riff(webp_chunk("VP8X", vp8x(1, 1):sub(1, 9)) .. webp_chunk("VP8L", vp8l(1, 1))), why = "WebP VP8X shorter than its header" },
         { mime = "image/webp", bytes = riff(webp_chunk("VP8X", vp8x(1, 1)) .. webp_chunk("VP8L", "")), why = "WebP VP8X with an empty bitstream" },
+        -- Exact header length, zero image data (round 5): header bytes are not image data.
+        { mime = "image/webp", bytes = riff(webp_chunk("VP8L", vp8l(1, 1):sub(1, 5))), why = "WebP VP8L header only, no image data" },
+        { mime = "image/webp", bytes = riff(webp_chunk("VP8 ", vp8(1, 1):sub(1, 10))), why = "WebP VP8 header only, no partition data" },
+        { mime = "image/webp", bytes = riff(webp_chunk("VP8X", vp8x(1, 1)) .. webp_chunk("VP8L", vp8l(1, 1):sub(1, 5))), why = "WebP VP8X with a header-only VP8L bitstream" },
+        { mime = "image/webp", bytes = riff(webp_chunk("VP8X", vp8x(1, 1)) .. webp_chunk("VP8 ", vp8(1, 1):sub(1, 10))), why = "WebP VP8X with a header-only VP8 bitstream" },
+        { mime = "image/webp", bytes = riff(webp_chunk("VP8X", vp8x(1, 1))), why = "WebP VP8X container with no bitstream chunk at all" },
     }
 
     -- Header fields at the other end of each valid range must still pass.

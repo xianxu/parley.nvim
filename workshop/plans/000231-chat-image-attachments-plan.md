@@ -808,3 +808,15 @@ on every path).
   record, zero width, zero height, invalid header field, header/record
   length mismatch) is pinned through `looks_like`, `read_bounded` on the real
   adapter and `question_content`.
+
+### 2026-09-13 — M1 boundary review round 5 (codex; BR-4 narrowed to one case)
+
+- **Reason:** round four's non-emptiness check missed a WebP bitstream chunk
+  of exactly its header length (VP8L 5 bytes, VP8 10 bytes), including inside
+  an extended (VP8X) container: header bytes were counted as image data.
+- **Delta:** the invariant is stated once and enforced per walker — *header
+  bytes are not image data; an image-bearing record carries at least one byte
+  beyond its mandatory header* (PNG IDAT, JPEG scan, GIF sub-block, WebP
+  bitstream after the VP8L/VP8 header). The matrix gains exact-header-length
+  rows for VP8L, VP8, and both inside VP8X, plus a VP8X container with no
+  bitstream chunk.
