@@ -216,3 +216,10 @@ resolved provider secrets without its sensitive flag. Mark that existing sink as
 sensitive and assert the generated key is absent from the written profile log
 (ARCH-SECURE). Welcome discovery uses a literal uv directory scan, capped after
 two matching files, instead of a command-expanding glob (ARCH-CONSTRAINTS).
+
+### 2026-09-13 — release acceptance complete
+
+v2.2.0 (fb685b5) passed two fresh-profile remote starter launches with exact
+released-plugin identity, effective policy/log checks and decoy preservation.
+All implementation and release acceptance work is complete; SDLC owns the final
+PR #180 merge/archive after CI. No code changed after the accepted close.

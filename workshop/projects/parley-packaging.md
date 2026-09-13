@@ -209,3 +209,10 @@ and persistent live-model tool policy. 241 spec files and lint pass; live GitHub
 dependency bootstrap passed against the candidate runtime. Close review and the
 released-plugin bootstrap remain before publication acceptance. #247 follows;
 its operator VM authentication input is still pending.
+
+### 2026-09-13 — released starter accepted
+
+#246 passed close review SHIP and published v2.2.0. Remote starter bootstrap and
+restart passed against the exact tagged plugin in a fresh profile; existing nvim
+bytes stayed unchanged. Measured local-close actual: 1.18h against 3.82h estimate.
+PR #180 awaits CI/merge. #247 is next, using this released runtime.

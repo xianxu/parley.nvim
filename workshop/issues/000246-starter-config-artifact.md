@@ -127,3 +127,12 @@ saved model replacement before the fix and now verifies selection persistence.
 BR-2: artifact guard now rejects all home-relative paths and ariadne imports,
 except the exact installation comment in the shipped entry. New negative fixtures
 reproduced the omissions. Re-running the full suite before the next close review.
+
+### 2026-09-13 — released-plugin acceptance
+
+Published v2.2.0 at fb685b5 after SHIP review, with PR #180 open. A fresh HOME/XDG
+profile downloaded init.lua from that tag and bootstrapped Parley through the
+released version specification (no PARLEY_RUNTIME override). Two launches passed;
+the installed plugin HEAD equals v2.2.0, one welcome was reused, effective profile
+policy/log checks passed, and decoy nvim bytes were unchanged. CI is the remaining
+publication gate; the approved acceptance is complete.
