@@ -1,12 +1,13 @@
 ---
 id: 000232
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-09-10
 updated: 2026-09-12
 estimate_hours: 1.45
 started: 2026-09-12T19:44:52-07:00
+actual_hours: 1.25
 ---
 
 # chat outline drops @@ annotations because the tree builder has its own item rule
@@ -185,6 +186,7 @@ outline entries in chats. That came from reading `is_outline_item` without check
 which builder chats actually use, and it is wrong until this lands.
 
 ### 2026-09-12
+- 2026-09-12: closed — make test exit 0 (full suite, 2026-09-12); make lint 0 warnings; make test-spec SPEC=ui/outline green (outline_parity 5 new cases, 4 red on the old builder first); on the operator file workshop/parley/2026-09-09.11-40-59.150_astrophotography-plan.md the tree outline lists "→ plan for 9/10/2026" (line 87) as row 5 of 33, built headlessly via _find_tree_root + _build_tree_outline_items; review verdict: SHIP
 
 - Claimed; plan rewritten as function-level test strategies after the codex
   plan-quality judge's one Important finding (the claude judge was unavailable:
@@ -206,3 +208,14 @@ which builder chats actually use, and it is wrong until this lands.
   (`workshop/parley/2026-09-09.11-40-59.150_astrophotography-plan.md`, line 87)
   the tree outline now lists `→ plan for 9/10/2026` as row 5 of 33, built
   headlessly through `_find_tree_root` + `_build_tree_outline_items`.
+
+## Revisions
+
+### 2026-09-12 — test location
+
+- **Reason:** the parity spec needs `parley.setup` (branch resolution and topic
+  lookup run through `require("parley")`), and `tests/unit/picker_items_spec.lua`
+  deliberately avoids `setup` so its picker describes stay isolated.
+- **Delta:** the Plan's "in `tests/unit/picker_items_spec.lua`" became its own
+  file, `tests/unit/outline_parity_spec.lua`, routed under `ui/outline`. Nothing
+  else in the Plan changed. (Recommended by the close review.)

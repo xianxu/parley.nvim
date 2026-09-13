@@ -1,5 +1,41 @@
 # Lessons
 
+## 2026-09-12 (#232, and the #231 plan reviews)
+
+- **A judge that runs under your sandbox cannot start its own.** The codex
+  boundary review returned REWORK with "sandbox-exec: sandbox_apply: Operation
+  not permitted" on every `git diff` — a nested-sandbox failure, not a code
+  finding. Rule: when an `sdlc` verb dispatches `--agent codex` (change-code,
+  milestone-close, close), run that verb with the harness sandbox off; read the
+  judge's own words before treating a REWORK as a defect. And when the claude
+  judge is rate-limited, `--agent codex` is the supported path — not `--force`.
+- **The plan-quality gate wants test strategies per function, not a case
+  inventory.** The first #232 plan enumerated fixture lines and assertions and
+  drew an Important finding for it. Rule: in `## Plan`, name each risky function
+  and its oracle (differential parity, direct classifier assertions, …) in one
+  line each; the cases live in the spec.
+- **A plan's Core-concepts tables are checked document-wide from the first
+  gate.** `single_source_sweeps_spec` "every symbol the plan tables name exists"
+  greps the whole plan, so a row for a name a LATER milestone creates is red at
+  the earlier gate, and a bare backticked value (`fake_clipboard`,
+  `max_full_exchanges`) must have a definition form in the tree. Rule: stage
+  later-milestone rows into the task that creates the name; bind fixture paths
+  to a `local` of the same name; dot config fields.
+- **A new payload family is a new log family.** #231's first plan sent images
+  on the wire and never asked what `logger.debug("messages to send", …)` and
+  the raw-mode logs would do with 13 MB of base64 per turn. Rule: when a change
+  puts a new kind of bytes into `messages`/`payload`, enumerate every sink that
+  serializes them (debug log, raw logs, fixtures) in the plan, and elide at
+  each (`ARCH-FUNERAL`: residue, not load).
+- **"Fix the class" applies to plans too — count the sites before writing the
+  task.** #231's draft fixed one of two chat movers and one of five chat
+  deleters; two reviewers each found the rest by grepping. Rule: when a task
+  says "X carries/removes Y", `grep` every site that does X and list them in
+  the plan's Facts before designing the fix (memory: fix the class, not the site).
+- **`/tmp` vs `/private/tmp` bit again** (#202 rule): compare paths a fixture
+  produces with `vim.fn.resolve` on both sides. It cost one red round here.
+
+
 ## 2026-09-10 (#227)
 
 - **Fail-open is only safe for a cache that is still aligned with what it
