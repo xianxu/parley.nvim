@@ -437,3 +437,27 @@ file: 2024-01-15-child.md
 		end)
 	end)
 end)
+
+describe("images in simple_markdown_to_html (#231)", function()
+	it("converts a bare image link to an img tag that no inline rule can mangle", function()
+		-- `_x_y_` in the filename is exactly what the `_…_` italic rule eats.
+		local html = exporter.simple_markdown_to_html("![a_b](assets/2026-09-10.14-20-03.112/x_y.png)")
+		assert.is_not_nil(
+			html:find('<img src="assets/2026-09-10.14-20-03.112/x_y.png" alt="a_b" class="asset-image">', 1, true),
+			html
+		)
+		assert.is_nil(html:find("<em", 1, true), html)
+	end)
+
+	it("escapes quotes in alt and src", function()
+		local html = exporter.simple_markdown_to_html('![say "hi"](a"b.png)')
+		assert.is_not_nil(html:find('alt="say &quot;hi&quot;"', 1, true), html)
+		assert.is_not_nil(html:find('src="a&quot;b.png"', 1, true), html)
+	end)
+
+	it("unwraps the paragraph around a lone image link", function()
+		local html = exporter.simple_markdown_to_html("before\n\n![](a.png)\n\nafter")
+		assert.is_not_nil(html:find('<img src="a.png" alt="" class="asset-image">', 1, true), html)
+		assert.is_nil(html:find("XIMGX", 1, true), html)
+	end)
+end)

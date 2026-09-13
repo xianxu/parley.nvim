@@ -325,4 +325,63 @@ tags: test
 			end
 		end)
 	end)
+	describe("Group E: assets (#231)", function()
+		local TS = "2026-09-10.14-20-03.112"
+
+		local function chat_with_image()
+			local path = create_chat_file(
+				TS .. "_img.md",
+				"---\ntopic: Img\nfile: " .. TS .. "_img.md\n---\n💬: see\n\n![](assets/" .. TS .. "/a.png)\n\n🤖: ok\n"
+			)
+			vim.fn.mkdir(tmpdir .. "/assets/" .. TS, "p")
+			assert.is_true(require("parley.assets").default_io.write(tmpdir .. "/assets/" .. TS .. "/a.png", "A"))
+			vim.cmd("edit " .. path)
+			return path
+		end
+
+		it("E1: markdown export copies the assets folder beside the files and keeps the source", function()
+			chat_with_image()
+			M.cmd.ExportMarkdown()
+			assert.equals(1, vim.fn.filereadable(export_markdown_dir .. "/2026-09-10-img.markdown"), "export written")
+			assert.equals(1, vim.fn.filereadable(export_markdown_dir .. "/assets/" .. TS .. "/a.png"), "copy present")
+			assert.equals(1, vim.fn.filereadable(tmpdir .. "/assets/" .. TS .. "/a.png"), "source kept")
+			vim.cmd("bdelete!")
+		end)
+
+		it("E2: HTML export renders the image and copies the folder", function()
+			chat_with_image()
+			M.cmd.ExportHTML()
+			local out = export_html_dir .. "/2026-09-10-img.html"
+			assert.equals(1, vim.fn.filereadable(out), "export written")
+			local html = table.concat(vim.fn.readfile(out), "\n")
+			assert.is_not_nil(html:find('<img src="assets/' .. TS .. '/a.png"', 1, true), html)
+			assert.is_not_nil(html:find(".asset-image {", 1, true), "css rule present")
+			assert.equals(1, vim.fn.filereadable(export_html_dir .. "/assets/" .. TS .. "/a.png"), "copy present")
+			vim.cmd("bdelete!")
+		end)
+
+		it("E3: a failed copy is reported and the export still completes", function()
+			-- A plain file where the assets directory must go: every mkdir fails.
+			assert.is_true(require("parley.assets").default_io.write(export_html_dir .. "/assets", "not a dir"))
+			local warnings = {}
+			local original_warning = M.logger.warning
+			M.logger.warning = function(message)
+				table.insert(warnings, message)
+			end
+			chat_with_image()
+			local ok, err = pcall(M.cmd.ExportHTML)
+			M.logger.warning = original_warning
+			assert.is_true(ok, tostring(err))
+			assert.equals(1, vim.fn.filereadable(export_html_dir .. "/2026-09-10-img.html"), "export still written")
+			assert.equals(0, vim.fn.filereadable(export_html_dir .. "/assets/" .. TS .. "/a.png"))
+			local reported = false
+			for _, w in ipairs(warnings) do
+				if w:find("could not create", 1, true) and w:find(TS, 1, true) then
+					reported = true
+				end
+			end
+			assert.is_true(reported, "copy failure reported: " .. vim.inspect(warnings))
+			vim.cmd("bdelete!")
+		end)
+	end)
 end)

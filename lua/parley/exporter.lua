@@ -344,6 +344,22 @@ M.simple_markdown_to_html = function(markdown)
 	html = html:gsub("<", "&lt;")
 	html = html:gsub(">", "&gt;")
 
+	-- #231: image links become opaque tokens FIRST and <img> tags LAST. Every
+	-- inline rule below runs over the whole string, so an early <img> would
+	-- get <em> inside its attributes (a `_x_y_` filename is exactly what the
+	-- italic rule eats). Same mechanism as the branch placeholders
+	-- (`XBRANCHX<n>XBRANCHX`, write_html_file). `&`, `<`, `>` are already
+	-- escaped above; `"` is the one attribute delimiter still live.
+	-- Function replacement: alt/src are user text, and a `%` in a string
+	-- replacement corrupts silently under LuaJIT (#214 BR-34).
+	local images = {}
+	html = html:gsub("!%[([^%]]*)%]%(([^%)%s]+)%)", function(alt, src)
+		local safe_src = src:gsub('"', "&quot;")
+		local safe_alt = alt:gsub('"', "&quot;")
+		images[#images + 1] = '<img src="' .. safe_src .. '" alt="' .. safe_alt .. '" class="asset-image">'
+		return "XIMGX" .. #images .. "XIMGX"
+	end)
+
 	-- Convert code blocks with language-specific styling.
 	--
 	-- #218: this was a document-wide gsub, `"```([^\n]*)\n(.-)\n```"`, whose
@@ -435,6 +451,17 @@ M.simple_markdown_to_html = function(markdown)
 	html = html:gsub("<p[^>]*>%s*<blockquote", "<blockquote")
 	html = html:gsub("</blockquote>%s*</p>", "</blockquote>")
 	html = html:gsub("<p[^>]*>%s*</p>", "")
+
+	-- #231: restore the image tags, the <p>-wrapped form first, exactly as
+	-- write_html_file restores the branch placeholders.
+	for n, tag in ipairs(images) do
+		-- gsub-safe: function replacement (#214 BR-34)
+		local function repl()
+			return tag
+		end
+		html = html:gsub("<p[^>]*>%s*XIMGX" .. n .. "XIMGX%s*</p>", repl)
+		html = html:gsub("XIMGX" .. n .. "XIMGX", repl)
+	end
 
 	return html
 end
@@ -686,6 +713,9 @@ local html_css = [[
         .hljs-function { color: #6f42c1; }
         .hljs-number { color: #005cc5; }
         .hljs-variable { color: #e36209; }
+
+        /* #231: pasted attachments (assets/<ts>/…) never overflow the column */
+        .asset-image { max-width: 100%; height: auto; }
     </style>]]
 
 --------------------------------------------------------------------------------
@@ -868,6 +898,8 @@ local function export_tree(params, format, write_fn, config_dir_key, extension)
 	-- Export all files in the tree
 	local exported = {}
 	local skipped = {}
+	local asset_errors = {}
+	local assets = require("parley.assets")
 	for _, info in ipairs(tree_infos) do
 		-- Use buffer lines for the current file (may have unsaved changes)
 		local export_info = info
@@ -878,6 +910,16 @@ local function export_tree(params, format, write_fn, config_dir_key, extension)
 		local output_path = write_fn(export_info, export_dir, link_map)
 		if output_path then
 			table.insert(exported, output_path)
+			-- #231: the chat's assets/<ts>/ folder travels with the export so
+			-- relative image links keep resolving for an HTML export opened
+			-- from disk. Copies, never moves. (A Jekyll post URL does not
+			-- resolve `assets/…` relative to `_posts/`; the copy is still the
+			-- right thing to ship — see atlas/export/tree_export.md.) A failed
+			-- copy is reported below, never swallowed; the export itself stands.
+			local _, errs = assets.copy_into(info.abs_path, export_dir)
+			for _, err in ipairs(errs) do
+				table.insert(asset_errors, err)
+			end
 		else
 			table.insert(skipped, info.abs_path)
 		end
@@ -906,6 +948,13 @@ local function export_tree(params, format, write_fn, config_dir_key, extension)
 		print("⚠️  Skipped " .. #skipped .. " files (missing or invalid)")
 		for _, path in ipairs(skipped) do
 			_parley.logger.warning("Skipped: " .. path)
+		end
+	end
+
+	if #asset_errors > 0 then
+		print("⚠️  " .. #asset_errors .. " attachment(s) not copied to " .. export_dir .. " (see log)")
+		for _, err in ipairs(asset_errors) do
+			_parley.logger.warning("Asset copy failed: " .. err)
 		end
 	end
 end
