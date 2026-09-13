@@ -1,1 +1,0 @@
-../../ariadne/scripts/run-merge-checks.sh

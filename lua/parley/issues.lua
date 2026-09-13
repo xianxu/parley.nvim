@@ -19,6 +19,7 @@ local _parley = nil
 -- Mtime-based cache: avoids re-reading unchanged issue files.
 -- Key: file path, Value: { mtime, issue_data }
 local _file_cache = {}
+local _file_cache_model = nil
 
 M.setup = function(parley)
     _parley = parley
@@ -29,6 +30,11 @@ M.clear_cache = function()
 end
 
 M.get_cache = function()
+    local model = issue_vocabulary.default()
+    if model ~= _file_cache_model then
+        _file_cache = {}
+        _file_cache_model = model
+    end
     return _file_cache
 end
 
@@ -202,6 +208,8 @@ end
 -- current_id: optional, if provided skips to the issue after this one (cycles)
 -- Returns the issue table or nil.
 M.next_runnable = function(issues, current_id)
+    local model, err = vocab()
+    if not model then return nil, err end
     local done_set = {}
     for _, issue in ipairs(issues) do
         if issue.status == "done" then
@@ -604,7 +612,7 @@ local function scan_dir_issues(dir, issues, is_archived)
                         id = id_str,
                         slug = slug,
                         title = title,
-                        status = fm and fm.status or "open",
+                        status = fm and fm.status or M.default_status(),
                         deps = fm and fm.deps or {},
                         created = fm and fm.created or "",
                         updated = fm and fm.updated or "",
@@ -628,6 +636,7 @@ end
 -- opts.history_dir_override: explicit history dir (super-repo per-member); else M.get_history_dir()
 -- opts.repo_name: if set, every returned issue is tagged with .repo_name (super-repo display)
 M.scan_issues = function(issues_dir, opts)
+    M.get_cache() -- Parsed defaults belong to this vocabulary generation.
     if not issues_dir then
         return {}
     end

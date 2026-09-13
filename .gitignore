@@ -61,3 +61,32 @@ bin/
 # is how 8ade807 committed four of them (#214 BR-22). The test harness points
 # HOME/XDG elsewhere, so this only catches manual runs.
 .local/
+
+# Maintainer-only links are restored by bootstrap/weave, never shipped.
+/.claude/settings.ariadne.json
+/.codex/config.toml
+/.openshell/Makefile
+/.openshell/dotfiles
+/.openshell/overlay
+/.openshell/policy.yaml
+/.openshell/sandbox.sh
+/.openshell/ssh-bin
+/.openshell/ssh_wrapper.sh
+/.tart/Makefile
+/.tart/scripts
+/Makefile.workflow
+/atlas/workflow
+/construct/dev-aliases.sh
+/construct/scripts/apply-gitignore-entries.sh
+/construct/scripts/bootstrap-peers.sh
+/construct/scripts/clone-data-deps.sh
+/construct/scripts/lib-deps.sh
+/construct/scripts/list-peers.sh
+/scripts/close-issue.py
+/scripts/docflow.sh
+/scripts/issue-sync.sh
+/scripts/lib.sh
+/scripts/parallel-checks.sh
+/scripts/pre-merge-checks.sh
+/scripts/run-merge-checks.sh
+/scripts/sdlc-install.sh

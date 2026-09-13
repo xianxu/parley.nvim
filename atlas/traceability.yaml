@@ -314,6 +314,8 @@ atlas:
     code:
       - scripts/golden_fixture.lua
       - Makefile.parley
+      - scripts/check-fresh-clone.sh
+      - tests/helpers/fresh_clone_probe.lua
       - tests/minimal_init.vim
       - tests/helpers/ready_port.lua
       - tests/helpers/fixture_process.lua
@@ -321,6 +323,8 @@ atlas:
       - tests/perf/chat_typing.lua
     tests:
       - tests/unit/golden_fixture_spec.lua
+      - tests/integration/fresh_clone_spec.lua
+      - tests/integration/portable_make_spec.lua
       - tests/arch/scratch_placement_spec.lua
       - tests/arch/destructive_recipe_spec.lua
       - tests/arch/superseded_comment_spec.lua
@@ -650,6 +654,7 @@ atlas:
       - tests/unit/issue_vocabulary_spec.lua
       - tests/unit/issue_unavailable_spec.lua
       - tests/integration/issue_command_spec.lua
+      - tests/integration/vocabulary_drift_spec.lua
       - tests/unit/issues_spec.lua
       - tests/unit/finder_facets_spec.lua
       - tests/unit/issue_finder_spec.lua

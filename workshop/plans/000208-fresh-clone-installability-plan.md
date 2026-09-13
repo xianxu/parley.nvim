@@ -21,8 +21,6 @@ This fulfills #208 and unblocks the isolated starter profile. Provider defaults,
 | Name | Lives in | Status | Contract |
 |------|----------|--------|----------|
 | `IssueVocabulary`, `from_table` | `lua/parley/issue_vocabulary.lua` | modified | Validate category arrays and lifecycle endpoints before deriving indexes; no invented statuses |
-| `default_status`, `parse_frontmatter`, status predicates, `cycle_status_value`, completion values, `topo_sort` | `lua/parley/issues.lua` | modified | Preserve raw text without vocabulary; lifecycle operations return an unavailable diagnostic |
-| `materialize` / status ordering | `lua/parley/issue_finder_records.lua` | modified | Deterministic ID ordering when vocabulary unavailable; valid models retain category order |
 
 One vocabulary owns all lifecycle semantics (ARCH-DRY). Validate strings, dense arrays, disjoint categories, at least one open status, and known transition endpoints. Unknown extra JSON fields remain compatible with upstream evolution. Preserve existing first-transition ordering. The from_table strategy below verifies this pure boundary without IO mocks.
 
@@ -32,8 +30,11 @@ Without a model, parsing retains a supplied status and leaves a missing one abse
 
 | Name | Lives in | Status | Wraps |
 |------|----------|--------|-------|
+| `default_status`, `parse_frontmatter`, status predicates, `cycle_status_value`, completion values, `topo_sort` | `lua/parley/issues.lua` | modified | Preserve raw text without vocabulary; lifecycle operations return an unavailable diagnostic |
+| `materialize` / status ordering | `lua/parley/issue_finder_records.lua` | modified | Deterministic ID ordering when vocabulary unavailable; valid models retain category order |
+| `materialize` | Same issue records shuffled while vocabulary is unavailable | Sorting every permutation yields the same deduplicated IDs; archived mtime ordering remains unchanged; ready-model controls retain category order |
 | `load`, `default`, `reload` | `lua/parley/issue_vocabulary.lua` | modified/new | JSON read/decode and one tagged cache: unprobed, ready(model), unavailable(reason) |
-| `setup`, issue action handlers | `lua/parley/issues.lua`, `lua/parley/issue_finder.lua`, `lua/parley/init.lua` | modified | Optional capability wiring and user diagnostics |
+| `get_cache`, `scan_issues`, `setup`, issue action handlers | `lua/parley/issues.lua`, `lua/parley/issue_finder.lua`, `lua/parley/init.lua` | modified | Optional capability wiring and user diagnostics |
 | `run_sdlc_issue_new`, `build_spawn_argv` | `lua/parley/issues.lua` | modified | Existing async runner; retain PATH executable and interactive-shell alias/function support |
 | Vendored vocabulary | `construct/generated/vocabulary/issue.json`, `.gitignore` | new | Release runtime data generated from upstream CUE |
 | Vocabulary drift check | `scripts/check-vocabulary.sh`, `scripts/merge-checks.d/20-vocabulary.sh` | new | Export into scratch and compare content; never repair during a check |
@@ -52,7 +53,6 @@ The issue creation runner already handles process-start errors and exit codes. P
 | `load` | Files whose bytes violate the read bound, JSON grammar, or model shape | Real scratch files fail explicitly; the valid control produces exactly the expected model, and no read borrows workspace data |
 | `default`, `reload` | Filesystem changes between cache events | Drive unprobed→ready/unavailable and explicit reload transitions against scratch files; repeated default calls retain the cached outcome, reload observes the new bytes |
 | Lifecycle helpers and callers | Absent model while raw issue text remains present | Table-driven helper checks plus each actual buffer/finder creation/cycle handler: compare bytes and timestamps before/after and require the unavailable diagnostic; enumerate direct and indirect callers with rg |
-| `materialize` | Same issue records shuffled while vocabulary is unavailable | Sorting every permutation yields the same deduplicated IDs; archived mtime ordering remains unchanged; ready-model controls retain category order |
 | `build_spawn_argv`, `run_sdlc_issue_new` | Command availability differs between PATH and the interactive shell | Filesystem-backed fake records argv and created files; exact quoted titles survive both routes, unavailable/failed routes return failure and leave the issue directory unchanged |
 | Drift checker | Committed content changes without source-stamp changes | Same export command passes the control, fails the mutated copy, and never repairs either input |
 | Standalone smoke | Hidden dependency available only outside the extracted product | Launch from the archive cwd under isolated HOME/XDG/runtimepath and assert load/setup/chat succeeds without external runtime data; missing-data variants additionally prove safe issue-action refusal |
@@ -150,3 +150,14 @@ templates; leave only safe command identifiers bare for shell alias expansion,
 with every argument quoted. The fake verified literal injection-like titles
 through executable, function, and alias routes; unavailable-command diagnostics
 include setup advice. These repairs fulfill the approved boundaries.
+
+### 2026-09-13 — cache-generation and scan sweep
+
+Reason: a missing-status disk scan still fabricated open, and cached defaults
+could survive a vocabulary reload. Delta: scanners share default_status;
+get_cache clears parsed records when the model identity changes. Direct
+next-runnable and status-write helpers also refuse unavailable data. Display
+uses a question-mark label for absent status without altering stored values.
+These adapters read the model cache and are classified as integration; only
+the validated model and its calculations are pure. Added red→green regressions
+for the scan and ready→unavailable cache transition.

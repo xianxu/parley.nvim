@@ -1,1 +1,0 @@
-../../ariadne/construct/dev-aliases.sh

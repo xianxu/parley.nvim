@@ -1,1 +1,0 @@
-../../ariadne/scripts/lib.sh

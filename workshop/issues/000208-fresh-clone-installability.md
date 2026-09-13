@@ -104,6 +104,43 @@ asked how isolated the two halves are; the coupling grep answers "concentrated i
 is step one of a split either way, and is what the launch actually requires —
 see #212.
 
+### 2026-09-13 — implementation checkpoint
+
+Runtime commit `3e2daf4` vendors the bounded module-root vocabulary and makes
+optional issue failures nonfatal. Follow-up staged changes invalidate parsed
+records on model reload and remove remaining invented status defaults.
+Focused vocabulary, unavailable-data, shell binary/function/alias, drift, and
+portable Make specs passed. Runtime archive acceptance passed all four variants
+(intact/missing/corrupt/malformed data) with an isolated HOME and real chat creation.
+Real exporter drift, read-only sdlc conformance, and isolated CI tool provisioning
+also passed. New test-map entries now pass the focused architecture suite.
+
+The full archive run failed in `parley_harness_spec.lua`: concurrent setup hit
+E739 creating the shared harness state directory. This is the existing #219
+check-then-mkdir race, not missing archive dependencies; do not rerun until green
+and dismiss it. Evidence: `/tmp/parley208-archive-full.log`, lines 501–523.
+The remaining acceptance work includes resolving that race through #219, then
+running full archive verification. Staged build cleanup preserves all maintainer
+links locally while untracking 28 escaping links (root Makefile becomes real).
+
+ariadne#225 merged as PR 122 at `2aff87d`, hosted CI green. Its root Makefile
+source was already adopted; Parley's seeded `.github/workflows/merge-check.yml`
+still needs the merged source bytes so CI invokes the local provisioning hook
+and upstream runner fallback. Do not fork the generic workflow or weave the
+whole live consumer unnecessarily. #208 is not closed or ready to publish yet.
+
+### 2026-09-13 — resumed verification and CI adoption
+
+Adopted the exact merged upstream `.github/workflows/merge-check.yml` seed,
+including declared Go selection, the repo setup hook, and the sibling runner
+fallback. Resumed checks pass: standalone startup for intact/missing/corrupt/
+malformed vocabulary, real exporter drift, read-only sdlc conformance, the
+issue-management and test-harness mapped suites, and lint (399 files, zero
+warnings/errors). Evidence is in `/tmp/parley208-resume-{runtime,issues,harness,lint}.log`.
+The #219 fix is proceeding in an isolated worktree; full-suite acceptance
+remains pending its integration. No release claim is made from these focused
+checks.
+
 ## Revisions
 
 ### 2026-09-13 — deployment implementation design

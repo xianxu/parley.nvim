@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+[ "$#" -eq 3 ] && [ "$1" = export ] && [ "$2" = --noun ] && [ "$3" = issue ] || {
+    echo "unexpected vocabulary argv" >&2
+    exit 2
+}
+printf '%s\n' 'export --noun issue' >> "$PARLEY_FAKE_VOCABULARY_LOG"
+if [ "${PARLEY_FAKE_VOCABULARY_MODE:-ok}" = fail ]; then
+    echo "fixture exporter failure" >&2
+    exit 7
+fi
+cat "$PARLEY_FAKE_VOCABULARY_DATA"
