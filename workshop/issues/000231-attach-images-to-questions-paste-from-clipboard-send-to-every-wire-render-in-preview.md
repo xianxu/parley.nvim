@@ -142,3 +142,17 @@ holds an unsupported format).
 ## Log
 
 ### 2026-09-10
+
+### 2026-09-12
+
+- Claimed; `sdlc start-plan` run. Operator framing on claim: #231 is a fork
+  in the road — the transcript stops being the whole chat state and gains a
+  bytes-only sidecar folder. The model-side counterpart (generated images
+  saved to the same folder via a client-side tool that returns the link) is
+  **#239**, `deps: [000231]`; its precondition is this issue's writer
+  (`images.save(chat, bytes, ext) → relative link`), so that writer must be
+  caller-agnostic — not coupled to the clipboard or to the question block.
+- Taking the spec's stated preference as the decision for Plan step 1: the
+  images folder is named by the **timestamp prefix**, not the full basename
+  (`images/2026-09-10.14-22-31.487/`). ParleySlug then has nothing extra to
+  rename. Revisit only if the plan turns up a reason.
