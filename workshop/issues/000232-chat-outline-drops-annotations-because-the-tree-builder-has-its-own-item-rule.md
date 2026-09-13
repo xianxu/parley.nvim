@@ -151,20 +151,20 @@ Test strategy (cases live in `tests/unit/picker_items_spec.lua`, beside the
 - `_is_outline_item` — **direct classifier assertions** over annotation
   delimiters (display text, and what is and is not an annotation).
 
-- [ ] Parity + nesting tests over the two builders (red on today's tree builder).
-- [ ] Classifier tests over annotation delimiters (red on today's slice).
-- [ ] Route `build_file_outline_items` through `is_outline_item(nil, i, config,
+- [x] Parity + nesting tests over the two builders (red on today's tree builder).
+- [x] Classifier tests over annotation delimiters (red on today's slice).
+- [x] Route `build_file_outline_items` through `is_outline_item(nil, i, config,
       code_memo, file_lines, { is_chat = true })` for every non-branch line:
       display = `indent .. formatted_line`, `type = item_type`, value
       `{ lnum = i, file = abs_path }`. Delete its private `user_prefix` match
       (`ARCH-DRY`: one item rule). The trailing-empty-question drop stays as
       is. Branch rows stay exactly as they are (they come from
       `parsed.branches`, which the shared rule does not know).
-- [ ] Fix the display slice (`3, -3`).
-- [ ] Atlas: `atlas/ui/outline.md` Logic section — one sentence: both builders
+- [x] Fix the display slice (`3, -3`).
+- [x] Atlas: `atlas/ui/outline.md` Logic section — one sentence: both builders
       classify lines through `is_outline_item`; the tree adds root, branch rows
       and indentation only.
-- [ ] Verify on the operator's file
+- [x] Verify on the operator's file
       (`workshop/parley/2026-09-09.11-40-59.150_astrophotography-plan.md`):
       `<M-t>` shows `→ plan for 9/10/2026` at its position. Record in `## Log`.
 
@@ -183,3 +183,26 @@ living beside `is_outline_item`.
 Earlier in the session the operator had been told `@@…@@` was *the* way to add
 outline entries in chats. That came from reading `is_outline_item` without checking
 which builder chats actually use, and it is wrong until this lands.
+
+### 2026-09-12
+
+- Claimed; plan rewritten as function-level test strategies after the codex
+  plan-quality judge's one Important finding (the claude judge was unavailable:
+  session rate limit; `--agent codex` worked). Estimate derived by v3.1: 1.45 h.
+- Implemented on the branch: `build_file_outline_items` now classifies every
+  non-branch line through `is_outline_item(nil, i, config, code_memo,
+  file_lines, { is_chat = true })`; a `🌿` line the parser did not list as a
+  branch (a child's upward parent link) is skipped, since branch rows come
+  from the parser. Slice fixed to `3, -3`. One decision not in the Spec:
+  the parity spec lives in its own file, `tests/unit/outline_parity_spec.lua`,
+  because it needs `parley.setup` (branch resolution + topic lookup) and
+  `picker_items_spec.lua` deliberately avoids that; routed under `ui/outline`.
+- Red first: 4 of 5 new cases failed on the old builder (parity, annotation in
+  tree, nested annotation, `→ @my note@` slice); the fifth is a delimiter pin.
+- Verified: `make test-spec SPEC=ui/outline` — chat_finder_logic 48,
+  outline_parity 5, outline 2, parse_chat 54, picker_items 53, all green;
+  `make lint` 0 warnings; arch guards single_source_sweeps 21,
+  untrusted_path 8, superseded_comment 9 green. On the operator's file
+  (`workshop/parley/2026-09-09.11-40-59.150_astrophotography-plan.md`, line 87)
+  the tree outline now lists `→ plan for 9/10/2026` as row 5 of 33, built
+  headlessly through `_find_tree_root` + `_build_tree_outline_items`.

@@ -646,6 +646,7 @@ atlas:
       - lua/parley/chat_parser.lua
     tests:
       - tests/unit/outline_spec.lua
+      - tests/unit/outline_parity_spec.lua
       - tests/unit/picker_items_spec.lua
       - tests/unit/chat_finder_logic_spec.lua
       - tests/unit/parse_chat_spec.lua

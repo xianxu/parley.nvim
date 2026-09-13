@@ -41,7 +41,9 @@ local function is_outline_item(bufnr, line_number, config, code_block_memo, all_
     return true, "question", "  " .. line
   -- Match annotations
   elseif line:match("^@@.+@@$") then
-    return true, "annotation", "→ " .. string.sub(line, 2, -2)
+    -- Both delimiters are two characters: `@@my note@@` → `→ my note` (#232;
+    -- the old 2,-2 slice left one `@` on each side).
+    return true, "annotation", "→ " .. string.sub(line, 3, -3)
   -- Match branch references
   elseif line:match("^" .. vim.pesc(config.chat_branch_prefix or "🌿:")) then
     return true, "branch", "🌿 " .. line
@@ -261,7 +263,6 @@ local function build_file_outline_items(file_path, config, depth)
 
   local user_prefix = config.chat_user_prefix
   for i = header_end + 1, #file_lines do
-    local line = file_lines[i]
     local branch = branch_at_line[i]
 
     if branch then
@@ -278,12 +279,21 @@ local function build_file_outline_items(file_path, config, depth)
         display = branch_indent .. "🌿 " .. topic,
         value = { lnum = branch.line, file = abs_path, child_path = child_abs, inline = branch.inline },
       })
-    elseif not code_memo[i] then
-      if line:match("^" .. vim.pesc(user_prefix)) then
+    else
+      -- #232: ONE item rule, shared with the flat builder. This branch used to
+      -- keep its own question-only match, so the `@@…@@` annotations the flat
+      -- rule knows never reached a chat outline — and chats always use the
+      -- tree (ARCH-DRY). The shared rule owns the code-block skip and the
+      -- no-headings-in-chats rule too. Branch rows come from the parser above;
+      -- a 🌿 line the parser did NOT list as a branch — a child's upward
+      -- parent_link — is skipped rather than rendered as a branch.
+      local is_item, item_type, formatted_line =
+        is_outline_item(nil, i, config, code_memo, file_lines, { is_chat = true })
+      if is_item and item_type ~= "branch" then
         table.insert(items, {
-          display = indent .. "  " .. line,
+          display = indent .. formatted_line,
           value = { lnum = i, file = abs_path },
-          type = "question",
+          type = item_type,
         })
       end
     end
