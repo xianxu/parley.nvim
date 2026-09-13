@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-09-10
 updated: 2026-09-12
-estimate_hours:
+estimate_hours: 6.79
 started: 2026-09-12T18:17:30-07:00
 ---
 
@@ -128,6 +128,54 @@ holds an unsupported format).
   the #224 lesson applied to a second kind of reference.
 - A missing clipboard binary produces a diagnosis naming what to install, not a
   stack trace.
+
+## Estimate
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: issue-spec design=1.0 impl=0.08
+item: lua-neovim design=0.2 impl=0.5
+item: lua-neovim design=0.2 impl=0.6
+item: lua-neovim design=0.2 impl=0.6
+item: lua-neovim design=0.2 impl=0.3
+item: lua-neovim design=0.2 impl=0.5
+item: lua-neovim design=0.2 impl=0.3
+item: real-api-discovery design=0.0 impl=0.18
+item: real-api-discovery design=0.0 impl=0.18
+item: real-api-discovery design=0.0 impl=0.18
+item: atlas-docs design=0.1 impl=0.05
+item: atlas-docs design=0.1 impl=0.05
+item: milestone-review design=0.1 impl=0.14
+item: milestone-review design=0.1 impl=0.14
+design-buffer: 0.15
+total: 6.79
+```
+
+*Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against
+`baseline-v3.1.md`. Method A only.* `sdlc estimate-source` flags that doc as
+stale (#127), so the per-primitive hours are provisional.
+
+How each item was picked, from the v2 table's ranges: design ×0.2 where the
+plan resolves the decisions (v2 Step 3 — the plan carries every contract and
+strategy), `impl=` at 40% of the v2/v2.1 range (v3.1), design buffer 0.15
+because the ×0.2 discount applies across the code primitives (v2.1 halves the
+buffer then). Familiarity 1.0: the parser, both builders, the wires, the
+movers/deleters and the exporter were read end to end during planning.
+
+- `issue-spec` — the spec predates the claim, but inside the window are the
+  durable plan, five fresh-eyes plan reviews over two rounds and four
+  plan-quality rounds: the middle of 0.5–1.5, undiscounted.
+- `lua-neovim` ×6, one per focused module or seam, impl in the scaled
+  0.2–0.6 range by size: `assets` pure + checked IO (0.5); clipboard recipes +
+  paste flow + key + fixture (0.6); parser + both builders + retention +
+  budget + send guard + log elision (0.6); the three wire shapes (0.3); both
+  movers + five deleters + sweep + prompts (0.5); export placeholder + copy
+  (0.3).
+- `real-api-discovery` ×3 — the M1 gate sends a real image through each wire
+  family (anthropic, openai, googleai/cliproxy); 0.3–0.6 ×0.4.
+- `atlas-docs` ×2 — the attachments doc at M1, the M2 lines and one-liners.
+- `milestone-review` ×2 — M1 and the close boundary.
 
 ## Plan
 
