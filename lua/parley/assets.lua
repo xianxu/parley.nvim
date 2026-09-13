@@ -130,8 +130,13 @@ end
 --- The one link shape written into the transcript.
 ---@param relative string
 ---@return string
-function M.markdown_link(relative)
-    return "![](" .. relative .. ")"
+--- The link line. The alt text defaults to the file name: markdown conceal
+--- (and rendering plugins) show an image link by its alt, so an empty alt
+--- renders as a blank line until the cursor lands on it (operator, 2026-09-13).
+--- The grammar accepts any alt; the operator may edit it.
+function M.markdown_link(relative, alt)
+    alt = alt or relative:match("([^/]+)$") or relative
+    return "![" .. alt .. "](" .. relative .. ")"
 end
 
 --- `<stamp>.<ext>`, then `<stamp>-2.<ext>`, … while `exists(name)` is true.

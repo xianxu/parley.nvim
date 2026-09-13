@@ -158,7 +158,10 @@ describe("assets: layout", function()
     it("relative_path and markdown_link form the one link shape", function()
         local rel = assets.relative_path(TS, "2026-09-10.14-22-31.487.png")
         assert.equals("assets/" .. TS .. "/2026-09-10.14-22-31.487.png", rel)
-        assert.equals("![](" .. rel .. ")", assets.markdown_link(rel))
+        assert.equals("![2026-09-10.14-22-31.487.png](" .. rel .. ")", assets.markdown_link(rel),
+            "alt defaults to the file name so conceal shows a label, not a blank line")
+        assert.equals("![shot](" .. rel .. ")", assets.markdown_link(rel, "shot"))
+        assert.is_not_nil(assets.parse_attachment(assets.markdown_link(rel)), "the default link is an attachment")
     end)
 
     it("unique_name suffixes -N while the name is taken", function()

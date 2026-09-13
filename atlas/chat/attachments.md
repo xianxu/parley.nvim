@@ -7,7 +7,9 @@ slug: `ParleySlug` renames nothing here, and the folder moves with its chat.
 ## Surface
 - `<M-v>` (`paste_image`, `parley_buffer` scope, n/i): reads a PNG off the
   clipboard, saves it as `assets/<ts>/<stamp>.png`, inserts
-  `![](assets/<ts>/<stamp>.png)` on its own line after the cursor line.
+  `![<stamp>.png](assets/<ts>/<stamp>.png)` on its own line after the cursor
+  line (the alt is the file name so markdown conceal shows a label rather than
+  a blank line; edit it freely).
   Declines with a message when the clipboard holds no image, when no tool is
   found (names what to install), when the buffer is not a timestamp-named
   chat, or when a paste is already in flight for that buffer. A buffer closed

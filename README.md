@@ -188,7 +188,9 @@ outside every exchange (the frontmatter, for instance) are left alone.
   belonged to the answer being replaced.
 - `<M-v>` **paste the clipboard image as an attachment** of the question: the
   image is saved under `<chat-dir>/assets/<chat-timestamp>/` and a
-  `![](assets/<ts>/<file>.png)` line is inserted under the cursor. The
+  `![<file>.png](assets/<ts>/<file>.png)` line is inserted under the cursor
+  (the alt text is the file name so a concealing markdown setup still shows
+  a label; edit it freely). The
   attachment is sent to the model (Anthropic, OpenAI and Gemini shapes; via
   cliproxyapi for all three), follows the memory window like the text it
   belongs to, and travels with the chat. Reads the clipboard through
