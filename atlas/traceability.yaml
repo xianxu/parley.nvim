@@ -36,6 +36,7 @@ atlas:
       - tests/unit/assets_spec.lua
       - tests/unit/argv_recipe_spec.lua
       - tests/unit/image_shrink_spec.lua
+      - tests/unit/image_probe_spec.lua
       - tests/integration/image_shrink_live_spec.lua
       - tests/unit/clipboard_image_spec.lua
       - tests/unit/wire_images_spec.lua

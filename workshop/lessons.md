@@ -2254,3 +2254,14 @@ download.
    arch sweep compares definition lines, so a new message inside `auth_files`
    or a new rule inside a fixture changes a contract without tripping it. Three
    review findings in one issue were rows that lagged the diff.
+
+9. **Bounded reads must preserve the outcome being classified.** Reading only
+   the input length makes larger valid converter output look corrupt. Read
+   through a fixed resource cap with an overflow sentinel, then transform and
+   compare complete bytes.
+10. **Cleanup is observable work.** Attempt every removal, distinguish missing
+    files from failed deletion, and retain cleanup diagnostics alongside the
+    primary error.
+11. **Live conformance needs a platform-local oracle.** A macOS-only dimension
+    probe leaves Linux recipes unchecked; select an independent probe for
+    each backend and test its dispatch without macOS tools.

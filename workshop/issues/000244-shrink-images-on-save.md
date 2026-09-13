@@ -198,3 +198,14 @@ plan supersedes the original Spec where these refinements differ.
   all 11 pass. Shared comparison normalization now ignores that volatile
   version while preserving tool behavior text and payload content; 7 new
   guards and all 11 existing cases pass. No captured fixtures refreshed.
+
+### 2026-09-13 — boundary review round 1 repairs
+
+Reason: BR-1–BR-3 found truncated-output misclassification, hidden cleanup
+failures, and an independent-probe gap on non-sips hosts. Delta: preserve
+complete output within the 10 MiB bound through metadata stripping and size
+comparison (ARCH-PURPOSE); attempt both removals and surface non-ENOENT
+failures (ARCH-FUNERAL); independently probe every installed recipe with its
+own tool or ffprobe/vipsheader companion (ARCH-MOCK). Regression tests cover
+larger output, metadata-heavy output, failed/thrown cleanup, timeout context,
+and probe dispatch without relying on sips.

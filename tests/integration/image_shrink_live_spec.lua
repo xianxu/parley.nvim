@@ -1,6 +1,7 @@
 local shrink = require('parley.image_shrink')
 local assets = require('parley.assets')
 local png_gen = require('tests.helpers.png_gen')
+local image_probe = require('tests.helpers.image_probe')
 
 describe('live image shrink recipe conformance', function()
     for _, candidate in ipairs(shrink.RECIPES) do
@@ -28,19 +29,15 @@ describe('live image shrink recipe conformance', function()
                 assert.is_true(out_width <= width and out_height <= height)
                 assert.is_true(#output < #input)
                 assert.is_true(#output < 300 * 1024)
-                if vim.fn.executable('sips') == 1 then
-                    local path = vim.fn.tempname() .. '.jpg'
-                    local ok, why = pcall(function()
-                        assert(assets.default_io.write(path, output))
-                        local probe = vim.system({'sips', '-g', 'pixelWidth', '-g', 'pixelHeight', path},
-                            {text=true, timeout=5000}):wait()
-                        assert.equals(0, probe.code, probe.stderr)
-                        assert.equals(out_width, tonumber(probe.stdout:match('pixelWidth: (%d+)')))
-                        assert.equals(out_height, tonumber(probe.stdout:match('pixelHeight: (%d+)')))
-                    end)
-                    os.remove(path)
-                    assert.is_true(ok, why)
-                end
+                local path = vim.fn.tempname() .. '.jpg'
+                local ok, why = pcall(function()
+                    assert(assets.default_io.write(path, output))
+                    local probe_width, probe_height = image_probe.dimensions(recipe.tool, path)
+                    assert.equals(out_width, probe_width)
+                    assert.equals(out_height, probe_height)
+                end)
+                os.remove(path)
+                assert.is_true(ok, why)
                 print(string.format('%s %dx%d: %d bytes -> %dx%d %d bytes in %.1f ms',
                     recipe.tool, width, height, #input, out_width, out_height, #output, elapsed_ms))
             end

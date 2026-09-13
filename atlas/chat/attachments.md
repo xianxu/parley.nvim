@@ -85,7 +85,8 @@ slug: `ParleySlug` renames nothing here, and the folder moves with its chat.
 An asset lives as long as a transcript line references it, and is removed
 with its chat. A link line deleted by hand leaves the file until then; there
 is no sweep. Logs never hold the bytes.
-Shrink input/output temporary files are removed on every completed attempt;
+Shrink input/output temporary files are both removed on every completed attempt
+(or a cleanup failure is reported);
 abnormal editor death leaves them to the operating system's temp cleanup.
 
 ## Tests
@@ -100,4 +101,10 @@ models osascript through the config seam); `tests/integration/chat_move_spec.lua
 `tests/fixtures/fake_sips` models converter outcomes through the configured
 command seam; `tests/helpers/png_gen.lua` generates codec-valid test images.
 `tests/integration/image_shrink_live_spec.lua` checks available recipes with
-`PARLEY_LIVE_SHRINK=1`.
+`PARLEY_LIVE_SHRINK=1`. Independent dimensions come from each recipe’s tool
+(or its companion `ffprobe`/`vipsheader`), via `tests/helpers/image_probe.lua`;
+a missing companion fails the opted-in conformance case. Probe dispatch and
+malformed/failing reports have portable coverage in `image_probe_spec.lua`.
+Output reads preserve complete JPEGs up to the 10 MiB cap before metadata
+stripping and size comparison. Both temporary removals are attempted; ENOENT
+is harmless, while other removal failures produce an original-kept diagnostic.

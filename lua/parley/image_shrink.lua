@@ -95,10 +95,11 @@ function M.classify(code, stderr, output, input_size, tool, requested_edge)
         return "kept", tostring(tool) .. " " .. reason
     end
     if code ~= 0 then
-        if code == 124 then
-            return kept("timed out after " .. M.TIMEOUT_MS .. " ms")
-        end
         local detail = (stderr or ""):gsub("%s+$", "")
+        if code == 124 then
+            return kept("timed out after " .. M.TIMEOUT_MS .. " ms"
+                .. (detail ~= "" and ": " .. detail or ""))
+        end
         return kept("exit " .. tostring(code) .. (detail ~= "" and ": " .. detail or ""))
     end
     if not output or output == "" then
@@ -133,9 +134,10 @@ M.default_deps = {
     end,
 }
 
---- Return exit code, stderr, and at most input-size output bytes.
+--- Return exit code, stderr, and complete output within the 10 MiB cap.
 --- Constant shell text limits per-file growth to <=10 MiB before exec. Both
---- paths are cleaned even after allocation/write/spawn/read failures.
+--- paths are cleaned even after allocation/write/spawn/read failures; genuine
+--- cleanup failures are reported after every removal has been attempted.
 function M.run(recipe, bytes, ext, max, deps)
     deps = deps or M.default_deps
     local paths = {}
@@ -154,13 +156,32 @@ function M.run(recipe, bytes, ext, max, deps)
         local argv = { "sh", "-c", 'ulimit -f 10240 || exit; exec "$@"', "sh" }
         vim.list_extend(argv, M.argv_for(recipe, input, out, max))
         local result = deps.system(argv, { timeout = M.TIMEOUT_MS, stdout = false, text = true })
-        return result.code or 1, result.stderr or "", deps.read(out, #bytes)
+        -- Preserve completeness through metadata stripping and classification.
+        -- One extra byte detects output beyond the cap without unbounded reads.
+        local result_code = result.code or 1
+        local converted = deps.read(out, assets.MAX_BYTES + 1)
+        if converted and #converted > assets.MAX_BYTES then
+            return result_code ~= 0 and result_code or 1,
+                (result.stderr or "") .. " output exceeds " .. assets.MAX_BYTES .. "-byte limit", nil
+        end
+        return result_code, result.stderr or "", converted
     end)
-    for _, path in ipairs(paths) do
-        pcall(deps.remove, path)
-    end
     if not ok then
-        return 1, tostring(code), nil
+        code, stderr, output = 1, tostring(code), nil
+    end
+    local cleanup_errors = {}
+    for _, path in ipairs(paths) do
+        local removed_ok, removed, err, errno = pcall(deps.remove, path)
+        if not removed_ok or (not removed and errno ~= 2) then
+            local reason = removed_ok and (err or "removal failed") or removed
+            cleanup_errors[#cleanup_errors + 1] = path .. ": " .. tostring(reason)
+        end
+    end
+    if #cleanup_errors > 0 then
+        local diagnostic = "cleanup failed: " .. table.concat(cleanup_errors, "; ")
+        stderr = stderr ~= "" and (stderr .. "; " .. diagnostic) or diagnostic
+        code = code ~= 0 and code or 1
+        output = nil
     end
     return code, stderr, output
 end

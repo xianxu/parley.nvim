@@ -81,7 +81,7 @@ describe('image shrink bounded runner', function()
             if fault == 'read' then error('read failure') end
             return files[path] and files[path]:sub(1,max)
         end
-        deps.remove = function(path) files[path] = nil; removed[#removed+1] = path end
+        deps.remove = function(path) files[path] = nil; removed[#removed+1] = path; return true end
         deps.system = function(argv, opts)
             assert.same({'sh','-c','ulimit -f 10240 || exit; exec "$@"','sh'}, vim.list_slice(argv,1,4))
             assert.equals(5000, opts.timeout)
@@ -92,13 +92,77 @@ describe('image shrink bounded runner', function()
         end
         return deps, files, removed
     end
-    it('cleans both files after success and caps reads at input size', function()
+    it('cleans both files after success and reads complete bounded output', function()
         local deps, files, removed = filesystem()
         local code, _, out = shrink.run({argv={'fake','{in}','{out}','{max}'}}, png, 'png', 1, deps)
         assert.equals(0, code)
-        assert.equals(jpeg:sub(1,#png), out)
+        assert.equals(jpeg, out)
         assert.same({}, files)
         assert.equals(2, #removed)
+    end)
+    it('rejects output above the fixed byte cap before classification', function()
+        local deps = filesystem()
+        deps.read = function(_, max)
+            assert.equals(require('parley.assets').MAX_BYTES+1, max)
+            return string.rep('x', max)
+        end
+        local code, err, out = shrink.run({argv={'fake','{in}','{out}','{max}'}}, png, 'png', 1, deps)
+        assert.is_not.equals(0, code)
+        assert.matches('output exceeds', err)
+        assert.is_nil(out)
+    end)
+    for _, kind in ipairs({'return', 'throw'}) do
+        it('reports '..kind..' cleanup failures and attempts both removals', function()
+            local deps = filesystem()
+            local attempts = {}
+            deps.remove = function(path)
+                attempts[#attempts+1] = path
+                if kind == 'throw' then error('permission denied') end
+                return nil, 'permission denied', 13
+            end
+            local code, err = shrink.run({argv={'fake','{in}','{out}','{max}'}}, png, 'png', 1, deps)
+            assert.is_not.equals(0, code)
+            assert.matches('cleanup failed', err)
+            assert.matches('permission denied', err)
+            assert.equals(2, #attempts)
+            assert.matches(attempts[1], err, 1, true)
+            assert.matches(attempts[2], err, 1, true)
+        end)
+    end
+    it('keeps process failure context when cleanup also fails', function()
+        local deps = filesystem()
+        deps.system = function() return {code=7,stderr='converter broke'} end
+        deps.remove = function() return nil, 'permission denied', 13 end
+        local code, err = shrink.run({argv={'fake','{in}','{out}','{max}'}}, png, 'png', 1, deps)
+        assert.equals(7, code)
+        assert.matches('converter broke', err)
+        assert.matches('cleanup failed', err)
+    end)
+    it('surfaces cleanup failure alongside the timeout notice', function()
+        local deps = filesystem()
+        deps.system = function() return {code=124,stderr=''} end
+        deps.remove = function() return nil, 'permission denied', 13 end
+        local code, err, output = shrink.run({argv={'fake','{in}','{out}','{max}'}}, png, 'png', 1, deps)
+        local status, note = shrink.classify(code, err, output, #png, 'fake', 1)
+        assert.equals('kept', status)
+        assert.matches('timed out', note)
+        assert.matches('cleanup failed', note)
+    end)
+    it('keeps throwing operation context when cleanup also fails', function()
+        local deps = filesystem('spawn')
+        deps.remove = function() return nil, 'permission denied', 13 end
+        local code, err = shrink.run({argv={'fake','{in}','{out}','{max}'}}, png, 'png', 1, deps)
+        assert.is_not.equals(0, code)
+        assert.matches('spawn failure', err)
+        assert.matches('cleanup failed', err)
+    end)
+    it('treats missing temporary paths as already cleaned', function()
+        local deps = filesystem()
+        deps.system = function() return {code=0,stderr=''} end
+        deps.remove = function() return nil, 'No such file or directory', 2 end
+        local code, err = shrink.run({argv={'fake','{in}','{out}','{max}'}}, png, 'png', 1, deps)
+        assert.equals(0, code)
+        assert.equals('', err)
     end)
     for _, fault in ipairs({'allocate','write','read','spawn'}) do
         it('cleans files on '..fault..' failure', function()
@@ -215,6 +279,34 @@ describe('filesystem-backed converter fixture', function()
         local elapsed = (clock.hrtime()-start)/1e9
         assert.is_true(elapsed >= 4.5 and elapsed < 8)
     end)
+    for _, metadata in ipairs({false, true}) do
+        it(metadata and 'accepts complete metadata-heavy output after stripping'
+            or 'silently retains the original when the complete JPEG is larger', function()
+            local input = require('tests.helpers.png_gen').png_bytes(1800, 1)
+            local payload = string.rep('m', 6000)
+            local length = #payload+2
+            local segment = '\255' .. (metadata and '\225' or '\224')
+                .. string.char(math.floor(length/256), length%256) .. payload
+            local larger = jpeg:sub(1,2) .. segment .. jpeg:sub(3)
+            assert.is_true(#larger > #input)
+            assert.is_true(#jpeg < #input)
+            local path = dir .. '/larger.jpg'
+            assert(require('parley.assets').default_io.write(path, larger))
+            vim.env.PARLEY_FAKE_SIPS = 'ok:' .. path
+            shrink.configure({shrink_cmd=recipe.argv}, nil, deps)
+            local output, ext, outcome = shrink.shrink(input, 'png')
+            shrink.configure()
+            if metadata then
+                assert.equals(jpeg, output)
+                assert.equals('jpg', ext)
+                assert.same({from=#input,to=#jpeg}, outcome)
+            else
+                assert.equals(input, output)
+                assert.equals('png', ext)
+                assert.is_nil(outcome)
+            end
+        end)
+    end
     it('enforces the operating-system output growth limit', function()
         local observed_size
         deps.remove = function(path)
@@ -240,7 +332,7 @@ describe('converter-independent metadata removal', function()
             tempname=function() index=index+1; return '/fake/'..index end,
             write=function(path, bytes) files[path]=bytes; return true end,
             read=function(path, max) return files[path] and files[path]:sub(1,max) end,
-            remove=function(path) files[path]=nil end,
+            remove=function(path) files[path]=nil; return true end,
             system=function(argv)
                 files[argv[7]] = decorated
                 return {code=0,stderr=''}

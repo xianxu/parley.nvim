@@ -42,7 +42,7 @@ The argv helper serves clipboard and shrink recipes (ARCH-DRY). Path tokens are 
 
 | Name | Lives in | Status | Wraps |
 |------|----------|--------|-------|
-| `run`, `default_deps` | `lua/parley/image_shrink.lua` | new | temp files, bounded subprocess |
+| `run`, `default_deps` | `lua/parley/image_shrink.lua` | new | temp files, complete capped output, bounded subprocess, visible cleanup failures |
 | `resolve`, `configure`, `shrink` | `lua/parley/image_shrink.lua` | new | session recipe state |
 | `save` | `lua/parley/assets.lua` | modified | shrink dependency then one asset write |
 | `paste` | `lua/parley/paste_image.lua` | modified | outcome notification |
@@ -101,3 +101,14 @@ inserts metadata records into valid fixture bytes, checks removal without
 changing dimensions/coding bytes, and rejects malformed/truncated records.
 Engine tests verify the shared save result contains stripped bytes and reports
 their final size. This fulfills the original requirement across tool recipes.
+
+### 2026-09-13 — boundary review round 1 repairs
+
+Reason: BR-1–BR-3 found truncated-output misclassification, hidden cleanup
+failures, and an independent-probe gap on non-sips hosts. Delta: preserve
+complete output within the 10 MiB bound through metadata stripping and size
+comparison (ARCH-PURPOSE); attempt both removals and surface non-ENOENT
+failures (ARCH-FUNERAL); independently probe every installed recipe with its
+own tool or ffprobe/vipsheader companion (ARCH-MOCK). Regression tests cover
+larger output, metadata-heavy output, failed/thrown cleanup, timeout context,
+and probe dispatch without relying on sips.
