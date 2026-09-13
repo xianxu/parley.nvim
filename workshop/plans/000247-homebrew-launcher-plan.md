@@ -56,11 +56,13 @@ personal tap and one source-owned generator (ARCH-DRY/PURPOSE).
 | Name | Lives in | Kind | Status | Wraps |
 |---|---|---|---|---|
 | `prepare_profile`, launcher entry | `packaging/launcher.lua`, `packaging/parley` | INTEGRATION | new | filesystem publication and exec of formula Neovim |
+| Formula render CLI | `packaging/render-formula.lua` | INTEGRATION | new | environment metadata, pure renderer and formula file output |
+| Live model selection | `tests/packaging/vm_chat.lua` | INTEGRATION | new | canonical model-provider axis and credential/catalog callbacks |
 | Release/tap update command | `scripts/release-parley.sh` | INTEGRATION | new | tagged archives, sha256, Git and gh |
 | Generated `Parley` formula | tap `Formula/parley.rb` | INTEGRATION | new | Homebrew install and formula test |
 | VM acceptance command and guest checks | `scripts/test-parley-vm.sh`, `tests/packaging/vm_acceptance.lua` | INTEGRATION | new | disposable Tart VM, real brew/Neovim/provider |
 | Guest proxy stop and profile removal | `tests/packaging/vm_stop.lua`, `tests/packaging/vm_uninstall.py` | INTEGRATION | new | identity-checked stop, Homebrew uninstall and bounded profile removal |
-| Stateful launcher/release fixtures | `tests/fixtures/fake_packaging_*`, `tests/packaging/` | INTEGRATION | new | recorded argv, local git/tap and archive state |
+| Stateful launcher/release fixtures | `tests/fixtures/fake_packaging_*`, `tests/fixtures/fake_tart`, `tests/fixtures/run_packaging_vm.py`, `tests/packaging/` | INTEGRATION | new | recorded argv, local git/tap and archive state |
 
 One executable source owns profile publication and argv forwarding. Formula tests
 and local acceptance invoke that same launcher. The formula generator consumes
@@ -240,3 +242,15 @@ disk-usage callable defaulting to the real filesystem probe. The test-only Pytho
 runner injects a fixed capacity; no application or production CLI environment
 variable can waive the disk guard. Cover both adequate capacity and 59 GiB refusal
 before Tart/clone, including reservation release (ARCH-MOCK/CONSTRAINTS).
+
+### 2026-09-13 — final review dispositions before release
+
+The alternate SDLC reviewer independently passed every packaging test including
+loopback and returned FIX-THEN-SHIP. Bundle its fixes and close metadata into one
+commit, as the gate directs; no repeat close is needed for those fixes. BR-4/5
+cover absent-VM cleanup, faithful Tart error codes and explicit retained diagnosis.
+BR-7 discovers models on cliproxy_config.providers(), distinct from login aliases;
+its regression covers a healthy Codex account with no models followed by Google.
+BR-8 consolidates rendering and upload helpers. BR-6 keeps the project task and
+public/live acceptance unchecked until the complete VM manifest; local
+codecomplete is not final acceptance or authorization to archive prematurely.

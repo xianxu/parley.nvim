@@ -77,6 +77,12 @@ scripts/test-parley-vm.sh uninstall /tmp/parley-acceptance-run
 scripts/test-parley-vm.sh verify /tmp/parley-acceptance-run
 ```
 
+For diagnosis, add `--keep-on-failure` to any phase. The manifest remembers it
+for later phases. A failure then retains the owned VM and its reservation,
+records a controlled phase/command/reason, and leaves detailed logs inside the
+guest. Run `cleanup RUN_DIR` when finished. If a failed clone created no VM,
+confirmed absence releases the reservation even in diagnosis mode.
+
 Exit 75 means required acceptance is pending, including guest authentication;
 it does not mean success. The live check sends a guest clipboard image through
 the installed managed proxy and requires a completed nonempty response. The

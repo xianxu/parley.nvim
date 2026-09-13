@@ -2334,3 +2334,11 @@ download.
 - A fake external command is insufficient when orchestration still reads host
   resource capacity. Inject every resource probe and test both sides of its
   threshold without requiring the test machine to provision that resource.
+
+- Match cleanup's missing-resource semantics to the real tool, and verify them
+  with a uniquely nonexistent resource. Preserve ownership when deletion fails;
+  release a reservation when absence is confirmed.
+- Live acceptance needs an explicit retained-diagnosis option and a controlled
+  failure reason; deleting the failing environment can destroy the only evidence.
+- Login-method names and model-provider names are separate axes. Use each
+  subsystem's canonical list, including the empty-catalog fallback case.

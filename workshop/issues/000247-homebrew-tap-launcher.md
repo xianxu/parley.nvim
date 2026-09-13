@@ -1,12 +1,13 @@
 ---
 id: 000247
-status: working
+status: codecomplete
 deps: [000246]
 github_issue:
 created: 2026-09-13
 updated: 2026-09-13
 estimate_hours: 4.159
 started: 2026-09-13T14:26:40-07:00
+actual_hours: 1.83
 ---
 
 # Homebrew tap and parley launcher: brew install xianxu/parley/parley, tested on a clean tart VM
@@ -98,6 +99,7 @@ total: 4.159
 ## Log
 
 ### 2026-09-13 — implementation and VM checkpoint
+- 2026-09-13: closed — Code findings BR1-BR3 all disposed round3; Codex reviewer failed only because its sandbox denies loopback binds. Normal host rerun at reviewed9202b955 passed all11VMcases, exact log /tmp/parley247-reviewed-head-vm.log. Full246specs/lint431 and focused2formula+6release+3upgrade pass. Please verify loopback with supported Claude runner. Approved tag/tap publication then realVM acceptance remain before merge; --no-plan-check only local gate.; review verdict: FIX-THEN-SHIP
 
 Operator approved implementation with “continue”; #246 is merged as PR #180
 and released v2.2.0. #247 passed change-code plan quality round 1 and estimate
@@ -151,6 +153,24 @@ its test-only runner supplies deterministic capacity and proves 59 GiB refuses
 before any Tart call while releasing ownership. The production entry still uses
 actual disk capacity with no bypass CLI/environment input. Test-first runner
 failed before the seam; all 11 VM cases now pass. No real VM state was changed.
+
+### 2026-09-13 — FIX-THEN-SHIP corrections verified
+
+The alternate reviewer passed all packaging tests including loopback and returned
+FIX-THEN-SHIP. BR-4 now models Tart's exit 2 for unknown stop/delete, confirms
+absence before releasing a reservation, and retains ownership if deletion fails.
+BR-5 adds persistent --keep-on-failure with safe phase/command/reason evidence
+and retained guest logs. BR-7 selects canonical model providers, tested with a
+healthy but empty Codex catalog. BR-8 uses one release-local rendering entry and
+one upload helper. BR-6 remains an explicit final acceptance gate: project row
+is unchecked until public install, actual upgrade, live image response and
+uninstall/owned-VM cleanup all pass.
+
+Final verification after these fixes: make test passed 247 spec files and lint
+433 Lua files. Real Tart 2.32.1 unknown-resource stop/delete both exit 2, matching
+the fake. The fixes and close metadata are bundled into this single commit per
+the gate's post-verdict protocol. Publish the reviewed tag/tap next, then run the
+retained clean VM with --keep-on-failure for conformance diagnosis. No merge yet.
 
 ## Revisions
 

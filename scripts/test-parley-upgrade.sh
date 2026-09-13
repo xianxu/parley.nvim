@@ -79,15 +79,10 @@ try:
                 output.add(child, arcname=child.name)
         digest = hashlib.sha256(archive.read_bytes()).hexdigest()
         rendered = owned / 'rendered.rb'
-        lua = ('local f=dofile(vim.env.UPGRADE_RUNTIME.."/packaging/formula.lua"); '
-               'local s=f.render_formula({tag=vim.env.UPGRADE_TAG,sha256=vim.env.UPGRADE_SHA}); '
-               'local out=assert(io.open(vim.env.UPGRADE_OUTPUT,"wb")); '
-               'assert(out:write(s)); assert(out:close())')
         run('nvim', '--headless', '-n', '--noplugin', '-u', 'NONE', '-i', 'NONE',
-            '-c', 'lua local ok,e=pcall(function() ' + lua + ' end); '
-                  'if not ok then io.stderr:write(tostring(e)); vim.cmd("cquit 1") end', '-c', 'qa!',
-            extra={'UPGRADE_RUNTIME': str(source), 'UPGRADE_TAG': 'v' + version,
-                   'UPGRADE_SHA': digest, 'UPGRADE_OUTPUT': str(rendered)})
+            '-l', str(source / 'packaging/render-formula.lua'),
+            extra={'PARLEY_RELEASE_TAG': 'v' + version, 'PARLEY_RELEASE_SHA256': digest,
+                   'PARLEY_RELEASE_OUTPUT': str(rendered)})
         formula = rendered.read_text().replace('class Parley < Formula', 'class ParleyUpgradeFixture < Formula')
         formula, count = re.subn(r'^  url "[^"]+"$', '  url "' + archive.as_uri() + '"', formula, flags=re.M)
         if count != 1:

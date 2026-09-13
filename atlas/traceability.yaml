@@ -6,6 +6,7 @@ atlas:
   infra/packaging:
     code:
       - packaging/formula.lua
+      - packaging/render-formula.lua
       - packaging/parley
       - packaging/launcher.lua
       - scripts/release-parley.sh
@@ -24,6 +25,7 @@ atlas:
       - tests/integration/packaging_release_spec.lua
       - tests/integration/packaging_upgrade_spec.lua
       - tests/integration/packaging_vm_spec.lua
+      - tests/integration/packaging_vm_catalog_spec.lua
 
   infra/starter:
     code:

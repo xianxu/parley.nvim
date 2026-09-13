@@ -216,3 +216,13 @@ its operator VM authentication input is still pending.
 restart passed against the exact tagged plugin in a fresh profile; existing nvim
 bytes stayed unchanged. Measured local-close actual: 1.18h against 3.82h estimate.
 PR #180 awaits CI/merge. #247 is next, using this released runtime.
+
+### 2026-09-13 — packaging local review and remaining live acceptance
+
+#246 is merged and released v2.2.0. #247 reached local codecomplete with a
+FIX-THEN-SHIP verdict; its VM failure-path corrections are being bundled into
+the close commit. The automatic local-close sweep ticked #247, but this project's
+row remains unchecked until public installation, upgrade, real managed login and
+image response, uninstall and VM cleanup are evidenced. User login begins with
+`:ParleyConnect` (which invokes the managed `:ParleyProxy login` flow). No merge
+or archive occurs before the acceptance manifest records outcome=complete.

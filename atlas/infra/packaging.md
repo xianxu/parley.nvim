@@ -29,6 +29,8 @@ Guest probes cover boot containment, fake first-use/chat and real managed-proxy
 login with a clipboard-image response. `scripts/test-parley-upgrade.sh` exercises
 real Homebrew upgrade using two local fixture versions and restores the public
 launcher. Final checks cover removal and the unchanged decoy nvim configuration;
-missing OAuth remains pending. Filesystem-backed fake Tart/brew and local Git
+missing OAuth remains pending. A persisted `--keep-on-failure` flag retains the
+owned guest for diagnosis. Cleanup confirms inventory absence before releasing
+ownership; deletion failure retains the reservation and original failure reason. Filesystem-backed fake Tart/brew and local Git
 remotes test failures without mutating the developer's package installation.
 Commands and ownership recovery are in [the package guide](../../packaging/README.md).

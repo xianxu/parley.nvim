@@ -43,13 +43,12 @@ curl --fail --location --silent --show-error --output "$scratch/release.tar.gz" 
 sha256=$(shasum -a 256 "$scratch/release.tar.gz" | awk '{print $1}')
 mkdir "$scratch/tree"
 tar -xzf "$scratch/release.tar.gz" -C "$scratch/tree" --strip-components=1
-for file in packaging/formula.lua packaging/parley packaging/launcher.lua packaging/starter-config/init.lua lua/parley/deps.lua; do
+for file in packaging/formula.lua packaging/render-formula.lua packaging/parley packaging/launcher.lua packaging/starter-config/init.lua lua/parley/deps.lua; do
     [ -f "$scratch/tree/$file" ] || fail "tagged archive lacks $file; publish a release containing packaging"
 done
-PARLEY_RELEASE_TREE="$scratch/tree" PARLEY_RELEASE_TAG="$tag" PARLEY_RELEASE_SHA256="$sha256" \
+PARLEY_RELEASE_TAG="$tag" PARLEY_RELEASE_SHA256="$sha256" \
     PARLEY_RELEASE_OUTPUT="$scratch/parley.rb" nvim -n --headless --noplugin -u NONE -i NONE \
-    -c 'lua local ok,err=pcall(function() local f=dofile(vim.env.PARLEY_RELEASE_TREE.."/packaging/formula.lua"); local s=f.render_formula({tag=vim.env.PARLEY_RELEASE_TAG,sha256=vim.env.PARLEY_RELEASE_SHA256}); local out=assert(io.open(vim.env.PARLEY_RELEASE_OUTPUT,"wb")); assert(out:write(s)); assert(out:close()) end); if not ok then io.stderr:write(tostring(err).."\n"); vim.cmd("cquit 1") end' \
-    -c 'qa!'
+    -l "$scratch/tree/packaging/render-formula.lua"
 if [ -n "$(git -C "$tap" status --porcelain --untracked-files=all -- Formula/parley.rb)" ]; then
     cmp -s "$scratch/parley.rb" "$tap/Formula/parley.rb" || fail 'tap formula contains uncommitted changes'
 fi

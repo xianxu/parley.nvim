@@ -62,6 +62,22 @@ local function ask(model, image)
     return {response_nonempty = true, image_sent = image or false, managed_route = true}
 end
 
+function M.live_model(proxy)
+    local selected, healthy_seen
+    for _, login in ipairs(require('parley.cliproxy_config').providers()) do
+        local health = await(function(done) proxy.credential_health_for_login(login, done) end)
+        assert(health and health.state ~= 'unknown', 'credential health could not be verified')
+        if health.state == 'healthy' then
+            healthy_seen = true
+            local models = await(function(done, fail) proxy.list_models(login, function(ids, err)
+                if err then fail() else done(ids) end
+            end) end)
+            if models and #models > 0 then selected = models[1]; break end
+        end
+    end
+    return selected, healthy_seen
+end
+
 function M.run(phase)
     local p, proxy = require('parley'), require('parley.cliproxy')
     if phase == 'fake' then
@@ -105,18 +121,7 @@ function M.run(phase)
         return {status = 'auth_pending', managed_download = true, private_config = true,
             private_auth = true, login_command = ':ParleyConnect'}
     end
-    local selected, healthy_seen
-    for _, login in ipairs(proxy.login_providers()) do
-        local health = await(function(done) proxy.credential_health_for_login(login, done) end)
-        assert(health and health.state ~= 'unknown', 'credential health could not be verified')
-        if health.state == 'healthy' then
-            healthy_seen = true
-            local models = await(function(done, fail) proxy.list_models(login, function(ids, err)
-                if err then fail() else done(ids) end
-            end) end)
-            if models and #models > 0 then selected = models[1]; break end
-        end
-    end
+    local selected, healthy_seen = M.live_model(proxy)
     if not selected then
         assert(not healthy_seen, 'authenticated account has no available live model')
         return {status = 'auth_pending', reason = 'no_authenticated_live_model'}

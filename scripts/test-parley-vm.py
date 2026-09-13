@@ -17,11 +17,20 @@ TART = os.environ.get('TART', 'tart')
 ENV = dict(os.environ, TART_NO_AUTO_PRUNE='1')
 
 
+class CommandFailure(RuntimeError):
+    def __init__(self, verb, reason):
+        self.command = verb
+        super().__init__('Tart ' + verb + ' failed (' + reason + ')')
+
+
 def command(args, timeout=900, check=True):
     # Capture guest output: provider URLs and credentials must never reach reports.
-    result = subprocess.run([TART] + args, env=ENV, capture_output=True, timeout=timeout)
+    try:
+        result = subprocess.run([TART] + args, env=ENV, capture_output=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        raise CommandFailure(args[0], 'timeout') from None
     if check and result.returncode:
-        raise RuntimeError('Tart command failed: ' + args[0])
+        raise CommandFailure(args[0], 'exit ' + str(result.returncode))
     return result
 
 
@@ -35,13 +44,62 @@ def save(directory, manifest):
     temporary.replace(directory / 'manifest.json')
 
 
+def diagnostic(manifest, error):
+    # Only our own controlled messages; never argv, guest stderr or provider output.
+    return {'phase': manifest.get('phase', 'preflight'),
+            'command': getattr(error, 'command', None),
+            'reason': str(error) if isinstance(error, RuntimeError) else type(error).__name__}
+
+
+def vm_exists(vm):
+    rows = json.loads(command(['list', '--format', 'json'], 30).stdout)
+    if not isinstance(rows, list) or any(not isinstance(row, dict) or not isinstance(row.get('Name'), str)
+                                         for row in rows):
+        raise RuntimeError('invalid Tart VM inventory; absence cannot be confirmed')
+    return any(row['Name'] == vm for row in rows)
+
+
 def cleanup(directory, manifest, lock):
-    # Stop/delete only the clone named by both our reservation and manifest.
-    command(['stop', manifest['vm']], 30, check=False)
-    command(['delete', manifest['vm']], 60)
-    manifest['status'] = 'cleaned'
+    # Missing clones are normal after failed creation. Confirm absence through
+    # inventory instead of treating Tart's exit 2 as successful deletion.
+    try:
+        if vm_exists(manifest['vm']):
+            command(['stop', manifest['vm']], 30, check=False)
+            result = command(['delete', manifest['vm']], 60, check=False)
+            if vm_exists(manifest['vm']):
+                raise CommandFailure('delete', 'exit ' + str(result.returncode) + '; owned VM remains')
+        manifest['status'] = 'cleaned'
+        save(directory, manifest)
+        lock.unlink()
+    except BaseException as error:
+        manifest['status'] = 'cleanup_failed'
+        manifest['cleanup_failure'] = diagnostic(manifest, error)
+        save(directory, manifest)
+        raise
+
+
+def handle_failure(directory, manifest, lock, error, clone_attempted=True):
+    manifest['outcome'] = 'failed'
+    manifest['status'] = 'failed'
+    manifest['failure'] = diagnostic(manifest, error)
     save(directory, manifest)
-    lock.unlink()
+    print('VM phase failed:', json.dumps(manifest['failure']), file=sys.stderr)
+    try:
+        if not clone_attempted:
+            lock.unlink()
+        elif manifest.get('keep_on_failure') and vm_exists(manifest['vm']):
+            manifest['status'] = 'failed_retained'
+            save(directory, manifest)
+            print('Retained owned VM for diagnosis; guest logs remain in its private profile. Manifest:',
+                  directory / 'manifest.json', file=sys.stderr)
+        else:
+            cleanup(directory, manifest, lock)
+    except BaseException as cleanup_error:
+        # Preserve the original failure even when cleanup independently fails.
+        manifest['status'] = 'cleanup_failed'
+        manifest['cleanup_failure'] = diagnostic(manifest, cleanup_error)
+        save(directory, manifest)
+        print('Owned VM reservation retained:', json.dumps(manifest['cleanup_failure']), file=sys.stderr)
 
 
 def install(directory, manifest):
@@ -51,12 +109,11 @@ def install(directory, manifest):
     guest(vm, 'brew install xianxu/parley/parley', 900)
     manifest['phase'] = 'boot'
     save(directory, manifest)
-    probe = base64.b64encode((REPO / 'tests/packaging/vm_acceptance.lua').read_bytes()).decode()
+    upload(vm, 'tests/packaging/vm_acceptance.lua', 'probe.lua')
     guest(vm, 'umask 077; mkdir -p "$HOME/.parley-acceptance" "$HOME/.config/nvim"; '
           'test ! -e "$HOME/.config/nvim/init.lua"; '
           'printf \'error("decoy nvim config was sourced")\\n\' > "$HOME/.config/nvim/init.lua"; '
           'shasum -a 256 "$HOME/.config/nvim/init.lua" > "$HOME/.parley-acceptance/decoy.sha"; '
-          "printf '%s' '" + probe + "' | base64 -D > \"$HOME/.parley-acceptance/probe.lua\"; "
           'parley --headless -n -i NONE -c \'lua if not pcall(dofile, vim.env.HOME .. "/.parley-acceptance/probe.lua") then vim.cmd("cquit 1") end\' -c qa', 900)
     evidence = json.loads(guest(vm, 'cat "$HOME/.parley-acceptance/boot.json"', 30).stdout)
     if not all(evidence.get(key) is True for key in ('boot', 'containment', 'decoy_unchanged')):
@@ -76,10 +133,7 @@ def probe_phase(directory, manifest, phase):
     for source, name in [('tests/packaging/vm_chat.lua', 'vm_chat.lua'),
                          ('tests/packaging/vm_chat_probe.lua', 'vm_chat_probe.lua'),
                          ('tests/fixtures/one_pixel.png', 'one_pixel.png')]:
-        encoded = base64.b64encode((REPO / source).read_bytes()).decode()
-        guest(vm, 'umask 077; mkdir -p "$HOME/.parley-acceptance"; '
-              + "printf '%s' '" + encoded + "' | base64 -D > "
-              + '\"$HOME/.parley-acceptance/' + name + '\"')
+        upload(vm, source, name)
     script = ('PARLEY_VM_PHASE=' + phase + ' parley --headless -n -i NONE '
               + '-c \'lua dofile(vim.env.HOME .. "/.parley-acceptance/vm_chat_probe.lua")\' '
               + '>/dev/null 2>&1; result=$?; '
@@ -176,6 +230,8 @@ def main(disk_usage=shutil.disk_usage):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('phase', choices=['boot', 'prepare', 'install', 'fake', 'prepare-auth', 'check-live', 'upgrade', 'uninstall', 'verify', 'cleanup'])
     parser.add_argument('directory', type=Path, help='private run directory containing ownership manifest')
+    parser.add_argument('--keep-on-failure', action='store_true',
+                        help='retain an existing owned VM and its private guest logs after failure')
     args = parser.parse_args()
     directory = args.directory.resolve()
     lock = Path.home() / '.cache/parley-vm-acceptance.owner'
@@ -186,6 +242,9 @@ def main(disk_usage=shutil.disk_usage):
             raise RuntimeError('ownership reservation does not match manifest')
         if not manifest['vm'].startswith('parley-acceptance-'):
             raise RuntimeError('invalid owned VM name')
+        if args.keep_on_failure:
+            manifest['keep_on_failure'] = True
+            save(directory, manifest)
         if args.phase == 'cleanup':
             cleanup(directory, manifest, lock)
             print('CLEANED owned VM')
@@ -195,9 +254,8 @@ def main(disk_usage=shutil.disk_usage):
                 raise RuntimeError('install requires a boot_ready owned run')
             try:
                 return install(directory, manifest)
-            except BaseException:
-                manifest['outcome'] = 'failed'
-                cleanup(directory, manifest, lock)
+            except BaseException as error:
+                handle_failure(directory, manifest, lock, error)
                 raise
         if args.phase in ('fake', 'prepare-auth', 'check-live'):
             if manifest['status'] == 'boot_ready':
@@ -206,9 +264,8 @@ def main(disk_usage=shutil.disk_usage):
                 raise RuntimeError('run fake before live acceptance')
             try:
                 return probe_phase(directory, manifest, args.phase)
-            except BaseException:
-                manifest['outcome'] = 'failed'
-                cleanup(directory, manifest, lock)
+            except BaseException as error:
+                handle_failure(directory, manifest, lock, error)
                 raise
         if args.phase in ('upgrade', 'uninstall'):
             if not manifest.get('install'):
@@ -218,9 +275,8 @@ def main(disk_usage=shutil.disk_usage):
                 return 75
             try:
                 return package_phase(directory, manifest, args.phase)
-            except BaseException:
-                manifest['outcome'] = 'failed'
-                cleanup(directory, manifest, lock)
+            except BaseException as error:
+                handle_failure(directory, manifest, lock, error)
                 raise
         missing = missing_evidence(manifest)
         if missing:
@@ -239,7 +295,8 @@ def main(disk_usage=shutil.disk_usage):
     reservation = {'vm': vm, 'directory': str(directory)}
     with lock.open('x') as handle:
         json.dump(reservation, handle)
-    manifest = {'schema': 1, 'vm': vm, 'image': IMAGE, 'status': 'preflight'}
+    manifest = {'schema': 1, 'vm': vm, 'image': IMAGE, 'status': 'preflight',
+                'keep_on_failure': args.keep_on_failure}
     clone_attempted = False
     try:
         disk = Path(os.environ.get('TART_HOME', str(Path.home() / '.tart')))
@@ -280,14 +337,8 @@ def main(disk_usage=shutil.disk_usage):
             print('Manifest:', directory / 'manifest.json')
             return 0
         return install(directory, manifest)
-    except BaseException:
-        manifest['outcome'] = 'failed'
-        manifest['status'] = 'failed'
-        save(directory, manifest)
-        if clone_attempted:
-            cleanup(directory, manifest, lock)
-        else:
-            lock.unlink()
+    except BaseException as error:
+        handle_failure(directory, manifest, lock, error, clone_attempted)
         raise
 
 
@@ -296,5 +347,5 @@ if __name__ == '__main__':
         sys.exit(main())
     except Exception as error:
         # Only controlled failure kinds, never captured command output.
-        print('VM acceptance failed:', type(error).__name__, file=sys.stderr)
+        print('VM acceptance failed:', str(error) if isinstance(error, RuntimeError) else type(error).__name__, file=sys.stderr)
         sys.exit(1)

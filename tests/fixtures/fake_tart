@@ -12,7 +12,7 @@ args = sys.argv[1:]
 with (root / 'calls.jsonl').open('a') as log:
     log.write(json.dumps({'args': args, 'no_prune': os.getenv('TART_NO_AUTO_PRUNE')}) + '\n')
 command = args[0]
-if os.getenv('FAKE_TART_FAIL') == command:
+if os.getenv('FAKE_TART_FAIL') == command or (command == 'delete' and os.getenv('FAKE_TART_DELETE_FAIL')):
     sys.exit(1)
 if command == 'list':
     print(json.dumps([{'Name': name, 'State': status} for name, status in state.items()]))
@@ -23,9 +23,13 @@ elif command == 'run':
     state[args[-1]] = 'running'
 elif command == 'stop':
     assert args[1] != 'tools-test'
+    if args[1] not in state:
+        sys.exit(2)
     state[args[1]] = 'stopped'
 elif command == 'delete':
     assert args[1] != 'tools-test'
+    if args[1] not in state:
+        sys.exit(2)
     state.pop(args[1], None)
 elif command == 'exec':
     script = ' '.join(args[2:])

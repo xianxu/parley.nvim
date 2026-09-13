@@ -31,7 +31,7 @@ describe('immutable Homebrew release workflow', function()
             run({ 'git', 'config', 'user.email', 'test@example.invalid' }, scratch .. '/' .. name)
             write(scratch .. '/' .. name .. '/README', { 'fixture' })
         end
-        for _, path in ipairs({ 'packaging/formula.lua', 'packaging/starter-config/init.lua', 'lua/parley/deps.lua' }) do
+        for _, path in ipairs({ 'packaging/formula.lua', 'packaging/render-formula.lua', 'packaging/starter-config/init.lua', 'lua/parley/deps.lua' }) do
             write(scratch .. '/source/' .. path, vim.fn.readfile(repo .. '/' .. path))
         end
         write(scratch .. '/source/packaging/parley', { '#!/bin/sh', 'exit 0' })
@@ -55,6 +55,25 @@ describe('immutable Homebrew release workflow', function()
         assert(vim.uv.fs_symlink(repo .. '/tests/fixtures/fake_packaging_curl', scratch .. '/bin/curl'))
     end)
     after_each(function() vim.fn.delete(scratch, 'rf') end)
+    it('renders through the shared entry from another working directory and rejects invalid metadata', function()
+        local output = scratch .. '/entry.rb'
+        local function entry(tag)
+            return vim.system({ vim.v.progpath, '-n', '--headless', '--noplugin', '-u', 'NONE', '-i', 'NONE',
+                '-l', repo .. '/packaging/render-formula.lua' }, { cwd = scratch, text = true, env = {
+                    PARLEY_RELEASE_TAG = tag, PARLEY_RELEASE_SHA256 = string.rep('a', 64),
+                    PARLEY_RELEASE_OUTPUT = output,
+                } }):wait(10000)
+        end
+        local result = entry('v2.3.0')
+        assert.are.equal(0, result.code, result.stderr)
+        assert.are.equal(dofile(repo .. '/packaging/formula.lua').render_formula({
+            tag = 'v2.3.0', sha256 = string.rep('a', 64),
+        }), table.concat(vim.fn.readfile(output, 'b'), '\n'))
+        vim.fn.delete(output)
+        result = entry('main')
+        assert.is_true(result.code ~= 0)
+        assert.are.equal(0, vim.fn.filereadable(output))
+    end)
     it('generates from the tagged archive without committing by default', function()
         local before = run({ 'git', 'rev-parse', 'HEAD' }, scratch .. '/tap')
         local result = release()
