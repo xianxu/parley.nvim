@@ -71,7 +71,7 @@ open. Sequencing below is dependency order, not a schedule.
 Dependency order. #208 unblocks everything; #206 and #207 are last because the
 product they document must be settled first.
 
-- [ ] [parley.nvim#208] — parley must install and load from a fresh clone *(B1 + the dev/user separation)*
+- [x] [parley.nvim#208] — parley must install and load from a fresh clone *(B1 + the dev/user separation)*
 - [ ] [parley.nvim#209] — safe-by-default posture for a public release *(B2, B4, B5)*
 - [ ] [parley.nvim#210] — consent model for write-capable tools *(B3; revisits #157)*
 - [ ] [parley.nvim#211] — remove personal configuration from product defaults *(B6, B7)*
@@ -87,7 +87,6 @@ product they document must be settled first.
 ### parley.nvim#208 — fresh-clone installability
 
 **est:** 2.494h
-**status:** acceptance passed — awaiting close review and publication
 **started:** 2026-09-13
 
 Runtime changes and portable build/test infrastructure are committed. Isolated

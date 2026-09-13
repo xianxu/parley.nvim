@@ -8,7 +8,7 @@
 
 **Tech Stack:** Lua, Neovim health API, Plenary/Busted; existing clipboard/shrink and release fixtures.
 
-**State:** Draft for operator approval; no implementation or estimate yet.
+**State:** Reviewed proposal awaiting approval; no implementation or estimate yet.
 
 ## Scope and approval
 
@@ -130,3 +130,11 @@ teardown, and in-memory notice state dies with setup generation/session.
 ARCH-MOCK: reuse existing stateful release fixture for download regression and
 actual temporary executable/version files for observation, not canned service
 responses. Clipboard and shrink keep their current fake/live process boundaries.
+
+## Revisions
+
+### 2026-09-13 — ready against shipped #208
+
+Integrated origin/main after #208 shipped and archived (`da6f6db`). Preserved
+#245’s independent dependency section and reviewed proposal; refreshed the state
+label. Implementation remains gated on design and formula-policy approval.

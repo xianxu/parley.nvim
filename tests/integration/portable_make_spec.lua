@@ -1,4 +1,11 @@
 describe('portable test dependency configuration', function()
+    it('shows product test commands without a maintainer overlay', function()
+        local result = vim.system({'make','--no-print-directory','WF_WORKFLOW=','help'}, {text=true}):wait()
+        assert.equals(0,result.code,result.stdout..result.stderr)
+        for _, command in ipairs({'make test ', 'make check-fresh-clone', 'make check-vocabulary'}) do
+            assert.is_truthy(result.stdout:find(command,1,true),result.stdout)
+        end
+    end)
     it('rejects a missing Plenary dependency with actionable advice', function()
         local result = vim.system({'make','--no-print-directory','-f','Makefile.parley',
             'check-test-deps','PLENARY='..vim.fn.tempname()}, {text=true}):wait()

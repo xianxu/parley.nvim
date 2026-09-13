@@ -1,6 +1,6 @@
 ---
 id: 000209
-status: working
+status: open
 deps: []
 github_issue:
 created: 2026-09-02
@@ -75,3 +75,54 @@ Split out of the `workshop/plans/000206-shipping-surface-inventory.md` audit as 
 Grouped because all three are unrequested-action defaults with the same shape of
 fix; B3 (write tools) is separated into #210 because it needs a consent design
 rather than a default flip.
+
+## Revisions
+
+### 2026-09-13 — current implementation and deployment proposal
+
+**Reason.** The September 2 audit predates #237 and the current disabled memory
+preference default. The operator wants an easy separate Parley profile, with
+managed cliproxy installation authorized by explicit first-use/login.
+
+**Delta (proposed, awaiting approval).** Keep the historical Spec above as the
+audit record; the current design is
+[the durable plan](../plans/000209-safe-by-default-posture-plan.md). Preserve
+memory_prefs=false, narrow default read roots, disable implicit downloads,
+and share asynchronous installation across update, explicit login and opted-in
+dispatch. #211 exclusively owns neutral/lazy directories and is a prerequisite
+for full fresh-profile filesystem acceptance; #210 exclusively owns model write
+consent. Replace the infeasible chat_dir-only acceptance with the enumerated
+profile state/cache/log boundary in the proposal, subject to operator approval.
+
+### 2026-09-13 — planning checkpoint
+
+Claimed early in /tmp/parley209-plan and ran sdlc start-plan. Inspected current
+setup, proxy discovery/install/update/login, preference scheduling, tool read
+policy and stateful fixtures. ARCH-DRY reuses #237 release selection and fixtures;
+ARCH-ORDER requires one cancellable installer owner; ARCH-PURPOSE keeps the full
+network/directory invariant explicit across #209 and #211. No implementation,
+change-code gate, estimate, or completion claim.
+
+### 2026-09-13 — design review scope correction
+
+Fresh-context review found passive status/picker effects missing from the task
+coverage: status creates paths/secrets and queries GitHub; the picker refreshes
+HTTP automatically. The proposal now enumerates those consumers, separates
+read-only credential lookup from creation, and requires explicit refresh actions.
+
+### 2026-09-13 — design review approved
+
+Fresh-context re-review approved the revised plan with no remaining Important
+findings. Review was read-only. The concrete plan remains awaiting operator
+approval; implementation and change-code have not started. `git diff --check`
+passes for the documentation changes.
+
+### 2026-09-13 — priority correction; release claim
+
+The operator clarified that the active project is parley-packaging, with #245
+following #244, rather than a broad v1-release push. Finish #208 then resume
+#245. #209 is not the next implementation task. Preserve its reviewed proposal
+for separate prioritization and approval; no runtime changes have been made.
+Return the premature planning claim to open via sdlc's documented forced status
+transition (working→open is not a modeled edge), then publish that state with
+--no-start so publication does not claim it again.
