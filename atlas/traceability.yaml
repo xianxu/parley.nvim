@@ -36,6 +36,7 @@ atlas:
       - tests/unit/build_messages_spec.lua
       - tests/integration/paste_image_spec.lua
       - tests/arch/log_sinks_spec.lua
+      - tests/integration/query_cache_spec.lua
 
   chat/lifecycle:
     code:

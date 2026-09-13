@@ -653,6 +653,38 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 		"/" .. logger.now() .. "." .. string.format("%x", math.random(0, 0xFFFFFF)) .. ".json"
 	helpers.table_to_file(payload, temp_file)
 
+	-- Transport-file lifecycle (#231 BR-7). The body above is what curl posts
+	-- (`-d @file`). A text-only body stays behind as a debug aid, bounded by the
+	-- setup-time prune (>200 files → keep 100). An image-bearing body is ~1000x
+	-- larger — 100 near-limit requests ≈ 2 GiB — so it is removed the moment
+	-- curl is done with it, on EVERY terminal path. One helper so a new path
+	-- cannot forget it; the callers are (ARCH-ORDER):
+	--   1. `terminal` — process exited: success, non-2xx, non-zero exit, and a
+	--      kill from tasker.stop/stop_buf (libuv still reports the exit).
+	--      Called BEFORE the `qt` guard, since a query already dropped from
+	--      the registry must not strand its body.
+	--   2. `start_error` — tasker.run never spawned curl (buffer busy, spawn
+	--      failure); wraps `abort_before_start`, which is shared with the
+	--      pre-file aborts (missing bearer, pre_query) and so cannot own this.
+	-- Not covered by design: an nvim crash mid-request (the setup prune
+	-- eventually sweeps it). `payload` is captured now: the request body is
+	-- fixed at this point, and later code must not need it to classify.
+	local discard_transport = tasker.once(function(reason)
+		if not require("parley.assets").has_image(payload) then
+			return
+		end
+		local ok, err = os.remove(temp_file)
+		if ok then
+			logger.debug("removed image-bearing transport file (" .. reason .. "): " .. temp_file)
+		else
+			logger.debug("transport file already gone (" .. reason .. "): " .. tostring(err))
+		end
+	end)
+	local start_error = function(msg)
+		discard_transport("start error")
+		abort_before_start(msg)
+	end
+
 	local curl_params = vim.deepcopy(D.config.curl_params or {})
 	local args = {
 		"--no-buffer",
@@ -675,6 +707,10 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 	end
 
 	local terminal = tasker.once(function(code, signal, _stdout_data, stderr_data, io_error)
+		-- curl has exited (tasker only fires this after process + pipes are
+		-- done), so the body is no longer being read. Before the `qt` guard —
+		-- see the lifecycle note at `discard_transport`.
+		discard_transport("exit code=" .. tostring(code) .. " signal=" .. tostring(signal))
 		local qt = tasker.get_query(qid)
 		if not qt then return end
 		stderr_data = stderr_data or ""
@@ -793,7 +829,7 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 			legacy_complete(qid, qt)
 		end
 	end)
-	tasker.run(buf, "curl", curl_params, terminal, out_reader(), nil, abort_before_start)
+	tasker.run(buf, "curl", curl_params, terminal, out_reader(), nil, start_error)
 end
 
 -- LLM query
