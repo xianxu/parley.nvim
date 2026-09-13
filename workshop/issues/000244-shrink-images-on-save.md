@@ -94,3 +94,33 @@ notification named); live conformance opt-in.
 ## Log
 
 ### 2026-09-13
+Claimed; `sdlc start-plan` run. Durable plan: `workshop/plans/000244-shrink-images-on-save-plan.md`
+(3 chunks, 8 tasks, TDD steps with code). Not yet through `sdlc change-code`
+— the next agent should run it (plan-quality gate, then derive `estimate_hours`).
+
+Measured on this host (macOS 26.6.2, sips-316) before designing:
+- `sips --resampleHeightWidthMax 1600` UPSCALES an 800×500 PNG to 1600×1000 →
+  the recipe carries a `{max}` token = min(1600, source long edge), computed
+  from `assets.dimensions` (pure, from the headers `looks_like` already walks).
+- Missing input, or a missing output directory → exit 0 and nothing written →
+  "exit 0 + no output" is a kept-original outcome.
+- Junk input → exit 13, `Error: Cannot extract image from file.`
+- 2880×1800 PNG → 1600×1000 JPEG q80 in 90 ms → the step runs synchronously
+  inside `assets.save`, bounded by a 5 s timeout (ARCH-CONSTRAINTS).
+- Alpha is flattened; no ICC in the output. A high-entropy 393 KB PNG came
+  back 360 KB → output must be strictly smaller or the original is kept.
+- Under the agent sandbox sips cannot write its own scratch under
+  `/var/folders/…/T` (exit 13): the live spec must run from a normal shell.
+
+Spec refinements the plan proposes (operator confirms at change-code):
+JPEG sources shrink only when over 1600 px (re-encoding for size alone is
+generation loss); not-smaller output → keep silently; the 10 MB cap stays a
+check on the source before the shrink.
+
+Design (ARCH-DRY): a new `argv_recipe` module holds the token grammar and
+config-wins selection that `clipboard_image` and `image_shrink` share;
+`clipboard_image` delegates with its messages unchanged. ARCH-MOCK:
+`tests/fixtures/fake_sips` (ok/fail/empty/garbage/slow + call log) through
+`config.assets.shrink_cmd`; opt-in `PARLEY_LIVE_SHRINK=1` per recipe.
+ARCH-ORDER: one tagged session field (`nil | {recipe} | {missing, warned}`),
+reset by `configure` from `parley.setup`.
