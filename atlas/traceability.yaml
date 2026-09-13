@@ -3,6 +3,29 @@ version: 1
 # Maps a feature entry to the code and tests that verify it.
 # Key format intentionally omits the leading "atlas/" and trailing ".md".
 atlas:
+  infra/dependencies:
+    code:
+      - lua/parley/deps.lua
+      - lua/parley/deps_probe.lua
+      - lua/parley/health.lua
+      - lua/parley/cliproxy.lua
+      - lua/parley/argv_recipe.lua
+      - lua/parley/clipboard_image.lua
+      - lua/parley/image_shrink.lua
+      - lua/parley/paste_image.lua
+      - lua/parley/exporter.lua
+    tests:
+      - tests/unit/deps_spec.lua
+      - tests/unit/deps_probe_spec.lua
+      - tests/integration/health_dependencies_spec.lua
+      - tests/integration/cliproxy_download_spec.lua
+      - tests/unit/clipboard_image_spec.lua
+      - tests/unit/image_shrink_spec.lua
+      - tests/unit/argv_recipe_spec.lua
+      - tests/integration/paste_image_spec.lua
+      - tests/integration/export_spec.lua
+      - tests/arch/dependency_registry_spec.lua
+
   chat/format:
     code:
       - lua/parley/fence.lua

@@ -7,10 +7,11 @@
 -- synthesized timeout message).
 local ci = require("parley.clipboard_image")
 
-local function env(sysname, wayland, tools)
+local function env(sysname, wayland, manager, tools)
     return {
         sysname = sysname,
         wayland = wayland,
+        manager = manager,
         executable = function(t)
             return tools[t] == true
         end,
@@ -33,12 +34,13 @@ describe("clipboard_image: constants and recipes", function()
         assert.equals(5000, ci.TIMEOUT_MS)
     end)
 
-    it("every recipe is data: tool, argv with exactly one whole {out}, install hint", function()
+    it("every recipe is data: tool, argv with exactly one whole {out}, dependency id", function()
         for _, key in ipairs({ "darwin", "wayland", "x11" }) do
             local r = ci.RECIPES[key]
             assert.is_table(r, key)
             assert.is_string(r.tool, key .. ".tool")
-            assert.is_string(r.install, key .. ".install")
+            assert.is_string(r.dependency, key .. ".dependency")
+            assert.is_nil(r.install, key .. ".install")
             -- The tool is what select() probes with executable(): it is the
             -- argv head, or the program the sh wrapper execs.
             assert.is_truthy(r.argv[1] == r.tool or r.argv[3]:find(r.tool, 1, true), key .. ": tool matches argv")
@@ -67,55 +69,64 @@ end)
 
 describe("clipboard_image: select", function()
     it("Darwin uses osascript", function()
-        local r, err = ci.select(nil, env("Darwin", false, { osascript = true }))
+        local r, err = ci.select(nil, env("Darwin", false, "brew", { osascript = true }))
         assert.is_nil(err)
         assert.equals("osascript", r.tool)
         assert.equals(ci.RECIPES.darwin, r)
     end)
 
     it("Darwin ignores Linux tools and the WAYLAND_DISPLAY flag", function()
-        local r = ci.select(nil, env("Darwin", true, { osascript = true, xclip = true, ["wl-paste"] = true }))
+        local r = ci.select(nil, env("Darwin", true, "brew", { osascript = true, xclip = true, ["wl-paste"] = true }))
         assert.equals("osascript", r.tool)
     end)
 
     it("Darwin without osascript says it ships with macOS", function()
-        local r, err = ci.select(nil, env("Darwin", false, { xclip = true }))
+        local r, err = ci.select(nil, env("Darwin", false, "brew", { xclip = true }))
         assert.is_nil(r)
         assert.matches("no clipboard image tool found", err)
         assert.matches("osascript", err)
     end)
 
     it("Wayland prefers wl-paste, falls back to xclip", function()
-        assert.equals("wl-paste", ci.select(nil, env("Linux", true, { ["wl-paste"] = true, xclip = true })).tool)
-        assert.equals("wl-paste", ci.select(nil, env("Linux", true, { ["wl-paste"] = true })).tool)
-        assert.equals("xclip", ci.select(nil, env("Linux", true, { xclip = true })).tool)
+        assert.equals("wl-paste", ci.select(nil, env("Linux", true, "apt", { ["wl-paste"] = true, xclip = true })).tool)
+        assert.equals("wl-paste", ci.select(nil, env("Linux", true, "apt", { ["wl-paste"] = true })).tool)
+        assert.equals("xclip", ci.select(nil, env("Linux", true, "apt", { xclip = true })).tool)
     end)
 
     it("X11 prefers xclip, falls back to wl-paste", function()
-        assert.equals("xclip", ci.select(nil, env("Linux", false, { ["wl-paste"] = true, xclip = true })).tool)
-        assert.equals("xclip", ci.select(nil, env("Linux", false, { xclip = true })).tool)
-        assert.equals("wl-paste", ci.select(nil, env("Linux", false, { ["wl-paste"] = true })).tool)
+        assert.equals("xclip", ci.select(nil, env("Linux", false, "apt", { ["wl-paste"] = true, xclip = true })).tool)
+        assert.equals("xclip", ci.select(nil, env("Linux", false, "apt", { xclip = true })).tool)
+        assert.equals("wl-paste", ci.select(nil, env("Linux", false, "apt", { ["wl-paste"] = true })).tool)
     end)
 
     it("an unknown sysname takes the X11 order", function()
-        assert.equals("xclip", ci.select(nil, env("FreeBSD", false, { ["wl-paste"] = true, xclip = true })).tool)
+        assert.equals("xclip", ci.select(nil, env("FreeBSD", false, nil, { ["wl-paste"] = true, xclip = true })).tool)
     end)
 
     it("names what to install when nothing is executable (both hints, in platform order)", function()
-        local r, err = ci.select(nil, env("Linux", false, {}))
+        local r, err, kind, capability = ci.select(nil, env("Linux", false, "apt", {}))
         assert.is_nil(r)
-        assert.matches("no clipboard image tool found", err)
-        assert.matches("xclip", err)
-        assert.matches("wl%-clipboard", err)
+        assert.equals("no clipboard image tool found: apt install xclip or apt install wl-clipboard", err)
+        assert.equals("missing", kind)
+        assert.equals("xclip|wl-clipboard", capability)
         assert.is_true(err:find("xclip", 1, true) < err:find("wl-clipboard", 1, true), "x11 hint first on X11")
 
-        local _, werr = ci.select(nil, env("Linux", true, {}))
+        local _, werr, _, wcapability = ci.select(nil, env("Linux", true, "apt", {}))
         assert.is_true(werr:find("wl-clipboard", 1, true) < werr:find("xclip", 1, true), "wayland hint first on Wayland")
+        assert.equals("wl-clipboard|xclip", wcapability)
+    end)
+
+    it("derives missing advice from the explicit current host", function()
+        local _, darwin = ci.select(nil, env("Darwin", false, "brew", {}))
+        assert.equals("no clipboard image tool found: osascript ships with macOS", darwin)
+        local _, unmanaged = ci.select(nil, env("Linux", false, nil, {}))
+        assert.matches("no tested install advice for xclip on Linux %(no supported package manager detected%)", unmanaged)
+        assert.is_nil(unmanaged:find("apt install", 1, true))
     end)
 
     it("a configured argv wins over the platform, without probing executables", function()
         local probed = false
-        local e = env("Darwin", false, {})
+        local e = env("Darwin", false, "brew", {})
         e.executable = function()
             probed = true
             return false
@@ -128,18 +139,19 @@ describe("clipboard_image: select", function()
     end)
 
     it("a configured argv must contain {out} as a whole argument", function()
-        local r, err = ci.select({ "/x/fake" }, env("Darwin", false, { osascript = true }))
+        local r, err, kind = ci.select({ "/x/fake" }, env("Darwin", false, "brew", { osascript = true }))
         assert.is_nil(r)
         assert.matches("{out}", err, 1, true)
+        assert.equals("config", kind)
 
-        r, err = ci.select({ "/x/fake", "--out={out}" }, env("Darwin", false, { osascript = true }))
+        r, err = ci.select({ "/x/fake", "--out={out}" }, env("Darwin", false, "brew", { osascript = true }))
         assert.is_nil(r, "an embedded {out} is not a whole argument")
         assert.matches("{out}", err, 1, true)
     end)
 
     it("an empty or non-list config falls through to the platform", function()
-        assert.equals("osascript", ci.select({}, env("Darwin", false, { osascript = true })).tool)
-        assert.equals("osascript", ci.select("osascript {out}", env("Darwin", false, { osascript = true })).tool)
+        assert.equals("osascript", ci.select({}, env("Darwin", false, "brew", { osascript = true })).tool)
+        assert.equals("osascript", ci.select("osascript {out}", env("Darwin", false, "brew", { osascript = true })).tool)
     end)
 end)
 
@@ -236,6 +248,9 @@ describe("clipboard_image: host_env", function()
         assert.is_string(e.sysname)
         assert.is_boolean(e.wayland)
         assert.is_function(e.executable)
+        if e.manager ~= nil then
+            assert.is_true(e.manager == "brew" or e.manager == "apt")
+        end
         assert.is_true(e.executable("sh"))
         assert.is_false(e.executable("parley-no-such-tool-" .. os.time()))
     end)

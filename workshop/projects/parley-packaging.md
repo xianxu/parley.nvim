@@ -72,7 +72,7 @@ Prerequisites owned by `parley-v1-release` (tracked there, listed for order):
 #213 honest checkhealth. This project's own rows:
 
 - [x] [parley.nvim#244] — shrink pasted and generated images before saving *(sips first; probe others; keep the original)*
-- [ ] [parley.nvim#245] — dependency registry and honest install advice *(after #213; feeds checkhealth and the formula)*
+- [x] [parley.nvim#245] — dependency registry and honest install advice *(independent dependency health; feeds the formula)*
 - [ ] [parley.nvim#246] — starter config as a product artifact *(after #211 and #209; `NVIM_APPNAME=parley`)*
 - [ ] [parley.nvim#247] — Homebrew tap and `parley` launcher, tested on a clean tart VM *(after #245, #246; the project's done_when)*
 - [ ] [parley.nvim#206] — user documentation *(v1-release's row; the brew path becomes its install section)*
@@ -157,3 +157,36 @@ checkout and archive, four startup variants, 1.81h measured). Next is #245,
 then #246 and #247. #245's dependency health section can land independently of
 #213's broader diagnostics; its reviewed design awaits approval of the default
 formula package subset. #209 remains a separate, unimplemented proposal.
+
+### 2026-09-13 — operator defines the core spine and first tester
+
+Reason: operator approved #245 and clarified the immediate outcome. Delta:
+#245 (dependencies) → #246 (starter profile) → #247 (Homebrew launcher) is the
+core spine. Together they should let the operator's high-school daughter try
+Parley without prior Neovim setup. Keep first installation, login, and first
+chat instructions suitable for that audience. #245's selected macOS formula
+projection includes ripgrep; alternate image backends and pandoc stay optional.
+Broader v1-release tasks are not an automatic prerequisite for this trial.
+
+### 2026-09-13 — dependency foundation accepted
+
+Reason: #245 passed the single close review (SHIP); the temporary checkout name
+prevented the automatic project lookup. Delta: record acceptance here under the
+canonical repository reference, using the primary-checkout `sdlc actual` result.
+Next is #246's isolated starter profile, followed by #247's tap/launcher and
+clean-machine acceptance. The first-tester goal remains the operator's daughter.
+
+<a id="parley-nvim-245"></a>
+### parley.nvim#245 — dependency registry and health
+
+**est:** 1.76h
+**actual:** 0.77h
+**closed:** 2026-09-13
+
+236 spec files and lint across 407 files passed. Registry-derived runtime advice,
+read-only health and managed version attribution are complete. Live sips checks
+passed; optional converters were absent and the clipboard preservation guard
+skipped live mutation. #247 owns formula parity against the default projection
+(ripgrep); alternate backends and pandoc remain optional.
+
+[parley.nvim#245]: #parley-nvim-245

@@ -13,13 +13,16 @@ local png = repo .. "/tests/fixtures/one_pixel.png"
 local log = root .. "/clipboard.log"
 
 local parley = require("parley")
-parley.setup({
-    chat_dir = root,
-    state_dir = vim.fn.tempname() .. "-parley-paste-state",
-    providers = {},
-    api_keys = {},
-    assets = { clipboard_cmd = { fake_clipboard, "{out}" } },
-})
+local function setup_parley(assets_config)
+    parley.setup({
+        chat_dir = root,
+        state_dir = vim.fn.tempname() .. "-parley-paste-state",
+        providers = {},
+        api_keys = {},
+        assets = assets_config,
+    })
+end
+setup_parley({ clipboard_cmd = { fake_clipboard, "{out}" } })
 local assets = require("parley.assets")
 
 local TS = "2026-09-10.14-20-03.112"
@@ -123,6 +126,67 @@ describe("paste image (#231)", function()
         assert.equals(1, #notices)
         assert.matches("timestamp%-named chat", notices[1].msg)
         assert.equals(0, reads())
+    end)
+
+    it("notices a missing clipboard capability once, keeps probing, recovers, and resets on setup", function()
+        local available, probes = false, 0
+        local function host_env()
+            return {
+                sysname = "Linux", manager = "apt", wayland = false,
+                executable = function(tool)
+                    probes = probes + 1
+                    return available and tool == "xclip"
+                end,
+            }
+        end
+        local function runner(argv, done)
+            assert(assets.default_io.write(argv[#argv], bytes_of(png)))
+            done(0, "")
+        end
+        local paste = require("parley.paste_image")
+        setup_parley({})
+        local buf = open_chat(TS .. "_dependency.md", chat_lines())
+
+        paste.paste(buf, { config = parley.config, notify = notify, host_env = host_env, runner = runner })
+        assert.equals(1, #notices)
+        assert.equals("Parley: no clipboard image tool found: apt install xclip or apt install wl-clipboard", notices[1].msg)
+        assert.equals(2, probes)
+
+        paste.paste(buf, { config = parley.config, notify = notify, host_env = host_env, runner = runner })
+        assert.equals(1, #notices, "the same missing capability is quiet")
+        assert.equals(4, probes, "a quiet attempt still probes every candidate")
+
+        available = true
+        paste.paste(buf, { config = parley.config, notify = notify, host_env = host_env, runner = runner })
+        assert.is_true(wait_for(function() return line_count(buf) == 10 end), "a newly available tool works without setup")
+        assert.equals(5, probes)
+
+        available = false
+        setup_parley({})
+        paste.paste(buf, { config = parley.config, notify = notify, host_env = host_env, runner = runner })
+        assert.equals(3, #notices, "setup starts a new notice generation")
+        assert.matches("apt install xclip", notices[3].msg, 1, true)
+        assert.equals(7, probes)
+        setup_parley({ clipboard_cmd = { fake_clipboard, "{out}" } })
+    end)
+
+    it("reports an invalid custom clipboard command on every attempt", function()
+        local paste = require("parley.paste_image")
+        setup_parley({ clipboard_cmd = { "fake-without-output-token" } })
+        local buf = open_chat(TS .. "_bad_config.md", chat_lines())
+        local deps = {
+            config = parley.config,
+            notify = notify,
+            host_env = function()
+                return { sysname = "Linux", manager = "apt", wayland = false, executable = function() return false end }
+            end,
+        }
+        paste.paste(buf, deps)
+        paste.paste(buf, deps)
+        assert.equals(2, #notices)
+        assert.matches("assets.clipboard_cmd must contain the {out} token", notices[1].msg, 1, true)
+        assert.equals(notices[1].msg, notices[2].msg)
+        setup_parley({ clipboard_cmd = { fake_clipboard, "{out}" } })
     end)
 
     it("the link lands where the cursor was, even if lines were inserted above meanwhile", function()
@@ -386,11 +450,13 @@ describe("paste image: shrink on save (#244)", function()
     it("no tool at all: original stored, one warning names what to install, the next paste is quiet", function()
         setup_with({ shrink_cmd = nil })
         -- Hide every real tool from the probe for this case.
-        require("parley.image_shrink").configure(parley.config.assets, { executable = function() return false end })
+        require("parley.image_shrink").configure(parley.config.assets, {
+            sysname = "Darwin", manager = "brew", executable = function() return false end,
+        })
         local buf = open_chat(TS .. "_notool.md", chat_lines())
         vim.api.nvim_win_set_cursor(0, { 8, 0 })
         local n1 = paste_and_wait(buf)
-        assert.matches("original kept: no image shrink tool found: sips ships with macOS or install ImageMagick", n1.msg)
+        assert.matches("original kept: no image shrink tool found: sips ships with macOS or brew install imagemagick", n1.msg)
         assert.equals("warn", n1.level)
         notices = {}
         vim.api.nvim_win_set_cursor(0, { 8, 0 })

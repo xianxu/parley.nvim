@@ -1,6 +1,8 @@
 -- Image conversion policy and one bounded subprocess seam (#244).
 local assets = require("parley.assets")
 local argv_recipe = require("parley.argv_recipe")
+local registry = require("parley.deps")
+local deps_probe = require("parley.deps_probe")
 
 local M = {
     TIMEOUT_MS = 5000,
@@ -24,7 +26,7 @@ M.RECIPES = {
             "sips", "-s", "format", "jpeg", "-s", "formatOptions", tostring(M.QUALITY),
             "--resampleHeightWidthMax", "{max}", "{in}", "--out", "{out}",
         },
-        install = "sips ships with macOS",
+        dependency = "sips",
     },
     {
         tool = "magick",
@@ -32,7 +34,7 @@ M.RECIPES = {
             "magick", "{in}", "-auto-orient", "-resize", "{max}x{max}>",
             "-background", "white", "-alpha", "remove", "-quality", tostring(M.QUALITY), "-strip", "{out}",
         },
-        install = "install ImageMagick (brew install imagemagick)",
+        dependency = "imagemagick",
     },
     {
         tool = "convert",
@@ -40,7 +42,7 @@ M.RECIPES = {
             "convert", "{in}", "-auto-orient", "-resize", "{max}x{max}>",
             "-background", "white", "-alpha", "remove", "-quality", tostring(M.QUALITY), "-strip", "{out}",
         },
-        install = "install ImageMagick (brew install imagemagick)",
+        dependency = "imagemagick",
     },
     {
         tool = "ffmpeg",
@@ -49,7 +51,7 @@ M.RECIPES = {
             "scale=w='min({max},iw)':h='min({max},ih)':force_original_aspect_ratio=decrease",
             "-frames:v", "1", "-q:v", "4", "-map_metadata", "-1", "-f", "image2", "{out}",
         },
-        install = "install ffmpeg (brew install ffmpeg)",
+        dependency = "ffmpeg",
     },
     {
         tool = "vipsthumbnail",
@@ -58,7 +60,7 @@ M.RECIPES = {
             'exec vipsthumbnail "$1" --size "$3x$3>" -o "$2[Q=' .. M.QUALITY .. ',strip]"',
             "sh", "{in}", "{out}", "{max}",
         },
-        install = "install libvips (brew install vips)",
+        dependency = "libvips",
     },
 }
 
@@ -189,6 +191,14 @@ end
 local config, environment, dependencies = {}, nil, nil
 local resolution = { status = "unprobed" }
 
+local function host_env()
+    local host = deps_probe.host()
+    host.executable = function(tool)
+        return vim.fn.executable(tool) == 1
+    end
+    return host
+end
+
 --- Setup resets session resolution, including the once-only missing-tool note.
 function M.configure(cfg, env, deps)
     config, environment, dependencies = cfg or {}, env, deps
@@ -200,18 +210,22 @@ function M.resolve()
     if resolution.status ~= "unprobed" then
         return resolution.recipe
     end
-    local executable = environment and environment.executable or function(tool)
+    local current = environment or host_env()
+    local executable = current.executable or function(tool)
         return vim.fn.executable(tool) == 1
     end
-    local recipe, note = argv_recipe.select(config.shrink_cmd, M.RECIPES, executable, {
+    local recipe, note, kind, capability = argv_recipe.select(config.shrink_cmd, M.RECIPES, executable, {
         config_key = "assets.shrink_cmd",
         tokens = { M.IN, M.OUT },
         embedded_tokens = { M.MAX },
         purpose = "for image conversion",
         none = "no image shrink tool found",
+        advice = function(id)
+            return registry.advice(id, current)
+        end,
     })
     resolution = recipe and { status = "found", recipe = recipe } or { status = "missing" }
-    return recipe, note
+    return recipe, note, kind, capability
 end
 
 --- Transform bytes and extension together, retaining originals on any failure.

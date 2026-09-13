@@ -20,11 +20,26 @@ function M.check()
 		end
 	end
 
-	if vim.fn.executable("curl") == 1 then
-		vim.health.ok("curl is installed")
-	else
-		vim.health.error("curl is not installed")
-	end
+    vim.health.start("Parley external tools")
+    local deps = require("parley.deps")
+    local probe = require("parley.deps_probe")
+    local host = probe.host()
+    for _, entry in ipairs(deps.entries) do
+        local observed = probe.observe(entry, host)
+        local label = entry.id .. " [" .. entry.tier .. "] — " .. entry.feature
+        if not observed.applicable then
+            vim.health.info(label .. ": not applicable on " .. host.sysname)
+        elseif observed.present then
+            local detail = ": installed (source: " .. observed.source
+            if entry.tier == "managed" then
+                detail = detail .. "; version: " .. (observed.version or "unknown")
+            end
+            vim.health.ok(label .. detail .. ")")
+        else
+            local report = entry.required and vim.health.error or vim.health.warn
+            report(label .. ": missing. " .. deps.advice(entry.id, host))
+        end
+    end
 
 	-- Check for optional dependencies
 	local has_lualine, _ = pcall(require, "lualine")
