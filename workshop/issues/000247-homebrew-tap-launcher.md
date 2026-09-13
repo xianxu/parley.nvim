@@ -1,11 +1,12 @@
 ---
 id: 000247
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-09-13
 updated: 2026-09-13
 estimate_hours:
+started: 2026-09-13T14:26:40-07:00
 ---
 
 # Homebrew tap and parley launcher: brew install xianxu/parley/parley, tested on a clean tart VM
