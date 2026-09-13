@@ -10,16 +10,36 @@
 local M = {}
 
 --- argv with every argument that IS a key of `map` replaced by map[arg].
---- An embedded token inside a longer argument is left alone (paths are only
---- ever whole arguments). The input is not mutated.
+--- Path values are never rescanned. Optional embedded_map substitutes numeric
+--- tokens only in arguments that were not replaced wholesale.
 --- @param argv string[]
 --- @param map table<string,string>
 --- @return string[]
-function M.substitute(argv, map)
+function M.substitute(argv, map, embedded_map)
     local out = {}
     for i, a in ipairs(argv) do
         local v = map[a]
-        out[i] = v ~= nil and v or a
+        if v ~= nil then
+            out[i] = v
+        else
+            local expanded = a
+            for token, value in pairs(embedded_map or {}) do
+                -- Plain find avoids giving token text a Lua-pattern meaning.
+                local parts, pos = {}, 1
+                while true do
+                    local first, last = expanded:find(token, pos, true)
+                    if not first then
+                        parts[#parts + 1] = expanded:sub(pos)
+                        break
+                    end
+                    parts[#parts + 1] = expanded:sub(pos, first - 1)
+                    parts[#parts + 1] = value
+                    pos = last + 1
+                end
+                expanded = table.concat(parts)
+            end
+            out[i] = expanded
+        end
     end
     return out
 end

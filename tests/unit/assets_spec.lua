@@ -1701,3 +1701,117 @@ describe("assets: default_io", function()
         assert.is_string(assets.key_for("/x/" .. assets.default_io.now() .. ".md"), "now mints a chat-shaped stamp")
     end)
 end)
+
+
+describe("assets: dimensions and formatting (#244)", function()
+    local png_gen = require("tests.helpers.png_gen")
+
+    it("returns dimensions from validated PNG and JPEG headers", function()
+        assert.same({ 1, 1 }, { assets.dimensions("image/png", PNG_BYTES) })
+        assert.same({ 1, 1 }, { assets.dimensions("image/jpeg", JPEG_BYTES) })
+        -- SOF9 fixture: height then width at bytes 95..98 (big-endian).
+        assert.equals("\255\201\0\11", JPEG_BYTES:sub(90, 93))
+        local rectangular = JPEG_BYTES:sub(1, 94) .. "\1\44\6\164" .. JPEG_BYTES:sub(99)
+        assert.same({ 1700, 300 }, { assets.dimensions("image/jpeg", rectangular) })
+        assert.same({ 1700, 3 }, { assets.dimensions("image/png", png_gen.png_bytes(1700, 3)) })
+        assert.same({ 300, 300 }, { assets.dimensions("image/png", png_gen.png_bytes(300, 300)) })
+    end)
+
+    it("agrees with structural validation across every truncation and byte mutation", function()
+        for mime, original in pairs({ ["image/png"] = PNG_BYTES, ["image/jpeg"] = JPEG_BYTES }) do
+            local function check(bytes)
+                local width, height = assets.dimensions(mime, bytes)
+                assert.equals(assets.looks_like(mime, bytes), width ~= nil)
+                assert.equals(width ~= nil, height ~= nil)
+            end
+            for n = 0, #original do
+                check(original:sub(1, n))
+            end
+            for pos = 1, #original do
+                for _, byte in ipairs({ 0, 255 }) do
+                    check(original:sub(1, pos - 1) .. string.char(byte) .. original:sub(pos + 1))
+                end
+            end
+            check(original .. "trailing")
+        end
+    end)
+
+    it("returns nil for unsupported media and non-string bytes", function()
+        assert.is_nil(assets.dimensions("image/gif", GIF_BYTES))
+        assert.is_nil(assets.dimensions("image/webp", WEBP_BYTES))
+        assert.is_nil(assets.dimensions(nil, PNG_BYTES))
+        assert.is_nil(assets.dimensions("image/png", nil))
+        assert.is_nil(assets.dimensions("image/jpeg", {}))
+    end)
+
+    it("formats byte units and rounding boundaries", function()
+        for _, case in ipairs({
+            { 0, "0 B" }, { 512, "512 B" }, { 1023, "1023 B" },
+            { 1024, "1.0 KB" }, { 9.94 * 1024, "9.9 KB" },
+            { 10 * 1024, "10 KB" }, { 10.5 * 1024, "11 KB" },
+            { 180 * 1024 + 300, "180 KB" }, { 1024 * 1024, "1.0 MB" },
+            { 4.1 * 1024 * 1024, "4.1 MB" }, { 12 * 1024 * 1024, "12 MB" },
+        }) do
+            assert.equals(case[2], assets.human_size(case[1]))
+        end
+    end)
+end)
+
+describe("assets: shrink before saving (#244)", function()
+    it("names and writes the chosen bytes and returns the outcome", function()
+        local io_ = fake_io()
+        local expected = { from = #PNG_BYTES, to = #JPEG_BYTES }
+        io_.shrink = function(bytes, ext)
+            assert.equals(PNG_BYTES, bytes)
+            assert.equals("png", ext)
+            assert.same({}, io_.files)
+            assert.same({}, io_.dirs)
+            return JPEG_BYTES, "jpg", expected
+        end
+        local rel, abs, err, outcome = assets.save(CHAT, PNG_BYTES, "png", io_)
+        assert.is_nil(err)
+        assert.matches("%.jpg$", rel)
+        assert.matches("%.jpg$", abs)
+        assert.equals(JPEG_BYTES, io_.files[abs])
+        assert.same(expected, outcome)
+    end)
+
+    it("keeps the source without an optional shrink dependency", function()
+        local io_ = fake_io()
+        local rel, abs, err, outcome = assets.save(CHAT, PNG_BYTES, "png", io_)
+        assert.is_nil(err)
+        assert.is_nil(outcome)
+        assert.matches("%.png$", rel)
+        assert.equals(PNG_BYTES, io_.files[abs])
+    end)
+
+    it("rejects over-cap sources before invoking shrink or creating files", function()
+        local io_ = fake_io()
+        local called = false
+        io_.shrink = function()
+            called = true
+            return "small", "jpg"
+        end
+        local rel, _, err = assets.save(CHAT, string.rep("x", assets.MAX_BYTES + 1), "png", io_)
+        assert.is_nil(rel)
+        assert.matches("exceeds", err)
+        assert.is_false(called)
+        assert.same({}, io_.files)
+        assert.same({}, io_.dirs)
+    end)
+
+    it("delegates default shrinking lazily and forwards all return values", function()
+        local old = package.loaded["parley.image_shrink"]
+        package.loaded["parley.image_shrink"] = {
+            shrink = function(bytes, ext)
+                return bytes .. "!", ext, { note = "kept" }
+            end,
+        }
+        local ok, result = pcall(function()
+            return { assets.default_io.shrink("source", "png") }
+        end)
+        package.loaded["parley.image_shrink"] = old
+        assert.is_true(ok, tostring(result))
+        assert.same({ "source!", "png", { note = "kept" } }, result)
+    end)
+end)

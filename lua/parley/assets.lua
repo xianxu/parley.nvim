@@ -170,6 +170,24 @@ function M.too_big(n)
     return ("%d bytes exceeds the %d-byte limit"):format(n, M.MAX_BYTES)
 end
 
+--- Human-readable bytes: one decimal below ten KB/MB, whole units above.
+---@param n number
+---@return string
+function M.human_size(n)
+    local function unit(value, suffix)
+        if value < 10 then
+            return ("%.1f %s"):format(value, suffix)
+        end
+        return ("%d %s"):format(math.floor(value + 0.5), suffix)
+    end
+    if n >= 1024 * 1024 then
+        return unit(n / (1024 * 1024), "MB")
+    elseif n >= 1024 then
+        return unit(n / 1024, "KB")
+    end
+    return ("%d B"):format(n)
+end
+
 -- Structural checks per media type (BR-4). One rule for all four formats:
 -- the container's records must parse from the first byte to the last with
 -- correct boundaries, AND at least one image-bearing record must be present,
@@ -225,7 +243,7 @@ local PNG_DEPTHS = {
     [4] = { [8] = true, [16] = true }, -- greyscale + alpha
     [6] = { [8] = true, [16] = true }, -- truecolour + alpha
 }
---- Validate the 13 IHDR data bytes at `pos`; returns ok, colour type.
+--- Validate the 13 IHDR data bytes at `pos`; returns ok, colour type, width, height.
 local function png_ihdr(bytes, pos)
     local width, height = u32be(bytes, pos), u32be(bytes, pos + 4)
     local depth, colour, compression, filter, interlace = bytes:byte(pos + 8, pos + 12)
@@ -239,7 +257,7 @@ local function png_ihdr(bytes, pos)
         and compression == 0
         and filter == 0
         and interlace <= 1
-    return ok, colour
+    return ok, colour, width, height
 end
 local function is_png(bytes)
     local n = #bytes
@@ -247,6 +265,7 @@ local function is_png(bytes)
         return false
     end
     local pos, first, colour, plte, idat_bytes = 9, true, nil, false, 0
+    local width, height
     while true do
         if pos + 8 > n + 1 then
             return false -- no room for length + type
@@ -262,7 +281,7 @@ local function is_png(bytes)
                 return false
             end
             local ok
-            ok, colour = png_ihdr(bytes, pos + 8)
+            ok, colour, width, height = png_ihdr(bytes, pos + 8)
             if not ok then
                 return false
             end
@@ -272,7 +291,11 @@ local function is_png(bytes)
         elseif kind == "PLTE" and idat_bytes == 0 then
             plte = len >= 3 and len <= 768 and len % 3 == 0
         elseif kind == "IEND" then
-            return len == 0 and nxt == n + 1 and idat_bytes >= 1 and (colour ~= 3 or plte)
+            local ok = len == 0 and nxt == n + 1 and idat_bytes >= 1 and (colour ~= 3 or plte)
+            if ok then
+                return true, width, height
+            end
+            return false
         end
         pos = nxt
     end
@@ -303,7 +326,7 @@ local function is_sof(marker)
     return marker >= 0xC0 and marker <= 0xCF and not JPEG_NOT_SOF[marker]
 end
 --- Validate the SOF segment whose 0xFF is at `pos` with segment length
---- `len` (the segment is known to fit); returns Nf, or nil when invalid.
+--- `len` (the segment is known to fit); returns Nf, width, height, or nil when invalid.
 local function jpeg_sof(bytes, pos, len)
     if len < 8 then
         return nil
@@ -312,10 +335,11 @@ local function jpeg_sof(bytes, pos, len)
     if len ~= 8 + 3 * nf or not JPEG_COMPONENTS[nf] or not JPEG_PRECISION[bytes:byte(pos + 4)] then
         return nil
     end
-    if u16be(bytes, pos + 5) < 1 or u16be(bytes, pos + 7) < 1 then
+    local height, width = u16be(bytes, pos + 5), u16be(bytes, pos + 7)
+    if height < 1 or width < 1 then
         return nil
     end
-    return nf
+    return nf, width, height
 end
 local function is_jpeg(bytes)
     local n = #bytes
@@ -323,6 +347,7 @@ local function is_jpeg(bytes)
         return false
     end
     local pos, nf = 3, nil
+    local width, height
     while true do
         if bytes:byte(pos) ~= 0xFF then
             return false
@@ -345,7 +370,10 @@ local function is_jpeg(bytes)
                 return false
             end
             local ns = bytes:byte(pos + 4)
-            return ns >= 1 and ns <= 4 and ns <= nf and len == 6 + 2 * ns
+            if ns >= 1 and ns <= 4 and ns <= nf and len == 6 + 2 * ns then
+                return true, width, height
+            end
+            return false
         elseif marker == 0xD9 then
             return false -- EOI before any scan
         elseif JPEG_STANDALONE[marker] then
@@ -359,7 +387,7 @@ local function is_jpeg(bytes)
                 return false
             end
             if is_sof(marker) then
-                nf = jpeg_sof(bytes, pos, len)
+                nf, width, height = jpeg_sof(bytes, pos, len)
                 if nf == nil then
                     return false
                 end
@@ -545,6 +573,25 @@ function M.looks_like(media_type, bytes)
         return false
     end
     return valid(bytes) == true
+end
+
+--- PNG/JPEG dimensions only after their structural validator succeeds. PURE.
+---@param media_type string|nil
+---@param bytes string|nil
+---@return integer|nil width
+---@return integer|nil height
+function M.dimensions(media_type, bytes)
+    if type(bytes) ~= "string" then
+        return nil
+    end
+    local valid = media_type == "image/png" and is_png or media_type == "image/jpeg" and is_jpeg
+    if valid then
+        local ok, width, height = valid(bytes)
+        if ok then
+            return width, height
+        end
+    end
+    return nil
 end
 
 --- The one sentence for bytes that fail looks_like.
@@ -893,6 +940,10 @@ local function regular_size(p)
 end
 
 M.default_io = {
+    shrink = function(bytes, ext)
+        -- Lazy: image_shrink uses the pure validators in this module.
+        return require("parley.image_shrink").shrink(bytes, ext)
+    end,
     exists = function(p)
         return vim.fn.filereadable(p) == 1 or vim.fn.isdirectory(p) == 1
     end,
@@ -994,6 +1045,7 @@ M.default_io = {
 ---@return string|nil rel
 ---@return string|nil abs
 ---@return string|nil err
+---@return table|nil outcome # shrink sizes or retained-original note
 function M.save(chat_path, bytes, ext, io_)
     io_ = io_ or M.default_io
     local folder, err = M.folder_for(chat_path)
@@ -1002,6 +1054,11 @@ function M.save(chat_path, bytes, ext, io_)
     end
     if #bytes > M.MAX_BYTES then
         return nil, nil, M.too_big(#bytes)
+    end
+    -- The source cap precedes conversion; naming follows the chosen bytes.
+    local outcome
+    if io_.shrink then
+        bytes, ext, outcome = io_.shrink(bytes, ext)
     end
     local mok, merr = io_.mkdir(folder)
     if not mok then
@@ -1015,7 +1072,7 @@ function M.save(chat_path, bytes, ext, io_)
     if not wok then
         return nil, nil, "could not write " .. abs .. ": " .. tostring(werr)
     end
-    return M.relative_path(M.key_for(chat_path), name), abs
+    return M.relative_path(M.key_for(chat_path), name), abs, nil, outcome
 end
 
 --- Bytes of an asset named by its transcript-relative path, bounded and

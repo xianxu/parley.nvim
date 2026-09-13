@@ -18,6 +18,13 @@ describe("argv_recipe: substitute / has_token", function()
         assert.is_true(ar.has_token({ "{max}x{max}>" }, "{max}", true))
         assert.is_false(ar.has_token({ "x{out}" }, "{out}"))
     end)
+    it("substitutes embedded numeric tokens without rescanning substituted paths", function()
+        local argv = { "tool", "{in}", "{out}", "{max}x{max}>", "prefix{in}" }
+        local paths = { ["{in}"] = "/tmp/{max}/input", ["{out}"] = "/tmp/out%1{max}" }
+        assert.same({ "tool", paths["{in}"], paths["{out}"], "1600x1600>", "prefix{in}" },
+            ar.substitute(argv, paths, { ["{max}"] = "1600" }))
+        assert.equals("{max}x{max}>", argv[4])
+    end)
 end)
 
 describe("argv_recipe: select", function()
