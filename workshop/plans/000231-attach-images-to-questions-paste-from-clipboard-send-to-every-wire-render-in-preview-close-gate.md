@@ -271,6 +271,51 @@ rounds:
           round: 9
       boundary: M2
       blocked: false
+    - "n": 10
+      timestamp: "2026-09-13T01:00:00-07:00"
+      agent: codex
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: Occurrence-keyed budgeting is exercised by repeated-path regression tests and a passing 21-reference probe.
+          round: 10
+        - id: BR-2
+          disposition: addressed
+          note: Differential builder tests cover total-exchange retention and old exchanges pinned by file references.
+          round: 10
+        - id: BR-3
+          disposition: addressed
+          note: Tests cover launch failure, nonmodifiable buffers, insertion rollback, existing-folder preservation, and retry.
+          round: 10
+        - id: BR-4
+          disposition: addressed
+          note: Malformed-container matrices exercise validation, bounded reading, and content emission for all four formats.
+          round: 10
+        - id: BR-5
+          disposition: addressed
+          note: The current concept tables classify effectful readers and existence callbacks as integration entities.
+          round: 10
+        - id: BR-6
+          disposition: addressed
+          note: README documents the paste keybinding, platform tools, clipboard override, storage, and retention.
+          round: 10
+        - id: BR-7
+          disposition: addressed
+          note: Request-cache tests cover image-body removal on success, provider error, cancellation, and spawn failure.
+          round: 10
+        - id: BR-8
+          disposition: addressed
+          note: Deletion regressions verify filesystem refusal and buffer exceptions preserve the transcript and assets.
+          round: 10
+        - id: BR-9
+          disposition: addressed
+          note: Pure isolation tests and real-export E4/E5 exercise same-family and cross-family placeholder attacks.
+          round: 10
+        - id: BR-10
+          disposition: addressed
+          note: Stateful policy tests cover skipping before mutation, exact text restoration, and failed readback.
+          round: 10
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#231 (boundary-review)
@@ -386,6 +431,21 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - BR-9 — addressed — Export restores both placeholder families together without rescanning emitted records. Regression tests pass; sequential-family restoration makes the cross-family isolation test fail.
 - BR-10 — addressed — Clipboard preservation failure skips before mutation; restoration verifies read-back. All three fake tests pass, and removing the preservation precondition makes its regression fail.
 - BR-8 — addressed — Prior disposition retained: asset cleanup follows successful transcript deletion, with filesystem-refusal and buffer-exception regression coverage.
+
+## Round 10 — 2026-09-13T01:00:00-07:00 (codex) — passed
+
+### Disposed
+
+- BR-1 — addressed — Occurrence-keyed budgeting is exercised by repeated-path regression tests and a passing 21-reference probe.
+- BR-2 — addressed — Differential builder tests cover total-exchange retention and old exchanges pinned by file references.
+- BR-3 — addressed — Tests cover launch failure, nonmodifiable buffers, insertion rollback, existing-folder preservation, and retry.
+- BR-4 — addressed — Malformed-container matrices exercise validation, bounded reading, and content emission for all four formats.
+- BR-5 — addressed — The current concept tables classify effectful readers and existence callbacks as integration entities.
+- BR-6 — addressed — README documents the paste keybinding, platform tools, clipboard override, storage, and retention.
+- BR-7 — addressed — Request-cache tests cover image-body removal on success, provider error, cancellation, and spawn failure.
+- BR-8 — addressed — Deletion regressions verify filesystem refusal and buffer exceptions preserve the transcript and assets.
+- BR-9 — addressed — Pure isolation tests and real-export E4/E5 exercise same-family and cross-family placeholder attacks.
+- BR-10 — addressed — Stateful policy tests cover skipping before mutation, exact text restoration, and failed readback.
 
 ## Open findings
 

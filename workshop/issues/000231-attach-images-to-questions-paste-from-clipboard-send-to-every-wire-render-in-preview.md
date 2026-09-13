@@ -1,12 +1,13 @@
 ---
 id: 000231
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-09-10
-updated: 2026-09-12
+updated: 2026-09-13
 estimate_hours: 6.93
 started: 2026-09-12T18:17:30-07:00
+actual_hours: 4.89
 ---
 
 # Attach images to questions: paste from clipboard, send to every wire, render in preview
@@ -307,6 +308,7 @@ and per-function test strategies; two review boundaries).
   live property then exposed the prefix/first-fit gap.
 
 ### 2026-09-13 (implementation, M2)
+- 2026-09-13: closed — M1 SHIP (6 rounds) + M2 SHIP (3 rounds); make lint 0 warnings + make test green (221 spec files); real osascript paste on the real clipboard; live per-wire send via managed cliproxy after every M1 rework round (claude-haiku-4-5-20251001, gpt-5.5, gemini-3.7-flash-high each described the red/blue image); zero image bytes in parley.log and zero image transport files under query_dir; movers/deleters/export covered by chat_move 14, chat_delete_sweep 1, exporter_tree 37, tree_export 12; live clipboard conformance run with the text restored; review verdict: SHIP
 - 2026-09-13: closed M2 — rework round 3: make lint 0 warnings + make test green (221 spec files); BR-9 cross-family — image and branch placeholders restored together in one left-to-right pass that never rescans an emitted record (exporter._restore_all), pinned both directions in unit and through the real ExportHTML (E4, E5: no nav div or html inside any <img>, alt keeps the literal token); BR-10 — the live clipboard check skips before any mutation unless the clipboard is text, verifies its read-back, policy driven by a stateful fake (3 cases) and the live case run once on the real clipboard with the text restored; exporter_tree 37, tree_export 12, clipboard_live 4, chat_move 14, chat_delete_sweep 1; review verdict: SHIP
 
 - M1 closed SHIP after six boundary rounds (the review sidecar carries all
