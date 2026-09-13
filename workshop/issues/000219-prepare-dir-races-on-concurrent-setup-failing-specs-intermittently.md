@@ -1,11 +1,12 @@
 ---
 id: 000219
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-09-05
-updated: 2026-09-05
-estimate_hours:
+updated: 2026-09-13
+estimate_hours: 0.988
+started: 2026-09-13T13:03:44-07:00
 ---
 
 # prepare_dir races on concurrent setup, failing specs intermittently
@@ -73,3 +74,26 @@ already use — the finding is whether any caller bypasses it.
 
 Surfaced by #218's close run. Frequency unknown — one occurrence in roughly a
 dozen full-suite runs this session.
+
+## Revisions
+
+### 2026-09-13 — resumed as #208 release blocker
+
+The class sweep finds logger's dependency prevents importing helper at module load. Delegate literal mkdir to a dependency-free filesystem seam and route all writers through it; helper retains path expansion. Detailed plan: `workshop/plans/000219-prepare-dir-race-plan.md`.
+
+## Estimate
+
+*Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against `baseline-v3.1.md`. Method A only.*
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: lua-neovim design=0.20 impl=0.30
+item: cross-cutting-refactor design=0.08 impl=0.12
+item: atlas-docs design=0.02 impl=0.04
+item: milestone-review design=0.02 impl=0.16
+design-buffer: 0.15
+total: 0.988
+```
+
+Derived after plan-quality passed: focused Lua seam 1.0h design ×0.2 and 0.75h implementation ×0.4; mechanical consumer sweep 0.4h ×0.2 and 0.3h ×0.4; atlas 0.1h ×0.2 and 0.1h ×0.4; review 0.1h ×0.2 and 0.4h ×0.4. Existing Neovim mkdir/isdirectory supplies the IO, no novel library. Design subtotal 0.32h with 15% buffer plus implementation 0.62h = 0.988h.
