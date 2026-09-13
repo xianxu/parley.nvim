@@ -287,9 +287,20 @@ end
 
 M.handle_delete_tree_response = function(input, item_value, tree_files, selected_index, items_count, source_win, close_fn, context)
 	if input and input:lower() == "y" then
+		-- #231: the door deletes the chat first and its assets only after; a
+		-- refused file keeps both and is reported per file (ERROR) and here
+		-- as a tally (WARN), the same shape as init.delete_chat_tree.
+		local failed = {}
 		for _, f in ipairs(tree_files) do
-			_parley.delete_chat_file(f)
-			M.invalidate_path(f)
+			if _parley.delete_chat_file(f) then
+				M.invalidate_path(f)
+			else
+				failed[#failed + 1] = vim.fn.fnamemodify(f, ":~:.")
+			end
+		end
+		if #failed > 0 then
+			vim.notify(("Deleted %d of %d chat file(s); not deleted: %s"):format(
+				#tree_files - #failed, #tree_files, table.concat(failed, ", ")), vim.log.levels.WARN)
 		end
 		if close_fn then
 			close_fn()

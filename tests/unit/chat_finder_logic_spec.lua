@@ -501,6 +501,7 @@ describe("ChatFinder logic", function()
             local deleted = nil
             M.helpers.delete_file = function(path)
                 deleted = path
+                return true -- the door (#231) reads a nil return as "not deleted"
             end
 
             M._handle_chat_finder_delete_response(nil, "/tmp/chat.md", 3, 7, 42)
@@ -525,6 +526,7 @@ describe("ChatFinder logic", function()
             local deleted = nil
             M.helpers.delete_file = function(path)
                 deleted = path
+                return true -- the door (#231) reads a nil return as "not deleted"
             end
 
             M._handle_chat_finder_delete_response("y", "/tmp/chat-b.md", 2, 4, 42, nil, {
@@ -1474,6 +1476,7 @@ describe("ChatFinder logic", function()
             local deleted = nil
             M.helpers.delete_file = function(path)
                 deleted = path
+                return true -- the door (#231) reads a nil return as "not deleted"
             end
 
             M._handle_chat_finder_delete_response("y", "/tmp/chat-c.md", 3, 3, 42, nil, {
