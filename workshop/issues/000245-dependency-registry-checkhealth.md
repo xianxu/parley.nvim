@@ -93,3 +93,6 @@ The formula parity test still lands with #247, against whichever policy is appro
 code evidence: `cliproxy.managed_binary()` currently creates its directory;
 clipboard missing-tool notices currently repeat, while shrink notices already
 reset once per configure. The durable plan specifies tests for both findings.
+
+Fresh-context design review: Approved; no important correctness gaps. Formula
+policy remains explicitly pending operator approval before implementation.
