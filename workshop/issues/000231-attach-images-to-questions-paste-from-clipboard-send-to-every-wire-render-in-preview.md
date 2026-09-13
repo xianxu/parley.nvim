@@ -1,11 +1,12 @@
 ---
 id: 000231
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-09-10
-updated: 2026-09-10
+updated: 2026-09-12
 estimate_hours:
+started: 2026-09-12T18:17:30-07:00
 ---
 
 # Attach images to questions: paste from clipboard, send to every wire, render in preview
