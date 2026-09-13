@@ -160,3 +160,16 @@ holds an unsupported format).
 - Operator confirmed Plan step 1 and sharpened it: the sidecar is an **asset**
   folder, `assets/<chat-timestamp>/`, no slug — slugs are for humans, and humans
   reach assets through the transcript. Same folder serves #239. Ticked.
+- Durable plan written: `workshop/plans/000231-chat-image-attachments-plan.md`
+  (two milestones, four execution chunks). Two fresh-eyes review rounds
+  (five reviewers) folded in; a third verification pass was cut off by the
+  session rate limit and its two open checks were verified by hand. Findings
+  that changed the design, worth remembering: (a) chat deletion has FIVE
+  sites, not one — one `delete_chat_file` door + an arch sweep; (b) the
+  send-time debug log and raw-mode logs would have written the base64 per
+  turn — `elide_image_data` at all three sinks; (c) an early `<img>` in the
+  HTML exporter is mangled by the italic rule — the file's placeholder
+  mechanism instead; (d) the paste must check the buffer BEFORE saving, or a
+  closed buffer orphans bytes. Wire shapes read live from the three
+  providers' docs today (Anthropic `image`/base64, OpenAI `image_url` data
+  URL, Gemini `inlineData`). Awaiting plan approval → `sdlc change-code`.
