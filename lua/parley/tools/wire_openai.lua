@@ -269,10 +269,12 @@ function M.translate_messages(messages)
             table.insert(out, translated)
 
         else
-            -- A user turn carrying tool_result blocks. Each result becomes
-            -- its own message; any stray text blocks collapse into one user
-            -- message after them, preserving the batch's relative order.
-            local texts = {}
+            -- A user turn carrying tool_result blocks and/or (#231) image
+            -- blocks. Each result becomes its own message; images and stray
+            -- text collapse into ONE user message after them, preserving the
+            -- batch's relative order — as content PARTS when an image is
+            -- present, a plain string otherwise (the pre-#231 shape, pinned).
+            local texts, parts = {}, {}
             for _, block in ipairs(msg.content) do
                 if block.type == "tool_result" then
                     local content = block.content or ""
@@ -286,24 +288,34 @@ function M.translate_messages(messages)
                     })
                 elseif block.type == "text" then
                     table.insert(texts, block.text or "")
+                elseif block.type == "image" and block.source and block.source.type == "base64" then
+                    -- Chat Completions image part (docs read 2026-09-12):
+                    -- {type="image_url", image_url={url="data:<mime>;base64,<data>", detail}}
+                    table.insert(parts, {
+                        type = "image_url",
+                        image_url = {
+                            url = "data:" .. block.source.media_type .. ";base64," .. block.source.data,
+                            detail = "auto",
+                        },
+                    })
                 else
-                    -- Unreachable today: parley builds no multimodal blocks, and
-                    -- the only table-content non-assistant messages come from
-                    -- _emit_content_blocks_as_messages. But dropping content on
-                    -- the floor is how a future image/document block would
-                    -- vanish from a request with no symptom but a confused
-                    -- model, so say so.
+                    -- Dropping content on the floor is how a document block
+                    -- would vanish from a request with no symptom but a
+                    -- confused model, so say so.
                     require("parley.logger").warning(
                         "wire_openai.translate_messages: dropping unsupported "
                         .. tostring(msg.role) .. " content block of type "
                         .. tostring(block.type))
                 end
             end
-            if #texts > 0 then
-                table.insert(out, {
-                    role = msg.role or "user",
-                    content = table.concat(texts, "\n\n"),
-                })
+            local text = #texts > 0 and table.concat(texts, "\n\n") or nil
+            if #parts > 0 then
+                if text then
+                    table.insert(parts, { type = "text", text = text })
+                end
+                table.insert(out, { role = msg.role or "user", content = parts })
+            elseif text then
+                table.insert(out, { role = msg.role or "user", content = text })
             end
         end
     end
