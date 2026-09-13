@@ -1,11 +1,12 @@
 ---
 id: 000244
-status: open
+status: working
 deps: [000231]
 github_issue:
 created: 2026-09-13
 updated: 2026-09-13
 estimate_hours:
+started: 2026-09-13T11:25:16-07:00
 ---
 
 # Shrink pasted and generated images before saving: sips first, probe other tools, keep the original when none
