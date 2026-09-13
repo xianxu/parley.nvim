@@ -49,7 +49,7 @@ return {
         -- Ensure parent directory exists
         local dir = path:match("(.+)/[^/]+$")
         if dir then
-            vim.fn.mkdir(dir, "p")
+            require("parley.fs").ensure_dir(dir)
         end
 
         -- Write the file

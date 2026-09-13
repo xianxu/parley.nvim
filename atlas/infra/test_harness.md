@@ -163,3 +163,7 @@ repairs inputs. Portable tests use `fake_vocabulary` with file-backed export
 results and recorded calls; CI provisions the real exporter/CUE through the
 repo-owned setup hook and executes the same check. Runtime/data validation
 remains independent of those maintainer tools.
+
+### Concurrent directory creation
+
+`tests/unit/prepare_dir_spec.lua` reproduces a competing directory creator at the mkdir boundary using real temporary directories. `lua/parley/fs.lua` owns the literal-path directory postcondition; helper path expansion remains in `helper.prepare_dir`. A source guard keeps all production directory creators on that seam.

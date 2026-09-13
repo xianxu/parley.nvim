@@ -31,7 +31,7 @@ M.setup = function(path, sensitive)
 	M.debug("New neovim instance [" .. uuid .. "] started, setting log file to " .. path)
 	local dir = vim.fn.fnamemodify(path, ":h")
 	if vim.fn.isdirectory(dir) == 0 then
-		vim.fn.mkdir(dir, "p")
+		require("parley.fs").ensure_dir(dir)
 	end
 	file = path
 

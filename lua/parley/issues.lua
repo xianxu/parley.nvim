@@ -892,7 +892,7 @@ M.cmd_issue_decompose = function()
         return
     end
 
-    vim.fn.mkdir(issues_dir, "p")
+    require("parley.fs").ensure_dir(issues_dir)
     local child_id = M.next_issue_id(issues_dir)
     local child_slug = M.slugify(task_text)
     local child_filename = child_id .. "-" .. child_slug .. ".md"

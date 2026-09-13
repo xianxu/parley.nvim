@@ -1020,12 +1020,9 @@ M.default_io = {
     stat = regular_size,
     -- "p": create parents; an existing directory is not an error.
     mkdir = function(p)
-        local ok, err = pcall(vim.fn.mkdir, p, "p")
+        local ok, err = pcall(require("parley.fs").ensure_dir, p)
         if not ok then
             return false, tostring(err)
-        end
-        if err ~= 1 then
-            return false, "mkdir failed: " .. p
         end
         return true
     end,
