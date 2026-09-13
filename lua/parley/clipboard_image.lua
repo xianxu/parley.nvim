@@ -2,7 +2,7 @@
 --
 -- Read an image off the system clipboard into a PNG file (#231, decision 11).
 --
--- Platform recipes are DATA: `RECIPES.<key> = { tool, argv, install }` where
+-- Platform recipes are DATA: `RECIPES.<key> = { tool, argv, dependency }` where
 -- `argv` carries the `{out}` token (`M.OUT`) as one WHOLE argument standing
 -- for the path to write. The path never enters an osascript script or a
 -- `sh -c` string — the darwin recipe reads it from `argv`, the Linux recipes
@@ -31,6 +31,8 @@
 -- PURE except `read_png` (spawn) and `host_env` (probes the host).
 
 local argv_recipe = require("parley.argv_recipe")
+local deps = require("parley.deps")
+local deps_probe = require("parley.deps_probe")
 local uv = vim.uv or vim.loop
 
 local M = {}
@@ -41,7 +43,7 @@ M.OUT = "{out}"
 --- How long the tool may run before vim.system kills it (exit 124).
 M.TIMEOUT_MS = 5000
 
---- Platform recipes. Each is `{ tool, argv, install }`; `argv` holds
+--- Platform recipes. Each is `{ tool, argv, dependency }`; `argv` holds
 --- exactly one `{out}` as a whole argument.
 M.RECIPES = {
     -- Writes «class PNGf» to the path in argv (the script reads `item 1 of
@@ -66,7 +68,7 @@ M.RECIPES = {
             "-e", "end run",
             "{out}",
         },
-        install = "osascript ships with macOS",
+        dependency = "osascript",
     },
     -- `sh -c '… > "$1"' sh <out>`: the path is $1, an argument, never part
     -- of the -c string. wl-paste exits 1 when the clipboard holds no
@@ -74,13 +76,13 @@ M.RECIPES = {
     wayland = {
         tool = "wl-paste",
         argv = { "sh", "-c", 'exec wl-paste --type image/png > "$1"', "sh", "{out}" },
-        install = "install wl-clipboard (wl-paste)",
+        dependency = "wl-clipboard",
     },
     -- Same shape; xclip exits 1 when the target is not offered.
     x11 = {
         tool = "xclip",
         argv = { "sh", "-c", 'exec xclip -selection clipboard -t image/png -o > "$1"', "sh", "{out}" },
-        install = "install xclip",
+        dependency = "xclip",
     },
 }
 
@@ -88,14 +90,12 @@ M.RECIPES = {
 --- own table in the same shape.
 --- @return table { sysname: string, wayland: boolean, executable: fun(tool: string): boolean }
 function M.host_env()
-    local uname = uv.os_uname()
-    return {
-        sysname = uname and uname.sysname or "",
-        wayland = (vim.env.WAYLAND_DISPLAY or "") ~= "",
-        executable = function(tool)
-            return vim.fn.executable(tool) == 1
-        end,
-    }
+    local host = deps_probe.host()
+    host.wayland = (vim.env.WAYLAND_DISPLAY or "") ~= ""
+    host.executable = function(tool)
+        return vim.fn.executable(tool) == 1
+    end
+    return host
 end
 
 -- Platform order: Darwin → darwin only; Wayland → wayland then x11; else
@@ -125,6 +125,9 @@ function M.select(config_cmd, env)
         tokens = { M.OUT },
         purpose = "for the PNG path to write",
         none = "no clipboard image tool found",
+        advice = function(id)
+            return deps.advice(id, env)
+        end,
     })
 end
 

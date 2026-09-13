@@ -53,7 +53,7 @@ M.entries = {
         id = "imagemagick",
         executables = { "magick", "convert" },
         tier = "advisory",
-        feature = "image shrinking",
+        feature = "optional image shrinking backend",
         packages = { brew = "imagemagick", apt = "imagemagick" },
         formula_default = false,
         required = false,
@@ -62,7 +62,7 @@ M.entries = {
         id = "ffmpeg",
         executables = { "ffmpeg" },
         tier = "advisory",
-        feature = "image shrinking",
+        feature = "optional image shrinking backend",
         packages = { brew = "ffmpeg", apt = "ffmpeg" },
         formula_default = false,
         required = false,
@@ -71,7 +71,7 @@ M.entries = {
         id = "libvips",
         executables = { "vipsthumbnail" },
         tier = "advisory",
-        feature = "image shrinking",
+        feature = "optional image shrinking backend",
         packages = { brew = "vips", apt = "libvips-tools" },
         formula_default = false,
         required = false,
@@ -172,7 +172,7 @@ local function host_label(host)
     local sysname = host.sysname or "unknown host"
     local manager = host.manager
     if manager == nil then
-        return tostring(sysname) .. " (no package manager)"
+        return tostring(sysname) .. " (no supported package manager detected)"
     end
     return tostring(sysname) .. " (manager " .. tostring(manager) .. ")"
 end

@@ -10,6 +10,13 @@ local jpeg = read(root .. '/tests/fixtures/one_pixel.jpg')
 local png = read(root .. '/tests/fixtures/one_pixel.png')
 
 describe('image shrink policy', function()
+    it('declares one registry dependency per ordered recipe without advice literals', function()
+        assert.same({'sips', 'imagemagick', 'imagemagick', 'ffmpeg', 'libvips'},
+            vim.tbl_map(function(recipe)
+                assert.is_nil(recipe.install)
+                return recipe.dependency
+            end, shrink.RECIPES))
+    end)
     it('uses format-specific strict eligibility and never upscales', function()
         for _, row in ipairs({
             {300*1024, 1600, 20, 'image/png', false},
@@ -178,9 +185,19 @@ end)
 
 describe('image shrink session resolution', function()
     after_each(function() shrink.configure() end)
+    local function host(sysname, manager, executable)
+        return {sysname=sysname, manager=manager, executable=executable}
+    end
+    it('can resolve from a freshly loaded module before setup configures it', function()
+        package.loaded['parley.image_shrink'] = nil
+        local fresh = require('parley.image_shrink')
+        local ok, err = pcall(fresh.resolve)
+        package.loaded['parley.image_shrink'] = shrink
+        assert.is_true(ok, tostring(err))
+    end)
     it('bypasses disabled, ineligible, malformed, and huge images before any probe', function()
         local probes = 0
-        local env = {executable=function() probes=probes+1; return false end}
+        local env = host('Linux', 'apt', function() probes=probes+1; return false end)
         shrink.configure({shrink=false}, env)
         assert.equals(png, shrink.shrink(png, 'png'))
         shrink.configure({}, env)
@@ -194,11 +211,12 @@ describe('image shrink session resolution', function()
     end)
     it('reports missing tools once and resets on configure', function()
         local probes = 0
-        local env = {executable=function() probes=probes+1; return false end}
+        local env = host('Linux', 'apt', function() probes=probes+1; return false end)
         shrink.configure({}, env)
-        local recipe, note = shrink.resolve()
+        local recipe, note, kind = shrink.resolve()
         assert.is_nil(recipe)
-        assert.matches('no image shrink tool', note)
+        assert.equals('no image shrink tool found: sips is not applicable on Linux (manager apt) or apt install imagemagick or apt install ffmpeg or apt install libvips-tools', note)
+        assert.equals('missing', kind)
         local _, again = shrink.resolve()
         assert.is_nil(again)
         assert.equals(5, probes)
@@ -208,21 +226,23 @@ describe('image shrink session resolution', function()
     end)
     it('selects the first available candidate and caches it', function()
         local probes = {}
-        shrink.configure({}, {executable=function(tool)
+        shrink.configure({}, host('Linux', 'apt', function(tool)
             probes[#probes+1] = tool
             return tool == 'convert'
-        end})
+        end))
         assert.equals('convert', shrink.resolve().tool)
         assert.equals('convert', shrink.resolve().tool)
         assert.same({'sips','magick','convert'}, probes)
     end)
     it('accepts configured embedded max and rejects missing tokens', function()
-        shrink.configure({shrink_cmd={'fake','{in}','{out}','--size={max}'}})
+        local env = host('Linux', 'apt', function() return false end)
+        shrink.configure({shrink_cmd={'fake','{in}','{out}','--size={max}'}}, env)
         assert.equals('fake', shrink.resolve().tool)
-        shrink.configure({shrink_cmd={'fake','{in}','{out}'}})
-        local recipe, note = shrink.resolve()
+        shrink.configure({shrink_cmd={'fake','{in}','{out}'}}, env)
+        local recipe, note, kind = shrink.resolve()
         assert.is_nil(recipe)
         assert.matches('{max}', note, 1, true)
+        assert.equals('config', kind)
     end)
     it('formats only actionable outcomes', function()
         assert.equals('', shrink.outcome_suffix(nil))

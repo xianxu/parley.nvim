@@ -29,30 +29,34 @@ end)
 
 describe("argv_recipe: select", function()
     local words = { config_key = "assets.clipboard_cmd", tokens = { "{out}" },
-        purpose = "for the PNG path to write", none = "no clipboard image tool found" }
+        purpose = "for the PNG path to write", none = "no clipboard image tool found",
+        advice = function(id) return "get " .. id end }
     local candidates = {
-        { tool = "one", argv = { "one", "{out}" }, install = "install one" },
-        { tool = "two", argv = { "two", "{out}" }, install = "install two" },
+        { tool = "one", argv = { "one", "{out}" }, dependency = "one-dep" },
+        { tool = "two", argv = { "two", "{out}" }, dependency = "two-dep" },
     }
     local function exe(set) return function(t) return set[t] == true end end
 
     it("a configured argv wins verbatim when it carries every token", function()
         local r = ar.select({ "mine", "{out}" }, candidates, exe({}), words)
-        assert.same({ tool = "mine", argv = { "mine", "{out}" }, install = nil }, r)
+        assert.same({ tool = "mine", argv = { "mine", "{out}" } }, r)
     end)
     it("a configured argv missing a token names the token, key and purpose", function()
-        local r, err = ar.select({ "mine" }, candidates, exe({ one = true }), words)
+        local r, err, kind = ar.select({ "mine" }, candidates, exe({ one = true }), words)
         assert.is_nil(r)
         assert.equals("assets.clipboard_cmd must contain the {out} token (as its own argument) for the PNG path to write", err)
+        assert.equals("config", kind)
     end)
     it("an empty or non-table config falls through to the candidates", function()
         assert.equals(candidates[2], ar.select({}, candidates, exe({ two = true }), words))
         assert.equals(candidates[1], ar.select(nil, candidates, exe({ one = true, two = true }), words))
     end)
-    it("no executable candidate → hints in order", function()
-        local r, err = ar.select(nil, candidates, exe({}), words)
+    it("no executable candidate derives current advice and returns a bounded capability key", function()
+        local r, err, kind, capability = ar.select(nil, candidates, exe({}), words)
         assert.is_nil(r)
-        assert.equals("no clipboard image tool found: install one or install two", err)
+        assert.equals("no clipboard image tool found: get one-dep or get two-dep", err)
+        assert.equals("missing", kind)
+        assert.equals("one-dep|two-dep", capability)
     end)
     it("several required tokens: the first missing one is named", function()
         local w = vim.tbl_extend("force", words, { tokens = { "{in}", "{out}" }, config_key = "assets.shrink_cmd", purpose = "for the image paths" })

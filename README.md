@@ -51,10 +51,15 @@ Despite of such simple interface, it's very powerful, sometimes more so than off
 
 ## Quick Install
 
-Optional dependencies:
+Run `:checkhealth parley` to see which external tools are available and what
+missing tools enable. It shows install advice for your detected package manager;
+Parley does not run those commands for you. CLIProxyAPI is managed by Parley:
+use `:ParleyProxy update` to install or update it. On macOS, clipboard image paste
+and the default image converter use the system's `osascript` and `sips`.
+
+`curl` is required for network requests. Other dependencies are optional:
 - [`lualine.nvim`](https://github.com/nvim-lualine/lualine.nvim) for status line integration. Not missing much if not available.
-- `curl` for oauth and fetching web content.
-- [`pandoc`](https://pandoc.org/) for exporting non-chat markdown files to HTML (`<C-g>eh`). Install with `brew install pandoc`.
+- [`pandoc`](https://pandoc.org/) for exporting non-chat markdown files to HTML (`<C-g>eh`). See `:checkhealth parley` for the install command.
 
 Example with `lazy.nvim`
 

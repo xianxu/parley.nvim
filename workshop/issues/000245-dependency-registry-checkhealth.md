@@ -60,8 +60,8 @@ Part of the `parley-packaging` project.
 
 - [x] Registry as data with a decision-table test over tiers × detection
 - [x] checkhealth section derived independently (approved revision below)
-- [ ] Recipes (#231 clipboard, #244 shrink) read advice from the registry
-- [ ] Formula-vs-registry parity test (lands with #247)
+- [x] Recipes (#231 clipboard, #244 shrink) read advice from the registry
+- [x] Formula package projection verified; formula-vs-registry parity handed to #247 (approved scope revision)
 
 ## Log
 
@@ -77,10 +77,31 @@ Part of the `parley-packaging` project.
   source precedence and managed-only version attribution; health forbids process
   launches and preserves the absent data directory without setup.
 - Targeted checks so far: deps 8, probe 4, health 3, managed download 6 and export
-  15 tests pass; lint reports 407 files without warnings. Runtime recipe advice
+  16 tests pass; lint reports 407 files without warnings. Runtime recipe advice
   and clipboard notice integration remain in progress.
+- Live conformance: sips resized both fixture sizes and passed metadata removal.
+  ImageMagick/ffmpeg/vips checks skipped because those optional tools are absent.
+  Live clipboard check skipped before mutation because the clipboard held
+  non-text content that the preservation guard could not safely restore;
+  all three stateful preservation-policy checks passed.
 - Package names checked against Homebrew Formulae and Debian trixie package
   pages; notably Homebrew `vips` corresponds to Debian `libvips-tools`.
+
+- Final implementation: all current advice consumers derive from the registry;
+  clipboard notices are bounded by dependency ids and reset by setup, with
+  fresh executable probes on each paste. Shrink retains lazy cached resolution,
+  including before setup. Package advice aliases deduplicate without changing
+  executable precedence. The architecture guard enforces registry ownership.
+- Final verification: `make test` exited 0: 236 spec files passed; its lint
+  phase checked 407 files with zero warnings/errors. Full-suite findings were
+  resolved: registry import shadowing and missing exported names in the Core
+  concepts table. `git diff --check` is clean. Logs are in
+  `/tmp/parley245-full-test.log`, `/tmp/parley245-shrink-live.log`, and
+  `/tmp/parley245-clipboard-live.log`.
+- #247 handoff: use `deps.packages({sysname='Darwin', manager='brew'}, 'default')`
+  for the additional formula dependency set, currently `{ 'ripgrep' }`; Neovim
+  is the host runtime, CLIProxyAPI is managed, other image backends/pandoc optional.
+  No formula exists in #245; #247 must enforce the actual formula parity test.
 
 ## Revisions
 

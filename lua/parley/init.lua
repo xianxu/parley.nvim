@@ -645,6 +645,7 @@ M.setup = function(opts)
 
 	-- Bind image conversion to this setup, resetting cached probes and notices.
 	require("parley.image_shrink").configure(M.config.assets)
+	require("parley.paste_image").reset_notices()
 
 	-- #214 BR-49: normalise shortcut shapes ONCE, here, where config enters the
 	-- system — not on every resolution. `resolve_keys` used to warn when it met a
@@ -3614,6 +3615,7 @@ M.paste_image = function(buf, deps)
 			vim.notify(msg, vim.log.levels[level:upper()] or vim.log.levels.INFO)
 		end,
 		runner = deps.runner,
+		host_env = deps.host_env,
 	})
 end
 

@@ -1,5 +1,14 @@
 # Lessons
 
+## 2026-09-13 (#245 integration review)
+
+- When moving an environment probe behind configure, preserve callers that
+  resolve before setup. Test the fresh-module path; lazy observation belongs
+  at the first resolution boundary, not an assumed prior initialization.
+- Host-specific advice must check both the host and dependency tier. A Darwin
+  branch shared by all entries can falsely describe optional packages as
+  system tools; test platform and advisory entries on the same host.
+
 ## 2026-09-13 (#208 archive acceptance)
 
 - Keep concept tables about entities and locations; test inputs and oracles

@@ -26,7 +26,7 @@
 -- paste created them and they are now empty (vim.fn.delete(…, "d") refuses a
 -- non-empty dir, so a folder that already held assets is never touched).
 --
--- deps = { config, notify(msg, level), runner? } — init.lua supplies the real
+-- deps = { config, notify(msg, level), runner?, host_env? } — init.lua supplies the real
 -- ones; specs pass a recording notify.
 
 local assets = require("parley.assets")
@@ -37,6 +37,12 @@ local M = {}
 
 -- buf → true while a read is in flight; cleared on every terminal path.
 local inflight = {}
+local missing_notices = {}
+
+--- Start a new setup generation for bounded missing-capability notices.
+function M.reset_notices()
+    missing_notices = {}
+end
 
 -- The folders `assets.save` would create for `folder` (assets/<ts> and its
 -- assets/ parent) that do NOT exist yet, innermost first — what a rollback
@@ -67,7 +73,7 @@ end
 
 --- Paste the clipboard image into the chat shown in `buf`.
 --- @param buf integer
---- @param deps table { config, notify, runner? }
+--- @param deps table { config, notify, runner?, host_env? }
 function M.paste(buf, deps)
     local chat_path = vim.api.nvim_buf_get_name(buf)
     local folder, ferr = assets.folder_for(chat_path)
@@ -80,8 +86,15 @@ function M.paste(buf, deps)
         return
     end
     local cfg = deps.config.assets or {}
-    local recipe, rerr = clipboard_image.select(cfg.clipboard_cmd, clipboard_image.host_env())
+    local current_host = (deps.host_env or clipboard_image.host_env)()
+    local recipe, rerr, error_kind, capability = clipboard_image.select(cfg.clipboard_cmd, current_host)
     if not recipe then
+        if error_kind == "missing" and missing_notices[capability] then
+            return
+        end
+        if error_kind == "missing" then
+            missing_notices[capability] = true
+        end
         deps.notify("Parley: " .. rerr, "warn")
         return
     end

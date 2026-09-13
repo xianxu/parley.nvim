@@ -72,7 +72,7 @@ Prerequisites owned by `parley-v1-release` (tracked there, listed for order):
 #213 honest checkhealth. This project's own rows:
 
 - [x] [parley.nvim#244] — shrink pasted and generated images before saving *(sips first; probe others; keep the original)*
-- [ ] [parley.nvim#245] — dependency registry and honest install advice *(after #213; feeds checkhealth and the formula)*
+- [ ] [parley.nvim#245] — dependency registry and honest install advice *(independent dependency health; feeds the formula)*
 - [ ] [parley.nvim#246] — starter config as a product artifact *(after #211 and #209; `NVIM_APPNAME=parley`)*
 - [ ] [parley.nvim#247] — Homebrew tap and `parley` launcher, tested on a clean tart VM *(after #245, #246; the project's done_when)*
 - [ ] [parley.nvim#206] — user documentation *(v1-release's row; the brew path becomes its install section)*
