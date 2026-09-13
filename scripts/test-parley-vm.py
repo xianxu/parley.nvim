@@ -172,7 +172,7 @@ def missing_evidence(manifest):
     return missing
 
 
-def main():
+def main(disk_usage=shutil.disk_usage):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('phase', choices=['boot', 'prepare', 'install', 'fake', 'prepare-auth', 'check-live', 'upgrade', 'uninstall', 'verify', 'cleanup'])
     parser.add_argument('directory', type=Path, help='private run directory containing ownership manifest')
@@ -245,7 +245,7 @@ def main():
         disk = Path(os.environ.get('TART_HOME', str(Path.home() / '.tart')))
         while not disk.exists():
             disk = disk.parent
-        free = shutil.disk_usage(disk).free
+        free = disk_usage(disk).free
         if free < 60 * 1024 ** 3:
             raise RuntimeError('at least 60 GiB free disk required')
         manifest['free_before_bytes'] = free
@@ -255,7 +255,7 @@ def main():
         manifest['phase'] = 'clone'
         save(directory, manifest)
         command(['clone', IMAGE, vm])
-        manifest['free_after_clone_bytes'] = shutil.disk_usage(disk).free
+        manifest['free_after_clone_bytes'] = disk_usage(disk).free
         manifest['observed_clone_allocation_bytes'] = free - manifest['free_after_clone_bytes']
         print('Observed clone allocation bytes:', manifest['observed_clone_allocation_bytes'])
         subprocess.Popen([TART, 'run', '--no-graphics', '--no-audio', '--no-clipboard', vm],

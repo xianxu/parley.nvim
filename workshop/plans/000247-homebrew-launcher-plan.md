@@ -232,3 +232,11 @@ versions. Its filesystem-backed fake must perform the same move, so an accidenta
 source-layout assumption fails before real publication (ARCH-MOCK/PURPOSE).
 BR-2: Ruby syntax validation runs in release integration coverage. The pure
 renderer unit tests contain only input/output and registry-parity assertions.
+
+### 2026-09-13 — deterministic VM capacity seam
+
+BR-3 integration-environment-isolation: the orchestrator's main entry accepts a
+disk-usage callable defaulting to the real filesystem probe. The test-only Python
+runner injects a fixed capacity; no application or production CLI environment
+variable can waive the disk guard. Cover both adequate capacity and 59 GiB refusal
+before Tart/clone, including reservation release (ARCH-MOCK/CONSTRAINTS).

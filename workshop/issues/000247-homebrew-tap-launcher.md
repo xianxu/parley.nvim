@@ -143,6 +143,15 @@ moved Ruby syntax execution to release integration; 2 pure renderer and 6 releas
 cases pass. Lint remains clean across 431 files. Both finding classes are recorded
 in lessons; public/live acceptance is still pending the reviewed release.
 
+### 2026-09-13 — close review round 2 repaired
+
+BR-1 and BR-2 were accepted as addressed. BR-3 found fake VM tests still consumed
+the host's real disk budget. The VM entry now accepts an injected capacity probe;
+its test-only runner supplies deterministic capacity and proves 59 GiB refuses
+before any Tart call while releasing ownership. The production entry still uses
+actual disk capacity with no bypass CLI/environment input. Test-first runner
+failed before the seam; all 11 VM cases now pass. No real VM state was changed.
+
 ## Revisions
 
 ### 2026-09-13T14:43:00-07:00 — packaging execution scope

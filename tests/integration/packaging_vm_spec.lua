@@ -12,17 +12,27 @@ describe('disposable packaging VM ownership', function()
             TART = repository .. '/tests/fixtures/fake_tart', FAKE_TART_STATE = root .. '/fake',
         }
         for key, value in pairs(extra or {}) do env[key] = value end
-        return vim.system({repository .. '/scripts/test-parley-vm.sh', phase, root .. '/run'},
+        return vim.system({'python3', repository .. '/tests/fixtures/run_packaging_vm.py', phase, root .. '/run'},
             {text = true, clear_env = true, env = env}):wait(10000)
     end
     local function state()
         return vim.json.decode(table.concat(vim.fn.readfile(root .. '/fake/vms.json'), '\n'))
     end
+    it('rejects insufficient simulated disk before cloning and releases its reservation', function()
+        local result = run('prepare', {FAKE_DISK_FREE_BYTES = tostring(59 * 1024 ^ 3)})
+        assert.equals(1, result.code)
+        local manifest = vim.json.decode(table.concat(vim.fn.readfile(root .. '/run/manifest.json'), '\n'))
+        assert.equals('failed', manifest.outcome)
+        assert.equals(0, vim.fn.filereadable(root .. '/fake/calls.jsonl'))
+        assert.equals(0, vim.fn.filereadable(root .. '/home/.cache/parley-vm-acceptance.owner'))
+    end)
     it('retains only its unique VM while authentication is pending and cleans it explicitly', function()
         local result = run('prepare')
         assert.equals(75, result.code, result.stderr)
         local manifest = vim.json.decode(table.concat(vim.fn.readfile(root .. '/run/manifest.json'), '\n'))
         assert.equals('auth_pending', manifest.status)
+        assert.equals(120 * 1024 ^ 3, manifest.free_before_bytes)
+        assert.equals(0, manifest.observed_clone_allocation_bytes)
         assert.equals('running', state()['tools-test'])
         assert.is_not_nil(state()[manifest.vm])
         local calls = {}

@@ -2330,3 +2330,7 @@ download.
   not merely copy the source tree; consumers must use the installed layout.
 - Keep external syntax checks with integration tests. Pure projection tests
   assert metadata and rendered output without creating files or subprocesses.
+
+- A fake external command is insufficient when orchestration still reads host
+  resource capacity. Inject every resource probe and test both sides of its
+  threshold without requiring the test machine to provision that resource.
