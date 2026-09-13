@@ -26,6 +26,23 @@ rounds:
           family: independent-conformance-oracle
           round: 1
       blocked: true
+    - "n": 2
+      timestamp: "2026-09-13T12:18:28-07:00"
+      agent: codex
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: Complete bounded output survives through metadata stripping and classification; restoring input-sized reads causes four test failures, including both configured-fixture regressions.
+          round: 2
+        - id: BR-2
+          disposition: addressed
+          note: Both removals are attempted, ENOENT is distinguished, and genuine failures retain process context; disabling cleanup reporting causes five regression failures.
+          round: 2
+        - id: BR-3
+          disposition: addressed
+          note: Live conformance invokes recipe-specific independent probes without a sips availability guard; forcing sips dispatch causes all four non-sips probe cases to fail.
+          round: 2
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#244 (boundary-review)
@@ -44,8 +61,14 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-3** [Important] `independent-conformance-oracle` Provide independent dimension probes on non-sips hosts.
   tests/integration/image_shrink_live_spec.lua:31 gates every independent dimension probe on sips availability. Other supported platforms consequently rely only on Parley's parser; add recipe-appropriate real-tool probes and exercise the no-sips path to fulfill the Spec (ARCH-MOCK).
 
+## Round 2 — 2026-09-13T12:18:28-07:00 (codex) — passed
+
+### Disposed
+
+- BR-1 — addressed — Complete bounded output survives through metadata stripping and classification; restoring input-sized reads causes four test failures, including both configured-fixture regressions.
+- BR-2 — addressed — Both removals are attempted, ENOENT is distinguished, and genuine failures retain process context; disabling cleanup reporting causes five regression failures.
+- BR-3 — addressed — Live conformance invokes recipe-specific independent probes without a sips availability guard; forcing sips dispatch causes all four non-sips probe cases to fail.
+
 ## Open findings
 
-- **BR-1** [Important] `bounded-read-outcome-fidelity` Preserve output completeness when classifying non-smaller conversions.
-- **BR-2** [Important] `cleanup-failure-observability` Surface failed temporary-file removal.
-- **BR-3** [Important] `independent-conformance-oracle` Provide independent dimension probes on non-sips hosts.
+(none — every finding has been disposed)

@@ -1,12 +1,13 @@
 ---
 id: 000244
-status: working
+status: codecomplete
 deps: [000231]
 github_issue:
 created: 2026-09-13
 updated: 2026-09-13
 estimate_hours: 1.623
 started: 2026-09-13T11:25:16-07:00
+actual_hours: 1.70
 ---
 
 # Shrink pasted and generated images before saving: sips first, probe other tools, keep the original when none
@@ -118,6 +119,7 @@ notification named); live conformance opt-in.
 ## Log
 
 ### 2026-09-13
+- 2026-09-13: closed — make test: 226 spec files pass, lint clean; engine 27 and probe 7 regressions pass; live sips 6.48MB to27.7KB at1600x1066 in59.6ms, no-upscale and metadata removal pass; other4 codecs absent and pending; review verdict: SHIP
 Claimed; `sdlc start-plan` run. Durable plan: `workshop/plans/000244-shrink-images-on-save-plan.md`
 (3 chunks, 8 tasks, TDD steps with code). Not yet through `sdlc change-code`
 — the next agent should run it (plan-quality gate, then derive `estimate_hours`).

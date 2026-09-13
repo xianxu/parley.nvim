@@ -71,11 +71,23 @@ Prerequisites owned by `parley-v1-release` (tracked there, listed for order):
 #208 fresh-clone install, #209 safe-by-default posture, #211 neutral defaults,
 #213 honest checkhealth. This project's own rows:
 
-- [ ] **#244** — shrink pasted and generated images before saving *(sips first; probe others; keep the original)*
-- [ ] **#245** — dependency registry and honest install advice *(after #213; feeds checkhealth and the formula)*
-- [ ] **#246** — starter config as a product artifact *(after #211 and #209; `NVIM_APPNAME=parley`)*
-- [ ] **#247** — Homebrew tap and `parley` launcher, tested on a clean tart VM *(after #245, #246; the project's done_when)*
-- [ ] **#206** — user documentation *(v1-release's row; the brew path becomes its install section)*
+- [x] [parley.nvim#244] — shrink pasted and generated images before saving *(sips first; probe others; keep the original)*
+- [ ] [parley.nvim#245] — dependency registry and honest install advice *(after #213; feeds checkhealth and the formula)*
+- [ ] [parley.nvim#246] — starter config as a product artifact *(after #211 and #209; `NVIM_APPNAME=parley`)*
+- [ ] [parley.nvim#247] — Homebrew tap and `parley` launcher, tested on a clean tart VM *(after #245, #246; the project's done_when)*
+- [ ] [parley.nvim#206] — user documentation *(v1-release's row; the brew path becomes its install section)*
+
+<a id="parley-nvim-244"></a>
+### parley.nvim#244 — shrink images on save
+
+**est:** 1.623h
+**actual:** 1.70h
+**closed:** 2026-09-13
+
+226 spec files and lint pass. Live sips verifies shrinking, no upscaling, and
+metadata removal. Boundary review round 2: SHIP; all three findings resolved.
+Other installed-tool conformance cases remain pending because those tools are
+absent on this host. Actual was 1.05× estimate.
 
 ## Log
 
@@ -116,3 +128,13 @@ The local `showbreak` intent needs a quoted Lua string. Keep the current
 profile intact. #208/#209/#211/#213 remain installation prerequisites; verify
 them before declaring the clean-machine acceptance complete. State/cache,
 as well as config/data, belong to the app profile's lifecycle.
+
+### 2026-09-13 — image shrinking complete and tracker references repaired
+
+**Reason:** #244 passed its close review; the automatic project sweep could
+not discover the original bare bold issue numbers. **Delta:** mark #244 closed,
+record measured actuals, and qualify task references so future gates discover
+them. Next prerequisite is #208 fresh-clone installability before the starter
+profile and clean-machine packaging acceptance.
+
+[parley.nvim#244]: #parley-nvim-244

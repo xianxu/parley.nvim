@@ -93,3 +93,77 @@ findings:
     detail: |
       tests/integration/image_shrink_live_spec.lua:31 gates every independent dimension probe on sips availability. Other supported platforms consequently rely only on Parley's parser; add recipe-appropriate real-tool probes and exercise the no-sips path to fulfill the Spec (ARCH-MOCK).
 ```
+
+---
+
+## Re-review — 2026-09-13T12:18:28-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 244 — Shrink pasted and generated images before saving: sips first, probe other tools, keep the original when none |
+| repo | parley.nvim |
+| issue file | workshop/issues/000244-shrink-images-on-save.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 132d90a8618df2bcc4a04eb78514e3896cf1dea7..f5f1248aee6ba2008c920ce9b7ef1cc84b37f4a6 |
+| command | sdlc close --issue 244 |
+| reviewer | codex |
+| timestamp | 2026-09-13T12:18:28-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+The pinned range satisfies the issue’s approved Spec and revised Plan. All three prior findings are addressed, with regression tests that fail when their protections are removed. No new findings. Repository files remain unchanged.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Complete bounded output survives through metadata stripping and classification; restoring input-sized reads causes four test failures, including both configured-fixture regressions.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      Both removals are attempted, ENOENT is distinguished, and genuine failures retain process context; disabling cleanup reporting causes five regression failures.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      Live conformance invokes recipe-specific independent probes without a sips availability guard; forcing sips dispatch causes all four non-sips probe cases to fail.
+```
+
+1. **Strengths**
+   - Shared argv grammar preserves path boundaries and avoids rescanning substituted paths.
+   - `assets.save` owns conversion, extension selection, and outcome reporting.
+   - Output acceptance checks format, dimensions, metadata removal, and actual byte reduction.
+   - README, atlas, traceability, and plan revisions cover the new behavior.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** None.
+
+4. **Minor findings:** None.
+
+5. **Test coverage**
+   - Attachment suite passed.
+   - Golden normalization: 7 tests passed; golden round trips: 11 passed.
+   - Lint: zero warnings/errors across 393 files.
+   - Live sips conversion, independent dimensions, no-upscale behavior, and metadata removal passed.
+   - Other converters were unavailable; their live cases remain pending.
+   - Scratch-only mutation checks confirmed the prior regressions turn red.
+
+6. **Architecture**
+   - **ARCH-DRY — pass:** shared argv grammar and JPEG walker.
+   - **ARCH-PURE — pass:** policy and parsing remain pure; IO dependencies are injected.
+   - **ARCH-PURPOSE — pass:** shared writer delivers the approved transformation contract.
+   - **ARCH-MOCK — pass:** filesystem-backed converter fixture shares the production seam; independent live probes exist.
+   - **ARCH-CONSTRAINTS — pass:** admission, timeout, output growth, and bounded reads are enforced and tested.
+   - **ARCH-SECURE — pass:** paths remain argv data; external output is validated.
+   - **ARCH-ORDER — pass:** explicit resolution states and synchronous conversion keep ordering bounded.
+   - **ARCH-FUNERAL — pass:** both temporary paths receive cleanup attempts; failures are observable.
+
+7. **Plan revision recommendations:** None; existing revisions capture the repairs.
