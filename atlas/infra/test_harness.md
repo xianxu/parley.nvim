@@ -139,3 +139,7 @@ the tree currently holds.
 
 - [Linting](linting.md) — `make lint`, which `make test` runs first.
 - `TOOLING.md` — the developer-facing command list and perf report.
+
+### Concurrent directory creation
+
+`tests/unit/prepare_dir_spec.lua` reproduces a competing directory creator at the mkdir boundary using real temporary directories. `lua/parley/fs.lua` owns the literal-path directory postcondition; helper path expansion remains in `helper.prepare_dir`. A source guard keeps all production directory creators on that seam.

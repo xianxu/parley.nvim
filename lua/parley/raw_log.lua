@@ -29,7 +29,7 @@ function M.log_path_for(chat_path, kind)
 end
 
 local function ensure_dir(path)
-    vim.fn.mkdir(vim.fn.fnamemodify(path, ":h"), "p")
+    require("parley.fs").ensure_dir(vim.fn.fnamemodify(path, ":h"))
 end
 
 local function read_file(path)
