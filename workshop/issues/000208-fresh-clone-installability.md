@@ -1,12 +1,13 @@
 ---
 id: 000208
-status: working
+status: codecomplete
 deps: [ariadne#225]
 github_issue:
 created: 2026-09-02
 updated: 2026-09-13
 estimate_hours: 2.494
 started: 2026-09-13T12:19:41-07:00
+actual_hours: 1.81
 ---
 
 # parley must install and load from a fresh clone
@@ -105,6 +106,7 @@ is step one of a split either way, and is what the launch actually requires —
 see #212.
 
 ### 2026-09-13 — implementation checkpoint
+- 2026-09-13: closed — 232 spec files and lint pass in final checkout and independent full archive; four vocabulary startup/chat variants pass; real drift and read-only sdlc conformance pass. BR-1 README entry and BR-2 standalone help repaired; portable help regression red→green, full mapped harness suite and targeted lint pass after repairs. Evidence /tmp/parley208-final-checkout.log, /tmp/parley208-resume-archive-fixed.log, /tmp/parley208-help-green.log, /tmp/parley208-review-harness.log.; review verdict: SHIP
 
 Runtime commit `3e2daf4` vendors the bounded module-root vocabulary and makes
 optional issue failures nonfatal. Follow-up staged changes invalidate parsed
@@ -154,6 +156,14 @@ path comparisons (`100ed4c`), with a deliberately redundant separator retained
 as a regression. `make check-vocabulary`, `make check-sdlc-conformance`, exact
 upstream seed comparisons, and `git diff --check` also pass. Ready for the
 whole-issue close review; publishing remains after that gate.
+
+### 2026-09-13 — close accepted
+
+Round 2 returned SHIP and disposed BR-1/BR-2. Reviewer independently reran all
+232 archive specs, four startup variants and 401-file lint, and mutation-tested
+standalone help. The sole new Minor, BR-3, is repaired by relocating the
+materialize strategy into its proper table. Measured actual adopted by close:
+1.81h. Packaging continues with #245; #209's separate proposal is deferred.
 
 ## Revisions
 

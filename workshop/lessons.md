@@ -2,6 +2,9 @@
 
 ## 2026-09-13 (#208 archive acceptance)
 
+- Keep concept tables about entities and locations; test inputs and oracles
+  belong in the strategy table. Check column meanings when relocating rows.
+
 - Removing an optional build overlay also removes the help prerequisites it
   supplied. Product-owned targets must wire their own help; test `make help`
   with the overlay absent. Surface new contributor commands in README with a

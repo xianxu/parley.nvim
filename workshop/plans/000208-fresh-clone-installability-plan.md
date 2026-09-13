@@ -32,7 +32,6 @@ Without a model, parsing retains a supplied status and leaves a missing one abse
 |------|----------|--------|-------|
 | `default_status`, `parse_frontmatter`, status predicates, `cycle_status_value`, completion values, `topo_sort` | `lua/parley/issues.lua` | modified | Preserve raw text without vocabulary; lifecycle operations return an unavailable diagnostic |
 | `materialize` / status ordering | `lua/parley/issue_finder_records.lua` | modified | Deterministic ID ordering when vocabulary unavailable; valid models retain category order |
-| `materialize` | Same issue records shuffled while vocabulary is unavailable | Sorting every permutation yields the same deduplicated IDs; archived mtime ordering remains unchanged; ready-model controls retain category order |
 | `load`, `default`, `reload` | `lua/parley/issue_vocabulary.lua` | modified/new | JSON read/decode and one tagged cache: unprobed, ready(model), unavailable(reason) |
 | `get_cache`, `scan_issues`, `setup`, issue action handlers | `lua/parley/issues.lua`, `lua/parley/issue_finder.lua`, `lua/parley/init.lua` | modified | Optional capability wiring and user diagnostics |
 | `run_sdlc_issue_new`, `build_spawn_argv` | `lua/parley/issues.lua` | modified | Existing async runner; retain PATH executable and interactive-shell alias/function support |
@@ -49,6 +48,7 @@ The issue creation runner already handles process-start errors and exit codes. P
 
 | Function / boundary | Adversarial input class | Mechanical guard |
 |---|---|---|
+| `materialize` | Same issue records shuffled while vocabulary is unavailable | Sorting every permutation yields the same deduplicated IDs; archived mtime ordering remains unchanged; ready-model controls retain category order |
 | `from_table` | Mutate one structural invariant of a minimal valid model at a time: category membership/array shape or transition endpoint | Every mutant is rejected before indexing; valid models preserve derived membership and first-transition order without IO |
 | `load` | Files whose bytes violate the read bound, JSON grammar, or model shape | Real scratch files fail explicitly; the valid control produces exactly the expected model, and no read borrows workspace data |
 | `default`, `reload` | Filesystem changes between cache events | Drive unprobed→ready/unavailable and explicit reload transitions against scratch files; repeated default calls retain the cached outcome, reload observes the new bytes |
@@ -180,3 +180,10 @@ uses a question-mark label for absent status without altering stored values.
 These adapters read the model cache and are classified as integration; only
 the validated model and its calculations are pure. Added red→green regressions
 for the scan and ready→unavailable cache transition.
+
+### 2026-09-13 — close review plan-table repair
+
+Reason: BR-3 found the materialize test strategy in the core-concepts table.
+Delta: move that existing row into Function-level test strategies without
+changing its inputs, oracle, or the implementation entity row. Close round 2
+returned SHIP; this is a prose-only repair before the close commit.
