@@ -5,7 +5,7 @@ deps: [000246]
 github_issue:
 created: 2026-09-13
 updated: 2026-09-13
-estimate_hours:
+estimate_hours: 4.159
 started: 2026-09-13T14:26:40-07:00
 ---
 
@@ -55,6 +55,38 @@ and no API key typed.
   `~/.local/share/parley` leaves no trace.
 - The formula's dependency list matches #245's advisory tier (test).
 - The tag→formula bump script is documented and used for at least one release.
+
+## Estimate
+
+Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against
+`baseline-v3.1.md`. Method A only; calibration remains provisional. Formula maps
+to a smaller module (base design 0.15h, impl 0.35h). Launcher maps to one API/IO
+integration (1h/0.75h), release orchestration to API integration (1.5h/1h), and
+VM orchestration to API integration (2h/1.5h). Guest chat acceptance maps to one
+Lua feature (2h/1h). Docs use 0.1h/0.1h; review 0h/0.35h; two live discovery
+surfaces use 0h/0.45h each; the generated tap handoff uses small cross-repo
+coordination 0.2h/0.2h. Detailed approved contracts apply ×0.2 design discount;
+v3.1 applies ×0.4 implementation scaling. Familiarity is 1.0 (existing shell,
+Neovim and Git patterns); mature brew/Tart/gh CLIs avoid a novel VM API client.
+15% design buffer, no vendor propagation multiplier. Operator OAuth availability
+is an external dependency, not fabricated active implementation hours.
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: smaller-go-module design=0.03 impl=0.14
+item: api-integration design=0.2 impl=0.3
+item: api-integration design=0.3 impl=0.4
+item: api-integration design=0.4 impl=0.6
+item: lua-neovim design=0.4 impl=0.4
+item: atlas-docs design=0.02 impl=0.04
+item: milestone-review design=0 impl=0.14
+item: real-api-discovery design=0 impl=0.18
+item: real-api-discovery design=0 impl=0.18
+item: cross-repo-refactor-small design=0.04 impl=0.08
+design-buffer: 0.15
+total: 4.159
+```
 
 ## Plan
 
