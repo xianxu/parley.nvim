@@ -727,6 +727,133 @@ describe("assets: looks_like (C4/BR-4 — bytes must be a structurally valid ima
     end)
 end)
 
+describe("assets: looks_like walks records (BR-4 round 3 — boundaries and image-bearing data)", function()
+    local PNG_SIG = "\137PNG\r\n\26\n"
+
+    local function u32be(n)
+        return string.char(math.floor(n / 16777216) % 256, math.floor(n / 65536) % 256, math.floor(n / 256) % 256, n % 256)
+    end
+    local function u32le(n)
+        return string.char(n % 256, math.floor(n / 256) % 256, math.floor(n / 65536) % 256, math.floor(n / 16777216) % 256)
+    end
+    local function png_chunk(kind, data)
+        return u32be(#data) .. kind .. data .. "\0\0\0\0" -- CRC is never checked
+    end
+    local function riff(chunks)
+        local body = "WEBP" .. chunks
+        return "RIFF" .. u32le(#body) .. body
+    end
+    local function webp_chunk(fourcc, data)
+        return fourcc .. u32le(#data) .. data .. (#data % 2 == 1 and "\0" or "")
+    end
+
+    -- Pieces of the real fixtures, by record.
+    local PNG_IHDR = PNG_BYTES:sub(9, 33) -- 4 + 4 + 13 + 4
+    local PNG_IDAT = PNG_BYTES:sub(34, 57) -- 4 + 4 + 12 + 4
+    local PNG_IEND = PNG_BYTES:sub(-12)
+    local JPEG_BEFORE_SOS = JPEG_BYTES:sub(1, 110) -- APP0, DQT, SOF9, DAC
+    local GIF_HEAD = GIF_BYTES:sub(1, 19) -- header + screen descriptor + 6-byte global color table
+    local GIF_IMAGE = GIF_BYTES:sub(20, -2) -- image descriptor .. sub-blocks .. terminator
+    local GIF_GCE = "\33\249\4\0\0\0\0\0" -- graphic control extension: label, one 4-byte sub-block, terminator
+    local WEBP_VP8L = WEBP_BYTES:sub(13) -- the fixture's one chunk, padded
+    local WEBP_VP8X = webp_chunk("VP8X", string.rep("\0", 10))
+
+    -- The reviewer's four executed probes: each passed the header+trailer check.
+    local probes = {
+        { mime = "image/png", name = "no_idat.png", bytes = PNG_SIG .. PNG_IHDR .. PNG_IEND, why = "PNG with IHDR and IEND but no IDAT" },
+        { mime = "image/jpeg", name = "soi_eoi.jpg", bytes = "\255\216\255\217", why = "JPEG FF D8 FF D9 with no frame or scan" },
+        { mime = "image/gif", name = "no_image.gif", bytes = GIF_HEAD .. ";", why = "GIF header, screen descriptor and trailer only" },
+        { mime = "image/webp", name = "no_len.webp", bytes = "RIFF" .. u32le(8) .. "WEBPVP8 ", why = "WebP RIFF header and chunk name without length or data" },
+    }
+
+    -- Boundary cases: a record that overruns, a trailer that is not last, a
+    -- container with records but no image-bearing one.
+    local boundaries = {
+        { mime = "image/png", bytes = PNG_SIG .. PNG_IHDR .. u32be(256) .. PNG_IDAT:sub(5) .. PNG_IEND, why = "PNG chunk length overruns the buffer" },
+        { mime = "image/png", bytes = PNG_BYTES .. "x", why = "PNG data after IEND" },
+        { mime = "image/png", bytes = PNG_BYTES .. png_chunk("tEXt", "a"), why = "PNG chunk after IEND" },
+        { mime = "image/png", bytes = PNG_SIG .. PNG_IHDR .. PNG_IDAT .. u32be(1) .. "IEND" .. "x" .. "\0\0\0\0", why = "PNG IEND with a non-zero length" },
+        { mime = "image/jpeg", bytes = JPEG_BEFORE_SOS .. "\255\217", why = "JPEG with SOF but no SOS" },
+        { mime = "image/jpeg", bytes = "\255\216\255\224\255\255" .. JPEG_BYTES:sub(7), why = "JPEG segment length overruns the buffer" },
+        { mime = "image/jpeg", bytes = "\255\216\255\224\0\1" .. JPEG_BYTES:sub(7), why = "JPEG segment length below 2" },
+        { mime = "image/jpeg", bytes = JPEG_BYTES:sub(1, 110):gsub("\255\201", "\255\254") .. JPEG_BYTES:sub(111), why = "JPEG with SOS but no SOF" },
+        { mime = "image/jpeg", bytes = JPEG_BYTES:sub(1, 120) .. "\255\217", why = "JPEG SOS with no entropy-coded data" },
+        { mime = "image/gif", bytes = "GIF89a\1\0\1\0\0\0\0;", why = "GIF without a global color table and no image" },
+        { mime = "image/gif", bytes = GIF_HEAD .. GIF_GCE .. ";", why = "GIF with an extension block but no image descriptor" },
+        { mime = "image/gif", bytes = GIF_BYTES .. "\0", why = "GIF trailer not last" },
+        { mime = "image/gif", bytes = GIF_HEAD .. GIF_IMAGE .. "\0;", why = "GIF unknown block introducer" },
+        { mime = "image/gif", bytes = GIF_HEAD .. "\44\0\0\0\0\1\0\1\0\0\2\255" .. ";", why = "GIF image sub-block overruns the buffer" },
+        { mime = "image/webp", bytes = riff("VP8L" .. u32le(63) .. WEBP_VP8L:sub(9)), why = "WebP chunk length exceeds the file" },
+        { mime = "image/webp", bytes = riff(WEBP_VP8X), why = "WebP VP8X without a bitstream chunk" },
+        { mime = "image/webp", bytes = riff(WEBP_VP8X .. webp_chunk("ALPH", "\0\0\0")), why = "WebP VP8X with alpha only" },
+        { mime = "image/webp", bytes = riff(webp_chunk("VP8 ", "")), why = "WebP bitstream chunk with zero length" },
+        { mime = "image/webp", bytes = riff(webp_chunk("EXIF", "abcd")), why = "WebP with no bitstream chunk" },
+        { mime = "image/webp", bytes = riff("VP8L" .. u32le(13) .. WEBP_VP8L:sub(9, 21)), why = "WebP odd chunk missing its pad byte" },
+    }
+
+    -- Records that a walker must accept: ancillary chunks and extensions
+    -- before the image-bearing record, and a VP8X container with a bitstream.
+    local accepted = {
+        { mime = "image/png", bytes = PNG_SIG .. PNG_IHDR .. png_chunk("tEXt", "k\0v") .. PNG_IDAT .. PNG_IEND, why = "PNG with an ancillary chunk" },
+        { mime = "image/png", bytes = PNG_SIG .. PNG_IHDR .. PNG_IDAT .. PNG_IDAT .. PNG_IEND, why = "PNG with two IDAT chunks" },
+        { mime = "image/jpeg", bytes = JPEG_BYTES:sub(1, 2) .. "\255" .. JPEG_BYTES:sub(3), why = "JPEG with a fill byte before a marker" },
+        { mime = "image/gif", bytes = GIF_HEAD .. GIF_GCE .. GIF_IMAGE .. ";", why = "GIF89a with a graphic control extension" },
+        { mime = "image/gif", bytes = GIF_HEAD .. "\33\254\3abc\0" .. GIF_IMAGE .. ";", why = "GIF with a comment extension" },
+        { mime = "image/webp", bytes = riff(WEBP_VP8X .. WEBP_VP8L), why = "WebP VP8X followed by a VP8L bitstream" },
+        { mime = "image/webp", bytes = riff(WEBP_VP8L .. webp_chunk("EXIF", "abc")), why = "WebP bitstream followed by metadata" },
+    }
+
+    it("rejects the reviewer's four probes", function()
+        for _, p in ipairs(probes) do
+            assert.is_false(assets.looks_like(p.mime, p.bytes), p.why)
+        end
+    end)
+
+    it("rejects overrunning records, trailers that are not last, and containers without image-bearing data", function()
+        for _, b in ipairs(boundaries) do
+            assert.is_false(assets.looks_like(b.mime, b.bytes), b.why)
+        end
+    end)
+
+    it("accepts containers whose records walk to the end with an image-bearing record", function()
+        for _, a in ipairs(accepted) do
+            assert.is_true(assets.looks_like(a.mime, a.bytes), a.why)
+        end
+    end)
+
+    it("read_bounded through the real io refuses each probe with the one sentence", function()
+        local root = vim.fn.tempname()
+        vim.fn.mkdir(root .. "/assets/" .. TS, "p")
+        local chat = root .. "/" .. TS .. ".md"
+        for _, p in ipairs(probes) do
+            local path = root .. "/assets/" .. TS .. "/" .. p.name
+            assert(assets.default_io.write(path, p.bytes))
+            local got, err = assets.read_bounded(chat, "assets/" .. TS .. "/" .. p.name)
+            assert.is_nil(got, p.why)
+            assert.equals("not a " .. p.mime .. " image", err, p.why)
+        end
+        for i, b in ipairs(boundaries) do
+            local name = ("b%d.%s"):format(i, b.mime:match("/(%w+)$"):gsub("jpeg", "jpg"))
+            assert(assets.default_io.write(root .. "/assets/" .. TS .. "/" .. name, b.bytes))
+            local got, err = assets.read_bounded(chat, "assets/" .. TS .. "/" .. name)
+            assert.is_nil(got, b.why)
+            assert.equals("not a " .. b.mime .. " image", err, b.why)
+        end
+        vim.fn.delete(root, "rf")
+    end)
+
+    it("question_content turns each probe into a note, never a block", function()
+        for _, p in ipairs(probes) do
+            local rel = "assets/" .. TS .. "/" .. p.name
+            local att = { id = "1:1", path = rel, media_type = p.mime }
+            local content = assets.question_content("q", { att }, { included = { ["1:1"] = true }, notes = {} }, function()
+                return p.bytes
+            end)
+            assert.equals("[attachment " .. rel .. " not a " .. p.mime .. " image]\nq", content, p.why)
+        end
+    end)
+end)
+
 describe("assets: elide_image_data", function()
     local B64 = vim.base64.encode(string.rep("\1\2\3", 400)) -- 1200 raw bytes
 

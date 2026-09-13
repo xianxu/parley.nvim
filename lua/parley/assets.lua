@@ -165,12 +165,21 @@ function M.too_big(n)
     return ("%d bytes exceeds the %d-byte limit"):format(n, M.MAX_BYTES)
 end
 
--- Structural checks per media type (BR-4): the signature alone is not an
--- image — the eight PNG bytes, or any prefix of a real file, would otherwise
--- become outbound image content. Each check reads only fixed-offset header
--- and trailer fields (no pixel decoding, no CRC): enough to refuse an empty,
--- truncated, corrupt, or mismatched file, cheap enough to run on every send.
+-- Structural checks per media type (BR-4). One rule for all four formats:
+-- the container's records must parse from the first byte to the last with
+-- correct boundaries, AND at least one image-bearing record must be present.
+-- A signature, a header, or a header+trailer pair is not an image — each
+-- would otherwise become outbound image content. Every walker is pure and
+-- bounded: it reads record lengths and steps over record bodies, never
+-- decoding pixels or verifying CRCs; a record that overruns the buffer, a
+-- trailer that is not the last byte, or a missing image record is `false`.
 -- `.` in a pattern matches any byte, NUL included.
+
+--- Big-endian u32 at 1-based offset `i` (caller guarantees the bytes exist).
+local function u32be(bytes, i)
+    local a, b, c, d = bytes:byte(i, i + 3)
+    return ((a * 256 + b) * 256 + c) * 256 + d
+end
 
 --- Little-endian u32 at 1-based offset `i` (caller guarantees the bytes exist).
 local function u32le(bytes, i)
@@ -178,39 +187,194 @@ local function u32le(bytes, i)
     return ((d * 256 + c) * 256 + b) * 256 + a
 end
 
--- PNG: signature, then IHDR must be the first chunk (length 13), and the
--- file must end with an IEND chunk (zero length + type + CRC = 12 bytes).
--- Minimum: 8 (signature) + 25 (IHDR chunk) + 12 (IEND chunk).
-local PNG_MIN = 8 + 25 + 12
+--- Big-endian u16 at 1-based offset `i` (caller guarantees the bytes exist).
+local function u16be(bytes, i)
+    local a, b = bytes:byte(i, i + 1)
+    return a * 256 + b
+end
+
+-- PNG grammar:  signature(8)  chunk*
+--   chunk = length(4 BE) type(4) data(length) crc(4)
+-- The first chunk is IHDR with length 13; at least one IDAT carries the
+-- image; the last chunk is IEND (length 0) and its end is the end of the
+-- buffer.
 local function is_png(bytes)
-    return #bytes >= PNG_MIN
-        and bytes:find("^\137PNG\r\n\26\n") ~= nil
-        and bytes:sub(9, 16) == "\0\0\0\13IHDR"
-        and bytes:sub(-12, -5) == "\0\0\0\0IEND"
+    local n = #bytes
+    if bytes:find("^\137PNG\r\n\26\n") == nil then
+        return false
+    end
+    local pos, first, idat = 9, true, false
+    while true do
+        if pos + 8 > n + 1 then
+            return false -- no room for length + type
+        end
+        local len = u32be(bytes, pos)
+        local kind = bytes:sub(pos + 4, pos + 7)
+        local nxt = pos + 12 + len -- past data + crc
+        if nxt > n + 1 then
+            return false -- chunk overruns the buffer
+        end
+        if first then
+            if kind ~= "IHDR" or len ~= 13 then
+                return false
+            end
+            first = false
+        elseif kind == "IDAT" then
+            idat = true
+        elseif kind == "IEND" then
+            return len == 0 and nxt == n + 1 and idat
+        end
+        pos = nxt
+    end
 end
 
--- JPEG: SOI + a marker prefix at the start, EOI at the end.
+-- JPEG grammar:  SOI  segment*  SOS  entropy-coded-data  EOI
+--   segment = 0xFF marker [length(2 BE) payload(length - 2)]
+-- Standalone markers (SOI, EOI, TEM, RST0–7) carry no length; every other
+-- marker has a length ≥ 2 that must fit. Fill bytes (extra 0xFF) may precede
+-- a marker. A frame header (SOF0–15, excluding DHT/JPG/DAC which share the
+-- 0xC range) must precede the first SOS; after SOS the scan runs to the EOI,
+-- which is the last two bytes. Stuffed 0xFF00 and RST markers inside the
+-- scan are data and are not walked.
+local JPEG_STANDALONE = { [0xD8] = true, [0xD9] = true, [0x01] = true }
+for m = 0xD0, 0xD7 do
+    JPEG_STANDALONE[m] = true
+end
+local JPEG_NOT_SOF = { [0xC4] = true, [0xC8] = true, [0xCC] = true }
+local function is_sof(marker)
+    return marker >= 0xC0 and marker <= 0xCF and not JPEG_NOT_SOF[marker]
+end
 local function is_jpeg(bytes)
-    return #bytes >= 4 and bytes:find("^\255\216\255") ~= nil and bytes:sub(-2) == "\255\217"
+    local n = #bytes
+    if bytes:find("^\255\216") == nil or bytes:sub(-2) ~= "\255\217" then
+        return false
+    end
+    local pos, sof = 3, false
+    while true do
+        if bytes:byte(pos) ~= 0xFF then
+            return false
+        end
+        while bytes:byte(pos + 1) == 0xFF do
+            pos = pos + 1 -- fill bytes
+        end
+        local marker = bytes:byte(pos + 1)
+        if marker == nil then
+            return false
+        end
+        if marker == 0xDA then
+            -- SOS: header segment, then at least one byte of scan data, then EOI.
+            if pos + 3 > n then
+                return false
+            end
+            local len = u16be(bytes, pos + 2)
+            local scan = pos + 2 + len
+            return sof and len >= 2 and scan <= n - 2
+        elseif marker == 0xD9 then
+            return false -- EOI before any scan
+        elseif JPEG_STANDALONE[marker] then
+            pos = pos + 2
+        else
+            if pos + 3 > n then
+                return false
+            end
+            local len = u16be(bytes, pos + 2)
+            if len < 2 or pos + 2 + len > n then
+                return false
+            end
+            if is_sof(marker) then
+                sof = true
+            end
+            pos = pos + 2 + len
+        end
+    end
 end
 
--- GIF: header (6) + logical screen descriptor (7), then at least the
--- trailer byte `;` — so 14 bytes minimum, the last of which is the trailer.
-local GIF_MIN = 6 + 7 + 1
+-- GIF grammar:  header(6)  screen-descriptor(7)  [global-color-table]  block*  trailer
+--   block = 0x21 label sub-blocks            (extension)
+--         | 0x2C descriptor(9) [local-color-table] lzw-min-code-size sub-blocks
+--   sub-blocks = (length(1) data(length))* 0x00
+--   color-table = 3 * 2^(size + 1) bytes when the packed byte's high bit is set
+-- The trailer 0x3B must be the last byte; at least one image descriptor
+-- must be present.
+local function gif_color_table(packed)
+    if packed >= 0x80 then
+        return 3 * 2 ^ (packed % 8 + 1)
+    end
+    return 0
+end
+--- Step over sub-blocks starting at `pos`; returns the position after the
+--- terminator, or nil when they overrun.
+local function gif_sub_blocks(bytes, pos, n)
+    while true do
+        local len = bytes:byte(pos)
+        if len == nil then
+            return nil
+        elseif len == 0 then
+            return pos + 1
+        end
+        pos = pos + 1 + len
+        if pos > n then
+            return nil
+        end
+    end
+end
 local function is_gif(bytes)
-    return #bytes >= GIF_MIN and bytes:find("^GIF8[79]a") ~= nil and bytes:sub(-1) == ";"
+    local n = #bytes
+    if bytes:find("^GIF8[79]a") == nil or n < 13 then
+        return false
+    end
+    local pos = 14 + gif_color_table(bytes:byte(11))
+    local image = false
+    while true do
+        local introducer = bytes:byte(pos)
+        if introducer == 0x3B then
+            return pos == n and image
+        elseif introducer == 0x21 then
+            pos = gif_sub_blocks(bytes, pos + 2, n)
+        elseif introducer == 0x2C then
+            local packed = bytes:byte(pos + 9)
+            if packed == nil then
+                return false
+            end
+            pos = gif_sub_blocks(bytes, pos + 10 + gif_color_table(packed) + 1, n)
+            image = true
+        else
+            return false
+        end
+        if pos == nil then
+            return false
+        end
+    end
 end
 
--- WebP: a RIFF container whose size field (bytes 5–8, little-endian) is the
--- file size minus the 8-byte RIFF header, form type WEBP at 9–12, and a
--- first chunk that is one of the three WebP bitstream chunks.
-local WEBP_CHUNKS = { ["VP8 "] = true, VP8L = true, VP8X = true }
+-- WebP grammar:  "RIFF" size(4 LE) "WEBP" chunk*
+--   chunk = fourcc(4) length(4 LE) data(length) [pad to even]
+-- The RIFF size is the buffer length minus 8 and the chunks walk to the
+-- end exactly. A `VP8 ` or `VP8L` chunk with data is the image; a `VP8X`
+-- extended header is not — it must be followed by a `VP8 `/`VP8L` chunk
+-- with data (alpha or animation alone is not an image).
 local function is_webp(bytes)
-    return #bytes >= 16
-        and bytes:sub(1, 4) == "RIFF"
-        and u32le(bytes, 5) == #bytes - 8
-        and bytes:sub(9, 12) == "WEBP"
-        and WEBP_CHUNKS[bytes:sub(13, 16)] == true
+    local n = #bytes
+    if n < 12 or bytes:sub(1, 4) ~= "RIFF" or bytes:sub(9, 12) ~= "WEBP" or u32le(bytes, 5) ~= n - 8 then
+        return false
+    end
+    local pos, bitstream = 13, false
+    while pos <= n do
+        if pos + 8 > n + 1 then
+            return false -- no room for fourcc + length
+        end
+        local fourcc = bytes:sub(pos, pos + 3)
+        local len = u32le(bytes, pos + 4)
+        local nxt = pos + 8 + len + len % 2
+        if nxt > n + 1 then
+            return false -- chunk (or its pad byte) overruns the buffer
+        end
+        if (fourcc == "VP8 " or fourcc == "VP8L") and len > 0 then
+            bitstream = true
+        end
+        pos = nxt
+    end
+    return bitstream
 end
 
 local VALIDATORS = {
@@ -220,10 +384,12 @@ local VALIDATORS = {
     ["image/webp"] = is_webp,
 }
 
---- Do these bytes have the structure of a `media_type` image — signature,
---- required first header, and end-of-file trailer? False for empty,
---- truncated, corrupt or mismatched bytes and for a type no wire accepts.
---- Header and trailer fields only; pixels and CRCs are not decoded. PURE.
+--- Do these bytes have the structure of a `media_type` image? One rule for
+--- every format: the container's records walk from the first byte to the
+--- last with correct boundaries, and at least one image-bearing record is
+--- present. False for empty, truncated, corrupt, header-only or mismatched
+--- bytes and for a type no wire accepts. Record boundaries only; pixels and
+--- CRCs are not decoded. PURE.
 ---@param media_type string|nil
 ---@param bytes string|nil
 ---@return boolean
