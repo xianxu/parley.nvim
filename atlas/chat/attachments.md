@@ -43,8 +43,22 @@ slug: `ParleySlug` renames nothing here, and the folder moves with its chat.
   placeholder gains "[An image was attached to this question; it is no longer included.]".
   An ancestor chat's attachment (tree-of-chat context) reaches the model as
   its link text only.
-- Logs: `parley.log` and the raw-mode logs receive `elide_image_data` output —
-  `<image/png, N bytes>` in place of the base64 — at all three sinks.
+- Logs: every logger call that serializes a request value goes through
+  `elide_image_data` — `<image/png, N bytes>` in place of the base64
+  (`tests/arch/log_sinks_spec.lua` enumerates the class). Transport files:
+  an image-bearing request body under `query_dir` is removed on every
+  terminal path of the curl job; text-only bodies keep the setup-time prune.
+- Movers and deleters: `move_chat` and `move_chat_tree` carry the folder
+  (`assets.move_conflict` is the one clash rule, refused before any `.md`
+  moves; a carry failure is reported after the move, state refresh and 🌿
+  rewrite complete); every chat deletion goes through `delete_chat_file`
+  (`tests/arch/chat_delete_sweep_spec.lua` allows exactly one
+  `helpers.delete_file` call), and every delete prompt appends
+  `assets.removal_note` naming the folder and its file count.
+- Export: tree export copies `assets/<ts>/` beside the exported files and
+  HTML renders `![…](…)` as `<img class="asset-image">` (relative links
+  resolve for an HTML export opened from disk, not from a Jekyll `_posts/`
+  URL); a failed copy is reported.
 
 ## Lifecycle
 An asset lives as long as a transcript line references it, and is removed
@@ -55,4 +69,7 @@ is no sweep. Logs never hold the bytes.
 `tests/unit/assets_spec.lua`, `clipboard_image_spec.lua`, `wire_images_spec.lua`,
 `parse_chat_spec.lua`, `build_messages_spec.lua`;
 `tests/integration/paste_image_spec.lua` (fixture `tests/fixtures/fake_clipboard`
-models osascript through the config seam).
+models osascript through the config seam); `tests/integration/chat_move_spec.lua`,
+`tree_export_spec.lua`, `query_cache_spec.lua`; `tests/arch/log_sinks_spec.lua`,
+`chat_delete_sweep_spec.lua`; `tests/integration/clipboard_live_spec.lua`
+(opt-in `PARLEY_LIVE_CLIPBOARD=1`, darwin, real recipe on the real clipboard).

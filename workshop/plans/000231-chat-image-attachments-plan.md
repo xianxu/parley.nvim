@@ -314,7 +314,7 @@ tool until its timeout. Nondeterminism enters at IO completion; the fixture's
 | `extract_file_refs` | `lua/parley/chat_parser.lua` | new (the `@@` grammar, hoisted from a local and exported so the continuation builder pins by file references exactly as the parser does) |
 | `translate_messages` | `lua/parley/tools/wire_openai.lua` | modified (image blocks → `image_url` parts) |
 | `googleai_parts` | `lua/parley/providers.lua` | new (local) |
-| `simple_markdown_to_html` | `lua/parley/exporter.lua` | planned (M2, Task 10): `![alt](src)` → `<img>` via placeholder |
+| `simple_markdown_to_html` | `lua/parley/exporter.lua` | modified (M2, Task 10): `![alt](src)` → `<img>` via placeholder |
 
 Contracts (pure — unit-tested without IO). **One rule for the two tables:** a
 function that invokes an injected effectful callback (`exists`, `read`,
@@ -384,12 +384,13 @@ pure. Every row below follows it:
 | `read_png` | `lua/parley/clipboard_image.lua` | new | `vim.system` |
 | `paste` | `lua/parley/paste_image.lua` | new | buffer, cursor, notify |
 | `paste_image` | `lua/parley/init.lua` | new | `paste_image.paste` with real deps |
-| `move_chat` | `lua/parley/init.lua` | planned (M2, Task 9) | `assets.move_conflict` / `move_with` |
-| `move_chat_tree` | `lua/parley/init.lua` | planned (M2, Task 9) | `assets.move_conflict` / `move_with` |
-| `delete_chat_tree` | `lua/parley/init.lua` | planned (M2, Task 9) | the one delete door (row added by Task 9); confirmation lists folders |
-| `handle_delete_response` | `lua/parley/chat_finder.lua` | planned (M2, Task 9) | the one delete door |
-| `handle_delete_tree_response` | `lua/parley/chat_finder.lua` | planned (M2, Task 9) | the one delete door |
-| `export_tree` | `lua/parley/exporter.lua` | planned (M2, Task 10) | `assets.copy_into` |
+| `move_chat` | `lua/parley/init.lua` | modified (M2, Task 9) | `assets.move_conflict` / `move_with` |
+| `move_chat_tree` | `lua/parley/init.lua` | modified (M2, Task 9) | `assets.move_conflict` / `move_with` |
+| `delete_chat_file` | `lua/parley/init.lua` | new (M2, Task 9) | `assets.delete_with` + `helpers.delete_file` — the one door |
+| `delete_chat_tree` | `lua/parley/init.lua` | modified (M2, Task 9) | `delete_chat_file`; confirmation lists folders |
+| `handle_delete_response` | `lua/parley/chat_finder.lua` | modified (M2, Task 9) | `delete_chat_file` |
+| `handle_delete_tree_response` | `lua/parley/chat_finder.lua` | modified (M2, Task 9) | `delete_chat_file` |
+| `export_tree` | `lua/parley/exporter.lua` | modified (M2, Task 10) | `assets.copy_into` |
 | `fake_clipboard` | `tests/fixtures/fake_clipboard` | new | stands in for `osascript` |
 
 Contracts (IO; every function takes `io_` defaulting to `default_io`, which is
