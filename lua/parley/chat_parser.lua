@@ -19,6 +19,7 @@
 --------------------------------------------------------------------------------
 
 local logger = require("parley.logger")
+local assets = require("parley.assets")
 
 local M = {}
 
@@ -640,7 +641,10 @@ local fence = require("parley.fence")
 					line_start = i,
 					line_end = nil,
 					content = "",
-					file_references = {} -- Will store file references we find (length > 0 means has references)
+					file_references = {}, -- Will store file references we find (length > 0 means has references)
+					-- #231: `![](assets/<ts>/<file>)` lines in this question, in order.
+					-- An attachment, not prose: build_messages sends the bytes.
+					attachments = {},
 				},
 				answer = nil
 			}
@@ -668,6 +672,14 @@ local fence = require("parley.fence")
 					original_line_index = i,
 				})
 				logger.debug("Found inline file reference on user line: " .. ref_path)
+			end
+
+			-- #231: an attachment on the prefix line itself (`💬: ![](assets/…)`)
+			local prefix_att = assets.parse_attachment(question_content)
+			if prefix_att then
+				table.insert(current_exchange.question.attachments, {
+					line = i, path = prefix_att.path, media_type = prefix_att.media_type,
+				})
 			end
 
 		-- Check for assistant message start
@@ -872,6 +884,13 @@ local fence = require("parley.fence")
 						original_line_index = i,
 					})
 					logger.debug("Found file reference: " .. ref_path)
+				end
+				-- #231: an attachment line inside the question body
+				local att = assets.parse_attachment(line)
+				if att then
+					table.insert(current_exchange.question.attachments, {
+						line = i, path = att.path, media_type = att.media_type,
+					})
 				end
 			end
 		end
