@@ -445,8 +445,13 @@ Contracts (IO; every function takes `io_` defaulting to `default_io`, which is
   asset (and its empty folder) — no bytes without a transcript line; every
   terminal path, launch failure included, clears the in-flight mark, removes
   the temp file and notifies.
-- `delete_chat_file(path)` (Task 9): `assets.delete_with` then
-  `helpers.delete_file`; a removal error is notified, the file is still deleted.
+- `delete_chat_file(path) → true | nil, err` (Task 9): the chat file is
+  deleted FIRST and its outcome checked (`helpers.delete_file` returns
+  `ok, err`; a buffer-deletion exception folds into `err`); on failure the
+  assets are untouched and an ERROR names the path; only after the transcript
+  is gone is the folder removed — nothing references it any more — and a
+  folder-removal failure is a WARN. Owner deletion before irreversible
+  cleanup (BR-8, `ARCH-ORDER`/`ARCH-FUNERAL`).
 - `fake_clipboard`: models osascript (says so): `PARLEY_FAKE_CLIPBOARD =
   png:<file> | slow:<file> | text | broken`; logs each call to
   `$PARLEY_FAKE_CLIPBOARD_LOG`.
@@ -622,8 +627,10 @@ the `delete_chat_file` row; replace "the one delete door" on the sibling rows).
 `assets.move_conflict` before any `.md` moves, carry the folder with
 `assets.move_with` after the `.md` move, finish their state refresh, file
 tracking and 🌿 rewrite regardless, and report any stranded folder at the
-end. `M.delete_chat_file(path)` = `assets.delete_with` then
-`helpers.delete_file`, a removal failure notified and the file still deleted;
+end. `M.delete_chat_file(path)` deletes the chat file first and checks the
+outcome, removes the folder only after the transcript is gone (a failed file
+deletion leaves the assets untouched and is an ERROR; a failed folder removal
+is a WARN);
 it replaces `helpers.delete_file` at the five chat-deletion sites named in
 Facts, and every single-file or tree prompt at those sites appends
 `assets.removal_note(path)` (`"" | " and assets/<ts>/ (N files)"`).
@@ -641,7 +648,12 @@ Facts, and every single-file or tree prompt at those sites appends
 **Contract:** `simple_markdown_to_html` renders `![alt](src)` as
 `<img src alt class="asset-image">` through the file's placeholder mechanism
 (taken before any inline rule, restored after the last, `<p>`-wrapped form
-handled), with `alt`/`src` attribute-escaped and a `.asset-image` style;
+handled) — **placeholders are collision-free and restored non-recursively**
+(BR-9, `ARCH-SECURE`): the token carries a raw `<`, which cannot survive the
+HTML escaping that runs first, and one `gsub` with a function replacement
+restores each family in a single pass (never rescanning restored tags), for
+image and branch placeholders alike; `alt`/`src` are attribute-escaped and a
+`.asset-image` style is added;
 `export_tree` copies each exported chat's folder with `assets.copy_into` and
 reports failed copies.
 **Acceptance:** the export strategy green.
@@ -821,3 +833,15 @@ on every path).
   bitstream after the VP8L/VP8 header). The matrix gains exact-header-length
   rows for VP8L, VP8, and both inside VP8X, plus a VP8X container with no
   bitstream chunk.
+
+### 2026-09-13 — M2 boundary review round 1 (codex; BR-8, BR-9)
+
+- **Reason:** the delete door removed the folder before the chat file and
+  ignored the file's failure (chat present, assets gone, silent); the
+  placeholder restore rescanned restored tags, so a literal token in an alt
+  text pulled a later image's attacker-controlled `src` into an attribute.
+- **Delta:** owner deletion first with a checked outcome, assets only after,
+  every deleter through the door (contract above), tested with filesystem
+  refusal and a buffer-deletion exception; collision-free `<…>` tokens and
+  single-pass function restoration for both placeholder families, with the
+  reviewer's exact input and token-in-attribute cases pinned.
