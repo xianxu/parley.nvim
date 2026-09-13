@@ -287,7 +287,6 @@ tool until its timeout. Nondeterminism enters at IO completion; the fixture's
 | `folder_in` | `lua/parley/assets.lua` | new |
 | `relative_path` | `lua/parley/assets.lua` | new |
 | `markdown_link` | `lua/parley/assets.lua` | new |
-| `unique_name` | `lua/parley/assets.lua` | new |
 | `media_type` | `lua/parley/assets.lua` | new |
 | `too_big` | `lua/parley/assets.lua` | new |
 | `parse_attachment` | `lua/parley/assets.lua` | new |
@@ -299,7 +298,6 @@ tool until its timeout. Nondeterminism enters at IO completion; the fixture's
 | `has_image` | `lua/parley/assets.lua` | new |
 | `omitted_text` | `lua/parley/assets.lua` | new |
 | `elide_image_data` | `lua/parley/assets.lua` | new |
-| `select` | `lua/parley/clipboard_image.lua` | new |
 | `argv_for` | `lua/parley/clipboard_image.lua` | new |
 | `classify` | `lua/parley/clipboard_image.lua` | new |
 | `preserve_exchange` | `lua/parley/chat_respond.lua` | new (extracted from `build_messages` `:779-798`) |
@@ -308,9 +306,13 @@ tool until its timeout. Nondeterminism enters at IO completion; the fixture's
 | `extract_file_refs` | `lua/parley/chat_parser.lua` | new (the `@@` grammar, hoisted from a local and exported so the continuation builder pins by file references exactly as the parser does) |
 | `translate_messages` | `lua/parley/tools/wire_openai.lua` | modified (image blocks → `image_url` parts) |
 | `googleai_parts` | `lua/parley/providers.lua` | new (local) |
-| `simple_markdown_to_html` | `lua/parley/exporter.lua` | modified (`![alt](src)` → `<img>` via placeholder) |
+| `simple_markdown_to_html` | `lua/parley/exporter.lua` | planned (M2, Task 10): `![alt](src)` → `<img>` via placeholder |
 
-Contracts (pure — unit-tested without IO; the reader-driven and probing functions moved to Integration points below, with their injected dependency named):
+Contracts (pure — unit-tested without IO). **One rule for the two tables:** a
+function that invokes an injected effectful callback (`exists`, `read`,
+`env.executable`, `io_`) is an integration point, however pure it is given
+that callback; a function that only transforms already-collected values is
+pure. Every row below follows it:
 
 - `key_for(chat_path) → ts|nil`; `folder_for(chat_path) → abs|nil, err`;
   `folder_in(dir, ts)`; `relative_path(ts, name)`; `markdown_link(rel)`;
@@ -359,6 +361,8 @@ Contracts (pure — unit-tested without IO; the reader-driven and probing functi
 |------|----------|--------|-------|
 | `default_io` | `lua/parley/assets.lua` | new | filesystem (`io.open`, `uv.fs_stat`, `vim.fn.mkdir/delete/readdir`, `os.rename/remove`) |
 | `question_content` | `lua/parley/assets.lua` | new | the injected `read` (bounded, validated) — pure given a plan and a reader |
+| `unique_name` | `lua/parley/assets.lua` | new | the injected `exists` predicate (filesystem in production) |
+| `select` | `lua/parley/clipboard_image.lua` | new | `env.executable` (the host probe in production) |
 | `move_conflict` | `lua/parley/assets.lua` | new | `io_.exists` |
 | `removal_note` | `lua/parley/assets.lua` | new | `io_.exists`, `io_.list` |
 | `host_env` | `lua/parley/clipboard_image.lua` | new | `uv.os_uname`, `$WAYLAND_DISPLAY`, `vim.fn.executable` |
@@ -372,12 +376,12 @@ Contracts (pure — unit-tested without IO; the reader-driven and probing functi
 | `read_png` | `lua/parley/clipboard_image.lua` | new | `vim.system` |
 | `paste` | `lua/parley/paste_image.lua` | new | buffer, cursor, notify |
 | `paste_image` | `lua/parley/init.lua` | new | `paste_image.paste` with real deps |
-| `move_chat` | `lua/parley/init.lua` | modified | `assets.move_conflict` / `move_with` |
-| `move_chat_tree` | `lua/parley/init.lua` | modified | `assets.move_conflict` / `move_with` |
-| `delete_chat_tree` | `lua/parley/init.lua` | modified | the one delete door (row added by Task 9) |
-| `handle_delete_response` | `lua/parley/chat_finder.lua` | modified | the one delete door (Task 9) |
-| `handle_delete_tree_response` | `lua/parley/chat_finder.lua` | modified | the one delete door (Task 9) |
-| `export_tree` | `lua/parley/exporter.lua` | modified | `assets.copy_into` |
+| `move_chat` | `lua/parley/init.lua` | planned (M2, Task 9) | `assets.move_conflict` / `move_with` |
+| `move_chat_tree` | `lua/parley/init.lua` | planned (M2, Task 9) | `assets.move_conflict` / `move_with` |
+| `delete_chat_tree` | `lua/parley/init.lua` | planned (M2, Task 9) | the one delete door (row added by Task 9); confirmation lists folders |
+| `handle_delete_response` | `lua/parley/chat_finder.lua` | planned (M2, Task 9) | the one delete door |
+| `handle_delete_tree_response` | `lua/parley/chat_finder.lua` | planned (M2, Task 9) | the one delete door |
+| `export_tree` | `lua/parley/exporter.lua` | planned (M2, Task 10) | `assets.copy_into` |
 | `fake_clipboard` | `tests/fixtures/fake_clipboard` | new | stands in for `osascript` |
 
 Contracts (IO; every function takes `io_` defaulting to `default_io`, which is
@@ -393,8 +397,12 @@ Contracts (IO; every function takes `io_` defaulting to `default_io`, which is
   size only for a **regular file**); larger than `MAX_BYTES` → `nil,
   too_big(size)` without reading; else `read(p, MAX_BYTES + 1)` (a failed
   read is `nil, err`, never `""`), a second size check, and `looks_like(mime,
-  bytes)` — the bytes must carry the signature of the type the extension
-  claims (PNG/JPEG/GIF/WebP), else `nil, "not a <mime> image"`.
+  bytes)` — **image validity**: the bytes must have the structure of the type
+  the extension claims, not just its signature — PNG: signature, a first
+  `IHDR` chunk of length 13, and a closing `IEND` chunk; JPEG: SOI … EOI;
+  GIF: `GIF8?a` + screen descriptor … trailer `;`; WebP: `RIFF`, a size field
+  matching the body, `WEBP`, a `VP8 `/`VP8L`/`VP8X` chunk. Pixel decoding and
+  CRCs are out of scope. Anything else → `nil, "not a <mime> image"`.
 - `question_content(text, attachments, plan, read) → string|blocks`: image
   blocks for the attachments whose `id` is in `plan.included`, one text block
   last; notes prepended (from `plan.notes` and from a read that fails after
@@ -745,3 +753,14 @@ on every path).
   `removal_note`, `host_env` and both builders as integration points with
   their injected dependency named. (BR-6) README documents `<M-v>`,
   `assets.clipboard_cmd` and the tool requirements at M1.
+
+### 2026-09-12 — M1 boundary review round 2 (codex; BR-4, BR-5 still open)
+
+- **Reason:** signature-only validation admitted an eight-byte PNG header as
+  image content (and a spec asserted it); `unique_name` and `select` invoke
+  injected effectful callbacks yet sat in the PURE table.
+- **Delta:** image validity is structural per format (contract above), with
+  valid fixtures for all four formats plus truncation, corruption and
+  type-mismatch variants through the real adapter. One classification rule is
+  stated and applied to every row: callback consumers are integration points.
+  M2-only rows are marked planned, not modified.
