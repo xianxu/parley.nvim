@@ -204,6 +204,8 @@ and per-function test strategies; two review boundaries).
 
 ## Log
 
+
+- 2026-09-13: closed M1 — rework round 6: make lint 0 warnings + make test green (219 spec files); BR-4 invariant stated once and enforced per walker — header bytes are not image data — with exact-header-length WebP rows (VP8L, VP8, both inside VP8X, bitstream-less VP8X) pinned three ways and mutation-checked red against the previous walker; live per-wire send after this round via managed cliproxy (claude-haiku-4-5-20251001, gpt-5.5, gemini-3.7-flash-high) each described the red/blue image; zero image transport files under query_dir; zero image bytes in parley.log; review verdict: SHIP
 ### 2026-09-10
 
 ### 2026-09-12

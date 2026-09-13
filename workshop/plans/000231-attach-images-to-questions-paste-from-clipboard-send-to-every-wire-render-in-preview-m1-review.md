@@ -522,3 +522,95 @@ dispose:
 7. **Plan revision recommendations**
 
    Append a `## Revisions` entry recording that round four’s non-emptiness check missed header-only WebP. State the header-versus-image-data invariant explicitly and extend the regression matrix to exact header lengths, including extended WebP containers.
+
+---
+
+## Re-review — 2026-09-13T00:19:49-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 231 — Attach images to questions: paste from clipboard, send to every wire, render in preview |
+| repo | parley.nvim |
+| issue file | workshop/issues/000231-attach-images-to-questions-paste-from-clipboard-send-to-every-wire-render-in-preview.md |
+| boundary | milestone M1 |
+| milestone | M1 |
+| window | 80fb39110267a500b8645d71196ac39955815757..741af97e4adeceaf6c466e113f3d46e63bf55376 |
+| command | sdlc milestone-close --issue 231 --milestone M1 |
+| reviewer | codex |
+| timestamp | 2026-09-13T00:19:49-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: medium
+```
+
+The pinned M1 implementation matches its capture-and-send scope. BR-4 is addressed: bounded reads reject nonregular files, preserve errors, and validate image structure before emission. The latest WebP regression tests fail when the fix is removed in memory. No new blocking findings.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Shared builder assigns budget identity per attachment occurrence.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      Both builders share retention inputs, including total exchanges and file references.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      Launch failures settle the operation; insertion failures roll back saved assets.
+  - id: BR-4
+    disposition: addressed
+    note: |
+      Real-adapter probes passed; removing WebP minimum-length fixes in memory caused validator and outbound-content regression tests to fail.
+  - id: BR-5
+    disposition: addressed
+    note: |
+      Core-concept tables classify effectful callback consumers as integration points.
+  - id: BR-6
+    disposition: addressed
+    note: |
+      README documents the paste binding, override, and clipboard requirements.
+  - id: BR-7
+    disposition: addressed
+    note: |
+      Dispatcher removes image-bearing transport files on terminal paths.
+```
+
+1. **Strengths**
+
+   - Shared attachment preparation keeps occurrence budgets and retention consistent across both builders.
+   - Validation rejects malformed inputs before they become image blocks; rejection notes retain the reason.
+   - Paste tests expose completion ordering and rollback through injected seams.
+   - README and atlas cover the new M1 surface.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** None.
+
+4. **Minor findings:** None.
+
+5. **Test coverage notes**
+
+   - Ran 12 read-only validator/content tests: **12 passed**.
+   - Reverted both WebP length checks in memory: **two tests failed**, including outbound-content rejection at `tests/unit/assets_spec.lua:1098`.
+   - Real-adapter probes passed for four fixtures, directory/missing/text rejection, and read-error preservation.
+   - Independent OpenAI translation probe passed.
+   - Scratch-writing integration tests and the full suite were inspected, not rerun under the read-only sandbox.
+
+6. **Architectural notes**
+
+   - **ARCH-DRY — pass:** shared budgets, retention, and payload recognition.
+   - **ARCH-PURE — pass:** deterministic validators; effectful consumers classified separately.
+   - **ARCH-PURPOSE — pass:** M1 capture/send delivered; lifecycle wiring remains explicitly M2.
+   - **ARCH-MOCK — pass:** stateful filesystem/clipboard doubles use production seams.
+   - **ARCH-CONSTRAINTS — pass:** bounded reads, request limits, and clipboard timeout.
+   - **ARCH-SECURE — pass:** constrained attachment grammar and structural validation; pixel decoding and CRC checks explicitly excluded.
+   - **ARCH-ORDER — pass:** held completions exercise interruption and rollback.
+   - **ARCH-FUNERAL — pass:** temporary/request cleanup implemented; durable asset lifecycle assigned to M2.
+
+7. **Plan revision recommendations:** None.

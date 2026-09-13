@@ -180,6 +180,40 @@ rounds:
           round: 5
       boundary: M1
       blocked: true
+    - "n": 6
+      timestamp: "2026-09-13T00:19:49-07:00"
+      agent: codex
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: Shared builder assigns budget identity per attachment occurrence.
+          round: 6
+        - id: BR-2
+          disposition: addressed
+          note: Both builders share retention inputs, including total exchanges and file references.
+          round: 6
+        - id: BR-3
+          disposition: addressed
+          note: Launch failures settle the operation; insertion failures roll back saved assets.
+          round: 6
+        - id: BR-4
+          disposition: addressed
+          note: Real-adapter probes passed; removing WebP minimum-length fixes in memory caused validator and outbound-content regression tests to fail.
+          round: 6
+        - id: BR-5
+          disposition: addressed
+          note: Core-concept tables classify effectful callback consumers as integration points.
+          round: 6
+        - id: BR-6
+          disposition: addressed
+          note: README documents the paste binding, override, and clipboard requirements.
+          round: 6
+        - id: BR-7
+          disposition: addressed
+          note: Dispatcher removes image-bearing transport files on terminal paths.
+          round: 6
+      boundary: M1
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#231 (boundary-review)
@@ -255,6 +289,18 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - BR-6 — addressed — Prior disposition retained: README documents the keybinding, clipboard tools, and configuration override.
 - BR-7 — addressed — Prior disposition retained: image transport cleanup covers completion and spawn failure, with cancellation and error regression coverage.
 
+## Round 6 — 2026-09-13T00:19:49-07:00 (codex) — passed
+
+### Disposed
+
+- BR-1 — addressed — Shared builder assigns budget identity per attachment occurrence.
+- BR-2 — addressed — Both builders share retention inputs, including total exchanges and file references.
+- BR-3 — addressed — Launch failures settle the operation; insertion failures roll back saved assets.
+- BR-4 — addressed — Real-adapter probes passed; removing WebP minimum-length fixes in memory caused validator and outbound-content regression tests to fail.
+- BR-5 — addressed — Core-concept tables classify effectful callback consumers as integration points.
+- BR-6 — addressed — README documents the paste binding, override, and clipboard requirements.
+- BR-7 — addressed — Dispatcher removes image-bearing transport files on terminal paths.
+
 ## Open findings
 
-- **BR-4** [Critical] `persisted-input-validation` Read errors and invalid image bytes are submitted as image content.
+(none — every finding has been disposed)
