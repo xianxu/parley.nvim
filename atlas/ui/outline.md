@@ -9,6 +9,12 @@
 
 ## Logic
 - Identifies: `💬:` (user questions), `#`/`##`/`###` (headings), `@@…@@` (annotations), `🌿:` (branch refs)
+- **One item rule** (#232): both builders — the flat buffer scan and the
+  tree's per-file extractor — classify lines through `is_outline_item`; the
+  tree adds only its `📋` root row, the branch rows it takes from the parser
+  (a child's upward parent link is therefore never a row), and indentation.
+  `tests/unit/outline_parity_spec.lua` is the differential oracle. An
+  annotation displays as `→ text` (both `@@` delimiters stripped).
 - Headings indented by level: `#` → 2sp, `##` → 4sp, `###` → 6sp
 - Lines inside code blocks (``` / ~~~) are excluded — but a `💬:`/`🤖:` turn
   marker at column zero ENDS an open fence (#218), so an unmatched fence in one
