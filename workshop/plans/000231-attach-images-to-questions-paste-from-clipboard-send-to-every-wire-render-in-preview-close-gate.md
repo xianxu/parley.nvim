@@ -146,6 +146,40 @@ rounds:
           round: 4
       boundary: M1
       blocked: true
+    - "n": 5
+      timestamp: "2026-09-13T00:14:26-07:00"
+      agent: codex
+      dispose:
+        - id: BR-4
+          disposition: not-addressed
+          note: assets.lua:468 and :474 accept exactly 5-byte VP8L and 10-byte VP8 headers without any image data. Executed probes returned looks_like=true and question_content emitted type=image for both. Existing tests reject shorter headers but omit these exact-length cases. ARCH-SECURE; existing persisted-input-validation family.
+          round: 5
+        - id: BR-1
+          disposition: addressed
+          note: 'Prior disposition retained: occurrence-keyed budgeting and repeated-path regression coverage are present.'
+          round: 5
+        - id: BR-2
+          disposition: addressed
+          note: 'Prior disposition retained: continuation uses total exchange count and the shared file-reference parser.'
+          round: 5
+        - id: BR-3
+          disposition: addressed
+          note: 'Prior disposition retained: launch settlement, insertion rollback, and retry regression coverage are present.'
+          round: 5
+        - id: BR-5
+          disposition: addressed
+          note: 'Prior disposition retained: effectful callbacks are classified as integration points in the Core concepts tables.'
+          round: 5
+        - id: BR-6
+          disposition: addressed
+          note: 'Prior disposition retained: README documents the keybinding, clipboard tools, and configuration override.'
+          round: 5
+        - id: BR-7
+          disposition: addressed
+          note: 'Prior disposition retained: image transport cleanup covers completion and spawn failure, with cancellation and error regression coverage.'
+          round: 5
+      boundary: M1
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#231 (boundary-review)
@@ -208,6 +242,18 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - BR-3 — addressed — Launch failures settle once, insertion prerequisites precede saving, and failed insertion rolls back the asset.
 - BR-5 — addressed — The Core concepts tables classify effectful callback consumers as integration points.
 - BR-6 — addressed — README documents M-v, asset storage, platform tools, and the clipboard override.
+
+## Round 5 — 2026-09-13T00:14:26-07:00 (codex) — BLOCKED
+
+### Disposed
+
+- BR-4 — not-addressed — assets.lua:468 and :474 accept exactly 5-byte VP8L and 10-byte VP8 headers without any image data. Executed probes returned looks_like=true and question_content emitted type=image for both. Existing tests reject shorter headers but omit these exact-length cases. ARCH-SECURE; existing persisted-input-validation family.
+- BR-1 — addressed — Prior disposition retained: occurrence-keyed budgeting and repeated-path regression coverage are present.
+- BR-2 — addressed — Prior disposition retained: continuation uses total exchange count and the shared file-reference parser.
+- BR-3 — addressed — Prior disposition retained: launch settlement, insertion rollback, and retry regression coverage are present.
+- BR-5 — addressed — Prior disposition retained: effectful callbacks are classified as integration points in the Core concepts tables.
+- BR-6 — addressed — Prior disposition retained: README documents the keybinding, clipboard tools, and configuration override.
+- BR-7 — addressed — Prior disposition retained: image transport cleanup covers completion and spawn failure, with cancellation and error regression coverage.
 
 ## Open findings
 

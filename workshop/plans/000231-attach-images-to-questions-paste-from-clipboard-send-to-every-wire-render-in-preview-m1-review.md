@@ -419,3 +419,106 @@ dispose:
 
 7. **Plan revision recommendations**
    - Append a `## Revisions` entry recording BR-4’s remaining class: empty image records and malformed mandatory headers. Specify a four-format regression matrix covering these cases through validation, bounded reads, and content emission.
+
+---
+
+## Re-review — 2026-09-13T00:14:26-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 231 — Attach images to questions: paste from clipboard, send to every wire, render in preview |
+| repo | parley.nvim |
+| issue file | workshop/issues/000231-attach-images-to-questions-paste-from-clipboard-send-to-every-wire-render-in-preview.md |
+| boundary | milestone M1 |
+| milestone | M1 |
+| window | 80fb39110267a500b8645d71196ac39955815757..c88da86cbfe9046d0a27a12c4879dfb3debba5fb |
+| command | sdlc milestone-close --issue 231 --milestone M1 |
+| reviewer | codex |
+| timestamp | 2026-09-13T00:14:26-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+BR-4 remains open: header-only WebP files still become outbound image blocks. The read-error handling, shared budgeting, wire translations, and paste cleanup are substantially improved; the remaining validation gap blocks this boundary.
+
+```findings
+dispose:
+  - id: BR-4
+    disposition: not-addressed
+    note: |
+      assets.lua:468 and :474 accept exactly 5-byte VP8L and 10-byte VP8 headers without any image data. Executed probes returned looks_like=true and question_content emitted type=image for both. Existing tests reject shorter headers but omit these exact-length cases. ARCH-SECURE; existing persisted-input-validation family.
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Prior disposition retained: occurrence-keyed budgeting and repeated-path regression coverage are present.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      Prior disposition retained: continuation uses total exchange count and the shared file-reference parser.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      Prior disposition retained: launch settlement, insertion rollback, and retry regression coverage are present.
+  - id: BR-5
+    disposition: addressed
+    note: |
+      Prior disposition retained: effectful callbacks are classified as integration points in the Core concepts tables.
+  - id: BR-6
+    disposition: addressed
+    note: |
+      Prior disposition retained: README documents the keybinding, clipboard tools, and configuration override.
+  - id: BR-7
+    disposition: addressed
+    note: |
+      Prior disposition retained: image transport cleanup covers completion and spawn failure, with cancellation and error regression coverage.
+```
+
+1. **Strengths**
+
+   - Both message builders share occurrence-based budgeting and retention inputs.
+   - Clipboard completion is scheduled and settled once; insertion failures roll back saved assets.
+   - Executed real-reader checks accepted all four committed image fixtures and rejected a directory with a visible error.
+   - README and atlas changes document the new attachment surface.
+
+2. **Critical findings**
+
+   **BR-4 — Header-only WebP content passes validation.** At [assets.lua:468](/Users/xianxu/workspace/parley.nvim/lua/parley/assets.lua:468) and [assets.lua:474](/Users/xianxu/workspace/parley.nvim/lua/parley/assets.lua:474), the length checks permit the header to consume the entire bitstream chunk. Correctly sized RIFF containers containing either of these payloads passed both validation and image-block construction:
+
+   - `VP8L`: `2f 00 00 00 00` — five header bytes, no image data.
+   - `VP8 `: `10 00 00 9d 01 2a 01 00 01 00` — ten header bytes, no image data.
+
+   **ARCH-SECURE:** enforce the existing family rule: mandatory headers do not count as image data. Sweep every image-bearing format branch for this distinction, including WebP inside an extended container. Add rejection tests through `looks_like`, the real `read_bounded` adapter, and `question_content`. Those tests must fail on this HEAD.
+
+3. **Important findings**
+
+   None newly raised.
+
+4. **Minor findings**
+
+   None.
+
+5. **Test coverage notes**
+
+   [assets_spec.lua:1017](/Users/xianxu/workspace/parley.nvim/tests/unit/assets_spec.lua:1017) and [assets_spec.lua:1022](/Users/xianxu/workspace/parley.nvim/tests/unit/assets_spec.lua:1022) cover headers one byte too short, but omit headers of exactly the required length with zero remaining data.
+
+   Read-only Neovim probes reproduced both failures. Full suites and filesystem-based mutation checks were not run because this environment prohibits writes. Existing test coverage was inspected; implementor-reported green runs were not treated as independent verification.
+
+6. **Architectural notes for upcoming work**
+
+   - **ARCH-DRY — pass:** shared attachment grammar, budgeting, retention, and image-payload recognition.
+   - **ARCH-PURE — pass:** deterministic policies separated from identified integration points.
+   - **ARCH-PURPOSE — flag:** BR-4’s promised invalid-input rejection remains incomplete.
+   - **ARCH-MOCK — pass for M1:** clipboard fake uses the production configuration seam; automated live conformance remains scheduled for M2.
+   - **ARCH-CONSTRAINTS — pass:** bounded reads, occurrence limits, final serialized-payload guard, and clipboard timeout.
+   - **ARCH-SECURE — flag:** header-only WebP is trusted as image content.
+   - **ARCH-ORDER — pass:** held completion seams exercise ordering; settlement and rollback paths are explicit.
+   - **ARCH-FUNERAL — pass for M1 scope:** temporary request cleanup exists; chat-owned asset lifecycle integration remains an explicit M2 obligation.
+
+7. **Plan revision recommendations**
+
+   Append a `## Revisions` entry recording that round four’s non-emptiness check missed header-only WebP. State the header-versus-image-data invariant explicitly and extend the regression matrix to exact header lengths, including extended WebP containers.
