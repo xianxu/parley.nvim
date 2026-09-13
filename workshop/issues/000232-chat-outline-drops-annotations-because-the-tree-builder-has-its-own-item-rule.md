@@ -1,11 +1,12 @@
 ---
 id: 000232
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-09-10
-updated: 2026-09-10
+updated: 2026-09-12
 estimate_hours:
+started: 2026-09-12T19:44:52-07:00
 ---
 
 # chat outline drops @@ annotations because the tree builder has its own item rule
