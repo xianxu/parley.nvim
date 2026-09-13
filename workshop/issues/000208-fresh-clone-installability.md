@@ -103,3 +103,15 @@ asked how isolated the two halves are; the coupling grep answers "concentrated i
 `init.lua` as the wiring hub". Decoupling at the load and registration boundary
 is step one of a split either way, and is what the launch actually requires —
 see #212.
+
+## Revisions
+
+### 2026-09-13 — deployment implementation design
+
+Reason: operator asked to continue packaging toward an easily installed separate
+Neovim profile. Delta: durable plan at
+`workshop/plans/000208-fresh-clone-installability-plan.md` specifies unavailable
+vocabulary behavior without invented lifecycle semantics; preserves existing
+shell aliases/functions for sdlc; uses regenerate-and-content-compare drift
+checks; repairs Plenary configuration and CI after untracking maintainer links.
+The plan is prepared for approval; implementation has not started.
