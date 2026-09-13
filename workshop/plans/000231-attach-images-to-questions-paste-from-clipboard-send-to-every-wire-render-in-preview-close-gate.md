@@ -112,6 +112,40 @@ rounds:
           round: 3
       boundary: M1
       blocked: true
+    - "n": 4
+      timestamp: "2026-09-13T00:02:21-07:00"
+      agent: codex
+      dispose:
+        - id: BR-4
+          disposition: not-addressed
+          note: 'Read-error handling improved, but invalid image bytes still pass: an empty PNG IDAT, JPEG with empty SOF/SOS headers, and GIF with empty image sub-blocks all return true from looks_like. The PNG becomes an outbound image block. Sweep all four validators under persisted-input-validation; require structurally meaningful headers and image data, with rejecting regressions through read_bounded and question_content.'
+          round: 4
+        - id: BR-7
+          disposition: addressed
+          note: dispatcher.lua invokes discard_transport before the terminal query-registry guard and on start failure. query_cache_spec.lua asserts removal after success, provider error, cancellation, and spawn failure; removing cleanup leaves files that violate those assertions. Integration execution and mutation verification were unavailable under read-only permissions.
+          round: 4
+        - id: BR-1
+          disposition: addressed
+          note: Occurrence identifiers govern budgeting and emission; duplicate-path regression coverage remains.
+          round: 4
+        - id: BR-2
+          disposition: addressed
+          note: Continuations use the full exchange count and shared file-reference extraction, with parity regressions.
+          round: 4
+        - id: BR-3
+          disposition: addressed
+          note: Launch failures settle once, insertion prerequisites precede saving, and failed insertion rolls back the asset.
+          round: 4
+        - id: BR-5
+          disposition: addressed
+          note: The Core concepts tables classify effectful callback consumers as integration points.
+          round: 4
+        - id: BR-6
+          disposition: addressed
+          note: README documents M-v, asset storage, platform tools, and the clipboard override.
+          round: 4
+      boundary: M1
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#231 (boundary-review)
@@ -163,7 +197,18 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-7** [Important] `request-artifact-retention` Full image payloads accumulate in the persistent request cache.
   lua/parley/dispatcher.lua:652–654 writes complete image-bearing payloads into query_dir without terminal cleanup. The setup-only count sweep at lines 69–78 leaves long-running sessions unbounded; 100 near-limit requests retain roughly 2 GiB. Delete transport files after subprocess completion on every terminal path, or enforce a writer-side retention budget, with lifecycle documentation and regression coverage. ARCH-FUNERAL.
 
+## Round 4 — 2026-09-13T00:02:21-07:00 (codex) — BLOCKED
+
+### Disposed
+
+- BR-4 — not-addressed — Read-error handling improved, but invalid image bytes still pass: an empty PNG IDAT, JPEG with empty SOF/SOS headers, and GIF with empty image sub-blocks all return true from looks_like. The PNG becomes an outbound image block. Sweep all four validators under persisted-input-validation; require structurally meaningful headers and image data, with rejecting regressions through read_bounded and question_content.
+- BR-7 — addressed — dispatcher.lua invokes discard_transport before the terminal query-registry guard and on start failure. query_cache_spec.lua asserts removal after success, provider error, cancellation, and spawn failure; removing cleanup leaves files that violate those assertions. Integration execution and mutation verification were unavailable under read-only permissions.
+- BR-1 — addressed — Occurrence identifiers govern budgeting and emission; duplicate-path regression coverage remains.
+- BR-2 — addressed — Continuations use the full exchange count and shared file-reference extraction, with parity regressions.
+- BR-3 — addressed — Launch failures settle once, insertion prerequisites precede saving, and failed insertion rolls back the asset.
+- BR-5 — addressed — The Core concepts tables classify effectful callback consumers as integration points.
+- BR-6 — addressed — README documents M-v, asset storage, platform tools, and the clipboard override.
+
 ## Open findings
 
 - **BR-4** [Critical] `persisted-input-validation` Read errors and invalid image bytes are submitted as image content.
-- **BR-7** [Important] `request-artifact-retention` Full image payloads accumulate in the persistent request cache.

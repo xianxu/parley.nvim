@@ -326,3 +326,96 @@ findings:
 
    - Strengthen the image-validation contract to require complete image-bearing structures across all four formats.
    - Enumerate request-cache files alongside assets and logs, naming their cleanup owner, terminal paths, retention bound, and test strategy.
+
+---
+
+## Re-review — 2026-09-13T00:02:21-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 231 — Attach images to questions: paste from clipboard, send to every wire, render in preview |
+| repo | parley.nvim |
+| issue file | workshop/issues/000231-attach-images-to-questions-paste-from-clipboard-send-to-every-wire-render-in-preview.md |
+| boundary | milestone M1 |
+| milestone | M1 |
+| window | 80fb39110267a500b8645d71196ac39955815757..255e34fd3981f11ddf7b71a40a64d2eeabbbb58d |
+| command | sdlc milestone-close --issue 231 --milestone M1 |
+| reviewer | codex |
+| timestamp | 2026-09-13T00:02:21-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+M1 delivers the attachment flow, shared budgeting, wire conversion, and request-file cleanup. BR-4 still blocks this boundary: executed probes confirm that containers without usable image data pass validation and become outbound image blocks. BR-7 is addressed by reachable cleanup and targeted regression tests; those integration tests were inspected but not rerun under the read-only sandbox.
+
+```findings
+dispose:
+  - id: BR-4
+    disposition: not-addressed
+    note: |
+      Read-error handling improved, but invalid image bytes still pass: an empty PNG IDAT, JPEG with empty SOF/SOS headers, and GIF with empty image sub-blocks all return true from looks_like. The PNG becomes an outbound image block. Sweep all four validators under persisted-input-validation; require structurally meaningful headers and image data, with rejecting regressions through read_bounded and question_content.
+  - id: BR-7
+    disposition: addressed
+    note: |
+      dispatcher.lua invokes discard_transport before the terminal query-registry guard and on start failure. query_cache_spec.lua asserts removal after success, provider error, cancellation, and spawn failure; removing cleanup leaves files that violate those assertions. Integration execution and mutation verification were unavailable under read-only permissions.
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Occurrence identifiers govern budgeting and emission; duplicate-path regression coverage remains.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      Continuations use the full exchange count and shared file-reference extraction, with parity regressions.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      Launch failures settle once, insertion prerequisites precede saving, and failed insertion rolls back the asset.
+  - id: BR-5
+    disposition: addressed
+    note: |
+      The Core concepts tables classify effectful callback consumers as integration points.
+  - id: BR-6
+    disposition: addressed
+    note: |
+      README documents M-v, asset storage, platform tools, and the clipboard override.
+```
+
+1. **Strengths**
+   - Both builders share occurrence-based budgeting and attachment resolution.
+   - Clipboard paths travel as arguments rather than interpolated shell code.
+   - Transport cleanup precedes the missing-query early return in [dispatcher.lua](/Users/xianxu/workspace/parley.nvim/lua/parley/dispatcher.lua:710).
+
+2. **Critical findings**
+   - **BR-4 — still open, ARCH-SECURE / ARCH-PURPOSE.** [assets.lua:222](/Users/xianxu/workspace/parley.nvim/lua/parley/assets.lua:222) treats zero-length IDAT as image data; [assets.lua:271](/Users/xianxu/workspace/parley.nvim/lua/parley/assets.lua:271) accepts empty JPEG frame/scan headers; [assets.lua:339](/Users/xianxu/workspace/parley.nvim/lua/parley/assets.lua:339) accepts GIF image sub-blocks containing only their terminator.
+     
+     Executed results: all three returned `true`; the empty-IDAT PNG produced `outbound block image`. This remains the existing `persisted-input-validation` finding. Fix the rule across all four formats: record names alone cannot establish image content. Validate mandatory header structure and actual data presence, without requiring pixel decoding or CRC verification.
+
+3. **Important findings**
+   - None newly raised.
+
+4. **Minor findings**
+   - None.
+
+5. **Test coverage notes**
+   - Required stat/name-status inspections and `git diff --check` succeeded.
+   - Read-only Neovim probes reproduced BR-4.
+   - Existing malformed-container tests cover absent records and overruns, but miss empty image records and mandatory header contents.
+   - Full integration tests and scratch-copy mutation tests were not run because they require filesystem writes. No full-suite pass is claimed.
+
+6. **Architectural notes**
+   - **ARCH-DRY: pass** — shared grammar, retention, budget, and image recognition.
+   - **ARCH-PURE: pass** — validation transforms bytes; IO consumers are classified separately.
+   - **ARCH-PURPOSE: flag** — BR-4’s invalid-input class remains incompletely handled.
+   - **ARCH-MOCK: pass for M1** — clipboard fake uses the production seam; live conformance remains explicitly scheduled for M2.
+   - **ARCH-CONSTRAINTS: pass** — bounded reads, request limits, clipboard timeout, and per-buffer admission.
+   - **ARCH-SECURE: flag** — malformed image structures become trusted outbound content.
+   - **ARCH-ORDER: pass** — scheduled once-only settlement and explicit terminal cleanup.
+   - **ARCH-FUNERAL: pass for M1** — transport cleanup is implemented; asset move/delete integration belongs to M2.
+
+7. **Plan revision recommendations**
+   - Append a `## Revisions` entry recording BR-4’s remaining class: empty image records and malformed mandatory headers. Specify a four-format regression matrix covering these cases through validation, bounded reads, and content emission.
