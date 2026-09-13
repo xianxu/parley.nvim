@@ -424,7 +424,7 @@ live in the specs:
 | `encoded_size`, `plan_budget` | property: included = newest-first prefix fitting both limits after the text and note charges; every exclusion carries a reason; deterministic | synthetic candidate lists around each limit, base64 inflation, text alone over budget |
 | `payload_size`, `has_image`, the send guard | mechanical guard on the **actual encoded payload** of each wire: a planned request fits; a payload pushed past the limit with an image present is refused with size and limit named; without an image it is untouched | boundary-sized content built through `prepare_payload` on all three wires; post-plan additions (notes) |
 | `question_content`, `omitted_text` | shape: images first, one text block last, notes prepended, string when nothing included; the note only with attachments | planned/unplanned/failed-after-plan attachments |
-| `preserve_exchange`, `window_size` | characterization: existing `build_messages_spec` cases byte-identical; then differential — the continuation builder and the initial builder agree on which exchanges carry images | a summarized image exchange under tool-loop continuation; the fake reader records that nothing was read |
+| `preserve_exchange`, `window_size` | characterization: the existing cases in tests/unit/build_messages_spec.lua stay byte-identical; then differential — the continuation builder and the initial builder agree on which exchanges carry images | a summarized image exchange under tool-loop continuation; the fake reader records that nothing was read |
 | both builders, budget | differential: identical inclusion, notes and encoded payload size on both paths | several retained exchanges over the request bytes or count; an oversized persisted file (fake `stat`) |
 | `save`, `read_bounded`, `move_with`, `delete_with`, `copy_into` | failure-injection matrix on the in-memory `io_`: documented `ok, err` and documented residual state per failing operation | each operation failing in turn; a file that grew past the cap after planning |
 | `classify`, `select`, `argv_for` | decision tables | exit code × file size; platform × executables; `{out}` placement |
@@ -433,7 +433,7 @@ live in the specs:
 | wires | golden payload per provider, text-only shapes pinned byte-for-byte | one internal image message; `web_search = false` at file scope |
 | `elide_image_data` | no base64 survives `vim.inspect`; `grep` shows exactly three sinks | the three wire shapes |
 | movers, deleters | integration through the real commands, the folder present and absent; the finder with `_reopen_chat_finder` stubbed | clash before any move; injected rename and removal failures |
-| `chat_delete_sweep_spec` | count: exactly one `helpers.delete_file(` under `lua/parley/**` (named exclusions), inside the door; seen red with six and with two | — |
+| the sweep in tests/arch/chat_delete_sweep_spec.lua | count: exactly one `helpers.delete_file(` under `lua/parley/**` (named exclusions), inside the door; seen red with six and with two | — |
 | export | `<img>` survives every inline rule and escapes quotes (unit); folder copied and tag present (integration, front-matter fixture) | markdown and HTML |
 | live conformance | real recipe, real clipboard, opt-in, restores what it found | image then text |
 
