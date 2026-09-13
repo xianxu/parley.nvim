@@ -493,6 +493,16 @@ M.entries = {
 		help_desc = "Insert branch reference",
 		buffer_local = true,
 	},
+	{
+		id = "paste_image",
+		config_key = "chat_shortcut_paste_image",
+		default_key = "<M-v>",
+		default_modes = { "n", "i" },
+		scope = "parley_buffer",
+		desc = "Parley paste clipboard image as attachment",
+		help_desc = "Paste image from clipboard",
+		buffer_local = true,
+	},
 
 	-- ── Chat ────────────────────────────────────────────────────────────
 	{

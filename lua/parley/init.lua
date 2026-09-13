@@ -2713,6 +2713,7 @@ M.prep_chat = function(buf, file_name)
 			-- re-implement i and v, which left `.i` dead and made the visual path
 			-- <Esc> twice (#214 BR-4).
 			branch_ref = chat_branch,
+			paste_image = function() M.paste_image(vim.api.nvim_get_current_buf()) end,
 			-- chat scope
 			chat_respond = respond_cb,
 			-- #161: <M-CR> — n/i reuse the respond closures; v/x <Esc>-commit the
@@ -2913,6 +2914,7 @@ M.setup_markdown_keymaps = function(buf)
 			-- zero call sites and re-derived a mapping the constructor already
 			-- returns — the same drift M1 collapsed four copies to remove.
 			branch_ref = md_branch,
+			paste_image = function() M.paste_image(vim.api.nvim_get_current_buf()) end,
 			chat_drill_in = drill_in_cbs.chat_drill_in,
 			chat_accept_drill_in = drill_in_cbs.chat_accept_drill_in,
 			chat_reject_drill_in = drill_in_cbs.chat_reject_drill_in,
@@ -3523,6 +3525,19 @@ M.delete_chat_tree = function(buf)
 			M.helpers.delete_file(f)
 		end
 	end
+end
+
+-- #231: paste the clipboard image as an attachment of the chat in `buf`.
+-- `deps` is for specs (a recording notify, a fake runner); the key passes nothing.
+M.paste_image = function(buf, deps)
+	deps = deps or {}
+	require("parley.paste_image").paste(buf, {
+		config = M.config,
+		notify = deps.notify or function(msg, level)
+			vim.notify(msg, vim.log.levels[level:upper()] or vim.log.levels.INFO)
+		end,
+		runner = deps.runner,
+	})
 end
 
 -- Move an entire chat tree to a new directory, updating all 🌿: references.
