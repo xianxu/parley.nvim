@@ -251,7 +251,7 @@ local function placeholder_shape(open, close)
 		return (str:gsub("%W", "%%%0"))
 	end
 	local token_pat = escape_pattern(open) .. "%d+" .. escape_pattern(close)
-	local shape = {}
+	local shape = { token_pat = token_pat }
 
 	--- The n-th token of this family.
 	function shape.token(n)
@@ -282,6 +282,45 @@ end
 local IMG_PLACEHOLDER = placeholder_shape("<PARLEY-IMG:", ">")
 -- Minted before the HTML escape (on chat lines); see property 2 above.
 local BRANCH_PLACEHOLDER = placeholder_shape("XBRANCHX", "XBRANCHX")
+
+--- Restore EVERY placeholder family in ONE pass (#231 BR-9, cross-family).
+--- Restoring one family and then scanning the whole HTML for the other let a
+--- branch token typed inside an image's alt text be substituted inside the
+--- attribute. This scanner walks the text once, left to right: at each step
+--- it finds the earliest token of any family, emits the text before it and
+--- that token's record (or "" when unknown), and resumes AFTER the token —
+--- emitted records are never rescanned, whatever they contain.
+--- @param text string   html carrying tokens of any family
+--- @param records table token -> html, all families merged
+--- @param shapes table[] the placeholder families to honour
+--- @return string
+local function restore_all(text, records, shapes)
+	-- Unwrap the paragraph the converter puts around a lone token: the
+	-- replacement re-emits the token itself, so no record content enters here.
+	for _, shape in ipairs(shapes) do
+		-- gsub-safe: "%1" re-emits the captured token, never user text
+		text = text:gsub("<p[^>]*>%s*(" .. shape.token_pat .. ")%s*</p>", "%1")
+	end
+	local out, pos, n = {}, 1, #text
+	while pos <= n do
+		local best_s, best_e
+		for _, shape in ipairs(shapes) do
+			local s_, e_ = text:find(shape.token_pat, pos)
+			if s_ and (not best_s or s_ < best_s) then
+				best_s, best_e = s_, e_
+			end
+		end
+		if not best_s then
+			out[#out + 1] = text:sub(pos)
+			break
+		end
+		out[#out + 1] = text:sub(pos, best_s - 1)
+		out[#out + 1] = records[text:sub(best_s, best_e)] or ""
+		pos = best_e + 1
+	end
+	return table.concat(out)
+end
+M._restore_all = restore_all
 
 --------------------------------------------------------------------------------
 -- Branch line processing
@@ -408,7 +447,11 @@ end
 --------------------------------------------------------------------------------
 
 -- Enhanced markdown to HTML converter with glow-like styling
-M.simple_markdown_to_html = function(markdown)
+--- @param markdown string
+--- @param records table|nil  when given, the image records are stored into it
+---   (token -> html) and the tokens are LEFT IN PLACE for the caller's single
+---   combined restore (write_html_file); when nil, the images are restored here.
+M.simple_markdown_to_html = function(markdown, records)
 	local html = markdown
 
 	-- Escape HTML special characters first
@@ -526,8 +569,15 @@ M.simple_markdown_to_html = function(markdown)
 	html = html:gsub("</blockquote>%s*</p>", "</blockquote>")
 	html = html:gsub("<p[^>]*>%s*</p>", "")
 
-	-- #231: restore the image tags — one non-recursive pass (BR-9), exactly as
-	-- write_html_file restores the branch placeholders.
+	-- #231: restore the image tags in one non-recursive pass (BR-9) — unless
+	-- the caller collects the records to restore every family together
+	-- (write_html_file: cross-family isolation, BR-9 round 2).
+	if records then
+		for token, tag in pairs(images) do
+			records[token] = tag
+		end
+		return html
+	end
 	return IMG_PLACEHOLDER.restore(html, images)
 end
 
@@ -790,7 +840,7 @@ local html_css = [[
 local function write_html_file(info, export_dir, link_map)
 	local file_dir = vim.fn.fnamemodify(info.abs_path, ":h")
 	local branch_prefix = (_parley.config and _parley.config.chat_branch_prefix) or "🌿:"
-	local processed_lines, placeholders, restore_placeholders =
+	local processed_lines, placeholders =
 		process_branch_lines(info.lines, info.parsed, "html", link_map, file_dir, branch_prefix, _parley.resolve_chat_path)
 
 	local content = table.concat(processed_lines, "\n")
@@ -799,12 +849,15 @@ local function write_html_file(info, export_dir, link_map)
 	local output_file = info.post_date .. "-" .. info.slug .. ".html"
 	local full_output_path = export_dir .. "/" .. output_file
 
-	local body_html = M.simple_markdown_to_html(content)
+	-- #231 BR-9 (cross-family): images and branches are restored TOGETHER in
+	-- one pass, so neither family's output is ever rescanned for the other.
+	local records = {}
+	local body_html = M.simple_markdown_to_html(content, records)
+	for token, replacement in pairs(placeholders) do
+		records[token] = replacement
+	end
 
-	-- Restore the branch placeholders (they may be wrapped in <p> tags) in one
-	-- non-recursive pass: topics are user text and a token-shaped topic must
-	-- stay literal (#231 BR-9).
-	body_html = restore_placeholders(body_html, placeholders)
+	body_html = restore_all(body_html, records, { IMG_PLACEHOLDER, BRANCH_PLACEHOLDER })
 
 	local html_template = [[
 <!DOCTYPE html>

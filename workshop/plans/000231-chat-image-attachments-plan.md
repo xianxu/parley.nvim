@@ -315,6 +315,7 @@ tool until its timeout. Nondeterminism enters at IO completion; the fixture's
 | `translate_messages` | `lua/parley/tools/wire_openai.lua` | modified (image blocks → `image_url` parts) |
 | `googleai_parts` | `lua/parley/providers.lua` | new (local) |
 | `simple_markdown_to_html` | `lua/parley/exporter.lua` | modified (M2, Task 10): `![alt](src)` → `<img>` via placeholder |
+| `_restore_all` | `lua/parley/exporter.lua` | new (M2; test seam over the one-pass restore of both placeholder families) |
 
 Contracts (pure — unit-tested without IO). **One rule for the two tables:** a
 function that invokes an injected effectful callback (`exists`, `read`,
@@ -677,9 +678,13 @@ not pin; the placeholder notes an image), `atlas/chat/format.md`,
 **Files:** create `tests/integration/clipboard_live_spec.lua`;
 `atlas/traceability.yaml` (append it).
 **Contract:** opt-in (`PARLEY_LIVE_CLIPBOARD=1`), darwin only; exercises
-`RECIPES.darwin` against the real clipboard for an image and for text;
-preserves the operator's clipboard (text saved only when it is text, restored
-on every path).
+`RECIPES.darwin` against the real clipboard for an image and for text.
+**Preservation precondition (BR-10):** the clipboard is mutated only when its
+current contents could be snapshotted as text; otherwise the check is skipped
+*before* any mutation; after the check the text is written back and read
+back, and a mismatch fails loudly. The precondition and the read-back are
+driven by a stateful fake clipboard in the same spec, so the policy is tested
+where the live check never runs.
 **Acceptance:** run once on this machine outside the agent sandbox and logged;
 `make lint && make test` green.
 
@@ -845,3 +850,18 @@ on every path).
   refusal and a buffer-deletion exception; collision-free `<…>` tokens and
   single-pass function restoration for both placeholder families, with the
   reviewer's exact input and token-in-attribute cases pinned.
+
+### 2026-09-13 — M2 boundary review round 2 (codex; BR-9 cross-family, BR-10)
+
+- **Reason:** images were restored inside `simple_markdown_to_html` and
+  branches afterwards over the whole HTML, so a branch token typed in an
+  image's alt text was substituted inside the attribute; the live spec
+  overwrote a non-text clipboard it could not restore.
+- **Delta:** placeholder isolation across the whole pipeline — `write_html_file`
+  restores **both families in one non-recursive pass** (`restore_all`: a
+  scanner that emits each record exactly once and never rescans emitted
+  records), `simple_markdown_to_html` hands its image records up instead of
+  restoring them when a caller asks; the cross-family matrix (branch token in
+  an image alt, image token in a branch topic, both directions through the
+  real export) is pinned. The live spec's preservation precondition is stated
+  and fake-tested.

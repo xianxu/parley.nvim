@@ -570,3 +570,42 @@ describe("placeholder restoration is non-recursive (#231 BR-9)", function()
 		assert.is_nil(html:find("XBRANCHX", 1, true), html)
 	end)
 end)
+
+describe("placeholder isolation across families (#231 BR-9 round 2)", function()
+	local exporter = require("parley.exporter")
+	local IMG1, BR1 = "<PARLEY-IMG:1>", "XBRANCHX1XBRANCHX"
+
+	it("simple_markdown_to_html leaves image tokens in place when a caller collects records", function()
+		local records = {}
+		local html = exporter.simple_markdown_to_html("![a](x.png)", records)
+		assert.is_not_nil(html:find(IMG1, 1, true), "token left in the html")
+		assert.is_nil(html:find("<img", 1, true), "nothing restored yet")
+		assert.matches('^<img src="x%.png" alt="a" class="asset%-image">$', records[IMG1])
+	end)
+
+	it("a branch token inside an image alt is never substituted (one pass, no rescan)", function()
+		local records = {}
+		local html = exporter.simple_markdown_to_html("![" .. BR1 .. "](missing.png)", records)
+		records[BR1] = '<div class="branch-nav">nav</div>'
+		local out = exporter._restore_all(html, records, {
+			{ token_pat = "<PARLEY%-IMG:%d+>" }, { token_pat = "XBRANCHX%d+XBRANCHX" },
+		})
+		assert.is_nil(out:find("branch-nav", 1, true), "no nav div inside the image attribute: " .. out)
+		assert.is_not_nil(out:find('alt="' .. BR1 .. '"', 1, true), "the alt keeps the literal token text")
+	end)
+
+	it("an image token inside a branch record is never substituted either", function()
+		local records = { [BR1] = '<a class="branch-inline">' .. IMG1 .. "</a>", [IMG1] = '<img src="evil.png">' }
+		local out = exporter._restore_all("see " .. BR1 .. " and " .. IMG1, records, {
+			{ token_pat = "<PARLEY%-IMG:%d+>" }, { token_pat = "XBRANCHX%d+XBRANCHX" },
+		})
+		assert.equals('see <a class="branch-inline">' .. IMG1 .. "</a> and " .. '<img src="evil.png">', out)
+	end)
+
+	it("an unknown token restores to nothing, and a <p>-wrapped token is unwrapped", function()
+		local out = exporter._restore_all("<p class='paragraph'>\n" .. IMG1 .. "\n</p>x<PARLEY-IMG:9>", { [IMG1] = "<img>" }, {
+			{ token_pat = "<PARLEY%-IMG:%d+>" },
+		})
+		assert.equals("<img>x", out)
+	end)
+end)

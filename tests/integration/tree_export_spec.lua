@@ -360,6 +360,34 @@ tags: test
 			vim.cmd("bdelete!")
 		end)
 
+		it("E5: a branch token inside an image alt is not substituted across families (BR-9 round 2)", function()
+			local child = create_chat_file(
+				"2024-03-16-child.md",
+				"---\ntopic: Child\nfile: 2024-03-16-child.md\n---\n💬: Hello\n\n🤖: Hi\n"
+			)
+			local root = create_chat_file(
+				"2024-03-16-root.md",
+				"---\ntopic: Root Chat\nfile: 2024-03-16-root.md\n---\n💬: see\n\n"
+					.. "![XBRANCHX1XBRANCHX](missing.png)\n\n🤖: ok\n\n"
+					.. "🌿: 2024-03-16-child.md: Child\n"
+			)
+			assert.is_not_nil(child)
+			vim.cmd("edit " .. root)
+			M.cmd.ExportHTML()
+			local out = export_html_dir .. "/2024-03-16-root_chat.html"
+			assert.equals(1, vim.fn.filereadable(out), "export written")
+			local html = table.concat(vim.fn.readfile(out), "\n")
+			-- The image keeps the literal token in its alt; no nav div inside any <img>.
+			assert.is_not_nil(html:find('alt="XBRANCHX1XBRANCHX"', 1, true), html)
+			for tag in html:gmatch("<img[^>]*>") do
+				assert.is_nil(tag:find("branch%-nav"), "nav div inside an image tag: " .. tag)
+				assert.is_nil(tag:find("<div", 1, true), "html inside an image tag: " .. tag)
+			end
+			local _, divs = html:gsub('<div class="branch%-nav ', "")
+			assert.equals(1, divs, "exactly one nav div, for the real branch")
+			vim.cmd("bdelete!")
+		end)
+
 		it("E4: token-shaped user text stays literal through the real HTML pipeline (BR-9)", function()
 			-- A branch whose topic equals a branch token, and the reviewer's
 			-- image input, in one exported chat.
