@@ -1,12 +1,13 @@
 ---
 id: 000246
-status: working
+status: codecomplete
 deps: [000245]
 github_issue:
 created: 2026-09-13
 updated: 2026-09-13
 estimate_hours: 3.823
 started: 2026-09-13T14:26:23-07:00
+actual_hours: 1.18
 ---
 
 # Starter config as a product artifact: NVIM_APPNAME=parley, lazy.nvim bootstrap, derived from the operator config without personal data
@@ -85,6 +86,7 @@ total: 3.823
 ## Log
 
 ### 2026-09-13
+- 2026-09-13: closed — make test: 241 specs pass; lint 419 files zero warnings/errors and bootstrap entry lint passes; git diff --check clean. BR-1 full startup restart regression reproduced then fixed saved-model replacement. BR-2 negative artifact fixtures reproduced then fixed home-relative and ariadne marker omissions. Real upstream dependency bootstrap passed with candidate runtime; release publication and final remote released-plugin bootstrap remain after local close review, before merge per approved plan.; review verdict: SHIP
 
 Implemented the isolated starter and live-model policy. Tests cover real competing
 initializers/key creators, abrupt owner death, effective provider/path/tool policy,

@@ -81,3 +81,84 @@ findings:
     detail: |
       scripts/check-starter.py:9 accepts ~/notes, ~/workspace/ariadne, and require("ariadne"). Extend enforcement across the promised categories, narrowly exempt legitimate installation comments, and add negative fixtures that fail without the correction (ARCH-PURPOSE).
 ```
+
+---
+
+## Re-review — 2026-09-13T15:50:35-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 246 — Starter config as a product artifact: NVIM_APPNAME=parley, lazy.nvim bootstrap, derived from the operator config without personal data |
+| repo | parley.nvim |
+| issue file | workshop/issues/000246-starter-config-artifact.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | a60edc290cac74330f868ea3e2738546c6ddaa64..7f2b6876e006b8174bb1035012e94e72d3ae76b1 |
+| command | sdlc close --issue 246 |
+| reviewer | codex |
+| timestamp | 2026-09-13T15:50:35-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: medium
+```
+
+Both prior findings are addressed, with regression evidence that detects the old behavior. No new blocking findings emerged from the pinned range. Confidence is limited by sandbox networking: the two download/login tests could not complete, and released-plugin bootstrap acceptance remains explicitly pending.
+
+1. **Strengths**
+
+   - Full-startup restart coverage now protects persisted model selection.
+   - Shared live-agent policy preserves `{}` as “no local tools” across selection and restoration.
+   - Client-key tests exercise competing creators, interrupted publication, malformed files, and inode replacement.
+   - README, atlas, and traceability updates cover the new starter surface.
+
+2. **Critical findings**
+
+   None.
+
+3. **Important findings**
+
+   None.
+
+4. **Minor findings**
+
+   None.
+
+5. **Test coverage notes**
+
+   - Passed: artifact guard, six bootstrap cases, eight runtime startup/recovery cases, nine client-key cases, and 88 related unit cases.
+   - **BR-1 mutation:** restoring `default_agent` in a scratch copy made the second launch fail with `saved model was replaced: Choose a model`.
+   - **BR-2 mutation:** removing the new scanner rules made all four relevant negative fixtures incorrectly return success.
+   - Additional entry-point probes confirmed welcome startup and explicit-file handling through the shipped `-u` configuration, using a local Lazy shim.
+   - `git diff --check` passed.
+   - Two connection cases failed in this environment; an independent socket probe confirmed loopback binding is denied with `Operation not permitted`. Their execution remains unverified here.
+
+6. **Architectural notes**
+
+   - **ARCH-DRY — pass:** shared policy projection and directory-creation helper.
+   - **ARCH-PURE — pass:** profile settings are separated from filesystem/UI orchestration.
+   - **ARCH-PURPOSE — pass:** startup persistence and promised marker categories are now enforced.
+   - **ARCH-MOCK — pass structurally:** connection tests reuse stateful release/proxy fixtures; execution has the limitation above.
+   - **ARCH-CONSTRAINTS — pass on inspection:** explicit bootstrap deadlines and bounded key reads.
+   - **ARCH-SECURE — pass:** private publication, opened-inode validation, and secret-log assertions.
+   - **ARCH-ORDER — pass:** restored selection survives startup; controlled interleavings cover initialization and publication.
+   - **ARCH-FUNERAL — pass:** normal cleanup, interrupted-state recovery, and profile removal have documented owners.
+
+7. **Plan revision recommendations**
+
+   None required. Keep released-plugin bootstrap acceptance pending until demonstrated, as the plan already specifies.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      starter_config.lua removes the unconditional default_agent; the two-process regression passes at HEAD and fails with “saved model was replaced: Choose a model” when the override is restored in a scratch copy.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      check-starter.py rejects home-relative paths and ariadne references with an exact installation-comment exception; negative fixtures pass at HEAD and incorrectly return success when the new rules are removed.
+```

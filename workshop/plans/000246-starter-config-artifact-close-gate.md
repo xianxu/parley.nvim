@@ -20,6 +20,19 @@ rounds:
           family: personal-marker-contract-coverage
           round: 1
       blocked: true
+    - "n": 2
+      timestamp: "2026-09-13T15:50:36-07:00"
+      agent: codex
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: 'starter_config.lua removes the unconditional default_agent; the two-process regression passes at HEAD and fails with “saved model was replaced: Choose a model” when the override is restored in a scratch copy.'
+          round: 2
+        - id: BR-2
+          disposition: addressed
+          note: check-starter.py rejects home-relative paths and ariadne references with an exact installation-comment exception; negative fixtures pass at HEAD and incorrectly return success when the new rules are removed.
+          round: 2
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#246 (boundary-review)
@@ -36,7 +49,13 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-2** [Important] `personal-marker-contract-coverage` The artifact guard omits home-relative paths and ariadne imports required by the Spec.
   scripts/check-starter.py:9 accepts ~/notes, ~/workspace/ariadne, and require("ariadne"). Extend enforcement across the promised categories, narrowly exempt legitimate installation comments, and add negative fixtures that fail without the correction (ARCH-PURPOSE).
 
+## Round 2 — 2026-09-13T15:50:36-07:00 (codex) — passed
+
+### Disposed
+
+- BR-1 — addressed — starter_config.lua removes the unconditional default_agent; the two-process regression passes at HEAD and fails with “saved model was replaced: Choose a model” when the override is restored in a scratch copy.
+- BR-2 — addressed — check-starter.py rejects home-relative paths and ariadne references with an exact installation-comment exception; negative fixtures pass at HEAD and incorrectly return success when the new rules are removed.
+
 ## Open findings
 
-- **BR-1** [Critical] `startup-preserves-persisted-selection` Starter startup overwrites the saved live model with the learner placeholder.
-- **BR-2** [Important] `personal-marker-contract-coverage` The artifact guard omits home-relative paths and ariadne imports required by the Spec.
+(none — every finding has been disposed)
