@@ -7,6 +7,7 @@ This index provides a central directory for all atlas entries of the `parley.nvi
 - [Chat Format](chat/format.md): Transcript prefixes and front matter header metadata.
 - [Chat Lifecycle](chat/lifecycle.md): Creation, slug rename (auto from topic), response, resubmission, and deletion.
 - [Chat Response Progress](chat/response_progress.md): Delayed playful pending presentation, semantic status handoff, tool continuation, and terminal cleanup for chat-producing LLM legs.
+- [Chat Attachments](chat/attachments.md): `<M-v>` pastes a clipboard image into `assets/<chat-timestamp>/`; a question's image links are sent to every wire under one retention rule and one request budget, and follow the memory window.
 - [Chat Memory](chat/memory.md): History management, summarization, and preservation.
 - [Memory Preferences](chat/memory_prefs.md): Per-tag user preference profiles from chat history summaries.
 - [Chat Parsing](chat/parsing.md): Buffer segmentation, turn identification, and branch link parsing.
