@@ -1,64 +1,52 @@
 # Provider Architecture
 
-- Transport: `curl` subprocess (no Lua HTTP deps). OpenAI-compatible adapters share payload format and SSE parsing; differ in headers/endpoints. Note that "OpenAI-compatible" does not mean "delegates to `openai.format_payload`": cliproxyapi's openai route (`cliproxy_openai_payload`) and `ollama` each build their own payload, and only `copilot` and `azure` delegate — so anything that must apply to every openai-shaped request belongs at `dispatcher.prepare_payload`, the single point upstream of all of them.
-- SSE line primitives (`safe_json_decode`, `strip_data_prefix`) live in `lua/parley/sse.lua`, shared by the adapters and the [tool wires](tool_use.md).
-- CLIProxyAPI dynamically selects OpenAI or Anthropic behavior based on strategy and model family.
-- Query cache in `query_dir`; pruned at >200 files.
+Choose a provider through the selected agent; configure its endpoint under
+`providers` and credentials under `api_keys`. Parley streams responses through
+`curl` subprocesses. Authentication or startup failures abort the caller's
+request and release its pending UI state; HTTP success alone does not mean a
+usable answer arrived.
 
-## When a response arrives but carries no answer (#228)
+## Request and response flow
 
-HTTP 200 does not mean the turn produced text, and three different endings look
-identical in the buffer — an answer that stops mid-sentence and looks finished.
-Parley knew the reason in every case and reported none of them, saying only
-`"<provider> response is empty: body_bytes=18152"` — a message that pairs the
-word *empty* with a byte count, and that has now misled twice for two unrelated
-causes (#197 credentials, #228 a token cap).
+`dispatcher.prepare_payload` is the shared request boundary. Provider adapters
+format messages, parameters, headers, and streaming response events. Client-side
+tool encoding and decoding go through the [tool wire registry](tool_use.md).
+CLIProxyAPI chooses an Anthropic or OpenAI-compatible route from the model and
+search strategy.
 
-**One classification, computed once, rendered afterwards.** The first version
-asked three separate questions in a fixed `if/elseif` order — empty? in-band
-error? abnormal stop reason? — so *order* decided the answer, and an empty
-response that ALSO carried an error could never be reported as an error. That
-is a bug a single classification cannot have.
+OpenAI-compatible adapters do not all delegate to `openai.format_payload`:
+CLIProxyAPI and Ollama build their own payloads, while Copilot and Azure delegate.
+Cross-provider behavior therefore belongs at the dispatcher boundary rather than
+inside just the OpenAI adapter. `lua/parley/sse.lua` supplies shared SSE/JSON
+primitives.
 
-| function | question |
+Query diagnostics live in the dispatcher's cache `query_dir`. Setup prunes an
+oversized store; explicit per-chat logs are described in [raw mode](../modes/raw_mode.md).
+
+## When an answer is empty or stops early
+
+The dispatcher classifies endings as `done`, `cap`, `filtered`, `error`, or
+`unknown`, then produces the corresponding notice. An in-band error takes
+precedence over stop-reason classification. Recognized normal endings remain
+quiet; unrecognized endings after visible text produce a warning. An empty
+response without a reason follows the separate empty-response diagnosis.
+
+| Function in `dispatcher.lua` | Responsibility |
 |---|---|
-| `_extract_stop_reason(raw)` | what did the wire call the ending? `stop_reason` (anthropic), `finish_reason` (openai), `finishReason` (googleai — camelCase, and unmatched until #228) |
-| `_is_output_cap(r)` | was it the output cap? |
-| `_is_normal_finish(r)` | did it end normally? A **whitelist** |
-| `_inband_error(raw)` | did the body carry an error the status could not see? |
-| `_classify_ending(qt)` | → `done` / `cap` / `filtered` / `error` / `unknown` |
-| `_ending_notice(qt)` | → the line to log, and at what level, or nil |
+| `_extract_stop_reason` | Read Anthropic `stop_reason`, OpenAI `finish_reason`, or Google `finishReason` |
+| `_inband_error` | Detect stream errors even after HTTP 200 |
+| `_classify_ending` | Choose one ending category |
+| `_is_output_cap`, `_is_normal_finish` | Classify known reason values |
+| `_ending_notice` | Format the notice and severity |
 
-Each has tests in `tests/unit/empty_response_reason_spec.lua`; the classification
-is table-driven over the endings, and the wire spellings have a case each.
+Model parameters are resolved by `provider_params.lua`. Claude names default to
+`max_tokens = 64000`, whether reached directly or through CLIProxyAPI. Thinking
+can consume that budget before visible answer text appears. This model-specific
+default does not raise the limit for every model behind the same provider.
 
-`_is_normal_finish` is a whitelist on purpose. Asking the opposite question —
-*was it the cap?* — stays silent for refusals, content filters and anything not
-yet enumerated. **A spurious warning is cheap; a silently truncated transcript
-is not**, so an unrecognised ending surfaces rather than passing as normal. Read
-the code for the accepted spellings rather than trusting a list here — an
-earlier revision of this paragraph named four when the code had six.
+## Verification
 
-**An in-band error outranks every other class**, because it explains the whole
-turn including its emptiness. It is also the one ending no stop reason can
-describe: a mid-stream error event carries none, so the body is the only
-evidence it happened.
-
-**`unknown` (no reason at all) surfaces only when text arrived.** An empty
-response with no reason is the empty-diagnosis path's business. Text that
-arrives with no terminal reason is anomalous — every recorded stream fixture
-across all three wires carries exactly one.
-
-### `max_tokens` is a MODEL property, not a provider one
-
-Defaults live in `provider_params.lua`. Claude models get **64000** (Anthropic's
-documented default for streaming, which is what parley sends) via a
-**model-keyed** override rather than a provider default: the same
-`claude-sonnet-5` arrives through both `anthropic` and `cliproxyapi`, while
-`cliproxyapi` also proxies `gpt-*` and `ollama` serves small local models — a
-provider-level default would push a cap those cannot honour.
-
-The cap counts **reasoning/thinking tokens**. A system prompt that asks the
-model to think before answering can spend the entire budget reasoning and emit
-no text at all, which is #228's reported failure: 18 KB of body, one thinking
-block, zero `text_delta`.
+`tests/unit/empty_response_reason_spec.lua` covers classifications and provider
+reason spellings; `tests/unit/provider_params_output_cap_spec.lua` covers output
+budgets; `tests/unit/providers_pre_query_spec.lua` and the CLIProxyAPI integration
+specs cover startup/abort behavior.

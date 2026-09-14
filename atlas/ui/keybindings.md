@@ -1,7 +1,27 @@
 # Spec: Key Bindings Help
 
 ## Command
-`:ParleyKeyBindings` (`<C-g>?`): centered floating window showing context-scoped shortcuts.
+`:ParleyKeyBindings` (`<C-g>?`): centered floating window showing context-scoped
+shortcuts. Press Ctrl+g, then `?`. Help is built when opened from the current
+Parley configuration, including aliases and disabled bindings. It does not
+inspect arbitrary `vim.keymap.set()` overrides made elsewhere.
+
+The app starter intentionally enables a smaller set than the full plugin
+defaults: Ctrl+g/Alt actions and finder-local actions. For example, a documented
+Ctrl+n note shortcut may be absent in the app while its `:ParleyNote…` command
+still works. Use local help to check availability, and see
+[Starter Configuration](../infra/starter.md) to customize the app.
+
+## Common transcript actions
+
+The shipped defaults put frequent actions on Alt/Option (`<M-…>`): visual
+`<M-q>` quotes selected text into an editable drill-in comment; `<M-CR>` sends
+from Normal/Insert mode and defines a selected term in Visual mode; `<M-i>`
+creates and opens a sub-chat; Normal-mode `<M-p>` moves the current exchange and
+following exchanges into a child chat. `<C-g>?` opens current help. Normal `gf`
+follows a file or recognized artifact reference; `<M-o>` also follows Parley
+branch references before falling back to smart `gf`. See [Branching](../chat/inline_branch_links.md)
+and [Drill-In](../chat/drill_in.md) for placement and selection details.
 
 ## Architecture: Keybinding Registry
 Configurable action keybindings are declared in `lua/parley/keybinding_registry.lua` — a single source of truth. Each entry carries:
@@ -35,7 +55,7 @@ Measured, not inferred:
 
 | config for the entry | resolves to |
 |---|---|
-| `default_keymaps = false` anywhere in config | **nothing** (master switch, below) |
+| `default_keymaps = false`, without an explicitly supplied shortcut | **nothing** (master switch, below) |
 | no `config_key` on the entry | `default_key` |
 | `config_key` set, key absent from config | `default_key` |
 | table without a `shortcut` field | `default_key` (its `modes` still apply) |
@@ -75,7 +95,8 @@ attachment (`<M-v>`, `paste_image`, #231), and follow-a-link
 smart `gf` when the cursor is not on a parley reference). `<C-g>` is
 the prefix surface for everything else. Help takes its keys from
 `resolve_keys` for configured actions: an entry that resolves to nothing is
-**omitted**, so the float cannot advertise a key that is not bound. (Before #214
+**omitted**. Picker reservation/collision checks happen later, so configured
+conflicts are an exception to registration/help agreement (see below). (Before #214
 it rendered `keys[1]` only — hiding `<M-q>`, `<M-t>` and `<C-g>i` — and fell
 back to `or entry.default_key`, resurrecting exactly the keys resolution had
 refused.)
@@ -86,14 +107,19 @@ Every registry entry carries a `config_key` — enforced by
 had none and could not be rebound or disabled at all.
 
 To rebind: `chat_shortcut_drill_in = { shortcut = "<M-z>" }`.
-To disable one binding: `shortcut = ""`.
+The string/list belongs inside the `shortcut` field, not directly in the option:
+`chat_shortcut_drill_in = "<M-z>"` is not supported shorthand. It falls back to
+the registry default when defaults are enabled and does not count as an explicit
+binding under `default_keymaps=false`.
+To disable an action and all its aliases: `shortcut = ""` or `shortcut = {}`.
+To remove only one alias, supply a list containing the aliases to retain.
 To disable **all** of parley's default keymaps: `default_keymaps = false`.
 
 ## The master switch
 `default_keymaps = false` makes parley claim no keys by default: every
 registry-derived binding — picker-internal mappings included — and every native
 override (below). It lives inside `resolve_keys`, so registration, `key_for`,
-and the `<C-g>?` float all go quiet together; help and reality cannot disagree.
+and the `<C-g>?` float all suppress implicit actions together.
 
 **A shortcut the user sets in `setup{}` still binds.** The switch suppresses
 parley's *own* claims, not the user's choices — `setup()` records which
@@ -188,11 +214,26 @@ Picker callers use `keys_for(id, config)` to pass the complete resolved list to
 labels. Extra mappings accept a string or list and install every allowed alias
 in prompt Insert/Normal mode and results Normal mode. Reserved Enter/Escape
 aliases are rejected individually; one reserved alias does not discard the
-other allowed keys. Existing collision precedence is unchanged.
+other allowed keys. Reservation compares Neovim termcodes, so equivalent
+spellings such as `<C-m>` for Enter and `<C-[>` for Escape are rejected too.
+Tag-bar-capable pickers also reserve `<ScrollWheelDown>` and `<ScrollWheelUp>`.
+
+Extra mappings install after prompt controls. An unreserved collision overwrites
+the earlier mapping; if two actions claim the same key, the action installed
+later by that picker wins. Thus Ctrl+j/k and Ctrl+c are default controls, not
+protected reservations. Avoid assigning them to finder actions. Chat Finder's
+extra-action order is single delete, tree delete, move, next-recency, its Tab
+alias, previous-recency, its Shift+Tab alias, then help.
+
+Help reports configured aliases before the picker checks reservations and
+collisions. It can therefore display a rejected reserved alias or both sides of
+a conflicting assignment. Rejected reservations produce a log warning. These
+are current limitations; use distinct, nonreserved keys.
 
 Chat, Note, and Issue Finder help includes a separate **Finder prompt** section
 from `picker_basics`: Ctrl+j/Down, Ctrl+k/Up, Enter, and Esc/Ctrl+c. These are
-fixed picker controls, so they remain available with `default_keymaps=false`.
+built-in picker controls, so they survive `default_keymaps=false` unless an
+unreserved custom action shadows them.
 Help describes configured actions; it does not inspect arbitrary later
 `vim.keymap.set` overrides from user config or other plugins.
 

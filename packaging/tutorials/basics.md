@@ -37,12 +37,12 @@ Press `ESC` when you finish typing; `:w` is optional for saving immediately.
 
 ## 2. Navigate with the outline
 
-A long conversation is easier to explore with an outline. It lists headings,
-questions, and linked branches. This tutorial's headings already give you
-something to try, even before an AI has answered.
+A long conversation is easier to explore with an outline. In chats it lists questions,
+linked branches, and named outline markers. Markdown headings appear in the
+outline for ordinary Markdown files, but not chat transcripts.
 
 1. Press Option+t, or run `:ParleyOutline`.
-2. Type `Try it`, select that heading, and press Return to jump there.
+2. Type `Try it`, select that marker, and press Return to jump there.
 3. Send the question below with Option+Enter and wait for the answer.
 4. Open the outline again to find your question or return to another section.
 
@@ -59,7 +59,7 @@ After sending the rainbow question below, try this:
 
 1. Press `ESC` and move the cursor to the part of the answer you want to explore.
 2. Press `Option+i`, or `ctrl+g` then `i`. Parley creates and opens a linked chat.
-3. In that child chat, press `i` and type a follow-up after its question marker,
+3. The child opens ready for typing. Type a follow-up after its question marker,
    for example: "Why do different colors bend by different amounts?"
 4. Send with `Option+return`. You can keep asking questions in this branch.
 5. Press `Option+t` to open the outline and select an item in "2. A Bit More
@@ -76,7 +76,7 @@ Continue with [3. Advanced](./advanced.md) for project folders, local tools,
 transcript context, and pasting images. Remember alternatively, `Option+o`
 over ./advanced.md opens it as well.
 
-## Try it
+@@Try it@@
 
 Place the cursor on the question below and press Option+Enter. You can replace
 it with a subject you are curious about: this is your editable conversation.

@@ -8,16 +8,7 @@ the end of the chat transcript. Persisted managed footnotes are rehydrated into
 diagnostics when any markdown buffer is entered or refreshed. The whole new
 annotation is **undoable** — `u` reverts the footnote edit and clears both
 decorations (see Undo below). For jargon you don't know (e.g. `ASIN`), it's a
-one-keystroke lookup. Added in
-[#161](../../workshop/issues/000161-inline-term-definition.md) (R1 added the
-highlight/undo); [#166](../../workshop/issues/000166-visual-selection-definition-system-manages-footnote.md)
-made the definition durable as a managed footnote; [#167](../../workshop/issues/000167-define-diagnostic-highlight-span.md)
-narrowed the visible decoration to the selected term plus footnote reference;
-[#172](../../workshop/issues/000172-markdown-footnote-diagnostics.md)
-rehydrates persisted managed footnotes in all markdown buffers.
-[#201](../../workshop/issues/000201-reflow-definition-diagnostics-at-display-width.md)
-made definition storage and diagnostic payloads width-independent and moved
-display-cell wrapping to each rendered surface.
+one-keystroke lookup.
 
 ## Flow
 

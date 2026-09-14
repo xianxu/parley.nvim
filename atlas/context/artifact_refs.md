@@ -1,4 +1,4 @@
-# Artifact-reference navigation (#160)
+# Artifact-reference navigation
 
 Jump from a symbolic ariadne artifact ref under the cursor — `ariadne#11`,
 `#15 M4`, `pair#84`, `gh#42` — to the current file it names, and highlight refs
@@ -39,20 +39,27 @@ open/pick the result, highlight refs.
   makes shadowing `gf` transparent. The shared handler `goto_ref_at_cursor(opts)`
   takes an optional `opts.on_no_ref` (the smart-gf passes native `gf`; without it the
   handler notifies). Bound in chat + markdown `parley_buffer` scope; disable/remap
-  via `config.chat_shortcut_resolve_ref_gf`. (The dedicated `<C-g>r` binding was
-  removed once smart-`gf` proved sufficient — operator call.)
+  via `config.chat_shortcut_resolve_ref_gf`.
 - **Also the tail of `<M-o>`** (#225): `OpenFileUnderCursor` tries the parley
   reference forms first and, when the cursor is on none of them, calls
   `ResolveRefOrGotoFile`. So `<M-o>` is "go to the thing under my cursor"
   whatever kind of thing it is, and this module is its last resort. It is
   reached only on the `"none"` outcome — a parley reference that was recognised
   and could not be opened stops with its own diagnostic rather than degrading
-  into a `gf` failure. See `context/file_references.md`.
+  into a `gf` failure. See [file references](file_references.md).
 - **Picker:** a family ref (issue + plan + reviews) opens the house `float_picker`;
   a single result opens directly.
 - **Cross-repo:** `sdlc resolve` resolves `pair#84` etc. itself; parley only sets
   the child process `cwd` (via `neighborhood.for_buf`) so a bare `#id` anchors to
   the repo that owns the current buffer.
+
+## Project lookup
+
+`gP` runs the same resolver with `--kind project`, finding the project that
+references the issue under the cursor, including across repositories. Configure
+or disable it with `chat_shortcut_resolve_ref_project`. A single project opens
+directly; multiple results use the picker. This requires the `sdlc` binary just
+like ordinary symbolic-reference jumps.
 
 ## Configuration
 
@@ -67,3 +74,9 @@ open/pick the result, highlight refs.
 - ariadne#144 — `sdlc resolve`/`open` (the resolver this consumes); its atlas is
   `ariadne/atlas/workflow/sdlc-binary.md` (§ "Artifact-reference resolution").
 - [File References (@@)](file_references.md) — the other reference syntax in chat.
+
+## Verification
+
+`tests/unit/artifact_ref_spec.lua` covers parsing, resolver arguments (including
+project lookup), and dispatch. `tests/integration/open_reference_spec.lua`
+covers the editor navigation chain.

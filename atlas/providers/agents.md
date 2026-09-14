@@ -1,28 +1,45 @@
 # Agents
 
-- An agent = provider + model + system prompt
-- Config fields: `name`, `provider`, `model` (string or object), `system_prompt`, `disable` (bool), `tools` (list of builtin tool names — or group sentinels `@all` / `@readonly`, see `providers/tool_use.md` — for client-side tool use; empty/absent = no tools; #81, anthropic-family only at present), `max_tool_iterations` (default 42, single-sourced in `defaults.lua`), `tool_result_max_bytes` (default 102400)
-- Default agents: read `config.lua`'s `agents` list — it is the source, and this
-  file deliberately does NOT restate it. Three rosters were listed here across
-  #205 and every one of them named agents the config had stopped shipping
-  (`Proxy-GPT5.4`, `Claude-Code`, `ToolSonnet`), because a copy of a list drifts
-  the moment the list moves. The SHAPE is what is stable and worth writing down:
-  a `*` suffix marks a cliproxyapi-routed agent, and since #205 the roster no
-  longer has to name a model for it to be reachable — see the live section below.
-- Selection: `:ParleyAgent [name]` (picker or explicit), `:ParleyNextAgent` (`<C-g>a`) cycles
-- **Live cliproxy models (#205).** Below the configured agents the picker shows a
-  `── live · cliproxy ──` section built from the proxy's own catalog, so a model
-  never has to be written into `config.lua` to be usable. Rows read
-  `Claude Opus 5 - claude-opus-5 (anthropic)` — the same `<name> - <model>` shape
-  the configured rows above use, and once picked a model leaves the live section
-  so it never shows twice; picking one registers a
-  cliproxyapi agent named `<id>*` with `@all` tools and the web-search strategy
-  its family supports, and persists it (`_state.live_agent`) so it survives a
-  restart. `<C-a>` toggles the whole catalog, bypassing both the configured
-  filter and the per-provider curation — curation decides the default view, never
-  what is reachable. A configured provider the catalog advertises nothing for
-  renders as `antigravity - (logged out)`; selecting it runs `:ParleyProxy login`.
-  Which providers appear, and how many models each contributes, comes from
-  `cliproxy.live_models` — see providers/cliproxy-managed.md.
-- Persisted to `state_dir/last_agent`
-- Virtual text on first chat line: `[AgentName]`. Indicator badges render as a single `[...]` group appended after the name: `🔧` when `tools` is non-empty, `🌎` when web_search is enabled and supported (`🌎?` when unsupported). Combined example: `ToolSonnet[🔧🌎]`. Helpers `highlighter.agent_tool_badge` / `agent_web_search_badge` are the single source, shared by picker, lualine, and the buffer-top extmark.
+An agent combines a provider, model, and system prompt. `:ParleyAgent` opens the
+picker; `:ParleyAgent NAME` selects a named agent. `<C-g>a` or
+`:ParleyNextAgent` cycles the configured selection. The selection is stored in
+`state_dir/state.json`; a configured `default_agent` can override it at setup.
+
+A chat's `provider:` and `model:` headers override the selected agent for that
+chat's requests. Changing the picker selection does not remove those headers;
+remove or edit them when you want that chat to follow the new selection.
+
+The picker selects a provider/model, not a particular saved vendor account.
+Parley does not offer a selector between two already-connected accounts of the
+same provider or a proxy-account logout command. The running proxy owns account
+routing; its credential diagnosis is not a guarantee of which account a later
+successful request will use. See [account management limits](cliproxy-managed.md#account-management-limits).
+
+## Configured and live agents
+
+`config.lua`'s `agents` list defines the shipped roster. Agent fields include
+`name`, `provider`, `model` (name or parameter table), `system_prompt`, `disable`,
+and `tools`. An absent/empty tool list gives no client-side tools; `@all` and
+`@readonly` expand through the [tool registry](tool_use.md). The tool protocol
+supports Anthropic and OpenAI families, including the corresponding CLIProxyAPI
+routes. Direct Google AI has no client tool wire.
+
+The picker also displays a live CLIProxyAPI catalog. Choosing a model registers
+an agent named `<id>*`, with `@all` tools and a family-appropriate search
+strategy, and persists its catalog data as `state.json.live_agent`. The chosen
+model moves into the registered roster so it is not shown twice. `<C-a>` toggles
+the full catalog beyond configured filters and per-provider curation. A logged-out
+provider row starts login. See [managed proxy](cliproxy-managed.md) for catalog
+refresh, provider filters, and login behavior.
+
+The agent header, picker, and lualine share the same badges: `🔧` for enabled
+tools, `🌎` for supported enabled search, `🌎?` for enabled but unsupported
+search. Tool-loop defaults are `max_tool_iterations = 42` and
+`tool_result_max_bytes = 102400`; individual agents can override them.
+
+## Implementation and verification
+
+- `lua/parley/config.lua`, `agent_picker.lua`, `agent_info.lua` — roster, selection UI, chat overrides.
+- `lua/parley/init.lua` (`refresh_state`, `register_live_agent`), `cliproxy_catalog.lua` — persistence and live selection.
+- `lua/parley/highlighter.lua` — `agent_tool_badge`, `agent_web_search_badge`.
+- `tests/unit/live_agent_state_spec.lua`, `tests/unit/tool_wire_registry_spec.lua`, `tests/unit/keybindings_spec.lua`.

@@ -52,6 +52,7 @@ atlas:
       - tests/unit/prepare_dir_spec.lua
       - tests/unit/help_content_spec.lua
       - tests/integration/parley_help_spec.lua
+      - tests/integration/documentation_spec.lua
       - tests/unit/starter_config_spec.lua
       - tests/unit/starter_onboarding_spec.lua
       - tests/unit/llm_readiness_spec.lua

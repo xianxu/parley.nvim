@@ -3,7 +3,12 @@
 Custom `float_picker` for all selection UIs — no external dependencies. Two or three stacked floats: results + optional tag bar + prompt.
 
 ## Navigation
-Up/down arrow keys wrap around at list boundaries (top wraps to bottom, bottom wraps to top).
+In the prompt, Ctrl+j/Down and Ctrl+k/Up move selection and wrap at list
+boundaries. Enter opens the selected item; Esc or Ctrl+c cancels. Type to filter.
+These basic controls remain available with `default_keymaps=false`; custom
+finder actions can shadow unreserved controls (see [Keybindings](keybindings.md)).
+Action shortcuts below are shipped defaults; `<C-g>?` shows configured finder
+actions and aliases when help is enabled. See [Keybindings](keybindings.md).
 
 ## Fuzzy Search
 AND-matching across whitespace-split tokens. Token-prefix scoring, bounded edit-distance typo tolerance, subsequence fallback. `{root}` / `[tag]` query tokens scope to bracketed haystack labels of the same kind; in-progress forms (`{char`, `[bu`) work the same way as their completed counterparts.
@@ -40,8 +45,8 @@ subscription; late callbacks cannot repaint a closed picker. Chat and Note can
 instead join an exact retained-prewarm fingerprint: cancellation then removes
 only the picker subscriber while the cache-building owner continues.
 
-Chat enumerates only dated Markdown names and reads ten header lines on cache
-misses. Note recursively enumerates Markdown metadata without body reads. Both
+Chat enumerates dated Markdown names and the stable `welcome.md`, `basics.md`,
+and `advanced.md` tutorial names, and reads ten header lines on cache misses. Note recursively enumerates Markdown metadata without body reads. Both
 apply recency only after raw records settle, update caches from adapted records,
 and prune stale entries only for roots that enumerated successfully.
 
@@ -118,3 +123,36 @@ its contract are easy to get wrong and are therefore stated here:
   when a background repaint would otherwise move the cursor under the operator
   and let `<CR>` fire on a row they never pointed at (#205).
 
+## Chat Finder actions and tags
+
+`:ParleyChatFinder` (`<C-g>f`) searches the configured chat roots. The default
+recency view is 12 months; `chat_finder_recency` controls the initial view and
+presets. Tab/Ctrl+a and Shift+Tab/Ctrl+s cycle the recency views (6, 12, All
+with the shipped presets). If an older chat is missing, switch to All and clear
+root/tag filters.
+
+| Default key | Action |
+| --- | --- |
+| Ctrl+d | Confirm deletion of the selected chat only |
+| Ctrl+g D | Confirm deletion of the entire linked tree, starting from its root |
+| Ctrl+x | Move the chat tree to another registered chat root |
+| Ctrl+g ? | Show configured finder help |
+
+Deletion is permanent file deletion, not a trash operation; cancellation keeps
+the file. Attached asset folders are included in the confirmation and deletion.
+For chat management and recovery, see [Chat Lifecycle](../chat/lifecycle.md).
+
+Tags come from the saved header, for example `tags: tutorial, ai`; see
+[Chat Format](../chat/format.md) for supported syntax and the ten-line metadata
+limit. Tag-bar buttons toggle which tags are included (OR across enabled tags);
+ALL enables every tag and NONE disables every tag. `[]` represents chats without
+tags. A prompt filter such as `[tutorial]` further narrows results. Both recency
+and tag/root filters can explain an apparently missing chat.
+
+## Implementation and checks
+
+`lua/parley/float_picker.lua` owns shared interaction;
+`lua/parley/chat_finder.lua` and `lua/parley/chat_finder_records.lua` own chat
+acquisition and display. `lua/parley/config.lua` owns defaults.
+`tests/unit/float_picker_spec.lua`, `tests/unit/chat_finder_logic_spec.lua`, and
+`tests/unit/chat_finder_records_spec.lua` cover controls, actions, and records.

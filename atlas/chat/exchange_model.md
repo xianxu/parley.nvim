@@ -44,7 +44,7 @@ The model is built once per `M.respond` call and lives through the entire respon
   recorded provisional thinking opener through the insertion block. Neither
   path reparses the chat.
 - **Tool loop**: `add_block` appends 🔧:/📎: blocks. The model is passed to recursive `M.respond` calls — no rebuilding.
-- **Spinner**: tracked as a block; set to size 0 when cleared.
+- **Pending presentation**: the current spinner/status is an extmark outside the model; see [Response Progress](response_progress.md). Legacy spinner block kinds remain tolerated by consumers.
 - **Prompt append**: uses `exchange_total_size` to compute insertion point.
 - **Folding**: `thinking`, `summary`, `tool_use`, and `tool_result` ranges come
   only from their stated model block spans and stay inside the selected

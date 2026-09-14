@@ -1,411 +1,58 @@
-<!-- panvimdoc-ignore-start -->
-
-<a href="https://github.com/xianxu/parley.nvim/blob/main/LICENSE"><img alt="GitHub" src="https://img.shields.io/github/license/xianxu/parley.nvim"></a>
-
-# Parley.nvim
-
-<!-- panvimdoc-ignore-end -->
-
-Parley started as a Neovim chat notebook for LLM conversations. It's created to help me research on a topic with the help with many different agents. A side goal of Parley is really a test bed for me to play with agentic coding workflow. This leading me to see a future of **markdown as state, nvim/`coding agent` as human operator interface, the beginning of future operating system for startups**. 
-
-There are just many different ways user can leverage it. With Parley, you have all the power of Neovim at your fingertips in your LLM chat, thus making comprehensive research easier. All your chat history also lives in plain markdown files, you can easily search through using local tools. You can even direct your coding agent to act according to the "brainstorming" chat thread you had with other agents, for example. The possibilities seem endless.
-
-Compared to stock chatbot, Parley supports a "tree of chats", essentially allowing user to branch of some side topic, in a linked but different file. This way, information is always organized, matching how human research and learn a topic.
-
-The philosophy behind Parley is Keep Things Simple, and Local, and a bit of Unix:
-- Keep chats as plain Markdown files you can edit any place
-- The chat transcript file has the full state of LLM chat
-- Highly configurable but also have good default out-of-box
-- Keep the workflow keyboard-first and fast
-- Keep behavior predictable across different chat providers
-- Leverage Neovim, and all its goodies
-- Minimal dependencies, install and it works, all you need is your API keys
-
-## Start here
+# Parley
 
 <!-- parley:introduction:start -->
-Parley is a conversational workspace backed by Neovim, available as a standalone
-app or the parley.nvim plugin in your existing editor. Ask questions, explore
-ideas, and keep conversations as local Markdown files. The selected provider
-receives the questions and attachments you send.
+Parley is a workspace for exploring ideas with AI. Conversations live in local
+Markdown files that you can edit, search, and keep. Ask different models in the
+same conversation, revise earlier text, and branch a side question into a linked
+chat without losing the main thread.
 
-In the app, run `:ParleyProxy connect` to connect an account and `:ParleyAgent`
-to choose a model. At a question, press `i` to type; Alt+Enter or Ctrl+g twice
-sends it. Escape leaves typing mode. `:ParleyChatRespond` also sends. Ctrl+g then
-`f` finds chats, Ctrl+g then `c` creates one, and Ctrl+g then `?` shows shortcuts.
-Use `:w` to save and `:wq` to quit. Plugin users can customize these mappings.
+The Parley app brings this workflow to a dedicated Neovim environment. You do
+not need an existing Neovim setup; the built-in tutorials teach the few editor
+controls needed to get started. Parley is also available as a Neovim plugin.
+
+Connect a provider account and choose a model. Sending a question shares the
+conversation context and included attachments with that provider. Parley can
+consult its installed documentation when you ask how a feature works; Ctrl+g
+then `?` shows shortcuts for your current context and Parley configuration.
 <!-- parley:introduction:end -->
 
-## Developer testing and performance
+## Install the app
 
-A standalone checkout includes its runtime data and contributor test targets;
-no ariadne checkout is required. With the test prerequisites installed, run
-`make test PLENARY=/absolute/path/to/plenary.nvim`. Use `make help` to list
-targets, including `make check-fresh-clone` for isolated archive acceptance.
-See [standalone contributor setup](TOOLING.md#standalone-contributor-setup)
-for prerequisites, dependency overrides, and maintainer verification commands.
-
-Run `make perf` to collect Parley's report-only chat-typing benchmark. See
-[TOOLING.md](TOOLING.md#chat-typing-performance-report) for the scenario, output schema,
-structural correctness gates, and optional MarkdownPreview comparison.
-
-Despite of such simple interface, it's very powerful, sometimes more so than official app
-- You can use "any" LLM providers, mix in the same conversation input from many different LLMs
-- Your chat transcript can be as complex as a tree with branches, to allow you to explore into different directions, without being forced into a linear conversation
-- You can jump easily between such tree branches
-- You can access your private local file, and private Google Drive file through oauth
-- You can edit anything in the transcript, including LLM responses, which presumably would influence the agent's future responses, a soft prompt engineering. You are constructing an understanding of a topic together with the help of LLMs
-- All you chat history in one place locally, you can search and further refine with whatever tools you want
-- Tweak system prompts to best suit your needs
-- Have many different chat threads active in different vim buffers, terminals etc., no limits
-- Easily switch between different chat threads, instant search experience with Chat Finder <C-g>f anywhere in Neovim
-- Also a good learning tool for LLM interactions, e.g. in raw request/response modes, you see all request/response details
-- New LLMs support web search and grounding, you can easily enable or disable if you want it to be faster
-- Publish your chat as markdown or HTML, for blogging or sharing, e.g. [a chat about async programming](https://xianxu.github.io/2025/05/12/conversation_around_concurrent_programming_models.html)
-- Share your brainstorming transcripts with your coding agents to start materializing it!
-
-## Quick Install
-
-On macOS with Homebrew:
+The recommended starting point is the **Parley app for macOS**, installed with
+[Homebrew](https://brew.sh/):
 
 ```sh
 brew install xianxu/parley/parley
 parley
 ```
 
-Follow the welcome chat to connect your account and choose a model. See the
-[package guide](packaging/README.md) for updates, settings and removal.
+The first launch installs editor dependencies and opens the Welcome tutorial.
+Follow it to connect an account, choose a model, and send your first question.
+Your Parley editor settings and chats are separate from your existing Neovim
+profile; provider logins are shared with other CLIProxyAPI clients.
 
-For a manual installation, use the [standalone starter profile](packaging/starter-config/README.md)
-for an isolated chat setup with account login and a short first-use guide.
+See the [app guide](packaging/README.md) for updates and removal, or
+[configuration and recovery](packaging/starter-config/README.md) for profile paths
+and settings. Existing Neovim users can use the
+[plugin setup guide](atlas/infra/config.md#install-as-a-neovim-plugin).
 
-Run `:checkhealth parley` to see which external tools are available and what
-missing tools enable. It shows install advice for your detected package manager;
-Parley does not run those commands for you. CLIProxyAPI is managed by Parley:
-use `:ParleyProxy update` to install or update it. On macOS, clipboard image paste
-and the default image converter use the system's `osascript` and `sips`.
+## Learn by chatting
 
-`curl` is required for network requests. Other dependencies are optional:
-- [`lualine.nvim`](https://github.com/nvim-lualine/lualine.nvim) for status line integration. Not missing much if not available.
-- [`pandoc`](https://pandoc.org/) for exporting non-chat markdown files to HTML (`<C-g>eh`). See `:checkhealth parley` for the install command.
+These tutorials open as editable chats in the app. You can also read their
+bundled originals here:
 
-Example with `lazy.nvim`
+1. [Welcome](packaging/tutorials/welcome.md) — editor essentials, connecting an
+   account, choosing a model, and sending a question.
+2. [Basics](packaging/tutorials/basics.md) — finding conversations, navigating the
+   outline, and branching into a side question.
+3. [Advanced](packaging/tutorials/advanced.md) — what the model sees, project
+   folders, local tools, chat-history search, and images.
 
-```lua
-{
-    "xianxu/parley.nvim",
-    config = function()
-        require("parley").setup({
-            -- supply at least one
-            api_keys = {
-                -- openai = "sk-...", -- or set env vars and fetch with os.getenv
-                openai = os.getenv("OPENAI_API_KEY"),
-                -- anthropic = ...
-                -- googleai = ...
-                -- ollama = ...
-            },
-        })
-    end,
-}
-```
+Ask Parley about a feature as you work. Its documentation tool reads the
+README, tutorials, and [atlas](atlas/index.md) from your installed version.
 
-A bit safer, macOS Keychain example:
+For contributors: [development and tests](TOOLING.md), [architecture](ARCH.md),
+and [code style](STYLE.md).
 
-1. First save API keys to Keychain (replace `your_username` and key values):
-
-```bash
-security add-generic-password -a "your_username" -s "OPENAI_API_KEY" -w "sk-..." -U
-...
-```
-
-2. Then fetch keys from Keychain in `api_keys`:
-
-```lua
-{
-    "xianxu/parley.nvim",
-    config = function()
-        require("parley").setup({
-            -- supply at least one
-            api_keys = {
-                openai = { "security", "find-generic-password", "-a", "your_username", "-s", "OPENAI_API_KEY", "-w" },
-                -- anthropic = ...
-                -- googleai = ...
-                -- ollama = ...
-            },
-        })
-    end,
-}
-```
-
-Notes:
-- Configure at least one provider key.
-- `api_keys` values can be strings or shell commands (for password managers/Keychain) resolve to a string.
-
-## First 60 Seconds
-
-1. Run `:ParleyChatNew` (default shortcut: `<C-g>c`) to create a new chat.
-2. Type your question after `💬:`, no need for anything else. `Topic: ?` will be automatically filled with summary of your question.
-3. Run `:ParleyChatRespond` (default shortcut: `<C-g><C-g>`) with mouse on the question line.
-4. Get a response from the agent after `🤖:`, streaming in real time. A slow
-   start shows a playful virtual progress line after one second; it never enters
-   the Markdown transcript.
-
-A Parley chat is a normal markdown file with a header and alternating `💬:` / `🤖:` blocks.
-
-## Basic Commands
-
-Most-used defaults:
-
-**Global**
-- `<C-g>c` new chat - global hotkey
-- `<C-g>f` find chat - opens immediately with a cancellable animated
-  `scanning…` row while Chat Finder asynchronously discovers chat headers; an
-  exact background prewarm is reused when available. In the finder, `<C-d>`
-  deletes the selected chat after confirmation; `<C-g>D` deletes its whole chat
-  tree after confirmation.
-- `<C-n>f` find notes - the same immediate loading experience over recursive
-  note metadata; note bodies are not read, and special folders still bypass
-  recency filtering
-- `<C-y>f` find issues - asynchronously read issue/history metadata with
-  vocabulary-backed ordering and repository facets in super-repo mode
-- `<C-j>f` find vision initiatives - asynchronously read YAML file bundles,
-  preserving file/parser order and exact source-line jumps
-- `<C-g>m` find Markdown files - directory facets in ordinary repo mode and
-  repository facets in super-repo mode; query text and facet choices persist
-  across finder reopenings within the current Neovim session. When a facet bar
-  wraps beyond its visible height, point at the bar and use the mouse wheel to
-  reach the remaining facets. The picker opens immediately with a cancellable
-  animated `scanning…` row while Git discovers all tracked Markdown files plus
-  untracked, non-ignored Markdown files; ignored untracked files and Markdown
-  inside nested repositories or submodules are excluded from the parent scan.
-- `<C-g>p` toggle peer (super-repo) mode - aggregate reads across sibling
-  `.parley` repositories. The explicit repo/peer choice persists separately for
-  each repository; an unsaved repository starts in ordinary repo mode.
-
-**In Chat Buffer**
-- `<C-g>?` show key bindings
-- `<C-g><C-g>` respond
-- `<M-CR>` respond (normal/insert); **visual-select a phrase + `<M-CR>`** → inline term definition — immediately shows a spinner after the selection, then on success replaces it with a markdown footnote reference/footer and centered diagnostic float, honoring `:ToggleWebSearch` for unfamiliar terms
-  - Reopened chats recover multi-word highlights from structured footnotes such as `[^acos]: "Advertising Cost of Sales". Ratio...`; generated ids such as `[^serverless-functions]` also recover `serverless functions` from the slug when that phrase appears before the reference.
-- `<C-g>G` respond all
-- `<C-g>x` stop
-- `u` / `<C-r>` undo/redo normally; while a response is pending, Parley asks
-  before cancelling that buffer's request and changing history (default: No)
-- `<C-g>t` chat outline
-- `<C-g>a` change agent
-- `<C-g>P` next system prompt
-- `<C-g>s` skill picker (review, voice-apply, etc.)
-- `<M-p>` (or `<C-g>b`) branch/prune - move the current exchange and following
-  exchanges to a child chat
-
-Tool-fold toggling ships **unbound**: a tool call's result is low-value reading,
-so folding it does not earn a key out of the shared `<C-g>` surface. It is still
-reachable as `:ParleyToggleToolFolds`. To bind it, set
-`chat_shortcut_toggle_tool_folds = { modes = { "n" }, shortcut = "<leader>tf" }`.
-
-Parley manages folds inside a chat buffer: tool calls, tool results, summaries
-and thinking blocks fold, and questions never do. It owns **every** fold within
-an exchange — including the tail of the buffer after the last block — so a
-manual `zf` there is removed the next time that exchange is reconciled. Folds
-outside every exchange (the frontmatter, for instance) are left alone.
-- `<C-g>l` toggle follow cursor
-- `<M-i>` (or `<M-S-CR>`, or `<C-g>i`) **inserts a branch at the cursor** and
-  creates the child chat it points at.
-  - **text selected** → the selection becomes an inline `[🌿:…](file)` anchor and
-    the child opens with `tell me more about "…"`.
-  - **pending `<M-q>` quotes** → they are stripped from the parent and become
-    the child's first question. Note the scope differs from `<M-CR>`: this
-    gathers **every** pending quote in the buffer, where `<M-CR>` with the cursor
-    inside an exchange gathers only that exchange's.
-  - **neither** → a bare `🌿:` placeholder, and the child opens for you to type
-    in.
-
-  In every chat case, the child opens in Insert mode with the cursor at the end
-  of its first question line, ready to edit.
-
-  The reference always lands where your cursor is, and the chord never deletes
-  anything from the parent. Every case saves the parent first, so the link is
-  never orphaned. It declines while a response is still streaming into that chat.
-
-  Re-running a question (`<M-CR>` on an answered one) replaces that answer — but
-  **your branch references and `🔒:` notes inside it survive**. An inline
-  `[🌿:…](file)` becomes a standalone `🌿:` line, since the sentence around it
-  belonged to the answer being replaced.
-- `<M-v>` **paste the clipboard image as an attachment** of the question: the
-  image is saved under `<chat-dir>/assets/<chat-timestamp>/` and a
-  `![<file>.png](assets/<ts>/<file>.png)` line is inserted under the cursor
-  (the alt text is the file name so a concealing markdown setup still shows
-  a label; edit it freely). The
-  attachment is sent to the model (Anthropic, OpenAI and Gemini shapes; via
-  cliproxyapi for all three), follows the memory window like the text it
-  belongs to, and travels with the chat. Reads the clipboard through
-  `osascript` on macOS, `wl-paste` or `xclip` on Linux; set
-  `assets.clipboard_cmd = { "<tool>", "…", "{out}" }` to use your own tool
-  (`{out}` is replaced by the PNG path to write; exit 0 + a non-empty file =
-  image, exit 1 = no image, anything else = failure).
-  Large images are shrunk to JPEGs with a long edge of at most 1600 pixels,
-  using `sips` on macOS or ImageMagick, ffmpeg, or libvips where installed.
-  The notice shows the size change. Small images, GIFs and WebP stay intact;
-  PNG transparency is flattened when converted. If conversion is unavailable
-  or fails, the original is kept. Set `assets.shrink = false` to keep all
-  originals, or `assets.shrink_cmd` to provide a recipe with `{in}`, `{out}`,
-  and `{max}` tokens. Images above 32 million pixels or a 16384-pixel dimension
-  skip conversion; the existing 10 MiB input cap remains.
-
-  Assets are write-once binaries. Committing `assets/` with chats keeps their
-  images available in other clones and adds their stored size to git history.
-  Ignoring that folder saves repository space but leaves image links unresolved
-  elsewhere. Choose per repository; Git LFS can later use the same asset paths.
-- `<M-o>` (or `<C-g>o`) open the thing under the cursor — a `🌿:` reference to a
-  sub-chat, an inline `[🌿:…](file)`, an `@@path@@` file reference, a `src:` link,
-  a directory. Anything else falls through to smart `gf` below, so it is one key
-  for "go to what I'm looking at"
-- `gf` smart go-to-file: on an ariadne artifact ref (`ariadne#11`, `#15 M4`, `pair#84`) resolves it and jumps (family picker when it resolves to many); on a plain path, Vim's native `gf`
-
-**Corresponding commands**
-- `:ParleyChatNew` create a new chat
-- `:ParleyChatFinder` asynchronous chat finder with joinable metadata prewarm
-- `:ParleyNoteFinder` asynchronous recursive note finder with joinable metadata prewarm
-- `:ParleyIssueFinder` asynchronous issue/history finder
-- `:ParleyVisionShow` asynchronous project-initiative finder
-- `:ParleyMarkdownFinder` asynchronous Git-aware Markdown finder with contextual directory/repository facets
-- `:ParleyChatRespond` answer current question
-- `:ParleyChatRespondAll` regenerate from start to cursor
-- `:ParleyStop` stop running generation
-- `:ParleyOutline` display questions in this buffer for navigation
-- `:ParleyKeyBindings` show active Parley keyboard shortcuts
-- `:ParleyAgent` switch agent
-- `:ParleySystemPrompt` switch system prompt
-- `:ParleyToggleFollowCursor` toggle live cursor-follow during streaming
-
-All five disk-backed finders open their picker shell immediately and keep the
-prompt live while `scanning…` animates. Settled results replace the loading row
-in one update; partial failures retain usable rows with a warning, total failure
-leaves a nonselectable error, and Esc cancels picker-owned work. Markdown uses
-Git's tracked union untracked-nonignored boundary, so ignored vendor trees are
-not searched in either ordinary or super-repo mode.
-
-## What Parley Supports
-
-- Providers: OpenAI, Anthropic, Google AI, Ollama, OpenAI-compatible endpoints, and CLIProxyAPI.
-  - parley can **manage a local `cliproxyapi`** for you — it renders the config from Lua and lazily starts/reuses/health-checks the proxy. `:ParleyProxy status|start|stop|restart|models <provider>|providers|login <provider>|reap|update` (bare `:ParleyProxy` prints per-subcommand help); `update` installs the latest cliproxyapi release — or the one `cliproxy.download_version` pins — and restarts the proxy parley started; `status` shows the running version against the latest. **On by default, and the shipped roster needs it** — the default `agents` list is one cliproxyapi agent, so a fresh install needs a `cliproxyapi` binary and a one-time `:ParleyProxy login` before the first question lands: `:ParleyProxy update` downloads the latest checksum-verified release (the first chat does too, via `cliproxy.auto_download`), or use `brew install cliproxyapi`. The manager itself stays dormant (it only acts when a cliproxyapi-provider agent runs, and reuses an existing proxy if one is up). To go straight to a vendor API instead, uncomment the `openai`/`anthropic` examples in the `agents` block — `config.lua` ships both shapes. Set `cliproxy = { manage = false }` to opt out. See [atlas/providers/cliproxy-managed.md](atlas/providers/cliproxy-managed.md).
-  - **No model list to maintain** — parley ships no `oauth-model-alias` block: cliproxyapi exposes an OAuth channel's models as soon as that channel has a credential, so a new release is reachable the moment your provider serves it. Set the block yourself only to PIN an id to a specific channel (antigravity re-serves claude, gemini and gpt-oss models alongside their native channels).
-  - **Live models in the agent picker** — cliproxyapi already advertises what it serves, and that set moves on its own (an antigravity login registers new models with no restart), so parley reads that catalog instead of asking you to name models in Lua. Below your configured agents the picker shows a `── live · cliproxy ──` section; picking a row gives you a tool-enabled agent for that model, and it survives a restart. `<C-a>` expands to the whole catalog. A provider you are not logged into shows as `(logged out)` — selecting it starts the login. Configure which providers appear, and how many models each contributes, with `cliproxy.live_models = { providers = { "claude:opus,sonnet,fable", "codex:gpt-5.6", "antigravity" }, per_provider = 3 }`: an entry is `"<provider>[:<term>,…]"`, the terms are substrings matched against the model id and its display name, and omitting `providers` offers every provider parley knows. It names providers and model families, never versions, so it does not go stale.
-- File context with `@@path/to/file` and directory patterns.
-- Web search toggle for supported providers, with semantic search/reasoning status shown in the response's transient virtual progress line.
-- Outline navigation, highlighting.
-- Export chat to markdown or HTML, for blogging, e.g. [a chat about async programming](https://xianxu.github.io/2025/05/12/conversation_around_concurrent_programming_models.html).
-- Misc: notes, interview mode, raw mode, and export.
-
-## Configuration Entry Points
-
-Common options live in `setup()`:
-- `api_keys`
-- `chat_dir`
-- `notes_dir`
-
-Merge behavior in `setup(opts)`:
-- `agents`, `system_prompts`, and `hooks` are merged by key/name, so you can override only selected entries.
-- **If you replace a system prompt, keep the fenced-code indentation line.** Every
-  shipped prompt asks the model to indent fenced code blocks by exactly two
-  spaces. That is not a style preference: parley matches turn markers (`💬:`,
-  `🤖:`) at column zero, so indenting fenced content is what lets a quoted
-  transcript sit inside a code block without being read as a new turn. A custom
-  `system_prompts` entry, or a chat header `system_prompt:`, replaces the prompt
-  **wholesale** — the convention goes with it, and a model that emits a
-  flush-left `💬:` inside a fence will have it treated as a turn. Append
-  `require("parley.defaults").fence_indent_convention` to a custom prompt to keep
-  the behaviour.
-- Most other top-level keys are replaced when provided (for example `chat_dir`, `chat_dirs`, `notes_dir`, `chat_template`, `raw_mode`, `highlight`, `chat_memory`, `assets`, `providers`, `api_keys`).
-- Practical rule: for non-merged tables, provide the full table you want, not just one nested field.
-- Reference [lua/parley/config.lua](https://github.com/xianxu/parley.nvim/blob/main/lua/parley/config.lua) for full defaults and examples.
-
-### Keybindings
-
-Every binding parley ships is rebindable **and** disableable, from one place:
-
-```lua
-require("parley").setup({
-  -- rebind: the config value REPLACES the shipped keys, it does not merge,
-  -- so list every key you want (aliases included).
-  chat_shortcut_drill_in = { modes = { "v", "x", "i", "n" }, shortcut = { "<M-q>", "<C-g>q" } },
-
-  -- disable one binding
-  chat_shortcut_prune = { shortcut = "" },
-
-  -- claim NO keys by default. Anything you bind explicitly above still
-  -- works — the switch suppresses parley's own claims, not your choices —
-  -- and <C-g>? shows exactly what survived.
-  default_keymaps = false,
-})
-```
-
-With `default_keymaps = false` and nothing else set, parley binds nothing at
-all. Most actions also have a `:Parley*` command (`:ParleyChatRespond`,
-`:ParleyChatFinder`, `:ParleyToggleToolFolds`, …), but not every binding has
-one — so if you want a key, bind it explicitly rather than relying on a command
-existing for it.
-
-`<C-g>?` shows what is actually bound in the current buffer — it reads the same
-resolution the keymaps do, so it never advertises a key you cannot press.
-
-Two deliberate defaults worth knowing:
-
-- **No `<leader>` map ships on.** `<leader>` is your namespace. The five copy
-  helpers and the oil.nvim shortcut are one config line each to enable; see the
-  paste-ready block in [`lua/parley/config.lua`](lua/parley/config.lua).
-- **`u`, `<C-r>`, `*`, `#`, `g*`, `g#` are wrapped, not claimed.** In chat
-  buffers they behave natively except when parley has something specific to do —
-  `u`/`<C-r>` ask before discarding a response that is still streaming, and
-  `*`/`#` search the whole `[...]` anchor when the cursor is inside one.
-Every knob is named in [`lua/parley/config.lua`](lua/parley/config.lua) beside
-the binding it controls — that file is the reference, so this section does not
-duplicate the list.
-
-**Changed defaults (upgrading).** Three shipped defaults changed when the
-keybinding surface was curated. Nothing is gone — each is one config line away:
-
-| Was | Now | Restore with |
-|---|---|---|
-| `<leader>cl` `<leader>cL` `<leader>cc` `<leader>cC` `<leader>cf` bound | unbound | the paste block in `config.lua` |
-| `<leader>fo` opened oil.nvim | unbound | `global_shortcut_oil = { modes = { "n" }, shortcut = "<leader>fo" }` |
-| spell typeahead popup on, mapping insert-mode `<CR>` | off (squiggles stay on) | `chat_spell = { typeahead = true }` |
-
-Two config *contracts* changed with them:
-
-- `shortcut = ""` used to fall through to the shipped default, and now means
-  **disabled**. If you set it somewhere expecting the default, name the key
-  instead.
-- **`🔒:` is a one-line note, not a section.** A line starting with `🔒:` is kept
-  out of what is sent to the model — but only *that* line. It previously withheld
-  everything from there to the end of the answer or question it sat in, which
-  meant a note dropped early in a long answer silently removed the rest of it
-  from every later turn. If you have transcripts written against the old
-  behaviour, text you expected to stay private will now be submitted. Prefix each
-  line you want withheld. (`🌿:` branch references changed the same way, and are
-  bookkeeping rather than content.)
-
-Chat storage roots:
-- `chat_dir` is the primary writable root used for new chats.
-- `chat_dirs` is an optional list of additional roots that Chat Finder, chat validation, and chat-aware commands will scan alongside `chat_dir`.
-- Chat roots are configured up front via `chat_dir` / `chat_dirs` in `setup()`.
-  (The runtime add/remove picker exists for **notes** — `:ParleyNoteDirs`,
-  `:ParleyNoteDirAdd`, `:ParleyNoteDirRemove` — but has no chat-domain twin;
-  this section previously documented three chat-domain `ParleyChatDir…`
-  commands that were never implemented.)
-- `:ParleyChatMove {dir}` moves the current chat to another registered chat root.
-
-  (`<C-g>h` was documented here as a chat-root management shortcut; it is bound
-  to nothing and never was — same stale block as the commands above.)
-
-For full defaults and examples, see [`lua/parley/config.lua`](lua/parley/config.lua).
-
-## Detailed Docs (Atlas)
-
-Advanced behavior is intentionally kept out of this README and documented in the atlas:
-
-- Overview index: [`atlas/index.md`](atlas/index.md)
-
-## Acknowledgement
-
-Parley was adapted from [gp.nvim](https://github.com/Robitx/gp.nvim), but has since been largely redesigned and rewritten.
+Parley was adapted from [gp.nvim](https://github.com/Robitx/gp.nvim) and has since
+been extensively redesigned. See [LICENSE](LICENSE).

@@ -14,8 +14,9 @@ Parley has two supported entry points into the same runtime:
   editor profile or redirect the user's configuration to `NVIM_APPNAME=parley`.
 
 Both entry points share chat, provider, picker and LLM implementations. Packaging
-must not fork those implementations. App profile isolation keeps its chats,
-credentials and state separate from a plugin configured in ordinary Neovim.
+must not fork those implementations. App profile isolation keeps editor configuration, chats and state separate from
+a plugin configured in ordinary Neovim. Proxy account credentials are shared in
+`~/.cli-proxy-api`; they are not isolated by `NVIM_APPNAME`.
 
 First-install bootstrap closes Lazy's installer view and restores the original
 editor window before starting Parley. Lazy's view closes asynchronously, so focus
@@ -46,13 +47,66 @@ intent rather than providing a second configuration to copy.
 | Surface | Release contract |
 |---|---|
 | Storage | Profile-local config/data/state/cache; chats directly in `chats/`, including `welcome.md`; no personal iCloud or blog paths |
-| First use | Welcome preamble explains connection, model selection and sending; the preamble is excluded from the LLM question |
+| First use | Missing welcome, basics and advanced tutorials are seeded without overwriting edits; the welcome preamble explains connection, model selection and sending and is excluded from the LLM question |
 | LLM setup | Missing setup opens the shared agent picker, including logged-out providers; login returns to that picker and model selection resumes the pending action |
 | Setup cancellation | Cancel aborts the pending action; changed source requires retry; headless mode never opens a picker |
 | Proxy | Managed CLIProxyAPI on loopback port 8317 with client key `parley-local`; account credentials share `~/.cli-proxy-api` with the plugin |
 | Keys | All Ctrl+g prefixes and Alt chords, including Alt+Enter, plus all finder-local controls; other global/editor integration shortcut families disabled |
 | Optional features | Automatic memory generation disabled; answer-style 📝 summaries, web search and all registered tools enabled |
 | Customization | Existing Neovim users retain `setup(opts)` as the configuration boundary |
+
+## Find your files and recover startup
+
+The following defaults apply to the app outside project mode. XDG variables
+replace the corresponding base directory; `/parley` is appended to each base.
+
+| Content | Default location | XDG base override |
+|---|---|---|
+| Editable settings | `~/.config/parley/init.lua` | `XDG_CONFIG_HOME` |
+| Chats and tutorials | `~/.local/share/parley/chats/` | `XDG_DATA_HOME` |
+| Notes | `~/.local/share/parley/notes/` | `XDG_DATA_HOME` |
+| Exports | `~/.local/share/parley/exports/` | `XDG_DATA_HOME` |
+| Installed editor plugins | `~/.local/share/parley/lazy/` | `XDG_DATA_HOME` |
+| Saved Parley state | `~/.local/state/parley/persisted/state.json` | `XDG_STATE_HOME` |
+| Runtime log | `~/.local/state/parley/parley.log` | `XDG_STATE_HOME` |
+| Caches/query scratch | `~/.cache/parley/` | `XDG_CACHE_HOME` |
+
+Inside Parley, `:lua print(vim.fn.stdpath('data'))` shows the effective data
+root; replace `data` with `config`, `state` or `cache` for the others.
+`:lua print(require('parley').config.chat_dir)` shows the actual chat destination,
+including a configured override or [project mode](repo_mode.md). Back up that
+directory together with its `assets/` subdirectory to preserve attachments.
+Plugin defaults instead use `stdpath('data')/parley/chats`, ordinarily
+`~/.local/share/nvim/parley/chats/`; an existing plugin configuration can override it.
+Provider accounts remain in shared `~/.cli-proxy-api`, outside these profile roots.
+
+For startup problems:
+
+1. A failed download normally removes its own staging. Check internet access
+   and retry `parley`. The starter requires Neovim 0.11+, Git and curl; Homebrew
+   supplies the app runtime. When the editor opens, `:checkhealth parley` reports
+   feature dependencies. A preview-server build failure can be retried with
+   `:Lazy build markdown-preview.nvim`.
+2. An error saying an initializer is **still active** means another launch owns
+   it; let that launch finish. If the error explicitly says **requires repair**,
+   close all Parley instances, then remove only the initializer directory named
+   in that error and retry. The possible default locations are
+   `~/.config/parley/.launcher-initializer`,
+   `~/.local/share/parley/initializer.lock` and
+   `~/.local/state/parley/welcome-initializer`. With XDG overrides use the reported
+   path, not these defaults. Do not remove the entire profile to clear a lock.
+3. An incomplete installed Lazy checkout is reported with its exact directory.
+   Close Parley, remove only that reported checkout and retry; the starter
+   downloads it again. An incomplete welcome chat is also reported by path:
+   back up and repair that file, or move it aside and restart to seed a fresh
+   copy. Existing tutorial edits are otherwise preserved.
+4. If loopback port 8317 belongs to another service, stop that service or change
+   the configured proxy port. Parley does not remove a foreign listener.
+
+Upgrades preserve `init.lua`; compare any adjacent `init.lua.new` before adopting
+new starter settings. Before removing app profile data, save chats/assets you
+want and run `:ParleyProxy stop`. `brew uninstall parley` alone removes the
+application, retaining profile data and shared account logins.
 
 ## Shared product defaults
 
@@ -126,8 +180,8 @@ retains the shared login directory. `chats/welcome.md` contains
 setup instructions before its first question and is a recognized chat filename
 for both attachment and finder discovery. Legacy welcome-folder chats move via
 the existing chat-tree mover, preserving attachments and refusing conflicts.
-Uninstall stops the
-owned managed proxy before removing those roots. See the
+For manual profile removal, stop the owned managed proxy first as described
+in the recovery section above. See the
 [starter guide](../../packaging/starter-config/README.md) for commands and recovery.
 
 `scripts/check-starter.py` rejects personal configuration markers in the artifact
@@ -140,8 +194,10 @@ preservation, private permissions and refusal of redirected credential roots.
 ## Bundled help and local access
 
 The default app model receives `parley_help`, a read-only tool for this release's
-README and Markdown documents linked from `atlas/index.md`. Calling it without a
-topic lists IDs; `README` or `atlas/infra/starter` reads a document. Lua source is
+README, bundled tutorials and Markdown documents linked from `atlas/index.md`.
+Calling it without a topic lists IDs; `README` or `atlas/infra/starter` reads a
+document. Tutorial IDs are `tutorials/welcome`, `tutorials/basics` and
+`tutorials/advanced`. Lua source is
 already packaged for Neovim to execute, but the help tool does not expose it.
 
 README's marked introduction is also appended after chat prompt resolution, with

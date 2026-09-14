@@ -1,19 +1,19 @@
 # Discovery Registry
 
-## Overview
-The discovery registry is parley's data-driven model of a repo's **noun
-vocabulary** — *what file types (nouns) exist and how to find their instances* —
-that a readonly research chat consumes instead of hard-coding type knowledge.
-It is the M1 core of issue #116. Its `render()` output feeds parley's repo-aware
-**chat context** (the P1 "chat as ariadne workbench" mode). _(Originally framed
-as feeding a #128 `repo_discovery` skill; the #128 re-scope reclassified that as
-P1 chat context, not a P2 skill — see `workshop/pensive/parley-two-modes-chat-vs-artifact.md`.)_
+## Scope
 
-A registry maps `name → TypeDescriptor`. The effective registry is **base ∪
-local**: a parley-shipped *base* (universal + parley-native types) unioned with
-*local* `type:` values grep-discovered from the inspected repo. The registry
-*interface* is decoupled from its *production* (grep now; a `datatype`-binary
-index later — same output shape, swappable producer).
+The registry is an internal library describing repository document types and
+where to search for them. It is exposed as `require('parley').discovery`.
+It builds descriptors and search commands; it does not execute the search.
+There is currently no production request-builder consumer of its `render()`
+output, so this registry does not automatically teach a chat the repository's
+types or grant file access. Ordinary users use the existing artifact finders
+and context/file tools; the [repo policy](../infra/repo_mode.md) controls access.
+
+The effective registry combines Parley's base types with local `type:` values
+discovered through ripgrep. Its interface keeps descriptor production separate
+from command compilation (`ARCH-PURE`). A future index could replace discovery,
+but an index service is not a current installation requirement.
 
 ## Module layout (`lua/parley/discovery/`)
 | Module | Role | Purity |
@@ -52,25 +52,17 @@ than literals (ARCH-DRY); they are repo-relative so the builder can prefix
 repo roots. `plan` has no config key (parley doesn't auto-create
 `workshop/plans/`) — literal `workshop/plans/*.md`.
 
-## The two consumers
-- `query(type, term) → DiscoverySpec` → `spec_to_command(spec) → structured
-  command` → `render_command(cmd) → string`: the **deterministic-shell,
-  thin-model** seam. The model only ever picks a noun + a term; the registry
-  compiles the search. `spec_to_command` is a **pure structured compiler** —
-  `split_glob` turns each `locate` glob into a positional search DIR + a RELATIVE
-  `-g` name pattern, yielding `{search_dirs, name_globs, frontmatter,
-  content_term}`; `render_command` renders the shellescaped `rg` pipeline.
-  This split is the **I-B root-cause fix** (#116 M2): on the *built* registry the
-  locate globs are absolute (repo-prefixed), so the old `rg … -g '<abs>' .`
-  matched nothing — a positional absolute dir + a relative `-g` matches. Only a
-  `frontmatter`-kind matcher adds a frontmatter filter; otherwise the `locate`
-  glob discriminates. "Decide/compile the search" (pure) is split from "run it"
-  (IO, consumer-side / #115).
-- `render() → string`: the noun-vocabulary text — one sorted bullet per type
-  (label, blurb, a derived find-hint). This is the repo-aware vocabulary parley's
-  **chat context** (P1) surfaces; its format is a contract guarded by
-  verbatim-line assertions in the registry spec. _(Pre-#128-re-scope this was
-  framed as a `repo_discovery` skill body — now P1 chat context, not a P2 skill.)_
+## Library outputs
+
+`query(type, term)` produces a `DiscoverySpec`. `spec_to_command(spec)` compiles
+that into structured search directories, relative name globs, frontmatter filters
+and a content term. `render_command(cmd)` shell-quotes the corresponding ripgrep
+pipeline. Absolute locate globs become positional directories plus relative `-g`
+patterns; only `frontmatter` matchers add a frontmatter filter. Executing the
+rendered command remains the caller's responsibility.
+
+`render()` produces one sorted bullet per type, with label, description and
+derived find hint. Neither output is currently injected into ordinary chat.
 
 ## base ∪ local composition (RegistryBuilder)
 `build(ctx)` composes the effective registry for an injected mode context
@@ -81,8 +73,8 @@ repo roots. `plan` has no config key (parley doesn't auto-create
   added first → wins ties; `local_types.discover` already subtracts base, so a
   collision can only arise across members → appears once).
 
-The **merge**: repo-relative `locate` globs are expanded across `[repo_root] +
-members`; absolute/global globs (chat/note's `chat_dir`/`notes_dir`) pass
+The **merge**: repo-relative `locate` globs are expanded across the super-repo
+members when present, otherwise the selected repo root; absolute/global globs (chat/note's `chat_dir`/`notes_dir`) pass
 through unchanged. So `query()` spans global ⊕ repo ⊕ siblings by reusing
 parley's existing root union (super_repo members, sourced from
 `super_repo.compute_members`) — no separate root-scope enum. `current()` reads
@@ -96,34 +88,21 @@ types" when rg is absent. This module is the single swap point for a future
 `datatype`-binary-maintained index: same descriptor-list output, different
 producer.
 
-## Issue home from cue (M2)
-The `issue` noun is **ariadne-owned**, so parley sources its home folder from
-ariadne's model rather than hardcoding it (the heart of #116 — parley defers to
-ariadne for ariadne's nouns). `ariadne/construct/vocabulary/issue.cue` carries a
-concrete `discovery: {home, glob}` block; `weave compile` exports it (via
-`vocabulary export`, a passthrough of `cue export`) into the gitignored
-`construct/generated/vocabulary/issue.json`. `issue_vocabulary.home()` reads the
-relative `discovery.home` (nil pre-weave / fresh clone — pcall-guarded). At
-`setup`, `issues.resolve_issues_dir(opts.issues_dir, home(), default)` seeds
-`config.issues_dir` — **precedence: explicit user override > cue home > built-in
-default** — so all five `config.issues_dir` readers (`get_issues_dir`,
-`get_issues_repo_root`, the super-repo finder `issue_finder.lua:133`, the status
-autocmd, and base.lua's issue descriptor) derive from the one cue source with no
-per-reader rerouting. `issues_dir` stays relative (it is in setup's
-`skip_prepare`). chat/note/vision stay parley-native — their config keys are
-parley's own concept, not ariadne's, so routing them through the registry would
-be a circular no-op.
+## Issue vocabulary and release data
 
-## Scope
-- **M1** — the registry **core** (this doc).
-- **M2 (done)** — `issue` home sourced from cue (above) + the I-B structured-argv
-  fix (built-registry `query()` now compiles a *matching* command). chat/note/
-  vision stay parley-native; the faceted picker UI is split to #115.
-- **M3** — issue creation via `sdlc issue new` **delegation** (retire parley's
-  hand-rolled `render_issue_template`); ariadne#145 unifies the creation template
-  onto the cue model.
+`construct/generated/vocabulary/issue.json` is tracked and shipped with Parley.
+It is generated from the maintainer's CUE vocabulary; installed users do not need
+ariadne or CUE to read it. `issue_vocabulary.home()` supplies the issue directory
+at setup with precedence: explicit `issues_dir` > vocabulary home > built-in
+default. The runtime loader resolves from the installed plugin root, validates
+its shape, and reports missing/damaged data without preventing chat startup.
+See [issue management](../issues/issue-management.md) for degraded capabilities.
 
-## Related
-- [Repo Mode](../infra/repo_mode.md) — the root-union the merge reuses.
-- [Super-Repo Mode](../modes/super_repo.md) — sibling-repo member discovery.
-- Issue `workshop/issues/000116-*.md`, plan `workshop/plans/000116-*-plan.md`.
+## Checks and related behavior
+
+The `discovery_*_spec.lua` files in `tests/unit/` cover the pure library. `tests/integration/discovery_builder_spec.lua` covers configured
+roots and compiled search behavior; `discovery_local_types_spec.lua` covers
+ripgrep discovery. `tests/unit/issue_vocabulary_spec.lua` covers release data.
+
+- [Repo mode](../infra/repo_mode.md): project roots.
+- [Super-repo mode](../modes/super_repo.md): sibling discovery.

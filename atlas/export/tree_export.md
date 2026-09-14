@@ -12,3 +12,10 @@ Missing files get plain text labels (no link). Circular refs tracked via visited
 
 ## Assets (#231)
 - Each exported chat's `assets/<ts>/` folder is copied beside the exported files (`assets.copy_into`); HTML renders `![…](…)` as `<img class="asset-image">` via the same placeholder mechanism as branch links. Relative links resolve for an HTML export opened from disk; a Jekyll `_posts/` URL does not resolve them. A failed copy is reported, never silent.
+
+## Implementation and checks
+
+`lua/parley/exporter.lua` owns tree discovery and link rewriting;
+`lua/parley/assets.lua` owns sidecar copying. See
+`tests/integration/tree_export_spec.lua` and `tests/unit/exporter_tree_spec.lua`.
+[Export Formats](formats.md) describes commands, destinations, and offline limits.

@@ -6,8 +6,8 @@ tags:
 
 # Welcome to Parley
 
-Parley is a Chat embedded in NeoVIM. This enhanced Markdown formatted document
-is the full transcript. You ask question after 💬:, AI answers after 🤖:.
+Parley is a chat workspace built on Neovim. This Markdown document is your
+transcript. You ask questions after 💬:; the AI answers after 🤖:.
 Everything is editable.
 
 VIM crash course:
@@ -16,7 +16,7 @@ VIM crash course:
 2. `i` to enter INSERT mode at current cursor, and you can then just type.
 3. To exit, be in NORMAL mode (so `ESC`), then issue command `:q` and `return`.
 
-Now, to start use Parley, we need to connect to your AI accounts:
+To start chatting, connect an AI account:
 
 1. Connect a provider when prompted. You can also run `:ParleyProxy connect`.
 2. Choose a model when the picker opens, or use `:ParleyAgent`.

@@ -10,7 +10,10 @@ Per-chat side-file logging of LLM API state for debugging and learning. The prev
 - **Symptom is at the API layer** (cache_control placement, token counts, `stop_reason`, SSE event ordering, tool block IDs, raw payload shape) → toggle `:ParleyToggleRawLog` and inspect `raw.md`. Three sub-blocks per turn: request payload (YAML), assembled response (YAML), raw SSE stream.
 - **Reproducing a bad request without re-running the whole flow** → copy the `### Request payload (yaml)` block from `raw.md` into a new question as a `\`\`\`yaml {"type": "request"}` fence (see Input feature below), tweak the failing field, and re-dispatch. Faster than restarting the chat.
 
-Both toggles default off. Turn them on, repro the bug, then turn them off again — the lualine red `[LOG-EX]`/`[LOG-RAW]` flag is your reminder they're hot. Logs are gitignored-by-convention via the `.parley-logs/` prefix but commit-safe; clean up with `rm -rf <chat-dir>/.parley-logs/` when done.
+Both toggles default off. Turn them on, repro the bug, then turn them off again — the lualine red `[LOG-EX]`/`[LOG-RAW]` flag is your reminder they're hot. Logs contain conversation and request content, including supplied context and
+tool results; `log_sensitive` does not redact these separate files. A hidden
+`.parley-logs/` directory is not itself a Git ignore rule. Review before sharing
+and remove the relevant chat's log directory when no longer needed.
 
 ## On-disk layout
 
@@ -157,3 +160,9 @@ When the next dispatch fires, this fence is parsed as the actual API payload (sk
 - **PyYAML dependency for input feature.** YAML emission is pure Lua (frequent — every dispatch); YAML *parsing* shells to Python (rare — only when the user types a raw fence). If PyYAML isn't installed the parse fails with a clear hint, and the rest of parley keeps working.
 - **No log rotation / truncation.** Logs grow unboundedly; user deletes manually. Acceptable because the toggle is off by default and explicitly debug-scoped.
 - **Tool-loop iterations get their own `## Turn`.** Easier to read; matches the API call boundary.
+
+## Checks
+
+`tests/unit/raw_log_spec.lua` covers side-file layout and append behavior;
+`tests/unit/log_emit_spec.lua` covers serialization. These are separate from
+`tests/unit/logger_spec.lua`, which covers the ordinary runtime log.

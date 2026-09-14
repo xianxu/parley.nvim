@@ -1,7 +1,7 @@
 # Notes Structure
 
 ## Layout
-- Dated notes: `notes_dir/YYYY/MM/weekNN/DD-subject.md`
+- Dated notes: `notes_dir/YYYY/MM/WNN/DD-subject.md`
 - Special folder notes: `notes_dir/<folder>/slug.md`
 
 ## Multi-root Architecture
@@ -16,3 +16,10 @@ Prompts for subject, auto-creates directory structure under the primary note roo
 - `:ParleyNoteFinder` (`<C-n>f`): note picker (scans all roots)
 - `:ParleyNoteDirs` (`<C-n>h`): manage note roots (add/rename/remove)
 - `:ParleyYearRoot` (`<C-n>r`): cd to current year's notes folder
+
+## Configuration and implementation
+
+The shortcuts above are plugin defaults; the app starter omits the Ctrl+n family.
+The commands still work. [Local help](../ui/keybindings.md) reflects enabled keys.
+`lua/parley/notes.lua` creates notes and uses Sunday-based week numbers for `WNN`;
+`lua/parley/note_dirs.lua` delegates root ownership to `lua/parley/root_dirs.lua`.

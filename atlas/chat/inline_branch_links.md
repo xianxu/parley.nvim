@@ -19,6 +19,11 @@ not, and `:write` would persist the user's unrelated pending edits.
 | saves the parent | yes | **no** — never writes a file parley does not own |
 | after the keypress | opens the child | cursor on the new line, insert mode |
 
+The child is written to the current primary `config.chat_dir`, even when the
+parent was opened from an extra chat root. It is not necessarily beside its
+parent. The stored link is resolved across configured roots. The target filename
+is timestamped; later topic updates may add its slug.
+
 ### What `<M-i>` does (#214 M3)
 
 `<M-i>` / `<M-S-CR>` / `<C-g>i` are one binding. The chord **inserts a branch
@@ -36,24 +41,11 @@ reference must be saved first. `open_branch_question` owns the scheduled landing
 it cancels if the originating window closes, loses focus, or changes buffers
 before navigation runs (#248).
 
-**Placement is the cursor, deliberately** (operator, 2026-09-07, revising an
-earlier end-of-answer rule). `<M-S-CR>` reads as a *submission*, whose effect is
-not local to anywhere — but `<M-S-CR>` does not survive most terminals (zellij,
-tmux, anything without CSI-u), so `<M-i>` is the key people actually press, and
-it reads as an *insertion*. Relocating the line made the keypress jump.
-
-**The cost that used to carry.** A mid-answer `🌿:` once truncated the exchange
-— the parser latched a local-section flag, so text after the reference left the
-LLM context and the exchange model lost the rest of that exchange. That is what
-made end-of-answer placement look attractive. It is fixed at the source (#214):
-`🌿:` and `🔒:` are single-line annotations, so a reference costs exactly its own
-line wherever it sits. See `atlas/chat/parsing.md`.
-
-**The chord never deletes.** An earlier M3 draft had it copy the question into
-the child and delete the answer it replaced, mirroring `<M-CR>`'s resubmit. That
-is coherent for a *submission* but not for an *insertion*, and the three keys
-share one callback — so the destructive reading would have been reachable from
-the key that says "insert here". Dropped.
+References are inserted at the cursor. Normal/Insert mode places a standalone
+reference after the cursor line; Visual mode replaces the selected text with an
+inline anchor. This insertion does not delete the answer. Full-line `🌿:` and
+`🔒:` annotations consume only their own line; prose after them stays in context.
+See [Chat Parsing](parsing.md).
 
 **How far the `<M-CR>` parallel goes.** Both keys gather through the same
 `drill_in.chat_gather_opts`, so the marker removal and the `[…]` span marking are
@@ -119,3 +111,10 @@ corrupts the transcript rather than erroring.
 - Missing file: rendered as plain text in export; `<C-g>o` warns
 - Preserved across answer regeneration
 - Included in tree traversal and collision detection
+
+## Implementation and checks
+
+`lua/parley/init.lua` (`branch_inserters`, `open_branch_question`) and
+`lua/parley/branch_ref.lua` own creation. `tests/integration/branch_child_spec.lua`,
+`tests/unit/inline_branch_spec.lua`, and `tests/unit/branch_ref_spec.lua` cover
+creation, selected-text anchors, and editing.

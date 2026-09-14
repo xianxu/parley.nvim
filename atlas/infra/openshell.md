@@ -1,58 +1,15 @@
-# OpenShell Sandbox Environment
+# Optional OpenShell development environment
 
-## Purpose
-Secure, policy-enforced sandbox for AI agent workflows using NVIDIA OpenShell. The sandbox is an **agent runtime**, not a dev environment — humans use their host IDE, agents run inside the sandbox.
+OpenShell is a maintainer's external agent sandbox integration, not part of the
+Parley application runtime. Parley does not automatically sandbox its model tools
+with OpenShell. File-tool access instead follows Parley's
+[repository/neighborhood policy](repo_mode.md).
 
-## Architecture
+A public checkout and the installed app do not include the sandbox bootstrap,
+policy, sync configuration or agent credentials. Maintainer bootstrap may restore
+additional infrastructure in a configured development environment. Consult that
+environment's current commands and policy before using it; sandbox availability,
+network policy and image behavior are not Parley release guarantees.
 
-```
-Host (macOS)                          Sandbox (OpenShell / K3s pod)
-+---------------------+              +--------------------------+
-| IDE, terminal       |              | Community base image     |
-| make sandbox-build  |--creates-->  | + project-specific tools |
-| make sandbox        |--connects--> | + git config, aliases    |
-|                     |              |                          |
-| mutagen (host-side) |<---sync--->  | /sandbox/repo            |
-|                     |--one-way-->  | /sandbox/worktree        |
-+---------------------+              +--------------------------+
-         |                                      |
-         |  OpenShell proxy (L7)                |
-         |  <- policy.yaml enforces egress ->    |
-         +--------------------------------------+
-```
-
-## Key Design Decisions
-
-1. **Community `base` image, no custom image** — project-specific tools added via bootstrap scripts at creation time.
-2. **Host-side download, sandbox-side install** — fast parallel downloads on host, cheap install in sandbox. Bootstrap cache persists across rebuilds.
-3. **Mutagen for file sync** — two-way for repo/worktree, one-way for `.git/`/plenary. Chosen over `--upload` (slow handshake) and git clone (slow through L7 proxy).
-4. **GitHub auth forwarded from host** — `gh auth token` copied via SSH. `http.sslVerify false` needed because OpenShell proxy terminates TLS.
-5. **Agents get full auto-approve** — sandbox is the security boundary.
-
-## Base Image Update Check
-
-On every `make sandbox`, compares the GHCR registry digest of `base:latest` against a locally saved digest (`.openshell/.base-image-digest`). Prompts user to rebuild if a newer image is available. Fails open — never blocks on network errors.
-
-## Connection Resilience
-- SSH keepalive: `ServerAliveInterval 15`, `ServerAliveCountMax 480` — tolerates up to 2 hours of missed heartbeats (e.g. laptop sleep/wake).
-- `stty sane` run after disconnect to restore terminal state after abnormal disconnects.
-
-## Known Issues
-
-- **~300s interactive agent delay** — Claude Code and Codex interactive sessions hang ~290s between every API round-trip inside the sandbox. Root cause: the L7 proxy creates zombie CONNECT tunnels that block the agent's event loop until a 300s internal timeout fires. `--print` (non-interactive) mode is unaffected. No workaround found yet. See `debug-slowness/` for full investigation, evidence, and filed issues ([OpenShell #759](https://github.com/NVIDIA/OpenShell/issues/759)).
-
-## Gotchas
-
-- **Policy `binaries` field** — every `network_policies` entry must have `binaries` or OPA silently denies all traffic.
-- **`HOME=/sandbox`** in the community base image, not `/home/sandbox`.
-- **DNS-1035 sandbox names** — dots replaced with hyphens.
-- **Luacheck without LuaRocks** — built from source with `gcc` directly (no `unzip` in base image).
-
-## Usage
-```bash
-make bootstrap          # One-time: install openshell, gh, mutagen + gh auth
-make sandbox-build      # Create sandbox, run setup, start sync (idempotent)
-make sandbox            # Connect to sandbox (builds if needed)
-make sandbox-clean      # Reset repo sync + re-apply config
-make sandbox-stop       # Delete sandbox, clean up
-```
+For ordinary development, use the standalone commands in `TOOLING.md` and the
+[test harness](test_harness.md). No OpenShell installation is required.

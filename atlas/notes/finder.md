@@ -25,3 +25,19 @@ First-level non-date/non-template folders are "special" — always visible regar
 
 ## Recency
 Same month-based cycle as Chat Finder. Directory-derived dates drive sort order over mtime.
+
+## Controls and defaults
+
+`note_finder_recency` defaults to filtering the last 3 months, with 3/6/12/All
+views. Ctrl+a/Ctrl+s cycle the view; Ctrl+d asks before deleting a note. Basic
+navigation is Ctrl+j/k or arrows, Enter to open, Esc/Ctrl+c to cancel. Action
+keys are configurable through `note_finder_mappings`.
+
+The app starter does not bind the plugin-default Ctrl+n f launcher; use
+`:ParleyNoteFinder`. Local Ctrl+g ? help shows the configured picker actions.
+
+## Implementation and checks
+
+`lua/parley/note_finder.lua` and `lua/parley/note_finder_records.lua` own discovery,
+classification, recency, and display. See `tests/unit/note_finder_logic_spec.lua`
+and `tests/unit/note_finder_records_spec.lua`.

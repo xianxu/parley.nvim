@@ -1,121 +1,70 @@
 # File References (@@)
 
-## Syntax
-- `@@<ref>@@` — the canonical form
-- Ref types: `@@https://...@@`, `@@/absolute@@`, `@@~/home@@`, `@@./relative@@`, `@@../parent@@`
-- No bare filenames, no colon syntax, no end-at-whitespace **in content
-  inclusion**. The *opening* chain below is more permissive than the inclusion
-  parser and accepts `@@<path>: topic@@` and bare chat filenames.
+Write `@@./file.lua@@` inside a question to include a file's content in the
+model's context. The original question stays readable; the assembled request
+adds a filename header and line-numbered content. This is separate from opening
+a reference in the editor.
 
-## Behavior
-- Inline anywhere in text: `review @@./file.lua@@ and improve it`
-- Content loaded with filename header and line numbers
-- Non-chat refs keep original text
-- Chat-to-chat references use `🌿:` branch links (see `chat/inline_branch_links.md`)
+## Inclusion syntax
 
-## Opening what's under the cursor
+- `@@https://example.com/file@@` — remote context; see [Google Drive](google_drive.md) for authenticated documents.
+- `@@/absolute/path@@`, `@@~/path@@`, `@@./relative@@`, `@@../parent@@` — local paths.
+- A closing `@@` is required. Bare filenames and `@@path: topic@@` are accepted
+  by parts of editor navigation, but are not the canonical content-inclusion form.
+- References work inline: `Review @@./file.lua@@ and improve it`.
+- Exchanges containing file references are preserved in full during memory
+  management rather than summarized. Chat branches use
+  [branch links](../chat/inline_branch_links.md).
 
-`<M-o>` (alias `<C-g>o`) → `OpenFileUnderCursor`. One key, one chain, in chat
-and markdown buffers alike (#225). It used to be two chains — a markdown one in
-`open_chat_reference` and a chat one inline in the command — which had drifted
-apart in four ways, three of them missing on the chat side.
+## Inclusion paths and permissions
 
-`open_reference_under_cursor(buf, line, col, is_chat)` tries, in order:
+When assembling a question's explicit `@@` references, the file-content reader
+expands the supplied path and reads it with Neovim's filesystem access. Relative
+paths in this inclusion step follow Neovim's current working directory, unlike
+editor navigation's buffer-relative lookup below. Use an absolute path when that
+distinction matters.
 
-1. a `src:` markdown link
-2. an inline `[🌿:anchor](file)` under the cursor
-3. a `🌿:` reference line
-4. an `@@` reference: `@@path@@`, `@@path: topic@@`, or the nearest `@@…@@`
-   on the line. A relative or bare name resolves against the buffer's directory
-   and the chat roots, timestamp-first, so a renamed slug still finds its file.
-   A **directory** reference opens in netrw, preferring the other window in a
-   two-split layout — **chat buffers only**, the one deliberate divergence
-   (`is_chat`). A missing target that names a chat timestamp is treated as a
-   forward reference and the chat is created.
+Explicit inclusion does not pass through the model file-tool dispatcher, so
+`tool_read_roots` does not restrict what an `@@` reference can include. The
+backtick guard prevents command execution during path expansion; it is not a
+read-root permission check. Include only content you intend to send. This describes
+the explicit-reference assembly in `chat_respond.build_messages`, not a promise
+that every recursive tool round rereads those files.
 
-It answers with one of three values, and the distinction is what lets the
-caller fall through safely:
+## Opening a reference
 
-| value | means | caller |
-|---|---|---|
-| `"opened"` | recognised and acted on | done; restore insert if it started there |
-| `"none"` | nothing here looks like a reference | fall through to `ResolveRefOrGotoFile` (smart `gf`) |
-| `"failed"` | recognised, could not open; already reported | done — do **not** fall through |
+`<M-o>` (alias `<C-g>o`) opens the reference under the cursor in chat and Markdown
+buffers. It handles `src:` links, inline branch links, `🌿:` reference lines,
+`@@` references, and ordinary local Markdown links. If there is no recognized
+reference it falls back to [smart gf](artifact_refs.md). A recognized but missing
+target reports its own error and does not fall through.
 
-`"failed"` must not fall through: handing `gf` a path we already know is absent
-trades a precise diagnostic for a vague one. The wording differs by arm — the
-`🌿:` and inline-link arms say `Chat file not found: …`, the `@@` arm says
-`File not found: …`, and a directory reference says `Directory not found: …`.
+Relative Markdown `.md` links resolve from the source buffer's directory,
+independent of shell cwd. For `@@` links, relative or bare names are resolved
+against the buffer directory and chat roots; timestamp-first chat lookup tolerates
+renamed slugs. A missing chat timestamp can be a forward reference that creates
+the chat. Directory references open netrw in chat buffers, preferring the other
+window in a two-split layout.
 
-**Landing mode follows the destination, not the origin.** A chat reference is
-somewhere you went to *write*, so insert mode is restored; a `gf` destination
-is source you went to *read*, so it lands in normal. Invoked from insert mode,
-the two arms therefore end differently on purpose.
+When invoked from Insert mode, a chat-reference destination restores editing;
+the smart-gf fallback lands in Normal mode for reading source. Pressing `gf`
+directly uses smart artifact-reference resolution or native Vim go-to-file.
 
-`open_branch_ref`, `try_open_src_link` and `try_open_inline_branch_link` return
-the same three-valued status; they used to return `true` for both "opened" and
-"recognised and failed", which was harmless only while every non-false answer
-meant stop.
+## Path handling and implementation
 
-## Keybindings
-- `<M-o>` / `<C-g>o`: open the reference under the cursor, else smart `gf`
-- `gf`: smart go-to-file directly (see `context/artifact_refs.md`)
+`open_reference_under_cursor` returns `"opened"`, `"none"`, or `"failed"`.
+Only `"none"` invokes the shared fallback. The branch and src-link helpers use
+the same status vocabulary.
 
-## Untrusted paths (#225)
+Paths read from transcript text are untrusted. They pass through
+`helper.expand_path`, `helper.abs_path`, or `helper.safe_glob` before any Vim
+expansion/globbing that could execute backticks. All three share
+`helper.would_execute`; refused paths produce diagnostics or remain inert
+literals. Operator-configured paths have a separate audited allowlist.
 
-`vim.fn.expand()` runs shell commands — expanding ``"`touch /tmp/x`"`` executes
-it. A chat buffer holds **model output**, so every path lifted out of one is
-attacker-influenced text arriving at a command-execution sink. This was
-reproduced end-to-end: a chat line ``@@`touch <path>`@@`` created the file when
-`<M-o>` was pressed on it.
-
-Four vim functions execute a backtick in their argument — `expand`, `glob`,
-`globpath`, `expandcmd` — and `resolve` / `filereadable` / `isdirectory` /
-`fnamemodify` / `simplify` do not. That set is **probed, not remembered**:
-`tests/arch/untrusted_path_spec.lua` runs the probe and fails if the declared
-set is wrong in either direction. It exists because the first version of this
-rule covered `expand` only, declared the class closed, and left `glob` live via
-`find_files`' pattern half.
-
-A transcript-derived string reaches a sink only through:
-
-| guard | on refusal | use when |
-|---|---|---|
-| `helper.expand_path` | `nil` | you want to REPORT the refusal |
-| `helper.abs_path` | the unexpanded literal (TOTAL) | you just need something for `filereadable` |
-| `helper.safe_glob` | `nil` | globbing |
-
-`helper.would_execute` is the one predicate all three share, so a new guard
-cannot disagree with the old ones about what "dangerous" means. Refusal rather
-than escaping: `expand()` has two executing constructs (`` `cmd` `` and
-`` `=expr` ``) with no reliable quoting, and no legitimate parley reference
-needs a backtick.
-
-**Config-derived** paths (`chat_dir`, `root.dir`, `src_root`) keep the plain
-calls — the distinction is provenance, not syntax — and each such site is
-allowlisted in the arch spec **with the reason it is operator-derived**. That
-allowlist, not a list in this document, is the enforcement: a new unguarded
-sink call fails the suite.
-
-`tests/integration/untrusted_path_spec.lua` additionally drives each entry point
-with a real `touch` payload and asserts three things per arm: no marker file,
-no raise, and the reported diagnostic. (An earlier version of this paragraph
-claimed every arm went red when the guard was removed. One did not — the
-`outline` arm passed a buffer number where a path was wanted and asserted
-nothing. Each arm's revert-and-see-red is now recorded rather than assumed.)
-
-## Rules
-- Exchanges with `@@` refs MUST be preserved in full during memory management (never summarized)
-- A path that came out of a buffer goes through `helper.expand_path`, never
-  `vim.fn.expand` directly
-- The fall-through has exactly ONE call site, asserted by
-  `tests/integration/open_reference_spec.lua`. Appending it per buffer type is
-  how the two chains diverged in the first place.
-
-## Ordinary Markdown navigation links
-
-Option+o / Ctrl+g then o also follows `[Basics](./basics.md)` with the cursor
-on either label or destination. Local `.md` destinations resolve against the
-source buffer's directory, independent of shell cwd. Missing targets report an
-error without falling through to `gf`. The chain reuses the existing Markdown
-link parser/resolver and preserves dedicated src/branch handling.
+- `lua/parley/helper.lua`, `chat_parser.lua` — reference extraction and safe path helpers.
+- `lua/parley/init.lua` — editor opening chain and remote-context cache.
+- `lua/parley/chat_respond.lua` — request inclusion.
+- `tests/unit/build_messages_spec.lua`, `tests/unit/remote_references_spec.lua` — context assembly and caching.
+- `tests/integration/open_reference_spec.lua` — navigation and one fallback boundary.
+- `tests/arch/untrusted_path_spec.lua`, `tests/integration/untrusted_path_spec.lua` — expansion sinks and end-to-end inert path handling.
