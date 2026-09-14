@@ -2,22 +2,19 @@
 # bootstrap.sh — first-run entrypoint for a bare clone of an ariadne derivative
 # whose upstream peers aren't checked out yet.
 #
-# A real committed file, not a symlink: every other entrypoint (Makefile,
-# construct/, AGENTS.md, …) is a sibling-relative symlink into ../<upstream>, so
-# on a peerless clone they all dangle and `make` can't even read its Makefile.
-# This reads the files that survive — construct/deps (substrate, #60) + the root
-# go.mod (Go app-dep siblings) — clones the upstream peers as siblings, then
-# `exec make bootstrap` (symlinks now resolve) for the full cascade
-# (ensure-go → bootstrap-peers → refresh → tools → sdlc-install → data-deps).
+# A real committed file, like the seeded root Makefile. Product targets work
+# without substrate peers; maintainer workflow helpers may be missing. This
+# reads construct/deps plus root go.mod, clones upstream peers as siblings,
+# then execs make bootstrap. The root finds its sibling workflow overlay,
+# whose pre-weave helpers resolve from their owner until weave creates links.
 #
-# The clone walk is TRANSITIVE (ariadne#45): each derivative declares only its
-# direct upstream, but a 3-deep chain (foo→mid→ariadne) symlinks the Makefile
-# through every level, so `make` can't start until the whole chain is on disk.
+# The clone walk is transitive (ariadne#45): each derivative declares only its
+# direct upstream, but every layer must be present for the full weave.
 # In-process BFS (not recursing into each peer's bootstrap.sh, whose `exec make`
 # would orphan the top repo); depends only on each peer's go.mod.
 #
 # Idempotent (present peers are just traversed). Delivered via the manifest
-# `seed` action (write-once). The replace-line parser below is kept identical to
+# `seed` action (content-tracking). The replace-line parser below is kept identical to
 # construct/scripts/.../list-peers.sh, locked by the drift test in
 # construct/scripts/test/.
 #

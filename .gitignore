@@ -90,3 +90,4 @@ bin/
 /scripts/pre-merge-checks.sh
 /scripts/run-merge-checks.sh
 /scripts/sdlc-install.sh
+/scripts/merge-checks.d/40-duplicate-issue-id.sh
