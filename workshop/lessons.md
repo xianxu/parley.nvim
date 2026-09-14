@@ -2373,3 +2373,6 @@ download.
   scheduler. Branch landing tests must inspect the actual destination/question,
   since source-text assertions about `startinsert` missed both the visual path
   and the seeded child landing on its trailing template question.
+
+- When changing navigation, search README and user help as well as the atlas;
+  #248 updated the map but initially left README promising the opposite landing.

@@ -68,3 +68,5 @@ Acceptance boundary: close through SDLC review after the implementation checks a
 - Separate hermetic headless Neovim smoke entered actual Insert mode on the visual branch's seeded first question and verified typed text appended there; /tmp/parley248-smoke.log. Full make test passed (including lint), exit 0; /tmp/parley248-full.log.
 
 - Close preflight rejected a self-referential unchecked review task. Expressed the acceptance boundary as prose; all implementation tasks are verified.
+
+- Closing review round 1: BR-1 identified stale README visual-branch landing prose. Corrected the user instructions to match all chat creation paths; swept README, docs, atlas, and runtime help for parent-focus/EOF claims. No runtime findings.
