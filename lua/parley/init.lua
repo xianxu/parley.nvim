@@ -2297,6 +2297,24 @@ local function branch_inserters(buf, abs_link, owns_file)
 		return ok
 	end
 
+	local function open_branch_question(file)
+		local win = vim.api.nvim_get_current_win()
+		vim.schedule(function()
+			-- A deferred gesture must not steal focus after the user moves away.
+			if not vim.api.nvim_win_is_valid(win) or vim.api.nvim_get_current_win() ~= win
+				or vim.api.nvim_win_get_buf(win) ~= buf then return end
+			vim.cmd("edit " .. vim.fn.fnameescape(file))
+			local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+			local parsed = M.parse_chat(lines, M.chat_parser.find_header_end(lines))
+			local first = parsed.exchanges[1]
+			-- Custom templates without a question keep the old end-of-file fallback.
+			local row = first and first.question.line_start or #lines
+			vim.api.nvim_win_set_cursor(win, { row, 0 })
+			vim.cmd("normal! $")
+			vim.cmd("startinsert!")
+		end)
+	end
+
 	-- Two buffer types, two honest guarantees — stated once here rather than
 	-- discovered per finding (#214 BR-27/BR-28).
 	--
@@ -2406,15 +2424,7 @@ local function branch_inserters(buf, abs_link, owns_file)
 			return true
 		end
 		M.logger.info("Branched submission into: " .. rel_path)
-		vim.schedule(function()
-			vim.cmd("edit " .. vim.fn.fnameescape(new_chat_file))
-			vim.cmd("normal! G")
-			-- Insert mode at the end, the same landing the placeholder path
-			-- gives. One key must not have two landing modes (#214 M3 review);
-			-- and a gathered child usually wants a line of framing before it is
-			-- submitted, so insert is the useful default in both cases.
-			vim.cmd("startinsert!")
-		end)
+		open_branch_question(new_chat_file)
 		return true
 	end
 
@@ -2478,11 +2488,7 @@ local function branch_inserters(buf, abs_link, owns_file)
 			return
 		end
 		M.logger.info("Created branch to new chat: " .. rel_path)
-		vim.schedule(function()
-			vim.cmd("edit " .. vim.fn.fnameescape(new_chat_file))
-			vim.cmd("normal! G")
-			vim.cmd("startinsert!")
-		end)
+		open_branch_question(new_chat_file)
 	end
 
 	local function insert_inline()
@@ -2515,11 +2521,10 @@ local function branch_inserters(buf, abs_link, owns_file)
 		create_child_if_owned(new_chat_file, topic,
 			require("parley.branch_submit").seed_question("define", selected))
 		M.highlight_chat_branch_refs(buf)
-		-- Same durability rule as insert_plain: the child is on disk and only the
-		-- in-buffer link points at it. Focus stays in the parent here, so Vim's
-		-- own unsaved-buffer guard also applies — but :q! would still orphan it.
-		commit_reference()
+		-- Open only after the inline anchor is durable, just like the plain path.
+		if not commit_reference() then return end
 		M.logger.debug("Created inline branch to new chat: " .. link .. " (" .. topic .. ")")
+		open_branch_question(new_chat_file)
 	end
 
 	--- ARCH-ORDER, applied to the WHOLE chord (#214 BR-69). A streaming response

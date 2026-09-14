@@ -210,13 +210,16 @@ outside every exchange (the frontmatter, for instance) are left alone.
 - `<M-i>` (or `<M-S-CR>`, or `<C-g>i`) **inserts a branch at the cursor** and
   creates the child chat it points at.
   - **text selected** → the selection becomes an inline `[🌿:…](file)` anchor and
-    the child opens with `tell me more about "…"`. You stay in the parent.
+    the child opens with `tell me more about "…"`.
   - **pending `<M-q>` quotes** → they are stripped from the parent and become
     the child's first question. Note the scope differs from `<M-CR>`: this
     gathers **every** pending quote in the buffer, where `<M-CR>` with the cursor
     inside an exchange gathers only that exchange's.
   - **neither** → a bare `🌿:` placeholder, and the child opens for you to type
     in.
+
+  In every chat case, the child opens in Insert mode with the cursor at the end
+  of its first question line, ready to edit.
 
   The reference always lands where your cursor is, and the chord never deletes
   anything from the parent. Every case saves the parent first, so the link is

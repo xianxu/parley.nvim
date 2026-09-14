@@ -2363,3 +2363,16 @@ download.
   credential deletion (ARCH-SECURE, ARCH-FUNERAL).
 - Moving a default path into an explicit user override can change precedence.
   Verify repo detection and buffer-local keymaps using the migrated profile.
+
+
+## 2026-09-14 (#248)
+
+- **Scheduled navigation owns a window, not whatever happens to be current.**
+  Capture the originating window and cancel if it closes, loses focus, or changes
+  buffers before the callback runs; cover those transitions with a controlled
+  scheduler. Branch landing tests must inspect the actual destination/question,
+  since source-text assertions about `startinsert` missed both the visual path
+  and the seeded child landing on its trailing template question.
+
+- When changing navigation, search README and user help as well as the atlas;
+  #248 updated the map but initially left README promising the opposite landing.
