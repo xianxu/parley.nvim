@@ -446,3 +446,8 @@ and deletion claims. Updated both packaging guides consistently: shared OAuth
 credentials live outside app roots and survive removal. Review independently
 passed 163 starter checks, 69 packaging checks and lint. Fresh-machine acceptance
 remains open.
+
+Published v2.4.1 at bcbb0143; Homebrew tap ce28540. Public release and exact
+remote formula bytes verified; source archive SHA256
+177b39288912af98e8686a90408ef5d87aeaf3d166ac81921972dbe816b29ad7.
+PR #181 remains open pending fresh-machine acceptance.
