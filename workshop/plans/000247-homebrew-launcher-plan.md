@@ -83,9 +83,9 @@ CLIProxyAPI. No hand-maintained second dependency list.
 ## Chunk 1: Package, publish and prove the app
 
 - [x] Implement formula projection and launcher with atomic initial config/candidate publication; add stateful filesystem/argv tests and registry parity coverage to `make test`.
-- [ ] Implement release/tap tooling using local git repositories and archive fixtures for deterministic retry/failure coverage; generate the exact reviewable formula and tap README locally.
-- [ ] Add isolated VM acceptance and uninstall checks, document commands and artifact ownership in atlas/README, and update the project.
-- [ ] Run local checks and SDLC close review. Publish the reviewed release/tap and run the actual clean-VM installation; fix/re-close on new code changes. Merge/archive only with the full acceptance evidence, then verify the public install command again.
+- [x] Implement release/tap tooling using local git repositories and archive fixtures for deterministic retry/failure coverage; generate the exact reviewable formula and tap README locally.
+- [x] Add isolated VM acceptance and uninstall checks, document commands and artifact ownership in atlas/README, and update the project.
+- [x] Run local checks and SDLC close review. Publish the reviewed release/tap and run the actual clean-VM installation; fix/re-close on new code changes. Merge/archive only with the full acceptance evidence, then verify the public install command again.
 
 ## Function test strategies
 
@@ -522,3 +522,11 @@ The personal profile must therefore use the shared repo_mode.detect_root helper
 to select a marked project explicitly, as the app does. Preserve global iCloud
 storage while restoring repo chat recognition and its agent keymap; add a
 regression for this exact explicit-global-path plus selected-repo combination.
+
+### 2026-09-14 — accepted release
+
+Operator explicitly accepts #247 after VM/fresh-machine/local testing and
+authorizes closure. Delivered tasks are checked. Acceptance uses that operator
+judgment plus the recorded automated suite and release verification rather than
+requiring a further unattended VM outcome manifest. Merge/archive is now
+authorized. Shared credential retention remains the agreed uninstall contract.

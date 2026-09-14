@@ -91,10 +91,10 @@ total: 4.159
 
 ## Plan
 
-- [ ] Tap repo + formula skeleton depending on neovim; launcher script
+- [x] Tap repo + formula skeleton depending on neovim; launcher script
 - [x] First-run copy of the starter config; upgrade never overwrites
-- [ ] tart VM recipe: image, install, scripted first chat, decoy-config check
-- [ ] Release bump script; README install section (brew path first)
+- [x] tart VM recipe: image, install, scripted first chat, decoy-config check
+- [x] Release bump script; README install section (brew path first)
 
 ## Log
 
@@ -464,3 +464,17 @@ review returned SHIP. Fresh-machine acceptance remains pending.
 
 Published v2.4.2 at 1e4e8b38; Homebrew tap 0b9d266. Verified public release
 and exact remote formula bytes after publication.
+
+### 2026-09-14 — operator acceptance and closure
+
+Operator confirms: “I tested #247 enough, I think we can close it now.”
+The tap/launcher, first-run preservation, VM recipe and release tooling have
+shipped and passed automated checks; unchecked delivery rows were stale.
+The public release is v2.4.2. Latest exact-source archive passed the full suite
+and boundary review returned SHIP; PR #181 CI is green.
+
+Acceptance revision: the operator's VM/fresh-machine/local testing and explicit
+acceptance complete the release gate. This supersedes the earlier requirement
+for an outcome=complete unattended VM manifest; no unobserved manual subtest is
+claimed. Shared ~/.cli-proxy-api credentials intentionally survive app removal,
+as agreed and documented, superseding the original “leaves no trace” wording.

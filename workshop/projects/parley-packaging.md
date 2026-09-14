@@ -74,7 +74,7 @@ Prerequisites owned by `parley-v1-release` (tracked there, listed for order):
 - [x] [parley.nvim#244] — shrink pasted and generated images before saving *(sips first; probe others; keep the original)*
 - [x] [parley.nvim#245] — dependency registry and honest install advice *(independent dependency health; feeds the formula)*
 - [x] [parley.nvim#246] — starter config as a product artifact *(after #211 and #209; `NVIM_APPNAME=parley`)*
-- [ ] [parley.nvim#247] — Homebrew tap and `parley` launcher, tested on a clean tart VM *(after #245, #246; the project's done_when)*
+- [x] [parley.nvim#247] — Homebrew tap and `parley` launcher, tested on a clean tart VM *(after #245, #246; the project's done_when)*
 - [ ] [parley.nvim#206] — user documentation *(v1-release's row; the brew path becomes its install section)*
 
 <a id="parley-nvim-244"></a>
@@ -235,3 +235,21 @@ tools with project-local defaults, image instructions, MarkdownPreview and local
 documentation access. The current login entry is `:ParleyProxy connect`.
 Publication follows local review; #247 remains unchecked pending the operator's
 fresh-machine acceptance. No merge or archive is implied by this testing release.
+
+### 2026-09-14 — #247 accepted
+
+Operator accepts the published app after testing and requests closing #247.
+Homebrew v2.4.2 is public; exact archive tests, boundary review and PR CI pass.
+This acceptance supersedes the prior requirement for an unattended VM manifest
+before merging. The #245–#247 packaging spine is complete; #206 documentation
+remains separately open. Shared account credentials intentionally survive app
+profile removal.
+
+<a id="parley-nvim-247"></a>
+### parley.nvim#247 — Homebrew app
+
+**actual:** 11.92h
+**closed:** 2026-09-14
+
+Measured at the last SDLC close. Published through v2.4.2, then accepted by the
+operator; no additional manual test outcomes are inferred from acceptance.
