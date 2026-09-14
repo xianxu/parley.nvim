@@ -2,6 +2,7 @@
 -- Owns: remote reference cache, _build_messages, _resolve_remote_references,
 --       chat_respond, chat_respond_all, resubmit_questions_recursively, cmd.Stop/ChatRespond
 local M = {}
+local stream_position = require("parley.stream_position")
 
 --- Build the user-facing notice for a failed provider request.
 ---
@@ -263,21 +264,6 @@ local function is_follow_cursor_enabled(override_free_cursor)
         return _parley._state.follow_cursor
     end
     return not _parley.config.chat_free_cursor
-end
-
-local function query_cursor_line(qt)
-    if not qt then
-        return nil
-    end
-
-    if type(qt.last_line) == "number" and qt.last_line >= 0 then
-        return qt.last_line + 1
-    end
-    if type(qt.first_line) == "number" and qt.first_line >= 0 then
-        return qt.first_line + 1
-    end
-
-    return nil
 end
 
 local function buf_changedtick(buf)
@@ -2025,7 +2011,7 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                         end
                     end
 
-                    local streamed_cursor_line = query_cursor_line(qt)
+                    local streamed_cursor = stream_position.from_query(qt)
 
                     -- Clean up trailing blanks after the current exchange.
                     -- The model tracks content sizes precisely, but streaming
@@ -2144,10 +2130,10 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                                 .. ", component: "
                                 .. tostring(component)
                                 .. ", streamed_cursor_line: "
-                                .. tostring(streamed_cursor_line)
+                                .. vim.inspect(streamed_cursor)
                         )
 
-                        local line = streamed_cursor_line
+                        local line = streamed_cursor and streamed_cursor[1]
                         if not line then
                             if exchange_idx and component == "question" then
                                 line = response_start_line + 2
@@ -2156,7 +2142,7 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                             end
                         end
                         _parley.logger.debug("Moving cursor to completion position: " .. tostring(line))
-                        _parley.helpers.cursor_to_line(line, buf, win)
+                        _parley.helpers.cursor_to_line(line, buf, win, streamed_cursor and streamed_cursor[2])
                     else
                         _parley.logger.debug("Not moving cursor due to free_cursor setting")
                     end

@@ -6,6 +6,7 @@ local logger = require("parley.logger")
 local tasker = require("parley.tasker")
 local vault = require("parley.vault")
 local helpers = require("parley.helper")
+local stream_position = require("parley.stream_position")
 
 local default_config = require("parley.config")
 local providers = require("parley.providers")
@@ -995,6 +996,7 @@ D.create_handler = function(buf, win, line, first_undojoin, prefix, cursor, on_l
 		local end_line = first_line + finished_lines + 1
 		qt.first_line = first_line
 		qt.last_line = end_line - 1
+		qt.last_col = #prefix + #new_pending
 		if opts.after_write then
 			opts.after_write(qid, chunk, delta, end_line - 1)
 		end
@@ -1013,7 +1015,8 @@ D.create_handler = function(buf, win, line, first_undojoin, prefix, cursor, on_l
 			should_move_cursor = cursor
 		end
 		if should_move_cursor then
-			helpers.cursor_to_line(end_line, buf, win)
+			local tip = stream_position.from_query(qt)
+			helpers.cursor_to_line(tip[1], buf, win, tip[2])
 		end
 		end
 		if opts.around_write then

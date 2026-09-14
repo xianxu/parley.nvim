@@ -53,11 +53,15 @@ local function clear_folds_in_span(buf, win, first_0, last_0)
     if not valid_target(buf, win) then return end
     if first_0 == nil or last_0 == nil or last_0 < first_0 then return end
     vim.api.nvim_win_call(win, function()
-        local cursor = vim.api.nvim_win_get_cursor(win)
         local line_count = vim.api.nvim_buf_line_count(buf)
         local last_row = math.min(last_0 + 1, line_count)
         local first_row = math.max(first_0 + 1, 1)
         if first_row > last_row then return end
+        -- Cursor excursions also change topline/skipcol with an attached UI.
+        -- Preserve only this fold walk's view, so intentional follow movement
+        -- inside with_exchange_update's mutation remains effective.
+        local view = vim.fn.winsaveview()
+        local foldenable = vim.api.nvim_get_option_value("foldenable", { win = win })
         -- Walk fold-to-fold, not row-to-row, in ONE Lua→VimL crossing.
         -- chat_respond wraps every streamed chunk in with_exchange_update, so
         -- this is a per-chunk cost and it must not scale with exchange length:
@@ -76,8 +80,7 @@ local function clear_folds_in_span(buf, win, first_0, last_0)
         -- Reachable from a user's `set nofoldenable`, `zi`, or parley's own
         -- chat_toggle_tool_folds. Saved and restored so the operator's setting
         -- is not changed underneath them.
-        vim.api.nvim_exec2(string.format([[
-            let s:fen = &l:foldenable
+        local ok, err = pcall(vim.api.nvim_exec2, string.format([[
             setlocal foldenable
             execute %d
             let s:guard = 0
@@ -98,15 +101,16 @@ local function clear_folds_in_span(buf, win, first_0, last_0)
               endif
             endwhile
             let b:parley_fold_clear_iters = s:guard
-            let &l:foldenable = s:fen
         ]], first_row, (last_row - first_row + 2) * 2, last_row), {})
+        -- Restore both even if the walk fails; its temporary editor state must
+        -- not become the reader's new position or folding preference.
+        vim.api.nvim_set_option_value("foldenable", foldenable, { win = win })
+        vim.fn.winrestview(view)
+        if not ok then error(err, 0) end
         -- Loop iterations, exposed so a test can assert this walks folds rather
         -- than rows without timing anything. A wall-clock assertion measures the
         -- machine as much as the algorithm.
         M._last_clear_iters = vim.b[buf].parley_fold_clear_iters
-        vim.api.nvim_win_set_cursor(win, {
-            math.min(cursor[1], vim.api.nvim_buf_line_count(buf)), cursor[2],
-        })
     end)
 end
 

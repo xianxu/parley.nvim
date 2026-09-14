@@ -556,7 +556,7 @@ describe("chat_respond: buffer state after completion", function()
         assert.is_true(answer_index < footer_divider_index, "Expected answer above footnote footer")
     end)
 
-    it("keeps follow cursor on the last streamed answer line after completion", function()
+    it("keeps follow cursor at the last streamed answer byte after completion", function()
         local chat_content = [[
 # topic: Test Topic
 - file: test.md
@@ -571,17 +571,18 @@ describe("chat_respond: buffer state after completion", function()
         parley._state.follow_cursor = true
         vim.api.nvim_win_set_cursor(0, {6, 0})
 
+        local final_line = string.rep("It embeds easily. ", 200) .. "end"
         local completion_called = false
         parley.dispatcher.query = function(buf_arg, provider, payload, handler, completion_callback)
             local mock_qid = "qid_follow_cursor"
             parley.tasker.set_query(mock_qid, {
-                response = "Lua is lightweight.\nIt embeds easily.",
+                response = "Lua is lightweight.\n" .. final_line,
                 buf = buf_arg,
             })
 
             if handler then
                 handler(mock_qid, "Lua is lightweight.\n")
-                handler(mock_qid, "It embeds easily.")
+                handler(mock_qid, final_line)
             end
 
             vim.schedule(function()
@@ -598,13 +599,13 @@ describe("chat_respond: buffer state after completion", function()
         local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
         local answer_end_line = nil
         for i, line in ipairs(lines) do
-            if line == "It embeds easily." then
+            if line == final_line then
                 answer_end_line = i
             end
         end
 
         assert.is_not_nil(answer_end_line, "Expected streamed answer text in buffer")
-        assert.same({ answer_end_line, 0 }, vim.api.nvim_win_get_cursor(0))
+        assert.same({ answer_end_line, #final_line - 1 }, vim.api.nvim_win_get_cursor(0))
     end)
 
     it("topic generation writes updated header to line 0", function()
