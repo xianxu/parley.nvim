@@ -54,6 +54,43 @@ describe("cliproxy login", function()
         return table.concat(out, "\n")
     end
 
+    it("uses a friendly window with a UI and cancellation settles once", function()
+        vim.env.PARLEY_FAKE_LOGIN_MODE = "hangs"
+        local saved_uis = vim.api.nvim_list_uis
+        vim.api.nvim_list_uis = function() return { {} } end
+        local count = 0
+        cliproxy.run_login("claude", (cliproxy.login_argv("claude")), function(ok)
+            assert.is_false(ok)
+            count = count + 1
+        end, 1500)
+        vim.api.nvim_list_uis = saved_uis
+        local cancel = vim.fn.maparg('c', 'n', false, true)
+        assert.is_function(cancel.callback)
+        assert.is_nil(all_notices():find('oauth/authorize', 1, true))
+        cancel.callback()
+        vim.wait(2000, function() return count > 1 end, 25)
+        assert.equals(1, count)
+    end)
+
+    it("reports a failed UI login without dumping raw diagnostics", function()
+        vim.env.PARLEY_FAKE_LOGIN_MODE = "dies_early"
+        local saved_uis = vim.api.nvim_list_uis
+        vim.api.nvim_list_uis = function() return { {} } end
+        local done, result = false, nil
+        cliproxy.run_login("claude", (cliproxy.login_argv("claude")), function(ok)
+            done, result = true, ok
+        end)
+        vim.api.nvim_list_uis = saved_uis
+        assert.is_true(vim.wait(8000, function() return done end, 25))
+        assert.is_false(result)
+        assert.matches('Sign%-in did not finish', all_notices())
+        assert.is_nil(all_notices():find('exited 3', 1, true))
+        vim.fn.maparg('d', 'n', false, true).callback()
+        local details = table.concat(vim.api.nvim_buf_get_lines(0, 0, -1, false), '\n')
+        assert.matches('exited 3', details)
+        vim.fn.maparg('<Esc>', 'n', false, true).callback()
+    end)
+
     it("surfaces the authorize URL so a failed auto-open is still recoverable", function()
         vim.env.PARLEY_FAKE_LOGIN_MODE = "success"
         local ok = await(function(done)

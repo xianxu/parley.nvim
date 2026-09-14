@@ -138,7 +138,8 @@ local config = {
 		-- match would leave that provider unfilterable.
 		--
 		-- Terms narrow; the picker then keeps the newest of each model line and
-		-- caps at per_provider. Term order is display order. <C-a> in the picker
+		-- caps each search term at per_provider (legacy option name).
+		-- Term order is display order. <C-a> in the picker
 		-- bypasses filter AND curation, so narrowing this never puts a model out
 		-- of reach. Nothing here names a model version, so nothing here goes
 		-- stale. A configured provider you are not logged into shows as

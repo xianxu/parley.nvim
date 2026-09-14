@@ -138,8 +138,27 @@ local function matches(m, term)
         or tostring(m.display):lower():find(term, 1, true) ~= nil
 end
 
+-- Compare GPT's dotted numeric version only after the primary recency tie.
+-- Same-date vendor rows need a numeric tie-break: alphabetical order places
+-- GPT-6 after GPT-5.6. Other families and equal-version variants stay lexical.
+local function tied_id_less(a, b)
+    local va, vb = a:match("^gpt%-(%d[%d%.]*)"), b:match("^gpt%-(%d[%d%.]*)")
+    if va and vb then
+        local aa, bb = vim.split(va, ".", { plain = true }), vim.split(vb, ".", { plain = true })
+        for i = 1, math.max(#aa, #bb) do
+            local na, nb = tonumber(aa[i]) or 0, tonumber(bb[i]) or 0
+            if na ~= nb then
+                return na > nb
+            end
+        end
+    end
+    return a < b
+end
+
 --- The picker's default view: for each configured provider, the models matching
---- its terms, one per series (the newest), capped at `per_provider`.
+--- its terms, one per series (the newest), with an independent cap per term.
+--- `per_provider` is the legacy option name for that per-search cap; a bare
+--- provider is one search. Series remain deduplicated across its terms.
 ---
 --- Term order is display order, so the config expresses preference.
 ---@param models table[] # from parse()
@@ -168,17 +187,19 @@ function M.curate(models, opts)
             if ra ~= rb then
                 return ra > rb
             end
-            return tostring(a.id) < tostring(b.id)
+            return tied_id_less(tostring(a.id), tostring(b.id))
         end)
         local taken, seen = {}, {}
         for _, term in ipairs(#parsed.terms > 0 and parsed.terms or { "" }) do
+            local term_count = 0
             for _, m in ipairs(pool) do
-                if #taken >= per then
+                if term_count >= per then
                     break
                 end
                 if not seen[m.series] and (term == "" or matches(m, term)) then
                     seen[m.series] = true
                     taken[#taken + 1] = m
+                    term_count = term_count + 1
                 end
             end
         end

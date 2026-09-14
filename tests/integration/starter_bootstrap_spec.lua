@@ -73,6 +73,16 @@ describe('starter bootstrap', function()
         assert.equals(1, vim.fn.filereadable(root .. '/result'))
     end)
 
+    it('starts in the main window after first-install UI and on cached startup', function()
+        for _ = 1, 2 do
+            local result = run(nil, {BOOTSTRAP_INSTALL_FLOAT = '1'})
+            assert.equals(0, result.code, result.stderr)
+            local observed = vim.json.decode(table.concat(vim.fn.readfile(root .. '/result'), '\n'))
+            assert.equals('', observed.relative, 'starter inherited the installer float')
+            assert.equals(1, observed.windows, 'installer window was left over the chat')
+        end
+    end)
+
     it('fails closed for a missing or dead owner without touching foreign staging', function()
         local lock = root .. '/data/parley/initializer.lock'
         vim.fn.mkdir(lock .. '/staging', 'p')

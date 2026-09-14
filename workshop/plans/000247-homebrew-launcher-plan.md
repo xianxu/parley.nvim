@@ -56,6 +56,7 @@ personal tap and one source-owned generator (ARCH-DRY/PURPOSE).
 | `read`, `context` | `lua/parley/help.lua` | INTEGRATION | new; fixed bundled guide only |
 | `parley_help` | `lua/parley/tools/builtin/parley_help.lua` | INTEGRATION | new; existing tool dispatcher |
 | `detect_root` | `lua/parley/repo_mode.lua` | INTEGRATION | new; marker-based project detection |
+| `open` | `lua/parley/cliproxy_login_ui.lua` | INTEGRATION | new; transient login presentation and controls |
 | `options` | `lua/parley/starter_config.lua` | PURE | modified per first-use revision |
 | `is_chat_filename` | `lua/parley/chat_parser.lua` | PURE | new per first-use revision |
 
@@ -470,3 +471,31 @@ starter option projection and chat filename recognition remain input/output
 functions; no other filesystem-dependent PURE row remains (ARCH-PURE).
 BR-4: add optional live Tart conformance comparing real and fake missing-resource
 stop/delete exits in a private HOME, skipping explicitly when Tart is absent.
+
+### 2026-09-13 — first-install window ownership
+
+User's fresh-machine screenshot shows welcome opened inside Lazy's 80% installer
+float. Capture the main window before Lazy setup, close only Lazy's own view on
+return, and restore that window before starter.start. Regression uses a real
+Neovim float in the bootstrap fixture with Lazy's scheduled-close semantics;
+verify both first-install and cached startup open a normal window (ARCH-MOCK).
+
+### 2026-09-13 — friendly login and model shortlist
+
+User asks for novice-friendly login instead of raw proxy output. Use a small
+login-owned float: finish signing in through the browser, manual open/copy URL,
+visible device instructions/code when required, optional details, explicit cancel
+and dismiss. Preserve the existing login process/callback lifecycle; close the
+progress UI before opening the model picker. Headless callers retain diagnostics.
+
+The actual v7.3.2 paid Codex registry gives Astra and the three GPT-5.6 variants
+identical created timestamps. Current alphabetical ties hide Astra behind the
+three-per-provider cap. Prefer newer numeric GPT generations/versions on those
+ties; keep timestamp priority and deterministic non-GPT behavior. Verify using
+the upstream model rows, without inventing models absent from the proxy catalog.
+
+User clarifies three results per search, not a shared provider budget. Apply the
+legacy per_provider setting per term, preserve order/deduplication, and let the
+app reuse product search definitions for its supported providers. This corrects
+term starvation but does not implement #230's separate proposed !N syntax or
+unlimited-by-default design; that issue remains open.

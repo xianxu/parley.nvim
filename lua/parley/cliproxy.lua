@@ -1306,17 +1306,26 @@ function M.run_login(provider, argv, on_done, timeout_ms)
     -- second time — telling an operator who had since logged in successfully
     -- that their login "did not complete".
     local settled = false
+    local presentation, job
     local raw_done = on_done or function() end
     -- The latch guards the NOTIFY as well as the callback: guarding only the
     -- callback still let an abandoned watcher tell an operator — three minutes
     -- after they were correctly told the login died, and after they had since
     -- logged in successfully — that their login "did not complete".
-    local function settle(ok, message, level)
+    local function settle(ok, message, level, cancelled)
         if settled then
             return
         end
         settled = true
-        if message then
+        if presentation then
+            for _, line in ipairs(vim.split(message or "", "\n", { plain = true, trimempty = true })) do
+                presentation.append(line)
+            end
+            presentation.finish(ok)
+            local notice = cancelled and "Sign-in cancelled." or (ok and "Account connected."
+                or "Sign-in did not finish. Try :ParleyProxy connect.")
+            vim.notify(notice, level)
+        elseif message then
             vim.notify(message, level)
         end
         raw_done(ok)
@@ -1335,7 +1344,12 @@ function M.run_login(provider, argv, on_done, timeout_ms)
     local shown = false
 
     local function handle_line(line)
-        output[#output + 1] = line
+        output[#output + 1] = line:sub(1, 8192)
+        if #output > 200 then table.remove(output, 1) end
+        if presentation then
+            if not settled then presentation.append(line) end
+            return
+        end
         -- Surface the instructions once, whatever shape they take — the URL may
         -- be any host, and some providers print a code to paste instead.
         --
@@ -1357,7 +1371,13 @@ function M.run_login(provider, argv, on_done, timeout_ms)
 
     -- jobstart, NOT a terminal buffer: the buffer version died with the window
     -- and took the callback listener with it.
-    local job = vim.fn.jobstart(cmd, {
+    if #vim.api.nvim_list_uis() > 0 then
+        presentation = require("parley.cliproxy_login_ui").open(provider, function()
+            settle(false, nil, vim.log.levels.INFO, true)
+            if job and job > 0 then pcall(vim.fn.jobstop, job) end
+        end)
+    end
+    job = vim.fn.jobstart(cmd, {
         on_stdout = function(_, data)
             for _, line in ipairs(data or {}) do
                 if line ~= "" then
@@ -1391,6 +1411,7 @@ function M.run_login(provider, argv, on_done, timeout_ms)
         end
         if ok then
             M.credential_health_for_login(provider, function(health)
+                if settled then return end
                 M._on_login_success(provider)
                 settle(true, ("cliproxy: %s login succeeded%s"):format(provider,
                     health.account and (" (" .. health.account .. ")") or ""), vim.log.levels.INFO)

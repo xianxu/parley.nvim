@@ -2,6 +2,15 @@
 local M = {}
 
 function M.options(roots)
+    local defaults = require('parley.config')
+    local providers = {}
+    for _, provider in ipairs({ 'claude', 'codex', 'gemini' }) do
+        local search = provider
+        for _, spec in ipairs(defaults.cliproxy.live_models.providers) do
+            if spec:match('^([^:]+)') == provider then search = spec; break end
+        end
+        providers[#providers + 1] = search
+    end
     local tools = { 'parley_help', 'read_file', 'ls', 'find', 'grep',
         'chat_history_search', 'write_file', 'edit_file' }
     local options = {
@@ -12,7 +21,7 @@ function M.options(roots)
         },
         cliproxy = {
             manage = true, auto_download = true, auth_dir = roots.data .. '/auth',
-            live_models = { providers = { 'claude', 'codex', 'gemini' }, per_provider = 3, tools = vim.deepcopy(tools) },
+            live_models = { providers = providers, per_provider = 3, tools = vim.deepcopy(tools) },
             config = { ['remote-management'] = { ['disable-control-panel'] = true } },
         },
         agents = {
@@ -38,7 +47,6 @@ function M.options(roots)
     -- Reuse the default bindings, explicitly opting in only these key families.
     -- This preserves their modes and aliases without claiming integration keys.
     local registry = require('parley.keybinding_registry')
-    local defaults = require('parley.config')
     for _, entry in ipairs(registry.entries) do
         if entry.config_key then
             local keys, modes = registry.resolve_keys(entry, defaults)

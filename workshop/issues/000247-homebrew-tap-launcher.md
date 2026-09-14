@@ -406,3 +406,22 @@ commit is 66c6b86. Downloaded tagged archive SHA256:
 Ruby syntax passed; GitHub API formula bytes exactly match the rendered formula.
 Fresh-machine install command: brew install xianxu/parley/parley. User acceptance
 remains pending; no local Homebrew reinstall or operator profile reset performed.
+
+### 2026-09-13 — fresh-machine usability corrections
+
+User found welcome in Lazy's installer float on first launch. Bootstrap now
+restores the captured main window before starter opens the chat and closes Lazy's
+view through its lifecycle API. Real-float regression failed before and passes
+after, including cached startup (bootstrap 7/7).
+
+Replaced interactive login log dumps with a disposable friendly progress view:
+browser open/copy, visible device codes, optional details, dismiss and explicit
+cancel. Existing process completion latch remains owner; headless diagnostics
+stay available. Login integration 15/15 and presentation 4/4 pass.
+
+Actual proxy v7.3.2 Codex rows reproduce equal-date alphabetical omission of
+Astra. GPT numeric-version ties now prefer newer versions. User clarified three
+results per search: each configured term gets its own legacy per_provider quota,
+with order and deduplication preserved, and app reuses product search terms.
+Catalog 66/66 and starter option regressions pass. Related #230 remains open for
+its separately proposed !N syntax. Full archive verification precedes publication.

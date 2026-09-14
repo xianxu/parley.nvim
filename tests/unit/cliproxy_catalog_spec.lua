@@ -177,7 +177,8 @@ describe("curate", function()
         ["claude"] = { "claude-opus-5", "claude-sonnet-5", "claude-fable-5" },
         ["codex:gpt-5.6"] = { "gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra" },
         ["antigravity:pro,flash"] = { "gemini-3.1-pro-low", "gemini-pro-agent",
-                                      "gemini-3.7-flash-high" },
+                                      "gemini-3.7-flash-high", "gemini-3-flash-agent",
+                                      "gemini-3.5-flash-extra-low" },
         ["antigravity"] = { "claude-opus-4-6-thinking", "claude-sonnet-4-6",
                             "gemini-3.7-flash-high" },
     }
@@ -187,6 +188,64 @@ describe("curate", function()
             assert.same(expected, ids(spec))
         end)
     end
+
+    it("keeps Astra in the default shortlist for the upstream equal-date Codex catalog", function()
+        -- CLIProxyAPI v7.3.2 models/models.json: all four paid-tier rows share
+        -- this timestamp, so alphabetical order previously hid GPT-6 entirely.
+        local rows = {}
+        for _, id in ipairs({ "gpt-6-astra", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna" }) do
+            rows[#rows + 1] = { id = id, owned_by = "openai", created = 1783616400 }
+        end
+        local parsed = cat.parse(vim.json.encode({ data = rows }), "{}")
+        local selected = cat.curate(parsed, { providers = { "codex" } })
+        assert.same({ "gpt-6-astra", "gpt-5.6-luna", "gpt-5.6-sol" },
+            vim.tbl_map(function(m) return m.id end, selected))
+    end)
+
+    it("still prefers a newer creation date over GPT version", function()
+        local parsed = cat.parse(vim.json.encode({ data = {
+            { id = "gpt-6-astra", owned_by = "openai", created = 100 },
+            { id = "gpt-5.6-sol", owned_by = "openai", created = 200 },
+        } }), "{}")
+        local selected = cat.curate(parsed, { providers = { "codex" } })
+        assert.same({ "gpt-5.6-sol", "gpt-6-astra" },
+            vim.tbl_map(function(m) return m.id end, selected))
+    end)
+
+    it("compares GPT version components numerically without changing other families", function()
+        local rows = {}
+        for _, id in ipairs({ "gpt-5.9-luna", "gpt-5.10-sol", "gpt-6-astra",
+            "claude-opus-9", "claude-fable-10", "gpt-oss-120b" }) do
+            rows[#rows + 1] = { id = id, owned_by = "openai", created = 100 }
+        end
+        local parsed = cat.parse(vim.json.encode({ data = rows }), "{}")
+        local selected = cat.curate(parsed, { providers = { "codex" }, per_provider = 10 })
+        assert.same({ "claude-fable-10", "claude-opus-9", "gpt-6-astra",
+            "gpt-5.10-sol", "gpt-5.9-luna", "gpt-oss-120b" },
+            vim.tbl_map(function(m) return m.id end, selected))
+    end)
+
+    it("gives each configured search its own quota without starving a later term", function()
+        local rows = {}
+        for _, id in ipairs({ "gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-6-astra" }) do
+            rows[#rows + 1] = { id = id, owned_by = "openai", created = 1783616400 }
+        end
+        local parsed = cat.parse(vim.json.encode({ data = rows }), "{}")
+        local selected = cat.curate(parsed, { providers = { "codex:gpt-5,gpt-6" }, per_provider = 3 })
+        assert.same({ "gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-6-astra" },
+            vim.tbl_map(function(m) return m.id end, selected))
+    end)
+
+    it("deduplicates overlapping searches without charging duplicates to their quota", function()
+        local rows = {}
+        for _, id in ipairs({ "gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-6-astra" }) do
+            rows[#rows + 1] = { id = id, owned_by = "openai", created = 1783616400 }
+        end
+        local parsed = cat.parse(vim.json.encode({ data = rows }), "{}")
+        local selected = cat.curate(parsed, { providers = { "codex:luna,gpt-5,gpt-6" }, per_provider = 2 })
+        assert.same({ "gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-6-astra" },
+            vim.tbl_map(function(m) return m.id end, selected))
+    end)
 
     it("matches displayName, not just id", function()
         -- gemini-pro-agent's id carries no "pro" version token at all; it
@@ -200,7 +259,7 @@ describe("curate", function()
         assert.equals("claude-sonnet-5", ids("claude:sonnet,opus")[1])
     end)
 
-    it("caps at per_provider", function()
+    it("caps a bare provider as one search", function()
         assert.equals(2, #ids("claude", 2))
     end)
 

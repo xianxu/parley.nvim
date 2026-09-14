@@ -17,6 +17,12 @@ Both entry points share chat, provider, picker and LLM implementations. Packagin
 must not fork those implementations. App profile isolation keeps its chats,
 credentials and state separate from a plugin configured in ordinary Neovim.
 
+First-install bootstrap closes Lazy's installer view and restores the original
+editor window before starting Parley. Lazy's view closes asynchronously, so focus
+restoration is explicit: the welcome chat must never inherit its 80% floating
+window. Bootstrap coverage exercises an actual Neovim float as well as cached
+startup, even when the test process itself runs headless.
+
 ## Configuration ownership today
 
 | Owner | Responsibility |

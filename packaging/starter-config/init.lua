@@ -92,6 +92,7 @@ local ok, err = xpcall(function()
     if vim.env.PARLEY_RUNTIME and vim.env.PARLEY_RUNTIME ~= "" then
         parley = { dir = vim.env.PARLEY_RUNTIME, name = "parley.nvim", lazy = false }
     end
+    local main_window = vim.api.nvim_get_current_win()
     require("lazy").setup({
         { "bluz71/vim-moonfly-colors", name = "moonfly", lazy = false, priority = 1000,
             commit = "4ed07bc0c6083cdd547c63f5c245e02c068b0c45",
@@ -130,6 +131,11 @@ local ok, err = xpcall(function()
         change_detection = { enabled = false },
         git = { timeout = math.min(120, math.max(1, math.floor(remaining() / 1000))) },
     })
+    -- First-install setup leaves Lazy's floating progress window focused.
+    -- Its close is scheduled, so restore our window before opening any chat.
+    local installer = package.loaded["lazy.view"]
+    if installer and installer.visible() then installer.view:close() end
+    vim.api.nvim_set_current_win(main_window)
     require("parley.starter").start()
 end, debug.traceback)
 timer:stop()

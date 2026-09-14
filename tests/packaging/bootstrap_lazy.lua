@@ -50,9 +50,28 @@ return {
         for _, plugin in ipairs(spec) do
             if plugin.dir then runtime = plugin.dir end
         end
+        local installed = vim.fn.stdpath('data') .. '/fixture-installed'
+        local install_win
+        if vim.env.BOOTSTRAP_INSTALL_FLOAT and vim.fn.filereadable(installed) == 0 then
+            local buf = vim.api.nvim_create_buf(false, true)
+            install_win = vim.api.nvim_open_win(buf, true, {
+                relative = 'editor', width = 40, height = 10, row = 2, col = 4,
+            })
+            -- Lazy closes its view on the scheduler, not synchronously.
+            package.loaded['lazy.view'] = {
+                visible = function() return vim.api.nvim_win_is_valid(install_win) end,
+                view = { close = function()
+                    vim.schedule(function() vim.api.nvim_win_close(install_win, true) end)
+                end },
+            }
+            vim.fn.writefile({'installed'}, installed)
+        end
         package.preload['parley.starter'] = function()
             return { start = function()
-                vim.fn.writefile({ vim.json.encode({ runtime = runtime, lockfile = opts.lockfile }) },
+                local relative = vim.api.nvim_win_get_config(0).relative
+                vim.wait(20)
+                vim.fn.writefile({ vim.json.encode({ runtime = runtime, lockfile = opts.lockfile,
+                    relative = relative, windows = #vim.api.nvim_list_wins() }) },
                     vim.env.BOOTSTRAP_RESULT)
             end }
         end

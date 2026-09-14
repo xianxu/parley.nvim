@@ -2,6 +2,11 @@ local starter
 
 describe('starter profile options', function()
     before_each(function() starter = require('parley.starter_config') end)
+    it('retains product search terms for the app providers', function()
+        local opts = starter.options({ data = '/profile/data', state = '/profile/state' })
+        assert.same({'claude:opus,sonnet,fable', 'codex:gpt-6,gpt-5', 'gemini'},
+            opts.cliproxy.live_models.providers)
+    end)
     it('keeps chat prefix and Alt chords without enabling other shortcut families', function()
         local opts = starter.options({ data = '/profile/data', state = '/profile/state' })
         assert.same({ '<C-g>f' }, opts.global_shortcut_finder.shortcut)

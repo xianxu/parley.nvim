@@ -31,6 +31,7 @@ atlas:
 
   infra/starter:
     code:
+      - lua/parley/cliproxy_login_ui.lua
       - lua/parley/dispatcher.lua
       - lua/parley/fs.lua
       - packaging/starter-config/init.lua
@@ -60,6 +61,7 @@ atlas:
       - tests/integration/starter_project_spec.lua
       - tests/integration/starter_config_spec.lua
       - tests/integration/starter_bootstrap_spec.lua
+      - tests/integration/cliproxy_login_ui_spec.lua
       - tests/arch/starter_artifact_spec.lua
 
   infra/dependencies:
