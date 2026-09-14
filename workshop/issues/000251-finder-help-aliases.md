@@ -17,7 +17,7 @@ Help audit found stale branch wording, missing prompt navigation controls, and f
 
 ## Spec
 
-Update Alt+i wording to create/open a sub-chat. Include prompt navigation, selection, and cancellation in finder help. Keep configuration-aware registry output; consume all resolved aliases when installing picker mappings, including help bindings. Preserve primary-only display for compact titles. Disabled entries remain unbound; reserved confirmation/cancellation keys remain protected.
+Update Alt+i wording to create/open a sub-chat. Include prompt navigation, selection, and cancellation in finder help. Keep configuration-aware registry output; consume all resolved aliases when installing picker mappings, including help bindings. Preserve primary-only display for compact titles. Chat, Note, and Issue Finder share this contract. Disabled entries remain unbound; reserved confirmation/cancellation keys remain protected.
 
 ## Done when
 
