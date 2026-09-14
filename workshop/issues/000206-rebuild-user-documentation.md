@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-09-01
 updated: 2026-09-14
-estimate_hours:
+estimate_hours: 2.49
 started: 2026-09-02T14:27:21-07:00
 ---
 
@@ -160,3 +160,17 @@ Current acceptance:
 - Durable checked audit inventory and representative user-question evidence; links/retrieval/claim checks plus applicable test suite and isolated starter verification pass.
 
 Implementation plan: workshop/plans/000206-documentation-refresh-plan.md. The original checked inventory remains historical evidence; its old blockers are not presumed current. No video deliverable or live provider/account access is required for this documentation revision.
+
+
+## Estimate
+
+Re-estimated for the 2026-09-14 scope after plan-quality approval. Provisional estimate-logic-v3.1: design/audit structure 3h × 0.2 resolved-spec factor = 0.6h; documentation audit/rewrite and help/test implementation 4h × 0.4 = 1.6h, including atlas inventory, tutorial corrections, README, link checks, retrieval verification and publication. One fresh closing review 0.5h × 0.4 = 0.2h. Familiar repository, parallel page audits; 15% design buffer. No live account setup or video production.
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: lua-neovim design=0.6 impl=1.6
+item: milestone-review design=0 impl=0.2
+design-buffer: 0.15
+total: 2.49
+```
