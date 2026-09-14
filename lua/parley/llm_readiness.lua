@@ -78,6 +78,10 @@ function M.defer(parley, action, opts)
     if not parley or not parley.config or parley.config.llm_onboarding ~= true then
         return false
     end
+    local agent = (parley.agents or {})[(parley._state or {}).agent]
+    if selected(parley) and agent.provider ~= 'cliproxyapi' then
+        return false -- configured API providers do not need managed OAuth setup
+    end
     if grants[parley] then
         return false
     end

@@ -7,7 +7,7 @@ created: 2026-09-13
 updated: 2026-09-13
 estimate_hours: 4.159
 started: 2026-09-13T14:26:40-07:00
-actual_hours: 9.12
+actual_hours: 9.66
 ---
 
 # Homebrew tap and parley launcher: brew install xianxu/parley/parley, tested on a clean tart VM
@@ -99,6 +99,7 @@ total: 4.159
 ## Log
 
 ### 2026-09-13 — implementation and VM checkpoint
+- 2026-09-13: closed — Bootstrap real-float regression7/7, login15/15, login UI4/4, catalog66/66 pass; full suite only found two corrected architecture integration failures, both rechecked passing. Exact release archive suite /tmp/parley-v2.4.1-archive.log must pass before tagging. User authorizes fresh-machine testing publication; live acceptance plan/project remain unchecked and PR remains open.; review verdict: SHIP
 - 2026-09-13: closed — Committed archive passed all 254 test files and lint 444 files. Review fixes pass starter 16/16 and packaging VM 17/17 including real Tart conformance; final corrected archive suite in /tmp/parley-v2.4.0-final-archive.log must pass before tag. Plan/project checks remain open because operator requested publication for fresh-machine acceptance; no merge/archive until acceptance completes.; review verdict: SHIP
 - 2026-09-13: closed — Code findings BR1-BR3 all disposed round3; Codex reviewer failed only because its sandbox denies loopback binds. Normal host rerun at reviewed9202b955 passed all11VMcases, exact log /tmp/parley247-reviewed-head-vm.log. Full246specs/lint431 and focused2formula+6release+3upgrade pass. Please verify loopback with supported Claude runner. Approved tag/tap publication then realVM acceptance remain before merge; --no-plan-check only local gate.; review verdict: FIX-THEN-SHIP
 
@@ -425,3 +426,16 @@ results per search: each configured term gets its own legacy per_provider quota,
 with order and deduplication preserved, and app reuses product search terms.
 Catalog 66/66 and starter option regressions pass. Related #230 remains open for
 its separately proposed !N syntax. Full archive verification precedes publication.
+
+User reviewed configuration convergence: shared response prompt/📝 summaries,
+web search and @all tools; automatic memory off; remove ToolOpus; shared default
+model searches. Personal chat/notes and blog export paths remain local. The same
+agent picker now handles missing setup for app and plugin. Shared auth explicitly
+uses ~/.cli-proxy-api; legacy profile credentials copy without overwrite.
+
+Verification: full `make test` passed after shared-default and unified-picker
+fixture updates (log /tmp/parley-shared-verified.log). Subsequent personal repo
+selection regression passed with starter project suite 5/5. Live map inspection
+confirmed the reported Ctrl+g a issue was Markdown add-reference binding caused
+by explicit global chat_dir suppressing implicit repo selection; personal config
+now selects the marked root through the shared helper.

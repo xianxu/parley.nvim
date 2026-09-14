@@ -584,3 +584,105 @@ dispose:
    - **ARCH-FUNERAL — pass:** Ownership controls cleanup; retained failures have explicit recovery paths and upgrade candidates remain bounded.
 
 7. **Plan revision recommendations:** None; the appended corrections cover these dispositions.
+
+---
+
+## Re-review — 2026-09-13T22:19:10-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 247 — Homebrew tap and parley launcher: brew install xianxu/parley/parley, tested on a clean tart VM |
+| repo | parley.nvim |
+| issue file | workshop/issues/000247-homebrew-tap-launcher.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | c1395685f69f53a2953cdbaeb01a77d410f105e8..50cadbc067075f6e876a74ed68f9cecdd30529b2 |
+| command | sdlc close --issue 247 |
+| reviewer | codex |
+| timestamp | 2026-09-13T22:19:10-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+The pinned range satisfies the revised testing-release scope. No new findings; prior corrections remain addressed. This approves the reviewed code, while the documented fresh-machine acceptance requirement remains before merge/archive.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Upgrade reads the installed share location; the moved-layout regression passes.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      Formula unit tests assert pure projections; Ruby execution resides in release integration coverage.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      Injected capacity tests cover insufficient disk before cloning without requiring host capacity.
+  - id: BR-4
+    disposition: addressed
+    note: |
+      Cleanup confirms VM absence before releasing ownership. Failure tests and real Tart missing-resource conformance pass.
+  - id: BR-5
+    disposition: addressed
+    note: |
+      Retained diagnosis preserves phase, command and controlled failure reasons; retention and retry tests pass.
+  - id: BR-6
+    disposition: addressed
+    note: |
+      Project acceptance remains unchecked; its revision explicitly requires complete acceptance before merge/archive.
+  - id: BR-7
+    disposition: addressed
+    note: |
+      Live acceptance uses canonical model providers; regression covers empty Codex followed by Google.
+  - id: BR-8
+    disposition: addressed
+    note: |
+      Release and upgrade share render-formula.lua; guest phases share the upload helper.
+  - id: BR-9
+    disposition: addressed
+    note: |
+      Tutorial staging resides inside chat_dir; cross-filesystem publication and failure-cleanup regressions pass.
+  - id: BR-10
+    disposition: addressed
+    note: |
+      The plan classifies auth_is_private as INTEGRATION, matching vm_chat.lua filesystem metadata checks; the appended revision records the correction.
+```
+
+1. **Strengths**
+   - Launcher tests exercise actual publication races, interrupted owners, edited configurations and argv preservation.
+   - Formula dependencies derive from the selected release’s registry.
+   - First-install window restoration uses Lazy’s lifecycle API and has a real-float regression.
+   - Readiness tests cover cancellation, changed source context and rebuilding requests after model selection.
+   - README and atlas describe the added user and architectural surfaces.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** None.
+
+4. **Minor findings:** None.
+
+5. **Test coverage**
+   - Required pinned stat/name-status and targeted patches inspected; range whitespace check passed.
+   - Pinned temporary snapshot: **165 starter cases and 15 login cases passed**.
+   - Packaging: **69 cases passed**, including real Tart conformance.
+   - Broader proxy suite: **628 cases passed**.
+   - Concurrent working-tree edits were excluded from the reviewed snapshot. Full live-image acceptance was not performed.
+
+6. **Architecture**
+   - **ARCH-DRY — pass:** shared rendering, upload, dependency and keybinding owners.
+   - **ARCH-PURE — pass:** corrected concept classifications match implementation boundaries.
+   - **ARCH-PURPOSE — pass:** revised release scope delivered; acceptance remains explicitly pending.
+   - **ARCH-MOCK — pass:** stateful fixtures exercise shared production seams.
+   - **ARCH-CONSTRAINTS — pass:** bounded waits, capacity checks and documentation reads.
+   - **ARCH-SECURE — pass:** isolated profiles, scoped tools and redirected-document rejection.
+   - **ARCH-ORDER — pass:** ownership, cancellation and publication races have mechanical coverage.
+   - **ARCH-FUNERAL — pass:** candidate, staging, VM and transient UI cleanup have defined owners.
+
+7. **Plan revision recommendations:** None.

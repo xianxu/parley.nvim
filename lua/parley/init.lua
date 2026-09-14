@@ -1432,7 +1432,7 @@ end
 local function live_agent_options()
 	local cliproxy = M.config.cliproxy or {}
 	local live_models = cliproxy.live_models or {}
-	return { tools = live_models.tools }
+	return { tools = live_models.tools, system_prompt = live_models.system_prompt }
 end
 
 --- Reconcile in-memory state with what is on disk, apply `update`, persist.

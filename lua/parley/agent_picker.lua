@@ -312,6 +312,27 @@ function M.agent_picker(plugin, opts)
         recall_key = "parley.agent_picker",
         recall_id_fn = M._identity,
         on_select = function(item)
+            if item and item.kind == "login" then
+                -- Keep the pending semantic action alive across OAuth. The
+                -- ordinary picker is also the model-choice surface afterward.
+                vim.schedule(function()
+                    local function failed(message)
+                        if message then vim.notify(message, vim.log.levels.ERROR) end
+                        if opts.on_cancel then opts.on_cancel(message or "Account login cancelled") end
+                    end
+                    cliproxy.ensure_running(function()
+                        local argv, err = cliproxy.login_argv(item.provider)
+                        if not argv then return failed(err) end
+                        local blocked = cliproxy.callback_port_blocked(item.provider)
+                        if blocked then return failed(blocked) end
+                        cliproxy.run_login(item.provider, argv, function(ok)
+                            if not ok then return failed() end
+                            vim.schedule(function() M.agent_picker(plugin, opts) end)
+                        end)
+                    end, failed)
+                end)
+                return
+            end
             M._select(plugin, item)
             local agent = item and plugin.agents[plugin._state.agent]
             local real = item and (item.kind == "agent" or item.kind == "live")

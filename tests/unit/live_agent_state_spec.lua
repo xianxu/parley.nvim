@@ -88,6 +88,15 @@ describe("live agent state", function()
         assert.same({}, parley.agents["claude-opus-5*"].tools)
     end)
 
+    it("restores the current configured live system prompt", function()
+        parley.config = vim.deepcopy(parley.config)
+        parley.config.cliproxy.live_models.system_prompt = "Personal live prompt"
+        persist({ agent = "claude-opus-5*",
+                  live_agent = { id = "claude-opus-5", owner = "anthropic" } })
+        parley.refresh_state()
+        assert.equals("Personal live prompt", parley.agents["claude-opus-5*"].system_prompt)
+    end)
+
     it("still falls back when there is no live agent to restore", function()
         persist({ agent = "long-gone*" })
         parley.refresh_state()

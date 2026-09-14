@@ -6,6 +6,53 @@ function M.connect()
     require('parley.starter_onboarding').connect(require('parley'))
 end
 
+-- Upgrade old standalone profiles without replacing shared accounts. Originals
+-- remain as backups; private staging plus link publication is atomic/no-clobber.
+local function migrate_auth(legacy, shared)
+    local source_stat = uv.fs_lstat(legacy)
+    if not source_stat then return end
+    assert(source_stat.type == 'directory', 'Invalid legacy authentication directory')
+    local target_stat = uv.fs_lstat(shared)
+    assert(not target_stat or target_stat.type == 'directory', 'Invalid shared authentication directory')
+    require('parley.fs').ensure_dir(shared, 448)
+    local staging = assert(uv.fs_mkdtemp(shared .. '/.parley-auth-XXXXXX'))
+    assert(uv.fs_chmod(staging, 448))
+    local ok, why = pcall(function()
+        local entries = assert(uv.fs_scandir(legacy))
+        while true do
+            local name, kind = uv.fs_scandir_next(entries)
+            if not name then break end
+            if kind == 'file' and name:match('%.json$') and not uv.fs_lstat(shared .. '/' .. name) then
+                local source = legacy .. '/' .. name
+                local stat = uv.fs_lstat(source)
+                if stat and stat.type == 'file' then
+                    local fd = assert(uv.fs_open(source, 'r', 0))
+                    local opened = uv.fs_fstat(fd)
+                    -- Check the opened inode before reading, so replacing a source
+                    -- with a symlink between scan and open cannot redirect access.
+                    if not opened or opened.type ~= 'file' or opened.ino ~= stat.ino or opened.dev ~= stat.dev then
+                        uv.fs_close(fd)
+                        error('Authentication source changed during migration')
+                    end
+                    local contents, read_error = uv.fs_read(fd, opened.size, 0)
+                    uv.fs_close(fd)
+                    assert(contents, read_error)
+                    local path = staging .. '/' .. name
+                    local dest = assert(uv.fs_open(path, 'wx', 384))
+                    local written, write_error = uv.fs_write(dest, contents, 0)
+                    uv.fs_close(dest)
+                    assert(written == #contents, write_error or 'Incomplete authentication migration')
+                    local linked, link_error, code = uv.fs_link(path, shared .. '/' .. name)
+                    assert(linked or code == 'EEXIST', link_error)
+                end
+            end
+        end
+    end)
+    local removed = vim.fn.delete(staging, 'rf')
+    assert(ok, why)
+    assert(removed == 0, 'Cannot remove private authentication staging')
+end
+
 local function migrate_welcome(parley, chat_dir)
     local legacy = chat_dir .. '/welcome'
     local stat = uv.fs_lstat(legacy)
@@ -120,6 +167,7 @@ function M.start()
     assert(uv.fs_chmod(roots.data, 448))
     local parley = require('parley')
     local options = require('parley.starter_config').options(roots)
+    migrate_auth(roots.data .. '/auth', vim.fn.expand(require('parley.config').cliproxy.auth_dir))
     options.repo_root = require('parley.repo_mode').detect_root(vim.fn.getcwd(), require('parley.config').repo_marker)
     parley.setup(options)
     -- Attachment labels remain ordinary visible Markdown in the starter.

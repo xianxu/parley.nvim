@@ -7,7 +7,11 @@
 
 ---@class ParleyConfig
 -- README_REFERENCE_MARKER_START
+local learner_tools = { "@all" }
+local data_root = vim.fn.stdpath("data"):gsub("/$", "") .. "/parley"
 local config = {
+	-- Missing account/model setup uses the same picker as :ParleyAgent.
+	llm_onboarding = true,
 	-- Please start with minimal config possible.
 	-- Just openai_api_key if you don't have OPENAI_API_KEY env set up.
 	-- Defaults change over time to improve things, options might get deprecated.
@@ -116,7 +120,8 @@ local config = {
 	-- `:ParleyProxy login <provider>` (OAuth). Set manage=false to opt out.
 	cliproxy = {
 		manage = true,
-		-- auth_dir defaults to cliproxy's own ~/.cli-proxy-api when omitted.
+		-- Shared with the standalone app; explicit because proxy defaults vary by version.
+		auth_dir = vim.fn.expand("~/.cli-proxy-api"),
 		-- binary_path = nil,  -- else `cliproxyapi` / `cli-proxy-api` on PATH
 		auto_download = true,  -- if no cliproxy binary is found, fetch the latest
 		--   checksum-verified release into stdpath('data') (no package manager required).
@@ -145,11 +150,12 @@ local config = {
 		-- stale. A configured provider you are not logged into shows as
 		-- "(logged out)" and selecting it starts its login.
 		live_models = {
-			providers = { "claude:opus,sonnet,fable", "codex:gpt-6,gpt-5", "antigravity" },
+			providers = { "claude:opus,sonnet,fable", "codex:gpt-6,gpt-5", "gemini" },
 			per_provider = 3,
 			-- Local tool policy for live picks, including restored selections.
-			-- Omit for { "@all" }; set {} to disable local tools, or list tools/groups.
-			-- tools = {},
+			-- Set {} to disable local tools, or list tools/groups.
+			tools = vim.deepcopy(learner_tools),
+			-- system_prompt may override the shared chat prompt for live agents.
 		},
 		-- Raw cliproxyapi config, rendered into the proxy's config.yaml. This is
 		-- where parley drives cliproxyapi as a wrapped dependency — tinker here in
@@ -207,32 +213,11 @@ local config = {
 	-- to remove some default agent completely set it like:
 	-- agents = {  { name = "ChatGPT3-5", disable = true, }, ... },
 	agents = {
-		-- {
-		-- 	provider = "openai",
-		-- 	name = "GPT5.5",
-		-- 	model = { model = "gpt-5.5", temperature = 0.8, top_p = 1, search_model = "gpt-5-search-api" },
-		-- 	system_prompt = require("parley.defaults").chat_system_prompt,
-		-- },
-		-- {
-		-- 	provider = "anthropic",
-		-- 	name = "Opus",
-		-- 	model = { model = "claude-opus-5", temperature = 0.8 },
-		-- 	system_prompt = require("parley.defaults").chat_system_prompt,
-		-- },
-		{
-			provider = "cliproxyapi",
-			name = "ToolOpus*",
-			-- No `web_search_strategy` here: it is DERIVED from the model family
-			-- (#205). claude-* needs the anthropic route, gpt-* the openai one,
-			-- and gemini-family models none at all — measured, single-sourced in
-			-- providers.cliproxy_default_web_search_strategy, and consulted by
-			-- the resolution chain. State it only to override that.
-			model = { model = "claude-opus-5" },
-			system_prompt = require("parley.defaults").chat_system_prompt,
-			synthetic_system_prompt = true,
-			tools = { "@all"},
-		},
-	},
+        { name = "Choose a model", placeholder = true, provider = "cliproxyapi",
+            model = { model = "choose-a-model" },
+            system_prompt = require("parley.defaults").chat_system_prompt,
+            tools = vim.deepcopy(learner_tools) },
+    },
 
 	-- named system prompts for reuse
 	-- name, system_prompt are mandatory fields
@@ -263,13 +248,13 @@ local config = {
 
 	-- directory for storing chat files
 	-- chat_dir = vim.fn.stdpath("data"):gsub("/$", "") .. "/parley/chats",
-	chat_dir = vim.fn.expand("~/Library/Mobile Documents/com~apple~CloudDocs/parley"),
+	chat_dir = data_root .. "/chats",
 	-- structured chat roots metadata; if empty, it is derived from chat_dir + chat_dirs
 	chat_roots = {},
 	-- additional chat roots searched by chat-aware features; new chats still use chat_dir
 	chat_dirs = {},
 	-- directory for storing notes
-	notes_dir = vim.fn.expand("~/Library/Mobile Documents/com~apple~CloudDocs/notes"),
+	notes_dir = data_root .. "/notes",
 	-- structured note roots metadata; if empty, it is derived from notes_dir + note_dirs
 	note_roots = {},
 	-- additional note roots searched by note-aware features; new notes still use notes_dir
@@ -277,8 +262,8 @@ local config = {
 	-- note dir within repo when repo mode is active (relative to git root)
 	repo_note_dir = "workshop/notes",
 	-- export directories for different formats
-	export_html_dir = vim.fn.expand("~/blogs/static"),
-	export_markdown_dir = vim.fn.expand("~/blogs/posts"),
+	export_html_dir = data_root .. "/exports/html",
+	export_markdown_dir = data_root .. "/exports/markdown",
 	-- chat user prompt prefix
 	chat_user_prefix = "💬:",
 	-- chat assistant prompt prefix (static string or a table {static, template})
@@ -596,7 +581,7 @@ local config = {
 	-- chat memory configuration (for summarizing older messages)
 	chat_memory = {
 		-- enable summary feature for older messages
-		enable = true,
+		enable = false,
 		-- maximum number of full exchanges to keep (a user and assistant pair)
 		max_full_exchanges = 242,
 		-- prefix for note lines in assistant responses (used to extract summaries)

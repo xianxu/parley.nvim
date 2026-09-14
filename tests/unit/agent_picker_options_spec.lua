@@ -59,6 +59,47 @@ describe('agent picker continuation options', function()
         vim.schedule = original
         assert.equals(0, selected)
     end)
+    it('continues login into the same picker without cancelling the pending action', function()
+        local original = {ensure_running = proxy.ensure_running, login_argv = proxy.login_argv,
+            callback_port_blocked = proxy.callback_port_blocked, run_login = proxy.run_login}
+        local finish, selected, cancelled = nil, 0, 0
+        proxy.ensure_running = function(done) done() end
+        proxy.login_argv = function() return {'fake'} end
+        proxy.callback_port_blocked = function() end
+        proxy.run_login = function(_, _, done) finish = done end
+        picker.agent_picker(plugin, {on_select = function() selected = selected + 1 end,
+            on_cancel = function() cancelled = cancelled + 1 end})
+        local initial = captured
+        captured.on_select({kind = 'login', provider = 'codex'})
+        vim.wait(30, function() return finish ~= nil end, 1)
+        local got_finish = finish ~= nil
+        if finish then finish(true) end
+        vim.wait(30, function() return captured ~= initial end, 1)
+        for key, value in pairs(original) do proxy[key] = value end
+        assert.is_true(got_finish)
+        assert.equals(0, cancelled)
+        assert.is_not_equal(initial, captured)
+        captured.on_select({kind = 'agent', name = 'Configured GPT'})
+        assert.equals(1, selected)
+    end)
+
+    it('cancels pending readiness when login fails without reopening', function()
+        local original = {ensure_running = proxy.ensure_running, login_argv = proxy.login_argv,
+            callback_port_blocked = proxy.callback_port_blocked, run_login = proxy.run_login}
+        local cancelled = 0
+        proxy.ensure_running = function(done) done() end
+        proxy.login_argv = function() return {'fake'} end
+        proxy.callback_port_blocked = function() end
+        proxy.run_login = function(_, _, done) done(false) end
+        picker.agent_picker(plugin, {on_cancel = function() cancelled = cancelled + 1 end})
+        local initial = captured
+        captured.on_select({kind = 'login', provider = 'codex'})
+        vim.wait(30, function() return cancelled > 0 end, 1)
+        for key, value in pairs(original) do proxy[key] = value end
+        assert.equals(1, cancelled)
+        assert.equals(initial, captured)
+    end)
+
     it('scopes configured and live rows to a provider without mutating config, including expansion', function()
         local before = vim.deepcopy(plugin.config)
         picker.agent_picker(plugin, {provider = 'codex'})

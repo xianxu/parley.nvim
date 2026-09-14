@@ -499,3 +499,13 @@ login. Success closes the window before the model picker resumes. Diagnostics
 are bounded in memory and disappear with the login; headless callers retain
 text output. Presentation lives in `lua/parley/cliproxy_login_ui.lua`; the
 process and single-completion latch remain owned by `cliproxy.run_login`.
+
+## Shared application and plugin login storage
+
+Both entry points explicitly render `auth-dir: ~/.cli-proxy-api` (expanded to an
+absolute path). Omitting the field is not equivalent: a local proxy probe with
+the omitted field returned no models, while the explicit directory returned the
+existing accounts' catalog. The starter migrates legacy profile auth JSON files
+without replacing shared files or deleting originals. Shared credentials remain
+when the application profile is uninstalled. Both entry points use the same
+agent picker for provider login and subsequent model selection.

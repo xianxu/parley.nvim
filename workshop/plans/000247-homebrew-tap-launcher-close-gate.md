@@ -200,6 +200,51 @@ rounds:
           note: Release rendering and guest upload retain their shared helper implementations.
           round: 6
       blocked: false
+    - "n": 7
+      timestamp: "2026-09-13T22:19:10-07:00"
+      agent: codex
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: Upgrade reads the installed share location; the moved-layout regression passes.
+          round: 7
+        - id: BR-2
+          disposition: addressed
+          note: Formula unit tests assert pure projections; Ruby execution resides in release integration coverage.
+          round: 7
+        - id: BR-3
+          disposition: addressed
+          note: Injected capacity tests cover insufficient disk before cloning without requiring host capacity.
+          round: 7
+        - id: BR-4
+          disposition: addressed
+          note: Cleanup confirms VM absence before releasing ownership. Failure tests and real Tart missing-resource conformance pass.
+          round: 7
+        - id: BR-5
+          disposition: addressed
+          note: Retained diagnosis preserves phase, command and controlled failure reasons; retention and retry tests pass.
+          round: 7
+        - id: BR-6
+          disposition: addressed
+          note: Project acceptance remains unchecked; its revision explicitly requires complete acceptance before merge/archive.
+          round: 7
+        - id: BR-7
+          disposition: addressed
+          note: Live acceptance uses canonical model providers; regression covers empty Codex followed by Google.
+          round: 7
+        - id: BR-8
+          disposition: addressed
+          note: Release and upgrade share render-formula.lua; guest phases share the upload helper.
+          round: 7
+        - id: BR-9
+          disposition: addressed
+          note: Tutorial staging resides inside chat_dir; cross-filesystem publication and failure-cleanup regressions pass.
+          round: 7
+        - id: BR-10
+          disposition: addressed
+          note: The plan classifies auth_is_private as INTEGRATION, matching vm_chat.lua filesystem metadata checks; the appended revision records the correction.
+          round: 7
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#247 (boundary-review)
@@ -291,6 +336,21 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - BR-6 — addressed — The project row remains unchecked, and the latest revision explicitly preserves acceptance before merge/archive.
 - BR-7 — addressed — Live acceptance uses canonical model providers; the catalog regression covers healthy Codex with an empty catalog before Google.
 - BR-8 — addressed — Release rendering and guest upload retain their shared helper implementations.
+
+## Round 7 — 2026-09-13T22:19:10-07:00 (codex) — passed
+
+### Disposed
+
+- BR-1 — addressed — Upgrade reads the installed share location; the moved-layout regression passes.
+- BR-2 — addressed — Formula unit tests assert pure projections; Ruby execution resides in release integration coverage.
+- BR-3 — addressed — Injected capacity tests cover insufficient disk before cloning without requiring host capacity.
+- BR-4 — addressed — Cleanup confirms VM absence before releasing ownership. Failure tests and real Tart missing-resource conformance pass.
+- BR-5 — addressed — Retained diagnosis preserves phase, command and controlled failure reasons; retention and retry tests pass.
+- BR-6 — addressed — Project acceptance remains unchecked; its revision explicitly requires complete acceptance before merge/archive.
+- BR-7 — addressed — Live acceptance uses canonical model providers; regression covers empty Codex followed by Google.
+- BR-8 — addressed — Release and upgrade share render-formula.lua; guest phases share the upload helper.
+- BR-9 — addressed — Tutorial staging resides inside chat_dir; cross-filesystem publication and failure-cleanup regressions pass.
+- BR-10 — addressed — The plan classifies auth_is_private as INTEGRATION, matching vm_chat.lua filesystem metadata checks; the appended revision records the correction.
 
 ## Open findings
 

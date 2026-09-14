@@ -108,10 +108,12 @@ function M.run(phase)
             vim.env.PARLEY_FAKE_MODE = 'healthy'
             vim.env.PARLEY_FAKE_LOGIN_MODE = nil -- login flags select the fixture's success path
             vim.cmd('ParleyProxy connect')
-            assert(vim.api.nvim_win_get_config(0).relative ~= '', 'Connect did not open a floating picker')
+            assert(vim.wait(1000, function() return vim.api.nvim_win_get_config(0).relative ~= '' end, 10),
+                'Connect did not open a floating picker')
+            vim.fn.maparg('<Down>', 'i', false, true).callback() -- skip live-section separator
             local confirm = vim.fn.maparg('<CR>', 'i', false, true)
             assert(type(confirm.callback) == 'function', 'provider picker has no Enter action')
-            confirm.callback() -- choose Claude through the existing provider picker
+            confirm.callback() -- choose Claude through the common agent picker
             assert(vim.wait(30000, function()
                 return vim.fn.filereadable(root .. '/auth/claude-fake@example.com.json') == 1
             end, 20), 'guest fake managed login failed')

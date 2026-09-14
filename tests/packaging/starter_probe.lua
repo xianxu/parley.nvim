@@ -7,19 +7,19 @@ local ok, why = pcall(function()
         assert(p._state.agent == vim.env.STARTER_EXPECT_MODEL, 'saved model was replaced: ' .. tostring(p._state.agent))
     end
     assert(p.config.default_keymaps == false)
-    assert(p.config.web_search == false)
+    assert(p.config.web_search == true)
     assert(p.config.chat_memory.enable == false)
     assert(p.config.memory_prefs.enable == false)
     assert(vim.tbl_count(p.dispatcher.providers) == 1)
     assert(p.dispatcher.providers.cliproxyapi)
     assert(p.agents['ToolOpus*'] == nil)
-    for _, a in pairs(p.agents) do assert(vim.deep_equal(a.tools, {'parley_help', 'read_file', 'ls', 'find', 'grep', 'chat_history_search', 'write_file', 'edit_file'})) end
+    for _, a in pairs(p.agents) do assert(vim.deep_equal(a.tools, {'@all'})) end
     local data, state = vim.fn.resolve(vim.fn.stdpath('data')), vim.fn.resolve(vim.fn.stdpath('state'))
     for _, name in ipairs({ 'chat_dir', 'notes_dir', 'export_html_dir', 'export_markdown_dir' }) do
         assert(vim.fn.resolve(p.config[name]):sub(1, #data + 1) == data .. '/', name .. ' escaped profile')
     end
     assert(vim.fn.resolve(p.config.state_dir):sub(1, #state + 1) == state .. '/')
-    assert(vim.fn.resolve(p.config.cliproxy.auth_dir) == data .. '/auth')
+    assert(vim.fn.resolve(vim.fn.expand(p.config.cliproxy.auth_dir)) == vim.fn.resolve(vim.env.HOME .. '/.cli-proxy-api'))
     assert(not vim.uv.fs_stat(vim.env.HOME .. '/Library/Mobile Documents'))
     assert(not vim.uv.fs_stat(vim.env.HOME .. '/blogs'))
     local key = p.vault.get_secret(require('parley.providers').get_secret_name('cliproxyapi'))

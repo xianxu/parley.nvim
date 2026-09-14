@@ -13,18 +13,23 @@ p.config.cliproxy.download_version = '9.9.9'
 p.dispatcher.providers.cliproxyapi.endpoint = ('http://127.0.0.1:%d/v1/chat/completions'):format(port)
 vim.env.PATH = '/usr/bin:/bin:/usr/sbin:/sbin'
 vim.env.PARLEY_FAKE_MODE = 'healthy'
-vim.env.PARLEY_FAKE_LOGIN_MODE = 'success'
+-- A login flag selects the fake's successful OAuth flow; setting its global
+-- login-mode override would also turn the managed server into a login process.
+vim.env.PARLEY_FAKE_LOGIN_MODE = nil
 assert(proxy.discover_binary() == nil, 'fixture must begin without a proxy binary')
 local notices = {}
 vim.notify = function(message) notices[#notices + 1] = tostring(message) end
 local ok, why = pcall(function()
     vim.cmd('ParleyProxy connect')
-    assert(vim.api.nvim_win_get_config(0).relative ~= '', 'Connect did not open a floating window')
+    assert(vim.wait(1000, function() return vim.api.nvim_win_get_config(0).relative ~= '' end, 10),
+        'Connect did not open a floating window')
+    -- The common agent picker begins with a live-section separator.
+    vim.fn.maparg('<Down>', 'i', false, true).callback()
     local confirm = vim.fn.maparg('<CR>', 'i', false, true)
     assert(type(confirm.callback) == 'function', 'provider picker has no Enter action')
     confirm.callback() -- choose Claude through the real floating picker
 
-    local credential = p.config.cliproxy.auth_dir .. '/claude-fake@example.com.json'
+    local credential = vim.fn.expand(p.config.cliproxy.auth_dir) .. '/claude-fake@example.com.json'
     assert(vim.wait(8000, function()
         if failure then return table.concat(notices, '\n'):find('auto_download failed', 1, true) ~= nil end
         return vim.fn.filereadable(credential) == 1

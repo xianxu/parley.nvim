@@ -58,6 +58,7 @@ atlas:
       - tests/unit/agent_picker_options_spec.lua
       - tests/unit/cliproxy_catalog_spec.lua
       - tests/unit/live_agent_state_spec.lua
+      - tests/integration/starter_auth_spec.lua
       - tests/integration/starter_project_spec.lua
       - tests/integration/starter_config_spec.lua
       - tests/integration/starter_bootstrap_spec.lua

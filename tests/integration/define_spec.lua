@@ -4,6 +4,14 @@
 -- Bootstrap parley so M.config is populated (parse_chat reads it).
 require("parley").setup({
     chat_dir = vim.fn.tempname() .. "-define-chat",
+    -- These transport fixtures own a configured model; onboarding is tested separately.
+    default_agent = "FixtureAnthropic",
+    agents = {
+        { name = "Choose a model", disable = true },
+        { name = "FixtureAnthropic", provider = "anthropic",
+          model = { model = "claude-sonnet-5" }, system_prompt = "You are a helpful assistant.",
+          tools = { "@all" } },
+    },
     providers = {},
     api_keys = {},
 })

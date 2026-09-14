@@ -24,6 +24,8 @@ separate complete configuration merged before `config.lua`. Provider credentials
 and provider definitions have dedicated setup handling; do not assume every
 option follows generic table replacement.
 
-The intended direction is a shared portable product baseline plus app bootstrap
-and user-specific overrides. That convergence is not implemented yet; the starter
-currently overrides personal and advanced defaults still present in `config.lua`.
+The app and plugin share portable product defaults: the answer-style prompt and
+📝 summaries, web search and all registered tools are enabled; automatic memory
+generation is disabled. The app supplies editor/bootstrap and storage differences.
+Personal chat/notes and blog export paths live in the user's Neovim configuration.
+OAuth credentials use the same explicit `~/.cli-proxy-api` directory.

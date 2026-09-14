@@ -70,6 +70,14 @@ describe('llm readiness deferral', function()
         assert.equals(0, actions)
     end)
 
+    it('enables common readiness by default but preserves direct API agents', function()
+        assert.is_true(require('parley.config').llm_onboarding)
+        parley._state = {agent = 'direct'}
+        parley.agents = {direct = {provider = 'openai', model = 'gpt-custom'}}
+        assert.is_false(readiness.defer(parley, function() error('must remain caller-owned') end))
+        assert.equals(0, state.ensure)
+    end)
+
     it('runs once in the captured window, buffer, and cursor', function()
         local observed = {}
         assert.is_true(readiness.defer(parley, function()

@@ -216,7 +216,14 @@ end)
 -- get_agent_info → prepare_payload to lock in the end-to-end
 -- invariant, not just one hop at a time.
 describe("get_agent forwards client-side tool config (full wiring chain)", function()
-    before_each(function() fresh_setup(nil) end)
+    before_each(function()
+        -- This chain checks Anthropic wire tools, not the shipped placeholder.
+        fresh_setup({
+            { name = "Choose a model", disable = true },
+            { name = "WireToolsTest", provider = "anthropic", model = "claude-sonnet-4-6",
+                system_prompt = "Test assistant", tools = { "@all" } },
+        })
+    end)
 
     it("get_agent carries the tools field from M.agents", function()
         local _, name = default_tool_agent()

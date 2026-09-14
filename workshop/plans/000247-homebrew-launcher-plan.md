@@ -499,3 +499,26 @@ legacy per_provider setting per term, preserve order/deduplication, and let the
 app reuse product search definitions for its supported providers. This corrects
 term starvation but does not implement #230's separate proposed !N syntax or
 unlimited-by-default design; that issue remains open.
+
+### 2026-09-13 — shared defaults and login flow
+
+User directs app and plugin to use one agent/provider picker and explicit shared
+OAuth directory `~/.cli-proxy-api`. Legacy app credentials copy without overwrite;
+originals remain and shared credentials survive app uninstall. Regression covers
+credential collisions, permissions, symlinks and explicit overrides.
+
+After reviewing old customizations, user chooses shared answer style including
+📝 summaries, all registered tools and web search; automatic memory stays off,
+ToolOpus is removed, and model choices use the agreed default searches. Personal
+chat/notes and blog export paths remain in the local Neovim config. The app keeps
+only profile/editor differences (ARCH-DRY). Verify effective starter defaults and
+live-agent inheritance, plus existing tool/root-policy regressions.
+
+### 2026-09-13 — preserve repo mode during personal-path migration
+
+Live inspection found Ctrl+g a invoking Add Chat Reference in a timestamped repo
+chat. An explicit personal chat_dir suppresses implicit repo detection by design.
+The personal profile must therefore use the shared repo_mode.detect_root helper
+to select a marked project explicitly, as the app does. Preserve global iCloud
+storage while restoring repo chat recognition and its agent keymap; add a
+regression for this exact explicit-global-path plus selected-repo combination.

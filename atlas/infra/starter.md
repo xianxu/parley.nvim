@@ -47,33 +47,25 @@ intent rather than providing a second configuration to copy.
 |---|---|
 | Storage | Profile-local config/data/state/cache; chats directly in `chats/`, including `welcome.md`; no personal iCloud or blog paths |
 | First use | Welcome preamble explains connection, model selection and sending; the preamble is excluded from the LLM question |
-| LLM setup | Missing connection opens the provider float; an available provider supplies model choices; successful selection resumes the pending action |
+| LLM setup | Missing setup opens the shared agent picker, including logged-out providers; login returns to that picker and model selection resumes the pending action |
 | Setup cancellation | Cancel aborts the pending action; changed source requires retry; headless mode never opens a picker |
-| Proxy | Managed CLIProxyAPI on loopback port 8317 with client key `parley-local`; account credentials remain profile-local |
+| Proxy | Managed CLIProxyAPI on loopback port 8317 with client key `parley-local`; account credentials share `~/.cli-proxy-api` with the plugin |
 | Keys | All Ctrl+g prefixes and Alt chords, including Alt+Enter; other integration shortcut families disabled |
-| Optional features | Chat memory summaries, preference generation and web search disabled; everyday file/search tools and bundled help enabled |
+| Optional features | Automatic memory generation disabled; answer-style 📝 summaries, web search and all registered tools enabled |
 | Customization | Existing Neovim users retain `setup(opts)` as the configuration boundary |
 
-## Default convergence direction — not yet implemented
+## Shared product defaults
 
-The intended product direction is one portable baseline shared by the app and
-an unconfigured plugin. Personal paths, preferred agents, broad tool access and
-Ariadne-specific workflow choices belong in the author's machine configuration,
-not in defaults distributed to strangers (ARCH-DRY).
+`config.lua` owns the portable baseline used by the app and plugin (ARCH-DRY).
+Both use the same answer-style prompt, including 📝 summaries, web search,
+`@all` tools, model searches and onboarding. Automatic memory generation is off;
+answer summaries do not enable background memory generation. The placeholder
+prompts for a real model instead of selecting a named ToolOpus agent.
 
-Today the two configurations still differ: plugin defaults include personal
-chat/note/export paths, `ToolOpus*` with `@all` tools, web search and chat memory
-enabled, and broader default keymaps. The release overrides these explicitly.
-[Issue #211](../../workshop/issues/000211-personal-config-out-of-defaults.md)
-already tracks removing personal defaults; convergence must include these policy
-differences and tests of bare `setup()` as well as the release profile.
-
-Sharing defaults means sharing product policy, not literal directories or editor
-bootstrap. Derive storage from each entry point's own profile; keep dependency
-installation, theme/editor settings and automatic welcome opening app-specific.
-Before migration, inventory the author's effective overrides and move that delta
-into the personal configuration. Preserve explicit plugin overrides and existing
-chats. This direction is recorded here; plugin defaults have not been migrated.
+The app supplies separate storage, editor bootstrap and its Ctrl+g/Alt key
+families. Personal chat/notes and blog export locations belong in the author's
+`~/.config/nvim/lua/plugins/parley.lua`; no personal paths ship in the defaults.
+Existing files are not moved by this configuration change.
 
 ## Test the application configuration without Homebrew
 
@@ -115,31 +107,22 @@ uses `:ParleyProxy connect` for account selection and login. The proxy command
 is available in ordinary plugin setup as well as the starter.
 `starter.connect()` delegates to the shared onboarding flow.
 
-`starter_onboarding` coordinates interactive startup through the existing proxy
-health, login and picker APIs. A saved real model skips onboarding; otherwise a
-usable connected provider opens the model picker and no connected provider opens
-Connect. An unavailable account-health check still tries the model catalog; if
-no usable catalog can be obtained, it opens provider selection without a blocking
-setup error. Initial proxy-start failure also opens provider selection; an actual
-login attempt still reports operational failures. Successful login opens the
-picker with the invalidated catalog. Headless
-startup and cancellation do not reopen dialogs. The placeholder agent is hidden
-from the picker.
-`llm_readiness.defer` also guards LLM actions before request construction. It
-validates provider/model availability, scopes model selection to the provider,
-and resumes against the original buffer and cursor. Cancellation or changed
-source cancels the pending action. The starter opts into this behavior with
-`llm_onboarding`; ordinary plugin configuration is unchanged.
-Connect uses `float_picker` with stable provider identities and selection recall,
-matching the agent selector's floating UI. Cancellation releases the active
-connection prompt so it can be reopened explicitly.
+`starter_onboarding` and `llm_readiness.defer` share the existing agent picker
+in both entry points. Missing setup opens its logged-out provider rows; login
+returns to the same picker with the refreshed catalog. Model selection resumes
+the pending action at the original buffer and cursor. Cancellation or changed
+source cancels that action. Selected non-proxy agents retain their normal path;
+headless startup never opens dialogs. The placeholder is hidden from the picker.
 
 `cliproxy.live_models.tools` flows through the shared `live_agent_options` into
 `cliproxy_catalog.build_agent` for both picking and restoring live models. An
 explicit empty table keeps local tools disabled; omission retains `@all`.
 
-All writable profile artifacts belong to Neovim's config/data/state/cache roots;
-the proxy auth directory is explicitly profile-local. `chats/welcome.md` contains
+Editor artifacts belong to Neovim's config/data/state/cache roots. OAuth
+credentials use the explicit shared `~/.cli-proxy-api` directory. Starter copies
+legacy profile auth JSON files there without overwriting existing credentials,
+retains originals, and refuses redirected directories. Uninstalling the app
+retains the shared login directory. `chats/welcome.md` contains
 setup instructions before its first question and is a recognized chat filename
 for both attachment and finder discovery. Legacy welcome-folder chats move via
 the existing chat-tree mover, preserving attachments and refusing conflicts.
@@ -151,6 +134,8 @@ owned managed proxy before removing those roots. See the
 and its policy source. Hermetic startup tests inspect effective Parley setup,
 not just returned options; local Git/process fixtures exercise bootstrap races
 and failures, followed by live upstream bootstrap conformance at release.
+`tests/integration/starter_auth_spec.lua` covers legacy auth migration, collision
+preservation, private permissions and refusal of redirected credential roots.
 
 ## Bundled help and local access
 
@@ -179,10 +164,9 @@ relative extras resolve against that primary root. Both app and plugin default
 to no extra roots, so peer directories are not implicitly accessible. Help
 access does not add the package root to those filesystem permissions.
 
-The app enables `parley_help`, `read_file`, `ls`, `find`, `grep`,
-`chat_history_search`, `write_file` and `edit_file` automatically. Users can ask
-for these actions without editing configuration. Internal skill-output tools are
-not offered in ordinary app chats. File writes retain existing backup and
+Both entry points enable the registered `@all` tool roster by default. Tool
+availability does not expand filesystem permissions; users can request supported
+actions without editing configuration. File writes retain existing backup and
 confinement behavior. Chat-history search filters configured roots through the
 trusted per-request root policy passed by the dispatcher; model input cannot
 choose a broader policy. Search therefore stays within the current project by

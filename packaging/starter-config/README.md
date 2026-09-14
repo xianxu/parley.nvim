@@ -39,8 +39,8 @@ NVIM_APPNAME=parley nvim 'my notes.md'
 ```
 
 The starter disables chat memory summaries and preference generation by default.
-It enables help, file reading/search, chat-history search and file writing/editing,
-with web search off. In a project marked by `.parley`, file tools stay inside that
+It enables the registered local tools and web search. Answer-style 📝 summaries
+remain enabled independently of automatic memory generation. In a project marked by `.parley`, file tools stay inside that
 project by default. Relative file-tool paths start at the repo root: `notes.md`
 means a file directly inside the folder containing `.parley`, not inside
 `workshop/parley`. Outside repo mode, tools use the chat directory. Peer folders are not

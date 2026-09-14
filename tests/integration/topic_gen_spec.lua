@@ -6,7 +6,17 @@ local tmp_dir = (os.getenv("TMPDIR") or "/tmp") .. "/parley-topic-gen-" .. os.ti
 vim.fn.mkdir(tmp_dir, "p")
 
 local parley = require("parley")
-parley.setup({ chat_dir = tmp_dir, state_dir = tmp_dir .. "/state", providers = {}, api_keys = {} })
+parley.setup({
+    -- These transport fixtures own a configured model; onboarding is tested separately.
+    default_agent = "FixtureAnthropic",
+    agents = {
+        { name = "Choose a model", disable = true },
+        { name = "FixtureAnthropic", provider = "anthropic",
+          model = { model = "claude-sonnet-5" }, system_prompt = "You are a helpful assistant.",
+          tools = { "@all" } },
+    },
+    chat_dir = tmp_dir, state_dir = tmp_dir .. "/state", providers = {}, api_keys = {},
+})
 local chat_respond = require("parley.chat_respond")
 
 describe("_conversation_after_lead (drops system-prompt + ancestors)", function()
