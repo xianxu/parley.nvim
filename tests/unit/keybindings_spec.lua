@@ -740,6 +740,10 @@ describe("<C-g>? can show every bound key (#214 I2)", function()
         for _, e in ipairs(reg.entries) do
             for _, k in ipairs(reg.resolve_keys(e, parley.config) or {}) do bound[k] = true end
         end
+        -- Fixed picker controls are installed independently of user keymap defaults.
+        for _, row in ipairs(reg.picker_basics or {}) do
+            for _, key in ipairs(row.keys) do bound[key] = true end
+        end
         local ghosts = {}
         for _, ctx in ipairs(CONTEXTS) do
             for _, line in ipairs(reg.help_lines(ctx, parley.config)) do
@@ -963,5 +967,56 @@ describe("open_file joins the alt family (#214)", function()
         -- …while a parent/child pair must be, or the guard proves nothing.
         assert.is_true(scopes_overlap("parley_buffer", "chat"))
         assert.is_true(scopes_overlap("markdown", "note"))
+    end)
+end)
+
+-- #251: finder consumers need every configured alias, while titles use one key.
+describe("finder key lists and help (#251)", function()
+    local registry = require("parley.keybinding_registry")
+
+    it("resolves remapped primary and aliases without changing key_for", function()
+        setup_parley({ chat_finder_mappings = { delete = { shortcut = { "<M-d>", "<F6>" } } } })
+        assert.is_function(registry.keys_for)
+        assert.same({ "<M-d>", "<F6>" }, registry.keys_for("cf_delete", parley.config))
+        assert.equals("<M-d>", registry.key_for("cf_delete", parley.config))
+        local lines = registry.help_lines("chat_finder", parley.config)
+        assert.is_true(has_line(lines, "<M-d>", "Delete selected chat"))
+        assert.is_true(has_line(lines, "<F6>", "Delete selected chat"))
+        assert.is_false(has_line(lines, "<C-d>", "Delete selected chat"))
+    end)
+
+    it("returns nil for unknown, disabled, and suppressed entries", function()
+        setup_parley({ default_keymaps = false, chat_finder_mappings = { delete = { shortcut = "" } } })
+        assert.is_function(registry.keys_for)
+        assert.is_nil(registry.keys_for("unknown_action", parley.config))
+        assert.is_nil(registry.keys_for("cf_delete", parley.config))
+        assert.is_nil(registry.keys_for("cf_move", parley.config))
+    end)
+
+    it("preserves explicitly opted-in alias lists with default maps disabled", function()
+        setup_parley({ default_keymaps = false,
+            chat_finder_mappings = { move = { shortcut = { "<F7>", "<F8>" } } } })
+        assert.is_function(registry.keys_for)
+        assert.same({ "<F7>", "<F8>" }, registry.keys_for("cf_move", parley.config))
+    end)
+
+    it("names the sub-chat creation and opening behavior", function()
+        setup_parley()
+        assert.is_true(has_line(registry.help_lines("chat", parley.config), "<M-i>", "Create and open sub-chat"))
+    end)
+
+    it("shows fixed prompt basics in every finder even with default maps disabled", function()
+        setup_parley({ default_keymaps = false })
+        for _, context in ipairs({ "chat_finder", "note_finder", "issue_finder" }) do
+            local lines = registry.help_lines(context, parley.config)
+            assert.is_true(has_line(lines, "<C-j>", "Next item"))
+            assert.is_true(has_line(lines, "<Down>", "Next item"))
+            assert.is_true(has_line(lines, "<C-k>", "Previous item"))
+            assert.is_true(has_line(lines, "<Up>", "Previous item"))
+            assert.is_true(has_line(lines, "<CR>", "Select item"))
+            assert.is_true(has_line(lines, "<Esc>", "Cancel finder"))
+            assert.is_true(has_line(lines, "<C-c>", "Cancel finder"))
+        end
+        assert.is_false(has_line(registry.help_lines("chat", parley.config), "<C-j>", "Next item"))
     end)
 end)

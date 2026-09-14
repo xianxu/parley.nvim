@@ -237,9 +237,9 @@ describe("NoteFinder logic", function()
 
         assert.is_truthy(captured)
         assert.equals("Note Files (Recent: 12 months  <C-a>/<C-s>: cycle)", captured.title)
-        assert.equals("<C-d>", captured.mappings[1].key)
-        assert.equals("<C-a>", captured.mappings[2].key)
-        assert.equals("<C-s>", captured.mappings[3].key)
+        assert.same({ "<C-d>" }, captured.mappings[1].key)
+        assert.same({ "<C-a>" }, captured.mappings[2].key)
+        assert.same({ "<C-s>" }, captured.mappings[3].key)
 
         local values = vim.tbl_map(function(item)
             return item.value

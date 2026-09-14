@@ -575,14 +575,14 @@ M.open = function(_)
 	-- vim.keymap.set. nil = deliberately unbound; float_picker skips those.
 	local kb = require("parley.keybinding_registry")
 	local cfg = _parley.config
-	local delete_shortcut = kb.key_for("cf_delete", cfg)
-	local delete_tree_shortcut = kb.key_for("cf_delete_tree", cfg)
-	local move_shortcut = kb.key_for("cf_move", cfg)
-	local next_recency_shortcut = kb.key_for("cf_next_recency", cfg)
-	local previous_recency_shortcut = kb.key_for("cf_prev_recency", cfg)
-	local cycle_filter_shortcut = kb.key_for("cf_cycle_filter", cfg)
-	local cycle_filter_prev_shortcut = kb.key_for("cf_cycle_filter_prev", cfg)
-	local keybindings_shortcut = kb.key_for("help", cfg)
+	local delete_shortcut = kb.keys_for("cf_delete", cfg)
+	local delete_tree_shortcut = kb.keys_for("cf_delete_tree", cfg)
+	local move_shortcut = kb.keys_for("cf_move", cfg)
+	local next_recency_shortcut = kb.keys_for("cf_next_recency", cfg)
+	local previous_recency_shortcut = kb.keys_for("cf_prev_recency", cfg)
+	local cycle_filter_shortcut = kb.keys_for("cf_cycle_filter", cfg)
+	local cycle_filter_prev_shortcut = kb.keys_for("cf_cycle_filter_prev", cfg)
+	local keybindings_shortcut = kb.keys_for("help", cfg)
 
 	-- Launch float picker for chat finder
 	do

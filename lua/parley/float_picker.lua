@@ -578,7 +578,7 @@ end
 ---   on_select  function(item) – called on confirmation
 ---   on_cancel  function()    – called on cancel/dismiss (optional)
 ---   on_query_change function(query) – called when prompt text changes (optional)
----   mappings   table    – list of { key: string, fn: function(item, close_fn) }
+---   mappings   table    – list of { key: string|string[], fn: function(item, close_fn) }
 ---                         keys are mapped in the prompt (insert mode)
 ---   recall_key string   – optional. When set, the last confirmed item's id
 ---                         is remembered and used as the initial cursor position
@@ -1499,30 +1499,33 @@ function M.open(opts)
     end
 
     for _, m in ipairs(extra_mappings) do
-        -- #214 C1: a nil/empty key means the binding is disabled (the caller
-        -- resolved it through the keybinding registry and got nothing back —
-        -- `shortcut = ""`, or `default_keymaps = false`). Skip it. Passing it
-        -- through raised "Invalid (empty) LHS" and took the whole picker down.
-        local normalized_key = m.key ~= nil and m.key ~= "" and key_name(keycode(m.key)) or nil
-        local reserved_key = normalized_key and reserved_keys[normalized_key]
-        if not normalized_key then
-            logger.debug("float_picker mapping skipped: no key bound")
-        elseif reserved_key then
-            logger.warning(string.format(
-                "float_picker mapping %s skipped because it conflicts with reserved key %s",
-                tostring(m.key),
-                reserved_key
-            ))
-        else
-            imap_p(m.key, function()
-                run_extra_mapping(m.fn)
-            end)
-            nmap_p(m.key, function()
-                run_extra_mapping(m.fn)
-            end)
-            nmap_r(m.key, function()
-                run_extra_mapping(m.fn)
-            end)
+        local keys = type(m.key) == "table" and m.key or { m.key }
+        for _, key in ipairs(keys) do
+            -- #214 C1: a nil/empty key means the binding is disabled (the caller
+            -- resolved it through the keybinding registry and got nothing back —
+            -- `shortcut = ""`, or `default_keymaps = false`). Skip it. Passing it
+            -- through raised "Invalid (empty) LHS" and took the whole picker down.
+            local normalized_key = key ~= nil and key ~= "" and key_name(keycode(key)) or nil
+            local reserved_key = normalized_key and reserved_keys[normalized_key]
+            if not normalized_key then
+                logger.debug("float_picker mapping skipped: no key bound")
+            elseif reserved_key then
+                logger.warning(string.format(
+                    "float_picker mapping %s skipped because it conflicts with reserved key %s",
+                    tostring(key),
+                    reserved_key
+                ))
+            else
+                imap_p(key, function()
+                    run_extra_mapping(m.fn)
+                end)
+                nmap_p(key, function()
+                    run_extra_mapping(m.fn)
+                end)
+                nmap_r(key, function()
+                    run_extra_mapping(m.fn)
+                end)
+            end
         end
     end
 

@@ -260,9 +260,9 @@ function M.agent_picker(plugin, opts)
         return M._build_items(projected, M._view_for(models, cfg, {all = all, agents = projected.agents}))
     end
 
-    local keybindings_key = require("parley.keybinding_registry").key_for("help", plugin.config)
+    local keybindings_key = require("parley.keybinding_registry").keys_for("help", plugin.config)
     local expand_key = require("parley.keybinding_registry")
-        .key_for("ap_expand_catalog", plugin.config)
+        .keys_for("ap_expand_catalog", plugin.config)
     local title = "🤖 Parley Agents"
     -- The registry owns the expand key. No literal fallback here: a hardcoded
     -- default would be a second copy of the registry's, invisible to the arch

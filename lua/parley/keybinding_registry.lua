@@ -490,7 +490,7 @@ M.entries = {
 		default_modes = { "n", "i", "v" },
 		scope = "parley_buffer",
 		desc = "Parley create and insert new chat",
-		help_desc = "Insert branch reference",
+		help_desc = "Create and open sub-chat (insert branch reference)",
 		buffer_local = true,
 	},
 	{
@@ -945,6 +945,16 @@ end
 -- Config resolution
 -------------------------------------------------------------------
 
+--- All keys bound to an action, primary first, honoring config overrides.
+--- Picker installers use this list so configured aliases remain live.
+--- @param id string
+--- @param config table
+--- @return string[]|nil keys
+function M.keys_for(id, config)
+	local entry = M._by_id[id]
+	return entry and (M.resolve_keys(entry, config)) or nil
+end
+
 --- The key bound to a registry entry id, honoring config overrides.
 ---
 --- Exists so a caller can ask for "the key for this action" without holding the
@@ -954,12 +964,8 @@ end
 --- @param config table
 --- @return string|nil key
 function M.key_for(id, config)
-	for _, entry in ipairs(M.entries) do
-		if entry.id == id then
-			return (M.resolve_key(entry, config))
-		end
-	end
-	return nil
+	local keys = M.keys_for(id, config)
+	return keys and keys[1] or nil
 end
 
 --- The key for `id` as DISPLAY text — never nil, so it can go straight into a
@@ -1133,6 +1139,16 @@ M.native_overrides = {
 -- Help display
 -------------------------------------------------------------------
 
+-- Fixed prompt controls belong to float_picker, not configurable registry
+-- entries: default_keymaps=false does not disable them. Keep their help
+-- catalog separate from the actions installed by register_global/buffer.
+M.picker_basics = {
+	{ keys = { "<C-j>", "<Down>" }, desc = "Next item" },
+	{ keys = { "<C-k>", "<Up>" }, desc = "Previous item" },
+	{ keys = { "<CR>" }, desc = "Select item" },
+	{ keys = { "<Esc>", "<C-c>" }, desc = "Cancel finder" },
+}
+
 --- Every key the help float should print for `entry`, or nil if nothing is
 --- bound (callers omit the row). Returns the full list: aliases are bindings
 --- too, and hiding them made <C-g>? unable to show <M-q>/<M-t>/<C-g>i (#214).
@@ -1200,6 +1216,14 @@ function M.help_lines(context, config)
 			end
 			table.insert(lines, "")
 		end
+	end
+
+	if context == "chat_finder" or context == "note_finder" or context == "issue_finder" then
+		table.insert(lines, "Finder prompt")
+		for _, row in ipairs(M.picker_basics) do
+			add_entry(row.keys, row.desc)
+		end
+		table.insert(lines, "")
 	end
 
 	-- Finder recency note

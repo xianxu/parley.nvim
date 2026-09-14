@@ -350,10 +350,10 @@ M.open = function(_options)
     -- rebinding, `shortcut = ""` and `default_keymaps = false` all reach them and
     -- the hardcoded default_key duplicates are gone. nil = unbound; skipped.
     local kb = require("parley.keybinding_registry")
-    local delete_shortcut = kb.key_for("if_delete", _parley.config)
-    local cycle_status_shortcut = kb.key_for("if_cycle_status", _parley.config)
-    local toggle_done_shortcut = kb.key_for("if_toggle_done", _parley.config)
-    local cycle_view_shortcut = kb.key_for("if_cycle_view", _parley.config)
+    local delete_shortcut = kb.keys_for("if_delete", _parley.config)
+    local cycle_status_shortcut = kb.keys_for("if_cycle_status", _parley.config)
+    local toggle_done_shortcut = kb.keys_for("if_toggle_done", _parley.config)
+    local cycle_view_shortcut = kb.keys_for("if_cycle_view", _parley.config)
 
     -- View mode: 0=issues (default), 1=history. Clamp with % 2 so any stale
     -- in-memory value (e.g. a `2` left by the pre-#158 tri-state) self-heals.
@@ -604,7 +604,7 @@ M.open = function(_options)
             },
             -- Show key bindings help
             {
-                key = kb.key_for("help", _parley.config),
+                key = kb.keys_for("help", _parley.config),
                 fn = function(_, _)
                     vim.schedule(function()
                         _parley.cmd.KeyBindings("issue_finder")
