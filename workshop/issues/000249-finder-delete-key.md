@@ -1,6 +1,6 @@
 ---
 id: 000249
-status: codecomplete
+status: working
 deps: []
 github_issue:
 created: 2026-09-14
@@ -49,6 +49,9 @@ total: 0.51
 - [x] Change only delete_tree defaults in config.lua and keybinding_registry.lua to `<C-g>D`; verify default and fallback resolution and help.
 - [x] Run focused finder/keybinding tests and full suite/lint.
 
+- [ ] Preserve finder-local bindings in starter_config.options and test starter option resolution.
+- [ ] Exercise the actual ChatFinder with starter options and run exact-launcher native smoke plus full tests/lint.
+
 Acceptance boundary: close through the binary-owned fresh review.
 
 ## Log
@@ -63,3 +66,15 @@ Acceptance boundary: close through the binary-owned fresh review.
 - Independent actual-picker reproduction confirmed Ctrl+d invoked tree deletion; native y confirmation worked. No second failure reproduced.
 - Six regression cases failed before the two-default fix: config and registry fallback each dispatched the wrong delete action and lacked the new tree chord. All six now pass (54 finder spec tests total), including saved-file outcomes and resume after confirmation.
 - Updated README finder instructions and recorded the key-normalization lesson. Full make test passed (256 spec files; lint clean). Native Insert-mode Ctrl+d plus native y confirmation deleted the temporary selected file through the single-chat path; /tmp/parley249-native.log. No architectural surface changed, so close uses --no-atlas; README covers the default-key change.
+
+## Revisions
+
+### 2026-09-14 — Exact app launcher exposes missing starter bindings
+
+Reason: user reports the collision fix did not restore Ctrl+d with `NVIM_APPNAME=parley PARLEY_RUNTIME="$PWD" nvim -u "$PWD/packaging/starter-config/init.lua"`. Earlier default-profile smoke did not exercise the starter.
+
+Delta: starter_config.options disables default_keymaps and only opts into Ctrl+g/Alt families, omitting Ctrl+d and other finder-local controls. Preserve every registry binding scoped to a finder while retaining the existing restricted global/editor key policy. This covers chat/note/issue finder-local actions, not just the reported key (ARCH-PURPOSE). Use existing registry scope metadata (ARCH-DRY); no new UI effects.
+
+- starter_config.options: assert local delete/move/recency/filter bindings survive while unrelated global shortcut families remain disabled.
+- Existing real ChatFinder mapping regression: add starter-derived options as a third configuration source, verifying confirmation, cancellation, and child preservation through effective mappings.
+- Exact starter-config launcher: native keyboard/confirmation smoke with actual Lazy/plugins and isolated HOME/XDG directories; do not call setup({}) after startup. This is the acceptance environment for the reported bug.
