@@ -1,11 +1,12 @@
 ---
 id: 000250
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-09-14
 updated: 2026-09-14
 estimate_hours:
+started: 2026-09-14T10:28:16-07:00
 ---
 
 # Open sub-chat when selecting an outline branch
