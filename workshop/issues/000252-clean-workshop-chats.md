@@ -7,7 +7,7 @@ created: 2026-09-14
 updated: 2026-09-14
 estimate_hours: 0.615
 started: 2026-09-14T12:05:18-07:00
-actual_hours: 0.06
+actual_hours: 0.26
 ---
 
 # Clean workshop chat corpus
@@ -37,6 +37,7 @@ Operator approved backup, deletion of personal/test material (no move to private
 ## Log
 
 ### 2026-09-14
+- 2026-09-14: closed — Final release delta: bootstrap comments only, exact inherited-symlink ignore preserves tracked vocabulary exception, README private-notes wording; bash -n bootstrap.sh and git check-ignore assertions passed, git diff --check clean. Original cleanup backup/inventory and mapped tests remain verified; rerun close covers post-close housekeeping and resolved claim-only conflict.; review verdict: SHIP
 - 2026-09-14: closed — Verified external backup59files with SHA256 and exact inventory; removed44chats+3images+1rawlog, retained11approved chats, six local branch references pass, literal tilde already absent. Seven adversarial cleanup checks pass; fold corpus RED before/GREEN after with workshop absent; final13 mapped chat/exchange_model specs pass and lint448files clean; unrelated staged README preserved.; review verdict: SHIP
 
 
