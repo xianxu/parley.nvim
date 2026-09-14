@@ -1,10 +1,10 @@
 ---
 id: 000206
-status: blocked
-deps: [000208, 000209, 000210, 000211, 000212, 000213]
+status: working
+deps: []
 github_issue:
 created: 2026-09-01
-updated: 2026-09-02
+updated: 2026-09-14
 estimate_hours:
 started: 2026-09-02T14:27:21-07:00
 ---
@@ -140,3 +140,23 @@ quotes `"codex:gpt-5.6"`, while `config.lua`'s default is now
 `"codex:gpt-6,gpt-5"` (`5596d22`). Deliberately not patched in place — the
 README is being rewritten here; don't carry the old example forward.
 
+
+
+## Revisions
+
+### 2026-09-14 — App tutorials and AI-queryable reference replace a separate manual
+
+Reason: the app now ships welcome.md, basics.md, and advanced.md; parley_help exposes installed documentation. Operator approved a concise README, an atlas audit for answerability and code consistency, and exposing canonical tutorials to AI help.
+
+Current scope supersedes the earlier separate user-manual hierarchy and mandatory video storyboard. README covers the product idea, app-first installation, and links to canonical packaging/tutorials files; plugin/contributor links remain secondary. Tutorials teach the workflow. Atlas pages describe observable shipped behavior, invocation/configuration/defaults, limitations, and source/test pointers; they remain a structured code map, not an exhaustive manual. Ctrl+g ? remains the live configured shortcut reference.
+
+The old dependency list is removed for this scope: document current shipped behavior accurately rather than waiting for every optional safety/integration issue to be implemented. This does not close those issues or assert their desired changes shipped. #208's former clean-clone blocker has shipped runtime vocabulary and fresh-clone tests; app installation and onboarding now exist. #207 retains video production; no storyboard is required to finish this issue.
+
+Current acceptance:
+- Concise app-first README links the three canonical tutorials and retains the introduction markers consumed by help.
+- Every atlas page is checked for current behavior, source evidence, discoverability, and useful user answers; index summaries agree with pages.
+- Canonical tutorials receive necessary factual corrections; workshop demonstration copies are preserved.
+- parley_help lists and safely reads the three bundled tutorials, with no arbitrary path access and existing size/symlink protections intact.
+- Durable checked audit inventory and representative user-question evidence; links/retrieval/claim checks plus applicable test suite and isolated starter verification pass.
+
+Implementation plan: workshop/plans/000206-documentation-refresh-plan.md. The original checked inventory remains historical evidence; its old blockers are not presumed current. No video deliverable or live provider/account access is required for this documentation revision.
