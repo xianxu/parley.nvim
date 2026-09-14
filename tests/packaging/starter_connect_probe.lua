@@ -17,9 +17,13 @@ vim.env.PARLEY_FAKE_LOGIN_MODE = 'success'
 assert(proxy.discover_binary() == nil, 'fixture must begin without a proxy binary')
 local notices = {}
 vim.notify = function(message) notices[#notices + 1] = tostring(message) end
-vim.ui.select = function(_, _, callback) callback('Claude', 1) end
 local ok, why = pcall(function()
-    vim.cmd('ParleyConnect')
+    vim.cmd('ParleyProxy connect')
+    assert(vim.api.nvim_win_get_config(0).relative ~= '', 'Connect did not open a floating window')
+    local confirm = vim.fn.maparg('<CR>', 'i', false, true)
+    assert(type(confirm.callback) == 'function', 'provider picker has no Enter action')
+    confirm.callback() -- choose Claude through the real floating picker
+
     local credential = p.config.cliproxy.auth_dir .. '/claude-fake@example.com.json'
     assert(vim.wait(8000, function()
         if failure then return table.concat(notices, '\n'):find('auto_download failed', 1, true) ~= nil end

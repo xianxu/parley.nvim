@@ -327,6 +327,7 @@ M.register_proxy_command = function(prefix)
 		{ name = "restart", desc = "stop, then start with a freshly rendered config" },
 		{ name = "models", arg = "<provider>", desc = "list the models a provider currently serves" },
 		{ name = "providers", desc = "list the supported provider names" },
+		{ name = "connect", desc = "choose an account provider, log in, then choose a model" },
 		{ name = "login", arg = "<provider>", desc = "run an interactive OAuth login for a provider" },
 		{ name = "reap", desc = "stop other cliproxy processes racing this one's auth-dir" },
 		{ name = "update", desc = "install the latest cliproxyapi release (or cliproxy.download_version), restarting parley's proxy" },
@@ -348,7 +349,9 @@ M.register_proxy_command = function(prefix)
 		local cliproxy = require("parley.cliproxy")
 		local sub = params.fargs[1]
 		local arg = params.fargs[2]
-		if sub == "status" then
+		if sub == "connect" then
+			require("parley.starter_onboarding").connect(M)
+		elseif sub == "status" then
 			cliproxy.status(function(info)
 				vim.notify(table.concat({
 					"cliproxy status",
@@ -743,14 +746,14 @@ M.setup = function(opts)
 	)
 
 	-- Detect parley-enabled repo via marker file and set up repo-local directories
-	-- Skip if user explicitly set chat_dir in opts (e.g. tests)
+	-- An explicit chat_dir stays authoritative unless a project root is also selected.
 	local function apply_repo_local()
-		if opts.chat_dir then return end
+		if opts.chat_dir and not opts.repo_root then return end
 
 		local marker = M.config.repo_marker
 		if not marker then return end
 
-		local git_root = M.helpers.find_git_root(vim.fn.getcwd())
+		local git_root = opts.repo_root or M.helpers.find_git_root(vim.fn.getcwd())
 		if git_root == "" then return end
 
 		local marker_path = git_root .. "/" .. marker
@@ -1786,9 +1789,9 @@ M.not_chat = function(buf, file_name)
 		return "resolved file (" .. resolved_file .. ") not in configured chat roots (" .. table.concat(M.get_chat_dirs(), ", ") .. ")"
 	end
 
-	-- Check for timestamp format in filename
+	-- Recognize ordinary timestamped chats and the packaged welcome transcript.
 	local basename = vim.fn.fnamemodify(resolved_file, ":t")
-	if not basename:match("^%d%d%d%d%-%d%d%-%d%d") then
+	if not require('parley.chat_parser').is_chat_filename(basename) then
 		return "file does not have timestamp format"
 	end
 
@@ -2826,7 +2829,7 @@ M.get_chat_topic = function(file_path)
 	local stat_mtime = stat and stat.mtime or nil
 	local basename = vim.fn.fnamemodify(file_path, ":t")
 
-	if not basename:match("^%d%d%d%d%-%d%d%-%d%d") then
+	if not require('parley.chat_parser').is_chat_filename(basename) then
 		return nil
 	end
 
@@ -4187,6 +4190,7 @@ end
 -- Prune: move cursored exchange + all following into a new child chat file.
 -- Replaces pruned content in parent with a 🌿: branch reference.
 M.cmd.ChatPrune = function()
+    if require('parley.llm_readiness').defer(M, M.cmd.ChatPrune) then return end
 	local buf = vim.api.nvim_get_current_buf()
 	local file_name = vim.api.nvim_buf_get_name(buf)
 	local reason = M.not_chat(buf, file_name)
@@ -4589,6 +4593,23 @@ local try_open_src_link = function(line, cursor_col, buf)
 	return "failed"
 end
 
+-- Ordinary local Markdown links use the source buffer's directory, including
+-- when the cursor is on their label. Keep URL schemes in the existing fallback.
+local function try_open_markdown_link(line, cursor_col, buf)
+    local link = issues_mod.parse_md_link_at_cursor(line, cursor_col + 1)
+    if not link or link.url:match("^%a[%w+%.%-]*:") or link.url:sub(1, 2) == "//" then return nil end
+    local base = vim.fn.fnamemodify(vim.api.nvim_buf_get_name(buf), ":p:h")
+    local target = issues_mod.resolve_link_target(link, base)
+    if not target then return nil end
+    target = vim.fn.simplify(target)
+    if vim.fn.filereadable(target) == 1 then
+        M.open_buf(target)
+        return "opened"
+    end
+    M.logger.warning("Markdown link target not found: " .. target)
+    return "failed"
+end
+
 --- Open whatever reference sits under the cursor.
 ---
 --- One chain for chat buffers and markdown buffers alike (#225). They used to
@@ -4621,6 +4642,7 @@ local function open_reference_under_cursor(buf, current_line, cursor_col, is_cha
 	-- a non-nil answer is terminal either way.
 	local handled = try_open_src_link(current_line, cursor_col, buf)
 		or try_open_inline_branch_link(current_line, cursor_col, buf)
+		or try_open_markdown_link(current_line, cursor_col, buf)
 		or open_branch_ref(current_line, buf)
 	if handled then
 		return handled
@@ -5147,7 +5169,12 @@ end
 -- Agent info resolution (delegated to parley.agent_info module)
 local agent_info_mod = require("parley.agent_info")
 M.get_agent_info = function(headers, agent)
-	return agent_info_mod.resolve(headers, agent, M._state, M.system_prompts, memory_prefs, M.logger)
+	local info = agent_info_mod.resolve(headers, agent, M._state, M.system_prompts, memory_prefs, M.logger)
+	if M.config.parley_help ~= false then
+		local context = require("parley.help").context(vim.env.NVIM_APPNAME == "parley" and "app" or "plugin")
+		if context ~= "" then info.system_prompt = (info.system_prompt or "") .. "\n\n" .. context end
+	end
+	return info
 end
 
 return M

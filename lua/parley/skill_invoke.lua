@@ -129,6 +129,12 @@ function M.invoke(buf, manifest, args, opts)
         end
     end
 
+    if require('parley.llm_readiness').defer(p, function()
+        M.invoke(buf, manifest, args, opts)
+    end, { buf = buf, on_cancel = function(reason)
+        deliver_attempt({ ok = false, msg = reason }, true)
+    end }) then return end
+
     if _in_flight[buf] then
         p.logger.warning("skill " .. tostring(manifest.name) .. ": already running on this buffer")
         deliver_attempt({ ok = false, msg = "already running" }, true)

@@ -312,3 +312,75 @@ introduction with current app/plugin mode. Enable only this help tool in the app
 plugin @all defaults discover it without widening explicit custom tool lists.
 Update welcome question; verify dispatcher reads, invalid topic rejection, prompt
 context and actual starter live agents. This extends the approved first-use work.
+
+### 2026-09-14 — implemented README/atlas help
+
+User revised documentation source to existing README and atlas. Added marked
+README introduction, post-resolution app/plugin context, and parley_help topic
+listing/reading. App live and placeholder agents expose only help; plugin @all
+discovers it while explicit tool lists remain unchanged. The module reads only
+README and atlas-indexed Markdown under its own runtime, bounds size and rejects
+symlink redirection. Lua source already ships but is not exposed by help.
+Changed the new welcome question. Added parser and real dispatcher tests, prompt
+precedence/idempotence/opt-out, invalid input and missing-doc cases. Fresh review
+found two stale atlas links; regression reproduced them, index corrected and all
+advertised topics now read successfully. Recorded prevention in lessons.
+Focused help (6), config-tools (26) and actual starter (13) cases pass. Broader
+verification log: /tmp/parley247-help-full2.log. Changes remain unreleased.
+
+Final verification: full make test exited 0, all 253 spec files passed; lint checked 443 files with zero warnings/errors.
+
+### 2026-09-14 — MarkdownPreview app dependency
+
+Added pinned iamcco/markdown-preview.nvim to the app bootstrap with explicit
+manual startup and localhost-only defaults. Uses upstream versioned prebuilt
+installer (120s timeout) plus binary version check (5s), no Node/Yarn dependency.
+Bootstrap stateful installer fixture covers success, failed download and wrong
+version. Six bootstrap cases pass; changed-file lint, artifact scan and diff
+checks pass. Live isolated Apple Silicon conformance downloaded server 0.0.10,
+started preview, fetched actual HTML and stopped it; no browser opened. Log:
+/tmp/parley247-preview-live.log. Docs describe commands and retry. Source profile
+updated; Homebrew release not yet published.
+
+### 2026-09-14 — MarkdownPreview Lazy build E117
+
+User hit Unknown function mkdp#util#get_platform in Lazy build. Root cause:
+function builders run before plugin autoload files are loaded; earlier smoke
+preloaded plugin and fixture stub hid the dependency. Removed that call and
+derive installed binary platform using Neovim host information. Regression now
+builds with no mkdp functions present: failed before fix, all six bootstrap
+cases pass afterward, including installer and version-check failures.
+
+Live verification through actual Lazy build passed without preloaded autoload
+functions; preview served HTML and stopped cleanly. Log:
+/tmp/parley247-preview-lazy-live.log. Changed-file lint and artifact scan pass.
+
+### 2026-09-14 — stable basics tutorial name
+
+Renamed the user's second tutorial to basics.md, preserving the active buffer
+and its edits through the app's RPC server. Added filename explanation to its
+preamble. Chat recognition and Finder now accept basics.md alongside welcome.md;
+ordinary chat names remain timestamped. Tests verify named-chat recognition,
+Finder discovery and no topic-slug rename. Thirteen starter integration cases
+and the chat-finder suite pass. Second tutorial remains locally authored, not
+yet part of automatic fresh-profile seeding.
+
+### 2026-09-13 — Advanced tutorial and app path behavior
+
+Created the locally authored advanced.md tutorial (topic 3. Advanced), linked
+from basics.md, covering transcript context, outline/branches, marker-only
+project folders, repo-root tool paths, local file/chat-search tools, and image
+pasting with Option+v. Named tutorials remain separate from automatic seeding.
+Image exercise starts a timestamped chat, which supplies the attachment ID.
+
+Enabled everyday app tools and removed implicit sibling read access; chat-history
+tool searches obey trusted dispatcher root policy. Ordinary Markdown navigation
+links now resolve beside their source document. The starter detects .parley
+without requiring Git and applies project chat storage despite its global
+fallback chat directory. Atlas and regression coverage describe these rules.
+
+Verification: make test with local Plenary passed (exit 0), log
+/tmp/parley247-advanced-final.log. The architecture producer inventory and the
+explicit-sibling completion fixture were updated for the intentional changes.
+Headless parser verified advanced.md is recognized and has one exchange;
+git diff --check passed. These changes remain local and unreleased.

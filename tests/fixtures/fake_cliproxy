@@ -63,11 +63,12 @@ import signal
 import sys
 import threading
 import time
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler
 
 sys.dont_write_bytecode = True  # never write __pycache__ into the repo (#202)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from fixture_watchdog import exit_with_parent  # noqa: E402
+from loopback_http import LoopbackHTTPServer  # noqa: E402
 
 
 def parse_args(argv):
@@ -507,7 +508,7 @@ def main():
         def exit_later(_signum, _frame):
             threading.Timer(exit_delay_ms / 1000.0, lambda: os._exit(0)).start()
         signal.signal(signal.SIGTERM, exit_later)
-    HTTPServer(("127.0.0.1", port), Handler).serve_forever()
+    LoopbackHTTPServer(("127.0.0.1", port), Handler).serve_forever()
 
 
 if __name__ == "__main__":

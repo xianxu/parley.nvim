@@ -9,6 +9,7 @@ local tmp_dir = (os.getenv("TMPDIR") or "/tmp") .. "/claude/parley-test-build-me
 -- Bootstrap parley
 local parley = require("parley")
 parley.setup({
+            parley_help = false, -- pin prompt composition independently of product documentation
     chat_dir = tmp_dir,
     state_dir = tmp_dir .. "/state",
     providers = {},

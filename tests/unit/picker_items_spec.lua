@@ -43,6 +43,17 @@ custom_prompts.setup(helper, _tmpdir)
 -- agent_picker._build_items
 -- ---------------------------------------------------------------------------
 describe("agent_picker item building", function()
+    it("omits onboarding placeholders while preserving genuine configured agents", function()
+        local plugin = make_plugin("Choose a model")
+        plugin._agents[#plugin._agents + 1] = "Choose a model"
+        plugin.agents["Choose a model"] = {provider = "cliproxyapi", model = "choose-a-model", placeholder = true}
+        local items = agent_picker._build_items(plugin)
+        assert.equals(3, #items)
+        for _, item in ipairs(items) do assert.is_not_equal("Choose a model", item.name) end
+        plugin.agents["Choose a model"].placeholder = false
+        assert.equals(4, #agent_picker._build_items(plugin))
+    end)
+
     it("places the current agent first", function()
         local items = agent_picker._build_items(make_plugin("mango"))
         assert.equals("mango", items[1].name)

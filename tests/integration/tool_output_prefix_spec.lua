@@ -87,6 +87,7 @@ describe("tool output never begins a line with a structural marker (#203)", func
     -- previous draft hand-listed five and let the atlas claim it derived from
     -- the registry; that claim is only true with this check.
     local NOT_ECHOING = {
+        parley_help = "bundled Markdown is indented by handler; delimiter regression in parley_help_spec",
         edit_file = "returns a status message, never file content",
         write_file = "returns a status message",
         propose_edits = "returns a status message",

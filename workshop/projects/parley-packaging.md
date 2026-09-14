@@ -226,3 +226,12 @@ row remains unchecked until public installation, upgrade, real managed login and
 image response, uninstall and VM cleanup are evidenced. User login begins with
 `:ParleyConnect` (which invokes the managed `:ParleyProxy login` flow). No merge
 or archive occurs before the acceptance manifest records outcome=complete.
+
+### 2026-09-13 — v2.4.0 fresh-machine testing release
+
+Operator requests publication of the accumulated app fixes for another fresh
+machine test. This release includes all three tutorials, setup pickers, useful
+tools with project-local defaults, image instructions, MarkdownPreview and local
+documentation access. The current login entry is `:ParleyProxy connect`.
+Publication follows local review; #247 remains unchecked pending the operator's
+fresh-machine acceptance. No merge or archive is implied by this testing release.

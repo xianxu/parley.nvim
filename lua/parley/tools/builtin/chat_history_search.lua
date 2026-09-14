@@ -1,11 +1,7 @@
--- `chat_history_search` — search this user's saved chat transcripts
--- across all configured chat roots (global + repo-local + super-repo
--- siblings).
---
--- Distinct from the `grep` tool because chat roots routinely live
--- outside cwd (global iCloud dir, sibling super-repo members), so
--- this tool deliberately does not pass any `path` / `file_path`
--- argument through to the dispatcher's cwd-scope guard.
+-- `chat_history_search` searches configured transcript roots permitted by
+-- the trusted execution policy. No model-supplied path bypasses confinement:
+-- the dispatcher passes root_policy separately from the tool input.
+-- Direct callers without execution context retain configured-root behavior.
 --
 -- Backend selection mirrors `grep.lua`: prefer ripgrep, fall back to
 -- system grep. Argument surface is structured rather than a raw
@@ -32,7 +28,7 @@ local function describe()
         .. "'do you remember when we talked about X', 'what did we discuss about Y', "
         .. "'have we chatted about Z before', 'find past chats on W'. Searches the "
         .. "user's saved chat transcripts (markdown files) across all configured chat "
-        .. "roots: global, current repo, and any super-repo siblings. Output paths are "
+        .. "roots allowed by the current project/read-root policy. Output paths are "
         .. "prefixed with `{<repo>}/` so you can tell which repo each hit lives in. "
         .. "Default context is -B1 -A2 lines around each match."
     if backend == "rg" then
@@ -194,7 +190,7 @@ return {
         },
         required = { "pattern" },
     },
-    handler = function(input)
+    handler = function(input, context)
         input = input or {}
         if type(input.pattern) ~= "string" or input.pattern == "" then
             return {
@@ -230,6 +226,17 @@ return {
         end
 
         local roots = parley.get_chat_roots() or {}
+        local policy = context and context.root_policy
+        if policy then
+            local scoped = {}
+            for _, root in ipairs(roots) do
+                if require('parley.tools.dispatcher').resolve_read_path(root.dir,
+                    policy.write_root, policy.read_roots) then
+                    scoped[#scoped + 1] = root
+                end
+            end
+            roots = scoped
+        end
         if #roots == 0 then
             return {
                 content = "no chat roots configured",

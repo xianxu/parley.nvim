@@ -1,8 +1,8 @@
 if vim.env.STARTER_HOLD then
     local parley = require('parley')
-    local new_chat = parley.new_chat
-    parley.new_chat = function(...)
-        local result = new_chat(...)
+    local open_buf = parley.open_buf
+    parley.open_buf = function(...)
+        local result = open_buf(...)
         vim.fn.writefile({ 'ready' }, vim.env.STARTER_HOLD .. '.ready')
         assert(vim.wait(10000, function()
             return vim.fn.filereadable(vim.env.STARTER_HOLD .. '.release') == 1

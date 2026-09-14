@@ -24,7 +24,7 @@ owned = work / 'upgrade-fixture'
 owned.mkdir()  # Never adopt or delete an existing run's directory.
 tap_name = 'parley-acceptance/fixtures'
 formula_name = tap_name + '/parley-upgrade-fixture'
-env = dict(os.environ, HOMEBREW_NO_AUTO_UPDATE='1', HOMEBREW_NO_INSTALL_FROM_API='1')
+env = dict(os.environ, HOMEBREW_NO_AUTO_UPDATE='1')
 
 def run(*argv, extra=None):
     result = subprocess.run(argv, env=dict(env, **(extra or {})), text=True,

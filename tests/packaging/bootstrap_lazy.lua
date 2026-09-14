@@ -13,6 +13,39 @@ return {
         assert(spec[1].commit == '4ed07bc0c6083cdd547c63f5c245e02c068b0c45')
         assert(spec[2].commit == '74b06c6c75e4eeb3108ec01852001636d85a932b')
         assert(spec[3].commit == 'a0bbec21143c7bc5f8bb02e0005fa0b982edc026')
+        local preview
+        for _, plugin in ipairs(spec) do
+            if plugin[1] == 'iamcco/markdown-preview.nvim' then preview = plugin end
+        end
+        assert(preview, 'MarkdownPreview must ship in the app profile')
+        assert(preview.commit == 'a923f5fc5ba36a3b17e289dc35dc17f66d0548ee')
+        assert(vim.deep_equal(preview.cmd, {'MarkdownPreview', 'MarkdownPreviewToggle', 'MarkdownPreviewStop'}))
+        preview.init()
+        assert(vim.g.mkdp_auto_start == 0 and vim.g.mkdp_open_to_the_world == 0)
+        assert(type(preview.build) == 'function')
+        -- Stateful installer fixture: materialize the server, then verify
+        -- failure is surfaced rather than accepting a missing download.
+        local dir = vim.fn.stdpath('data') .. '/markdown-preview.nvim'
+        vim.fn.mkdir(dir .. '/app/bin', 'p')
+        vim.fn.writefile({'{"version":"0.0.10"}'}, dir .. '/package.json')
+        local host = (vim.uv or vim.loop).os_uname()
+        local platform = host.sysname == 'Darwin'
+            and (host.machine == 'arm64' and 'macos-arm64' or 'macos') or 'linux'
+        local binary = 'markdown-preview-' .. platform
+        vim.fn.writefile({'#!/bin/sh', 'mkdir -p bin',
+            "printf '#!/bin/sh\\necho 0.0.10\\n' > bin/" .. binary,
+            'chmod +x bin/' .. binary}, dir .. '/app/install.sh')
+        -- Build must work before plugin autoload functions are available.
+        assert(vim.fn.exists('*mkdp#util#get_platform') == 0)
+        local ok, err = pcall(preview.build, {dir = dir})
+        assert(ok, err)
+        vim.fn.writefile({'exit 7'}, dir .. '/app/install.sh')
+        local failed, why = pcall(preview.build, {dir = dir})
+        assert(not failed and tostring(why):find('install failed', 1, true))
+        vim.fn.writefile({'exit 0'}, dir .. '/app/install.sh')
+        vim.fn.writefile({'#!/bin/sh', 'echo 0.0.9'}, dir .. '/app/bin/' .. binary)
+        local verified, verify_error = pcall(preview.build, {dir = dir})
+        assert(not verified and tostring(verify_error):find('verification failed', 1, true))
         local runtime
         for _, plugin in ipairs(spec) do
             if plugin.dir then runtime = plugin.dir end

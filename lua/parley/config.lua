@@ -196,6 +196,7 @@ local config = {
 	state_dir = vim.fn.stdpath("data"):gsub("/$", "") .. "/parley/persisted",
 	-- default per-chat: enable server-side web_search tool (supported by Anthropic, GoogleAI, OpenAI)
 	web_search = true,
+	parley_help = true, -- include installed product guidance in chat requests
 
 	-- default agent name set during startup, if nil last used agent is used
 	default_agent = nil,
@@ -302,7 +303,7 @@ local config = {
 	-- cwd. Each entry: absolute (`/x`), home (`~/workspace`, ~ expanded), or
 	-- relative to cwd (`../`). Empty = cwd-only. Write tools
 	-- (edit_file/write_file) stay cwd-confined regardless of this setting.
-	tool_read_roots = {'../'},
+	tool_read_roots = {},
 	-- #139: default output-pager page size (lines) for tool results. Every read
 	-- tool's output is windowed to this many lines unless the agent passes a
 	-- larger `limit` (clamped to 2000). The 100KB byte-cap remains the backstop.

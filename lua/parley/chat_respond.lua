@@ -1360,6 +1360,10 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
         return
     end
 
+    if require('parley.llm_readiness').defer(_parley, function()
+        M.respond(params, callback, override_free_cursor, force, live_model, live_target_idx)
+    end, { buf = buf }) then return end
+
     -- Find header section end
     local header_end = find_chat_header_end(lines)
 
@@ -2237,6 +2241,7 @@ end
 
 -- Function to resubmit all questions up to the cursor position
 M.respond_all = function()
+    if require('parley.llm_readiness').defer(_parley, M.respond_all) then return end
     local buf = vim.api.nvim_get_current_buf()
     local win = vim.api.nvim_get_current_win()
     local cursor_pos = vim.api.nvim_win_get_cursor(0)

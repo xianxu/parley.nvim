@@ -2342,3 +2342,11 @@ download.
   failure reason; deleting the failing environment can destroy the only evidence.
 - Login-method names and model-provider names are separate axes. Use each
   subsystem's canonical list, including the empty-catalog fallback case.
+
+- When an existing documentation index becomes model-discoverable, test every
+  advertised document through the real reader. A few representative topics miss
+  stale index links; the bundled-help review found two missing vision documents.
+
+- Lazy function build hooks cannot assume the plugin runtime is loaded. Test
+  builds before autoload functions exist and through Lazy itself; preloading the
+  plugin or stubbing its platform helper hid the MarkdownPreview E117 failure.

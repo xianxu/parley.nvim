@@ -1,10 +1,13 @@
 # Repo Mode
 
 ## Overview
-When a `.parley` marker file exists at the git root of the current working directory, parley enters "repo mode". This makes parley a brainstorming and design tool scoped to that repository.
+The standalone app detects the nearest ancestor directory containing `.parley`,
+including ordinary folders without Git, and enters repo mode. This makes parley a brainstorming and design tool scoped to that repository.
 
 ## Detection
-During `setup()`, after config merging:
+The app uses `repo_mode.detect_root(cwd, marker)` and passes the detected root
+into setup. Its global chat-directory policy does not override that selection.
+For ordinary plugin setup without an explicit repo root, after config merging:
 1. Check `config.repo_marker` is set (default: `".parley"`)
 2. Find the git root from `vim.fn.getcwd()` (works from any subdirectory)
 3. If `<git_root>/<repo_marker>` is readable, activate repo mode
@@ -43,7 +46,7 @@ derives a root policy from the artifact path with two separated concepts
 otherwise) is the single resolution base — every relative path, read or
 write, means "relative to the write root," including `../sibling` traversal —
 while `policy.read_roots` (write root + `tool_read_roots`-derived, default
-`{'../'}`) is a pure permission boundary: the resolved realpath must land
+`{}`) is a pure permission boundary: the resolved realpath must land
 within one of them, never a fallback resolution base. Completion globs the
 write root only and labels candidates by textual prefix-strip (so `..`
 survives in typed form), filtered through the same read resolver — completion

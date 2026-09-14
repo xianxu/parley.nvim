@@ -12,7 +12,7 @@ for kind, path in pairs(expected) do
 end
 assert(vim.fn.filereadable(expected.config .. '/init.lua') == 1, 'starter missing')
 assert(vim.env.PARLEY_RUNTIME and vim.env.PARLEY_RUNTIME ~= '', 'installed runtime missing')
-assert(vim.fn.exists(':Parley') == 2, 'installed app failed to boot')
+assert(vim.fn.exists(':ParleyProxy') == 2, 'installed app failed to boot')
 local check = vim.system({'shasum', '-a', '256', '-c', home .. '/.parley-acceptance/decoy.sha'},
     {text = true}):wait()
 assert(check.code == 0, 'decoy profile changed')

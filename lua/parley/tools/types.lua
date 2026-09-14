@@ -14,7 +14,7 @@
 --- @field name string Non-empty tool name used by the LLM and the registry.
 --- @field description string Non-empty human-readable description shown to the LLM.
 --- @field input_schema table JSON-schema-shaped table describing the tool's arguments.
---- @field handler fun(input: table): ToolResult Pure function from input to result.
+--- @field handler fun(input: table, context?: table): ToolResult Handler; context carries trusted root_policy, never model input.
 --- @field kind string|nil "read" or "write" — defaults to "read" when absent.
 --- @field needs_backup boolean|nil True if the tool destroys information
 ---        on disk and the dispatcher must capture a `.parley-backup`

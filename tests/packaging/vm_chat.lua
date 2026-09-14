@@ -9,6 +9,16 @@ local function await(start, timeout)
     return value
 end
 
+function M.auth_is_private(auth, data)
+    local stat = vim.uv.fs_lstat(auth)
+    if not stat or stat.type ~= 'directory' or stat.uid ~= vim.uv.getuid() then return false end
+    if stat.mode % 512 == 448 then return true end
+    local parent = vim.uv.fs_lstat(data)
+    local prefix = vim.fn.resolve(data) .. '/'
+    return parent and parent.type == 'directory' and parent.uid == vim.uv.getuid()
+        and parent.mode % 512 == 448 and vim.fn.resolve(auth):sub(1, #prefix) == prefix or false
+end
+
 local function ready(proxy)
     assert(proxy.is_managed(), 'installed starter must manage the proxy')
     await(function(ok, fail) proxy.ensure_running(ok, fail) end, 840000)
@@ -17,8 +27,7 @@ local function ready(proxy)
     local stat = assert(vim.uv.fs_stat(path), 'managed config missing')
     assert(stat.mode % 512 == 384, 'managed config is not private')
     local auth = require('parley').config.cliproxy.auth_dir
-    local auth_stat = assert(vim.uv.fs_stat(auth), 'private auth directory missing')
-    assert(auth_stat.mode % 512 == 448, 'auth directory is not private')
+    assert(M.auth_is_private(auth, vim.fn.stdpath('data')), 'auth directory is not private')
 end
 
 local function ask(model, image)
@@ -81,6 +90,7 @@ end
 function M.run(phase)
     local p, proxy = require('parley'), require('parley.cliproxy')
     if phase == 'fake' then
+        p.config.llm_onboarding = false -- this phase proves transport; onboarding has dedicated UI tests
         -- Fixtures are part of the released tree; only the guest starts them.
         vim.cmd.cd(vim.env.PARLEY_RUNTIME)
         local releases = require('tests.helpers.fake_releases')
@@ -97,8 +107,11 @@ function M.run(phase)
             releases.publish(server, '9.9.9')
             vim.env.PARLEY_FAKE_MODE = 'healthy'
             vim.env.PARLEY_FAKE_LOGIN_MODE = nil -- login flags select the fixture's success path
-            vim.ui.select = function(_, _, callback) callback('Claude', 1) end
-            vim.cmd('ParleyConnect')
+            vim.cmd('ParleyProxy connect')
+            assert(vim.api.nvim_win_get_config(0).relative ~= '', 'Connect did not open a floating picker')
+            local confirm = vim.fn.maparg('<CR>', 'i', false, true)
+            assert(type(confirm.callback) == 'function', 'provider picker has no Enter action')
+            confirm.callback() -- choose Claude through the existing provider picker
             assert(vim.wait(30000, function()
                 return vim.fn.filereadable(root .. '/auth/claude-fake@example.com.json') == 1
             end, 20), 'guest fake managed login failed')
@@ -119,7 +132,7 @@ function M.run(phase)
     ready(proxy)
     if phase == 'prepare-auth' then
         return {status = 'auth_pending', managed_download = true, private_config = true,
-            private_auth = true, login_command = ':ParleyConnect'}
+            private_auth = true, login_command = ':ParleyProxy connect'}
     end
     local selected, healthy_seen = M.live_model(proxy)
     if not selected then

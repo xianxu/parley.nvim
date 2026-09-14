@@ -92,6 +92,8 @@ describe("neighborhood completion", function()
     end)
 
     it("completefunc tracks the live neighborhood across attach-before-recognition (#196)", function()
+        -- This fixture explicitly grants sibling reads; the default stays confined.
+        parley.config.tool_read_roots = { "../" }
         -- A SECOND repo, deliberately NOT the configured chat_dir and NOT in
         -- chat_roots, so its chat is only recognized once repo_root points at
         -- it. This drives the real Done-when transition (behavior, not a planted

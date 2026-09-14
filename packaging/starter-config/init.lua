@@ -98,6 +98,30 @@ local ok, err = xpcall(function()
             config = function() vim.cmd.colorscheme("moonfly") end },
         { "nvim-lua/plenary.nvim", commit = "74b06c6c75e4eeb3108ec01852001636d85a932b" },
         { "nvim-telescope/telescope.nvim", commit = "a0bbec21143c7bc5f8bb02e0005fa0b982edc026" },
+        { "iamcco/markdown-preview.nvim",
+            commit = "a923f5fc5ba36a3b17e289dc35dc17f66d0548ee",
+            cmd = { "MarkdownPreview", "MarkdownPreviewToggle", "MarkdownPreviewStop" },
+            ft = { "markdown" },
+            init = function()
+                vim.g.mkdp_auto_start = 0
+                vim.g.mkdp_open_to_the_world = 0
+            end,
+            build = function(plugin)
+                local info = vim.json.decode(table.concat(vim.fn.readfile(plugin.dir .. "/package.json"), "\n"))
+                local result = vim.system({ "bash", plugin.dir .. "/app/install.sh", "v" .. info.version },
+                    { cwd = plugin.dir .. "/app", text = true }):wait(120000)
+                assert(result.code == 0, "MarkdownPreview install failed: " .. (result.stderr or "timeout"))
+                -- Lazy runs function builders before loading plugin autoload files.
+                local host = (vim.uv or vim.loop).os_uname()
+                local platform = host.sysname == "Darwin"
+                    and (host.machine == "arm64" and "macos-arm64" or "macos") or "linux"
+                local server = plugin.dir .. "/app/bin/markdown-preview-" .. platform
+                assert(vim.fn.executable(server) == 1,
+                    "MarkdownPreview server was not installed; retry with :Lazy build markdown-preview.nvim")
+                local installed = vim.system({ server, "--version" }, { text = true }):wait(5000)
+                assert(installed.code == 0 and vim.trim(installed.stdout or "") == info.version,
+                    "MarkdownPreview server verification failed; retry with :Lazy build markdown-preview.nvim")
+            end },
         parley,
     }, {
         root = data .. "/lazy",

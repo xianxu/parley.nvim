@@ -3,15 +3,40 @@ local uv = vim.uv or vim.loop
 local M = {}
 
 function M.connect()
-    vim.ui.select({ 'Claude', 'Codex', 'Gemini' }, { prompt = 'Connect your account' }, function(_, index)
-        if not index then return end
-        local provider = ({ 'claude', 'codex', 'gemini' })[index]
-        require('parley.cliproxy').ensure_running(function()
-            vim.schedule(function() vim.cmd('ParleyProxy login ' .. provider) end)
-        end, function(why)
-            vim.schedule(function() vim.notify(tostring(why), vim.log.levels.ERROR) end)
-        end)
+    require('parley.starter_onboarding').connect(require('parley'))
+end
+
+local function migrate_welcome(parley, chat_dir)
+    local legacy = chat_dir .. '/welcome'
+    local stat = uv.fs_lstat(legacy)
+    if not stat then return end
+    assert(stat.type == 'directory', 'Legacy welcome path is not a directory: ' .. legacy)
+    local previous = vim.deepcopy(parley.get_chat_roots())
+    -- Root lookup uses first match: the nested source must precede its parent.
+    parley.set_chat_dirs({ legacy, chat_dir }, false)
+    local ok, why = pcall(function()
+        local entries = assert(uv.fs_scandir(legacy))
+        local files = {}
+        while true do
+            local name, kind = uv.fs_scandir_next(entries)
+            if not name then break end
+            if name:match('%.md$') then
+                assert(kind == 'file', 'Legacy welcome chat is not a regular file: ' .. name)
+                files[#files + 1] = legacy .. '/' .. name
+            end
+        end
+        for _, path in ipairs(files) do
+            if uv.fs_lstat(path) then
+                local moved, err = parley.move_chat_tree(path, chat_dir)
+                assert(moved, err)
+            end
+        end
+        -- Remove only empty containers; unrelated files are never deleted.
+        uv.fs_rmdir(legacy .. '/assets')
+        uv.fs_rmdir(legacy)
     end)
+    parley.set_chat_roots(previous, false)
+    assert(ok, why)
 end
 
 local function welcome(parley, roots)
@@ -44,30 +69,30 @@ local function welcome(parley, roots)
     local chat_dir = parley.config.chat_dir
     local ok, result = xpcall(function()
         vim.fn.writefile({ tostring(uv.os_getpid()) }, lock .. '/owner')
-        local dir = chat_dir .. '/welcome'
-        require('parley.fs').ensure_dir(dir, 448)
-        local files = {}
-        local entries = assert(uv.fs_scandir(dir))
-        while #files < 2 do
-            local name = uv.fs_scandir_next(entries)
-            if not name then break end
-            if name:match('%.md$') then files[#files + 1] = dir .. '/' .. name end
+        migrate_welcome(parley, chat_dir)
+        local source = debug.getinfo(1, 'S').source:sub(2)
+        local runtime = assert(source:match('^(.*)/lua/parley/starter%.lua$'), 'Cannot locate bundled tutorials')
+        for _, name in ipairs({ 'welcome.md', 'basics.md', 'advanced.md' }) do
+            local path = chat_dir .. '/' .. name
+            local stat = uv.fs_lstat(path)
+            if not stat then
+                local lines = vim.fn.readfile(runtime .. '/packaging/tutorials/' .. name)
+                local staging = lock .. '/' .. name
+                assert(vim.fn.writefile(lines, staging) == 0, 'Cannot write tutorial: ' .. name)
+                local linked, why = uv.fs_link(staging, path)
+                assert(linked, 'Cannot publish tutorial: ' .. tostring(why))
+            elseif name == 'welcome.md' then
+                assert(stat.type == 'file' and stat.size > 0,
+                    'Incomplete welcome chat; repair or remove: ' .. path)
+                local lines = vim.fn.readfile(path)
+                local parser = require('parley.chat_parser')
+                local header_end = parser.find_header_end(lines)
+                local parsed = header_end and parser.parse_chat(lines, header_end, parley.config)
+                assert(parsed and #parsed.exchanges > 0,
+                    'Incomplete welcome chat; repair or remove: ' .. path)
+            end
         end
-        assert(#files <= 1, 'Multiple welcome chats; keep the desired file in ' .. dir .. ' and retry.')
-        if #files == 1 then
-            local stat = uv.fs_lstat(files[1])
-            assert(stat and stat.type == 'file' and stat.size > 0,
-                'Incomplete welcome chat; repair or remove: ' .. files[1])
-            local lines = vim.fn.readfile(files[1])
-            local parser = require('parley.chat_parser')
-            local header_end = parser.find_header_end(lines)
-            local parsed = header_end and parser.parse_chat(lines, header_end, parley.config)
-            assert(parsed and #parsed.exchanges > 0,
-                'Incomplete welcome chat; repair or remove: ' .. files[1])
-            return parley.open_buf(files[1])
-        end
-        parley.config.chat_dir = dir
-        return parley.new_chat()
+        return parley.open_buf(chat_dir .. '/welcome.md')
     end, debug.traceback)
     parley.config.chat_dir = chat_dir
     cleanup()
@@ -80,10 +105,14 @@ function M.start()
     assert(vim.env.NVIM_APPNAME == 'parley', 'Start with NVIM_APPNAME=parley to use this profile.')
     local roots = { data = vim.fn.stdpath('data'), state = vim.fn.stdpath('state') }
     require('parley.fs').ensure_dir(roots.state, 448)
-    local key = require('parley.starter_profile').client_key(roots.data)
+    require('parley.fs').ensure_dir(roots.data, 448)
+    local data_stat = uv.fs_lstat(roots.data)
+    assert(data_stat and data_stat.type == 'directory', 'Invalid profile directory: ' .. roots.data)
+    assert(uv.fs_chmod(roots.data, 448))
     local parley = require('parley')
-    parley.setup(require('parley.starter_config').options(roots, key))
-    vim.api.nvim_create_user_command('ParleyConnect', M.connect, { desc = 'Connect a Claude, Codex or Gemini account' })
+    local options = require('parley.starter_config').options(roots)
+    options.repo_root = require('parley.repo_mode').detect_root(vim.fn.getcwd(), require('parley.config').repo_marker)
+    parley.setup(options)
     -- Attachment labels remain ordinary visible Markdown in the starter.
     local group = vim.api.nvim_create_augroup('ParleyStarter', { clear = true })
     vim.api.nvim_create_autocmd({ 'BufEnter', 'WinEnter' }, { group = group, callback = function()
@@ -92,9 +121,11 @@ function M.start()
     if vim.fn.argc() == 0 then
         welcome(parley, roots)
         vim.wo.conceallevel = 0
-        vim.notify('Welcome to Parley!\n:ParleyConnect — log in, then :ParleyAgent to choose a model\n'
+        vim.notify('Welcome to Parley!\n:ParleyProxy connect — log in, then :ParleyAgent to choose a model\n'
             .. 'i — type   Esc — finish typing   Alt+Enter — send\n'
+            .. 'Ctrl+g f — find chats   Ctrl+g c — new chat   Ctrl+g ? — shortcuts\n'
             .. 'Alt+v — paste image   Alt+t — outline   :wq — save and quit', vim.log.levels.INFO)
+        require('parley.starter_onboarding').start(parley)
     end
 end
 

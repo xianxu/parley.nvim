@@ -111,9 +111,11 @@ def install(directory, manifest):
     save(directory, manifest)
     upload(vm, 'tests/packaging/vm_acceptance.lua', 'probe.lua')
     guest(vm, 'umask 077; mkdir -p "$HOME/.parley-acceptance" "$HOME/.config/nvim"; '
+          'if test -f "$HOME/.parley-acceptance/decoy.sha"; then '
+          'shasum -a 256 -c "$HOME/.parley-acceptance/decoy.sha" >/dev/null; else '
           'test ! -e "$HOME/.config/nvim/init.lua"; '
           'printf \'error("decoy nvim config was sourced")\\n\' > "$HOME/.config/nvim/init.lua"; '
-          'shasum -a 256 "$HOME/.config/nvim/init.lua" > "$HOME/.parley-acceptance/decoy.sha"; '
+          'shasum -a 256 "$HOME/.config/nvim/init.lua" > "$HOME/.parley-acceptance/decoy.sha"; fi; '
           'parley --headless -n -i NONE -c \'lua if not pcall(dofile, vim.env.HOME .. "/.parley-acceptance/probe.lua") then vim.cmd("cquit 1") end\' -c qa', 900)
     evidence = json.loads(guest(vm, 'cat "$HOME/.parley-acceptance/boot.json"', 30).stdout)
     if not all(evidence.get(key) is True for key in ('boot', 'containment', 'decoy_unchanged')):
@@ -143,7 +145,7 @@ def probe_phase(directory, manifest, phase):
     if result.returncode == 75 and evidence.get('status') == 'auth_pending':
         manifest['status'] = 'auth_pending'
         save(directory, manifest)
-        print('PENDING: open parley in the guest and use :ParleyConnect to complete OAuth')
+        print('PENDING: open parley in the guest and use :ParleyProxy connect to complete OAuth')
         return 75
     if result.returncode != 0 or evidence.get('status') == 'failed':
         raise RuntimeError('guest phase failed')
@@ -177,7 +179,8 @@ def package_phase(directory, manifest, phase):
     if phase == 'upgrade':
         upload(vm, 'scripts/test-parley-upgrade.sh', 'upgrade.sh')
         guest(vm, 'sh "$HOME/.parley-acceptance/upgrade.sh" '
-              + '"$(brew --prefix parley)/libexec" "$HOME/.parley-acceptance/upgrade"', 900)
+              + '"$(brew --prefix parley)/libexec" "$HOME/.parley-acceptance/upgrade" '
+              + '>"$HOME/.parley-acceptance/upgrade.log" 2>&1', 900)
         result = guest(vm, 'cat "$HOME/.parley-acceptance/upgrade/upgrade.json"', 30)
     else:
         upload(vm, 'tests/packaging/vm_stop.lua', 'vm_stop.lua')
@@ -250,7 +253,8 @@ def main(disk_usage=shutil.disk_usage):
             print('CLEANED owned VM')
             return 0
         if args.phase == 'install':
-            if manifest['status'] != 'boot_ready':
+            retry = manifest['status'] == 'failed_retained' and manifest.get('phase') in ('install', 'boot')
+            if manifest['status'] != 'boot_ready' and not retry:
                 raise RuntimeError('install requires a boot_ready owned run')
             try:
                 return install(directory, manifest)

@@ -206,7 +206,11 @@ M.generate_preferences = function(buckets, callback)
 		return
 	end
 
-	local agent = _parley.get_agent()
+    if require('parley.llm_readiness').defer(_parley, function()
+        M.generate_preferences(buckets, callback)
+    end, { on_cancel = function() callback({}) end }) then return end
+
+    local agent = _parley.get_agent()
 	local provider = agent.provider
 	local model = agent.model
 	_parley.logger.debug("memory_prefs: using provider=" .. tostring(provider) .. " model=" .. vim.inspect(model))

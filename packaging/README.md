@@ -8,7 +8,7 @@ parley
 ```
 
 The first launch downloads the editor plugins and opens a welcome chat. In
-Parley, press Escape and type `:ParleyConnect`, then press Return. Choose your
+Parley, press Escape and type `:ParleyProxy connect`, then press Return. Choose your
 provider and finish its account login in the browser. Follow the welcome chat
 for choosing a model, sending a question, and pasting an image.
 
@@ -71,7 +71,7 @@ scripts/test-parley-vm.sh install /tmp/parley-acceptance-run
 scripts/test-parley-vm.sh fake /tmp/parley-acceptance-run
 scripts/test-parley-vm.sh upgrade /tmp/parley-acceptance-run
 scripts/test-parley-vm.sh prepare-auth /tmp/parley-acceptance-run
-# Complete :ParleyConnect in the guest.
+# Complete :ParleyProxy connect in the guest.
 scripts/test-parley-vm.sh check-live /tmp/parley-acceptance-run
 scripts/test-parley-vm.sh uninstall /tmp/parley-acceptance-run
 scripts/test-parley-vm.sh verify /tmp/parley-acceptance-run

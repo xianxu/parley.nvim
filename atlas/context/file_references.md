@@ -111,3 +111,11 @@ nothing. Each arm's revert-and-see-red is now recorded rather than assumed.)
 - The fall-through has exactly ONE call site, asserted by
   `tests/integration/open_reference_spec.lua`. Appending it per buffer type is
   how the two chains diverged in the first place.
+
+## Ordinary Markdown navigation links
+
+Option+o / Ctrl+g then o also follows `[Basics](./basics.md)` with the cursor
+on either label or destination. Local `.md` destinations resolve against the
+source buffer's directory, independent of shell cwd. Missing targets report an
+error without falling through to `gf`. The chain reuses the existing Markdown
+link parser/resolver and preserves dedicated src/branch handling.
