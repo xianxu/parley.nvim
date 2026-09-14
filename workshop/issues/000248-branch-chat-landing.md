@@ -42,9 +42,10 @@ total: 0.51
 
 ## Plan
 
-- [ ] Replace the source-text landing assertion with behavioral regression tests: drive branch inserters in n/i/v using real temporary chat files; verify opened child, first-question cursor, insertion command, saved anchor, and failed-write refusal.
-- [ ] Extract shared scheduled child navigation in branch_inserters, using parse_chat first exchange location; call after commit_reference succeeds in each child-creating path.
-- [ ] Run branch integration tests, full suite and lint; record evidence and close through SDLC review.
+- [x] Replace the source-text landing assertion with behavioral regression tests: drive branch inserters in n/i/v using real temporary chat files; verify opened child, first-question cursor, insertion command, saved anchor, and failed-write refusal.
+- [x] Extract shared scheduled child navigation in branch_inserters, using parse_chat first exchange location; call after commit_reference succeeds in each child-creating path.
+- [x] Run branch integration tests, full suite and lint; record evidence.
+- [ ] Close through SDLC review.
 
 ## Log
 
@@ -59,3 +60,9 @@ total: 0.51
 - Name the shared helper `open_branch_question` inside `branch_inserters`. Capture the originating window at the gesture; cancel its scheduled navigation if the window is invalid, no longer current, or no longer displaying the parent. This prevents a deferred gesture stealing focus (ARCH-ORDER).
 - Function test strategies in `tests/integration/branch_child_spec.lua`: `open_branch_question` uses adversarial children with trailing template questions and a controlled `vim.schedule` queue to assert parser-directed cursor placement and cancellation after focus/buffer/window changes. Spy only on `startinsert!` while executing other editor commands normally, recording the destination and cursor at insertion request time; restore seams in after_each.
 - `insert_plain`, `insert_planned`, and `insert_inline`, reached via `_branch_inserters`: parameterize n/i/v and gathered/plain inputs, compare saved parent references with actual opened child files; force a parent write failure using a BufWriteCmd error and assert no navigation in every mode. Existing foreign-buffer and streaming tests remain acceptance coverage.
+
+### 2026-09-14 — Implementation verification
+
+- Replaced the source-text landing check with 13 behavioral cases. Red run had 8 expected failures: five incorrect/missing landings plus three deferred-focus violations; no test errors. Readonly parent buffers provide real write failures across all five branch variants.
+- Shared open_branch_question now handles all child-creating paths after commit_reference succeeds. Targeted ui/keybindings suite passes.
+- Separate hermetic headless Neovim smoke entered actual Insert mode on the visual branch's seeded first question and verified typed text appended there; /tmp/parley248-smoke.log. Full make test passed (including lint), exit 0; /tmp/parley248-full.log.

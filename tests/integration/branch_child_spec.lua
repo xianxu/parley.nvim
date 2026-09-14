@@ -986,19 +986,80 @@ describe("a failed child creation leaves the parent untouched (#214 BR-63)", fun
     end)
 end)
 
--- #214 M3 review (Minor): one key, one landing. The placeholder path opened the
--- child in insert mode and the quotes path did not.
-describe("both branch paths land the same way (#214 M3)", function()
-    it("the child is opened in insert mode from either path", function()
-        local src = table.concat(vim.fn.readfile("lua/parley/init.lua"), "\n")
-        local planned = src:match("Branched submission into.-end%)")
-        local plain = src:match("Created branch to new chat.-end%)")
-        assert.is_truthy(planned and plain, "could not locate both branch landings")
-        for name, body in pairs({ ["quotes path"] = planned, ["placeholder path"] = plain }) do
-            assert.is_truthy(body:find("startinsert", 1, true),
-                name .. " does not put the cursor in insert mode in the child")
+-- Drive real file creation/navigation; control only deferred work and observe
+-- the Insert-mode request, which a synchronous headless test cannot enter.
+describe("branch creation lands on the first question (#248)", function()
+    local tmpdir, buf, saved_dir, real_schedule, real_cmd, queue, landing
+    before_each(function()
+        parley.setup({})
+        tmpdir = vim.fn.tempname(); vim.fn.mkdir(tmpdir, "p")
+        saved_dir = parley.config.chat_dir; parley.config.chat_dir = tmpdir
+        local parent = tmpdir .. "/2026-09-14.10-00-00.000_parent.md"
+        vim.fn.writefile({ "---", "topic: parent", "file: f", "---", "",
+            "💬: q", "", "🤖:[A]", "", "selected words" }, parent)
+        vim.cmd("edit! " .. vim.fn.fnameescape(parent))
+        buf = vim.api.nvim_get_current_buf(); parley._parley_bufs[buf] = "chat"
+        vim.api.nvim_win_set_cursor(0, { 10, 0 })
+        real_schedule, real_cmd = vim.schedule, vim.cmd
+        queue, landing = {}, nil
+        vim.schedule = function(fn) queue[#queue + 1] = fn end
+        vim.cmd = function(cmd)
+            if cmd == "startinsert!" or cmd == "startinsert" then
+                landing = { buf = vim.api.nvim_get_current_buf(), cursor = vim.api.nvim_win_get_cursor(0) }
+            else return real_cmd(cmd) end
         end
     end)
+    after_each(function()
+        vim.schedule, vim.cmd = real_schedule, real_cmd
+        parley._parley_bufs[buf] = nil; parley.config.chat_dir = saved_dir
+        vim.cmd("silent! only!"); vim.cmd("silent! %bwipeout!")
+        vim.fn.delete(tmpdir, "rf")
+    end)
+    local function flush()
+        local i = 1
+        while queue[i] do local fn = queue[i]; i = i + 1; fn() end
+    end
+    local function branch(mode, gathered)
+        if gathered then vim.api.nvim_buf_set_lines(buf, 9, 10, false, { "🤖[selected words]" }) end
+        if mode == "v" then vim.cmd("normal! v$") end
+        parley._branch_inserters(buf, false, true)[mode]()
+    end
+    for _, case in ipairs({ { "n" }, { "i" }, { "n", true }, { "i", true }, { "v" } }) do
+        local mode, gathered = case[1], case[2]
+        local label = mode .. (gathered and " gathered" or "")
+        it(label .. " opens its first question for insertion, after saving the anchor", function()
+            branch(mode, gathered)
+            assert.is_false(vim.bo[buf].modified)
+            local parent = table.concat(vim.fn.readfile(vim.api.nvim_buf_get_name(buf)), "\n")
+            assert.is_truthy(parent:find(mode == "v" and "[🌿:selected words]" or "🌿:", 1, true))
+            flush()
+            assert.is_truthy(landing, "no Insert-mode request in the new chat")
+            assert.are_not.equal(buf, landing.buf)
+            local lines = vim.api.nvim_buf_get_lines(landing.buf, 0, -1, false)
+            local first
+            for row, line in ipairs(lines) do
+                if line:find(parley.config.chat_user_prefix, 1, true) == 1 then first = row; break end
+            end
+            assert.are.equal(first, landing.cursor[1], "landed on the trailing template question")
+            assert.are.equal(math.max(0, #lines[first] - 1), landing.cursor[2])
+        end)
+        it(label .. " stays put if the parent cannot be saved", function()
+            vim.bo[buf].readonly = true
+            branch(mode, gathered); flush()
+            assert.are.equal(buf, vim.api.nvim_get_current_buf())
+            assert.is_nil(landing)
+        end)
+    end
+    for _, action in ipairs({ "enew", "vsplit", "vsplit | wincmd p | close" }) do
+        it("cancels deferred navigation after " .. action, function()
+            branch("n", true); vim.cmd(action)
+            local win, current = vim.api.nvim_get_current_win(), vim.api.nvim_get_current_buf()
+            flush()
+            assert.are.equal(win, vim.api.nvim_get_current_win())
+            assert.are.equal(current, vim.api.nvim_get_current_buf())
+            assert.is_nil(landing)
+        end)
+    end
 end)
 
 -- #214 BR-75 end-to-end: the sequence the finding describes. <M-i> inserts a
