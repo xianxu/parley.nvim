@@ -49,8 +49,8 @@ total: 0.51
 - [x] Change only delete_tree defaults in config.lua and keybinding_registry.lua to `<C-g>D`; verify default and fallback resolution and help.
 - [x] Run focused finder/keybinding tests and full suite/lint.
 
-- [ ] Preserve finder-local bindings in starter_config.options and test starter option resolution.
-- [ ] Exercise the actual ChatFinder with starter options and run exact-launcher native smoke plus full tests/lint.
+- [x] Preserve finder-local bindings in starter_config.options and test starter option resolution.
+- [x] Exercise the actual ChatFinder with starter options and run exact-launcher native smoke plus full tests/lint.
 
 Acceptance boundary: close through the binary-owned fresh review.
 
@@ -78,3 +78,9 @@ Delta: starter_config.options disables default_keymaps and only opts into Ctrl+g
 - starter_config.options: assert local delete/move/recency/filter bindings survive while unrelated global shortcut families remain disabled.
 - Existing real ChatFinder mapping regression: add starter-derived options as a third configuration source, verifying confirmation, cancellation, and child preservation through effective mappings.
 - Exact starter-config launcher: native keyboard/confirmation smoke with actual Lazy/plugins and isolated HOME/XDG directories; do not call setup({}) after startup. This is the acceptance environment for the reported bug.
+
+### 2026-09-14 — Starter-profile reproduction and correction
+
+- Exact launcher reproduced no confirmation with an empty Ctrl+d map. Real plugins copied into an isolated profile; no user chats/auth used. The probe retains the actual starter setup and drives native Ctrl+d plus native y input. It now passes: /tmp/parley249-exact-launcher.log (runner /tmp/parley-starter-delete-runner.py).
+- Starter preserves all finder-local registry keys, including move, recency and filter actions, while global/editor prefix policy stays unchanged. Nine actual-picker cases now include starter options passed through setup, whose explicit-key bookkeeping is required by the resolver. Old policy produces two expected missing-Ctrl+d failures; corrected policy passes. Pure policy coverage checks chat, note and issue finder controls.
+- Updated app configuration documentation and recorded the missed entry-point lesson. Full make test passed, exit 0: 256 spec files; lint 0 warnings/errors in 447 files.

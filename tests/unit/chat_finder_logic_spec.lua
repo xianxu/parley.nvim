@@ -214,12 +214,27 @@ describe("ChatFinder logic", function()
     end)
 
     describe("finder delete keys (#249)", function()
-        for _, defaults in ipairs({ "config", "registry fallback" }) do
+        for _, defaults in ipairs({ "config", "registry fallback", "starter" }) do
             for _, case in ipairs({ { key = "<C-d>", answer = "y" },
                 { key = "<C-d>", answer = "n" }, { key = "<C-g>D", answer = "n", tree = true } }) do
                 it(defaults .. " " .. case.key .. " confirmation " .. case.answer, function()
                     M.config.chat_finder_mappings = defaults == "config"
                         and vim.deepcopy(require("parley.config").chat_finder_mappings) or {}
+                    if defaults == "starter" then
+                        local opts = require("parley.starter_config").options({ data = tmpdir, state = tmpdir })
+                        local fixture_config = M.config
+                        M.setup(vim.tbl_extend("force", opts, {
+                            chat_dir = tmpdir, chat_dirs = { tmpdir, secondary_tmpdir },
+                            chat_roots = { { dir = tmpdir, label = "main" },
+                                { dir = secondary_tmpdir, label = "secondary" } },
+                        }))
+                        local configured = M.config
+                        M.config = fixture_config
+                        M.config.default_keymaps = configured.default_keymaps
+                        M.config._explicit_shortcuts = configured._explicit_shortcuts
+                        M.config.chat_finder_mappings = configured.chat_finder_mappings
+                        require("parley.chat_finder").clear_cache()
+                    end
                     M.config.chat_finder_recency.filter_by_default = false
                     M._chat_finder.source_win = vim.api.nvim_get_current_win()
                     local parent = tmpdir .. "/2026-09-14.10-00-00.000_parent.md"

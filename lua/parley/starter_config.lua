@@ -19,15 +19,16 @@ function M.options(roots)
         state_dir = roots.state .. '/persisted', log_file = roots.state .. '/parley.log',
         default_keymaps = false,
     }
-    -- Reuse the default bindings, explicitly opting in only these key families.
-    -- This preserves their modes and aliases without claiming integration keys.
+    -- Keep editor/global shortcuts in the app key families. Finder controls
+    -- live only in their picker buffers, so retain their complete default set.
     local registry = require('parley.keybinding_registry')
     for _, entry in ipairs(registry.entries) do
         if entry.config_key then
             local keys, modes = registry.resolve_keys(entry, defaults)
             local selected = {}
             for _, keybinding in ipairs(keys or {}) do
-                if keybinding:lower():match('^<c%-g>') or keybinding:lower():match('^<m%-') then
+                if entry.scope:match('_finder$') or keybinding:lower():match('^<c%-g>')
+                    or keybinding:lower():match('^<m%-') then
                     selected[#selected + 1] = keybinding
                 end
             end

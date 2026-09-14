@@ -2385,3 +2385,9 @@ download.
   For overlapping actions, test effective buffer mappings using shipped defaults
   and registry fallbacks; comparing key strings or calling a captured action
   directly cannot detect alias collisions.
+
+- **Match the user's entry point before declaring a UI bug fixed.** The app
+  starter applies `default_keymaps=false`; a smoke that calls `setup({})` bypasses
+  that policy and proved the plugin behavior instead. Run the actual starter
+  entry with isolated profile data, and normalize starter options through setup
+  before inspecting effective bindings (setup records explicit shortcut intent).
