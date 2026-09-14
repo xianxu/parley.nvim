@@ -1,6 +1,6 @@
 ---
 id: 000249
-status: codecomplete
+status: working
 deps: []
 github_issue:
 created: 2026-09-14
@@ -52,6 +52,9 @@ total: 0.51
 - [x] Preserve finder-local bindings in starter_config.options and test starter option resolution.
 - [x] Exercise the actual ChatFinder with starter options and run exact-launcher native smoke plus full tests/lint.
 
+- [ ] Audit every Chat Finder chord with native input under the exact starter; cover confirmed/cancelled deletion and moves.
+- [ ] Bind Ctrl+j/k through the existing prompt navigation mappings, add regressions, and run full verification.
+
 Acceptance boundary: close through the binary-owned fresh review.
 
 ## Log
@@ -85,3 +88,11 @@ Delta: starter_config.options disables default_keymaps and only opts into Ctrl+g
 - Exact launcher reproduced no confirmation with an empty Ctrl+d map. Real plugins copied into an isolated profile; no user chats/auth used. The probe retains the actual starter setup and drives native Ctrl+d plus native y input. It now passes: /tmp/parley249-exact-launcher.log (runner /tmp/parley-starter-delete-runner.py).
 - Starter preserves all finder-local registry keys, including move, recency and filter actions, while global/editor prefix policy stays unchanged. Nine actual-picker cases now include starter options passed through setup, whose explicit-key bookkeeping is required by the resolver. Old policy produces two expected missing-Ctrl+d failures; corrected policy passes. Pure policy coverage checks chat, note and issue finder controls.
 - Updated app configuration documentation and recorded the missed entry-point lesson. Full make test passed, exit 0: 256 spec files; lint 0 warnings/errors in 447 files.
+
+### 2026-09-14 — Full finder chord audit
+
+Reason: operator asks to verify all Chat Finder chords in the app launcher.
+
+Delta: native input confirms Ctrl+j submits the prompt and Ctrl+k enters digraph input. The on_key dispatch compares translated keys against unnormalized names (`<NL>` / `<C-K>` versus `<C-j>` / `<C-k>`) and cannot suppress default actions. Install ordinary prompt insert mappings alongside Up/Down, reusing their selection/focus behavior, and remove the ineffective observer handlers (ARCH-DRY, ARCH-PURPOSE). This restores documented navigation with no new interaction/state model or per-key work. Keep the existing help behavior: Ctrl+g ? opens scoped help and leaves the finder.
+
+Tests: regress effective prompt mappings moving selection without submitting/cancelling; native exact-starter probes cover Ctrl+j/k and the complete finder chord inventory. Native audit already passes arrows, Enter, Esc/Ctrl+c, scoped help, Ctrl+a/s, Tab/Shift-Tab, and Ctrl+x confirmed/cancelled moves. All probes use isolated HOME/XDG and temporary chats (ARCH-SECURE). This remains a small atomic bugfix; existing issue plan is sufficient.
