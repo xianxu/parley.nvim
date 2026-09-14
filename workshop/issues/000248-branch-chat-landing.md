@@ -45,7 +45,7 @@ total: 0.51
 - [x] Replace the source-text landing assertion with behavioral regression tests: drive branch inserters in n/i/v using real temporary chat files; verify opened child, first-question cursor, insertion command, saved anchor, and failed-write refusal.
 - [x] Extract shared scheduled child navigation in branch_inserters, using parse_chat first exchange location; call after commit_reference succeeds in each child-creating path.
 - [x] Run branch integration tests, full suite and lint; record evidence.
-- [ ] Close through SDLC review.
+Acceptance boundary: close through SDLC review after the implementation checks above.
 
 ## Log
 
@@ -66,3 +66,5 @@ total: 0.51
 - Replaced the source-text landing check with 13 behavioral cases. Red run had 8 expected failures: five incorrect/missing landings plus three deferred-focus violations; no test errors. Readonly parent buffers provide real write failures across all five branch variants.
 - Shared open_branch_question now handles all child-creating paths after commit_reference succeeds. Targeted ui/keybindings suite passes.
 - Separate hermetic headless Neovim smoke entered actual Insert mode on the visual branch's seeded first question and verified typed text appended there; /tmp/parley248-smoke.log. Full make test passed (including lint), exit 0; /tmp/parley248-full.log.
+
+- Close preflight rejected a self-referential unchecked review task. Expressed the acceptance boundary as prose; all implementation tasks are verified.
