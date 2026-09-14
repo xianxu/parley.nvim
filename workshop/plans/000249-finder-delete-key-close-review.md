@@ -116,3 +116,62 @@ The pinned change fulfills #249, including the documented starter-profile revisi
 ```findings
 {}
 ```
+
+---
+
+## Re-review — 2026-09-14T09:46:38-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 249 — Fix chat finder delete key collision |
+| repo | parley.nvim |
+| issue file | workshop/issues/000249-finder-delete-key.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | c90d2f953d6b6c3d3b91f7a6b13368ea5c61b9ed..64ef3ccce2bc0de9e769aa0c4bf017bd9925706f |
+| command | sdlc close --issue 249 |
+| reviewer | codex |
+| timestamp | 2026-09-14T09:46:38-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+The pinned changes satisfy issue #249’s Spec and revised Plan. Single-chat and tree deletion now have distinct defaults, the starter retains finder-local controls, and Ctrl+j/k use consuming prompt mappings. No blocking findings emerged. Independently run focused tests and lint passed.
+
+1. **Strengths**
+   - Config and registry fallback both use `<C-g>D`, keeping runtime and help aligned.
+   - Deletion regressions inspect effective Neovim mappings and verify confirmation targets, cancellation, and child-file preservation across three configuration sources.
+   - Starter policy reuses registry scope metadata and covers chat, note, and issue finders.
+   - README and starter atlas changes document the revised behavior.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** None.
+
+4. **Minor findings:** None.
+
+5. **Test coverage notes**
+   - Passed: ChatFinder **57**, float picker **79**, starter configuration **5**, keybindings **70** tests.
+   - Lint: **0 warnings, 0 errors across 447 files**.
+   - This review did not independently rerun the full suite or native launcher audit. Effective-map tests verify dispatch and effects; they do not reproduce native keyboard timing.
+
+6. **Architectural notes**
+   - **ARCH-DRY — Pass:** reuses registry scopes and existing navigation helpers.
+   - **ARCH-PURE — Pass:** policy remains a data projection; UI effects stay in the picker.
+   - **ARCH-PURPOSE — Pass:** addresses both the collision and starter filtering across finder families.
+   - **ARCH-MOCK — Pass:** introduces no external-service dependency; deletion tests exercise temporary files through existing seams.
+   - **ARCH-CONSTRAINTS — Pass:** adds no scanning, fan-out, or expensive per-keystroke work.
+   - **ARCH-SECURE — Pass:** new integration cases use temporary chat roots; no credential handling added.
+   - **ARCH-ORDER — Pass:** retains existing confirmation suspend/resume handling; navigation consumes native actions.
+   - **ARCH-FUNERAL — Pass:** creates no new durable runtime artifacts or background processes.
+
+7. **Plan revision recommendations:** None. Existing revisions account for the expanded scope.
+
+```findings
+{}
+```
