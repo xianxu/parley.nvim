@@ -686,3 +686,113 @@ dispose:
    - **ARCH-FUNERAL — pass:** candidate, staging, VM and transient UI cleanup have defined owners.
 
 7. **Plan revision recommendations:** None.
+
+---
+
+## Re-review — 2026-09-13T22:46:32-07:00 (FIX-THEN-SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 247 — Homebrew tap and parley launcher: brew install xianxu/parley/parley, tested on a clean tart VM |
+| repo | parley.nvim |
+| issue file | workshop/issues/000247-homebrew-tap-launcher.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | c1395685f69f53a2953cdbaeb01a77d410f105e8..303e922399ad52d29683f41dad3526b6afb7da81 |
+| command | sdlc close --issue 247 |
+| reviewer | codex |
+| timestamp | 2026-09-13T22:46:32-07:00 |
+| verdict | FIX-THEN-SHIP |
+
+## Review
+
+```verdict
+verdict: FIX-THEN-SHIP
+confidence: medium
+```
+
+The pinned implementation has no newly confirmed runtime defect. Starter and packaging checks passed, and prior fixes remain supported by code and regression coverage. Correct the package guides’ outdated credential-isolation and removal claims before publication. Live acceptance remains pending under the recorded release-first revision.
+
+1. **Strengths**
+   - Launcher tests exercise real publication races, symlink rejection, settings preservation, and exact argument forwarding.
+   - Formula generation derives dependencies from the tagged release’s registry.
+   - Onboarding tests cover cancellation, changed source buffers, and exactly-once action resumption.
+   - VM cleanup preserves ownership when deletion fails and supports retained diagnostics.
+
+2. **Critical findings:** None.
+
+3. **Important findings**
+   - [packaging/README.md:15](/Users/xianxu/workspace/parley.nvim/packaging/README.md:15), lines 34–36, and [starter guide:57](/Users/xianxu/workspace/parley.nvim/packaging/starter-config/README.md:57), line 79, still describe isolated credentials and claim profile removal deletes saved login. The implementation now shares `~/.cli-proxy-api`, migrates legacy credentials there, and preserves that directory during uninstall. Update both guides to explain shared ownership and retention; avoid recommending unconditional deletion of credentials other installations use. **ARCH-SECURE / ARCH-FUNERAL.**
+
+4. **Minor findings:** None.
+
+5. **Test coverage**
+   - Starter mapping: **163 passed** across 15 spec files.
+   - Packaging mapping: **69 passed** across 9 spec files, including installed Tart conformance.
+   - Lint: **447 files**, zero warnings/errors.
+   - Pinned `git diff --check`: passed.
+   - Full suite and authenticated clean-VM acceptance were not independently rerun.
+
+6. **Architectural notes**
+   - **ARCH-DRY — pass:** shared registry, rendering entry, picker, and defaults.
+   - **ARCH-PURE — pass:** projection entities and filesystem integration are classified consistently.
+   - **ARCH-PURPOSE — pass:** implementation follows recorded scope revisions; pending acceptance remains explicit.
+   - **ARCH-MOCK — pass:** stateful dependency fixtures and real conformance checks cover packaging boundaries.
+   - **ARCH-CONSTRAINTS — pass:** capacity guards, deadlines, bounded publication, and bounded documentation reads.
+   - **ARCH-SECURE — flag:** user-facing credential ownership claims lag the implementation.
+   - **ARCH-ORDER — pass:** publication and deferred-action tests exercise competing and interrupted transitions.
+   - **ARCH-FUNERAL — flag:** removal documentation incorrectly promises credential deletion.
+
+7. **Plan revision recommendations:** None; the shared-auth revision already describes the intended behavior correctly.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Upgrade reconstructs starter input from installed share; installed-layout upgrade tests pass.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      Formula unit tests assert projections; Ruby execution resides in release integration.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      Injected capacity tests cover adequate disk and refusal below 60 GiB without host capacity dependence.
+  - id: BR-4
+    disposition: addressed
+    note: |
+      Cleanup checks VM absence and retains ownership on deletion failure; fake and installed Tart conformance tests pass.
+  - id: BR-5
+    disposition: addressed
+    note: |
+      Retained-failure tests verify preserved VM ownership and phase/command diagnostics.
+  - id: BR-6
+    disposition: addressed
+    note: |
+      Issue and project acceptance remain unchecked; the plan explicitly reserves merge/archive for completed acceptance.
+  - id: BR-7
+    disposition: addressed
+    note: |
+      VM model discovery uses canonical model providers; healthy Codex with an empty catalog falls through in regression coverage.
+  - id: BR-8
+    disposition: addressed
+    note: |
+      Release-local formula rendering and guest upload each use a shared entry/helper.
+  - id: BR-9
+    disposition: addressed
+    note: |
+      Tutorial staging now resides under the destination chat directory; cross-filesystem and failed-publication cleanup tests pass.
+  - id: BR-10
+    disposition: addressed
+    note: |
+      The plan classifies auth_is_private as INTEGRATION, matching its filesystem metadata operations and integration tests.
+findings:
+  - id: new
+    severity: Important
+    family: credential-lifecycle-documentation
+    title: |
+      Package guides promise credential isolation and deletion that shared authentication no longer provides
+    detail: |
+      packaging/README.md:15 and :34-36 plus packaging/starter-config/README.md:57 and :79 contradict the shared ~/.cli-proxy-api implementation and retained-auth uninstall policy. Update both guides to state shared ownership and retention, consistent with atlas/infra/starter.md:122-125; do not recommend unconditional deletion of shared credentials. ARCH-SECURE and ARCH-FUNERAL.
+```

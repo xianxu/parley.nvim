@@ -54,9 +54,13 @@ same Parley runtime as an ordinary plugin installation.
 Neovim's standard XDG variables apply. With their default values, this profile owns:
 
 - `~/.config/parley`: editable configuration and plugin lockfile.
-- `~/.local/share/parley`: plugins, chats, exports, proxy binary and credentials.
+- `~/.local/share/parley`: plugins, chats, exports and proxy binary.
 - `~/.local/state/parley`: session state and logs.
 - `~/.cache/parley`: caches and query scratch.
+
+Provider logins live in the shared `~/.cli-proxy-api` directory, outside this
+profile. Both the app and plugin use it. On upgrade, legacy profile credentials
+are copied there without replacing existing accounts; originals are retained.
 
 The managed proxy uses loopback port 8317 and API key `parley-local`, matching
 `define`'s defaults. Start Parley and connect your account, then run `define`
@@ -76,8 +80,10 @@ Parley session before upgrading, then close and reopen Parley. Remove any
 
 Before removing the profile, run `:ParleyProxy stop` to stop its managed proxy.
 Then remove the four profile directories above (or their configured XDG locations).
-This deletes your chats and saved provider login, so keep any files you want first.
-No ordinary `nvim` profile directory is part of this removal.
+This deletes your app settings and chats, so keep any files you want first.
+Shared provider logins in `~/.cli-proxy-api` remain intact and may still be used
+by your Neovim plugin or another proxy client. No ordinary `nvim` profile
+directory is part of this removal.
 
 Maintainers verify the artifact with `python3 scripts/check-starter.py` and
 `make test-spec SPEC=infra/starter`. The full `make test` runs these checks too.

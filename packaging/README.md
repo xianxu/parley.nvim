@@ -12,8 +12,8 @@ Parley, press Escape and type `:ParleyProxy connect`, then press Return. Choose 
 provider and finish its account login in the browser. Follow the welcome chat
 for choosing a model, sending a question, and pasting an image.
 
-Parley keeps its configuration, chats and login separate from your existing
-Neovim setup. `parley notes.md` opens a file. Settings live in
+Parley keeps its editor configuration and chats separate from your existing
+Neovim setup. The app and plugin share provider logins in `~/.cli-proxy-api`. `parley notes.md` opens a file. Settings live in
 `~/.config/parley/init.lua` (or your configured XDG config directory).
 See the [starter guide](starter-config/README.md) for shortcuts and recovery.
 
@@ -31,9 +31,11 @@ candidate and do not repeat the notice for unchanged bytes.
 
 Before uninstalling, run `:ParleyProxy stop` inside Parley and close the app.
 Then run `brew uninstall parley`. Homebrew removes the application; your chats
-and account login remain. To remove those too, first save anything you want,
-then remove the four Parley directories listed in the
-[profile guide](starter-config/README.md#profile-files-and-recovery).
+and account logins remain. To remove the app settings and chats too, first save
+anything you want, then remove the four Parley directories listed in the
+[profile guide](starter-config/README.md#profile-files-and-recovery). Shared
+logins in `~/.cli-proxy-api` remain available to the plugin and other proxy clients;
+they are not part of app-profile removal.
 
 ## Maintainer release
 

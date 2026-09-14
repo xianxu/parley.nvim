@@ -245,6 +245,58 @@ rounds:
           note: The plan classifies auth_is_private as INTEGRATION, matching vm_chat.lua filesystem metadata checks; the appended revision records the correction.
           round: 7
       blocked: false
+    - "n": 8
+      timestamp: "2026-09-13T22:46:32-07:00"
+      agent: codex
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: Upgrade reconstructs starter input from installed share; installed-layout upgrade tests pass.
+          round: 8
+        - id: BR-2
+          disposition: addressed
+          note: Formula unit tests assert projections; Ruby execution resides in release integration.
+          round: 8
+        - id: BR-3
+          disposition: addressed
+          note: Injected capacity tests cover adequate disk and refusal below 60 GiB without host capacity dependence.
+          round: 8
+        - id: BR-4
+          disposition: addressed
+          note: Cleanup checks VM absence and retains ownership on deletion failure; fake and installed Tart conformance tests pass.
+          round: 8
+        - id: BR-5
+          disposition: addressed
+          note: Retained-failure tests verify preserved VM ownership and phase/command diagnostics.
+          round: 8
+        - id: BR-6
+          disposition: addressed
+          note: Issue and project acceptance remain unchecked; the plan explicitly reserves merge/archive for completed acceptance.
+          round: 8
+        - id: BR-7
+          disposition: addressed
+          note: VM model discovery uses canonical model providers; healthy Codex with an empty catalog falls through in regression coverage.
+          round: 8
+        - id: BR-8
+          disposition: addressed
+          note: Release-local formula rendering and guest upload each use a shared entry/helper.
+          round: 8
+        - id: BR-9
+          disposition: addressed
+          note: Tutorial staging now resides under the destination chat directory; cross-filesystem and failed-publication cleanup tests pass.
+          round: 8
+        - id: BR-10
+          disposition: addressed
+          note: The plan classifies auth_is_private as INTEGRATION, matching its filesystem metadata operations and integration tests.
+          round: 8
+      findings:
+        - id: BR-11
+          severity: Important
+          title: Package guides promise credential isolation and deletion that shared authentication no longer provides
+          detail: packaging/README.md:15 and :34-36 plus packaging/starter-config/README.md:57 and :79 contradict the shared ~/.cli-proxy-api implementation and retained-auth uninstall policy. Update both guides to state shared ownership and retention, consistent with atlas/infra/starter.md:122-125; do not recommend unconditional deletion of shared credentials. ARCH-SECURE and ARCH-FUNERAL.
+          family: credential-lifecycle-documentation
+          round: 8
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#247 (boundary-review)
@@ -352,6 +404,31 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - BR-9 — addressed — Tutorial staging resides inside chat_dir; cross-filesystem publication and failure-cleanup regressions pass.
 - BR-10 — addressed — The plan classifies auth_is_private as INTEGRATION, matching vm_chat.lua filesystem metadata checks; the appended revision records the correction.
 
+## Round 8 — 2026-09-13T22:46:32-07:00 (codex) — passed
+
+### Disposed
+
+- BR-1 — addressed — Upgrade reconstructs starter input from installed share; installed-layout upgrade tests pass.
+- BR-2 — addressed — Formula unit tests assert projections; Ruby execution resides in release integration.
+- BR-3 — addressed — Injected capacity tests cover adequate disk and refusal below 60 GiB without host capacity dependence.
+- BR-4 — addressed — Cleanup checks VM absence and retains ownership on deletion failure; fake and installed Tart conformance tests pass.
+- BR-5 — addressed — Retained-failure tests verify preserved VM ownership and phase/command diagnostics.
+- BR-6 — addressed — Issue and project acceptance remain unchecked; the plan explicitly reserves merge/archive for completed acceptance.
+- BR-7 — addressed — VM model discovery uses canonical model providers; healthy Codex with an empty catalog falls through in regression coverage.
+- BR-8 — addressed — Release-local formula rendering and guest upload each use a shared entry/helper.
+- BR-9 — addressed — Tutorial staging now resides under the destination chat directory; cross-filesystem and failed-publication cleanup tests pass.
+- BR-10 — addressed — The plan classifies auth_is_private as INTEGRATION, matching its filesystem metadata operations and integration tests.
+
+### Raised
+
+- **BR-11** [Important] `credential-lifecycle-documentation` Package guides promise credential isolation and deletion that shared authentication no longer provides
+  packaging/README.md:15 and :34-36 plus packaging/starter-config/README.md:57 and :79 contradict the shared ~/.cli-proxy-api implementation and retained-auth uninstall policy. Update both guides to state shared ownership and retention, consistent with atlas/infra/starter.md:122-125; do not recommend unconditional deletion of shared credentials. ARCH-SECURE and ARCH-FUNERAL.
+
 ## Open findings
 
-(none — every finding has been disposed)
+- **BR-11** [Important] `credential-lifecycle-documentation` Package guides promise credential isolation and deletion that shared authentication no longer provides
+
+## Revisions
+
+2026-09-13: BR-11 addressed before the close commit. Both package guides now state
+shared OAuth ownership and retained credentials after app-profile removal.

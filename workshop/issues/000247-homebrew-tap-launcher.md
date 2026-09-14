@@ -7,7 +7,7 @@ created: 2026-09-13
 updated: 2026-09-13
 estimate_hours: 4.159
 started: 2026-09-13T14:26:40-07:00
-actual_hours: 9.66
+actual_hours: 11.21
 ---
 
 # Homebrew tap and parley launcher: brew install xianxu/parley/parley, tested on a clean tart VM
@@ -99,6 +99,7 @@ total: 4.159
 ## Log
 
 ### 2026-09-13 — implementation and VM checkpoint
+- 2026-09-13: closed — Full make test passed (/tmp/parley-shared-verified.log); subsequent explicit-global-path repo regression passed starter_project 5/5; git diff --check clean. Fresh-machine operator acceptance remains pending, so project completion and acceptance checkboxes deliberately remain open.; review verdict: FIX-THEN-SHIP
 - 2026-09-13: closed — Bootstrap real-float regression7/7, login15/15, login UI4/4, catalog66/66 pass; full suite only found two corrected architecture integration failures, both rechecked passing. Exact release archive suite /tmp/parley-v2.4.1-archive.log must pass before tagging. User authorizes fresh-machine testing publication; live acceptance plan/project remain unchecked and PR remains open.; review verdict: SHIP
 - 2026-09-13: closed — Committed archive passed all 254 test files and lint 444 files. Review fixes pass starter 16/16 and packaging VM 17/17 including real Tart conformance; final corrected archive suite in /tmp/parley-v2.4.0-final-archive.log must pass before tag. Plan/project checks remain open because operator requested publication for fresh-machine acceptance; no merge/archive until acceptance completes.; review verdict: SHIP
 - 2026-09-13: closed — Code findings BR1-BR3 all disposed round3; Codex reviewer failed only because its sandbox denies loopback binds. Normal host rerun at reviewed9202b955 passed all11VMcases, exact log /tmp/parley247-reviewed-head-vm.log. Full246specs/lint431 and focused2formula+6release+3upgrade pass. Please verify loopback with supported Claude runner. Approved tag/tap publication then realVM acceptance remain before merge; --no-plan-check only local gate.; review verdict: FIX-THEN-SHIP
@@ -439,3 +440,9 @@ selection regression passed with starter project suite 5/5. Live map inspection
 confirmed the reported Ctrl+g a issue was Markdown add-reference binding caused
 by explicit global chat_dir suppressing implicit repo selection; personal config
 now selects the marked root through the shared helper.
+
+Boundary review returned FIX-THEN-SHIP with BR-11: outdated credential ownership
+and deletion claims. Updated both packaging guides consistently: shared OAuth
+credentials live outside app roots and survive removal. Review independently
+passed 163 starter checks, 69 packaging checks and lint. Fresh-machine acceptance
+remains open.

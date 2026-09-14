@@ -2357,3 +2357,9 @@ download.
   boolean; classify helpers by dependencies, not their return shape.
 - A fixture exit-code assertion does not establish conformance. Compare with the
   installed dependency when available, using isolated resources.
+
+- When private profile state becomes shared, update installation and removal
+  guides together with the atlas; profile deletion must not promise global
+  credential deletion (ARCH-SECURE, ARCH-FUNERAL).
+- Moving a default path into an explicit user override can change precedence.
+  Verify repo detection and buffer-local keymaps using the migrated profile.
