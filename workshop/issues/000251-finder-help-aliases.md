@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-09-14
 updated: 2026-09-14
-estimate_hours:
+estimate_hours: 0.98
 started: 2026-09-14T10:53:58-07:00
 ---
 
@@ -25,6 +25,19 @@ Update Alt+i wording to create/open a sub-chat. Include prompt navigation, selec
 - Every configured picker alias is installed and dispatches its action; disabling hides and unbinds it.
 - Default string mappings and reserved-key protection remain compatible.
 - Focused regressions, exact starter override smoke, full tests and lint pass.
+
+## Estimate
+
+Method estimate-logic-v3.1, provisional repo calibration. Familiar Lua/Neovim stack: design 2h × 0.2 resolved-scope factor = 0.4h; implementation 1h × 0.4 = 0.4h (shared alias installer plus mechanical consumers and tests); review 0.3h × 0.4 = 0.12h. 15% design buffer.
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: lua-neovim design=0.4 impl=0.4
+item: milestone-review design=0 impl=0.12
+design-buffer: 0.15
+total: 0.98
+```
 
 ## Plan
 
