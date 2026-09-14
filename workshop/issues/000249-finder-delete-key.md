@@ -1,13 +1,13 @@
 ---
 id: 000249
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-09-14
 updated: 2026-09-14
 estimate_hours: 0.51
 started: 2026-09-14T09:15:17-07:00
-actual_hours: 0.21
+actual_hours: 1.00
 ---
 
 # Fix chat finder delete key collision
@@ -57,6 +57,7 @@ Acceptance boundary: close through the binary-owned fresh review.
 ## Log
 
 ### 2026-09-14
+- 2026-09-14: closed — Exact packaging/starter-config/init.lua launcher with NVIM_APPNAME=parley and PARLEY_RUNTIME: missing Ctrl+d reproduced before fix; native Ctrl+d plus native y now deletes isolated selected chat. make test passed 256 spec files; lint clean; starter default/fallback/live-picker cases passed.; review verdict: SHIP
 - 2026-09-14: closed — make test passed: 256 specs; lint 0 warnings/errors; six live-picker regression cases red then green; native Insert-mode Ctrl+d and y deleted only selected temp chat. No architectural surface change: default shortcut correction documented in README.; review verdict: SHIP
 
 - User reported Ctrl+d failure while preparing tutorial. Confirmed default-key alias; independent reproduction investigating real picker/confirmation flow. Trivial default-key correction: use change-code --no-judge for planning, retain the full closing code review. Preserve existing unrelated workspace edits.
