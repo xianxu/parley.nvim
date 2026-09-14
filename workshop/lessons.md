@@ -2406,3 +2406,6 @@ download.
   Exercise installed mappings in prompt and results modes, and invoke each
   alias through the real starter profile; captured option tables alone miss
   this mismatch.
+- Plan concept tables should label registry resolution as PURE and editor
+  mapping installation/callers as INTEGRATION, even when separate section
+  headings already imply that distinction.

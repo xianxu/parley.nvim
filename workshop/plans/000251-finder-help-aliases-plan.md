@@ -45,3 +45,7 @@ The full-suite architecture check requires the exported function name in the cor
 | Name | Lives in | Status |
 |---|---|---|
 | `keys_for` | `lua/parley/keybinding_registry.lua` | new |
+
+### 2026-09-14 — Closing review classification clarification
+
+Closing review passed with one minor documentation finding. Registry resolution (`keys_for`/`resolve_keys`) and help projection are **PURE**. Picker mapping installation and its callers are **INTEGRATION**, wrapping Neovim buffers and keyboard callbacks. This makes the existing separation explicit; implementation scope is unchanged.

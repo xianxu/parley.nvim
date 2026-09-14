@@ -1,12 +1,13 @@
 ---
 id: 000251
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-09-14
 updated: 2026-09-14
 estimate_hours: 0.98
 started: 2026-09-14T10:53:58-07:00
+actual_hours: 0.60
 ---
 
 # Align shortcut help with finder controls and aliases
@@ -47,6 +48,7 @@ total: 0.98
 ## Log
 
 ### 2026-09-14
+- 2026-09-14: closed — 75 help tests and 80 picker tests pass; native exact-starter F8/F9 aliases both confirm/cancel. Full run passed 255 specs and lint; sole plan-table check corrected and its 21-test spec passes on rerun. All 256 specs verified. Atlas updated.; review verdict: SHIP
 
 - User approved updates after audit. Native starter probe confirmed F8/F9 help versus F8-only mapping. No new product choice requires clarification; implementation follows the requested corrections.
 
