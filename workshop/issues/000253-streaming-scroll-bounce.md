@@ -1,12 +1,13 @@
 ---
 id: 000253
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-09-14
 updated: 2026-09-14
 estimate_hours: 0.83
 started: 2026-09-14T13:32:30-07:00
+actual_hours: 0.56
 ---
 
 # Streaming fold updates bounce the viewport during scrolling
@@ -35,6 +36,7 @@ Fold maintenance must preserve each window’s complete view without undoing del
 ## Log
 
 ### 2026-09-14
+- 2026-09-14: closed — All 259 specs pass across full run (258) and corrected plan inventory architecture rerun (21 assertions); luacheck 451 files clean; 11 attached-UI stream regressions; actual isolated starter Normal/Insert frontier and split-view smoke passes.; review verdict: SHIP
 
 
 Reproduction scripts: /tmp/parley-fold-ui-repro.lua, /tmp/parley-fold-ui-multi.lua, /tmp/parley253-wrap-smooth-repro.lua. Independent experiment adding winsaveview/winrestview only around clear_folds_in_span fixes the split drift and preserves explicit follow within mutation. No production files changed during diagnosis.

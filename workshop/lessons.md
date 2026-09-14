@@ -2422,3 +2422,9 @@ download.
 
 - Keep regression inputs in explicit synthetic fixtures. Personal workshop content and obsolete missing-file exemptions make cleanup change test coverage silently.
 - Before bulk local cleanup, record exact retained/removal paths and verify source hashes again immediately before removal; retain the original external backup and journal across retries.
+
+## 2026-09-14 (#253)
+
+- Cursor restoration does not imply viewport restoration. Test streaming/fold maintenance with an attached Neovim UI, including wrapped-line skipcol and independent split views; keep view restoration scoped to maintenance so it cannot undo deliberate follow movement.
+- A followed stream endpoint needs a byte column as well as a row. Share its projection between streaming and completion, and verify wrapped/multibyte output through the real cursor API.
+- An isolated HOME/XDG does not isolate cwd-based chat discovery. Packaging test children that create chats must also run in a scratch working directory; the existing VM fake-chat test leaks synthetic chats into the checkout.
