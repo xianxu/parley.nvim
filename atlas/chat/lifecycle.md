@@ -1,7 +1,7 @@
 # Chat Lifecycle
 
 ## Creation (`:ParleyChatNew` / `<C-g>c`)
-Creates timestamped `.md` in primary `chat_dir`. Multi-root: all roots scanned for discovery; new chats always in primary.
+Creates timestamped `.md` in primary `chat_dir`. Multi-root: all roots scanned for discovery; new chats always in primary. Chats are ordinary Markdown files: save edits with `:write`, and use `:ParleyChatFinder` (`<C-g>f`) to reopen them. The app also ships three stable-name tutorial transcripts.
 
 ## Slug Rename (auto, on save)
 When a chat's `topic:` header changes, the file is auto-renamed to include a slug: `YYYY-MM-DD.HH-MM-SS.mmm_slug-words.md`. The slug is derived from the topic (stop words stripped, kebab-case, max 5 words / 40 chars). The `_` separator ensures unambiguous parsing. See `lua/parley/chat_slug.lua` for the pure slug logic.
@@ -74,7 +74,18 @@ three visits. A whole-file rewrite triggered by resting a cursor would be the
 old behaviour moved rather than removed.
 
 ## Move (`:ParleyChatMove`)
-Moves entire chat tree (root + descendants) to another chat root; rewrites all `🌿:` references.
+Moves the entire linked tree to another registered chat root and rewrites its
+`🌿:` references. Invoking it on a child first walks to the ancestor root, so
+parents and siblings move too. Chat Finder Ctrl+x uses this same tree operation.
+Associated asset folders follow their chats. Destinations must already be in
+the configured chat roots; pass a registered directory to `:ParleyChatMove [dir]`
+or choose one from its picker. There is no `:ParleyChatDirs` command; see
+[Repository Mode](../infra/repo_mode.md) for root selection.
+
+There is no dedicated user command for moving just one chat. The Lua helper
+`require("parley").move_chat(file, target_dir)` moves one file and its assets,
+but does not perform tree-wide reference rewriting; it is an implementation API,
+not the behavior of `:ParleyChatMove`.
 
 ## Branching / Pruning (`<M-p>`, legacy `<C-g>b`)
 Splits current exchange + following into a new child chat with `🌿:` links. Async LLM topic generation.
@@ -84,7 +95,7 @@ The tool-fold toggle remains configurable as
 non-empty shortcut is registered and shown through the shared keybinding
 registry.
 
-## Response (`:ParleyChatRespond` / `<C-g><C-g>`)
+## Response (`:ParleyChatRespond` / `<M-CR>` / `<C-g><C-g>`)
 Assembles context (with memory summarization), streams LLM response into buffer. The [exchange model](exchange_model.md) is the single source of truth for all transcript mutations during the response lifecycle — streaming text growth, tool block insertion, and prompt append all go through the model. [Response progress](response_progress.md) is cosmetic extmark state that begins at the response header (or a recursive leg's last visible block), then follows the current generation tip; it never becomes a model block. A per-buffer pending-session guard prevents duplicate calls.
 
 Semantic folds are a pure projection of one exchange's positive-size thinking,
@@ -165,10 +176,43 @@ Toggles auto-follow of streaming insertion point.
 Resubmits all questions from start to cursor, replacing existing answers. Stop with `<C-g>x`.
 
 ## Context Assembly (Tree of Chat)
-Child chats inject ancestor context by walking parent chain to root. Summaries replace full answers when available.
+Child chats inject ancestor context in root-to-parent order. At each ancestor,
+only exchanges up to that ancestor's branch reference to the next child are
+included (`branch.after_exchange`); exchanges after that branch point are not.
+If no matching forward reference is found, that ancestor contributes no
+exchanges. The question of each included exchange is retained; its answer uses
+the `📝:` summary when present, otherwise the full answer.
+
+This ancestor-summary rule applies even when `chat_memory.enable=false`.
+Disabling memory preserves the current chat's ordinary message window; it does
+not turn ancestor summaries into full ancestor answers. The implementation is
+`chat_respond.collect_ancestor_chain` / `build_ancestor_messages`.
 
 ## Review (`:ParleyChatReview`)
 Creates a new chat pre-filled with a proof-read prompt for the current file. Inserts a `🌿:` back-link into the source file's front matter pointing to the review chat.
 
 ## Deletion (`:ParleyChatDelete` / `<C-g>d`)
-Deletes current file only (not children). Purges associated memory and cached metrics.
+Deletes the current file only, not children, and removes its asset folder and
+cached metrics. `chat_confirm_delete` defaults to `true`; the prompt defaults to
+No. `:ParleyChatDeleteTree` walks to the root and deletes the entire linked tree
+(including parents and siblings of the current child) after confirmation. Chat Finder offers Ctrl+d for one file and Ctrl+g D for its tree.
+These commands delete files directly; there is no Parley trash or undelete.
+Recovery of a deleted chat requires your own backup or version-control copy.
+
+## Stopping and correcting a response
+
+`:ParleyStop` (`<C-g>x`) stops running responses. Normal/Insert `<M-CR>` on a
+previous answered exchange replaces that answer; visual `<M-CR>` instead defines
+the selected term. Ready drill-in comments can turn resubmission into a follow-up
+that preserves the original answer; see [Drill-In Markers](drill_in.md).
+Undo uses Neovim history; during a pending response the normal `u`/Ctrl+r mappings
+ask before stopping that buffer's response and changing history. Save a separate
+copy or use version control when you need durable recovery beyond editor history.
+
+## Implementation and checks
+
+`lua/parley/init.lua` owns creation, deletion, branch opening, and slug repair;
+`lua/parley/chat_dirs.lua` owns move commands; `lua/parley/chat_respond.lua` owns
+submission. See `tests/integration/branch_child_spec.lua`,
+`tests/integration/chat_move_spec.lua`, `tests/unit/chat_finder_logic_spec.lua`,
+and `tests/integration/chat_respond_spec.lua`.

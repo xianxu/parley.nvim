@@ -44,7 +44,7 @@ The model is built once per `M.respond` call and lives through the entire respon
   recorded provisional thinking opener through the insertion block. Neither
   path reparses the chat.
 - **Tool loop**: `add_block` appends 🔧:/📎: blocks. The model is passed to recursive `M.respond` calls — no rebuilding.
-- **Spinner**: tracked as a block; set to size 0 when cleared.
+- **Pending presentation**: the current spinner/status is an extmark outside the model; see [Response Progress](response_progress.md). Legacy spinner block kinds remain tolerated by consumers.
 - **Prompt append**: uses `exchange_total_size` to compute insertion point.
 - **Folding**: `thinking`, `summary`, `tool_use`, and `tool_result` ranges come
   only from their stated model block spans and stay inside the selected
@@ -139,3 +139,13 @@ sections when replacing the insertion span.
 ## Key Invariant
 
 Any feature needing buffer positions MUST use the model. Never scan lines, use `foldlevel()`, `last_content_line()`, or backward lookups. The model already knows.
+
+
+## Folding verification corpus
+
+`tests/integration/fold_invariants_spec.lua` exercises real Neovim fold state
+over five dedicated `tests/fixtures/fold_*.md` transcripts: tool blocks,
+assistant-first input, adversarial fences, markers inside prose fences, and
+ordinary multi-exchange/model conversations. Both parsed-model and independent
+raw-text oracles remain active. Workshop chats are not test fixtures; removing
+or editing personal conversations does not change the test corpus.

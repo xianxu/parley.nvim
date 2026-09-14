@@ -1,12 +1,13 @@
 ---
 id: 000206
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-09-01
 updated: 2026-09-14
 estimate_hours: 2.49
 started: 2026-09-02T14:27:21-07:00
+actual_hours: 3.49
 ---
 
 # Rebuild Parley user documentation
@@ -87,6 +88,8 @@ accurate reference material for existing users.
 
 ## Log
 
+
+- 2026-09-14: closed — All 257 make test specs pass; make lint 448 files zero warnings/errors; final infra/starter mapped suite passes; fresh isolated actual starter seeds and retrieves all three tutorials and native Basics outline exercise lands correctly; all54 atlas pages audited and16 docs-only questions resolved. Historical unchecked manual/video/live-provider Plan items were explicitly superseded by approved 2026-09-14 revision; revised checklist complete, so no-plan-check applies only to those preserved historical items.; review verdict: SHIP
 ### 2026-09-01
 
 Created while triaging the Parley backlog. Promotion now depends more on a
@@ -174,3 +177,18 @@ item: milestone-review design=0 impl=0.2
 design-buffer: 0.15
 total: 2.49
 ```
+
+
+### 2026-09-14 — Implemented revised scope
+
+The original ## Plan remains as historical evidence; its separate manual/video and live-provider acceptance are superseded by the earlier dated revision. Current plan:
+
+- [x] Rewrite README around app installation, product idea and canonical tutorials.
+- [x] Audit all 54 feature pages and index against code; record sources/corrections in workshop/plans/000206-documentation-audit.md.
+- [x] Correct tutorial outline exercises and make all three safely retrievable through parley_help.
+- [x] Check user answerability against exact retrieved docs and address identified scope/recovery/default contradictions.
+- [x] Verify 257 test specs, lint (448 files), local documentation links, reader boundaries, and isolated starter tutorial exercise.
+
+The initial full suite identified a missing traceability route and a README-specific shortcut regression check. Added the route and moved the six-headline-chord guarantee to the callable atlas; full rerun passes. New doc claim checks exercise the actual tag parser and chat outline, rather than pinning descriptive source strings. ARCH-DRY: retain current configured help as the live key reference; ARCH-SECURE: tutorial catalog extends only three fixed paths; explicit inclusion and model tool root policies are documented separately. The source audits corrected historical claims about broad chat search, background memory, shared credentials and raw log privacy. No deferred product behavior is implemented here.
+
+Fresh binary-owned close review and PR publication follow this implementation record. Merge remains operator-controlled.

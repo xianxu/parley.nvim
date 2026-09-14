@@ -1,5 +1,9 @@
 # Editable System Prompts
 
+Use `:ParleySystemPrompt` to choose or edit a reusable system prompt. Changes
+are stored separately from built-in defaults, so restoring a modified prompt
+returns to the configured original rather than deleting it.
+
 ## Sources (highest precedence first)
 - **Custom/Modified**: stored in `{state_dir}/custom_system_prompts.json`
 - **Built-in**: from config defaults + `setup()` opts; deleting modified restores built-in
@@ -28,3 +32,9 @@ the synthetic pair. Built by `lua/parley/system_prompt_msgs.lua` and
 applied in `lua/parley/chat_respond.lua` (both the legacy
 `_build_messages` path and the model-driven `build_messages_from_model`
 path used by the tool loop).
+
+## Verification
+
+`lua/parley/system_prompt_picker.lua` owns picker actions;
+`tests/unit/custom_prompts_spec.lua` covers stored prompt operations and
+`tests/unit/system_prompt_msgs_spec.lua` covers provider-facing synthetic delivery.

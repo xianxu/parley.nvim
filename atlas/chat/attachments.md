@@ -55,7 +55,7 @@ slug: `ParleySlug` renames nothing here, and the folder moves with its chat.
   `build_messages` and the tool-loop continuation builder. A retained
   question becomes image blocks (Anthropic shape) then one text block; the
   openai wire emits `image_url` data-URL parts, googleai `inlineData`. One
-  request budget (`plan_budget`): 10 MB per image, 20 MB encoded and 20 images
+  request budget (`plan_budget`): 10 MiB per image, 20 MiB encoded and 20 images
   per request, planned over every retained attachment, newest first; dropped
   or unreadable images become a one-line note. A final guard refuses an
   image-bearing payload that still exceeds the limit. Reads are bounded

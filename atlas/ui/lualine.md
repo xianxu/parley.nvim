@@ -1,8 +1,8 @@
 # Spec: Lualine Integration
 
 ## Config
-- `lualine.enable`: boolean on/off
-- `lualine.section`: target section (e.g. `lualine_x`)
+- `lualine.enable`: boolean on/off (default `true`; requires lualine to be installed)
+- `lualine.section`: target section (default `lualine_x`)
 - `lualine.replace_filetype`: when true (default), auto-replaces the user's filetype component with a parley mode glyph (`○` global / `⊚-<repo>` repo / `⦿-<repo>` super-repo). See [Super-Repo Mode](../modes/super_repo.md).
 
 ## Component Content
@@ -23,3 +23,9 @@
 - `require('parley.lualine').create_component()` for custom positioning
 - `require('parley.lualine').create_mode_component()` for the mode glyph (use with `replace_filetype = false`)
 - `require('parley.lualine').format_branch_label()` for the branch display rule
+
+## Implementation
+
+`lua/parley/lualine.lua` owns integration and display; `lua/parley/config.lua`
+owns defaults. Turning integration off leaves your own statusline configuration
+in control.

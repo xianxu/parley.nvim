@@ -1,14 +1,23 @@
 # Raw Mode
 
-Per-chat side-file logging of API state for debugging and learning. Replaces the previous in-buffer behavior (#121).
+Raw logging writes per-chat side files for inspecting what Parley sent and what
+the provider returned. The master switch `raw_mode.enable` defaults to `true`,
+but both logging flags default to `false`; enabling the feature alone writes no
+exchange/raw side logs.
 
-**For agents debugging parley:** this is the first-line diagnostic tool for any LLM-pipeline issue (wrong prompt, missing messages, cache misses, tool_use shape, token usage, SSE oddities). Toggle on, reproduce, inspect the side files, toggle off. See [`atlas/infra/raw_logging.md`](../infra/raw_logging.md#when-to-use-this-debugging-entry-point) for the decision tree (exchange-level vs raw-API-level) and the full spec — file layout, format, toggles, lualine indicator, and the typed-YAML input feature.
+| Command | Result |
+|---|---|
+| `:ParleyToggleExchangeLog` | Toggle `raw_mode.log_exchange`: per-turn message lists in `<chat-dir>/.parley-logs/<basename>/exchange.md` |
+| `:ParleyToggleRawLog` | Toggle `raw_mode.log_raw`: request payload, assembled response, and raw SSE in the sibling `raw.md` |
+| `:ParleyOpenExchangeLog` | Open the current chat's exchange log in a vertical split |
+| `:ParleyOpenRawLog` | Open the current chat's raw log in a vertical split |
 
-Quick reference:
+When the master switch is false, toggle commands do nothing. Lualine shows red
+`LOG-EX` / `LOG-RAW` flags for active logs. Logs contain conversation and request
+content, so inspect the relevant turn rather than treating them as ordinary
+status messages.
 
-- `raw_mode.enable` — master switch (default `true`).
-- `raw_mode.log_exchange` — per-turn message-list log to `<chat-dir>/.parley-logs/<basename>/exchange.md`.
-- `raw_mode.log_raw` — per-turn request payload + assembled response + raw SSE log to `…/raw.md`.
-- `:ParleyToggleExchangeLog`, `:ParleyToggleRawLog` — flip the toggles.
-- `:ParleyOpenExchangeLog`, `:ParleyOpenRawLog` — open the current chat's log in a vsplit.
-- A red `[LOG-EX]` / `[LOG-RAW]` flag appears in the lualine parley section while a toggle is on.
+See [raw logging](../infra/raw_logging.md) for format, typed-YAML input, and a
+diagnostic guide. Implementation lives in `lua/parley/raw_log.lua`, the commands
+in `init.lua`, and indicators in `lualine.lua`; verification is in
+`tests/unit/raw_log_spec.lua`.

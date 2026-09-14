@@ -1,6 +1,13 @@
 # Issue Management
 
-Repo-local issue tracking with single-file-per-issue markdown format, designed for agentic coding workflows.
+Optional repo-local issue tracking for development workflows, separate from
+ordinary chats and the app tutorials. Existing issue files can be browsed without
+installing the maintainer SDLC tool; `:ParleyIssueNew` requires `sdlc` and reports
+setup advice when absent. The app does not install it.
+
+The Ctrl+y shortcuts below are plugin defaults. The app disables that global
+shortcut family; use the commands or configure explicit bindings. Finder-local
+controls remain enabled. `:ParleyKeyBindings` reports effective configured keys.
 
 ## File Format
 Each issue is `{issues_dir}/NNNNNN-slug.md` with YAML frontmatter (`id`, `status`, `deps`, `github_issue`, `created`, `updated`) and markdown sections (title, done-when, plan checklist, log).
@@ -54,7 +61,14 @@ Done issues move to `workshop/history/issues/` at the SDLC publish gate. GitHub
 issues are closed through the publish flow. History is low-signal — agents
 should avoid reading it unless directed.
 
-## Makefile Integration
-- `make fetch N` / `make issue N`: create local issue from GitHub issue
-- `make push` / `make merge`: archive done issues, close GitHub issues
-- `make pull-request`: gathers issue references for PR body
+## Workflow integration and checks
+
+Maintainers create/import internal issues with `sdlc issue new`, then use the
+lifecycle gates described in [the optional workflow](../infra/workflow.md).
+Do not infer that creating a chat requires an issue or publishes anything.
+
+Implementation: `lua/parley/issues.lua`, `issue_finder.lua`,
+`issue_finder_records.lua` and `issue_vocabulary.lua`. Tests:
+`tests/unit/issues_spec.lua`, `tests/unit/issue_finder_spec.lua`,
+`tests/unit/issue_unavailable_spec.lua` and
+`tests/integration/issue_command_spec.lua`.

@@ -1,9 +1,12 @@
 # Memory Preferences
 
-Per-tag user preference profiles generated from chat history summaries.
+Per-tag user preference profiles generated from chat history summaries. This is
+opt-in and separate from [conversation-window summarization](memory.md): enabling
+it permits background LLM calls that derive reusable preferences and inject them
+into later system prompts.
 
 ## Config
-- `memory_prefs.enable`: toggle feature (default: true)
+- `memory_prefs.enable`: toggle feature (default: false)
 - `memory_prefs.max_files`: max recent chat files per tag to include summaries from (default: 100)
 - `memory_prefs.max_age_days`: re-generate when older than N days (default: 1)
 - `memory_prefs.prompt`: LLM prompt for generating preference profiles
@@ -30,3 +33,8 @@ Per-tag user preference profiles generated from chat history summaries.
 - `lua/parley/memory_prefs.lua` — core module
 - `lua/parley/config.lua` — config defaults
 - `lua/parley/init.lua` — setup, command, system prompt injection
+
+## Checks
+
+`tests/unit/memory_prefs_spec.lua` covers grouping, age checks, storage parsing,
+and prompt composition.

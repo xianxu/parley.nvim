@@ -1,150 +1,85 @@
 # Skill System
 
-> **Redesigned (#128), re-scoped 2026-06-15.** Parley has **two modes**
-> (see `workshop/pensive/parley-two-modes-chat-vs-artifact.md`): **P1** — parley
-> *chat* as an ariadne workbench (read-only, repo-aware, tools); **P2** — a
-> workbench around *one artifact* (the markdown file is the subject; *skills*
-> construct context + mutation tools). **"Skill" is a P2 concept.** The redesign
-> deleted the parallel `skill_runner` engine by having P2 **reuse the existing
-> dispatcher/tools layer** — **P1's chat loop is untouched**, and **no new shared
-> kernel was built.** As of M4, both P2 skills (`review`, `voice-apply`) run
-> through `skill_invoke`; `skill_runner` no longer exists.
+Skills run focused LLM tasks against the current artifact, using the same
+provider dispatcher and client-side tools as chat. `<C-g>s` opens the skill
+picker; in non-chat Markdown, `<M-s>` is another entry. The picker collects any
+declared arguments, then runs the selected skill without creating a chat buffer.
 
-## Redesign (#128) — P2 rides the shared dispatcher; skill = P2 descriptor
+## Built-in behavior
 
-A skill is **data, not a pipeline**: a `SkillManifest`
-(`{name, description, scope, activation, source, tools?, elevated?, force_tool?, args?, agent?}`).
-The "shared kernel" is the **existing dispatcher/tools layer**
-(`prepare_payload` / `query` / `decode` / `execute_call`) that P1's chat loop
-already rides; P2 gets a **thin driver** (`skill_invoke`) that rides the same
-layer instead of `skill_runner`'s bespoke copies. The keystone: **`propose_edits`
-is a real registered tool**, so P2's edit-apply flows through the same
-`execute_call` path as every chat tool — cwd-scope active, with an **inline
-numbered `.parley-backup`** before each write (via `lua/parley/tools/backup.lua`,
-shared with `write_file`).
+| Skill | What it does | Entry or requirement |
+|---|---|---|
+| `review` | Apply document edits from ready markers or a review mode; show edit explanations | `<C-g>ve` for marker review; `<M-CR>` in Markdown for the mode menu |
+| `voice-apply` | Rewrite an artifact using a personal writing-style guide | Choose a style from `~/.personal/<slug>-writing-style.md` |
+| `define` | Produce an inline definition for a selected term | Visual definition action supplies the selected phrase and bounded context |
 
-**Milestones** (plan: `workshop/plans/000128-skill-system-redesign-plan.md`):
-M1 manifest + providers + registry (done) · M2 `propose_edits` tool + pure P2
-context-assembler (done) · M3 thin `skill_invoke` driver + `review` ported
-(done) · **M4 `voice-apply` ported + `skill_runner` deleted (done)** ·
-~~M5 `repo_discovery`~~ **dropped** (it's P1 context, not a skill).
+See [document review](../modes/review.md) for markers, modes, journal, and undo
+behavior. Skills can write the artifact: `propose_edits` uses the shared tool
+execution path, writes a numbered `.parley-backup.N`, and reloads the buffer.
+The driver prevents concurrent invocations on the same buffer and reports
+progress; each ordinary invocation is one tool-use exchange. Review adds its
+own bounded marker-resubmission loop.
 
-**M1 modules:**
-- `lua/parley/skill_manifest.lua` — `SkillManifest` shape + `validate` (PURE).
-- `lua/parley/skill_providers.lua` — `disk(root)` (closure `source` — kills the v1 `debug.getinfo` dance; injects `ctx.skill_md` for an explicit `source(ctx)`) + `virtual(generators)` seam.
-- `lua/parley/skill_registry.lua` — `discover` (union + validate-drop + last-wins dedup), `current()`; exposed as `parley.skills`.
+## Discovery and customization
 
-**M2 modules (the shared pieces P2 reuses — no LLM, no chat-loop change):**
-- `lua/parley/skill_edits.lua` — `compute_edits` (PURE batch-edit transform; the single source — the `propose_edits` handler is its one caller).
-- `lua/parley/tools/builtin/propose_edits.lua` — the real `propose_edits` builtin (`kind=write`); edit-apply via the shared dispatch path.
-- `lua/parley/skill_assembly.lua` — PURE `build_invocation` (manifest + body + document → LLM-call inputs) + `resolve_agent` (the agent cascade, pure given injected config/registry deps).
-
-**M3 modules (the P2 path goes live — chat loop still untouched):**
-- `lua/parley/skill_invoke.lua` — the thin P2 driver: one tool-use exchange on an artifact via the EXISTING dispatchers (`prepare_payload`/`query`/`execute_call`); `on_done` hook; per-buffer `is_in_flight` guard; reloads the artifact with `:edit!`; binds edits to the artifact (injects `file_path`).
-- `lua/parley/skill_render.lua` — the single source of `clear_decorations`/`attach_diagnostics`/`highlight_edits` (salvaged from `skill_runner`).
-- `propose_edits` gains an inline numbered `.parley-backup` before each write.
-- `review` runs via `skill_invoke` (`review.run_via_invoke`): marker pre-check + resubmit-up-to-3 stay in the skill.
-
-**M4 (engine unified — `skill_runner` deleted):**
-- `voice-apply` ported to an explicit `source(ctx)` composing `ctx.skill_md` (the SKILL.md body, injected by the disk provider) ⊕ the per-slug `~/.personal/<slug>-writing-style.md` style guide.
-- `skill_picker` lists skills from `parley.skills.current().all()` and routes via `M.run_skill`: `review` → `run_via_invoke` (marker-aware); every other skill → `skill_invoke.invoke` (single-shot).
-- `lua/parley/skill_runner.lua` **deleted**; `review.lua`'s v1 edit/diagnostic re-exports and `review/init.lua`'s dead `pre_submit`/`post_apply`/`system_prompt` removed.
-
-Key design points: P2's edit-apply is a normal tool (not special-cased);
-`build_invocation`/`compute_edits`/`resolve_agent` are pure (the `source()` IO +
-`query` + `execute_call` stay in the driver); the chat loop is never touched.
-
-### Tooling decision — no structured `glob`/`list_dir` (YAGNI, M4)
-
-`glob.lua`/`list_dir.lua` do not exist (the issue's "present but unregistered"
-premise was stale). `builtin/` ships `ls` + `find` (registered) + `grep`; P2's
-artifact mode reads with `read_file` and edits with `propose_edits`. No structured
-directory-listing tool has a consumer in either mode today, so **none was added**.
-Revisit only when a concrete consumer appears (`ARCH-DRY` — don't add surface
-without a caller).
-
-## Entry Points
-
-- `<C-g>s` — skill picker (cascading typeahead: select skill → select args → run)
-- `<C-g>ve` — fast path for review skill (bypass picker)
-
-## Skill Definition
-
-Each skill is a folder under `lua/parley/skills/` (the plugin disk provider root;
-`~/.config/parley/skills/` is the user override root):
-
-```
-lua/parley/skills/<name>/
-  init.lua    -- returns a SkillManifest: { name, description, scope, activation,
-              --   tools?, elevated?, force_tool?, args?, agent?, source? }
-  SKILL.md    -- the skill body (system prompt); the disk provider's default source
-```
-
-`SKILL.md` is the default body. A skill needing a **dynamic** body declares an
-explicit `source(ctx)` (e.g. `voice-apply` composing `ctx.skill_md ⊕ <style>`);
-the disk provider injects `ctx.skill_md` from the dir's SKILL.md. `args` lists
-completable picker arguments (`{ name, description, complete }`).
-
-## Built-in Skills
-
-- **review** — edit document based on 🤖 markers (light edit / heavy revision); marker-aware resubmit loop
-- **voice-apply** — rewrite to match a personal writing voice from `~/.personal/<slug>-writing-style.md`
-
-## Agent resolution cascade
-
-`skill_assembly.resolve_agent` picks the agent for a skill turn. Pure — the IO
-shell (`skill_invoke`) injects config, the agent registry, and the transcript
-agent. First capable tier wins:
-
-1. per-skill override — `config.skills[].agent`
-2. legacy `review_agent` (review skill only)
-3. `manifest.agent`
-4. global `config.skill_agent`
-5. **the transcript agent** — the `<C-g>a` selection with the chat's
-   frontmatter `provider:`/`model:` overrides applied (via `agent_info.resolve`,
-   provider+model only; the chat's `system_prompt` is deliberately not
-   inherited, since a skill owns its prompt through `source(ctx)`)
-6. first agent in roster order with a tool wire
-
-Explicit configuration outranks ambient context; ambient context outranks roster
-position. **Capability is tested at every tier** — an agent with no tool wire is
-skipped rather than returned, because a skill without its tool fails at the far
-end of the request as "model returned no tool call".
-
-Two traps this encodes (#215): `get_agent` **never returns nil** — an unknown
-name warns and falls back to the selection (`init.lua:4405-4451`), so a tier
-naming a missing agent does not fall through, it silently resolves. And while
-`skill_agent` is set, tier 5 is unreachable — which is why the shipped defaults
-are `nil`.
-
-## Config
+The plugin supplies skill folders under `lua/parley/skills/`. User skills under
+`~/.config/parley/skills/` override a plugin skill with the same name. Each folder
+contains `init.lua`, returning a `SkillManifest`:
 
 ```lua
-skill_shortcut = { modes = { "n" }, shortcut = "<C-g>s" },
-skill_agent = nil,                -- optional global pin; nil by default (#215)
-skills = {},                      -- per-skill overrides: { { name = "review", agent = "..." }, { name = "...", disable = true } }
+{ name, description, scope, activation, source,
+  tools = {}, elevated = {}, force_tool = nil, args = {}, agent = nil }
 ```
 
-## Key Files
+`SKILL.md` is the default prompt body. A manifest can instead provide a
+`source(ctx)` function; `define` uses this and has no SKILL.md. The disk provider
+injects `ctx.skill_dir` and, when present, `ctx.skill_md`, so dynamic prompts can
+compose local resources. Manifest validation drops invalid entries; discovery
+deduplicates by name with the last provider winning.
 
-Redesign (#128) — M1 (manifest + discovery):
-- `lua/parley/skill_manifest.lua` — declarative `SkillManifest` shape + `validate` (PURE)
-- `lua/parley/skill_providers.lua` — `disk(root)` (+ `ctx.skill_md` injection) + `virtual(generators)` providers (uniform manifests)
-- `lua/parley/skill_registry.lua` — `discover`/`get`/`names`/`all`/`default_stack`/`current()` (exposed as `parley.skills`)
-- `tests/unit/skill_manifest_spec.lua`, `tests/integration/skill_providers_spec.lua`, `tests/integration/skill_registry_spec.lua`
+`skill_registry.default_stack` also accepts explicit repo/virtual generator
+providers. These are extension seams, not automatic discovery of every repo's
+agent skills. `config.skills` currently supplies per-skill agent overrides; the
+picker does not implement a `disable` filter there.
 
-Redesign (#128) — M2 (shared pieces P2 reuses):
-- `lua/parley/skill_edits.lua` — `compute_edits` (PURE; single source of the batch-edit transform)
-- `lua/parley/tools/builtin/propose_edits.lua` — the real `propose_edits` builtin (P2 edit-apply via the shared dispatch path)
-- `lua/parley/tools/backup.lua` — numbered `.parley-backup` helper (shared by `propose_edits` + `write_file`)
-- `lua/parley/skill_assembly.lua` — PURE `build_invocation` + `resolve_agent` (injected-config cascade)
-- `tests/unit/skill_edits_spec.lua`, `tests/unit/tools_builtin_propose_edits_spec.lua`, `tests/unit/skill_assembly_spec.lua`
+## Agent selection
 
-Redesign (#128) — M3/M4 (P2 path live; both skills ported; engine unified):
-- `lua/parley/skill_invoke.lua` — the thin P2 driver (one exchange on the existing dispatchers; `is_in_flight` guard)
-- `lua/parley/skill_render.lua` — diagnostics/highlights (single source; was salvaged from skill_runner)
-- `lua/parley/skill_picker.lua` — `<C-g>s` picker UI; lists `parley.skills.current()`, routes via `M.run_skill`
-- `lua/parley/skills/review/init.lua` — `review.run_via_invoke` (markers + resubmit; runs via skill_invoke)
-- `lua/parley/skills/voice_apply/init.lua` — `voice-apply` via explicit `source(ctx)` (SKILL.md ⊕ style guide)
-- `lua/parley/review.lua` — backward-compatible shim (marker/quickfix/submit API)
-- `tests/integration/skill_invoke_spec.lua`, `tests/integration/skill_invoke_review_spec.lua`, `tests/integration/voice_apply_spec.lua`, `tests/unit/skill_picker_spec.lua`, `tests/unit/skill_render_spec.lua`
+The first tool-capable candidate wins in this order:
+
+1. `config.skills` entry for this skill, e.g. `{ name = "review", agent = "MyAgent" }`.
+2. Legacy `review_agent`, for review only.
+3. The manifest's `agent`.
+4. Global `skill_agent`.
+5. The selected transcript agent, including chat `provider:`/`model:` overrides.
+6. The first tool-capable agent in roster order.
+
+`review_agent` and `skill_agent` default to nil. A skill owns its prompt, so the
+transcript's system prompt is not inherited. Candidates without a tool wire are
+skipped; explicit unsupported choices emit a diagnostic. Supported wires are
+Anthropic and OpenAI families, including proxy routes; direct Google AI is not
+available for tool-driven skills. Unknown named agents retain `get_agent`'s
+fallback-to-selection behavior.
+
+## Module map
+
+| Module | Responsibility |
+|---|---|
+| `skill_manifest.lua` | Validate the declarative manifest |
+| `skill_providers.lua`, `skill_registry.lua` | Load disk/virtual providers and resolve overrides |
+| `skill_picker.lua` | Select skill/arguments and dispatch review or generic invocation |
+| `skill_assembly.lua` | Build invocation context and resolve the agent |
+| `skill_invoke.lua` | Run one exchange, execute tools, guard concurrency, reload, call completion hooks |
+| `skill_edits.lua`, `tools/builtin/propose_edits.lua` | Compute and apply document edits |
+| `tools/backup.lua`, `skill_render.lua` | Backups, highlights, diagnostics |
+| `skills/review/`, `skills/voice_apply/`, `skills/define/` | Built-in manifests and behavior |
+
+All module paths are under `lua/parley/`. There is no separate skill runner or
+provider transport.
+
+## Verification
+
+Unit coverage: `tests/unit/skill_manifest_spec.lua`, `skill_assembly_spec.lua`,
+`skill_edits_spec.lua`, `skill_picker_spec.lua`, and `skill_render_spec.lua`.
+Integration coverage: `tests/integration/skill_registry_spec.lua`,
+`skill_providers_spec.lua`, `skill_invoke_spec.lua`, `skill_invoke_review_spec.lua`,
+`voice_apply_spec.lua`, and `define_spec.lua`.

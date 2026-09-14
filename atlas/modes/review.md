@@ -5,7 +5,7 @@ documents with `🤖[comment]` markers, then an agent rewrites the document
 to address the comments — or run a **mode** (see Review Modes below) for a
 whole-document pass that needs no markers at all.
 
-**Run flow (#133 M2).** A *mode* run always proceeds, even with zero markers
+**Run flow.** A *mode* run always proceeds, even with zero markers
 (the no-marker general review). A legacy no-mode run still needs ≥1 ready `[]`
 marker. Pending `{}` markers no longer **block** submission — ready markers are
 processed, `{}` ones skipped, and pending markers surface via the **on-save**
@@ -47,15 +47,25 @@ After an optional `<>`, `[]` and `{}` may appear in any order.
 
 | Binding         | Action                                                          |
 |-----------------|-----------------------------------------------------------------|
-| `<M-q>` / `<C-g>q` | Insert `🤖<sel>[]` (visual) or `🤖[]` (normal/insert). Shared with chat — see `atlas/chat/drill_in.md`. |
-| `<M-a>`         | Accept the marker at cursor per [review-convention §5](../../../ariadne/workshop/targets/review-convention.md) |
-| `<M-r>`         | Reject the marker at cursor per review-convention §5            |
+| `<M-q>` / `<C-g>q` | Insert `🤖<sel>[]` (visual) or `🤖[]` (normal/insert). Shared with chat — see [drill-in](../chat/drill_in.md). |
+| `<M-a>`         | Accept the marker at cursor (rules below) |
+| `<M-r>`         | Reject the marker at cursor (rules below)            |
 | `<C-g>ve`       | Run the review skill (agent edits per ready markers, legacy no-mode) |
 | `<C-g>vf`       | Open the review finder (jump to files with pending markers)     |
-| `<M-s>`         | Open the **skill picker** (review is one of the skills) (#133; moved off `<M-o>` in #225) |
-| `<M-CR>`        | Open the **review-mode menu** (mode selector + instruction editor; sticky-preselected) (#133) |
+| `<M-s>`         | Open the **skill picker** (review is one of the skills) |
+| `<M-CR>`        | Open the **review-mode menu** (mode selector + instruction editor; sticky-preselected) |
 
-## Review menu (#133 M4)
+## Accepting and rejecting markers
+
+A quoted `🤖<text>` anchor keeps its text on either action. A bare
+`🤖{proposal}` inserts its text when accepted and disappears when rejected.
+For `🤖~old~{new}` (or a single human replacement section), acceptance keeps
+`new`, rejection keeps `old`; a bare strike accepts deletion. A strike with a
+longer dialogue also accepts deletion because no single replacement is selected.
+Unanchored commentary disappears on either action. These rules are implemented
+by `drill_in.resolve` and tested with the shared marker parser.
+
+## Review menu
 
 `lua/parley/review_menu.lua` — a composite two-window float: a mode **selector**
 on top (the focused window; selection = its cursor line, so `j`/`k`/arrows/mouse
@@ -67,15 +77,15 @@ On submit it calls
 non-empty instruction. Reuses `float_picker.compute_layout` for geometry (now
 exported). The sidecar (`*.parley-journal.md`) is excluded from review
 attachment (`is_journal_sidecar`). `<M-CR>` is free here — chat-respond's `<M-CR>`
-is chat-buffer-only. Cross-session sticky mode is v2.
+is chat-buffer-only. The last-used mode is remembered only for the current session.
 
 ## Architecture
 
-Review is implemented as a **skill** in the unified skill system (see `atlas/index.md` §8).
+Review is implemented as a **skill** in the unified skill system (see the [skill system](../skills/skill-system.md)).
 
 - **Skill module**: `lua/parley/skills/review/init.lua` — marker parsing, `run_via_invoke` (marker pre-check + resubmit), keybindings
 - **System prompt**: `lua/parley/skills/review/SKILL.md`
-- **Driver**: `lua/parley/skill_invoke.lua` — one tool-use exchange on the existing dispatcher (the `skill_runner` engine was deleted in M4; both review and voice-apply run through this driver)
+- **Driver**: `lua/parley/skill_invoke.lua` — one tool-use exchange on the existing dispatcher, shared with other skills
 - **Rendering**: `lua/parley/skill_render.lua` — diagnostics + edit highlights
 - **Shim**: `lua/parley/review.lua` — backward-compatible re-exports for existing callers
 - **Headless**: Direct API call, no chat buffer, no exchange model
@@ -83,9 +93,9 @@ Review is implemented as a **skill** in the unified skill system (see `atlas/ind
 - **Tool**: `propose_edits` tool with `{old_string, new_string, explain}` triples (forced via `tool_choice`)
 - **Edits**: Applied to file on disk via the `propose_edits` builtin, buffer reloaded via `:edit!`
 - **Feedback**: Highlights on edits (DiffChange), diagnostics from explain fields (INFO), quickfix for pending agent questions
-- **Provider**: Requires Anthropic or cliproxyapi (tool_use support)
+- **Provider**: Requires a client tool wire: Anthropic or an OpenAI-compatible provider, including CLIProxyAPI routes. Direct Google AI has no wire. Agent choice follows the [skill agent cascade](../skills/skill-system.md).
 
-## Review Modes (#133)
+## Review Modes
 
 Review runs in a selectable **mode** (a stage of document construction). A mode is
 a sub-markdown file `lua/parley/skills/review/modes/<name>.md` = YAML frontmatter
@@ -110,14 +120,13 @@ mode.directives(flags) ⊕ operator-instruction`. No mode selected → base SKIL
   the skill's own absolute dir into `source(ctx)` (alongside `ctx.skill_md`) so the
   review skill reads its `modes/` subdir without re-deriving the path.
 
-## Journal (#133 M3)
+## Journal
 
-Each review round is recorded to a **self-contained markdown sidecar** beside the
-doc — `<doc>.parley-journal.md` — tracked in git WITH the document. This replaces
-docflow's git-branch journaling: docflow's *value* (attributed per-round diffs +
-rationale) without its branch *mechanism* (no working-tree churn, portable to a
-standalone plugin install). vim's native undo owns in-session text time-travel;
-the journal owns the durable, cross-session record.
+Each review round is recorded to a Markdown sidecar beside the document,
+`<doc>.parley-journal.md`. It records attributed diffs and rationale without
+changing branches. The sidecar can be version-controlled with the document;
+Parley does not commit it automatically. Native undo handles interactive text
+changes, while the journal preserves a durable record across sessions.
 
 - **`lua/parley/skills/review/journal.lua`** — PURE `serialize_entry` /
   `serialize_base` / `parse` / `diff` (`vim.diff`, unified) / `is_drift`
@@ -132,11 +141,11 @@ the journal owns the durable, cross-session record.
   and calls `journal.append` (skips no-op rounds + path-less buffers).
 - **Drift**: `is_drift(recorded_hash, current)` detects an external edit (e.g.
   Claude Code resolving markers) since the last recorded round.
-- **Deferred (v2)**: durable "revert/show round N" (reconstruct via base +
-  replayed diffs). The journal stores the **diff + rationale** per round (not a
-  structured decoration set — see the plan's Revisions).
+- **Not implemented**: durable "revert/show round N" (reconstruct via base +
+  replayed diffs). The journal stores the **diff + rationale** per round, not a structured
+  decoration set.
 
-## Decoration projection — undo/redo coherence (#133 M5)
+## Decoration projection — undo/redo coherence
 
 nvim's undo reverts **text only**; review decorations are drawn once per round
 and otherwise ride, so without help they go stale after an undo (esp. across the
@@ -157,7 +166,7 @@ round's own reload; the watcher is attached lazily (only after the first round).
 The decide rule (`projection.decide`) is pure. Session-scoped (matches nvim's
 session-scoped undo); per-state snapshots aren't journaled.
 
-## Diagnostic display (#133 M6)
+## Diagnostic display
 
 The edit "why" (the per-edit `explain`) is an INFO diagnostic on parley's
 `parley_skill` namespace. `lua/parley/skills/review/diag_display.lua` controls how
@@ -171,15 +180,15 @@ cursor is in that edit's region** (`attach_diagnostics` spans
 `lnum..end_lnum`) and hides otherwise. `:ParleyShowDiagnostics` toggles it. The
 built-in `]d`/`[d` (jump) and `<C-W>d` (float, wraps) still work on these
 diagnostics because the underlying diagnostic spans remain unchanged. Composes
-with M5 — re-renders on undo/redo.
+with decoration projection — re-renders on undo/redo.
 
 The same controller also renders managed footnote diagnostics; those use a
 centered non-focusable float instead of virtual lines, and show only while the
 cursor is inside the term/`[^footnote]` diagnostic span.
 
-## Progress bar (#133 M7)
+## Progress bar
 
-A review round is headless and takes ~30s, so it shows a **detached progress
+A review round runs without a chat buffer and shows a **detached progress
 bar** — `lua/parley/progress.lua`, a floating bar pinned just above the
 statusline with an animated spinner + message + elapsed seconds. It's a **general
 reusable mechanism** (`progress.start/update/stop/is_active`, one active at a
@@ -192,12 +201,12 @@ kill-or-cancel prompt (no two concurrent rounds).
 ## Config
 
 ```lua
-review_agent = nil,             -- optional pin (deprecated; use skills config). nil by default (#215)
+review_agent = nil,             -- legacy optional pin; prefer skills config
 review_highlight_duration = 2000, -- highlight fade time in ms
 review_shortcut_edit   = { modes = { "n" }, shortcut = "<C-g>ve" },
 review_shortcut_finder = { modes = { "n", "i" }, shortcut = "<C-g>vf" },
-review_shortcut_menu   = { modes = { "n" }, shortcut = "<M-s>" },   -- skill picker (#133, #225)
-review_shortcut_next   = { modes = { "n", "i" }, shortcut = "<M-CR>" }, -- review-mode menu (#133)
+review_shortcut_menu   = { modes = { "n" }, shortcut = "<M-s>" },   -- skill picker
+review_shortcut_next   = { modes = { "n", "i" }, shortcut = "<M-CR>" }, -- review-mode menu
 -- Marker insertion: see drill_in_callbacks in lua/parley/init.lua
 -- (shared <M-q> / <C-g>q binding)
 ```
@@ -205,13 +214,13 @@ review_shortcut_next   = { modes = { "n", "i" }, shortcut = "<M-CR>" }, -- revie
 ## Key Files
 
 - `lua/parley/skills/review/init.lua` — skill definition (+ `source(ctx)` mode composition, `mode` arg), marker parsing, `run_via_invoke` (marker pre-check + resubmit), keybindings
-- `lua/parley/skills/review/mode.lua` — Mode parse/directives (PURE) + load/list IO seam (#133)
-- `lua/parley/skills/review/modes/*.md` — the six review-mode prompt files (#133)
-- `lua/parley/skills/review/journal.lua` — per-round journal: PURE serialize/parse/diff/drift + sidecar IO seam (#133)
-- `lua/parley/review_menu.lua` — composite review-mode menu (selector + instruction editor); `<M-CR>` (#133)
-- `lua/parley/skills/review/projection.lua` — decoration projection: re-render style on undo/redo per content-state (#133 M5)
-- `lua/parley/skills/review/diag_display.lua` — inline "why" display toggle (`:ParleyShowDiagnostics`, cursor-region auto-show) (#133 M6)
-- `lua/parley/progress.lua` — detached progress bar (general reusable long-op feedback; review is the first user) (#133 M7)
+- `lua/parley/skills/review/mode.lua` — Mode parse/directives (PURE) + load/list IO seam
+- `lua/parley/skills/review/modes/*.md` — the six review-mode prompt files
+- `lua/parley/skills/review/journal.lua` — per-round journal: PURE serialize/parse/diff/drift + sidecar IO seam
+- `lua/parley/review_menu.lua` — composite review-mode menu (selector + instruction editor); `<M-CR>`
+- `lua/parley/skills/review/projection.lua` — decoration projection: re-render style on undo/redo per content-state
+- `lua/parley/skills/review/diag_display.lua` — inline "why" display toggle (`:ParleyShowDiagnostics`, cursor-region auto-show)
+- `lua/parley/progress.lua` — detached progress bar (general reusable long-op feedback; review is the first user)
 - `lua/parley/skills/review/SKILL.md` — system prompt (light edit + heavy revision sections)
 - `lua/parley/skill_invoke.lua` — the P2 driver (one tool-use exchange via the existing dispatcher)
 - `lua/parley/skill_render.lua` — diagnostics + edit highlights

@@ -52,7 +52,7 @@ Refresh fires on `User ParleySuperRepoChanged`.
 Chat & note finders inherit multi-root behaviour from `root_dirs.lua` —
 super-repo simply pushes each member's chat/note dir into `chat_roots` /
 `note_roots` with `label = <repo_name>`. Issue / vision / markdown finders
-were extended explicitly during M3-M5.
+obtain their member roots through the super-repo overlay.
 
 Markdown Finder obtains the active member roots from `super_repo.get_state()`
 when each picker invocation opens; it does not treat the cached config member
@@ -89,8 +89,7 @@ fixing the case where typing was abandoned before the closing brace.
 
 `chat_dir`, `notes_dir`, `issues_dir`, `history_dir`, `vision_dir`,
 `repo_root` are exactly what plain repo mode set them to. Super-repo
-does not redirect writes to a "brain" repo — that idea was dropped during
-design (see `workshop/issues/000113-create-a-super-repo-mode.md`).
+does not redirect writes to a different repository.
 
 ## Persistence safety
 
@@ -132,3 +131,10 @@ filter for plain repo mode's primary note root.
 - `lua/parley/lualine.lua` — `format_mode`, `create_mode_component`, and
   the filetype-component auto-replace at setup time.
 - `lua/parley/keybinding_registry.lua` — `super_repo_toggle` entry.
+
+## Verification
+
+`tests/unit/super_repo_spec.lua` covers membership, mode selection, persistence,
+and lualine state. Finder behavior is covered in the corresponding
+`tests/unit/chat_finder_logic_spec.lua`, `note_finder_logic_spec.lua`,
+`issue_finder_spec.lua`, and `markdown_finder_spec.lua`.

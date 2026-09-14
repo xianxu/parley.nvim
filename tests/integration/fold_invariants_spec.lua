@@ -2,22 +2,16 @@ local tool_folds = require("parley.tool_folds")
 local projection = require("parley.fold_projection")
 
 -- #200: the two invariants, measured on real Neovim fold state over the in-repo
--- transcript corpus. A cold parse must never fold a question, and must always
+-- synthetic transcript corpus. A cold parse must never fold a question, and must always
 -- fold a tool call / tool result / summary / thinking block at its own marker.
 --
 -- The oracle walks the PARSED MODEL, not the raw file text. A regex sweep would
 -- assert `foldclosed(i) == i` for every 📎:-looking line, including one inside a
 -- tool body — where it is content, correctly living inside the enclosing fold.
 -- Only question line_starts and foldable block starts are subjects here.
--- Single point of definition for where the real corpus comes from. Not an
--- injection seam — nothing outside this file can replace it — but it keeps the
--- git dependency in one place, and the tracked fixtures below are listed
--- explicitly so they do not depend on git or cwd at all.
-local function corpus_provider()
-    return vim.fn.systemlist("git ls-files 'workshop/parley/*.md'")
-end
-
-describe("fold invariants over the repo transcript corpus", function()
+-- #252: fixed synthetic inputs keep coverage independent of workshop cleanup,
+-- Git availability, and personal conversation content.
+describe("fold invariants over dedicated transcript fixtures", function()
     local original_buf, win
 
     before_each(function()
@@ -31,86 +25,19 @@ describe("fold invariants over the repo transcript corpus", function()
         end
     end)
 
-    -- Tracked files only: a filesystem glob makes the suite's shape depend on
-    -- the working tree (untracked drafts). A tracked file can still be deleted
-    -- but unstaged, so drop what is not readable — and floor the count, so a
-    -- wholesale disappearance fails loudly instead of shrinking the suite to
-    -- nothing and reporting green.
-    -- The real corpus carries zero tool blocks (measured: thinking 20,
-    -- summary 20, question 46, text 38, agent_header 38, tool_use 0,
-    -- tool_result 0), so on its own this harness cannot exercise the issue's
-    -- headline 🔧:/📎: case at all. A tracked fixture supplies that shape.
-    -- fold_assistant_first.md pins #200 C1 round 2: chat_parser fabricates a
-    -- question block when an answer has no preceding 💬: (chat_parser.lua:623),
-    -- so exchange_start lands on a blank line. Requiring a question anchor
-    -- there refused such transcripts permanently. Every other corpus file and
-    -- fixture starts with 💬:, so nothing else covers this shape.
     local corpus = {
         "tests/fixtures/fold_tool_transcript.md",
         "tests/fixtures/fold_assistant_first.md",
-        -- M2's adversarial shapes: structural markers inside tool bodies, a
-        -- shorter fence nested in a longer one, and a summary marker that is
-        -- content. The real corpus contains none of these (the audit found 0),
-        -- so without this fixture nothing exercises the M2 defects.
         "tests/fixtures/fold_adversarial.md",
-        -- BR-43's shape: a marker quoted inside an ordinary fenced block. The
-        -- adversarial fixture covers nesting but none of the shapes that
-        -- actually broke, so this one carries the raw-text oracle's teeth.
         "tests/fixtures/fold_marker_in_prose.md",
-    }
-    -- Dropping unreadable tracked files is deliberate (a file can be deleted but
-    -- unstaged), but a SILENT drop lets "the audit is clean over every tracked
-    -- transcript" be false without anyone noticing — #203's own close evidence
-    -- claimed exactly that while one deleted transcript was skipped (BR-5). So
-    -- the skips are counted and reported as a case of their own.
-    local skipped = {}
-    for _, path in ipairs(corpus_provider()) do
-        if vim.fn.filereadable(path) == 1 then
-            corpus[#corpus + 1] = path
-        else
-            skipped[#skipped + 1] = path
-        end
-    end
-
-    -- This audit is cited as evidence that the fold invariants hold over the
-    -- whole corpus, so a silently skipped file makes that evidence false (#203
-    -- BR-5). The first fix printed the skips — but RUN_SPEC discards output on a
-    -- PASS, so nobody would ever see it. It asserts now.
-    --
-    -- Zero is the right threshold, not "however many are broken today": either
-    -- resolution of a deleted-but-unstaged transcript clears it. Commit the
-    -- deletion and the file stops being tracked, so it is never listed; restore
-    -- it and it is readable. Only the limbo state fails, which is the state that
-    -- actually invalidates the claim.
-    -- One NAMED exclusion, deliberately not a numeric tolerance (#203 BR-5).
-    -- A "<= 1" threshold would silently absorb whichever file broke next; naming
-    -- it means any OTHER skip still fails, and the coverage claim can state its
-    -- own exception instead of overstating itself.
-    --
-    -- This transcript is deleted-but-unstaged in the working tree, and the
-    -- operator chose (2026-08-22) to leave it in limbo rather than commit the
-    -- deletion or restore it. Either resolution retires this entry: committing
-    -- the deletion untracks the file so it is never listed; restoring it makes
-    -- it readable.
-    local KNOWN_UNREADABLE = {
-        ["workshop/parley/2026-05-03.22-29-53.828_global-warming-overview.md"] =
-            "deleted-but-unstaged; operator deferred the decision (#203 BR-5)",
+        "tests/fixtures/fold_multi_exchange.md",
     }
 
-    it("skips no tracked transcript except the one known exclusion", function()
-        local unexpected = {}
-        for _, path in ipairs(skipped) do
-            if not KNOWN_UNREADABLE[path] then unexpected[#unexpected + 1] = path end
+    it("has every dedicated fixture available", function()
+        assert.equals(5, #corpus)
+        for _, path in ipairs(corpus) do
+            assert.equals(1, vim.fn.filereadable(path), "missing fixture: " .. path)
         end
-        assert.message(("%d tracked transcript(s) unreadable and NOT the known "
-            .. "exclusion, so this audit does not cover the corpus it is cited "
-            .. "for: %s"):format(#unexpected, table.concat(unexpected, ", ")))
-            .equals(0, #unexpected)
-    end)
-
-    it("finds a corpus to check", function()
-        assert.message(("only %d readable transcripts under workshop/parley/")
-            :format(#corpus)).is_true(#corpus >= 8)
     end)
 
     for _, path in ipairs(corpus) do
@@ -118,7 +45,7 @@ describe("fold invariants over the repo transcript corpus", function()
             local lines = vim.fn.readfile(path)
             local chat_parser = require("parley.chat_parser")
             local header_end = chat_parser.find_header_end(lines)
-            if not header_end then return end  -- not a chat transcript
+            assert.is_not_nil(header_end, "fixture must have a chat header: " .. path)
 
             local buf = vim.api.nvim_create_buf(false, true)
             vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)

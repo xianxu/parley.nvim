@@ -1,14 +1,14 @@
 # Spec: Outline Navigation
 
 ## Command
-- `:ParleyOutline` (`<C-g>t`): floating picker with headings and conversation turns
+- `:ParleyOutline` (`<M-t>` / `<C-g>t`): floating picker for document navigation
 
 ## Scope
-- **Chat files**: tree-aware outline with questions, branches, annotations
-- **Any `.md` file**: flat outline of `#`, `##`, `###` headings
+- **Chat files**: tree-aware outline with questions, branches, annotations; Markdown headings in answers are deliberately excluded
+- **Other `.md` files**: flat outline including `#`, `##`, `###` headings
 
 ## Logic
-- Identifies: `💬:` (user questions), `#`/`##`/`###` (headings), `@@…@@` (annotations), `🌿:` (branch refs)
+- Identifies `💬:` user questions, `@@…@@` annotations, and `🌿:` branch references; `#`/`##`/`###` headings are included only in non-chat Markdown
 - **One item rule** (#232): both builders — the flat buffer scan and the
   tree's per-file extractor — classify lines through `is_outline_item`; the
   tree adds only its `📋` root row, the branch rows it takes from the parser
@@ -36,3 +36,9 @@
 - Standard `float_picker` (results + prompt), fuzzy filter with highlights
 - Single click selects; double-click/`<CR>` confirms with highlight flash
 - Cross-file nav uses `edit` (same window), not split
+
+## Implementation and checks
+
+`lua/parley/outline.lua` owns classification, tree building, and navigation.
+`tests/unit/outline_spec.lua` verifies child-file navigation and missing-file
+handling; `tests/unit/outline_parity_spec.lua` keeps flat/tree classification aligned.

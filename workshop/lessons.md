@@ -2409,3 +2409,16 @@ download.
 - Plan concept tables should label registry resolution as PURE and editor
   mapping installation/callers as INTEGRATION, even when separate section
   headings already imply that distinction.
+
+
+## 2026-09-14 (#206)
+
+- Documentation retrieval needs an answerability check as well as valid links. A guide linked from a readable page may itself fall outside the tool catalog; keep essential recovery instructions in a callable owner.
+- Audit access-control claims at the execution seam. Pathless history search still receives a trusted root policy, while explicit user file references follow a separate inclusion path; neither behavior can be inferred from the tool's input schema.
+- When moving reference material, move its drift protection to the new owner. Do not preserve an obsolete README layout solely to satisfy a content-location test.
+
+
+## 2026-09-14 (#252)
+
+- Keep regression inputs in explicit synthetic fixtures. Personal workshop content and obsolete missing-file exemptions make cleanup change test coverage silently.
+- Before bulk local cleanup, record exact retained/removal paths and verify source hashes again immediately before removal; retain the original external backup and journal across retries.

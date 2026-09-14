@@ -1,4 +1,4 @@
--- Only the installed README and atlas-linked Markdown are exposed to models.
+-- Only the installed README, three bundled tutorials and atlas-linked Markdown are exposed to models.
 local content = require('parley.help_content')
 local uv = vim.uv or vim.loop
 local source = debug.getinfo(1, 'S').source:sub(2)

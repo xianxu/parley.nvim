@@ -1,6 +1,8 @@
 # Test Harness
 
-How `make test` runs, and the one invariant it defends.
+Contributor verification, not an application prerequisite. `make test` runs
+Lua unit, integration and architecture specs with isolated profile data.
+See `TOOLING.md` for dependencies, targeted tests and performance commands.
 
 ## Shape
 

@@ -1,5 +1,15 @@
 # macOS package and launcher
 
+Install with `brew install xianxu/parley/parley`, then run `parley`. To update,
+run `brew update` and `brew upgrade parley`. Existing settings are preserved;
+when the starter changes, the next launch writes an `init.lua.new` candidate
+beside your editable settings for comparison. See the [package guide](../../packaging/README.md)
+for removal and [starter recovery](../../packaging/starter-config/README.md#profile-files-and-recovery)
+for profile paths and interrupted initialization. Removing the Homebrew package
+does not delete chats or shared account logins.
+
+## Runtime ownership
+
 The public Homebrew tap installs an immutable released runtime under `libexec`
 and exposes its starter under `share/parley/config`. `packaging/formula.lua`
 renders the formula from validated tag/digest metadata and the released
@@ -18,6 +28,10 @@ published with a no-clobber hard link; upgrades atomically replace one
 An interrupted owner's lock requires explicit repair after closing all instances;
 normal failures remove only owned staging. The starter then owns plugin bootstrap,
 welcome creation and credentials; see [starter profile](starter.md).
+
+## Maintainer release and acceptance
+
+These scripts are release tooling, not app startup requirements.
 
 `scripts/release-parley.sh` validates source/tap identities and immutable tag
 agreement, hashes the tagged archive, and renders using that archive's registry.

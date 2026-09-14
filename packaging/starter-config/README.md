@@ -46,7 +46,7 @@ project by default. Relative file-tool paths start at the repo root: `notes.md`
 means a file directly inside the folder containing `.parley`, not inside
 `workshop/parley`. Outside repo mode, tools use the chat directory. Peer folders are not
 granted automatically. Ask for these actions directly—no configuration is needed. Ask “What is Parley, and how do I use it?” for an introduction;
-the model can consult this release’s README and atlas for further details. Image
+the model can consult this release’s README, tutorials, and atlas for further details. Image
 attachments remain available. Login, model selection and chat commands use the
 same Parley runtime as an ordinary plugin installation.
 

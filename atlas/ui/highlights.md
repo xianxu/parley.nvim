@@ -104,3 +104,13 @@ row-indexed.
   text changes. Its namespace renders review-style virtual lines for the current
   line and uses the concise message `local time: <converted local time>`. The
   buffer text is never rewritten.
+
+## Customization and implementation
+
+Set `highlight` entries in Parley setup options to Neovim highlight attributes,
+for example `highlight = { reference = { underline = true, fg = "#80c0ff" } }`.
+Other entries include `question`, `inline_branch`, and `footnote`.
+`lua/parley/highlighter.lua` (`setup_highlights`) defines supported entries and
+fallback groups; `lua/parley/highlight_structure.lua` owns structural parsing.
+`tests/unit/highlighter_spec.lua`, `tests/unit/highlight_structure_spec.lua`, and
+`tests/integration/highlighting_spec.lua` exercise rendering and state.

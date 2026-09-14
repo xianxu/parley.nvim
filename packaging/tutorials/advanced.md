@@ -44,9 +44,9 @@ without the preceding conversation.
 
 ## 2. Outline, branches, and markers
 
-Press Option+t or run `:ParleyOutline`. The outline includes headings, questions,
-and branches across the linked chat tree. Selecting an item jumps to it, opening
-its chat file when needed. A branch lets you explore a side question separately
+Press Option+t or run `:ParleyOutline`. The chat outline includes questions,
+outline markers, and branches across the linked tree. Selecting a branch opens
+its child file at the start; selecting a question or marker jumps to its line. A branch lets you explore a side question separately
 while keeping a link back to the main conversation.
 
 You can also put an outline marker on its own line, using `@@tag@@` syntax:
@@ -58,7 +58,7 @@ marker, not the `tags:` metadata at the top of the file.
 
 The same `@@...@@` syntax can refer to a local file for context. Use a descriptive
 label for an outline marker; use a real path only when you mean to reference a
-file. A heading such as `## Research notes` is another way to label a section.
+file. Markdown headings can label sections visually, but they are not chat-outline entries.
 
 To make a branch, put the cursor where it belongs and press Option+i. Type and
 send your side question in the new chat. Option+t helps you return to the main

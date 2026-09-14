@@ -1,8 +1,8 @@
 return {
     name = 'parley_help',
     kind = 'read',
-    description = 'Read the installed Parley README and atlas. Omit topic to list topics, '
-        .. 'Then supply an exact topic ID, such as README or atlas/infra/starter, to read it. Covers app/plugin usage, accounts, '
+    description = 'Read the installed Parley README, tutorials and atlas. Omit topic to list topics, '
+        .. 'Then supply an exact topic ID, such as tutorials/welcome or atlas/infra/starter, to read it. Covers app/plugin usage, accounts, '
         .. 'shortcuts, attachments and configuration. No access to personal files.',
     input_schema = {
         type = 'object',

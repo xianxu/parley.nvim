@@ -1,19 +1,49 @@
-# Managed cliproxyapi (opt-in)
+# Managed CLIProxyAPI
 
-Parley can manage a local [cliproxyapi](https://github.com/router-for-me/CLIProxyAPI)
-instance — render its config, start it on demand, reuse it if it's already up —
-so users stop hand-maintaining `/opt/homebrew/etc/cliproxyapi.conf` and
-`brew services`. Issue #131.
+Parley can install, start, and reuse a local CLIProxyAPI process for proxy-backed
+agents. Management is enabled by default (`cliproxy.manage = true`) but starts
+no daemon until a proxy-backed request needs one. An already healthy proxy is
+reused. Set `manage = false` when another service owns the process.
 
-**On by default** (`config.lua` ships `cliproxy = { manage = true, … }`), but
-**dormant** — it only acts when a cliproxyapi-provider agent actually runs, and
-it **reuses** an already-running proxy (e.g. `brew services`) when one answers
-healthy. So the default is safe for users who don't use cliproxyapi (it never
-fires) and cooperative for those who run their own (it reuses it). Set
-`cliproxy = { manage = false }` to opt out. A new machine needs a binary —
-`:ParleyProxy update` downloads the latest release (the first chat does too,
-via `auto_download`), or `brew install cliproxyapi` — and a one-time
-`:ParleyProxy login <provider>`.
+## Common actions
+
+| Command | What happens |
+|---|---|
+| `:ParleyProxy` | Show subcommands and help |
+| `:ParleyProxy connect` | Start the guided account/model connection flow |
+| `:ParleyProxy login PROVIDER` | Sign into a provider account |
+| `:ParleyAgent` | Choose a configured or live proxy model |
+| `:ParleyProxy status` | Inspect health, binary source, running/latest versions |
+| `:ParleyProxy update` | Install the pinned or latest release and restart only a Parley-owned process |
+| `:ParleyProxy stop` | Stop the proxy; another proxy-backed request may start it again |
+
+`auto_download = true` allows first-use installation. Set `download_version` to
+pin a release or `binary_path` to use an explicit binary. Automatic downloads
+support the shipped macOS/Linux archive paths, not Windows ZIP installs.
+Provider credentials live in `~/.cli-proxy-api`; the separate client token
+`api_keys.cliproxyapi` defaults to `CLIPROXYAPI_API_KEY` or `parley-local`.
+The endpoint determines the managed host/port.
+
+If an answer fails, distinguish account authentication, quota/model availability,
+and process health. The recovery policy below uses proxy-reported credential
+health; repeatedly logging in does not repair quota or unavailable-model errors.
+
+## Account management limits
+
+`connect` chooses an account **provider**, then runs login and model selection.
+`:ParleyAgent` selects a model, not an individual account among multiple saved
+accounts for the same provider. Parley sends the proxy a model request and does
+not pin a credential filename or expose a per-account switch/logout command.
+Account routing belongs to the running proxy. Credential-health diagnostics can
+identify an account involved in a failure, but do not establish the account that
+will serve every later request.
+
+Signing in again runs the provider's OAuth flow; it is not a documented
+replace/delete operation for an existing credential. `:ParleyProxy stop` stops
+the process and leaves shared authentication files intact. Do not confuse
+`:ParleyGdriveLogout` (remote-document OAuth storage) with proxy subscription
+accounts. The command surface is defined by `SUBS_HELP` in `lua/parley/init.lua`;
+`agent_picker.lua` and `cliproxy_catalog.lua` define model selection.
 
 ## Pieces
 
@@ -36,7 +66,7 @@ via `auto_download`), or `brew install cliproxyapi` — and a one-time
   `version_probe` (#237: the running version from `X-Cpa-Version`, no
   credential), `spawn` (detached, PID-tracked), `ensure_running`
   (reuse-if-healthy → else discover/spawn/poll, bounded — never hangs),
-  `list_models` (#132), the release IO (`latest_release`, `resolve_target`,
+  `list_models`, the release IO (`latest_release`, `resolve_target`,
   `download`, `installed_version`, `update` — see Releases), and
   `status`/`start`/`stop`/`restart_managed`/`login_argv`. The curl argv is built
   once in `api_argv` (route-parameterized since #197; `dump_headers` since #237)
@@ -78,7 +108,7 @@ then ensure — without the wait a proxy still shutting down could be reused
 (#237). A cliproxyapi still answering when the wait ends is reported as an
 error, never taken for the replacement.
 
-## Model catalog (#205)
+## Model catalog
 
 Three modules, split by what they touch: **`cliproxy_catalog.lua`** is the pure
 core (parse the two model routes, derive a model's series, rank it, apply the
@@ -133,7 +163,7 @@ reads that catalog instead of carrying model names in Lua.
   results per search term (the option retains its legacy name). Term order is
   display order; overlapping searches do not repeat a model line. Equal-date GPT
   rows prefer newer numeric generations/versions before alphabetical variants.
-- **No `oauth-model-alias` is required (#205).** cliproxyapi exposes an OAuth
+- **No `oauth-model-alias` is required.** cliproxyapi exposes an OAuth
   channel's models automatically once that channel has a credential — verified
   against a live proxy: models absent from any alias block answer normally, and a
   login registers its channel's models with no restart. The block parley used to
@@ -159,42 +189,40 @@ reads that catalog instead of carrying model names in Lua.
   `none` (a global off switch) → a correction when the configured strategy is one
   the family cannot use → the provider default → none. It corrects and never
   invents, so an unconfigured setup still resolves to `none`. **Behaviour change
-  (#205):** a claude model under the shipped `openai_tools_route` default now
+ :** a claude model under the shipped `openai_tools_route` default now
   takes the ANTHROPIC route by default, because measurement showed claude returns
   an empty completion on the openai route with web_search on. Set
   `web_search_strategy` on the agent to override.
 - **Server-side web search differs per family** (measured 2026-08-31): claude
   needs the anthropic route; gpt/codex works on `openai_tools_route`; gemini and
-  anything antigravity re-serves gets `none`, because `{type="web_search"}` makes
+  non-Claude models antigravity re-serves get `none`, because `{type="web_search"}` makes
   gemini answer `malformed_function_call` with no content. The decision is
   single-sourced in `providers.cliproxy_default_web_search_strategy`.
 
 ## Auth & secrets
 
 - The **client token** (`api_keys.cliproxyapi`) is resolved through the vault and
-  written into the rendered `api-keys`; the committed Lua holds no secret.
+  written into the rendered `api-keys`. It authenticates the local client, not a
+  vendor subscription.
 - **OAuth subscription tokens** live in `auth-dir` (default `~/.cli-proxy-api`),
   written by `:ParleyProxy login <provider>` → `cliproxyapi -<provider>-login`
   (per-provider flags: claude, codex, codex-device, google, kimi, xai,
   antigravity). The one unavoidable manual, per-machine step.
 
-## Required even when managed
+## Client authentication
 
-`api_keys.cliproxyapi` must be set even with `manage = true` — the dispatcher's
-`vault.run_with_secret` gate runs *before* `pre_query`, so a missing secret
-silently skips the request (neither the query nor the abort fires). This is the
-same gate all secret-backed providers use; just be aware managed mode doesn't
-remove the secret requirement (the secret is the client↔proxy token).
+Management does not remove the client-token requirement. The dispatcher resolves
+`api_keys.cliproxyapi` before the provider's startup hook. The shipped local token
+works for the configuration Parley renders; a separately managed proxy may
+require a different token. A missing or failed secret resolver aborts the request
+through the caller's error path.
 
-## Auth-failure → diagnosis and recovery (#197)
+## Auth-failure → diagnosis and recovery
 
 **The principle: parley does not infer credential state, it asks.**
 
-#131 M3 inferred it two ways and both were wrong by 2026-08-01: a single
-response pattern (`"unknown provider for model <X>"`, which 7.1.71 no longer
-emits for a dead credential) and the shape of `/v1/models` (which still lists
-every model while the credential is dead). The source of truth is now the
-proxy's own **`GET /v0/management/auth-files`**.
+The source is the proxy's **`GET /v0/management/auth-files`** response. A model
+remaining in `/v1/models` does not prove its account is healthy.
 
 - **`cliproxy_auth.lua`** (pure, no IO):
   - `classify_response(http_status, body, request_model)` → `{kind, provider,
@@ -356,7 +384,7 @@ behavior the entire repair branches on. Never point that at the real auth-dir:
 cliproxy refreshes at startup and every 15m, and Claude's refresh tokens rotate
 on use — the race that caused this issue.
 
-## Models & providers (#132)
+## Models & providers
 
 `:ParleyProxy` is self-documenting and can list what a provider serves:
 
@@ -385,7 +413,7 @@ has `codex-device` — a login flow, not a distinct provider. Completion for
 `models <X>` and `login <X>` draws from the matching axis, so neither leaks the
 other's extras.
 
-## Releases: auto_download and update (#131 M2, #237)
+## Releases: auto_download and update
 
 **One target rule.** `:ParleyProxy update` and the first-run `auto_download`
 (`cliproxy = { manage = true, auto_download = true }`, which removes the

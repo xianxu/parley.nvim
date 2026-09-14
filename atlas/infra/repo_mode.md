@@ -7,13 +7,15 @@ including ordinary folders without Git, and enters repo mode. This makes parley 
 ## Detection
 The app uses `repo_mode.detect_root(cwd, marker)` and passes the detected root
 into setup. Its global chat-directory policy does not override that selection.
-For ordinary plugin setup without an explicit repo root, after config merging:
+For ordinary plugin setup without an explicit repo root, an explicit `chat_dir`
+keeps that storage choice and suppresses automatic repo detection. Otherwise,
+after config merging:
 1. Check `config.repo_marker` is set (default: `".parley"`)
 2. Find the git root from `vim.fn.getcwd()` (works from any subdirectory)
 3. If `<git_root>/<repo_marker>` is readable, activate repo mode
 
 ## Behavior when active
-- `config.repo_root` is set to the git root path
+- `config.repo_root` is set to the selected project root (the Git root for implicit plugin detection)
 - Repo-local directories are auto-created: `workshop/parley/`, `workshop/notes/`, `workshop/issues/`, `workshop/vision/`, `workshop/history/issues/`
 - `workshop/parley/` (configurable via `repo_chat_dir`) becomes the primary chat directory, labeled `"repo"`
 - `workshop/notes/` (configurable via `repo_note_dir`) becomes the primary note directory
@@ -23,15 +25,15 @@ For ordinary plugin setup without an explicit repo root, after config merging:
 ## Multi-root architecture
 
 ### Chat roots (issue #117)
-Chat roots are a *derived* list — never freeform-added or persisted. The shape on every read is:
+Chat roots are assembled at setup from the primary directory and configured
+extras. In repo mode the project chat directory becomes primary, the original
+global directory stays discoverable, and legacy `chat_dirs` extras are preserved.
+Super-repo mode adds sibling project roots. These changes do not persist chat
+roots to `state.json`; older saved `chat_dirs`/`chat_roots` are ignored.
 
-```
-chat_roots = [config.chat_dir]
-           + (repo_root/repo_chat_dir if repo mode is active)
-           + (sibling repos' chat dirs if super-repo mode is active)
-```
-
-`apply_repo_local()` materializes this list at setup; super-repo toggling pushes/pops sibling entries at runtime. There are no `:ParleyChatDirs` / `:ParleyChatDirAdd` / `:ParleyChatDirRemove` commands and no `<C-g>h` keybinding — they were removed in issue #117 because the original use case (drop a folder in for deliberation) is fully covered by repo + super-repo modes. State.json no longer carries `chat_dirs` / `chat_roots`; old state files with these fields are silently ignored on load.
+There are no `:ParleyChatDirs`, `:ParleyChatDirAdd` or `:ParleyChatDirRemove`
+commands. Configure roots at setup, or select repo/super-repo mode. New chats go
+to the primary directory; finding a global chat does not relocate it.
 
 `state.json.repo_modes` separately stores each canonical repo root's explicit
 `repo` / `super_repo` choice. Missing or invalid entries mean ordinary repo
@@ -80,7 +82,7 @@ with an error status.
 ### Artifact finder discovery
 
 All five disk-backed finders open before acquisition and share the same
-cancellable loading/outcome lifecycle. Chat scans dated Markdown headers, Note
+cancellable loading/outcome lifecycle. Chat scans recognized chat Markdown headers (including named tutorial files), Note
 scans recursive metadata without bodies, Issue scans the selected non-recursive
 issue/history tree, Vision scans non-recursive YAML file bundles, and Markdown
 uses the Git boundary above. Super-repo mode expands those same operations per
@@ -93,7 +95,7 @@ Notes still use the multi-root manager with freeform add/remove/rename via `:Par
 ## Configuration
 | Key | Default | Description |
 |-----|---------|-------------|
-| `repo_marker` | `".parley"` | Marker file name; set to `nil`/`false` to disable |
+| `repo_marker` | `".parley"` | Marker file name; set to `false` to disable (omitting it retains the default) |
 | `repo_chat_dir` | `"workshop/parley"` | Chat dir name within repo (primary in repo mode) |
 | `repo_note_dir` | `"workshop/notes"` | Note dir name within repo (primary in repo mode) |
 | `issues_dir` | `"workshop/issues"` | Issue tracker dir |
@@ -102,7 +104,9 @@ Notes still use the multi-root manager with freeform add/remove/rename via `:Par
 | `note_roots` | `{}` | Structured note roots metadata |
 | `note_dirs` | `{}` | Additional note dirs (extras) |
 
-All directory names are relative to git root unless they start with `/`.
+Repo artifact directory names are relative to the selected project root unless
+they start with `/`. Markdown Finder uses Git enumeration, so a non-Git project
+can host chats without providing the same Git-backed Markdown discovery.
 
 ## Commands and keybindings
 - `:ParleyNoteDirs` / `<C-n>h` — manage note roots (add/rename/remove)
@@ -122,3 +126,11 @@ All directory names are relative to git root unless they start with `/`.
 
 ## Related
 - [Super-Repo Mode](../modes/super_repo.md) — read-aggregation overlay across sibling `.parley` repos.
+
+## Checks
+
+Detection and storage precedence: `tests/unit/repo_mode_spec.lua`,
+`tests/integration/starter_project_spec.lua`. Root/state behavior:
+`tests/unit/chat_dirs_spec.lua` and `tests/unit/super_repo_spec.lua`.
+Source: `lua/parley/repo_mode.lua`, setup/persistence in `init.lua`,
+`repo_artifacts.lua`, `super_repo.lua` and `neighborhood.lua`.

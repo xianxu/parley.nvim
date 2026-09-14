@@ -57,7 +57,11 @@ that opener-through-terminator span and no earlier line.
 First `🌿:` before first `💬:` = parent link. Subsequent = child branches with `after_exchange` count for context assembly.
 
 ## Validation
-Path must be inside a configured chat root; filename must match `YYYY-MM-DD` pattern; header must contain `topic` and `file`.
+Chat-buffer recognition (`init.lua:not_chat`) requires a configured chat root,
+at least five lines, a header separator, and nonempty `topic` and `file` fields.
+`chat_parser.is_chat_filename` accepts dated `YYYY-MM-DD*.md` names plus the
+shipped tutorial names `welcome.md`, `basics.md`, and `advanced.md`. Header parsing
+is line-oriented rather than general YAML; see [Chat Format](format.md) for tags.
 
 ## Single-line annotations (#214)
 
@@ -94,3 +98,9 @@ Two properties the fix has to hold together, both asserted in
 
 An inline `[🌿:anchor](file)` link already worked this way — the target is
 dropped and the anchor text is submitted — and is unchanged.
+
+## Implementation and checks
+
+`lua/parley/chat_parser.lua`, `lua/parley/answer_structure.lua`, and
+`lua/parley/fence.lua`; `tests/unit/parse_chat_spec.lua` and
+`tests/unit/annotation_lines_spec.lua`.

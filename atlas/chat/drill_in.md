@@ -23,7 +23,8 @@ The marker syntax is the same one the [review skill](../modes/review.md) uses on
 
 The chat-respond pipeline gathers every ready marker (with or without `<T>`) — the difference is in how the marker collapses inline (see Lifecycle step 3). Strike markers are skipped entirely.
 
-See [#123](../../workshop/issues/000123-quoted-body-marker-syntax.md) for the rationale behind `<T>`. See [#124](../../workshop/issues/000124-review-convention-alignment.md) and the canonical [review-convention target](../../../ariadne/workshop/targets/review-convention.md) for the strike family and the broader convention parley.nvim implements.
+The quoted-body and strike families share the [Document Review](../modes/review.md)
+marker grammar. This page describes their chat-specific submission behavior.
 
 Accept and reject for `~X~` and the full §5 table are wired via `<M-a>` / `<M-r>` (#124 M2 — see the keybinding table below).
 
@@ -31,7 +32,7 @@ Accept and reject for `~X~` and the full §5 table are wired via `<M-a>` / `<M-r
 
 1. **Create** — visual-mode `<C-g>q` (or `<M-q>`) wraps the selection as `🤖<T>[]` and drops the cursor inside the empty `[]` in insert mode.
 2. **Compose** — user types the question (multi-line allowed).
-3. **Submit** — `<C-g>g` (chat respond) processes ready markers. Two paths:
+3. **Submit** — `<M-CR>` / `<C-g><C-g>` (chat respond) processes ready markers. Two paths:
 
    - **Branch path** (cursor on a past exchange that contains ready markers): treats them as follow-up questions for that exchange. Strips them in place inside the exchange and **inserts a new user turn after that exchange's answer**, populated with the gathered quote+question blocks. The original Q/A is preserved (no resubmit). Pipeline `end_index` is capped at the inserted new turn, so subsequent (now stale) exchanges below stay in the buffer but are out of context for this turn.
    - **End-append path** (cursor on the unanswered last question or at end of buffer): gathers every ready marker buffer-wide and appends the gathered blocks to the next user turn slot at the end. Markers are stripped in place. If the user already typed text in the next turn, exactly one blank line separates the user's text from the first block. Multiple blocks are stacked with one blank line between them.
@@ -199,7 +200,7 @@ truncated inferred anchor (`generate_snippet` ellipsis) won't string-match its
 source span, so `*` finds no twin there. Both are acceptable for the common
 single-line `[quoted text]` ↔ `[T]` twin case this targets.
 
-Accept/reject semantics (the full table) live in the canonical [review-convention target](../../../ariadne/workshop/targets/review-convention.md) §5. In summary:
+Accept/reject uses the same [Document Review](../modes/review.md) convention. In summary:
 
 - `<X>` anchor → X preserved (both modes)
 - `~D~` anchor → accept removes D (or splices in the first `{N}`/`[N]` after the strike); reject restores D

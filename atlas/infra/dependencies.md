@@ -1,5 +1,14 @@
 # External dependencies
 
+Run `:checkhealth parley` to see which external tools are available and what a
+missing tool affects. The Homebrew app installs Neovim and ripgrep; CLIProxyAPI
+is managed separately by Parley (`:ParleyProxy update`). `curl` is required for
+provider requests and is supplied by macOS. Clipboard/image conversion and
+export tools are feature-specific: a missing optional converter does not prevent
+ordinary text chat. Plugin installations own their dependency setup.
+
+## Implementation
+
 `lua/parley/deps.lua` owns external-tool metadata and display-only install advice.
 Its pure `advice(id, host)` and `packages(host, selection)` projections share the
 same host/manager policy. The registry groups tools as managed, platform or
@@ -25,11 +34,12 @@ rechecks availability so later installation recovers immediately. Shrink retains
 its existing configure-owned resolution cache. Exporter's pandoc error and
 CLIProxyAPI's missing-binary guidance also derive from the registry.
 
-For #247, `deps.packages({sysname='Darwin', manager='brew'}, 'default')` supplies
+`deps.packages({sysname='Darwin', manager='brew'}, 'default')` supplies
 ripgrep as the additional formula dependency. Neovim remains the host runtime;
 CLIProxyAPI remains Parley-managed. Alternate converters and pandoc are optional;
 `'all'` projects the available advisory packages for explicit installation advice.
-Formula generation and parity verification belong to #247.
+`packaging/formula.lua` generates the formula from this projection, with parity
+coverage in `tests/unit/packaging_formula_spec.lua`.
 
 The dependency specs cover host policy, executable/version changes and read-only
 health reporting. `tests/arch/dependency_registry_spec.lua` prevents builtin

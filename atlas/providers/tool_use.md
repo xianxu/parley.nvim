@@ -2,19 +2,32 @@
 
 Client-side tool loop enabling LLM agents to call tools (read/edit files, search, etc.) and receive results.
 
+Tool calls appear as `🔧:` blocks with `📎:` results in the chat. They can read or
+change files according to the selected agent's tool list and the active root
+policy. `@readonly` grants read tools; `@all` also grants writes. A model may
+choose not to call a tool even when one is available.
+
+Anthropic and OpenAI-compatible providers have client tool wires; direct Google
+AI does not. Server-side web search is independent of this loop. A turn stops
+at `max_tool_iterations` (42 by default), and cancellation supplies a result for
+outstanding calls so the transcript remains valid.
+
 ## Tool Set
 
-Standard Unix tools exposed to Claude, plus file operations:
+File operations and structured wrappers around locally available Unix tools:
 
 | Tool | Kind | Description |
 |------|------|-------------|
+| `parley_help` | read | List/read installed README, tutorials, and atlas by exact topic ID; no arbitrary file paths or personal-file access |
 | `read_file` | read | Read file with line numbers. Params: `file_path`, `offset`, `limit` |
 | `ls` | read | Shell out to system `ls` with structured `path`/`flags` fields |
 | `find` | read | Shell out to system `find` with structured path/name/type/depth fields |
 | `grep` | read | Shell out to `rg` or system `grep` with structured pattern/path/filter fields |
-| `chat_history_search` | read | Search past chats across ALL chat roots (global + repo + super-repo siblings). Output is `{<repo>}/...`-prefixed. Default context `-B1 -A2`, `*.md` glob, case-insensitive. Params: `pattern`, `before`, `after`, `glob`, `case_insensitive`, `max_count` |
+| `chat_history_search` | read | Search configured chat roots admitted by the request's root policy; extra `tool_read_roots` can allow global or sibling roots. Output is `{<repo>}/...`-prefixed. Default context `-B1 -A2`, `*.md` glob, case-insensitive. Params: `pattern`, `before`, `after`, `glob`, `case_insensitive`, `max_count` |
 | `edit_file` | write | String replacement (`old_string`/`new_string`) or line insertion (`insert_line`/`insert_text`) |
 | `write_file` | write | Create/overwrite file. Numbered `.parley-backup.N` on each write |
+| `propose_edits` | write | Apply a batch of explained document edits; used by review and voice skills |
+| `emit_definition` | output | Return a structured inline definition to the definition skill |
 | `ack` | read | Optional, registered only if `ack` is installed; structured pattern/path/filter fields |
 
 Tool descriptions dynamically advertise the locally available command version (e.g., "ripgrep 14.1" vs "GNU grep 3.11").
@@ -27,6 +40,10 @@ An agent's `tools` field is an explicit allow-list resolved by `tools.select()` 
 |----------|------------|
 | `"@all"` | every registered tool (includes `ack` when installed) |
 | `"@readonly"` | every registered non-write tool (`kind ~= "write"`; absent kind defaults to read) |
+
+`parley_help = false` suppresses the introductory product context added to chat
+system prompts; it does not unregister the `parley_help` tool. Tool availability
+still follows the agent's explicit list or group selectors.
 
 Group sentinels expand alphabetically; the combined list is de-duplicated by name (first occurrence wins), so `{ "edit_file", "@readonly" }` is safe. An unknown name or group raises at agent-config validation, naming the offending token.
 
@@ -121,12 +138,12 @@ payloads stay an accurate model of the request.
 
 ## Loop Model
 
-1. User submits → Claude responds (may include `tool_use` content blocks)
+1. User submits → the selected agent responds (may include `tool_use` content blocks)
 2. `tool_loop.process_response` decodes tool calls, executes each via `dispatcher.execute_call`
 3. Writes 🔧: (tool call) and 📎: (tool result) blocks into the buffer via the exchange model
 4. Returns `"recurse"` → `M.respond` is called again with the live model
 5. `build_messages_from_model` reads content from the buffer at model positions — no re-parsing
-6. Repeats until Claude responds with text only (no tool_use) → `"done"`
+6. Repeats until the agent responds with text only (no tool_use) → `"done"`
 
 The chat response lease guards this loop via an extmark anchored on the response's agent-header line (#138): before the scheduled recursive `M.respond`, the lease is validated again. If the user undoes/redoes or deletes the response in that gap, the anchor invalidates and recursive resubmit is cancelled rather than inserting a new placeholder from stale live-model positions. (Pre-#138 the lease committed a new `changedtick` after appending tool blocks; the extmark anchor needs no such commit.)
 
@@ -219,9 +236,13 @@ block still starts a turn.
   symlinks must remain within a read root. Write tools ignore the wider set and
   retain `resolve_path_in_cwd` confinement plus missing-leaf creation semantics
   (reads share the same mechanism via `resolve_read_path`, differing only by
-  extra roots + existence). Tools without path fields, such as
-  `chat_history_search`, are unaffected. (#147, #192)
-- **Tool argv safety** (#144, #149): `ls`, `grep`, `find`, `chat_history_search`, and optional `ack` no longer accept raw shell fragments. Each exposes structured fields and builds argv lists for the named binary, so shell metacharacters (`;`, `|`, `$()`, backticks, `>`) are data, not syntax. The shared pure helper (`lua/parley/tools/builtin/argv.lua`) validates local positive allowlists and numeric process flags: `ls` allows compact display flags only; `grep` allows a small read-only flag set and rejects `rg` execution/arbitrary-read flags such as `--pre`, `--hostname-bin`, and `-f`; `find` has no free `flags` field and only exposes path/name/type/depth predicates; `ack` exposes pattern/path/type/context fields with no raw `command` or `flags` escape hatch; `chat_history_search` keeps its explicit chat-root cwd bypass but validates `before`/`after`/`max_count` as non-negative integers before invoking `rg` or `grep` through argv-list execution. `grep`, `ack`, and `chat_history_search` insert `--` before pattern/path positionals so dash-leading patterns cannot be parsed as options; omitted-path defaults for cwd-confined tools are declared as `default_path = "."` so the dispatcher canonicalizes them through the cwd/read-root guard before execution.
+  extra roots + existence). Pathless `chat_history_search` receives the same
+  trusted policy in its handler context and filters configured chat roots through
+  `resolve_read_path`. Model input cannot supply a wider policy. A direct Lua
+  handler call without context searches all configured roots; normal dispatched
+  chat/skill requests supply context and remain confined. Finder visibility is
+  not a tool permission grant.
+- **Tool argv safety** (#144, #149): `ls`, `grep`, `find`, `chat_history_search`, and optional `ack` no longer accept raw shell fragments. Each exposes structured fields and builds argv lists for the named binary, so shell metacharacters (`;`, `|`, `$()`, backticks, `>`) are data, not syntax. The shared pure helper (`lua/parley/tools/builtin/argv.lua`) validates local positive allowlists and numeric process flags: `ls` allows compact display flags only; `grep` allows a small read-only flag set and rejects `rg` execution/arbitrary-read flags such as `--pre`, `--hostname-bin`, and `-f`; `find` has no free `flags` field and only exposes path/name/type/depth predicates; `ack` exposes pattern/path/type/context fields with no raw `command` or `flags` escape hatch; `chat_history_search` searches only policy-admitted chat roots and validates `before`/`after`/`max_count` as non-negative integers before invoking `rg` or `grep` through argv-list execution. `grep`, `ack`, and `chat_history_search` insert `--` before pattern/path positionals so dash-leading patterns cannot be parsed as options; omitted-path defaults for cwd-confined tools are declared as `default_path = "."` so the dispatcher canonicalizes them through the cwd/read-root guard before execution.
 - **Output pager** (#139): a horizontal substrate cap — *every tool's output is a paged stream.* The registry (`register`) injects `offset`/`limit` params into every non-write, non-`self_paginates` tool's schema, and the dispatcher windows each result to lines `[offset, offset+limit)` (offset 1-indexed; `limit` defaults to `tool_result_page_lines` = 200, clamped ≤ 2000), stripping the params so the handler never sees them. When the window is partial it appends a footer naming the **true total** + the next page: `[lines 1-200 of 1,240,118 — pass offset=201 for the next page, or narrow your query]`. `read_file` sets `self_paginates = true` — its native `offset`/`limit` (line-window of the file) *is* the contract, so the dispatcher neither injects nor slices it (a no-limit read falls back to the byte-cap). Deep paging on shell tools re-runs the tool (run+slice, no cache — v1). The 100KB byte-cap (`truncate`) stays as the backstop for pathological single lines. Orthogonal to input safety (#144) — slices *after* the handler.
 - **Iteration cap**: `max_tool_iterations` (default 42, single-sourced in `defaults.lua` `#154`) — writes synthetic `📎: (iteration limit reached — max N rounds)` when hit
 - **Cancellation**: `cmd_stop` triggers `repair_unmatched_tool_blocks` — writes `📎: (cancelled by user)` for any 🔧: without matching 📎:
@@ -240,3 +261,18 @@ block still starts a turn.
 - Each initial or recursive LLM round uses the delayed virtual
   [response-progress](../chat/response_progress.md) presentation; fast visible
   output bypasses it, and local tool execution itself shows no spinner
+
+## Implementation and verification
+
+The builtin list lives in `lua/parley/tools/init.lua`; `tool_loop.lua` owns the
+chat recursion, `tools/dispatcher.lua` owns execution/root checks/paging, and
+`tools/wire.lua` selects the protocol. Tests include
+`tests/unit/tool_wire_registry_spec.lua`,
+`tests/unit/anthropic_tool_wire_spec.lua`,
+`tests/unit/tools_builtin_propose_edits_spec.lua`, and
+`tests/integration/cliproxy_tool_conformance_spec.lua`.
+
+`tests/unit/tools_builtin_chat_history_search_spec.lua` verifies policy-confined
+history search, explicit additional roots, symlink rejection, and forged input
+policy. The dispatcher passes policy as handler context, separately from model
+arguments.
