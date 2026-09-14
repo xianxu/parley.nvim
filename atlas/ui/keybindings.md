@@ -4,7 +4,7 @@
 `:ParleyKeyBindings` (`<C-g>?`): centered floating window showing context-scoped shortcuts.
 
 ## Architecture: Keybinding Registry
-All keybindings are declared in `lua/parley/keybinding_registry.lua` — a single source of truth. Each entry carries:
+Configurable action keybindings are declared in `lua/parley/keybinding_registry.lua` — a single source of truth. Each entry carries:
 - `id`, `scope`, `desc`, `default_key`, `default_modes`
 - optional `config_key` for user-configurable bindings
 - optional `help_desc` override for the help display
@@ -74,13 +74,13 @@ attachment (`<M-v>`, `paste_image`, #231), and follow-a-link
 (`<M-o>`, #225 — one key for "go to what I'm looking at", falling through to
 smart `gf` when the cursor is not on a parley reference). `<C-g>` is
 the prefix surface for everything else. Help takes its keys from
-`resolve_keys` and nothing else: an entry that resolves to nothing is
+`resolve_keys` for configured actions: an entry that resolves to nothing is
 **omitted**, so the float cannot advertise a key that is not bound. (Before #214
 it rendered `keys[1]` only — hiding `<M-q>`, `<M-t>` and `<C-g>i` — and fell
 back to `or entry.default_key`, resurrecting exactly the keys resolution had
 refused.)
 
-## Every binding is rebindable
+## Configurable actions and fixed picker controls
 Every registry entry carries a `config_key` — enforced by
 `tests/unit/keybindings_spec.lua`, not by convention. Before #214, nine entries
 had none and could not be rebound or disabled at all.
@@ -179,3 +179,21 @@ ships no key — a tool call's *result* is low-value reading, so folding it does
 justify a key out of the shared `<C-g>` surface — but is invokable as
 `:ParleyToggleToolFolds`, and the registry callback *is* that command, so binding
 it cannot drift from calling it. "Unbound" must not mean "unreachable".
+
+
+## Picker aliases and help (#251)
+
+Picker callers use `keys_for(id, config)` to pass the complete resolved list to
+`float_picker`; `key_for` and `key_label` remain primary-only helpers for compact
+labels. Extra mappings accept a string or list and install every allowed alias
+in prompt Insert/Normal mode and results Normal mode. Reserved Enter/Escape
+aliases are rejected individually; one reserved alias does not discard the
+other allowed keys. Existing collision precedence is unchanged.
+
+Chat, Note, and Issue Finder help includes a separate **Finder prompt** section
+from `picker_basics`: Ctrl+j/Down, Ctrl+k/Up, Enter, and Esc/Ctrl+c. These are
+fixed picker controls, so they remain available with `default_keymaps=false`.
+Help describes configured actions; it does not inspect arbitrary later
+`vim.keymap.set` overrides from user config or other plugins.
+
+The branch shortcut description now says it creates and opens a sub-chat.

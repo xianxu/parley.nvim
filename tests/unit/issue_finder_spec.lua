@@ -208,7 +208,7 @@ describe("IssueFinder asynchronous discovery", function()
             local key = require("parley.keybinding_registry").key_for("if_cycle_status", fake.config)
             local mapping
             for _, entry in ipairs(captured.mappings) do
-                if entry.key == key then mapping = entry end
+                if vim.tbl_contains(entry.key, key) then mapping = entry end
             end
             assert.is_not_nil(mapping)
             mapping.fn({value=path, issue={id="1",status="working"}}, function()
@@ -468,7 +468,7 @@ describe("IssueFinder query persistence", function()
 
     local function cycle_view_mapping(opts)
         for _, mapping in ipairs(opts.mappings) do
-            if mapping.key == "<Tab>" then
+            if vim.tbl_contains(mapping.key, "<Tab>") then
                 return mapping
             end
         end

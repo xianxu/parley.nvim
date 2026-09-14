@@ -392,7 +392,7 @@ function M.question_picker(config)
   if not is_chat then
     -- Non-chat: use flat outline (include markdown headings)
     local items = M._build_picker_items(current_bufnr, config, { is_chat = false })
-    local keybindings_key = require("parley.keybinding_registry").key_for("help", parley.config)
+    local keybindings_key = require("parley.keybinding_registry").keys_for("help", parley.config)
     float_picker.open({
       title = "Outline",
       items = items,
@@ -432,7 +432,7 @@ function M.question_picker(config)
       items = M._build_picker_items(current_bufnr, config, { is_chat = true })
     end
 
-    local keybindings_key = require("parley.keybinding_registry").key_for("help", parley.config)
+    local keybindings_key = require("parley.keybinding_registry").keys_for("help", parley.config)
     float_picker.open({
       title = "🌳 Chat Tree Outline",
       items = items,

@@ -2397,3 +2397,12 @@ download.
   and digraph input. Install prompt mappings like the arrow controls and verify
   real native input under the app launcher, including the next typed character
   after a nested confirmation returns.
+
+
+## 2026-09-14 (#251)
+
+- **Help aliases must survive the entire installer path.** A registry that
+  resolves and displays a list cannot hand only its primary key to a picker.
+  Exercise installed mappings in prompt and results modes, and invoke each
+  alias through the real starter profile; captured option tables alone miss
+  this mismatch.

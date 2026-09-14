@@ -544,6 +544,41 @@ describe("float_picker", function()
             assert.equals("extra_val", mapped_item.value)
         end)
 
+        it("installs all aliases and filters reserved keys independently (#251)", function()
+            local calls = {}
+            local selected
+            local picker = float_picker.open({
+                items = { { display = "item", value = "alias-item" } },
+                on_select = function(item) selected = item.value end,
+                mappings = {
+                    { key = { "<F8>", "<C-m>", "<F9>", "<Esc>" }, fn = function(item)
+                        calls[#calls + 1] = item.value
+                    end },
+                    { key = {}, fn = function() error("disabled mapping called") end },
+                },
+            })
+            for _, mode in ipairs({ "i", "n" }) do
+                for _, key in ipairs({ "<F8>", "<F9>" }) do
+                    local mapping = vim.fn.maparg(key, mode, false, true)
+                    assert.equals("function", type(mapping.callback))
+                    mapping.callback()
+                end
+            end
+            local prompt_win = vim.api.nvim_get_current_win()
+            local results_win = find_float_win()
+            for _, key in ipairs({ "<F8>", "<F9>" }) do
+                vim.api.nvim_set_current_win(results_win)
+                vim.fn.maparg(key, "n", false, true).callback()
+            end
+            assert.same({ "alias-item", "alias-item", "alias-item", "alias-item", "alias-item", "alias-item" }, calls)
+            assert.is_false(picker.is_closed())
+            vim.api.nvim_set_current_win(prompt_win)
+            vim.fn.maparg("<CR>", "i", false, true).callback()
+            vim.wait(100, function() return selected ~= nil end)
+            assert.equals("alias-item", selected)
+            assert.equals(6, #calls)
+        end)
+
         it("does not let a <C-m> extra mapping override <CR> confirm", function()
             local selected = nil
             local extra_mapping_called = false

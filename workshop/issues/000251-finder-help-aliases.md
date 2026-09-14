@@ -41,11 +41,18 @@ total: 0.98
 
 ## Plan
 
-- [ ] Implement the approved audit corrections following workshop/plans/000251-finder-help-aliases-plan.md.
-- [ ] Verify configured/default mappings, update atlas, and close through fresh review.
+- [x] Implement the approved audit corrections following workshop/plans/000251-finder-help-aliases-plan.md.
+- [x] Verify configured/default mappings, update atlas, and close through fresh review.
 
 ## Log
 
 ### 2026-09-14
 
 - User approved updates after audit. Native starter probe confirmed F8/F9 help versus F8-only mapping. No new product choice requires clarification; implementation follows the requested corrections.
+
+- Plan review PQ-1/PQ-2/PQ-3 addressed: explicit per-function adversarial inputs and effective mapping oracles, alias-count expectations, and preserved lifecycle/collision behavior. Plan passed round 2. Estimate design allowance includes audit and planning already performed; implementation allowance includes docs, verification, and PR publication, with full test execution mostly unattended.
+- Registry/help tests: 70 existing passed and 5 new failed before changes; all 75 now pass. Picker alias/empty/reserved-list test failed before changes; all 80 picker tests now pass, including dispatch via prompt i/n and results n mappings.
+- Exact starter smoke passes: remapped help key and disabled branch entry reflected; both F8 and F9 delete aliases invoke native confirmation, cancellation preserves the temporary chat. /tmp/parley251-native.log, runner /tmp/parley251-help-runner.py.
+
+- Full suite: 255 spec files passed and lint reported 0 warnings/errors in 447 files. The sole failure was the plan/entity documentation check for keys_for; after adding its exact exported name to the core-concepts table, all 21 checks in that final spec pass. Logs: /tmp/parley251-full.log and /tmp/parley251-arch-green.log. All 256 spec files are now verified across that run and the focused rerun; no production changes followed the suite.
+- Updated atlas/ui/keybindings.md for picker aliases, fixed prompt controls, and the boundary between Parley configuration and arbitrary external remaps.

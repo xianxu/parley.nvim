@@ -683,7 +683,7 @@ describe("agent_picker repaint passes the identity", function()
         local captured = drive_expand()
         local expand
         for _, m in ipairs(captured.mappings or {}) do
-            if m.key == "<C-a>" then expand = m end
+            if vim.tbl_contains(m.key, "<C-a>") then expand = m end
         end
         assert.is_not_nil(expand, "the expand mapping should be registered")
         expand.fn()

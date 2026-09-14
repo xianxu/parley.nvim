@@ -208,7 +208,7 @@ function M.open(opts)
                 end,
             },
             {
-                key = require("parley.keybinding_registry").key_for("help", plugin.config),
+                key = require("parley.keybinding_registry").keys_for("help", plugin.config),
                 fn = function(_, _)
                     vim.schedule(function()
                         plugin.cmd.KeyBindings()
