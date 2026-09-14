@@ -440,6 +440,17 @@ function M.question_picker(config)
       initial_index = sel_index or 1,
       on_select = function(item)
         local entry = item.value
+        if entry.child_path then
+          if vim.fn.filereadable(entry.child_path) ~= 1 then
+            vim.notify("Cannot open outline branch: " .. entry.child_path, vim.log.levels.WARN)
+            return
+          end
+          local child_buf = vim.fn.bufadd(entry.child_path)
+          vim.fn.bufload(child_buf)
+          -- A branch targets the file start, not the nearest question/heading.
+          focus_buffer_line(child_buf, entry.child_path, target_windows, 1)
+          return
+        end
         do
           local target_file = entry.file or buf_name
           local target_buf = vim.fn.bufnr(target_file)
