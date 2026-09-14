@@ -3,8 +3,8 @@
 <!-- parley:introduction:start -->
 Parley is a workspace for exploring ideas with AI. Conversations live in local
 Markdown files that you can edit, search, and keep. Ask different models in the
-same conversation, revise earlier text, and branch a side question into a linked
-chat without losing the main thread.
+same conversation, revise earlier text, add private notes, and branch a side
+question into a linked chat without losing the main thread.
 
 The Parley app brings this workflow to a dedicated Neovim environment. You do
 not need an existing Neovim setup; the built-in tutorials teach the few editor
