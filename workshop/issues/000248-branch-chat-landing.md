@@ -1,12 +1,13 @@
 ---
 id: 000248
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-09-14
 updated: 2026-09-14
 estimate_hours: 0.51
 started: 2026-09-14T08:51:22-07:00
+actual_hours: 0.37
 ---
 
 # Open inserted branch chat consistently
@@ -50,6 +51,7 @@ Acceptance boundary: close through SDLC review after the implementation checks a
 ## Log
 
 ### 2026-09-14
+- 2026-09-14: closed — make test passed: 256 spec files, lint 0 warnings/errors in 447 files; targeted ui/keybindings passed; 13 behavioral landing cases; real Neovim Insert-mode typing smoke passed; README landing corrected and doc sweep/diff check clean; review verdict: SHIP
 
 - User specified consistent open-and-edit behavior; scoped fix to existing child creation. Found insert_inline discards commit_reference result and has no navigation; other paths duplicate EOF landing. Existing workspace has unrelated tutorial/bootstrap changes; stage only issue and fix files.
 
