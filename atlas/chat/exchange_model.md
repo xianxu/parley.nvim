@@ -139,3 +139,13 @@ sections when replacing the insertion span.
 ## Key Invariant
 
 Any feature needing buffer positions MUST use the model. Never scan lines, use `foldlevel()`, `last_content_line()`, or backward lookups. The model already knows.
+
+
+## Folding verification corpus
+
+`tests/integration/fold_invariants_spec.lua` exercises real Neovim fold state
+over five dedicated `tests/fixtures/fold_*.md` transcripts: tool blocks,
+assistant-first input, adversarial fences, markers inside prose fences, and
+ordinary multi-exchange/model conversations. Both parsed-model and independent
+raw-text oracles remain active. Workshop chats are not test fixtures; removing
+or editing personal conversations does not change the test corpus.

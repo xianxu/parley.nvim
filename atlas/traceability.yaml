@@ -253,6 +253,7 @@ atlas:
       - lua/parley/buffer_edit.lua
       - lua/parley/render_buffer.lua
       - lua/parley/fold_projection.lua
+      - tests/fixtures/fold_multi_exchange.md
       - lua/parley/exchange_anchors.lua
       - lua/parley/fence.lua
       - lua/parley/tool_folds.lua

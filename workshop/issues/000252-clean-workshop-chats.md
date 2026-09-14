@@ -29,9 +29,9 @@ Operator approved backup, deletion of personal/test material (no move to private
 
 ## Plan
 
-- [ ] Verify external backup and manifest, then apply exact keep/remove inventory.
-- [ ] Repair retained references and use a dedicated synthetic folding corpus.
-- [ ] Run scoped tests, inspect staged scope, close through fresh review.
+- [x] Verify external backup and manifest, then apply exact keep/remove inventory.
+- [x] Repair retained references and use a dedicated synthetic folding corpus.
+- [x] Run scoped tests, inspect staged scope, close through fresh review.
 
 ## Log
 
@@ -50,3 +50,12 @@ item: milestone-review design=0 impl=0.1
 design-buffer: 0.15
 total: 0.615
 ```
+
+
+### 2026-09-14 — Cleanup and verification
+
+Verified private backup: `/Users/xianxu/.local/share/parley/cleanup-backups/20260914-120628-workshop` (59 original files, SHA256 manifest, exact inventory, operation journal, one-shot executor and recovery copies). Removed44chat transcripts+3PNG+1hidden raw log; retained11approved chats. Literal checkout tilde directory disappeared before backup execution; confirmed absent, did not delete an alternate target. Backup original hashes rechecked after cleanup. No private research moved to another active library.
+
+Six retained branch targets resolve locally after correcting timestamp-renamed paths and anchoring refractive-index to workshop Basics with a forward link. The cross-category WWII link was an incoming backlink from the removed chat, so retained product prose did not need deletion. Seven temporary executor tests cover unsafe paths, source changes, incomplete/corrupt backups, extra source files, symlinks and exact deletion/retry.
+
+Fold corpus no longer queries Git/workshop or retains an obsolete missing-file exemption. Four existing adversarial fixtures plus a synthetic multi-exchange fixture exercise unchanged model/raw-text fold oracles; all fixtures must exist and have headers. RED: with workshop discovery empty, old suite failed corpus minimum. GREEN: six cases pass with no workshop discovery, and again from an isolated directory without workshop. Mapped chat/exchange_model suite and lint pass. No runtime API changes. Unrelated staged README, .gitignore, bootstrap and untracked merge helper preserved.
