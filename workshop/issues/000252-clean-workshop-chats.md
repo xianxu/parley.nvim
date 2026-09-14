@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-09-14
 updated: 2026-09-14
-estimate_hours:
+estimate_hours: 0.615
 started: 2026-09-14T12:05:18-07:00
 ---
 
@@ -36,3 +36,17 @@ Operator approved backup, deletion of personal/test material (no move to private
 ## Log
 
 ### 2026-09-14
+
+
+## Estimate
+
+After plan-quality approval: familiar Lua test harness and small filesystem cleanup. Resolved design 0.5h ×0.2 =0.1h; implementation/verification 1h ×0.4 =0.4h; single fresh review0.25h ×0.4 =0.1h; 15% design buffer0.015h.
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: lua-neovim design=0.1 impl=0.4
+item: milestone-review design=0 impl=0.1
+design-buffer: 0.15
+total: 0.615
+```
