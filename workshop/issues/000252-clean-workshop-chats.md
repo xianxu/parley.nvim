@@ -1,12 +1,13 @@
 ---
 id: 000252
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-09-14
 updated: 2026-09-14
 estimate_hours: 0.615
 started: 2026-09-14T12:05:18-07:00
+actual_hours: 0.06
 ---
 
 # Clean workshop chat corpus
@@ -36,6 +37,7 @@ Operator approved backup, deletion of personal/test material (no move to private
 ## Log
 
 ### 2026-09-14
+- 2026-09-14: closed — Verified external backup59files with SHA256 and exact inventory; removed44chats+3images+1rawlog, retained11approved chats, six local branch references pass, literal tilde already absent. Seven adversarial cleanup checks pass; fold corpus RED before/GREEN after with workshop absent; final13 mapped chat/exchange_model specs pass and lint448files clean; unrelated staged README preserved.; review verdict: SHIP
 
 
 ## Estimate
