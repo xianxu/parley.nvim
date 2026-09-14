@@ -1,12 +1,13 @@
 ---
 id: 000206
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-09-01
 updated: 2026-09-14
 estimate_hours: 2.49
 started: 2026-09-02T14:27:21-07:00
+actual_hours: 3.49
 ---
 
 # Rebuild Parley user documentation
@@ -87,6 +88,8 @@ accurate reference material for existing users.
 
 ## Log
 
+
+- 2026-09-14: closed — All 257 make test specs pass; make lint 448 files zero warnings/errors; final infra/starter mapped suite passes; fresh isolated actual starter seeds and retrieves all three tutorials and native Basics outline exercise lands correctly; all54 atlas pages audited and16 docs-only questions resolved. Historical unchecked manual/video/live-provider Plan items were explicitly superseded by approved 2026-09-14 revision; revised checklist complete, so no-plan-check applies only to those preserved historical items.; review verdict: SHIP
 ### 2026-09-01
 
 Created while triaging the Parley backlog. Promotion now depends more on a

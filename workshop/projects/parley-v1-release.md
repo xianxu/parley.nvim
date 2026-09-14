@@ -79,7 +79,7 @@ product they document must be settled first.
 - [ ] [parley.nvim#213] — make checkhealth honest and remove the copilot adapter *(B10; Tier 4 moved to #236, outside v1)*
 - [x] [parley.nvim#214] — audit and curate the default keybinding surface *(policy on top of #212's mechanism)* — **closed 2026-09-08, 17.14h** (est 3.83h, 0.2×)
 - [x] [parley.nvim#237] — ParleyProxy update fetches the latest release unless pinned; status shows the version *(a stale pin locks out the newest models)*
-- [ ] [parley.nvim#206] — rebuild Parley user documentation *(step 1 done: the audit)*
+- [x] [parley.nvim#206] — rebuild Parley user documentation *(step 1 done: the audit)*
 - [ ] [parley.nvim#207] — produce Parley introduction video *(depends on #206)*
 - [ ] [parley.nvim#162] — split parley into two plugins — **deferred**, see Log
 
@@ -212,3 +212,16 @@ the existing breakdown without changing scope or completion state; add #208's
 current progress and blocker so close can update this portfolio record.
 
 [parley.nvim#208]: #parley.nvim-208
+
+
+### 2026-09-14T11:52:00-07:00 — #206 documentation accepted
+
+Reason: the operator approved app tutorials plus AI-queryable atlas as the user-documentation structure. Delta: #206 now completes the concise app-first README, all 54 atlas feature-page audit, canonical tutorial corrections and help retrieval. The old audit-only task note and mandatory storyboard scope are superseded; video production stays #207. Fresh closing review returned SHIP with no findings; PR awaits operator merge.
+
+### parley.nvim#206 — documentation refresh
+
+**est:** 2.49h
+**actual:** 3.49h
+**closed:** 2026-09-14
+
+Verification: 257 test specs, lint, native isolated starter tutorial exercise, and 16 retrieved-doc user questions. Durable evidence: `workshop/plans/000206-documentation-audit.md`.

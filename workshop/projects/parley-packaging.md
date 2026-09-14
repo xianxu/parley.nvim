@@ -75,7 +75,7 @@ Prerequisites owned by `parley-v1-release` (tracked there, listed for order):
 - [x] [parley.nvim#245] — dependency registry and honest install advice *(independent dependency health; feeds the formula)*
 - [x] [parley.nvim#246] — starter config as a product artifact *(after #211 and #209; `NVIM_APPNAME=parley`)*
 - [x] [parley.nvim#247] — Homebrew tap and `parley` launcher, tested on a clean tart VM *(after #245, #246; the project's done_when)*
-- [ ] [parley.nvim#206] — user documentation *(v1-release's row; the brew path becomes its install section)*
+- [x] [parley.nvim#206] — user documentation *(v1-release's row; the brew path becomes its install section)*
 
 <a id="parley-nvim-244"></a>
 ### parley.nvim#244 — shrink images on save
@@ -253,3 +253,16 @@ profile removal.
 
 Measured at the last SDLC close. Published through v2.4.2, then accepted by the
 operator; no additional manual test outcomes are inferred from acceptance.
+
+
+### 2026-09-14T11:52:00-07:00 — #206 documentation accepted
+
+Reason: the operator approved app tutorials plus AI-queryable atlas as the user-documentation structure. Delta: #206 now completes the concise app-first README, all 54 atlas feature-page audit, canonical tutorial corrections and help retrieval. The old audit-only task note and mandatory storyboard scope are superseded; video production stays #207. Fresh closing review returned SHIP with no findings; PR awaits operator merge.
+
+### parley.nvim#206 — documentation refresh
+
+**est:** 2.49h
+**actual:** 3.49h
+**closed:** 2026-09-14
+
+Verification: 257 test specs, lint, native isolated starter tutorial exercise, and 16 retrieved-doc user questions. Durable evidence: `workshop/plans/000206-documentation-audit.md`.
