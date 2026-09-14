@@ -842,7 +842,7 @@ M.entries = {
 	{
 		id = "cf_delete_tree",
 		config_key = "chat_finder_mappings.delete_tree",
-		default_key = "<C-D>",
+		default_key = "<C-g>D",
 		default_modes = { "n", "i", "v", "x" },
 		scope = "chat_finder",
 		desc = "Delete chat tree",

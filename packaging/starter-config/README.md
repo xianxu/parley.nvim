@@ -28,9 +28,10 @@ You can edit `init.lua` to change your settings.
    Alt+t opens the conversation outline. Press Escape and type `:wq` to save
    and quit. Use `:ParleyChatNew` for a new conversation.
 
-The starter keeps all Ctrl+g-prefixed shortcuts and Alt chords. Press Ctrl+g,
+The starter keeps all Ctrl+g-prefixed shortcuts and Alt chords, plus finder-local
+controls such as Ctrl+d to delete the selected chat after confirmation. Press Ctrl+g,
 then `f` to find chats, `c` to create one, or `?` for shortcut help. Press Ctrl+g
-twice to send. Other shortcut families remain disabled.
+twice to send. Other global/editor shortcut families remain disabled.
 
 Pass a file to open it instead of the welcome chat:
 

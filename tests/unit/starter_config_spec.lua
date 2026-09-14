@@ -33,6 +33,19 @@ describe('starter profile options', function()
         assert.is_nil(opts.global_shortcut_note_finder)
         assert.is_false(opts.default_keymaps)
     end)
+    it('retains finder-local controls despite restricting global key families', function()
+        local opts = starter.options({ data = '/profile/data', state = '/profile/state' })
+        local defaults = require('parley.config')
+        for _, field in ipairs({ 'chat_finder_mappings', 'note_finder_mappings', 'issue_finder_mappings' }) do
+            for action, binding in pairs(defaults[field]) do
+                local expected = type(binding.shortcut) == 'table' and binding.shortcut or { binding.shortcut }
+                assert.is_truthy(opts[field] and opts[field][action], field .. '.' .. action)
+                assert.same(expected, opts[field][action].shortcut, field .. '.' .. action)
+            end
+        end
+        assert.is_nil(opts.global_shortcut_note_finder)
+        assert.is_nil(opts.global_shortcut_issue_finder)
+    end)
     it('overrides app locations and external provider availability only', function()
         local roots = { data = '/profile/data', state = '/profile/state' }
         local opts = starter.options(roots)

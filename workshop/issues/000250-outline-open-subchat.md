@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-09-14
 updated: 2026-09-14
-estimate_hours:
+estimate_hours: 0.51
 started: 2026-09-14T10:28:16-07:00
 ---
 
@@ -28,6 +28,19 @@ Reuse the existing resolved child path and chat-file navigation machinery where 
 - Non-branch outline navigation and branch expansion/collapse continue working.
 - Regression coverage checks destination file and cursor position, including a missing child file.
 
+## Estimate
+
+Small Lua navigation correction with existing resolved paths and picker seams: design 0.2h, implementation/tests 0.2h, review 0.08h, 15% design buffer. Same calibrated small-fix method as #249.
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: lua-neovim design=0.2 impl=0.2
+item: milestone-review design=0 impl=0.08
+design-buffer: 0.15
+total: 0.51
+```
+
 ## Plan
 
 - [ ] Trace outline branch activation and reuse its resolved child path to open the sub-chat at its start.
@@ -39,3 +52,5 @@ Reuse the existing resolved child path and chat-file navigation machinery where 
 
 - Filed at the operator's request; implementation has not started.
 - Inspection: lua/parley/outline.lua already records `child_path` alongside the parent `file` and branch `lnum` for tree outline entries. Follow the activation path before choosing the implementation seam.
+
+- Implementation decision: branch activation uses resolved child_path, loads the existing target buffer, and calls the shared focus helper at line 1 without nearest-outline-line adjustment. Missing files notify and preserve the source. Non-branch selection keeps its existing path. The issue spec is operator-approved; this atomic change uses the structural plan gate and full closing review.

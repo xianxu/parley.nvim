@@ -213,6 +213,61 @@ describe("ChatFinder logic", function()
         require("parley.chat_finder").clear_cache()
     end)
 
+    describe("finder delete keys (#249)", function()
+        for _, defaults in ipairs({ "config", "registry fallback", "starter" }) do
+            for _, case in ipairs({ { key = "<C-d>", answer = "y" },
+                { key = "<C-d>", answer = "n" }, { key = "<C-g>D", answer = "n", tree = true } }) do
+                it(defaults .. " " .. case.key .. " confirmation " .. case.answer, function()
+                    M.config.chat_finder_mappings = defaults == "config"
+                        and vim.deepcopy(require("parley.config").chat_finder_mappings) or {}
+                    if defaults == "starter" then
+                        local opts = require("parley.starter_config").options({ data = tmpdir, state = tmpdir })
+                        local fixture_config = M.config
+                        M.setup(vim.tbl_extend("force", opts, {
+                            chat_dir = tmpdir, chat_dirs = { tmpdir, secondary_tmpdir },
+                            chat_roots = { { dir = tmpdir, label = "main" },
+                                { dir = secondary_tmpdir, label = "secondary" } },
+                        }))
+                        local configured = M.config
+                        M.config = fixture_config
+                        M.config.default_keymaps = configured.default_keymaps
+                        M.config._explicit_shortcuts = configured._explicit_shortcuts
+                        M.config.chat_finder_mappings = configured.chat_finder_mappings
+                        require("parley.chat_finder").clear_cache()
+                    end
+                    M.config.chat_finder_recency.filter_by_default = false
+                    M._chat_finder.source_win = vim.api.nvim_get_current_win()
+                    local parent = tmpdir .. "/2026-09-14.10-00-00.000_parent.md"
+                    local child = tmpdir .. "/2026-09-14.09-00-00.000_child.md"
+                    vim.fn.writefile({ "---", "topic: parent", "---", "", "💬: q", "",
+                        "🌿: " .. vim.fn.fnamemodify(child, ":t") .. ": child" }, parent)
+                    vim.fn.writefile({ "---", "topic: child", "---", "", "💬: child" }, child)
+                    M._chat_finder.initial_value = parent
+                    local prompt, respond
+                    vim.ui.input = function(opts, callback) prompt, respond = opts.prompt, callback end
+                    M.cmd.ChatFinder()
+                    -- Resolve the effective Neovim map: registering <C-D> after
+                    -- <C-d> silently replaces it, even though the strings differ.
+                    local mapping = vim.fn.maparg(case.key, "i", false, true)
+                    assert.is_function(mapping.callback, "missing finder key " .. case.key)
+                    mapping.callback()
+                    assert(vim.wait(500, function() return prompt ~= nil end, 10), "no confirmation")
+                    if case.tree then
+                        assert.is_truthy(prompt:find("2 file(s) in tree", 1, true), prompt)
+                    else
+                        assert.is_falsy(prompt:find("file(s) in tree", 1, true), prompt)
+                        assert.is_truthy(prompt:find(parent, 1, true), prompt)
+                    end
+                    respond(case.answer)
+                    assert.are.equal(case.answer == "y" and 0 or 1, vim.fn.filereadable(parent))
+                    assert.are.equal(1, vim.fn.filereadable(child), "single deletion removed child")
+                    assert(vim.wait(500, function() return #find_float_wins() > 0 end, 10),
+                        "finder did not resume after confirmation")
+                end)
+            end
+        end
+    end)
+
     describe("Group A: Timestamp parsing from filename", function()
         it("A1: parses timestamp from valid YYYY-MM-DD-HH-MM-SS filename", function()
             -- Create a file with timestamp format

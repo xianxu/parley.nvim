@@ -2376,3 +2376,24 @@ download.
 
 - When changing navigation, search README and user help as well as the atlas;
   #248 updated the map but initially left README promising the opposite landing.
+
+
+## 2026-09-14 (#249)
+
+- **Control-key case is not a distinct binding.** `<C-D>` and `<C-d>` both
+  normalize to byte 4 in Neovim, so the later finder mapping replaced the first.
+  For overlapping actions, test effective buffer mappings using shipped defaults
+  and registry fallbacks; comparing key strings or calling a captured action
+  directly cannot detect alias collisions.
+
+- **Match the user's entry point before declaring a UI bug fixed.** The app
+  starter applies `default_keymaps=false`; a smoke that calls `setup({})` bypasses
+  that policy and proved the plugin behavior instead. Run the actual starter
+  entry with isolated profile data, and normalize starter options through setup
+  before inspecting effective bindings (setup records explicit shortcut intent).
+
+- **Navigation shortcuts must consume the native key action.** `vim.on_key`
+  observes input; a missed/unnormalized Ctrl+j/k handler exposes prompt submit
+  and digraph input. Install prompt mappings like the arrow controls and verify
+  real native input under the app launcher, including the next typed character
+  after a nested confirmation returns.

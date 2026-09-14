@@ -50,7 +50,7 @@ intent rather than providing a second configuration to copy.
 | LLM setup | Missing setup opens the shared agent picker, including logged-out providers; login returns to that picker and model selection resumes the pending action |
 | Setup cancellation | Cancel aborts the pending action; changed source requires retry; headless mode never opens a picker |
 | Proxy | Managed CLIProxyAPI on loopback port 8317 with client key `parley-local`; account credentials share `~/.cli-proxy-api` with the plugin |
-| Keys | All Ctrl+g prefixes and Alt chords, including Alt+Enter; other integration shortcut families disabled |
+| Keys | All Ctrl+g prefixes and Alt chords, including Alt+Enter, plus all finder-local controls; other global/editor integration shortcut families disabled |
 | Optional features | Automatic memory generation disabled; answer-style 📝 summaries, web search and all registered tools enabled |
 | Customization | Existing Neovim users retain `setup(opts)` as the configuration boundary |
 
@@ -63,7 +63,7 @@ answer summaries do not enable background memory generation. The placeholder
 prompts for a real model instead of selecting a named ToolOpus agent.
 
 The app supplies separate storage, editor bootstrap and its Ctrl+g/Alt key
-families. Personal chat/notes and blog export locations belong in the author's
+families plus finder-local controls. Personal chat/notes and blog export locations belong in the author's
 `~/.config/nvim/lua/plugins/parley.lua`; no personal paths ship in the defaults.
 Existing files are not moved by this configuration change.
 
@@ -80,7 +80,7 @@ pinned dependencies. It uses existing Parley profile data and may download missi
 plugins. It does not exercise Homebrew formula installation or launcher upgrades.
 
 `make test-spec SPEC=infra/starter` follows [traceability](../traceability.yaml).
-The policy unit spec defends defaults and key families; starter integration probes
+The policy unit spec defends defaults, key families, and finder-local controls; starter integration probes
 inspect effective setup, profile isolation, welcome parsing, finder visibility,
 keymaps and model selection before sending. Onboarding/readiness specs cover
 provider selection, cancellation and changed-source handling. Bootstrap fixtures
@@ -99,7 +99,7 @@ recovery instead of stealing a competing initializer's work.
 `starter_config.options(roots)` is the pure profile policy projection. It uses
 loopback port 8317 and the `parley-local` client key, matching `define` defaults;
 no client-key file is created or read. Provider OAuth and proxy management
-credentials remain separate. The profile retains Ctrl+g and Alt key families
+credentials remain separate. The profile retains Ctrl+g and Alt key families plus finder-local controls
 from the default bindings and adds Alt+Enter for sending. Both chat memory
 summaries and preference generation are disabled in this profile.
 `starter.start()` applies the policy, seeds missing bundled tutorials and reopens the welcome chat, and

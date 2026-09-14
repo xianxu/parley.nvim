@@ -374,6 +374,29 @@ describe("float_picker", function()
     -- Key mappings
     -- -------------------------------------------------------------------------
     describe("key mappings", function()
+        for _, key in ipairs({ "<C-j>", "<C-k>" }) do
+            it(key .. " moves selection from the prompt without submitting (#249)", function()
+                local picker = float_picker.open({
+                    title = "Navigation",
+                    items = {
+                        { display = "alpha", value = 1 },
+                        { display = "beta", value = 2 },
+                        { display = "gamma", value = 3 },
+                    },
+                    on_select = function() error("navigation must not submit") end,
+                })
+                -- Put selection in the middle so either direction can move.
+                vim.fn.maparg("<Up>", "i", false, true).callback()
+                local before = picker.selected().value
+                local mapping = vim.fn.maparg(key, "i", false, true)
+                assert.equals("function", type(mapping.callback), "missing prompt mapping for " .. key)
+                mapping.callback()
+                assert.is_false(picker.is_closed())
+                assert.equals(before + (key == "<C-j>" and -1 or 1), picker.selected().value)
+                assert.equals("prompt", vim.bo.buftype)
+            end)
+        end
+
         it("ignores confirm while a status row is active", function()
             local selected = false
             local cancelled = false
