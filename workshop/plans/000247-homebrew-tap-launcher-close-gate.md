@@ -155,6 +155,51 @@ rounds:
           family: pure-test-io-separation
           round: 5
       blocked: true
+    - "n": 6
+      timestamp: "2026-09-13T21:59:57-07:00"
+      agent: codex
+      dispose:
+        - id: BR-4
+          disposition: addressed
+          note: Cleanup confirms VM absence before releasing ownership and preserves the original failure. All 17 VM tests passed, including real Tart missing-resource conformance. Restoring checked deletion in scratch reproduced the leaked reservation.
+          round: 6
+        - id: BR-9
+          disposition: addressed
+          note: starter.lua stages tutorials inside chat_dir. Both publication regression cases pass; moving staging back under state in an isolated pinned archive makes them fail specifically with EXDEV.
+          round: 6
+        - id: BR-10
+          disposition: addressed
+          note: The concept table now classifies auth_is_private as INTEGRATION, matching its filesystem operations. The appended release-review revision records the classification sweep; remaining PURE rows match their implementations.
+          round: 6
+        - id: BR-1
+          disposition: addressed
+          note: Installed-layout handling remains corrected; all three upgrade integration cases passed.
+          round: 6
+        - id: BR-2
+          disposition: addressed
+          note: Formula unit tests retain projection assertions; external Ruby syntax validation remains in release integration.
+          round: 6
+        - id: BR-3
+          disposition: addressed
+          note: VM tests inject disk capacity through the test runner, including insufficient-capacity refusal.
+          round: 6
+        - id: BR-5
+          disposition: addressed
+          note: Retained-failure diagnostics and separate cleanup failures remain covered by passing VM cases.
+          round: 6
+        - id: BR-6
+          disposition: addressed
+          note: The project row remains unchecked, and the latest revision explicitly preserves acceptance before merge/archive.
+          round: 6
+        - id: BR-7
+          disposition: addressed
+          note: Live acceptance uses canonical model providers; the catalog regression covers healthy Codex with an empty catalog before Google.
+          round: 6
+        - id: BR-8
+          disposition: addressed
+          note: Release rendering and guest upload retain their shared helper implementations.
+          round: 6
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#247 (boundary-review)
@@ -232,8 +277,21 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-10** [Critical] `pure-test-io-separation` The plan incorrectly classifies auth_is_private as PURE
   workshop/plans/000247-homebrew-launcher-plan.md:320 declares PURE, but tests/packaging/vm_chat.lua:13-20 reads filesystem metadata, UID and resolved paths; its integration test creates directories and symlinks. This is the 2nd finding in family pure-test-io-separation. Apply the rule across all concept tables: filesystem-dependent entities are INTEGRATION. Append a classification revision and sweep every PURE row; BR-2's renderer correction remains addressed (ARCH-PURE).
 
+## Round 6 — 2026-09-13T21:59:57-07:00 (codex) — passed
+
+### Disposed
+
+- BR-4 — addressed — Cleanup confirms VM absence before releasing ownership and preserves the original failure. All 17 VM tests passed, including real Tart missing-resource conformance. Restoring checked deletion in scratch reproduced the leaked reservation.
+- BR-9 — addressed — starter.lua stages tutorials inside chat_dir. Both publication regression cases pass; moving staging back under state in an isolated pinned archive makes them fail specifically with EXDEV.
+- BR-10 — addressed — The concept table now classifies auth_is_private as INTEGRATION, matching its filesystem operations. The appended release-review revision records the classification sweep; remaining PURE rows match their implementations.
+- BR-1 — addressed — Installed-layout handling remains corrected; all three upgrade integration cases passed.
+- BR-2 — addressed — Formula unit tests retain projection assertions; external Ruby syntax validation remains in release integration.
+- BR-3 — addressed — VM tests inject disk capacity through the test runner, including insufficient-capacity refusal.
+- BR-5 — addressed — Retained-failure diagnostics and separate cleanup failures remain covered by passing VM cases.
+- BR-6 — addressed — The project row remains unchecked, and the latest revision explicitly preserves acceptance before merge/archive.
+- BR-7 — addressed — Live acceptance uses canonical model providers; the catalog regression covers healthy Codex with an empty catalog before Google.
+- BR-8 — addressed — Release rendering and guest upload retain their shared helper implementations.
+
 ## Open findings
 
-- **BR-4** [Important] `fake-conformance-to-real-dependency` Clone failure leaks the VM ownership reservation and the fake tart hides it
-- **BR-9** [Critical] `atomic-publication-filesystem-locality` Tutorial publication aborts startup across filesystem boundaries
-- **BR-10** [Critical] `pure-test-io-separation` The plan incorrectly classifies auth_is_private as PURE
+(none — every finding has been disposed)

@@ -484,3 +484,103 @@ findings:
 7. **Plan revisions**
 
    Append revisions classifying `auth_is_private` as INTEGRATION and requiring destination-local tutorial staging across independently mounted project/XDG roots. Keep final release acceptance unchecked.
+
+---
+
+## Re-review — 2026-09-13T21:59:57-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 247 — Homebrew tap and parley launcher: brew install xianxu/parley/parley, tested on a clean tart VM |
+| repo | parley.nvim |
+| issue file | workshop/issues/000247-homebrew-tap-launcher.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | c1395685f69f53a2953cdbaeb01a77d410f105e8..d682f69d510789fed2062146d49a18af4f953889 |
+| command | sdlc close --issue 247 |
+| reviewer | codex |
+| timestamp | 2026-09-13T21:59:57-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+The pinned changes resolve BR-4, BR-9 and BR-10. Focused starter and packaging tests passed, including live Tart conformance; scratch mutations confirmed that the cleanup and cross-filesystem regressions fail without their fixes. No new findings. This supports the documented testing release; the existing fresh-machine acceptance requirement remains before merge/archive.
+
+```findings
+dispose:
+  - id: BR-4
+    disposition: addressed
+    note: |
+      Cleanup confirms VM absence before releasing ownership and preserves the original failure. All 17 VM tests passed, including real Tart missing-resource conformance. Restoring checked deletion in scratch reproduced the leaked reservation.
+  - id: BR-9
+    disposition: addressed
+    note: |
+      starter.lua stages tutorials inside chat_dir. Both publication regression cases pass; moving staging back under state in an isolated pinned archive makes them fail specifically with EXDEV.
+  - id: BR-10
+    disposition: addressed
+    note: |
+      The concept table now classifies auth_is_private as INTEGRATION, matching its filesystem operations. The appended release-review revision records the classification sweep; remaining PURE rows match their implementations.
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Installed-layout handling remains corrected; all three upgrade integration cases passed.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      Formula unit tests retain projection assertions; external Ruby syntax validation remains in release integration.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      VM tests inject disk capacity through the test runner, including insufficient-capacity refusal.
+  - id: BR-5
+    disposition: addressed
+    note: |
+      Retained-failure diagnostics and separate cleanup failures remain covered by passing VM cases.
+  - id: BR-6
+    disposition: addressed
+    note: |
+      The project row remains unchecked, and the latest revision explicitly preserves acceptance before merge/archive.
+  - id: BR-7
+    disposition: addressed
+    note: |
+      Live acceptance uses canonical model providers; the catalog regression covers healthy Codex with an empty catalog before Google.
+  - id: BR-8
+    disposition: addressed
+    note: |
+      Release rendering and guest upload retain their shared helper implementations.
+```
+
+1. **Strengths**
+   - Tutorial publication preserves edits, stages privately on the destination filesystem, and cleans normal failures: `lua/parley/starter.lua:83`.
+   - VM cleanup distinguishes confirmed absence from failed deletion while retaining both diagnostics: `scripts/test-parley-vm.py:62`.
+   - Deferred LLM actions preserve source context and reject changed or deleted buffers; the starter suite exercises cancellation and reentry.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** None.
+
+4. **Minor findings:** None.
+
+5. **Test coverage**
+   - `make test-spec SPEC=infra/starter` passed in isolated scratch storage.
+   - Packaging: 17 VM, 10 launcher, 7 release and 3 upgrade cases passed.
+   - Installed Tart conformance ran successfully; it was not skipped.
+   - BR-4 and BR-9 mutations reproduced their specific failures.
+   - `git diff --check` passed. Full-suite and live OAuth/image acceptance were not rerun.
+
+6. **Architectural notes**
+   - **ARCH-DRY — pass:** Registry-derived dependencies, shared rendering/upload helpers and reused path resolution.
+   - **ARCH-PURE — pass:** Corrected concept classifications match dependency boundaries.
+   - **ARCH-PURPOSE — pass:** Implementation follows the appended scope revisions; outstanding acceptance remains explicit.
+   - **ARCH-MOCK — pass:** Stateful packaging doubles exercise production seams; Tart semantics have live conformance.
+   - **ARCH-CONSTRAINTS — pass:** Capacity/time bounds are exercised; destination-local staging removes the filesystem restriction.
+   - **ARCH-SECURE — pass:** Structured subprocess arguments, scoped tool access and isolated test profiles preserve trust boundaries.
+   - **ARCH-ORDER — pass:** Tests exercise competing initialization, cancellation, retry and failed cleanup.
+   - **ARCH-FUNERAL — pass:** Ownership controls cleanup; retained failures have explicit recovery paths and upgrade candidates remain bounded.
+
+7. **Plan revision recommendations:** None; the appended corrections cover these dispositions.

@@ -7,7 +7,7 @@ created: 2026-09-13
 updated: 2026-09-13
 estimate_hours: 4.159
 started: 2026-09-13T14:26:40-07:00
-actual_hours: 1.83
+actual_hours: 9.12
 ---
 
 # Homebrew tap and parley launcher: brew install xianxu/parley/parley, tested on a clean tart VM
@@ -99,6 +99,7 @@ total: 4.159
 ## Log
 
 ### 2026-09-13 — implementation and VM checkpoint
+- 2026-09-13: closed — Committed archive passed all 254 test files and lint 444 files. Review fixes pass starter 16/16 and packaging VM 17/17 including real Tart conformance; final corrected archive suite in /tmp/parley-v2.4.0-final-archive.log must pass before tag. Plan/project checks remain open because operator requested publication for fresh-machine acceptance; no merge/archive until acceptance completes.; review verdict: SHIP
 - 2026-09-13: closed — Code findings BR1-BR3 all disposed round3; Codex reviewer failed only because its sandbox denies loopback binds. Normal host rerun at reviewed9202b955 passed all11VMcases, exact log /tmp/parley247-reviewed-head-vm.log. Full246specs/lint431 and focused2formula+6release+3upgrade pass. Please verify loopback with supported Claude runner. Approved tag/tap publication then realVM acceptance remain before merge; --no-plan-check only local gate.; review verdict: FIX-THEN-SHIP
 
 Operator approved implementation with “continue”; #246 is merged as PR #180
@@ -384,3 +385,17 @@ Verification: make test with local Plenary passed (exit 0), log
 explicit-sibling completion fixture were updated for the intentional changes.
 Headless parser verified advanced.md is recognized and has one exchange;
 git diff --check passed. These changes remain local and unreleased.
+
+### 2026-09-13 — v2.4.0 release review passed
+
+Bundled all three authored tutorials, preserving only their preambles and initial
+questions. Missing tutorials seed atomically beside their destination, including
+projects on another filesystem; existing edits survive startup. Review corrections
+cover EXDEV and failed-publication cleanup, real Tart missing-resource conformance,
+and integration classification of auth metadata checks.
+
+Exact corrected commit d682f69d passed all 254 test files and lint (444 files,
+zero warnings/errors) from an isolated archive; log
+/tmp/parley-v2.4.0-final-archive.log. SDLC boundary review returned SHIP, no open
+findings. Project checkbox restored to pending because fresh-machine acceptance
+is the user's next step. Publication authorized; PR remains open, no archive.
