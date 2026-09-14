@@ -4,10 +4,10 @@ status: codecomplete
 deps: [000246]
 github_issue:
 created: 2026-09-13
-updated: 2026-09-13
+updated: 2026-09-14
 estimate_hours: 4.159
 started: 2026-09-13T14:26:40-07:00
-actual_hours: 11.21
+actual_hours: 11.92
 ---
 
 # Homebrew tap and parley launcher: brew install xianxu/parley/parley, tested on a clean tart VM
@@ -98,6 +98,8 @@ total: 4.159
 
 ## Log
 
+
+- 2026-09-14: closed — Streaming integration tests passed for shared cursor-follow default; app inheritance asserted; git diff --check clean. Fresh-machine acceptance remains pending; acceptance checkboxes and project completion deliberately remain open.; review verdict: SHIP
 ### 2026-09-13 — implementation and VM checkpoint
 - 2026-09-13: closed — Full make test passed (/tmp/parley-shared-verified.log); subsequent explicit-global-path repo regression passed starter_project 5/5; git diff --check clean. Fresh-machine operator acceptance remains pending, so project completion and acceptance checkboxes deliberately remain open.; review verdict: FIX-THEN-SHIP
 - 2026-09-13: closed — Bootstrap real-float regression7/7, login15/15, login UI4/4, catalog66/66 pass; full suite only found two corrected architecture integration failures, both rechecked passing. Exact release archive suite /tmp/parley-v2.4.1-archive.log must pass before tagging. User authorizes fresh-machine testing publication; live acceptance plan/project remain unchecked and PR remains open.; review verdict: SHIP
@@ -456,3 +458,6 @@ User requests publication of cursor-follow enabled by default. Shared
 chat_free_cursor=false is inherited by the app; saved preferences still override
 the default. Existing streaming integration suite passed; release archive checks
 and boundary review precede v2.4.2 publication.
+
+Cursor-follow release: clean archive full suite passed at 75831f56; boundary
+review returned SHIP. Fresh-machine acceptance remains pending.

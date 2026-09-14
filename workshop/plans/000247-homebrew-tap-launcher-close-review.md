@@ -796,3 +796,115 @@ findings:
     detail: |
       packaging/README.md:15 and :34-36 plus packaging/starter-config/README.md:57 and :79 contradict the shared ~/.cli-proxy-api implementation and retained-auth uninstall policy. Update both guides to state shared ownership and retention, consistent with atlas/infra/starter.md:122-125; do not recommend unconditional deletion of shared credentials. ARCH-SECURE and ARCH-FUNERAL.
 ```
+
+---
+
+## Re-review — 2026-09-14T07:01:11-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 247 — Homebrew tap and parley launcher: brew install xianxu/parley/parley, tested on a clean tart VM |
+| repo | parley.nvim |
+| issue file | workshop/issues/000247-homebrew-tap-launcher.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | c1395685f69f53a2953cdbaeb01a77d410f105e8..75831f56c4d7ff7b01af22cede0a6c0a83488de2 |
+| command | sdlc close --issue 247 |
+| reviewer | codex |
+| timestamp | 2026-09-14T07:01:11-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: medium
+```
+
+BR-11 is addressed: both guides now accurately describe shared credentials and their retention during app removal. The packaging and starter test selections passed, including real Tart missing-resource conformance; the pinned diff passes whitespace checks. No blocking findings remain. This review preserves the documented requirement for live acceptance before merge/archive.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Upgrade reads the installed share path; installed-layout upgrade and restoration tests pass.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      Formula unit coverage tests projection and validation; external syntax validation belongs to release integration.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      Injected disk capacity covers sufficient space and pre-clone refusal; VM tests pass without requiring 60 GiB.
+  - id: BR-4
+    disposition: addressed
+    note: |
+      Cleanup confirms absence before releasing ownership; clone-failure tests and real/fake Tart exit-code conformance pass.
+  - id: BR-5
+    disposition: addressed
+    note: |
+      Retained diagnosis records controlled failure details; retention, retry, and failed-cleanup tests pass.
+  - id: BR-6
+    disposition: addressed
+    note: |
+      Issue and project retain pending acceptance checkboxes and explicitly prohibit merge/archive before complete acceptance evidence.
+  - id: BR-7
+    disposition: addressed
+    note: |
+      Live discovery enumerates canonical model providers; healthy Codex with an empty catalog is covered by passing integration tests.
+  - id: BR-8
+    disposition: addressed
+    note: |
+      Release rendering uses packaging/render-formula.lua; VM uploads use the shared upload helper.
+  - id: BR-9
+    disposition: addressed
+    note: |
+      Tutorial staging uses the destination filesystem; cross-filesystem publication and failure-cleanup regressions pass.
+  - id: BR-10
+    disposition: addressed
+    note: |
+      The plan classifies auth_is_private as INTEGRATION, matching its filesystem metadata reads in tests/packaging/vm_chat.lua.
+  - id: BR-11
+    disposition: addressed
+    note: |
+      The bcbb0143 correction updates packaging/README.md:15-38 and packaging/starter-config/README.md:54-86. Shared ownership and retained credentials match config.lua:124, starter.lua migration, and vm_uninstall.py's four-root removal. This is a prose-only correction; shared-auth integration tests also pass.
+findings:
+  - id: new
+    severity: Minor
+    family: duplicate-helper
+    title: |
+      Selected-model validation is duplicated between readiness and onboarding
+    detail: |
+      lua/parley/llm_readiness.lua:9 and lua/parley/starter_onboarding.lua:6 implement the same placeholder/model predicate. ARCH-DRY: this is the 2nd finding in family duplicate-helper. Apply the rule that setup consumers share one model-selection validity predicate: consolidate both enumerated consumers into a pure helper and test its accepted model shapes.
+```
+
+1. **Strengths**
+
+   - Launcher tests exercise real competing publishers, interrupted initialization, symlinks, exact argument forwarding, and preservation of edited settings.
+   - Release and upgrade tests verify immutable-tag handling, retry behavior, installed layout, and restoration after failure.
+   - Authentication migration preserves existing shared accounts and legacy originals; its collision, permission, and symlink tests pass.
+   - Deferred actions validate the original editor context and settle cancellation/resumption once.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** None.
+
+4. **Minor findings:** Consolidate the duplicated selected-model predicate described above.
+
+5. **Test coverage notes**
+
+   Passed `make test-spec SPEC=infra/packaging` and `make test-spec SPEC=infra/starter`, using separate temporary test roots. Passed pinned-range `git diff --check`. The full suite and authenticated clean-machine image acceptance were not rerun. No repository edits or mutation testing were performed.
+
+6. **Architectural notes**
+
+   - **ARCH-DRY — flag, Minor:** duplicated selection predicate; formula dependencies and release rendering otherwise share their sources.
+   - **ARCH-PURE — pass:** inspected Core-concepts classifications match dependencies; projection tests remain separate from integration checks.
+   - **ARCH-PURPOSE — pass:** implemented packaging behavior follows the revised scope; acceptance remains explicitly pending.
+   - **ARCH-MOCK — pass:** stateful packaging fixtures exercise production seams; Tart conformance passed.
+   - **ARCH-CONSTRAINTS — pass:** capacity refusal, bounded waits, document limits, and serialized publication have coverage.
+   - **ARCH-SECURE — pass:** private credential publication, trusted tool-root context, and bounded indexed documentation reads are preserved.
+   - **ARCH-ORDER — pass:** publisher barriers and deferred-action cancellation tests exercise relevant ordering.
+   - **ARCH-FUNERAL — pass:** profile, staging, candidate, and owned-VM removal policies are explicit; shared credential retention is now documented consistently.
+
+7. **Plan revision recommendations:** None required for this boundary.

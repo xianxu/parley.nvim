@@ -297,6 +297,62 @@ rounds:
           family: credential-lifecycle-documentation
           round: 8
       blocked: false
+    - "n": 9
+      timestamp: "2026-09-14T07:01:11-07:00"
+      agent: codex
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: Upgrade reads the installed share path; installed-layout upgrade and restoration tests pass.
+          round: 9
+        - id: BR-2
+          disposition: addressed
+          note: Formula unit coverage tests projection and validation; external syntax validation belongs to release integration.
+          round: 9
+        - id: BR-3
+          disposition: addressed
+          note: Injected disk capacity covers sufficient space and pre-clone refusal; VM tests pass without requiring 60 GiB.
+          round: 9
+        - id: BR-4
+          disposition: addressed
+          note: Cleanup confirms absence before releasing ownership; clone-failure tests and real/fake Tart exit-code conformance pass.
+          round: 9
+        - id: BR-5
+          disposition: addressed
+          note: Retained diagnosis records controlled failure details; retention, retry, and failed-cleanup tests pass.
+          round: 9
+        - id: BR-6
+          disposition: addressed
+          note: Issue and project retain pending acceptance checkboxes and explicitly prohibit merge/archive before complete acceptance evidence.
+          round: 9
+        - id: BR-7
+          disposition: addressed
+          note: Live discovery enumerates canonical model providers; healthy Codex with an empty catalog is covered by passing integration tests.
+          round: 9
+        - id: BR-8
+          disposition: addressed
+          note: Release rendering uses packaging/render-formula.lua; VM uploads use the shared upload helper.
+          round: 9
+        - id: BR-9
+          disposition: addressed
+          note: Tutorial staging uses the destination filesystem; cross-filesystem publication and failure-cleanup regressions pass.
+          round: 9
+        - id: BR-10
+          disposition: addressed
+          note: The plan classifies auth_is_private as INTEGRATION, matching its filesystem metadata reads in tests/packaging/vm_chat.lua.
+          round: 9
+        - id: BR-11
+          disposition: addressed
+          note: The bcbb0143 correction updates packaging/README.md:15-38 and packaging/starter-config/README.md:54-86. Shared ownership and retained credentials match config.lua:124, starter.lua migration, and vm_uninstall.py's four-root removal. This is a prose-only correction; shared-auth integration tests also pass.
+          round: 9
+      findings:
+        - id: BR-12
+          severity: Minor
+          title: Selected-model validation is duplicated between readiness and onboarding
+          detail: 'lua/parley/llm_readiness.lua:9 and lua/parley/starter_onboarding.lua:6 implement the same placeholder/model predicate. ARCH-DRY: this is the 2nd finding in family duplicate-helper. Apply the rule that setup consumers share one model-selection validity predicate: consolidate both enumerated consumers into a pure helper and test its accepted model shapes.'
+          family: duplicate-helper
+          round: 9
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#247 (boundary-review)
@@ -424,11 +480,27 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-11** [Important] `credential-lifecycle-documentation` Package guides promise credential isolation and deletion that shared authentication no longer provides
   packaging/README.md:15 and :34-36 plus packaging/starter-config/README.md:57 and :79 contradict the shared ~/.cli-proxy-api implementation and retained-auth uninstall policy. Update both guides to state shared ownership and retention, consistent with atlas/infra/starter.md:122-125; do not recommend unconditional deletion of shared credentials. ARCH-SECURE and ARCH-FUNERAL.
 
+## Round 9 — 2026-09-14T07:01:11-07:00 (codex) — passed
+
+### Disposed
+
+- BR-1 — addressed — Upgrade reads the installed share path; installed-layout upgrade and restoration tests pass.
+- BR-2 — addressed — Formula unit coverage tests projection and validation; external syntax validation belongs to release integration.
+- BR-3 — addressed — Injected disk capacity covers sufficient space and pre-clone refusal; VM tests pass without requiring 60 GiB.
+- BR-4 — addressed — Cleanup confirms absence before releasing ownership; clone-failure tests and real/fake Tart exit-code conformance pass.
+- BR-5 — addressed — Retained diagnosis records controlled failure details; retention, retry, and failed-cleanup tests pass.
+- BR-6 — addressed — Issue and project retain pending acceptance checkboxes and explicitly prohibit merge/archive before complete acceptance evidence.
+- BR-7 — addressed — Live discovery enumerates canonical model providers; healthy Codex with an empty catalog is covered by passing integration tests.
+- BR-8 — addressed — Release rendering uses packaging/render-formula.lua; VM uploads use the shared upload helper.
+- BR-9 — addressed — Tutorial staging uses the destination filesystem; cross-filesystem publication and failure-cleanup regressions pass.
+- BR-10 — addressed — The plan classifies auth_is_private as INTEGRATION, matching its filesystem metadata reads in tests/packaging/vm_chat.lua.
+- BR-11 — addressed — The bcbb0143 correction updates packaging/README.md:15-38 and packaging/starter-config/README.md:54-86. Shared ownership and retained credentials match config.lua:124, starter.lua migration, and vm_uninstall.py's four-root removal. This is a prose-only correction; shared-auth integration tests also pass.
+
+### Raised
+
+- **BR-12** [Minor] `duplicate-helper` Selected-model validation is duplicated between readiness and onboarding
+  lua/parley/llm_readiness.lua:9 and lua/parley/starter_onboarding.lua:6 implement the same placeholder/model predicate. ARCH-DRY: this is the 2nd finding in family duplicate-helper. Apply the rule that setup consumers share one model-selection validity predicate: consolidate both enumerated consumers into a pure helper and test its accepted model shapes.
+
 ## Open findings
 
-- **BR-11** [Important] `credential-lifecycle-documentation` Package guides promise credential isolation and deletion that shared authentication no longer provides
-
-## Revisions
-
-2026-09-13: BR-11 addressed before the close commit. Both package guides now state
-shared OAuth ownership and retained credentials after app-profile removal.
+- **BR-12** [Minor] `duplicate-helper` Selected-model validation is duplicated between readiness and onboarding
