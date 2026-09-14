@@ -29,7 +29,7 @@
 - Walks parent chain to root; builds unified outline across linked files
 - Root topic shown as `📋 topic` at top
 - All branches expanded by default; 2-space indentation per depth level
-- Selecting `🌿` jumps to that line in parent file
+- Selecting `🌿` opens the referenced child file at line 1 (standalone, inline, and nested branches); missing files show a warning without creating an empty buffer
 - Selecting child-file item opens file in same window and jumps to line
 
 ## Interaction

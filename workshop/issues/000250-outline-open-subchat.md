@@ -1,12 +1,13 @@
 ---
 id: 000250
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-09-14
 updated: 2026-09-14
 estimate_hours: 0.51
 started: 2026-09-14T10:28:16-07:00
+actual_hours: 0.22
 ---
 
 # Open sub-chat when selecting an outline branch
@@ -43,14 +44,19 @@ total: 0.51
 
 ## Plan
 
-- [ ] Trace outline branch activation and reuse its resolved child path to open the sub-chat at its start.
-- [ ] Add navigation regressions covering branch forms, non-branch entries, and missing children; verify in the app launcher.
+- [x] Trace outline branch activation and reuse its resolved child path to open the sub-chat at its start.
+- [x] Add navigation regressions covering branch forms, non-branch entries, and missing children; verify in the app launcher.
 
 ## Log
 
 ### 2026-09-14
+- 2026-09-14: closed — Six outline tests pass; four branch regressions red then green. Native exact-starter query and Enter opens child at line 1. Full make test exit 0: 256 specs; lint 0 warnings/errors in 447 files. Atlas navigation updated.; review verdict: SHIP
 
 - Filed at the operator's request; implementation has not started.
 - Inspection: lua/parley/outline.lua already records `child_path` alongside the parent `file` and branch `lnum` for tree outline entries. Follow the activation path before choosing the implementation seam.
 
 - Implementation decision: branch activation uses resolved child_path, loads the existing target buffer, and calls the shared focus helper at line 1 without nearest-outline-line adjustment. Missing files notify and preserve the source. Non-branch selection keeps its existing path. The issue spec is operator-approved; this atomic change uses the structural plan gate and full closing review.
+
+- Four regression cases failed before implementation (parent destination for each branch form; missing-file warning absent) and all six outline tests now pass. Fixtures use unique timestamp identities and real chat headers so the actual tree path is exercised.
+- Native starter launcher with isolated HOME/XDG and native query/Enter confirms the selected branch opens its child at cursor `{1, 0}`; /tmp/parley250-native.log. Full make test exit 0: 256 spec files, lint 0 warnings/errors in 447 files; /tmp/parley250-full.log.
+- Updated atlas/ui/outline.md to describe child-file navigation. Existing tree traversal/expansion logic is unchanged.
