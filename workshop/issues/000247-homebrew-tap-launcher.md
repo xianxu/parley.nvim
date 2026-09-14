@@ -461,3 +461,6 @@ and boundary review precede v2.4.2 publication.
 
 Cursor-follow release: clean archive full suite passed at 75831f56; boundary
 review returned SHIP. Fresh-machine acceptance remains pending.
+
+Published v2.4.2 at 1e4e8b38; Homebrew tap 0b9d266. Verified public release
+and exact remote formula bytes after publication.
