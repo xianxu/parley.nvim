@@ -172,6 +172,29 @@ the fake. The fixes and close metadata are bundled into this single commit per
 the gate's post-verdict protocol. Publish the reviewed tag/tap next, then run the
 retained clean VM with --keep-on-failure for conformance diagnosis. No merge yet.
 
+### 2026-09-13 — public release and actual guest conformance
+
+Published v2.3.0 at 67d14b6fae8f9b830110091dbb5315cc588001c6 and public
+xianxu/homebrew-parley at 59fa5f6. Release script generated, reviewed and published
+archive SHA256 b8f2b2ada24adbe48dcf831896e8a7c28c76dc7d7e76648ccc34c45fb5e72631.
+PR #181 is open; CI run 34790826347 passed. Actual guest installed Parley 2.3.0,
+Neovim 0.12.5_1 and ripgrep 15.2.0 and opened the welcome chat.
+
+Actual boot exposed an acceptance-probe typo (:Parley vs shipped :ParleyConnect).
+A real launcher/starter regression reproduces it and passes after correction.
+The retained install can now resume in the same owned VM, checking its existing
+decoy hash before retry; 16 VM harness cases pass. Guest boot/containment/decoy
+acceptance now passes. These post-close harness fixes need delta review before
+merge; released application code has not changed.
+
+Guest fake first-use is blocked by Python HTTPServer reverse-DNS startup: a
+real process sample shows socket_gethostbyaddr -> mdns_hostbyaddr before listen.
+Direct socket binding works and guest firewall is disabled. Fix the local fixture
+server's unnecessary DNS dependency; do not change product proxy networking.
+The real brew upgrade phase is in progress. Retained VM/manifest ownership is
+unchanged; --keep-on-failure has preserved diagnostic evidence. Live OAuth and
+image response remain pending, and the project stays unchecked.
+
 ## Revisions
 
 ### 2026-09-13T14:43:00-07:00 — packaging execution scope
@@ -191,3 +214,101 @@ image-response path. A direct keyed-provider response cannot substitute for it.
 A VM credential is usable only if it authenticates that same managed proxy;
 otherwise the operator completes OAuth in the guest. That input remains pending.
 Fresh-context plan review completed; implementation approval is pending.
+
+### 2026-09-14 — operator VM acceptance and simplified defaults
+
+The user completed managed Claude login and text response in their own
+`parley.nvim-test` VM, then reproduced successful define integration with explicit
+port/key overrides. They requested default port 8317, `parley-local`, all Ctrl+g
+bindings and Alt chords. The starter now implements those defaults, removes its
+generated-key owner, and preserves private profile data permissions. Old key files
+are ignored. Two unit cases and eleven isolated startup cases pass, including
+actual shortcut registration and an existing-key profile; changed-file lint and
+diff checks pass.
+
+Stopped the VM's old owned proxy and overlaid only the two updated starter
+modules in its installed v2.3.0 runtime for acceptance. The installed define,
+with DEFINE_LLM_BASE_URL, DEFINE_LLM_API_KEY and Anthropic credentials unset,
+returned PONG on port 8317 in 1.082 seconds. The same VM verified Ctrl+g f/c/?,
+Ctrl+g Ctrl+g and Alt+Return/v/t mappings. This is a test overlay, not a published
+Homebrew upgrade. A new reviewed release remains required; image/upgrade/removal
+acceptance remains pending. Other running VMs were untouched.
+
+### 2026-09-14 — flat welcome and automatic onboarding verified
+
+The user's local welcome conversation was invisible because finder discovery is
+nonrecursive. Per their revised request, new profiles now create `chats/welcome.md`
+with setup instructions before an example question. Chat filename recognition is
+shared by attachment, topic lookup and finder discovery. Legacy `chats/welcome/`
+transcripts migrate through the existing tree mover, preserving contents/assets
+and refusing clashes; empty containers are removed. Existing welcome.md contents
+are preserved. The generated preamble is excluded from the parsed question.
+
+Interactive startup without a real selected model now opens the existing model
+picker when a connected provider serves models, or Connect when account setup is
+needed. Successful login opens the picker; network failures remain errors,
+cancellation is respected, and headless startup is silent. The placeholder is
+hidden from selectable agents. Ctrl+g and Alt shortcuts are derived through the
+registry resolver. Verification: `make test` passed all 249 spec files and lint
+435 files (`/tmp/parley247-first-use-full.log`); 13 onboarding cases and 12 isolated
+starter cases cover the flow. These changes are not yet a published Homebrew
+release and have not been applied to the user's local installation.
+
+### 2026-09-14 — floating provider picker
+
+Per user request, Connect now uses the same float_picker component as the agent
+selector, with stable provider IDs, filtering and selection recall. Cancellation
+clears the in-flight prompt, while successful login still opens the model picker.
+Verified 14 onboarding cases and 12 starter integration cases. The integration
+probe opens the real floating window and invokes its Enter mapping before
+checking managed download/login; failure coverage also passes. Changed-file lint
+and diff checks pass. This UI change is local and pending release with the other
+first-use corrections.
+
+### 2026-09-14 — action fallback and source-profile launch
+
+Implemented provider-scoped model selection and `:ParleyProxy connect`; removed
+the standalone Connect command. Semantic LLM entry points defer before building
+requests and resume only with unchanged source context. Regression proves a real
+chat request uses the newly selected model (13 starter integration cases pass).
+Dedicated profile now disables both chat_memory and memory_prefs; regression
+failed before adding chat_memory=false. Checkout launch documented using
+NVIM_APPNAME=parley PARLEY_RUNTIME=$PWD and the packaged init.lua. Latest full
+verification pending; all changes remain unpublished.
+
+Verification follow-up: full test run had one architecture documentation failure
+(missing agent_picker row in Core concepts); added that row and all 21 architecture
+cases pass. All other spec files passed that run. The 13 starter integration cases
+pass again with effective chat_memory=false and memory_prefs=false assertions.
+Two starter policy cases and 17 onboarding cases pass. Logs:
+`/tmp/parley247-fallback-full.log`, `/tmp/parley247-fallback-arch.log`,
+`/tmp/parley247-memory-starter.log`. No release or local installation updated.
+
+### 2026-09-14 — product boundary and configuration ownership
+
+User clarified that Homebrew Parley is a standalone app backed by Neovim, while
+parley.nvim is independently configurable inside an existing editor. Expanded
+atlas/infra/starter.md with ownership, release behavior, regression coverage and
+the direct-checkout test command; linked it from the atlas index and configuration
+map. Recorded shared portable defaults as intended direction, with current
+differences explicit and #211 as the existing personal-default migration work.
+No plugin defaults or personal machine configuration changed in this docs pass.
+
+### 2026-09-14 — picker fallback when account checks are unavailable
+
+User acceptance showed a blocking account-health error instead of setup UI.
+Unknown health now falls through to catalog discovery; usable models open the
+provider-scoped agent picker. Unavailable catalogs or initial proxy startup
+open provider selection without duplicate setup errors. Explicit login retains
+its operational error reporting. Cancellation/resume callbacks stay intact.
+Regression first reproduced four failures under the previous policy.
+
+### 2026-09-14 — bundled help approved by user
+
+Approved design and test steps: workshop/plans/000247-homebrew-launcher-plan.md,
+section “approved bundled product help”. Add a fixed shipped Markdown guide,
+parley_help topic tool (index/read, no arbitrary file paths), and overview-derived
+introduction with current app/plugin mode. Enable only this help tool in the app;
+plugin @all defaults discover it without widening explicit custom tool lists.
+Update welcome question; verify dispatcher reads, invalid topic rejection, prompt
+context and actual starter live agents. This extends the approved first-use work.
