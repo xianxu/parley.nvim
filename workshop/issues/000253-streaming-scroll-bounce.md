@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-09-14
 updated: 2026-09-14
-estimate_hours:
+estimate_hours: 0.83
 started: 2026-09-14T13:32:30-07:00
 ---
 
@@ -38,3 +38,16 @@ Fold maintenance must preserve each window’s complete view without undoing del
 
 
 Reproduction scripts: /tmp/parley-fold-ui-repro.lua, /tmp/parley-fold-ui-multi.lua, /tmp/parley253-wrap-smooth-repro.lua. Independent experiment adding winsaveview/winrestview only around clear_folds_in_span fixes the split drift and preserves explicit follow within mutation. No production files changed during diagnosis.
+
+## Estimate
+
+Derived after plan approval: Lua/Neovim design 1h × 0.2 = 0.2h; implementation and attached-UI verification 1.25h × 0.4 = 0.5h; boundary review 0.25h × 0.4 = 0.1h; design buffer 15% adds 0.03h.
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: lua-neovim design=0.2 impl=0.5
+item: milestone-review design=0 impl=0.1
+design-buffer: 0.15
+total: 0.83
+```
