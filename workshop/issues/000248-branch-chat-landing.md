@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-09-14
 updated: 2026-09-14
-estimate_hours:
+estimate_hours: 0.51
 started: 2026-09-14T08:51:22-07:00
 ---
 
@@ -26,6 +26,19 @@ This is a small UI glue fix: existing parser supplies the question location (ARC
 - Visual selection opens its child on the seeded first question in Insert mode.
 - Plain and gathered n/i branches use the same landing, even with a trailing template question.
 - Parent anchor is saved before navigation; save failure and foreign markdown stay put.
+
+## Estimate
+
+Produced via brain/data/life/42shots/velocity/estimate-logic-v3.1.md against baseline-v3.1.md, Method A only (calibration marked stale). One focused Lua/Neovim fix: low-end design 1h × 0.2 because the spec resolves landing and ownership; low-end implementation 0.5h × 0.4 ship-time scaling = 0.2h. One boundary review: design 0h, implementation 0.2h × 0.4 = 0.08h. Familiar stack, no novel library needed; 15% design buffer.
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: lua-neovim design=0.2 impl=0.2
+item: milestone-review design=0 impl=0.08
+design-buffer: 0.15
+total: 0.51
+```
 
 ## Plan
 
