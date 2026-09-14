@@ -1468,14 +1468,20 @@ function M.open(opts)
     map_wheel(prompt_buf, "n", "<ScrollWheelUp>", -1)
     map_wheel(results_buf, "n", "<ScrollWheelDown>", 1)
     map_wheel(results_buf, "n", "<ScrollWheelUp>", -1)
-    imap_p("<Up>", function()
-        move_selection(-1)
-        focus_prompt()
-    end)
-    imap_p("<Down>", function()
-        move_selection(1)
-        focus_prompt()
-    end)
+    -- Map navigation so Neovim cannot submit <C-j> or start digraph input
+    -- on <C-k>; an on_key observer does not consume their default actions.
+    for _, key in ipairs({ "<Up>", "<C-k>" }) do
+        imap_p(key, function()
+            move_selection(-1)
+            focus_prompt()
+        end)
+    end
+    for _, key in ipairs({ "<Down>", "<C-j>" }) do
+        imap_p(key, function()
+            move_selection(1)
+            focus_prompt()
+        end)
+    end
     imap_p("<Left>", function()
         query_cursor = math.max(0, query_cursor - 1)
         focus_prompt()
@@ -1530,14 +1536,6 @@ function M.open(opts)
     local special_keys = {
         ["<Esc>"] = function()
             cancel()
-        end,
-        ["<C-j>"] = function()
-            move_selection(1)
-            focus_prompt()
-        end,
-        ["<C-k>"] = function()
-            move_selection(-1)
-            focus_prompt()
         end,
     }
 

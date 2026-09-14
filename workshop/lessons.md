@@ -2391,3 +2391,9 @@ download.
   that policy and proved the plugin behavior instead. Run the actual starter
   entry with isolated profile data, and normalize starter options through setup
   before inspecting effective bindings (setup records explicit shortcut intent).
+
+- **Navigation shortcuts must consume the native key action.** `vim.on_key`
+  observes input; a missed/unnormalized Ctrl+j/k handler exposes prompt submit
+  and digraph input. Install prompt mappings like the arrow controls and verify
+  real native input under the app launcher, including the next typed character
+  after a nested confirmation returns.

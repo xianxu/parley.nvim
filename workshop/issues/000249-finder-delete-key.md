@@ -52,8 +52,8 @@ total: 0.51
 - [x] Preserve finder-local bindings in starter_config.options and test starter option resolution.
 - [x] Exercise the actual ChatFinder with starter options and run exact-launcher native smoke plus full tests/lint.
 
-- [ ] Audit every Chat Finder chord with native input under the exact starter; cover confirmed/cancelled deletion and moves.
-- [ ] Bind Ctrl+j/k through the existing prompt navigation mappings, add regressions, and run full verification.
+- [x] Audit every Chat Finder chord with native input under the exact starter; cover confirmed/cancelled deletion and moves.
+- [x] Bind Ctrl+j/k through the existing prompt navigation mappings, add regressions, and run full verification.
 
 Acceptance boundary: close through the binary-owned fresh review.
 
@@ -96,3 +96,10 @@ Reason: operator asks to verify all Chat Finder chords in the app launcher.
 Delta: native input confirms Ctrl+j submits the prompt and Ctrl+k enters digraph input. The on_key dispatch compares translated keys against unnormalized names (`<NL>` / `<C-K>` versus `<C-j>` / `<C-k>`) and cannot suppress default actions. Install ordinary prompt insert mappings alongside Up/Down, reusing their selection/focus behavior, and remove the ineffective observer handlers (ARCH-DRY, ARCH-PURPOSE). This restores documented navigation with no new interaction/state model or per-key work. Keep the existing help behavior: Ctrl+g ? opens scoped help and leaves the finder.
 
 Tests: regress effective prompt mappings moving selection without submitting/cancelling; native exact-starter probes cover Ctrl+j/k and the complete finder chord inventory. Native audit already passes arrows, Enter, Esc/Ctrl+c, scoped help, Ctrl+a/s, Tab/Shift-Tab, and Ctrl+x confirmed/cancelled moves. All probes use isolated HOME/XDG and temporary chats (ARCH-SECURE). This remains a small atomic bugfix; existing issue plan is sufficient.
+
+### 2026-09-14 — Audit outcomes
+
+- Native starter audit passes: Up/Down, Ctrl+j/k, Enter, Esc/Ctrl+c, Ctrl+g ?, Ctrl+a/s, Tab/Shift-Tab (including All boundary), Ctrl+x move confirmed/cancelled, Ctrl+d and Ctrl+g D confirmed/cancelled. Single deletion preserves the child; tree deletion removes both; cancellation preserves both and the next typed character edits the finder query. Scoped help opens successfully and leaves the finder, as before.
+- Ctrl+j/k each failed both the native probe and effective prompt-map regression before the fix; both now pass. The 79-test float_picker spec passes. Native runners: /tmp/parley-finder-core-runner.py, /tmp/parley-starter-chords-runner.py, /tmp/parley-finder-deletions-runner.py; isolated profiles retain actual starter setup and use temporary chats only.
+- Harness corrections: initialize sticky query state explicitly, use a plain sentinel query, and canonicalize /tmp paths before comparing item values. After cancelled native input Neovim reports pending Insert mode as normal, so verify the next typed character edits the prompt instead of asserting only the mode string.
+- Full make test exit 0: 256 spec files; lint 0 warnings/errors in 447 files (/tmp/parley249-chords-full.log). No new architectural surface; existing picker documentation already promises Ctrl+j/k navigation.
