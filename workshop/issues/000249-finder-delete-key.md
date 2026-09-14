@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-09-14
 updated: 2026-09-14
-estimate_hours:
+estimate_hours: 0.51
 started: 2026-09-14T09:15:17-07:00
 ---
 
@@ -28,6 +28,19 @@ ARCH-DRY/PURPOSE: fix both existing default sources and test the live key rather
 - Ctrl+d reaches single-chat confirmation from the finder and confirmed deletion removes only the selected chat.
 - Tree deletion has a distinct reachable default chord; cancelling preserves files.
 - Runtime defaults, registry fallback, and displayed help agree; focused tests and lint pass.
+
+## Estimate
+
+Method A, estimate-logic-v3.1 (repo calibration at brain/data/life/42shots/velocity/estimate-logic-v3.1.md, provisional/stale). One focused Lua/Neovim bugfix: low-end design 1h × 0.2 resolved-spec factor = 0.2h; implementation 0.5h × 0.4 ship-time factor = 0.2h, covering regression setup and binding change. One review: design 0h, implementation 0.2h × 0.4 = 0.08h. Familiar stack, existing picker/file fixture seams; no new library needed. 15% design buffer.
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: lua-neovim design=0.2 impl=0.2
+item: milestone-review design=0 impl=0.08
+design-buffer: 0.15
+total: 0.51
+```
 
 ## Plan
 
