@@ -317,7 +317,7 @@ preamble exclusion, finder discovery, registered shortcuts, and onboarding paths
 | `is_chat_filename` | `lua/parley/chat_parser.lua` | PURE | new |
 | `start`, `connect` | `lua/parley/starter_onboarding.lua` | INTEGRATION | new |
 | `migrate_welcome`, `welcome` | `lua/parley/starter.lua` | INTEGRATION | modified |
-| `auth_is_private` | `tests/packaging/vm_chat.lua` | PURE | new |
+| `auth_is_private` | `tests/packaging/vm_chat.lua` | INTEGRATION | new |
 
 ### 2026-09-14 — consistent provider selector
 
@@ -459,3 +459,14 @@ ship only tutorial preambles and initial questions, never local AI responses.
 Verify the committed release archive, run the SDLC boundary review, publish an
 immutable v2.4.0 tag and release, then render and publish its exact Homebrew
 formula. Keep PR and project acceptance open for the fresh-machine test.
+
+### 2026-09-13 — release review corrections
+
+BR-9: stage tutorial bytes on the destination chat filesystem, retaining atomic
+no-clobber publication and cleanup; state and project paths may be separate
+mounts. BR-10: auth_is_private reads filesystem metadata and is INTEGRATION.
+Swept all PURE rows: formula validation/rendering, help content projections,
+starter option projection and chat filename recognition remain input/output
+functions; no other filesystem-dependent PURE row remains (ARCH-PURE).
+BR-4: add optional live Tart conformance comparing real and fake missing-resource
+stop/delete exits in a private HOME, skipping explicitly when Tart is absent.

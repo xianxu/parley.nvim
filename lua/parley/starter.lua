@@ -58,7 +58,12 @@ local function welcome(parley, roots)
         vim.wait(100)
     end
     local owned = true
+    local staging_dir
     local function cleanup()
+        if staging_dir then
+            assert(vim.fn.delete(staging_dir, 'rf') == 0, 'Cannot remove tutorial staging: ' .. staging_dir)
+            staging_dir = nil
+        end
         if owned then
             local removed = vim.fn.delete(lock, 'rf')
             assert(removed == 0, 'Cannot remove welcome initializer: ' .. lock)
@@ -77,7 +82,11 @@ local function welcome(parley, roots)
             local stat = uv.fs_lstat(path)
             if not stat then
                 local lines = vim.fn.readfile(runtime .. '/packaging/tutorials/' .. name)
-                local staging = lock .. '/' .. name
+                if not staging_dir then
+                    staging_dir = assert(uv.fs_mkdtemp(chat_dir .. '/.parley-tutorial-XXXXXX'))
+                    assert(uv.fs_chmod(staging_dir, 448))
+                end
+                local staging = staging_dir .. '/' .. name
                 assert(vim.fn.writefile(lines, staging) == 0, 'Cannot write tutorial: ' .. name)
                 local linked, why = uv.fs_link(staging, path)
                 assert(linked, 'Cannot publish tutorial: ' .. tostring(why))

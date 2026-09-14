@@ -105,6 +105,56 @@ rounds:
           family: duplicate-helper
           round: 4
       blocked: false
+    - "n": 5
+      timestamp: "2026-09-13T21:55:12-07:00"
+      agent: codex
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: Upgrade reads the installed share location; passing upgrade fixtures reproduce Homebrew's move out of libexec.
+          round: 5
+        - id: BR-2
+          disposition: addressed
+          note: Formula unit coverage is input/output-only; Ruby execution resides in passing release integration tests.
+          round: 5
+        - id: BR-3
+          disposition: addressed
+          note: The injected capacity probe and passing insufficient-capacity test isolate fake VM tests from host disk availability.
+          round: 5
+        - id: BR-4
+          disposition: not-addressed
+          note: Clone cleanup and original-error preservation are repaired and regression-tested. However, tests/integration/packaging_vm_spec.lua:31 only asserts the fake returns 2; the requested optional real-versus-fake stop/delete conformance test is absent. The issue's manual verification claim does not provide that executable guard (ARCH-MOCK).
+          round: 5
+        - id: BR-5
+          disposition: addressed
+          note: Persistent --keep-on-failure retains the owned VM, reports its manifest, and records controlled diagnostics. Passing tests cover retained failure, retry, explicit cleanup, and independent cleanup failure.
+          round: 5
+        - id: BR-6
+          disposition: addressed
+          note: Plan revisions at lines 263-265 and 453-462 explicitly preserve pending acceptance; the project remains unchecked until the complete manifest. This disposition does not establish live acceptance.
+          round: 5
+        - id: BR-7
+          disposition: addressed
+          note: vm_chat.lua:73 enumerates canonical model providers. The passing catalog regression exercises healthy Codex with no models followed by a usable Google catalog.
+          round: 5
+        - id: BR-8
+          disposition: addressed
+          note: Both packaging scripts use packaging/render-formula.lua; VM transfers use upload(). Release and upgrade integration tests exercise the shared renderer.
+          round: 5
+      findings:
+        - id: BR-9
+          severity: Critical
+          title: Tutorial publication aborts startup across filesystem boundaries
+          detail: lua/parley/starter.lua:79-83 stages under stdpath('state') and hard-links into chat_dir. An external-drive project or separately mounted XDG roots makes fs_link return EXDEV, aborting startup. Reproduced through real starter.start() with injected cross-filesystem link semantics. Stage on the destination filesystem, retain no-clobber publication, and add regression coverage (ARCH-CONSTRAINTS).
+          family: atomic-publication-filesystem-locality
+          round: 5
+        - id: BR-10
+          severity: Critical
+          title: The plan incorrectly classifies auth_is_private as PURE
+          detail: 'workshop/plans/000247-homebrew-launcher-plan.md:320 declares PURE, but tests/packaging/vm_chat.lua:13-20 reads filesystem metadata, UID and resolved paths; its integration test creates directories and symlinks. This is the 2nd finding in family pure-test-io-separation. Apply the rule across all concept tables: filesystem-dependent entities are INTEGRATION. Append a classification revision and sweep every PURE row; BR-2''s renderer correction remains addressed (ARCH-PURE).'
+          family: pure-test-io-separation
+          round: 5
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#247 (boundary-review)
@@ -162,10 +212,28 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-8** [Minor] `duplicate-helper` Headless formula-render one-liner and guest upload snippet are duplicated
   release-parley.sh:51 and test-parley-upgrade.sh:82-88 embed the same nvim -c render program; test-parley-vm.py duplicates the base64 upload in install() (55-59), probe_phase() (76-82) and upload() (112-116). Extract one packaging/render-formula entry and use upload() everywhere (ARCH-DRY).
 
+## Round 5 — 2026-09-13T21:55:12-07:00 (codex) — BLOCKED
+
+### Disposed
+
+- BR-1 — addressed — Upgrade reads the installed share location; passing upgrade fixtures reproduce Homebrew's move out of libexec.
+- BR-2 — addressed — Formula unit coverage is input/output-only; Ruby execution resides in passing release integration tests.
+- BR-3 — addressed — The injected capacity probe and passing insufficient-capacity test isolate fake VM tests from host disk availability.
+- BR-4 — not-addressed — Clone cleanup and original-error preservation are repaired and regression-tested. However, tests/integration/packaging_vm_spec.lua:31 only asserts the fake returns 2; the requested optional real-versus-fake stop/delete conformance test is absent. The issue's manual verification claim does not provide that executable guard (ARCH-MOCK).
+- BR-5 — addressed — Persistent --keep-on-failure retains the owned VM, reports its manifest, and records controlled diagnostics. Passing tests cover retained failure, retry, explicit cleanup, and independent cleanup failure.
+- BR-6 — addressed — Plan revisions at lines 263-265 and 453-462 explicitly preserve pending acceptance; the project remains unchecked until the complete manifest. This disposition does not establish live acceptance.
+- BR-7 — addressed — vm_chat.lua:73 enumerates canonical model providers. The passing catalog regression exercises healthy Codex with no models followed by a usable Google catalog.
+- BR-8 — addressed — Both packaging scripts use packaging/render-formula.lua; VM transfers use upload(). Release and upgrade integration tests exercise the shared renderer.
+
+### Raised
+
+- **BR-9** [Critical] `atomic-publication-filesystem-locality` Tutorial publication aborts startup across filesystem boundaries
+  lua/parley/starter.lua:79-83 stages under stdpath('state') and hard-links into chat_dir. An external-drive project or separately mounted XDG roots makes fs_link return EXDEV, aborting startup. Reproduced through real starter.start() with injected cross-filesystem link semantics. Stage on the destination filesystem, retain no-clobber publication, and add regression coverage (ARCH-CONSTRAINTS).
+- **BR-10** [Critical] `pure-test-io-separation` The plan incorrectly classifies auth_is_private as PURE
+  workshop/plans/000247-homebrew-launcher-plan.md:320 declares PURE, but tests/packaging/vm_chat.lua:13-20 reads filesystem metadata, UID and resolved paths; its integration test creates directories and symlinks. This is the 2nd finding in family pure-test-io-separation. Apply the rule across all concept tables: filesystem-dependent entities are INTEGRATION. Append a classification revision and sweep every PURE row; BR-2's renderer correction remains addressed (ARCH-PURE).
+
 ## Open findings
 
 - **BR-4** [Important] `fake-conformance-to-real-dependency` Clone failure leaks the VM ownership reservation and the fake tart hides it
-- **BR-5** [Important] `failure-diagnosability` Every guest-phase failure destroys the VM and reports only an exception type
-- **BR-6** [Minor] `acceptance-evidence-before-archive` Done-when is unmet at this whole-issue close by design; do not archive or tick the project row yet
-- **BR-7** [Minor] `live-path-input-validity` Live model selection may pass the codex-device login alias to list_models
-- **BR-8** [Minor] `duplicate-helper` Headless formula-render one-liner and guest upload snippet are duplicated
+- **BR-9** [Critical] `atomic-publication-filesystem-locality` Tutorial publication aborts startup across filesystem boundaries
+- **BR-10** [Critical] `pure-test-io-separation` The plan incorrectly classifies auth_is_private as PURE

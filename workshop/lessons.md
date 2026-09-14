@@ -2350,3 +2350,10 @@ download.
 - Lazy function build hooks cannot assume the plugin runtime is loaded. Test
   builds before autoload functions exist and through Lazy itself; preloading the
   plugin or stubbing its platform helper hid the MarkdownPreview E117 failure.
+
+- Atomic hard-link publication must stage on the destination filesystem; profile
+  state and project chats can reside on different mounts. Exercise EXDEV semantics.
+- Filesystem metadata checks are integration work even when their result is a
+  boolean; classify helpers by dependencies, not their return shape.
+- A fixture exit-code assertion does not establish conformance. Compare with the
+  installed dependency when available, using isolated resources.

@@ -54,6 +54,22 @@ describe('isolated starter runtime', function()
         end
     end)
 
+    it('seeds tutorials when state and chats are on different filesystems', function()
+        local result = run(nil, { STARTER_CROSS_FILESYSTEM = '1' })
+        assert.equals(0, result.code, result.stderr)
+        assert.same({}, vim.fn.glob(scratch .. '/data/parley/chats/.parley-tutorial-*', false, true))
+        assert.equals(0, vim.fn.isdirectory(scratch .. '/state/parley/welcome-initializer'))
+    end)
+
+    it('cleans destination staging and lock after publication fails', function()
+        local result = run(nil, { STARTER_CROSS_FILESYSTEM = '1', STARTER_LINK_FAILURE = '1',
+            STARTER_EXPECT_ERROR = 'injected publication failure' })
+        assert.equals(0, result.code, result.stderr)
+        assert.same({}, vim.fn.glob(scratch .. '/data/parley/chats/.parley-tutorial-*', false, true))
+        assert.equals(0, vim.fn.isdirectory(scratch .. '/state/parley/welcome-initializer'))
+        assert.equals(0, vim.fn.filereadable(scratch .. '/data/parley/chats/welcome.md'))
+    end)
+
     it('preserves an explicit file without creating a welcome', function()
         local file = scratch .. '/requested notes.md'
         vim.fn.writefile({ 'My notes' }, file)

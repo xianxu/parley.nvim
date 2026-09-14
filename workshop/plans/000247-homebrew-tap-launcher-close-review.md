@@ -369,3 +369,118 @@ None.
 - Add an entry stating whether the promised "retained diagnosis run" is implemented as a flag, or strike the promise.
 - Core concepts table lists fixtures as `tests/fixtures/fake_packaging_*`; `fake_tart` and `run_packaging_vm.py` do not match that glob. Name them.
 - The project file's `done_when` still says `:ParleyProxy login`; the shipped command is `:ParleyConnect`. Correct it when the close sweep touches the project.
+
+---
+
+## Re-review — 2026-09-13T21:55:12-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 247 — Homebrew tap and parley launcher: brew install xianxu/parley/parley, tested on a clean tart VM |
+| repo | parley.nvim |
+| issue file | workshop/issues/000247-homebrew-tap-launcher.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | c1395685f69f53a2953cdbaeb01a77d410f105e8..79ed1b57d7a7958dc8ac285f1bc5bb999d657873 |
+| command | sdlc close --issue 247 |
+| reviewer | codex |
+| timestamp | 2026-09-13T21:55:12-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+Packaging and onboarding tests pass, and most prior findings are addressed. Shipping remains blocked by cross-filesystem tutorial publication, a contradictory PURE classification, and BR-4’s missing executable Tart conformance check. Pending public/live acceptance remains explicitly tracked.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Upgrade reads the installed share location; passing upgrade fixtures reproduce Homebrew's move out of libexec.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      Formula unit coverage is input/output-only; Ruby execution resides in passing release integration tests.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      The injected capacity probe and passing insufficient-capacity test isolate fake VM tests from host disk availability.
+  - id: BR-4
+    disposition: not-addressed
+    note: |
+      Clone cleanup and original-error preservation are repaired and regression-tested. However, tests/integration/packaging_vm_spec.lua:31 only asserts the fake returns 2; the requested optional real-versus-fake stop/delete conformance test is absent. The issue's manual verification claim does not provide that executable guard (ARCH-MOCK).
+  - id: BR-5
+    disposition: addressed
+    note: |
+      Persistent --keep-on-failure retains the owned VM, reports its manifest, and records controlled diagnostics. Passing tests cover retained failure, retry, explicit cleanup, and independent cleanup failure.
+  - id: BR-6
+    disposition: addressed
+    note: |
+      Plan revisions at lines 263-265 and 453-462 explicitly preserve pending acceptance; the project remains unchecked until the complete manifest. This disposition does not establish live acceptance.
+  - id: BR-7
+    disposition: addressed
+    note: |
+      vm_chat.lua:73 enumerates canonical model providers. The passing catalog regression exercises healthy Codex with no models followed by a usable Google catalog.
+  - id: BR-8
+    disposition: addressed
+    note: |
+      Both packaging scripts use packaging/render-formula.lua; VM transfers use upload(). Release and upgrade integration tests exercise the shared renderer.
+findings:
+  - id: new
+    severity: Critical
+    family: atomic-publication-filesystem-locality
+    title: |
+      Tutorial publication aborts startup across filesystem boundaries
+    detail: |
+      lua/parley/starter.lua:79-83 stages under stdpath('state') and hard-links into chat_dir. An external-drive project or separately mounted XDG roots makes fs_link return EXDEV, aborting startup. Reproduced through real starter.start() with injected cross-filesystem link semantics. Stage on the destination filesystem, retain no-clobber publication, and add regression coverage (ARCH-CONSTRAINTS).
+  - id: new
+    severity: Critical
+    family: pure-test-io-separation
+    title: |
+      The plan incorrectly classifies auth_is_private as PURE
+    detail: |
+      workshop/plans/000247-homebrew-launcher-plan.md:320 declares PURE, but tests/packaging/vm_chat.lua:13-20 reads filesystem metadata, UID and resolved paths; its integration test creates directories and symlinks. This is the 2nd finding in family pure-test-io-separation. Apply the rule across all concept tables: filesystem-dependent entities are INTEGRATION. Append a classification revision and sweep every PURE row; BR-2's renderer correction remains addressed (ARCH-PURE).
+```
+
+1. **Strengths**
+
+   - Formula generation consumes the selected release’s dependency registry.
+   - Launcher tests exercise real competing publishers, interrupted initialization, edited settings, and exact argument forwarding.
+   - VM cleanup preserves ownership when deletion fails and preserves the original failure.
+   - README and atlas document the new packaging and app surfaces.
+
+2. **Critical findings**
+
+   The two new findings above require destination-local tutorial staging and correction of the concept table. The classification severity follows the explicit Core-concepts review contract.
+
+3. **Important findings**
+
+   BR-4 remains partially open. Add a conformance test that compares fake and real Tart unknown-resource exit codes, skipping explicitly when Tart is unavailable.
+
+4. **Minor findings**
+
+   None newly raised. Continue honoring BR-6’s acceptance-before-archive requirement.
+
+5. **Test coverage**
+
+   `make test-spec SPEC=infra/packaging TEST_ENV_ROOT=/tmp/parley247-review-primary` passed **68 tests**. Independent runtime review passed **40 additional tests**. The cross-filesystem startup reproduction failed as described. No live VM acceptance was performed.
+
+6. **Architectural notes**
+
+   - **ARCH-DRY — pass:** shared rendering, upload, and dependency projection.
+   - **ARCH-PURE — flag:** auth helper classification contradicts its implementation.
+   - **ARCH-PURPOSE — pass for documented local scope:** final acceptance remains pending.
+   - **ARCH-MOCK — flag:** executable Tart conformance remains missing.
+   - **ARCH-CONSTRAINTS — flag:** tutorial publication assumes one filesystem.
+   - **ARCH-SECURE — pass:** inspected paths retain bounded documentation access and controlled diagnostics.
+   - **ARCH-ORDER — pass:** changed readiness flows guard cancellation/context; packaging tests inject ordering.
+   - **ARCH-FUNERAL — pass:** owned VM cleanup and bounded publication artifacts have explicit removal paths.
+
+7. **Plan revisions**
+
+   Append revisions classifying `auth_is_private` as INTEGRATION and requiring destination-local tutorial staging across independently mounted project/XDG roots. Keep final release acceptance unchecked.

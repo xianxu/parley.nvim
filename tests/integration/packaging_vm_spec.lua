@@ -35,6 +35,21 @@ describe('disposable packaging VM ownership', function()
             assert.equals(2, result.code)
         end
     end)
+    it('conforms to installed Tart for missing-resource stop and delete', function()
+        local tart = vim.fn.exepath('tart')
+        if tart == '' then pending('Tart is unavailable; live conformance skipped'); return end
+        -- A private HOME contains no VM; never address an operator-owned resource.
+        local name = 'parley-conformance-absent-' .. tostring((vim.uv or vim.loop).os_getpid())
+        local env = { HOME = root .. '/home', PATH = vim.env.PATH,
+            TART_HOME = root .. '/tart', TART_NO_AUTO_PRUNE = '1', FAKE_TART_STATE = root .. '/fake' }
+        for _, verb in ipairs({'stop', 'delete'}) do
+            local real = vim.system({tart, verb, name}, {text = true, clear_env = true, env = env}):wait(10000)
+            local fake = vim.system({repository .. '/tests/fixtures/fake_tart', verb, name},
+                {text = true, clear_env = true, env = env}):wait(10000)
+            assert.equals(2, real.code, real.stderr)
+            assert.equals(real.code, fake.code, verb .. ' missing-resource exit differs')
+        end
+    end)
     it('preserves clone failure and releases the reservation when absence is confirmed', function()
         local result = run('prepare', {FAKE_TART_FAIL = 'clone'})
         assert.equals(1, result.code)

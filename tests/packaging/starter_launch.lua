@@ -1,3 +1,17 @@
+if vim.env.STARTER_CROSS_FILESYSTEM then
+    local uv = vim.uv or vim.loop
+    local link = uv.fs_link
+    uv.fs_link = function(source, destination)
+        local dir = vim.fs.dirname(destination)
+        if source:sub(1, #dir + 1) ~= dir .. '/' then
+            return nil, 'EXDEV: cross-device link', 'EXDEV'
+        end
+        assert(uv.fs_stat(vim.fs.dirname(source)).mode % 512 == 448,
+            'tutorial staging directory must be private')
+        if vim.env.STARTER_LINK_FAILURE then return nil, 'injected publication failure' end
+        return link(source, destination)
+    end
+end
 if vim.env.STARTER_HOLD then
     local parley = require('parley')
     local open_buf = parley.open_buf
