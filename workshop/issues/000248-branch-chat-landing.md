@@ -38,3 +38,11 @@ This is a small UI glue fix: existing parser supplies the question location (ARC
 ### 2026-09-14
 
 - User specified consistent open-and-edit behavior; scoped fix to existing child creation. Found insert_inline discards commit_reference result and has no navigation; other paths duplicate EOF landing. Existing workspace has unrelated tutorial/bootstrap changes; stage only issue and fix files.
+
+## Revisions
+
+### 2026-09-14 08:54 — Plan review PQ-1/PQ-2
+
+- Name the shared helper `open_branch_question` inside `branch_inserters`. Capture the originating window at the gesture; cancel its scheduled navigation if the window is invalid, no longer current, or no longer displaying the parent. This prevents a deferred gesture stealing focus (ARCH-ORDER).
+- Function test strategies in `tests/integration/branch_child_spec.lua`: `open_branch_question` uses adversarial children with trailing template questions and a controlled `vim.schedule` queue to assert parser-directed cursor placement and cancellation after focus/buffer/window changes. Spy only on `startinsert!` while executing other editor commands normally, recording the destination and cursor at insertion request time; restore seams in after_each.
+- `insert_plain`, `insert_planned`, and `insert_inline`, reached via `_branch_inserters`: parameterize n/i/v and gathered/plain inputs, compare saved parent references with actual opened child files; force a parent write failure using a BufWriteCmd error and assert no navigation in every mode. Existing foreign-buffer and streaming tests remain acceptance coverage.
