@@ -399,3 +399,10 @@ zero warnings/errors) from an isolated archive; log
 /tmp/parley-v2.4.0-final-archive.log. SDLC boundary review returned SHIP, no open
 findings. Project checkbox restored to pending because fresh-machine acceptance
 is the user's next step. Publication authorized; PR remains open, no archive.
+
+Published v2.4.0 at source commit 3f5b0b8c; GitHub release is public and the tap
+commit is 66c6b86. Downloaded tagged archive SHA256:
+03bf478df6fb8c4f3ef677a06b2d2ab29ce6381cbf0a26eda479ea331ca89e61.
+Ruby syntax passed; GitHub API formula bytes exactly match the rendered formula.
+Fresh-machine install command: brew install xianxu/parley/parley. User acceptance
+remains pending; no local Homebrew reinstall or operator profile reset performed.
