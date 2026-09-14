@@ -27,5 +27,7 @@ option follows generic table replacement.
 The app and plugin share portable product defaults: the answer-style prompt and
 📝 summaries, web search and all registered tools are enabled; automatic memory
 generation is disabled. The app supplies editor/bootstrap and storage differences.
+Cursor-follow during streaming defaults to on; an existing saved preference
+takes precedence. `Ctrl+g l` toggles it.
 Personal chat/notes and blog export paths live in the user's Neovim configuration.
 OAuth credentials use the same explicit `~/.cli-proxy-api` directory.

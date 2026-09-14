@@ -558,8 +558,8 @@ local config = {
 		toggle_done = { modes = { "n", "i", "v", "x" }, shortcut = "<C-a>" },
 	},
 
-	-- if true, finished ChatResponder won't move the cursor to the end of the buffer
-	chat_free_cursor = true,
+	-- Follow streamed answers by default; Ctrl+g l toggles the saved preference.
+	chat_free_cursor = false,
 	-- use prompt buftype for chats (:h prompt-buffer)
 	chat_prompt_buf_type = false,
 

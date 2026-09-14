@@ -451,3 +451,8 @@ Published v2.4.1 at bcbb0143; Homebrew tap ce28540. Public release and exact
 remote formula bytes verified; source archive SHA256
 177b39288912af98e8686a90408ef5d87aeaf3d166ac81921972dbe816b29ad7.
 PR #181 remains open pending fresh-machine acceptance.
+
+User requests publication of cursor-follow enabled by default. Shared
+chat_free_cursor=false is inherited by the app; saved preferences still override
+the default. Existing streaming integration suite passed; release archive checks
+and boundary review precede v2.4.2 publication.
