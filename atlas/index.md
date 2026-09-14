@@ -51,7 +51,8 @@ This index provides a central directory for all atlas entries of the `parley.nvi
 
 ## 7. Infrastructure & Security
 
-- [Starter profile](infra/starter.md): Isolated app configuration, pinned bootstrap and managed first-use login.
+- [macOS packaging](infra/packaging.md): Homebrew formula, isolated launcher, immutable releases and owned VM acceptance.
+- [Parley application and release configuration](infra/starter.md): Standalone app versus Neovim plugin, configuration ownership, release contracts, direct checkout testing and intended default convergence.
 - [Repo Mode](infra/repo_mode.md): Marker-file detection for parley-enabled repos with auto-created local directories.
 - [Configuration System](infra/config.md): Settings and merging logic.
 - [Vault (Secret Management)](infra/vault.md): Secret retrieval and storage.
@@ -74,12 +75,8 @@ This index provides a central directory for all atlas entries of the `parley.nvi
 - [Export Formats](export/formats.md): Jekyll HTML and Markdown export logic.
 - [Tree Export](export/tree_export.md): Exporting chat trees as multiple linked files with navigation.
 
-## 10. Vision Tracker
-- [Vision Format](vision/format.md): YAML schema, multi-file namespacing, and ID resolution rules.
-- [Vision Exports](vision/exports.md): CSV, DOT graph export, and validation.
-
-## 11. Discovery Registry
+## 10. Discovery Registry
 - [Discovery Registry](discovery/registry.md): Data-driven noun-vocabulary (what file types exist + how to find instances); base ∪ local composition, matcher discriminator kinds, the `query()`/`render()` consumers, grep-now/index-later seam. Feeds parley's repo-aware **chat context** (the P1 "chat as ariadne workbench" mode) — not a #128 skill (see #128 re-scope).
 
-## 12. Traceability
+## 11. Traceability
 - [Traceability Map](traceability.yaml): Mapping from each feature entry to implementation files and related tests.

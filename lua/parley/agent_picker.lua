@@ -51,32 +51,34 @@ function M._build_items(plugin, extra)
     local items = {}
     for _, agent_name in ipairs(plugin._agents) do
         local agent = plugin.agents[agent_name]
-        local provider = agent.provider or "openai"
-        local model_name = type(agent.model) == "table" and agent.model.model or agent.model
+        if not agent.placeholder then
+            local provider = agent.provider or "openai"
+            local model_name = type(agent.model) == "table" and agent.model.model or agent.model
 
-        local description = model_name .. " (" .. provider .. ")"
-        -- Combined [🔧🌎]-style indicator group for tool-enabled agents and
-        -- web search (M1 Task 1.7 of #81). Reuse the highlighter helpers
-        -- so picker, buffer-top extmark, and lualine agree on the badge
-        -- string. The `require` itself is NOT pcall-wrapped: a real load
-        -- failure in parley.highlighter should surface loudly, not silently
-        -- hide the badge. The pcall only guards the `agent_web_search_badge`
-        -- state read (_parley._state) which may be nil in isolated unit tests.
-        local highlighter = require("parley.highlighter")
-        local tool_part = highlighter.agent_tool_badge(agent) or ""
-        local ok_ws, web_part = pcall(highlighter.agent_web_search_badge, agent)
-        if not ok_ws then web_part = "" end
-        local indicators = tool_part .. (web_part or "")
-        local indicator_group = (indicators ~= "") and (" [" .. indicators .. "]") or ""
-        local is_current = agent_name == plugin._state.agent
-        local display = (is_current and "✓ " or "  ") .. agent_name .. indicator_group .. " - " .. description
+            local description = model_name .. " (" .. provider .. ")"
+            -- Combined [🔧🌎]-style indicator group for tool-enabled agents and
+            -- web search (M1 Task 1.7 of #81). Reuse the highlighter helpers
+            -- so picker, buffer-top extmark, and lualine agree on the badge
+            -- string. The `require` itself is NOT pcall-wrapped: a real load
+            -- failure in parley.highlighter should surface loudly, not silently
+            -- hide the badge. The pcall only guards the `agent_web_search_badge`
+            -- state read (_parley._state) which may be nil in isolated unit tests.
+            local highlighter = require("parley.highlighter")
+            local tool_part = highlighter.agent_tool_badge(agent) or ""
+            local ok_ws, web_part = pcall(highlighter.agent_web_search_badge, agent)
+            if not ok_ws then web_part = "" end
+            local indicators = tool_part .. (web_part or "")
+            local indicator_group = (indicators ~= "") and (" [" .. indicators .. "]") or ""
+            local is_current = agent_name == plugin._state.agent
+            local display = (is_current and "✓ " or "  ") .. agent_name .. indicator_group .. " - " .. description
 
-        table.insert(items, {
-            name = agent_name,
-            kind = "agent",
-            display = display,
-            is_current = is_current,
-        })
+            table.insert(items, {
+                name = agent_name,
+                kind = "agent",
+                display = display,
+                is_current = is_current,
+            })
+        end
     end
 
     -- Current agent first, then alphabetical
@@ -222,7 +224,9 @@ function M._select(plugin, item)
 end
 
 -- Create a floating picker to select an LLM agent
-function M.agent_picker(plugin)
+---@param opts table|nil # { provider?: string, on_select?: fun(agent: table, item: table), on_cancel?: function }
+function M.agent_picker(plugin, opts)
+    opts = opts or {}
     local ok_proxy, cliproxy = pcall(require, "parley.cliproxy")
 
     -- Read the catalog off disk: synchronous, ~5 KB, no network on a UI path.
@@ -234,9 +238,26 @@ function M.agent_picker(plugin)
     end
 
     local expanded = false
-    local function view_for(all)
-        return M._view_for(catalog(), ((plugin.config or {}).cliproxy or {}).live_models or {},
-            { all = all, agents = plugin.agents })
+    local function items_for(all)
+        local models = catalog()
+        local cfg = ((plugin.config or {}).cliproxy or {}).live_models or {}
+        local projected = plugin
+        if opts.provider then
+            local owner = require("parley.cliproxy_config").provider_owned_by(opts.provider)
+            models = vim.tbl_filter(function(model) return owner ~= nil and model.owner == owner end, models)
+            cfg = vim.tbl_extend("force", cfg, {providers = {opts.provider}})
+            local ids, agents, names = {}, {}, {}
+            for _, model in ipairs(models) do ids[model.id] = true end
+            for _, name in ipairs(plugin._agents) do
+                local agent = plugin.agents[name]
+                local id = type(agent.model) == "table" and agent.model.model or agent.model
+                if agent.provider == "cliproxyapi" and ids[id] then
+                    names[#names + 1], agents[name] = name, agent
+                end
+            end
+            projected = vim.tbl_extend("force", plugin, {_agents = names, agents = agents})
+        end
+        return M._build_items(projected, M._view_for(models, cfg, {all = all, agents = projected.agents}))
     end
 
     local keybindings_key = require("parley.keybinding_registry").key_for("help", plugin.config)
@@ -267,7 +288,7 @@ function M.agent_picker(plugin)
     -- desynchronised the other.
     local function repaint()
         local was = handle.selected and handle.selected()
-        handle.update(M._build_items(plugin, view_for(expanded)), nil,
+        handle.update(items_for(expanded), nil,
             was and M._identity(was) or nil)
     end
 
@@ -286,13 +307,43 @@ function M.agent_picker(plugin)
 
     handle = float_picker.open({
         title = title,
-        items = M._build_items(plugin, view_for(expanded)),
+        items = items_for(expanded),
         anchor = "top",
         recall_key = "parley.agent_picker",
         recall_id_fn = M._identity,
         on_select = function(item)
+            if item and item.kind == "login" then
+                -- Keep the pending semantic action alive across OAuth. The
+                -- ordinary picker is also the model-choice surface afterward.
+                vim.schedule(function()
+                    local function failed(message)
+                        if message then vim.notify(message, vim.log.levels.ERROR) end
+                        if opts.on_cancel then opts.on_cancel(message or "Account login cancelled") end
+                    end
+                    cliproxy.ensure_running(function()
+                        local argv, err = cliproxy.login_argv(item.provider)
+                        if not argv then return failed(err) end
+                        local blocked = cliproxy.callback_port_blocked(item.provider)
+                        if blocked then return failed(blocked) end
+                        cliproxy.run_login(item.provider, argv, function(ok)
+                            if not ok then return failed() end
+                            vim.schedule(function() M.agent_picker(plugin, opts) end)
+                        end)
+                    end, failed)
+                end)
+                return
+            end
             M._select(plugin, item)
+            local agent = item and plugin.agents[plugin._state.agent]
+            local real = item and (item.kind == "agent" or item.kind == "live")
+                and agent and not agent.placeholder and plugin._state.agent == item.name
+            if real then
+                if opts.on_select then opts.on_select(agent, item) end
+            elseif opts.on_cancel then
+                opts.on_cancel()
+            end
         end,
+        on_cancel = opts.on_cancel,
         mappings = mappings,
     })
 
@@ -315,6 +366,7 @@ function M.agent_picker(plugin)
             end
         end)
     end
+    return handle
 end
 
 return M

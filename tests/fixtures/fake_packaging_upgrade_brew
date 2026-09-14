@@ -1,0 +1,77 @@
+#!/usr/bin/env python3
+"""Stateful miniature package store for the guest upgrade workflow contract."""
+import json
+import os
+from pathlib import Path
+import re
+import shutil
+import sys
+import tarfile
+from urllib.parse import unquote, urlparse
+
+store = Path(os.environ['FAKE_UPGRADE_BREW'])
+state_path = store / 'state.json'
+state = json.loads(state_path.read_text())
+args = sys.argv[1:]
+state['commands'].append(args)
+state_path.write_text(json.dumps(state))
+command = args[0]
+if command == '--prefix':
+    print(store / 'prefix')
+elif command == '--repository':
+    print(store / 'tap')
+elif command == 'tap-new':
+    (store / 'tap/Formula').mkdir(parents=True)
+    state['tap'] = True
+elif command == 'unlink':
+    assert state['public_linked']
+    (store / 'prefix/bin/parley').unlink()
+    state['public_linked'] = False
+elif command in ('install', 'upgrade'):
+    if command == 'install':
+        assert not state['installed'] and not state['public_linked']
+    else:
+        assert state['installed'] and not state['public_linked']
+        if os.environ.get('FAKE_UPGRADE_FAIL') == 'upgrade':
+            sys.exit(42)
+    formula = (store / 'tap/Formula/parley-upgrade-fixture.rb').read_text()
+    archive = Path(unquote(urlparse(re.search(r'  url "([^"]+)"', formula)[1]).path))
+    prefix = store / 'installed'
+    runtime = prefix / 'libexec'
+    if prefix.exists():
+        shutil.rmtree(prefix)
+    runtime.mkdir(parents=True)
+    with tarfile.open(archive) as content:
+        content.extractall(runtime, filter='data')
+    # Pathname.install moves the starter out of libexec into the formula's share tree.
+    starter = prefix / 'share/parley/config/init.lua'
+    starter.parent.mkdir(parents=True)
+    shutil.move(runtime / 'packaging/starter-config/init.lua', starter)
+    assert not (runtime / 'packaging/starter-config/init.lua').exists()
+    wrapper = store / 'fixture-parley'
+    wrapper.write_text('#!/bin/sh\nexport PARLEY_RUNTIME=' + __import__('shlex').quote(str(runtime))
+                       + '\nexport PARLEY_STARTER=' + __import__('shlex').quote(str(starter))
+                       + '\nexport PARLEY_NVIM=' + __import__('shlex').quote(os.environ['FAKE_UPGRADE_NVIM'])
+                       + '\nexec "$PARLEY_RUNTIME/packaging/parley" "$@"\n')
+    wrapper.chmod(0o755)
+    link = store / 'prefix/bin/parley'
+    link.unlink(missing_ok=True)
+    link.symlink_to(wrapper)
+    state['installed'] = True
+    state['versions'].append(archive.name)
+elif command == 'uninstall':
+    if state['installed']:
+        (store / 'prefix/bin/parley').unlink(missing_ok=True)
+        shutil.rmtree(store / 'installed')
+    state['installed'] = False
+elif command == 'untap':
+    assert not state['installed']
+    shutil.rmtree(store / 'tap')
+    state['tap'] = False
+elif command == 'link':
+    assert not state['installed']
+    (store / 'prefix/bin/parley').symlink_to(store / 'public-parley')
+    state['public_linked'] = True
+else:
+    raise RuntimeError('Unsupported package operation: ' + command)
+state_path.write_text(json.dumps(state))

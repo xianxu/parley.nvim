@@ -562,3 +562,28 @@ describe("reference opening: landing mode follows the destination", function()
         end)
     end
 end)
+
+describe('ordinary local Markdown navigation links', function()
+    it('opens a relative link from its label in a chat using the buffer directory', function()
+        local target = write_chat('basics.md', {})
+        local line = 'Continue with [Basics](./basics.md) now.'
+        local source = write_chat('welcome.md', {line})
+        local rec = open_at(source, line, 18)
+        assert.equals(vim.uv.fs_realpath(target), vim.uv.fs_realpath(rec.opened))
+        assert.equals('', joined(rec.cmds))
+    end)
+    it('opens local Markdown links in plain Markdown too, including spaces', function()
+        local target = write_markdown('more basics.md', {'# More'})
+        local line = '[More](./more basics.md)'
+        local source = write_markdown('index.md', {line})
+        assert.equals(vim.uv.fs_realpath(target), vim.uv.fs_realpath(open_at(source, line, 3).opened))
+    end)
+    it('reports a missing Markdown link target without falling through to gf', function()
+        local line = '[Missing](./missing.md)'
+        local source = write_chat('welcome.md', {line})
+        local rec = open_at(source, line, 3)
+        assert.is_nil(rec.opened)
+        assert.equals(1, #rec.warnings)
+        assert.equals('', joined(rec.cmds))
+    end)
+end)

@@ -92,12 +92,37 @@ local ok, err = xpcall(function()
     if vim.env.PARLEY_RUNTIME and vim.env.PARLEY_RUNTIME ~= "" then
         parley = { dir = vim.env.PARLEY_RUNTIME, name = "parley.nvim", lazy = false }
     end
+    local main_window = vim.api.nvim_get_current_win()
     require("lazy").setup({
         { "bluz71/vim-moonfly-colors", name = "moonfly", lazy = false, priority = 1000,
             commit = "4ed07bc0c6083cdd547c63f5c245e02c068b0c45",
             config = function() vim.cmd.colorscheme("moonfly") end },
         { "nvim-lua/plenary.nvim", commit = "74b06c6c75e4eeb3108ec01852001636d85a932b" },
         { "nvim-telescope/telescope.nvim", commit = "a0bbec21143c7bc5f8bb02e0005fa0b982edc026" },
+        { "iamcco/markdown-preview.nvim",
+            commit = "a923f5fc5ba36a3b17e289dc35dc17f66d0548ee",
+            cmd = { "MarkdownPreview", "MarkdownPreviewToggle", "MarkdownPreviewStop" },
+            ft = { "markdown" },
+            init = function()
+                vim.g.mkdp_auto_start = 0
+                vim.g.mkdp_open_to_the_world = 0
+            end,
+            build = function(plugin)
+                local info = vim.json.decode(table.concat(vim.fn.readfile(plugin.dir .. "/package.json"), "\n"))
+                local result = vim.system({ "bash", plugin.dir .. "/app/install.sh", "v" .. info.version },
+                    { cwd = plugin.dir .. "/app", text = true }):wait(120000)
+                assert(result.code == 0, "MarkdownPreview install failed: " .. (result.stderr or "timeout"))
+                -- Lazy runs function builders before loading plugin autoload files.
+                local host = (vim.uv or vim.loop).os_uname()
+                local platform = host.sysname == "Darwin"
+                    and (host.machine == "arm64" and "macos-arm64" or "macos") or "linux"
+                local server = plugin.dir .. "/app/bin/markdown-preview-" .. platform
+                assert(vim.fn.executable(server) == 1,
+                    "MarkdownPreview server was not installed; retry with :Lazy build markdown-preview.nvim")
+                local installed = vim.system({ server, "--version" }, { text = true }):wait(5000)
+                assert(installed.code == 0 and vim.trim(installed.stdout or "") == info.version,
+                    "MarkdownPreview server verification failed; retry with :Lazy build markdown-preview.nvim")
+            end },
         parley,
     }, {
         root = data .. "/lazy",
@@ -106,6 +131,11 @@ local ok, err = xpcall(function()
         change_detection = { enabled = false },
         git = { timeout = math.min(120, math.max(1, math.floor(remaining() / 1000))) },
     })
+    -- First-install setup leaves Lazy's floating progress window focused.
+    -- Its close is scheduled, so restore our window before opening any chat.
+    local installer = package.loaded["lazy.view"]
+    if installer and installer.visible() then installer.view:close() end
+    vim.api.nvim_set_current_win(main_window)
     require("parley.starter").start()
 end, debug.traceback)
 timer:stop()

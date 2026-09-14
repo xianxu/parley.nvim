@@ -333,7 +333,7 @@ function M.execute_call(call, tools_registry, opts)
     -- error ToolResult rather than propagating the error up to the
     -- tool loop (which would leave an orphan 🔧: block and break the
     -- cancel-cleanup invariant).
-    local ok, result = pcall(def.handler, call.input or {})
+    local ok, result = pcall(def.handler, call.input or {}, { root_policy = policy })
     if not ok then
         return {
             id = call.id,

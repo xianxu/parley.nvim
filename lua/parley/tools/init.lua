@@ -156,6 +156,7 @@ end
 --- which tools ship with parley. Adding a new builtin requires editing
 --- this list AND creating the corresponding file under builtin/.
 M.BUILTIN_NAMES = {
+    "parley_help",
     "read_file",
     "ls",
     "find",

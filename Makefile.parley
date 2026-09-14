@@ -206,7 +206,7 @@ lint:
 		echo "luacheck not found. Install with: luarocks install luacheck"; \
 		exit 1; \
 	}
-	@luacheck lua tests
+	@luacheck lua tests packaging
 
 # Refresh SSE fixture files from real APIs.
 # Requires ANTHROPIC_API_KEY, OPENAI_API_KEY, GOOGLEAI_API_KEY in environment.

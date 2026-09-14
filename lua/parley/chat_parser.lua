@@ -23,6 +23,11 @@ local assets = require("parley.assets")
 
 local M = {}
 
+-- Tutorial transcripts have stable names; ordinary chats retain timestamps.
+function M.is_chat_filename(name)
+    return name == 'welcome.md' or name == 'basics.md' or name == 'advanced.md' or name:match('^%d%d%d%d%-%d%d%-%d%d.*%.md$') ~= nil
+end
+
 local function trim(str)
 	return (str:gsub("^%s*(.-)%s*$", "%1"))
 end

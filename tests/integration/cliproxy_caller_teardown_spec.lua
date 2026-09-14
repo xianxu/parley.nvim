@@ -13,6 +13,10 @@ vim.fn.mkdir(tmp_dir, "p")
 local parley = require("parley")
 local ready_port = require("tests.helpers.ready_port")
 parley.setup({
+    -- Teardown begins after model selection; the learner placeholder is unrelated.
+    default_agent = "TeardownTest",
+    agents = { { name = "TeardownTest", provider = "cliproxyapi", model = "claude-x",
+        system_prompt = "Test assistant" } },
     chat_dir = tmp_dir,
     state_dir = tmp_dir .. "/state",
     providers = {},

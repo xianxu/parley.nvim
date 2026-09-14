@@ -48,6 +48,44 @@ describe("chat_history_search tool", function()
         if base then vim.fn.delete(base, "rf") end
     end)
 
+    it('confines dispatched history search to the project unless extra roots are granted', function()
+        local dispatcher = require('parley.tools.dispatcher')
+        local registry = require('parley.tools')
+        local cwd = base .. '/parley.nvim'
+        local call = function(extra)
+            return dispatcher.execute_call({id = 'search', name = 'chat_history_search',
+                input = {pattern = 'aws', case_insensitive = true}}, registry,
+                {cwd = cwd, read_roots = extra or {}})
+        end
+        local result = call()
+        assert.is_not_true(result.is_error)
+        assert.truthy(result.content:find('agent-design.md', 1, true))
+        assert.is_nil(result.content:find('infra.md', 1, true))
+        assert.is_nil(result.content:find('aws-notes.md', 1, true))
+        local expanded = call({sibling_dir})
+        assert.truthy(expanded.content:find('infra.md', 1, true))
+        assert.is_nil(expanded.content:find('aws-notes.md', 1, true))
+    end)
+
+    it('rejects an escaping symlink root and cannot accept model-supplied root policy', function()
+        local link = base .. '/parley.nvim/linked-chats'
+        assert(vim.uv.fs_symlink(sibling_dir, link))
+        parley.set_chat_dirs({repo_dir, link}, false)
+        local dispatcher = require('parley.tools.dispatcher')
+        local registry = require('parley.tools')
+        local result = dispatcher.execute_call({id = 'search', name = 'chat_history_search',
+            input = {pattern = 'aws', case_insensitive = true}}, registry,
+            {cwd = base .. '/parley.nvim'})
+        assert.is_not_true(result.is_error)
+        assert.is_nil(result.content:find('infra.md', 1, true))
+        local forged = dispatcher.execute_call({id = 'forged', name = 'chat_history_search',
+            input = {pattern = 'aws', root_policy = {write_root = base, read_roots = {base}}}}, registry,
+            {cwd = base .. '/parley.nvim'})
+        assert.is_not_true(forged.is_error)
+        assert.is_nil(forged.content:find('infra.md', 1, true))
+        assert.is_nil(forged.content:find('aws-notes.md', 1, true))
+    end)
+
     it("description is non-empty", function()
         assert.is_string(chat_history_search.description)
         assert.is_true(#chat_history_search.description > 0)

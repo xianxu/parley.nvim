@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 import http.server
 import os
-import socketserver
 import sys
 import time
+
+sys.dont_write_bytecode = True
+from loopback_http import LoopbackHTTPServer  # noqa: E402
 
 
 MODE = sys.argv[1]
@@ -53,10 +55,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.wfile.write(DONE)
 
 
-class Server(socketserver.TCPServer):
-    allow_reuse_address = True
-
-
 def publish_ready(port):
     """Publish the port atomically.
 
@@ -75,6 +73,6 @@ def publish_ready(port):
     os.replace(staging, READY_FILE)
 
 
-with Server(("127.0.0.1", 0), Handler) as server:
+with LoopbackHTTPServer(("127.0.0.1", 0), Handler) as server:
     publish_ready(server.server_address[1])
     server.handle_request()

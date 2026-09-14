@@ -7,6 +7,10 @@ files["lua/**/*.lua"] = {
     },
 }
 
+files["packaging/**/*.lua"] = {
+    globals = { "vim" },
+}
+
 files["tests/**/*.lua"] = {
     globals = {
         "vim",

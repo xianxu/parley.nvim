@@ -29,11 +29,12 @@ Modes (--mode, or PARLEY_FAKE_RELEASES_MODE):
 import os
 import sys
 import time
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler
 
 sys.dont_write_bytecode = True  # never write __pycache__ into the repo (#202)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from fixture_watchdog import exit_with_parent  # noqa: E402
+from loopback_http import LoopbackHTTPServer  # noqa: E402
 
 PREFIX = "/router-for-me/CLIProxyAPI/releases"
 
@@ -102,7 +103,7 @@ def main():
                         return self._send(200, f.read(), {"Content-Type": "application/octet-stream"})
             return self._send(404)
 
-    HTTPServer(("127.0.0.1", port), Handler).serve_forever()
+    LoopbackHTTPServer(("127.0.0.1", port), Handler).serve_forever()
 
 
 if __name__ == "__main__":

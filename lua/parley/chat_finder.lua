@@ -400,7 +400,7 @@ local function discovery_snapshot()
 		roots = roots,
 		recursion = false,
 		max_depth = 1,
-		pattern = "YYYY-MM-DD*.md",
+        pattern = "YYYY-MM-DD*.md|welcome.md|basics.md|advanced.md",
 		backend = { source = "libuv", header_lines = 10 },
 	})
 end
@@ -451,7 +451,7 @@ local function new_session(snapshot, ownership, register_prewarm)
 						recurse = false,
 						max_depth = data.max_depth,
 						match = function(relative)
-							return relative:match("^%d%d%d%d%-%d%d%-%d%d.*%.md$") ~= nil
+							return require('parley.chat_parser').is_chat_filename(relative)
 						end,
 						read_policy = function(candidate)
 							return chat_records.read_decision(_file_cache, {

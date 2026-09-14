@@ -129,9 +129,10 @@ reads that catalog instead of carrying model names in Lua.
   per_provider = 3 }`. An entry is `"<provider>[:<term>,…]"`; terms are
   case-insensitive substrings matched against the id **and** the display name
   (required, not cosmetic: antigravity's ids are unfilterable otherwise). Terms
-  narrow, then the newest of each model line is kept, capped at `per_provider`.
-  Term order is display order. It names providers and families, never versions,
-  so it does not go stale.
+  narrow, then the newest of each model line is kept, with up to `per_provider`
+  results per search term (the option retains its legacy name). Term order is
+  display order; overlapping searches do not repeat a model line. Equal-date GPT
+  rows prefer newer numeric generations/versions before alphabetical variants.
 - **No `oauth-model-alias` is required (#205).** cliproxyapi exposes an OAuth
   channel's models automatically once that channel has a credential — verified
   against a live proxy: models absent from any alias block answer normally, and a
@@ -489,3 +490,22 @@ release. The `binary:` line names where the binary came from (`binary_path`,
   `download` into a throwaway data dir. It pins the keyed and rejected version
   header, the lockout, both chat routes and the release redirect. Without a
   binary, each case reports pending with the reason.
+
+Interactive login uses a compact connection window: finish in the browser,
+`o` reopens the authorization link, `y` copies it, and `d` shows the process
+instructions and diagnostics. Device verification codes and their URLs appear
+in the main view. `Esc` hides the window while login continues; `c` cancels the
+login. Success closes the window before the model picker resumes. Diagnostics
+are bounded in memory and disappear with the login; headless callers retain
+text output. Presentation lives in `lua/parley/cliproxy_login_ui.lua`; the
+process and single-completion latch remain owned by `cliproxy.run_login`.
+
+## Shared application and plugin login storage
+
+Both entry points explicitly render `auth-dir: ~/.cli-proxy-api` (expanded to an
+absolute path). Omitting the field is not equivalent: a local proxy probe with
+the omitted field returned no models, while the explicit directory returned the
+existing accounts' catalog. The starter migrates legacy profile auth JSON files
+without replacing shared files or deleting originals. Shared credentials remain
+when the application profile is uninstalled. Both entry points use the same
+agent picker for provider login and subsequent model selection.

@@ -56,6 +56,8 @@ local ALLOW = {
     ["lua/parley/neighborhood.lua:canonical:root"] = "a configured_roots entry",
     ["lua/parley/tools/dispatcher.lua:resolve_root:root"] = "a tool's configured root",
 
+    ["lua/parley/starter.lua:start:require('parley.config').cliproxy.auth_dir"] = "operator-configured shared OAuth directory",
+
     -- resolve_dir_key: the same one-liner in three modules, always over a
     -- config *_dir value. (The duplication is pre-existing and noted in #225.)
     ["lua/parley/init.lua:resolve_dir_key:d"] = "a config *_dir value",
@@ -315,6 +317,7 @@ describe("arch: transcript-derived paths never reach vim.fn.expand", function()
         local DISPOSITIONED = {
             -- function                     test that distinguishes its values
             ["try_open_inline_branch_link"] = "open_reference_spec: the inline [🌿:…](file) arm",
+            ["try_open_markdown_link"] = "open_reference_spec: ordinary Markdown links open or fail without gf fallback",
             ["open_branch_ref"] = "open_reference_spec + untrusted_path_spec: the 🌿: arms",
             ["try_open_src_link"] = "open_reference_spec: D1, both buffer types",
             ["open_reference_under_cursor"] = "open_reference_spec: the three-valued contract",

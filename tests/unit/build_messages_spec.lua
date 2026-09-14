@@ -9,6 +9,10 @@ local tmp_dir = (os.getenv("TMPDIR") or "/tmp") .. "/claude/parley-test-build-me
 -- Bootstrap parley
 local parley = require("parley")
 parley.setup({
+    default_agent = "BuildMessagesTest",
+    agents = { { name = "BuildMessagesTest", provider = "anthropic",
+        model = "claude-sonnet-4-6", system_prompt = "Test assistant" } },
+            parley_help = false, -- pin prompt composition independently of product documentation
     chat_dir = tmp_dir,
     state_dir = tmp_dir .. "/state",
     providers = {},

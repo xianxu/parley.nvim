@@ -2319,3 +2319,47 @@ download.
   a later default assignment can overwrite a correctly restored model.
 - An artifact denylist must cover each promised category; test generic home-relative
   paths and prohibited module imports, not just known personal examples.
+
+- An atomic lock directory becomes visible before its owner file. Competing
+  processes must tolerate that initialization gap with bounded retries and
+  explicit abandoned-lock recovery; test the gap with a real process barrier.
+- When a new source directory is introduced, include it in architecture scans
+  and route its specs in traceability before the full-suite run.
+
+- Package fixtures must reproduce install-time moves and generated wrappers,
+  not merely copy the source tree; consumers must use the installed layout.
+- Keep external syntax checks with integration tests. Pure projection tests
+  assert metadata and rendered output without creating files or subprocesses.
+
+- A fake external command is insufficient when orchestration still reads host
+  resource capacity. Inject every resource probe and test both sides of its
+  threshold without requiring the test machine to provision that resource.
+
+- Match cleanup's missing-resource semantics to the real tool, and verify them
+  with a uniquely nonexistent resource. Preserve ownership when deletion fails;
+  release a reservation when absence is confirmed.
+- Live acceptance needs an explicit retained-diagnosis option and a controlled
+  failure reason; deleting the failing environment can destroy the only evidence.
+- Login-method names and model-provider names are separate axes. Use each
+  subsystem's canonical list, including the empty-catalog fallback case.
+
+- When an existing documentation index becomes model-discoverable, test every
+  advertised document through the real reader. A few representative topics miss
+  stale index links; the bundled-help review found two missing vision documents.
+
+- Lazy function build hooks cannot assume the plugin runtime is loaded. Test
+  builds before autoload functions exist and through Lazy itself; preloading the
+  plugin or stubbing its platform helper hid the MarkdownPreview E117 failure.
+
+- Atomic hard-link publication must stage on the destination filesystem; profile
+  state and project chats can reside on different mounts. Exercise EXDEV semantics.
+- Filesystem metadata checks are integration work even when their result is a
+  boolean; classify helpers by dependencies, not their return shape.
+- A fixture exit-code assertion does not establish conformance. Compare with the
+  installed dependency when available, using isolated resources.
+
+- When private profile state becomes shared, update installation and removal
+  guides together with the atlas; profile deletion must not promise global
+  credential deletion (ARCH-SECURE, ARCH-FUNERAL).
+- Moving a default path into an explicit user override can change precedence.
+  Verify repo detection and buffer-local keymaps using the migrated profile.

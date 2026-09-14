@@ -3,25 +3,66 @@ version: 1
 # Maps a feature entry to the code and tests that verify it.
 # Key format intentionally omits the leading "atlas/" and trailing ".md".
 atlas:
+  infra/packaging:
+    code:
+      - packaging/formula.lua
+      - packaging/render-formula.lua
+      - packaging/parley
+      - packaging/launcher.lua
+      - scripts/release-parley.sh
+      - scripts/test-parley-vm.sh
+      - scripts/test-parley-vm.py
+      - scripts/test-parley-upgrade.sh
+      - tests/packaging/vm_acceptance.lua
+      - tests/packaging/vm_chat.lua
+      - tests/packaging/vm_chat_probe.lua
+      - tests/packaging/vm_stop.lua
+      - tests/packaging/vm_uninstall.py
+    tests:
+      - tests/arch/single_source_sweeps_spec.lua
+      - tests/unit/packaging_formula_spec.lua
+      - tests/integration/packaging_launcher_spec.lua
+      - tests/integration/packaging_release_spec.lua
+      - tests/integration/packaging_upgrade_spec.lua
+      - tests/integration/packaging_vm_spec.lua
+      - tests/integration/packaging_vm_catalog_spec.lua
+      - tests/integration/packaging_boot_spec.lua
+      - tests/integration/fixture_loopback_dns_spec.lua
+
   infra/starter:
     code:
+      - lua/parley/cliproxy_login_ui.lua
       - lua/parley/dispatcher.lua
       - lua/parley/fs.lua
       - packaging/starter-config/init.lua
       - lua/parley/starter.lua
+      - README.md
+      - lua/parley/help_content.lua
+      - lua/parley/help.lua
+      - lua/parley/tools/builtin/parley_help.lua
       - lua/parley/starter_config.lua
-      - lua/parley/starter_profile.lua
+      - lua/parley/starter_onboarding.lua
+      - lua/parley/llm_readiness.lua
+      - lua/parley/chat_parser.lua
+      - lua/parley/chat_finder.lua
       - lua/parley/cliproxy_catalog.lua
       - lua/parley/init.lua
       - scripts/check-starter.py
     tests:
       - tests/unit/prepare_dir_spec.lua
+      - tests/unit/help_content_spec.lua
+      - tests/integration/parley_help_spec.lua
       - tests/unit/starter_config_spec.lua
+      - tests/unit/starter_onboarding_spec.lua
+      - tests/unit/llm_readiness_spec.lua
+      - tests/unit/agent_picker_options_spec.lua
       - tests/unit/cliproxy_catalog_spec.lua
       - tests/unit/live_agent_state_spec.lua
-      - tests/integration/starter_profile_spec.lua
+      - tests/integration/starter_auth_spec.lua
+      - tests/integration/starter_project_spec.lua
       - tests/integration/starter_config_spec.lua
       - tests/integration/starter_bootstrap_spec.lua
+      - tests/integration/cliproxy_login_ui_spec.lua
       - tests/arch/starter_artifact_spec.lua
 
   infra/dependencies:

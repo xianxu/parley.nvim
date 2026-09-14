@@ -1,0 +1,910 @@
+# Boundary Review — parley.nvim#247 (whole-issue close)
+
+| field | value |
+|-------|-------|
+| issue | 247 — Homebrew tap and parley launcher: brew install xianxu/parley/parley, tested on a clean tart VM |
+| repo | parley.nvim |
+| issue file | workshop/issues/000247-homebrew-tap-launcher.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | c1395685f69f53a2953cdbaeb01a77d410f105e8..b5e48b7c35e53d5e97df6bf5a11e83212c378114 |
+| command | sdlc close --issue 247 |
+| reviewer | codex |
+| timestamp | 2026-09-13T16:21:58-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+The launcher and release tooling have strong failure-path coverage, but the required upgrade acceptance fails against the formula’s actual installed layout. The current fake hides that mismatch. Public release and live VM acceptance remain pending, as the tracker acknowledges.
+
+1. **Strengths**
+
+   - Launcher tests exercise real competing publishers, killed processes, symlinks, settings preservation and exact argument forwarding.
+   - Release tests verify archive-local dependency generation, immutable-tag checks and retry after a failed push.
+   - README, atlas and traceability updates cover the new packaging surface.
+
+2. **Critical findings**
+
+   - [scripts/test-parley-upgrade.sh:64](/Users/xianxu/workspace/parley.nvim/scripts/test-parley-upgrade.sh:64): The upgrade fixture reads `runtime/packaging/starter-config/init.lua`, but [packaging/formula.lua:38](/Users/xianxu/workspace/parley.nvim/packaging/formula.lua:38) **moves** that file into `share/parley/config`. Homebrew’s installed `Pathname.install` implementation confirms the move. Reproducing that layout in scratch storage makes the upgrade script exit 1 with `FileNotFoundError`, before either version installs. Read the installed starter from its actual location or preserve it in `libexec`; make the fixture model the same installation layout. **ARCH-PURPOSE, ARCH-MOCK.**
+
+3. **Important findings**
+
+   - [tests/unit/packaging_formula_spec.lua:26](/Users/xianxu/workspace/parley.nvim/tests/unit/packaging_formula_spec.lua:26): The PURE projection test writes a temporary file and executes Ruby. Move syntax validation into an integration test, retaining direct string/metadata assertions in the unit suite. The renderer itself can remain PURE. **ARCH-PURE.**
+
+4. **Minor findings**
+
+   None.
+
+5. **Test coverage notes**
+
+   - Passed: 21 architecture checks, 10 launcher tests, 6 release tests, 3 upgrade tests and 2 formula tests.
+   - VM tests: 9 passed; the fake-chat test failed because this sandbox denies loopback binding. An independent socket probe confirmed `Operation not permitted`; this is a verification limitation.
+   - The installed-layout scratch reproduction independently demonstrated the upgrade defect.
+   - `git diff --check` passed.
+
+6. **Architectural notes**
+
+   | Marker | Assessment |
+   |---|---|
+   | ARCH-DRY | Pass: dependencies derive from the release-local registry. |
+   | ARCH-PURE | Flag: Ruby execution belongs outside the pure unit test. |
+   | ARCH-PURPOSE | Flag: required upgrade acceptance cannot run against the installed package. |
+   | ARCH-MOCK | Flag: fake installation preserves a source-tree layout that Homebrew changes. |
+   | ARCH-CONSTRAINTS | Pass: bounded file reads, launcher waits and VM phases. |
+   | ARCH-SECURE | Pass: inspected publication paths reject symlinks; guest reports omit credentials. |
+   | ARCH-ORDER | Pass: launcher interleavings have explicit test barriers; release retries are exercised. |
+   | ARCH-FUNERAL | Pass: one upgrade candidate, owned staging cleanup and explicit VM removal/recovery. |
+
+7. **Plan revision recommendations**
+
+   Append a timestamped `## Revisions` entry defining the installed starter location and requiring upgrade fixtures to reproduce Homebrew’s installation semantics. Clarify that Ruby syntax validation is INTEGRATION coverage. Keep public publication and live acceptance unchecked until their evidence exists.
+
+```findings
+findings:
+  - id: new
+    severity: Critical
+    family: installed-layout-conformance
+    title: |
+      Upgrade acceptance reads a starter file that the formula moves elsewhere
+    detail: |
+      scripts/test-parley-upgrade.sh:64-65 reads the starter from copied libexec, but packaging/formula.lua:38 moves it into share/parley/config. A scratch reproduction of the installed layout exits 1 with FileNotFoundError before either fixture version installs. Correct the source location or preserve the runtime file, and update packaging_upgrade_spec.lua plus fake_packaging_upgrade_brew to model the actual installed layout (ARCH-PURPOSE, ARCH-MOCK).
+  - id: new
+    severity: Important
+    family: pure-test-io-separation
+    title: |
+      Pure formula unit coverage includes filesystem and subprocess operations
+    detail: |
+      tests/unit/packaging_formula_spec.lua:26-31 writes a temporary Ruby file and executes ruby -c. Move that validation into integration coverage and keep the PURE renderer tests as direct metadata and string assertions; the renderer itself need not be reclassified (ARCH-PURE).
+```
+
+---
+
+## Re-review — 2026-09-13T16:28:14-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 247 — Homebrew tap and parley launcher: brew install xianxu/parley/parley, tested on a clean tart VM |
+| repo | parley.nvim |
+| issue file | workshop/issues/000247-homebrew-tap-launcher.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | c1395685f69f53a2953cdbaeb01a77d410f105e8..b318335cc8e7a94aa38cfd5572d16c3c296b6d7c |
+| command | sdlc close --issue 247 |
+| reviewer | codex |
+| timestamp | 2026-09-13T16:28:14-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+Both prior findings are addressed, including confirmed regression failures when BR-1’s fix is removed. One Important test-isolation issue remains: fake VM tests require 60 GiB of actual host disk. Public release and live VM acceptance remain pending under the plan’s post-review sequence.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      The upgrade harness reads the installed share path; public and fixture layouts move the starter out of libexec. All three upgrade tests pass. Reverting only the source-path correction in a scratch copy makes two tests fail.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      Filesystem writes and ruby -c moved from packaging_formula_spec.lua into release integration coverage. Both direct renderer tests and all six release integration tests pass.
+findings:
+  - id: new
+    severity: Important
+    family: integration-environment-isolation
+    title: |
+      Fake VM tests require 60 GiB of real host disk
+    detail: |
+      tests/integration/packaging_vm_spec.lua:10-18 substitutes Tart but scripts/test-parley-vm.py:245-250 still reads actual host disk capacity. Ordinary tests therefore fail below 60 GiB despite creating no VM. A scratch reproduction supplying 59 GiB rejects prepare before fake Tart receives any command. Inject the disk-capacity probe, supply deterministic test budgets, and cover insufficient-space rejection explicitly (ARCH-MOCK, ARCH-CONSTRAINTS).
+```
+
+**1. Strengths**
+
+- Launcher tests exercise real publication races, interrupted ownership, symlinks, exact argv and exit-status preservation.
+- Release rendering consumes the tagged archive’s registry; tests verify publication retry after a failed push.
+- Upgrade coverage now exercises the installed layout and restores the real public launcher.
+- README and atlas document installation, profile updates, release tooling and removal.
+
+**2. Critical findings**
+
+None.
+
+**3. Important findings**
+
+The disk-probe isolation issue above. Preserve the production preflight while separating fake-test capacity from the machine running the suite.
+
+**4. Minor findings**
+
+None.
+
+**5. Test coverage notes**
+
+- Passed: 21 architecture checks, 10 launcher tests, 6 release tests, 3 upgrade tests and 2 formula tests.
+- VM coverage: 9 passed; the fake-provider chat case failed because this sandbox prohibits loopback binding. A direct socket probe confirmed `PermissionError: Operation not permitted`; this is a verification limitation, not an additional code finding.
+- BR-1 mutation: two expected failures.
+- Repository files remain unchanged.
+
+**6. Architectural notes**
+
+| Principle | Assessment |
+|---|---|
+| ARCH-DRY | Pass: dependency projection derives from the release registry. |
+| ARCH-PURE | Pass: renderer assertions are separated from executable syntax validation. |
+| ARCH-PURPOSE | Pass for the planned local-review stage; public/live acceptance remains outstanding. |
+| ARCH-MOCK | Flag: fake VM tests retain a real disk-capacity dependency. |
+| ARCH-CONSTRAINTS | Flag: the production disk threshold incorrectly constrains fake tests. |
+| ARCH-SECURE | Pass: quoted argv, symlink checks, isolated profiles and redacted guest output. |
+| ARCH-ORDER | Pass: launcher barriers exercise competing publishers; upgrade invalidates earlier live evidence. |
+| ARCH-FUNERAL | Pass: bounded candidate/staging ownership and explicit VM/profile cleanup. |
+
+**7. Plan revision recommendations**
+
+Append a `## Revisions` entry specifying an injectable disk-capacity probe, deterministic sufficient/insufficient-space fixtures, and preservation of the 60 GiB requirement for real VM runs.
+
+---
+
+## Re-review — 2026-09-13T16:32:52-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 247 — Homebrew tap and parley launcher: brew install xianxu/parley/parley, tested on a clean tart VM |
+| repo | parley.nvim |
+| issue file | workshop/issues/000247-homebrew-tap-launcher.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | c1395685f69f53a2953cdbaeb01a77d410f105e8..9202b955a8ca8746388bad353b69b99a1f55b1d5 |
+| command | sdlc close --issue 247 |
+| reviewer | codex |
+| timestamp | 2026-09-13T16:32:52-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: medium
+```
+
+BR-3 is addressed, and inspection found no new code defect. Verification remains blocked: the fake-chat integration test failed because this sandbox prohibits loopback socket binding, confirmed independently with `PermissionError(1, 'Operation not permitted')`. Rerun that test in an environment permitting local sockets. Public release and live VM acceptance also remain explicitly pending under the plan’s pre-publication review sequence.
+
+```findings
+dispose:
+  - id: BR-3
+    disposition: addressed
+    note: |
+      Both capacity probes use the injected callable. The insufficient-space test verifies refusal and reservation release before Tart runs. An in-memory mutation reverting the probe calls fails with simulated host capacity of 59 GiB, while the fixed implementation accepts the injected 120 GiB.
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Upgrade reconstruction reads prefix/share/parley/config/init.lua; the fixture reproduces Homebrew's move out of libexec. All three upgrade integration cases passed.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      Formula unit cases contain validation and projection assertions; subprocess-based Ruby syntax validation resides in release integration coverage. Both formula unit cases and all six release cases passed.
+```
+
+1. **Strengths**
+   - Launcher tests exercise real competing publishers, interrupted ownership, symlink refusal, exact argv forwarding, and settings preservation.
+   - Formula generation consumes the selected release’s dependency registry; an archive-specific fixture verifies that provenance.
+   - Release tests verify interrupted-push retries and preservation of unrelated tap changes.
+   - README, atlas, and traceability cover the new packaging surface.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** No new code findings. The failed fake-chat test at `tests/integration/packaging_vm_spec.lua:97` requires verification outside this socket-restricted sandbox.
+
+4. **Minor findings:** None.
+
+5. **Test coverage notes**
+   - Passed: 21 architecture, 10 launcher, 6 release, 3 upgrade, 10 VM, and 2 formula checks.
+   - Blocked: one VM fake-chat case; its download attempted `127.0.0.1:0` after socket allocation failed.
+   - BR-3’s mutation check demonstrated sensitivity to reverting the fix.
+   - Pinned stat/name-status inspection and `git diff --check` succeeded. Repository files were unchanged.
+
+6. **Architectural notes**
+   - **ARCH-DRY — pass:** dependencies derive from the release-local registry.
+   - **ARCH-PURE — pass:** formula validation/rendering remain separate from orchestration.
+   - **ARCH-PURPOSE — pass for this planned review checkpoint:** final public/live acceptance remains unchecked.
+   - **ARCH-MOCK — flag, verification only:** stateful fixtures exist, but the socket-dependent case could not complete here.
+   - **ARCH-CONSTRAINTS — pass:** capacity rejection is deterministic; launcher waits and VM phases have bounds.
+   - **ARCH-SECURE — pass:** reviewed publication paths reject unsafe targets; argv forwarding preserves argument boundaries.
+   - **ARCH-ORDER — pass:** publisher barriers exercise competing and interrupted operations; completion requires phase evidence.
+   - **ARCH-FUNERAL — pass:** staging cleanup, explicit abandoned-lock recovery, owned-VM deletion, and profile removal are defined.
+
+7. **Plan revision recommendations:** None. Preserve the unchecked release/live-acceptance items until their evidence exists.
+
+---
+
+## Re-review — 2026-09-13T16:44:47-07:00 (FIX-THEN-SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 247 — Homebrew tap and parley launcher: brew install xianxu/parley/parley, tested on a clean tart VM |
+| repo | parley.nvim |
+| issue file | workshop/issues/000247-homebrew-tap-launcher.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | c1395685f69f53a2953cdbaeb01a77d410f105e8..9202b955a8ca8746388bad353b69b99a1f55b1d5 |
+| command | sdlc close --issue 247 |
+| reviewer | claude |
+| timestamp | 2026-09-13T16:44:47-07:00 |
+| verdict | FIX-THEN-SHIP |
+
+## Review
+
+```verdict
+verdict: FIX-THEN-SHIP
+confidence: high
+```
+
+The three prior findings are genuinely fixed: I re-ran every packaging spec (2 formula, 6 release, 3 upgrade, 10 launcher, 11 VM, 21 arch cases all green in this sandbox, including the loopback fake-chat case that blocked earlier rounds), and mutation checks for BR-1 and BR-3 go red when the fix is reverted. The launcher, formula projection and release script are solid and well tested. What keeps this off SHIP is the failure path of the VM orchestrator that the operator is about to run live for the first time: I reproduced, with real tart's exit code for deleting a nonexistent VM, that a failed `tart clone` leaks the ownership reservation, masks the original error, and makes the documented `cleanup` recovery fail too. The fake tart hides this because it lets `delete`/`stop` of an unknown VM succeed. That is fixable in minutes and does not block the gate on its own, but it should land before the live run. The whole-issue Done-when (public tap, live VM chat, one real release) is by plan still pending; the close must not archive or merge before that evidence exists.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      test-parley-upgrade.sh:67 reads prefix/share/parley/config/init.lua; fake brew moves the starter out of libexec (fixture:46-50). Reverting the path in a scratch copy fails 2 of 3 upgrade cases.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      packaging_formula_spec.lua contains only validate/render assertions; ruby -c lives in packaging_release_spec.lua:63-65. Both suites green.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      main(disk_usage=) injected at test-parley-vm.py:175,248,258; run_packaging_vm.py supplies capacity. Mutating back to shutil.disk_usage makes an injected 59 GiB proceed to clone; the real code refuses before any Tart call.
+findings:
+  - id: new
+    severity: Important
+    family: fake-conformance-to-real-dependency
+    title: |
+      Clone failure leaks the VM ownership reservation and the fake tart hides it
+    detail: |
+      scripts/test-parley-vm.py:254 sets clone_attempted before the clone; on clone failure cleanup() calls delete with check=True (line 41), which real tart 2.32.1 exits 2 on for a nonexistent VM. Reproduced with a tart-faithful wrapper: the lock at ~/.cache/parley-vm-acceptance.owner survives, the error is reported as "Tart command failed: delete" (the clone error is lost), every later prepare fails FileExistsError, and `cleanup RUN_DIR` fails the same way. tests/fixtures/fake_tart:27-29 lets delete/stop of an unknown VM succeed, so no test can see it. This generalizes BR-1's rule (a fake must reproduce the real dependency's semantics the orchestrator's control flow depends on, ARCH-MOCK/ARCH-FUNERAL/ARCH-ORDER). Class fix: (1) fake_tart delete/stop exit 2 on unknown names; (2) a conformance spec, skipped when tart is absent, asserting the fake's exit codes for delete/stop-unknown equal the real binary's; (3) preflight failure path releases the lock in a finally and deletes with check=False; (4) a FAKE_TART_FAIL=clone case asserting the lock is released and the original error is reported.
+  - id: new
+    severity: Important
+    family: failure-diagnosability
+    title: |
+      Every guest-phase failure destroys the VM and reports only an exception type
+    detail: |
+      test-parley-vm.py:196-224 wraps install/probe/package phases in except BaseException → cleanup → raise, and main's handler (line 297-300) prints only the exception class. command() discards captured output. A guest failure in the never-yet-run live path (e.g. parley exits before writing phase.json → json.loads('') → JSONDecodeError) deletes the only evidence. The plan's Operating envelope promises "except an explicitly retained diagnosis run"; no retain option exists. Add a --keep-on-failure flag (or manifest field) that skips cleanup and prints the manifest path, and keep redaction for the console while optionally writing guest stderr to a 0600 file inside the private run dir.
+  - id: new
+    severity: Minor
+    family: acceptance-evidence-before-archive
+    title: |
+      Done-when is unmet at this whole-issue close by design; do not archive or tick the project row yet
+    detail: |
+      No public tap exists, no live guest chat has run, and release-parley.sh has not been used for a release. The plan's Chunk 1 step 4 sequences these after this review; the issue Plan items 1/3/4 are unchecked accordingly. Record it as a plan revision and keep merge/archive blocked until the manifest shows outcome=complete.
+  - id: new
+    severity: Minor
+    family: live-path-input-validity
+    title: |
+      Live model selection may pass the codex-device login alias to list_models
+    detail: |
+      tests/packaging/vm_chat.lua:109-118 iterates proxy.login_providers() (includes codex-device) and calls proxy.list_models(login); cliproxy_config PROVIDER_OWNED_BY has no codex-device key, so if codex is healthy but lists zero models the loop reaches codex-device, list_models errors, await() asserts and the phase fails. Iterate cc.providers() for the model axis, or resolve the alias first.
+  - id: new
+    severity: Minor
+    family: duplicate-helper
+    title: |
+      Headless formula-render one-liner and guest upload snippet are duplicated
+    detail: |
+      release-parley.sh:51 and test-parley-upgrade.sh:82-88 embed the same nvim -c render program; test-parley-vm.py duplicates the base64 upload in install() (55-59), probe_phase() (76-82) and upload() (112-116). Extract one packaging/render-formula entry and use upload() everywhere (ARCH-DRY).
+```
+
+**Strengths**
+
+- `packaging/launcher.lua:34-79` is a genuinely careful publication protocol: lstat-only reads with a 1 MiB bound, no-clobber hard-link publish, atomic candidate rename, explicit non-stealing lock with bounded wait. The spec drives real competing processes through filesystem barriers (`packaging_launcher_spec.lua:41-61`), which is the right oracle for ARCH-ORDER.
+- `packaging/formula.lua:19` derives dependencies from the registry; the release spec's archive-only `archive-ripgrep` mutation (`packaging_release_spec.lua:39-42`) proves rendering uses the tagged tree's registry, not the checkout's.
+- `scripts/release-parley.sh` checks tag identity before and after download (lines 30, 42), stages on the destination filesystem, and the interrupted-push retry is tested against a real bare remote with a rejecting hook.
+- Fake brew (`fake_packaging_upgrade_brew:46-50`) now models Homebrew's install-time move; the upgrade spec asserts the libexec starter is absent on both sides.
+- Docs gate met: README install section leads with brew, `packaging/README.md`, tap README, `atlas/infra/packaging.md`, index and traceability all updated; lessons carry the three prior findings as rules.
+
+**Critical findings**
+
+None.
+
+**Important findings**
+
+1. `scripts/test-parley-vm.py:254,41` — reservation lock leaks on clone failure; fake tart lenient on unknown-VM delete/stop. Reproduction and class fix in the findings block. Real tart output observed: `the specified VM "…" does not exist`, exit 2.
+2. `scripts/test-parley-vm.py:196-224,297` — no retained-diagnosis run; guest failures leave only an exception class name. Plan promised the retain path.
+
+**Minor findings**
+
+- Live loop may call `list_models('codex-device')` (`vm_chat.lua:109`).
+- Duplicated render one-liner and upload snippet.
+- `libexec.install Dir["*", ".*"]` ships `workshop/`, `docs/`, `atlas/` into every user's prefix. Public repo, so no secret exposure, but it is bloat; `tests/` is needed by the fake phase, the rest is not.
+- Manifest carries `status`/`phase`/`outcome` as three free strings; the legal combinations are unwritten (ARCH-ORDER). A single tagged state would remove the redundancy seen in the failed manifest (`status: failed`, `outcome: failed`).
+- `owned.mkdir()` in `test-parley-upgrade.sh:24` surfaces as a raw traceback rather than the script's `sys.exit` message.
+
+**Test coverage notes**
+
+- Ran in this sandbox: formula 2/2, release 6/6, upgrade 3/3, launcher 10/10, VM 11/11 (including the loopback fake-chat case prior rounds could not run), arch 21/21, luacheck 0 warnings over 16 packaging files, python syntax clean, `git diff --check` clean.
+- Mutation evidence: BR-1 revert → 2 failures; BR-3 revert → injected 59 GiB proceeds to clone.
+- Uncovered: the live branch of `vm_chat.lua:103-126` (health, model listing, osascript clipboard seed, image paste) runs only in the real guest. API names it uses all exist (`credential_health_for_login`, `list_models`, `managed_binary`, `_config_path`, `has_image`, `paste_image`, query `payload`/`provider`), and the clipboard reader is osascript, so no missing formula dependency. Clone-failure and unknown-VM delete paths have no test.
+
+**Architectural notes**
+
+- ARCH-DRY: flag (Minor) — duplicated render and upload snippets.
+- ARCH-PURE: pass — `formula.lua` is a projection; unit tests are IO-free.
+- ARCH-PURPOSE: conditional pass — code delivers the full local scope; the Done-when's public/live evidence is sequenced after this review by plan and must gate merge/archive.
+- ARCH-MOCK: flag (Important) — fake tart diverges from real tart on delete/stop of unknown VMs and has no live conformance probe; fake brew and local git remotes are good seams.
+- ARCH-CONSTRAINTS: pass — 1 MiB read bound, 5 s lock wait, 180 s readiness, 900 s phases, disk preflight with injected probe.
+- ARCH-SECURE: pass — symlink refusal, lstat-verified reads, argv arrays, forged-manifest rejection, redacted guest output, tests never touch real HOME.
+- ARCH-ORDER: flag (Important) — the preflight error path unwinds without releasing the lock; launcher interleavings are otherwise explicit and barrier-tested.
+- ARCH-FUNERAL: flag (Important) — same lock leak; otherwise one `.new` candidate, owned staging removed with the lock, VM removed on verify.
+
+**Plan revision recommendations**
+
+- Add a `## Revisions` entry: the preflight/cleanup lifecycle releases the ownership reservation on every failure, fake tart reproduces real tart's unknown-VM exit code, and a conformance check keeps them aligned.
+- Add an entry stating whether the promised "retained diagnosis run" is implemented as a flag, or strike the promise.
+- Core concepts table lists fixtures as `tests/fixtures/fake_packaging_*`; `fake_tart` and `run_packaging_vm.py` do not match that glob. Name them.
+- The project file's `done_when` still says `:ParleyProxy login`; the shipped command is `:ParleyConnect`. Correct it when the close sweep touches the project.
+
+---
+
+## Re-review — 2026-09-13T21:55:12-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 247 — Homebrew tap and parley launcher: brew install xianxu/parley/parley, tested on a clean tart VM |
+| repo | parley.nvim |
+| issue file | workshop/issues/000247-homebrew-tap-launcher.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | c1395685f69f53a2953cdbaeb01a77d410f105e8..79ed1b57d7a7958dc8ac285f1bc5bb999d657873 |
+| command | sdlc close --issue 247 |
+| reviewer | codex |
+| timestamp | 2026-09-13T21:55:12-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+Packaging and onboarding tests pass, and most prior findings are addressed. Shipping remains blocked by cross-filesystem tutorial publication, a contradictory PURE classification, and BR-4’s missing executable Tart conformance check. Pending public/live acceptance remains explicitly tracked.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Upgrade reads the installed share location; passing upgrade fixtures reproduce Homebrew's move out of libexec.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      Formula unit coverage is input/output-only; Ruby execution resides in passing release integration tests.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      The injected capacity probe and passing insufficient-capacity test isolate fake VM tests from host disk availability.
+  - id: BR-4
+    disposition: not-addressed
+    note: |
+      Clone cleanup and original-error preservation are repaired and regression-tested. However, tests/integration/packaging_vm_spec.lua:31 only asserts the fake returns 2; the requested optional real-versus-fake stop/delete conformance test is absent. The issue's manual verification claim does not provide that executable guard (ARCH-MOCK).
+  - id: BR-5
+    disposition: addressed
+    note: |
+      Persistent --keep-on-failure retains the owned VM, reports its manifest, and records controlled diagnostics. Passing tests cover retained failure, retry, explicit cleanup, and independent cleanup failure.
+  - id: BR-6
+    disposition: addressed
+    note: |
+      Plan revisions at lines 263-265 and 453-462 explicitly preserve pending acceptance; the project remains unchecked until the complete manifest. This disposition does not establish live acceptance.
+  - id: BR-7
+    disposition: addressed
+    note: |
+      vm_chat.lua:73 enumerates canonical model providers. The passing catalog regression exercises healthy Codex with no models followed by a usable Google catalog.
+  - id: BR-8
+    disposition: addressed
+    note: |
+      Both packaging scripts use packaging/render-formula.lua; VM transfers use upload(). Release and upgrade integration tests exercise the shared renderer.
+findings:
+  - id: new
+    severity: Critical
+    family: atomic-publication-filesystem-locality
+    title: |
+      Tutorial publication aborts startup across filesystem boundaries
+    detail: |
+      lua/parley/starter.lua:79-83 stages under stdpath('state') and hard-links into chat_dir. An external-drive project or separately mounted XDG roots makes fs_link return EXDEV, aborting startup. Reproduced through real starter.start() with injected cross-filesystem link semantics. Stage on the destination filesystem, retain no-clobber publication, and add regression coverage (ARCH-CONSTRAINTS).
+  - id: new
+    severity: Critical
+    family: pure-test-io-separation
+    title: |
+      The plan incorrectly classifies auth_is_private as PURE
+    detail: |
+      workshop/plans/000247-homebrew-launcher-plan.md:320 declares PURE, but tests/packaging/vm_chat.lua:13-20 reads filesystem metadata, UID and resolved paths; its integration test creates directories and symlinks. This is the 2nd finding in family pure-test-io-separation. Apply the rule across all concept tables: filesystem-dependent entities are INTEGRATION. Append a classification revision and sweep every PURE row; BR-2's renderer correction remains addressed (ARCH-PURE).
+```
+
+1. **Strengths**
+
+   - Formula generation consumes the selected release’s dependency registry.
+   - Launcher tests exercise real competing publishers, interrupted initialization, edited settings, and exact argument forwarding.
+   - VM cleanup preserves ownership when deletion fails and preserves the original failure.
+   - README and atlas document the new packaging and app surfaces.
+
+2. **Critical findings**
+
+   The two new findings above require destination-local tutorial staging and correction of the concept table. The classification severity follows the explicit Core-concepts review contract.
+
+3. **Important findings**
+
+   BR-4 remains partially open. Add a conformance test that compares fake and real Tart unknown-resource exit codes, skipping explicitly when Tart is unavailable.
+
+4. **Minor findings**
+
+   None newly raised. Continue honoring BR-6’s acceptance-before-archive requirement.
+
+5. **Test coverage**
+
+   `make test-spec SPEC=infra/packaging TEST_ENV_ROOT=/tmp/parley247-review-primary` passed **68 tests**. Independent runtime review passed **40 additional tests**. The cross-filesystem startup reproduction failed as described. No live VM acceptance was performed.
+
+6. **Architectural notes**
+
+   - **ARCH-DRY — pass:** shared rendering, upload, and dependency projection.
+   - **ARCH-PURE — flag:** auth helper classification contradicts its implementation.
+   - **ARCH-PURPOSE — pass for documented local scope:** final acceptance remains pending.
+   - **ARCH-MOCK — flag:** executable Tart conformance remains missing.
+   - **ARCH-CONSTRAINTS — flag:** tutorial publication assumes one filesystem.
+   - **ARCH-SECURE — pass:** inspected paths retain bounded documentation access and controlled diagnostics.
+   - **ARCH-ORDER — pass:** changed readiness flows guard cancellation/context; packaging tests inject ordering.
+   - **ARCH-FUNERAL — pass:** owned VM cleanup and bounded publication artifacts have explicit removal paths.
+
+7. **Plan revisions**
+
+   Append revisions classifying `auth_is_private` as INTEGRATION and requiring destination-local tutorial staging across independently mounted project/XDG roots. Keep final release acceptance unchecked.
+
+---
+
+## Re-review — 2026-09-13T21:59:57-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 247 — Homebrew tap and parley launcher: brew install xianxu/parley/parley, tested on a clean tart VM |
+| repo | parley.nvim |
+| issue file | workshop/issues/000247-homebrew-tap-launcher.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | c1395685f69f53a2953cdbaeb01a77d410f105e8..d682f69d510789fed2062146d49a18af4f953889 |
+| command | sdlc close --issue 247 |
+| reviewer | codex |
+| timestamp | 2026-09-13T21:59:57-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+The pinned changes resolve BR-4, BR-9 and BR-10. Focused starter and packaging tests passed, including live Tart conformance; scratch mutations confirmed that the cleanup and cross-filesystem regressions fail without their fixes. No new findings. This supports the documented testing release; the existing fresh-machine acceptance requirement remains before merge/archive.
+
+```findings
+dispose:
+  - id: BR-4
+    disposition: addressed
+    note: |
+      Cleanup confirms VM absence before releasing ownership and preserves the original failure. All 17 VM tests passed, including real Tart missing-resource conformance. Restoring checked deletion in scratch reproduced the leaked reservation.
+  - id: BR-9
+    disposition: addressed
+    note: |
+      starter.lua stages tutorials inside chat_dir. Both publication regression cases pass; moving staging back under state in an isolated pinned archive makes them fail specifically with EXDEV.
+  - id: BR-10
+    disposition: addressed
+    note: |
+      The concept table now classifies auth_is_private as INTEGRATION, matching its filesystem operations. The appended release-review revision records the classification sweep; remaining PURE rows match their implementations.
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Installed-layout handling remains corrected; all three upgrade integration cases passed.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      Formula unit tests retain projection assertions; external Ruby syntax validation remains in release integration.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      VM tests inject disk capacity through the test runner, including insufficient-capacity refusal.
+  - id: BR-5
+    disposition: addressed
+    note: |
+      Retained-failure diagnostics and separate cleanup failures remain covered by passing VM cases.
+  - id: BR-6
+    disposition: addressed
+    note: |
+      The project row remains unchecked, and the latest revision explicitly preserves acceptance before merge/archive.
+  - id: BR-7
+    disposition: addressed
+    note: |
+      Live acceptance uses canonical model providers; the catalog regression covers healthy Codex with an empty catalog before Google.
+  - id: BR-8
+    disposition: addressed
+    note: |
+      Release rendering and guest upload retain their shared helper implementations.
+```
+
+1. **Strengths**
+   - Tutorial publication preserves edits, stages privately on the destination filesystem, and cleans normal failures: `lua/parley/starter.lua:83`.
+   - VM cleanup distinguishes confirmed absence from failed deletion while retaining both diagnostics: `scripts/test-parley-vm.py:62`.
+   - Deferred LLM actions preserve source context and reject changed or deleted buffers; the starter suite exercises cancellation and reentry.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** None.
+
+4. **Minor findings:** None.
+
+5. **Test coverage**
+   - `make test-spec SPEC=infra/starter` passed in isolated scratch storage.
+   - Packaging: 17 VM, 10 launcher, 7 release and 3 upgrade cases passed.
+   - Installed Tart conformance ran successfully; it was not skipped.
+   - BR-4 and BR-9 mutations reproduced their specific failures.
+   - `git diff --check` passed. Full-suite and live OAuth/image acceptance were not rerun.
+
+6. **Architectural notes**
+   - **ARCH-DRY — pass:** Registry-derived dependencies, shared rendering/upload helpers and reused path resolution.
+   - **ARCH-PURE — pass:** Corrected concept classifications match dependency boundaries.
+   - **ARCH-PURPOSE — pass:** Implementation follows the appended scope revisions; outstanding acceptance remains explicit.
+   - **ARCH-MOCK — pass:** Stateful packaging doubles exercise production seams; Tart semantics have live conformance.
+   - **ARCH-CONSTRAINTS — pass:** Capacity/time bounds are exercised; destination-local staging removes the filesystem restriction.
+   - **ARCH-SECURE — pass:** Structured subprocess arguments, scoped tool access and isolated test profiles preserve trust boundaries.
+   - **ARCH-ORDER — pass:** Tests exercise competing initialization, cancellation, retry and failed cleanup.
+   - **ARCH-FUNERAL — pass:** Ownership controls cleanup; retained failures have explicit recovery paths and upgrade candidates remain bounded.
+
+7. **Plan revision recommendations:** None; the appended corrections cover these dispositions.
+
+---
+
+## Re-review — 2026-09-13T22:19:10-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 247 — Homebrew tap and parley launcher: brew install xianxu/parley/parley, tested on a clean tart VM |
+| repo | parley.nvim |
+| issue file | workshop/issues/000247-homebrew-tap-launcher.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | c1395685f69f53a2953cdbaeb01a77d410f105e8..50cadbc067075f6e876a74ed68f9cecdd30529b2 |
+| command | sdlc close --issue 247 |
+| reviewer | codex |
+| timestamp | 2026-09-13T22:19:10-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+The pinned range satisfies the revised testing-release scope. No new findings; prior corrections remain addressed. This approves the reviewed code, while the documented fresh-machine acceptance requirement remains before merge/archive.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Upgrade reads the installed share location; the moved-layout regression passes.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      Formula unit tests assert pure projections; Ruby execution resides in release integration coverage.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      Injected capacity tests cover insufficient disk before cloning without requiring host capacity.
+  - id: BR-4
+    disposition: addressed
+    note: |
+      Cleanup confirms VM absence before releasing ownership. Failure tests and real Tart missing-resource conformance pass.
+  - id: BR-5
+    disposition: addressed
+    note: |
+      Retained diagnosis preserves phase, command and controlled failure reasons; retention and retry tests pass.
+  - id: BR-6
+    disposition: addressed
+    note: |
+      Project acceptance remains unchecked; its revision explicitly requires complete acceptance before merge/archive.
+  - id: BR-7
+    disposition: addressed
+    note: |
+      Live acceptance uses canonical model providers; regression covers empty Codex followed by Google.
+  - id: BR-8
+    disposition: addressed
+    note: |
+      Release and upgrade share render-formula.lua; guest phases share the upload helper.
+  - id: BR-9
+    disposition: addressed
+    note: |
+      Tutorial staging resides inside chat_dir; cross-filesystem publication and failure-cleanup regressions pass.
+  - id: BR-10
+    disposition: addressed
+    note: |
+      The plan classifies auth_is_private as INTEGRATION, matching vm_chat.lua filesystem metadata checks; the appended revision records the correction.
+```
+
+1. **Strengths**
+   - Launcher tests exercise actual publication races, interrupted owners, edited configurations and argv preservation.
+   - Formula dependencies derive from the selected release’s registry.
+   - First-install window restoration uses Lazy’s lifecycle API and has a real-float regression.
+   - Readiness tests cover cancellation, changed source context and rebuilding requests after model selection.
+   - README and atlas describe the added user and architectural surfaces.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** None.
+
+4. **Minor findings:** None.
+
+5. **Test coverage**
+   - Required pinned stat/name-status and targeted patches inspected; range whitespace check passed.
+   - Pinned temporary snapshot: **165 starter cases and 15 login cases passed**.
+   - Packaging: **69 cases passed**, including real Tart conformance.
+   - Broader proxy suite: **628 cases passed**.
+   - Concurrent working-tree edits were excluded from the reviewed snapshot. Full live-image acceptance was not performed.
+
+6. **Architecture**
+   - **ARCH-DRY — pass:** shared rendering, upload, dependency and keybinding owners.
+   - **ARCH-PURE — pass:** corrected concept classifications match implementation boundaries.
+   - **ARCH-PURPOSE — pass:** revised release scope delivered; acceptance remains explicitly pending.
+   - **ARCH-MOCK — pass:** stateful fixtures exercise shared production seams.
+   - **ARCH-CONSTRAINTS — pass:** bounded waits, capacity checks and documentation reads.
+   - **ARCH-SECURE — pass:** isolated profiles, scoped tools and redirected-document rejection.
+   - **ARCH-ORDER — pass:** ownership, cancellation and publication races have mechanical coverage.
+   - **ARCH-FUNERAL — pass:** candidate, staging, VM and transient UI cleanup have defined owners.
+
+7. **Plan revision recommendations:** None.
+
+---
+
+## Re-review — 2026-09-13T22:46:32-07:00 (FIX-THEN-SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 247 — Homebrew tap and parley launcher: brew install xianxu/parley/parley, tested on a clean tart VM |
+| repo | parley.nvim |
+| issue file | workshop/issues/000247-homebrew-tap-launcher.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | c1395685f69f53a2953cdbaeb01a77d410f105e8..303e922399ad52d29683f41dad3526b6afb7da81 |
+| command | sdlc close --issue 247 |
+| reviewer | codex |
+| timestamp | 2026-09-13T22:46:32-07:00 |
+| verdict | FIX-THEN-SHIP |
+
+## Review
+
+```verdict
+verdict: FIX-THEN-SHIP
+confidence: medium
+```
+
+The pinned implementation has no newly confirmed runtime defect. Starter and packaging checks passed, and prior fixes remain supported by code and regression coverage. Correct the package guides’ outdated credential-isolation and removal claims before publication. Live acceptance remains pending under the recorded release-first revision.
+
+1. **Strengths**
+   - Launcher tests exercise real publication races, symlink rejection, settings preservation, and exact argument forwarding.
+   - Formula generation derives dependencies from the tagged release’s registry.
+   - Onboarding tests cover cancellation, changed source buffers, and exactly-once action resumption.
+   - VM cleanup preserves ownership when deletion fails and supports retained diagnostics.
+
+2. **Critical findings:** None.
+
+3. **Important findings**
+   - [packaging/README.md:15](/Users/xianxu/workspace/parley.nvim/packaging/README.md:15), lines 34–36, and [starter guide:57](/Users/xianxu/workspace/parley.nvim/packaging/starter-config/README.md:57), line 79, still describe isolated credentials and claim profile removal deletes saved login. The implementation now shares `~/.cli-proxy-api`, migrates legacy credentials there, and preserves that directory during uninstall. Update both guides to explain shared ownership and retention; avoid recommending unconditional deletion of credentials other installations use. **ARCH-SECURE / ARCH-FUNERAL.**
+
+4. **Minor findings:** None.
+
+5. **Test coverage**
+   - Starter mapping: **163 passed** across 15 spec files.
+   - Packaging mapping: **69 passed** across 9 spec files, including installed Tart conformance.
+   - Lint: **447 files**, zero warnings/errors.
+   - Pinned `git diff --check`: passed.
+   - Full suite and authenticated clean-VM acceptance were not independently rerun.
+
+6. **Architectural notes**
+   - **ARCH-DRY — pass:** shared registry, rendering entry, picker, and defaults.
+   - **ARCH-PURE — pass:** projection entities and filesystem integration are classified consistently.
+   - **ARCH-PURPOSE — pass:** implementation follows recorded scope revisions; pending acceptance remains explicit.
+   - **ARCH-MOCK — pass:** stateful dependency fixtures and real conformance checks cover packaging boundaries.
+   - **ARCH-CONSTRAINTS — pass:** capacity guards, deadlines, bounded publication, and bounded documentation reads.
+   - **ARCH-SECURE — flag:** user-facing credential ownership claims lag the implementation.
+   - **ARCH-ORDER — pass:** publication and deferred-action tests exercise competing and interrupted transitions.
+   - **ARCH-FUNERAL — flag:** removal documentation incorrectly promises credential deletion.
+
+7. **Plan revision recommendations:** None; the shared-auth revision already describes the intended behavior correctly.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Upgrade reconstructs starter input from installed share; installed-layout upgrade tests pass.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      Formula unit tests assert projections; Ruby execution resides in release integration.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      Injected capacity tests cover adequate disk and refusal below 60 GiB without host capacity dependence.
+  - id: BR-4
+    disposition: addressed
+    note: |
+      Cleanup checks VM absence and retains ownership on deletion failure; fake and installed Tart conformance tests pass.
+  - id: BR-5
+    disposition: addressed
+    note: |
+      Retained-failure tests verify preserved VM ownership and phase/command diagnostics.
+  - id: BR-6
+    disposition: addressed
+    note: |
+      Issue and project acceptance remain unchecked; the plan explicitly reserves merge/archive for completed acceptance.
+  - id: BR-7
+    disposition: addressed
+    note: |
+      VM model discovery uses canonical model providers; healthy Codex with an empty catalog falls through in regression coverage.
+  - id: BR-8
+    disposition: addressed
+    note: |
+      Release-local formula rendering and guest upload each use a shared entry/helper.
+  - id: BR-9
+    disposition: addressed
+    note: |
+      Tutorial staging now resides under the destination chat directory; cross-filesystem and failed-publication cleanup tests pass.
+  - id: BR-10
+    disposition: addressed
+    note: |
+      The plan classifies auth_is_private as INTEGRATION, matching its filesystem metadata operations and integration tests.
+findings:
+  - id: new
+    severity: Important
+    family: credential-lifecycle-documentation
+    title: |
+      Package guides promise credential isolation and deletion that shared authentication no longer provides
+    detail: |
+      packaging/README.md:15 and :34-36 plus packaging/starter-config/README.md:57 and :79 contradict the shared ~/.cli-proxy-api implementation and retained-auth uninstall policy. Update both guides to state shared ownership and retention, consistent with atlas/infra/starter.md:122-125; do not recommend unconditional deletion of shared credentials. ARCH-SECURE and ARCH-FUNERAL.
+```
+
+---
+
+## Re-review — 2026-09-14T07:01:11-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 247 — Homebrew tap and parley launcher: brew install xianxu/parley/parley, tested on a clean tart VM |
+| repo | parley.nvim |
+| issue file | workshop/issues/000247-homebrew-tap-launcher.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | c1395685f69f53a2953cdbaeb01a77d410f105e8..75831f56c4d7ff7b01af22cede0a6c0a83488de2 |
+| command | sdlc close --issue 247 |
+| reviewer | codex |
+| timestamp | 2026-09-14T07:01:11-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: medium
+```
+
+BR-11 is addressed: both guides now accurately describe shared credentials and their retention during app removal. The packaging and starter test selections passed, including real Tart missing-resource conformance; the pinned diff passes whitespace checks. No blocking findings remain. This review preserves the documented requirement for live acceptance before merge/archive.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Upgrade reads the installed share path; installed-layout upgrade and restoration tests pass.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      Formula unit coverage tests projection and validation; external syntax validation belongs to release integration.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      Injected disk capacity covers sufficient space and pre-clone refusal; VM tests pass without requiring 60 GiB.
+  - id: BR-4
+    disposition: addressed
+    note: |
+      Cleanup confirms absence before releasing ownership; clone-failure tests and real/fake Tart exit-code conformance pass.
+  - id: BR-5
+    disposition: addressed
+    note: |
+      Retained diagnosis records controlled failure details; retention, retry, and failed-cleanup tests pass.
+  - id: BR-6
+    disposition: addressed
+    note: |
+      Issue and project retain pending acceptance checkboxes and explicitly prohibit merge/archive before complete acceptance evidence.
+  - id: BR-7
+    disposition: addressed
+    note: |
+      Live discovery enumerates canonical model providers; healthy Codex with an empty catalog is covered by passing integration tests.
+  - id: BR-8
+    disposition: addressed
+    note: |
+      Release rendering uses packaging/render-formula.lua; VM uploads use the shared upload helper.
+  - id: BR-9
+    disposition: addressed
+    note: |
+      Tutorial staging uses the destination filesystem; cross-filesystem publication and failure-cleanup regressions pass.
+  - id: BR-10
+    disposition: addressed
+    note: |
+      The plan classifies auth_is_private as INTEGRATION, matching its filesystem metadata reads in tests/packaging/vm_chat.lua.
+  - id: BR-11
+    disposition: addressed
+    note: |
+      The bcbb0143 correction updates packaging/README.md:15-38 and packaging/starter-config/README.md:54-86. Shared ownership and retained credentials match config.lua:124, starter.lua migration, and vm_uninstall.py's four-root removal. This is a prose-only correction; shared-auth integration tests also pass.
+findings:
+  - id: new
+    severity: Minor
+    family: duplicate-helper
+    title: |
+      Selected-model validation is duplicated between readiness and onboarding
+    detail: |
+      lua/parley/llm_readiness.lua:9 and lua/parley/starter_onboarding.lua:6 implement the same placeholder/model predicate. ARCH-DRY: this is the 2nd finding in family duplicate-helper. Apply the rule that setup consumers share one model-selection validity predicate: consolidate both enumerated consumers into a pure helper and test its accepted model shapes.
+```
+
+1. **Strengths**
+
+   - Launcher tests exercise real competing publishers, interrupted initialization, symlinks, exact argument forwarding, and preservation of edited settings.
+   - Release and upgrade tests verify immutable-tag handling, retry behavior, installed layout, and restoration after failure.
+   - Authentication migration preserves existing shared accounts and legacy originals; its collision, permission, and symlink tests pass.
+   - Deferred actions validate the original editor context and settle cancellation/resumption once.
+
+2. **Critical findings:** None.
+
+3. **Important findings:** None.
+
+4. **Minor findings:** Consolidate the duplicated selected-model predicate described above.
+
+5. **Test coverage notes**
+
+   Passed `make test-spec SPEC=infra/packaging` and `make test-spec SPEC=infra/starter`, using separate temporary test roots. Passed pinned-range `git diff --check`. The full suite and authenticated clean-machine image acceptance were not rerun. No repository edits or mutation testing were performed.
+
+6. **Architectural notes**
+
+   - **ARCH-DRY — flag, Minor:** duplicated selection predicate; formula dependencies and release rendering otherwise share their sources.
+   - **ARCH-PURE — pass:** inspected Core-concepts classifications match dependencies; projection tests remain separate from integration checks.
+   - **ARCH-PURPOSE — pass:** implemented packaging behavior follows the revised scope; acceptance remains explicitly pending.
+   - **ARCH-MOCK — pass:** stateful packaging fixtures exercise production seams; Tart conformance passed.
+   - **ARCH-CONSTRAINTS — pass:** capacity refusal, bounded waits, document limits, and serialized publication have coverage.
+   - **ARCH-SECURE — pass:** private credential publication, trusted tool-root context, and bounded indexed documentation reads are preserved.
+   - **ARCH-ORDER — pass:** publisher barriers and deferred-action cancellation tests exercise relevant ordering.
+   - **ARCH-FUNERAL — pass:** profile, staging, candidate, and owned-VM removal policies are explicit; shared credential retention is now documented consistently.
+
+7. **Plan revision recommendations:** None required for this boundary.

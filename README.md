@@ -21,6 +21,21 @@ The philosophy behind Parley is Keep Things Simple, and Local, and a bit of Unix
 - Leverage Neovim, and all its goodies
 - Minimal dependencies, install and it works, all you need is your API keys
 
+## Start here
+
+<!-- parley:introduction:start -->
+Parley is a conversational workspace backed by Neovim, available as a standalone
+app or the parley.nvim plugin in your existing editor. Ask questions, explore
+ideas, and keep conversations as local Markdown files. The selected provider
+receives the questions and attachments you send.
+
+In the app, run `:ParleyProxy connect` to connect an account and `:ParleyAgent`
+to choose a model. At a question, press `i` to type; Alt+Enter or Ctrl+g twice
+sends it. Escape leaves typing mode. `:ParleyChatRespond` also sends. Ctrl+g then
+`f` finds chats, Ctrl+g then `c` creates one, and Ctrl+g then `?` shows shortcuts.
+Use `:w` to save and `:wq` to quit. Plugin users can customize these mappings.
+<!-- parley:introduction:end -->
+
 ## Developer testing and performance
 
 A standalone checkout includes its runtime data and contributor test targets;
@@ -51,7 +66,17 @@ Despite of such simple interface, it's very powerful, sometimes more so than off
 
 ## Quick Install
 
-New to Neovim? Use the [standalone starter profile](packaging/starter-config/README.md)
+On macOS with Homebrew:
+
+```sh
+brew install xianxu/parley/parley
+parley
+```
+
+Follow the welcome chat to connect your account and choose a model. See the
+[package guide](packaging/README.md) for updates, settings and removal.
+
+For a manual installation, use the [standalone starter profile](packaging/starter-config/README.md)
 for an isolated chat setup with account login and a short first-use guide.
 
 Run `:checkhealth parley` to see which external tools are available and what

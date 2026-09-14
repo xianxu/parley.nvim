@@ -27,6 +27,7 @@ local function ensure_parley_setup()
     local parley = require("parley")
     if not parley._state or not parley._state.agent then
         parley.setup({
+            parley_help = false, -- pin prompt composition independently of product documentation
             chat_dir = (os.getenv("TMPDIR") or "/tmp") .. "/claude/parley-harness",
             state_dir = (os.getenv("TMPDIR") or "/tmp") .. "/claude/parley-harness/state",
             providers = {},

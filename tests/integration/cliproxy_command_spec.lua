@@ -37,6 +37,23 @@ describe(":ParleyProxy command", function()
         assert.equals(2, vim.fn.exists(":ParleyProxy"))
     end)
 
+    it("offers connect in help and completion without a standalone alias", function()
+        local messages = capture_notify(function() vim.cmd("ParleyProxy") end)
+        assert.is_truthy(messages[1].msg:find("connect", 1, true))
+        assert.is_true(vim.tbl_contains(vim.fn.getcompletion("ParleyProxy con", "cmdline"), "connect"))
+        assert.equals(0, vim.fn.exists(":ParleyConnect"))
+    end)
+
+    it("routes connect to the account flow in an ordinary plugin setup", function()
+        local onboarding = require("parley.starter_onboarding")
+        local saved, seen = onboarding.connect, nil
+        onboarding.connect = function(plugin) seen = plugin end
+        local ok, err = pcall(vim.cmd, "ParleyProxy connect")
+        onboarding.connect = saved
+        assert(ok, err)
+        assert.is_true(seen == parley)
+    end)
+
     it("an unknown subcommand prints usage without erroring (no probe)", function()
         local msgs = capture_notify(function()
             vim.cmd("ParleyProxy bogus")
@@ -53,7 +70,7 @@ describe(":ParleyProxy command", function()
         assert.equals(1, #msgs)
         assert.equals(vim.log.levels.INFO, msgs[1].level)
         local help = msgs[1].msg
-        for _, sub in ipairs({ "status", "start", "stop", "restart", "models", "providers", "login", "update" }) do
+        for _, sub in ipairs({ "status", "start", "stop", "restart", "models", "providers", "connect", "login", "update" }) do
             assert.is_truthy(help:find(sub, 1, true), "help missing subcommand: " .. sub)
         end
         assert.is_truthy(help:find("<provider>", 1, true)) -- models/login show their arg

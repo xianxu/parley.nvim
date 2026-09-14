@@ -29,15 +29,45 @@ describe('isolated starter runtime', function()
     it('reopens one durable welcome across independent launches', function()
         local first = run()
         assert.equals(0, first.code, first.stderr)
-        local chats = vim.fn.glob(scratch .. '/data/parley/chats/welcome/*.md', false, true)
+        local chats = vim.fn.glob(scratch .. '/data/parley/chats/welcome.md', false, true)
         assert.equals(1, #chats)
         local before = vim.fn.readfile(chats[1])
         local second = run()
         assert.equals(0, second.code, second.stderr)
-        assert.same(chats, vim.fn.glob(scratch .. '/data/parley/chats/welcome/*.md', false, true))
+        assert.same(chats, vim.fn.glob(scratch .. '/data/parley/chats/welcome.md', false, true))
         assert.same(before, vim.fn.readfile(chats[1]))
         assert.same({ "error('separate nvim config was sourced')" }, vim.fn.readfile(scratch .. '/config/nvim/init.lua'))
         assert.is_nil(uv.fs_stat(scratch .. '/home/.cli-proxy-api'))
+    end)
+
+    it('seeds all tutorials and preserves edited lessons on later launches', function()
+        local first = run()
+        assert.equals(0, first.code, first.stderr)
+        local dir = scratch .. '/data/parley/chats/'
+        for _, name in ipairs({ 'welcome.md', 'basics.md', 'advanced.md' }) do
+            local lines = vim.fn.readfile(dir .. name)
+            table.insert(lines, 7, 'My personal lesson note')
+            vim.fn.writefile(lines, dir .. name)
+            local again = run()
+            assert.equals(0, again.code, again.stderr)
+            assert.same(lines, vim.fn.readfile(dir .. name))
+        end
+    end)
+
+    it('seeds tutorials when state and chats are on different filesystems', function()
+        local result = run(nil, { STARTER_CROSS_FILESYSTEM = '1' })
+        assert.equals(0, result.code, result.stderr)
+        assert.same({}, vim.fn.glob(scratch .. '/data/parley/chats/.parley-tutorial-*', false, true))
+        assert.equals(0, vim.fn.isdirectory(scratch .. '/state/parley/welcome-initializer'))
+    end)
+
+    it('cleans destination staging and lock after publication fails', function()
+        local result = run(nil, { STARTER_CROSS_FILESYSTEM = '1', STARTER_LINK_FAILURE = '1',
+            STARTER_EXPECT_ERROR = 'injected publication failure' })
+        assert.equals(0, result.code, result.stderr)
+        assert.same({}, vim.fn.glob(scratch .. '/data/parley/chats/.parley-tutorial-*', false, true))
+        assert.equals(0, vim.fn.isdirectory(scratch .. '/state/parley/welcome-initializer'))
+        assert.equals(0, vim.fn.filereadable(scratch .. '/data/parley/chats/welcome.md'))
     end)
 
     it('preserves an explicit file without creating a welcome', function()
@@ -45,8 +75,21 @@ describe('isolated starter runtime', function()
         vim.fn.writefile({ 'My notes' }, file)
         local result = run({ file })
         assert.equals(0, result.code, result.stderr)
-        assert.same({}, vim.fn.glob(scratch .. '/data/parley/chats/welcome/*.md', false, true))
+        assert.same({}, vim.fn.glob(scratch .. '/data/parley/chats/welcome.md', false, true))
         assert.same({ 'My notes' }, vim.fn.readfile(file))
+    end)
+
+    it('moves legacy welcome chats into the chat root and keeps their contents', function()
+        local legacy = scratch .. '/data/parley/chats/welcome'
+        vim.fn.mkdir(legacy, 'p')
+        local name = '2026-09-13.19-22-30.648_simple-greeting-exchange.md'
+        local lines = { '---', 'topic: A saved conversation', 'file: ' .. name, 'tags:', '---', '', '💬: Hello', '' }
+        vim.fn.writefile(lines, legacy .. '/' .. name)
+        local result = run()
+        assert.equals(0, result.code, result.stderr)
+        assert.same(lines, vim.fn.readfile(scratch .. '/data/parley/chats/' .. name))
+        assert.equals(0, vim.fn.isdirectory(legacy))
+        assert.equals(1, vim.fn.filereadable(scratch .. '/data/parley/chats/welcome.md'))
     end)
 
     it('preserves a selected live model across complete startup', function()
@@ -56,19 +99,33 @@ describe('isolated starter runtime', function()
         assert.equals(0, second.code, second.stderr)
     end)
 
+    it('defers a chat request until model selection and rebuilds it with that model', function()
+        local result = run(nil, { STARTER_READINESS_TEST = '1' })
+        assert.equals(0, result.code, result.stderr)
+    end)
+
+    it('ignores an old generated key without changing the saved file', function()
+        local data = scratch .. '/data/parley'
+        vim.fn.mkdir(data, 'p')
+        vim.fn.writefile({ 'old-profile-key' }, data .. '/client-key')
+        local result = run(nil, { STARTER_LEGACY_KEY = '1' })
+        assert.equals(0, result.code, result.stderr)
+        assert.same({ 'old-profile-key' }, vim.fn.readfile(data .. '/client-key'))
+    end)
+
     it('rejects an incomplete welcome without overwriting it', function()
-        local dir = scratch .. '/data/parley/chats/welcome'
+        local dir = scratch .. '/data/parley/chats'
         vim.fn.mkdir(dir, 'p')
-        local file = dir .. '/unfinished.md'
+        local file = dir .. '/welcome.md'
         vim.fn.writefile({ '# topic: partial' }, file)
         local result = run(nil, { STARTER_EXPECT_ERROR = 'Incomplete welcome chat' })
         assert.equals(0, result.code, result.stderr)
         assert.same({ '# topic: partial' }, vim.fn.readfile(file))
     end)
 
-    it('rejects symlinks and multiple welcome files without replacing them', function()
+    it('rejects a symlink welcome file without replacing it', function()
         assert.equals(0, run().code)
-        local files = vim.fn.glob(scratch .. '/data/parley/chats/welcome/*.md', false, true)
+        local files = vim.fn.glob(scratch .. '/data/parley/chats/welcome.md', false, true)
         local target = scratch .. '/saved.md'
         assert(uv.fs_rename(files[1], target))
         assert(uv.fs_symlink(target, files[1]))
@@ -76,8 +133,6 @@ describe('isolated starter runtime', function()
         assert.equals('link', uv.fs_lstat(files[1]).type)
         vim.fn.delete(files[1])
         assert(uv.fs_rename(target, files[1]))
-        vim.fn.writefile({ 'other' }, vim.fn.fnamemodify(files[1], ':h') .. '/other.md')
-        assert.equals(0, run(nil, { STARTER_EXPECT_ERROR = 'Multiple welcome chats' }).code)
     end)
 
     it('waits for another welcome creator and reopens its sole chat', function()
@@ -90,7 +145,7 @@ describe('isolated starter runtime', function()
         assert.equals(0, first:wait(5000).code)
         local result = second:wait(5000)
         assert.equals(0, result.code, result.stderr)
-        assert.equals(1, #vim.fn.glob(scratch .. '/data/parley/chats/welcome/*.md', false, true))
+        assert.equals(1, #vim.fn.glob(scratch .. '/data/parley/chats/welcome.md', false, true))
     end)
 
     it('recovers the chat created before owner death only after explicit lock repair', function()
@@ -99,14 +154,14 @@ describe('isolated starter runtime', function()
         assert.is_true(vim.wait(5000, function() return vim.fn.filereadable(hold .. '.ready') == 1 end, 10))
         first:kill(9)
         first:wait(5000)
-        local files = vim.fn.glob(scratch .. '/data/parley/chats/welcome/*.md', false, true)
+        local files = vim.fn.glob(scratch .. '/data/parley/chats/welcome.md', false, true)
         local before = vim.fn.readfile(files[1])
         local lock = scratch .. '/state/parley/welcome-initializer'
         assert.equals(0, run(nil, { STARTER_EXPECT_ERROR = 'Close all Parley instances' }).code)
         assert.equals(1, vim.fn.isdirectory(lock))
         vim.fn.delete(lock, 'rf') -- explicit operator repair
         assert.equals(0, run().code)
-        assert.same(files, vim.fn.glob(scratch .. '/data/parley/chats/welcome/*.md', false, true))
+        assert.same(files, vim.fn.glob(scratch .. '/data/parley/chats/welcome.md', false, true))
         assert.same(before, vim.fn.readfile(files[1]))
     end)
 

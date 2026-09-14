@@ -11,6 +11,14 @@ local canonical_pending_start = require("parley.chat_pending").start
 parley.setup({
     chat_dir = tmp_dir,
     state_dir = tmp_dir .. "/state",
+    -- These transport fixtures own a configured model; onboarding is tested separately.
+    default_agent = "FixtureAnthropic",
+    agents = {
+        { name = "Choose a model", disable = true },
+        { name = "FixtureAnthropic", provider = "anthropic",
+          model = { model = "claude-sonnet-5" }, system_prompt = "You are a helpful assistant.",
+          tools = { "@all" } },
+    },
     providers = {},
     api_keys = {},
 })
