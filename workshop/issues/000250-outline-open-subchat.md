@@ -1,12 +1,13 @@
 ---
 id: 000250
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-09-14
 updated: 2026-09-14
 estimate_hours: 0.51
 started: 2026-09-14T10:28:16-07:00
+actual_hours: 0.22
 ---
 
 # Open sub-chat when selecting an outline branch
@@ -49,6 +50,7 @@ total: 0.51
 ## Log
 
 ### 2026-09-14
+- 2026-09-14: closed — Six outline tests pass; four branch regressions red then green. Native exact-starter query and Enter opens child at line 1. Full make test exit 0: 256 specs; lint 0 warnings/errors in 447 files. Atlas navigation updated.; review verdict: SHIP
 
 - Filed at the operator's request; implementation has not started.
 - Inspection: lua/parley/outline.lua already records `child_path` alongside the parent `file` and branch `lnum` for tree outline entries. Follow the activation path before choosing the implementation seam.
