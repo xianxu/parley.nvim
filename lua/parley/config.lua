@@ -482,7 +482,7 @@ local config = {
 
 	chat_finder_mappings = {
 		delete = { modes = { "n", "i", "v", "x" }, shortcut = "<C-d>" },
-		delete_tree = { modes = { "n", "i", "v", "x" }, shortcut = "<C-D>" },
+		delete_tree = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>D" },
 		move = { modes = { "n", "i", "v", "x" }, shortcut = "<C-x>" },
 		next_recency = { modes = { "n", "i", "v", "x" }, shortcut = "<C-a>" },
 		previous_recency = { modes = { "n", "i", "v", "x" }, shortcut = "<C-s>" },

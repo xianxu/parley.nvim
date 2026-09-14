@@ -44,12 +44,20 @@ total: 0.51
 
 ## Plan
 
-- [ ] Add live-picker regression coverage in tests/unit/chat_finder_logic_spec.lua using shipped defaults: drive normalized keys and compare temporary files/confirmation targets, including cancellation and child preservation.
-- [ ] Change only delete_tree defaults in config.lua and keybinding_registry.lua to `<C-g>D`; verify default and fallback resolution and help.
-- [ ] Run focused finder/keybinding tests and full suite/lint; close through the binary-owned fresh review.
+- [x] Add live-picker regression coverage in tests/unit/chat_finder_logic_spec.lua using shipped defaults: drive normalized keys and compare temporary files/confirmation targets, including cancellation and child preservation.
+- [x] Change only delete_tree defaults in config.lua and keybinding_registry.lua to `<C-g>D`; verify default and fallback resolution and help.
+- [x] Run focused finder/keybinding tests and full suite/lint.
+
+Acceptance boundary: close through the binary-owned fresh review.
 
 ## Log
 
 ### 2026-09-14
 
 - User reported Ctrl+d failure while preparing tutorial. Confirmed default-key alias; independent reproduction investigating real picker/confirmation flow. Trivial default-key correction: use change-code --no-judge for planning, retain the full closing code review. Preserve existing unrelated workspace edits.
+
+### 2026-09-14 — Implementation
+
+- Independent actual-picker reproduction confirmed Ctrl+d invoked tree deletion; native y confirmation worked. No second failure reproduced.
+- Six regression cases failed before the two-default fix: config and registry fallback each dispatched the wrong delete action and lacked the new tree chord. All six now pass (54 finder spec tests total), including saved-file outcomes and resume after confirmation.
+- Updated README finder instructions and recorded the key-normalization lesson. Full make test passed (256 spec files; lint clean). Native Insert-mode Ctrl+d plus native y confirmation deleted the temporary selected file through the single-chat path; /tmp/parley249-native.log. No architectural surface changed, so close uses --no-atlas; README covers the default-key change.

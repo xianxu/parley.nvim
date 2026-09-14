@@ -2376,3 +2376,12 @@ download.
 
 - When changing navigation, search README and user help as well as the atlas;
   #248 updated the map but initially left README promising the opposite landing.
+
+
+## 2026-09-14 (#249)
+
+- **Control-key case is not a distinct binding.** `<C-D>` and `<C-d>` both
+  normalize to byte 4 in Neovim, so the later finder mapping replaced the first.
+  For overlapping actions, test effective buffer mappings using shipped defaults
+  and registry fallbacks; comparing key strings or calling a captured action
+  directly cannot detect alias collisions.

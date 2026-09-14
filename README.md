@@ -160,7 +160,9 @@ Most-used defaults:
 - `<C-g>c` new chat - global hotkey
 - `<C-g>f` find chat - opens immediately with a cancellable animated
   `scanning…` row while Chat Finder asynchronously discovers chat headers; an
-  exact background prewarm is reused when available
+  exact background prewarm is reused when available. In the finder, `<C-d>`
+  deletes the selected chat after confirmation; `<C-g>D` deletes its whole chat
+  tree after confirmation.
 - `<C-n>f` find notes - the same immediate loading experience over recursive
   note metadata; note bodies are not read, and special folders still bypass
   recency filtering
