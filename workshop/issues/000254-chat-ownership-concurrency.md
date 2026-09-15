@@ -60,6 +60,61 @@ applying a patch. Human edits arrive through Neovim and must be reconciled befor
 another generated patch; humans cannot be assumed to use our mutation API.
 No asynchronous callback retains naked row ranges as write authority.
 
+### Fine-grained editing scope
+
+The operator notes that editing inside an active answer is uncommon. The initial
+concurrency policy can therefore keep only the streaming answer region temporarily
+read-only while questions and other exchanges remain editable. Fine-grained
+ownership makes the restriction match the actual write conflict; enabling typing
+ahead does not require merging simultaneous edits inside the answer. If a mutation
+does reach that region (including external edits or undo), the revocation rule
+below still applies.
+
+Distinguish write conflicts from input dependencies. Typing a subsequent question
+does not affect the current generation's inputs or output region. Editing earlier
+context does not overlap its output region either, but changes what that answer is
+based on. Handle this with immutable input snapshots and an explicit staleness
+policy, rather than expanding the write lock to all context.
+
+### Whole-exchange deletion and identity resolution
+
+Deleting a whole exchange is a valid document operation, including while its
+answer streams. A regional editing restriction must permit an explicit exchange
+deletion to revoke the write grant and remove the exchange coherently. Subsequent
+callbacks must resolve to absent/revoked, never old coordinates or a replacement
+exchange at the same ordinal:
+
+```text
+resolve(exchange_id, generation_id)
+  -> current authorized answer region
+  -> absent / revoked
+```
+
+Resolution and mutation must occur without an intervening unvalidated document
+change. Never fall back to remembered rows or recreate the deleted exchange from
+late output. Request cancellation only for the deleted exchange's generation;
+retain transport ownership until its outcome is resolved. Undo may restore visible
+text but must not restore a retired generation's authority.
+
+The current implementation enforces only part of this contract:
+
+- `chat_lease.lua` anchors the answer header with an invalidating extmark and checks
+  generation identity. Deleting the header invalidates guarded callbacks. This is
+  useful deletion detection, not a complete exchange identity/location resolver.
+- `chat_respond.lua` handles invalidation by globally stopping tasker processes;
+  the isolated audit reproduced cancellation reaching another chat.
+- Response code still uses `target_idx` and model-computed block positions. Batch
+  refresh reparses and advances `current_idx + 1`; deletion can change which exchange
+  occupies that ordinal. Computing positions through an exchange abstraction does
+  not itself establish that the abstraction reflects current human edits.
+
+Capture batch membership by stable identity. If a selected exchange disappears,
+pause with an explicit missing-target outcome under the proposed conflict policy;
+do not substitute the exchange now occupying its former position. Deleting an
+unrelated exchange may move locations without changing selected identities. The
+batch ordinal risk is established from code; no additional batch-deletion behavior
+was reproduced during this discussion.
+
 ### Proposed editing and refresh policies
 
 - Typing the next question and unrelated edits outside the active answer are safe;
@@ -127,6 +182,10 @@ implementation. The chat findings predated concurrent #240 changes.
   checks reject bypasses and authoritative state is not externally mutable.
 - Single and batch submission share one response lifecycle; selected identities,
   revision conflicts, partial progress, and replacement recovery are tested.
+- Whole-exchange deletion during streaming, before completion, and between batch
+  steps cannot redirect writes, recreate deleted content, skip to a different
+  identity, or cancel unrelated work. Moving an exchange preserves identity;
+  deleting then undoing it does not reauthorize stale callbacks.
 - Unknown process/effect outcomes remain explicit; active work cannot disappear
   through retention cleanup; tool writes cannot claim unconfirmed success.
 - Deterministic sequence tests cover interleaved human edits, chunks, completion,
@@ -161,3 +220,14 @@ requires revision tracking and scoped write authority. Existing response-progres
 and provider-architecture suites passed during the audit while the added probes
 exposed missing sequence invariants. No implementation changes made. Issue remains
 open for future hardening; the proposed steps are not a costed implementation plan.
+
+## Revisions
+
+### 2026-09-14 — Fine-grained ownership and exchange deletion
+
+Follow-up discussion clarified that users seldom edit active answers: restrict the
+streaming answer region initially while supporting typing ahead. Added the
+write-conflict/input-dependency distinction and the whole-exchange deletion
+contract. Recorded the gap between current anchor validation/positional indexing
+and authoritative identity resolution, with deletion/undo/batch acceptance cases.
+These additions refine the proposed design; no implementation was changed.
