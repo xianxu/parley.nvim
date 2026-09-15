@@ -1062,3 +1062,31 @@ the superseded exploration checklist to prose so it cannot act as duplicate
 completion gates. Reviewed design now separates document lifetime from outstanding
 effects, specifies safe recovery association, and explicitly bounds normal
 rendering work while acknowledging broad native fold-clearing costs.
+
+
+### 2026-09-15 — M4 integration verification checkpoint
+
+Production response composition, captured onboarding profiles, per-child remote
+preparation cleanup, guarded drill-in transforms, scoped Stop/StopDocument,
+independent topics, ordered tool slots, and bounded append/replacement receipts
+are implemented. Legacy tool_loop/chat_lease production registries are removed.
+M4 staging checkpoints: 3954cc0d, 97c854f3, 3f89893e, 48c67ce2, 785674c9.
+The combined renderer integration is 0cf9bf23 in /tmp/parley254-integrate.
+The feature branch remains unchanged while M3's fifth review runs against
+0257ddad; its open ledger findings must be disposed before milestone closure.
+
+Verified the combined tree across 131 unique mapped files (1624 tests, zero
+failures/errors) and full lint (556 files clean). The mapped attachment send-guard
+failure was corrected: oversized requests report the configured limit before
+answer preparation or provider IO, preserving source text. New ownership mapping
+is nonempty and its tests are included. The complete M4 staging benchmark passed
+30 scenarios x20 samples; stream/human interleave at 5000 rows was54.87ms median,
+18 structural rows, zero full reads; broad repair still costs4.52s cumulative.
+An additional full report is running against the combined renderer tree because
+that merge changes production presentation code. See the durable plan Revisions
+for measured bounds, compatibility decisions and M5 source-revision prerequisites.
+
+Remaining: receive/dispose M3 review, finish combined performance evidence, close
+M4 through its mandatory review, implement M5 recovery/batch and M6 asynchronous
+builtin/resource supervision. Do not merge to main; operator live testing follows
+the completed issue and precedes merge. No fabricated actual-time value recorded.
