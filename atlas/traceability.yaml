@@ -343,6 +343,8 @@ atlas:
       - tests/integration/document_fold_batches_spec.lua
       - tests/integration/document_fold_join_spec.lua
       - tests/integration/document_presentation_reentrant_spec.lua
+      - tests/integration/document_fold_retirement_spec.lua
+      - tests/integration/document_fold_uncertainty_retirement_spec.lua
       - tests/integration/document_fold_native_spec.lua
       - tests/integration/document_folds_spec.lua
       - tests/integration/highlighter_document_spec.lua

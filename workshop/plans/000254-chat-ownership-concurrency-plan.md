@@ -841,6 +841,27 @@ requires a further review to dispose those open findings; extend the per-boundar
 round budget to five for that disposal rather than waive the ledger. This extra
 review is required by the refused transition, not a second discretionary review.
 
+### 2026-09-15 — Codex M3 review: suspended cleanup ownership
+
+The Codex boundary review disposed BR-12 but retained BR-11. The preceding cleanup
+claim was incomplete: cancellation inside an already-suspended native fold slice
+could restore its temporary disabled value after retirement restored the operator
+preference. Retirement must transfer preference-restoration ownership before any
+callbacks; returning nested cleanup must not overwrite that completed transfer.
+The fix covers apply, uncertainty clearing, and both discard paths, with native
+suspended-slice tests for enabled/disabled operator preferences and preserved view.
+ARCH-ORDER and ARCH-FUNERAL govern this ordering. All remaining boundary reviews
+use Codex per the operator's explicit instruction. No gate is waived.
+
+### 2026-09-15 — M3 final regression mapping sweep
+
+Codex disposed BR-11 and returned FIX-THEN-SHIP with one verification mapping
+omission (BR-13). The complete newly-added regression sweep found exactly the two
+native retirement specs missing. Both are now registered under chat/document;
+mapping output was checked against the added-spec inventory. No runtime changes
+follow the reviewed cleanup fix. The close commit includes this correction and
+the gate's M3 closure metadata; no redundant boundary review is required.
+
 ### 2026-09-15 — M4 finite replacement successor authority
 
 Repeatedly repairing a shrinking opaque row between bounded deletion patches would

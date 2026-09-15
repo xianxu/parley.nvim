@@ -17,9 +17,14 @@ end
 local function notify(event) if M._observer then M._observer(event) end end
 -- A slice owns temporary editor state even after it loses publication authority.
 -- Cleanup targets the captured window, never whichever window a callback selects.
-local function restore_window(buf,win,enabled,view)
+local function restore_window(buf,win,enabled,view,owner)
     if not valid_target(buf,win) then return end
-    local ok,err=pcall(vim.api.nvim_set_option_value,'foldenable',enabled,{win=win})
+    local ok,err=true,nil
+    -- Retirement may run inside an option callback. Once it restores the
+    -- operator preference, nested slices must not reinstate temporary suspension.
+    if not (owner and owner.released_preference) then
+        ok,err=pcall(vim.api.nvim_set_option_value,'foldenable',enabled,{win=win})
+    end
     if valid_target(buf,win) then
         local restored,failure=pcall(vim.api.nvim_win_call,win,function()vim.fn.winrestview(view)end)
         if not restored and ok then ok,err=false,failure end
@@ -27,7 +32,7 @@ local function restore_window(buf,win,enabled,view)
     if not ok then error(err,0) end
 end
 
-local function clear_folds_in_span(buf, win, first_0, last_0, command_limit, remember, current)
+local function clear_folds_in_span(buf, win, first_0, last_0, command_limit, remember, current, owner)
     -- Reset first: an early return must not leave a previous call's count
     -- readable as if it described this one.
     M._last_clear_iters = nil
@@ -124,7 +129,7 @@ local function clear_folds_in_span(buf, win, first_0, last_0, command_limit, rem
         local ok, err = pcall(vim.api.nvim_exec2, command, {})
         -- Restore both even if the walk fails; its temporary editor state must
         -- not become the reader's new position or folding preference.
-        restore_window(buf,win,foldenable,view)
+        restore_window(buf,win,foldenable,view,owner)
         if not ok then error(err, 0) end
         if not live() then return end
         -- Loop iterations, exposed so a test can assert this walks folds rather
@@ -191,8 +196,9 @@ local BATCH_GROUPS=64
 local INTERACTIVE_ROWS=50000
 local function release_window(buf,window)
     local suspended=window.suspended;window.suspended=false
+    if suspended then window.released_preference=true end
     if suspended and valid_target(buf,window.win) then
-        if not vim.api.nvim_get_option_value('foldenable',{win=window.win}) then
+        if vim.api.nvim_get_option_value('foldenable',{win=window.win})~=window.enabled then
             setting_foldenable=setting_foldenable+1
             local ok,err=pcall(vim.api.nvim_set_option_value,'foldenable',window.enabled,{win=window.win})
             setting_foldenable=setting_foldenable-1
@@ -283,7 +289,7 @@ local function clear_uncertainty(s)
                 if not current() then return end
                 local found=Document.query(s.doc,row,row+1)[1]
                 if found then s.opened[window.win][found.handle]=opened end
-            end,current)
+            end,current,window)
         setting_foldenable=setting_foldenable-1
         if not ok then discard_uncertainty(s,job);error(next_row,0) end
         if not current() then return true end
@@ -370,7 +376,7 @@ local function apply(buf,s,plan)
                 -- At most 50k affected rows retain the measured native-clear
                 -- exception. Larger scopes visit bounded fold groups per slice.
                 local next_row,done=clear_folds_in_span(buf,win,window.clear_row,plan.last-1,
-                    window.suspended and BATCH_GROUPS*2 or nil,nil,current)
+                    window.suspended and BATCH_GROUPS*2 or nil,nil,current,window)
                 if not current() then return end
                 window.clear_row=next_row
                 if done then window.phase='create';window.index=1 end
@@ -398,7 +404,7 @@ local function apply(buf,s,plan)
         -- leave folds suspended between slices of a large reconciliation.
         local restore_enabled=enabled
         if current() and window.suspended then restore_enabled=false end
-        restore_window(buf,win,restore_enabled,view)
+        restore_window(buf,win,restore_enabled,view,window)
         if not success then error(failure,0) end
     end)
     setting_foldenable=setting_foldenable-1
