@@ -143,3 +143,20 @@ Fold teardown removes its buffer-owned autocmd group. Externally retained docume
 handles remain queryable as detached facades; the registry cannot retain retired
 documents through its own callbacks. Native LuaJIT collection tests exercise all
 production consumers together.
+
+### Reentrant consumer effects
+
+Native presentation can synchronously call operator code. Diagnostic set/reset
+fires DiagnosticChanged; fold options/restoration can fire OptionSet. Consumers
+retain a captured publication job and revalidate it after these boundaries. A
+superseded publisher stops before its next effect and cannot clear newer dirty
+work. Diagnostic clear similarly yields ownership to any replacement refresh
+started by its callbacks. Recursive diagnostic step reports busy; injected reader
+and converter callbacks obey the same current-job rule. Native regressions live
+in `tests/integration/diagnostic_reentrancy_spec.lua`.
+
+Fold slices also carry a monotonic presentation generation, mirrored as a scalar
+buffer variable for the native fold walk. The native walk stops if a callback
+replaces its job without changing text. Detach removes that scalar. The native
+redraw test confirms that view-only window calls emit no entry callbacks and
+buffer edits are rejected by redraw textlock.

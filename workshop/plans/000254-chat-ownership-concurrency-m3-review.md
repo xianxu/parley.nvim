@@ -266,3 +266,117 @@ Atlas changes cover the introduced architecture. No new command, keybinding, or 
 ## 7. Plan revision recommendations
 
 Add a `## Revisions` entry defining **location versus semantic eligibility** for delayed consumer actions. Enumerate the presentation/navigation consumers and their validation points, and require native tests for outline selections during uncertainty, after reclassification, and after harmless relocation.
+
+---
+
+## Re-review — 2026-09-15T04:00:29-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 254 — Harden chat ownership and concurrency |
+| repo | 000254-chat-ownership-concurrency |
+| issue file | workshop/issues/000254-chat-ownership-concurrency.md |
+| boundary | milestone M3 |
+| milestone | M3 |
+| window | 2afd7de993dc028c6132df4687695e83dcbb8fe0..654687ddbb310880b10a3ce5713588c326a1a15b |
+| command | sdlc milestone-close --issue 254 --milestone M3 |
+| reviewer | codex |
+| timestamp | 2026-09-15T04:00:29-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+BR-9’s outline correction is supported by passing regressions that fail when the fix is removed. The shared document boundary, native undo handling, and retirement tests also hold up. One blocking publication race remains: a reentrant diagnostic callback invalidates the current job, but its publisher subsequently erases that invalidation, leaving obsolete diagnostics indefinitely. The repository was unchanged; tests and reproductions ran in an isolated archive of the pinned head.
+
+```findings
+dispose:
+  - id: BR-9
+    disposition: addressed
+    note: |
+      outline.lua now checks current projection eligibility and revalidates after focus callbacks. Removing the fix in scratch produces six outline failures; removing the diagnostic correction also fails the pending-publication regression.
+  - id: BR-5
+    disposition: addressed
+    note: |
+      Native callback-frame admission is enforced in document/editor.lua; all four native-history regressions pass against the pinned head.
+  - id: BR-6
+    disposition: addressed
+    note: |
+      Semantic presentation uses confirmed document evidence. The six highlighter-document and seven document-fold integration cases pass, including uncertainty handling.
+  - id: BR-7
+    disposition: addressed
+    note: |
+      The plan's M3 inventory revision explicitly supersedes proposed locations and identifies unchanged fold_projection/buffer_edit modules and the documentation-only exchange_model change; these statements match the pinned diff.
+  - id: BR-8
+    disposition: addressed
+    note: |
+      Editor retirement breaks its coordinator callback reference, and fold teardown removes owned callbacks. All five document-retention regressions pass.
+findings:
+  - id: new
+    severity: Critical
+    family: semantic-publication-evidence
+    title: |
+      Reentrant diagnostic publication overwrites a newer invalidation
+    detail: |
+      lua/parley/diagnostic_refresh.lua:127–133 publishes through vim.diagnostic.set, which synchronously runs DiagnosticChanged callbacks. A callback editing the source sets s.job=nil and s.dirty=true through the subscription at line 185, but the returning publisher unconditionally resets s.dirty=false. A native regression removing the timestamp during publication leaves one obsolete diagnostic after repair/drain reports idle. ARCH-ORDER, ARCH-PURPOSE: this is the 5th finding in family semantic-publication-evidence. Earlier rounds fixed instances; enforce the class-wide rule that an effect completion may commit only while its captured job and eligibility remain current. Enumerate highlighting, fold recreation, outline navigation, and diagnostic publication across callback boundaries; preserve newer invalidation and stop superseded effects.
+```
+
+## 1. Strengths
+
+- Outline selection distinguishes identity from eligibility and checks again after focus callbacks.
+- Ownership state is private, with explicit transitions and bounded generation/grant admission.
+- Native history, write-plan, scheduler, and retention tests exercise real ordering and independently check outcomes.
+- Atlas and tooling document the new coordinator, projections, work bounds, and staged M4 migration.
+
+## 2. Critical findings
+
+**Diagnostic publication loses reentrant invalidation** — [diagnostic_refresh.lua:127](/Users/xianxu/workspace/worktree/parley.nvim/000254-chat-ownership-concurrency/lua/parley/diagnostic_refresh.lua:127).
+
+Reproduction:
+
+1. Prepare publication for a buffer containing one timestamp.
+2. Register a one-shot `DiagnosticChanged` callback that replaces it with `no timestamp`.
+3. Publish, then drain document and diagnostic work.
+4. Drain reports `idle`, but one timestamp diagnostic remains.
+
+Fix sketch: capture publication ownership, recheck it after each callback-capable effect, and clear dirty state only if that same job remains current. Preserve edits, reloads, and detach events observed during publication.
+
+The failing native regression is available in [review_reentrant_spec.lua](/tmp/parley-m3-review-v404f4cp/tests/integration/review_reentrant_spec.lua).
+
+## 3. Important findings
+
+None additional.
+
+## 4. Minor findings
+
+None.
+
+## 5. Test coverage notes
+
+- Passed the complete `ui/outline` mapping and **77 additional focused cases** covering diagnostics, native history, retention, ownership, folds, highlighting, scheduling, projections, and write plans.
+- Removing BR-9’s executable correction caused **six outline failures and one diagnostic failure**.
+- The new reentrant-publication regression fails on the pinned head: expected zero diagnostics, observed one.
+- Full-suite and performance benchmark results were not independently rerun.
+
+## 6. Architectural notes
+
+| Principle | Assessment |
+|---|---|
+| ARCH-DRY | Pass: shared projection and deferred-work ownership consolidate live consumers. |
+| ARCH-PURE | Pass: ownership/projection logic is separated from native editor effects; pure tests need no IO doubles. |
+| ARCH-PURPOSE | **Flag:** current publication evidence is still lost across a reentrant effect. |
+| ARCH-MOCK | Pass: injected stateful editor seam plus native conformance tests. |
+| ARCH-CONSTRAINTS | Pass in inspected scope: explicit page, byte, grant, and scheduling bounds; no independent latency certification. |
+| ARCH-SECURE | Pass in inspected scope: callback provenance and exact write receipts are checked; review tests used isolated storage. |
+| ARCH-ORDER | **Flag:** a superseded publisher can overwrite newer authoritative job state. |
+| ARCH-FUNERAL | Pass: timer, document, and fold callback retirement have passing native tests. |
+
+The revised M3 inventory matches the delivered module boundaries. Atlas updates cover the architectural surface; no new command, keybinding, or configuration key requiring a README update was identified.
+
+## 7. Plan revision recommendations
+
+Add a `## Revisions` entry defining **publication ownership across reentrant effects**: enumerate the four semantic consumers, identify callback-capable effects, and require captured-job validation before subsequent effects or completion commits. Include native sequences for edit, reload, and detach during diagnostic publication.

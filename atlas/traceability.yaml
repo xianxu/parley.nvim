@@ -177,6 +177,7 @@ atlas:
       - tests/integration/perf_chat_typing_spec.lua
       - tests/integration/perf_ownership_spec.lua
       - tests/integration/diagnostic_refresh_spec.lua
+      - tests/integration/diagnostic_reentrancy_spec.lua
       - tests/integration/highlighting_spec.lua
       - tests/integration/highlight_typing_spec.lua
       - tests/arch/performance_line_reader_spec.lua
@@ -252,6 +253,7 @@ atlas:
       - lua/parley/document/state.lua
       - lua/parley/document/projection.lua
     tests:
+      - tests/integration/diagnostic_reentrancy_spec.lua
       - tests/unit/document_sequence_spec.lua
       - tests/unit/document_lexical_spec.lua
       - tests/unit/document_grammar_spec.lua
@@ -277,6 +279,7 @@ atlas:
       - tests/integration/document_native_history_spec.lua
       - tests/integration/document_fold_batches_spec.lua
       - tests/integration/document_fold_join_spec.lua
+      - tests/integration/document_presentation_reentrant_spec.lua
       - tests/integration/document_fold_native_spec.lua
       - tests/integration/document_folds_spec.lua
       - tests/integration/highlighter_document_spec.lua

@@ -116,29 +116,41 @@ local function start(s)
     end)
     s.job=job
 end
+local function current(s,job)
+    return not s.dead and buffers[s.buf]==s and s.job==job
+end
+local function superseded(s)
+    return {status=(s.dead or buffers[s.buf]~=s) and 'detached' or 'more'}
+end
 local function publish(s)
     local job=s.job;job.materializing=true
     local records={}
     for _,record in ipairs(job.footnotes) do
         local value=define.materialize_diagnostic(record)
+        if not current(s,job) then return superseded(s) end
         value.lnum=record.lnum;value.end_lnum=record.lnum
         records[#records+1]=value
     end
-    local utc=timezone.publish(s.buf,job.timezone)
-    local foot=footnotes.publish_footnotes(s.buf,records)
-    local work={native_diagnostic_entries=utc.entries+foot.entries,
-        diagnostic_message_bytes=utc.message_bytes+foot.message_bytes,native_diagnostic_sets=2}
-    local event={operation='diagnostic_publication'};for key,value in pairs(work) do event[key]=value end
-    Reader.record_work(s.buf,event)
+    local work={native_diagnostic_entries=0,diagnostic_message_bytes=0,native_diagnostic_sets=0}
+    local function record(result)
+        work.native_diagnostic_entries=work.native_diagnostic_entries+result.entries
+        work.diagnostic_message_bytes=work.diagnostic_message_bytes+result.message_bytes
+        work.native_diagnostic_sets=work.native_diagnostic_sets+1
+        Reader.record_work(s.buf,{operation='diagnostic_publication',native_diagnostic_entries=result.entries,
+            diagnostic_message_bytes=result.message_bytes,native_diagnostic_sets=1})
+    end
+    -- Each diagnostic set synchronously calls operator DiagnosticChanged hooks.
+    -- A returning effect owns neither a newer job nor its dirty flag.
+    record(timezone.publish(s.buf,job.timezone))
+    if not current(s,job) then return superseded(s) end
+    record(footnotes.publish_footnotes(s.buf,records))
+    if not current(s,job) then return superseded(s) end
     s.job=nil;s.dirty=false
     return {status='idle',work=work}
 end
-function M.step(buf)
-    local s=buffers[buf]
-    if not s or s.dead then return {status='detached'} end
+local function step(s,buf)
     if s.failure then return {status='error',reason=s.failure} end
     if not s.dirty then return {status='idle'} end
-    if not s.job then start(s) end
     local job=s.job
     if job.pending and job.pending.status=='publish' then return publish(s) end
     local input
@@ -147,8 +159,10 @@ function M.step(buf)
         local live=Document.lookup(s.doc,request.handle)
         if not live then s.job=nil;return {status='more'} end
         input=(s.opts.reader or Reader.for_buffer(buf)):chunk({row=live.start_row,col=request.col,max_bytes=4096})
+        if not current(s,job) then return superseded(s) end
     end
     local success,result=coroutine.resume(job.thread,input)
+    if not current(s,job) then return superseded(s) end
     if not success then
         s.job=nil;s.failure=tostring(result)
         return {status='error',reason=s.failure}
@@ -158,6 +172,22 @@ function M.step(buf)
     Reader.record_work(buf,{operation='diagnostic_parse',diagnostic_bytes_processed=job.work,
         diagnostic_matches_processed=job.matches})
     job.work=0;job.matches=0
+    return result
+end
+function M.step(buf)
+    local s=buffers[buf]
+    if not s or s.dead then return {status='detached'} end
+    if s.running then return {status='busy'} end
+    s.running=true
+    if s.dirty and not s.job and not s.failure then start(s) end
+    local job=s.job
+    local ok,result=pcall(step,s,buf)
+    s.running=false
+    if not ok then
+        if s.dead or buffers[buf]~=s or job and s.job~=job then return superseded(s) end
+        s.job=nil;s.failure=tostring(result)
+        return {status='error',reason=s.failure}
+    end
     return result
 end
 schedule=function(s)
@@ -199,13 +229,18 @@ function M.drain(buf,limit)
         local s=buffers[buf];if not s then return {status='detached'} end
         Document.repair_step(s.doc)
         result=M.step(buf)
-        if result.status=='idle' or result.status=='detached' or result.status=='error' then return result end
+        if result.status=='idle' or result.status=='detached' or result.status=='error' or result.status=='busy' then return result end
     end
     return result
 end
 function M.clear(buf)
     local s=buffers[buf]
     if s then s.dead=true;s.pump:close();s.job=nil;s.unsubscribe();buffers[buf]=nil end
-    if vim.api.nvim_buf_is_valid(buf) then timezone.clear(buf);footnotes.clear_footnote_diagnostics(buf) end
+    if vim.api.nvim_buf_is_valid(buf) then
+        timezone.clear(buf)
+        -- A clear also fires DiagnosticChanged. A replacement refresh owns
+        -- its own output; the retired clearer cannot erase it on return.
+        if buffers[buf]==nil and vim.api.nvim_buf_is_valid(buf) then footnotes.clear_footnote_diagnostics(buf) end
+    end
 end
 return M

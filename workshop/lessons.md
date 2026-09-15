@@ -2535,3 +2535,8 @@ download.
 - Diagnostic candidate flags cannot stand in for semantic-context validity.
   Retire pending derivations on incoming-context changes as well as edits to
   candidate text, and test invalidation immediately before read and publication.
+
+- Native presentation effects are reentrant: DiagnosticChanged and OptionSet can
+  edit or retire the source synchronously. Recheck captured job ownership after
+  every callback-capable effect, including cleanup/restoration, before subsequent
+  effects or dirty-state completion. Test replacement work started inside cleanup.

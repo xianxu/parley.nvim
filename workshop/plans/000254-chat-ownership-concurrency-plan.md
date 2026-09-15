@@ -802,3 +802,24 @@ diagnostics are the last computed diagnostic snapshot during typing; they do not
 authorize outline navigation or writes. Fresh publication awaits confirmed context.
 Native outline tests cover uncertainty, reclassification, deletion, harmless
 relocation and stale tree entries (ARCH-ORDER, ARCH-PURPOSE).
+
+
+### 2026-09-15 — Publication ownership across reentrant effects (BR-10)
+
+Reason: DiagnosticChanged edits and fold OptionSet edits expose the same lost
+invalidation pattern after native effects return. Delta: a consumer captures its
+job/projection and validates ownership after every callback-capable effect before
+performing subsequent effects or committing completion. Newer invalidation always
+wins; clearing, replacement refresh, reload and detach are ownership transitions.
+
+| Consumer | Callback boundary and completion rule |
+|---|---|
+| Diagnostics | `vim.diagnostic.set/reset` invokes DiagnosticChanged; injected readers and converters can also call out. Check current buffer facade and job after each call. Stop superseded publication, preserve dirty state, and prevent recursive step of the same job. A retired clear cannot clear a replacement refresh. |
+| Native folds | Window/option/fold operations and view restoration can invoke operator callbacks. Native slices and cleanup must retain captured-plan ownership; a returning old slice cannot clear dirty work from those callbacks. |
+| Outline | Validate current projection after buffer/window focus callbacks immediately before cursor placement. Navigation and its highlight use the captured target; source identity alone is insufficient. |
+| Highlights | Redraw decoration runs under native textlock; semantic reads require current confirmed document metadata. Any cache completion around view callbacks must commit only its captured current cache work. |
+
+Native regressions cover publication edits at both diagnostic-set boundaries,
+reload, detach, recursive publication, replacement refresh during clear, and fold
+restoration edits. Work accounting records effects actually performed, including
+partial publication interrupted by callbacks (ARCH-ORDER, ARCH-PURPOSE).

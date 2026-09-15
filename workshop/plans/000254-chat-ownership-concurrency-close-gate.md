@@ -126,6 +126,39 @@ rounds:
           round: 6
       boundary: M3
       blocked: true
+    - "n": 7
+      timestamp: "2026-09-15T04:00:29-07:00"
+      agent: codex
+      dispose:
+        - id: BR-9
+          disposition: addressed
+          note: outline.lua now checks current projection eligibility and revalidates after focus callbacks. Removing the fix in scratch produces six outline failures; removing the diagnostic correction also fails the pending-publication regression.
+          round: 7
+        - id: BR-5
+          disposition: addressed
+          note: Native callback-frame admission is enforced in document/editor.lua; all four native-history regressions pass against the pinned head.
+          round: 7
+        - id: BR-6
+          disposition: addressed
+          note: Semantic presentation uses confirmed document evidence. The six highlighter-document and seven document-fold integration cases pass, including uncertainty handling.
+          round: 7
+        - id: BR-7
+          disposition: addressed
+          note: The plan's M3 inventory revision explicitly supersedes proposed locations and identifies unchanged fold_projection/buffer_edit modules and the documentation-only exchange_model change; these statements match the pinned diff.
+          round: 7
+        - id: BR-8
+          disposition: addressed
+          note: Editor retirement breaks its coordinator callback reference, and fold teardown removes owned callbacks. All five document-retention regressions pass.
+          round: 7
+      findings:
+        - id: BR-10
+          severity: Critical
+          title: Reentrant diagnostic publication overwrites a newer invalidation
+          detail: 'lua/parley/diagnostic_refresh.lua:127–133 publishes through vim.diagnostic.set, which synchronously runs DiagnosticChanged callbacks. A callback editing the source sets s.job=nil and s.dirty=true through the subscription at line 185, but the returning publisher unconditionally resets s.dirty=false. A native regression removing the timestamp during publication leaves one obsolete diagnostic after repair/drain reports idle. ARCH-ORDER, ARCH-PURPOSE: this is the 5th finding in family semantic-publication-evidence. Earlier rounds fixed instances; enforce the class-wide rule that an effect completion may commit only while its captured job and eligibility remain current. Enumerate highlighting, fold recreation, outline navigation, and diagnostic publication across callback boundaries; preserve newer invalidation and stop superseded effects.'
+          family: semantic-publication-evidence
+          round: 7
+      boundary: M3
+      blocked: true
 ---
 
 # Gate ledger — 000254-chat-ownership-concurrency#254 (boundary-review)
@@ -192,6 +225,21 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-9** [Critical] `semantic-publication-evidence` Outline selection accepts surviving identity without current semantic evidence
   lua/parley/outline.lua:139–145 checks only whether Document.lookup returns a row. Native reproduction: select "# heading", replace its preceding "intro" with an opening code fence, then invoke the saved selection. Navigation succeeds while metadata.confirmed=false; after repair, the outline contains zero items but the same selection still succeeds and highlights line 2. This violates Plan section C's confirmed-navigation contract (ARCH-ORDER, ARCH-PURPOSE). This is the 4th finding in family semantic-publication-evidence. State and enforce the rule across consumers: surviving identity establishes location, never current semantic eligibility. Enumerate highlighting, folds, outline selection/navigation, and diagnostics; validate each action's current semantic evidence. Add selection-after-invalidation and selection-after-reclassification regressions.
 
+## Round 7 — 2026-09-15T04:00:29-07:00 (codex) — BLOCKED
+
+### Disposed
+
+- BR-9 — addressed — outline.lua now checks current projection eligibility and revalidates after focus callbacks. Removing the fix in scratch produces six outline failures; removing the diagnostic correction also fails the pending-publication regression.
+- BR-5 — addressed — Native callback-frame admission is enforced in document/editor.lua; all four native-history regressions pass against the pinned head.
+- BR-6 — addressed — Semantic presentation uses confirmed document evidence. The six highlighter-document and seven document-fold integration cases pass, including uncertainty handling.
+- BR-7 — addressed — The plan's M3 inventory revision explicitly supersedes proposed locations and identifies unchanged fold_projection/buffer_edit modules and the documentation-only exchange_model change; these statements match the pinned diff.
+- BR-8 — addressed — Editor retirement breaks its coordinator callback reference, and fold teardown removes owned callbacks. All five document-retention regressions pass.
+
+### Raised
+
+- **BR-10** [Critical] `semantic-publication-evidence` Reentrant diagnostic publication overwrites a newer invalidation
+  lua/parley/diagnostic_refresh.lua:127–133 publishes through vim.diagnostic.set, which synchronously runs DiagnosticChanged callbacks. A callback editing the source sets s.job=nil and s.dirty=true through the subscription at line 185, but the returning publisher unconditionally resets s.dirty=false. A native regression removing the timestamp during publication leaves one obsolete diagnostic after repair/drain reports idle. ARCH-ORDER, ARCH-PURPOSE: this is the 5th finding in family semantic-publication-evidence. Earlier rounds fixed instances; enforce the class-wide rule that an effect completion may commit only while its captured job and eligibility remain current. Enumerate highlighting, fold recreation, outline navigation, and diagnostic publication across callback boundaries; preserve newer invalidation and stop superseded effects.
+
 ## Open findings
 
-- **BR-9** [Critical] `semantic-publication-evidence` Outline selection accepts surviving identity without current semantic evidence
+- **BR-10** [Critical] `semantic-publication-evidence` Reentrant diagnostic publication overwrites a newer invalidation
