@@ -164,5 +164,24 @@ describe('pure fixed-membership batches',function()
             end
         end
     end)
+    it('preserves positive completion when its refreshed context is already conflicted',function()
+        local s,leg=start(B.new(spec()))
+        s=send(s,{type='finished',leg=leg,outcome='success',context_revision='unavailable',context_status='conflict'})
+        assert.equals(1,B.snapshot(s).completed);assert.equals('paused',B.snapshot(s).phase)
+        local proof=evidence();proof.contexts.a={status='conflict',revision='unavailable'}
+        local same,r=send(s,{type='resume',evidence=proof});assert.equals(s,same);assert.is_false(r.accepted)
+        proof.contexts.a={status='valid',revision='adopted'}
+        s=send(s,{type='resume',evidence=proof,accept_changes=true});s=start(s,proof)
+        assert.equals('b',B.snapshot(s).active.entity);assert.equals(1,B.snapshot(s).completed)
+    end)
+    it('finishes after adopting the last completed context without replaying a member',function()
+        local input=spec();input.selection={input.selection[1]}
+        local s,leg=start(B.new(input))
+        s=send(s,{type='finished',leg=leg,outcome='success',context_revision='unavailable',context_status='conflict'})
+        assert.equals(1,B.snapshot(s).completed);assert.equals('paused',B.snapshot(s).phase)
+        local proof=evidence();proof.contexts.a={status='valid',revision='adopted'}
+        local result;s,result=send(s,{type='resume',evidence=proof,accept_changes=true})
+        assert.equals('completed',B.snapshot(s).phase);assert.same({},result.effects)
+    end)
 
 end)

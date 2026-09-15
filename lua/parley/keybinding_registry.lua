@@ -535,7 +535,7 @@ M.entries = {
 		default_modes = { "n", "i", "v", "x" },
 		scope = "chat",
 		desc = "Parley prompt Chat Respond All",
-		help_desc = "Respond all",
+		help_desc = "Respond to questions through cursor",
 		buffer_local = true,
 	},
 	{

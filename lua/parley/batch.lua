@@ -79,11 +79,15 @@ function M.transition(h,event)
         if not s.active or event.leg~=s.active.leg then return reject('stale leg') end
         if not ref(event.outcome) then return reject('missing outcome') end
         if event.outcome=='success' and not ref(event.context_revision) then return reject('missing context revision') end
+        if event.context_status~=nil and event.context_status~='valid' and event.context_status~='conflict' then
+            return reject('invalid context status')
+        end
         local paused=s.phase=='paused'
         if event.outcome=='success' then
             s.contexts[s.active.entity]=event.context_revision;s.completed=s.completed+1
             s.phase=s.completed==#s.selection and 'completed' or (paused and 'paused' or 'ready')
             if not paused then s.reason=nil end
+            if event.context_status=='conflict' then s.phase='paused';s.reason='context changed' end
         else
             s.phase='paused';s.reason=event.outcome
             if event.outcome=='unknown' then s.unknown=true end
@@ -101,7 +105,7 @@ function M.transition(h,event)
             end
             for entity in pairs(s.contexts)do s.contexts[entity]=event.evidence.contexts[entity].revision end
         end
-        s.phase='ready';s.reason=nil
+        s.phase=s.completed==#s.selection and 'completed' or 'ready';s.reason=nil
     else return reject('unknown event') end
     return wrap(s),{accepted=true,effects=effects}
 end

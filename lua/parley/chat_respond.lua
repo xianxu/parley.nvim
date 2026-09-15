@@ -1367,6 +1367,7 @@ local function start_scoped_response(frame)
     local exchange = parsed.exchanges[index]
     if not exchange or not exchange.question then return nil, 'no question selected' end
     local question = exchange.question
+    local replacing_answer = exchange.answer ~= nil
     local last = exchange.answer and exchange.answer.line_end or question.line_end
     local footer = trailing_footnote_boundary(frame.lines, question.line_end)
     if footer then last = math.max(question.line_end, math.min(last, footer)) end
@@ -1397,11 +1398,22 @@ local function start_scoped_response(frame)
     -- The captured request excludes the answer being replaced. Its old bytes
     -- remain in the editor until preparation has acquired every mutable gap.
     exchange.answer = nil
+    local input_parsed, input_index = parsed, index
+    if frame.input_rows then
+        input_parsed = vim.deepcopy(parsed); input_parsed.exchanges = {}
+        for i, item in ipairs(parsed.exchanges) do
+            if item.question and frame.input_rows[item.question.line_start] then
+                input_parsed.exchanges[#input_parsed.exchanges + 1] = vim.deepcopy(item)
+                if i == index then input_index = #input_parsed.exchanges end
+            end
+        end
+    end
     local doc = D.get(buf) or D.attach(buf, {patterns = require('parley.highlight_structure').patterns(config)})
     local group = responses[buf] or {}; responses[buf] = group
     response_order = response_order + 1
     local entry = {doc = doc, epoch = D.snapshot(doc).epoch, order = response_order, batch = frame.batch,
         label = (frame.lines[question.line_start] or 'Response'):sub(1, 256)}; group[entry] = true
+    local recovery
     local latest, messages, final_payload, topic_source, topic_parent, failure_notice
     local message_lead = 0
     local topic_attempted, main_finished, topic_finished = false, false, true
@@ -1501,8 +1513,8 @@ local function start_scoped_response(frame)
             if operation.cancelled or ctx.cancelled() then resolve(); return end
             if remote_error then fail(remote_error); return end
             local ok, err = xpcall(function()
-                messages, message_lead = M.build_messages({parsed_chat = parsed, start_index = frame.start_index,
-                    end_index = frame.end_index, exchange_idx = index, agent = agent, config = config,
+                messages, message_lead = M.build_messages({parsed_chat = input_parsed, start_index = frame.start_index,
+                    end_index = frame.end_index, exchange_idx = input_index, agent = agent, config = config,
                     helpers = _parley.helpers, logger = _parley.logger, resolved_remote_content = remote,
                     root_policy = info.root_policy, chat_path = frame.file_name})
                 if parsed.parent_link then
@@ -1516,6 +1528,20 @@ local function start_scoped_response(frame)
                 if assets.has_image(final_payload) and assets.payload_size(final_payload) > assets.MAX_REQUEST_BYTES then
                     error(string.format('request refused: image payload exceeds the %d-byte limit',
                         assets.MAX_REQUEST_BYTES), 0)
+                end
+                if replacing_answer then
+                    local Recovery = require('parley.chat_recovery')
+                    Recovery.setup(_parley)
+                    if not recovery then
+                        local why
+                        recovery, why = Recovery.start(doc, {buf = buf, path = frame.file_name,
+                            root = root_policy.write_root, lines = frame.lines, parsed = frame.parsed,
+                            index = index, entity = ctx.entity, ctx = ctx,
+                            region = {first = point, last = spec.output.last}})
+                        if not recovery then error('Answer recovery unavailable: ' .. tostring(why), 0) end
+                    end
+                    local published = Recovery.publish(recovery, ctx)
+                    if not published.ok then error('Answer recovery unavailable: ' .. tostring(published.reason), 0) end
                 end
                 cb.prepared({buf = buf, provider = info.provider, model = info.model,
                     messages = messages, payload = final_payload, response_profile = {
@@ -1541,8 +1567,8 @@ local function start_scoped_response(frame)
                 plan = preparation_plan()
                 needs_agent = false
             end
-            local ok, remote = pcall(M.resolve_remote_references, {parsed_chat = parsed, config = config,
-                chat_file = frame.file_name, exchange_idx = index,
+            local ok, remote = pcall(M.resolve_remote_references, {parsed_chat = input_parsed, config = config,
+                chat_file = frame.file_name, exchange_idx = input_index,
                 cancelled = function()return operation.cancelled or ctx.cancelled()end,
                 on_failure = logical_failure}, build)
             if not ok then fail(remote)
@@ -1586,10 +1612,20 @@ local function start_scoped_response(frame)
         end,
         finalize = function(ctx, done)
             start_topic()
-            return require('parley.response_completion').start(doc, ctx, done, {user_prefix = config.chat_user_prefix})
+            return require('parley.response_completion').start(doc, ctx, function(status)
+                if recovery then
+                    local settled = require('parley.chat_recovery').settle(recovery, ctx)
+                    if not settled.ok then
+                        pcall(vim.notify, 'Previous answer retained; restore needs a fresh target: '
+                            .. tostring(settled.reason), vim.log.levels.WARN)
+                    end
+                end
+                done(status)
+            end, {user_prefix = config.chat_user_prefix})
         end,
         rejected = function(why)
             main_finished = true; release(); _parley.logger.warning('Response not started: ' .. tostring(why))
+            if recovery then require('parley.chat_recovery').finish(recovery, 'start refused') end
             if frame.terminal then frame.terminal({outcome = 'start refused'}) end
         end,
         terminal = function(result)
@@ -1602,6 +1638,7 @@ local function start_scoped_response(frame)
                 require('parley.buffer_lifecycle').finalize_mutated_api_leg(buf, true)
             end
             if failure_notice then vim.notify(failure_notice, vim.log.levels.WARN); failure_notice = nil end
+            if recovery then require('parley.chat_recovery').finish(recovery, result.outcome) end
             if frame.terminal then frame.terminal(result) end
             if result.outcome == 'success' then
                 vim.cmd('doautocmd User ParleyDone')
@@ -1857,7 +1894,7 @@ M.respond_all = function()
     end
     if #selection == 0 then return nil, 'no questions selected' end
     local root_policy = require('parley.neighborhood').policy_for_buf(buf)
-    local batch
+    local batch, retired
     batch, reason = Batch.start(doc, {selection = selection,
         start = function(entity, done)
             if not vim.api.nvim_buf_is_valid(buf) or D.get(buf) ~= doc then return nil, 'document changed' end
@@ -1872,27 +1909,43 @@ M.respond_all = function()
                 if exchange.question and exchange.question.line_start == marker.start_row + 1 then index = i; break end
             end
             if not index then return nil, 'question unavailable' end
+            local input_rows = {}
+            for _, member in ipairs(selection) do
+                local found = D.lookup(doc, member)
+                if not found then return nil, 'captured batch context unavailable' end
+                input_rows[found.start_row + 1] = true
+            end
             local session, why = start_scoped_response({buf = buf, win = win, cursor = cursor, follow = false,
                 file_name = file_name, lines = source, parsed = current, exchange_idx = index,
                 start_index = header + 1, end_index = #source, params = {range = 2, root_policy = root_policy},
-                batch = batch, terminal = done})
+                batch = batch, terminal = done, input_rows = input_rows})
             if not session then return nil, why end
             return {cancel = function()require('parley.response_session').cancel(session, 'batch cancelled')end}
         end,
-        changed = function(state)
-            if state.phase == 'paused' then
+        changed = function(state, validation)
+            if validation and not validation.accepted then
+                _parley.logger.warning('Batch not resumed: ' .. tostring(validation.reason))
+            elseif state.phase == 'paused' then
                 _parley.logger.warning('Batch paused after ' .. state.completed .. '/' .. #state.selection
                     .. ' questions: ' .. tostring(state.reason))
             end
         end,
+        retired = function()
+            retired = true
+            if batches[buf] == batch then batches[buf] = nil end
+        end,
     })
-    if batch then batches[buf] = batch else _parley.logger.warning('Batch not started: ' .. tostring(reason)) end
+    if batch and not retired then batches[buf] = batch
+    elseif not batch then _parley.logger.warning('Batch not started: ' .. tostring(reason)) end
     return batch, reason
 end
 function M.resume_batch(params)
     local batch = batches[vim.api.nvim_get_current_buf()]
-    if not batch then return nil, 'no batch in this chat' end
-    return require('parley.batch_response').resume(batch, {accept_changes = params and params.bang == true})
+    if not batch then _parley.logger.warning('No paused batch in this chat'); return nil, 'no batch in this chat' end
+    local result = require('parley.batch_response').resume(batch, {accept_changes = params and params.bang == true})
+    if not result.accepted then _parley.logger.warning('Batch not resumed: ' .. tostring(result.reason))
+    elseif result.pending then _parley.logger.info('Validating batch questions before resuming') end
+    return result
 end
 
 --------------------------------------------------------------------------------
