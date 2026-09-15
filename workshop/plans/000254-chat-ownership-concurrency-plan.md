@@ -560,3 +560,30 @@ page through the shared index; no all-anchor scan or mutable-layout reparse is
 part of the new fold path. Section/outline projection revisions are separate from
 lexical proofs; payload-only edits preserve both when every relevant value is
 unchanged. Actual consumer migrations and broad suites remain before M3 closure.
+
+### 2026-09-15 — M3 consumer audit and write-plan revision evidence
+
+The live rendering consumers now use the document index. The remaining mutable
+`exchange_model` chain is generation writing: `chat_respond` stream-span reduction
+and `tool_loop` append positions. Migrating those at M4 together with scoped write
+plans avoids an interim second authority and lets M3 establish the read/observer
+boundary first. Delta: the M3 architecture check forbids positional re-derivation
+in rendering consumers; M4 explicitly removes numeric live writer models and
+per-chunk active-answer re-reduction before claiming bounded generation work.
+The pure materialized layout remains useful for preparation/serialization/oracles.
+
+The audit also found timezone and footnote diagnostics reading the entire buffer
+on edit convergence. This belongs to the requested rendering guarantee. Extend
+M3 to shared-index candidate projection and bounded scheduled diagnostic parsing;
+ordinary non-candidate edits must not trigger global derivation. Definition
+changes have broad reference dependencies (including first-definition boundary
+and duplicate-definition resolution), processed in slices. Native diagnostic
+namespace publication is inherently O(diagnostic count/output size), accounted
+separately from bounded parsing; no silent definition truncation.
+
+Write plans require the grant revision they were built against. Both owned text
+writes and disjoint edits that move grant coordinates advance that revision.
+A stale plan is rejected without revoking a still-valid writer; subsequent plans
+must resolve current coordinates. Regressions cover repeated matching bytes,
+disjoint relocation and delegated insertion slots. This is an authority check,
+not a document-global changedtick barrier (ARCH-PURPOSE).
