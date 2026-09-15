@@ -1283,3 +1283,17 @@ clean. The recovery preview now uses the established mutation helper at92d7b5da;
 10 architecture and19 public recovery tests pass. M5 remains open pending the
 remaining lifecycle fixes and another Codex boundary review. M6 verification
 continues separately; its final integration will include the completed M5 fixes.
+
+### 2026-09-15 M5 recovery corrections verified locally
+
+BR20/21/23/24 implemented atbfd749e4.155 focused tests pass, including all three
+original reviewer save/retry/cleanup reproductions. A follow-up cancellation
+contract probe found early async settlement refusals returned non-cancellable
+results; three red cases now pass, with80 final focused tests. The regional
+settlement proof permits next-draft edits and rejects answer ABA/cancel/reload.
+Bounded context-revision retry metadata preserves original snapshots across
+public single/batch failure or cancellation without retaining grants. Host
+retirement follows adapter release; cleanup errors are visible. Released adapter
+inspection retains its store by an existing explicit API test, while association
+payload is dropped. Full576-file lint clean. Final mapped M5 union is running
+before the next Codex review; no milestone completion is claimed yet.
