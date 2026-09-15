@@ -778,6 +778,41 @@ explicitly superseding the original proposed paths and deferred migration claims
 No review finding is waived; grouped-undo parity, uncertainty presentation, and
 native reclamation regressions precede the next gate.
 
+### 2026-09-15 — Preserved M4 staging checkpoint during M3 rework
+
+`/tmp/parley254-m4-stage` retains isolated, uncommitted M4 work, based on
+`85a3d793` plus the later M3 read-progress core copied before staging began.
+It is not part of the reviewed feature branch. Pure `generation.lua` passes 28
+tests: bounded staging, exact partial receipts, child isolation, separate logical
+completion/cleanup and 100-round retention. `generation_runner.lua` passes 18
+stateful integration tests, acquiring before preparation, handling synchronous
+callbacks, private append contexts, stale-input continuation pauses and bounded
+blob retention. `document/append.lua` passes 12 tests, including large lines,
+split syntax, UTF-8 byte lookup and accepted-prefix accounting.
+
+Root's `dispatcher.create_output_handler` has five passing fragmentation/long-line
+tests. A new header-only authority branch has three passing native tests; header
+grants cannot cross rows and remain independent of answer/question edits. Neither
+is connected to the final response flow yet. Scoped replacement is designed but
+unimplemented: a private cursor will remove old owned text in bounded slices and
+append replacement bytes with receipt accounting, via the runner's staging cap.
+
+Non-generation caller migration removed the delayed drill-in whole-buffer fallback
+and routes picker/image/reference/branch/skill-result edits toward captured user
+transactions. Native regressions reproduced disjoint-text loss and deleted-marker
+resurrection before fixes. User transaction core has ten passing unit tests, but
+its source certificates currently expire when an opaque region is materialized
+without a native text change. This safely rejects callbacks but blocks unchanged
+async skill/image paths; stable text provenance through metadata materialization
+remains an explicit M4 blocker. No repair suppression or fresh post-IO authority
+workaround is accepted. Generic disk-writing skills with unknown target ranges
+use conservative pre-IO whole-source guards; conflicts leave the live buffer intact
+and surface the external result for explicit reconciliation.
+
+All M4 agents paused at this state for BR-5/6/8. Preserve their files when bringing
+M3 frame/presentation/retirement fixes into that staging tree; do not overwrite
+shared document/editor/sequence hooks with whole-file copies.
+
 ## Revisions
 
 ### 2026-09-14 — Incremental rendering is part of the core contract
