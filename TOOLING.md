@@ -97,7 +97,7 @@ directory) with:
 make perf PERF_OUTPUT=/path/to/parley-chat-typing.json
 ```
 
-The JSON envelope has `schema_version: 2`, `generated_at`,
+The JSON envelope has `schema_version: 3`, `generated_at`,
 `timing_unit: "milliseconds"`, `environment` (`os`, `nvim`, and the measured
 git `commit`), and `scenarios`. Every scenario records `name`, `phase`,
 `attribution` (`inclusive` or `isolated`), `line_count`, `iteration_count`,
@@ -109,8 +109,11 @@ as `tests/perf/harness.lua`'s `WORK_FIELDS`). Schema 2 adds `bytes_read`
 (returned string bytes, excluding newline separators), `index_nodes_visited`,
 `dependency_nodes_visited`, `anchors_resolved`, `fold_groups_visited` (outer
 fold deletion targets), and `native_fold_ops` (`zj`, `zD`, and fold creation
-commands). Node counters are reserved for the incremental core; zero does not
-mean existing array copies are free. Generated reports are ignored
+commands). Schema 3 adds `index_entries_visited`, `metadata_values_copied`,
+and `summary_values_copied`, so bounded leaf counts cannot hide nested metadata
+work. The direct document-core benchmark populates these from actual index
+statistics; zero on a legacy path does not mean its array copies are free.
+Generated reports are ignored
 artifacts; durable baseline/optimized summaries belong in the issue log.
 
 The `fold_maintenance` and `stream_human_interleave` phases add many-exchange

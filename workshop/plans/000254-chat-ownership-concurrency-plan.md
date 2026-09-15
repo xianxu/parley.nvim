@@ -449,3 +449,50 @@ reconciliation, visible unresolved diagnostics, global/document/generation
 admission enforcement, timer cleanup, and deterministic clock/process tests. The
 five-second operating envelope remains unchanged. M1 supplies safe retention; M6
 supplies bounded operational supervision (ARCH-CONSTRAINTS, ARCH-FUNERAL).
+
+### 2026-09-15 — M2 structural core refinements
+
+Reason: implementation and differential tests exposed distinct grammar scopes,
+and work-count tests distinguish text authority from syntactic evidence.
+Delta: share lexical ownership in `document/lexical.lua`; keep global and
+answer-scoped semantic transitions separate. Factor bounded reading, indexed
+facts, dependency intervals, and semantic scheduling into `lexer.lua`, `facts.lua`,
+`dependencies.lua`, and `semantic.lua`, composed by `structure.lua` (ARCH-DRY,
+ARCH-PURE). `dependencies.restart_origin` owns the planned restart query rather
+than expanding the grammar transition module with interval storage.
+
+A classified same-row edit can retain syntax evidence only when its complete
+lexical descriptor and indexed summary match. Its text revision always advances;
+syntax certificates require explicit validation and cannot authorize text writes.
+Unknown lexical edits use conservative sliced repair. Ordinary Enter/range-edit
+integration still needs the M3 bounded invalidation path; the M2 direct-index
+splice measurement is not evidence of final live semantic convergence.
+
+Dependency queries use logarithmic interval navigation whose handle ranks each
+require logarithmic sequence navigation: total navigation is O(log² N), measured
+without suffix enumeration. On the 50,000-row pure-core corpus, EOF dependency
+query plus suffix removal used 58 dependency visits and 310 sequence-node visits.
+Typed-row update plus syntax-proof validation used 56 sequence visits and 128
+copied leaf entries. Million-row opaque paste/removal used 89 visits and 129
+copies. An 800,000-byte line was classified in 196 reads of at most 4096 bytes,
+retaining bounded lexer state; its total work is intentionally proportional to
+payload size. These isolate index operations; M3 owns attached-editor timing,
+fold preservation, and foreground acceptance.
+
+### 2026-09-15 — M2 newline audit: selective facts and fragment convergence
+
+Reason: same-row syntax preservation alone does not prevent broad semantic
+repair on ordinary Enter/Backspace. Delta: complete the pure-core solution in M2,
+before live migration, with selector-specific fact evidence and bounded fragment
+transfer. Fixed predicate channels summarize matching-token counts and maximum
+syntax revisions without hashes. Stable fact bounds permit irrelevant row-count
+changes; adjacency facts remain explicit. Footer search and its previous-nonblank
+lookup keep separate trigger ranges. The interval index retains semantic restart
+origins separately from those trigger starts, under explicit visit budgets.
+
+A classified fragment can reuse untouched suffix metadata only after its complete
+global and answer-section outgoing checkpoints agree with the previous state and
+relevant facts remain valid. Text evidence always expires and inserted rows receive
+fresh identities. Unknown/oversized fragments and semantic changes retain the
+conservative sliced path. This refines the existing complete-checkpoint convergence
+contract; it adds no external concurrency or persistence scope (ARCH-PURPOSE).

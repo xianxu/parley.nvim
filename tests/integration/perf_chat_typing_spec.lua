@@ -50,7 +50,8 @@ describe("chat typing performance scenario", function()
         local counter = chat_typing.new_counter()
         local token = reader.set_observer(998877, function(e) counter:observe(e) end)
         local fields = { "bytes_read", "index_nodes_visited", "dependency_nodes_visited",
-            "anchors_resolved", "fold_groups_visited", "native_fold_ops" }
+            "anchors_resolved", "fold_groups_visited", "native_fold_ops", "index_entries_visited",
+            "metadata_values_copied", "summary_values_copied" }
         for _, field in ipairs(fields) do
             reader.record_work(998877, { [field] = 2 })
             reader.record_work(998877, { [field] = 3 })
@@ -136,7 +137,7 @@ describe("chat typing performance scenario", function()
             structure_entries_copied = 0,
         }))
         local decoded = vim.json.decode(require("tests.perf.harness").encode(report))
-        assert.equals(2, decoded.schema_version)
+        assert.equals(3, decoded.schema_version)
         assert.equals("milliseconds", decoded.timing_unit)
         assert.equals("inclusive", decoded.scenarios[1].attribution)
         assert.equals("isolated", decoded.scenarios[2].attribution)

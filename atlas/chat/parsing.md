@@ -38,6 +38,14 @@ general markdown block model rather than a fence pair.
 `fence.scan` makes the one depth-aware pass; `chat_parser`, `answer_structure`
 and `fold_projection` all consume it.
 
+## Incremental structural core
+
+The [document structure core](document.md) extracts shared lexical ownership and
+adds resumable index/grammar repair. During #254 M2, legacy full parser traversals
+remain independent compatibility oracles; live buffer migration follows in M3.
+Global fence scanning and answer-scoped section scanning retain their distinct
+bounds, including malformed fences that close outside an answer.
+
 ## Parser → Model Pipeline
 `answer_structure.reduce` is the one semantic answer grammar. It produces
 `text`, `thinking`, `summary`, `tool_use`, and `tool_result` spans for both

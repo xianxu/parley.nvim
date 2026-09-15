@@ -235,6 +235,27 @@ atlas:
       - tests/arch/single_resolver_spec.lua
       - tests/integration/chat_respond_spec.lua
 
+  chat/document:
+    code:
+      - lua/parley/document/sequence.lua
+      - lua/parley/document/lexical.lua
+      - lua/parley/document/grammar.lua
+      - lua/parley/document/lexer.lua
+      - lua/parley/document/facts.lua
+      - lua/parley/document/dependencies.lua
+      - lua/parley/document/semantic.lua
+      - lua/parley/document/structure.lua
+    tests:
+      - tests/unit/document_sequence_spec.lua
+      - tests/unit/document_lexical_spec.lua
+      - tests/unit/document_grammar_spec.lua
+      - tests/unit/document_lexer_spec.lua
+      - tests/unit/document_facts_spec.lua
+      - tests/unit/document_dependencies_spec.lua
+      - tests/unit/document_semantic_spec.lua
+      - tests/unit/document_structure_spec.lua
+      - tests/integration/perf_document_spec.lua
+
   chat/parsing:
     code:
       - lua/parley/answer_structure.lua
