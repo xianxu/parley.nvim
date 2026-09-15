@@ -623,6 +623,16 @@ Scoped lint and diff checks pass. Lexical publication can no longer install
 semantic state, and fenced tool markers retain the legacy boundary behavior.
 Repeat M2 boundary review on the correction commit.
 
+### 2026-09-15 — M3 tested foundation checkpoint
+
+Shared editor/coordinator/state/projection and live highlighter/native fold path
+checkpointed from isolated staging. Targeted evidence: state14, coordinator13,
+editor14, projection6, structure22, sequence32; highlighter visual/typing/shared
+renderer/fence/unit suites51; fold adapter5 and attached-UI native probes3 pass.
+Outline, undo hardening and performance migration remain staged agent tasks.
+Legacy layout/anchor consumers and old fold regression harness migration remain
+before the M3 boundary; no M3 completion claim. M2 closed SHIP at `2afd7de9`.
+
 ## Revisions
 
 ### 2026-09-14 — Incremental rendering is part of the core contract
