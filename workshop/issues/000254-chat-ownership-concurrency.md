@@ -1342,3 +1342,30 @@ M6 now merges all M4 corrections and the verified M5 foundation at78a2f735;
 941a53ff adds the JSON correction. Fresh full mapped verification and integrated
 performance are running. M5 is under Codex review on feature cebb38eb. Neither
 M5 nor M6 is closed, and main remains unmerged for operator live testing.
+
+### 2026-09-15 M6 complete-suite corrections and final integration
+
+Canonical make test launched354 specs. Initial collection had353 complete footers
+with5438 passes/two failures, plus an incomplete packaging spec after12 passes and
+one failure. All three failures now have verified focused corrections: public
+abort retirement5, starter readiness16, packaged guest17. The abort fixture had
+prior error-message redraw consuming its wait; redraw isolation preserves the
+original timeout and tests actual terminal failure, released grants and question
+preservation. Guest model selection uses the real registration path; isolated cwd
+and module-relative fixture paths prevent repo chat creation. Confinement17 plus
+download6/update40 tests pass. Generated disposable chats were preserved under
+/tmp/parley254-generated-chat-evidence rather than deleted or committed.
+
+Shared temporary-directory cleanup retires native buffers first; definition37
+and skill18 pass without E211. The full make test document performance spec also
+passes under its unchanged60-second deadline; the earlier mapped-run incomplete
+result remains recorded, not silently erased. M5 recovery rework is integrated
+atde1db79a and171 tests across10 affected specs pass. Final lint596 files clean;
+source/test/atlas/README diff check clean. Per-file final evidence is being combined
+with original failures retained; this is a complete run plus focused corrections,
+not a claim that the original invocation exited successfully.
+
+The earlier integrated performance run passed30 scenarios/600 samples, with zero
+full-buffer reads in every scenario. Final performance is rerunning after recovery
+integration because completion behavior changed. Codex is reviewing M5 separately;
+M6 remains staged and cannot close before that boundary. Main remains unmerged.
