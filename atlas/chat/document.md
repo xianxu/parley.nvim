@@ -99,19 +99,23 @@ an exact preceding receipt from the same writer and unchanged native undo state.
 Highlighters query at most 256 rows and 64 KiB per viewport page. Tall windows
 advance through pages; horizontal and smooth-scroll windows read byte slices of
 long rows. Local edits discard intersecting presentation pages. Uncertain regions
-retain conservative presentation while semantic confirmation catches up.
+use neutral/local lexical styling; stale semantic roles and fence/footer/draft
+context cannot authorize presentation.
 
-Fold queries return at most eight ranges per page. Native fold replacement waits
-for a complete, confirmed, still-valid projection. Ordinary body edits let Neovim
-move existing folds without rebuilding them. Structural changes rebuild affected
-fold groups while preserving each window's view, open state, and fold enablement.
+Fold queries return at most eight ranges per page. Uncertainty invalidation
+clears semantic folds in the unconfirmed suffix independently of recreation.
+Only a complete, confirmed, still-valid projection can recreate them. Ordinary
+body edits with surviving context let Neovim move folds without rebuilding them.
+Structural changes preserve each window's view, open state, and fold enablement
+while reconciling affected groups.
 Native application costs scale with affected fold groups and are counted separately.
 Creation applies at most 64 groups per timer turn. Above 50,000 affected rows,
 cleanup also caps each native fold-jump batch at 64 groups and temporarily disables
 fold display in affected windows. Completion, cancellation, reload, and detach
 restore operator fold preferences. Each yield revalidates the projection; edits
 that invalidate it abort and rederive the remaining plan. A deferred ordinary join
-that proves unchanged topology schedules no native fold work.
+can avoid native fold work when unchanged topology is confirmed before
+invalidation runs.
 
 Outline candidates and diagnostic candidates come from index summaries. Picker
 labels use bounded text slices and selection resolves the current stable handle.
@@ -121,3 +125,17 @@ Repair and consumer pagination use a shared cancellable timer owner
 (`deferred_work`). Each continuation yields to a new event-loop turn. A bounded
 Lua slice alone is insufficient: recursively queued immediate callbacks can still
 starve input. Reload cancels pending work; detach closes its owner.
+
+### Callback frames and retirement
+
+The editor's single native attachment uses `on_bytes` for edit arithmetic and
+`on_lines` only as an ordering barrier. Grouped undo/redo can expose final buffer
+text while sending intermediate byte events; matching lengths do not establish
+read provenance. Unsupported callback frames remain opaque until scheduled repair
+reads the settled source. The barrier does not apply a second edit stream.
+
+Detach severs the editor's document callback and releases work/effect references.
+Fold teardown removes its buffer-owned autocmd group. Externally retained document
+handles remain queryable as detached facades; the registry cannot retain retired
+documents through its own callbacks. Native LuaJIT collection tests exercise all
+production consumers together.

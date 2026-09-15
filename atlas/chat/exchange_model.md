@@ -58,7 +58,8 @@ Because the model is live state, `chat_respond` protects every pending async wri
 `tool_folds` consumes certified document projections. It no longer validates an
 array of exchange extmarks or reparses the chat to recover layout. Ordinary body
 edits preserve native folds; structural edits queue bounded projection queries.
-Only a complete, confirmed plan can clear and recreate affected native groups.
+Invalidation clears semantic folds whose context is uncertain. Only a complete,
+confirmed plan can recreate affected native groups.
 Manual folds before the first exchange remain outside Parley's owned region.
 Window view, fold enablement, and open state survive application. Creation is
 batched at 64 groups; beyond 50,000 affected rows cleanup is also batched with

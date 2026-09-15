@@ -10,6 +10,10 @@
 
 **Status:** Operator-approved; plan-quality accepted and implementation underway. The operator will live-test before merge. Issue: `workshop/issues/000254-chat-ownership-concurrency.md`.
 
+**Current M3 inventory:** The original proposed module/function tables below are
+preserved as planning history. Their M3 entries are superseded by the complete
+inventory in **Revisions → 2026-09-15 — M3 review inventory correction (BR-7)**.
+
 ---
 
 ## Chunk 1: Design and contracts
@@ -706,3 +710,39 @@ buffer-owned fold autocmds. Native LuaJIT weak-reference tests verify reclamatio
 while externally retained detached handles continue to return detached state.
 M4 staging is paused until these M3 findings are resolved (ARCH-ORDER,
 ARCH-PURPOSE, ARCH-FUNERAL).
+
+### 2026-09-15 — M4 ephemeral source guards
+
+Reason: a pending explicit-user command must keep its source provenance when the
+index materializes opaque metadata without changing buffer text. Stable row
+handles alone do not supply that guarantee. Delta: use at most 64 live ephemeral
+source-region guards per document, maintained by the existing normalized native
+edit observer. Every intersecting native edit permanently invalidates a guard,
+including identical replacement and undo/redo. Preceding disjoint edits relocate
+its byte endpoints; metadata repair never modifies it.
+
+Opaque tokens retain guards; fixed registry slots hold weak references. Capture
+and extension enforce capacity atomically, share existing guards without
+refreshing provenance, and release on completion/cancellation/reload/detach.
+Abandoned tokens are collectible. Empty insertions bind a containing row and
+relative column, conservatively rejecting boundary joins. Guard visits are
+counted and bounded by 64 per native edit. No payload cache, row-array index,
+source-lineage hierarchy, or persistent edit journal is added (ARCH-PURPOSE,
+ARCH-CONSTRAINTS, ARCH-FUNERAL).
+
+Source guards prove unchanged text; they never authorize writes. Explicit user
+transactions still emit user receipts without a generation grant. Generated
+replacement additionally validates its leaf grant and consumes exact generated
+receipts after every bounded slice. Native writes invalidate guards normally;
+continuation after an owned patch requires a new checked successor proof rather
+than exempting the writer from invalidation. M4 implementation remains paused
+while M3 review fixes are verified.
+
+### 2026-09-15 — Isolated M4 preparation resumes during final M3 verification
+
+Reason: the M3 review fixes are integrated and released by their authors; remaining
+feature verification and review do not depend on M4 source-guard implementation.
+Delta: supersede the temporary M4 staging pause for the bounded source-guard task
+only. Staging commits `6cf67e52` and `b6723424` preserve M4 preparation and its M3
+review-base merge; 83 focused staging cases pass. The M3 milestone remains open,
+and no M4 code enters the feature branch until its review fixes have cleared.

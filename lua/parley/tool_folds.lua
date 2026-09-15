@@ -10,7 +10,7 @@ local function valid_target(buf,win)
         and vim.api.nvim_win_get_buf(win)==buf
 end
 local function notify(event) if M._observer then M._observer(event) end end
-local function clear_folds_in_span(buf, win, first_0, last_0, command_limit)
+local function clear_folds_in_span(buf, win, first_0, last_0, command_limit, remember)
     -- Reset first: an early return must not leave a previous call's count
     -- readable as if it described this one.
     M._last_clear_iters = nil
@@ -49,14 +49,21 @@ local function clear_folds_in_span(buf, win, first_0, last_0, command_limit)
             setlocal foldenable
             execute %d
             let s:guard = 0
+            let s:states = []
             let s:groups = 0
             let s:ops = 0
             let s:limit = %d
-            while line('.') <= %d && s:guard < s:limit
+            while line('.') <= %d && s:guard < s:limit && s:ops + 2 < s:limit
               let s:guard += 1
               if foldlevel(line('.')) > 0
                 let s:groups += 1
                 let s:ops += 1
+                let s:was_open = foldclosed(line('.')) == -1
+                if s:was_open
+                  silent! normal! zc
+                  let s:ops += 1
+                endif
+                call add(s:states, [foldclosed(line('.')) - 1, s:was_open])
                 silent! normal! zD
                 if foldlevel(line('.')) > 0
                   break
@@ -70,10 +77,11 @@ local function clear_folds_in_span(buf, win, first_0, last_0, command_limit)
                 endif
               endif
             endwhile
+            let b:parley_fold_clear_states = s:states
             let b:parley_fold_clear_iters = s:guard
             let b:parley_fold_clear_work = [s:groups, s:ops]
             let b:parley_fold_clear_next = line('.')
-            let b:parley_fold_clear_done = s:guard < s:limit || line('.') > %d
+            let b:parley_fold_clear_done = (s:guard < s:limit && s:ops + 2 < s:limit) || line('.') > %d
         ]], first_row, command_limit or (last_row - first_row + 2) * 2, last_row, last_row), {})
         -- Restore both even if the walk fails; its temporary editor state must
         -- not become the reader's new position or folding preference.
@@ -88,6 +96,9 @@ local function clear_folds_in_span(buf, win, first_0, last_0, command_limit)
         -- Nested folds deleted together by zD constitute one outer group.
         local work = vim.b[buf].parley_fold_clear_work
         line_reader.record_work(buf, { fold_groups_visited = work[1], native_fold_ops = work[2] })
+        if remember then
+            for _,entry in ipairs(vim.b[buf].parley_fold_clear_states or {}) do remember(entry[1],entry[2]==1) end
+        end
         next_row=vim.b[buf].parley_fold_clear_next-1
         done=vim.b[buf].parley_fold_clear_done==1
     end)
@@ -146,6 +157,82 @@ local function release_window(buf,window)
         end
     end
     window.suspended=false
+end
+-- Open hints belong to live fold markers. Retire deleted/non-fold identities
+-- in scheduled slices, including when repeated edits abort reconstruction.
+local function prune_hints(s)
+    local scan=s.hint_scan
+    if not scan then return false end
+    if not scan.windows then
+        scan.windows={};scan.index=0
+        for _,map in pairs(s.opened) do scan.windows[#scan.windows+1]=map end
+    end
+    local visited=0
+    while visited<BATCH_GROUPS do
+        if not scan.map then
+            scan.index=scan.index+1
+            local map=scan.windows[scan.index]
+            if not map then s.hint_scan=nil;return false end
+            scan.map,scan.key=map,next(map)
+        end
+        local key=scan.key
+        if not key then scan.map=nil else
+            scan.key=next(scan.map,key)
+            local row=Document.lookup(s.doc,key)
+            if not row or row.metadata and row.metadata.confirmed
+                and not require('parley.document.projection').summary(row.metadata).fold_start then
+                scan.map[key]=nil
+            end
+            visited=visited+1
+        end
+    end
+    return true
+end
+local function discard_uncertainty(s)
+    for _,window in ipairs(s.uncertainty and s.uncertainty.windows or {}) do release_window(s.buf,window) end
+    s.uncertainty=nil
+end
+local function clear_uncertainty(s)
+    local scope=Document.uncertain_range(s.doc)
+    if not scope then discard_uncertainty(s);return false end
+    if s.uncertainty_cleared then return false end
+    local job=s.uncertainty
+    if not job then
+        job={first=math.max(scope.first,s.owned_first or scope.first),last=scope.last,windows={},index=1}
+        for _,win in ipairs(vim.fn.win_findbuf(s.buf)) do
+            job.windows[#job.windows+1]={win=win,row=job.first,
+                enabled=vim.api.nvim_get_option_value('foldenable',{win=win}),
+                suspended=job.last-job.first>INTERACTIVE_ROWS}
+        end
+        s.uncertainty=job
+        -- Recreation must include every removed suffix fold once context returns.
+        s.first=math.min(s.first or job.first,job.first)
+        s.last=math.max(s.last or job.last,job.last)
+    end
+    local window=job.windows[job.index]
+    if not window then
+        s.uncertainty_cleared=true;discard_uncertainty(s);return true
+    end
+    if valid_target(s.buf,window.win) then
+        s.opened[window.win]=s.opened[window.win] or {}
+        setting_foldenable=setting_foldenable+1
+        local ok,next_row,done=pcall(clear_folds_in_span,s.buf,window.win,window.row,job.last-1,
+            BATCH_GROUPS*2,function(row,opened)
+                local found=Document.query(s.doc,row,row+1)[1]
+                if found then s.opened[window.win][found.handle]=opened end
+            end)
+        setting_foldenable=setting_foldenable-1
+        if not ok then discard_uncertainty(s);error(next_row,0) end
+        window.row=next_row
+        if window.suspended and not done then
+            setting_foldenable=setting_foldenable+1
+            vim.api.nvim_set_option_value('foldenable',false,{win=window.win})
+            setting_foldenable=setting_foldenable-1
+        end
+        if not done then return true end
+    end
+    release_window(s.buf,window);job.index=job.index+1
+    return true
 end
 local function discard_plan(s)
     local plan=s.plan
@@ -239,7 +326,10 @@ end
 -- every desired range is confirmed and its local projection proof still holds.
 function M.step(buf)
     local s=buffers[buf]
-    if not s or s.first==nil then return 'idle' end
+    if not s then return 'idle' end
+    if prune_hints(s) then return 'more' end
+    if clear_uncertainty(s) then return 'more' end
+    if s.first==nil then return 'idle' end
     local size=Document.size(s.doc).rows
     local plan=s.plan
     if plan and plan.certificate then
@@ -293,14 +383,21 @@ local function ensure(buf)
     local s={buf=buf,doc=doc,windows={},opened={}};buffers[buf]=s
     s.unsubscribe=Document.subscribe(doc,function(event)
         if event.kind=='detach' then
+            discard_uncertainty(s)
             discard_plan(s)
             if s.work then s.work:close() end
+            if s.group then vim.api.nvim_del_augroup_by_id(s.group);s.group=nil end
+            if s.unsubscribe then s.unsubscribe();s.unsubscribe=nil end
+            s.doc=nil;s.work=nil
             buffers[buf]=nil;return
         end
         if event.kind=='reload' then
+            discard_uncertainty(s);s.uncertainty_cleared=nil;s.hint_scan=nil;s.opened={}
             if s.work then s.work:cancel() end
             s.owned_first=nil;mark(s,0,Document.size(doc).rows)
         elseif event.kind=='edit' then
+            s.hint_scan=s.hint_scan or {}
+            discard_uncertainty(s);s.uncertainty_cleared=nil
             if s.owned_first then
                 if event.old_last_row<=s.owned_first then
                     s.owned_first=s.owned_first+event.last_row-event.old_last_row
@@ -321,7 +418,7 @@ local function ensure(buf)
                 if row then mark(s,row.start_row,row.end_row) end
             end
         end
-        if s.first~=nil then schedule(buf,s) end
+        if s.first~=nil or event.kind=='edit' and event.semantic_changed then schedule(buf,s) end
     end)
     mark(s,0,Document.size(doc).rows)
     return s
@@ -365,15 +462,18 @@ function M.setup(buf)
     if s.setup then return end
     s.setup=true
     local group=vim.api.nvim_create_augroup('ParleyToolFolds'..buf,{clear=true})
+    s.group=group
     vim.api.nvim_create_autocmd({'BufWinEnter','WinEnter'},{group=group,callback=function(args)
         if args.buf==buf then M.hydrate_window(buf,vim.api.nvim_get_current_win()) end
     end})
     vim.api.nvim_create_autocmd('OptionSet',{group=group,pattern='foldenable',callback=function()
-        if setting_foldenable>0 or not s.plan or not s.plan.windows then return end
+        if setting_foldenable>0 then return end
         local win=vim.api.nvim_get_current_win()
-        for _,window in ipairs(s.plan.windows) do
-            if window.win==win and window.suspended then
-                window.enabled=vim.api.nvim_get_option_value('foldenable',{win=win})
+        for _,job in ipairs({s.plan or {},s.uncertainty or {}}) do
+            for _,window in ipairs(job.windows or {}) do
+                if window.win==win and window.suspended then
+                    window.enabled=vim.api.nvim_get_option_value('foldenable',{win=win})
+                end
             end
         end
     end})

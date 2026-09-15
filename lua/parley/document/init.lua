@@ -114,7 +114,7 @@ local function observe_edit(doc,s,event)
     local newlast=first+added
     local reused=false
     local diagnostic_changed=true
-    if added<=256 and last-first<=256 and bytes<=65536 and not (a and a.opaque) and not (z and z.opaque) then
+    if event.source_frame==true and added<=256 and last-first<=256 and bytes<=65536 and not (a and a.opaque) and not (z and z.opaque) then
         local lines=s.editor.reader:lines(first,newlast,false)
         local spans={}; local actual=0
         for i,line in ipairs(lines) do
@@ -149,6 +149,12 @@ local function observe_edit(doc,s,event)
             reused=accumulate_repair(repair_work,Structure.replace_fragment(s.structure,first,last,spans,
                 {rows=256,bytes=65536,nodes=65536,entries=65536})).reused_suffix
         end
+    elseif added==1 and last-first<=256 and bytes<=65536 and not (a and a.opaque) and not (z and z.opaque) then
+        -- Capture only old indexed evidence here. No callback text is read;
+        -- the settled repair turn may prove a bounded join against its suffix.
+        local delayed=accumulate_repair(repair_work,Structure.begin_deferred_fragment(s.structure,
+            first,last,added,bytes,{rows=256,bytes=65536,nodes=65536,entries=65536}))
+        if delayed.status=='deferred' then s.deferred={first=first,last=newlast,bytes=bytes} end
     else accumulate_repair(repair_work,Structure.splice(s.structure,first,last,opaque(added,bytes))) end
     if not reused then s.idle=false end
     reconcile(s)
@@ -157,10 +163,12 @@ local function observe_edit(doc,s,event)
     work.rows_processed,work.bytes_scanned=classified_rows+repair_work.rows_processed,classified_bytes
     work.dependency_nodes_visited=repair_work.dependency_nodes_visited
     record(s,work)
+    -- Local proof repair gets the first scheduled turn. Presentation consumers
+    -- still fail closed if their slice runs before that proof converges.
+    schedule(doc)
     notify(s,{kind='edit',first_row=first,last_row=newlast,old_last_row=last,
         reused_suffix=reused,semantic_changed=not reused,diagnostic_changed=diagnostic_changed,
         deferred_fragment=s.deferred~=nil})
-    schedule(doc)
 end
 local function observe(doc,event)
     local s=state(doc)
@@ -178,7 +186,7 @@ local function observe(doc,event)
         s.dead=true; s.deferred=nil; buffers[s.buf]=nil
         if s.work then s.work:close() end
         effects(s,State.transition(s.authority,{kind='detach'}))
-        notify(s,{kind='detach'}); s.subscribers={}; s.structure=nil
+        notify(s,{kind='detach'}); s.subscribers={}; s.structure=nil; s.on_effect=nil; s.work=nil
     end
 end
 
@@ -222,6 +230,10 @@ end
 function M.diagnostic_candidates(doc,first,last,opts)
     local s=state(doc)
     return s.dead and {status='detached'} or measured_query(s,Structure.diagnostic_candidates,first,last,opts)
+end
+function M.uncertain_range(doc)
+    local s=state(doc)
+    return not s.dead and Structure.uncertain_range(s.structure) or nil
 end
 function M.validate_projection(doc,certificate)
     local s=state(doc); if s.dead then return false,'detached' end

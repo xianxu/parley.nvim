@@ -33,10 +33,11 @@ describe('highlighter shared document rendering',function()
     end)
     it('shares one on_bytes owner across repeated renderer attachment',function()
         local attach=vim.api.nvim_buf_attach
-        local bytes,lines=0,0
+        local bytes,lines,paired=0,0,0
         vim.api.nvim_buf_attach=function(buffer,send,opts)
             if opts.on_bytes then bytes=bytes+1 end
             if opts.on_lines then lines=lines+1 end
+            if opts.on_bytes and opts.on_lines then paired=paired+1 end
             return attach(buffer,send,opts)
         end
         local ok,err=pcall(function()
@@ -45,7 +46,10 @@ describe('highlighter shared document rendering',function()
             highlighter.clear_structure(buf)
             assert.equals(doc,highlighter.rebuild_structure(buf))
             assert.equals(1,bytes)
-            assert.equals(0,lines)
+            -- The same editor attachment uses on_lines only as a native-frame
+            -- barrier; it is not a second structural observer or edit stream.
+            assert.equals(1,lines)
+            assert.equals(1,paired)
         end)
         vim.api.nvim_buf_attach=attach
         assert.is_true(ok,tostring(err))

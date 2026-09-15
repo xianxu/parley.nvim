@@ -94,7 +94,8 @@ vim.schedule(function()
         F.apply_folds(buf)
         vim.api.nvim_input('<BS>')
         poll(function() return vim.api.nvim_buf_get_changedtick(buf)>tick end,function()
-            assert(F.step(buf)=='pending')
+            assert(F.flush(buf)=='pending')
+            assert(vim.fn.foldlevel(3)==0)
             -- Let the queued fold task actually stop on uncertainty. Its only
             -- wake-up after this point is the successful document repair event.
             vim.defer_fn(function()

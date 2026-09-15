@@ -126,9 +126,21 @@ describe('bounded native fold batches',function()
         assert.equals('idle',F.flush(buf))
         assert.is_false(vim.wo.foldenable)
         vim.wo.foldenable=true
-        F.apply_folds(buf)
+        -- A human role change makes the suffix uncertain before recreation is
+        -- possible. Its native cleanup has the same overload/slice contract.
+        vim.api.nvim_buf_set_text(buf,0,0,0,#'💬: q',{'🤖: replacement'})
+        assert.is_not_nil(D.uncertain_range(doc))
         for _=1,100 do F.step(buf);if not vim.wo.foldenable then break end end
         assert.is_false(vim.wo.foldenable)
+        work={ops=0,groups=0,reads=0}
+        token=Reader.set_observer(buf,function(e)
+            work.ops=work.ops+(e.native_fold_ops or 0)
+            work.groups=work.groups+(e.fold_groups_visited or 0)
+            work.reads=work.reads+(e.lines_requested or 0)
+        end)
+        F.step(buf)
+        Reader.clear_observer(buf,token)
+        assert.is_true(work.groups<=64);assert.is_true(work.ops<=128);assert.equals(0,work.reads)
         -- Explicit logical detach cancels the batch immediately, before any
         -- scheduled callback can recreate folds against a retired document.
         D.detach(doc)

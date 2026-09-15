@@ -272,6 +272,9 @@ atlas:
       - tests/unit/document_write_plan_spec.lua
       - tests/integration/document_scheduler_spec.lua
       - tests/integration/document_edit_spec.lua
+      - tests/integration/document_callback_frame_spec.lua
+      - tests/integration/document_retention_spec.lua
+      - tests/integration/document_native_history_spec.lua
       - tests/integration/document_fold_batches_spec.lua
       - tests/integration/document_fold_join_spec.lua
       - tests/integration/document_fold_native_spec.lua
