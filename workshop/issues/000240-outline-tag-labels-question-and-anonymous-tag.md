@@ -1,11 +1,12 @@
 ---
 id: 000240
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-09-12
-updated: 2026-09-12
+updated: 2026-09-14
 estimate_hours:
+started: 2026-09-14T20:14:11-07:00
 ---
 
 # Outline tag conventions: an @@tag@@ immediately before a question labels it; @@_@@ is anonymous and hides itself, or the question it precedes
