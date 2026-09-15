@@ -102,19 +102,73 @@ an exact preceding receipt from the same writer and unchanged native undo state.
 Highlighters query at most 256 rows and 64 KiB per viewport page. Tall windows
 advance through pages; horizontal and smooth-scroll windows read byte slices of
 long rows. Local edits discard intersecting presentation pages. Uncertain regions
-retain conservative presentation while semantic confirmation catches up.
+use neutral/local lexical styling; stale semantic roles and fence/footer/draft
+context cannot authorize presentation.
 
-Fold queries return at most eight ranges per page. Native fold replacement waits
-for a complete, confirmed, still-valid projection. Ordinary body edits let Neovim
-move existing folds without rebuilding them. Structural changes rebuild affected
-fold groups while preserving each window's view, open state, and fold enablement.
+Fold queries return at most eight ranges per page. Uncertainty invalidation
+clears semantic folds in the unconfirmed suffix independently of recreation.
+Only a complete, confirmed, still-valid projection can recreate them. Ordinary
+body edits with surviving context let Neovim move folds without rebuilding them.
+Structural changes preserve each window's view, open state, and fold enablement
+while reconciling affected groups.
 Native application costs scale with affected fold groups and are counted separately.
+Creation applies at most 64 groups per timer turn. Above 50,000 affected rows,
+cleanup also caps each native fold-jump batch at 64 groups and temporarily disables
+fold display in affected windows. Completion, cancellation, reload, and detach
+restore operator fold preferences. Each yield revalidates the projection; edits
+that invalidate it abort and rederive the remaining plan. A deferred ordinary join
+can avoid native fold work when unchanged topology is confirmed before
+invalidation runs.
 
 Outline candidates and diagnostic candidates come from index summaries. Picker
-labels use bounded text slices and selection resolves the current stable handle.
-The index never stores a second transcript or a full row-position array.
+labels use bounded text slices. Navigation requires the current confirmed outline
+projection, not merely a surviving handle, and rechecks after focus callbacks.
+Diagnostic jobs retire on candidate-text or semantic-context changes, including
+between derivation and publication. Previously published diagnostic decorations
+remain the last computed snapshot during typing; they grant no navigation or write
+authority. The index never stores a second transcript or a full row-position array.
 
 Repair and consumer pagination use a shared cancellable timer owner
 (`deferred_work`). Each continuation yields to a new event-loop turn. A bounded
 Lua slice alone is insufficient: recursively queued immediate callbacks can still
 starve input. Reload cancels pending work; detach closes its owner.
+
+### Callback frames and retirement
+
+The editor's single native attachment uses `on_bytes` for edit arithmetic and
+`on_lines` only as an ordering barrier. Grouped undo/redo can expose final buffer
+text while sending intermediate byte events; matching lengths do not establish
+read provenance. Unsupported callback frames remain opaque until scheduled repair
+reads the settled source. The barrier does not apply a second edit stream.
+
+Detach severs the editor's document callback and releases work/effect references.
+Fold teardown removes its buffer-owned autocmd group. Externally retained document
+handles remain queryable as detached facades; the registry cannot retain retired
+documents through its own callbacks. Native LuaJIT collection tests exercise all
+production consumers together.
+
+### Reentrant consumer effects
+
+Native presentation can synchronously call operator code. Diagnostic set/reset
+fires DiagnosticChanged; fold options/restoration can fire OptionSet. Consumers
+retain a captured publication job and revalidate it after these boundaries. A
+superseded publisher stops before its next effect and cannot clear newer dirty
+work. Diagnostic clear similarly yields ownership to any replacement refresh
+started by its callbacks. Recursive diagnostic step reports busy; injected reader
+and converter callbacks obey the same current-job rule. Native regressions live
+in `tests/integration/diagnostic_reentrancy_spec.lua`.
+
+Fold slices also carry a monotonic presentation generation, mirrored as a scalar
+buffer variable for the native fold walk. The native walk stops if a callback
+replaces its job without changing text. Detach removes that scalar. The native
+redraw test confirms that view-only window calls emit no entry callbacks and
+buffer edits are rejected by redraw textlock.
+
+### Superseded native fold work
+
+Fold publication checks captured document/job ownership after callback-capable
+operations. Temporary editor state has a separate cleanup obligation: stale
+slices restore the captured window's view and fold preference even after losing
+publication authority. A configure pass publishes its window list only when
+complete; interruption discards that expected job and leaves repair dirty.
+Discarding a job releases every captured window without erasing a newer job.

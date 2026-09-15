@@ -211,6 +211,7 @@ atlas:
       - tests/integration/perf_chat_typing_spec.lua
       - tests/integration/perf_ownership_spec.lua
       - tests/integration/diagnostic_refresh_spec.lua
+      - tests/integration/diagnostic_reentrancy_spec.lua
       - tests/integration/highlighting_spec.lua
       - tests/integration/highlight_typing_spec.lua
       - tests/arch/performance_line_reader_spec.lua
@@ -289,6 +290,7 @@ atlas:
       - lua/parley/document/state.lua
       - lua/parley/document/projection.lua
     tests:
+      - tests/integration/diagnostic_reentrancy_spec.lua
       - tests/unit/document_sequence_spec.lua
       - tests/unit/document_lexical_spec.lua
       - tests/unit/document_grammar_spec.lua
@@ -302,12 +304,19 @@ atlas:
 
       - tests/unit/deferred_work_spec.lua
       - tests/unit/document_coordinator_spec.lua
+      - tests/unit/document_progress_spec.lua
       - tests/unit/document_projection_spec.lua
       - tests/unit/document_deferred_fragment_spec.lua
       - tests/unit/document_state_spec.lua
       - tests/unit/document_write_plan_spec.lua
       - tests/integration/document_scheduler_spec.lua
       - tests/integration/document_edit_spec.lua
+      - tests/integration/document_callback_frame_spec.lua
+      - tests/integration/document_retention_spec.lua
+      - tests/integration/document_native_history_spec.lua
+      - tests/integration/document_fold_batches_spec.lua
+      - tests/integration/document_fold_join_spec.lua
+      - tests/integration/document_presentation_reentrant_spec.lua
       - tests/integration/document_fold_native_spec.lua
       - tests/integration/document_folds_spec.lua
       - tests/integration/highlighter_document_spec.lua
@@ -491,6 +500,7 @@ atlas:
       - tests/helpers/fresh_clone_probe.lua
       - tests/minimal_init.vim
       - tests/helpers/ready_port.lua
+      - tests/helpers/spec_runner.lua
       - tests/helpers/fixture_process.lua
       - tests/fixtures/fake_sse_server
       - tests/perf/chat_typing.lua
@@ -502,6 +512,7 @@ atlas:
       - tests/arch/destructive_recipe_spec.lua
       - tests/arch/superseded_comment_spec.lua
       - tests/unit/ready_port_spec.lua
+      - tests/unit/spec_runner_spec.lua
       - tests/integration/fixture_ready_publish_spec.lua
       - tests/integration/chat_progress_process_spec.lua
 

@@ -51,9 +51,12 @@ scoped authority; accumulated block sizes cannot authorize a future write.
 `tool_folds` consumes certified document projections. It no longer validates an
 array of exchange extmarks or reparses the chat to recover layout. Ordinary body
 edits preserve native folds; structural edits queue bounded projection queries.
-Only a complete, confirmed plan can clear and recreate affected native groups.
+Invalidation clears semantic folds whose context is uncertain. Only a complete,
+confirmed plan can recreate affected native groups.
 Manual folds before the first exchange remain outside Parley's owned region.
-Window view, fold enablement, and open state survive application.
+Window view, fold enablement, and open state survive application. Creation is
+batched at 64 groups; beyond 50,000 affected rows cleanup is also batched with
+fold display suspended until completion or cancellation.
 
 See [document consumers](document.md#live-consumers) for paging and cost bounds.
 `fold_projection` remains a materialized-model oracle for compatibility tests.

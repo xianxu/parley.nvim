@@ -196,7 +196,13 @@ describe("outline preserves sibling branches (#241)", function()
                     end
                 end
                 local actual = {}
-                for _, item in ipairs(tree) do actual[#actual + 1] = item.value end
+                for _, item in ipairs(tree) do
+                    local value=item.value
+                    -- Provenance accompanies locations but does not change
+                    -- sibling ordering or branch destinations.
+                    actual[#actual + 1]={file=value.file,lnum=value.lnum,
+                        child_path=value.child_path,inline=value.inline}
+                end
                 assert.same(expected, actual)
                 local branches = {}
                 for _, item in ipairs(tree) do

@@ -726,6 +726,314 @@ the window across #192 and #254. Existing worktree attribution remains unreliabl
 for this multi-hour effort; retain explicit N/A rather than invent a per-milestone
 increment or pollute calibration with that undercount.
 
+### 2026-09-15 — M3 repair progress and native fold batches
+
+Removed the coordinator's disposable numeric read cache. Unread lexical requests
+now refresh local source evidence immediately before bounded IO, so continuous
+disjoint edits cannot starve or misdirect repair. Four regressions cover sustained
+edits, row relocation, source overlap, and insufficient-budget zero-IO behavior.
+The document mapping passes 237 tests before adding native fold batch coverage.
+
+Native fold application now captures and creates at most 64 groups per slice;
+above 50,000 affected rows, cleanup is also capped and folds are temporarily
+disabled with per-window preference/view restoration. Deferred ordinary joins
+preserve existing folds while allowing previously dirty work to resume. Native
+join coverage passes three tests; the full exchange mapping passes 264 tests.
+The five-test native batch suite passes independently in 35–44 seconds but hit
+Plenary's 50-second timeout during the mapped run. A narrowly scoped harness
+timeout is being added; final integrated verification and M3 review remain pending.
+The timed-out child has exited; no process cleanup is required.
+
+### 2026-09-15 — M3 final verification and review submission
+
+Document mapping: 245 passing tests (`document-complete`, `semantic-final`, and
+`document-rest` logs under `/tmp/parley254-m3-*`). The large semantic corpus also
+hit Plenary's default deadline under load; both 50,000-row corpora now have exact
+file-scoped 180-second deadlines. The selection regression passes, normal test
+deadlines remain unchanged, and the resumed corpus passes all 20 tests.
+Exchange/layout 264, lifecycle 510, highlights 84, outline 216 are green as
+recorded above; mappings overlap. Full lint passes 501 files, with the final
+runner-only changes re-linted separately.
+
+`make perf` passes 30 schema-4 scenarios on `ea933f51` (five warmups, 20 samples;
+report `/tmp/parley254-m3-current-perf.json`). At 5,000 rows, median/p95 milliseconds:
+typing 7.870/13.452; Enter+join 17.447/19.493; redraw 0.529/0.894; fold maintenance
+1.343/1.626; stream/human 23.556/52.326. Samples ran alongside conformance tests,
+so timing includes contention. Deterministic work remains one copied typing row,
+six Enter/join rows, zero redraw semantic rows, and zero hot full-buffer reads.
+Broad explicit repair/restore costs 3.867 s median. No 8 ms streaming claim is
+made; its old production writer is explicitly the next milestone's migration.
+M3 implementation is ready for mandatory review. Actual-time attribution remains
+N/A for the unreliable cross-issue worktree measurement explained above.
+
+### 2026-09-15 — M3 review REWORK
+
+The mandatory `2afd7de9..626e565e` review raised BR-5 (grouped-undo callback
+provenance), BR-6 (unconfirmed semantic presentation), BR-7 (stale proposed entity
+inventory), and BR-8 (document/editor and fold-autocmd retention). M3 remains
+open. M4 staging is preserved and paused while three bounded fixes proceed in
+`/tmp/parley254-m3-review-stage`; the feature branch owns documentation and review
+state. The plan now contains a complete current M3 module/function inventory,
+explicitly superseding the original proposed paths and deferred migration claims.
+No review finding is waived; grouped-undo parity, uncertainty presentation, and
+native reclamation regressions precede the next gate.
+
+### 2026-09-15 — Preserved M4 staging checkpoint during M3 rework
+
+`/tmp/parley254-m4-stage` retains isolated, uncommitted M4 work, based on
+`85a3d793` plus the later M3 read-progress core copied before staging began.
+It is not part of the reviewed feature branch. Pure `generation.lua` passes 28
+tests: bounded staging, exact partial receipts, child isolation, separate logical
+completion/cleanup and 100-round retention. `generation_runner.lua` passes 18
+stateful integration tests, acquiring before preparation, handling synchronous
+callbacks, private append contexts, stale-input continuation pauses and bounded
+blob retention. `document/append.lua` passes 12 tests, including large lines,
+split syntax, UTF-8 byte lookup and accepted-prefix accounting.
+
+Root's `dispatcher.create_output_handler` has five passing fragmentation/long-line
+tests. A new header-only authority branch has three passing native tests; header
+grants cannot cross rows and remain independent of answer/question edits. Neither
+is connected to the final response flow yet. Scoped replacement is designed but
+unimplemented: a private cursor will remove old owned text in bounded slices and
+append replacement bytes with receipt accounting, via the runner's staging cap.
+
+Non-generation caller migration removed the delayed drill-in whole-buffer fallback
+and routes picker/image/reference/branch/skill-result edits toward captured user
+transactions. Native regressions reproduced disjoint-text loss and deleted-marker
+resurrection before fixes. User transaction core has ten passing unit tests, but
+its source certificates currently expire when an opaque region is materialized
+without a native text change. This safely rejects callbacks but blocks unchanged
+async skill/image paths; stable text provenance through metadata materialization
+remains an explicit M4 blocker. No repair suppression or fresh post-IO authority
+workaround is accepted. Generic disk-writing skills with unknown target ranges
+use conservative pre-IO whole-source guards; conflicts leave the live buffer intact
+and surface the external result for explicit reconciliation.
+
+All M4 agents paused at this state for BR-5/6/8. Preserve their files when bringing
+M3 frame/presentation/retirement fixes into that staging tree; do not overwrite
+shared document/editor/sequence hooks with whole-file copies.
+
+
+### 2026-09-15 — M3 review verification and isolated staging durability
+
+BR-5/6/8 fixes are now on the feature working tree, including native callback-frame,
+undo-history and retention conformance. Highlight mapping passes 85 cases and lint
+passes 504 files. The document mapping's sole attachment fixture failure was an
+obsolete assertion that no `on_lines` hook exists: the same byte observer now owns
+a non-mutating frame barrier. The corrected fixture checks one paired attachment;
+the resumed document mapping passes. Exchange mapping still fails the first
+stream-observer assertion in `chat_respond_spec`; root-cause investigation and
+lifecycle checks are ongoing. No final benchmark or review clearance is claimed.
+
+M4 preparation is now committed in its isolated staging checkout: `6cf67e52`, then
+`b6723424` merges current M3 review fixes while preserving generation/user hooks.
+Its focused append/generation/runner/frame/retention/header/user tests pass 83 cases.
+Only the bounded ephemeral source-guard task resumes there; integration waits for
+M3 review clearance. The source-materialization blocker remains open.
+
+### 2026-09-15 — M3 review suites complete
+
+The streaming fixture now crosses an explicit native bootstrap barrier before
+its timed delivery assertions. A probe showed the first timed wait evaluated its
+predicate once, spent 1,572 ms in queued setup work, and returned timeout although
+the observer count was already one. No production code or stream timeout changed.
+The full response spec passes 74 cases. Combining passing mapped files, including
+the corrected attachment fixture and the resumed remainder, gives complete
+coverage: chat/document 263, ui/highlights 85, chat/exchange_model 264 and
+chat/lifecycle 511; 952 cases across 76 unique files (mapping overlap excluded).
+Full performance proof is still running on production commit `ebd0585b`. Its
+run overlaps the short focused response verification and small M4 unit probes;
+report-only timing will disclose that load rather than claim a pristine host.
+
+### 2026-09-15 — Final M3 review-fix performance evidence
+
+`make perf PERF_OUTPUT=/tmp/parley254-m3-reviewed-perf.json` completed with all
+30 schema-4 scenarios, five warmups and 20 samples on `ebd0585b` (Darwin, Neovim
+0.11.7). Subsequent feature changes are test/docs only. At 5,000 rows:
+
+| Phase | Median / p95 ms | Structural rows / copied entries | Full-buffer reads |
+|---|---:|---:|---:|
+| Ordinary typing | 7.836 / 10.001 | 1 / 1 | 0 |
+| Enter + Backspace | 18.147 / 24.543 | 5 / 6 | 0 |
+| Viewport redraw | 0.537 / 1.108 | 0 / 0 | 0 |
+| Ordinary fold maintenance | 1.222 / 1.427 | 1 / 1 | 0 |
+| Legacy stream + human input | 30.017 / 32.883 | 20 / 22 | 0 |
+| Explicit broad repair | 3403.101 / 3498.989 | 18,987 / 18,987 | 0 |
+
+Ordinary Enter/join performs zero native fold operations. The legacy streamed
+interleave now honestly clears uncertain semantic folds: 126 outer groups /
+252 native operations at 5,000 rows, across bounded consumer batches. That
+affected-output work is not a constant-work claim, and the stream p95 does not
+meet the 8 ms aspiration. M4 owns removal of growing stream-row replacement and
+its materialized live-model reconciliation. Broad structural repair is incremental
+and yields to input; its aggregate time still scales with affected structure.
+The report overlaps short response/spec and M4 unit probes; timing is report-only.
+
+All four required mapped suites have passing file coverage (document263,
+highlights85, exchange264, lifecycle511), and final lint reports zero warnings
+/errors in 504 files. BR-5/6/8 production fixes, their native regressions and BR-7
+inventory correction are committed. M3 remains pending the mandatory review retry.
+
+### 2026-09-15 — M3 second review and complete consumer evidence sweep
+
+Second review `2afd7de9..976bf963` is REWORK with all prior BR-5/6/7/8 findings
+addressed (including pre-fix red comparisons). New BR-9 rejects outline selection
+that uses a surviving handle without current semantic eligibility. M3 remains
+2/6 closed. The fix checks the exact current outline projection before navigation;
+its native uncertainty/reclassification/deletion/relocation/tree tests are underway.
+
+The same sweep reproduced an additional delayed diagnostic-publication defect:
+a preceding text-to-fence edit left candidate flags unchanged, so a pending job
+published while its context was unconfirmed. Pending jobs now retire on semantic
+changes too. Red observed; the focused diagnostic lifecycle/publication, adapter
+and parser suites pass. The plan records every consumer's eligibility boundary.
+M4 remains isolated; its source guards, capacity tickets, presentation-only pending
+UI, delayed user callers and bounded replacement preparation are not M3 changes.
+
+### 2026-09-15 — M3 BR-9 verification and third boundary review
+
+Committed `a8d9d770` validates exact current outline eligibility before navigation
+and after focus callbacks, binds disk selections to bounded source evidence, and
+retires pending diagnostics on semantic-context changes. The whole outline mapping
+passes 223/223 across six files; diagnostic integration/unit/text suites pass
+12/14/6. Native red reproductions precede the fixes. Lint is clean in 504 files;
+consumer eligibility contracts and review lessons are recorded in atlas and plan.
+
+The full performance run `/tmp/parley254-br9-perf.json` completed on `a8d9d770`
+(Darwin, Neovim 0.11.7, 30 scenarios, five warmups and 20 samples). At 5,000 rows,
+median/p95 milliseconds are typing 7.778/14.652, Enter/join 15.702/18.545, redraw
+0.717/1.539, folds 0.751/0.959, legacy stream/human 29.905/52.275, and explicit
+broad repair 2434.630/2504.419. Every measured phase has zero full-buffer reads.
+Typing processes/copies 1/1 rows; Enter/join 5/6; legacy interleave 23/25 and clears
+126 affected outer fold groups with 252 native operations. These are measured
+aggregate costs, not constant-time or 8 ms guarantees. Short isolated M4 probes
+ran concurrently; timing remains report-only. M4 will replace the legacy writer.
+
+The third M3 review uses this committed consumer class sweep. M4 remains isolated
+and incomplete: submission-to-runner admission, annotation-preserving replacement,
+scoped readiness and provider adapters are being integrated, with no main merge.
+
+### 2026-09-15 — M3 third review: reentrant effect ownership
+
+The third boundary review (`2afd7de9..654687dd`) confirms BR-9 addressed but
+raises BR-10: DiagnosticChanged can invalidate a publication synchronously, then
+the returning old job clears the newer dirty flag. The feature remains 2/6 closed.
+A native class sweep reproduces both diagnostic effects, detach, recursive step,
+and replacement refresh during clear. Nine diagnostic reentrancy tests now pass,
+including real reload, injected-reader failure and converter reentry. Publication
+checks captured job identity after callback-capable effects, preserves newer
+invalidation, and accounts only effects actually performed. Reentrant step reports
+busy instead of publishing the same job recursively.
+
+The same sweep reproduces a fold OptionSet callback editing the source during
+restoration, after which the old job erased new dirty work. Its native fix/test
+is in progress. M4 continues in its isolated checkout; no gate was bypassed and
+no M3 completion is claimed. The next review must include both fixes and the
+cross-consumer callback-boundary contract, even though the default three-round
+review budget has been used.
+
+### 2026-09-15 — BR-10 fixes ready for broad verification
+
+The diagnostic class sweep passes nine new native cases plus existing 12/14/6
+integration/unit/text cases. Four native presentation tests pass: source edits
+during fold restoration, replacement fold jobs without text changes, detach
+inside option configuration, and redraw textlock. Existing document-fold,
+tool-fold, join, retention and highlighter-document suites all pass. Four-file
+lint and diff checks are clean. Detach now removes the fold-generation scalar;
+standalone native fold clearing also supports an unattached buffer.
+
+M4 checkpoint `38e0ed14` preserves the released adapters and caller migrations.
+Additional reservation cancellation, copied continuation input, provider result
+and preparation geometry fixes remain isolated. The tool-round adapter draft is
+not yet verified or wired. No milestone or whole-issue completion is claimed.
+
+
+### 2026-09-15 — BR-10 verification completed; timing comparison under investigation
+
+Production commit `b62c2b59` passes the complete chat/document mapping: 276 tests
+in 29 files, including native broad-fold conformance. Lint checks 506 files with
+zero warnings/errors. Full benchmark `/tmp/parley254-br10-perf.json` completes
+30 scenarios with 20 samples each; every scenario reports zero full-buffer reads.
+At 5,000 rows, median/p95 milliseconds are typing 9.273/10.127, Enter/join
+21.149/22.520, redraw 0.650/1.324, folds 1.201/2.245 and legacy stream/human
+interleave 37.610/54.511. Broad repair is 8777.140/8843.768 versus the prior
+2434.630/2504.419, despite identical 18,987 processed/copied rows and 2,567,147
+index visits. This timing difference is being investigated before boundary close;
+it is not dismissed as noise or claimed as a responsiveness guarantee.
+
+M4 isolated tool-round integration passes five tests including ordered completion,
+unknown-to-known evidence with explicit resume, sibling-only cancellation and
+positive fixture cleanup. Production respond wiring remains outstanding.
+
+
+### 2026-09-15 — Controlled repair comparison and fourth M3 review
+
+Read-only investigation `/tmp/parley254-br10-perf-investigation.md` compares
+old/current fold code under the same 1,000-row repair probe. With JIT disabled,
+medians differ by less than 1% (about 724 ms); JIT-enabled identical current code
+varies from 287–302 ms to 550–621 ms across processes. The full benchmark uses
+`pairs()` phase order, changing trace/warmup context between reports. No consistent
+BR-10 algorithmic regression was reproduced; the full-run 8.8-second broad repair
+latency remains disclosed and is not replaced by the smaller probe.
+
+The fourth M3 boundary review extends `WF_BOUNDARY_ROUND_CAP` to four because
+BR-10 was newly raised at the third review and its native class fixes require a
+fresh review. Review and open-finding gates remain enabled. Use Claude for this
+review after earlier Codex agent usage exhaustion. Actual-time attribution remains
+N/A: the measured window mixes #192/#254 and cannot reliably attribute this work;
+only that measurement gate is waived, without entering invented hours.
+
+
+### 2026-09-15 — Fourth review and production response migration
+
+Fourth M3 review window `2afd7de9..d349c02e` disposes BR-10, returns
+FIX-THEN-SHIP, and raises BR-11/BR-12 for superseded fold restoration and truncated
+window-configuration plans. The ledger refuses milestone finalization while these
+are open. Native class fixes are in progress; M3 is not closed and no gate was
+waived. The exact review evidence remains in the M3 review and close-gate sidecars.
+
+M4 now replaces the old public respond writer in its isolated staging checkout.
+Six public-command cases pass: disjoint generations, human next-draft edits,
+overlap refusal, preceding-stream edits during next-question admission, source
+deletion during remote preparation, scoped Stop, and automatic topic integration
+(the disjoint test combines the first two behaviors). Session/ordered-tool/topic
+and completion adapters have native/fake integration coverage. Input-prefix edits
+mark frozen input stale instead of rejecting disjoint output admission. Completion
+now carries its real operation identity. Native history is observed directly;
+old pending confirmation and global Stop repair are removed.
+
+Migrating older tests and the production benchmark exposed remaining integration
+issues: an unobserved native tick advance can deny the first owned append after
+preparation; next-prompt insertion can extend the finishing grant across the new
+exchange and revoke it; old parser answer ranges can include trailing footnotes;
+provider failure notification can precede committed admitted bytes. Regression
+assertions remain in place. Editor frame proof and finite released insertion fixes
+are underway; captured footer exclusion and terminal failure-notice ordering have
+been implemented and are being rechecked. This is WIP, not an M4 completion claim.
+
+
+### 2026-09-15 — BR-11/BR-12 fixed and M4 checkpoint preserved
+
+The fold class fix restores captured window state regardless of publication
+supersession, constructs window plans atomically, discards only the expected job,
+and reschedules surviving windows after setup interruption. Four added native
+controls fail with the prior file; 43 focused tests (eight reentrancy plus existing
+fold/batch/retention/join suites) pass, including broad native folds. Full lint
+checks 506 files without warnings/errors. The fourth review's ledger refusal
+requires another review to dispose BR-11/BR-12; the per-boundary budget is extended
+to five, with all review/ledger gates still enabled.
+
+M4 checkpoint `3954cc0d` commits production response composition in isolated
+staging. Follow-up native regressions now pass: 23 migrated public response cases,
+21 completion cases, five ownership cases, seven stateful-process progress cases,
+six public scoped-response cases and 62 branch cases. Lint checked 548 files clean.
+The first owned native append now authenticates a captured frame even after save
+advances changedtick without callbacks. Normal typing/streaming aggregate repair
+remains under investigation: a 1,000-row probe preserved bytes but repaired 1,639
+rows. Tracing identifies structural-token fallback overbroad dependency channels
+and loss of the prepared tail-row extent for a newline append. No performance
+completion is claimed; M4 legacy removal/full verification and M5/M6 remain.
+
 ## Revisions
 
 ### 2026-09-14 — Incremental rendering is part of the core contract

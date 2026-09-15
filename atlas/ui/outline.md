@@ -54,6 +54,11 @@ handling; `tests/unit/outline_parity_spec.lua` keeps flat/tree classification al
 
 The current buffer uses document summary searches with at most eight candidates
 per page and at most 4096 bytes per label read. Picker loading advances through
-scheduled pages and resolves selection through a stable current handle. Closing
+scheduled pages. Selection resolves a stable current handle and then requires an
+exact match in the current confirmed outline projection, both before navigation
+and after focus autocommands. Uncertain or reclassified rows cannot authorize a
+jump. Disk selections retain bounded exact source-line evidence at their captured
+file and row; they never search for replacement text elsewhere. Explicit file
+entries navigate to file start. Closing
 the picker or detaching its document retires outstanding work. Explicit cross-file
 tree materialization remains a user-command operation over disk snapshots.

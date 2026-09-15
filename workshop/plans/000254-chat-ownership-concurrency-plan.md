@@ -10,6 +10,10 @@
 
 **Status:** Operator-approved; plan-quality accepted and implementation underway. The operator will live-test before merge. Issue: `workshop/issues/000254-chat-ownership-concurrency.md`.
 
+**Current M3 inventory:** The original proposed module/function tables below are
+preserved as planning history. Their M3 entries are superseded by the complete
+inventory in **Revisions → 2026-09-15 — M3 review inventory correction (BR-7)**.
+
 ---
 
 ## Chunk 1: Design and contracts
@@ -275,12 +279,12 @@ Each M-row below is a real `sdlc milestone-close` boundary, with its own fresh-c
 
 **Files:** create `lua/parley/document/state.lua`, `init.lua`, `editor.lua`, `tests/unit/document_state_spec.lua`, `tests/helpers/fake_document_editor.lua`, `tests/integration/document_edit_spec.lua`; modify `lua/parley/buffer_edit.lua`, `highlighter.lua`, `exchange_model.lua`, `exchange_anchors.lua`, `fold_projection.lua`, `tool_folds.lua`, `outline.lua`, `buffer_lifecycle.lua`; extend `tests/integration/highlight_typing_spec.lua`, `tool_folds_spec.lua`, `stream_view_spec.lua`, `tests/arch/buffer_mutation_spec.lua`, `performance_line_reader_spec.lua`; update `atlas/chat/exchange_model.md`, `atlas/chat/parsing.md`, `atlas/ui/highlights.md`, `TOOLING.md`, `atlas/traceability.yaml`.
 
-- [ ] Implement `state.transition` and `state.resolve` with private ownership, read-only query results, immediate grant invalidation, and the preservation/provenance strategies below.
-- [ ] Implement `editor.observe` and `editor.apply` with a stateful double and real Neovim conformance; no writes occur inside forbidden callback contexts.
-- [ ] Attach one index per chat and move highlighting to its viewport queries. Remove independent full-array/spontaneous full-rebuild cache ownership; replace tests that require 2N copying with bounded-work invariants. Conservative styling while unresolved must not blank unaffected text.
-- [ ] Prove the fold update strategy with attached UI, then migrate folds/layout/outline to confirmed IDs and local deltas. Preserve view/open state; remove all-anchor validation and per-chunk full-parse recovery. Keep full document parsing only for explicit materialization/oracle uses.
-- [ ] Enumerate current structural consumers and make adapters delegate to the new source; architecture tests prohibit mutable live models and redraw-time parsing. No dual authoritative cache may survive the boundary.
-- [ ] Run document, highlights, exchange, and lifecycle mapped suites plus `make perf`; update atlas/tooling with the new bounds, commit, close M3.
+- [x] Implement `state.transition` and `state.resolve` with private ownership, read-only query results, immediate grant invalidation, and the preservation/provenance strategies below.
+- [x] Implement `editor.observe` and `editor.apply` with a stateful double and real Neovim conformance; no writes occur inside forbidden callback contexts.
+- [x] Attach one index per chat and move highlighting to its viewport queries. Remove independent full-array/spontaneous full-rebuild cache ownership; replace tests that require 2N copying with bounded-work invariants. Conservative styling while unresolved must not blank unaffected text.
+- [x] Prove the fold update strategy with attached UI, then migrate folds/layout/outline to confirmed IDs and local deltas. Preserve view/open state; remove all-anchor validation and per-chunk full-parse recovery. Keep full document parsing only for explicit materialization/oracle uses.
+- [x] Enumerate current structural consumers and make adapters delegate to the new source; architecture tests prohibit mutable live models and redraw-time parsing. No dual authoritative cache may survive the boundary.
+- [x] Run document, highlights, exchange, and lifecycle mapped suites plus `make perf`; update atlas/tooling with the new bounds, commit, close M3.
 
 ### M4 — Route every generation write through scoped authority
 
@@ -630,6 +634,212 @@ Fresh slots start an empty scanner; existing tails require one bounded bootstrap
 with local entry proof that survives unrelated neighboring edits. Candidate-rich
 long-line diagnostics require explicit work measurement rather than assuming
 that bounded per-slice parsing also proves bounded aggregate append work.
+
+### 2026-09-15 — M3 completed verification before review
+
+Reason: native fold batches and starvation regressions now pass with final
+consumer integration. Delta: mark M3 implementation tasks verified; its milestone
+boundary remains pending the binary-owned review. Document mapping: 245 tests
+across the completed prefix and resumed semantic/remainder runs. Two real
+50,000-row corpora have scoped 180-second harness deadlines; other tests retain
+50 seconds. Full feature benchmark on `ea933f51` passes all 30 schema-4 scenarios
+with five warmups and 20 samples. Ordinary typing processes/copies one row;
+Enter+join six; viewport redraw no semantic rows; all hot phases have zero full
+buffer reads. Timing remains report-only and was collected with concurrent test
+load: the 5,000-row stream/human p95 is 52.326 ms. This does not meet the 8 ms
+aspiration; M4 still owns removal of the legacy generation model/stream rewrite.
+
+### 2026-09-15 — M3 review inventory correction (BR-7)
+
+Reason: the original proposal names anticipated files/functions that were not the
+ones delivered. Delta: the following is the **current M3 inventory**, superseding
+the original M3 rows in Core concepts, Integration points, Files, and the
+function-level strategy table. The original proposal remains as design history.
+No unchanged module is claimed as modified merely because a caller now reuses it.
+
+| Current entity or integration | Actual module(s) | M3 change and ownership |
+|---|---|---|
+| Ownership transitions and resolution | `document/state.lua` | New private grants, dependency snapshots, lifetime transitions; no editor IO. |
+| Buffer coordinator | `document/init.lua` | New composition of index, state, editor, query subscriptions and bounded repair. |
+| Native editor boundary | `document/editor.lua` | New native observation, byte-frame normalization, scoped patches, exact receipts and undo separation. |
+| Indexed semantic projection | `document/projection.lua` | New aggregate summaries, exchange lookup, fold pagination and projection validation; owns live projected ranges. |
+| Existing fold policy | `fold_projection.lua` | Reused unchanged. `is_foldable` supplies policy; `desired_folds` remains the materialized-model oracle. There is no `fold_projection.project`. |
+| Materialized layout | `exchange_model.lua` | Documentation-only correction of its scope. Existing pure layout implementation remains for materialization and legacy generation preparation; live rendering no longer treats it as authority. |
+| Legacy buffer primitives | `buffer_edit.lua` | Unchanged at M3. Generation and explicit-user mutation migration remains M4; M3 adds the editor boundary that it will use. |
+| Live rendering | `highlighter.lua`, `tool_folds.lua`, `outline.lua` | Modified to use coordinator queries; per-consumer authoritative structural caches removed. |
+| Live diagnostics | `diagnostic_refresh.lua`, `define.lua`, `skill_render.lua`, `timezone_diagnostics.lua` | Modified to use indexed candidate discovery, bounded derivation and scheduled publication. |
+| Fair scheduled work | `deferred_work.lua` | New coalesced timer work lifecycle shared by repair, folds, outline and diagnostics. |
+| Teardown | `buffer_lifecycle.lua` | Modified to retire shared document and consumer state. |
+| Extmark identity registry | `exchange_anchors.lua` | Deleted; indexed entities supply current identity/location. |
+| Materialized parser | `chat_parser.lua` | Comment-only update removing obsolete anchor ownership description; parser remains an explicit materialization/oracle. |
+| M2 core integration refinements | `document/sequence.lua`, `dependencies.lua`, `grammar.lua`, `lexical.lua`, `lexer.lua`, `semantic.lua`, `structure.lua` | Modified for bounded navigation, fragment convergence, fair read progress, projection and diagnostic integration. Existing facts implementation is reused unchanged in M3. |
+
+Paths in this table are relative to `lua/parley/`. The complete production change
+list was checked against `git diff --name-status 2afd7de9..626e565e -- lua`.
+
+Current function-level verification replaces the corresponding proposed M3 names:
+
+| Function | Verification strategy |
+|---|---|
+| `state.transition`, `state.resolve` | Seeded edit/ownership histories with independent exclusive-region, preservation and monotonic-revocation invariants. |
+| `Editor.observe`, `Editor.apply`, `Editor.can_join_undo` | Native callback/undo histories and stateful fault schedules; compare settled text/semantics and exact partial receipts. |
+| `Document.repair_step` | Continuous disjoint edits and source replacement between reads; progress plus byte/row/navigation limits per slice. |
+| `projection.exchange`, `projection.folds`, `projection.validate` | Independently derived exchange/fold intervals, paginated queries and stale local proof rejection. |
+| `highlighter._compute_window_decorations` | Native viewport, long-line and uncertainty corpus; independent style expectations and bounded reads. |
+| `tool_folds.step`, `tool_folds.flush` | Actual native folds across uncertainty, batched clear/recreation, window edits and teardown; open/view state and operation counters. |
+| `outline._load_live_items`, `diagnostic_refresh.step` | Indexed live candidate pages, disjoint progress, cancellation and independent final output parity. |
+| `deferred_work.new` | Native timer fairness, coalescing, cancellation and no retained polling callback after retirement. |
+
+### 2026-09-15 — M3 review evidence and retirement rules (BR-5, BR-6, BR-8)
+
+Reason: fresh-context review reproduced equal-extent grouped-undo corruption,
+stale semantic presentation and retired callback retention. Delta: reopen the
+M3 implementation conclusion pending these fixes and verification. Native callback
+text may be classified only with evidence that its byte coordinate frame belongs
+to that event; equal row/byte extents alone are insufficient. Settled native
+undo/redo tests compare token kinds and exchanges to actual buffer text.
+
+Unconfirmed context cannot authorize role, reasoning, fence, footer/draft styling
+or semantic folds. Only local lexical presentation and separately proven
+unaffected context may survive; fold invalidation is separate from certified
+recreation. Tests that required stale styling/folds must be replaced with the
+plan's uncertainty invariants, retaining bounded foreground work.
+
+Retirement must break document/editor callback reference cycles and remove all
+buffer-owned fold autocmds. Native LuaJIT weak-reference tests verify reclamation,
+while externally retained detached handles continue to return detached state.
+M4 staging is paused until these M3 findings are resolved (ARCH-ORDER,
+ARCH-PURPOSE, ARCH-FUNERAL).
+
+### 2026-09-15 — M4 ephemeral source guards
+
+Reason: a pending explicit-user command must keep its source provenance when the
+index materializes opaque metadata without changing buffer text. Stable row
+handles alone do not supply that guarantee. Delta: use at most 64 live ephemeral
+source-region guards per document, maintained by the existing normalized native
+edit observer. Every intersecting native edit permanently invalidates a guard,
+including identical replacement and undo/redo. Preceding disjoint edits relocate
+its byte endpoints; metadata repair never modifies it.
+
+Opaque tokens retain guards; fixed registry slots hold weak references. Capture
+and extension enforce capacity atomically, share existing guards without
+refreshing provenance, and release on completion/cancellation/reload/detach.
+Abandoned tokens are collectible. Empty insertions bind a containing row and
+relative column, conservatively rejecting boundary joins. Guard visits are
+counted and bounded by 64 per native edit. No payload cache, row-array index,
+source-lineage hierarchy, or persistent edit journal is added (ARCH-PURPOSE,
+ARCH-CONSTRAINTS, ARCH-FUNERAL).
+
+Source guards prove unchanged text; they never authorize writes. Explicit user
+transactions still emit user receipts without a generation grant. Generated
+replacement additionally validates its leaf grant and consumes exact generated
+receipts after every bounded slice. Native writes invalidate guards normally;
+continuation after an owned patch requires a new checked successor proof rather
+than exempting the writer from invalidation. M4 implementation remains paused
+while M3 review fixes are verified.
+
+### 2026-09-15 — Isolated M4 preparation resumes during final M3 verification
+
+Reason: the M3 review fixes are integrated and released by their authors; remaining
+feature verification and review do not depend on M4 source-guard implementation.
+Delta: supersede the temporary M4 staging pause for the bounded source-guard task
+only. Staging commits `6cf67e52` and `b6723424` preserve M4 preparation and its M3
+review-base merge; 83 focused staging cases pass. The M3 milestone remains open,
+and no M4 code enters the feature branch until its review fixes have cleared.
+
+### 2026-09-15 — Reserve tool-round grant capacity before yielding
+
+Reason: reserving ordered tool placeholders takes bounded writes across event
+turns, while another generation may acquire grants in between. A free-slot count
+is not a reservation. Delta: retain the document's 16-live-grant limit and the
+runner's requirement that every declared child receives its grant before dispatch.
+Reserve capacity for the whole round before its first output mutation.
+
+The pure ownership state adds generation/round-scoped capacity tickets. Admission
+counts live non-revoked grants plus outstanding reserved capacity. Ordinary
+proof-checked acquisition atomically consumes its matching ticket only on success;
+a ticket never authorizes text or bypasses entity validation. Tickets release
+unused capacity on reservation failure/cancellation and generation retirement,
+reload or detach. Ticket count is bounded by the same 16-slot budget. Production
+rounds exceeding available capacity are refused before placeholder writes or tool
+effects, even though the protocol reducer can represent 32 declared calls.
+
+Once admitted, reservation writes still report exact partial progress if a human
+edit or native failure interrupts them; no rollback or synthetic success hides
+those bytes. Tests interleave competing admission during yielded reservation,
+failed acquisition, foreign tickets and retirement (ARCH-ORDER, ARCH-CONSTRAINTS,
+ARCH-PURPOSE). This is M4 staging work and does not enter the M3 review window.
+
+### 2026-09-15 — M3 review fixes verified, review retry pending
+
+Reason: native provenance, uncertainty and retirement fixes plus their conformance
+tests pass the complete M3 verification mapping. Delta: implementation checks are
+again supported by evidence: document263/highlights85/exchange264/lifecycle511,
+504-file clean lint, and all30 full benchmark scenarios on `ebd0585b`. The issue
+Log records timings and affected native fold costs without an 8 ms latency claim.
+M3 closure still belongs to the binary-owned fresh-context review.
+
+### 2026-09-15 — Delayed actions require current eligibility (BR-9)
+
+Reason: the second M3 review addressed BR-5/6/7/8 but reproduced outline navigation
+to an unconfirmed, then reclassified, surviving heading handle. Delta: distinguish
+location from semantic eligibility at every delayed consumer boundary. A surviving
+handle supplies coordinates only; the action must still qualify under its current
+projection. No nearby positional substitute stands in for a vanished outline item.
+
+| Consumer/action | Current eligibility boundary |
+|---|---|
+| Highlighting | Filtered document query supplies confirmed semantic context; unresolved rows retain only neutral/local lexical presentation. |
+| Fold recreation | Validate the current paginated fold projection certificate immediately before native operations. Identity lookup for invalidation bounds or open-state hints does not authorize recreation. |
+| Outline selection/navigation | Resolve identity for location, then require an exact current outline projection match, including after focus-changing editor callbacks. Reject unavailable/reclassified items; preserve harmless relocation. |
+| Diagnostic derivation/publication | Candidate projection establishes eligibility. Retire in-flight derivation on candidate-text **or semantic-context** changes, including changes while a bounded read or final publication is pending. Membership lookup only relocates an otherwise valid derivation. |
+
+The diagnostics sweep reproduced a pending publication that survived a preceding
+text-to-fence edit because its lexical diagnostic-candidate flags were unchanged.
+It now retires on semantic-context changes as well. Native regressions cover
+pending reads, pending publication and unaffected text edits. Existing published
+diagnostics are the last computed diagnostic snapshot during typing; they do not
+authorize outline navigation or writes. Fresh publication awaits confirmed context.
+Native outline tests cover uncertainty, reclassification, deletion, harmless
+relocation and stale tree entries (ARCH-ORDER, ARCH-PURPOSE).
+
+
+### 2026-09-15 — Publication ownership across reentrant effects (BR-10)
+
+Reason: DiagnosticChanged edits and fold OptionSet edits expose the same lost
+invalidation pattern after native effects return. Delta: a consumer captures its
+job/projection and validates ownership after every callback-capable effect before
+performing subsequent effects or committing completion. Newer invalidation always
+wins; clearing, replacement refresh, reload and detach are ownership transitions.
+
+| Consumer | Callback boundary and completion rule |
+|---|---|
+| Diagnostics | `vim.diagnostic.set/reset` invokes DiagnosticChanged; injected readers and converters can also call out. Check current buffer facade and job after each call. Stop superseded publication, preserve dirty state, and prevent recursive step of the same job. A retired clear cannot clear a replacement refresh. |
+| Native folds | Window/option/fold operations and view restoration can invoke operator callbacks. Native slices and cleanup must retain captured-plan ownership; a returning old slice cannot clear dirty work from those callbacks. |
+| Outline | Validate current projection after buffer/window focus callbacks immediately before cursor placement. Navigation and its highlight use the captured target; source identity alone is insufficient. |
+| Highlights | Redraw decoration runs under native textlock; semantic reads require current confirmed document metadata. Any cache completion around view callbacks must commit only its captured current cache work. |
+
+Native regressions cover publication edits at both diagnostic-set boundaries,
+reload, detach, recursive publication, replacement refresh during clear, and fold
+restoration edits. Work accounting records effects actually performed, including
+partial publication interrupted by callbacks (ARCH-ORDER, ARCH-PURPOSE).
+
+### 2026-09-15 — Fold cleanup and aborted configuration (BR-11/BR-12)
+
+Reason: fourth review found that returning stale work could leave temporary fold
+preferences/view changed, or treat a partially built empty window list as complete.
+Delta: separate captured-window cleanup from publication ownership. Build window
+plans locally, publish only after successful configuration, discard only expected
+jobs, and restore every captured window even when cleanup reenters or one window
+fails. Done phases cannot re-enter creation, and setup interruption schedules
+surviving windows. Four new native controls fail on the prior implementation;
+eight reentrancy tests plus 35 existing fold/batch/retention/join cases pass.
+
+The review returned FIX-THEN-SHIP, but the ledger left BR-11/BR-12 open and
+explicitly refused milestone finalization. The binary's next-action instruction
+requires a further review to dispose those open findings; extend the per-boundary
+round budget to five for that disposal rather than waive the ledger. This extra
+review is required by the refused transition, not a second discretionary review.
 
 ### 2026-09-15 — M4 finite replacement successor authority
 

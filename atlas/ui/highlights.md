@@ -64,8 +64,10 @@ invalidate those pages; disjoint edits do not restart their progress.
 
 Confirmed inert edits transfer local checkpoints and retain the suffix. Broad or
 structural changes become uncertain and repair in bounded scheduled slices.
-Surviving regions retain conservative presentation, and semantic deltas trigger
-coalesced redraw. Redraw never repairs by scanning the whole document.
+Unconfirmed regions use neutral or local lexical styling. Surviving row identity
+does not preserve question, reasoning, fence, footer, or draft context. Confirmed
+regions retain their styles; semantic deltas trigger coalesced redraw. Redraw
+never repairs by scanning the whole document.
 
 ## Key Behaviors
 - Applied via decoration providers with ephemeral extmarks per window viewport

@@ -2508,6 +2508,50 @@ download.
   callback can still queue a whole-document repair; immediate counters alone
   conceal that cost.
 
+## 2026-09-15 (#254 M3 boundary review)
+
+- Native undo may expose final buffer text while delivering intermediate edits.
+  Matching row and byte counts does not prove coordinate-frame provenance.
+  Conformance must assert settled semantic parity under equal-size shifted edits.
+- Surviving row identity proves neither current role nor current fence context.
+  Apply the same semantic-evidence rule to highlighting, folds and write authority;
+  never encode stale presentation as an expected test result.
+- Weak-key tables do not collect a key retained by its value's callback under
+  LuaJIT. Break callback cycles on detach and test native weak-reference collection
+  and autocmd removal independently of buffer validity checks.
+- At a review boundary, compare the full concept/function inventory with the
+  actual diff. Distinguish reused policy, documentation-only changes and explicitly
+  deferred consumers; proposed function names are not implementation evidence.
+
+- A controlled presentation scheduler does not drain Neovim's native redraw queue.
+  After explicit index bootstrap, cross an observable native scheduling barrier
+  before measuring stream delivery; a timed wait can expire while its queued
+  callback actually succeeds. Keep work bounds and delivery assertions intact.
+
+- Identity lookup is not semantic eligibility. A delayed navigation action must
+  revalidate its exact current projection, including after focus callbacks; a
+  nearby row is never a substitute for a vanished selected item. Sweep every
+  action that consumes surviving handles, not only drawing code.
+- Diagnostic candidate flags cannot stand in for semantic-context validity.
+  Retire pending derivations on incoming-context changes as well as edits to
+  candidate text, and test invalidation immediately before read and publication.
+
+- Native presentation effects are reentrant: DiagnosticChanged and OptionSet can
+  edit or retire the source synchronously. Recheck captured job ownership after
+  every callback-capable effect, including cleanup/restoration, before subsequent
+  effects or dirty-state completion. Test replacement work started inside cleanup.
+
+## 2026-09-15 (#254 M3 superseded fold cleanup)
+
+- Publication authority and cleanup obligations have different lifetimes. Losing
+  a generation or tick check stops publication, but does not excuse restoring
+  temporary fold options and the captured window view. Retire job pointers first,
+  then clean every captured window even if one cleanup callback edits or throws.
+- Build a resumable job's window list locally and publish it only after all
+  callback-capable configuration succeeds. A partially constructed empty list
+  must never be interpreted as completed work. Test both changed-text and
+  tick-only callback interruption, plus loss of one window during setup.
+
 
 ## #254 M4 response composition audit
 
