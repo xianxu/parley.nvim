@@ -271,6 +271,30 @@ rounds:
           round: 11
       boundary: M3
       blocked: false
+    - "n": 12
+      timestamp: "2026-09-15T10:23:31-07:00"
+      agent: codex
+      findings:
+        - id: BR-14
+          severity: Critical
+          title: Pending tool reservations parse as completed non-error results
+          detail: 'lua/parley/response_tools.lua:153 serializes an ordinary result before execution; a scratch production-fixture regression returned content="(pending)" and is_error=false. This is the 7th finding in family semantic-publication-evidence. Earlier rounds fixed instances: state and enforce the rule that only confirmed outcomes publish result evidence, sweeping reservation, cancellation, persistence, parsing, and provider projection (ARCH-PURPOSE, ARCH-SECURE, ARCH-ORDER). Plan lines 150–155 explicitly prohibit this representation.'
+          family: semantic-publication-evidence
+          round: 12
+        - id: BR-15
+          severity: Critical
+          title: Stale input can silently strand a response in paused state
+          detail: lua/parley/generation_runner.lua:317 pauses stale-input continuation until an explicit resume policy arrives, but production callers do not invoke the session resume API or publish stale/paused state; response_session.lua:52 wires only ordinary pending presentation. Expose the state and an identity-validated continuation decision, retain the promised stale indication on completed answers, and test through the public response workflow (ARCH-PURPOSE, ARCH-ORDER).
+          family: lifecycle-state-observability
+          round: 12
+        - id: BR-16
+          severity: Important
+          title: README omits the new StopDocument command and changed Stop contract
+          detail: 'lua/parley/init.lua:1583–1584 introduces the user-facing command and selection behavior without any README change in the pinned range. This is the 4th finding in family deferred-contract-traceability. Do not repair only this command: enumerate all changed user-facing behavior, including active-output editing and native history, and complete the README gate for that inventory (ARCH-PURPOSE). Prose inspection is sufficient validation for this documentation correction.'
+          family: deferred-contract-traceability
+          round: 12
+      boundary: M4
+      blocked: true
 ---
 
 # Gate ledger — 000254-chat-ownership-concurrency#254 (boundary-review)
@@ -400,6 +424,20 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-13** [Important] `deferred-contract-traceability` BR-11 regressions are missing from the documented verification mapping
   atlas/traceability.yaml:280-285 omits document_fold_retirement_spec.lua and document_fold_uncertainty_retirement_spec.lua. scripts/spec_test_map.sh list-tests chat/document consequently excludes both, contrary to the plan's verification contract at :377. This is the 3rd finding in family deferred-contract-traceability. Apply the rule that every new boundary regression must be registered in its documented suite: the complete added-spec sweep found exactly these two omissions. Register both and verify the mapping includes them.
 
+## Round 12 — 2026-09-15T10:23:31-07:00 (codex) — BLOCKED
+
+### Raised
+
+- **BR-14** [Critical] `semantic-publication-evidence` Pending tool reservations parse as completed non-error results
+  lua/parley/response_tools.lua:153 serializes an ordinary result before execution; a scratch production-fixture regression returned content="(pending)" and is_error=false. This is the 7th finding in family semantic-publication-evidence. Earlier rounds fixed instances: state and enforce the rule that only confirmed outcomes publish result evidence, sweeping reservation, cancellation, persistence, parsing, and provider projection (ARCH-PURPOSE, ARCH-SECURE, ARCH-ORDER). Plan lines 150–155 explicitly prohibit this representation.
+- **BR-15** [Critical] `lifecycle-state-observability` Stale input can silently strand a response in paused state
+  lua/parley/generation_runner.lua:317 pauses stale-input continuation until an explicit resume policy arrives, but production callers do not invoke the session resume API or publish stale/paused state; response_session.lua:52 wires only ordinary pending presentation. Expose the state and an identity-validated continuation decision, retain the promised stale indication on completed answers, and test through the public response workflow (ARCH-PURPOSE, ARCH-ORDER).
+- **BR-16** [Important] `deferred-contract-traceability` README omits the new StopDocument command and changed Stop contract
+  lua/parley/init.lua:1583–1584 introduces the user-facing command and selection behavior without any README change in the pinned range. This is the 4th finding in family deferred-contract-traceability. Do not repair only this command: enumerate all changed user-facing behavior, including active-output editing and native history, and complete the README gate for that inventory (ARCH-PURPOSE). Prose inspection is sufficient validation for this documentation correction.
+
 ## Open findings
 
 - **BR-13** [Important] `deferred-contract-traceability` BR-11 regressions are missing from the documented verification mapping
+- **BR-14** [Critical] `semantic-publication-evidence` Pending tool reservations parse as completed non-error results
+- **BR-15** [Critical] `lifecycle-state-observability` Stale input can silently strand a response in paused state
+- **BR-16** [Important] `deferred-contract-traceability` README omits the new StopDocument command and changed Stop contract

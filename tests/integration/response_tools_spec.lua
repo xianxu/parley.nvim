@@ -61,14 +61,68 @@ describe('production concurrent tool round composition',function()
         for _,doc in ipairs(docs)do D.detach(doc)end
         docs,runners,fixtures={},{},{}
     end)
+    local function projected(f)
+        local parsed=require('parley.chat_parser').parse_chat(f.editor.lines,0,{
+            chat_user_prefix='💬:',chat_branch_prefix='🌿:',chat_assistant_prefix={'🤖:','[{{agent}}]'},
+            chat_tool_use_prefix='🔧:',chat_tool_result_prefix='📎:',chat_memory={enable=false}})
+        local blocks=parsed.exchanges[1].answer.content_blocks
+        local results={}
+        for _,block in ipairs(blocks)do if block.type=='tool_result'then results[block.id]=block end end
+        local wire={}
+        local messages=require('parley.chat_respond')._emit_content_blocks_as_messages(blocks)
+        for _,message in ipairs(messages)do
+            for _,block in ipairs(message.content)do
+                if block.type=='tool_result'then wire[block.tool_use_id]=block end
+            end
+        end
+        local openai={}
+        for _,message in ipairs(require('parley.tools.wire_openai').translate_messages(messages))do
+            if message.role=='tool'then openai[message.tool_call_id]=message.content end
+        end
+        return results,wire,openai
+    end
+    for _,stop in ipairs({'pending','cancel','reload','unknown','rejected'})do
+        it('never publishes completed results from '..stop..' reservations',function()
+            local f=setup();f.round(calls)
+            assert.equals(2,#f.producer.started,'reservations must admit both producers')
+            if stop=='unknown' or stop=='rejected'then
+                f.producer.started[1].events.outcome(stop,{content='no confirmed result'})
+                f.producer.started[1].events.resolved();f.drain()
+            elseif stop=='cancel'then Runner.cancel(f.runner);f.drain()
+            elseif stop=='reload'then f.editor:reload(f.editor.lines);f.drain()end
+            local results,wire,openai=projected(f)
+            assert.same({},results,'only positive tool outcomes may serialize result blocks')
+            for _,c in ipairs(calls)do
+                assert.is_true(wire[c.id].is_error,'missing results must remain missing on provider projection')
+                assert.is_nil(wire[c.id].content:find('(pending)',1,true))
+                assert.is_truthy(openai[c.id]:find(wire[c.id].content,1,true))
+            end
+            assert.equals(1,#f.requests,'reservation alone cannot admit provider continuation')
+            if stop=='unknown'then
+                f.producer.started[1].events.outcome('known',{content='later confirmation'});f.drain()
+            end
+        end)
+    end
+    it('publishes only confirmed sibling outcomes when a live transcript is reparsed',function()
+        local f=setup();f.round(calls)
+        local first,second=unpack(f.producer.started)
+        second.events.outcome('known',{content='confirmed second'});second.events.resolved();f.drain()
+        local results,wire=projected(f)
+        assert.is_nil(results.a);assert.equals('confirmed second',results.b.content)
+        assert.is_true(wire.a.is_error);assert.is_false(wire.b.is_error)
+        first.events.outcome('known',{content='confirmed first'});first.events.resolved();f.drain()
+        results,wire=projected(f)
+        assert.equals('confirmed first',results.a.content);assert.equals('confirmed second',results.b.content)
+        assert.is_false(wire.a.is_error);assert.is_false(wire.b.is_error)
+    end)
     it('declares all call blocks and result grants before any producer starts',function()
         local f=setup();f.round(calls)
         assert.equals(2,#f.producer.started)
         local text=table.concat(f.editor.lines,'\n')
         local a=text:find('🔧: read_file id=a',1,true)
         local b=text:find('🔧: read_file id=b',1,true)
-        local ra=text:find('📎: read_file id=a',1,true)
-        local rb=text:find('📎: read_file id=b',1,true)
+        local ra=text:find('(Tool result pending)',1,true)
+        local rb=text:find('(Tool result pending)',ra+1,true)
         assert.is_true(a<b and b<ra and ra<rb)
         assert.equals('executing_tools',Runner.snapshot(f.runner).phase)
     end)
@@ -119,7 +173,7 @@ describe('production concurrent tool round composition',function()
         local f=setup();f.round(calls)
         local first,second=unpack(f.producer.started)
         local row
-        for i,line in ipairs(f.editor.lines)do if line:find('📎: read_file id=a',1,true)then row=i-1;break end end
+        for i,line in ipairs(f.editor.lines)do if line:find('(Tool result pending)',1,true)then row=i-1;break end end
         assert.is_not_nil(row)
         f.editor:edit(row,0,row,0,{'human '});f.drain()
         assert.equals(1,#f.producer.cancelled)
@@ -127,7 +181,7 @@ describe('production concurrent tool round composition',function()
         f.producer.cancelled[1].resolved()
         second.events.outcome('known',{content='sibling result'});second.events.resolved();f.drain()
         local text=table.concat(f.editor.lines,'\n')
-        assert.is_not_nil(text:find('human 📎: read_file id=a',1,true))
+        assert.is_not_nil(text:find('human (Tool result pending)',1,true))
         assert.is_not_nil(text:find('sibling result',1,true))
         assert.equals(1,#f.requests)
         assert.is_false(first.events.outcome('known',{content='late output'}))

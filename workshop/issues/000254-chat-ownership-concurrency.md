@@ -1152,3 +1152,19 @@ passed separately. Per-file evidence in /tmp/parley254-m4-final-verification.txt
 
 M4 enters mandatory Codex review. M5 recovery/batch and M6 async tool work remain
 staged separately. Actual time N/A due mixed-session attribution, not guessed.
+
+### 2026-09-15 M4 Codex rework verification
+
+Codex reviewed 506d2c34..ae2e12ec and returned REWORK (BR-14–BR-16).
+BR-14 now reserves fixed inert text and only serializes known result evidence;
+parser/provider projections remain truthful on cancel, reload and unknown results.
+BR-15 connects state changes to bounded stale annotations and an identity-checked
+public original-input continuation decision. Native tests cover successful stale
+completion, fresh-answer clearing, focus changes, revoked output and detach.
+BR-16 sweeps README and atlas for all changed user behavior. No main merge.
+Verification: 83 tests across seven directly affected production/lifecycle files
+pass; BR-14's independent six-file run passed105 tests (overlapping, not additive).
+Full lint559 files clean. Changed-code/docs diff check clean; the unrelated user
+transcript has pre-existing trailing whitespace and is excluded from our check.
+Next: rerun the M4 boundary with --agent codex. M5 remains isolated and verified;
+M6 asynchronous execution work continues separately.

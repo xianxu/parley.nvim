@@ -1124,3 +1124,16 @@ repair took11.01/13.02seconds with counters unchanged from staging; reviewer/CPU
 overlap limits timing attribution. This remains an expensive documented exception.
 M4 now enters its mandatory Codex review; M5/M6 stay isolated until their preceding
 boundaries close. No merge to main is authorized before operator live testing.
+
+### 2026-09-15 — M4 Codex BR-14–BR-16 correction
+
+Reason: production review exposed incomplete outcome publication and stale-input
+workflow despite internal lifecycle coverage. Delta: reserve fixed inert pending
+text (no completed-result syntax); publish results only after known outcomes.
+Expose stale/paused presentation and `ChatResumeResponse`, whose captured decision
+validates document, generation, round, input and live output grants and explicitly
+keeps original input/confirmed results. A revoked writer cannot resume. Runtime
+stale annotations survive completion, clear on new generation/reload, and are
+bounded to 256 per buffer. Add public focus-change, refusal and fresh-answer
+checks; sweep README for Stop, StopDocument, active-output editing, reload, native
+history, pending results and stale continuation (ARCH-PURPOSE, ARCH-ORDER).

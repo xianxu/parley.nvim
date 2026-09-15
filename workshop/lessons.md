@@ -2581,3 +2581,12 @@ download.
   transaction and must stop admission after an interrupted receipt. Partial
   edits may remain; newer human text must survive. Install native test wrappers
   before attaching a driver that caches API functions.
+
+- #254 BR-14: reserve space without publishing outcome evidence. Test persisted
+  and provider-projected placeholders under pending, cancellation, reload and
+  unknown outcome, not only the final renderer.
+- #254 BR-15: every reachable paused state needs visible status and a production
+  operator transition. Test that transition through public commands with focus
+  changes and revoked authority; an internal resume test is insufficient.
+- #254 BR-16: sweep the full changed command/behavior inventory into README before
+  a boundary, including native-edit consequences and cancellation scope.
