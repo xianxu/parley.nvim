@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-09-12
 updated: 2026-09-14
-estimate_hours:
+estimate_hours: 0.3075
 started: 2026-09-14T18:16:23-07:00
 ---
 
@@ -96,3 +96,16 @@ more than one branch per line — a map where a list was needed.
 Reason: #250 shipped after this issue was filed and intentionally changed branch selection to open the child file at line1. Delta: supersede the optional source-column propagation and second-link landing acceptance criterion with preserving that child destination. The former plan's third checkbox (carry col through parser/picker) is removed from active scope; no parser or selection changes are needed. The remaining purpose is still every parsed branch row and each distinct child subtree, in document/column order.
 
 The three-file fix uses the existing `build_file_outline_items` IO boundary, with an ordered-list grouping local to that invocation; no new public function or separate business rule. ARCH-DRY: parser order and the existing row renderer remain authoritative. ARCH-PURE/MOCK: exercise real parser/files and tree builder without mocking filesystem or resolver. ARCH-PURPOSE: all branches survive, with independent expansion; unchanged global visited semantics still prevent cyclic recursion. ARCH-CONSTRAINTS: O(branches + lines + existing recursion), no additional file reads per branch. ARCH-ORDER: synchronous file projection has no pending operation state; arrays preserve parser order. ARCH-SECURE: existing path resolver is reused. ARCH-FUNERAL: arrays die with the build; synthetic fixture files are removed in teardown.
+
+## Estimate
+
+After plan approval: known local grouping fix, existing real-file test harness and no new public API. Design baseline0.25h ×0.2 =0.05h; implementation/tests/docs baseline0.375h ×0.4 =0.15h; one boundary review baseline0.25h ×0.4 =0.1h.15% design buffer adds0.0075h. No parallel-overlap discount.
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: lua-neovim design=0.05 impl=0.15
+item: milestone-review design=0 impl=0.1
+design-buffer: 0.15
+total: 0.3075
+```
