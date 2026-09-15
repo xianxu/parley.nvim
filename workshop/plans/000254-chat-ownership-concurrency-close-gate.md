@@ -97,6 +97,35 @@ rounds:
           round: 5
       boundary: M3
       blocked: true
+    - "n": 6
+      timestamp: "2026-09-15T03:30:11-07:00"
+      agent: codex
+      dispose:
+        - id: BR-5
+          disposition: addressed
+          note: Native callback-frame regressions pass at head. Restoring pre-fix editor/coordinator code in scratch reproduces the equal-extent undo token mismatch and forbidden callback reads.
+          round: 6
+        - id: BR-6
+          disposition: addressed
+          note: Structure queries strip invalidated semantic presentation, and fold maintenance clears uncertain folds. Head regressions pass; restoring pre-fix modules causes three highlight and two fold regression failures.
+          round: 6
+        - id: BR-7
+          disposition: addressed
+          note: 'Plan lines 652–691 explicitly supersede the proposed inventory: document/projection.lua owns indexed projection; fold_projection.lua and buffer_edit.lua are unchanged; exchange_model.lua changes documentation only. The pinned diff and declared functions support these corrections.'
+          round: 6
+        - id: BR-8
+          disposition: addressed
+          note: Editor detach severs on_event and fold teardown deletes its autocmd group. Native retention tests pass at head; pre-fix scratch code fails four retention cases, including document collection and autocmd cleanup.
+          round: 6
+      findings:
+        - id: BR-9
+          severity: Critical
+          title: Outline selection accepts surviving identity without current semantic evidence
+          detail: 'lua/parley/outline.lua:139–145 checks only whether Document.lookup returns a row. Native reproduction: select "# heading", replace its preceding "intro" with an opening code fence, then invoke the saved selection. Navigation succeeds while metadata.confirmed=false; after repair, the outline contains zero items but the same selection still succeeds and highlights line 2. This violates Plan section C''s confirmed-navigation contract (ARCH-ORDER, ARCH-PURPOSE). This is the 4th finding in family semantic-publication-evidence. State and enforce the rule across consumers: surviving identity establishes location, never current semantic eligibility. Enumerate highlighting, folds, outline selection/navigation, and diagnostics; validate each action''s current semantic evidence. Add selection-after-invalidation and selection-after-reclassification regressions.'
+          family: semantic-publication-evidence
+          round: 6
+      boundary: M3
+      blocked: true
 ---
 
 # Gate ledger — 000254-chat-ownership-concurrency#254 (boundary-review)
@@ -149,9 +178,20 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-8** [Important] `scope-owned-callback-cleanup` Detached documents and fold callbacks are not reclaimed
   lua/parley/document/init.lua:176–191 leaves the weak-key registry value holding an editor callback that captures its document key. A native LuaJIT probe retained all 50 deleted documents after repeated full GC. tool_folds.lua also leaves four autocmd registrations after deletion. ARCH-FUNERAL: break retired callback references, remove scope-owned autocmds, and test reclamation through native weak references.
 
+## Round 6 — 2026-09-15T03:30:11-07:00 (codex) — BLOCKED
+
+### Disposed
+
+- BR-5 — addressed — Native callback-frame regressions pass at head. Restoring pre-fix editor/coordinator code in scratch reproduces the equal-extent undo token mismatch and forbidden callback reads.
+- BR-6 — addressed — Structure queries strip invalidated semantic presentation, and fold maintenance clears uncertain folds. Head regressions pass; restoring pre-fix modules causes three highlight and two fold regression failures.
+- BR-7 — addressed — Plan lines 652–691 explicitly supersede the proposed inventory: document/projection.lua owns indexed projection; fold_projection.lua and buffer_edit.lua are unchanged; exchange_model.lua changes documentation only. The pinned diff and declared functions support these corrections.
+- BR-8 — addressed — Editor detach severs on_event and fold teardown deletes its autocmd group. Native retention tests pass at head; pre-fix scratch code fails four retention cases, including document collection and autocmd cleanup.
+
+### Raised
+
+- **BR-9** [Critical] `semantic-publication-evidence` Outline selection accepts surviving identity without current semantic evidence
+  lua/parley/outline.lua:139–145 checks only whether Document.lookup returns a row. Native reproduction: select "# heading", replace its preceding "intro" with an opening code fence, then invoke the saved selection. Navigation succeeds while metadata.confirmed=false; after repair, the outline contains zero items but the same selection still succeeds and highlights line 2. This violates Plan section C's confirmed-navigation contract (ARCH-ORDER, ARCH-PURPOSE). This is the 4th finding in family semantic-publication-evidence. State and enforce the rule across consumers: surviving identity establishes location, never current semantic eligibility. Enumerate highlighting, folds, outline selection/navigation, and diagnostics; validate each action's current semantic evidence. Add selection-after-invalidation and selection-after-reclassification regressions.
+
 ## Open findings
 
-- **BR-5** [Critical] `semantic-publication-evidence` Grouped undo can leave the settled index confirming incorrect marker kinds
-- **BR-6** [Critical] `semantic-publication-evidence` Unconfirmed semantics still control highlights and native folds
-- **BR-7** [Critical] `deferred-contract-traceability` M3 Core concepts and function declarations disagree with the pinned implementation
-- **BR-8** [Important] `scope-owned-callback-cleanup` Detached documents and fold callbacks are not reclaimed
+- **BR-9** [Critical] `semantic-publication-evidence` Outline selection accepts surviving identity without current semantic evidence

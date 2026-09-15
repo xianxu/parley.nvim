@@ -778,3 +778,27 @@ again supported by evidence: document263/highlights85/exchange264/lifecycle511,
 504-file clean lint, and all30 full benchmark scenarios on `ebd0585b`. The issue
 Log records timings and affected native fold costs without an 8 ms latency claim.
 M3 closure still belongs to the binary-owned fresh-context review.
+
+### 2026-09-15 — Delayed actions require current eligibility (BR-9)
+
+Reason: the second M3 review addressed BR-5/6/7/8 but reproduced outline navigation
+to an unconfirmed, then reclassified, surviving heading handle. Delta: distinguish
+location from semantic eligibility at every delayed consumer boundary. A surviving
+handle supplies coordinates only; the action must still qualify under its current
+projection. No nearby positional substitute stands in for a vanished outline item.
+
+| Consumer/action | Current eligibility boundary |
+|---|---|
+| Highlighting | Filtered document query supplies confirmed semantic context; unresolved rows retain only neutral/local lexical presentation. |
+| Fold recreation | Validate the current paginated fold projection certificate immediately before native operations. Identity lookup for invalidation bounds or open-state hints does not authorize recreation. |
+| Outline selection/navigation | Resolve identity for location, then require an exact current outline projection match, including after focus-changing editor callbacks. Reject unavailable/reclassified items; preserve harmless relocation. |
+| Diagnostic derivation/publication | Candidate projection establishes eligibility. Retire in-flight derivation on candidate-text **or semantic-context** changes, including changes while a bounded read or final publication is pending. Membership lookup only relocates an otherwise valid derivation. |
+
+The diagnostics sweep reproduced a pending publication that survived a preceding
+text-to-fence edit because its lexical diagnostic-candidate flags were unchanged.
+It now retires on semantic-context changes as well. Native regressions cover
+pending reads, pending publication and unaffected text edits. Existing published
+diagnostics are the last computed diagnostic snapshot during typing; they do not
+authorize outline navigation or writes. Fresh publication awaits confirmed context.
+Native outline tests cover uncertainty, reclassification, deletion, harmless
+relocation and stale tree entries (ARCH-ORDER, ARCH-PURPOSE).

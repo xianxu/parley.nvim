@@ -118,8 +118,12 @@ can avoid native fold work when unchanged topology is confirmed before
 invalidation runs.
 
 Outline candidates and diagnostic candidates come from index summaries. Picker
-labels use bounded text slices and selection resolves the current stable handle.
-The index never stores a second transcript or a full row-position array.
+labels use bounded text slices. Navigation requires the current confirmed outline
+projection, not merely a surviving handle, and rechecks after focus callbacks.
+Diagnostic jobs retire on candidate-text or semantic-context changes, including
+between derivation and publication. Previously published diagnostic decorations
+remain the last computed snapshot during typing; they grant no navigation or write
+authority. The index never stores a second transcript or a full row-position array.
 
 Repair and consumer pagination use a shared cancellable timer owner
 (`deferred_work`). Each continuation yields to a new event-loop turn. A bounded

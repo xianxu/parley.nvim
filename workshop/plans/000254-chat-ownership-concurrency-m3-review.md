@@ -159,3 +159,110 @@ findings:
     detail: |
       lua/parley/document/init.lua:176–191 leaves the weak-key registry value holding an editor callback that captures its document key. A native LuaJIT probe retained all 50 deleted documents after repeated full GC. tool_folds.lua also leaves four autocmd registrations after deletion. ARCH-FUNERAL: break retired callback references, remove scope-owned autocmds, and test reclamation through native weak references.
 ```
+
+---
+
+## Re-review — 2026-09-15T03:30:11-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 254 — Harden chat ownership and concurrency |
+| repo | 000254-chat-ownership-concurrency |
+| issue file | workshop/issues/000254-chat-ownership-concurrency.md |
+| boundary | milestone M3 |
+| milestone | M3 |
+| window | 2afd7de993dc028c6132df4687695e83dcbb8fe0..976bf963e5c5f9afedea5623529f5597b7a836d0 |
+| command | sdlc milestone-close --issue 254 --milestone M3 |
+| reviewer | codex |
+| timestamp | 2026-09-15T03:30:11-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+The four prior findings are addressed, with verified regression evidence. The document and highlight suites pass. One remaining contract violation blocks M3: outline selection treats a surviving row handle as proof that the row remains a valid outline item, even when its semantics are unconfirmed or have changed.
+
+```findings
+dispose:
+  - id: BR-5
+    disposition: addressed
+    note: |
+      Native callback-frame regressions pass at head. Restoring pre-fix editor/coordinator code in scratch reproduces the equal-extent undo token mismatch and forbidden callback reads.
+  - id: BR-6
+    disposition: addressed
+    note: |
+      Structure queries strip invalidated semantic presentation, and fold maintenance clears uncertain folds. Head regressions pass; restoring pre-fix modules causes three highlight and two fold regression failures.
+  - id: BR-7
+    disposition: addressed
+    note: |
+      Plan lines 652–691 explicitly supersede the proposed inventory: document/projection.lua owns indexed projection; fold_projection.lua and buffer_edit.lua are unchanged; exchange_model.lua changes documentation only. The pinned diff and declared functions support these corrections.
+  - id: BR-8
+    disposition: addressed
+    note: |
+      Editor detach severs on_event and fold teardown deletes its autocmd group. Native retention tests pass at head; pre-fix scratch code fails four retention cases, including document collection and autocmd cleanup.
+findings:
+  - id: new
+    severity: Critical
+    family: semantic-publication-evidence
+    title: |
+      Outline selection accepts surviving identity without current semantic evidence
+    detail: |
+      lua/parley/outline.lua:139–145 checks only whether Document.lookup returns a row. Native reproduction: select "# heading", replace its preceding "intro" with an opening code fence, then invoke the saved selection. Navigation succeeds while metadata.confirmed=false; after repair, the outline contains zero items but the same selection still succeeds and highlights line 2. This violates Plan section C's confirmed-navigation contract (ARCH-ORDER, ARCH-PURPOSE). This is the 4th finding in family semantic-publication-evidence. State and enforce the rule across consumers: surviving identity establishes location, never current semantic eligibility. Enumerate highlighting, folds, outline selection/navigation, and diagnostics; validate each action's current semantic evidence. Add selection-after-invalidation and selection-after-reclassification regressions.
+```
+
+## 1. Strengths
+
+- Native callback admission now distinguishes delivery frames from matching row/byte extents.
+- Uncertainty filtering lives in `document/structure.lua:49`, giving consumers a shared conservative query boundary.
+- Write-plan tests exercise disjoint writers, delegated slots, stale revisions, and partial failures through both fake and native editors.
+- Native reclamation tests cover all production consumers together, including queued callbacks and retained detached facades.
+
+## 2. Critical findings
+
+**Outline selection bypasses semantic validation — `lua/parley/outline.lua:139`.**
+
+`Document.lookup` deliberately returns surviving rows with `confirmed=false`; it also returns confirmed rows that no longer qualify as outline items. Selection checks neither condition.
+
+Fix by validating the selected identity through the current outline projection immediately before navigation. Await repair or report unavailable while uncertain; reject a reclassified item. Preserve navigation when unrelated edits merely relocate a valid item.
+
+The native reproduction is available in [the scratch probe](/tmp/parley254-outline-review.lua).
+
+## 3. Important findings
+
+None additional.
+
+## 4. Minor findings
+
+None.
+
+## 5. Test coverage notes
+
+- Passed `make test-spec SPEC=chat/document`.
+- Passed `make test-spec SPEC=ui/highlights`: **85 tests**.
+- Confirmed BR-5/6/8 regression failures against pre-fix modules in an isolated scratch copy.
+- Existing tests miss delayed outline selection after semantic invalidation and reclassification.
+- Did not rerun the complete repository suite or full `make perf`.
+- The reviewed checkout remains unchanged.
+
+## 6. Architectural notes
+
+| Principle | Result |
+|---|---|
+| **ARCH-DRY** | Pass: shared structural queries and timer lifecycle replace separate consumer ownership. |
+| **ARCH-PURE** | Pass: indexed structure and grant decisions remain separate from editor IO. |
+| **ARCH-PURPOSE** | **Flag:** outline selection does not enforce the confirmed-consumer contract. |
+| **ARCH-MOCK** | Pass: stateful editor doubles share the production seam; native tests check their assumptions. |
+| **ARCH-CONSTRAINTS** | Pass for inspected M3 paths: bounded reads, repair slices, and native fold batches have coverage. |
+| **ARCH-SECURE** | Pass for inspected text/ownership boundaries: uncertain text cannot manufacture write authority. |
+| **ARCH-ORDER** | **Flag:** delayed outline selection uses identity captured before a semantic change without revalidating eligibility. |
+| **ARCH-FUNERAL** | Pass: native tests verify callback, document, timer, and fold-autocmd retirement. |
+
+Atlas changes cover the introduced architecture. No new command, keybinding, or configuration surface requiring a README update was identified.
+
+## 7. Plan revision recommendations
+
+Add a `## Revisions` entry defining **location versus semantic eligibility** for delayed consumer actions. Enumerate the presentation/navigation consumers and their validation points, and require native tests for outline selections during uncertainty, after reclassification, and after harmless relocation.

@@ -99,6 +99,9 @@ local function start(s)
                 end)
             end
         end)
+        -- Candidate projection establishes semantic eligibility. The document
+        -- subscription retires this whole derivation on candidate-text OR
+        -- semantic-context changes; lookup here supplies location only.
         -- Bounded membership/coordinate validation precedes output materialization.
         for _,records in ipairs({job.timezone,job.footnotes}) do
             for _,record in ipairs(records) do
@@ -176,7 +179,8 @@ function M.refresh(buf,opts)
         end)
         s.unsubscribe=Document.subscribe(doc,function(event)
             if event.kind=='detach' then M.clear(buf)
-            elseif event.kind=='reload' or event.kind=='edit' and event.diagnostic_changed~=false then
+            elseif event.kind=='reload' or event.kind=='edit'
+                and (event.diagnostic_changed~=false or event.semantic_changed) then
                 if event.kind=='reload' then s.pump:cancel() end
                 s.job=nil;s.failure=nil;s.dirty=true;schedule(s)
             elseif event.kind=='repair' and s.dirty then schedule(s) end

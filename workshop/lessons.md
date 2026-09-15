@@ -2527,3 +2527,11 @@ download.
   After explicit index bootstrap, cross an observable native scheduling barrier
   before measuring stream delivery; a timed wait can expire while its queued
   callback actually succeeds. Keep work bounds and delivery assertions intact.
+
+- Identity lookup is not semantic eligibility. A delayed navigation action must
+  revalidate its exact current projection, including after focus callbacks; a
+  nearby row is never a substitute for a vanished selected item. Sweep every
+  action that consumes surviving handles, not only drawing code.
+- Diagnostic candidate flags cannot stand in for semantic-context validity.
+  Retire pending derivations on incoming-context changes as well as edits to
+  candidate text, and test invalidation immediately before read and publication.
