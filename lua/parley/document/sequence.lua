@@ -251,6 +251,38 @@ function M.at(seq,row)
     local e,r,b=locate(s,row)
     if e then return snapshot(s,e,r,b),row-r end
 end
+-- Byte offsets are exact even inside an opaque span; its interior row is not.
+function M.at_byte(seq,byte,budget)
+    assert(type(byte)=="number" and byte>=0 and byte<math.huge and byte%1==0,"invalid byte offset")
+    local nodes,entries=math.huge,math.huge
+    if budget then
+        for _,value in pairs(budget) do
+            assert(type(value)=="number" and value>=0 and value<math.huge and value%1==0,"invalid byte budget")
+        end
+        nodes,entries=budget.nodes or math.huge,budget.entries or math.huge
+    end
+    local s=state(seq);local n,r,b=s.root,0,0
+    if not n or byte>=n.bytes then return nil end
+    while n do
+        if nodes<1 then return nil,"budget" end
+        nodes=nodes-1;count(s,"nodes_visited")
+        if n.entries then
+            local lo,hi=1,#n.entries
+            while lo<=hi do
+                if entries<1 then return nil,"budget" end
+                entries=entries-1;count(s,"entries_visited")
+                local mid=math.floor((lo+hi)/2);local e=n.entries[mid]
+                if byte<b+e.local_byte then hi=mid-1
+                elseif byte>=b+e.local_byte+e.bytes then lo=mid+1
+                else return snapshot(s,e,r+e.local_row,b+e.local_byte),byte-b-e.local_byte end
+            end
+            return nil
+        end
+        if byte<b+n.left.bytes then n=n.left
+        else r,b=r+n.left.rows,b+n.left.bytes;n=n.right end
+    end
+end
+
 function M.rank(seq,handle,budget)
     local nodes,entries=math.huge,math.huge
     if budget then
@@ -528,6 +560,7 @@ function M.range_certificate(seq,first,last,opts)
     assert(kind=="text" or kind=="syntax" or kind=="projection","unknown certificate kind")
     local s=state(seq)
     check_range(s,first,last)
+    assert(not (opts and opts.edges==false) or kind=="text" and first<last,"edgeless proof requires nonempty text")
     local totals=aggregate(s,first,last)
     if not totals then return nil,"partial opaque range" end
     local size=M.size(seq).rows
@@ -535,7 +568,7 @@ function M.range_certificate(seq,first,last,opts)
     local z,zr=locate(s,last-1)
     local before=first>0 and locate(s,first-1) or nil
     local after=last<size and locate(s,last) or nil
-    local c={kind=kind,totals=totals,first=a and a.handle or s.eof,first_offset=a and first-ar or 0,
+    local c={kind=kind,edges=not (opts and opts.edges==false),totals=totals,first=a and a.handle or s.eof,first_offset=a and first-ar or 0,
         last=z and z.handle or s.eof,last_offset=z and last-zr or 0,
         before=before and before.handle,after=after and after.handle,empty=first==last}
     local token={}; s.certificates[token]=c
@@ -625,7 +658,7 @@ function M.validate_certificate(seq,token,opts)
     if c.empty then last=first end
     local before=first>0 and locate(s,first-1) or nil
     local after=last<M.size(seq).rows and locate(s,last) or nil
-    if (before and before.handle)~=c.before or (after and after.handle)~=c.after then return false,"changed edge" end
+    if c.edges~=false and ((before and before.handle)~=c.before or (after and after.handle)~=c.after) then return false,"changed edge" end
     local totals=aggregate(s,first,last)
     if not totals or totals.rows~=c.totals.rows then return false,"changed range" end
     if kind=="projection" then

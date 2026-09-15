@@ -877,7 +877,12 @@ M.highlight_chat_branch_refs = function(buf)
                     local updated_line = M.render_chat_branch_line(line, base_dir)
                     if updated_line ~= line then
                         local line_nr = range.start_line + offset - 1
-                        vim.api.nvim_buf_set_lines(buf, line_nr - 1, line_nr, false, { updated_line })
+                        local edits = require("parley.buffer_edit")
+                        local capture = edits.capture_user(buf, "refresh-branch-topic", {
+                            { first = { row = line_nr - 1, col = 0 },
+                                last = { row = line_nr - 1, col = #line } },
+                        })
+                        if capture then edits.apply_user(capture, { { region = 1, text = updated_line } }) end
                     end
                 end
             end

@@ -1,0 +1,121 @@
+local D=require('parley.document')
+local Fake=require('tests.helpers.fake_document_editor')
+local nextbuf=96000
+local function attach(lines)
+    nextbuf=nextbuf+1;local fake=Fake.new(lines)
+    return D.attach(nextbuf,{driver=fake.driver,schedule=false}),fake
+end
+local function region(a,b,c,d) return {first={row=a,col=b},last={row=c,col=d}} end
+local function capture(doc,regions)
+    local token,reason=D.capture_user(doc,{operation='user-test',regions=regions})
+    assert.is_table(token,tostring(reason));return token
+end
+describe('document user transactions',function()
+    it('provides explicit capture, resolve and apply entrypoints',function()
+        assert.is_function(D.capture_user);assert.is_function(D.resolve_user);assert.is_function(D.apply_user)
+    end)
+    if not D.capture_user then return end
+
+    it('captures a local opaque range before repair without reading or parsing the document',function()
+        local lines={};for i=1,50000 do lines[i]='body' end
+        local doc,fake=attach(lines)
+        local reads=0;local original=fake.driver.text
+        fake.driver.text=function(...) reads=reads+1;return original(...) end
+        D.stats(doc,true)
+        local token=capture(doc,{region(24999,0,24999,4)})
+        local work=D.stats(doc)
+        assert.equals(0,reads);assert.is_true(work.nodes_visited<256)
+        assert.is_true(work.entries_copied<256)
+        assert.equals(50000,D.size(doc).rows);assert.equals(250000,D.size(doc).bytes)
+        assert.is_table(D.resolve_user(doc,token));D.detach(doc)
+    end)
+
+    it('relocates untouched text after disjoint edits and rejects identical overlapping replacement',function()
+        local doc,fake=attach({'first','gap','selected','gap','last'})
+        local token=capture(doc,{region(2,0,2,8)})
+        fake:set_lines(0,0,{'new'})
+        local resolved=assert(D.resolve_user(doc,token));assert.equals(3,resolved.regions[1].first.row)
+        local result=D.apply_user(doc,token,{patches={{region=1,text='changed'}}})
+        assert.equals('applied',result.status);assert.equals('changed',fake.lines[4])
+        assert.is_nil(result.receipts[1].owner);assert.equals('user',result.receipts[1].role)
+        local duplicate=D.apply_user(doc,token,{patches={{region=1,text='again'}}});assert.equals('stale',duplicate.status)
+        local next_token=capture(doc,{region(3,0,3,7)})
+        fake:edit(3,0,3,7,{'changed'})
+        assert.is_nil(D.resolve_user(doc,next_token))
+        assert.equals('stale',D.apply_user(doc,next_token,{patches={{region=1,text='wrong'}}}).status)
+        D.detach(doc)
+    end)
+
+    it('retains original source guards while extending a delayed transaction',function()
+        local doc,fake=attach({'selection','gap','footer'})
+        local token=capture(doc,{region(0,0,0,9)})
+        local extended=assert(D.extend_user(doc,token,{regions={region(2,0,2,6)}}))
+        local result=D.apply_user(doc,extended,{patches={{region=1,text='replacement'},{region=2,text='updated'}}})
+        assert.equals('applied',result.status);assert.same({'replacement','gap','updated'},fake.lines)
+        assert.equals(2,#result.receipts);D.detach(doc)
+    end)
+
+    it('rejects stale proof-only whole-source guards instead of overwriting changed text',function()
+        local doc,fake=attach({'first','target','last'})
+        local token=capture(doc,{region(0,0,2,4),region(1,0,1,6)})
+        fake:edit(0,0,0,5,{'FIRST'})
+        assert.equals('stale',D.apply_user(doc,token,{patches={{region=2,text='replacement'}}}).status)
+        assert.equals('target',fake.lines[2]);D.detach(doc)
+    end)
+
+    it('stops remaining patches after an unexpected nested edit and preserves exact receipts',function()
+        local doc,fake=attach({'left','gap','right'})
+        local token=capture(doc,{region(0,0,0,4),region(2,0,2,5)})
+        fake.after_delivery=function(f) f:edit(0,0,0,4,{'HUMAN'}) end
+        local result=D.apply_user(doc,token,{patches={{region=1,text='LEFT'},{region=2,text='RIGHT'}}})
+        assert.equals('interrupted',result.status)
+        assert.same({'HUMAN','gap','RIGHT'},fake.lines)
+        assert.equals(2,#result.receipts);assert.equals('user',result.receipts[1].role)
+        assert.is_nil(result.receipts[2].role);D.detach(doc)
+    end)
+
+    it('retains observed user receipts after a mutate-then-error failure',function()
+        local doc,fake=attach({'old'})
+        local token=capture(doc,{region(0,0,0,3)})
+        fake.mutate_then_error=true
+        local result=D.apply_user(doc,token,{patches={{region=1,text='new'}}})
+        assert.equals('error',result.status);assert.equals('new',fake.lines[1])
+        assert.equals('user',result.receipts[1].role);D.detach(doc)
+    end)
+
+    it('splits broad replacement into bounded physical patches without a stale overwrite fallback',function()
+        local old=string.rep('a',150000);local replacement=string.rep('é',80000)
+        local doc,fake=attach({old})
+        local token=capture(doc,{region(0,0,0,#old)})
+        local original=fake.driver.set_text;local writes=0
+        fake.driver.set_text=function(buf,sr,sc,er,ec,text)
+            writes=writes+1;assert.is_true(ec-sc<=65536)
+            assert.is_true(#table.concat(text,'\n')<=65536)
+            return original(buf,sr,sc,er,ec,text)
+        end
+        local result=D.apply_user(doc,token,{patches={{region=1,text=replacement}}})
+        assert.equals('applied',result.status);assert.equals(replacement,fake.lines[1]);assert.is_true(writes>2)
+        D.detach(doc)
+    end)
+
+    it('keeps pending lexical reads safe across opaque endpoint exposure',function()
+        local doc,fake=attach({'one','two','three','four'})
+        assert.equals('read',D.repair_step(doc).status)
+        local token=capture(doc,{region(2,0,2,5)})
+        local result=D.apply_user(doc,token,{patches={{region=1,text='THREE'}}})
+        assert.equals('applied',result.status)
+        assert.equals('idle',D.drain(doc,1000).status)
+        assert.equals('THREE',fake.lines[3]);assert.equals(4,D.size(doc).rows);D.detach(doc)
+    end)
+
+    it('rejects foreign documents, reload epochs, anchor deletion and forged grant input',function()
+        local doc,fake=attach({'a','b'});local other=attach({'a','b'})
+        local token=capture(doc,{region(1,0,1,1)})
+        assert.equals('stale',D.apply_user(other,token,{patches={{region=1,text='x'}}}).status)
+        fake:reload({'a','b'})
+        assert.equals('stale',D.apply_user(doc,token,{patches={{region=1,text='x'}}}).status)
+        local bad=D.capture_user(doc,{operation='x',grant=12,regions={region(0,0,0,1)}})
+        assert.is_nil(bad)
+        D.detach(doc);D.detach(other)
+    end)
+end)

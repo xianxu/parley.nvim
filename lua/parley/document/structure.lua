@@ -68,6 +68,32 @@ function M.query(document, first, last, opts)
     for _,row in ipairs(rows) do visible(current,row,opts,certainty) end
     return rows
 end
+-- Entry-local payload proof: neighbor insertion changes location, not source.
+local entry_proofs=setmetatable({},{__mode='k'})
+function M.entry_checkpoint(document,handle)
+    local current=state(document)
+    local rank=sequence.rank(current.index,handle)
+    if not rank or rank.rows~=1 then return nil end
+    local span=sequence.at(current.index,rank.row)
+    if span.opaque then return nil end
+    local total=sequence.summary(current.index,rank.row,rank.row+1)
+    local proof={}
+    entry_proofs[proof]={document=document,epoch=current.epoch,handle=handle,stamp=total.max_stamp,bytes=total.bytes}
+    return proof
+end
+function M.validate_entry(document,proof)
+    local saved=entry_proofs[proof];local current=state(document)
+    if not saved or saved.document~=document or saved.epoch~=current.epoch then return nil end
+    local rank=sequence.rank(current.index,saved.handle)
+    if not rank or rank.rows~=1 then return nil end
+    local total=sequence.summary(current.index,rank.row,rank.row+1)
+    if not total or total.max_stamp~=saved.stamp or total.bytes~=saved.bytes then return nil end
+    return sequence.at(current.index,rank.row)
+end
+function M.at_byte(document,byte,budget)
+    return sequence.at_byte(state(document).index,byte,budget)
+end
+
 function M.at(document,row,opts)
     local current=state(document)
     return visible(current,sequence.at(current.index,row),opts)
@@ -155,6 +181,18 @@ function M.authority_range(document,entity,first_byte,last_byte,opts)
     if not marker then return finish({status="stale"}) end
     local sem=marker.metadata and marker.metadata.semantic
     if not sem then return finish({status="opaque",row=marker.start_row}) end
+    -- Header jobs (for example automatic topics) own only this confirmed row.
+    -- They cannot borrow answer authority or expand into adjacent header fields.
+    if sem.header then
+        if marker.start_row>=frontier(current) then return finish({status="opaque",row=marker.start_row}) end
+        if first_byte<marker.start_byte or last_byte>marker.end_byte-1 then
+            return finish({status="refused"})
+        end
+        local certificate=sequence.range_certificate(current.index,marker.start_row,marker.end_row,{kind="projection"})
+        if not certificate then return finish({status="opaque",row=marker.start_row}) end
+        return finish({status="ready",entity=entity,first_byte=first_byte,last_byte=last_byte,
+            region_first_byte=marker.start_byte,region_last_byte=marker.end_byte-1,certificate=certificate})
+    end
     if not sem.answer_start and not sem.exchange_start then return finish({status="refused"}) end
     local used=sequence.stats(current.index)
     local remaining={budget_nodes=nodes-(used.nodes_visited-initial.nodes_visited)-reserve.nodes,
@@ -297,6 +335,39 @@ end
 
 -- A job proves only local text identity. It cannot authorize semantic state;
 -- only the semantic worker validates context and publishes derived metadata.
+-- Expose row boundaries without reading opaque text. All changes travel through
+-- splice so outstanding lexical and semantic jobs lose their old provenance.
+function M.expose_text_range(document, first, last, first_byte, last_byte)
+    for _,boundary in ipairs({{last,last_byte},{first,first_byte}}) do
+        local row,byte=boundary[1],boundary[2]
+        if row<M.size(document).rows then
+            local span=M.at(document,row)
+            if span and span.opaque and row>span.start_row then
+                assert(byte>span.start_byte and byte<span.end_byte,"invalid opaque boundary")
+                M.splice(document,span.start_row,span.end_row,{
+                    {opaque=true,rows=row-span.start_row,bytes=byte-span.start_byte},
+                    {opaque=true,rows=span.end_row-row,bytes=span.end_byte-byte},
+                })
+            end
+        end
+    end
+end
+function M.capture_text(document, first, last)
+    local current=state(document)
+    local certificate,reason=sequence.range_certificate(current.index,first,last,{edges=false})
+    if not certificate then return nil,reason end
+    local token={}
+    jobs[token]={document=document,epoch=current.epoch,certificate=certificate,user_text=true}
+    return token
+end
+function M.validate_text(document, token)
+    local current,captured=state(document),jobs[token]
+    if not captured or not captured.user_text or captured.document~=document or captured.epoch~=current.epoch then
+        return false,"stale text proof"
+    end
+    return sequence.validate_certificate(current.index,captured.certificate)
+end
+
 function M.capture(document, first, last)
     local current = state(document)
     local certificate, reason = sequence.range_certificate(current.index, first, last)
@@ -357,6 +428,25 @@ function M.publish(document, job, spans)
 end
 
 -- One call performs one semantic slice or one bounded lexical read transition.
+-- Refresh an unread intent immediately before native IO. Already-read replies
+-- still take repair_step's request/certificate validation path unchanged.
+function M.refresh_read_request(document,budget)
+    local current=state(document)
+    if not current.read_pending or not current.lexer then return {status='idle',work={}} end
+    budget=budget or {}
+    -- One group covers this preflight; the other groups cover validating and
+    -- publishing the subsequent bounded lexical response in the same slice.
+    local required=sequence.navigation_budget(current.index,4)
+    if (budget.nodes or 32768)<required.nodes or (budget.entries or 32768)<required.entries
+        or (budget.bytes or 4096)<1 or (budget.rows or 1)<1 then
+        required.bytes,required.rows=1,1
+        return {status='budget',required=required,work={}}
+    end
+    local result=require('parley.document.lexer').step(current.lexer,nil,budget)
+    current.read_pending=result.status=='read'
+    return result
+end
+
 -- The caller owns reading text and scheduling the next turn.
 function M.repair_step(document, input, budget)
     local current = state(document)

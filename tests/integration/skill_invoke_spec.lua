@@ -122,6 +122,19 @@ describe("skill_invoke.invoke", function()
         assert.are.equal("uppercase", done_result.decorations[1].explain)
     end)
 
+    it("preserves unsaved human text when a disk-editing skill completes", function()
+        skill_invoke.invoke(buf, manifest(), {}, {
+            on_done = function(r) done_result = r end,
+        })
+        vim.api.nvim_buf_set_text(buf, 0, 10, 0, 10, { " human" })
+        assert.is_true(vim.wait(2000, function() return done_result ~= nil end))
+        assert.equals("alpha beta human", table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n"))
+        assert.equals("ALPHA beta", table.concat(vim.fn.readfile(path), "\n"))
+        assert.is_false(done_result.ok)
+        assert.is_true(done_result.reconciliation_required)
+        assert.equals(path, done_result.external_path)
+    end)
+
     it("coerces a stringified edits array and applies it (model quirk, #133)", function()
         -- Some models emit the propose_edits `edits` arg as a JSON STRING, not an
         -- array. The driver must coerce it (so it applies) and not crash the renderer.

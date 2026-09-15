@@ -66,11 +66,12 @@ function Editor:observe(tick,sr,sc,sb,orows,oc,ob,nrows,nc,nb)
         if actual==pending.patch.text then
             pending.seen=true
             event.owner=pending.owner
+            if pending.user then event.role="user"; event.user=pending.user end
         end
     end
     if self.operation then
         self.operation.receipts[#self.operation.receipts+1]=event
-        if not event.owner then self.operation.unexpected=true end
+        if not event.owner and not (event.user and event.user==self.operation.user) then self.operation.unexpected=true end
     end
     self.in_callback=true
     local ok,err=pcall(function()
@@ -144,14 +145,14 @@ function Editor:can_join_undo(plan)
     return native_state.sequence>0 and native_state.sequence==receipt.sequence and native_state.tick==receipt.tick
 end
 
-function Editor:apply(plan,validate)
+local function apply(self,plan,validate,user)
     if self.in_callback or self.operation then return {status='busy',receipts={}} end
     if self.dead or not self.attached or plan.epoch~=self.epoch then return {status='stale',receipts={}} end
     assert(type(validate)=='function','authority validator required')
     for _,patch in ipairs(plan.patches) do
         if #patch.text>LIMIT or #patch.expected_old>LIMIT then return {status='chunkneeded',receipts={}} end
     end
-    local operation={receipts={},validate=validate,plan=plan}
+    local operation={receipts={},validate=validate,plan=plan,user=user and {} or nil}
     self.operation=operation
     local status='applied'
     local ok,err=pcall(function()
@@ -167,22 +168,23 @@ function Editor:apply(plan,validate)
             local lines=split(patch.text)
             if self.driver.undo_break and self.driver.undo_join then
                 operation.undo_open=true
-                if self:can_join_undo(plan) then self.driver.undo_join(self.buf)
+                if user and i>1 or not user and self:can_join_undo(plan) then self.driver.undo_join(self.buf)
                 else self.driver.undo_break(self.buf) end
                 if operation.unexpected or operation.revoked then status='interrupted'; break end
             end
             self.pending={patch=patch,new_end=endpoint(a.row,a.col,#lines-1,#lines[#lines],a.byte+#patch.text),
-                owner={epoch=plan.epoch,generation=plan.generation,operation=plan.operation,grant=plan.grant,entity=plan.entity,patch=i}}
+                user=operation.user,
+                owner=not user and {epoch=plan.epoch,generation=plan.generation,operation=plan.operation,grant=plan.grant,entity=plan.entity,patch=i} or nil}
             operation.undo_open=self.driver.undo_break~=nil
             self.driver.set_text(self.buf,a.row,a.col,b.row,b.col,lines)
             local seen=self.pending and self.pending.seen
             self.pending=nil
             if operation.unexpected or not seen then status='interrupted'; break end
             if operation.revoked then status='stale'; break end
-            if self.driver.undo_break then self.driver.undo_break(self.buf) end
-            operation.undo_open=false
+            if not user and self.driver.undo_break then self.driver.undo_break(self.buf) end
+            operation.undo_open=user
             if operation.unexpected or operation.revoked then status='interrupted'; break end
-            if self.driver.undo_state then
+            if not user and self.driver.undo_state then
                 local undo=self.driver.undo_state(self.buf)
                 self.undo_receipt={epoch=plan.epoch,generation=plan.generation,grant=plan.grant,
                     sequence=undo.sequence,tick=undo.tick}
@@ -200,4 +202,6 @@ function Editor:apply(plan,validate)
     self.pending,self.operation=nil,nil
     return {status=ok and status or 'error',receipts=operation.receipts,error=not ok and tostring(err) or nil}
 end
+function Editor:apply(plan,validate) return apply(self,plan,validate,false) end
+function Editor:apply_user(plan,validate) return apply(self,plan,validate,true) end
 return M

@@ -6,6 +6,7 @@ local Structure=require('parley.document.structure')
 local Grammar=require('parley.document.grammar')
 local Lexical=require('parley.document.lexical')
 local Reader=require('parley.line_reader')
+local Append=require('parley.document.append')
 local M={}
 local buffers={}
 local documents=setmetatable({},{__mode='k'})
@@ -99,7 +100,8 @@ local function observe_edit(doc,s,event)
     effects(s,State.transition(s.authority,{kind='observed_edit',epoch=event.epoch,
         first=event.first,last=event.last,new_bytes=event.new_bytes,
         owner_grant=event.owner and event.owner.grant}))
-    s.input=nil
+    Append.prune(s.append,State.snapshot(s.authority).grants)
+    local appended=Append.observe(s.append,s.structure,event)
     local first=math.min(event.start.row,event.old_rows)
     local whole_rows=event.start.col==0 and event.old_end.col==0 and event.new_end.col==0
     local last=math.min(event.old_rows,event.old_end.row+(whole_rows and 0 or 1))
@@ -115,14 +117,15 @@ local function observe_edit(doc,s,event)
     local newlast=first+added
     local reused=false
     local diagnostic_changed=true
-    if added<=256 and last-first<=256 and bytes<=65536 and not (a and a.opaque) and not (z and z.opaque) then
-        local lines=s.editor.reader:lines(first,newlast,false)
-        local spans={}; local actual=0
+    if appended or (added<=256 and last-first<=256 and bytes<=65536 and not (a and a.opaque) and not (z and z.opaque)) then
+        local lines=not appended and s.editor.reader:lines(first,newlast,false) or {}
+        local spans=appended and appended.spans or {}; local actual=0
+        if appended then for _,span in ipairs(spans) do actual=actual+span.bytes end end
         for i,line in ipairs(lines) do
             local _,token=Grammar.lex_step(Grammar.lex_start(s.patterns),line,true,{bytes=65536})
             spans[i]={rows=1,bytes=#line+1,metadata={token=token}}; actual=actual+#line+1
         end
-        classified_rows,classified_bytes=#spans,actual
+        classified_rows,classified_bytes=#spans,appended and 0 or actual
         if actual==bytes and #spans==1 and last-first==1 and a and a.metadata then
             local old,new=a.metadata.token,spans[1].metadata.token
             diagnostic_changed=not old or old.footnote or old.diagnostic_utc_candidate
@@ -151,13 +154,14 @@ local function observe_edit(doc,s,event)
                 {rows=256,bytes=65536,nodes=65536,entries=65536})).reused_suffix
         end
     else accumulate_repair(repair_work,Structure.splice(s.structure,first,last,opaque(added,bytes))) end
+    if appended then Append.commit(s.append,s.structure,appended,newlast-1) end
     if not reused then s.idle=false end
     reconcile(s)
     local work=Structure.stats(s.structure)
     for key,value in pairs(work) do work[key]=value-(before[key] or 0) end
     work.rows_processed,work.bytes_scanned=classified_rows+repair_work.rows_processed,classified_bytes
     work.dependency_nodes_visited=repair_work.dependency_nodes_visited
-    record(s,work)
+    if not s.append_busy then record(s,work) end
     notify(s,{kind='edit',first_row=first,last_row=newlast,old_last_row=last,
         reused_suffix=reused,semantic_changed=not reused,diagnostic_changed=diagnostic_changed})
     schedule(doc)
@@ -168,14 +172,16 @@ local function observe(doc,event)
     if event.kind=='edit' then observe_edit(doc,s,event)
     elseif event.kind=='reload' then
         cancel_schedule(s)
-        s.epoch=epoch(); s.input=nil; s.deferred=nil; s.idle=false
+        Append.clear(s.append)
+        s.epoch=epoch(); s.deferred=nil; s.idle=false
         effects(s,State.transition(s.authority,{kind='reload',next_epoch=s.epoch}))
         s.editor:set_epoch(s.epoch)
         Structure.reload(s.structure,opaque(event.rows,event.total))
         notify(s,{kind='reload'}); schedule(doc)
     elseif event.kind=='detach' then
         cancel_schedule(s)
-        s.dead=true; s.input=nil; s.deferred=nil; buffers[s.buf]=nil
+        Append.clear(s.append)
+        s.dead=true; s.deferred=nil; buffers[s.buf]=nil
         if s.work then s.work:close() end
         effects(s,State.transition(s.authority,{kind='detach'}))
         notify(s,{kind='detach'}); s.subscribers={}; s.structure=nil
@@ -249,7 +255,9 @@ function M.transition(doc,event)
             end
         end
     end
-    return effects(s,State.transition(s.authority,event))
+    local result=effects(s,State.transition(s.authority,event))
+    Append.prune(s.append,State.snapshot(s.authority).grants)
+    return result
 end
 function M.repair_step(doc,budget)
     local s=state(doc); if s.dead then return {status='detached'} end
@@ -293,9 +301,18 @@ function M.repair_step(doc,budget)
         record(s,result.work);notify(s,{kind='repair',result=result})
         return result
     end
-    local input=s.input and s.editor:chunk(s.input) or nil; s.input=nil
-    local result=Structure.repair_step(s.structure,input,limits)
-    if result.status=='read' then s.input=result.request end
+    -- Refresh unread intents from the lexer's live provenance immediately
+    -- before IO so disjoint edits cannot starve
+    -- delivery or redirect it to a different row.
+    local refreshed=Structure.refresh_read_request(s.structure,limits)
+    local result
+    if refreshed.status=='read' then
+        limits.nodes=limits.nodes-(refreshed.work.nodes_visited or 0)
+        limits.entries=limits.entries-(refreshed.work.entries_visited or 0)
+        result=Structure.repair_step(s.structure,s.editor:chunk(refreshed.request),limits)
+    elseif refreshed.status=='idle' then
+        result=Structure.repair_step(s.structure,nil,limits)
+    else result=refreshed end
     if result.status=='idle' then s.idle=true end
     reconcile(s,true)
     for key,value in pairs(Structure.stats(s.structure)) do result.work[key]=value-(before[key] or 0) end
@@ -310,6 +327,23 @@ function M.drain(doc,limit,budget)
         if result.status=='idle' or result.status=='detached' then return result end
     end
     return result
+end
+local User=require('parley.document.user_edits')
+function M.capture_user(doc,intent)
+    local s=state(doc)
+    return measured_query(s,function() return User.capture(s.structure,s.editor,s.epoch,intent) end)
+end
+function M.resolve_user(doc,token)
+    local s=state(doc)
+    return measured_query(s,function() return User.resolve(s.structure,s.editor,s.epoch,token) end)
+end
+function M.extend_user(doc,token,intent)
+    local s=state(doc)
+    return measured_query(s,function() return User.extend(s.structure,s.editor,s.epoch,token,intent) end)
+end
+function M.apply_user(doc,token,request)
+    local s=state(doc)
+    return User.apply(s.structure,s.editor,s.epoch,token,request)
 end
 function M.apply(doc,plan)
     local s=state(doc)
@@ -329,5 +363,67 @@ function M.apply(doc,plan)
             last=phase=='before' and patch.finish.byte or event.first+event.new_bytes},current))
     end)
 end
+-- Resolve an owned leaf tail at call time. The caller supplies bytes, never
+-- coordinates or lexical evidence. Exact receipts distinguish applied output
+-- from permission to continue after structural repair.
+local function append(doc,intent)
+    local s=state(doc)
+    local function reject(status,reason)return {status=status,reason=reason,accepted_bytes=0,work={}}end
+    if s.dead then return reject('stale','detached') end
+    if s.append_busy then return reject('busy','append in flight') end
+    local operation=type(intent)=='table' and intent.operation
+    local valid_operation=type(operation)=='string' and #operation>0 and #operation<=256
+        or type(operation)=='number' and operation>=0 and operation<math.huge and operation%1==0
+    if type(intent)~='table' or type(intent.bytes)~='string' or #intent.bytes>4096 or not valid_operation then
+        return reject('refused','invalid append intent')
+    end
+    local _,newlines=intent.bytes:gsub('\n','')
+    if newlines>255 then return reject('refused','row slice limit') end
+    local snapshot=State.snapshot(s.authority)
+    local grant=snapshot.grants[intent.grant]
+    if not grant then return reject('stale','grant') end
+    for _,other in pairs(snapshot.grants) do
+        if other.parent==grant.id and other.status~='revoked' then return reject('refused','delegated parent') end
+    end
+    local current=proof(s,grant)
+    if not current then return reject('stale','identity') end
+    local resolved=effects(s,State.resolve(s.authority,{epoch=intent.epoch,generation=intent.generation,
+        entity=intent.entity,grant=intent.grant,revision=intent.revision,first=grant.last,last=grant.last},current))
+    if not resolved.ok then return reject((resolved.reason=='suspended' or resolved.reason=='uncertain')
+        and 'suspended' or 'stale',resolved.reason) end
+    if #intent.bytes==0 then return {status='applied',accepted_bytes=0,revision=grant.revision,work={}} end
+    s.append=s.append or Append.new(s.patterns)
+    Append.prune(s.append,snapshot.grants)
+    local prepared=Append.prepare(s.append,s.structure,s.editor.reader,grant,intent)
+    if prepared.status~='ready' then return prepared end
+    s.append_busy=true
+    local result=M.apply(doc,{epoch=intent.epoch,generation=intent.generation,operation=prepared.prepared.receipt_operation,
+        grant=intent.grant,entity=intent.entity,revision=intent.revision,patches={prepared.patch}})
+    s.append_busy=false
+    local accepted=prepared.prepared.accepted and #intent.bytes or 0
+    local after=State.snapshot(s.authority).grants[intent.grant]
+    Append.finish(s.append,result.status=='interrupted' or result.status=='error' or accepted==0
+        or not after or after.status=='revoked')
+    local status=result.status
+    if accepted>0 and after and after.status=='suspended' then status='suspended' end
+    return {status=status,accepted_bytes=accepted,revision=after and after.revision,
+        receipts=result.receipts,error=result.error,work=prepared.work}
+end
+
+function M.append(doc,intent)
+    local s=state(doc)
+    local before=not s.dead and Structure.stats(s.structure)
+    local result=append(doc,intent)
+    if before then
+        local work=Structure.stats(s.structure)
+        for key,value in pairs(work) do work[key]=value-(before[key] or 0) end
+        for key,value in pairs(result.work or {}) do work[key]=value end
+        work.lexer_retained_bytes,work.append_cursors=Append.retained(s.append)
+        result.work=work
+        record(s,work)
+    end
+    return result
+end
+
 function M.detach(doc) state(doc).editor:detach() end
 return M

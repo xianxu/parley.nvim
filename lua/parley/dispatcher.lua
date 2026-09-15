@@ -895,6 +895,26 @@ D.query = function(buf, provider, payload, handler, on_exit, callback, on_progre
 	end, abort_before_start)
 end
 
+-- Chat output is admitted synchronously into its generation's bounded queue.
+-- This adapter owns no buffer position or growing partial line. In particular,
+-- admission must happen before a following provider-complete event.
+function D.create_output_handler(emit)
+	assert(type(emit) == "function", "output sink must be callable")
+	local leading, retired = true, false
+	return function(qid, chunk)
+		if retired or type(chunk) ~= "string" then return false end
+		if leading then
+			chunk = chunk:gsub("^\n+", "")
+			if chunk == "" then return true end
+			leading = false
+		end
+		if chunk == "" then return true end
+		local accepted = emit(qid, chunk) == true
+		if not accepted then retired = true end
+		return accepted
+	end
+end
+
 -- response handler
 ---@param buf number | nil # buffer to insert response into
 ---@param win number | nil # window to insert response into

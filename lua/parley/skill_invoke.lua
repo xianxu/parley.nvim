@@ -86,16 +86,6 @@ local function render_propose_edits(buf, call, original, new_content)
     return edits
 end
 
--- Reload the artifact buffer from its (now-edited) file. Uses `:edit!` (a
--- command, run with the buffer current) rather than nvim_buf_set_lines so buffer
--- mutation stays out of this module — the #90 arch boundary keeps direct
--- line-setting in buffer_edit.lua. Deterministic (synchronous force-reload).
-local function reload_buffer(buf)
-    vim.api.nvim_buf_call(buf, function()
-        pcall(vim.cmd, "silent edit!")
-    end)
-end
-
 --- Invoke a skill on an artifact buffer (one exchange).
 --- @param buf number the artifact buffer
 --- @param manifest table SkillManifest
@@ -185,6 +175,20 @@ function M.invoke(buf, manifest, args, opts)
     end
 
     local original = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
+    local source_capture
+    if not opts.no_reload then
+        local last_row = vim.api.nvim_buf_line_count(buf) - 1
+        local last_line = vim.api.nvim_buf_get_lines(buf, last_row, last_row + 1, false)[1] or ""
+        local reason
+        source_capture, reason = require("parley.buffer_edit").capture_user(buf,
+            "skill:" .. tostring(manifest.name), {
+                { first = { row = 0, col = 0 }, last = { row = last_row, col = #last_line } },
+            })
+        if not source_capture then
+            finish({ ok = false, msg = "source capture unavailable: " .. tostring(reason) }, true)
+            return
+        end
+    end
     -- source(ctx) does IO (reads SKILL.md / style guides) and can fail — e.g.
     -- voice_apply with a missing style file. Route the failure through the SAME
     -- on_done({ok=false}) channel as the other early-outs (no file / no agent)
@@ -384,7 +388,23 @@ function M.invoke(buf, manifest, args, opts)
                         return
                     end
                     if not opts.no_reload then
-                        reload_buffer(buf)
+                        -- Unknown tool targets require the original whole-source proof.
+                        -- An external result never authorizes replacing newer live text.
+                        local edits = require("parley.buffer_edit")
+                        local live, reason = edits.resolve_user(source_capture)
+                        local result
+                        if live then
+                            local disk = table.concat(vim.fn.readfile(artifact_path), "\n")
+                            result = edits.apply_user(source_capture, { { region = 1, text = disk } })
+                        end
+                        if not live or result.status ~= "applied" then
+                            local msg = "Live text changed; skill result remains on disk for reconciliation"
+                            p.logger.warning(msg .. ": " .. artifact_path)
+                            finish({ ok = false, msg = msg, reason = reason or result.reason,
+                                reconciliation_required = true, external_path = artifact_path,
+                                calls = calls, results = results, original = original }, true)
+                            return
+                        end
                     end
                     if not vim.api.nvim_buf_is_valid(buf) then
                         finish({ ok = false, msg = "buffer invalid" }, false)

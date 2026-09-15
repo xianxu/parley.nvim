@@ -377,6 +377,9 @@ local function finish(c)
     return t
 end
 
+-- Snapshot the complete token without consuming the active append cursor.
+function M.lex_token(cursor) return finish(cursor) end
+
 -- Consumes at most budget.bytes from this slice. The caller resubmits any
 -- unconsumed suffix. eof means this slice ends the line, not the document.
 function M.lex_step(cursor, bytes, eof, budget)
