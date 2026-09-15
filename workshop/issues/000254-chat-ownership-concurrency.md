@@ -1439,3 +1439,19 @@ instead of duplicated async/compatibility policy. Plan revisions enumerate each
 class. Bounded parallel repairs are underway; M6 remains open. Existing BR13
 mapping evidence was checked: chat/document includes both native retirement
 specs; whole-issue review must dispose the ledger entry explicitly.
+
+### 2026-09-15 M6 class corrections checkpoint
+
+BR25 path identity uses descriptor-relative worker calls and private bounded
+capabilities; native filesystem71 focused assertions pass. Root subprocess scope
+uses a clean owned Neovim child, pinned cwd/file descriptor and exec, with no
+extra external dependency. Production15-case probe covers ls/find/grep ancestor
+redirects, child symlinks, private exclusions, multi-root output and cancellation
+after launch; pure planning7 tests pass. It exposed relative bootstrap-path and
+exit-status ambiguity, both corrected with captured absolute helper path and a
+bounded exec handshake. BR26/28 shared transforms and committed-byte editor
+refresh pass85 tests. BR27 complete publication sweep passes196 tests, preserving
+visible evidence at zero body capacity and in provider/skill output. New8specs
+are registered in providers/tool_execution; source-scoped lint/diff clean.
+Combined final mapped verification follows this checkpoint. M6 remains open;
+Codex re-review will assess the full correction classes, not isolated repros.
