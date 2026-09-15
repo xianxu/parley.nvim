@@ -1192,3 +1192,20 @@ through pre-IO preparation; three native affinity tests pass. The full stale-tes
 inventory was swept without another contradiction. Full146-file canonical mapped
 verification and lint are running before the next Codex review; no partial-run
 success claim is being substituted for those results.
+
+### 2026-09-15 M4 full rework verification complete
+
+Final unique union146 specs/1739 passing tests, no final failures/errors/incomplete
+files. Full lint559 clean; source/test/atlas/README diffcheck clean. All mapped
+performance specs completed under unchanged deadlines. Five expected Neovim error
+headers were inspected as deliberate authorization/cancellation/read-error fixtures,
+not runner failures. Exact per-file evidence:/tmp/parley254-m4-rework-verification.txt.
+
+One original GC assertion failed: five unchanged repeats produced4passes/1same
+failure. A local interpreter-only fixture produced5/5passes; removing actual
+Deferred.close callback cleanup still failed the weak-reference assertion. The
+localized test-probe change is e72fd6cd; its final30-test file and lint pass. No
+runtime cleanup or assertion was weakened, and the initial failure remains in the
+report. This final rerun supersedes that file only, not the whole-suite evidence.
+Next: Codex M4 review of the fully verified candidate; M6 full140-file run proceeds
+in isolation. M5/M6 boundaries remain open and main remains unmerged.
