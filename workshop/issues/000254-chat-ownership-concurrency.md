@@ -1291,3 +1291,24 @@ changed. Two-file lint and scoped diffcheck clean. Logs:/tmp/parley254-resource-
 perf-{before,samples,long-samples,disjoint}.log and resource-work-{red,green}.log.
 All M6 runtime work is checkpointed; full140-file canonical verification is ready
 once the ongoing M4 full-run finishes. Public concurrency tests already pass.
+
+### 2026-09-15 M6 full-run findings and merged verification
+
+Initial140-file run completed with1706 passes and14 assertion failures, not a
+passing result. OpenAI direct-session fixtures now capture advertised read_file
+capabilities. Golden comparisons normalize only obsolete ls/find/ripgrep startup
+version metadata;24 tests pass without regenerating payloads. Skill fixtures now
+retire canonical-path buffers before deleting files:18 tests pass without E211.
+
+Onboarding exposed a product bug: native decoded {} carries Neovim metadata,
+which the pure operation ledger correctly refused. Captured dispatch now removes
+only that exact empty-object marker recursively before strict ledger validation;
+arbitrary metatables/cycles stay invalid and JSON null receives an explicit
+refusal rather than being dropped.81 focused tests and the public9-test onboarding
+suite pass, including positive execution and exact bounded result assertions.
+The earlier onboarding-green claim was incorrect and its failing log is retained.
+
+M6 now merges all M4 corrections and the verified M5 foundation at78a2f735;
+941a53ff adds the JSON correction. Fresh full mapped verification and integrated
+performance are running. M5 is under Codex review on feature cebb38eb. Neither
+M5 nor M6 is closed, and main remains unmerged for operator live testing.
