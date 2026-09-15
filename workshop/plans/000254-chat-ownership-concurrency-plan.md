@@ -1413,3 +1413,16 @@ reconciliation notices are at most72 bytes of metadata/result,9216 at128records,
 including zero body capacity. Scheduler/backend capture, paging, normalization,
 path-label expansion, transcript/provider serialization and skill output retain
 these facts. All new entity specs are registered in providers/tool_execution.
+
+### 2026-09-15 — Verified M6 correction performance
+
+Reason: path/capability preparation and result publication changed after the
+previous benchmark. Delta: fresh make perf on79527881 exits0; all30scenarios with
+20samples pass work gates, allzero full-buffer reads.27/30 complete work counters
+are identical to the preceding run.5000-row median/p95 milliseconds: edit8.17/13.97,
+Enter17.93/20.50, redraw0.575/0.800, folds1.16/1.384, stream45.82/51.63. Broad repair
+2.645/2.910seconds improves from3.85seconds but remains expensive; edit p95 rises
+from9.27ms. No low-latency guarantee or isolated causal attribution is claimed.
+Report `/tmp/parley254-m6-rework-final-perf.json`; independently parsed analysis
+`...-rework-final-perf-summary.md`. Combined146-spec correction verification and
+these measurements now accompany the second Codex M6 review.
