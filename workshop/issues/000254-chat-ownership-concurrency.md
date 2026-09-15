@@ -1474,3 +1474,13 @@ Final performance refresh is running on79527881 before Codex re-review.
   broad repair median2.645s. Edit p95 worsened to13.97ms; limits retained in plan.
   Entering Codex re-review with1872 passing affected tests,5569 combined inventory,
   full lint610 plus worker clean. Runtime/test tree is checkpointed and frozen.
+
+### 2026-09-15 M6 second review — remaining class gaps
+
+Codex passed all18 tool-execution specs and19 skill tests, and mutation controls
+confirmed BR26/27/28. It retained BR25: replacing the completed temporary pre-image
+before link could certify wrong backup bytes. New BR29 broad glob overrides a
+mandatory private exclusion; BR30 autoread skill source refresh invalidates the
+skill's own proof. Plan revisions cover identity through publication/cleanup,
+non-overridable per-target exclusion policy, and one skill source-completion owner.
+M6 remains open; all three correction classes are underway before another review.
