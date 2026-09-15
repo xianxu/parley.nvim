@@ -1455,3 +1455,16 @@ visible evidence at zero body capacity and in provider/skill output. New8specs
 are registered in providers/tool_execution; source-scoped lint/diff clean.
 Combined final mapped verification follows this checkpoint. M6 remains open;
 Codex re-review will assess the full correction classes, not isolated repros.
+
+### 2026-09-15 M6 combined correction verification
+
+At79527881, all146 affected specs have final passing evidence:1872 assertions,
+zero failed/errors/incomplete and explicit per-file exits/hashes. Initial collection
+was1868pass/3fail; old fake-process handshake and tiny-cap expectations were
+corrected with retained behavioral assertions plus a new missing-handshake case.
+The original failed run remains preserved. Global inventory now362 unique specs
+and5569 passing assertions (prior354 plus8 new), with focused override provenance;
+this is not a fresh all-green whole make-test claim. Full lint610 plus explicit
+worker and post-correction fixtures clean. Reports: `/tmp/parley254-m6-complete-latest-verification.txt`,
+`...-complete-latest-results.json`, `...-rework-final-latest-results.json`.
+Final performance refresh is running on79527881 before Codex re-review.
