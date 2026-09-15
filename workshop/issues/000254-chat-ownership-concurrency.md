@@ -1498,3 +1498,16 @@ positive cleanup; skill37 and review19 tests pass, including callback collection
 The combined affected-spec run follows this checkpoint; M6 remains open pending
 Codex review. ARCH-DRY shaped the shared traversal policy and source-completion
 owner; independent effect and physical lifetimes remain explicit.
+
+### 2026-09-15 M6 final correction verification
+
+At runtime63a4e9a8/docHEAD8744d89c,147/147 affected specs pass1916 assertions,
+zero failures/errors/incomplete and canonical make exit0; source hashes unchanged.
+Full lint612 files plus explicit worker1 is clean with both exits0. Global363
+spec inventory records5613 passing assertions with retained original full-run
+and focused-override provenance, not a new all-green whole-suite claim. Reports:
+`/tmp/parley254-m6-rework2-final-verification.txt` and
+`/tmp/parley254-m6-complete-latest-verification.txt`. Skill37, native traversal23,
+pure scope8 and mandatory policy7 pass. Performance evidence remains the prior
+600-sample run: these changes affect tool IO/policy and skill completion rather
+than document benchmark paths. Entering Codex M6 review with runtime frozen.
