@@ -32,6 +32,12 @@ end
 
 local function ask(model, image)
     local p = require('parley')
+    -- This transport probe already selected a catalog model. Capture that
+    -- choice through the same registration path as the interactive picker.
+    p.register_live_agent({id = model})
+    local selected = p.get_agent()
+    assert(selected and selected.provider == 'cliproxyapi' and selected.model.model == model,
+        'guest model choice was not registered')
     local buf = p.new_chat('Answer briefly. Do not use tools.',
         {model = model, provider = 'cliproxyapi'},
         image and 'Describe the attached image in one short sentence.' or 'Reply with the word ok.')
@@ -65,6 +71,7 @@ local function ask(model, image)
         return false
     end, 30), 'model response exceeded 120 seconds or was empty')
     assert(query.provider == 'cliproxyapi', 'request bypassed managed provider')
+    assert(query.payload.model == model, 'request did not use the selected guest model')
     if image then
         assert(require('parley.assets').has_image(query.payload), 'request omitted clipboard image')
     end
