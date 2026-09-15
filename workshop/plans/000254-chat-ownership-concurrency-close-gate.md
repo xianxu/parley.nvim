@@ -53,6 +53,20 @@ rounds:
           round: 3
       boundary: M2
       blocked: true
+    - "n": 4
+      timestamp: "2026-09-15T01:01:56-07:00"
+      agent: codex
+      dispose:
+        - id: BR-3
+          disposition: addressed
+          note: structure.lua:144–169 restricts publication to lexical metadata and invalidates changed classifications. document_structure_spec.lua:109 and :135 pass at HEAD and both fail with the pre-fix module substituted in memory; disjoint-edit acceptance remains covered.
+          round: 4
+        - id: BR-4
+          disposition: addressed
+          note: grammar.lua:225 retains original structural kind for termination. document_grammar_spec.lua:205 and document_semantic_spec.lua:61 pass at HEAD and both fail with the pre-fix module substituted in memory; coverage sweeps both tool-marker kinds across section and fence states.
+          round: 4
+      boundary: M2
+      blocked: false
 ---
 
 # Gate ledger — 000254-chat-ownership-concurrency#254 (boundary-review)
@@ -85,7 +99,13 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-4** [Critical] `grammar-boundary-preservation` Ordinary-fence suppression removes a required reasoning boundary
   lua/parley/document/grammar.lua:202–225 rewrites fenced tool markers to text before reasoning termination. For question, answer, opening fence, reasoning marker, tool-result marker, closing fence, the new core marks the last two rows thinking while the legacy reducer marks them text. ARCH-PURPOSE: preserve original structural boundary semantics separately from tool-section admission and cover both tool-marker kinds across section states.
 
+## Round 4 — 2026-09-15T01:01:56-07:00 (codex) — passed
+
+### Disposed
+
+- BR-3 — addressed — structure.lua:144–169 restricts publication to lexical metadata and invalidates changed classifications. document_structure_spec.lua:109 and :135 pass at HEAD and both fail with the pre-fix module substituted in memory; disjoint-edit acceptance remains covered.
+- BR-4 — addressed — grammar.lua:225 retains original structural kind for termination. document_grammar_spec.lua:205 and document_semantic_spec.lua:61 pass at HEAD and both fail with the pre-fix module substituted in memory; coverage sweeps both tool-marker kinds across section and fence states.
+
 ## Open findings
 
-- **BR-3** [Critical] `semantic-publication-evidence` Local text certificates permit stale confirmed semantic publication
-- **BR-4** [Critical] `grammar-boundary-preservation` Ordinary-fence suppression removes a required reasoning boundary
+(none — every finding has been disposed)

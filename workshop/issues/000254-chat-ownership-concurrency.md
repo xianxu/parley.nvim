@@ -350,7 +350,7 @@ The durable plan specifies these implementation review boundaries; each requires
 its own `sdlc milestone-close` after implementation:
 
 - [x] M1 — Durable audit regressions and process-lifecycle containment.
-- [ ] M2 — Dependency-aware incremental sequence/grammar/structure core.
+- [x] M2 — Dependency-aware incremental sequence/grammar/structure core.
 - [ ] M3 — Document ownership and shared highlighting/folding/layout index.
 - [ ] M4 — Scoped concurrent generation/child-slot writes and human editing.
 - [ ] M5 — Fixed batch identities and recoverable answer replacement.
@@ -550,6 +550,7 @@ remains active. Scoped luacheck and whitespace checks pass. BR-1 and BR-2 fixes
 are ready for the required repeated review after REWORK.
 
 ### 2026-09-15 — M1 closed; M2 integration checkpoint
+- 2026-09-15: closed M2 — Document 131 and parsing 239 tests pass; scoped lint and diff clean. BR-3 delayed semantic publication and BR-4 56 fenced tool/section differential cases fixed. Existing 50k Enter+join 3 semantic rows, 358 index visits, 175 leaf copies and JIT retention regression pass. Actual attribution unavailable for this worktree as recorded at M1; no guessed actuals.; review verdict: SHIP
 
 M1 passed the repeated boundary review with SHIP, committed at dc715634.
 M2 work continues in /tmp/parley254-m2-stage (detached staging from 2ab8f40e),

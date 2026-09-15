@@ -128,3 +128,89 @@ findings:
     detail: |
       lua/parley/document/grammar.lua:202–225 rewrites fenced tool markers to text before reasoning termination. For question, answer, opening fence, reasoning marker, tool-result marker, closing fence, the new core marks the last two rows thinking while the legacy reducer marks them text. ARCH-PURPOSE: preserve original structural boundary semantics separately from tool-section admission and cover both tool-marker kinds across section states.
 ```
+
+---
+
+## Re-review — 2026-09-15T01:01:56-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 254 — Harden chat ownership and concurrency |
+| repo | 000254-chat-ownership-concurrency |
+| issue file | workshop/issues/000254-chat-ownership-concurrency.md |
+| boundary | milestone M2 |
+| milestone | M2 |
+| window | dc715634428c3c66b59e869d54ed576c1bc13369..9851858c0d0c46eb69e63871a21a964ff9ea548d |
+| command | sdlc milestone-close --issue 254 --milestone M2 |
+| reviewer | codex |
+| timestamp | 2026-09-15T01:01:56-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: medium
+```
+
+The pinned M2 range satisfies the isolated-core boundary. Both prior Critical findings are addressed, with regressions confirmed to fail when their respective fixes are removed in memory. No new blocking findings emerged. Repository files remain unchanged.
+
+## 1. Strengths
+
+- Publication now separates lexical evidence from semantic authority and preserves newer semantics for equivalent results (`lua/parley/document/structure.lua:144`).
+- Fence containment and structural termination have distinct rules, backed by golden and legacy-comparison tests (`lua/parley/document/grammar.lua:225`).
+- Sequence tests exercise independent reference models, stale provenance, atomic updates, and bounded work.
+- Atlas, traceability, and plan revisions document the new modules and explicitly reserve live-editor migration for M3.
+
+## 2. Critical findings
+
+None. BR-3 and BR-4 are addressed below.
+
+## 3. Important findings
+
+None.
+
+## 4. Minor findings
+
+None raised.
+
+## 5. Test coverage notes
+
+- Required stat and name-status inspections succeeded; inspected targeted patches and supporting source.
+- **122 document tests passed** under Neovim using an in-memory assertion runner.
+- **3 real-Neovim reader tests passed**, including bounded UTF-8 reads and final-empty-row handling.
+- **400 additional seeded answer-section comparisons passed** against the legacy reducer.
+- Removing the publication fix caused **two regression failures**; removing the grammar fix caused **two regression failures**.
+- Skipped the file-writing subprocess GC test under the read-only constraint. Full mapped suites and performance reports were not rerun.
+- `git diff --check` reported only two Markdown hard-break trailing spaces in the prior review artifact.
+
+## 6. Architectural notes
+
+| Principle | Assessment |
+|---|---|
+| ARCH-DRY | **Pass:** legacy highlighting and fence entry points delegate shared lexical rules. |
+| ARCH-PURE | **Pass:** core transitions operate without IO; text reads remain outside the core. Legacy comparison tests require the Neovim host, not mocked core behavior. |
+| ARCH-PURPOSE | **Pass for M2:** isolated structural core delivered; live migration remains explicitly assigned to M3. |
+| ARCH-MOCK | **Pass for M2:** controlled read responses share the production request interface; real-editor conformance tests pass. |
+| ARCH-CONSTRAINTS | **Pass for M2:** row, byte, navigation, and copy bounds have executable coverage. Attached-editor timing remains unverified here. |
+| ARCH-SECURE | **Pass:** publication rejects derived metadata; stale source evidence and malformed read requests fail explicitly. |
+| ARCH-ORDER | **Pass:** private worker state and controlled edit/read sequences enforce publication ordering; both prior temporal regressions are covered. |
+| ARCH-FUNERAL | **Pass by inspection:** weak stores, detached membership checks, and reload reset define in-memory lifetimes; reclamation regression exists but was not rerun. |
+
+M2 core-concept entities exist at their stated paths; revisions explain the extracted helper modules. Atlas updates are present. No new user-facing command, keybinding, or configuration surface requires a README update.
+
+## 7. Plan revision recommendations
+
+None. The existing M2 boundary-review revision describes both corrections accurately.
+
+```findings
+dispose:
+  - id: BR-3
+    disposition: addressed
+    note: |
+      structure.lua:144–169 restricts publication to lexical metadata and invalidates changed classifications. document_structure_spec.lua:109 and :135 pass at HEAD and both fail with the pre-fix module substituted in memory; disjoint-edit acceptance remains covered.
+  - id: BR-4
+    disposition: addressed
+    note: |
+      grammar.lua:225 retains original structural kind for termination. document_grammar_spec.lua:205 and document_semantic_spec.lua:61 pass at HEAD and both fail with the pre-fix module substituted in memory; coverage sweeps both tool-marker kinds across section and fence states.
+```
