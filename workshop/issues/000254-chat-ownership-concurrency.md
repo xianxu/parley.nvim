@@ -890,6 +890,29 @@ and parser suites pass. The plan records every consumer's eligibility boundary.
 M4 remains isolated; its source guards, capacity tickets, presentation-only pending
 UI, delayed user callers and bounded replacement preparation are not M3 changes.
 
+### 2026-09-15 — M3 BR-9 verification and third boundary review
+
+Committed `a8d9d770` validates exact current outline eligibility before navigation
+and after focus callbacks, binds disk selections to bounded source evidence, and
+retires pending diagnostics on semantic-context changes. The whole outline mapping
+passes 223/223 across six files; diagnostic integration/unit/text suites pass
+12/14/6. Native red reproductions precede the fixes. Lint is clean in 504 files;
+consumer eligibility contracts and review lessons are recorded in atlas and plan.
+
+The full performance run `/tmp/parley254-br9-perf.json` completed on `a8d9d770`
+(Darwin, Neovim 0.11.7, 30 scenarios, five warmups and 20 samples). At 5,000 rows,
+median/p95 milliseconds are typing 7.778/14.652, Enter/join 15.702/18.545, redraw
+0.717/1.539, folds 0.751/0.959, legacy stream/human 29.905/52.275, and explicit
+broad repair 2434.630/2504.419. Every measured phase has zero full-buffer reads.
+Typing processes/copies 1/1 rows; Enter/join 5/6; legacy interleave 23/25 and clears
+126 affected outer fold groups with 252 native operations. These are measured
+aggregate costs, not constant-time or 8 ms guarantees. Short isolated M4 probes
+ran concurrently; timing remains report-only. M4 will replace the legacy writer.
+
+The third M3 review uses this committed consumer class sweep. M4 remains isolated
+and incomplete: submission-to-runner admission, annotation-preserving replacement,
+scoped readiness and provider adapters are being integrated, with no main merge.
+
 ## Revisions
 
 ### 2026-09-14 — Incremental rendering is part of the core contract
