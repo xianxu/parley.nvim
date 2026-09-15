@@ -421,6 +421,32 @@ rounds:
           round: 16
       boundary: M5
       blocked: true
+    - "n": 17
+      timestamp: "2026-09-15T12:10:21-07:00"
+      agent: codex
+      dispose:
+        - id: BR-20
+          disposition: not-addressed
+          note: Delayed settlement now works, but chat_recovery.lua:295 ignores a confirmed save while settlement is queued, and settlement completion never revisits it. A native-write scratch regression leaves one snapshot after successful settlement. Preserve and join save/settlement evidence in either order; ARCH-ORDER, ARCH-PURPOSE, ARCH-FUNERAL.
+          round: 17
+        - id: BR-21
+          disposition: addressed
+          note: Bounded revision-checked retry metadata survives failed-attempt retirement. Public single/batch failure and cancellation retry tests pass; runtime retry and public batch retry regressions fail against the pre-fix implementation.
+          round: 17
+        - id: BR-22
+          disposition: addressed
+          note: Unknown corrupt association blocks new publication. All five committed sole-record, all-revisions, quarantine, failed-quarantine, and unknown-name regressions pass at head and fail against the pre-fix implementation.
+          round: 17
+        - id: BR-23
+          disposition: addressed
+          note: Adapter release now invokes host retirement and cancels pending settlement. Detach registry assertions pass at head and fail against the pre-fix implementation; cancellation, reload, and failed-settlement retirement tests also pass.
+          round: 17
+        - id: BR-24
+          disposition: not-addressed
+          note: Unlink failures now notify, with a regression that fails without the fix. However, chat_recovery.lua:298-299 discards saved-file fs_stat errors and silently returns. Injected EACCES yields zero notifications. Apply the common error-publication rule to every cleanup IO stage.
+          round: 17
+      boundary: M5
+      blocked: true
 ---
 
 # Gate ledger — 000254-chat-ownership-concurrency#254 (boundary-review)
@@ -616,11 +642,18 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-24** [Important] `lifecycle-state-observability` Recovery cleanup IO failures are swallowed by production callers
   lua/parley/chat_recovery.lua:174 ignores failed RR.saved results, and lua/parley/chat_respond.lua:1655 ignores successful settlement results carrying cleanup_error. Injected unlink EACCES during confirmed-save cleanup produces no notification. This is the 2nd finding in family lifecycle-state-observability. Define and enforce one error-publication rule across save cleanup, superseded-record cleanup, discard and deletion; retain physical accounting and test visible outcomes.
 
+## Round 17 — 2026-09-15T12:10:21-07:00 (codex) — BLOCKED
+
+### Disposed
+
+- BR-20 — not-addressed — Delayed settlement now works, but chat_recovery.lua:295 ignores a confirmed save while settlement is queued, and settlement completion never revisits it. A native-write scratch regression leaves one snapshot after successful settlement. Preserve and join save/settlement evidence in either order; ARCH-ORDER, ARCH-PURPOSE, ARCH-FUNERAL.
+- BR-21 — addressed — Bounded revision-checked retry metadata survives failed-attempt retirement. Public single/batch failure and cancellation retry tests pass; runtime retry and public batch retry regressions fail against the pre-fix implementation.
+- BR-22 — addressed — Unknown corrupt association blocks new publication. All five committed sole-record, all-revisions, quarantine, failed-quarantine, and unknown-name regressions pass at head and fail against the pre-fix implementation.
+- BR-23 — addressed — Adapter release now invokes host retirement and cancels pending settlement. Detach registry assertions pass at head and fail against the pre-fix implementation; cancellation, reload, and failed-settlement retirement tests also pass.
+- BR-24 — not-addressed — Unlink failures now notify, with a regression that fails without the fix. However, chat_recovery.lua:298-299 discards saved-file fs_stat errors and silently returns. Injected EACCES yields zero notifications. Apply the common error-publication rule to every cleanup IO stage.
+
 ## Open findings
 
 - **BR-13** [Important] `deferred-contract-traceability` BR-11 regressions are missing from the documented verification mapping
 - **BR-20** [Critical] `semantic-publication-evidence` Successful replacement abandons settlement while semantic repair is pending
-- **BR-21** [Critical] `recovery-retry-association` Provider failure removes the association required for retrying partial replacements
-- **BR-22** [Critical] `semantic-publication-evidence` Corruption of the sole recovery record permits partial output to become a new original
-- **BR-23** [Important] `scope-owned-callback-cleanup` Recovery adapter retirement leaves the host registry retaining detached documents
 - **BR-24** [Important] `lifecycle-state-observability` Recovery cleanup IO failures are swallowed by production callers

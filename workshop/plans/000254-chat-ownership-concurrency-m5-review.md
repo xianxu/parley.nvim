@@ -127,3 +127,116 @@ findings:
     detail: |
       lua/parley/chat_recovery.lua:174 ignores failed RR.saved results, and lua/parley/chat_respond.lua:1655 ignores successful settlement results carrying cleanup_error. Injected unlink EACCES during confirmed-save cleanup produces no notification. This is the 2nd finding in family lifecycle-state-observability. Define and enforce one error-publication rule across save cleanup, superseded-record cleanup, discard and deletion; retain physical accounting and test visible outcomes.
 ```
+
+---
+
+## Re-review — 2026-09-15T12:10:21-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 254 — Harden chat ownership and concurrency |
+| repo | 000254-chat-ownership-concurrency |
+| issue file | workshop/issues/000254-chat-ownership-concurrency.md |
+| boundary | milestone M5 |
+| milestone | M5 |
+| window | 8c40b9c637acfb5763ba339e8e2d5d5d5783d46b..b07a6c5d4768794825a3a39237026cd567827713 |
+| command | sdlc milestone-close --issue 254 --milestone M5 |
+| reviewer | codex |
+| timestamp | 2026-09-15T12:10:21-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+Three prior findings are addressed with regression evidence. BR-20 and BR-24 remain partially unresolved: saves arriving before settlement are forgotten, and saved-file probe failures remain silent. Both reproduce against the pinned head. Repository files were unchanged.
+
+## 1. Strengths
+
+- Batch execution preserves captured identities, validates revisions, and shares the single-response lifecycle.
+- Failed-attempt retry metadata survives retirement without retaining write grants.
+- Corrupt recovery records now conservatively block publication, including across restart and failed quarantine.
+- README, atlas pages, and traceability mappings cover the new batch and recovery surfaces.
+
+## 2. Critical findings
+
+**BR-20 — not-addressed: save-before-settlement remains uncovered.**  
+[chat_recovery.lua:295](lua/parley/chat_recovery.lua#L295) ignores saves unless the job is already `settled`. The settlement callback at line 229 never revisits an earlier save.
+
+Reproduction: publish → replace → queue settlement → execute real `:write` → settlement succeeds → finish successfully. One snapshot remains instead of zero.
+
+**Fix:** model successful settlement and confirmed-save evidence as an ordering-independent join. Retain pending save evidence and validate it when settlement completes. Cover both event orders, edits, cancellation, and teardown across single and batch execution. This remains BR-20 in `semantic-publication-evidence`, not a new finding. **ARCH-ORDER, ARCH-PURPOSE, ARCH-FUNERAL.**
+
+## 3. Important findings
+
+**BR-24 — not-addressed: saved-file probe errors are swallowed.**  
+[chat_recovery.lua:298](lua/parley/chat_recovery.lua#L298) discards the error returned by `fs_stat`; line 299 silently returns. Injecting `EACCES` produces zero notifications while retaining the snapshot.
+
+**Fix:** route saved-file probe failures through the common reporting rule, preserving physical accounting. Sweep every save-cleanup IO stage, including stat and read-back. This remains BR-24 in `lifecycle-state-observability`.
+
+## 4. Minor findings
+
+None.
+
+## 5. Test coverage notes
+
+Pinned-head validation passed:
+
+| Suite | Passed |
+|---|---:|
+| `chat/recovery` | 84 |
+| `chat/batch` | 92 |
+| `chat/lifecycle` | 722 across 58 files |
+
+`git diff --check` passed.
+
+Scratch copies using the pre-fix implementation made the committed corruption, retry, settlement, registry-retirement, and cleanup-notification regressions fail.
+
+Two additional pinned-head regressions fail in [the scratch spec](/tmp/parley-m5-save-order-spec.lua:357): save-before-settlement and failed saved-file stat. The existing 32 tests in that spec pass.
+
+## 6. Architectural notes
+
+| Marker | Result |
+|---|---|
+| ARCH-DRY | Pass — shared response lifecycle, revision proofs, and reporting helper. |
+| ARCH-PURE | Pass — batch decisions remain IO-free; adapters own effects. |
+| ARCH-PURPOSE | Flag — BR-20 leaves successful-save cleanup incomplete. |
+| ARCH-MOCK | Pass — controlled provider callbacks and stateful filesystem faults exercise production seams. |
+| ARCH-CONSTRAINTS | Pass — tested query budgets and storage admission limits. |
+| ARCH-SECURE | Pass — corrupt association no longer implies absence. |
+| ARCH-ORDER | Flag — confirmed save arriving before settlement is discarded. |
+| ARCH-FUNERAL | Flag — that ordering strands a snapshot until another save or explicit cleanup. |
+
+## 7. Plan revision recommendations
+
+Add `## Revisions` entries specifying:
+
+- Settlement and confirmed-save evidence must converge in either arrival order, with explicit invalidation rules.
+- Every failed cleanup IO stage must publish an actionable error while retaining recovery accounting.
+
+```findings
+dispose:
+  - id: BR-20
+    disposition: not-addressed
+    note: |
+      Delayed settlement now works, but chat_recovery.lua:295 ignores a confirmed save while settlement is queued, and settlement completion never revisits it. A native-write scratch regression leaves one snapshot after successful settlement. Preserve and join save/settlement evidence in either order; ARCH-ORDER, ARCH-PURPOSE, ARCH-FUNERAL.
+  - id: BR-21
+    disposition: addressed
+    note: |
+      Bounded revision-checked retry metadata survives failed-attempt retirement. Public single/batch failure and cancellation retry tests pass; runtime retry and public batch retry regressions fail against the pre-fix implementation.
+  - id: BR-22
+    disposition: addressed
+    note: |
+      Unknown corrupt association blocks new publication. All five committed sole-record, all-revisions, quarantine, failed-quarantine, and unknown-name regressions pass at head and fail against the pre-fix implementation.
+  - id: BR-23
+    disposition: addressed
+    note: |
+      Adapter release now invokes host retirement and cancels pending settlement. Detach registry assertions pass at head and fail against the pre-fix implementation; cancellation, reload, and failed-settlement retirement tests also pass.
+  - id: BR-24
+    disposition: not-addressed
+    note: |
+      Unlink failures now notify, with a regression that fails without the fix. However, chat_recovery.lua:298-299 discards saved-file fs_stat errors and silently returns. Injected EACCES yields zero notifications. Apply the common error-publication rule to every cleanup IO stage.
+```
