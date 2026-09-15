@@ -31,7 +31,7 @@ File operations and structured wrappers around locally available Unix tools:
 | `emit_definition` | output | Return a structured inline definition to the definition skill |
 | `ack` | read | Optional, registered only if `ack` is installed; structured pattern/path/filter fields |
 
-Tool descriptions dynamically advertise the locally available command version (e.g., "ripgrep 14.1" vs "GNU grep 3.11").
+Tool descriptions identify the selected local command. Registering builtin tools does not launch version-probe subprocesses.
 
 ## Selecting Tools (agent config)
 
@@ -109,7 +109,11 @@ Anthropic frames each call with `content_block_start`/`_stop` around a top-level
 `.index`. OpenAI streams an *array* of partial `delta.tool_calls[]` where `id`
 and `function.name` arrive only in that call's first chunk, `arguments`
 accumulates as string fragments, and **nothing closes a call**. The OpenAI
-decoder therefore keys on the array index, orders by first appearance, and is
+decoder therefore keys on the array index. Both wires return calls in declared
+numeric index order, independent of start, fragment, or completion arrival.
+Sparse indexes are supported; missing or invalid indexes are rejected rather
+than aliased to index zero. Conflicting identities invalidate that index. The
+OpenAI decoder is
 deliberately *not* gated on `finish_reason == "tool_calls"` — a truncated stream
 still surfaces what assembled. The response adapter admits tool rounds only
 from a successful provider completion; failure does not launch tools from a
@@ -173,9 +177,11 @@ have caused an effect: an `unknown` outcome prevents continuation and is not
 converted into a successful or cancelled result. A later known outcome and
 positive cleanup can settle it; a cancellation request alone cannot.
 
-M4 supplies independent child slots and lifecycle accounting for concurrent
-producers. The default builtin producer still calls the synchronous tool
-dispatcher. Converting builtin execution to asynchronous processes belongs to M6.
+Builtin definitions expose asynchronous execution and resource declarations.
+The captured dispatcher profile, process-scoped scheduler, checked filesystem
+seam, and Tasker supervise effects independently from transcript grants. See
+[Tool Execution and Cleanup](tool_execution.md) for admission, bounds, uncertain
+outcomes, and internal reconciliation APIs.
 
 ## Buffer Representation
 
@@ -277,7 +283,7 @@ block still starts a turn.
 - **Iteration cap**: `max_tool_iterations` (default 42, single-sourced in `defaults.lua`) is captured by the Session; a further tool round is refused when the limit is reached, without executing its calls.
 - **Cancellation**: scoped generation cancellation revokes answer/tool grants and stops owned operations. It waits for positive cleanup and does not scan or repair unmatched transcript blocks.
 - **Tool_use↔tool_result invariant → valid payload by construction** (#155, #156): the single pure emitter `_emit_content_blocks_as_messages` (shared by both build paths — `build_messages` and `build_messages_from_model` normalize into it) tracks pending tool_use ids and synthesizes a neutral `is_error` result (`M.DANGLING_TOOL_RESULT_TEXT`) for any not answered by a real `📎:`, in the immediately-following user message (partial parallel calls handled). So an unanswered 🔧: (crash / kill / reload / hand-edited buffer) never reaches Anthropic as an assistant `tool_use` without a matching user `tool_result`. Symmetrically (#156), an **orphan** `📎:` (no preceding 🔧:) or a **duplicate** result is dropped: `resolve_pending` returns whether the id matched a still-pending `tool_use`, and an unmatched result is skipped — so the payload never carries an unmatched user `tool_result` either. Empty tool input coerces to `{}` here (one source). This normalization belongs to request construction; it does not rewrite the buffer.
-- **Backup**: `write_file` creates numbered `.parley-backup.N` on every write
+- **Backup**: asynchronous existing-file writes and edits publish a checked numbered `.parley-backup.N` before destructive IO; a failed backup prevents the target write. New files use exclusive creation.
 - **Unknown tools**: return friendly error "Tool 'X' is not available on this client"
 - **Malformed blocks**: `build_messages_from_model` degrades to text (no Anthropic rejection)
 - **Buffer diagnostic**: `:lua require('parley').check_buffer()` validates invariants

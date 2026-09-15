@@ -38,6 +38,7 @@ its feature pages, and the three tutorials without reading personal files.
 - [Google AI Provider](providers/googleai.md)
 - [Agents](providers/agents.md)
 - [Tool Use](providers/tool_use.md)
+- [Tool Execution and Cleanup](providers/tool_execution.md): Captured capabilities, resource claims, checked IO, and uncertain effects.
 - [System Prompts](providers/system_prompts.md)
 
 ## 3. Context & References
