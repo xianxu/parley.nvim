@@ -606,3 +606,27 @@ new timer turn; cancellation invalidates queued callbacks and closes its timer.
 Tests require native timers to fire before multi-slice work completes, and verify
 reload/detach cleanup. This closes the scheduling class across live consumers
 rather than just the first observed document callback (ARCH-DRY).
+
+### 2026-09-15 — Repair ordering and M4 append preparation
+
+The semantic pass has a dependency-ordered frontier: a later visible region cannot
+be confirmed before its incoming fence/role/checkpoint evidence exists. The actual
+mechanism therefore uses a global frontier and a scoped answer queue with local
+certificates, rather than treating arbitrary dirty spans as independent semantic
+jobs. Disjoint edits must retain valid queued reads and completed prefix work;
+new coordinator stress tests enforce progress under continuous same-document
+edits. Timer fairness applies across documents and consumers. M4 waiter priorities
+may advance the lexical/fact demands needed by visible regions and grants, but
+cannot bypass predecessor proofs. This refines the queue mechanism in §C while
+preserving the non-starvation and conservative-authority requirements.
+
+M4 streaming will use bounded append intents with private incremental lexical
+cursors per admitted output slot. The editor already supports zero-width patches;
+remove dispatcher growing-line replacement and response active-block reparsing.
+An exact mutation receipt commits accepted output even if semantic confirmation
+then suspends further writes; queued bytes must never replay that accepted prefix.
+Caller-supplied lexical/semantic metadata cannot authorize this optimization.
+Fresh slots start an empty scanner; existing tails require one bounded bootstrap,
+with local entry proof that survives unrelated neighboring edits. Candidate-rich
+long-line diagnostics require explicit work measurement rather than assuming
+that bounded per-slice parsing also proves bounded aggregate append work.
