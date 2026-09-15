@@ -53,8 +53,9 @@ cleanup. Check edited files and the reported pre-image backups directly.
    to inspect/export the original and `:ParleyAnswerRestore` to restore it.
 4. Edit the replacement before restoring; verify the preview and confirmation.
    Edit again while a picker is open; stale selection must not overwrite it.
-5. Save a successful replacement. Its confirmed recovery copy can be cleaned up.
-   Closing a buffer alone must not delete a needed recovery copy.
+5. Save while streaming, then save the completed replacement. Cleanup requires
+   the saved file to match the completed answer; an earlier partial save must
+   retain the original. Closing a buffer alone must not delete a needed copy.
 
 ## Rendering and long chats
 
