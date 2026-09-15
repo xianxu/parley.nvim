@@ -1091,3 +1091,15 @@ focused cleanup-ownership fix and regression matrix are in progress. Plan revisi
 records the corrected ownership rule. Operator requested Codex for every remaining
 review. M4 combined benchmark passed all hard gates; M5 work remains isolated until
 M3/M4 boundaries close.
+
+### 2026-09-15 — BR-11 suspended retirement verification
+
+Retirement now marks preference restoration ownership before callbacks; nested
+apply/uncertainty cleanup still restores captured view but cannot reinstate the
+retired suspension. Restoring disabled operator preference is also explicit when
+retirement interrupts temporarily enabled folds. Both discard paths share this rule.
+50 tests across10 focused files pass:47 existing presentation/fold/batch regressions,
+two native50k suspended-retirement regressions, and scoped harness contract. Five
+changed Lua files lint clean; diff check clean. New native fixtures use the existing
+180-second large-corpus test runner path without changing production work limits.
+Next: Codex M3 boundary review; no closure claimed before its verdict.
