@@ -1318,3 +1318,5 @@ two additional reviewer cases failed. The save/settlement ordering join and full
 save-probe error reporting are being corrected together. M5 stays open; no review
 finding is waived. M6 has5481 passing per-file assertions across354 specs after
 explicitly recorded focused corrections; it awaits final M5 integration/review.
+
+- 2026-09-15 M5 BR20/24 final correction: confirmed-save/settlement join now works in either order; bounded native Pre/Post destination observations distinguish alternate writes and nested slug renames without stranding later saves after aborted writes. Saved-file stat/read failures remain visible. Final focused validation: 167 tests across 9 specs, every exit 0 and zero failed/errors; exact reviewer reproduction 34 passes. Manifest `/tmp/parley254-save-join-final.json`; lint and scoped diff clean. Earlier complete M5 mapped validation remains 92 specs/1103 passes; changed adapter/public lifecycle families rerun above. Preparing Codex re-review; M5 remains open.
