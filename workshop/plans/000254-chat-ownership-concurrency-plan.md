@@ -1162,3 +1162,55 @@ duplicate, late terminal and reentrant-publication histories. Replace unsupporte
 suffix-positive evidence with genuine consumed-prefix edits and retain an explicit
 negative suffix case into pre-IO preparation. Sweep the complete stale assertion
 inventory and rerun the full146-file mapped union (ARCH-ORDER, ARCH-FUNERAL).
+
+### 2026-09-15 — M5 fixed input membership and completion evidence
+
+Native public regression showed a newly inserted question could enter a later
+batch request despite fixed response selection. The batch now restricts both
+remote-reference preparation and provider messages to its captured exchange set;
+write geometry still comes from the full current document. Inserted questions stay
+in the buffer but do not become new context for the already-captured batch.
+
+A successful generation callback must capture context evidence immediately, or
+freeze the edit serial while structural repair completes. A later human edit
+cannot become silently accepted completion evidence. A positive success advances
+completed progress even when context evidence is unavailable; the batch pauses
+and requires explicit adoption before continuing. Reload/detach retires obsolete
+registry membership while Session retains physical effect cleanup.
+
+Per-query bounds alone do not bound batch callbacks. Batch proof validation is
+being split into at most eight Document queries per scheduled turn, with a shared
+edit serial fencing staged evidence. Repeated concurrent edits pause validation
+instead of spinning. Large explicit resume acknowledges queued validation and
+keeps the batch paused until the complete proof is accepted.
+
+Recovery core22 and Document adapter13 tests pass. Public response25 tests pass
+including unavailable recovery publication preserving the original answer and
+starting no provider IO. Recovery UI/save association and bounded batch validation
+are still in progress; M5 is not closed. M6 implementation may stage independently
+but must integrate only after M5 review. M6 inventory corrects the old file list:
+tool_loop is already removed; response_tools owns production child dispatch, and
+argv is a pure helper rather than an executable builtin.
+
+### 2026-09-15 — M5 recovery integration and M6 handoff
+
+M5 batch mapping now passes7files/87tests. Public response27tests include captured
+request membership, registered bang-resume edit adoption, refused snapshot
+publication, and deletion cleanup only after confirmed chat removal. Recovery
+store22, adapter13, UI/save/deletion17 and path-exclusion4 tests have passed in
+focused runs; the store is receiving an additional ambiguous-descriptor-close
+regression before final mapped verification. Current changed runtime lint is clean.
+
+Recovery files are excluded from explicit attachment reads and directory expansion,
+including canonical/symlink aliases. The existing synchronous tool read/traversal
+path bypasses the helper; M6's common tool admission and traversal migration must
+apply the shared recovery_paths policy before content IO. This remaining tool
+enforcement is not claimed by M5 and must pass before the issue reaches live testing.
+
+M6 pure operation/resources prerequisites are staged at82a5fb12 in
+/tmp/parley254-m6-stage:14tests including4200generated events/steps pass. Checked
+asynchronous filesystem and process-supervision seams are in progress separately.
+Numeric file descriptors are not reusable authority after an ambiguous close:
+probe-only reconciliation must never close a descriptor that may now belong to
+another operation. M5 recovery uses the same conservative rule and bounded retained
+owners. No unresolved operation is removed to make an admission counter look clean.

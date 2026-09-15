@@ -36,6 +36,14 @@ See the [app guide](packaging/README.md) for updates and removal, or
 and settings. Existing Neovim users can use the
 [plugin setup guide](atlas/infra/config.md#install-as-a-neovim-plugin).
 
+## Editing during answers
+
+You can edit the next question while an answer streams. Editing active output
+stops its writer; reloading the file invalidates its active writes.
+[Question batches](atlas/chat/batch.md) keep a fixed selection, and
+[answer recovery](atlas/chat/recovery.md) preserves previous answers before
+regeneration.
+
 ## Learn by chatting
 
 These tutorials open as editable chats in the app. You can also read their

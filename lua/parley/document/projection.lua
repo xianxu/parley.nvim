@@ -24,6 +24,8 @@ function M.summary(metadata)
     local outline_chat=outside and (token.kind=='user' or token.kind=='branch' or token.preface_tag) or false
     return {
         exchange=sem.exchange_start or false,answer=sem.answer_start or false,
+        question_boundary=sem.answer_start or sem.exchange_start or sem.preface or sem.footer or sem.content_ended or false,
+        context_boundary=sem.exchange_start or sem.preface or sem.footer or sem.content_ended or false,
         answer_end=sem.answer_start or sem.exchange_start or sem.preface or sem.footer or sem.content_ended or false,
         section_start=start or false,section_end_after=finish or false,
         boundary=start or finish or sem.exchange_start or sem.answer_start or sem.preface

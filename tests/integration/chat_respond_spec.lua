@@ -121,6 +121,75 @@ describe('chat_respond: scoped session integration',function()
         wait_for(function()return Respond.response_snapshot(session).status=='terminal'end)
         return Respond.response_snapshot(session).generation
     end
+    it('cleans recovery only after the chat deletion is confirmed',function()
+        open({'💬: question',''})
+        local path=vim.api.nvim_buf_get_name(buf);files[#files+1]=path
+        vim.fn.writefile(vim.api.nvim_buf_get_lines(buf,0,-1,false),path)
+        local Recovery=require('parley.chat_recovery')
+        local old_deleted,old_delete=Recovery.deleted,parley.helpers.delete_file
+        local calls_deleted=0
+        Recovery.deleted=function(captured)
+            calls_deleted=calls_deleted+1;assert.equals(path,captured)
+            assert.equals(0,vim.fn.filereadable(path));return {ok=true}
+        end
+        parley.helpers.delete_file=function()return nil,'injected deletion refusal'end
+        local failed=parley.delete_chat_file(path)
+        parley.helpers.delete_file=old_delete
+        assert.is_nil(failed);assert.equals(0,calls_deleted)
+        local ok=parley.delete_chat_file(path)
+        Recovery.deleted=old_deleted
+        assert.is_true(ok);assert.equals(1,calls_deleted)
+    end)
+    it('refuses answer replacement when recovery publication is unavailable',function()
+        open({'💬: question','','🤖: original','valuable answer',''})
+        local before=vim.api.nvim_buf_get_lines(buf,0,-1,false)
+        local Store=require('parley.answer_recovery');local original=Store.open
+        Store.open=function()return nil,'injected recovery IO failure'end
+        local ok,session=pcall(Respond.respond,{range=0})
+        if ok and session then
+            ok=vim.wait(5000,function()return Respond.response_snapshot(session).status=='terminal'end,1)
+        end
+        Store.open=original
+        assert.is_true(ok,tostring(session))
+        if session then assert.equals('prepare_failed',Respond.response_snapshot(session).generation.outcome)end
+        assert.equals(0,#calls)
+        assert.same(before,vim.api.nvim_buf_get_lines(buf,0,-1,false))
+    end)
+    it('supports explicit edit adoption through the registered resume command',function()
+        open({'💬: first','','🤖: old first','','💬: second',''})
+        vim.api.nvim_win_set_cursor(0,{9,0})
+        local batch=assert(Respond.respond_all())
+        wait_for(function()return #calls==1 end)
+        local second=assert(find_line_number(buf,'💬: second'))
+        vim.api.nvim_buf_set_text(buf,second-1,6,second-1,6,{'edited '})
+        output(calls[1],'new first');calls[1].complete(calls[1].id)
+        wait_for(function()return Respond.batch_snapshot(batch).phase=='paused'end)
+        assert.equals(1,Respond.batch_snapshot(batch).completed)
+        vim.cmd('ParleyChatResumeBatch!')
+        wait_for(function()return #calls==2 end)
+        assert.truthy(vim.json.encode(calls[2].payload):find('edited second',1,true))
+    end)
+    it('runs a captured batch while the operator edits another chat',function()
+        open({'💬: first','','🤖: old first','','💬: second',''})
+        vim.api.nvim_win_set_cursor(0,{9,0})
+        local free=parley.config.chat_free_cursor
+        local batch=Respond.respond_all();assert.is_not_nil(batch)
+        wait_for(function()return #calls==1 end)
+        local other=vim.api.nvim_create_buf(false,true);vim.api.nvim_set_current_buf(other)
+        vim.api.nvim_buf_set_lines(other,0,-1,false,{'operator work'})
+        local second=assert(find_line_number(buf,'💬: second'))
+        vim.api.nvim_buf_set_lines(buf,second-1,second-1,false,{'💬: unselected insertion','','🤖: unselected answer',''})
+        output(calls[1],'new first');calls[1].complete(calls[1].id)
+        wait_for(function()return #calls==2 end)
+        assert.equals(buf,calls[2].buf)
+        assert.is_nil(vim.json.encode(calls[2].payload):find('unselected insertion',1,true))
+        output(calls[2],'new second');calls[2].complete(calls[2].id)
+        wait_for(function()return Respond.batch_snapshot(batch).phase=='completed'end)
+        assert.equals(free,parley.config.chat_free_cursor)
+        assert.same({'operator work'},vim.api.nvim_buf_get_lines(other,0,-1,false))
+        assert.equals(other,vim.api.nvim_get_current_buf())
+        vim.api.nvim_set_current_buf(buf);vim.api.nvim_buf_delete(other,{force=true})
+    end)
     it('completes once with a new prompt and retains existing headers',function()
         open({'💬: question',''})
         local session=submit();output(calls[1],'answer')

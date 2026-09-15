@@ -58,12 +58,6 @@ M.setup = function(parley)
 end
 
 --------------------------------------------------------------------------------
--- Module-level state shared between async callbacks while responding
--- (mirrors the former init.lua local `original_free_cursor_value`)
---------------------------------------------------------------------------------
-local original_free_cursor_value = nil
-
---------------------------------------------------------------------------------
 -- Local helpers copied from init.lua (functions that are too small to expose
 -- on M but are needed inside the extracted functions below)
 --------------------------------------------------------------------------------
@@ -309,17 +303,9 @@ end
 -- Stop selects one captured generation; StopDocument explicitly selects all.
 -- Child operations retain their positive-resolution barrier after cancellation.
 M.cmd_stop = function()
-    if original_free_cursor_value ~= nil then
-        _parley.config.chat_free_cursor = original_free_cursor_value
-        original_free_cursor_value = nil
-    end
     return M.stop_at_cursor(vim.api.nvim_get_current_buf(), vim.api.nvim_win_get_cursor(0)[1] - 1)
 end
 M.cmd_stop_document = function()
-    if original_free_cursor_value ~= nil then
-        _parley.config.chat_free_cursor = original_free_cursor_value
-        original_free_cursor_value = nil
-    end
     return M.cancel_responses(vim.api.nvim_get_current_buf())
 end
 
@@ -1315,11 +1301,13 @@ end
 -- Active response membership is keyed by the captured buffer. A session owns
 -- its document grants and effects; membership is only for explicit Stop/UI.
 local responses = {}
+local batches = {}
 local response_order = 0
 function M.response_snapshot(session)
     return require('parley.response_session').snapshot(session)
 end
 local function cancel_entry(entry)
+    if entry.batch then require('parley.batch_response').cancel(entry.batch) end
     if entry.topic then require('parley.response_topic').cancel(entry.topic, 'operator stopped response') end
     if entry.session then
         require('parley.response_session').cancel(entry.session, 'operator stopped response')
@@ -1328,6 +1316,7 @@ local function cancel_entry(entry)
     return 0
 end
 function M.cancel_responses(buf)
+    if batches[buf] then require('parley.batch_response').cancel(batches[buf]) end
     local group = responses[buf]
     if not group then return 0 end
     local copy = {}; for entry in pairs(group) do copy[#copy + 1] = entry end
@@ -1408,6 +1397,7 @@ local function start_scoped_response(frame)
     local exchange = parsed.exchanges[index]
     if not exchange or not exchange.question then return nil, 'no question selected' end
     local question = exchange.question
+    local replacing_answer = exchange.answer ~= nil
     local last = exchange.answer and exchange.answer.line_end or question.line_end
     local footer = trailing_footnote_boundary(frame.lines, question.line_end)
     if footer then last = math.max(question.line_end, math.min(last, footer)) end
@@ -1438,11 +1428,22 @@ local function start_scoped_response(frame)
     -- The captured request excludes the answer being replaced. Its old bytes
     -- remain in the editor until preparation has acquired every mutable gap.
     exchange.answer = nil
+    local input_parsed, input_index = parsed, index
+    if frame.input_rows then
+        input_parsed = vim.deepcopy(parsed); input_parsed.exchanges = {}
+        for i, item in ipairs(parsed.exchanges) do
+            if item.question and frame.input_rows[item.question.line_start] then
+                input_parsed.exchanges[#input_parsed.exchanges + 1] = vim.deepcopy(item)
+                if i == index then input_index = #input_parsed.exchanges end
+            end
+        end
+    end
     local doc = D.get(buf) or D.attach(buf, {patterns = require('parley.highlight_structure').patterns(config)})
     local group = responses[buf] or {}; responses[buf] = group
     response_order = response_order + 1
-    local entry = {doc = doc, epoch = D.snapshot(doc).epoch, order = response_order,
+    local entry = {doc = doc, epoch = D.snapshot(doc).epoch, order = response_order, batch = frame.batch,
         label = (frame.lines[question.line_start] or 'Response'):sub(1, 256)}; group[entry] = true
+    local recovery
     local latest, messages, final_payload, topic_source, topic_parent, failure_notice
     local message_lead = 0
     local topic_attempted, main_finished, topic_finished = false, false, true
@@ -1542,8 +1543,8 @@ local function start_scoped_response(frame)
             if operation.cancelled or ctx.cancelled() then resolve(); return end
             if remote_error then fail(remote_error); return end
             local ok, err = xpcall(function()
-                messages, message_lead = M.build_messages({parsed_chat = parsed, start_index = frame.start_index,
-                    end_index = frame.end_index, exchange_idx = index, agent = agent, config = config,
+                messages, message_lead = M.build_messages({parsed_chat = input_parsed, start_index = frame.start_index,
+                    end_index = frame.end_index, exchange_idx = input_index, agent = agent, config = config,
                     helpers = _parley.helpers, logger = _parley.logger, resolved_remote_content = remote,
                     root_policy = info.root_policy, chat_path = frame.file_name})
                 if parsed.parent_link then
@@ -1557,6 +1558,20 @@ local function start_scoped_response(frame)
                 if assets.has_image(final_payload) and assets.payload_size(final_payload) > assets.MAX_REQUEST_BYTES then
                     error(string.format('request refused: image payload exceeds the %d-byte limit',
                         assets.MAX_REQUEST_BYTES), 0)
+                end
+                if replacing_answer then
+                    local Recovery = require('parley.chat_recovery')
+                    Recovery.setup(_parley)
+                    if not recovery then
+                        local why
+                        recovery, why = Recovery.start(doc, {buf = buf, path = frame.file_name,
+                            root = root_policy.write_root, lines = frame.lines, parsed = frame.parsed,
+                            index = index, entity = ctx.entity, ctx = ctx,
+                            region = {first = point, last = spec.output.last}})
+                        if not recovery then error('Answer recovery unavailable: ' .. tostring(why), 0) end
+                    end
+                    local published = Recovery.publish(recovery, ctx)
+                    if not published.ok then error('Answer recovery unavailable: ' .. tostring(published.reason), 0) end
                 end
                 cb.prepared({buf = buf, provider = info.provider, model = info.model,
                     messages = messages, payload = final_payload, response_profile = {
@@ -1582,8 +1597,8 @@ local function start_scoped_response(frame)
                 plan = preparation_plan()
                 needs_agent = false
             end
-            local ok, remote = pcall(M.resolve_remote_references, {parsed_chat = parsed, config = config,
-                chat_file = frame.file_name, exchange_idx = index,
+            local ok, remote = pcall(M.resolve_remote_references, {parsed_chat = input_parsed, config = config,
+                chat_file = frame.file_name, exchange_idx = input_index,
                 cancelled = function()return operation.cancelled or ctx.cancelled()end,
                 on_failure = logical_failure}, build)
             if not ok then fail(remote)
@@ -1635,10 +1650,21 @@ local function start_scoped_response(frame)
         end,
         finalize = function(ctx, done)
             start_topic()
-            return require('parley.response_completion').start(doc, ctx, done, {user_prefix = config.chat_user_prefix})
+            return require('parley.response_completion').start(doc, ctx, function(status)
+                if recovery then
+                    local settled = require('parley.chat_recovery').settle(recovery, ctx)
+                    if not settled.ok then
+                        pcall(vim.notify, 'Previous answer retained; restore needs a fresh target: '
+                            .. tostring(settled.reason), vim.log.levels.WARN)
+                    end
+                end
+                done(status)
+            end, {user_prefix = config.chat_user_prefix})
         end,
         rejected = function(why)
             main_finished = true; release(); _parley.logger.warning('Response not started: ' .. tostring(why))
+            if recovery then require('parley.chat_recovery').finish(recovery, 'start refused') end
+            if frame.terminal then frame.terminal({outcome = 'start refused'}) end
         end,
         terminal = function(result)
             main_finished = true
@@ -1650,6 +1676,8 @@ local function start_scoped_response(frame)
                 require('parley.buffer_lifecycle').finalize_mutated_api_leg(buf, true)
             end
             if failure_notice then vim.notify(failure_notice, vim.log.levels.WARN); failure_notice = nil end
+            if recovery then require('parley.chat_recovery').finish(recovery, result.outcome) end
+            if frame.terminal then frame.terminal(result) end
             if result.outcome == 'success' then
                 vim.cmd('doautocmd User ParleyDone')
                 if frame.callback then frame.callback() end
@@ -1875,187 +1903,87 @@ end
 -- chat_respond_all
 --------------------------------------------------------------------------------
 
--- Function to resubmit all questions up to the cursor position
+-- Explicit batch admission may materialize the chat; rendering never uses this
+-- path. Every later leg resolves a captured identity before parsing its input.
+function M.batch_snapshot(batch) return require('parley.batch_response').snapshot(batch) end
 M.respond_all = function()
-    if require('parley.llm_readiness').defer(_parley, M.respond_all) then return end
-    local buf = vim.api.nvim_get_current_buf()
-    local win = vim.api.nvim_get_current_win()
-    local cursor_pos = vim.api.nvim_win_get_cursor(0)
-    local cursor_line = cursor_pos[1]
-
-    if _parley.tasker.is_busy(buf, false) then
-        return
-    end
-
-    -- Get all lines and check if this is a chat file
+    local D, Batch = require('parley.document'), require('parley.batch_response')
+    local buf, win = vim.api.nvim_get_current_buf(), vim.api.nvim_get_current_win()
+    local cursor = vim.api.nvim_win_get_cursor(win)
     local file_name = vim.api.nvim_buf_get_name(buf)
     local reason = _parley.not_chat(buf, file_name)
-    if reason then
-        _parley.logger.warning("File " .. vim.inspect(file_name) .. " does not look like a chat file: " .. vim.inspect(reason))
-        return
+    if reason then _parley.logger.warning('Batch not started: ' .. tostring(reason)); return end
+    if batches[buf] and Batch.snapshot(batches[buf]).phase ~= 'completed' then
+        _parley.logger.warning('A batch is already active or paused in this chat'); return
     end
-
-    -- Get all lines
     local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-
-    -- Find header section end
     local header_end = find_chat_header_end(lines)
-
-    if header_end == nil then
-        _parley.logger.error("Error while parsing headers: --- not found. Check your chat template.")
-        return
-    end
-
-    -- Parse chat into structured representation
-    local parsed_chat = _parley.parse_chat(lines, header_end)
-
-    -- Find which exchange contains the cursor
-    local current_exchange_idx, _ = _parley.find_exchange_at_line(parsed_chat, cursor_line)
-    if not current_exchange_idx then
-        -- If cursor isn't on any exchange, find the last exchange before cursor
-        for i = #parsed_chat.exchanges, 1, -1 do
-            local exchange = parsed_chat.exchanges[i]
-            if exchange.question and exchange.question.line_start < cursor_line then
-                current_exchange_idx = i
-                break
-            end
+    if not header_end then return nil, 'chat header unavailable' end
+    local parsed = _parley.parse_chat(lines, header_end)
+    local doc = D.get(buf) or D.attach(buf, {patterns = require('parley.highlight_structure').patterns(_parley.config)})
+    if D.drain(doc, 10000).status ~= 'idle' then return nil, 'document structure unavailable' end
+    local selection = {}
+    for _, exchange in ipairs(parsed.exchanges) do
+        if exchange.question and exchange.question.line_start <= cursor[1] then
+            local found = D.exchange(doc, exchange.question.line_start - 1)
+            if found.status ~= 'ready' then return nil, 'question identity unavailable' end
+            selection[#selection + 1] = found.identity
         end
     end
-
-    if not current_exchange_idx then
-        _parley.logger.warning("No questions found before cursor position")
-        return
-    end
-
-    -- Save the original position for later restoration
-    local original_question_line = nil
-    if current_exchange_idx and parsed_chat.exchanges[current_exchange_idx] then
-        original_question_line = parsed_chat.exchanges[current_exchange_idx].question.line_start
-    end
-
-    -- Start recursive resubmission process
-    _parley.logger.info("Resubmitting all " .. current_exchange_idx .. " questions...")
-
-    -- Show a notification to the user
-    vim.api.nvim_echo({
-        { "Parley: ", "Type" },
-        { "Resubmitting all " .. current_exchange_idx .. " questions...", "WarningMsg" },
-    }, true, {})
-
-    M.resubmit_questions_recursively(parsed_chat, 1, current_exchange_idx, header_end, original_question_line, win)
+    if #selection == 0 then return nil, 'no questions selected' end
+    local root_policy = require('parley.neighborhood').policy_for_buf(buf)
+    local batch, retired
+    batch, reason = Batch.start(doc, {selection = selection,
+        start = function(entity, done)
+            if not vim.api.nvim_buf_is_valid(buf) or D.get(buf) ~= doc then return nil, 'document changed' end
+            local marker = D.lookup(doc, entity)
+            if not marker then return nil, 'question missing' end
+            local source = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+            local header = find_chat_header_end(source)
+            if not header then return nil, 'chat header unavailable' end
+            local current = _parley.parse_chat(source, header)
+            local index
+            for i, exchange in ipairs(current.exchanges) do
+                if exchange.question and exchange.question.line_start == marker.start_row + 1 then index = i; break end
+            end
+            if not index then return nil, 'question unavailable' end
+            local input_rows = {}
+            for _, member in ipairs(selection) do
+                local found = D.lookup(doc, member)
+                if not found then return nil, 'captured batch context unavailable' end
+                input_rows[found.start_row + 1] = true
+            end
+            local session, why = start_scoped_response({buf = buf, win = win, cursor = cursor, follow = false,
+                file_name = file_name, lines = source, parsed = current, exchange_idx = index,
+                start_index = header + 1, end_index = #source, params = {range = 2, root_policy = root_policy},
+                batch = batch, terminal = done, input_rows = input_rows})
+            if not session then return nil, why end
+            return {cancel = function()require('parley.response_session').cancel(session, 'batch cancelled')end}
+        end,
+        changed = function(state, validation)
+            if validation and not validation.accepted then
+                _parley.logger.warning('Batch not resumed: ' .. tostring(validation.reason))
+            elseif state.phase == 'paused' then
+                _parley.logger.warning('Batch paused after ' .. state.completed .. '/' .. #state.selection
+                    .. ' questions: ' .. tostring(state.reason))
+            end
+        end,
+        retired = function()
+            retired = true
+            if batches[buf] == batch then batches[buf] = nil end
+        end,
+    })
+    if batch and not retired then batches[buf] = batch
+    elseif not batch then _parley.logger.warning('Batch not started: ' .. tostring(reason)) end
+    return batch, reason
 end
-
---------------------------------------------------------------------------------
--- resubmit_questions_recursively
---------------------------------------------------------------------------------
-
-M.resubmit_questions_recursively = function(
-    parsed_chat,
-    current_idx,
-    max_idx,
-    header_end,
-    original_position,
-    original_win
-)
-    -- Save the original value on the first call
-    if current_idx == 1 then
-        original_free_cursor_value = _parley.config.chat_free_cursor
-        _parley.logger.debug(
-            "Starting recursive resubmission - saving original chat_free_cursor: " .. tostring(original_free_cursor_value)
-        )
-    end
-
-    -- Check if we've processed all questions
-    if current_idx > max_idx then
-        _parley.logger.info("Completed resubmitting all questions")
-
-        -- Always restore original setting at the end
-        if original_free_cursor_value ~= nil then
-            _parley.config.chat_free_cursor = original_free_cursor_value
-            _parley.logger.debug("End of resubmission - restored chat_free_cursor to: " .. tostring(original_free_cursor_value))
-
-            -- Notify user of completion
-            vim.api.nvim_echo({
-                { "Parley: ", "Type" },
-                { "Completed resubmitting all questions", "String" },
-            }, true, {})
-
-            -- Reset tracking variable
-            original_free_cursor_value = nil
-        end
-
-        -- Return cursor to the original position (question under cursor) after everything is done
-        local buf = vim.api.nvim_get_current_buf()
-
-        -- If we have an original position saved, restore it
-        if original_position and original_win and vim.api.nvim_win_is_valid(original_win) then
-            -- Get current lines - the line numbers may have changed during processing
-            local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-            local parsed_chat_final = _parley.parse_chat(lines, header_end)
-
-            -- Find the original question's new position
-            if parsed_chat_final.exchanges[max_idx] and parsed_chat_final.exchanges[max_idx].question then
-                local new_position = parsed_chat_final.exchanges[max_idx].question.line_start
-                _parley.helpers.cursor_to_line(new_position, buf, original_win)
-            else
-                -- Fallback if we can't find the original question
-                _parley.helpers.cursor_to_line(original_position, buf, original_win)
-            end
-        end
-
-        return
-    end
-
-    -- Create params for the current question
-    local params = {}
-    local buf = vim.api.nvim_get_current_buf()
-    local win = vim.api.nvim_get_current_win()
-
-    -- Highlight the current question being processed
-    local ns_id = vim.api.nvim_create_namespace("ParleyResubmitAll")
-    vim.api.nvim_buf_clear_namespace(buf, ns_id, 0, -1)
-
-    -- Find the question and position the cursor on it to ensure the correct context
-    local question = parsed_chat.exchanges[current_idx].question
-    local highlight_start = question.line_start
-    vim.api.nvim_buf_add_highlight(buf, ns_id, "DiffAdd", highlight_start - 1, 0, -1)
-
-    -- Set the cursor to this question to ensure proper context processing
-    _parley.helpers.cursor_to_line(highlight_start, buf, win)
-
-    -- Schedule highlight to clear after processing is complete
-    vim.defer_fn(function()
-        vim.api.nvim_buf_clear_namespace(buf, ns_id, 0, -1)
-    end, 1000)
-
-    -- This is key: we use a simulated fake params object
-    -- but actually we set the cursor on the right question first
-    -- so the proper context is used and answer is placed in correct position
-    -- We force free_cursor to false to ensure cursor follows during resubmission
-    -- The parameter true means "force cursor movement" - it will override chat_free_cursor setting
-    _parley.logger.debug("Resubmitting question " .. current_idx .. " of " .. max_idx .. " with forced cursor movement")
-
-    -- Force cursor movement for each individual question
-    _parley.config.chat_free_cursor = false -- Will be restored at the end of the resubmission
-
-    _parley.chat_respond(params, function()
-        -- After this question is processed, move to the next one
-        -- We need to reparse the chat since content has changed
-        local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-        local parsed_chat_updated = _parley.parse_chat(lines, header_end)
-
-        -- Continue with the next question
-        vim.defer_fn(function()
-            M.resubmit_questions_recursively(
-                parsed_chat_updated,
-                current_idx + 1,
-                max_idx,
-                header_end,
-                original_position,
-                original_win
-            )
-        end, 500) -- Small delay to allow UI to update
-    end)
+function M.resume_batch(params)
+    local batch = batches[vim.api.nvim_get_current_buf()]
+    if not batch then _parley.logger.warning('No paused batch in this chat'); return nil, 'no batch in this chat' end
+    local result = require('parley.batch_response').resume(batch, {accept_changes = params and params.bang == true})
+    if not result.accepted then _parley.logger.warning('Batch not resumed: ' .. tostring(result.reason))
+    elseif result.pending then _parley.logger.info('Validating batch questions before resuming') end
+    return result
 end
 
 --------------------------------------------------------------------------------

@@ -1312,11 +1312,17 @@ M.setup = function(opts)
 	-- register default commands
 	for cmd, _ in pairs(M.cmd) do
 		if M.hooks[cmd] == nil then
-			M.helpers.create_user_command(M.config.cmd_prefix .. cmd, function(params)
+			local function invoke(params)
 				M.logger.debug("running command: " .. cmd)
 				M.refresh_state()
 				M.cmd[cmd](params)
-			end, completions[cmd])
+			end
+			if cmd == "ChatResumeBatch" then
+				vim.api.nvim_create_user_command(M.config.cmd_prefix .. cmd, invoke,
+					{ bang = true, nargs = 0, desc = "Resume batch; ! accepts edited input" })
+			else
+				M.helpers.create_user_command(M.config.cmd_prefix .. cmd, invoke, completions[cmd])
+			end
 		end
 	end
 
@@ -1583,6 +1589,14 @@ M._format_missing_remote_reference_cache_content = function(u) return chat_respo
 M.cmd.Stop = function(signal) chat_respond.cmd_stop(signal) end
 M.cmd.StopDocument = function() chat_respond.cmd_stop_document() end
 M.cmd.ChatResumeResponse = function() chat_respond.cmd_resume_response() end
+
+M.cmd.ChatResumeBatch = function(params) return chat_respond.resume_batch(params) end
+M.cmd.AnswerRecovery = function()
+    local recovery = require('parley.chat_recovery'); recovery.setup(M); return recovery.open()
+end
+M.cmd.AnswerRestore = function()
+    local recovery = require('parley.chat_recovery'); recovery.setup(M); return recovery.restore()
+end
 
 --------------------------------------------------------------------------------
 -- Keybinding help (driven by keybinding_registry)
@@ -3645,6 +3659,12 @@ M.delete_chat_file = function(path)
 	if not ok then
 		vim.notify("not deleted: " .. tostring(path) .. " (" .. tostring(err) .. ")", vim.log.levels.ERROR)
 		return nil, err
+	end
+	local recovery = require("parley.chat_recovery")
+	recovery.setup(M)
+	local cleaned = recovery.deleted(path)
+	if not cleaned.ok then
+		vim.notify("Deleted " .. path .. " but answer recovery cleanup failed: " .. tostring(cleaned.reason), vim.log.levels.WARN)
 	end
 	local fok, ferr = require("parley.assets").delete_with(path)
 	if not fok then

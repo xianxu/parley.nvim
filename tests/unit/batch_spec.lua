@@ -1,0 +1,187 @@
+local loaded,B=pcall(require,'parley.batch')
+local function spec()
+    return {epoch='epoch',batch='batch',selection={{entity='a',revision='qa'},{entity='b',revision='qb'},
+        {entity='c',revision='qc'}},contexts={{entity='prior',revision='prior1'}}}
+end
+local function evidence()
+    return {epoch='epoch',questions={a={status='valid',revision='qa'},b={status='valid',revision='qb'},
+        c={status='valid',revision='qc'}},contexts={prior={status='valid',revision='prior1'}}}
+end
+local function send(s,e)
+    e.epoch=e.epoch or 'epoch';e.batch=e.batch or 'batch'
+    return B.transition(s,e)
+end
+local function effect(r,kind)
+    for _,e in ipairs(r.effects)do if e.type==kind then return e end end
+end
+local function start(s,proof)
+    local next,r=send(s,{type='start',evidence=proof or evidence()})
+    return next,effect(r,'start_generation').leg
+end
+
+describe('pure fixed-membership batches',function()
+    it('provides the batch reducer',function()assert.is_true(loaded,tostring(B))end)
+    if not loaded then return end
+    it('freezes membership and ignores inserted questions or current selection',function()
+        local input=spec();local s=B.new(input);input.selection[1].entity='other'
+        local proof=evidence();proof.questions.inserted={status='valid',revision='new'};proof.cursor='c'
+        local next,r=send(s,{type='start',evidence=proof})
+        assert.equals('a',effect(r,'start_generation').entity)
+        effect(r,'start_generation').entity='tampered'
+        assert.equals('ready',B.snapshot(s).phase)
+        assert.equals('a',B.snapshot(next).active.entity)
+        local view=B.snapshot(next);view.selection[1].entity='mutated'
+        assert.equals('a',B.snapshot(next).selection[1].entity)
+    end)
+    it('defers opaque evidence and pauses changed or missing identities',function()
+        local s=B.new(spec());local proof=evidence();proof.questions.c.status='opaque'
+        assert.equals('deferred',B.validate_next(s,proof).status)
+        local same,r=send(s,{type='start',evidence=proof})
+        assert.equals(s,same);assert.same({},r.effects)
+        proof.questions.c={status='valid',revision='changed'}
+        local paused=send(s,{type='start',evidence=proof})
+        assert.equals('paused',B.snapshot(paused).phase)
+        assert.equals('question changed',B.snapshot(paused).reason)
+        proof.questions.c=nil
+        assert.equals('missing',B.validate_next(s,proof).status)
+        proof.epoch='other';assert.equals('obsolete',B.validate_next(s,proof).status)
+    end)
+    it('preserves successful progress and validates refreshed context before advancing',function()
+        local s,leg=start(B.new(spec()))
+        s=send(s,{type='finished',leg=leg,outcome='success',context_revision='a1'})
+        assert.equals(1,B.snapshot(s).completed)
+        local proof=evidence();proof.contexts.a={status='valid',revision='a1'}
+        s,leg=start(s,proof);assert.equals('b',B.snapshot(s).active.entity)
+        s=send(s,{type='finished',leg=leg,outcome='provider_failed'})
+        assert.equals('paused',B.snapshot(s).phase);assert.equals(1,B.snapshot(s).completed)
+        proof.contexts.a.revision='human edit'
+        local same,r=send(s,{type='resume',evidence=proof})
+        assert.equals(s,same);assert.equals('context changed',r.reason)
+        s=send(s,{type='resume',evidence=proof,accept_changes=true})
+        s,leg=start(s,proof);assert.equals('b',B.snapshot(s).active.entity)
+        assert.equals(1,B.snapshot(s).completed)
+    end)
+    it('retains cancellation ownership until the active leg positively finishes',function()
+        local s,leg=start(B.new(spec()))
+        local paused,r=send(s,{type='cancel'})
+        assert.equals('paused',B.snapshot(paused).phase)
+        assert.equals(leg,effect(r,'cancel_generation').leg)
+        local same,retry=send(paused,{type='resume',evidence=evidence(),accept_changes=true})
+        assert.equals(paused,same);assert.equals('leg unresolved',retry.reason)
+        paused=send(paused,{type='finished',leg=leg,outcome='cancelled'})
+        local ready=send(paused,{type='resume',evidence=evidence()})
+        assert.equals('ready',B.snapshot(ready).phase)
+        assert.equals(0,B.snapshot(ready).completed)
+    end)
+    it('does not replay an unknown effect through resume',function()
+        local s,leg=start(B.new(spec()))
+        s=send(s,{type='finished',leg=leg,outcome='unknown'})
+        local same,r=send(s,{type='resume',evidence=evidence(),accept_changes=true})
+        assert.equals(s,same);assert.equals('unknown effect',r.reason)
+        assert.equals(0,B.snapshot(s).completed)
+    end)
+    it('rejects duplicate and stale leg completions without losing later progress',function()
+        local s,leg=start(B.new(spec()))
+        s=send(s,{type='finished',leg=leg,outcome='success',context_revision='a1'})
+        local proof=evidence();proof.contexts.a={status='valid',revision='a1'}
+        local running,newleg=start(s,proof)
+        local same,r=send(running,{type='finished',leg=leg,outcome='success',context_revision='forged'})
+        assert.equals(running,same);assert.is_false(r.accepted)
+        assert.equals(newleg,B.snapshot(same).active.leg)
+        same,r=send(running,{type='finished',leg=newleg,outcome='success'})
+        assert.equals(running,same);assert.is_false(r.accepted)
+    end)
+    it('never adopts missing members or changes the captured document epoch on resume',function()
+        local s=send(B.new(spec()),{type='cancel'})
+        local proof=evidence();proof.questions.b=nil
+        local same=send(s,{type='resume',evidence=proof,accept_changes=true})
+        assert.equals(s,same)
+        proof=evidence();proof.epoch='new epoch'
+        same=send(s,{type='resume',evidence=proof,accept_changes=true});assert.equals(s,same)
+    end)
+    it('completes in captured order and emits no further generation',function()
+        local s=B.new(spec());local proof=evidence()
+        for _,entity in ipairs({'a','b','c'})do
+            local leg;s,leg=start(s,proof)
+            assert.equals(entity,B.snapshot(s).active.entity)
+            s=send(s,{type='finished',leg=leg,outcome='success',context_revision=entity..'1'})
+            proof.contexts[entity]={status='valid',revision=entity..'1'}
+        end
+        assert.equals('completed',B.snapshot(s).phase)
+        assert.equals(3,B.snapshot(s).completed)
+        local same,r=send(s,{type='start',evidence=proof});assert.equals(s,same);assert.same({},r.effects)
+    end)
+    it('rejects invalid membership and wrong-scope events',function()
+        local bad=spec();bad.selection[2].entity='a';assert.has_error(function()B.new(bad)end)
+        local s=B.new(spec());local same,r=send(s,{type='cancel',epoch='foreign'})
+        assert.equals(s,same);assert.is_false(r.accepted)
+        same,r=send(s,{type='invented'});assert.equals(s,same);assert.is_false(r.accepted)
+        assert.equals('completed',B.snapshot(B.new({epoch='epoch',batch='empty',selection={}})).phase)
+    end)
+    it('ignores success racing cancellation until explicit resume starts the next leg',function()
+        local s,leg=start(B.new(spec()))
+        s=send(s,{type='cancel'})
+        s=send(s,{type='finished',leg=leg,outcome='success',context_revision='a1'})
+        assert.equals('paused',B.snapshot(s).phase);assert.equals(1,B.snapshot(s).completed)
+        local proof=evidence();proof.contexts.a={status='valid',revision='a1'}
+        local same=send(s,{type='start',evidence=proof});assert.equals(s,same)
+        s=send(s,{type='resume',evidence=proof});s=start(s,proof)
+        assert.equals('b',B.snapshot(s).active.entity)
+    end)
+    it('preserves independent progress invariants across generated event histories',function()
+        for seed=1,40 do
+            local s=B.new(spec());local proof=evidence();local completed=0;local issued={}
+            local random=seed
+            for _=1,150 do
+                random=(random*48271)%2147483647
+                local before=B.snapshot(s);local event
+                if before.phase=='completed' then event={type='start',evidence=proof}
+                elseif before.active then
+                    if random%4==0 then event={type='cancel'}
+                    elseif random%4==1 then event={type='finished',leg='stale',outcome='success',context_revision='bad'}
+                    else
+                        local success=random%4==2
+                        event={type='finished',leg=before.active.leg,outcome=success and 'success' or 'provider_failed',
+                            context_revision=success and before.active.entity..'done' or nil}
+                        if success then
+                            completed=completed+1
+                            proof.contexts[before.active.entity]={status='valid',revision=event.context_revision}
+                        end
+                    end
+                elseif before.phase=='paused' then event={type='resume',evidence=proof}
+                else event={type='start',evidence=proof} end
+                local result;s,result=send(s,event)
+                local after=B.snapshot(s)
+                assert.equals(completed,after.completed)
+                assert.same(spec().selection,after.selection)
+                for _,e in ipairs(result.effects)do
+                    if e.type=='start_generation' then
+                        assert.is_nil(issued[e.leg]);issued[e.leg]=true
+                        assert.equals(spec().selection[completed+1].entity,e.entity)
+                    end
+                end
+                assert.is_true(after.completed>=before.completed)
+            end
+        end
+    end)
+    it('preserves positive completion when its refreshed context is already conflicted',function()
+        local s,leg=start(B.new(spec()))
+        s=send(s,{type='finished',leg=leg,outcome='success',context_revision='unavailable',context_status='conflict'})
+        assert.equals(1,B.snapshot(s).completed);assert.equals('paused',B.snapshot(s).phase)
+        local proof=evidence();proof.contexts.a={status='conflict',revision='unavailable'}
+        local same,r=send(s,{type='resume',evidence=proof});assert.equals(s,same);assert.is_false(r.accepted)
+        proof.contexts.a={status='valid',revision='adopted'}
+        s=send(s,{type='resume',evidence=proof,accept_changes=true});s=start(s,proof)
+        assert.equals('b',B.snapshot(s).active.entity);assert.equals(1,B.snapshot(s).completed)
+    end)
+    it('finishes after adopting the last completed context without replaying a member',function()
+        local input=spec();input.selection={input.selection[1]}
+        local s,leg=start(B.new(input))
+        s=send(s,{type='finished',leg=leg,outcome='success',context_revision='unavailable',context_status='conflict'})
+        assert.equals(1,B.snapshot(s).completed);assert.equals('paused',B.snapshot(s).phase)
+        local proof=evidence();proof.contexts.a={status='valid',revision='adopted'}
+        local result;s,result=send(s,{type='resume',evidence=proof,accept_changes=true})
+        assert.equals('completed',B.snapshot(s).phase);assert.same({},result.effects)
+    end)
+
+end)

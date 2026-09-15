@@ -1210,3 +1210,46 @@ runtime cleanup or assertion was weakened, and the initial failure remains in th
 report. This final rerun supersedes that file only, not the whole-suite evidence.
 Next: Codex M4 review of the fully verified candidate; M6 full140-file run proceeds
 in isolation. M5/M6 boundaries remain open and main remains unmerged.
+
+### 2026-09-15 — M5 isolated implementation checkpoint
+
+Codex is the reviewer for all remaining boundaries, as requested by the operator.
+Its M3 review retained BR-11: cancellation inside an already-suspended fold slice
+can overwrite retirement cleanup. The feature worktree owns that focused fix; M5
+continues separately in /tmp/parley254-m5-stage until M3/M4 gates close.
+
+Combined M4 performance completed: all30 scenarios x20 samples passed hard gates;
+27 non-stream scenarios have identical work counters to staging. At5000 rows,
+stream median/p9568.80/114.28ms,17 structural rows, zero full reads. Broad repair
+11.01/13.02s with unchanged counters; reviewer CPU overlap limits timing attribution.
+Report: /tmp/parley254-m4-integrated-perf-summary.md.
+
+M5 recovery core has22 passing tests and clean lint, including native temporary
+filesystem publication and stateful fault coverage. Root batch reducer tests have
+the expected missing-module red (/tmp/parley254-batch-red.log); implementation is
+next. Document question/context revision proofs are independently in progress.
+Batch membership is fixed; only positive leg completion advances progress; opaque
+proofs defer and unknown effects cannot be replayed by resume. Recovery host/UI
+integration and atomic Document restore proof remain outstanding.
+
+### 2026-09-15 — M5 staged implementation checkpoint
+
+M3 closed506d2c34; verified M4 now on feature head ae2e12ec and under Codex review
+(log /tmp/parley254-m4-gate-codex.log). M5 stays in /tmp/parley254-m5-stage.
+Batch7files/87tests and publicresponse27tests pass, including frozen request
+membership and real registered resume! command. Recovery store/adapter/UI/privacy
+focused suites pass; ambiguous close reconciliation is being strengthened before
+final mapped recovery run. Tool-side recovery-path exclusion belongs to the M6
+common admission/traversal migration and remains mandatory before issue completion.
+M6 pure operation/resource contracts committed82a5fb12; async filesystem and
+Tasker supervision work proceeds in /tmp/parley254-m6-stage. No main merge or final
+completion is claimed. Operator live testing follows all six completed boundaries.
+
+### 2026-09-15 M5 final verification checkpoint
+
+M5 isolated head19272d82 includes fresh directory identity/privacy revalidation,
+no-create confirmed deletion cleanup, and unique public fixture chat identities.
+Final mapped union:91 unique specs,1030 passing tests, no failures/errors/incomplete
+files;575-file lint clean. Original nine failures were fixed and superseded by12
+focused reruns, not waived. Evidence:/tmp/parley254-m5-final-verification.txt.
+M4 Codex rework97ac5805 is under review before integration into this M5 candidate.

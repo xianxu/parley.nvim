@@ -312,6 +312,31 @@ atlas:
       - tests/unit/document_tail_spec.lua
       - tests/unit/stream_output_spec.lua
       - tests/unit/user_buffer_edit_spec.lua
+
+  chat/batch:
+    code:
+      - lua/parley/batch.lua
+      - lua/parley/batch_response.lua
+      - lua/parley/chat_respond.lua
+      - lua/parley/document/structure.lua
+    tests:
+      - tests/unit/batch_spec.lua
+      - tests/unit/document_region_revision_spec.lua
+      - tests/integration/document_revision_spec.lua
+      - tests/integration/batch_respond_spec.lua
+      - tests/integration/batch_lifecycle_spec.lua
+      - tests/integration/batch_validation_budget_spec.lua
+      - tests/integration/chat_respond_spec.lua
+  chat/recovery:
+    code:
+      - lua/parley/chat_recovery.lua
+      - lua/parley/answer_recovery.lua
+      - lua/parley/response_recovery.lua
+    tests:
+      - tests/integration/chat_recovery_spec.lua
+      - tests/integration/recovery_paths_spec.lua
+      - tests/integration/answer_recovery_spec.lua
+      - tests/integration/response_recovery_spec.lua
   chat/document:
     code:
       - lua/parley/line_reader.lua
