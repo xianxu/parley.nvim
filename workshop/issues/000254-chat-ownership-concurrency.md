@@ -1308,3 +1308,13 @@ provide89 specs; three prior-inventory Document extras bring the total to92.
 Full576-file lint clean. Exact evidence:/tmp/parley254-m5-rework-verification.txt,
 combined-results.json and the two full stdout/SPEC_EXIT logs. No deadline was
 increased. BR20–24 now return to mandatory Codex review. Main remains unmerged.
+
+### 2026-09-15 M5 second Codex review
+
+Codex disposedBR21/22/23 with mutation-backed evidence. BR20 remains open for a
+real save arriving before queued settlement; BR24 remains open for silent saved-
+file stat errors. Existing recovery84, batch92 and lifecycle722 tests passed, but
+two additional reviewer cases failed. The save/settlement ordering join and full
+save-probe error reporting are being corrected together. M5 stays open; no review
+finding is waived. M6 has5481 passing per-file assertions across354 specs after
+explicitly recorded focused corrections; it awaits final M5 integration/review.
