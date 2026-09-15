@@ -468,6 +468,9 @@ describe('runner terminal retention',function()
                 Runner.drain(r,1000);weak[1]=r
                 D.detach(doc);vim.api.nvim_buf_delete(buf,{force=true})
             end
+            -- Keep fixture locals off JIT traces while measuring reachability.
+            -- The real Deferred.close retention mutation still fails this probe.
+            jit.off(run,true)
             run();collectgarbage('collect');collectgarbage('collect')
             assert.is_nil(weak[1])
         end
