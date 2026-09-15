@@ -17,10 +17,7 @@ local ALLOWED_FIELDS = {
 }
 
 local function detect_ack()
-    if vim.fn.executable("ack") == 1 then
-        local version = vim.fn.system({ "ack", "--version" }):match("[^\n]+") or "ack"
-        return "ack", version
-    end
+    if vim.fn.executable("ack") == 1 then return "ack", "ack" end
     return nil, nil
 end
 
@@ -111,7 +108,7 @@ local function build_command(input)
     return cmd
 end
 
-return {
+local definition = {
     name = "ack",
     kind = "read",
     default_path = ".",
@@ -161,7 +158,7 @@ return {
         },
         required = { "pattern" },
     },
-    handler = function(input)
+    handler = function(input, execution)
         input = input or {}
         if not ack_cmd then
             return fail("ack is not installed on this system. Use grep instead.")
@@ -172,8 +169,9 @@ return {
             return fail(err)
         end
 
-        local result = vim.fn.system(cmd)
-        local exit_code = vim.v.shell_error
+        local result, exit_code
+        if execution and execution.run then result, exit_code = execution.run(cmd)
+        else result = vim.fn.system(cmd); exit_code = vim.v.shell_error end
 
         -- ack: 0=matches, 1=no matches, 2+=error
         if exit_code >= 2 then
@@ -200,3 +198,5 @@ return {
         }
     end,
 }
+
+return require("parley.tools.async_builtin").bind(definition)

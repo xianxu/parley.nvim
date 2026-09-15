@@ -7,17 +7,11 @@
 -- system grep. Argument surface is structured rather than a raw
 -- command string, so we control all flags.
 
-local version = require("parley.tools.version")
 local argv = require("parley.tools.builtin.argv")
 
 local function detect_backend()
-    if vim.fn.executable("rg") == 1 then
-        local stable = version.stable_command_version(vim.fn.system("rg --version"):match("[^\n]+"), "ripgrep")
-        return "rg", stable
-    elseif vim.fn.executable("grep") == 1 then
-        local stable = version.stable_command_version(vim.fn.system("grep --version 2>&1"):match("[^\n]+"), "grep")
-        return "grep", stable
-    end
+    if vim.fn.executable("rg") == 1 then return "rg", "ripgrep" end
+    if vim.fn.executable("grep") == 1 then return "grep", "grep" end
     return nil, nil
 end
 
@@ -134,14 +128,15 @@ local function normalize_input(input)
     }
 end
 
-local function search_root(input, root)
+local function search_root(input, root, execution)
     local anchor, label = compute_anchor(root)
-    if vim.fn.isdirectory(root.dir) ~= 1 then
+    if not (execution and execution.run) and vim.fn.isdirectory(root.dir) ~= 1 then
         return nil
     end
     local cmd = build_cmd(input, root.dir)
-    local result = vim.fn.system(cmd)
-    local exit_code = vim.v.shell_error
+    local result, exit_code
+    if execution and execution.run then result, exit_code = execution.run(cmd)
+    else result = vim.fn.system(cmd); exit_code = vim.v.shell_error end
     -- 0 = matches, 1 = no matches, 2+ = error (both rg and grep)
     if exit_code >= 2 then
         return {
@@ -156,7 +151,7 @@ local function search_root(input, root)
     return { label = label, content = rewrite_paths(trimmed, anchor, label) }
 end
 
-return {
+local definition = {
     name = "chat_history_search",
     kind = "read",
     description = describe(),
@@ -216,8 +211,9 @@ return {
             }
         end
 
-        local ok, parley = pcall(require, "parley")
-        if not ok or type(parley.get_chat_roots) ~= "function" then
+        local ok, parley = true, nil
+        if not (context and context.chat_roots) then ok, parley = pcall(require, "parley") end
+        if not (context and context.chat_roots) and (not ok or type(parley.get_chat_roots) ~= "function") then
             return {
                 content = "parley.get_chat_roots() unavailable — is parley.setup() complete?",
                 is_error = true,
@@ -225,9 +221,9 @@ return {
             }
         end
 
-        local roots = parley.get_chat_roots() or {}
+        local roots = context and context.chat_roots or parley.get_chat_roots() or {}
         local policy = context and context.root_policy
-        if policy then
+        if policy and not (context and context.run) then
             local scoped = {}
             for _, root in ipairs(roots) do
                 if require('parley.tools.dispatcher').resolve_read_path(root.dir,
@@ -248,7 +244,7 @@ return {
         local sections = {}
         local any_hits = false
         for _, root in ipairs(roots) do
-            local r = search_root(normalized, root)
+            local r = search_root(normalized, root, context)
             if r then
                 if r.error then
                     table.insert(sections, "── {" .. r.label .. "} ──\n" .. r.error)
@@ -274,3 +270,5 @@ return {
         }
     end,
 }
+
+return require("parley.tools.async_builtin").bind(definition)

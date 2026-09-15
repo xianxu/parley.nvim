@@ -105,9 +105,7 @@ function M.decode_tool_calls_from_stream(raw_response)
 
     -- index -> { id, name, parts = {} }
     local by_index = {}
-    -- Index order of FIRST appearance, so the returned list follows the
-    -- stream rather than numeric index. Matches wire_anthropic's contract
-    -- and survives a provider that emits indices out of order.
+    -- Sort declared indexes after assembly; arrival order carries no authority.
     local order = {}
 
     for line in raw_response:gmatch("[^\n]+") do
@@ -123,26 +121,32 @@ function M.decode_tool_calls_from_stream(raw_response)
 
             if type(tool_calls) == "table" then
                 for _, tc in ipairs(tool_calls) do
-                    local idx = tc.index or 0
-                    local state = by_index[idx]
-                    if not state then
-                        state = { parts = {} }
-                        by_index[idx] = state
-                        table.insert(order, idx)
-                    end
+                    local idx = type(tc) == "table" and tc.index
+                    if type(idx) == "number" and idx >= 0 and idx < math.huge and idx % 1 == 0 then
+                        local state = by_index[idx]
+                        if not state then
+                            state = { parts = {} }
+                            by_index[idx] = state
+                            table.insert(order, idx)
+                        end
 
-                    -- sse.str, not `if tc.id then`: an explicit JSON null
-                    -- decodes to vim.NIL, which is TRUTHY, so the obvious
-                    -- guard would let a continuation chunk overwrite the id
-                    -- and name captured in the first chunk with userdata.
-                    state.id = sse.str(tc.id) or state.id
+                        -- sse.str, not `if tc.id then`: an explicit JSON null
+                        -- decodes to vim.NIL, which is TRUTHY, so the obvious
+                        -- guard would let a continuation chunk overwrite the id
+                        -- and name captured in the first chunk with userdata.
+                        local id = sse.str(tc.id)
+                        if id and state.id and id ~= state.id then state.invalid = true end
+                        state.id = state.id or id
 
-                    local fn = tc["function"]
-                    if type(fn) == "table" then
-                        state.name = sse.str(fn.name) or state.name
-                        local args = sse.str(fn.arguments)
-                        if args then
-                            table.insert(state.parts, args)
+                        local fn = tc["function"]
+                        if type(fn) == "table" then
+                            local name = sse.str(fn.name)
+                            if name and state.name and name ~= state.name then state.invalid = true end
+                            state.name = state.name or name
+                            local args = sse.str(fn.arguments)
+                            if args then
+                                table.insert(state.parts, args)
+                            end
                         end
                     end
                 end
@@ -150,6 +154,7 @@ function M.decode_tool_calls_from_stream(raw_response)
         end
     end
 
+    table.sort(order)
     local completed = {}
     for _, idx in ipairs(order) do
         local state = by_index[idx]
@@ -162,7 +167,7 @@ function M.decode_tool_calls_from_stream(raw_response)
         -- never-raise contract this decoder advertises. Dropping it is safe:
         -- nothing was written to the buffer for it, so nothing is left
         -- unmatched.
-        if state.name then
+        if state.name and not state.invalid then
             local input = {}
             local full_json = table.concat(state.parts)
             if full_json ~= "" then

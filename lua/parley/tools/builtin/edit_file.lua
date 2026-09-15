@@ -6,7 +6,7 @@
 --
 -- After writing, triggers :checktime so Neovim reloads the buffer.
 
-return {
+local definition = {
     name = "edit_file",
     kind = "write",
     needs_backup = false,
@@ -180,3 +180,5 @@ return {
         return { content = msg, is_error = false, name = "edit_file" }
     end,
 }
+
+return require("parley.tools.async_builtin").bind(definition)
