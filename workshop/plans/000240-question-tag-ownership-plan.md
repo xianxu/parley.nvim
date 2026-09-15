@@ -119,3 +119,25 @@ The operator's field makes ownership explicit at the shared exchange boundary (A
 ### 2026-09-14 — Symbol table reconciled
 
 Reason: keep the reviewable function inventory aligned with the operator-directed design. Delta: the Core concepts table marks discarded planned APIs deleted and lists the new preface functions; the superseded design prose remains above as revision history.
+
+### 2026-09-14 — Complete ownership and function-level verification
+
+Reason: plan-quality PQ-1 identified consecutive unanswered questions; PQ-2 requires function-specific adversarial strategies. Delta: the question START anchor and the receiving question's literal content remain unchanged. The PRECEDING component may be an answer or an unanswered question: its content and end span must shrink to exclude the next exchange's preface. This explicitly supersedes the earlier unconditional “question.line_start/end and question.content unchanged” wording. Every attached tag has exactly one owning exchange, independent of whether the preceding exchange has an answer.
+
+The following strategies supersede the earlier enumerated test instructions (examples remain illustration only; concrete cases live in executable specs). Direct pure tests need no IO mocks; integrations use real Neovim/parser/files and existing transport fakes.
+
+| Function | Adversarial input class | Mechanical guard/oracle |
+|---|---|---|
+| `parse_tag` | Generated delimiter boundaries and surrounding text | Accept only whole-line nonempty marker; preserve exact raw label |
+| `associations` | Generated tag/question placements across configured prefixes, headers and fence boundaries | Exactly adjacent eligible tags attach once; no unrelated source row changes ownership |
+| `compose_question` | Absent/present preface and arbitrary multiline literal question text | Raw prefix occurs exactly once; no mutation or delimiter rewriting |
+| `apply_outline` | Hand-built ordered item streams with labels, hidden items and branch rows | Question identity/file/lnum/indent retained; only declared label/hide transformation; inputs unchanged |
+| `initial_index` | Competing source/tag row matches in multiple files | Exact owning question selected; hidden rows never selectable |
+| `parse_chat` | Transcript grammar compositions including consecutive unanswered questions and structured answers | Source-span partition assigns each preface once; all old-component text/sections end before it; real question markers remain at recorded starts |
+| `preface_start`, `preface_end` and model position methods | Generated prior-block growth/removal and exchange gaps | Derived preface and question spans agree with source positions, shift together and never double-count |
+| `render_exchange`, `positions` | Parsed transcripts with prefaces at each exchange boundary | Parse/render golden equality and agreement between exposed spans and source markers |
+| `build_messages`, `build_messages_from_model`, ancestor/topic consumers | Same transcript through every context entry, including reference/raw-request/tool/window branches | Exact role/content parity and preface exactly once in its retained user message, never prior assistant; existing request side effects/policies retained |
+| `question_picker` | Actual buffers/files with current cursor on tag/question/branch | Correct preselection and real navigation destination; effective filter matches displayed label |
+| `respond` regeneration path | Both neighboring exchange resubmission orders through existing fake transport | Completion leaves preface spelling/adjacency intact and model/question anchors coherent |
+
+Operating envelope (PQ-3): representative long interactive chat is 5,000 lines at roughly100 bytes/line (~0.5MB source). The new work is one linear association scan per physical parse/outline build and O(attached tags) metadata, with no durable cache or per-token work; strings are referenced rather than duplicating the transcript. Measure baseline/current parse+outline on 100,1,000,5,000-line synthetic transcripts, report medians rather than flaky timing assertions. Provisional incremental budget is20ms at5,000 lines on this development machine; exceeding it triggers profiling/replanning before close. Larger chats retain all content with linear cost (no silent truncation); no claim of an enforced document-size limit. This replaces all superseded snapshot-cache cost claims.
