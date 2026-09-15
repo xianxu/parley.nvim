@@ -127,7 +127,19 @@ local function observe_edit(doc,s,event)
     -- Only the private cursor's final exact receipt may publish known small
     -- rows. Earlier/large slices stay opaque to avoid rereading a growing row.
     local classify_successor=successor and final_receipt and bytes<=4096
-    if (not successor or classify_successor) and event.source_frame==true and (appended or (added<=256 and last-first<=256 and bytes<=65536
+    local unchanged_eol=event.source_frame==true and event.owner and a and not a.opaque and last==first+1
+        and event.first==event.last and event.first==a.end_byte-1
+        and event.start.row==a.start_row and event.start.col==a.bytes-1
+        and event.new_end.row>event.start.row
+    if unchanged_eol then
+        -- A zero-width insertion cannot alter the prefix. Native row offsets
+        -- prove its first inserted byte is a newline without rereading a long
+        -- question row. Only an exact owned callback reaches this check.
+        unchanged_eol=s.editor.driver.offset(s.buf,first+1)-s.editor.driver.offset(s.buf,first)==a.bytes
+    end
+    if unchanged_eol and not appended and (successor and not classify_successor or bytes>65536 or added>256) then
+        accumulate_repair(repair_work,Structure.splice(s.structure,first+1,last,opaque(added-1,bytes-a.bytes)))
+    elseif (not successor or classify_successor) and event.source_frame==true and (appended or (added<=256 and last-first<=256 and bytes<=65536
         and not (a and a.opaque) and not (z and z.opaque))) then
         local lines=not appended and s.editor.reader:lines(first,newlast,false) or {}
         local spans=appended and appended.spans or {}; local actual=0
@@ -153,7 +165,12 @@ local function observe_edit(doc,s,event)
             else delayed=accumulate_repair(repair_work,Structure.splice(s.structure,first,last,opaque(added,bytes))) end
             if delayed.status=='deferred' then s.deferred={first=first,last=newlast,bytes=bytes} end
         elseif last>first and spans[1] and a and preserve(s,a,spans[1].metadata.token,event) then
-            accumulate_repair(repair_work,Structure.replace_row(s.structure,first,spans[1].metadata.token,spans[1].bytes))
+            -- Exact owned insertion of a newline at EOL leaves this original
+            -- row's bytes untouched. Keep its text stamp as well as identity.
+            -- External/ambiguous callbacks always advance the ordinary stamp.
+            if not unchanged_eol then
+                accumulate_repair(repair_work,Structure.replace_row(s.structure,first,spans[1].metadata.token,spans[1].bytes))
+            end
             if last-first==1 and #spans==1 then reused=true
             else
                 local tail={}; for i=2,#spans do tail[#tail+1]=spans[i] end
@@ -243,6 +260,14 @@ function M.lookup(doc,handle,opts)
 end
 function M.exchange(doc,row,opts)
     local s=state(doc); return s.dead and {status='detached'} or measured_query(s,Structure.exchange,row,opts)
+end
+function M.capture_revision(doc,entity,kind,opts)
+    local s=state(doc)
+    return s.dead and {status='obsolete'} or measured_query(s,Structure.capture_revision,entity,kind,opts)
+end
+function M.validate_revision(doc,token,opts)
+    local s=state(doc)
+    return s.dead and {status='obsolete'} or measured_query(s,Structure.validate_revision,token,opts)
 end
 -- Display-only byte coordinates; no native reads or write authority.
 function M.byte_position(doc,offset)

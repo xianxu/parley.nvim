@@ -557,7 +557,7 @@ function M.summary(seq,first,last)
 end
 function M.range_certificate(seq,first,last,opts)
     local kind=opts and opts.kind or "text"
-    assert(kind=="text" or kind=="syntax" or kind=="projection","unknown certificate kind")
+    assert(kind=="text" or kind=="region_text" or kind=="syntax" or kind=="projection","unknown certificate kind")
     local s=state(seq)
     check_range(s,first,last)
     local totals=aggregate(s,first,last)
@@ -645,7 +645,7 @@ local function validate_fact(seq,c)
 end
 function M.validate_certificate(seq,token,opts)
     local kind=opts and opts.kind or "text"
-    assert(kind=="text" or kind=="syntax" or kind=="fact" or kind=="projection","unknown certificate kind")
+    assert(kind=="text" or kind=="region_text" or kind=="syntax" or kind=="fact" or kind=="projection","unknown certificate kind")
     local s=state(seq)
     local c=s.certificates[token]
     if not c then return false,"foreign certificate" end
@@ -657,7 +657,11 @@ function M.validate_certificate(seq,token,opts)
     if c.empty then last=first end
     local before=first>0 and locate(s,first-1) or nil
     local after=last<M.size(seq).rows and locate(s,last) or nil
-    if (before and before.handle)~=c.before or (after and after.handle)~=c.after then return false,"changed edge" end
+    -- Region consumers separately recompute semantic bounds. Outside neighbors
+    -- are not source bytes; all existing certificate kinds keep edge checks.
+    if kind~="region_text" and ((before and before.handle)~=c.before or (after and after.handle)~=c.after) then
+        return false,"changed edge"
+    end
     local totals=aggregate(s,first,last)
     if not totals or totals.rows~=c.totals.rows then return false,"changed range" end
     if kind=="projection" then

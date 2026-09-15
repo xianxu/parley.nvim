@@ -130,6 +130,74 @@ function M.next_exchange(document,first,last,opts)
     end
     return result
 end
+-- Batch input evidence is metadata-only. Tokens belong to this structure's
+-- epoch and retain scalar bounds/handles and a sequence certificate, no trees.
+local REGION_TEXT={kind="region_text"}
+local function revision_bounds(document,entity,kind,opts)
+    local current=state(document)
+    local initial=sequence.stats(current.index)
+    local reserve=sequence.navigation_budget(current.index,4)
+    local nodes,entries=opts and opts.budget_nodes or 4096,opts and opts.budget_entries or 8192
+    if nodes<=reserve.nodes or entries<=reserve.entries then return {status="budget"} end
+    local function search(first,last,selector,reverse)
+        local used=sequence.stats(current.index)
+        local remaining_nodes=nodes-(used.nodes_visited-initial.nodes_visited)-reserve.nodes
+        local remaining_entries=entries-(used.entries_visited-initial.entries_visited)-reserve.entries
+        if remaining_nodes<=0 or remaining_entries<=0 then return {status="budget"} end
+        return projection.find(current.index,first,last,selector,{reverse=reverse,
+            budget_nodes=remaining_nodes,budget_entries=remaining_entries})
+    end
+    local marker=M.lookup(document,entity)
+    if not marker then return {status="obsolete"} end
+    if not marker.metadata or not marker.metadata.confirmed then return unknown(current) end
+    local sem=marker.metadata.semantic
+    if not sem or not sem.exchange_start then return {status="obsolete"} end
+    local first=marker.start_row
+    if sem.preface_origin then
+        local preface=M.lookup(document,sem.preface_origin)
+        if not preface or not preface.metadata.confirmed then return unknown(current) end
+        first=preface.start_row
+    end
+    local total=sequence.size(current.index).rows
+    local limit=math.min(total,frontier(current))
+    local boundary=search(marker.start_row+1,limit,kind.."_boundary")
+    if boundary.status~="found" and boundary.status~="not_found" then return boundary end
+    if boundary.status=="not_found" and limit<total then return unknown(current) end
+    local last=boundary.span and boundary.span.start_row or limit
+    local tail=search(marker.start_row,last,"nonblank",true)
+    if tail.status~="found" then return tail end
+    return {status="ready",first=first,last=tail.span.end_row}
+end
+local function revision_work(current,before,result)
+    -- A budget result is retried from current semantic bounds. Never expose a
+    -- projection continuation: holding it could keep a detached index alive.
+    result.cursor=nil
+    result.work=sequence.stats(current.index)
+    for key,value in pairs(result.work)do result.work[key]=value-(before[key] or 0)end
+    return result
+end
+function M.capture_revision(document,entity,kind,opts)
+    assert(kind=="question" or kind=="context","unknown input revision kind")
+    local current=state(document);local before=sequence.stats(current.index)
+    local bounds=revision_bounds(document,entity,kind,opts)
+    if bounds.status~="ready" then return revision_work(current,before,bounds) end
+    local certificate=sequence.range_certificate(current.index,bounds.first,bounds.last,REGION_TEXT)
+    if not certificate then return revision_work(current,before,{status="opaque"}) end
+    current.revisions=current.revisions or setmetatable({},{__mode="k"})
+    local token={}
+    current.revisions[token]={epoch=current.epoch,entity=entity,kind=kind,certificate=certificate}
+    return revision_work(current,before,{status="ready",token=token,entity=entity,kind=kind})
+end
+function M.validate_revision(document,token,opts)
+    local current=state(document);local before=sequence.stats(current.index)
+    local saved=current.revisions and current.revisions[token]
+    if not saved or saved.epoch~=current.epoch then return revision_work(current,before,{status="obsolete"}) end
+    local bounds=revision_bounds(document,saved.entity,saved.kind,opts)
+    if bounds.status~="ready" then return revision_work(current,before,bounds) end
+    local valid,extent=sequence.validate_certificate(current.index,saved.certificate,REGION_TEXT)
+    valid=valid and extent.first_row==bounds.first and extent.last_row==bounds.last
+    return revision_work(current,before,{status=valid and "valid" or "conflict",entity=saved.entity,kind=saved.kind})
+end
 -- A completion decision is consumed synchronously, never retained across a yield.
 -- Three indexed searches bound work independently of exchange/body length.
 function M.completion(document,entity,tip_row,opts)

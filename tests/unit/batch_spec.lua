@@ -118,4 +118,51 @@ describe('pure fixed-membership batches',function()
         same,r=send(s,{type='invented'});assert.equals(s,same);assert.is_false(r.accepted)
         assert.equals('completed',B.snapshot(B.new({epoch='epoch',batch='empty',selection={}})).phase)
     end)
+    it('ignores success racing cancellation until explicit resume starts the next leg',function()
+        local s,leg=start(B.new(spec()))
+        s=send(s,{type='cancel'})
+        s=send(s,{type='finished',leg=leg,outcome='success',context_revision='a1'})
+        assert.equals('paused',B.snapshot(s).phase);assert.equals(1,B.snapshot(s).completed)
+        local proof=evidence();proof.contexts.a={status='valid',revision='a1'}
+        local same=send(s,{type='start',evidence=proof});assert.equals(s,same)
+        s=send(s,{type='resume',evidence=proof});s=start(s,proof)
+        assert.equals('b',B.snapshot(s).active.entity)
+    end)
+    it('preserves independent progress invariants across generated event histories',function()
+        for seed=1,40 do
+            local s=B.new(spec());local proof=evidence();local completed=0;local issued={}
+            local random=seed
+            for _=1,150 do
+                random=(random*48271)%2147483647
+                local before=B.snapshot(s);local event
+                if before.phase=='completed' then event={type='start',evidence=proof}
+                elseif before.active then
+                    if random%4==0 then event={type='cancel'}
+                    elseif random%4==1 then event={type='finished',leg='stale',outcome='success',context_revision='bad'}
+                    else
+                        local success=random%4==2
+                        event={type='finished',leg=before.active.leg,outcome=success and 'success' or 'provider_failed',
+                            context_revision=success and before.active.entity..'done' or nil}
+                        if success then
+                            completed=completed+1
+                            proof.contexts[before.active.entity]={status='valid',revision=event.context_revision}
+                        end
+                    end
+                elseif before.phase=='paused' then event={type='resume',evidence=proof}
+                else event={type='start',evidence=proof} end
+                local result;s,result=send(s,event)
+                local after=B.snapshot(s)
+                assert.equals(completed,after.completed)
+                assert.same(spec().selection,after.selection)
+                for _,e in ipairs(result.effects)do
+                    if e.type=='start_generation' then
+                        assert.is_nil(issued[e.leg]);issued[e.leg]=true
+                        assert.equals(spec().selection[completed+1].entity,e.entity)
+                    end
+                end
+                assert.is_true(after.completed>=before.completed)
+            end
+        end
+    end)
+
 end)
