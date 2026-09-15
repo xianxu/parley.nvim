@@ -491,3 +491,24 @@ findings:
     detail: |
       lua/parley/tool_folds.lua:315-325 assigns plan.windows={} then returns 'more' when configure(win,current) fails on a tick-only change; the next slice finds no window, returns 'idle', and M.step:416 clears s.first. Native reproduction: an inert same-length edit inside an OptionSet(foldminlines) autocmd during the apply-phase configure leaves foldlevel(3)==0 across repeated flushes (control gives 1). This is the 6th finding in family semantic-publication-evidence: a superseded slice must discard its job or leave it resumable, and completion may only be claimed from evidence gathered under the captured ownership. Enumerate every current() exit in tool_folds.lua (apply:319, apply:398, clear_uncertainty:273/279/284, setup:571) and fix the class, not the site.
 ```
+
+---
+
+## Re-review — 2026-09-15T09:19:02-07:00 (unknown)
+
+| field | value |
+|-------|-------|
+| issue | 254 — Harden chat ownership and concurrency |
+| repo | 000254-chat-ownership-concurrency |
+| issue file | workshop/issues/000254-chat-ownership-concurrency.md |
+| boundary | milestone M3 |
+| milestone | M3 |
+| window | 2afd7de993dc028c6132df4687695e83dcbb8fe0..0257ddad2a0f5554c3ad64ab2a2843c4bb140c6b |
+| command | sdlc milestone-close --issue 254 --milestone M3 |
+| reviewer | claude |
+| timestamp | 2026-09-15T09:19:02-07:00 |
+| verdict | unknown |
+
+## Review
+
+You're out of usage credits. Switch to another model, or manage usage credits at claude.ai/settings/usage?from=cc_cli_limit_message, to continue.
