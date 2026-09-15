@@ -169,3 +169,7 @@ Synthetic median performance at5,000 lines: parse45.44ms (+1.30ms), outline51.16
 ### 2026-09-14 — Verification complete
 
 All plan work implemented under the approved exchange-preface revision (the shared helper is question_tags.apply_outline, superseding the original outline-local helper name). Full make test passed in an indexed isolated checkout excluding the unrelated pending SVG-default edit; lint clean and all test files passed. The working-checkout run confirmed that SVG edit alone changes11 golden payloads, so no unrelated defaults or golden fixtures were changed for this issue. Scoped diff check clean. Ready for boundary review.
+
+### 2026-09-14 — Boundary review rework
+
+Review returned REWORK: semantic ownership had not reached cut/paste/prune and scoped exchange context; parser classification ignored existing logging IO; README lacked a concise syntax note. Reproduced pruning and clipboard failures, added semantic_start and swept lookup/movement/context consumers. Plan revision records the consumer enumeration and parser classification correction. Targeted regression and fresh combined verification follow before re-review.
