@@ -831,6 +831,20 @@ Its focused append/generation/runner/frame/retention/header/user tests pass 83 c
 Only the bounded ephemeral source-guard task resumes there; integration waits for
 M3 review clearance. The source-materialization blocker remains open.
 
+### 2026-09-15 — M3 review suites complete
+
+The streaming fixture now crosses an explicit native bootstrap barrier before
+its timed delivery assertions. A probe showed the first timed wait evaluated its
+predicate once, spent 1,572 ms in queued setup work, and returned timeout although
+the observer count was already one. No production code or stream timeout changed.
+The full response spec passes 74 cases. Combining passing mapped files, including
+the corrected attachment fixture and the resumed remainder, gives complete
+coverage: chat/document 263, ui/highlights 85, chat/exchange_model 264 and
+chat/lifecycle 511; 952 cases across 76 unique files (mapping overlap excluded).
+Full performance proof is still running on production commit `ebd0585b`. Its
+run overlaps the short focused response verification and small M4 unit probes;
+report-only timing will disclose that load rather than claim a pristine host.
+
 ## Revisions
 
 ### 2026-09-14 — Incremental rendering is part of the core contract
