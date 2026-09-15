@@ -1111,3 +1111,12 @@ next. Document question/context revision proofs are independently in progress.
 Batch membership is fixed; only positive leg completion advances progress; opaque
 proofs defer and unknown effects cannot be replayed by resume. Recovery host/UI
 integration and atomic Document restore proof remain outstanding.
+
+### 2026-09-15 — Isolated M6 pure prerequisites
+
+M6 operation/resource contracts staged in /tmp/parley254-m6-stage, independent of
+M5 host integration.14 tests pass including2400 generated operation events and
+1800 resource steps; four files lint clean. Process exit/EOF never substitutes
+for explicit known external-effect evidence when releasing quarantined claims.
+Next isolated work: checked asynchronous filesystem operations and fault model.
+This checkpoint does not integrate or close M6; M4/M5 reviews precede it.
