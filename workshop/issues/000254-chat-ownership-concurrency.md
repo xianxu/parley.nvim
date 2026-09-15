@@ -510,6 +510,35 @@ M1 implementation and required baseline coverage are ready for the automatic
 milestone review. No M2 implementation edits have begun; read-only API preparation
 covered balanced sequence spans, resumable lexical facts, and local provenance.
 
+### 2026-09-14 — M1 review round 1 and fixes
+
+Automatic review returned REWORK: BR-1 found automatic topic requests escaped the
+response cancellation owner; BR-2 required an explicit milestone for deferred
+reconciliation. Reproduced BR-1 with a production response plus stateful process
+fixture: answer completion starts topic request; deleting the answer produced no
+signal. Propagated owner/admission through `generate_topic` to dispatcher, including
+its retry closure. Moved parent lease validation before spinner target lookup and
+buffer validity so missing/nonanimated topic text cannot skip lifetime checks.
+Header-deletion and buffer-deletion topic regressions now pass, preserve unrelated
+work, and retain signaled attempts until exit/drain. Added actual dispatcher retry
+ownership coverage. Enumerated launches: response provider and automatic topic
+carry response ownership; recursive tool responses validate then acquire their own
+lease; standalone manual topic is independent. Deferred prelaunch generation
+ownership remains the explicit M4 task.
+
+BR-2 is assigned explicitly to M6 in the durable plan: capped five-second process
+reconciliation, visible unresolved status, retained admissions/resource claims,
+validated global/document/generation caps, timer cleanup and deterministic tests.
+Timing attribution for M1 was unavailable/inconsistent across worktree and main
+sources, so the gate uses only `--no-actual`, records N/A, and preserves all other
+gates. No hand-estimated actual was supplied. Re-run automatic M1 review after
+mapped verification of these fixes; no future milestone implementation has started.
+
+Read-only editor conformance probe for M3 found whole-buffer deletion emits zero
+inserted bytes while Neovim retains one empty line. Normalize this empty-buffer
+case against observed line count/offsets in the adapter and add a durable test;
+other UTF-8/multiline byte events reconstructed the actual buffer in the probe.
+
 ## Revisions
 
 ### 2026-09-14 — Incremental rendering is part of the core contract
