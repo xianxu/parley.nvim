@@ -1520,3 +1520,13 @@ identifies lifecycle decisions outside the pure transition boundary. The plan
 enumerates scheduler, filesystem-operation and skill final-read owners and
 requires transitions to authorize launches, cleanup release and retirement,
 with adapter rejection controls. M6 remains open during this structural repair.
+
+### 2026-09-15 BR31 correction checkpoint
+
+Pure lifecycle permissions now control all three owners enumerated by Codex.
+Focused checks pass: operation12, scheduler16, architecture7, producer11, chat
+async tools8; filesystem67 and skill64 including their related suites. Rejected
+transition controls prove adapters cannot launch, consume, release or retire
+contrary to model decisions. New pure modules/tests are mapped. Final149-spec
+verification follows; fourth M6 Codex review retains Important severity with
+round cap5 rather than allowing automatic demotion.
