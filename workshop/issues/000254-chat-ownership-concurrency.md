@@ -965,6 +965,24 @@ M4 isolated tool-round integration passes five tests including ordered completio
 unknown-to-known evidence with explicit resume, sibling-only cancellation and
 positive fixture cleanup. Production respond wiring remains outstanding.
 
+
+### 2026-09-15 — Controlled repair comparison and fourth M3 review
+
+Read-only investigation `/tmp/parley254-br10-perf-investigation.md` compares
+old/current fold code under the same 1,000-row repair probe. With JIT disabled,
+medians differ by less than 1% (about 724 ms); JIT-enabled identical current code
+varies from 287–302 ms to 550–621 ms across processes. The full benchmark uses
+`pairs()` phase order, changing trace/warmup context between reports. No consistent
+BR-10 algorithmic regression was reproduced; the full-run 8.8-second broad repair
+latency remains disclosed and is not replaced by the smaller probe.
+
+The fourth M3 boundary review extends `WF_BOUNDARY_ROUND_CAP` to four because
+BR-10 was newly raised at the third review and its native class fixes require a
+fresh review. Review and open-finding gates remain enabled. Use Claude for this
+review after earlier Codex agent usage exhaustion. Actual-time attribution remains
+N/A: the measured window mixes #192/#254 and cannot reliably attribute this work;
+only that measurement gate is waived, without entering invented hours.
+
 ## Revisions
 
 ### 2026-09-14 — Incremental rendering is part of the core contract
