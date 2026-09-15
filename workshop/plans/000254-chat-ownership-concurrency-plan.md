@@ -769,3 +769,12 @@ edit or native failure interrupts them; no rollback or synthetic success hides
 those bytes. Tests interleave competing admission during yielded reservation,
 failed acquisition, foreign tickets and retirement (ARCH-ORDER, ARCH-CONSTRAINTS,
 ARCH-PURPOSE). This is M4 staging work and does not enter the M3 review window.
+
+### 2026-09-15 — M3 review fixes verified, review retry pending
+
+Reason: native provenance, uncertainty and retirement fixes plus their conformance
+tests pass the complete M3 verification mapping. Delta: implementation checks are
+again supported by evidence: document263/highlights85/exchange264/lifecycle511,
+504-file clean lint, and all30 full benchmark scenarios on `ebd0585b`. The issue
+Log records timings and affected native fold costs without an 8 ms latency claim.
+M3 closure still belongs to the binary-owned fresh-context review.
