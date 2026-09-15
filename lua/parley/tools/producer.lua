@@ -1,6 +1,7 @@
 -- Generation adapters hand cancelled operations to one process-scoped owner.
 -- No document objects or current editor selection enter this module.
 local Dispatch=require('parley.tools.dispatcher')
+local Result=require('parley.tools.result_evidence')
 local Scheduler=require('parley.tools.scheduler')
 local Tasker=require('parley.tasker')
 local M={}
@@ -89,8 +90,8 @@ function M.new(opts)
         local refused=setmetatable({},{__mode='k'})
         return {start=function(call,_,events)
             events=events or {};local h={};refused[h]=true
-            invoke(events.outcome,'known',{id=type(call)=='table' and call.id or '',name=type(call)=='table' and call.name or '',
-                content=('Tool is not in captured capabilities'):sub(1,maximum),is_error=true});invoke(events.resolved);return h
+            invoke(events.outcome,'known',Result.publish({id=type(call)=='table' and call.id or '',name=type(call)=='table' and call.name or '',
+                content='Tool is not in captured capabilities',is_error=true},maximum));invoke(events.resolved);return h
         end,cancel=function(h,done)if not refused[h]then return false end;invoke(done);return true end,close=function()end}
     end
     if not scalar(opts.buf)then return nil,'captured buffer required'end
@@ -103,8 +104,8 @@ function M.new(opts)
     local records=setmetatable({},{__mode='k'});local producer={}
     if not injected then clients=clients+1 end
     local function refuse(call,events,reason)
-        invoke(events.outcome,'known',{id=type(call)=='table' and call.id or '',name=type(call)=='table' and call.name or '',
-            content=tostring(reason):sub(1,maximum),is_error=true})
+        invoke(events.outcome,'known',Result.publish({id=type(call)=='table' and call.id or '',name=type(call)=='table' and call.name or '',
+            content=tostring(reason),is_error=true},maximum))
         invoke(events.resolved);local h={};records[h]={refused=true};return h
     end
     function producer.start(call,ctx,events)
@@ -131,7 +132,8 @@ function M.new(opts)
                 if not r.normalized then
                     local snapshot=service:snapshot(r.op)
                     local formatted,value=pcall(Dispatch.normalize,r.token,result,snapshot and snapshot.evidence)
-                    r.normalized=formatted and value or {id=call_id,name=call_name,content=('Tool result formatting failed'):sub(1,maximum),is_error=true}
+                    r.normalized=formatted and value or Result.publish({id=call_id,name=call_name,
+                        content='Tool result formatting failed',is_error=true},maximum)
                     r.token=nil
                 end
                 result=vim.deepcopy(r.normalized)
@@ -147,7 +149,7 @@ function M.new(opts)
             if callbacks then invoke(callbacks.resolved)end
         end
         local op,status=service:execute(generation,{attempt=attempt,round=round,call_id=call.id,name=call.name,
-            input=prepared.input,claims=prepared.claims},{outcome=deliver,resolved=complete})
+            input=prepared.input,claims=prepared.claims,authority=prepared.authority},{outcome=deliver,resolved=complete})
         if not op then records[handle]=nil;return refuse(call,events,status)end
         r.op=op
         if not injected then

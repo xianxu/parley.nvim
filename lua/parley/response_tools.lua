@@ -3,7 +3,6 @@
 local D=require('parley.document')
 local Deferred=require('parley.deferred_work')
 local Serialize=require('parley.tools.serialize')
-local Dispatch=require('parley.tools.dispatcher')
 local M={}
 local function copy(value)return type(value)=='table' and vim.deepcopy(value) or value end
 local function valid_name(value)return type(value)=='string' and #value>0 and #value<=256 and not value:find('%s')end
@@ -81,8 +80,10 @@ local function tool_outcome(s,r,outcome,value)
     local result
     if outcome=='known'then
         assert(type(value)=='table' and type(value.content)=='string','invalid tool result')
-        result={id=r.call.id,name=r.call.name,content=Dispatch.truncate(value.content,s.result_limit),is_error=value.is_error==true}
-    else result={id=r.call.id,name=r.call.name,content=type(value)=='table' and tostring(value.content or '') or '',is_error=true}end
+        result=require('parley.tools.result_evidence').publish(value,s.result_limit)
+        result.id=r.call.id;result.name=r.call.name;result.is_error=value.is_error==true
+    else result=require('parley.tools.result_evidence').publish({id=r.call.id,name=r.call.name,
+        content=type(value)=='table' and tostring(value.content or '') or '',is_error=true},s.result_limit)end
     r.outcome=outcome
     -- Reserve publication before invoking outcome observers: they may report
     -- physical cleanup or cancel reentrantly. Neither can retire this record

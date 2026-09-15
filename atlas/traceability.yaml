@@ -790,6 +790,13 @@ atlas:
       - lua/parley/tools/types.lua
       - lua/parley/tools/async_builtin.lua
       - lua/parley/tools/filesystem.lua
+      - lua/parley/tools/path_authority.lua
+      - lua/parley/tools/process_scope.lua
+      - lua/parley/tools/process_bootstrap.lua
+      - scripts/tool_process.lua
+      - lua/parley/tools/file_transform.lua
+      - lua/parley/tools/file_refresh.lua
+      - lua/parley/tools/result_evidence.lua
       - lua/parley/tasker.lua
       - lua/parley/attempt.lua
       - tests/helpers/fake_process.lua
@@ -805,6 +812,14 @@ atlas:
       - tests/integration/tool_dispatch_capture_spec.lua
       - tests/integration/tool_producer_spec.lua
       - tests/integration/chat_async_tools_spec.lua
+      - tests/unit/tool_path_authority_lifecycle_spec.lua
+      - tests/unit/tool_process_scope_spec.lua
+      - tests/unit/tool_file_transform_spec.lua
+      - tests/unit/tool_result_evidence_spec.lua
+      - tests/integration/tool_path_authority_spec.lua
+      - tests/integration/tool_process_scope_spec.lua
+      - tests/integration/tool_file_refresh_spec.lua
+      - tests/integration/tool_result_evidence_spec.lua
 
   providers/tool_use:
     code:

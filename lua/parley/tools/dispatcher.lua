@@ -243,11 +243,18 @@ local function prepare_input(call,def,policy,opts)
     return input,page
 end
 local function normalize(call,page,opts,result,evidence)
+    local Result=require('parley.tools.result_evidence')
     if type(result)~='table' or type(result.content)~='string' then
         result={content='handler returned invalid result',is_error=true}
     else result=vim.deepcopy(result)end
+    result=Result.cap(result)
     result.id=call.id;result.name=call.name
-    if page and not result.is_error then result.content=M.page_lines(result.content,page.offset,page.limit)end
+    if page and not result.is_error then
+        local content,total=M.page_lines(result.content,page.offset,page.limit)
+        result.content=content
+        if page.offset>1 or page.limit<total then result.truncated=true end
+    end
+    if evidence and evidence.reconciliation_required==true then result.reconciliation_required=true end
     local footer
     if evidence and evidence.backup_confirmed==true and type(evidence.backup_path)=='string' then
         footer='\npre-image: '..evidence.backup_path
@@ -255,22 +262,10 @@ local function normalize(call,page,opts,result,evidence)
     end
     local budget=opts.max_bytes
     if footer and budget and #footer>budget then
-        result.content=('Confirmed backup path exceeds result limit'):sub(1,budget)
-        result.is_error=true;result.truncated=true;return result
+        result.content='Confirmed backup path exceeds result limit'
+        result.is_error=true;result.truncated=true;footer=nil
     end
-    if budget then
-        budget=budget-(footer and #footer or 0)
-        if #result.content>budget then
-            local marker=string.format('\n... [truncated: %d bytes omitted]',#result.content)
-            local keep=math.max(0,budget-#marker)
-            for _=1,3 do
-                marker=string.format('\n... [truncated: %d bytes omitted]',#result.content-keep)
-                keep=math.max(0,budget-#marker)
-            end
-            result.content=#marker<=budget and result.content:sub(1,keep)..marker or result.content:sub(1,budget)
-            result.truncated=true
-        end
-    end
+    result=Result.publish(result,budget and budget-(footer and #footer or 0))
     if footer then result.content=result.content..footer end
     return result
 end
@@ -382,7 +377,12 @@ function M.capture(definitions,opts)
         if defs[def.name]then return nil,'duplicate tool capability'end
         defs[def.name]=vim.deepcopy(def)
     end
-    local profile={};profiles[profile]={definitions=defs,context=context,options=options};return profile
+    local root_paths={policy.write_root}
+    for _,root in ipairs(policy.read_roots)do root_paths[#root_paths+1]=root end
+    if context.help_root then root_paths[#root_paths+1]=context.help_root end
+    local authority,authority_error=require('parley.tools.path_authority').capture(root_paths)
+    if not authority then return nil,authority_error end
+    local profile={};profiles[profile]={definitions=defs,context=context,options=options,authority=authority};return profile
 end
 function M.context(profile)return vim.deepcopy(assert(profiles[profile],'invalid captured tool profile').context)end
 function M.capabilities(profile)
@@ -458,8 +458,14 @@ function M.prepare(profile,call)
             end
         end
     end
+    local paths={}
+    for _,claim in ipairs(claims)do if claim.path then paths[#paths+1]=claim.path end end
+    for _,key in ipairs({'path','file_path'})do if type(input[key])=='string'then paths[#paths+1]=input[key]end end
+    for _,path in ipairs(input.paths or {})do paths[#paths+1]=path end
+    local authority,authority_error=require('parley.tools.path_authority').capture(paths,claims,p.authority)
+    if not authority then return nil,authority_error end
     local token={};preparations[token]={call={id=call.id,name=call.name},page=page,options=p.options}
-    return {input=input,claims=claims,token=token}
+    return {input=input,claims=claims,token=token,authority=authority}
 end
 function M.normalize(token,result,evidence)
     local p=assert(preparations[token],'invalid tool preparation receipt')

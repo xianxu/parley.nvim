@@ -97,6 +97,24 @@ describe("skill_invoke.invoke", function()
         remove_fixture_dir(tmpdir)
     end)
 
+    it("preserves truncation evidence in the skill result delivered to its caller", function()
+        local large = tmpdir .. "/large.txt"
+        vim.fn.writefile({ string.rep("x", 600000) }, large, "b")
+        parley.dispatcher.query = function(_b, _p, _payload, _h, on_exit)
+            tasker.set_query("qid_large_read", { raw_response = read_file_sse(large) })
+            vim.schedule(function() on_exit("qid_large_read") end)
+        end
+        skill_invoke.invoke(buf, manifest({ tools = { "read_file" }, elevated = {}, force_tool = "read_file" }), {}, {
+            no_reload = true, on_done = function(result) done_result = result end,
+        })
+        assert.is_true(vim.wait(5000, function() return done_result ~= nil end, 1))
+        assert.is_true(done_result.ok)
+        local result = done_result.results[1]
+        assert.is_true(result.truncated)
+        assert.truthy(result.content:find("[Tool result incomplete]", 1, true))
+        assert.is_true(#result.content <= 524288)
+    end)
+
     it("drives one exchange: payload + force_tool, applies propose_edits, reloads, on_done", function()
         skill_invoke.invoke(buf, manifest(), {}, {
             manual = true,

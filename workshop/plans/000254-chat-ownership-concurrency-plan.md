@@ -1383,3 +1383,33 @@ families and lint, and return to Codex review. ARCH-SECURE/ORDER govern changing
 identity; ARCH-PURPOSE/CONSTRAINTS govern complete bounded evidence; ARCH-DRY/PURE
 require common transformation policy; ARCH-MOCK/FUNERAL require shared stateful
 seams and explicit retirement of any new handles or captured editor evidence.
+
+### 2026-09-15 — Concrete M6 rework entities and limits
+
+Reason: native probes establish the effect-time identity mechanism and truthful
+publication representation. Delta: `tools/path_authority.lua` is an integration
+owner for opaque captured identities/permissions and worker openat/mkdirat/linkat/
+unlinkat operations. Export/import is64KiB, components128, captured identities4096;
+unsupported POSIX/LuaJIT builds refuse. Intermediate ambiguous closes transfer to
+bounded runtime quarantine and require positive probe evidence. Existing checked
+filesystem owns final descriptors, effect uncertainty and callback retirement.
+
+`tools/process_scope.lua` is pure argv/target/output planning; `process_bootstrap`
+and `scripts/tool_process.lua` are thin integration. The same owned Neovim process
+pins a captured target then execs the safe builtin backend, so no unowned helper
+outlives Tasker. Up to32 targets are split sequentially; body/path-label expansion
+shares a fixed output cap and sticky incompleteness. Native fchdir/exec probes
+retain the pinned directory across rename. File descriptors preserve file-target
+semantics; private exclusions stay relative to pinned roots. No new external
+binary is required. Existing resource claims coordinate Parley operations, not
+arbitrary outside writers; this is not a sandbox for custom commands.
+
+`tools/file_transform.lua` is pure shared validation/edit/numbering policy;
+`tools/file_refresh.lua` integrates captured editor proof with confirmed bytes,
+never a second path read. Changed/ABA/replaced buffers remain untouched and dirty;
+only exact post-apply proof clears modified. Document's64KiB User limit remains.
+`tools/result_evidence.lua` is pure bounded publication: incomplete and editor-
+reconciliation notices are at most72 bytes of metadata/result,9216 at128records,
+including zero body capacity. Scheduler/backend capture, paging, normalization,
+path-label expansion, transcript/provider serialization and skill output retain
+these facts. All new entity specs are registered in providers/tool_execution.

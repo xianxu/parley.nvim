@@ -17,7 +17,7 @@ local function setup(options)
     local requests={}
     local adapter=Tools.new(doc,{producer=not options.actual and producer or nil,root_policy=options.root_policy,
         buf=serial,allowed_tools=options.actual and {'read_file','write_file'} or {},
-        max_iterations=options.max_iterations,schedule=false,build_input=function(previous,messages)
+        max_iterations=options.max_iterations,max_result_bytes=options.max_result_bytes,schedule=false,build_input=function(previous,messages)
         previous.messages=messages;previous.payload={model='fixture',messages=messages};return previous
     end})
     local hooks={prepare=function(ctx,cb)cb.prepared(ctx.input);cb.resolved()end,
@@ -57,6 +57,18 @@ local function setup(options)
 end
 local calls={{id='a',name='read_file',input={path='a'}},{id='b',name='read_file',input={path='b'}}}
 describe('production concurrent tool round composition',function()
+    it('keeps upstream incompleteness visible in transcript and both provider continuations at tiny caps',function()
+        local f=setup({max_result_bytes=8});f.round({calls[1]})
+        local op=f.producer.started[1]
+        op.events.outcome('known',{content='partial',truncated=true,is_error=false});op.events.resolved();f.drain()
+        local messages=f.requests[2].ctx.input.messages
+        local block=messages[#messages].content[1]
+        assert.equals('[Tool result incomplete]\n',block.content)
+        local openai=require('parley.tools.wire_openai').translate_messages(messages)
+        assert.equals(block.content,openai[#openai].content)
+        local lines=f.editor.lines
+        assert.truthy(table.concat(lines,'\n'):find('[Tool result incomplete]',1,true))
+    end)
     after_each(function()
         for _,r in ipairs(runners)do Runner.cancel(r);Runner.drain(r,100)end
         for _,f in ipairs(fixtures)do

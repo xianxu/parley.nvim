@@ -94,7 +94,7 @@ end
 --- @param result ToolResult { id, content, is_error?, name? }
 --- @return string block
 function M.render_result(result)
-    local content = result.content or ""
+    local content = require("parley.tools.result_evidence").publish(result).content
     local pair = fence_for(content)
     local err_tag = result.is_error and " error=true" or ""
     return string.format(

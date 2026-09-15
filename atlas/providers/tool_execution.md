@@ -164,3 +164,42 @@ blocked-prefix proof within one pump. A128-waiter/32-claim chain measured roughl
 queues stayed below0.1ms. These are diagnostic timings, not latency guarantees.
 A JIT-disabled VM-call regression bounds deterministic pump work; collision tests
 ensure cached ordering never weakens exact path/ancestor conflicts.
+
+## Effect-time paths and editor reconciliation
+
+`tools/path_authority.lua` captures directory and resource identities alongside
+canonical claims. Each path operation resolves components relative to pinned
+parent descriptors with no-follow opens in a libuv worker. Renaming an admitted
+ancestor cannot redirect a queued operation. Capabilities constrain subsequent
+paths, including backup publication and missing-directory creation. The backend
+requires LuaJIT plus POSIX descriptor-relative calls on macOS/Linux; unsupported
+builds refuse protected execution. Native conformance was run on macOS.
+
+Builtin traversal runs through `process_scope` and `process_bootstrap`: a clean
+Neovim child imports the bounded authority, pins one target, then replaces itself
+with the captured command. Directory targets become its pinned cwd; regular files
+remain inherited descriptors. Multiple search targets run sequentially inside
+one owned tool operation. No child-follow flags are accepted, and private-path
+exclusions are translated before traversal. Tasker owns the same process through
+bootstrap, exec, cancellation, exit and drain. An18-byte stderr handshake
+distinguishes successful bootstrap from a search returning no matches; Tasker
+accounts that bounded control metadata in addition to the body capture budget. This protects admitted path
+identity; it does not serialize arbitrary external writers or sandbox custom
+programs. Authority payloads are limited to64KiB, path depth128, captured identity
+entries4096 and command targets32. Ambiguous intermediate descriptor closes stay
+quarantined until positive probe evidence; they are never blindly retried.
+
+`file_transform` owns pure edits, insertion and numbered-read policy for both
+async and compatibility handlers. `file_refresh` captures open-buffer identity
+and revision before IO. A confirmed write refreshes unchanged autoread buffers
+from committed bytes, without reopening the pathname. Intervening edits, ABA,
+rename, unsupported encoding or a refused Document grant preserve the buffer and
+report reconciliation required. Only an unchanged post-apply tick and exact text
+permit clearing modified state. Chat Document refresh retains the64KiB User-edit
+bound; larger replacements require reconciliation.
+
+`result_evidence` preserves incomplete-output and reconciliation evidence through
+scheduler caps, paging, normalization, path-label expansion, serialization,
+provider continuation and skill results. Body retention remains capped. Fixed
+notices use at most72 metadata bytes per result (9216 across128 records), including
+zero body capacity; they cannot disappear into an empty apparent success.

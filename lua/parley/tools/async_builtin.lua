@@ -7,73 +7,21 @@ local source = debug.getinfo(1, 'S').source:sub(2)
 local help_root = source:match('^(.*)/lua/parley/tools/async_builtin%.lua$')
 help_root = help_root and (vim.uv or vim.loop).fs_realpath(help_root)
 local function result(name,content,failed)return {name=name,content=content,is_error=failed or false}end
-local function integer(n)return type(n)=='number' and n>=0 and n<math.huge and n%1==0 end
 local function inside(parent,path)return path==parent or path:sub(1,#parent+1)==parent..'/'end
 local function await(method,...)
     local value=coroutine.yield({method=method,args={...}})
     if value.error_code or value.cancelled then error({outcome=value},0)end
     return value
 end
-local function lines(bytes)
-    local out={};for line in (bytes..'\n'):gmatch('([^\n]*)\n')do out[#out+1]=line end
-    if bytes:sub(-1)=='\n' then table.remove(out)end
-    return out
-end
 
-local function transform(name,input,content,path,maximum)
-    if name=='write_file' then
-        if type(input.content)~='string' then return nil,'missing or invalid required field: content'end
-        if #input.content>maximum then return nil,'file transformation exceeds size limit'end
-        return input.content,'Written '..#input.content..' bytes to '..path
-    end
-    if name=='propose_edits'then
-        if type(input.edits)~='table' or #input.edits==0 then return nil,'no edits provided'end
-        if #input.edits>128 or #content*#input.edits>8388608 then return nil,'edit work capacity exceeded'end
-        local bound=#content
-        for _,edit in ipairs(input.edits)do
-            if type(edit)~='table' or type(edit.new_string)~='string'then return nil,'invalid edit'end
-            bound=bound+#edit.new_string
-            if bound>maximum then return nil,'file transformation exceeds size limit'end
-        end
-        local changed=require('parley.skill_edits').compute_edits(content,input.edits)
-        return changed.ok and changed.content or nil,changed.msg..(changed.ok and ' to '..path or '')
-    end
-    if input.insert_line~=nil and input.insert_text~=nil then
-        if type(input.insert_line)~='number' or not integer(math.abs(input.insert_line)) or type(input.insert_text)~='string'then return nil,'invalid insert fields'end
-        if #content+#input.insert_text+2>maximum then return nil,'file transformation exceeds size limit'end
-        local old,added=lines(content),lines(input.insert_text)
-        local at=math.max(0,math.min(input.insert_line,#old));local out={}
-        for i=1,at do out[#out+1]=old[i]end
-        for _,line in ipairs(added)do out[#out+1]=line end
-        for i=at+1,#old do out[#out+1]=old[i]end
-        return table.concat(out,'\n')..(content:sub(-1)=='\n' and '\n' or ''),
-            'Inserted '..#added..' line(s) after line '..at..' in '..path
-    end
-    local old,new=input.old_string,input.new_string
-    if type(old)~='string' or old=='' then return nil,'missing or invalid required field: old_string'end
-    if type(new)~='string'then return nil,'missing or invalid required field: new_string'end
-    local first=content:find(old,1,true)
-    if not first then return nil,'old_string not found in '..path end
-    if not input.replace_all and content:find(old,first+1,true)then
-        return nil,'old_string is not unique in '..path..'. Use replace_all=true to replace all occurrences.'
-    end
-    local escaped=old:gsub('([%(%)%.%%%+%-%*%?%[%]%^%$])','%%%1')
-    local count=1
-    if input.replace_all then count=select(2,content:gsub(escaped,''))end
-    if #content+count*(#new-#old)>maximum then return nil,'file transformation exceeds size limit'end
-    local changed
-    if input.replace_all then changed=content:gsub(escaped,(new:gsub('%%','%%%%')))
-    else changed=content:sub(1,first-1)..new..content:sub(first+#old)end
-    return changed,'Replaced '..count..' occurrence(s) in '..path
-end
-
-local function file_body(name,input,context)
+local function file_body(name,input,context,refresh)
     local path=input.file_path or input.path
     if type(path)~='string' or path:sub(1,1)~='/'then return result(name,'missing or invalid required field: file_path',true)end
     local maximum=context.max_file_bytes or 1048576
+    local invalid=require('parley.tools.file_transform').validate(name,input,maximum)
+    if invalid then return result(name,invalid,true)end
     local prior
     if name=='write_file'then
-        if type(input.content)~='string' or #input.content>maximum then return result(name,'invalid or oversized content',true)end
         prior=await('stat',path)
         if prior.revision.exists then prior=await('read',path)
         else
@@ -83,20 +31,13 @@ local function file_body(name,input,context)
         end
     else prior=await('read',path)end
     local content=prior.data or ''
-    if (name=='read_file' or input.insert_line~=nil) and select(2,content:gsub('\n',''))>32768 then
-        return result(name,'line transformation capacity exceeded',true)
-    end
     if name=='read_file'then
-        if content==''then return result(name,'')end
-        local start=input.offset or input.line_start or 1
-        local limit=input.limit or (input.line_end and input.line_end-start+1)
-        if not integer(start) or start<1 or limit and not integer(limit)then return result(name,'invalid line range',true)end
-        local out={};for index,line in ipairs(lines(content))do
-            if index>=start and (not limit or #out<limit)then out[#out+1]=string.format('%5d  %s',index,line)end
-        end
-        return result(name,table.concat(out,'\n'))
+        local text,err,metadata=require('parley.tools.file_transform').numbered_read(input,content)
+        local value=result(name,text or err,text==nil)
+        for key,item in pairs(metadata or {})do value[key]=item end
+        return value
     end
-    local changed,message=transform(name,input,content,path,maximum)
+    local changed,message=require('parley.tools.file_transform').transform(name,input,content,path,maximum)
     if not changed then return result(name,message,true)end
     local backup
     if prior.revision.exists then
@@ -107,6 +48,9 @@ local function file_body(name,input,context)
         if not backup then return result(name,'backup capacity exhausted',true)end
     end
     local outcome=await('write_checked',{path=path,content=changed,expected=prior.revision,backup_path=backup})
+    local completion=require('parley.tools.file_refresh').complete(refresh,changed)
+    outcome.evidence=outcome.evidence or {}
+    outcome.evidence.reconciliation_required=completion.reconciliation_required
     return result(name,message),outcome
 end
 
@@ -165,24 +109,34 @@ end
 local function execute(definition,input,context,done)
     input=vim.deepcopy(input or {})
     local captured={};for key,value in pairs(context or {})do
-        captured[key]=type(value)=='table' and key~='filesystem' and key~='tasker' and vim.deepcopy(value) or value
+        captured[key]=type(value)=='table' and key~='filesystem' and key~='tasker' and key~='authority' and vim.deepcopy(value) or value
     end
     context=captured
     local fs=context.filesystem or require('parley.tools.filesystem').new({max_bytes=context.max_file_bytes or 1048576})
+    if context.authority then fs=fs:authorized(context.authority)end
     local tasker=context.tasker or require('parley.tasker')
+    local refresh=write_tools[definition.name] and type(input.file_path or input.path)=='string'
+        and require('parley.tools.file_refresh').capture(input.file_path or input.path) or nil
     local cancelled,finished=false,false
     local active,sequence=nil,0
     local process_bytes=0
+    local process_formatted_bytes,process_truncated=0,false
     local had_effect=false
     local last={certainty='unknown',effect='not_applied',physical_resolved=false}
     local handle={}
     local function publish(value)
         if value.effect=='applied' or value.effect=='partial'then had_effect=true end
         if had_effect and value.effect=='not_applied'then value.effect='partial'end
+        if refresh and value.effect~='not_applied' and require('parley.tools.file_refresh').pending(refresh)then
+            value.evidence=value.evidence or {};value.evidence.reconciliation_required=true
+        end
         if value.result and value.evidence and value.evidence.backup_confirmed and value.evidence.backup_path then
             value.result.content=value.result.content..'\npre-image: '..value.evidence.backup_path
         end
-        last=value;if value.certainty=='known' and value.physical_resolved then finished=true;active=nil end
+        last=value;if value.certainty=='known' and value.physical_resolved then
+            finished=true;active=nil
+            if refresh then require('parley.tools.file_refresh').release(refresh);refresh=nil end
+        end
         pcall(done,vim.deepcopy(value))
     end
     local function failure(value)
@@ -191,17 +145,36 @@ local function execute(definition,input,context,done)
         publish(value)
     end
     local function terminal(value,evidence)
+        if process_truncated then value.truncated=true end
         evidence=evidence or {}
         publish({certainty='known',effect=evidence.effect or (had_effect and (value.is_error and 'partial' or 'applied') or 'not_applied'),physical_resolved=true,
             result=value,evidence=evidence.evidence})
     end
     local execution={chat_roots=context.chat_roots or {},root_policy=context.root_policy}
     execution.run=function(command)
-        local observed=await('process',private_argv(command,context))
-        return observed.data,observed.code
+        command=private_argv(command,context)
+        if not context.authority then
+            local observed=await('process',command)
+            return observed.data,observed.code
+        end
+        local scope=require('parley.tools.process_scope')
+        local plans,problem=scope.plan(command,context.private_directory)
+        if not plans then error({message=problem},0)end
+        local outputs,code={},nil
+        for _,plan in ipairs(plans)do
+            local observed=await('process',plan.command,plan)
+            local remaining=math.max(0,(context.max_bytes or 1048576)-process_formatted_bytes)
+            local separator=#outputs>0 and remaining>0 and '\n' or ''
+            local rendered,truncated=scope.restore(observed.data or '',plan.path,plan.command[1],remaining-#separator)
+            outputs[#outputs+1]=separator..rendered
+            process_formatted_bytes=process_formatted_bytes+#separator+#rendered
+            process_truncated=process_truncated or truncated
+            code=scope.join_code(code,observed.code)
+        end
+        return table.concat(outputs),code
     end
     local thread=coroutine.create(function()
-        if file_tools[definition.name]then return file_body(definition.name,input,context)end
+        if file_tools[definition.name]then return file_body(definition.name,input,context,refresh)end
         if definition.name=='parley_help'then return help_body(input,context)end
         return definition.handler(input,execution)
     end)
@@ -226,23 +199,39 @@ local function execute(definition,input,context,done)
         end
         local ok_launch,child=pcall(function()
             if request.method=='process'then
-                local command=request.args[1];local args={};for i=2,#command do args[#args+1]=command[i]end
+                local command=request.args[1]
+                local process_cwd=context.cwd
+                if request.args[2]then
+                    local wrapped,problem=require('parley.tools.process_bootstrap').command(request.args[2],context.authority)
+                    if not wrapped then
+                        observed({certainty='known',effect='not_applied',physical_resolved=true,error_code=problem})
+                        return {}
+                    end
+                    command=wrapped;process_cwd='/'
+                end
+                local args={};for i=2,#command do args[#args+1]=command[i]end
                 local remaining=(context.max_bytes or 1048576)-process_bytes
                 if remaining<2 then
                     observed({certainty='known',effect='not_applied',physical_resolved=true,error_code='aggregate process output capacity'})
                     return {}
                 end
                 local stderr_limit=math.min(65536,math.max(1,math.floor(remaining/8)))
+                local marker=request.args[2] and require('parley.tools.process_scope').exec_marker or ''
                 local id=tostring(context.operation_id)..':process:'..sequence
                 local launched=tasker.run(context.buf,command[1],args,function(code,signal,out,err,io_error)
+                    if marker~=''then
+                        if err:sub(1,#marker)~=marker then
+                            io_error='scoped process bootstrap failed'
+                        else err=err:sub(#marker+1)end
+                    end
                     process_bytes=process_bytes+#out+#err
                     observed({certainty='known',effect='applied',physical_resolved=true,data=out..err,
                         code=code,error_code=io_error or signal~=0 and 'process terminated' or nil})
                 end,nil,nil,function()
                     observed({certainty='known',effect='not_applied',physical_resolved=true,error_code='process launch failed'})
-                end,{cwd=context.cwd,kind='tool',attempt_id=id,admission_key=id,
+                end,{cwd=process_cwd,kind='tool',attempt_id=id,admission_key=id,
                     generation_id=context.generation_id,logical_generation=context.logical_generation,
-                    stdout_limit=remaining-stderr_limit,stderr_limit=stderr_limit,
+                    stdout_limit=remaining-stderr_limit,stderr_limit=stderr_limit+#marker,
                     on_unresolved=function()observed({certainty='unknown',effect='not_applied',physical_resolved=false,
                         error_code='process cleanup unresolved'})end})
                 return {cancel=function()if launched then pcall(tasker.stop_attempt,launched)end end,

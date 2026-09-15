@@ -93,9 +93,9 @@ describe('captured response onboarding',function()
             if message.role=='tool' and message.tool_call_id=='first' then result=message.content end
         end
         assert.equals(1,executed)
-        -- The complete wire result, including any truncation notice, must fit
-        -- the selected profile's eight-byte cap. This cap leaves no notice room.
-        assert.equals('12345678',result)
+        -- The eight-byte body cap cannot hold a meaningful omission notice.
+        -- Fixed metadata remains visible; no source bytes escape this tiny cap.
+        assert.equals('[Tool result incomplete]\n',result)
         round(calls[2],'second');wait(function()return Respond.response_snapshot(session).status=='terminal'end)
         assert.equals(1,executed)
         assert.equals('provider_failed',Respond.response_snapshot(session).generation.outcome)

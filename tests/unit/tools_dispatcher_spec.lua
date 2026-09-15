@@ -442,8 +442,9 @@ describe("execute_call", function()
         })
         local call = { id = "toolu_05", name = "big", input = {} }
         local result = dispatcher.execute_call(call, registry, { max_bytes = 100 })
-        assert.matches("truncated: %d+ bytes omitted", result.content)
-        assert.is_true(#result.content < 500)
+        assert.is_true(result.truncated)
+        assert.truthy(result.content:find("[Tool result incomplete]",1,true))
+        assert.equals(100,#result.content)
     end)
 
     it("stamps id even on unknown-tool errors", function()

@@ -2623,3 +2623,13 @@ download.
   Capture native write destinations before callbacks can rename a buffer, and
   cover nested writes and aborted writes without Post. Read-back failures must
   preserve evidence and remain observable.
+
+- #254 BR25: canonical path strings are not durable identity. Exercise ancestor
+  replacement between admission and effect, including traversal and backups;
+  preserve descriptor-close uncertainty as physical ownership.
+- #254 BR26/28: migration parity includes editor side effects and shared pure
+  transformation policy. Refresh from positively committed bytes under captured
+  buffer revision; an intervening edit must never become an unmodified buffer.
+- #254 BR27: enumerate every lossy output stage and consumer. Body limits must
+  preserve bounded visible incompleteness and reconciliation metadata even at
+  zero remaining capacity; test the final provider/skill representation.

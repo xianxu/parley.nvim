@@ -3,8 +3,10 @@
 local O=require('parley.tools.operation')
 local R=require('parley.tools.resources')
 local M={}
+local Result=require('parley.tools.result_evidence')
 local function result_copy(value)
-    return {content=value.content,is_error=value.is_error,truncated=value.truncated}
+    return Result.publish({content=value.content,is_error=value.is_error,truncated=value.truncated,
+        reconciliation_required=value.reconciliation_required},value.publication_limit)
 end
 local function plain(value)
     local state,result=O.accept(O.new(),{generation='copy',attempt='1',round='1',call_id='copy',name='copy',capability_ref='copy',input=value})
@@ -63,9 +65,13 @@ function M.new(opts)
     set_result=function(r,value)
         local content=type(value)=='table' and type(value.content)=='string' and value.content or 'Tool outcome unavailable'
         local available=math.max(0,math.min(max_bytes,total_bytes-retained+r.bytes))
-        local truncated=#content>available or type(value)=='table' and value.truncated==true
-        content=content:sub(1,available);retained=retained-r.bytes+#content;r.bytes=#content
-        r.result={content=content,is_error=type(value)~='table' or value.is_error==true,truncated=truncated}
+        local result=Result.cap({content=content,is_error=type(value)~='table' or value.is_error==true,
+            truncated=r.result and r.result.truncated or type(value)=='table' and value.truncated==true,
+            reconciliation_required=r.result and r.result.reconciliation_required
+                or r.evidence and r.evidence.reconciliation_required==true
+                or type(value)=='table' and value.reconciliation_required==true},available)
+        retained=retained-r.bytes+#result.content;r.bytes=#result.content
+        result.publication_limit=available;r.result=result
     end
     local function settle(r)
         if r.known and r.physical and not r.released then
@@ -112,6 +118,7 @@ function M.new(opts)
         for k,v in pairs(r.scope.context)do ctx[k]=v end
         ctx.config=plain(r.definition.config or {});ctx.operation_id=r.id;ctx.logical_generation=r.scope.logical
         ctx.generation_id=r.scope.id;ctx.document=r.scope.document;ctx.max_bytes=max_bytes
+        ctx.authority=r.authority
         local entry=O.get(ledger,r.key);ctx.attempt=entry.attempt;ctx.round=entry.round;ctx.call_id=entry.call_id;ctx.name=entry.name
         local ok,backend=pcall(r.definition.execute_async,plain(entry.input),ctx,function(value)observe(r,value)end)
         r.definition=nil
@@ -153,7 +160,7 @@ function M.new(opts)
             return r.op,accepted.status
         end
         if accepted.status~='accepted'then return nil,accepted.status end
-        serial=serial+1;local op={};local r={op=op,id='operation:'..serial,key=accepted.key,scope=scope,document=scope.document,claims=plain(spec.claims),name=spec.name,definition=def,capability_ref=scope.id..':'..spec.name,callbacks=callbacks or {},bytes=0,version=0}
+        serial=serial+1;local op={};local r={op=op,id='operation:'..serial,key=accepted.key,scope=scope,document=scope.document,authority=spec.authority,claims=plain(spec.claims),name=spec.name,definition=def,capability_ref=scope.id..':'..spec.name,callbacks=callbacks or {},bytes=0,version=0}
         local admission;resources,admission=R.admit(resources,{id=r.id,document=scope.document,generation=scope.id,claims=spec.claims})
         if admission.status~='admitted' and admission.status~='queued'then transition(r,{type='reject'});ledger=O.forget(ledger,r.key);return nil,admission.status end
         records[op]=r;by_key[r.key]=r;by_id[r.id]=r;scope.count=scope.count+1

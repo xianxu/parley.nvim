@@ -56,16 +56,22 @@ function M.new(opts)
     end
     assert(chunk_bytes<=65536,'filesystem chunk limit exceeds 64KiB')
     local fs={}
+    function fs.authorized(_,authority)
+        local options={};for k,v in pairs(opts)do options[k]=v end
+        options.runtime=require('parley.tools.path_authority').runtime(authority)
+        return M.new(options)
+    end
     local function operation(done)
         assert(type(done)=='function','filesystem completion required')
         local c={fds={},identities={},steps=0,written=0,cancelled=false,done=false}
         local handle={}
         local cleanup,fail,rpc
         local function outcome()
-            local uncertain=c.pending~=nil or next(c.fds)~=nil or c.temporary~=nil or c.target_uncertain
+            local runtime_unknown=runtime.unresolved and runtime.unresolved()
+            local uncertain=c.pending~=nil or next(c.fds)~=nil or c.temporary~=nil or c.target_uncertain or runtime_unknown
             local effect=c.applied and 'applied' or c.mutated and 'partial' or c.target_uncertain and 'unknown' or 'not_applied'
             return {certainty=uncertain and 'unknown' or 'known',effect=effect,cancelled=c.cancelled,
-                physical_resolved=c.pending==nil and next(c.fds)==nil,
+                physical_resolved=c.pending==nil and next(c.fds)==nil and not runtime_unknown,
                 error_code=c.error_code,cleanup_error=c.cleanup_error,data=c.data,revision=copy(c.revision),
                 evidence={written=c.written,backup_path=c.backup_published and c.backup_path or nil,
                     backup_confirmed=c.backup_confirmed or false,temporary=c.temporary,steps=c.steps}}
@@ -230,6 +236,7 @@ function M.new(opts)
             if c.done or c.pending then return false end
             schedule(function()
                 if c.done or c.pending then return end
+                if runtime.reconcile then runtime.reconcile()end
                 local pending={};for fd in pairs(c.fds)do pending[#pending+1]=fd end
                 local index=0
                 local function next_close()
