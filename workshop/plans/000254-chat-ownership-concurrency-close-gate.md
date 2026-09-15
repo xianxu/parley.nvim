@@ -188,6 +188,44 @@ rounds:
       boundary: M3
       blocked: true
       protocol_error: no valid findings block
+    - "n": 10
+      timestamp: "2026-09-15T09:26:25-07:00"
+      agent: codex
+      dispose:
+        - id: BR-11
+          disposition: not-addressed
+          note: Important; scope-owned-callback-cleanup. tool_folds.lua:347 captures temporary suspension as enabled=false. Detach inside the subsequent OptionSet callback releases the job, but :399-401 restores that temporary false value after retirement. A native 50,010-row reproduction fails on pinned head; moving detach outside the slice passes. Retain BR-11 and fix cleanup ownership across nested slices and job retirement (ARCH-ORDER, ARCH-FUNERAL).
+          round: 10
+        - id: BR-12
+          disposition: addressed
+          note: tool_folds.lua:324-335 constructs windows locally and discards interrupted plans. The configuration and surviving-window regressions pass on head and fail with the pre-fix tool_folds.lua substituted.
+          round: 10
+        - id: BR-5
+          disposition: addressed
+          note: Prior disposition retained. Native history regressions pass; editor.lua uses callback ordering evidence rather than matching extents alone.
+          round: 10
+        - id: BR-6
+          disposition: addressed
+          note: Prior disposition retained. Projection queries reject unconfirmed semantics; highlighting and fold invalidation consume the shared document evidence.
+          round: 10
+        - id: BR-7
+          disposition: addressed
+          note: Prior disposition retained. Plan Revisions at line 652 explicitly supersede the proposed inventory; the named modules and unchanged fold_projection/buffer_edit classifications match the pinned diff.
+          round: 10
+        - id: BR-8
+          disposition: addressed
+          note: Prior disposition retained. Document retirement tests pass; detach severs callbacks and removes the fold autocmd group.
+          round: 10
+        - id: BR-9
+          disposition: addressed
+          note: Prior disposition retained. Outline tests pass; navigation validates current semantic eligibility after resolving identity and focus callbacks.
+          round: 10
+        - id: BR-10
+          disposition: addressed
+          note: Prior disposition retained. Diagnostic reentrancy tests pass; publication checks captured-job ownership after native diagnostic effects.
+          round: 10
+      boundary: M3
+      blocked: true
 ---
 
 # Gate ledger — 000254-chat-ownership-concurrency#254 (boundary-review)
@@ -286,7 +324,19 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 
 **Protocol error:** no valid findings block — this round contributed no findings.
 
+## Round 10 — 2026-09-15T09:26:25-07:00 (codex) — BLOCKED
+
+### Disposed
+
+- BR-11 — not-addressed — Important; scope-owned-callback-cleanup. tool_folds.lua:347 captures temporary suspension as enabled=false. Detach inside the subsequent OptionSet callback releases the job, but :399-401 restores that temporary false value after retirement. A native 50,010-row reproduction fails on pinned head; moving detach outside the slice passes. Retain BR-11 and fix cleanup ownership across nested slices and job retirement (ARCH-ORDER, ARCH-FUNERAL).
+- BR-12 — addressed — tool_folds.lua:324-335 constructs windows locally and discards interrupted plans. The configuration and surviving-window regressions pass on head and fail with the pre-fix tool_folds.lua substituted.
+- BR-5 — addressed — Prior disposition retained. Native history regressions pass; editor.lua uses callback ordering evidence rather than matching extents alone.
+- BR-6 — addressed — Prior disposition retained. Projection queries reject unconfirmed semantics; highlighting and fold invalidation consume the shared document evidence.
+- BR-7 — addressed — Prior disposition retained. Plan Revisions at line 652 explicitly supersede the proposed inventory; the named modules and unchanged fold_projection/buffer_edit classifications match the pinned diff.
+- BR-8 — addressed — Prior disposition retained. Document retirement tests pass; detach severs callbacks and removes the fold autocmd group.
+- BR-9 — addressed — Prior disposition retained. Outline tests pass; navigation validates current semantic eligibility after resolving identity and focus callbacks.
+- BR-10 — addressed — Prior disposition retained. Diagnostic reentrancy tests pass; publication checks captured-job ownership after native diagnostic effects.
+
 ## Open findings
 
 - **BR-11** [Important] `scope-owned-callback-cleanup` Superseded fold slices skip restoring operator foldenable and window view
-- **BR-12** [Important] `semantic-publication-evidence` Aborted window configuration leaves a truncated plan that reports idle with no folds

@@ -512,3 +512,124 @@ findings:
 ## Review
 
 You're out of usage credits. Switch to another model, or manage usage credits at claude.ai/settings/usage?from=cc_cli_limit_message, to continue.
+
+---
+
+## Re-review — 2026-09-15T09:26:25-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 254 — Harden chat ownership and concurrency |
+| repo | 000254-chat-ownership-concurrency |
+| issue file | workshop/issues/000254-chat-ownership-concurrency.md |
+| boundary | milestone M3 |
+| milestone | M3 |
+| window | 2afd7de993dc028c6132df4687695e83dcbb8fe0..7507d370d87c128d2de8413abf54c64a31b065a9 |
+| command | sdlc milestone-close --issue 254 --milestone M3 |
+| reviewer | codex |
+| timestamp | 2026-09-15T09:26:25-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+BR-12 is addressed with regression evidence. BR-11 remains open: native reproduction shows that cancelling an already-suspended fold slice still leaves the operator’s fold preference changed. The shared document architecture and focused tests otherwise support the M3 direction. Repository files were left unchanged.
+
+```findings
+dispose:
+  - id: BR-11
+    disposition: not-addressed
+    note: |
+      Important; scope-owned-callback-cleanup. tool_folds.lua:347 captures temporary suspension as enabled=false. Detach inside the subsequent OptionSet callback releases the job, but :399-401 restores that temporary false value after retirement. A native 50,010-row reproduction fails on pinned head; moving detach outside the slice passes. Retain BR-11 and fix cleanup ownership across nested slices and job retirement (ARCH-ORDER, ARCH-FUNERAL).
+  - id: BR-12
+    disposition: addressed
+    note: |
+      tool_folds.lua:324-335 constructs windows locally and discards interrupted plans. The configuration and surviving-window regressions pass on head and fail with the pre-fix tool_folds.lua substituted.
+  - id: BR-5
+    disposition: addressed
+    note: |
+      Prior disposition retained. Native history regressions pass; editor.lua uses callback ordering evidence rather than matching extents alone.
+  - id: BR-6
+    disposition: addressed
+    note: |
+      Prior disposition retained. Projection queries reject unconfirmed semantics; highlighting and fold invalidation consume the shared document evidence.
+  - id: BR-7
+    disposition: addressed
+    note: |
+      Prior disposition retained. Plan Revisions at line 652 explicitly supersede the proposed inventory; the named modules and unchanged fold_projection/buffer_edit classifications match the pinned diff.
+  - id: BR-8
+    disposition: addressed
+    note: |
+      Prior disposition retained. Document retirement tests pass; detach severs callbacks and removes the fold autocmd group.
+  - id: BR-9
+    disposition: addressed
+    note: |
+      Prior disposition retained. Outline tests pass; navigation validates current semantic eligibility after resolving identity and focus callbacks.
+  - id: BR-10
+    disposition: addressed
+    note: |
+      Prior disposition retained. Diagnostic reentrancy tests pass; publication checks captured-job ownership after native diagnostic effects.
+```
+
+## 1. Strengths
+
+- Shared projection queries replace independent live structural ownership in highlighting, folds, outline candidates, and diagnostics.
+- Private ownership transitions enforce grant revisions, revocation, and bounded admission.
+- The four new presentation regressions are meaningful: all pass on head and fail against the pre-fix fold implementation.
+- Atlas documents the new coordinator, callback provenance, uncertainty, and retirement contracts.
+
+## 2. Critical findings
+
+None.
+
+## 3. Important findings
+
+**BR-11 remains open — suspended slice cleanup overwrites retirement cleanup.**
+
+At [tool_folds.lua:347](/Users/xianxu/workspace/worktree/parley.nvim/000254-chat-ownership-concurrency/lua/parley/tool_folds.lua:347), an already-suspended slice captures `foldenable=false`. It temporarily enables folds, triggering an operator callback that detaches the document. `release_window` retires the suspension, but the returning slice restores its captured `false` at line 401. Subsequent `flush` reports idle, leaving folds disabled.
+
+Reproduction:
+
+1. Create 50,010 rows with 150 fold groups; start with folds enabled.
+2. Step reconciliation until it suspends fold display.
+3. Detach the document from the next `OptionSet(foldenable)` callback.
+4. Step and flush: folds remain disabled.
+5. Control: detach immediately **after** the step; folds return to enabled.
+
+[Scratch regression](/tmp/parley-review-zx68xxph/head/tests/integration/review_suspended_spec.lua:10) fails on pinned head; its control passes.
+
+**Fix the existing `scope-owned-callback-cleanup` rule across the class:** distinguish the operator preference from temporary suspension, and ensure returning nested cleanup cannot overwrite completed retirement. Sweep apply, uncertainty clearing, and both discard paths. This continues BR-11, rather than introducing another finding. **ARCH-ORDER, ARCH-FUNERAL.**
+
+## 4. Minor findings
+
+None.
+
+## 5. Test coverage notes
+
+- Eight presentation regressions passed; four failed with the pre-fix implementation.
+- Ten additional focused test files passed, covering ownership, projection, editor writes, history, diagnostics, retention, outline, scheduling, and highlighting.
+- The missing ordering is **detach inside an already-suspended slice**. Existing large-window coverage detaches between slices.
+- `git diff --check` passed. Full-suite and performance runs were not repeated.
+
+## 6. Architectural notes
+
+| Principle | Assessment |
+|---|---|
+| ARCH-DRY | Pass: shared projections and timer scheduling consolidate consumer behavior. |
+| ARCH-PURE | Pass: ownership and index logic remain separate from native editor effects. |
+| ARCH-PURPOSE | Flag: BR-11 violates the promised fold-preference preservation. M4 writer migration remains explicitly staged. |
+| ARCH-MOCK | Pass: injected editor behavior is complemented by native conformance tests. |
+| ARCH-CONSTRAINTS | Pass: explicit admission and slice budgets; no fresh latency certification claimed. |
+| ARCH-SECURE | Pass: native event provenance and stale authority are checked conservatively. |
+| ARCH-ORDER | Flag: slice restoration can overwrite job-retirement effects. |
+| ARCH-FUNERAL | Flag: retirement leaves temporary fold state behind in BR-11. |
+
+The revised M3 inventory matches the inspected code. Atlas coverage is present; no new user command, keybinding, or configuration key requiring a README update was identified.
+
+## 7. Plan revision recommendations
+
+Add a `## Revisions` entry qualifying the cleanup claim at plan line 827: **BR-11 remains unresolved for cancellation within suspended slices**. Specify ownership of operator preferences across slice entry, suspension, cancellation, and cleanup completion, with native regressions for those interleavings.

@@ -2551,3 +2551,9 @@ download.
   callback-capable configuration succeeds. A partially constructed empty list
   must never be interpreted as completed work. Test both changed-text and
   tick-only callback interruption, plus loss of one window during setup.
+
+- #254 BR-11: temporary editor suspension is not the operator preference. When
+  retirement restores that preference inside a callback, transfer cleanup ownership
+  before callbacks and prevent every returning nested slice from restoring its
+  captured temporary value. Test cancellation inside suspended native operations,
+  in addition to cancellation between slices.

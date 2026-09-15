@@ -840,3 +840,15 @@ explicitly refused milestone finalization. The binary's next-action instruction
 requires a further review to dispose those open findings; extend the per-boundary
 round budget to five for that disposal rather than waive the ledger. This extra
 review is required by the refused transition, not a second discretionary review.
+
+### 2026-09-15 — Codex M3 review: suspended cleanup ownership
+
+The Codex boundary review disposed BR-12 but retained BR-11. The preceding cleanup
+claim was incomplete: cancellation inside an already-suspended native fold slice
+could restore its temporary disabled value after retirement restored the operator
+preference. Retirement must transfer preference-restoration ownership before any
+callbacks; returning nested cleanup must not overwrite that completed transfer.
+The fix covers apply, uncertainty clearing, and both discard paths, with native
+suspended-slice tests for enabled/disabled operator preferences and preserved view.
+ARCH-ORDER and ARCH-FUNERAL govern this ordering. All remaining boundary reviews
+use Codex per the operator's explicit instruction. No gate is waived.
