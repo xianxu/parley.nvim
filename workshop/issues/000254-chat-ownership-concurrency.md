@@ -549,6 +549,25 @@ signaling but disappear after confirmed process completion, while unrelated work
 remains active. Scoped luacheck and whitespace checks pass. BR-1 and BR-2 fixes
 are ready for the required repeated review after REWORK.
 
+### 2026-09-15 — M1 closed; M2 integration checkpoint
+
+M1 passed the repeated boundary review with SHIP, committed at dc715634.
+M2 work continues in /tmp/parley254-m2-stage (detached staging from 2ab8f40e),
+with sequence, grammar, dependencies, facts, and structure modules under
+lua/parley/document/. Sequence has 15 passing focused tests, grammar 13,
+dependencies 7, preliminary local publication 6. These are component results,
+not a completed M2 claim. The structural repair driver and integration remain.
+The operator authorized uninterrupted implementation through #254 completion;
+main merge remains deferred until their extensive live testing.
+
+Compatibility evidence requires separate document and answer-scoped semantic
+transitions sharing lexical facts: a fence closed beyond an answer can suppress
+a global tool marker while the answer reducer recognizes a tool section.
+Dependency interval navigation performs O(log² N) total index navigation because
+stable handle rank lookup is logarithmic; measured 50k-entry queries inspected
+16 dependency nodes and 158 sequence nodes, with no suffix sweep. This refines
+the original complexity shorthand while preserving bounded hot-path work.
+
 ## Revisions
 
 ### 2026-09-14 — Incremental rendering is part of the core contract
