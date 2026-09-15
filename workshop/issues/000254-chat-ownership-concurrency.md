@@ -1511,3 +1511,12 @@ and focused-override provenance, not a new all-green whole-suite claim. Reports:
 pure scope8 and mandatory policy7 pass. Performance evidence remains the prior
 600-sample run: these changes affect tool IO/policy and skill completion rather
 than document benchmark paths. Entering Codex M6 review with runtime frozen.
+
+### 2026-09-15 M6 third review — lifecycle authority
+
+Codex disposed BR25/29/30 with mutation controls and passed all19 mapped tool
+specs, skill37, architecture6 and lint612. No Critical findings remain. BR31
+identifies lifecycle decisions outside the pure transition boundary. The plan
+enumerates scheduler, filesystem-operation and skill final-read owners and
+requires transitions to authorize launches, cleanup release and retirement,
+with adapter rejection controls. M6 remains open during this structural repair.
