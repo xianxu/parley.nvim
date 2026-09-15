@@ -78,7 +78,7 @@ local function slice(bytes,first,limit)
 end
 local function context(s,effect)
     local grant=effect.grant or s.grant
-    local ctx={epoch=s.epoch,generation=s.generation,operation=effect.operation,grant=grant,
+    local ctx={epoch=s.epoch,generation=s.generation,operation=effect.operation or effect.id,grant=grant,
         entity=s.entity,exchange=s.entity,round=effect.round,call_id=effect.call_id,
         stale_input=G.snapshot(s.machine).stale_input}
     if effect.type=='prepare' then ctx.preparation_grants=copy(s.preparation_grants) end
@@ -203,6 +203,10 @@ local function start_operation(s,effect)
     local ctx,after_writes=context(s,effect)
     local input=s.blobs[effect.input_ref or effect.input_seed_ref]
     ctx.input=input and copy(input.value)
+    if effect.type=='continue_round' then
+        local previous=s.blobs[s.current_input]
+        ctx.previous_input=previous and copy(previous.value)
+    end
     if effect.type=='request' then
         for grant in pairs(s.grants) do if grant~=s.grant then s.grants[grant]=nil end end
         if s.current_input~=effect.input_ref then release(s,s.current_input);s.current_input=effect.input_ref end
@@ -356,6 +360,14 @@ local function execute(s,effect)
             end)
             if not ok then issue(s,err) end
         end
+    elseif effect.type=='cancel_reservation' then
+        local reservation=s.reservation
+        if not reservation or reservation.round~=effect.round then return false end
+        local adapter=s.adapters.cancel_reservation
+        if not adapter then issue(s,'reservation cancel adapter missing; reservation unresolved');return false end
+        local ok,err=pcall(adapter,{epoch=s.epoch,generation=s.generation,round=effect.round,
+            handle=reservation.handle},function()reservation.done(nil,nil,'cancelled')end)
+        if not ok then issue(s,err) end
     elseif effect.type=='finalize' then
         if s.detached or G.snapshot(s.machine).phase=='stopping' then
             dispatch(s,{type='finalize_result',finalize=effect.id,status='failed'});return false
@@ -375,21 +387,31 @@ local function execute(s,effect)
             dispatch(s,{type='round_reservation_failed',round=effect.round,status='cancelled'});return false
         end
         local ctx,after_writes=context(s,effect);ctx.children=copy(effect.children)
+        for _,child in ipairs(ctx.children) do
+            -- Reservation is a borrowed view, not consumption: the unchanged
+            -- private blob is retained until this child actually starts.
+            child.arguments=copy(s.blobs[child.arguments_ref].value)
+        end
         local completed=false
+        local reservation={round=effect.round};s.reservation=reservation
         local adapter=s.adapters.reserve_round
-        local function done(grants,receipt)
+        local function done(grants,receipt,status)
             if completed or s.terminal then return end;completed=true
             after_writes(function(failed)
+                if s.reservation==reservation then s.reservation=nil end
                 if failed or not grants then
-                    dispatch(s,{type='round_reservation_failed',round=effect.round,status='failed'});return
+                    dispatch(s,{type='round_reservation_failed',round=effect.round,status=status or 'failed'});return
                 end
                 for _,grant in ipairs(grants) do s.grants[grant]='valid' end
                 local ref=blob(s,receipt or true,false)
                 dispatch(s,{type='round_reserved',round=effect.round,grants=grants,receipt_ref=ref});release(s,ref)
             end)
         end
+        reservation.done=done
         if not adapter then done(nil) else
-            local ok,err=pcall(adapter,ctx,done);if not ok then issue(s,err);done(nil) end
+            local ok,handle=pcall(adapter,ctx,done)
+            if not ok then issue(s,handle);done(nil)
+            elseif s.reservation==reservation then reservation.handle=handle end
         end
     elseif effect.type=='terminal' then
         if not s.detached then D.transition(s.doc,{kind='finish_generation',generation=s.generation}) end

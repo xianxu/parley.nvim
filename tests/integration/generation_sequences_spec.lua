@@ -114,6 +114,8 @@ describe('generation runner sequences',function()
     it('releases superseded inputs and round payloads across one hundred rounds',function()
         local doc=document();local fake=Fake.new();local child
         fake.adapters.reserve_round=function(ctx,done)
+            assert.is_table(ctx.children[1].arguments)
+            ctx.children[1].arguments.value='reservation mutation'
             if not child or not D.snapshot(doc).grants[child] or D.snapshot(doc).grants[child].status=='revoked' then
                 local parent=D.snapshot(doc).grants[ctx.grant]
                 local result=D.transition(doc,{kind='acquire',generation=ctx.generation,parent=ctx.grant,
@@ -124,17 +126,101 @@ describe('generation runner sequences',function()
             done({child},{layout='owned'})
         end
         fake.adapters.start_child=function(ctx,cb)cb.outcome('known',{value=ctx.arguments.value});cb.resolved()end
-        fake.adapters.continue_round=function(ctx,cb)cb.prepared({message=ctx.results[1].value});cb.resolved()end
+        fake.adapters.continue_round=function(ctx,cb)
+            local n=ctx.results[1].value
+            assert.equals(n==1 and 'frozen' or n-1,ctx.previous_input.message)
+            ctx.previous_input.message='mutated borrowed prior input'
+            cb.prepared({message=n});cb.resolved()
+        end
         local r=start(doc,fake,2);fake:prepare();Runner.drain(r,100)
         for round=1,100 do
             local cb=fake.requests[round].callbacks
             assert.is_true(cb.round({{call_id='call',arguments={value=round}}}));cb.resolved()
             Runner.drain(r,100)
             assert.equals(round+1,#fake.requests)
+            assert.equals(round,fake.requests[round+1].ctx.input.message)
             assert.is_true(Runner.snapshot(r).retained_blobs<=6)
         end
         fake:complete(101);Runner.drain(r,100)
         assert.equals('terminal',Runner.snapshot(r).phase)
+    end)
+
+    it('releases unstarted argument refs after reservation failure or cancellation exactly once',function()
+        for _,cancel in ipairs({false,true})do
+            local doc=document();local fake=Fake.new();local finish_reservation
+            fake.adapters.reserve_round=function(ctx,done)
+                assert.same({nested={value='source'}},ctx.children[1].arguments)
+                finish_reservation=done
+            end
+            local r=start(doc,fake,2);fake:prepare();Runner.drain(r,100)
+            local cb=fake.requests[1].callbacks
+            cb.round({{call_id='one',arguments={nested={value='source'}}}});cb.resolved()
+            Runner.drain(r,100);assert.is_function(finish_reservation)
+            assert.is_true(Runner.snapshot(r).retained_blobs>0)
+            if cancel then
+                Runner.cancel(r);Runner.drain(r,100)
+                assert.equals('stopping',Runner.snapshot(r).phase)
+            end
+            finish_reservation(nil)
+            Runner.drain(r,100)
+            assert.equals('terminal',Runner.snapshot(r).phase)
+            assert.equals(0,Runner.snapshot(r).retained_blobs)
+            finish_reservation(nil);cb.resolved();Runner.drain(r,100)
+            assert.equals(0,Runner.snapshot(r).retained_blobs)
+        end
+    end)
+
+    it('cancels a live reservation by handle and waits for positive cleanup acknowledgement',function()
+        local doc=document();local fake=Fake.new();local handle={};local ack;local calls=0
+        fake.adapters.reserve_round=function()return handle end
+        fake.adapters.cancel_reservation=function(ctx,resolved)
+            assert.equals(handle,ctx.handle);assert.is_not_nil(ctx.round);calls=calls+1;ack=resolved
+        end
+        local r=start(doc,fake,2);fake:prepare();Runner.drain(r,100)
+        local cb=fake.requests[1].callbacks
+        cb.round({{call_id='one',arguments={value=1}}});cb.resolved();Runner.drain(r,100)
+        Runner.cancel(r);Runner.drain(r,100)
+        assert.equals(1,calls);assert.equals('stopping',Runner.snapshot(r).phase)
+        Runner.cancel(r);Runner.drain(r,100);assert.equals(1,calls)
+        ack();Runner.drain(r,100)
+        assert.equals('terminal',Runner.snapshot(r).phase);assert.equals(0,Runner.snapshot(r).retained_blobs)
+        ack();assert.equals('terminal',Runner.snapshot(r).phase)
+    end)
+    it('settles queued reservation writes before acknowledging cancellation terminal',function()
+        local doc=document();local fake=Fake.new();local r;local write_done=false
+        fake.adapters.reserve_round=function(ctx)
+            assert.is_true(ctx.append('pending shell',function()write_done=true end))
+            Runner.cancel(r)
+            return {}
+        end
+        fake.adapters.cancel_reservation=function(_,resolved)resolved()end
+        fake.adapters.terminal=function()assert.is_true(write_done)end
+        r=start(doc,fake,2);fake:prepare();Runner.drain(r,100)
+        local cb=fake.requests[1].callbacks
+        cb.round({{call_id='one',arguments={}}});cb.resolved();Runner.drain(r,100)
+        assert.is_true(write_done);assert.equals('terminal',Runner.snapshot(r).phase)
+        assert.equals(0,Runner.snapshot(r).retained_blobs)
+    end)
+    it('does not start queued reservation adapters after cancellation',function()
+        local doc=document();local fake=Fake.new();local called=false
+        fake.adapters.reserve_round=function()called=true end
+        local r=start(doc,fake,2);fake:prepare();Runner.drain(r,100)
+        local cb=fake.requests[1].callbacks
+        cb.round({{call_id='one',arguments={}}});cb.resolved();Runner.cancel(r);Runner.drain(r,100)
+        assert.is_false(called);assert.equals('terminal',Runner.snapshot(r).phase)
+    end)
+    it('keeps missing or throwing reservation cleanup unresolved',function()
+        for _,throws in ipairs({false,true})do
+            local doc=document();local fake=Fake.new();local done
+            fake.adapters.reserve_round=function(_,complete)done=complete;return {}end
+            if throws then fake.adapters.cancel_reservation=function()error('not resolved')end end
+            local r=start(doc,fake,2);fake:prepare();Runner.drain(r,100)
+            local cb=fake.requests[1].callbacks
+            cb.round({{call_id='one',arguments={}}});cb.resolved();Runner.drain(r,100)
+            Runner.cancel(r);Runner.drain(r,100)
+            assert.equals('stopping',Runner.snapshot(r).phase)
+            done(nil);Runner.drain(r,100);assert.equals('terminal',Runner.snapshot(r).phase)
+        end
     end)
 
     it('binds context writes to private authority despite mutated context fields',function()

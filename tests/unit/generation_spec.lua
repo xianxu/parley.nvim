@@ -307,7 +307,9 @@ describe('pure generation lifecycle',function()
         local s,a=requesting();local r
         s,r=send(s,{type='round_declared',attempt=a,calls={{index=1,call_id='c',arguments_ref='a'}}})
         local round=effect(r,'reserve_round').round
-        s=send(s,{type='cancel'});s=send(s,{type='operation_resolved',operation=a})
+        s,r=send(s,{type='cancel'});assert.equals(round,effect(r,'cancel_reservation').round)
+        s,r=send(s,{type='cancel'});assert.is_nil(effect(r,'cancel_reservation'))
+        s=send(s,{type='operation_resolved',operation=a})
         assert.equals('stopping',G.snapshot(s).phase)
         s,r=send(s,{type='round_reservation_failed',round=round,status='cancelled'})
         assert.equals('terminal',G.snapshot(s).phase);assert.is_table(effect(r,'terminal'))

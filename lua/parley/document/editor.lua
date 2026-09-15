@@ -82,6 +82,11 @@ function Editor:observe(tick,sr,sc,sb,orows,oc,ob,nrows,nc,nb)
             and self.driver.line_count(self.buf)==rows
         or not self.native_frames and self.driver.callback_frame
             and self.driver.callback_frame(self.buf,tick)==true or false
+    local pending=self.pending
+    local frame=pending and pending.frame
+    local owned_frame=frame and not pending.seen and self.operation and not self.operation.unexpected
+        and tick==frame.tick and (self.frame_serial or 0)==frame.serial
+        and self.rows==frame.rows and self.total==frame.total and self.driver.line_count(self.buf)==rows
     if self.native_frames then
         self.frame_serial=(self.frame_serial or 0)+1
         self.expected_tick=tick+1;self.awaiting_lines=true
@@ -91,12 +96,12 @@ function Editor:observe(tick,sr,sc,sb,orows,oc,ob,nrows,nc,nb)
         start={row=sr,col=sc,byte=sb},old_end=endpoint(sr,sc,orows,oc,sb+ob),new_end=new_end,
         old_rows=self.rows,new_rows=rows,old_total=self.total,new_total=total}
     self.rows,self.total=rows,total
-    local pending=self.pending
-    if source_frame and pending and not pending.seen and equal_pos(event.start,pending.patch.start)
+    if (source_frame or owned_frame) and pending and not pending.seen and equal_pos(event.start,pending.patch.start)
         and equal_pos(event.old_end,pending.patch.finish) and equal_pos(new_end,pending.new_end)
         and inserted==#pending.patch.text then
         local actual=table.concat(self.reader:text(sr,sc,new_end.row,new_end.col,{}),'\n')
         if actual==pending.patch.text then
+            event.source_frame=true
             pending.seen=true
             event.owner=pending.owner
             if pending.user then event.role="user"; event.user=pending.user end
@@ -226,6 +231,17 @@ local function apply(self,plan,validate,user)
             self.pending={patch=patch,new_end=endpoint(a.row,a.col,#lines-1,#lines[#lines],a.byte+#patch.text),
                 user=operation.user,
                 owner=not user and {epoch=plan.epoch,generation=plan.generation,operation=plan.operation,grant=plan.grant,entity=plan.entity,patch=i} or nil}
+            -- Saving a modified native buffer advances changedtick without
+            -- delivering a byte/line notification. Bind this
+            -- synchronous mutation to its current frame, after undo callbacks.
+            -- This private token supplements only an exact pending patch; it
+            -- never grants source-frame evidence to ordinary undo/human events.
+            if self.native_frames and not self.lines_ahead and not self.awaiting_lines
+                and self.driver.line_count(self.buf)==self.rows
+                and self.driver.offset(self.buf,self.rows)==self.total then
+                self.pending.frame={tick=self.driver.changedtick(self.buf),serial=self.frame_serial or 0,
+                    rows=self.rows,total=self.total}
+            end
             operation.undo_open=self.driver.undo_break~=nil
             self.driver.set_text(self.buf,a.row,a.col,b.row,b.col,lines)
             local seen=self.pending and self.pending.seen

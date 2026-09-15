@@ -250,6 +250,10 @@ end
 function M.next_exchange(doc,first,last,opts)
     local s=state(doc); return s.dead and {status='detached'} or measured_query(s,Structure.next_exchange,first,last,opts)
 end
+function M.completion(doc,entity,tip_row,opts)
+    local s=state(doc)
+    return s.dead and {status='detached'} or measured_query(s,Structure.completion,entity,tip_row,opts)
+end
 function M.folds(doc,first,last,opts)
     local s=state(doc); return s.dead and {status='detached'} or measured_query(s,Structure.folds,first,last,opts)
 end
@@ -419,6 +423,31 @@ function M.replace_new(doc,intent)
     if type(offset)~='number' or offset<0 or offset%1~=0 or offset>grant.last-grant.first
         or not entity or grant.first+offset<entity.end_byte then return nil,'entity row overlap' end
     return Replacement.new(s,intent,proof(s,grant))
+end
+-- Insert a bounded suffix and relinquish it using finite replacement's private
+-- receipt. Existing trailing authority may shrink; native bytes are never cut.
+function M.insert_released_new(doc,intent)
+    local s=state(doc)
+    if s.dead or type(intent)~='table' or type(intent.bytes)~='string' or #intent.bytes>4096
+        or type(intent.point)~='number' or intent.point%1~=0 then return nil,'invalid released insertion' end
+    local _,newlines=intent.bytes:gsub('\n','')
+    if newlines>255 then return nil,'row slice limit'end
+    local grant=State.snapshot(s.authority).grants[intent.grant]
+    if not grant or intent.point<grant.first or intent.point>grant.last then return nil,'outside grant'end
+    local row=Structure.at_byte(s.structure,intent.point)
+    local entity=Structure.lookup(s.structure,grant.entity)
+    if not row or row.opaque or intent.point~=row.end_byte-1 or not entity
+        or intent.point<entity.end_byte then return nil,'unconfirmed line end'end
+    local witness,reason=State.successor_new(s.authority,intent,proof(s,grant))
+    if not witness then return nil,reason end
+    if not State.successor_finish(s.authority,witness,intent.point)then
+        State.successor_cancel(s.authority,witness);return nil,'cannot narrow grant'
+    end
+    grant=State.snapshot(s.authority).grants[intent.grant]
+    local request={epoch=intent.epoch,generation=intent.generation,entity=intent.entity,grant=intent.grant,
+        revision=grant.revision,operation=intent.operation,bytes=intent.bytes,
+        first_offset=grant.last-grant.first,retain_prefix=0}
+    return Replacement.new(s,request,proof(s,grant))
 end
 function M.replace_step(doc,cursor)
     local s=state(doc)

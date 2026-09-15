@@ -718,3 +718,32 @@ NOT yet been replaced and is temporarily incompatible with the new pending UI
 API. Module/adapter regressions pass, but no end-to-end M4 completion is claimed.
 The next integration wires these adapters, then tool rounds, topic/header grants,
 scoped Stop/history, current lifecycle documentation, full mapping and M4 review.
+
+### 2026-09-15 — Public response composition and integration findings
+
+Reason: the old public writer still bypassed the released scoped adapters, and
+integration tests expose contracts that component tests alone cannot establish.
+Delta: compose source admission, finite preparation, provider/tool effects,
+presentation, completion and independent topic ownership through response_session;
+respond captures its buffer/config/input once and no callback reparses a live
+numeric exchange model. Register sessions solely for explicit current-chat Stop.
+Native undo/redo runs directly through document observation, revoking affected
+grants without obsolete pending confirmation or synthetic cancellation results.
+
+Request context before the selected question is a frozen input dependency, not a
+write-conflict region: preceding stream edits while target repair waits mark it
+stale and cannot deny admission of a disjoint answer. Captured trailing footnote
+boundaries cap replacement before any IO. Failure notices follow terminal delivery
+of already-admitted bytes. Topic header and origin-marker guards are captured
+before topic IO; an independent header generation survives normal answer completion
+but is cancelled by origin edits or unsuccessful completion (ARCH-ORDER).
+
+Native full-path tests found two further implementation gaps: silent native tick
+advances between finite preparation and streaming need explicit owned-mutation
+frame evidence; a next-prompt insertion must release the inserted question from
+future answer authority instead of extending the old grant across it. Reuse exact
+native receipts and finite replacement's narrowing witness; never exempt human
+edits or ignore revocation merely because a generation is finalizing
+(ARCH-PURPOSE, ARCH-DRY). Preserve the red public/benchmark tests until these fixes
+are verified. M4 remains isolated and incomplete pending compatibility sweep,
+full mapping/performance, atlas and its boundary review.

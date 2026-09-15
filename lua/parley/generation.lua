@@ -41,6 +41,7 @@ local function stop(s,effects,outcome)
     if s.phase=='stopping' then return end
     s.phase='stopping';s.outcome=outcome;s.grant_status='revoked'
     emit(s,effects,'revoke',{grant=s.grant})
+    if s.round and s.round.reservation_pending then emit(s,effects,'cancel_reservation',{round=s.round.id}) end
     for _,item in ipairs(s.queue) do
         s.discarded_bytes=s.discarded_bytes+item.bytes
         emit(s,effects,'release_blob',{blob_ref=item.blob_ref,operation=item.operation,seq=item.seq})

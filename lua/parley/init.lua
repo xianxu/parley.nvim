@@ -2571,29 +2571,12 @@ local function branch_inserters(buf, abs_link, owns_file)
 		open_branch_question(new_chat_file)
 	end
 
-	--- ARCH-ORDER, applied to the WHOLE chord (#214 BR-69). A streaming response
-	--- owns this buffer's exchange model and holds a chat lease on its 🤖: line;
-	--- any of these three paths edits the transcript under it. The guard sat
-	--- inside `insert_planned`, which only n/i reach, so visual mode created a
-	--- child and wrote the parent mid-stream — while the README and the atlas
-	--- said the chord declines. This file already states the governing rule
-	--- ("The enumeration is the dispatch table below — n, i, v"); wrapping the
-	--- table is what applies it, rather than guarding the path in front of me.
-	local function refuse_while_pending(fn)
-		return function()
-			if require("parley.chat_pending").identity(buf) then
-				M.logger.warning("Branch: this chat has a response in flight — "
-					.. "wait for it, or stop it with the stop shortcut, then branch")
-				return
-			end
-			fn()
-		end
-	end
-
+	-- Native user transactions decide which source survives; pending decoration
+	-- has no authority to block a disjoint branch command.
 	return {
-		n = refuse_while_pending(insert_plain),
-		i = refuse_while_pending(function() vim.cmd("stopinsert"); insert_plain() end),
-		v = refuse_while_pending(insert_inline),
+		n = insert_plain,
+		i = function() vim.cmd("stopinsert"); insert_plain() end,
+		v = insert_inline,
 	}
 end
 
@@ -2731,8 +2714,7 @@ M.prep_chat = function(buf, file_name)
 		end, "Parley: search whole [...] anchor (#141)")
 	end
 
-	-- Standard history keys stay native unless this chat owns a pending response.
-	-- Confirmed history changes stop only this buffer before retiring its session.
+	-- History stays native; document edit observation revokes only affected grants.
 	local history = require("parley.chat_history")
 	local function guarded_history(key)
 		return function()
@@ -2747,15 +2729,12 @@ M.prep_chat = function(buf, file_name)
 			end
 			history.guard({
 				buf = buf,
-				pending_identity = require("parley.chat_pending").identity,
 				native_history = native_history,
-				confirm = history.confirm,
-				cancel_for_history = chat_respond.cancel_for_history,
 			})
 		end
 	end
-	native_map("u", guarded_history("u"), "Parley: guard chat history undo")
-	native_map("<C-r>", guarded_history("redo"), "Parley: guard chat history redo")
+	native_map("u", guarded_history("u"), "Parley: native chat history undo")
+	native_map("<C-r>", guarded_history("redo"), "Parley: native chat history redo")
 
 	-- #161: one respond-callback set, shared by chat_respond and chat_define.
 	local respond_cb = make_respond_cb("ChatRespond")

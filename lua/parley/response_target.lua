@@ -46,7 +46,7 @@ local function readiness(s,resolved)
     if not qend.metadata.semantic or qend.metadata.semantic.role~='question'
         or question.last.byte~=qend.end_byte-1 or output.first.byte~=question.last.byte
         or output.last.row>=exchange.last or output.last.byte~=last.end_byte-1 then return false,'range changed' end
-    local dependencies={{first=question.first.byte,last=question.last.byte}}
+    local dependencies={{first=s.input_prefix and 0 or question.first.byte,last=question.last.byte}}
     for i=3,#resolved.regions do local r=resolved.regions[i];dependencies[#dependencies+1]={first=r.first.byte,last=r.last.byte}end
     return {entity=marker.handle,first=output.first.byte,last=output.last.byte,question_row=question.first.row,
         regions=resolved.regions,dependencies=dependencies,input_ref=s.input_ref,dependencies_ref=s.dependencies_ref,
@@ -76,6 +76,7 @@ function M.start(doc,spec,callbacks)
     if type(spec)~='table' or type(spec.question)~='table' or type(spec.output)~='table'
         or type(spec.question.first)~='table' or type(spec.output.last)~='table'
         or not same_position(spec.question.last,spec.output.first) or spec.question.first.col~=0
+        or spec.input_prefix~=nil and type(spec.input_prefix)~='boolean'
         or not scalar(spec.input_ref) or not scalar(spec.dependencies_ref) then return nil,'invalid target'end
     if type(callbacks)~='table' or callbacks.ready~=nil and type(callbacks.ready)~='function'
         or callbacks.cancelled~=nil and type(callbacks.cancelled)~='function' then return nil,'invalid callbacks'end
@@ -89,7 +90,7 @@ function M.start(doc,spec,callbacks)
     local scheduling=spec.schedule~=false
     local s={doc=doc,key=key,guard=guard,status='waiting',input_stale=false,
         callbacks={ready=callbacks.ready,cancelled=callbacks.cancelled},
-        input_ref=spec.input_ref,dependencies_ref=spec.dependencies_ref}
+        input_ref=spec.input_ref,dependencies_ref=spec.dependencies_ref,input_prefix=spec.input_prefix}
     states[target]=s;group[key]=true;pending[doc]=group
     s.work=Deferred.new(function()return M.step(target).status=='waiting'end)
     s.off=D.subscribe(doc,function(event)

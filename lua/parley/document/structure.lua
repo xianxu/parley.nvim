@@ -130,6 +130,26 @@ function M.next_exchange(document,first,last,opts)
     end
     return result
 end
+-- A completion decision is consumed synchronously, never retained across a yield.
+-- Three indexed searches bound work independently of exchange/body length.
+function M.completion(document,entity,tip_row,opts)
+    local current=state(document)
+    local total=sequence.size(current.index).rows
+    if frontier(current)<total then return unknown(current) end
+    local marker=M.lookup(document,entity)
+    if not marker or not marker.metadata or not marker.metadata.semantic
+        or not marker.metadata.semantic.exchange_start then return {status="stale"} end
+    local blocked=projection.find(current.index,marker.start_row+1,total,"completion_blocker",opts)
+    if blocked.status=="found" then return {status="skipped"} end
+    if blocked.status~="not_found" then return blocked end
+    local suffix=projection.find(current.index,tip_row+1,total,"completion_suffix",opts)
+    if suffix.status=="found" then return {status="skipped"} end
+    if suffix.status~="not_found" then return suffix end
+    local reverse={reverse=true,budget_nodes=opts and opts.budget_nodes,budget_entries=opts and opts.budget_entries}
+    local last=projection.find(current.index,marker.start_row+1,total,"completion_content",reverse)
+    if last.status=="found" then return {status="ready",point=last.span.end_byte-1} end
+    return last
+end
 function M.folds(document,first,last,opts)
     local current=state(document)
     if last>frontier(current) then return unknown(current) end

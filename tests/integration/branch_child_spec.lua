@@ -737,16 +737,10 @@ describe("visual branch seeds the child with an instruction (#214 M3)", function
     end)
 end)
 
--- #214 M3, ARCH-ORDER. A streaming response owns the parent's exchange model and
--- holds a chat lease anchored on the 🤖: line. Deleting the answer under it
--- (case 3b) or splicing a line into the exchange it is writing would fight that
--- lease, and the failure mode is a corrupted transcript rather than an error. The
--- transition is synchronous on the keypress, so declining is enough — there is
--- no queue to build.
-describe("branched submission refuses under a pending response (#214 M3)", function()
+-- Presentation is not write authority. Branch commands use captured user edits.
+describe("branch commands during response presentation", function()
     local tmpdir, parent_path, parent_buf
     local pending = require("parley.chat_pending")
-
     before_each(function()
         parley.setup({})
         tmpdir = vim.fn.tempname()
@@ -766,60 +760,21 @@ describe("branched submission refuses under a pending response (#214 M3)", funct
         vim.fn.delete(tmpdir, "rf")
     end)
 
-    it("changes nothing while the buffer owns a pending response", function()
-        local before = table.concat(vim.api.nvim_buf_get_lines(parent_buf, 0, -1, false), "\n")
-        local orig = pending.identity
-        pending.identity = function(b) return b == parent_buf and { agent = "A" } or nil end
-
-        vim.api.nvim_win_set_cursor(0, { 6, 0 })
-        parley._branch_inserters(parent_buf, false, true).n()
-
-        pending.identity = orig
-        local after = table.concat(vim.api.nvim_buf_get_lines(parent_buf, 0, -1, false), "\n")
-        assert.are.equal(before, after,
-            "the transcript was edited while a response was streaming into it")
-        for _, f in ipairs(vim.fn.readdir(tmpdir)) do
-            assert.are.equal(vim.fn.fnamemodify(parent_path, ":t"), f,
-                "a child was created for a submission that was refused")
-        end
-    end)
-
-    -- BR-69: the guard sat inside insert_planned, which only n/i reach — so
-    -- VISUAL mode created a child and wrote the parent mid-stream while the
-    -- README and the atlas said the chord declines. The enumeration is the
-    -- dispatch table (n, i, v), which this file already says out loud.
-    it("every dispatch mode refuses, not just the one that had the guard", function()
-        local orig = pending.identity
-        for _, mode in ipairs({ "n", "i", "v" }) do
-            vim.fn.writefile({ "---", "topic: t", "file: f", "---", "",
-                               "💬: first question", "", "🤖:[A]", "", "answer body", "",
-                               "📝: sum" }, parent_path)
-            vim.cmd("edit! " .. vim.fn.fnameescape(parent_path))
-            parent_buf = vim.api.nvim_get_current_buf()
-            parley.prep_chat(parent_buf, parent_path)
-            local before = table.concat(vim.api.nvim_buf_get_lines(parent_buf, 0, -1, false), "\n")
-
-            pending.identity = function(b) return b == parent_buf and { agent = "A" } or nil end
-            vim.api.nvim_win_set_cursor(0, { 10, 0 })
-            if mode == "v" then vim.cmd("normal! v$") end
-            parley._branch_inserters(parent_buf, false, true)[mode]()
-            pending.identity = orig
-
-            local after = table.concat(vim.api.nvim_buf_get_lines(parent_buf, 0, -1, false), "\n")
-            assert.are.equal(before, after, mode .. " edited the transcript mid-stream")
-            for _, f in ipairs(vim.fn.readdir(tmpdir)) do
-                assert.are.equal(vim.fn.fnamemodify(parent_path, ":t"), f,
-                    mode .. " created a child for a refused branch")
-            end
-        end
-    end)
-
-    it("works again once the response is done", function()
-        vim.api.nvim_win_set_cursor(0, { 6, 0 })
-        parley._branch_inserters(parent_buf, false, true).n()
-        local joined = table.concat(vim.api.nvim_buf_get_lines(parent_buf, 0, -1, false), "\n")
-        assert.is_truthy(joined:find("🌿:", 1, true), "no branch after the response finished")
-    end)
+    for _,mode in ipairs({'n','i','v'})do
+        it('allows the '..mode..' command without consulting pending presentation',function()
+            local original=pending.identity
+            local consulted=0
+            pending.identity=function()consulted=consulted+1;return {agent='A'}end
+            vim.api.nvim_win_set_cursor(0,{10,0})
+            if mode=='v'then vim.cmd('normal! v$')end
+            local ok,err=pcall(parley._branch_inserters(parent_buf,false,true)[mode])
+            pending.identity=original
+            assert.is_true(ok,tostring(err))
+            assert.equals(0,consulted)
+            local body=table.concat(vim.api.nvim_buf_get_lines(parent_buf,0,-1,false),'\n')
+            assert.is_truthy(body:find('🌿:',1,true))
+        end)
+    end
 end)
 
 -- #214 M3, found by the operator on first real use. `vim.fn.writefile` encodes a

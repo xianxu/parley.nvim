@@ -45,24 +45,27 @@ function M.new(opts)
             if not active then return end
             local qt=tasker.get_query(qid)
             if not qt then error('missing query result')end
-            -- Borrowed only for this call. Hosts freeze the bounded fields they
-            -- need; the full query/transcript is never copied into Runner blobs.
-            if opts.on_result then opts.on_result(r.ctx,qt)end
-            if failure then failed(r,failure_reason(failure));return end
+            -- Query data is borrowed only for this call. Tool declarations are
+            -- copied for the host so its continuation state cannot mutate admission.
+            if failure then
+                if opts.on_result then opts.on_result(r.ctx,qt,{},failure)end
+                failed(r,failure_reason(failure));return
+            end
             local decoder=qt.tool_wire and wire.by_name(qt.tool_wire)
                 or wire.resolve(r.input.provider,r.input.model or r.input.payload.model)
             local calls=decoder and decoder.decode_tool_calls_from_stream(qt.raw_response or '') or {}
             assert(type(calls)=='table' and #calls<=32,'tool call limit')
-            if #calls>0 then
-                local declared,seen={},{}
-                for i,call in ipairs(calls)do
-                    assert(scalar(call.id) and type(call.name)=='string' and #call.name>0 and #call.name<=256
-                        and type(call.input)=='table' and not seen[call.id],'invalid tool call')
-                    seen[call.id]=true
-                    declared[i]={call_id=call.id,arguments={id=call.id,name=call.name,input=call.input}}
-                end
-                assert(r.cb.round(declared)~=false,'tool round refused')
+            local declared,seen={},{}
+            for i,call in ipairs(calls)do
+                assert(scalar(call.id) and type(call.name)=='string' and #call.name>0 and #call.name<=256
+                    and type(call.input)=='table' and not seen[call.id],'invalid tool call')
+                seen[call.id]=true
+                declared[i]={call_id=call.id,arguments={id=call.id,name=call.name,input=call.input}}
+            end
+            if opts.on_result then opts.on_result(r.ctx,qt,vim.deepcopy(calls))end
+            if #calls>0 then assert(r.cb.round(declared)~=false,'tool round refused')
             else assert(r.cb.complete()~=false,'completion refused')end
+
         end)
         if not ok then failed(r,'provider result processing failed')end
         resolve(r)

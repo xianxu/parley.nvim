@@ -9,13 +9,36 @@ local function state(session)return assert(states[session],'invalid response sub
 local function snapshot(s)
     return {status=s.status,reason=s.reason,generation=s.runner and Runner.snapshot(s.runner) or s.result}
 end
+local function regions(value,preparation)
+    if preparation==nil then return {{first=value.first,last=value.last}}end
+    if type(preparation)~='table' or type(preparation.regions)~='table'
+        or #preparation.regions<1 or #preparation.regions>16 then return nil end
+    local out={}
+    for _,region in ipairs(preparation.regions)do
+        if type(region)~='table' then return nil end
+        local first,last=region.first_offset,region.last_offset
+        if type(first)~='number' or type(last)~='number' or first%1~=0 or last%1~=0
+            or first<0 or last<first or last>value.last-value.first then return nil end
+        out[#out+1]={first=value.first+first,last=value.first+last}
+    end
+    return out
+end
+local function reject(adapters,reason)
+    local rejected=type(adapters)=='table' and adapters.rejected
+    if type(rejected)=='function' then pcall(rejected,reason) end
+    return nil,reason
+end
 local function cancelled(s,reason)
+    if s.status~='waiting' then return end
+    local adapters=s.adapters
     s.status='cancelled';s.reason=reason;s.doc=nil;s.target=nil;s.spec=nil;s.adapters=nil
+    -- Host notification runs after retirement and cannot interrupt target cleanup.
+    reject(adapters,reason)
 end
 function M.start(doc,spec,adapters)
-    if type(spec)~='table' or type(adapters)~='table' then return nil,'invalid submission' end
+    if type(spec)~='table' or type(adapters)~='table' then return reject(adapters,'invalid submission') end
     for _,name in ipairs({'prepare','request','finalize'})do
-        if type(adapters[name])~='function' then return nil,name..' adapter required' end
+        if type(adapters[name])~='function' then return reject(adapters,name..' adapter required') end
     end
     local session={}
     local s={doc=doc,status='waiting',spec=vim.deepcopy(spec),adapters={}}
@@ -23,7 +46,11 @@ function M.start(doc,spec,adapters)
     states[session]=s
     local target,reason=Target.start(doc,s.spec,{
         ready=function(value)
-            local run_spec={entity=value.entity,first=value.first,last=value.last,dependencies=value.dependencies,
+            local spans=regions(value,s.spec.preparation)
+            if not spans then cancelled(s,'preparation outside captured output');return end
+            local primary=table.remove(spans,1)
+            local run_spec={entity=value.entity,first=primary.first,last=primary.last,dependencies=value.dependencies,
+                preparation_regions=spans,
                 input=s.spec.input,capabilities=s.spec.capabilities,limits=s.spec.limits,
                 input_stale=value.input_stale,schedule=s.spec.schedule}
             local hooks=s.adapters
@@ -33,8 +60,8 @@ function M.start(doc,spec,adapters)
                 if terminal then terminal(result) end
             end
             local runner,err=Runner.start(doc,run_spec,hooks)
-            s.target=nil;s.spec=nil;s.adapters=nil
             if not runner then cancelled(s,err);return end
+            s.target=nil;s.spec=nil;s.adapters=nil
             s.runner=runner;s.status='running'
         end,
         cancelled=function(why)cancelled(s,why)end,

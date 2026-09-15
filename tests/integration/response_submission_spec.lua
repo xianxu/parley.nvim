@@ -101,4 +101,97 @@ describe('response submission lifetime',function()
         assert.equals(0,#fake.finalizations)
     end)
 
+    it('admits frozen disjoint preparation gaps without owning protected source between them',function()
+        local doc=fixture();local fake=Fake.new();local value=spec()
+        local text_offset=1+#'🤖: answer'+1
+        value.preparation={regions={{first_offset=0,last_offset=1},
+            {first_offset=text_offset,last_offset=text_offset+4}}}
+        local s=start(doc,value,fake);settle(s)
+        local ctx=fake.preparations[1].ctx
+        assert.equals(1,#ctx.preparation_grants)
+        local snapshot=D.snapshot(doc)
+        local primary=snapshot.grants[ctx.grant]
+        local extra=snapshot.grants[ctx.preparation_grants[1]]
+        assert.equals(primary.first+1,primary.last)
+        assert.equals(primary.first+text_offset,extra.first)
+        assert.is_false(fake.preparations[1].callbacks.prepared(ctx.input))
+        D.transition(doc,{kind='revoke',grant=extra.id})
+        fake:prepare();settle(s);assert.equals(1,#fake.requests)
+        fake:complete(1);settle(s)
+    end)
+    it('refuses preparation geometry outside the captured output before IO',function()
+        local doc=fixture();local fake=Fake.new();local value=spec()
+        value.preparation={regions={{first_offset=0,last_offset=100000}}}
+        local s=start(doc,value,fake);settle(s)
+        assert.equals('cancelled',S.snapshot(s).status)
+        assert.equals(0,#fake.preparations)
+        assert.same({},D.snapshot(doc).generations)
+    end)
+
+    it('notifies the captured rejection hook after deleted-source cleanup',function()
+        local doc,editor=fixture();local fake=Fake.new();local calls={}
+        fake.adapters.rejected=function(reason)
+            calls[#calls+1]=reason
+            assert.equals(0,D.user_guard_stats(doc).live)
+        end
+        local s=start(doc,spec(),fake)
+        fake.adapters.rejected=function()error('mutated hook')end
+        editor:edit(0,0,1,4,{'replacement'})
+        settle(s);S.cancel(s);S.cancel(s)
+        assert.same({'source changed'},calls)
+    end)
+    it('retires before a rejection hook reenters and throws',function()
+        local doc=fixture();local fake=Fake.new();local calls=0;local s;local observed
+        fake.adapters.rejected=function(reason)
+            calls=calls+1
+            observed={reason=reason,status=S.snapshot(s).status,cancel=S.cancel(s,'again'),
+                step=S.step(s).status,guards=D.user_guard_stats(doc).live}
+            error('presentation failed')
+        end
+        s=start(doc,spec(),fake)
+        assert.is_true(S.cancel(s,'stop'))
+        assert.is_false(S.cancel(s,'again'))
+        assert.equals(1,calls)
+        assert.same({reason='stop',status='cancelled',cancel=false,step='cancelled',guards=0},observed)
+        assert.equals('cancelled',S.snapshot(s).status)
+    end)
+    it('reports synchronous target rejection exactly once without retaining a guard',function()
+        local doc=fixture();local fake=Fake.new();local calls={};local value=spec()
+        value.question.first.col=1
+        fake.adapters.rejected=function(reason)calls[#calls+1]=reason;error('ignored')end
+        local s,reason=S.start(doc,value,fake.adapters)
+        assert.is_nil(s);assert.equals('invalid target',reason)
+        assert.same({'invalid target'},calls)
+        assert.equals(0,D.user_guard_stats(doc).live)
+    end)
+    it('reports invalid preparation geometry before any IO',function()
+        local doc=fixture();local fake=Fake.new();local calls={};local value=spec()
+        value.preparation={regions={{first_offset=0,last_offset=100000}}}
+        fake.adapters.rejected=function(reason)calls[#calls+1]=reason end
+        local s=start(doc,value,fake);settle(s);S.cancel(s)
+        assert.same({'preparation outside captured output'},calls)
+        assert.equals(0,#fake.preparations)
+    end)
+    it('reports runner admission refusal through the rejection hook',function()
+        local doc=fixture();local first,second=Fake.new(),Fake.new();local calls={}
+        local a=start(doc,spec(),first);settle(a)
+        second.adapters.rejected=function(reason)calls[#calls+1]=reason end
+        local b=start(doc,spec(),second);settle(b);S.cancel(b)
+        assert.equals(1,#calls)
+        assert.equals(S.snapshot(b).reason,calls[1])
+        assert.equals(0,#second.preparations)
+    end)
+
+    it('reports invalid submission input and missing required adapters synchronously',function()
+        local doc=fixture();local fake=Fake.new();local calls={}
+        fake.adapters.rejected=function(reason)calls[#calls+1]=reason end
+        local s,reason=S.start(doc,nil,fake.adapters)
+        assert.is_nil(s);assert.equals('invalid submission',reason)
+        fake.adapters.prepare=nil
+        s,reason=S.start(doc,spec(),fake.adapters)
+        assert.is_nil(s);assert.equals('prepare adapter required',reason)
+        assert.same({'invalid submission','prepare adapter required'},calls)
+        assert.equals(0,D.user_guard_stats(doc).live)
+    end)
+
 end)

@@ -117,13 +117,18 @@ describe('production response provider adapter',function()
         assert.equals(1,s.failed);assert.equals(0,s.complete)
     end)
     it('decodes ordered tool calls through the dispatched wire and reports a round without recursive IO',function()
-        local cb,s=callbacks();local adapter=Provider.new({on_result=function()s.events[#s.events+1]='result'end})
+        local cb,s=callbacks();local observed
+        local adapter=Provider.new({on_result=function(_,_,calls)
+            observed=vim.deepcopy(calls);if calls and calls[1] then calls[1].input.path='host mutation' end
+            s.events[#s.events+1]='result'
+        end})
         adapter.request(context(1),cb)
         local p=processes.processes[4242]
         p:emit('stdout','data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call-a","type":"function","function":{"name":"read","arguments":"{\\"path\\":\\"file\\"}"}}]}}]}\n\n')
         status(p,'200');p:finish()
         assert.is_true(vim.wait(100,function()return s.resolved==1 end,1))
         assert.equals(0,s.complete);assert.equals(1,processes.spawn_calls)
+        assert.same({{id='call-a',name='read',input={path='file'}}},observed)
         assert.same({{call_id='call-a',arguments={id='call-a',name='read',input={path='file'}}}},s.calls)
         assert.same({'result','round','resolved'},s.events)
     end)
