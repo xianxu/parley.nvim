@@ -33,6 +33,42 @@ describe('captured async tool dispatch',function()
         local context=Dispatch.context(profile);context.root_policy.write_root=outside
         assert.equals(root,Dispatch.context(profile).root_policy.write_root)
     end)
+    it('normalizes native JSON empty objects before strict operation admission',function()
+        local O=require('parley.tools.operation')
+        for _,json in ipairs({'{}','{"nested":{},"array":[{}, {"deeper":{}}]}'})do
+            local input=vim.json.decode(json);local before=vim.deepcopy(input)
+            local prepared=assert(Dispatch.prepare(capture(definition()),call(input)))
+            local function plain(value)
+                if type(value)~='table'then return end
+                assert.is_nil(getmetatable(value));for _,item in pairs(value)do plain(item)end
+            end
+            plain(prepared.input);assert.same(before,input)
+            if json=='{}'then assert.equals(getmetatable(vim.empty_dict()),getmetatable(input))end
+            local _,result=O.accept(O.new(),{generation='g',attempt='a',round='r',call_id='id',
+                name='tool',input=prepared.input,capability_ref='captured'})
+            assert.equals('accepted',result.status)
+        end
+    end)
+    it('explicitly refuses JSON null without dropping values or changing the request',function()
+        local profile=capture(definition())
+        for _,json in ipairs({'{"value":null}','{"items":[{},null]}'})do
+            local input=vim.json.decode(json);local before=vim.deepcopy(input)
+            local prepared,reason=Dispatch.prepare(profile,call(input))
+            assert.is_nil(prepared);assert.equals('unsupported JSON null in tool input',reason)
+            assert.same(before,input)
+        end
+    end)
+    it('refuses arbitrary metatables and cyclic input without invoking metadata',function()
+        local invoked=false
+        local profile=capture(definition())
+        local hostile=setmetatable({},{__index=function()invoked=true;error('metadata')end})
+        assert.is_nil(Dispatch.prepare(profile,call({nested=hostile})))
+        assert.is_false(invoked)
+        local forged=setmetatable({},vim.deepcopy(getmetatable(vim.empty_dict())))
+        assert.is_nil(Dispatch.prepare(profile,call({nested=forged})))
+        local cycle={};cycle.self=cycle
+        assert.is_nil(Dispatch.prepare(profile,call(cycle)))
+    end)
     it('refuses synchronous definitions in the captured runtime',function()
         local def=definition();def.execute_async=nil
         assert.is_nil(Dispatch.capture({def},{root_policy={write_root=root,read_roots={root}}}))

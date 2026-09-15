@@ -390,11 +390,45 @@ function M.capabilities(profile)
     for name,def in pairs(p.definitions)do out[name]={execute_async=def.execute_async,config=vim.deepcopy(def.config or {})}end
     return out
 end
+-- JSON's native empty-object marker is wire representation, not executable
+-- authority. Remove only that exact marker before entering the plain ledger;
+-- arbitrary metatables, cycles, and non-JSON values remain inadmissible.
+local Operation=require('parley.tools.operation')
+local empty_object_mt=getmetatable(vim.empty_dict())
+local function plain_json_input(value)
+    local ledger=Operation.new();local nodes,active=0,{}
+    local function visit(v,depth)
+        nodes=nodes+1
+        if nodes>ledger.limits.max_argument_nodes or depth>32 then error('input limit',0)end
+        if rawequal(v,vim.NIL)then error('unsupported JSON null in tool input',0)end
+        if type(v)~='table'then return v end
+        local mt=getmetatable(v)
+        if active[v] or mt~=nil and (mt~=empty_object_mt or next(v)~=nil)then error('invalid input',0)end
+        active[v]=true;local out={}
+        for k,item in next,v do
+            if type(k)~='string' and type(k)~='number'then error('invalid key',0)end
+            out[visit(k,depth+1)]=visit(item,depth+1)
+        end
+        active[v]=nil;return out
+    end
+    local ok,plain=pcall(visit,value,0)
+    if not ok then
+        return nil,plain=='unsupported JSON null in tool input' and plain or 'invalid tool input'
+    end
+    -- Keep finite values, byte/node limits and allowed key validation owned by
+    -- the operation ledger. This disposable validation record grants no IO.
+    local _,result=Operation.accept(ledger,{generation='json',attempt='json',round='json',
+        call_id='json',name='json',capability_ref='json',input=plain})
+    if result.status~='accepted'then return nil,'invalid tool input'end
+    return plain
+end
 function M.prepare(profile,call)
     local p=profiles[profile];if not p then return nil,'invalid captured tool profile'end
     local valid,why=types.validate_call(call);if not valid then return nil,why end
     local def=p.definitions[call.name];if not def then return nil,'tool not in captured capabilities'end
-    local input,page=prepare_input(call,def,p.context.root_policy,p.options)
+    local plain,input_error=plain_json_input(call.input)
+    if not plain then return nil,input_error end
+    local input,page=prepare_input({id=call.id,name=call.name,input=plain},def,p.context.root_policy,p.options)
     if not input then return nil,page end
     local claims={{scope='global',mode='write'}}
     if def.resources then

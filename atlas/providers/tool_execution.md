@@ -11,6 +11,8 @@ the chat loop and [Chat Write Ownership](../chat/ownership.md) for buffer grants
 `tools/dispatcher.lua` captures selected definitions, root policy, cwd, private
 recovery directory, and presentation limits in an opaque profile. Preparation
 copies validated input and resolves canonical resource claims before execution.
+Native JSON empty-object markers become plain argument tables. JSON null values
+are currently refused explicitly; preparation never silently drops them.
 The scheduler captures each actual `execute_async` function and its config;
 changing the registry, current buffer, cwd, or agent settings later does not
 replace an admitted capability. Preparation receipts bind result normalization

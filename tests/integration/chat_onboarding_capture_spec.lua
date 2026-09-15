@@ -14,6 +14,7 @@ describe('captured response onboarding',function()
         calls={};ready=nil;session=nil
         old_defer,old_query,old_stop=Ready.defer,parley.dispatcher.query,parley.tasker.stop_owner
         parley._state.agent='Choose a model'
+        parley.agents.SelectedFixture.tools={}
         Ready.defer=function(_,action)ready=action;return true end
         parley.dispatcher.query=function(b,provider,payload,output,complete,_,_,abort,_,_,opts)
             local id='onboarding:'..(#calls+1)
@@ -69,9 +70,14 @@ describe('captured response onboarding',function()
     it('enforces the selected agent tool limits through a public continuation',function()
         local executed=0
         require('parley.tools').register({name='profile_read',description='Fixture',
-            input_schema={type='object',properties={}},handler=function()
-                executed=executed+1;return {content='1234567890abcdefghij',is_error=false}
+            input_schema={type='object',properties={}},resources=function()return {}end,
+            execute_async=function(_,_,done)
+                executed=executed+1
+                done({certainty='known',effect='not_applied',physical_resolved=true,
+                    result={content='1234567890abcdefghij',is_error=false}})
+                return {cancel=function()end}
             end})
+        parley.agents.SelectedFixture.tools={'profile_read'}
         session=assert(Respond.respond({range=0}));wait(function()return ready~=nil end)
         parley._state.agent='SelectedFixture';ready();wait(function()return #calls==1 end)
         assert.equals('SelectedFixture',require('parley.chat_pending').identity(buf).agent)
@@ -82,9 +88,14 @@ describe('captured response onboarding',function()
             call.complete(call.id)
         end
         round(calls[1],'first');wait(function()return #calls==2 end)
-        local payload=vim.inspect(calls[2].payload)
-        assert.truthy(payload:find('12345678',1,true));assert.is_nil(payload:find('1234567890',1,true))
-        assert.truthy(payload:find('[truncated:',1,true))
+        local result
+        for _,message in ipairs(calls[2].payload.messages)do
+            if message.role=='tool' and message.tool_call_id=='first' then result=message.content end
+        end
+        assert.equals(1,executed)
+        -- The complete wire result, including any truncation notice, must fit
+        -- the selected profile's eight-byte cap. This cap leaves no notice room.
+        assert.equals('12345678',result)
         round(calls[2],'second');wait(function()return Respond.response_snapshot(session).status=='terminal'end)
         assert.equals(1,executed)
         assert.equals('provider_failed',Respond.response_snapshot(session).generation.outcome)
