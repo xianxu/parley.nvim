@@ -42,6 +42,14 @@ late output cannot overwrite the chat. Inspect retained work with
 `:ParleyToolOperations`. An effect decision must not invent process or file
 cleanup. Check edited files and the reported pre-image backups directly.
 
+## Skill file refresh
+
+Run an editing skill on a disposable file with `autoread` enabled. Its own tool
+writes should appear once at completion. Repeat while typing in the source:
+your newer buffer text must survive and the result should request reconciliation.
+Cancel a skill while its tools are active, then inspect disk and buffer separately;
+unfinished I/O must not permit a new conflicting run or apply a late source refresh.
+
 ## Batch and answer recovery
 
 1. Start `:ParleyChatRespondAll` through a chosen question. Insert a new question,
