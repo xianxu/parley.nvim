@@ -339,6 +339,11 @@ local function finish(c)
     local t={bytes=c.bytes,blank=c.leading,divider=c.last_nonspace==3 and c.trimmed:sub(1,3)=='---',
         preface_tag=c.bytes>=5 and c.raw:sub(1,2)=='@@' and c.tail:sub(-2)=='@@',
         footnote=c.footnote==5}
+    -- Outline's existing dialect accepts column-zero levels one through three
+    -- followed by a literal space. The retained prefix is enough even for a
+    -- multi-megabyte heading; no payload or new unbounded scanner is needed.
+    local hashes=c.raw:match('^(#+) ')
+    if hashes and #hashes<=3 then t.heading_level=#hashes end
     if c.ticks>=3 then t.render_fence_width=c.ticks end
     if c.memo_width>=3 then t.memo_fence_width=c.memo_width end
     if c.ordinary_ticks>=3 and c.ordinary_valid then t.ordinary_open_width=c.ordinary_ticks end

@@ -28,6 +28,10 @@ local function combine(s, a, b)
     if not s.combine then return nil end
     return copy(s, s.combine(copy(s, a, true), copy(s, b, true)), true)
 end
+local function combine_projection(s, a, b)
+    if not s.combine_projection then return nil end
+    return copy(s, s.combine_projection(copy(s,a,true), copy(s,b,true)), true)
+end
 local function same(s,a,b,summary)
     count(s,summary and "summary_values_compared" or "metadata_values_compared")
     if type(a)~=type(b) then return false end
@@ -80,13 +84,15 @@ local function root(n) if n then n.parent = nil end; return n end
 local function leaf(s, entries)
     if #entries == 0 then return nil end
     count(s, "nodes_created"); count(s, "leaves_created")
-    local n = { entries = entries, height = 1, rows = 0, bytes = 0, max_stamp = 0, max_syntax_stamp = 0, channels = {}, opaque_rows = 0, opaque_max_stamp = 0, summary = s.empty }
+    local n = { entries = entries, height = 1, rows = 0, bytes = 0, max_stamp = 0, max_syntax_stamp = 0, max_projection_stamp = 0, projection = s.empty_projection, channels = {}, opaque_rows = 0, opaque_max_stamp = 0, summary = s.empty }
     for _, e in ipairs(entries) do
         count(s, "entries_copied")
         e.leaf, e.local_row, e.local_byte = n, n.rows, n.bytes
         n.rows, n.bytes = n.rows + e.rows, n.bytes + e.bytes
         n.max_stamp = math.max(n.max_stamp, e.stamp)
         n.max_syntax_stamp = math.max(n.max_syntax_stamp, e.syntax_stamp)
+        n.max_projection_stamp = math.max(n.max_projection_stamp, e.projection_stamp)
+        n.projection = combine_projection(s,n.projection,e.projection)
         n.opaque = n.opaque or e.opaque
         n.opaque_rows=n.opaque_rows+(e.opaque and e.rows or 0)
         n.opaque_max_stamp=math.max(n.opaque_max_stamp,e.opaque and e.syntax_stamp or 0)
@@ -102,6 +108,8 @@ local function branch(s, a, b, staged)
     local n = { left = a, right = b, height = math.max(a.height,b.height)+1,
         rows = a.rows+b.rows, bytes = a.bytes+b.bytes, max_stamp = math.max(a.max_stamp,b.max_stamp),
         max_syntax_stamp = math.max(a.max_syntax_stamp,b.max_syntax_stamp),
+        max_projection_stamp = math.max(a.max_projection_stamp,b.max_projection_stamp),
+        projection = combine_projection(s,a.projection,b.projection),
         opaque = a.opaque or b.opaque,
         opaque_rows=a.opaque_rows+b.opaque_rows,opaque_max_stamp=math.max(a.opaque_max_stamp,b.opaque_max_stamp),
         channels=combine_channels(s,a.channels,b.channels), summary = combine(s,a.summary,b.summary) }
@@ -138,8 +146,10 @@ local function entry(s, value, stamp)
     assert(value.opaque or value.rows == 1, "confirmed entries represent one row")
     s.next_handle=s.next_handle+1
     local e = { rows=value.rows, bytes=value.bytes, opaque=value.opaque == true,
-        metadata=copy(s,value.metadata), stamp=stamp, syntax_stamp=stamp, handle=s.prefix..s.next_handle }
+        metadata=copy(s,value.metadata), stamp=stamp, syntax_stamp=stamp, projection_stamp=stamp, handle=s.prefix..s.next_handle }
     e.summary = s.summarize and not e.opaque and copy(s,s.summarize(copy(s,e.metadata)),true) or s.empty
+    e.projection = s.projection_summary and not e.opaque
+        and copy(s,s.projection_summary(copy(s,e.metadata)),true) or s.empty_projection
     e.channel_set=membership(s,e.metadata,e.opaque)
     e.channels=entry_channels(s,e.channel_set,stamp)
     s.handles[e.handle] = e
@@ -166,10 +176,12 @@ end
 function M.new(values, opts)
     opts = opts or {}
     assert((opts.summarize == nil) == (opts.combine == nil), "summarize and combine are paired")
+    assert((opts.projection_summary==nil)==(opts.combine_projection==nil),"projection summary and combine are paired")
     next_sequence=next_sequence+1
     local prefix="sequence:"..next_sequence..":"
     local seq, s = {}, { work={}, handles=setmetatable({}, {__mode="v"}), stamp=1,prefix=prefix,next_handle=0,
-        summarize=opts.summarize, combine=opts.combine, eof=prefix.."eof", certificates=setmetatable({}, {__mode="k"}),
+        summarize=opts.summarize, combine=opts.combine, projection_summary=opts.projection_summary,
+        combine_projection=opts.combine_projection, eof=prefix.."eof", certificates=setmetatable({}, {__mode="k"}),
         cursors=setmetatable({}, {__mode="k"}),bof=prefix.."bof",channels=opts.channels,channel_names={} }
     assert((opts.channels==nil)==(opts.channel_names==nil),"channel classifier and fixed registry are paired")
     local channel_count=0
@@ -181,6 +193,7 @@ function M.new(values, opts)
     end
     states[seq] = s
     s.empty = copy(s,opts.empty_summary,true)
+    s.empty_projection = copy(s,opts.empty_projection,true)
     s.root = root(build(s,values or {},s.stamp))
     return seq
 end
@@ -343,6 +356,14 @@ local function same_syntax_token(s,a,b)
     for k in pairs(b) do if not transient[k] and a[k]==nil then return false end end
     return true
 end
+local function same_projection_metadata(s,a,b)
+    if type(a)~="table" or type(b)~="table" then return false end
+    for key,value in pairs(a) do
+        if key~="token" and not same(s,value,b[key],false) then return false end
+    end
+    for key in pairs(b) do if key~="token" and a[key]==nil then return false end end
+    return true
+end
 local function update_rebuild(ctx,n)
     local s,affected,prepared,staged,stamp,projection=ctx.s,ctx.affected,ctx.prepared,ctx.staged,ctx.stamp,ctx.projection
     if not affected[n] then return n end
@@ -353,11 +374,13 @@ local function update_rebuild(ctx,n)
         for i,e in ipairs(n.entries) do
             local replacement=prepared[e.handle]
             entries[i]={rows=e.rows,bytes=e.bytes,opaque=e.opaque,handle=e.handle,
-                metadata=e.metadata,summary=e.summary,channel_set=e.channel_set,channels=e.channels,
+                metadata=e.metadata,summary=e.summary,projection=e.projection,
+                projection_stamp=replacement and not replacement.same_projection and stamp or e.projection_stamp,channel_set=e.channel_set,channels=e.channels,
                 stamp=replacement and not projection and stamp or e.stamp,
                 syntax_stamp=replacement and not projection and not replacement.same_syntax and stamp or e.syntax_stamp}
             if replacement then
                 entries[i].metadata,entries[i].summary=replacement.metadata,replacement.summary
+                entries[i].projection=replacement.projection
                 entries[i].bytes=replacement.bytes
                 entries[i].channel_set=replacement.channel_set
                 entries[i].channels=entry_channels(s,replacement.channel_set,entries[i].syntax_stamp)
@@ -396,11 +419,16 @@ local function update_many(seq,updates,projection,text_update)
         end
         prepared[handle]={metadata=value,summary=s.summarize and not e.opaque
             and copy(s,s.summarize(copy(s,value)),true) or s.empty,bytes=text_update and update.bytes or e.bytes}
+        prepared[handle].projection=s.projection_summary and not e.opaque
+            and copy(s,s.projection_summary(copy(s,value)),true) or s.empty_projection
         prepared[handle].channel_set=membership(s,value,e.opaque)
         if text_update then
             prepared[handle].same_syntax=e.metadata and same_syntax_token(s,e.metadata.token,value.token)
                 and same(s,e.summary,prepared[handle].summary,true)
                 and same(s,e.channel_set,prepared[handle].channel_set,true) or false
+            prepared[handle].same_projection=prepared[handle].same_syntax
+                and same_projection_metadata(s,e.metadata,value)
+                and same(s,e.projection,prepared[handle].projection,true)
         end
         if projection and (not e.metadata or not value or not e.metadata.token or not value.token
             or not same(s,e.metadata.token,value.token,false)
@@ -414,7 +442,7 @@ local function update_many(seq,updates,projection,text_update)
         end
     end
     if #updates==0 then return true end
-    local stamp=s.stamp+(projection and 0 or 1)
+    local stamp=s.stamp+1
     local context={s=s,affected=affected,prepared=prepared,staged=staged,stamp=stamp,projection=projection}
     local replacement=update_rebuild(context,s.root)
     update_install(context,replacement,nil)
@@ -444,6 +472,7 @@ local function aggregate_add(ctx,value)
     result.rows=result.rows+value.rows; result.bytes=result.bytes+value.bytes
     result.max_stamp=math.max(result.max_stamp,value.max_stamp or value.stamp)
     result.max_syntax_stamp=math.max(result.max_syntax_stamp,value.max_syntax_stamp or value.syntax_stamp)
+    result.max_projection_stamp=math.max(result.max_projection_stamp,value.max_projection_stamp or value.projection_stamp)
     if include_summary then
         result.summary=combine(s,result.summary,value.summary)
         result.opaque=result.opaque or value.opaque==true
@@ -470,7 +499,7 @@ local function aggregate_walk(ctx,n,r)
     return aggregate_walk(ctx,n.left,r) and aggregate_walk(ctx,n.right,r+n.left.rows)
 end
 local function aggregate(s,first,last,include_summary)
-    local result={rows=0,bytes=0,max_stamp=0,max_syntax_stamp=0}
+    local result={rows=0,bytes=0,max_stamp=0,max_syntax_stamp=0,max_projection_stamp=0}
     if include_summary then result.summary=s.empty; result.opaque=false end
     if not aggregate_walk({s=s,result=result,include_summary=include_summary,first=first,last=last},s.root,0) then return nil end
     return result
@@ -485,7 +514,7 @@ function M.summary(seq,first,last)
 end
 function M.range_certificate(seq,first,last,opts)
     local kind=opts and opts.kind or "text"
-    assert(kind=="text" or kind=="syntax","unknown certificate kind")
+    assert(kind=="text" or kind=="syntax" or kind=="projection","unknown certificate kind")
     local s=state(seq)
     check_range(s,first,last)
     local totals=aggregate(s,first,last)
@@ -573,7 +602,7 @@ local function validate_fact(seq,c)
 end
 function M.validate_certificate(seq,token,opts)
     local kind=opts and opts.kind or "text"
-    assert(kind=="text" or kind=="syntax" or kind=="fact","unknown certificate kind")
+    assert(kind=="text" or kind=="syntax" or kind=="fact" or kind=="projection","unknown certificate kind")
     local s=state(seq)
     local c=s.certificates[token]
     if not c then return false,"foreign certificate" end
@@ -588,7 +617,9 @@ function M.validate_certificate(seq,token,opts)
     if (before and before.handle)~=c.before or (after and after.handle)~=c.after then return false,"changed edge" end
     local totals=aggregate(s,first,last)
     if not totals or totals.rows~=c.totals.rows then return false,"changed range" end
-    if kind=="syntax" then
+    if kind=="projection" then
+        if totals.max_projection_stamp~=c.totals.max_projection_stamp then return false,"changed projection" end
+    elseif kind=="syntax" then
         if totals.max_syntax_stamp~=c.totals.max_syntax_stamp then return false,"changed syntax" end
     elseif totals.bytes~=c.totals.bytes or totals.max_stamp~=c.totals.max_stamp then
         return false,"changed range"
@@ -604,7 +635,7 @@ local function find_walk(ctx,n,r,b)
     if not n or r>=last or r+n.rows<=first or ctx.result then return end
     if work.nodes_visited>=node_limit-reserve_nodes then ctx.resume=reverse and math.min(last,r+n.rows) or math.max(first,r); ctx.result={status="budget"}; return end
     work.nodes_visited=work.nodes_visited+1; count(s,"nodes_visited")
-    if not n.opaque and opts.may_match and not opts.may_match(copy(s,n.summary,true)) then return end
+    if not n.opaque and opts.may_match and not opts.may_match(copy(s,opts.projection and n.projection or n.summary,true)) then return end
     if n.entries then
         local index=reverse and #n.entries or 1
         while index>=1 and index<=#n.entries do
@@ -648,8 +679,10 @@ function M.find(seq,first,last,opts)
     if node_limit<=reserve_nodes or entry_limit<=reserve_entries then
         return {status="budget",cursor=opts.cursor,required={max_nodes=reserve_nodes+1,max_entries=reserve_entries+1},work=work}
     end
-    local certificate_kind=opts.certificate_kind or "text"
-    assert(certificate_kind=="text" or certificate_kind=="syntax" or certificate_kind=="fact","unknown find certificate kind")
+    local certificate_kind=opts.certificate_kind or (opts.projection and "projection" or "text")
+    assert(not opts.projection or certificate_kind=="projection","projection search requires projection proof")
+    assert(not opts.projection or s.projection_summary,"projection summary is not configured")
+    assert(certificate_kind=="text" or certificate_kind=="syntax" or certificate_kind=="fact" or certificate_kind=="projection","unknown find certificate kind")
     local reverse=opts.reverse==true
     local range_first,range_last=first,last
     local cert

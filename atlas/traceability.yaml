@@ -246,6 +246,10 @@ atlas:
       - lua/parley/document/dependencies.lua
       - lua/parley/document/semantic.lua
       - lua/parley/document/structure.lua
+      - lua/parley/document/init.lua
+      - lua/parley/document/editor.lua
+      - lua/parley/document/state.lua
+      - lua/parley/document/projection.lua
     tests:
       - tests/unit/document_sequence_spec.lua
       - tests/unit/document_lexical_spec.lua
@@ -257,6 +261,14 @@ atlas:
       - tests/unit/document_structure_spec.lua
       - tests/integration/perf_document_spec.lua
       - tests/integration/document_reader_spec.lua
+
+      - tests/unit/document_coordinator_spec.lua
+      - tests/unit/document_projection_spec.lua
+      - tests/unit/document_state_spec.lua
+      - tests/integration/document_edit_spec.lua
+      - tests/integration/document_fold_native_spec.lua
+      - tests/integration/document_folds_spec.lua
+      - tests/integration/highlighter_document_spec.lua
 
   chat/parsing:
     code:

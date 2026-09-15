@@ -542,3 +542,21 @@ original structural kind for boundary termination while using fence-suppressed
 kind for tool admission. Regressions cover delayed publication after an upstream
 role change, each derived metadata family, classification invalidation, and 56
 fenced tool/section combinations against the independent legacy reducer.
+
+### 2026-09-15 — M3 native edit and fold integration evidence
+
+Native grouped undo can deliver several logical edits while buffer reads already
+show the final undone text. Editor row totals therefore follow callback deltas;
+the coordinator accepts bounded callback text only when its byte extent matches,
+otherwise retaining opaque evidence until scheduled repair. Whole-buffer deletion
+normalizes Neovim's mandatory empty line. Marker bytes replaced with identical
+text retire the old row identity; typing after an untouched marker preserves it.
+
+Attached-UI probes establish that native manual folds already move correctly for
+interior text growth and retain open/view state during next-question typing, but
+survive marker deletion incorrectly. M3 uses native movement for equivalent body
+edits and schedules certified section projection for structural changes. Queries
+page through the shared index; no all-anchor scan or mutable-layout reparse is
+part of the new fold path. Section/outline projection revisions are separate from
+lexical proofs; payload-only edits preserve both when every relevant value is
+unchanged. Actual consumer migrations and broad suites remain before M3 closure.

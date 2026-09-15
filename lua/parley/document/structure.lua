@@ -1,6 +1,7 @@
 -- Incremental metadata publication. Neovim text remains outside this module.
 local sequence = require("parley.document.sequence")
 local grammar = require("parley.document.grammar")
+local projection = require("parley.document.projection")
 local M = {}
 local documents = setmetatable({}, { __mode = "k" })
 local jobs = setmetatable({}, { __mode = "k" })
@@ -12,6 +13,9 @@ end
 local function new_sequence(spans)
     return sequence.new(spans, {
         empty_summary = grammar.empty_summary(),
+        projection_summary = projection.summary,
+        combine_projection = projection.combine,
+        empty_projection = projection.empty(),
         channel_names = grammar.CHANNELS,
         channels = function(metadata)
             return metadata and metadata.token and grammar.channels(metadata.token) or {}
@@ -37,21 +41,116 @@ function M.stats(document, reset)
     return sequence.stats(state(document).index, reset)
 end
 
+local function frontier(current)
+    return current.semantic and require("parley.document.semantic").confirmed_frontier(current.semantic)
+        or sequence.size(current.index).rows
+end
+local function visible(current,row,opts,certainty)
+    if row and row.metadata and current.semantic then
+        row.metadata.confirmed = row.end_row <= (certainty or frontier(current)) and row.metadata.confirmed == true
+        if not row.metadata.confirmed then
+            if opts and opts.presentation and row.metadata.semantic then
+                local sem=row.metadata.semantic
+                row.metadata.presentation={footer=sem.footer,draft=sem.draft,draft_end=sem.draft_end,
+                    draft_start=sem.draft_start}
+            end
+            row.metadata.semantic = nil
+            if not (opts and opts.presentation) then row.metadata.render_before = nil end
+        end
+    end
+    return row
+end
 function M.query(document, first, last, opts)
     local current = state(document)
     local rows = sequence.query(current.index, first, last, opts)
-    if current.semantic then
-        local frontier = require("parley.document.semantic").confirmed_frontier(current.semantic)
-        for _, row in ipairs(rows) do
-            if row.metadata then
-                row.metadata.confirmed = row.end_row <= frontier and row.metadata.confirmed == true
-                if not row.metadata.confirmed then
-                    row.metadata.semantic, row.metadata.render_before = nil, nil
-                end
-            end
-        end
-    end
+    local certainty=frontier(current)
+    for _,row in ipairs(rows) do visible(current,row,opts,certainty) end
     return rows
+end
+function M.at(document,row,opts)
+    local current=state(document)
+    return visible(current,sequence.at(current.index,row),opts)
+end
+function M.lookup(document,handle,opts)
+    local current=state(document)
+    local rank=sequence.rank(current.index,handle)
+    if not rank or rank.rows==0 then return nil end
+    return visible(current,sequence.at(current.index,rank.row),opts)
+end
+local function unknown(current)
+    return {status="opaque",row=frontier(current),work={nodes_visited=0,entries_visited=0}}
+end
+function M.exchange(document,row,opts)
+    local current=state(document)
+    if row>=frontier(current) then return unknown(current) end
+    local result=projection.exchange(current.index,row,opts)
+    if result.status=="ready" and (result.last>frontier(current) or result.last==frontier(current)
+        and result.last<sequence.size(current.index).rows) then
+        local refused=unknown(current);refused.work=result.work;return refused
+    end
+    return result
+end
+function M.folds(document,first,last,opts)
+    local current=state(document)
+    if last>frontier(current) then return unknown(current) end
+    return projection.folds(current.index,first,last,opts)
+end
+function M.outline(document,first,last,opts)
+    local current=state(document)
+    if first>=frontier(current) then return unknown(current) end
+    local result=projection.find(current.index,first,math.min(last,frontier(current)),
+        opts and opts.is_chat and "outline_chat" or "outline",opts)
+    if result.status=="not_found" and last>frontier(current) then
+        local refused=unknown(current);refused.work=result.work;return refused
+    end
+    return result
+end
+function M.validate_projection(document,certificate)
+    local current=state(document)
+    local valid,bounds=projection.validate(current.index,certificate)
+    if not valid then return false,bounds end
+    if bounds.last_row>frontier(current) then return false,"unconfirmed projection" end
+    return true,bounds
+end
+
+-- Prove byte authority against a confirmed semantic marker and its next
+-- owning boundary. Later dirty regions do not block an already confirmed one.
+function M.authority_range(document,entity,first_byte,last_byte,opts)
+    local current=state(document)
+    opts=opts or {}
+    local initial=sequence.stats(current.index)
+    local function finish(result)
+        local measured=sequence.stats(current.index)
+        for key,value in pairs(measured) do measured[key]=value-(initial[key] or 0) end
+        result.work=measured
+        return result
+    end
+    local nodes,entries=opts.budget_nodes or opts.nodes or 4096,opts.budget_entries or opts.entries or 8192
+    local reserve=sequence.navigation_budget(current.index)
+    if nodes<=reserve.nodes*3 or entries<=reserve.entries*3 then return finish({status="budget"}) end
+    if type(first_byte)~="number" or type(last_byte)~="number" or first_byte<0 or last_byte<first_byte
+        or last_byte==math.huge or first_byte%1~=0 or last_byte%1~=0 then return finish({status="refused"}) end
+    local marker=M.lookup(document,entity)
+    if not marker then return finish({status="stale"}) end
+    local sem=marker.metadata and marker.metadata.semantic
+    if not sem then return finish({status="opaque",row=marker.start_row}) end
+    if not sem.answer_start and not sem.exchange_start then return finish({status="refused"}) end
+    local used=sequence.stats(current.index)
+    local remaining={budget_nodes=nodes-(used.nodes_visited-initial.nodes_visited)-reserve.nodes,
+        budget_entries=entries-(used.entries_visited-initial.entries_visited)-reserve.entries}
+    local limit=frontier(current)
+    local found=projection.find(current.index,marker.start_row+1,limit,
+        sem.answer_start and "answer_end" or "exchange",remaining)
+    if found.status~="found" and found.status~="not_found" then return finish(found) end
+    if not found.span and limit<sequence.size(current.index).rows then return finish({status="opaque",row=limit}) end
+    local last=found.span and found.span.start_row or limit
+    local upper=found.span and found.span.start_byte or sequence.size(current.index).bytes
+    if first_byte<marker.start_byte or last_byte>upper then return finish({status="refused"}) end
+    local certificate=sequence.range_certificate(current.index,marker.start_row,
+        found.span and last+1 or last,{kind="projection"})
+    if not certificate then return finish({status="opaque",row=last}) end
+    return finish({status="ready",entity=entity,first_byte=first_byte,last_byte=last_byte,
+        region_first_byte=marker.start_byte,region_last_byte=upper,certificate=certificate})
 end
 
 function M.splice(document, first, last, spans, opts)

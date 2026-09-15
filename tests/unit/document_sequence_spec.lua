@@ -10,6 +10,46 @@ describe("document sequence", function()
     it("provides the pure sequence module", function() assert.is_true(ok) end)
     if not ok then return end
 
+    it("indexes projections independently and rejects stale projection cursors", function()
+        local values = rows(1600)
+        for _, v in ipairs(values) do v.metadata.token = { kind = "text" } end
+        local seq = S.new(values, {
+            channel_names = { 'row' }, channels = function() return { row = true } end,
+            projection_summary = function(m) return { marked = m.marked == true } end,
+            combine_projection = function(a,b) return { marked = a.marked or b.marked } end,
+            empty_projection = { marked = false },
+        })
+        local h = S.at(seq, 100).handle
+        local text = S.range_certificate(seq, 0, 1600)
+        local syntax = S.range_certificate(seq, 0, 1600, { kind = "syntax" })
+        local proof = S.range_certificate(seq, 0, 1600, { kind = "projection" })
+        local fact = S.fact_certificate(seq,{first=S.bof(seq),last=S.eof(seq),channels={'row'}})
+        local result = S.find(seq, 0, 1600, { projection = true, max_nodes = 512, max_entries = 600,
+            matches = function() return false end })
+        assert.equals("budget", result.status)
+        assert.is_table(result.cursor)
+        assert.is_true(S.project_many(seq, { { handle = h, metadata = { token = { kind = "text" }, marked = true } } }))
+        assert.is_true(S.validate_certificate(seq,text))
+        assert.is_true(S.validate_certificate(seq,syntax,{kind="syntax"}))
+        assert.is_true(S.validate_certificate(seq,fact,{kind="fact"}))
+        assert.is_false(S.validate_certificate(seq,proof,{kind="projection"}))
+        assert.equals("stale", S.find(seq,0,1600,{projection=true,cursor=result.cursor}).status)
+        local found = S.find(seq,0,1600,{projection=true,
+            may_match=function(summary) return summary.marked end,
+            matches=function(m) return m.marked end})
+        assert.equals("found", found.status)
+        assert.equals(h, found.span.handle)
+        local payload_proof=S.range_certificate(seq,0,1600,{kind="projection"})
+        local metadata=S.at(seq,100).metadata
+        metadata.token.bytes=60
+        assert.is_true(S.update_text(seq,h,{bytes=61,metadata=metadata}))
+        assert.is_true(S.validate_certificate(seq,payload_proof,{kind="projection"}))
+        metadata.note="new semantic meaning without changed summary"
+        assert.is_true(S.project_many(seq,{{handle=h,metadata=metadata}}))
+        assert.is_false(S.validate_certificate(seq,payload_proof,{kind="projection"}))
+        assert.is_false(S.validate_certificate(seq,text,{kind="projection"}))
+    end)
+
     it("splices against an independent seeded flat reference and proves membership", function()
         local flat, seed, next_id = rows(300), 4312, 301
         local seq = S.new(flat)

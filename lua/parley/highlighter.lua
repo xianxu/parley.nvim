@@ -60,64 +60,31 @@ local function stop_and_close_timer(timer)
 end
 
 local HIGHLIGHT_VIEWPORT_MARGIN = 20
--- Quiet time after the last edit before an approximate structure is rebuilt
--- (#227). Longer than the gap between keystrokes, so a burst costs one
--- rebuild; short enough that a pause converges almost at once.
-local STRUCTURE_REPAIR_MS = 250
-local structure_caches = {}
-
--- A restartable one-shot run-later (#227): each `start` replaces the pending
--- run. Production rides a libuv timer and hops to the main loop before calling
--- Neovim; tests swap the factory for one they fire by hand.
-local function new_uv_deferral()
-    local timer = vim.uv.new_timer()
-    if not timer then return nil end
-    return {
-        start = function(_, delay_ms, fn)
-            timer:stop()
-            timer:start(delay_ms, 0, vim.schedule_wrap(fn))
-        end,
-        stop = function() timer:stop() end,
-        close = function() stop_and_close_timer(timer) end,
-    }
-end
--- Under the test harness no repair fires on its own: a 250 ms rebuild landing
--- inside some other spec's vim.wait is an ordering that spec never
--- constructed. A spec opts into the real clock with
--- `_set_repair_deferral(nil, ms)` or fires one by hand. The signal is
--- $PARLEY_TEST_MODE, exported by tests/minimal_init.vim: plenary runs each
--- spec in a child nvim that inherits the environment but not `g:` variables.
-local function new_default_deferral()
-    if vim.env.PARLEY_TEST_MODE == "1" then
-        return { start = function() end, stop = function() end, close = function() end }
-    end
-    return new_uv_deferral()
-end
-local new_deferral = new_default_deferral
-
---- Test seam: swap the repair deferral factory and/or its delay. `nil`
---- opts into the production timer. Returns a function restoring both.
-function M._set_repair_deferral(factory, delay_ms)
-    local prev_factory, prev_delay = new_deferral, STRUCTURE_REPAIR_MS
-    new_deferral = factory or new_uv_deferral
-    STRUCTURE_REPAIR_MS = delay_ms or STRUCTURE_REPAIR_MS
-    return function()
-        new_deferral, STRUCTURE_REPAIR_MS = prev_factory, prev_delay
-    end
-end
-
--- Drop a cache whose structure may no longer line up with its buffer. Its
--- attachment sees the missing entry on its next event and detaches.
+-- Subscriptions carry no structural state; the document owns repair and lifetime.
+local subscriptions = {}
 local function forget_structure(buf)
-    local cache = structure_caches[buf]
-    if cache and cache.repair then
-        cache.repair:close()
-        cache.repair = nil
-    end
-    structure_caches[buf] = nil
+    local subscription = subscriptions[buf]
+    if subscription then subscription.unsubscribe() end
+    subscriptions[buf] = nil
 end
 
-
+local function row_metadata(structure, row)
+    return structure.document_rows and structure.document_rows[row]
+end
+local function render_state(structure, row, streaming)
+    if not structure.document_rows then
+        return require("parley.highlight_structure").state_before(structure, row, { streaming = streaming })
+    end
+    local metadata = row_metadata(structure, row)
+    local state = vim.tbl_extend("force", {}, metadata and metadata.render_before or {})
+    if streaming and state.in_reasoning then state.reasoning_explicit_end = true end
+    return state
+end
+local function is_footer_row(structure, row, legacy_range)
+    local metadata = row_metadata(structure, row)
+    local semantic = metadata and (metadata.semantic or metadata.presentation)
+    return semantic and semantic.footer or legacy_range and row >= legacy_range.start_row
+end
 
 local function merge_line_ranges(ranges)
     if #ranges <= 1 then
@@ -177,7 +144,7 @@ local function compute_chat_highlights(buf, start_line, end_line, reader, struct
     local highlight_structure = require("parley.highlight_structure")
     local patterns = highlight_structure.patterns(_parley.config)
     lines = lines or reader:lines(start_line - 1, end_line, false)
-    local footer_range = highlight_structure.footer_range(structure, vim.api.nvim_buf_line_count(buf))
+    local footer_range = not structure.document_rows and highlight_structure.footer_range(structure, vim.api.nvim_buf_line_count(buf))
     -- While a stream is in flight for this buffer, the model has not
     -- yet emitted 🧠:[END]. Assume explicit-end mode so blank-line
     -- paragraph breaks inside the in-progress thinking region keep
@@ -186,7 +153,7 @@ local function compute_chat_highlights(buf, start_line, end_line, reader, struct
     -- lookahead-decided mode takes over and a real [END] / structural
     -- marker controls termination.
     local streaming = require("parley.tasker").is_busy(buf, true)
-    local initial = highlight_structure.state_before(structure, start_line - 1, { streaming = streaming })
+    local initial = render_state(structure, start_line - 1, streaming)
     local in_block = initial.in_question
     local in_code_block = initial.in_code
     local code_fence_len = initial.code_fence_len
@@ -196,6 +163,15 @@ local function compute_chat_highlights(buf, start_line, end_line, reader, struct
 
     for offset, line in ipairs(lines) do
         local line_nr = start_line + offset - 1
+        if structure.document_rows then
+            local before = render_state(structure, line_nr - 1, streaming)
+            if streaming and row_metadata(structure, line_nr - 1) and row_metadata(structure, line_nr - 2) then
+                before.in_reasoning = before.in_reasoning or in_reasoning_block
+            end
+            in_block, in_code_block, code_fence_len = before.in_question, before.in_code, before.code_fence_len
+            in_reasoning_block, in_reasoning_explicit_end = before.in_reasoning, before.reasoning_explicit_end
+            in_tool_block = before.in_tool
+        end
         local classified = highlight_structure.classify(line, patterns)
         -- #218: this used to keep a private copy of the structure's fence
         -- toggle — byte-identical logic, drifting independently, and neither
@@ -219,7 +195,7 @@ local function compute_chat_highlights(buf, start_line, end_line, reader, struct
 
         push_artifact_refs(result, row, line) -- #160: navigable artifact refs
 
-        local is_footer = footer_range and row >= footer_range.start_row
+        local is_footer = is_footer_row(structure, row, footer_range)
         if is_footer then
             table.insert(result[row], { hl_group = "ParleyFootnote", col_start = 0, col_end = -1 })
             in_block = false
@@ -240,7 +216,7 @@ local function compute_chat_highlights(buf, start_line, end_line, reader, struct
             -- highlight tracks parse boundaries even when the model omits
             -- the canonical blank-line terminator (or in pre-existing
             -- chats authored under the old single-line 🧠: convention).
-            local classification = highlight_structure.classify(line, patterns)
+            local classification = classified
             local kind = classification.kind
             local is_user = kind == "user"
             local is_assistant = kind == "assistant"
@@ -267,8 +243,10 @@ local function compute_chat_highlights(buf, start_line, end_line, reader, struct
                 in_reasoning_block = true
                 -- The structure owns terminator lookahead. Streaming is only
                 -- a redraw-time overlay for an unfinished reasoning block.
-                local after = highlight_structure.state_before(structure, row + 1, { streaming = streaming })
-                in_reasoning_explicit_end = after.reasoning_explicit_end
+                local metadata = row_metadata(structure, row)
+                local after = metadata and metadata.after and metadata.after.render
+                    or render_state(structure, row + 1, streaming)
+                in_reasoning_explicit_end = streaming or after.reasoning_explicit_end
             elseif is_summary or line:match("^👂:") then
                 table.insert(result[row], { hl_group = "ParleyThinking", col_start = 0, col_end = -1 })
             elseif is_tool_use or is_tool_result then
@@ -374,12 +352,12 @@ local function compute_markdown_highlights(buf, start_line, end_line, reader, st
     local result = {}
     local branch_prefix = _parley.config.chat_branch_prefix or "🌿:"
     lines = lines or reader:lines(start_line - 1, end_line, false)
-    local footer_range = require("parley.highlight_structure").footer_range(
+    local footer_range = not structure.document_rows and require("parley.highlight_structure").footer_range(
         structure, vim.api.nvim_buf_line_count(buf))
     for offset, line in ipairs(lines) do
         local row = start_line + offset - 2
         push_artifact_refs(result, row, line) -- #160: navigable artifact refs
-        if footer_range and row >= footer_range.start_row then
+        if is_footer_row(structure, row, footer_range) then
             result[row] = result[row] or {}
             table.insert(result[row], { hl_group = "ParleyFootnote", col_start = 0, col_end = -1 })
         end
@@ -446,12 +424,19 @@ local function compute_markdown_highlights(buf, start_line, end_line, reader, st
     -- Draft-block backgrounds come from the buffer-owned structure, so an
     -- opener above the viewport paints visible body lines without another read.
     local blocks = {}
-    for _, range in ipairs(require("parley.highlight_structure").draft_blocks_in(
-        structure, start_line - 1, end_line)) do
-        blocks[#blocks + 1] = {
-            open_row = range.start_row,
-            close_row = range.end_row_exclusive - 1,
-        }
+    if structure.document_rows then
+        for row = start_line - 1, end_line - 1 do
+            local metadata = row_metadata(structure, row)
+            local semantic = metadata and (metadata.semantic or metadata.presentation)
+            if semantic and (semantic.draft or semantic.draft_end) then
+                blocks[#blocks + 1] = { open_row = row, close_row = row }
+            end
+        end
+    else
+        for _, range in ipairs(require("parley.highlight_structure").draft_blocks_in(
+            structure, start_line - 1, end_line)) do
+            blocks[#blocks + 1] = { open_row = range.start_row, close_row = range.end_row_exclusive - 1 }
+        end
     end
     local view_from = start_line - 1
     local view_to = end_line - 1
@@ -903,12 +888,7 @@ end
 -- Simple clear-and-apply; used by tests on scratch buffers.
 -- Production highlighting is handled by the decoration provider.
 M.highlight_question_block = function(buf)
-    local cache = structure_caches[buf]
-    if not cache or cache.dirty then
-        local rebuilt, err = M.rebuild_structure(buf)
-        assert(rebuilt, err)
-        cache = structure_caches[buf]
-    end
+    local document = assert(M.rebuild_structure(buf))
     local ns = M.setup_highlights()
     local ranges = get_visible_line_ranges(buf)
 
@@ -918,7 +898,7 @@ M.highlight_question_block = function(buf)
 
     for _, range in ipairs(ranges) do
         local reader = require("parley.line_reader").for_buffer(buf)
-        local row_map = compute_chat_highlights(buf, range.start_line, range.end_line, reader, cache.structure)
+        local row_map = M._compute_window_decorations(0, buf, range.start_line - 1, range.end_line - 1, reader, document)
         for row, hls in pairs(row_map) do
             for _, hl in ipairs(hls) do
                 vim.api.nvim_buf_add_highlight(buf, ns, hl.hl_group, row, hl.col_start, hl.col_end)
@@ -927,16 +907,40 @@ M.highlight_question_block = function(buf)
     end
 end
 
--- Production compute seam shared by the decoration provider and isolated
--- performance runners. Scan breadth intentionally remains unchanged.
+-- Production compute seam: bounded viewport snapshots and bounded text reads.
 local function compute_window_decorations(_winid, buf, toprow, botrow, reader, structure)
     reader = reader or require("parley.line_reader").for_buffer(buf)
     local buf_type = _parley._parley_bufs[buf]
+    structure = structure or require("parley.document").get(buf)
     if not structure then return nil end
     local start_line = toprow + 1
     local line_count = vim.api.nvim_buf_line_count(buf)
-    local end_line = math.min(botrow + 1 + HIGHLIGHT_VIEWPORT_MARGIN, line_count)
-    local lines = reader:lines(toprow, end_line, false)
+    local end_line = math.min(botrow + 1 + HIGHLIGHT_VIEWPORT_MARGIN, line_count, toprow + 256)
+    if not structure.fingerprints and not structure.document_rows then
+        local rows = require("parley.document").query(structure, toprow, end_line, { presentation = true })
+        local viewport = {}
+        for _, row in ipairs(rows) do
+            if not row.opaque and row.rows == 1 then viewport[row.start_row] = row.metadata end
+        end
+        structure = { document_rows = viewport }
+    end
+    local lines
+    local first_byte = vim.api.nvim_buf_get_offset(buf, toprow)
+    local last_byte = vim.api.nvim_buf_get_offset(buf, end_line)
+    if last_byte - first_byte <= 65536 then
+        lines = reader:lines(toprow, end_line, false)
+    else
+        lines = {}
+        local remaining = 65536
+        for row = toprow, end_line - 1 do
+            if remaining <= 0 then break end
+            local chunk = reader:chunk({ row = row, col = 0, max_bytes = remaining })
+            lines[#lines + 1] = chunk.bytes
+            remaining = remaining - #chunk.bytes - 1
+            if not chunk.eol then break end
+        end
+        end_line = toprow + #lines
+    end
     if buf_type == "chat" then
         return compute_chat_highlights(buf, start_line, end_line, reader, structure, lines)
     elseif buf_type == "markdown" then
@@ -947,128 +951,25 @@ end
 
 M._compute_window_decorations = compute_window_decorations
 
-local function build_structure(buf)
-    local reader = require("parley.line_reader").for_buffer(buf)
-    local lines = reader:lines(0, -1, false)
-    local structure, rows, work = require("parley.highlight_structure").build(
-        lines, require("parley.highlight_structure").patterns(_parley.config))
-    require("parley.line_reader").record_work(buf, {
-        operation = "structure_build",
-        structure_rows_processed = work and work.rows_visited or rows,
-        structure_entries_copied = work and work.entries_copied or 0,
-    })
-    return structure
-end
-
--- (Re)start the one scheduled rebuild that brings an approximate structure
--- back to exact. Restarting on every edit that leaves the cache dirty is what
--- makes a burst of keystrokes cost one rebuild, after the burst.
-local function arm_repair(buf, cache)
-    cache.repair = cache.repair or new_deferral()
-    if not cache.repair then return end
-    cache.repair:start(STRUCTURE_REPAIR_MS, function()
-        if structure_caches[buf] ~= cache or not cache.dirty or not vim.api.nvim_buf_is_valid(buf) then
-            return
-        end
-        local rebuilt, err = M.rebuild_structure(buf)
-        if not rebuilt then
-            _parley.logger.debug("structure repair failed: " .. tostring(err):sub(1, 200))
-            return
-        end
-        -- Decorations are ephemeral and an unedited buffer is not redrawn on
-        -- its own. `valid = true` would re-run on_win yet redraw no lines.
-        -- nvim__redraw is experimental API: if it is renamed or refuses, the
-        -- repair still stands and the next redraw shows it.
-        pcall(vim.api.nvim__redraw, { buf = buf, valid = false })
-    end)
-end
-
+-- Kept as the lifecycle entry point: attaching requests bounded shared repair.
 function M.rebuild_structure(buf)
     if not vim.api.nvim_buf_is_valid(buf) then return nil, "invalid buffer" end
-    local existing = structure_caches[buf]
-    if existing and not existing.dirty then
-        return existing.structure
-    end
-    local ok, candidate = pcall(build_structure, buf)
-    if not ok then
-        -- An existing cache keeps its structure: every edit spliced it, so it
-        -- still lines up with the buffer and keeps rendering while dirty (#227).
-        return nil, candidate
-    end
-    local cache = existing or {}
-    cache.structure = candidate
-    cache.dirty = false
-    if cache.repair then cache.repair:stop() end
-    structure_caches[buf] = cache
-    if not cache.attached then
-        local generation = {}
-        cache.generation = generation
-        local function owned(changed_buf)
-            local current = structure_caches[changed_buf]
-            if current and current.generation == generation and vim.api.nvim_buf_is_valid(changed_buf) then
-                return current
+    local Document = require("parley.document")
+    local document = Document.get(buf) or Document.attach(buf, { patterns = require("parley.highlight_structure").patterns(_parley.config) })
+    if subscriptions[buf] and subscriptions[buf].document ~= document then forget_structure(buf) end
+    if not subscriptions[buf] then
+        local subscription = { document = document }
+        subscriptions[buf] = subscription
+        subscription.unsubscribe = Document.subscribe(document, function(event)
+            if subscriptions[buf] ~= subscription then return end
+            if event.kind == "detach" then
+                forget_structure(buf)
+            elseif event.kind == "repair" and vim.api.nvim_buf_is_valid(buf) then
+                pcall(vim.api.nvim__redraw, { buf = buf, valid = false })
             end
-        end
-        -- A structure that cannot be spliced onto an edit is rebuilt now, and
-        -- dropped if even that fails: a misaligned structure is worse than none.
-        local function resync(changed_buf, current)
-            current.dirty = true
-            if not M.rebuild_structure(changed_buf) then forget_structure(changed_buf) end
-        end
-        cache.on_lines = function(_, changed_buf, _, firstline, lastline, new_lastline)
-            local current = owned(changed_buf)
-            if not current then return true end
-            local model = require("parley.highlight_structure")
-            local line_reader = require("parley.line_reader")
-            local ok_splice, replaced, _, reason, work = pcall(function()
-                local new_lines = line_reader.for_buffer(changed_buf):lines(firstline, new_lastline, false)
-                return model.replace(current.structure, firstline, lastline, new_lines,
-                    model.patterns(_parley.config))
-            end)
-            -- Nvim reports emptying a buffer as zero lines though it keeps one,
-            -- so a self-consistent splice can still miss the buffer: check the
-            -- one fact rendering depends on.
-            if not ok_splice or not replaced
-                or #replaced.fingerprints ~= vim.api.nvim_buf_line_count(changed_buf) then
-                resync(changed_buf, current)
-                return
-            end
-            -- The work replace actually did, copy included (#227 BR-4): the
-            -- #170 gates can only hold a cost they are shown.
-            line_reader.record_work(changed_buf, {
-                operation = "structure_replace",
-                structure_rows_processed = work.rows_visited,
-                structure_entries_copied = work.entries_copied,
-            })
-            current.structure = replaced
-            current.dirty = current.dirty or reason ~= nil
-            if current.dirty then arm_repair(changed_buf, current) end
-        end
-        -- :checktime/autoread replaces the text without on_lines. Without this
-        -- handler Nvim detaches instead, leaving every window on the buffer but
-        -- the current one plain until an unrelated event rebuilt it.
-        cache.on_reload = function(_, reloaded_buf)
-            local current = owned(reloaded_buf)
-            if current then resync(reloaded_buf, current) end
-        end
-        cache.on_detach = function(_, detached_buf)
-            local current = structure_caches[detached_buf]
-            if current and current.generation == generation then
-                forget_structure(detached_buf)
-            end
-        end
-        local attached = vim.api.nvim_buf_attach(buf, false, {
-            on_lines = cache.on_lines,
-            on_reload = function(_, reloaded_buf) cache.on_reload(nil, reloaded_buf) end,
-            on_detach = function(_, detached_buf) cache.on_detach(nil, detached_buf) end,
-        })
-        if not attached then
-            forget_structure(buf)
-            return nil, "failed to attach structure cache"
-        end
-        cache.attached = true
+        end)
     end
-    return candidate
+    return document
 end
 
 function M.clear_structure(buf)
@@ -1076,7 +977,11 @@ function M.clear_structure(buf)
     require("parley.line_reader").clear_buffer(buf)
 end
 
-M._structure_cache = function(buf) return structure_caches[buf] end
+-- Compatibility inspection only: no independently owned structural cache.
+M._structure_cache = function(buf)
+    local document = require("parley.document").get(buf)
+    return document and { structure = document, attached = true }
+end
 
 M.setup_buf_handler = function()
     local interview = require("parley.interview")
@@ -1099,18 +1004,16 @@ M.setup_buf_handler = function()
             if not _parley._parley_bufs[bufnr] then
                 return false
             end
-            -- A dirty cache still renders (#227): every edit splices it, so it
-            -- lines up with the buffer and only its state can lag, until the
-            -- scheduled repair.
-            local structure_cache = structure_caches[bufnr]
-            if not structure_cache then
+            -- The shared index retains presentation only on surviving row handles.
+            local document = require("parley.document").get(bufnr)
+            if not document then
                 return false
             end
             local line_reader = require("parley.line_reader")
             local reader = line_reader.for_buffer(bufnr)
             local row_map = line_reader.with_phase(bufnr, "decoration_redraw", function()
                 return compute_window_decorations(
-                    winid, bufnr, toprow, botrow, reader, structure_cache.structure)
+                    winid, bufnr, toprow, botrow, reader, document)
             end)
 
             _decor_cache[winid] = {
