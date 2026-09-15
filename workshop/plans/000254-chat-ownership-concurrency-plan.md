@@ -254,7 +254,7 @@ Each M-row below is a real `sdlc milestone-close` boundary, with its own fresh-c
 
 **Files:** modify `lua/parley/tasker.lua`, `lua/parley/chat_respond.lua`; create `lua/parley/attempt.lua`, `tests/unit/attempt_spec.lua`, `tests/helpers/fake_process.lua`, `tests/integration/chat_ownership_spec.lua`; extend `tests/unit/tasker_unit_spec.lua`, `tests/integration/tasker_run_spec.lua`, `tests/integration/chat_respond_spec.lua`, `tests/perf/chat_typing.lua`, `tests/perf/harness.lua`; update `atlas/chat/lifecycle.md`, `atlas/traceability.yaml`.
 
-- [ ] Promote documented audit reproductions to synthetic durable tests through production response/tasker paths. Cover appended-question preservation, A-cancellation not affecting B, EPERM/failed signals, unfinished retention, and exit/drain ordering; no dependency on old `/tmp` audit files.
+- [ ] Promote the audit to durable regression specs for `chat_respond.respond` and tasker, using the function strategies below; no dependency on old `/tmp` artifacts.
 - [ ] Extract attempt transitions; route tasker ownership/probe/stop/cleanup decisions through them and existing `_uv` seam. Introduce generation/attempt correlation for the current caller without claiming the new document architecture exists yet.
 - [ ] Contain completion suffix deletion and global cancellation through current lease-guarded narrow operations. Treat these as migration prerequisites with tests, not the final ownership proof.
 - [ ] Capture baseline work/timing for representative typing, newline, structural edit, fold maintenance, and concurrent stream. Extend counters for nodes/dependencies/anchors/folds and record environment and scaling summary in issue Log.
@@ -264,19 +264,19 @@ Each M-row below is a real `sdlc milestone-close` boundary, with its own fresh-c
 
 **Files:** create `lua/parley/document/sequence.lua`, `grammar.lua`, `structure.lua`, `tests/unit/document_sequence_spec.lua`, `document_grammar_spec.lua`, `document_structure_spec.lua`; modify `lua/parley/highlight_structure.lua`, `fence.lua`, `answer_structure.lua`, `chat_parser.lua`, `line_reader.lua`; add `tests/fixtures/document_edits.lua`; update `atlas/chat/parsing.md`, `atlas/traceability.yaml`.
 
-- [ ] Specify sequence splice/rank/query invariants and test randomized edits against a flat reference, including opaque inserted spans and subtree reclamation. Count all copied entries and visited nodes, not only buffer reads.
+- [ ] Implement `sequence.splice`, `sequence.rank`, and `sequence.query` against their reference-model and work-count contracts below.
 - [ ] Extract pure grammar ownership with complete checkpoint state and backward/negative lookahead dependencies; preserve existing distinct fence rules, reasoning, annotations, prefaces, headerless chats, and footer/draft behavior.
-- [ ] Implement scheduled-work-independent repair steps returning continuation and deltas. Test settled output against the legacy full parser before migrating it; keep independent golden fixtures for grammar ambiguities.
-- [ ] Exercise mutation sequences that insert/remove far-away closers, replace marker bytes, delete partial/whole exchanges, and supersede pending repair. Verify no stale revision publishes and dependencies cannot certify a changed payload merely from token equality.
-- [ ] Add work-bound tests at all scale sizes; prove ordinary newline/word edits avoid total-document copying and pathological repair respects row/byte/visit limits. Validate long-line behavior and peak retained memory.
+- [ ] Implement `structure.repair_step` returning continuation/deltas and `structure.publish` validating local provenance, using the differential/golden strategy below.
+- [ ] Implement `grammar.restart_origin` and dependency-certificate validation; drive their adversarial sequence strategy before integrating the scheduler.
+- [ ] Gate the structural functions against the declared workload envelope through the shared instrumented harness.
 - [ ] Run mapped parsing/highlights/exchange suites plus new mapped document suite; update atlas/traceability, commit, close M2. The new core must be usable in isolation; live authority migration follows M3.
 
 ### M3 — Own document edits and migrate live structure consumers
 
 **Files:** create `lua/parley/document/state.lua`, `init.lua`, `editor.lua`, `tests/unit/document_state_spec.lua`, `tests/helpers/fake_document_editor.lua`, `tests/integration/document_edit_spec.lua`; modify `lua/parley/buffer_edit.lua`, `highlighter.lua`, `exchange_model.lua`, `exchange_anchors.lua`, `fold_projection.lua`, `tool_folds.lua`, `outline.lua`, `buffer_lifecycle.lua`; extend `tests/integration/highlight_typing_spec.lua`, `tool_folds_spec.lua`, `stream_view_spec.lua`, `tests/arch/buffer_mutation_spec.lua`, `performance_line_reader_spec.lua`; update `atlas/chat/exchange_model.md`, `atlas/chat/parsing.md`, `atlas/ui/highlights.md`, `TOOLING.md`, `atlas/traceability.yaml`.
 
-- [ ] Implement document transitions and identity provenance with private ownership, read-only query results, and immediate grant invalidation. Test partial A/whole B/partial C deletion, marker corruption, explicit move vs native cut/paste, undo, and document epochs.
-- [ ] Implement the real editor adapter and stateful double. Verify actual Neovim callback ordering/textlock, exact mutation receipts, reentrant edits, errors after partial multi-patch application, reload/detach, UTF-8 and empty buffers. No writes occur inside forbidden callback contexts.
+- [ ] Implement `state.transition` and `state.resolve` with private ownership, read-only query results, immediate grant invalidation, and the preservation/provenance strategies below.
+- [ ] Implement `editor.observe` and `editor.apply` with a stateful double and real Neovim conformance; no writes occur inside forbidden callback contexts.
 - [ ] Attach one index per chat and move highlighting to its viewport queries. Remove independent full-array/spontaneous full-rebuild cache ownership; replace tests that require 2N copying with bounded-work invariants. Conservative styling while unresolved must not blank unaffected text.
 - [ ] Prove the fold update strategy with attached UI, then migrate folds/layout/outline to confirmed IDs and local deltas. Preserve view/open state; remove all-anchor validation and per-chunk full-parse recovery. Keep full document parsing only for explicit materialization/oracle uses.
 - [ ] Enumerate current structural consumers and make adapters delegate to the new source; architecture tests prohibit mutable live models and redraw-time parsing. No dual authoritative cache may survive the boundary.
@@ -289,29 +289,81 @@ Each M-row below is a real `sdlc milestone-close` boundary, with its own fresh-c
 - [ ] Extract generation transitions/runner, acquire before provider readiness/reference preparation, and freeze input dependencies. Stale preparation callbacks cannot act on a new buffer/generation. Keep presentation reducer subordinate to this lifecycle.
 - [ ] Convert dispatcher stream assembly to position-free output intents; route text/tool blocks/topic/header/completion/failure cleanup through document operations. Reserve a tool round as all call blocks followed by ordered result slots; assign stable child operation/block IDs before dispatch. Support concurrent disjoint generations and delegated child-slot writes through the production coordinator using controllable async producers. M4 does not claim built-in tool effects run concurrently yet; their production async execution/resource/outcome boundary is M6. Delete naked index/range authority and tool-loop live-model registry after caller migration.
 - [ ] Sweep all chat mutation entry points: response/regeneration, tool append/cancel repair, auto-topic, reference repair, definition/drill-in transforms, marker insertion, cut/paste/prune/branch/move/delete. Explicit user operations get validated document transactions; out-of-band edits are still observed as external. Scratch buffers are explicitly classified outside this boundary.
-- [ ] Enforce mutation receipts and safe undo grouping. Use real `u`, redo, typing, and plugin edits between chunks; preserve unrelated typing and revoke writes after active-output edits/deletion, including undo that restores the header.
-- [ ] Exercise deterministic schedules through the real runner with fake provider/process/editor: edit/chunk/complete, reload/late completion, input revision change, stop failure, duplicate callbacks, queue overflow, and two concurrent chats, multiple generations in one buffer, and controlled out-of-order child-slot producers while the human types the next question. Repeat with real asynchronous builtin tool dispatch in M6. Assert independent invariants after every event.
+- [ ] Enforce `editor.can_join_undo` and mutation receipts through the real editor-history strategy below.
+- [ ] Drive `generation_runner.dispatch` through the deterministic scheduling strategy below, then repeat via actual asynchronous builtin dispatch at M6.
 - [ ] Remove obsolete pending controls only when their safety purpose is covered; document that editing active output cancels writing. Run mapped lifecycle/ownership/highlights/exchange/provider-tool suites, `make perf`, update atlas/traceability, commit, close M4.
 
 ### M5 — Batch selection and recoverable replacement
 
 **Files:** create `lua/parley/batch.lua`, `answer_recovery.lua`, `tests/unit/batch_spec.lua`, `tests/integration/answer_recovery_spec.lua`, `batch_respond_spec.lua`; modify `lua/parley/chat_respond.lua`, `generation_runner.lua`, `init.lua`, `keybinding_registry.lua`; update `atlas/chat/lifecycle.md`, `atlas/index.md`, user help, `atlas/traceability.yaml`.
 
-- [ ] Implement checked recovery snapshots and restore/discard operations, using portable scratch-backed tests for partial writes/close failure, malformed records, restart, failed cleanup, save acknowledgement, and admission caps. Make snapshot confirmation a precondition of destructive answer replacement.
+- [ ] Implement `answer_recovery.publish`, `resolve`, `restore`, and `cleanup` against the fault/recovery strategies below. Make snapshot confirmation a precondition of destructive answer replacement.
 - [ ] Replace recursive ordinal batching with fixed IDs/revisions and explicit progress. Single and batch calls use the same generation runner, never current-buffer/window or global cursor configuration as authority.
-- [ ] Verify question/context edits between steps pause, deletion does not substitute targets, inserted questions do not join selection, completed steps survive failure, retries preserve the original recovery snapshot, and restore never clobbers intervening human text.
+- [ ] Validate `batch.transition` and `batch.validate_next` against the fixed-membership/revision strategies below.
 - [ ] Run mapped batch/recovery/lifecycle suites and production sequence integration, update atlas/help, commit, close M5.
 
 ### M6 — Tool outcomes and final enforcement
 
 **Files:** create `lua/parley/tools/operation.lua`, `filesystem.lua`, `resources.lua`, `scheduler.lua`, `tests/unit/tool_operation_spec.lua`, `tool_resources_spec.lua`, `tests/helpers/fake_tool_filesystem.lua`, `tests/integration/tool_effect_sequences_spec.lua`, `concurrent_tools_spec.lua`; modify `lua/parley/tools/dispatcher.lua`, `backup.lua`, `wire_anthropic.lua`, `wire_openai.lua`, `types.lua`, all twelve registered files under `lua/parley/tools/builtin/`, `lua/parley/tool_loop.lua`, `generation_runner.lua`, `defaults.lua`; extend `tests/unit/tools_dispatcher_spec.lua`, `tools_builtin_propose_edits_spec.lua`, `tests/integration/openai_tool_loop_spec.lua`, `tests/arch/document_ownership_spec.lua`; update `atlas/providers/tool_use.md`, `atlas/providers/architecture.md`, `atlas/traceability.yaml`, `workshop/lessons.md` for actual review findings.
 
-- [ ] Add callback-based tool dispatch, explicit cancellation handles, async builtin IO/commands, and a fair scheduler backed by pure resource admission. Preserve provider declaration indexes and normalize ordered call/result slots. Replace global cwd switching with explicit paths/cwd. Conformance tests prove two real sleeping subprocess tools overlap while editor input remains responsive.
-- [ ] Enforce the generation's selected capability snapshot, concurrent round join, resource admission, and scoped tool-call ledger before effect execution. Test unadvertised calls, duplicate IDs/changed arguments, retry, cancellation during effect, and post-effect serialization errors.
+- [ ] Add callback-based tool dispatch, explicit cancellation handles, async builtin IO/commands, and a fair scheduler backed by pure resource admission. Preserve provider declaration indexes and normalize ordered call/result slots. Replace global cwd switching with explicit paths/cwd. Use the scheduler conformance strategy below to establish real overlap and responsiveness.
+- [ ] Enforce the generation's selected capability snapshot, concurrent round join, resource admission, and scoped tool-call ledger before effect execution. Verify `operation.transition` and `dispatcher.execute_async` using their authority/effect strategies below.
 - [ ] Route backup/open/write/flush/close through checked filesystem outcomes; exercise stateful partial failures across each write/edit/proposal consumer. Do not report success before checked completion or repeat an unknown effect automatically.
 - [ ] Sweep lifetime/authority bypasses and add architecture enforcement, including direct transcript API calls through command strings and mutable tables returned from public APIs. Verify all production callers use the final boundaries.
 - [ ] Run all focused mappings, `make test`, `make lint`, and `make perf PERF_OUTPUT=/tmp/parley-254-final-perf.json`. Compare attached-UI and deterministic work reports to M1 baseline; record measured limits and retained risks. Full suite runs once per checkout at a time.
 - [ ] Update atlas indexes/traceability and referencing project files discovered by SDLC, commit, close M6 with evidence. Then issue-close with the binary's mandatory review and measured actuals; publish through `sdlc pr`/`sdlc merge` only when the implementation is complete.
+
+### Function-level test strategies (PQ-1)
+
+Names below define the intended module APIs; new symbols enter at their owning
+milestone. Each strategy applies to the adversarial class, with concrete cases
+living in executable specs. Behavioral policies remain in Chunk 1.
+
+| Milestone / function | Strategy and mechanical guard |
+|---|---|
+| M1 `attempt.transition` | Generate reordered lifecycle evidence; assert terminal delivery and resource release require independently stated completion evidence. |
+| M1 `attempt.can_deliver_terminal` | Enumerate observation combinations against the exit/drain oracle, including confirmed no-process launch failure. |
+| M1 `tasker.run` | Stateful process/pipe schedules with reentrant terminal callbacks; assert once-only delivery and admission release by attempt identity. |
+| M1 `tasker.is_busy` | Fault-injected process observations; unresolved admission remains busy regardless of probe uncertainty. |
+| M1 `tasker.cleanup_stale_handles` | Adversarial observation histories; cleanup cannot infer terminal state from absent/failed probes. |
+| M1 `tasker.stop_owner` | Multi-owner process schedules; only named attempts receive cancellation and unresolved ownership survives. |
+| M1 `tasker.cleanup_old_queries` | Generated age/count pressure over lifecycle states; only privately confirmed terminal records are eligible. |
+| M1 `tasker.get_active_query_by_buf` | Mixed active/history records with timestamp ties; compare to active-only creation-order reference. |
+| M1 `chat_respond.respond` | Real response flow with controlled edits/completion; assert independently authored text is preserved and cancellation stays scoped. |
+| M2 `sequence.splice` | Seeded arbitrary text-range changes against flat sequence reference; assert metadata/size equality and bounded copy work. |
+| M2 `sequence.rank` | Random tree shape/provenance histories; compare positions and live-root membership to independent flattened reference. |
+| M2 `sequence.query` | Adversarial region queries over opaque and confirmed spans; assert exact intersections with bounded visits. |
+| M2 `grammar.advance` | Fuzz malformed syntax and supported dialects; compare golden semantic expectations and pre-migration full parser. |
+| M2 `grammar.restart_origin` | Generated backward/negative dependency changes; compare earliest affected origin to exhaustive dependency oracle under visit budgets. |
+| M2 `structure.repair_step` | Seeded syntax/edit sequences; settled result matches reference semantics and every continuation respects work bounds. |
+| M2 `structure.publish` | Interleave local and unrelated changes with repair; provenance oracle rejects stale effects without starving disjoint work. |
+| M3 `state.transition` | Generate edits and owner events; assert text preservation, exclusive grants, and monotonic revocation after every transition. |
+| M3 `state.resolve` | Random deletion/move/reinsertion provenance histories; current-root identity oracle forbids stale or ordinal substitution. |
+| M3 `editor.observe` | Real Neovim event traces compared with stateful double; normalized byte edits reconstruct actual buffer coordinates. |
+| M3 `editor.apply` | Inject reentrant mutations and partial failures; receipts reflect only observed edits and remaining patches lose authority. |
+| M3 `editor.can_join_undo` | Real editor-history sequences with mixed writers; undo grouping never absorbs another owner's changes. |
+| M3 `highlighter._compute_window_decorations` | Viewport/long-line/unresolved-region corpus; independent styling oracle plus bounded read/byte counters. |
+| M3 `fold_projection.project` | Generated confirmed block structures; compare desired intervals to independent semantic ownership oracle. |
+| M3 `tool_folds.reconcile` | Attached-UI structural edit sequences; assert actual fold/view state and measure native affected-range work. |
+| M4 `generation.transition` | Model-based multi-owner event schedules; independent lifecycle/grant invariants prohibit stale writes and orphaned effects. |
+| M4 `generation_runner.dispatch` | Production runner with stateful editor/provider/process scheduler; assert preservation, disjoint progress, and bounded queues per event. |
+| M4 `dispatcher.create_handler` | Arbitrarily fragmented byte streams; assembler output equals original text while owning no document coordinates. |
+| M4 `generation.reserve_round` | Permuted declaration/completion histories; stable call/result identity order is independent of completion timing. |
+| M5 `batch.transition` | Generated selection/progress histories; immutable membership and completed-progress preservation are independent invariants. |
+| M5 `batch.validate_next` | Adversarial revision dependencies; reference snapshot comparison pauses every conflicting advance. |
+| M5 `answer_recovery.publish` | Stateful filesystem fault schedules; replacement authority requires confirmed immutable snapshot publication. |
+| M5 `answer_recovery.resolve` | Mutated persisted association evidence; only a unique exact target resolves, otherwise inspection/explicit selection remains available. |
+| M5 `answer_recovery.restore` | Concurrent edit/failure schedules; fresh target evidence prevents restoration over human changes. |
+| M5 `answer_recovery.cleanup` | Generated save/retention/failure histories; needed snapshots remain recoverable and caps account for failed deletion. |
+| M6 `operation.transition` | Capability/call/effect event sequences; independently assert no unauthorized effect, replay of uncertainty, or fabricated success. |
+| M6 `resources.admit` | Random overlapping multi-resource claims; serial reference proves exclusivity, atomic admission, and fair bounded queues. |
+| M6 `resources.release` | Unknown/resolved effect histories; only confirmed resolution frees conflicting claims. |
+| M6 `dispatcher.execute_async` | Stateful tool effects plus result-processing failures; execution authority and honest effect evidence survive presentation failure. |
+| M6 `scheduler.pump` | Controlled async completions plus disposable real subprocesses; overlap/liveness oracle and bounded admission counters prove responsiveness. |
+| M6 `filesystem.write_checked` | Stateful partial-IO failures; bytes/evidence oracle forbids success before checked completion. |
+| M6 `filesystem.backup_checked` | Faults at publication boundaries; destructive writes are forbidden without confirmed backup evidence. |
+| M6 `wire_anthropic.decode_tool_calls_from_stream` | Permuted indexed protocol fragments; declared-index reference preserves call order and identity. |
+| M6 `wire_openai.decode_tool_calls_from_stream` | Permuted indexed protocol fragments; declared-index reference preserves call order and identity. |
 
 ### Verification command contract
 
@@ -361,3 +413,10 @@ Reason: operator said “looks good. let's go. plan review next?” Delta: the d
 is approved for SDLC plan-quality review and implementation; previous pending
 approval statements record the earlier stage. Estimate remains deferred until
 the gate accepts.
+
+### 2026-09-14 — Plan-quality PQ-1 refinement
+
+Reason: the SDLC judge required named risky functions and concise strategy lines,
+rather than prose case inventories. Delta: compressed test instructions across
+all six milestones and added the function-to-strategy table with independent
+oracles/work guards. Behavioral contracts and scope are unchanged.
