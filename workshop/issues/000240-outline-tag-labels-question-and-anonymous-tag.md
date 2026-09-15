@@ -173,3 +173,5 @@ All plan work implemented under the approved exchange-preface revision (the shar
 ### 2026-09-14 — Boundary review rework
 
 Review returned REWORK: semantic ownership had not reached cut/paste/prune and scoped exchange context; parser classification ignored existing logging IO; README lacked a concise syntax note. Reproduced pruning and clipboard failures, added semantic_start and swept lookup/movement/context consumers. Plan revision records the consumer enumeration and parser classification correction. Targeted regression and fresh combined verification follow before re-review.
+
+Rework verification: full isolated make test passed again (260 files, clean lint). Six clipboard, one prune, one definition-context and one drill-in regression demonstrated RED→GREEN. All reviewed semantic-start consumers now share the same helper; physical anchors remain unchanged.

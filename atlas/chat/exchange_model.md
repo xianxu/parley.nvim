@@ -174,3 +174,7 @@ use the same composition. Anonymous tags affect only outline visibility. Existin
 file-reference syntax in a preface belongs to the following question, including
 its retention/reference-loading policy. Regenerating the preceding answer leaves
 the following preface outside the deleted span.
+
+Exchange editing and scoped context use `question_tags.semantic_start(exchange)`
+to include a preface. Cut, selection, paste and pruning share that ownership
+boundary; question block positions remain anchored on the question marker.

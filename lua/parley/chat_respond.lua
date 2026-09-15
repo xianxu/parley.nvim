@@ -1413,7 +1413,7 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
 
     if params.range ~= 2 and exchange_idx and component then
         local exch = parsed_chat.exchanges[exchange_idx]
-        local exch_start = exch.question.line_start
+        local exch_start = require("parley.question_tags").semantic_start(exch)
         local exch_end = (exch.answer and exch.answer.line_end) or exch.question.line_end
         local exch_lines = {}
         for i = exch_start, exch_end do table.insert(exch_lines, lines[i]) end

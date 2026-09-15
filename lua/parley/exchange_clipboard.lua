@@ -1,12 +1,13 @@
 --------------------------------------------------------------------------------
 -- exchange_clipboard.lua: pure functions for cutting and pasting chat exchanges.
 --
--- An "exchange" is a question + answer pair. Its line range extends from
--- question.line_start through the last line before the next exchange starts
+-- An "exchange" includes its preface, question, and answer. Its range extends
+-- from its semantic start through the last line before the next exchange starts
 -- (including trailing blank lines and branch markers).
 --------------------------------------------------------------------------------
 
 local M = {}
+local semantic_start = require("parley.question_tags").semantic_start
 
 --- Get the inclusive line range for a single exchange, including trailing
 --- whitespace/branch lines that belong to it.
@@ -20,14 +21,14 @@ M.get_exchange_line_range = function(parsed_chat, exchange_idx, total_lines)
 		return nil, nil
 	end
 
-	local start_line = ex.question.line_start
+	local start_line = semantic_start(ex)
 
-	-- End line: if there's a next exchange, go up to (but not including) its question start.
+	-- Stop before the next exchange's preface, or its question if untagged.
 	-- Otherwise, go to the end of the file.
 	local next_ex = parsed_chat.exchanges[exchange_idx + 1]
 	local end_line
 	if next_ex then
-		end_line = next_ex.question.line_start - 1
+		end_line = semantic_start(next_ex) - 1
 	else
 		end_line = total_lines
 	end
@@ -43,15 +44,8 @@ end
 --- @return table  sorted list of exchange indices
 M.get_exchanges_for_range = function(parsed_chat, sel_start, sel_end, total_lines)
 	local result = {}
-	for i, ex in ipairs(parsed_chat.exchanges) do
-		local ex_start = ex.question.line_start
-		local ex_end
-		local next_ex = parsed_chat.exchanges[i + 1]
-		if next_ex then
-			ex_end = next_ex.question.line_start - 1
-		else
-			ex_end = total_lines
-		end
+	for i in ipairs(parsed_chat.exchanges) do
+		local ex_start, ex_end = M.get_exchange_line_range(parsed_chat, i, total_lines)
 
 		-- Overlap check: ranges overlap if start <= other_end and end >= other_start
 		if sel_start <= ex_end and sel_end >= ex_start then
@@ -71,15 +65,8 @@ end
 --- @return number  line number to insert after (0-based nvim_buf_set_lines start)
 M.get_paste_line = function(parsed_chat, cursor_line, header_end, total_lines)
 	-- Find the exchange the cursor is on
-	for i, ex in ipairs(parsed_chat.exchanges) do
-		local ex_start = ex.question.line_start
-		local ex_end
-		local next_ex = parsed_chat.exchanges[i + 1]
-		if next_ex then
-			ex_end = next_ex.question.line_start - 1
-		else
-			ex_end = total_lines
-		end
+	for i in ipairs(parsed_chat.exchanges) do
+		local ex_start, ex_end = M.get_exchange_line_range(parsed_chat, i, total_lines)
 
 		if cursor_line >= ex_start and cursor_line <= ex_end then
 			return ex_end
@@ -88,16 +75,10 @@ M.get_paste_line = function(parsed_chat, cursor_line, header_end, total_lines)
 
 	-- Cursor is not on any exchange — find nearest exchange before cursor
 	local best_end = header_end
-	for i, ex in ipairs(parsed_chat.exchanges) do
-		local ex_end
-		local next_ex = parsed_chat.exchanges[i + 1]
-		if next_ex then
-			ex_end = next_ex.question.line_start - 1
-		else
-			ex_end = total_lines
-		end
+	for i in ipairs(parsed_chat.exchanges) do
+		local ex_start, ex_end = M.get_exchange_line_range(parsed_chat, i, total_lines)
 
-		if ex.question.line_start <= cursor_line then
+		if ex_start <= cursor_line then
 			best_end = ex_end
 		end
 	end

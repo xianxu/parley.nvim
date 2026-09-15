@@ -2432,3 +2432,8 @@ download.
 ## 2026-09-14 (#241)
 
 - Source line numbers identify positions, not unique semantic items. When a parser can emit multiple items on one line, preserve its ordered list through every projection; regression assertions must retain full item identity instead of normalizing back into a line-keyed map.
+
+## 2026-09-14 (#240)
+
+- Adding an exchange-owned component requires sweeping semantic range consumers as well as parsing and sending: cut, paste, visual selection, prune and scoped context must use a shared semantic start. Keep the physical question marker only for cursor/highlight and model block anchors.
+- Classify functions by their actual dependency effects; a parser that calls a file-backed logger is INTEGRATION even if its primary output is a data structure.

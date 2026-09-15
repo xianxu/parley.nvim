@@ -29,6 +29,12 @@ function M.compose_question(preface_content, question_content)
     return question_content or ""
 end
 
+--- First physical row owned by a parsed exchange, including its preface.
+--- The literal question anchor remains question.line_start.
+function M.semantic_start(exchange)
+    return (exchange.preface and exchange.preface.line_start) or exchange.question.line_start
+end
+
 local function copy_item(item)
     local out = {}
     for key, value in pairs(item) do out[key] = value end

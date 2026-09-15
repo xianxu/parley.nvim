@@ -2877,6 +2877,23 @@ describe("chat_respond: drill-in pre-processing", function()
             "original question should be preserved; got:\n" .. after)
     end)
 
+    it("gathers a drill-in from the current exchange preface and preserves the following preface", function()
+        local lines = { "# topic: Branch prefaces", "- file: test.md", "---", "",
+            "@@🤖<Term>[what is this?]@@", "💬: Explain this topic", "", "🤖:",
+            "Original answer", "", "@@later topic@@", "💬: Later question" }
+        vim.fn.writefile(lines, test_file)
+        vim.cmd("edit " .. test_file)
+        local buf = vim.api.nvim_get_current_buf()
+        vim.api.nvim_win_set_cursor(0, { 6, 0 })
+        parley.chat_respond({ range = 0 })
+        local after = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
+        assert.is_nil(after:find("🤖<Term>", 1, true))
+        assert.is_truthy(after:find("@@[Term]@@\n💬: Explain this topic", 1, true))
+        assert.is_truthy(after:find("Original answer", 1, true))
+        assert.is_truthy(after:find("> [Term]\n\nwhat is this?", 1, true))
+        assert.is_truthy(after:find("@@later topic@@\n💬: Later question", 1, true))
+    end)
+
     it("branches a new turn after the cursor exchange when it contains drill-ins", function()
         -- Cursor on a past exchange that has a drill-in marker → don't resubmit;
         -- instead strip the marker and insert a new user turn (with quote+question

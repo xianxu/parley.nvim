@@ -218,8 +218,7 @@ end
 ---@return number|nil         # exchange index, or nil outside any exchange
 function M.find_exchange_at_line(parsed, line_no)
 	for i, ex in ipairs(parsed.exchanges or {}) do
-		local exchange_start = (ex.preface and ex.preface.line_start)
-			or (ex.question and ex.question.line_start) or math.huge
+		local exchange_start = ex.question and require("parley.question_tags").semantic_start(ex) or math.huge
 		local a_end = (ex.answer and ex.answer.line_end)
 			or (ex.question and ex.question.line_end)
 			or 0

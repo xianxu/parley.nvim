@@ -54,7 +54,7 @@ function M.context_for_selection(parsed_chat, sel_line, all_lines, find_exchange
     if not ex then
         return table.concat(all_lines, "\n") -- whole-buffer fallback
     end
-    local lo = ex.question.line_start
+    local lo = require("parley.question_tags").semantic_start(ex)
     local hi = (ex.answer and ex.answer.line_end) or ex.question.line_end
     local slice = {}
     for l = lo, hi do
