@@ -2601,3 +2601,8 @@ download.
 - #254 BR-19: when an invariant changes, sweep existing positive and negative
   fixtures and run the full mapped family before review. New regressions alone
   can leave an older test defending the opposite semantics.
+
+- #254 GC probe: when a reachability assertion is intermittent, distinguish
+  runtime retention from compiled fixture locals with repeated controlled runs.
+  Keep the weak-reference assertion and demonstrate that disabling actual cleanup
+  still fails after isolating the probe; do not hide failures with extra retries.
