@@ -243,17 +243,17 @@ its own `sdlc milestone-close` after implementation:
 
 ### Earlier exploration checklist (superseded for execution)
 
-- [ ] At implementation start, claim and enter planning; reconcile current code and
+- Earlier proposal: At implementation start, claim and enter planning; reconcile current code and
   editing restriction, then author a reviewed durable plan with real review boundaries.
-- [ ] Promote audit reproductions to durable regression tests and correct lifecycle
+- Earlier proposal: Promote audit reproductions to durable regression tests and correct lifecycle
   failures without first broadening editing concurrency.
-- [ ] Enforce exchange identity, regional revisions, scoped generation writes, and
+- Earlier proposal: Enforce exchange identity, regional revisions, scoped generation writes, and
   ownership from the first asynchronous boundary while the editing guard remains.
-- [ ] Enable typing ahead once preservation and event-order tests pass; then cover
+- Earlier proposal: Enable typing ahead once preservation and event-order tests pass; then cover
   active-answer edits, boundary changes, undo, and document closure explicitly.
-- [ ] Replace recursive batch orchestration with explicit selection/progress and
+- Earlier proposal: Replace recursive batch orchestration with explicit selection/progress and
   revision-conflict policy using the same single-generation operation.
-- [ ] Complete process/tool uncertainty and capability enforcement, sequence testing,
+- Earlier proposal: Complete process/tool uncertainty and capability enforcement, sequence testing,
   atlas updates, and verification through SDLC review gates before closing the issue.
 
 ## Log
@@ -291,6 +291,30 @@ and provider-architecture suites passed during the audit while the added probes
 exposed missing sequence invariants. No implementation changes made. Issue remains
 open for future hardening; the proposed steps are not a costed implementation plan.
 
+### 2026-09-14 — Design review completed
+
+The operator confirmed one Neovim instance and clarified concurrent tool/background
+writers as a core requirement. Completed structure/rendering and lifecycle audits,
+then wrote the six-milestone durable plan. Fresh-context review approved both plan
+chunks after fixes for detached-document effect ownership, restart recovery
+association, paused/stopping/queued lifecycle cases, and executable milestone
+sequencing. Concurrent tool effects are delivered at M6; M4 proves the production
+coordinator's disjoint generation/child-slot contract.
+
+A synthetic Neovim 0.11.7 attached-TUI probe established native visual-range `zD`
+removes intersecting folds and preserves disjoint closed folds. Exploratory samples
+at 50,000 rows: about 0.63 ms for broad clearing of roughly 1,000 folds; indexed
+removal of roughly 256 folds took about 1.43 ms. These are individual samples, not
+p95 guarantees. Native broad-range cost scales with affected span; the plan states
+that exception and an overload policy rather than claiming constant work.
+Recreate these probes as repository conformance tests during M3; scratch paths are
+`/tmp/parley254-fold-direct.lua` and `/tmp/parley254-fold-indexed-ui.lua`.
+
+Validation: `sdlc issue validate --issue 254` passed; existing lifecycle, parsing,
+exchange-model, and highlight test mappings all resolve actual specs. No production
+code or tests changed. Operator plan approval remains pending; estimates wait for
+the plan-quality gate. Plan/review lessons are locally committed, not published.
+
 ## Revisions
 
 ### 2026-09-14 — Incremental rendering is part of the core contract
@@ -310,3 +334,12 @@ write-conflict/input-dependency distinction and the whole-exchange deletion
 contract. Recorded the gap between current anchor validation/positional indexing
 and authoritative identity resolution, with deletion/undo/batch acceptance cases.
 These additions refine the proposed design; no implementation was changed.
+
+### 2026-09-14 — Multi-operation scope and review closure
+
+Reason: the operator requires concurrent background/tool writers as well as human
+typing. Delta: added confirmed scope and six concrete milestone rows; converted
+the superseded exploration checklist to prose so it cannot act as duplicate
+completion gates. Reviewed design now separates document lifetime from outstanding
+effects, specifies safe recovery association, and explicitly bounds normal
+rendering work while acknowledging broad native fold-clearing costs.
