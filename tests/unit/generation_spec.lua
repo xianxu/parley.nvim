@@ -492,4 +492,40 @@ describe('pure generation lifecycle',function()
         assert.equals(0,G.snapshot(s).committed_bytes)
     end)
 
+    it('transfers child supervision only while stopping without inventing a known outcome',function()
+        local s,a=requesting();local r
+        s,r=send(s,{type='round_declared',attempt=a,calls={{index=1,call_id='a',arguments_ref='args'}}})
+        local round=effect(r,'reserve_round');local child=round.children[1].operation
+        s=send(s,{type='round_reserved',round=round.round,grants={'child'},receipt_ref='receipt'})
+        local unchanged,rejected=send(s,{type='operation_supervised',operation=child})
+        assert.equals(s,unchanged);assert.is_false(rejected.accepted)
+        s=send(s,{type='operation_resolved',operation=a});s=send(s,{type='cancel'})
+        unchanged,rejected=send(s,{type='operation_resolved',operation=child,supervised=true})
+        assert.equals(s,unchanged);assert.is_false(rejected.accepted)
+        s,r=send(s,{type='operation_supervised',operation=child})
+        assert.is_true(r.accepted);assert.equals('terminal',G.snapshot(s).phase)
+        local saved=G.snapshot(s).supervised_children[child]
+        assert.equals('unknown',saved.outcome);assert.equals(0,G.snapshot(s).outstanding_operations)
+        assert.is_nil(effect(r,'continue_round'))
+    end)
+    it('keeps transferred unknown evidence frozen while sibling cleanup is pending',function()
+        local s,a=requesting();local r
+        s,r=send(s,{type='round_declared',attempt=a,calls={
+            {index=1,call_id='a',arguments_ref='a'},{index=2,call_id='b',arguments_ref='b'}}})
+        local round=effect(r,'reserve_round');local first=round.children[1].operation
+        s=send(s,{type='round_reserved',round=round.round,grants={'one','two'},receipt_ref='receipt'})
+        s=send(s,{type='child_outcome',round=round.round,operation=first,outcome='unknown',result_ref='uncertain'})
+        s=send(s,{type='cancel'})
+        local unchanged,rejected=send(s,{type='operation_supervised',operation=a})
+        assert.equals(s,unchanged);assert.is_false(rejected.accepted)
+        s=send(s,{type='operation_resolved',operation=a})
+        s,r=send(s,{type='operation_supervised',operation=first});assert.is_true(r.accepted)
+        assert.equals('stopping',G.snapshot(s).phase)
+        unchanged,rejected=send(s,{type='child_outcome',round=round.round,operation=first,outcome='known',result_ref='late'})
+        assert.equals(s,unchanged);assert.is_false(rejected.accepted)
+        assert.equals('uncertain',G.snapshot(s).supervised_children[first].result_ref)
+        s=send(s,{type='operation_supervised',operation=round.children[2].operation})
+        assert.equals('terminal',G.snapshot(s).phase)
+    end)
+
 end)

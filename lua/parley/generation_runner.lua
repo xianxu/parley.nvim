@@ -354,9 +354,19 @@ local function execute(s,effect)
         if op then
             local adapter=s.adapters.cancel_operation
             if not adapter then issue(s,'cancel adapter missing; operation unresolved');return end
-            local ok,err=pcall(adapter,{epoch=s.epoch,generation=s.generation,operation=effect.operation,handle=op.handle},function()
-                local result=dispatch(s,{type='operation_resolved',operation=effect.operation})
+            local ok,err=pcall(adapter,{epoch=s.epoch,generation=s.generation,operation=effect.operation,handle=op.handle},function(evidence)
+                if s.operations[effect.operation]~=op then return false end
+                local kind='operation_resolved'
+                if evidence~=nil then
+                    -- Only this trusted cancellation adapter can transfer ownership.
+                    -- Ordinary producer cb.resolved() always needs positive cleanup.
+                    if type(evidence)~='table' or getmetatable(evidence) or evidence.supervised~=true then return false end
+                    for key in pairs(evidence)do if key~='supervised'then return false end end
+                    kind='operation_supervised'
+                end
+                local result=dispatch(s,{type=kind,operation=effect.operation})
                 if result.accepted then s.operations[effect.operation]=nil end
+                return result.accepted
             end)
             if not ok then issue(s,err) end
         end
