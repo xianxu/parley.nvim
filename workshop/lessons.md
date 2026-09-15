@@ -2557,3 +2557,7 @@ download.
   before callbacks and prevent every returning nested slice from restoring its
   captured temporary value. Test cancellation inside suspended native operations,
   in addition to cancellation between slices.
+
+- #254 BR-13: before every boundary, compare every newly added *_spec.lua against
+  atlas/traceability.yaml and the documented mapping output. A test passing when
+  invoked directly is not evidence that the mapped suite will defend it later.

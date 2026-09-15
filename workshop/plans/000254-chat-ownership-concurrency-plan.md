@@ -852,3 +852,12 @@ The fix covers apply, uncertainty clearing, and both discard paths, with native
 suspended-slice tests for enabled/disabled operator preferences and preserved view.
 ARCH-ORDER and ARCH-FUNERAL govern this ordering. All remaining boundary reviews
 use Codex per the operator's explicit instruction. No gate is waived.
+
+### 2026-09-15 — M3 final regression mapping sweep
+
+Codex disposed BR-11 and returned FIX-THEN-SHIP with one verification mapping
+omission (BR-13). The complete newly-added regression sweep found exactly the two
+native retirement specs missing. Both are now registered under chat/document;
+mapping output was checked against the added-spec inventory. No runtime changes
+follow the reviewed cleanup fix. The close commit includes this correction and
+the gate's M3 closure metadata; no redundant boundary review is required.

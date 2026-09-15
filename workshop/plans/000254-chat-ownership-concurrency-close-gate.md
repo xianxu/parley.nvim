@@ -226,6 +226,51 @@ rounds:
           round: 10
       boundary: M3
       blocked: true
+    - "n": 11
+      timestamp: "2026-09-15T10:02:39-07:00"
+      agent: codex
+      dispose:
+        - id: BR-11
+          disposition: addressed
+          note: tool_folds.lua:20-29 and :197-215 transfer preference-restoration ownership before callbacks and preserve captured views; both discard paths share release_windows. Both new retirement specs pass at HEAD and fail with the pre-2f784bb2 fold implementation.
+          round: 11
+        - id: BR-5
+          disposition: addressed
+          note: editor.lua:66 enforces callback-frame provenance; document_callback_frame_spec.lua and document_native_history_spec.lua pass native grouped undo/redo checks.
+          round: 11
+        - id: BR-6
+          disposition: addressed
+          note: structure.lua:49 removes unconfirmed semantic presentation; native fold uncertainty and highlighting tests pass.
+          round: 11
+        - id: BR-7
+          disposition: addressed
+          note: Plan revision at :652-688 explicitly supersedes proposed M3 symbols. The pinned diff confirms projection.lua owns projection, fold_projection.lua remains unchanged, buffer_edit.lua remains unchanged, and exchange_anchors.lua is deleted.
+          round: 11
+        - id: BR-8
+          disposition: addressed
+          note: Editor detach severs its event sink and fold teardown removes its autocmd group; document_retention_spec.lua passes native collection and retained-detached-handle checks.
+          round: 11
+        - id: BR-9
+          disposition: addressed
+          note: outline.lua revalidates current eligibility after focus callbacks; the outline suite passes uncertainty, reclassification, deletion, relocation, and stale tree-selection regressions.
+          round: 11
+        - id: BR-10
+          disposition: addressed
+          note: diagnostic_refresh.lua checks captured job ownership after callback-capable effects; all nine diagnostic_reentrancy_spec.lua tests pass.
+          round: 11
+        - id: BR-12
+          disposition: addressed
+          note: Fold configuration publishes its window list only after completion; document_presentation_reentrant_spec.lua passes interrupted-configuration and surviving-window regressions.
+          round: 11
+      findings:
+        - id: BR-13
+          severity: Important
+          title: BR-11 regressions are missing from the documented verification mapping
+          detail: 'atlas/traceability.yaml:280-285 omits document_fold_retirement_spec.lua and document_fold_uncertainty_retirement_spec.lua. scripts/spec_test_map.sh list-tests chat/document consequently excludes both, contrary to the plan''s verification contract at :377. This is the 3rd finding in family deferred-contract-traceability. Apply the rule that every new boundary regression must be registered in its documented suite: the complete added-spec sweep found exactly these two omissions. Register both and verify the mapping includes them.'
+          family: deferred-contract-traceability
+          round: 11
+      boundary: M3
+      blocked: false
 ---
 
 # Gate ledger — 000254-chat-ownership-concurrency#254 (boundary-review)
@@ -337,6 +382,24 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - BR-9 — addressed — Prior disposition retained. Outline tests pass; navigation validates current semantic eligibility after resolving identity and focus callbacks.
 - BR-10 — addressed — Prior disposition retained. Diagnostic reentrancy tests pass; publication checks captured-job ownership after native diagnostic effects.
 
+## Round 11 — 2026-09-15T10:02:39-07:00 (codex) — passed
+
+### Disposed
+
+- BR-11 — addressed — tool_folds.lua:20-29 and :197-215 transfer preference-restoration ownership before callbacks and preserve captured views; both discard paths share release_windows. Both new retirement specs pass at HEAD and fail with the pre-2f784bb2 fold implementation.
+- BR-5 — addressed — editor.lua:66 enforces callback-frame provenance; document_callback_frame_spec.lua and document_native_history_spec.lua pass native grouped undo/redo checks.
+- BR-6 — addressed — structure.lua:49 removes unconfirmed semantic presentation; native fold uncertainty and highlighting tests pass.
+- BR-7 — addressed — Plan revision at :652-688 explicitly supersedes proposed M3 symbols. The pinned diff confirms projection.lua owns projection, fold_projection.lua remains unchanged, buffer_edit.lua remains unchanged, and exchange_anchors.lua is deleted.
+- BR-8 — addressed — Editor detach severs its event sink and fold teardown removes its autocmd group; document_retention_spec.lua passes native collection and retained-detached-handle checks.
+- BR-9 — addressed — outline.lua revalidates current eligibility after focus callbacks; the outline suite passes uncertainty, reclassification, deletion, relocation, and stale tree-selection regressions.
+- BR-10 — addressed — diagnostic_refresh.lua checks captured job ownership after callback-capable effects; all nine diagnostic_reentrancy_spec.lua tests pass.
+- BR-12 — addressed — Fold configuration publishes its window list only after completion; document_presentation_reentrant_spec.lua passes interrupted-configuration and surviving-window regressions.
+
+### Raised
+
+- **BR-13** [Important] `deferred-contract-traceability` BR-11 regressions are missing from the documented verification mapping
+  atlas/traceability.yaml:280-285 omits document_fold_retirement_spec.lua and document_fold_uncertainty_retirement_spec.lua. scripts/spec_test_map.sh list-tests chat/document consequently excludes both, contrary to the plan's verification contract at :377. This is the 3rd finding in family deferred-contract-traceability. Apply the rule that every new boundary regression must be registered in its documented suite: the complete added-spec sweep found exactly these two omissions. Register both and verify the mapping includes them.
+
 ## Open findings
 
-- **BR-11** [Important] `scope-owned-callback-cleanup` Superseded fold slices skip restoring operator foldenable and window view
+- **BR-13** [Important] `deferred-contract-traceability` BR-11 regressions are missing from the documented verification mapping

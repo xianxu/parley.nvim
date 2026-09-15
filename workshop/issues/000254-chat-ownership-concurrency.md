@@ -351,7 +351,7 @@ its own `sdlc milestone-close` after implementation:
 
 - [x] M1 — Durable audit regressions and process-lifecycle containment.
 - [x] M2 — Dependency-aware incremental sequence/grammar/structure core.
-- [ ] M3 — Document ownership and shared highlighting/folding/layout index.
+- [x] M3 — Document ownership and shared highlighting/folding/layout index.
 - [ ] M4 — Scoped concurrent generation/child-slot writes and human editing.
 - [ ] M5 — Fixed batch identities and recoverable answer replacement.
 - [ ] M6 — Asynchronous concurrent tools, resource/outcome enforcement, final verification.
@@ -550,6 +550,7 @@ remains active. Scoped luacheck and whitespace checks pass. BR-1 and BR-2 fixes
 are ready for the required repeated review after REWORK.
 
 ### 2026-09-15 — M1 closed; M2 integration checkpoint
+- 2026-09-15: closed M3 — BR-11 suspended cleanup ownership:50 focused tests across10 files passed, including two native50k suspended apply/uncertainty retirement regressions and scoped test-runner contract;47 existing presentation/fold/batch tests retained. Five changed Lua files lint clean; git diff --check clean. Prior combined M4 mapping131files1624tests and full556lint passed; integrated performance30scenarios x20samples passed hard gates with zero full-buffer stream reads. Broad native repair remains an explicit expensive exception. Actual N/A: mixed issue192/254 session attribution is unreliable; no invented hours. Review with Codex per operator instruction; no verdict guard bypass.; review verdict: FIX-THEN-SHIP
 - 2026-09-15: closed M2 — Document 131 and parsing 239 tests pass; scoped lint and diff clean. BR-3 delayed semantic publication and BR-4 56 fenced tool/section differential cases fixed. Existing 50k Enter+join 3 semantic rows, 358 index visits, 175 leaf copies and JIT retention regression pass. Actual attribution unavailable for this worktree as recorded at M1; no guessed actuals.; review verdict: SHIP
 
 M1 passed the repeated boundary review with SHIP, committed at dc715634.
@@ -1103,3 +1104,9 @@ two native50k suspended-retirement regressions, and scoped harness contract. Fiv
 changed Lua files lint clean; diff check clean. New native fixtures use the existing
 180-second large-corpus test runner path without changing production work limits.
 Next: Codex M3 boundary review; no closure claimed before its verdict.
+
+Codex M3 FIX-THEN-SHIP follow-through: BR-11 addressed with red-control evidence;
+BR-13's two omitted retirement specs registered in chat/document before close
+commit. Complete new-spec mapping sweep has no missing specs. Codex reran mapped
+document, highlights85, exchange_model264 and outline223 tests plus both native
+retirement regressions. No runtime change was needed after the accepted review.
