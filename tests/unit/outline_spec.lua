@@ -142,6 +142,20 @@ describe("Outline branch destinations (#250)", function()
         error("missing leaf question")
     end)
 
+    it("preselects a preface's question and lands on its question line", function()
+        local path = chat("parent")
+        vim.fn.writefile({ "---", "topic: parent", "file: " .. filename("parent"), "---",
+            "💬: first", "🤖: answer", "text", "@@label@@", "💬: original wording" }, path)
+        vim.cmd("edit " .. vim.fn.fnameescape(path))
+        vim.api.nvim_win_set_cursor(0, { 8, 0 })
+        outline.question_picker(parley.config)
+        local selected = options.items[options.initial_index]
+        assert.equals("  label", selected.display)
+        assert.equals(9, selected.value.lnum)
+        options.on_select(selected)
+        assert.same({ 9, 0 }, vim.api.nvim_win_get_cursor(0))
+    end)
+
     it("reports a missing child without opening an empty file", function()
         local parent = chat("parent", "🌿: missing.md: Missing")
         open_outline(parent)

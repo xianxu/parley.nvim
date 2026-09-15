@@ -226,3 +226,57 @@ describe("exchange_clipboard", function()
 		end)
 	end)
 end)
+
+describe("exchange_clipboard preserves preface ownership", function()
+    local lines = {
+        "---", "topic: Tagged exchanges", "file: tagged.md", "---", "",
+        "@@first@@", "💬: First question", "🤖: First answer", "",
+        "@@second@@", "💬: Second question", "🤖: Second answer", "",
+    }
+    local parsed = { exchanges = {
+        { preface = { line_start = 6, line_end = 6, content = "@@first@@" },
+            question = { line_start = 7, line_end = 7 }, answer = { line_start = 8, line_end = 8 } },
+        { preface = { line_start = 10, line_end = 10, content = "@@second@@" },
+            question = { line_start = 11, line_end = 11 }, answer = { line_start = 12, line_end = 12 } },
+    } }
+
+    for index = 1, 2 do
+        it("cuts exchange " .. index .. " with its own preface and leaves its neighbour intact", function()
+            local extracted, first, last = ec.extract_exchange_lines(lines, parsed, { index }, #lines)
+            local start = index == 1 and 6 or 10
+            assert.same({ lines[start], lines[start + 1], lines[start + 2] }, extracted)
+            assert.equals(start, first)
+            assert.equals(index == 1 and 9 or 13, last)
+            local remaining = {}
+            for row, line in ipairs(lines) do
+                if row < first or row > last then remaining[#remaining + 1] = line end
+            end
+            local other = index == 1 and 10 or 6
+            assert.same({ lines[1], lines[2], lines[3], lines[4], lines[5],
+                lines[other], lines[other + 1], lines[other + 2], "" }, remaining)
+        end)
+
+        it("selects exchange " .. index .. " when only its preface is highlighted", function()
+            local row = index == 1 and 6 or 10
+            assert.same({ index }, ec.get_exchanges_for_range(parsed, row, row, #lines))
+        end)
+    end
+
+    it("pastes after the first exchange without splitting the next preface from its question", function()
+        local after = ec.get_paste_line(parsed, 7, 4, #lines)
+        local inserted = ec.build_paste_lines(lines, after, { "💬: Pasted", "🤖: Pasted answer" }, #lines)
+        local result = {}
+        for row = 1, after do result[#result + 1] = lines[row] end
+        vim.list_extend(result, inserted)
+        for row = after + 1, #lines do result[#result + 1] = lines[row] end
+        assert.same({ lines[1], lines[2], lines[3], lines[4], lines[5],
+            "@@first@@", "💬: First question", "🤖: First answer", "",
+            "💬: Pasted", "🤖: Pasted answer", "",
+            "@@second@@", "💬: Second question", "🤖: Second answer", "" }, result)
+    end)
+
+    it("pastes after the owning exchange when the cursor is on either preface", function()
+        assert.equals(9, ec.get_paste_line(parsed, 6, 4, #lines))
+        assert.equals(13, ec.get_paste_line(parsed, 10, 4, #lines))
+    end)
+end)

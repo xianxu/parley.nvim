@@ -1,12 +1,13 @@
 ---
 id: 000240
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-09-12
 updated: 2026-09-14
 estimate_hours: 1.345
 started: 2026-09-14T20:14:11-07:00
+actual_hours: 2.04
 ---
 
 # Outline tag conventions: an @@tag@@ immediately before a question labels it; @@_@@ is anonymous and hides itself, or the question it precedes
@@ -98,13 +99,15 @@ the outline shows.
 
 ## Plan
 
-- [ ] Pure `apply_tag_conventions(items, lines)` in `outline.lua`; unit tests on hand-built items
-- [ ] Call it from `_build_picker_items` and the tree builder; parity test cases
-- [ ] `find_nearest_outline_line` / picker preselect: tag line maps to the merged row
-- [ ] Help text: tag replaces the label; `_` is anonymous
+- [x] Pure `apply_tag_conventions(items, lines)` in `outline.lua`; unit tests on hand-built items
+- [x] Call it from `_build_picker_items` and the tree builder; parity test cases
+- [x] `find_nearest_outline_line` / picker preselect: tag line maps to the merged row
+- [x] Help text: tag replaces the label; `_` is anonymous
 
 ## Log
 
+
+- 2026-09-14: closed — Full isolated make test: 260 files pass, lint clean; clipboard/prune/definition/drill-in regressions RED to GREEN; parser/context/outline/regeneration coverage passes; unrelated SVG prompt excluded.; review verdict: SHIP
 ### 2026-09-12
 
 - Filed from the brain advisor session on the operator's conventions (1–3
@@ -159,3 +162,19 @@ total: 1.345
 ```
 
 Baseline measured before implementation, synthetic100/1,000/5,000-line transcripts, median of11 after warmup: parse1.05/8.70/44.14ms, outline1.20/9.63/48.59ms. `/tmp/parley240-benchmark.lua` and `/tmp/parley240-baseline.json`; isolated profile and no providers.
+
+### 2026-09-14 — Implementation checkpoint
+
+Implemented exchange preface ownership through parser, live model, rendering, context, outline and cursor lookup. Bounded workers are finished. Focused suites passed: parser70, section7, build_messages84, ancestors9, respond integration73; model/render/tool regressions also passed. Regeneration regressions reproduce deletion with the original parser and pass with preface ownership. Cursor on a preface now resolves to its following exchange, including when the preceding question is unanswered. Full-suite and boundary review remain.
+
+Synthetic median performance at5,000 lines: parse45.44ms (+1.30ms), outline51.16ms (+2.58ms), within the planned20ms incremental budget. Unrelated defaults and workshop chat edits are preserved outside this issue.
+
+### 2026-09-14 — Verification complete
+
+All plan work implemented under the approved exchange-preface revision (the shared helper is question_tags.apply_outline, superseding the original outline-local helper name). Full make test passed in an indexed isolated checkout excluding the unrelated pending SVG-default edit; lint clean and all test files passed. The working-checkout run confirmed that SVG edit alone changes11 golden payloads, so no unrelated defaults or golden fixtures were changed for this issue. Scoped diff check clean. Ready for boundary review.
+
+### 2026-09-14 — Boundary review rework
+
+Review returned REWORK: semantic ownership had not reached cut/paste/prune and scoped exchange context; parser classification ignored existing logging IO; README lacked a concise syntax note. Reproduced pruning and clipboard failures, added semantic_start and swept lookup/movement/context consumers. Plan revision records the consumer enumeration and parser classification correction. Targeted regression and fresh combined verification follow before re-review.
+
+Rework verification: full isolated make test passed again (260 files, clean lint). Six clipboard, one prune, one definition-context and one drill-in regression demonstrated RED→GREEN. All reviewed semantic-start consumers now share the same helper; physical anchors remain unchanged.

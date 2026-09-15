@@ -77,3 +77,14 @@ describe("render_buffer.raw_request_fence_lines", function()
         assert.matches('"b"', body)
     end)
 end)
+
+describe("render_buffer question prefaces", function()
+    it("renders the preface once before the literal question and reports both spans", function()
+        local lines = { "---", "topic: Preface", "file: preface.md", "---", "@@_@@", "💬: literal question" }
+        local parsed = chat_parser.parse_chat(lines, 4, cfg)
+        assert.same({ "@@_@@", "💬: literal question" }, rb.render_exchange(parsed.exchanges[1]))
+        local projected = rb.positions(parsed).exchanges[1]
+        assert.same({ line_start = 5, line_end = 5 }, projected.preface)
+        assert.same({ line_start = 6, line_end = 6 }, projected.question)
+    end)
+end)

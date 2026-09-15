@@ -13,10 +13,11 @@
 -- See #90 design: size-based architecture.
 --
 -- Rules:
---   1. Everything is a block (question, agent_header, text, tool_use,
+--   1. Question and answer content is made of blocks (question, agent_header, text, tool_use,
 --      tool_result, spinner, thinking, note, ...).
 --   2. Parsed blocks preserve their actual preceding gaps; new blocks default
---      to one blank line.
+--      to one blank line. An exchange's optional preface identifies owned
+--      leading content within its gap; it adds no extra rows to the model.
 --   3. Empty blocks contribute neither content nor gap.
 --
 -- Default layout for newly appended content (parsed content stores its actual
@@ -198,6 +199,21 @@ function Model:block_end(k, b)
     return self:block_start(k, b) + self.exchanges[k].blocks[b].size - 1
 end
 
+--- Prefaces occupy the end of the physical gap before the question. Their
+--- rows are already counted in gap_before; they are not an additional block,
+--- so block 1 and exchange_start remain anchored on the question marker.
+--- Like block positions, these 0-indexed rows move as earlier blocks grow.
+function Model:preface_start(k)
+    local preface = self.exchanges[k].preface
+    if not preface then return nil end
+    return self:block_start(k, 1) - preface.size
+end
+
+function Model:preface_end(k)
+    if not self.exchanges[k].preface then return nil end
+    return self:block_start(k, 1) - 1
+end
+
 --- 0-indexed last line of the final visible block, or nil if none is visible.
 function Model:last_nonempty_block_end(k)
     local block_index = last_nonempty_block_index(self.exchanges[k])
@@ -293,6 +309,12 @@ function M.from_parsed_chat(parsed_chat)
         end
         assert(gap_before >= 0, "overlapping exchange spans")
         model:add_exchange(q_size, gap_before)
+        if ex.preface then
+            local size = ex.preface.line_end - ex.preface.line_start + 1
+            assert(size > 0 and size <= gap_before and ex.preface.line_end == question_start - 1,
+                "preface must occupy the gap immediately before its question")
+            model.exchanges[#model.exchanges].preface = { size = size }
+        end
         local previous_block_end = question_end
         if ex.answer then
             local k = #model.exchanges

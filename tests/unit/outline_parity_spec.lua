@@ -201,3 +201,39 @@ describe("outline preserves sibling branches (#241)", function()
         end
     end
 end)
+
+describe("outline question prefaces (#240)", function()
+    after_each(function() vim.fn.delete(tmp .. "/" .. ROOT) end)
+    it("keeps flat and tree labels, anonymous hiding and strict adjacency aligned", function()
+        local lines = { "---", "topic: Root", "file: " .. ROOT, "---",
+            "@@polar@@", "💬: hidden wording", "🤖: answer", "text",
+            "@@_@@", "💬: hidden question", "🤖: answer", "text",
+            "@@standalone@@", "", "💬: visible", "@@last@@" }
+        vim.fn.writefile(lines, tmp .. "/" .. ROOT)
+        local tree = outline._build_tree_outline_items(tmp .. "/" .. ROOT, cfg, {})
+        table.remove(tree, 1)
+        local flat = flat_items(lines)
+        assert.same(normalized(flat), normalized(tree))
+        assert.equals(4, #tree)
+        assert.equals("  polar", tree[1].display)
+        assert.equals(6, tree[1].value.lnum)
+        assert.equals(5, tree[1].value.tag_lnum)
+        assert.equals("  → standalone", tree[2].display)
+        assert.equals("  💬: visible", tree[3].display)
+        assert.equals("  → last", tree[4].display)
+    end)
+    it("drops a tagged trailing empty prompt and keeps inline branches beside labelled questions", function()
+        local lines = { "---", "topic: Root", "file: " .. ROOT, "---",
+            "@@label@@", "💬: see [🌿: Child](" .. CHILD .. ")",
+            "🤖: answer", "text", "@@empty@@", "💬: " }
+        vim.fn.writefile(lines, tmp .. "/" .. ROOT)
+        local tree = outline._build_tree_outline_items(tmp .. "/" .. ROOT, cfg, {})
+        assert.equals(3, #tree)
+        assert.equals("  label", tree[2].display)
+        assert.equals("question", tree[2].type)
+        assert.equals(6, tree[2].value.lnum)
+        assert.equals(5, tree[2].value.tag_lnum)
+        assert.equals("    🌿 Child", tree[3].display)
+        assert.equals(6, tree[3].value.lnum)
+    end)
+end)

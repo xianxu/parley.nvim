@@ -65,6 +65,11 @@ end
 --- @return string[] lines
 function M.render_exchange(exchange)
     local out = {}
+    if exchange.preface then
+        for _, line in ipairs(split_lines(exchange.preface.content or "")) do
+            table.insert(out, line)
+        end
+    end
     table.insert(out, "💬: " .. (exchange.question and exchange.question.content or ""))
     if exchange.answer then
         table.insert(out, "")
@@ -118,6 +123,12 @@ function M.positions(parsed_chat)
     local result = { exchanges = {} }
     for _, ex in ipairs(parsed_chat.exchanges or {}) do
         local entry = {}
+        if ex.preface then
+            entry.preface = {
+                line_start = ex.preface.line_start,
+                line_end = ex.preface.line_end,
+            }
+        end
         if ex.question then
             entry.question = {
                 line_start = ex.question.line_start,

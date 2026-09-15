@@ -48,6 +48,10 @@ bundled originals here:
 3. [Advanced](packaging/tutorials/advanced.md) — what the model sees, project
    folders, local tools, chat-history search, and images.
 
+To label a question in the outline, put `@@label@@` immediately above its question
+line, with no blank line between them. `@@_@@` hides that question from the outline.
+Both forms remain in AI context as a preface to the following question.
+
 Ask Parley about a feature as you work. Its documentation tool reads the
 README, tutorials, and [atlas](atlas/index.md) from your installed version.
 

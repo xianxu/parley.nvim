@@ -157,3 +157,24 @@ assistant-first input, adversarial fences, markers inside prose fences, and
 ordinary multi-exchange/model conversations. Both parsed-model and independent
 raw-text oracles remain active. Workshop chats are not test fixtures; removing
 or editing personal conversations does not change the test corpus.
+
+## Question prefaces
+
+A parsed exchange may own `preface = {line_start, line_end, content}` before its
+question. Currently this is an immediately adjacent whole-line `@@…@@` tag.
+The parser excludes it from the preceding component (including an unanswered
+question), and rendering places it before the `💬:` line. Question starts remain
+on their real markers. The live model stores only `preface = {size}` and derives
+its span with `preface_start/end`, immediately before block1. Those rows are
+already counted in `gap_before`; they are never counted twice in exchange size.
+
+Context builders prepend the raw preface through `question_tags.compose_question`.
+The initial request, tool continuation, ancestor context and branch topic request
+use the same composition. Anonymous tags affect only outline visibility. Existing
+file-reference syntax in a preface belongs to the following question, including
+its retention/reference-loading policy. Regenerating the preceding answer leaves
+the following preface outside the deleted span.
+
+Exchange editing and scoped context use `question_tags.semantic_start(exchange)`
+to include a preface. Cut, selection, paste and pruning share that ownership
+boundary; question block positions remain anchored on the question marker.

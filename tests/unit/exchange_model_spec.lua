@@ -451,3 +451,41 @@ describe("exchange_model: from_parsed_chat with real parser", function()
         assert.equals("💬: q2", lines[m:block_start(2, 1) + 1])
     end)
 end)
+
+describe("exchange_model: question prefaces", function()
+    local function parsed_model()
+        return em.from_parsed_chat({ header_end = 4, exchanges = {
+            { question = { line_start = 5, line_end = 5 }, answer = { line_start = 6, line_end = 7,
+                semantic_sections = { { kind = "text", line_start = 7, line_end = 7 } } } },
+            { preface = { line_start = 8, line_end = 8, content = "@@topic@@" },
+                question = { line_start = 9, line_end = 9 } },
+        } })
+    end
+
+    it("locates a preface inside the existing gap without shifting the question", function()
+        local model = parsed_model()
+        assert.same({ size = 1 }, model.exchanges[2].preface)
+        assert.equals(7, model:preface_start(2))
+        assert.equals(7, model:preface_end(2))
+        assert.equals(8, model:exchange_start(2))
+        assert.equals(8, model:block_start(2, 1))
+        assert.equals("question", model.exchanges[2].blocks[1].kind)
+        assert.equals(1, model:exchange_total_size(2))
+        assert.equals(1, model.exchanges[2].gap_before)
+        assert.is_nil(model:preface_start(1))
+        assert.is_nil(model:preface_end(1))
+    end)
+
+    it("moves the preface and question together as the preceding answer changes", function()
+        local model = parsed_model()
+        model:grow_block(1, 3, 2)
+        assert.equals(9, model:preface_start(2))
+        assert.equals(10, model:block_start(2, 1))
+        model:remove_block(1, 3)
+        assert.equals(6, model:preface_start(2))
+        assert.equals(7, model:block_start(2, 1))
+        model:grow_question(2, 2)
+        assert.equals(3, model:question_size(2))
+        assert.equals(6, model:preface_start(2))
+    end)
+end)

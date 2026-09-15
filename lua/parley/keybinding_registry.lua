@@ -1237,6 +1237,13 @@ function M.help_lines(context, config)
 		table.insert(lines, "")
 	end
 
+	if context == "chat" or context == "markdown" then
+		table.insert(lines, "Outline tags:")
+		table.insert(lines, "  @@label@@ immediately above a question replaces its outline label and search text.")
+		table.insert(lines, "  @@_@@ hides itself and an immediately following question from the outline only.")
+		table.insert(lines, "  A blank line breaks association. Attached tags prefix the question in AI context.")
+		table.insert(lines, "")
+	end
 	table.insert(lines, "Close: q or <Esc>")
 	return lines
 end

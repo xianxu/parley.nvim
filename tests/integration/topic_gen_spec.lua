@@ -152,6 +152,22 @@ describe("ChatPrune topic generation failure", function()
         end
     end)
 
+    it("moves the preface with the pruned question", function()
+        local parent = write_parent("2026-07-12-120009-parent-preface.md")
+        vim.api.nvim_buf_set_lines(0, 9, 9, false, { "@@branch topic@@" })
+        vim.api.nvim_win_set_cursor(0, { 10, 0 })
+        chat_respond.generate_topic = function(_messages, _provider, _model, callback)
+            callback(nil, "abort")
+        end
+        parley.cmd.ChatPrune()
+        local parent_text = table.concat(vim.fn.readfile(parent), "\n")
+        assert.is_falsy(parent_text:find("@@branch topic@@", 1, true))
+        local children = vim.fn.glob(tmp_dir .. "/*.md", false, true)
+        local child = children[1] == parent and children[2] or children[1]
+        local child_text = table.concat(vim.fn.readfile(child), "\n")
+        assert.is_truthy(child_text:find("@@branch topic@@\n💬: prune this exchange", 1, true))
+    end)
+
     for _, reason in ipairs({ "abort", "empty" }) do
         it("keeps the pruned chat unchanged when topic generation returns " .. reason, function()
             local parent = write_parent("2026-07-12-12000" .. (#reason) .. "-parent-" .. reason .. ".md")

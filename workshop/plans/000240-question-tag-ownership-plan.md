@@ -18,7 +18,8 @@
 | `apply_outline` | lua/parley/question_tags.lua | PURE | new: label/hide item projection |
 | `initial_index` | lua/parley/question_tags.lua | PURE | new: item selection using file, question and tag rows |
 | `context_view` | lua/parley/chat_parser.lua | superseded planned API | deleted |
-| `parse_chat` | lua/parley/chat_parser.lua | PURE | modified: explicit exchange preface ownership |
+| `parse_chat` | lua/parley/chat_parser.lua | INTEGRATION | modified: explicit exchange preface ownership |
+| `semantic_start` | lua/parley/question_tags.lua | PURE | new: semantic exchange boundary including preface |
 | `compose_question` | lua/parley/question_tags.lua | PURE | new: preface plus literal question for AI context |
 | `preface_start` | lua/parley/exchange_model.lua | PURE | new: derived preface start |
 | `preface_end` | lua/parley/exchange_model.lua | PURE | new: derived preface end |
@@ -130,6 +131,7 @@ The following strategies supersede the earlier enumerated test instructions (exa
 |---|---|---|
 | `parse_tag` | Generated delimiter boundaries and surrounding text | Accept only whole-line nonempty marker; preserve exact raw label |
 | `associations` | Generated tag/question placements across configured prefixes, headers and fence boundaries | Exactly adjacent eligible tags attach once; no unrelated source row changes ownership |
+| `semantic_start` | lua/parley/question_tags.lua | PURE | new: semantic exchange boundary including preface |
 | `compose_question` | Absent/present preface and arbitrary multiline literal question text | Raw prefix occurs exactly once; no mutation or delimiter rewriting |
 | `apply_outline` | Hand-built ordered item streams with labels, hidden items and branch rows | Question identity/file/lnum/indent retained; only declared label/hide transformation; inputs unchanged |
 | `initial_index` | Competing source/tag row matches in multiple files | Exact owning question selected; hidden rows never selectable |
@@ -141,3 +143,15 @@ The following strategies supersede the earlier enumerated test instructions (exa
 | `respond` regeneration path | Both neighboring exchange resubmission orders through existing fake transport | Completion leaves preface spelling/adjacency intact and model/question anchors coherent |
 
 Operating envelope (PQ-3): representative long interactive chat is 5,000 lines at roughly100 bytes/line (~0.5MB source). The new work is one linear association scan per physical parse/outline build and O(attached tags) metadata, with no durable cache or per-token work; strings are referenced rather than duplicating the transcript. Measure baseline/current parse+outline on 100,1,000,5,000-line synthetic transcripts, report medians rather than flaky timing assertions. Provisional incremental budget is20ms at5,000 lines on this development machine; exceeding it triggers profiling/replanning before close. Larger chats retain all content with linear cost (no silent truncation); no claim of an enforced document-size limit. This replaces all superseded snapshot-cache cost claims.
+
+### 2026-09-14 — Preface cursor ownership
+
+Reason: consumer sweep found both parser and init exchange-at-line helpers start at the question row; after extracting a preface they would either return no exchange or let an earlier unanswered-question margin claim it. Delta: use preface.line_start as the semantic ownership lower bound while retaining physical question starts, and stop an unanswered question's margin before the next preface. Parser find_section_at_line returns the owning exchange and no answer section for a preface. Test both helpers and the response selection path with cursor on preface. This completes the ownership change rather than introducing another navigation policy.
+
+### 2026-09-14 — Boundary review ownership sweep
+
+BR-1: physical question markers remain appropriate for cursor/highlight and model block anchors, but semantic spans must include the preface. Centralize semantic_start(exchange) and reuse it in prune, cut ranges, visual selection, paste insertion, exchange lookup, definition context and drill-in extraction. Add regression coverage for movement and scoped context so adjacent tags cannot be reassigned to an earlier exchange (ARCH-PURPOSE, ARCH-DRY).
+
+BR-2: correct parse_chat classification to INTEGRATION because existing logger.debug calls perform file IO. The association helper remains PURE; no parser logging extraction is required by this ownership change. The table correction supersedes the earlier classification.
+
+BR-3: add a concise outline-tag explanation within README's existing learning section, retaining the approved introduction/install/tutorial structure.

@@ -4045,7 +4045,7 @@ M.find_exchange_at_line = function(parsed_chat, line_number)
 		-- Check if the line is in the question
 		if
 			exchange.question
-			and line_number >= exchange.question.line_start
+			and line_number >= require("parley.question_tags").semantic_start(exchange)
 			and line_number <= exchange.question.line_end
 		then
 			return i, "question"
@@ -4067,7 +4067,8 @@ M.find_exchange_at_line = function(parsed_chat, line_number)
 			else
 				-- No answer — check if before the next exchange
 				local next_ex = parsed_chat.exchanges[i + 1]
-				if not next_ex or line_number < next_ex.question.line_start then
+				local next_start = next_ex and require("parley.question_tags").semantic_start(next_ex)
+				if not next_start or line_number < next_start then
 					return i, "question"
 				end
 			end
@@ -4218,7 +4219,7 @@ M.cmd.ChatPrune = function()
 	-- If cursor isn't directly on an exchange, find the nearest one at or after cursor
 	if not exchange_idx then
 		for i, ex in ipairs(parsed_chat.exchanges) do
-			if ex.question and ex.question.line_start >= cursor_line then
+			if ex.question and require("parley.question_tags").semantic_start(ex) >= cursor_line then
 				exchange_idx = i
 				break
 			end
@@ -4235,9 +4236,9 @@ M.cmd.ChatPrune = function()
 		return
 	end
 
-	-- Determine the line range to prune: from the question start of the target
+	-- Determine the line range to prune: from the semantic start of the target
 	-- exchange through the end of the file.
-	local prune_start = parsed_chat.exchanges[exchange_idx].question.line_start
+	local prune_start = require("parley.question_tags").semantic_start(parsed_chat.exchanges[exchange_idx])
 	local prune_end = #lines
 
 	-- Collect pruned lines (1-indexed inclusive)
@@ -4296,7 +4297,8 @@ M.cmd.ChatPrune = function()
 	for idx = exchange_idx, #parsed_chat.exchanges do
 		local ex = parsed_chat.exchanges[idx]
 		if ex.question then
-			table.insert(topic_msgs, { role = "user", content = ex.question.content })
+			table.insert(topic_msgs, { role = "user", content = require("parley.question_tags").compose_question(
+				ex.preface and ex.preface.content, ex.question.content) })
 		end
 		if ex.answer then
 			table.insert(topic_msgs, { role = "assistant", content = ex.answer.content })
@@ -4386,7 +4388,7 @@ M.cmd.ExchangeCut = function(opts)
 		if not idx then
 			-- Try nearest exchange at or after cursor
 			for i, ex in ipairs(parsed_chat.exchanges) do
-				if ex.question and ex.question.line_start >= cursor_line then
+				if ex.question and require("parley.question_tags").semantic_start(ex) >= cursor_line then
 					idx = i
 					break
 				end

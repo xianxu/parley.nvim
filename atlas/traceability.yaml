@@ -248,6 +248,7 @@ atlas:
 
   chat/exchange_model:
     code:
+      - lua/parley/question_tags.lua
       - lua/parley/stream_position.lua
       - lua/parley/answer_structure.lua
       - lua/parley/exchange_model.lua
@@ -261,6 +262,7 @@ atlas:
       - lua/parley/tool_loop.lua
       - lua/parley/dispatcher.lua
     tests:
+      - tests/unit/question_tags_spec.lua
       - tests/unit/stream_position_spec.lua
       - tests/integration/stream_view_spec.lua
       - tests/unit/answer_structure_spec.lua
@@ -777,9 +779,11 @@ atlas:
 
   ui/outline:
     code:
+      - lua/parley/question_tags.lua
       - lua/parley/outline.lua
       - lua/parley/chat_parser.lua
     tests:
+      - tests/unit/question_tags_spec.lua
       - tests/unit/outline_spec.lua
       - tests/unit/outline_parity_spec.lua
       - tests/unit/picker_items_spec.lua

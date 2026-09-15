@@ -988,6 +988,18 @@ describe("define keybinding split (#161)", function()
 end)
 
 describe("define: context_for_selection vs real parse_chat (#161)", function()
+    it("includes the owned preface when selecting its tag, question, or answer", function()
+        local parley = require("parley")
+        local define = require("parley.define")
+        local lines = { "# topic: ctx", "- file: ctx.md", "---", "", "💬: FIRSTONLY", "",
+            "🤖:", "FIRSTONLY answer", "", "@@catalogue terms@@", "💬: define ASIN", "", "🤖:", "ASIN is a product id" }
+        local parsed = parley.parse_chat(lines, 3)
+        for _, row in ipairs({ 10, 11, 14 }) do
+            local ctx = define.context_for_selection(parsed, row, lines, parley.find_exchange_at_line)
+            assert.equals("@@catalogue terms@@\n💬: define ASIN\n\n🤖:\nASIN is a product id", ctx)
+        end
+    end)
+
     it("slices the enclosing exchange from real parse_chat output (field contract)", function()
         local parley = require("parley")
         local define = require("parley.define")
