@@ -99,7 +99,8 @@ function M.run(phase)
     if phase == 'fake' then
         p.config.llm_onboarding = false -- this phase proves transport; onboarding has dedicated UI tests
         -- Fixtures are part of the released tree; only the guest starts them.
-        vim.cmd.cd(vim.env.PARLEY_RUNTIME)
+        -- Resolve Lua helpers explicitly without entering a discovered project.
+        package.path = vim.env.PARLEY_RUNTIME .. "/?.lua;" .. package.path
         local releases = require('tests.helpers.fake_releases')
         local server = releases.start()
         local root = vim.fn.tempname()
