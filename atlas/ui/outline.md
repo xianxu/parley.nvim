@@ -28,6 +28,7 @@
 ## Tree-Aware Outline (Chat Files)
 - Walks parent chain to root; builds unified outline across linked files
 - Root topic shown as `📋 topic` at top
+- Multiple inline branches on one source line appear left to right, each followed by its expanded child subtree. Standalone and inline branch rows retain their existing indentation and child-file destinations.
 - All branches expanded by default; 2-space indentation per depth level
 - Selecting `🌿` opens the referenced child file at line 1 (standalone, inline, and nested branches); missing files show a warning without creating an empty buffer
 - Selecting child-file item opens file in same window and jumps to line

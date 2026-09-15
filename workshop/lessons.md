@@ -2428,3 +2428,7 @@ download.
 - Cursor restoration does not imply viewport restoration. Test streaming/fold maintenance with an attached Neovim UI, including wrapped-line skipcol and independent split views; keep view restoration scoped to maintenance so it cannot undo deliberate follow movement.
 - A followed stream endpoint needs a byte column as well as a row. Share its projection between streaming and completion, and verify wrapped/multibyte output through the real cursor API.
 - An isolated HOME/XDG does not isolate cwd-based chat discovery. Packaging test children that create chats must also run in a scratch working directory; the existing VM fake-chat test leaks synthetic chats into the checkout.
+
+## 2026-09-14 (#241)
+
+- Source line numbers identify positions, not unique semantic items. When a parser can emit multiple items on one line, preserve its ordered list through every projection; regression assertions must retain full item identity instead of normalizing back into a line-keyed map.
