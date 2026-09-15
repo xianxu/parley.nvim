@@ -1330,3 +1330,20 @@ reload, detach and path changes must not redirect old cleanup authority. Every
 failed stat/read/cleanup stage uses the same visible reporting rule and keeps
 physical bytes accounted. Tests cover both event orders and interrupted joins
 through single and batch execution (ARCH-ORDER, ARCH-FUNERAL, ARCH-PURPOSE).
+
+### 2026-09-15 — Final integrated M6 performance evidence
+
+Reason: recovery settlement changes required measuring the integrated execution
+path again. Delta: final report at fb342a12 passes all 30 hard-gated scenarios,
+20 samples each, with zero full-buffer reads. At 5000 rows ordinary edit visits
+one row (7.87 ms median), Enter/join five (18.14 ms), redraw requests61 lines
+(0.57 ms), stable fold maintenance one row (1.12 ms). All27 non-stream work
+counters equal the previous report. Stream adds one row and leaf copy; median
+45.15 ms and p95 76.43 ms versus43.91/48.54. Broad repair remains document-scale:
+3852.90 ms median versus2562.85 with unchanged18975 cumulative row visits.
+These observed timing regressions are retained; CPU overlap is a possible
+confounder, not a demonstrated explanation. Timing remains report-only and no
+8 ms streaming claim is made. The benchmark uses production scoped responses
+with controlled provider text, not builtin process/IO overlap. Native concurrent
+tool heartbeat tests provide separate evidence. Exact report and analysis:
+`/tmp/parley254-m6-final-perf.json`, `...-final-perf-summary.md`.
