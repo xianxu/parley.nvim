@@ -675,6 +675,33 @@ and clearly retains legacy generation-only model/reducer retirement in M4. The
 operator's end-of-issue live testing and no-merge-before-approval instruction
 remain in force.
 
+### 2026-09-15 — M3 deferred-work corrections
+
+Native timer regressions failed before fair scheduling and now pass for document
+repair, diagnostics, and outline pagination. All four consumers, including folds,
+use the shared coalesced deferred-work owner; reload/cancel closes timers and
+retired callbacks cannot restart work. Native Backspace requires deferred text
+validation: its callback can still expose the old split rows. The single-result-row
+optimization retains bounded metadata evidence, reads in admitted byte slices,
+and finalizes only after current lexical data and semantic checkpoints agree.
+Broader mismatched frames remain conservatively opaque. Rapid edits, inverse
+edits, reload, explicit tiny budgets, long rows, and existing unfinished repair
+are covered by eight deferred-fragment tests (ARCH-ORDER, ARCH-DRY).
+
+The document mapping passes 233 tests; the response integration file passes 74.
+The broader exchange and lifecycle mappings reached legacy synchronous-fold and
+timer-count assumptions, respectively; fixtures now explicitly converge shared
+rendering and isolate the timers under test. Remaining mapped files are running.
+Production lint is clean across 20 core/consumer files. M3 review is pending.
+
+A fresh staging performance report passes all 30 schema-4 scenarios. Timed native
+input includes up to four bounded repair steps: at 1,000/5,000 rows, Enter plus join
+copies six rows and visits 815/929 nodes; ordinary typing copies one row and
+visits 261/288 nodes. Every hot phase has zero full-buffer reads. Diagnostic phases
+now observe zero deferred semantic rows, and an explicit 5,000-row fixture cleanup
+probe is idle with zero work. This removes the earlier hidden whole-document
+repair debt; an exact feature-commit `make perf` run will anchor review evidence.
+
 ## Revisions
 
 ### 2026-09-14 — Incremental rendering is part of the core contract
