@@ -275,12 +275,12 @@ Each M-row below is a real `sdlc milestone-close` boundary, with its own fresh-c
 
 **Files:** create `lua/parley/document/state.lua`, `init.lua`, `editor.lua`, `tests/unit/document_state_spec.lua`, `tests/helpers/fake_document_editor.lua`, `tests/integration/document_edit_spec.lua`; modify `lua/parley/buffer_edit.lua`, `highlighter.lua`, `exchange_model.lua`, `exchange_anchors.lua`, `fold_projection.lua`, `tool_folds.lua`, `outline.lua`, `buffer_lifecycle.lua`; extend `tests/integration/highlight_typing_spec.lua`, `tool_folds_spec.lua`, `stream_view_spec.lua`, `tests/arch/buffer_mutation_spec.lua`, `performance_line_reader_spec.lua`; update `atlas/chat/exchange_model.md`, `atlas/chat/parsing.md`, `atlas/ui/highlights.md`, `TOOLING.md`, `atlas/traceability.yaml`.
 
-- [ ] Implement `state.transition` and `state.resolve` with private ownership, read-only query results, immediate grant invalidation, and the preservation/provenance strategies below.
-- [ ] Implement `editor.observe` and `editor.apply` with a stateful double and real Neovim conformance; no writes occur inside forbidden callback contexts.
-- [ ] Attach one index per chat and move highlighting to its viewport queries. Remove independent full-array/spontaneous full-rebuild cache ownership; replace tests that require 2N copying with bounded-work invariants. Conservative styling while unresolved must not blank unaffected text.
-- [ ] Prove the fold update strategy with attached UI, then migrate folds/layout/outline to confirmed IDs and local deltas. Preserve view/open state; remove all-anchor validation and per-chunk full-parse recovery. Keep full document parsing only for explicit materialization/oracle uses.
-- [ ] Enumerate current structural consumers and make adapters delegate to the new source; architecture tests prohibit mutable live models and redraw-time parsing. No dual authoritative cache may survive the boundary.
-- [ ] Run document, highlights, exchange, and lifecycle mapped suites plus `make perf`; update atlas/tooling with the new bounds, commit, close M3.
+- [x] Implement `state.transition` and `state.resolve` with private ownership, read-only query results, immediate grant invalidation, and the preservation/provenance strategies below.
+- [x] Implement `editor.observe` and `editor.apply` with a stateful double and real Neovim conformance; no writes occur inside forbidden callback contexts.
+- [x] Attach one index per chat and move highlighting to its viewport queries. Remove independent full-array/spontaneous full-rebuild cache ownership; replace tests that require 2N copying with bounded-work invariants. Conservative styling while unresolved must not blank unaffected text.
+- [x] Prove the fold update strategy with attached UI, then migrate folds/layout/outline to confirmed IDs and local deltas. Preserve view/open state; remove all-anchor validation and per-chunk full-parse recovery. Keep full document parsing only for explicit materialization/oracle uses.
+- [x] Enumerate current structural consumers and make adapters delegate to the new source; architecture tests prohibit mutable live models and redraw-time parsing. No dual authoritative cache may survive the boundary.
+- [x] Run document, highlights, exchange, and lifecycle mapped suites plus `make perf`; update atlas/tooling with the new bounds, commit, close M3.
 
 ### M4 — Route every generation write through scoped authority
 
@@ -630,3 +630,17 @@ Fresh slots start an empty scanner; existing tails require one bounded bootstrap
 with local entry proof that survives unrelated neighboring edits. Candidate-rich
 long-line diagnostics require explicit work measurement rather than assuming
 that bounded per-slice parsing also proves bounded aggregate append work.
+
+### 2026-09-15 — M3 completed verification before review
+
+Reason: native fold batches and starvation regressions now pass with final
+consumer integration. Delta: mark M3 implementation tasks verified; its milestone
+boundary remains pending the binary-owned review. Document mapping: 245 tests
+across the completed prefix and resumed semantic/remainder runs. Two real
+50,000-row corpora have scoped 180-second harness deadlines; other tests retain
+50 seconds. Full feature benchmark on `ea933f51` passes all 30 schema-4 scenarios
+with five warmups and 20 samples. Ordinary typing processes/copies one row;
+Enter+join six; viewport redraw no semantic rows; all hot phases have zero full
+buffer reads. Timing remains report-only and was collected with concurrent test
+load: the 5,000-row stream/human p95 is 52.326 ms. This does not meet the 8 ms
+aspiration; M4 still owns removal of the legacy generation model/stream rewrite.

@@ -32,6 +32,6 @@ let $PARLEY_TEST_MODE = '1'
 let $PARLEY_CLIPROXY_RELEASES_URL = 'http://127.0.0.1:9/router-for-me/CLIProxyAPI/releases'
 
 " Preserve ordinary per-file deadlines; the scoped runner extends only the
-" real >50k-row native fold conformance fixture, including mapped make runs.
+" real 50k-row conformance corpora, including mapped make runs.
 command! -nargs=1 -complete=file PlenaryBustedFile
       \ lua require('tests.helpers.spec_runner').run([[<args>]])
