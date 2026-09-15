@@ -476,6 +476,15 @@ review. Continue M2–M6 from the approved durable plan. Keep unrelated main-che
 changes untouched. M1 intentionally retains unresolved attempts without timers;
 global bounded admission/reconciliation scheduling remains later milestone work.
 
+### 2026-09-14 — Continue autonomously through final live-test handoff
+
+The operator explicitly authorized continuing without waiting between milestones.
+Complete #254 implementation and automated review/verification, then hand over the
+branch for extensive operator live testing before merging to main. Do not merge
+until that live-testing approval arrives. Normal local milestone reviews and
+fixes remain authorized. Context checkpoints preserve progress and do not require
+another operator message to resume.
+
 ## Revisions
 
 ### 2026-09-14 — Incremental rendering is part of the core contract
