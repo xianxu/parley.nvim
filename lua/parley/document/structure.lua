@@ -111,7 +111,8 @@ function M.reload(document, spans)
     current.lexer, current.semantic, current.read_pending = nil, nil, nil
 end
 
--- A job holds a local certificate, not a document-wide changedtick or old tree.
+-- A job proves only local text identity. It cannot authorize semantic state;
+-- only the semantic worker validates context and publishes derived metadata.
 function M.capture(document, first, last)
     local current = state(document)
     local certificate, reason = sequence.range_certificate(current.index, first, last)
@@ -139,21 +140,32 @@ function M.publish(document, job, spans)
     if rows ~= captured.rows or bytes ~= captured.bytes then
         return { status = "invalid_extent" }
     end
+    if #spans > 256 then return { status = "invalid_extent" } end
+    for _, span in ipairs(spans) do
+        if span.opaque or span.rows ~= 1 or type(span.metadata) ~= "table"
+            or type(span.metadata.token) ~= "table" then
+            return { status = "invalid_metadata" }
+        end
+        for key in pairs(span.metadata) do
+            if key ~= "token" then return { status = "invalid_metadata" } end
+        end
+    end
     local existing = sequence.query(current.index, extent.first_row, extent.last_row, { limit = 257 })
-    local updates = {}
-    local compatible = #existing == #spans and #spans <= 256
+    local equivalent = #existing == #spans
     for i, span in ipairs(spans) do
         local old = existing[i]
-        if not old or old.opaque or span.opaque or old.rows ~= span.rows or old.bytes ~= span.bytes then
-            compatible = false
+        if not old or old.opaque or old.rows ~= 1 or old.bytes ~= span.bytes
+            or not old.metadata or not old.metadata.token
+            or not grammar.same_token(old.metadata.token, span.metadata.token) then
+            equivalent = false
             break
         end
-        updates[i] = { handle = old.handle, metadata = span.metadata }
     end
-    if compatible then
-        assert(sequence.update_many(current.index, updates))
-    else
-        sequence.splice(current.index, extent.first_row, extent.last_row, spans)
+    -- Equivalent lexical results leave current semantic metadata and row
+    -- identities intact, including newer context settled while this job ran.
+    -- Changed lexical results use the normal semantic invalidation path.
+    if not equivalent then
+        M.splice(document, extent.first_row, extent.last_row, spans)
     end
     jobs[job] = nil
     return { status = "published", first_row = extent.first_row, last_row = extent.last_row }

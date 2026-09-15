@@ -2484,3 +2484,13 @@ download.
 - A delayed read request contains coordinates from a particular observation.
   Refresh an unread request after a disjoint edit moves its source; retain the
   old frame only for a response already read under that frame.
+
+## #254 M2 review — match evidence to the effect
+
+- A local text certificate authorizes lexical results only. Derived semantic
+  state also needs its incoming context and lookahead dependencies; public repair
+  APIs must not accept arbitrary metadata under weaker proof.
+- Grammar compatibility can require two views of a token: its original structural
+  boundary and whether a fence admits a section. Suppressing section admission
+  must not erase boundary effects. Sweep the cross-product against an independent
+  reducer, including malformed and unterminated fences.

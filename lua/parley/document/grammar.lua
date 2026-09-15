@@ -222,7 +222,9 @@ function M.advance_sections(state,t,facts)
             s.section='summary'; s.reasoning=false; section.start=true
         elseif k=='tool_use' or k=='tool_result' then
             s.section=k; s.reasoning=false; section.start=true
-        elseif lexical.is_structural_kind(k) then
+        -- Fence containment controls tool admission, but the original marker
+        -- remains a boundary for reasoning and preceding tool/text sections.
+        elseif lexical.is_structural_kind(t.kind) then
             s.section='text'; s.reasoning=false; section.start=true
         elseif k=='reasoning_end' and s.reasoning then
             section.kind='thinking'; s.reasoning=false; s.section='text'

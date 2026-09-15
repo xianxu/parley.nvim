@@ -528,3 +528,17 @@ entries; median 3.020 ms and observed p95 3.387 ms. Setup/materialization is out
 that window. Across 100/1,000/10,000/50,000 rows the semantic work stays three rows.
 These are isolated core measurements, not the M3 attached-editor acceptance.
 M2 implementation tasks are verified; its review boundary is pending.
+
+### 2026-09-15 — M2 boundary review: semantic authority and fence parity
+
+Reason: BR-3 demonstrated that unchanged local text does not prove unchanged
+semantic context; BR-4 found ordinary-fenced tool markers still terminate
+reasoning in the existing answer reducer. Delta: `structure.publish` accepts
+lexical-only metadata, rejects every derived-metadata field, preserves newer
+semantics for equivalent lexical results, and routes changed classifications
+through normal invalidation. Semantic publication remains solely in the worker
+that validates context/dependencies (ARCH-PURPOSE). Section reduction now keeps
+original structural kind for boundary termination while using fence-suppressed
+kind for tool admission. Regressions cover delayed publication after an upstream
+role change, each derived metadata family, classification invalidation, and 56
+fenced tool/section combinations against the independent legacy reducer.

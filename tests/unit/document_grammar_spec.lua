@@ -202,6 +202,16 @@ describe('document grammar', function()
         assert.equals(1,initial[2].semantic.exchange)
     end)
 
+    it('ends reasoning at a fenced tool marker without admitting a tool section', function()
+        for _,marker in ipairs({'📎: x','🔧: x'}) do
+            local rows=run({'💬: q','🤖: a','```','🧠: think',marker,'```'},
+                {[3]={ordinary_close=6,section_ordinary_close=6}})
+            assert.equals('thinking',rows[4].semantic.section_kind)
+            assert.equals('text',rows[5].semantic.section_kind)
+            assert.equals('text',rows[6].semantic.section_kind)
+        end
+    end)
+
     it('keeps section lookahead scoped and preserves the prior checkpoint on retry', function()
         local scope_end={id='answer-end'}
         local state=grammar.initial_sections({['end']=scope_end})

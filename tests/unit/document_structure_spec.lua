@@ -1,7 +1,10 @@
 local structure = require("parley.document.structure")
 
 local function span(text)
-    return { rows = 1, bytes = #text + 1, metadata = { text_id = text } }
+    local grammar = require("parley.document.grammar")
+    local lexer = grammar.lex_start(require("parley.highlight_structure").patterns({}))
+    local _, token = grammar.lex_step(lexer, text, true)
+    return { rows = 1, bytes = #text + 1, metadata = { token = token } }
 end
 
 local function document()
@@ -9,17 +12,16 @@ local function document()
 end
 
 describe("incremental structure publication", function()
-    it("preserves confirmed row identity when publishing metadata", function()
+    it("preserves row identity when publishing equivalent lexical metadata", function()
         local doc = document()
         local before = structure.query(doc, 0, 2)
         local job = structure.capture(doc, 0, 2)
         local first = span("first")
-        first.metadata.confirmed = true
         assert.equals("published", structure.publish(doc, job, { first, span("middle") }).status)
         local after = structure.query(doc, 0, 2)
         assert.equals(before[1].handle, after[1].handle)
         assert.equals(before[2].handle, after[2].handle)
-        assert.is_true(after[1].metadata.confirmed)
+        assert.same(first.metadata.token, after[1].metadata.token)
     end)
 
     it("publishes a locally valid repair after an unrelated edit", function()
@@ -28,7 +30,7 @@ describe("incremental structure publication", function()
         structure.splice(doc, 2, 3, { span("changed elsewhere") })
         local result = structure.publish(doc, job, { span("first") })
         assert.equals("published", result.status)
-        assert.equals("changed elsewhere", structure.query(doc, 2, 3)[1].metadata.text_id)
+        assert.equals(#"changed elsewhere" + 1, structure.query(doc, 2, 3)[1].bytes)
     end)
 
     it("rejects stale repair despite replacement having identical size", function()
@@ -37,7 +39,7 @@ describe("incremental structure publication", function()
         structure.splice(doc, 0, 1, { span("other") })
         local result = structure.publish(doc, job, { span("first") })
         assert.equals("stale", result.status)
-        assert.equals("other", structure.query(doc, 0, 1)[1].metadata.text_id)
+        assert.same(span("other").metadata.token, structure.query(doc, 0, 1)[1].metadata.token)
     end)
 
     it("cannot reuse a consumed repair authority", function()
@@ -59,7 +61,7 @@ describe("incremental structure publication", function()
         local doc = document()
         local job = structure.capture(doc, 0, 1)
         assert.equals("invalid_extent", structure.publish(doc, job, { span("much longer") }).status)
-        assert.equals("first", structure.query(doc, 0, 1)[1].metadata.text_id)
+        assert.equals(#"first" + 1, structure.query(doc, 0, 1)[1].bytes)
     end)
 
     it("keeps unread bulk text opaque without per-row allocation", function()
@@ -104,6 +106,46 @@ local function opaque_document(lines)
 end
 
 describe("document repair orchestration", function()
+    it("rejects old semantic publication after a disjoint context change", function()
+        local lines = { "💬: q", "one", "two", "three", "four" }
+        local doc = opaque_document(lines)
+        settle(doc, lines, { rows = 256 })
+        local captured = structure.query(doc, 3, 4)[1]
+        local job = structure.capture(doc, 3, 4)
+        lines[1] = "🤖: a"
+        structure.splice(doc, 0, 1, { span(lines[1]) })
+        settle(doc, lines, { rows = 256 })
+        assert.equals("answer", structure.query(doc, 3, 4)[1].metadata.semantic.role)
+        assert.equals("invalid_metadata", structure.publish(doc, job, {
+            { rows = 1, bytes = captured.bytes, metadata = captured.metadata },
+        }).status)
+        for _, key in ipairs({ "confirmed", "before", "after", "semantic", "render_before",
+            "answer_header", "section", "section_before", "section_after" }) do
+            local candidate = span(lines[4])
+            candidate.metadata[key] = true
+            assert.equals("invalid_metadata", structure.publish(doc, job, { candidate }).status)
+        end
+        assert.equals("published", structure.publish(doc, job, { span(lines[4]) }).status)
+        local current = structure.query(doc, 3, 4)[1]
+        assert.equals(captured.handle, current.handle)
+        assert.equals("answer", current.metadata.semantic.role)
+        assert.is_true(current.metadata.confirmed)
+    end)
+
+    it("invalidates semantics when a lexical publication changes classification", function()
+        local lines = { "💬: q", "one", "two" }
+        local doc = opaque_document(lines)
+        settle(doc, lines, { rows = 256 })
+        local job = structure.capture(doc, 0, 1)
+        -- A corrected classification for the same certified bytes cannot carry
+        -- any old derived state into the repair worker.
+        local candidate = span("🤖: a")
+        assert.equals("published", structure.publish(doc, job, { candidate }).status)
+        assert.is_nil(structure.query(doc, 2, 3)[1].metadata.semantic)
+        settle(doc, lines, { rows = 256 })
+        assert.equals("answer", structure.query(doc, 2, 3)[1].metadata.semantic.role)
+    end)
+
     it("settles opaque text into confirmed exchanges through bounded reads", function()
         local lines = { "💬: question", "🤖: answer", "body", "💬: next", "draft" }
         local doc = opaque_document(lines)

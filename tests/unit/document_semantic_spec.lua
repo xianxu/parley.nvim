@@ -58,6 +58,43 @@ describe('document semantic worker',function()
         end
     end)
 
+    it('matches legacy fenced tool boundaries across reasoning and existing section states',function()
+        local reducer=require('parley.answer_structure')
+        local prefixes={
+            {'plain'}, {'🧠: think'}, {'🧠: think','','continued'},
+            {'🧠: think','🧠:[END]'}, {'📝: summary'}, {'🔧: earlier'}, {'📎: earlier'},
+        }
+        for _,marker in ipairs({'🔧: next','📎: next'}) do
+            for _,prefix in ipairs(prefixes) do
+                for _,closed in ipairs({false,true}) do
+                    for _,fence_first in ipairs({false,true}) do
+                        local body=fence_first and {'```'} or {}
+                        for _,line in ipairs(prefix) do body[#body+1]=line end
+                        if not fence_first then body[#body+1]='```' end
+                        body[#body+1]=marker
+                        body[#body+1]='tail'
+                        if closed then body[#body+1]='```' end
+                        local lines={'💬: q','🤖: a'}
+                        for _,line in ipairs(body) do lines[#lines+1]=line end
+                        local seq=sequence(lines)
+                        local worker=Semantic.new(seq)
+                        settle(worker)
+                        local expected=reducer.reduce(body,require('parley.highlight_structure').patterns({}))
+                        for _,section in ipairs(expected.sections) do
+                            for row=section.line_start,section.line_end do
+                                local actual=S.at(seq,row+1)
+                                if not actual.metadata.token.blank then
+                                    assert.equals(section.kind,actual.metadata.semantic.section_kind,
+                                        table.concat(body,' / ')..' row '..row)
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end)
+
     it('reports opaque demand and resumes after bounded token materialization',function()
         local seq=sequence({'💬: q','🤖: a'})
         S.splice(seq,2,2,{{rows=100,bytes=500,opaque=true}})

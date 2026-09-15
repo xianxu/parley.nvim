@@ -35,6 +35,24 @@ rounds:
           round: 2
       boundary: M1
       blocked: false
+    - "n": 3
+      timestamp: "2026-09-15T00:44:23-07:00"
+      agent: codex
+      findings:
+        - id: BR-3
+          severity: Critical
+          title: Local text certificates permit stale confirmed semantic publication
+          detail: 'lua/parley/document/structure.lua:115–154 captures only local text evidence and epoch. After changing an earlier question marker to an assistant marker and completing repair, publishing previously captured body metadata succeeds and restores question semantics with confirmed=true. ARCH-ORDER / ARCH-SECURE: validate incoming semantic state and dependencies, or restrict publication to lexical metadata; add controlled stale-publication and disjoint-edit regressions.'
+          family: semantic-publication-evidence
+          round: 3
+        - id: BR-4
+          severity: Critical
+          title: Ordinary-fence suppression removes a required reasoning boundary
+          detail: 'lua/parley/document/grammar.lua:202–225 rewrites fenced tool markers to text before reasoning termination. For question, answer, opening fence, reasoning marker, tool-result marker, closing fence, the new core marks the last two rows thinking while the legacy reducer marks them text. ARCH-PURPOSE: preserve original structural boundary semantics separately from tool-section admission and cover both tool-marker kinds across section states.'
+          family: grammar-boundary-preservation
+          round: 3
+      boundary: M2
+      blocked: true
 ---
 
 # Gate ledger — 000254-chat-ownership-concurrency#254 (boundary-review)
@@ -58,6 +76,16 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - BR-1 — addressed — chat_respond.lua:2127 propagates response ownership into automatic topics; dispatcher.lua:881 preserves it across retries. Removing topic ownership in a scratch copy makes both deletion regressions fail at chat_ownership_spec.lua:157. The pinned tests verify unrelated-owner preservation and retention until exit/drain.
 - BR-2 — addressed — The pinned plan adds an explicit M6 task at line 310 covering bounded reconciliation, admission limits, diagnostics, timer cleanup, and deterministic verification. Its Revisions entry at lines 443–451 accurately distinguishes tasker.lua:130's current retention-only behavior from future supervision.
 
+## Round 3 — 2026-09-15T00:44:23-07:00 (codex) — BLOCKED
+
+### Raised
+
+- **BR-3** [Critical] `semantic-publication-evidence` Local text certificates permit stale confirmed semantic publication
+  lua/parley/document/structure.lua:115–154 captures only local text evidence and epoch. After changing an earlier question marker to an assistant marker and completing repair, publishing previously captured body metadata succeeds and restores question semantics with confirmed=true. ARCH-ORDER / ARCH-SECURE: validate incoming semantic state and dependencies, or restrict publication to lexical metadata; add controlled stale-publication and disjoint-edit regressions.
+- **BR-4** [Critical] `grammar-boundary-preservation` Ordinary-fence suppression removes a required reasoning boundary
+  lua/parley/document/grammar.lua:202–225 rewrites fenced tool markers to text before reasoning termination. For question, answer, opening fence, reasoning marker, tool-result marker, closing fence, the new core marks the last two rows thinking while the legacy reducer marks them text. ARCH-PURPOSE: preserve original structural boundary semantics separately from tool-section admission and cover both tool-marker kinds across section states.
+
 ## Open findings
 
-(none — every finding has been disposed)
+- **BR-3** [Critical] `semantic-publication-evidence` Local text certificates permit stale confirmed semantic publication
+- **BR-4** [Critical] `grammar-boundary-preservation` Ordinary-fence suppression removes a required reasoning boundary
