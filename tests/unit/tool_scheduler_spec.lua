@@ -120,4 +120,42 @@ describe('captured tool scheduler',function()
         assert.equals(0,service:stats().records);assert.equals(0,service:stats().result_bytes)
     end)
 
+    it('requires pure transition permission before starting an effect',function()
+        local O=require('parley.tools.operation');local original=O.transition
+        O.transition=function(state,key,event)
+            if event.type=='start'then return state,{status='invalid_transition'}end
+            return original(state,key,event)
+        end
+        local ok,err=pcall(function()
+            service:execute(gen,spec(),{});flush();assert.equals(0,starts)
+        end)
+        O.transition=original;if not ok then error(err)end
+    end)
+    it('retains claims when the model rejects physical evidence or release',function()
+        local O=require('parley.tools.operation');local original=O.transition
+        for _,denied in ipairs({'physical','release'})do
+            local op=service:execute(gen,spec(denied,'/'..denied),{})
+            O.transition=function(state,key,event)
+                if event.type==denied then return state,{status='invalid_transition'}end
+                return original(state,key,event)
+            end
+            local ok,err=pcall(function()
+                done[starts](outcome('known',true));flush()
+                assert.equals(denied~='physical',service:snapshot(op).physical_resolved)
+                assert.equals(denied=='physical' and 1 or 2,service:stats().running)
+            end)
+            O.transition=original;if not ok then error(err)end
+        end
+    end)
+    it('retains adapter records when the model refuses retirement',function()
+        local O=require('parley.tools.operation');local original=O.forget
+        local op=service:execute(gen,spec(),{});done[1](outcome('known',true));flush()
+        O.forget=function(state)return state,{status='unresolved'}end
+        local ok,err=pcall(function()
+            service:close_generation(gen);assert.is_not_nil(service:snapshot(op))
+            assert.equals(1,service:stats().records)
+        end)
+        O.forget=original;if not ok then error(err)end
+    end)
+
 end)

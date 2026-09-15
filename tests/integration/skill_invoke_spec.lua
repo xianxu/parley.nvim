@@ -98,6 +98,54 @@ describe("skill_invoke.invoke", function()
         remove_fixture_dir(tmpdir)
     end)
 
+    for _,denied in ipairs({'admit','finish','observation'})do
+        it('obeys pure model rejection of '..denied,function()
+            local Model=require('parley.skill_source_read');local transition=Model.transition
+            local FS=require('parley.tools.filesystem');local native_new=FS.new
+            local read_calls,observed,callback=0,nil,nil
+            FS.new=function(options)
+                FS.new=native_new
+                local fs=native_new(options);local authorize=fs.authorized
+                fs.authorized=function(self,token)
+                    local protected=authorize(self,token);local read=protected.read
+                    protected.read=function(reader,file,done)
+                        read_calls=read_calls+1;callback=done
+                        return read(reader,file,function(value)observed=value;done(value)end)
+                    end
+                    return protected
+                end
+                return fs
+            end
+            local rejected=false
+            Model.transition=function(pool,state,event)
+                if event.type==denied then rejected=true;return pool,state,{}end
+                return transition(pool,state,event)
+            end
+            skill_invoke.invoke(buf,manifest(),{},{on_done=function(r)done_result=r end})
+            FS.new=native_new
+            local reached=vim.wait(5000,function()return rejected end,1)
+            Model.transition=transition
+            assert.is_true(reached)
+            if denied=='admit' then
+                assert.equals(0,read_calls)
+                assert.is_false(done_result.ok)
+            elseif denied=='finish' then
+                assert.is_nil(done_result)
+                assert.is_true(skill_invoke.is_in_flight(buf))
+                skill_invoke.cancel(buf)
+                assert.is_false(skill_invoke.is_in_flight(buf))
+            else
+                assert.is_nil(done_result)
+                assert.same({'alpha beta'},vim.api.nvim_buf_get_lines(buf,0,-1,false))
+                assert.is_true(skill_invoke.is_in_flight(buf))
+                assert.is_true(observed.physical_resolved)
+                callback(observed)
+                assert.is_true(done_result.ok)
+                assert.is_false(skill_invoke.is_in_flight(buf))
+            end
+        end)
+    end
+
     for _,autoread in ipairs({false,true})do
         for _,mode in ipairs({'success','human','aba','cancel','ancestor','reload','detach'})do
             it('retains one source completion owner '..tostring(autoread)..' '..mode,function()

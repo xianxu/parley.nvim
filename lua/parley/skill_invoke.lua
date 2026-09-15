@@ -28,8 +28,8 @@ local _gen = {}
 -- The exact-once terminal owned by the active generation for each buffer.
 -- Cancelled final reads keep this physical owner until positive cleanup.
 local _terminals = {}
-local source_reads=0
-local MAX_SOURCE_READS=16 -- at most 16MiB of final-read capture across buffers
+local SourceRead=require('parley.skill_source_read')
+local source_pool=SourceRead.pool(16) -- at most 16MiB across all buffers
 
 --- Is a skill exchange in flight for `buf`? Cleared on on_exit/on_abort, so an
 --- abort that can't start the query doesn't block the buffer forever (#131).
@@ -44,9 +44,7 @@ end
 --- @param buf number
 function M.cancel(buf)
     local finish = _terminals[buf]
-    if finish then
-        finish({ ok = false, msg = "cancelled" }, false)
-    end
+    if finish and not finish({ ok = false, msg = "cancelled" }, false) then return false end
     _gen[buf] = (_gen[buf] or 0) + 1
     if not _terminals[buf] then _in_flight[buf] = nil end
 end
@@ -144,74 +142,79 @@ function M.invoke(buf, manifest, args, opts)
     local gen = (_gen[buf] or 0) + 1
     _gen[buf] = gen
     local source_capture,tool_producer,source_read,source_filesystem,source_completion
-    local read_admitted,read_timer,read_deadline,read_delay=false,nil,nil,10
-    local retire_read,on_source_read
+    local read_state=SourceRead.new()
+    local read_timer,on_source_read
+    local function transition(event)
+        local permissions
+        source_pool,read_state,permissions=SourceRead.transition(source_pool,read_state,event)
+        return permissions
+    end
     local process_owner="skill:"..tostring(buf)..":"..tostring(gen)
-    local finished = false
     local detached_progress = opts.detached_progress ~= false
     local progress_started = false
-    local function finish(result, deliver_done)
-        if finished then return false end
-        finished = true
+    local finish
+    local function complete_logical(result,deliver_done,permissions)
+        if not permissions.deliver then return false end
         source_completion=nil
-        if source_read then source_read:cancel() end
+        if permissions.cancel and source_read then source_read:cancel() end
         if tool_producer then tool_producer.close();tool_producer=nil end
         tasker.stop_owner(process_owner)
         require("parley.buffer_edit").cancel_user(source_capture)
         source_capture=nil
         if progress_started then
             pcall(function() require("parley.progress").stop() end)
-            progress_started = false
+            progress_started=false
         end
-        if not read_admitted and _terminals[buf] == finish then
-            _terminals[buf] = nil
-            _in_flight[buf] = nil
+        if permissions.release_owner and _terminals[buf]==finish then
+            _terminals[buf]=nil;_in_flight[buf]=nil
         end
-        deliver_attempt(result, deliver_done)
+        deliver_attempt(result,deliver_done)
         return true
     end
-    _terminals[buf] = finish
+    finish=function(result,deliver_done)
+        return complete_logical(result,deliver_done,transition({type='finish'}))
+    end
+    _terminals[buf]=finish
     local function stop_read_timer()
         if read_timer then
             local timer=read_timer;read_timer=nil
             if not timer:is_closing()then timer:stop();timer:close()end
         end
     end
-    retire_read=function()
-        if not read_admitted then return end
-        read_admitted=false;source_reads=source_reads-1;source_read=nil;source_filesystem=nil
-        stop_read_timer()
-        if finished and _terminals[buf]==finish then _terminals[buf]=nil;_in_flight[buf]=nil end
-    end
     local function reconcile_read()
-        if not read_admitted or read_timer then return end
+        if read_timer then return end
+        local permission=transition({type='schedule',now=vim.uv.hrtime()/1000000})
+        if not permission.delay then return end
         read_timer=vim.defer_fn(function()
             read_timer=nil
-            if not read_admitted or not source_read then return end
-            local handle=source_read
-            handle:reconcile()
-            local outcome=handle:snapshot()
-            if outcome and outcome.physical_resolved then on_source_read(outcome);return end
-            if vim.uv.hrtime()>=read_deadline then
+            local effects=transition({type='tick',now=vim.uv.hrtime()/1000000})
+            if effects.deadline then
                 p.logger.warning('Skill source read cleanup unresolved; buffer remains busy for reconciliation')
-                finish({ok=false,certainty='unknown',reconciliation_required=true,
-                    msg='Source read unresolved; skill result requires reconciliation'},true)
-                return
+                complete_logical({ok=false,certainty='unknown',reconciliation_required=true,
+                    msg='Source read unresolved; skill result requires reconciliation'},true,effects)
             end
-            read_delay=math.min(read_delay*2,250);reconcile_read()
-        end,read_delay)
+            if effects.probe and source_read then
+                local handle=source_read
+                handle:reconcile()
+                on_source_read(handle:snapshot())
+            end
+            if effects.delay then reconcile_read()end
+        end,permission.delay)
     end
 
-    -- This callback retains only the physical owner after logical completion.
-    -- The payload/UI continuation is nullable and cleared by finish.
+    -- Only model permission can retire the physical owner or invoke completion.
+    -- Logical termination clears the payload/UI continuation independently.
     on_source_read=function(read)
-        if not read_admitted then return end
-        local continuation=source_completion
-        if read.physical_resolved then
-            source_completion=nil
-            retire_read()
+        local effects=transition({type='observation',physical_resolved=read.physical_resolved})
+        local continuation=effects.complete and source_completion
+        if effects.retire then
+            source_completion=nil;source_read=nil;source_filesystem=nil
+            stop_read_timer()
         end
-        if continuation and not finished then
+        if effects.release_owner and _terminals[buf]==finish then
+            _terminals[buf]=nil;_in_flight[buf]=nil
+        end
+        if continuation then
             local ok=pcall(continuation,read)
             if not ok then finish({ok=false,msg='source completion failed',reconciliation_required=true},true)end
         end
@@ -415,7 +418,7 @@ function M.invoke(buf, manifest, args, opts)
             vim.schedule(function()
                 -- Superseded by a newer exchange (the old one was cancelled) →
                 -- no-op so we don't reload/re-render or clobber the new state.
-                if finished or _gen[buf] ~= gen then
+                if read_state.logical or _gen[buf] ~= gen then
                     return
                 end
                 if not vim.api.nvim_buf_is_valid(buf) then
@@ -441,7 +444,7 @@ function M.invoke(buf, manifest, args, opts)
                         assert(not seen[call.id],'duplicate skill tool call');seen[call.id]=true
                     end
                     local function finish_tools()
-                        if finished or _gen[buf]~=gen then return end
+                        if read_state.logical or _gen[buf]~=gen then return end
                         for i,call in ipairs(calls)do
                             if call.name=='propose_edits' then
                                 if results[i].is_error then errors[#errors+1]=results[i].content
@@ -501,15 +504,14 @@ function M.invoke(buf, manifest, args, opts)
                             calls=calls,results=results,original=original},true)
                     end
                     if not edits.resolve_user(source_capture) then refuse('source changed');return end
-                    if source_reads>=MAX_SOURCE_READS then refuse('source read capacity');return end
-                    source_reads=source_reads+1;read_admitted=true
-                    read_deadline=vim.uv.hrtime()+5000000000
+                    local permission=transition({type='admit',now=vim.uv.hrtime()/1000000})
+                    if not permission.launch then refuse('source read '..tostring(permission.reason or 'refused'));return end
                     source_completion=function(read)
                         if not read.physical_resolved then
                             if read.error_code then refuse(read.error_code) end
                             return
                         end
-                        if finished or _gen[buf]~=gen then return end
+                        if read_state.logical or _gen[buf]~=gen then return end
                         if read.error_code or read.certainty~='known' or type(read.data)~='string' then
                             refuse(read.error_code or 'source read unresolved');return
                         end
@@ -521,16 +523,17 @@ function M.invoke(buf, manifest, args, opts)
                         deliver_completion()
                     end
                     local handle=source_filesystem:read(artifact_path,on_source_read)
-                    if read_admitted then
+                    local attached=transition({type='attach'})
+                    if attached.retain then
                         source_read=handle
-                        if finished then source_read:cancel()end
+                        if attached.cancel then source_read:cancel()end
                         reconcile_read()
                     end
                     end
                     local remaining=#calls
                     local uncertain=false
                     local function joined()
-                        if remaining>0 or finished then return end
+                        if remaining>0 or read_state.logical then return end
                         if uncertain then
                             finish({ok=false,msg='tool effect unresolved',calls=calls,results=results},true);return
                         end
@@ -555,16 +558,16 @@ function M.invoke(buf, manifest, args, opts)
                         local item={}
                         tool_producer.start(call,{epoch='skill:'..tostring(buf),generation=gen,round='1',attempt=qid},{
                             outcome=function(kind,result)
-                                if finished then return end
+                                if read_state.logical then return end
                                 item.kind=kind;results[i]=result
                             end,
                             resolved=function()
-                                if finished or item.resolved then return end
+                                if read_state.logical or item.resolved then return end
                                 item.resolved=true;remaining=remaining-1
                                 if item.kind~='known' then uncertain=true end
                                 joined()
                             end})
-                        if finished then break end
+                        if read_state.logical then break end
                     end
                 end
                 local ok_completion = xpcall(complete, function() return nil end)
@@ -577,7 +580,7 @@ function M.invoke(buf, manifest, args, opts)
         nil,
         nil,
         function(msg) -- on_abort
-            if finished or _gen[buf] ~= gen then
+            if read_state.logical or _gen[buf] ~= gen then
                 return -- superseded by a newer exchange (cancelled) → no-op
             end
             p.logger.error("skill " .. tostring(manifest.name) .. " abort: " .. tostring(msg))
@@ -585,11 +588,11 @@ function M.invoke(buf, manifest, args, opts)
         end,
         nil,
         function(_qid, transport_error) -- on_error (dispatcher argument 10)
-            if finished or _gen[buf] ~= gen then return end
+            if read_state.logical or _gen[buf] ~= gen then return end
             p.logger.error("skill " .. tostring(manifest.name) .. " transport error")
             finish({ ok = false, msg = "transport error", error = transport_error }, true)
         end,
-        {generation_id=process_owner,logical_generation=process_owner,alive=function()return not finished end}
+        {generation_id=process_owner,logical_generation=process_owner,alive=function()return not read_state.logical end}
     )
     if not ok_query then
         p.logger.error("skill " .. tostring(manifest.name) .. " query failed")

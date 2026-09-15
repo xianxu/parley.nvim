@@ -70,6 +70,22 @@ replace backend cleanup evidence. `service:reconcile_step()` and handle probes
 only inspect outstanding work. `ParleyToolOperations` presents this evidence and
 accepts an explicit effect classification, as described below.
 
+## Pure lifecycle authority
+
+`tools/operation.lua` authorizes execution, claim release and record retirement.
+Its transitions join known effect evidence with backend physical completion,
+track generation closure and callback delivery, and determine probe deadlines.
+The scheduler consumes those permissions; rejected transitions cannot launch a
+tool, release a claim, or remove its retained record.
+
+`tools/filesystem_operation.lua` owns request admission, unique completion IDs,
+cancellation, effect certainty and cleanup/publication decisions. The filesystem
+adapter retains descriptors, bytes and identity observations and performs only
+authorized requests. `skill_source_read.lua` similarly owns the shared read pool,
+logical completion, physical retirement and deadline decisions. The skill adapter
+retains its source proof, UI callbacks, timer and read handle. Direct pure sequence
+tests and adapter rejection controls defend each boundary.
+
 ## Checked filesystem transactions
 
 `tools/filesystem.lua` supplies callback-based `stat`, `read`, `write_checked`,

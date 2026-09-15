@@ -2640,3 +2640,8 @@ download.
 - #254 BR30: two layers must not independently refresh one source buffer. Keep
   one original proof and one completion owner, and separate logical completion
   from retained physical-read cleanup when cancellation or a callback is lost.
+
+- #254 BR31: a pure lifecycle model must authorize production execution, release
+  and retirement. A reducer whose permission is ignored is documentation, not a
+  boundary. Test adapters with denied transitions and reordered effect/cleanup
+  evidence; keep handles and payloads in adapters, decisions in the model.

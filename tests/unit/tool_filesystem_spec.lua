@@ -16,6 +16,41 @@ local function write(fs,revision,done,extra)
 end
 
 describe('checked asynchronous tool filesystem',function()
+    it('does not issue native IO when the pure lifecycle refuses request admission',function()
+        local F=require('parley.tools.filesystem_operation');local original=F.transition
+        F.transition=function(state,event)
+            if event.type=='request'then return state,{execute=false,reason='admission denied'}end
+            return original(state,event)
+        end
+        local fs,f=fixture();local result
+        local ok,err=pcall(function()fs:read('/file',function(v)result=v end);f.drain()end)
+        F.transition=original
+        assert.is_true(ok,tostring(err));assert.equals(0,#f.calls)
+        assert.equals('admission denied',result.error_code)
+    end)
+    it('does not consume an IO completion rejected by the pure lifecycle',function()
+        local F=require('parley.tools.filesystem_operation');local original=F.transition
+        F.transition=function(state,event)
+            if event.type=='completed'then return state,{consume=false}end
+            return original(state,event)
+        end
+        local fs,f=fixture();local result,handle
+        local ok,err=pcall(function()handle=fs:read('/file',function(v)result=v end);f.drain()end)
+        F.transition=original
+        assert.is_true(ok,tostring(err));assert.is_nil(result);assert.equals(1,#f.calls)
+        assert.equals('unknown',handle:snapshot().certainty);assert.is_false(handle:snapshot().physical_resolved)
+    end)
+    it('does not publish terminal completion against a rejected lifecycle decision',function()
+        local F=require('parley.tools.filesystem_operation');local original=F.transition
+        F.transition=function(state,event)
+            if event.type=='publish'then return state,{publish=false}end
+            return original(state,event)
+        end
+        local fs,f=fixture();local result
+        local ok,err=pcall(function()fs:read('/file',function(v)result=v end);f.drain()end)
+        F.transition=original
+        assert.is_true(ok,tostring(err));assert.is_nil(result);assert.same({},f.fds)
+    end)
     for _,boundary in ipairs({'link','unlink'})do
         it('preserves a substituted temporary leaf at the '..boundary..' effect boundary',function()
             local fs,f=fixture();local prior=read(fs,f);local replaced

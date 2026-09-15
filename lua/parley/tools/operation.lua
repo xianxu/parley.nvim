@@ -78,17 +78,18 @@ function M.transition(s,key,event)
     local record={};for k,v in pairs(previous)do record[k]=v end
     local status,kind=record.status,event.type
     local result={status='accepted',key=key}
-    if kind=='authorize' and status=='queued'then
+    if kind=='authorize' and status=='queued' and not record.owner_closed then
         if event.capability_ref~=record.capability_ref then return s,{status='authority'}end
         record.status='authorized'
-    elseif kind=='start' and status=='authorized'then
-        record.status='executing';result.effect_start=true
+    elseif kind=='start' and status=='authorized' and not record.owner_closed then
+        record.status='executing';record.started=true;result.effect_start=true
     elseif kind=='cancel' and (status=='queued' or status=='authorized')then
-        record.status='cancelled_before_effect'
-    elseif kind=='cancel' and (status=='executing' or status=='outcome_unknown')then
-        record.cancel_requested=true
+        record.status='cancelled_before_effect';record.physical=true;record.cancel_requested=true
+        result.cancelled_before_effect=true
+    elseif kind=='cancel' and record.started then
+        record.cancel_requested=true;result.cancel_backend=not record.physical
     elseif kind=='reject' and (status=='queued' or status=='authorized')then
-        record.status='rejected'
+        record.status='rejected';record.physical=true
     elseif kind=='outcome' and status=='executing' or kind=='reconcile' and status=='outcome_unknown'then
         if not ref(event.evidence_ref) or event.result_ref~=nil and not ref(event.result_ref) or (event.effect~='known' and event.effect~='partial' and event.effect~='unknown')
             or kind=='reconcile' and event.effect~='known' or event.effect=='known' and not ref(event.result_ref)then
@@ -96,6 +97,29 @@ function M.transition(s,key,event)
         end
         record.status=event.effect=='known' and 'outcome_known' or 'outcome_unknown'
         record.effect=event.effect;record.evidence_ref=event.evidence_ref;record.result_ref=event.result_ref
+    elseif kind=='physical' and record.started and not record.physical then
+        if not ref(event.evidence_ref)then return s,{status='invalid'}end
+        record.physical=true
+    elseif kind=='release' and not record.released and record.physical
+        and (status=='outcome_known' or status=='cancelled_before_effect' or status=='rejected')then
+        record.released=true;record.poll=nil;result.release_claims=true
+    elseif kind=='owner_closed' and not record.owner_closed then
+        record.owner_closed=true
+    elseif kind=='delivery_begin' and not record.delivering then
+        record.delivering=true;result.deliver=true
+    elseif kind=='delivery_end' and record.delivering then
+        record.delivering=nil
+    elseif kind=='poll' and record.started and not record.released and not record.poll_retired then
+        if type(event.now)~='number' or event.now~=event.now or event.now<0 or event.now==math.huge then return s,{status='invalid'}end
+        if not record.poll then record.poll={deadline=event.now+5000,next=event.now+50,delay=50}end
+    elseif kind=='tick' and record.poll then
+        if type(event.now)~='number' or event.now~=event.now or event.now<record.poll.next or event.now==math.huge then return s,{status='invalid'}end
+        if event.now>=record.poll.deadline then
+            record.poll=nil;record.poll_retired=true;result.diagnostic=true
+        else
+            local delay=math.min(1000,record.poll.delay*2)
+            record.poll={deadline=record.poll.deadline,next=event.now+delay,delay=delay};result.probe=true
+        end
     elseif kind=='presentation_failed' and (status=='outcome_known' or status=='outcome_unknown')then
         if not ref(event.error_ref)then return s,{status='invalid'}end
         record.presentation_error_ref=event.error_ref
@@ -105,11 +129,17 @@ end
 function M.forget(s,key)
     local record=s.records[key]
     if not record then return s,{status='missing'}end
-    if record.status~='outcome_known' and record.status~='cancelled_before_effect' and record.status~='rejected'then
+    if not record.owner_closed or record.delivering or not record.released or not record.physical then
         return s,{status='unresolved'}
     end
     local next_state=changed(s,key,nil);next_state.count=s.count-1
     return next_state,{status='forgotten'}
+end
+function M.lifecycle(s,key)
+    local r=s.records[key];if not r then return nil end
+    return {status=r.status,known=r.status=='outcome_known' or r.status=='cancelled_before_effect' or r.status=='rejected',
+        physical=r.physical==true,released=r.released==true,started=r.started==true,cancelled=r.cancel_requested==true,
+        owner_closed=r.owner_closed==true,poll=copy(r.poll)}
 end
 function M.get(s,key)return copy(s.records[key])end
 function M.stats(s)return {records=s.count}end

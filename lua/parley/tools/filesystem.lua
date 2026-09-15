@@ -1,6 +1,7 @@
 -- Checked asynchronous IO. Path policy and resource admission are supplied by
 -- the host; this boundary never changes cwd or infers authority from a filename.
 local M={}
+local Lifecycle=require('parley.tools.filesystem_operation')
 local serial=0
 local function copy(t)
     if type(t)~='table'then return t end
@@ -63,35 +64,44 @@ function M.new(opts)
     end
     local function operation(done)
         assert(type(done)=='function','filesystem completion required')
-        local c={fds={},identities={},steps=0,written=0,cancelled=false,done=false}
+        local c={fds={},identities={},written=0}
+        local state=Lifecycle.new(max_steps)
+        local function transition(event)
+            local decision;state,decision=Lifecycle.transition(state,event);return decision
+        end
+        local function effect(value)value.type='effect';return transition(value)end
+        local function facts()
+            return {handles=next(c.fds)~=nil,temporary=c.temporary~=nil,
+                native_handles=runtime.unresolved and runtime.unresolved() or false,
+                artifacts=runtime.uncertain and runtime.uncertain() or false}
+        end
         local handle={}
         local cleanup,fail,rpc
         local function outcome()
-            local runtime_unknown=runtime.unresolved and runtime.unresolved()
-            local uncertain=c.pending~=nil or next(c.fds)~=nil or c.temporary~=nil or c.target_uncertain or runtime_unknown
-                or runtime.uncertain and runtime.uncertain()
-            local effect=c.applied and 'applied' or c.mutated and 'partial' or c.target_uncertain and 'unknown' or 'not_applied'
-            return {certainty=uncertain and 'unknown' or 'known',effect=effect,cancelled=c.cancelled,
-                physical_resolved=c.pending==nil and next(c.fds)==nil and not runtime_unknown,
+            local view=Lifecycle.view(state,facts())
+            return {certainty=view.certainty,effect=view.effect,cancelled=view.cancelled,
+                physical_resolved=view.physical_resolved,
                 error_code=c.error_code,cleanup_error=c.cleanup_error,data=c.data,revision=copy(c.revision),
                 evidence={written=c.written,backup_path=c.backup_published and c.backup_path or nil,
-                    backup_confirmed=c.backup_confirmed or false,temporary=c.temporary,steps=c.steps,
+                    backup_confirmed=c.backup_confirmed or false,temporary=c.temporary,steps=state.steps,
                     uncertain_artifacts=runtime.uncertain_artifacts and runtime.uncertain_artifacts() or nil}}
         end
         local function publish()
+            local decision=transition({type='publish',facts=facts()})
+            if not decision.publish then return end
             local result=outcome()
-            if result.certainty=='known'then c.done=true end
             -- A failing formatter/consumer cannot alter checked effect evidence.
             pcall(done,result)
         end
         rpc=function(name,args,cb,closing,mutation)
-            if not closing and c.steps>=max_steps then fail('capacity');return end
-            c.steps=c.steps+1;local token={};c.pending=token
-            if mutation then c.target_uncertain=true end
+            local permission=transition({type='request',cleanup=closing==true,mutation=mutation==true})
+            if not permission.execute then
+                fail(permission.reason or 'request refused');return
+            end
+            local id=permission.id
             local function observed(err,value)
                 schedule(function()
-                    if c.pending~=token or token.seen then return end
-                    token.seen=true;c.pending=nil
+                    if not transition({type='completed',id=id}).consume then return end
                     local ok=pcall(cb,err,value)
                     if not ok then fail('callback')end
                 end)
@@ -136,31 +146,32 @@ function M.new(opts)
             local index=0
             local function next_close()
                 index=index+1;local fd=pending[index]
-                if fd then close(fd,next_close);return end
-                if c.temporary and not next(c.fds)then
-                    remove_temporary(publish)
-                else publish()end
+                local decision=transition({type='cleanup',remaining=fd and 1 or 0,facts=facts()})
+                if decision.action=='close' then close(fd,next_close)
+                elseif decision.action=='remove_temporary'then remove_temporary(publish)
+                elseif decision.action=='publish'then publish()end
             end
             next_close()
         end
         fail=function(code)
-            c.error_code=c.error_code or code;c.stopped=true
-            if not c.pending then cleanup()end
+            c.error_code=c.error_code or code
+            if transition({type='stop'}).cleanup then cleanup()end
         end
         local function proceed()
-            if c.stopped then cleanup();return false end
-            if c.cancelled then fail('cancelled');return false end
-            return true
+            local decision=transition({type='proceed'})
+            if decision.cancelled then c.error_code=c.error_code or 'cancelled'end
+            if decision.cleanup then cleanup()end
+            return decision.proceed==true
         end
         local function open(file,flags,mode,cb)
             if not proceed()then return end
             rpc('open',{file,flags,mode},function(err,fd)
                 if err or type(fd)~='number'then
-                    if flags=='wx' and file==c.path then c.target_uncertain=false end
+                    if flags=='wx' and file==c.path then effect({uncertain=false}) end
                     fail('open');return
                 end
                 c.fds[fd]=true
-                if flags=='wx' and file==c.path then c.mutated=true;c.target_uncertain=false end
+                if flags=='wx' and file==c.path then effect({mutated=true});effect({uncertain=false}) end
                 if file==c.temp_candidate then c.temporary=file end
                 rpc('fstat',{fd},function(failure,metadata)
                     if failure then fail('stat');return end
@@ -168,7 +179,7 @@ function M.new(opts)
                     if not c.identities[fd]then fail('stat');return end
                     if file==c.temp_candidate then c.temporary_identity=copy(c.identities[fd])end
                     if proceed()then cb(fd)end
-                end)
+                end,true)
             end,false,flags=='wx' and file==c.path)
         end
         local function stat(file,cb)
@@ -222,7 +233,7 @@ function M.new(opts)
                         if target then c.synced=true end
                         close(fd,function(closed)
                             if not closed then publish();return end
-                            if target then c.applied=true end
+                            if target then effect({applied=true}) end
                             if proceed()then cb()end
                         end)
                     end)
@@ -232,7 +243,7 @@ function M.new(opts)
                 rpc('write',{fd,chunk,offset},function(err,count)
                     if err or type(count)~='number' or count<=0 or count>#chunk or count%1~=0 then fail('write');return end
                     offset=offset+count
-                    if target then c.target_uncertain=false;c.written=offset end
+                    if target then effect({uncertain=false});c.written=offset end
                     next_write()
                 end,false,target)
             end
@@ -248,14 +259,12 @@ function M.new(opts)
             end)
         end
         function handle.cancel(_)
-            if c.done then return false end
-            c.cancelled=true
-            return true
+            return transition({type='cancel'}).accepted==true
         end
         function handle.reconcile(_)
-            if c.done or c.pending then return false end
+            if not transition({type='reconcile'}).reconcile then return false end
             schedule(function()
-                if c.done or c.pending then return end
+                if not transition({type='reconcile'}).reconcile then return end
                 if runtime.reconcile then runtime.reconcile()end
                 local pending={};for fd in pairs(c.fds)do pending[#pending+1]=fd end
                 local index=0
@@ -271,7 +280,7 @@ function M.new(opts)
                         end,true)
                         return
                     end
-                    if not next(c.fds) and c.synced and c.mutated and c.written==#(c.content or '')then c.applied=true end
+                    if not next(c.fds) and c.synced and c.written==#(c.content or '')then effect({complete_if_mutated=true}) end
                     cleanup(true)
                 end
                 next_close()
@@ -280,7 +289,7 @@ function M.new(opts)
         end
         function handle.snapshot(_)return outcome()end
         c.stat=stat;c.open=open;c.read_snapshot=read_snapshot;c.write_bytes=write_bytes;c.sync_parent=sync_parent
-        c.rpc=rpc;c.fail=fail;c.proceed=proceed;c.publish=publish;c.cleanup=cleanup;c.remove_temporary=remove_temporary
+        c.effect=effect;c.rpc=rpc;c.fail=fail;c.proceed=proceed;c.publish=publish;c.cleanup=cleanup;c.remove_temporary=remove_temporary
         return c,handle
     end
     function fs.stat(_,file,done)
@@ -319,7 +328,7 @@ function M.new(opts)
             local function next_directory()
                 if not c.proceed()then return end
                 index=index+1;local directory=paths[index]
-                if not directory then c.applied=c.mutated or false;c.publish();return end
+                if not directory then c.effect({complete_if_mutated=true});c.publish();return end
                 if private and (directory==private or directory:sub(1,#private+1)==private..'/')then
                     c.fail('private');return
                 end
@@ -332,7 +341,7 @@ function M.new(opts)
                     c.rpc('mkdir',{directory,448},function(err)
                         if err then
                             if tostring(err):find('EEXIST',1,true)then
-                                c.target_uncertain=false
+                                c.effect({uncertain=false})
                                 c.stat(directory,function(now)
                                     if not now.exists or now.type~='directory'then c.fail('not_directory');return end
                                     next_directory()
@@ -340,7 +349,7 @@ function M.new(opts)
                             else c.fail('mkdir')end
                             return
                         end
-                        c.target_uncertain=false;c.mutated=true
+                        c.effect({uncertain=false});c.effect({mutated=true})
                         c.sync_parent(directory,next_directory)
                     end,false,true)
                 end)
@@ -373,7 +382,7 @@ function M.new(opts)
                                 if runtime.require_preimage then runtime.require_preimage(c.backup_path,c.backup_revision)end
                                 c.rpc('ftruncate',{fd,0},function(failure)
                                     if failure then c.backup_confirmed=false;c.fail('truncate');return end
-                                    c.target_uncertain=false;c.mutated=true;write()
+                                    c.effect({uncertain=false});c.effect({mutated=true});write()
                                 end,false,true)
                             end)
                         end)

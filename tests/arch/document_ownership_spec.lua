@@ -37,6 +37,19 @@ describe('arch: captured document ownership',function()
         end
     end)
 
+    it('keeps tool and source-read lifecycle authority independent of effects',function()
+        local scope={'lua/parley/tools/operation.lua','lua/parley/tools/filesystem_operation.lua',
+            'lua/parley/skill_source_read.lua'}
+        for _,global in ipairs({'vim','io','os'})do
+            forbid(scope,'%f[%w_]'..global..'%s*[%.%[]',
+                '#254: lifecycle transitions authorize effects; adapters own IO, clocks and handles',true)
+        end
+        for _,dependency in ipairs({'luv','ffi','socket','parley.tools.scheduler',
+            'parley.tools.filesystem','parley.skill_invoke','parley.tasker'})do
+            forbid(scope,dependency,'#254: pure lifecycle owners cannot import their effect executors')
+        end
+    end)
+
     it('keeps asynchronous targets independent of the current editor selection',function()
         for _,pattern in ipairs({'nvim_get_current_','nvim_set_current_',
             'nvim_win_get_cursor','nvim_win_set_cursor','vim.fn.line','vim.fn.col','vim.fn.getpos'})do

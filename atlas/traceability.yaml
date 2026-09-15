@@ -790,6 +790,8 @@ atlas:
       - lua/parley/tools/types.lua
       - lua/parley/tools/async_builtin.lua
       - lua/parley/tools/filesystem.lua
+      - lua/parley/tools/filesystem_operation.lua
+      - lua/parley/skill_source_read.lua
       - lua/parley/tools/path_authority.lua
       - lua/parley/tools/process_scope.lua
       - lua/parley/tools/traversal_policy.lua
@@ -807,6 +809,8 @@ atlas:
       - tests/unit/tool_resources_spec.lua
       - tests/unit/tool_scheduler_spec.lua
       - tests/unit/tool_filesystem_spec.lua
+      - tests/unit/tool_filesystem_operation_spec.lua
+      - tests/unit/skill_source_read_spec.lua
       - tests/integration/tool_filesystem_native_spec.lua
       - tests/integration/tasker_supervision_spec.lua
       - tests/integration/async_builtin_spec.lua
@@ -1084,6 +1088,7 @@ atlas:
       - lua/parley/skill_edits.lua
       - lua/parley/skill_assembly.lua
       - lua/parley/skill_invoke.lua
+      - lua/parley/skill_source_read.lua
       - lua/parley/skill_render.lua
       - lua/parley/neighborhood.lua
       - lua/parley/tools/builtin/propose_edits.lua
@@ -1101,6 +1106,7 @@ atlas:
       - tests/unit/skill_assembly_spec.lua
       - tests/unit/tools_builtin_propose_edits_spec.lua
       - tests/integration/skill_invoke_spec.lua
+      - tests/unit/skill_source_read_spec.lua
       - tests/integration/skill_invoke_review_spec.lua
       - tests/integration/voice_apply_spec.lua
       - tests/unit/skill_picker_spec.lua

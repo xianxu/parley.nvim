@@ -1494,3 +1494,19 @@ late cleanup and callback-collection behavior. Register pure models and direct
 tests in traceability. Run all affected mappings and lint before Codex re-review;
 no review finding or round limit is waived. Whole-issue integration review and
 operator live testing remain required before main merge.
+
+### 2026-09-15 — BR31 implementation and enforcement evidence
+
+The three planned pure owners are implemented. Operation transitions now gate
+start, release, delivery and retirement and own polling deadlines; the scheduler
+no longer stores known/physical/released/poll lifecycle mirrors. Filesystem
+transitions own request serials, cancellation, effect joins and cleanup/publication
+permissions. Skill source-read transitions own the shared16-slot pool and
+logical/physical lifetime, including delayed cleanup after a five-second deadline.
+Direct reducer tests and adapter controls reject start, physical evidence, release,
+retirement, IO requests, completions and publication. Architecture enforcement
+forbids editor/IO dependencies in these pure models. Existing native regressions
+remain green; final mapped verification follows the checkpoint.
+
+A fourth M6 review will use boundary round cap5 so the Important BR31 finding
+remains blocking until explicitly disposed; no finding is waived or demoted.

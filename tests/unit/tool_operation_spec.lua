@@ -96,6 +96,7 @@ describe('tool operation effect ledger',function()
         s=event(s,key,'outcome',{effect='unknown',evidence_ref='e'})
         unchanged,result=O.forget(s,key);assert.equals('unresolved',result.status);assert.same(s,unchanged)
         s=event(s,key,'reconcile',{effect='known',evidence_ref='e2',result_ref='r'})
+        s=event(s,key,'physical',{evidence_ref='backend'});s=event(s,key,'release');s=event(s,key,'owner_closed')
         s,result=O.forget(s,key);assert.equals('forgotten',result.status);assert.equals(0,O.stats(s).records)
         assert.is_nil(O.get(s,key))
     end)
@@ -120,5 +121,44 @@ describe('tool operation effect ledger',function()
                 local _,duplicate=O.accept(s,spec());assert.are_not.equals('accepted',duplicate.status)
             end
         end
+    end)
+end)
+
+describe('tool operation lifecycle permissions',function()
+    it('joins effect and physical completion in either order before release and retirement',function()
+        for _,physical_first in ipairs({true,false})do
+            local s,key=executing();local permission
+            s=event(s,key,'owner_closed')
+            if physical_first then s=event(s,key,'physical',{evidence_ref='backend'})
+            else s=event(s,key,'outcome',{effect='known',evidence_ref='checked',result_ref='r'})end
+            local same,held=event(s,key,'release');assert.is_nil(held.release_claims);assert.same(s,same)
+            same,held=O.forget(s,key);assert.equals('unresolved',held.status);assert.same(s,same)
+            if physical_first then s=event(s,key,'outcome',{effect='known',evidence_ref='checked',result_ref='r'})
+            else s=event(s,key,'physical',{evidence_ref='backend'})end
+            s,permission=event(s,key,'release');assert.is_true(permission.release_claims)
+            local duplicate;_,duplicate=event(s,key,'release');assert.is_nil(duplicate.release_claims)
+            s,permission=O.forget(s,key);assert.equals('forgotten',permission.status)
+        end
+    end)
+    it('does not retire a delivering or open owner and cannot poll after its deadline',function()
+        local s,key=executing();local permission
+        s=event(s,key,'poll',{now=0});s,permission=event(s,key,'tick',{now=50})
+        assert.is_true(permission.probe);assert.equals(150,O.lifecycle(s,key).poll.next)
+        s,permission=event(s,key,'tick',{now=5000});assert.is_true(permission.diagnostic)
+        s=event(s,key,'poll',{now=6000});assert.is_nil(O.lifecycle(s,key).poll)
+        s=event(s,key,'outcome',{effect='known',evidence_ref='e',result_ref='r'})
+        s=event(s,key,'physical',{evidence_ref='e'});s=event(s,key,'release')
+        local _,held=O.forget(s,key);assert.equals('unresolved',held.status)
+        s=event(s,key,'delivery_begin');s=event(s,key,'owner_closed')
+        _,held=O.forget(s,key);assert.equals('unresolved',held.status)
+        s=event(s,key,'delivery_end');s,permission=O.forget(s,key)
+        assert.equals('forgotten',permission.status)
+    end)
+    it('cancellation before execution authorizes known no-effect release without a backend',function()
+        local s,key=accept();local permission
+        s,permission=event(s,key,'cancel');assert.is_true(permission.cancelled_before_effect)
+        assert.is_nil(permission.cancel_backend);assert.is_true(O.lifecycle(s,key).physical)
+        s,permission=event(s,key,'release');assert.is_true(permission.release_claims)
+        local _,denied=event(s,key,'start');assert.is_nil(denied.effect_start)
     end)
 end)
