@@ -14,11 +14,14 @@
 |---|---|---|---|
 | `parse_tag` | lua/parley/question_tags.lua | PURE | new: whole-line nonempty @@…@@ text |
 | `associations` | lua/parley/question_tags.lua | PURE | new: question row → immediately preceding eligible tag |
-| `project_context` | lua/parley/question_tags.lua | PURE | new: same-index context-only line snapshot |
+| `project_context` | lua/parley/question_tags.lua | superseded planned API | deleted |
 | `apply_outline` | lua/parley/question_tags.lua | PURE | new: label/hide item projection |
 | `initial_index` | lua/parley/question_tags.lua | PURE | new: item selection using file, question and tag rows |
-| `context_view` | lua/parley/chat_parser.lua | PURE | new: lazily parse projected context once per physical parse |
-| `parse_chat` | lua/parley/chat_parser.lua | PURE | modified: optional context-snapshot metadata; physical fields unchanged |
+| `context_view` | lua/parley/chat_parser.lua | superseded planned API | deleted |
+| `parse_chat` | lua/parley/chat_parser.lua | PURE | modified: explicit exchange preface ownership |
+| `compose_question` | lua/parley/question_tags.lua | PURE | new: preface plus literal question for AI context |
+| `preface_start` | lua/parley/exchange_model.lua | PURE | new: derived preface start |
+| `preface_end` | lua/parley/exchange_model.lua | PURE | new: derived preface end |
 
 A question has at most one attached tag (its immediate predecessor). With consecutive tag lines, only the last can attach. Tag records carry raw spelling, label, tag row and question row. No blank-line tolerance. Existing whole-line delimiter behavior is retained; `_` is the exact anonymous label. Existing configured question prefixes and `highlight_structure.code_block_memo` define question/fence boundaries. Tags in headers or fences are ineligible. Ordinary inline @@text@@ is not a label. The same association map drives both projections (ARCH-DRY).
 
@@ -112,3 +115,7 @@ The live positional model gains optional `exchange.preface = {size}`. Its source
 Direct pure tests cover preface classification/composition, model-derived positions and movement, and outline item projection. Parser tests prove preface ownership and removal from every previous-answer representation, with first/last questions, strict adjacency, configured prefixes and fenced lookalikes. Existing render and model fixtures defend physical layout. Real parse/live/ancestor message parity proves raw preface appears once at the following user message start and never in prior assistant/tool/summary text; file-reference and raw-request tests defend their established contracts. Full resubmit tests prove preface survives both relevant regenerations. No externally observable change is accepted merely because the parser test passes.
 
 The operator's field makes ownership explicit at the shared exchange boundary (ARCH-PURE/DRY/PURPOSE), replacing context-specific copies of the transcript. Preface metadata is ephemeral parsed/model data with existing lifetimes (ARCH-FUNERAL). The only new persistent content is what the operator already wrote in the chat.
+
+### 2026-09-14 — Symbol table reconciled
+
+Reason: keep the reviewable function inventory aligned with the operator-directed design. Delta: the Core concepts table marks discarded planned APIs deleted and lists the new preface functions; the superseded design prose remains above as revision history.
