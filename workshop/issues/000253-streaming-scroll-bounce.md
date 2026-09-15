@@ -1,12 +1,13 @@
 ---
 id: 000253
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-09-14
 updated: 2026-09-14
 estimate_hours: 0.83
 started: 2026-09-14T13:32:30-07:00
+actual_hours: 0.56
 ---
 
 # Streaming fold updates bounce the viewport during scrolling
@@ -28,13 +29,14 @@ Fold maintenance must preserve each window’s complete view without undoing del
 
 ## Plan
 
-- [ ] Add failing attached-UI regressions for fold view and wrapped-tip following.
-- [ ] Preserve maintenance view and follow real text endpoint; update atlas.
-- [ ] Verify real UI behavior, test suites and close through fresh review.
+- [x] Add failing attached-UI regressions for fold view and wrapped-tip following.
+- [x] Preserve maintenance view and follow real text endpoint; update atlas.
+- [x] Verify real UI behavior and test suites; submit close through fresh review.
 
 ## Log
 
 ### 2026-09-14
+- 2026-09-14: closed — All 259 specs pass across full run (258) and corrected plan inventory architecture rerun (21 assertions); luacheck 451 files clean; 11 attached-UI stream regressions; actual isolated starter Normal/Insert frontier and split-view smoke passes.; review verdict: SHIP
 
 
 Reproduction scripts: /tmp/parley-fold-ui-repro.lua, /tmp/parley-fold-ui-multi.lua, /tmp/parley253-wrap-smooth-repro.lua. Independent experiment adding winsaveview/winrestview only around clear_folds_in_span fixes the split drift and preserves explicit follow within mutation. No production files changed during diagnosis.
@@ -51,3 +53,15 @@ item: milestone-review design=0 impl=0.1
 design-buffer: 0.15
 total: 0.83
 ```
+
+### Implementation evidence
+
+Plan-quality round3 CLEAN. Estimate-quality INFO: budget includes already-completed design/reproduction plus implementation, native UI verification and boundary review; no fan-out discount. Added shared pure query endpoint projection (ARCH-DRY/PURE), optional byte-column placement and matching completion endpoint. Fold clear now preserves view and foldenable around only its own walk, including exceptions, retaining intentional follow movements.
+
+Six native attached-UI fold regressions failed before the patch and pass after; completion regression failed with column0 and passes with the endpoint. Additional actual dispatcher/native-wheel cases cover visible-bottom crossing, wrapped text, free scrolling, prefix/multibyte/newline endpoints and helper guards. `make test-spec SPEC=chat/exchange_model` passed. Full suite and isolated starter smoke in progress.
+
+Isolated actual starter smoke passed without a second setup(): default follow=true, wrap/linebreak enabled; 3500-byte paragraph ends at screen row22 of24 in Normal mode, appended text remains visible in Insert mode without leaving Insert. Two split views and intentional mutation movement preserved. Scripts: /tmp/parley253-starter-runner.py and /tmp/parley253-starter-ui-probe.lua.
+
+Initial full run: all behavior tests passed; fresh_clone required staging new module and single_source_sweeps required exact function names in plan inventory. Both corrected before the rerun.
+
+Verification complete: full suite rerun passed258 of259 spec files; remaining single_source_sweeps required additions in the first Core concepts table (its parser ignores revision tables). Corrected table and reran that spec:21/21 pass. Thus all259 files pass across full + targeted rerun; luacheck451 files,0 warnings/errors. No runtime changes after full run. Actual app UI smoke passed Normal/Insert and split-view cases.

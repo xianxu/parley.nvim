@@ -248,6 +248,7 @@ atlas:
 
   chat/exchange_model:
     code:
+      - lua/parley/stream_position.lua
       - lua/parley/answer_structure.lua
       - lua/parley/exchange_model.lua
       - lua/parley/buffer_edit.lua
@@ -260,6 +261,8 @@ atlas:
       - lua/parley/tool_loop.lua
       - lua/parley/dispatcher.lua
     tests:
+      - tests/unit/stream_position_spec.lua
+      - tests/integration/stream_view_spec.lua
       - tests/unit/answer_structure_spec.lua
       - tests/unit/tool_folds_spec.lua
       - tests/unit/fold_projection_spec.lua

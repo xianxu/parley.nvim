@@ -110,6 +110,14 @@ the number of folds present, not with the number of rows. It transiently forces
 silently no-ops and a stale fold survives. Resolved anchor rows are cached per
 `(buffer, changedtick)` so the per-chunk cost does not track chat length.
 
+Each clear preserves the target window's full view, including `topline` and
+wrapped-line `skipcol`, and restores that view and `'foldenable'` even when the
+walk fails. Restoring only the cursor lets streaming chunks scroll an attached
+UI backward. Preservation surrounds fold clearing rather than the mutation,
+so an intentional follow-cursor move during the write survives reconciliation;
+other windows retain their independent reading positions. The attached-UI
+regressions live in `tests/integration/stream_view_spec.lua`.
+
 ## Loading from Parser
 
 `from_parsed_chat(parsed_chat)` builds a model from parser output. The shared

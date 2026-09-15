@@ -1,0 +1,20 @@
+local position = require("parley.stream_position")
+
+describe("stream endpoint projection", function()
+    it("projects the last row and preserves byte columns", function()
+        assert.same({ 5, #"🧠: café" }, position.from_query({ first_line = 1, last_line = 4, last_col = #"🧠: café" }))
+        assert.same({ 1, 0 }, position.from_query({ last_line = 0, last_col = 0 }))
+    end)
+
+    it("defaults legacy row-only queries to column zero", function()
+        assert.same({ 5, 0 }, position.from_query({ last_line = 4 }))
+        assert.same({ 3, 0 }, position.from_query({ first_line = 2, last_col = 12 }))
+        assert.same({ 3, 0 }, position.from_query({ first_line = 2, last_line = -1 }))
+    end)
+
+    it("has no endpoint without a valid row", function()
+        assert.is_nil(position.from_query(nil))
+        assert.is_nil(position.from_query({}))
+        assert.is_nil(position.from_query({ first_line = -1, last_line = "2" }))
+    end)
+end)

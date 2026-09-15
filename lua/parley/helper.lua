@@ -220,7 +220,8 @@ end
 ---@param line number # line number
 ---@param buf number # buffer number
 ---@param win number | nil # window number
-_H.cursor_to_line = function(line, buf, win)
+---@param col number | nil # zero-based byte column (default: start of line)
+_H.cursor_to_line = function(line, buf, win, col)
 	logger.debug("cursor_to_line called - line: " .. tostring(line) ..
 	            ", buf: " .. tostring(buf) ..
 	            ", win: " .. tostring(win) ..
@@ -248,7 +249,7 @@ _H.cursor_to_line = function(line, buf, win)
 
 	-- move cursor to the line
 	logger.debug("cursor_to_line - setting cursor position to line " .. tostring(line))
-	pcall(vim.api.nvim_win_set_cursor, win, { line, 0 })
+	pcall(vim.api.nvim_win_set_cursor, win, { line, col or 0 })
 end
 
 ---@param str string # string to check

@@ -170,7 +170,7 @@ structural work bounds while treating elapsed timings as evidence rather than
 CI budgets.
 
 ## Follow Cursor (`:ParleyToggleFollowCursor` / `<C-g>l`)
-Toggles auto-follow of streaming insertion point.
+Toggles auto-follow of streaming insertion point. Follow targets the final byte column of generated text, including wrapped paragraphs, and uses the same endpoint on completion (`stream_position.from_query`). With follow disabled, streaming preserves manual scrolling; fold maintenance preserves each window’s view independently. Explicit response overrides still take precedence over the saved toggle and configuration default.
 
 ## Resubmit All (`:ParleyChatRespondAll` / `<C-g>G`)
 Resubmits all questions from start to cursor, replacing existing answers. Stop with `<C-g>x`.
