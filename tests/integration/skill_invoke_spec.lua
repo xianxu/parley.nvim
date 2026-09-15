@@ -3,12 +3,25 @@
 -- Reuses the chat_respond_spec fake pattern: monkeypatch parley.dispatcher.query
 -- (the LLM dispatcher), inject a tool-use raw_response into tasker, fire on_exit;
 -- vim.wait for the (vim.scheduled) on_done. The propose_edits call applies through
--- the REAL tools dispatcher (execute_call) onto the artifact file.
+-- the real asynchronous producer and checked filesystem onto the artifact file.
 
 local skill_invoke = require("parley.skill_invoke")
 local parley = require("parley")
 local tasker = require("parley.tasker")
 local assembly = require("parley.skill_assembly")
+
+-- Retire editor ownership before deleting fixture files. Hidden buffers otherwise
+-- survive into later edit commands, which can emit E211 for removed artifacts.
+local function remove_fixture_dir(dir)
+    local prefix = vim.fn.resolve(vim.fn.fnamemodify(dir, ":p")):gsub("/$", "") .. "/"
+    for _, candidate in ipairs(vim.api.nvim_list_bufs()) do
+        local name = vim.fn.resolve(vim.api.nvim_buf_get_name(candidate))
+        if name:sub(1, #prefix) == prefix then
+            vim.api.nvim_buf_delete(candidate, { force = true })
+        end
+    end
+    vim.fn.delete(dir, "rf")
+end
 
 -- SSE builder (same shape as tests/unit/anthropic_tool_decode_spec.lua).
 local function sse(events)
@@ -92,7 +105,7 @@ describe("skill_invoke.invoke", function()
         parley.dispatcher.query = orig_query
         assembly.resolve_agent = orig_resolve
         pcall(function() require("parley.progress").stop() end)
-        vim.fn.delete(tmpdir, "rf")
+        remove_fixture_dir(tmpdir)
     end)
 
     it("drives one exchange: payload + force_tool, applies propose_edits, reloads, on_done", function()
@@ -377,7 +390,7 @@ describe("skill_invoke terminal ownership (#182)", function()
         pcall(skill_invoke.cancel, buf)
         pcall(function() require("parley.progress").stop() end)
         pcall(vim.cmd, "enew!")
-        vim.fn.delete(tmpdir, "rf")
+        remove_fixture_dir(tmpdir)
     end)
 
     it("suppresses detached progress only when explicitly requested", function()
