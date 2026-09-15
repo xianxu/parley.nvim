@@ -947,6 +947,24 @@ Additional reservation cancellation, copied continuation input, provider result
 and preparation geometry fixes remain isolated. The tool-round adapter draft is
 not yet verified or wired. No milestone or whole-issue completion is claimed.
 
+
+### 2026-09-15 — BR-10 verification completed; timing comparison under investigation
+
+Production commit `b62c2b59` passes the complete chat/document mapping: 276 tests
+in 29 files, including native broad-fold conformance. Lint checks 506 files with
+zero warnings/errors. Full benchmark `/tmp/parley254-br10-perf.json` completes
+30 scenarios with 20 samples each; every scenario reports zero full-buffer reads.
+At 5,000 rows, median/p95 milliseconds are typing 9.273/10.127, Enter/join
+21.149/22.520, redraw 0.650/1.324, folds 1.201/2.245 and legacy stream/human
+interleave 37.610/54.511. Broad repair is 8777.140/8843.768 versus the prior
+2434.630/2504.419, despite identical 18,987 processed/copied rows and 2,567,147
+index visits. This timing difference is being investigated before boundary close;
+it is not dismissed as noise or claimed as a responsiveness guarantee.
+
+M4 isolated tool-round integration passes five tests including ordered completion,
+unknown-to-known evidence with explicit resume, sibling-only cancellation and
+positive fixture cleanup. Production respond wiring remains outstanding.
+
 ## Revisions
 
 ### 2026-09-14 — Incremental rendering is part of the core contract
