@@ -726,6 +726,24 @@ the window across #192 and #254. Existing worktree attribution remains unreliabl
 for this multi-hour effort; retain explicit N/A rather than invent a per-milestone
 increment or pollute calibration with that undercount.
 
+### 2026-09-15 — M3 repair progress and native fold batches
+
+Removed the coordinator's disposable numeric read cache. Unread lexical requests
+now refresh local source evidence immediately before bounded IO, so continuous
+disjoint edits cannot starve or misdirect repair. Four regressions cover sustained
+edits, row relocation, source overlap, and insufficient-budget zero-IO behavior.
+The document mapping passes 237 tests before adding native fold batch coverage.
+
+Native fold application now captures and creates at most 64 groups per slice;
+above 50,000 affected rows, cleanup is also capped and folds are temporarily
+disabled with per-window preference/view restoration. Deferred ordinary joins
+preserve existing folds while allowing previously dirty work to resume. Native
+join coverage passes three tests; the full exchange mapping passes 264 tests.
+The five-test native batch suite passes independently in 35–44 seconds but hit
+Plenary's 50-second timeout during the mapped run. A narrowly scoped harness
+timeout is being added; final integrated verification and M3 review remain pending.
+The timed-out child has exited; no process cleanup is required.
+
 ## Revisions
 
 ### 2026-09-14 — Incremental rendering is part of the core contract
