@@ -118,7 +118,7 @@ function M.transition(s,key,event)
             record.poll=nil;record.poll_retired=true;result.diagnostic=true
         else
             local delay=math.min(1000,record.poll.delay*2)
-            record.poll={deadline=record.poll.deadline,next=event.now+delay,delay=delay};result.probe=true
+            record.poll={deadline=record.poll.deadline,next=math.min(record.poll.deadline,event.now+delay),delay=delay};result.probe=true
         end
     elseif kind=='presentation_failed' and (status=='outcome_known' or status=='outcome_unknown')then
         if not ref(event.error_ref)then return s,{status='invalid'}end

@@ -161,4 +161,18 @@ describe('tool operation lifecycle permissions',function()
         s,permission=event(s,key,'release');assert.is_true(permission.release_claims)
         local _,denied=event(s,key,'start');assert.is_nil(denied.effect_start)
     end)
+    it('clamps every scheduled reconciliation tick to the five-second deadline',function()
+        local s,key=executing();s=event(s,key,'poll',{now=0})
+        local elapsed,probes=0,0
+        while O.lifecycle(s,key).poll do
+            elapsed=O.lifecycle(s,key).poll.next
+            local permission;s,permission=event(s,key,'tick',{now=elapsed})
+            if permission.probe then probes=probes+1 end
+            if permission.diagnostic then assert.equals(5000,elapsed)end
+            assert.is_true(probes<20)
+        end
+        assert.equals(5000,elapsed);assert.is_false(O.lifecycle(s,key).released)
+        assert.equals(1,O.stats(s).records)
+    end)
+
 end)

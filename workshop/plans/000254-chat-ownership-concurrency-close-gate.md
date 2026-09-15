@@ -575,6 +575,47 @@ rounds:
           round: 21
       boundary: M6
       blocked: true
+    - "n": 22
+      timestamp: "2026-09-15T14:00:30-07:00"
+      agent: codex
+      dispose:
+        - id: BR-31
+          disposition: addressed
+          note: All three enumerated owners consume pure lifecycle permissions. Reordered-completion and rejection tests pass; restoring each pre-fix adapter in scratch makes its rejection regressions fail.
+          round: 22
+        - id: BR-25
+          disposition: addressed
+          note: Identity-bound path and backup publication protections remain present; mapped native path-authority regressions pass.
+          round: 22
+        - id: BR-26
+          disposition: addressed
+          note: Shared committed-byte buffer reconciliation remains wired into mutation tools; mapped file-refresh tests pass.
+          round: 22
+        - id: BR-27
+          disposition: addressed
+          note: Bounded result-evidence publication retains truncation notices; mapped result-evidence tests pass.
+          round: 22
+        - id: BR-28
+          disposition: addressed
+          note: Async and compatibility adapters consume the shared file-transform policy; mapped transformation tests pass.
+          round: 22
+        - id: BR-29
+          disposition: addressed
+          note: Mandatory exclusions remain applied through shared traversal policy after optional filters; mapped traversal tests pass.
+          round: 22
+        - id: BR-30
+          disposition: addressed
+          note: Skill completion retains sole source-buffer refresh ownership and original proof; the skill-system suite passes.
+          round: 22
+      findings:
+        - id: BR-32
+          severity: Minor
+          title: Scheduler reconciliation schedules beyond its five-second deadline
+          detail: lua/parley/tools/operation.lua:121 does not clamp the next tick to the deadline. Deterministic scheduled ticks reach the diagnostic at 5550 ms instead of 5000 ms. Clamp next to min(deadline, now + delay) and test the complete timer sequence. Ownership remains retained throughout. ARCH-CONSTRAINTS.
+          family: reconciliation-deadline-enforcement
+          round: 22
+      boundary: M6
+      blocked: false
 ---
 
 # Gate ledger — 000254-chat-ownership-concurrency#254 (boundary-review)
@@ -835,7 +876,24 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-31** [Important] `lifecycle-state-observability` Authoritative cleanup and execution decisions bypass the pure transition boundary
   scheduler.lua:76-115 releases claims and starts effects from integration-owned flags; operation.lua:85 emits effect_start with zero production consumers. skill_invoke.lua:146-216 independently owns final-read admission and retirement transitions. This is the 3rd finding in this family: enumerate scheduler, filesystem-operation, and skill final-read lifecycle owners, enforce execution/release/retirement through pure transition results, and test rejected transitions plus reordered completion evidence. ARCH-PURE, ARCH-ORDER.
 
+## Round 22 — 2026-09-15T14:00:30-07:00 (codex) — passed
+
+### Disposed
+
+- BR-31 — addressed — All three enumerated owners consume pure lifecycle permissions. Reordered-completion and rejection tests pass; restoring each pre-fix adapter in scratch makes its rejection regressions fail.
+- BR-25 — addressed — Identity-bound path and backup publication protections remain present; mapped native path-authority regressions pass.
+- BR-26 — addressed — Shared committed-byte buffer reconciliation remains wired into mutation tools; mapped file-refresh tests pass.
+- BR-27 — addressed — Bounded result-evidence publication retains truncation notices; mapped result-evidence tests pass.
+- BR-28 — addressed — Async and compatibility adapters consume the shared file-transform policy; mapped transformation tests pass.
+- BR-29 — addressed — Mandatory exclusions remain applied through shared traversal policy after optional filters; mapped traversal tests pass.
+- BR-30 — addressed — Skill completion retains sole source-buffer refresh ownership and original proof; the skill-system suite passes.
+
+### Raised
+
+- **BR-32** [Minor] `reconciliation-deadline-enforcement` Scheduler reconciliation schedules beyond its five-second deadline
+  lua/parley/tools/operation.lua:121 does not clamp the next tick to the deadline. Deterministic scheduled ticks reach the diagnostic at 5550 ms instead of 5000 ms. Clamp next to min(deadline, now + delay) and test the complete timer sequence. Ownership remains retained throughout. ARCH-CONSTRAINTS.
+
 ## Open findings
 
 - **BR-13** [Important] `deferred-contract-traceability` BR-11 regressions are missing from the documented verification mapping
-- **BR-31** [Important] `lifecycle-state-observability` Authoritative cleanup and execution decisions bypass the pure transition boundary
+- **BR-32** [Minor] `reconciliation-deadline-enforcement` Scheduler reconciliation schedules beyond its five-second deadline

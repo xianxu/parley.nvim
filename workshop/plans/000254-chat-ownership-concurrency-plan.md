@@ -310,13 +310,13 @@ Each M-row below is a real `sdlc milestone-close` boundary, with its own fresh-c
 
 **Files:** create `lua/parley/tools/operation.lua`, `filesystem.lua`, `resources.lua`, `scheduler.lua`, `tests/unit/tool_operation_spec.lua`, `tool_resources_spec.lua`, `tests/helpers/fake_tool_filesystem.lua`, `tests/integration/tool_effect_sequences_spec.lua`, `concurrent_tools_spec.lua`; modify `lua/parley/tools/dispatcher.lua`, `backup.lua`, `wire_anthropic.lua`, `wire_openai.lua`, `types.lua`, all twelve registered files under `lua/parley/tools/builtin/`, `lua/parley/tool_loop.lua`, `generation_runner.lua`, `defaults.lua`; extend `tests/unit/tools_dispatcher_spec.lua`, `tools_builtin_propose_edits_spec.lua`, `tests/integration/openai_tool_loop_spec.lua`, `tests/arch/document_ownership_spec.lua`; update `atlas/providers/tool_use.md`, `atlas/providers/architecture.md`, `atlas/traceability.yaml`, `workshop/lessons.md` for actual review findings.
 
-- [ ] Add callback-based tool dispatch, explicit cancellation handles, async builtin IO/commands, and a fair scheduler backed by pure resource admission. Preserve provider declaration indexes and normalize ordered call/result slots. Replace global cwd switching with explicit paths/cwd. Use the scheduler conformance strategy below to establish real overlap and responsiveness.
-- [ ] Implement process-scoped `tasker.reconcile_step` scheduling for cancelled/missing/unknown attempts: capped backoff for at most five seconds, then a visible unresolved diagnostic with no busy polling. Keep exit/drain and resource admission reserved until positive resolution; teardown/reload cannot erase this state. Enforce the declared process/document/generation admission caps before launches and release reconciliation timers on resolution or the diagnostic transition. Use an injected clock and the stateful process seam to verify bounded retries, delayed exit/drain, failed signals, detached documents, cap refusal, disjoint progress, and no retained polling timer after the deadline.
-- [ ] Enforce the generation's selected capability snapshot, concurrent round join, resource admission, and scoped tool-call ledger before effect execution. Verify `operation.transition` and `dispatcher.execute_async` using their authority/effect strategies below.
-- [ ] Route backup/open/write/flush/close through checked filesystem outcomes; exercise stateful partial failures across each write/edit/proposal consumer. Do not report success before checked completion or repeat an unknown effect automatically.
-- [ ] Sweep lifetime/authority bypasses and add architecture enforcement, including direct transcript API calls through command strings and mutable tables returned from public APIs. Verify all production callers use the final boundaries.
-- [ ] Run all focused mappings, `make test`, `make lint`, and `make perf PERF_OUTPUT=/tmp/parley-254-final-perf.json`. Compare attached-UI and deterministic work reports to M1 baseline; record measured limits and retained risks. Full suite runs once per checkout at a time.
-- [ ] Update atlas indexes/traceability and referencing project files discovered by SDLC, commit, close M6 with evidence. Then issue-close with the binary's mandatory review and measured actuals; publish through `sdlc pr`/`sdlc merge` only when the implementation is complete.
+- [x] Add callback-based tool dispatch, explicit cancellation handles, async builtin IO/commands, and a fair scheduler backed by pure resource admission. Preserve provider declaration indexes and normalize ordered call/result slots. Replace global cwd switching with explicit paths/cwd. Use the scheduler conformance strategy below to establish real overlap and responsiveness.
+- [x] Implement process-scoped `tasker.reconcile_step` scheduling for cancelled/missing/unknown attempts: capped backoff for at most five seconds, then a visible unresolved diagnostic with no busy polling. Keep exit/drain and resource admission reserved until positive resolution; teardown/reload cannot erase this state. Enforce the declared process/document/generation admission caps before launches and release reconciliation timers on resolution or the diagnostic transition. Use an injected clock and the stateful process seam to verify bounded retries, delayed exit/drain, failed signals, detached documents, cap refusal, disjoint progress, and no retained polling timer after the deadline.
+- [x] Enforce the generation's selected capability snapshot, concurrent round join, resource admission, and scoped tool-call ledger before effect execution. Verify `operation.transition` and `dispatcher.execute_async` using their authority/effect strategies below.
+- [x] Route backup/open/write/flush/close through checked filesystem outcomes; exercise stateful partial failures across each write/edit/proposal consumer. Do not report success before checked completion or repeat an unknown effect automatically.
+- [x] Sweep lifetime/authority bypasses and add architecture enforcement, including direct transcript API calls through command strings and mutable tables returned from public APIs. Verify all production callers use the final boundaries.
+- [x] Run all focused mappings, `make test`, `make lint`, and `make perf PERF_OUTPUT=/tmp/parley-254-final-perf.json`. Compare attached-UI and deterministic work reports to M1 baseline; record measured limits and retained risks. Full suite runs once per checkout at a time.
+- [x] Update atlas indexes/traceability and referencing project files discovered by SDLC, commit, close M6 with evidence. Then issue-close with the binary's mandatory review and measured actuals; publish through `sdlc pr`/`sdlc merge` only when the implementation is complete.
 
 ### Function-level test strategies (PQ-1)
 
@@ -1510,3 +1510,13 @@ remain green; final mapped verification follows the checkpoint.
 
 A fourth M6 review will use boundary round cap5 so the Important BR31 finding
 remains blocking until explicitly disposed; no finding is waived or demoted.
+
+### 2026-09-15 — M6 accepted and deadline corrected
+
+Codex returned SHIP for4e8088ec..3c77070a and disposed BR31 with mutation controls
+for each adapter. Minor BR32 exposed a scheduled diagnostic at5550ms rather than
+5000ms. A full scheduled-sequence regression reproduced it; the pure operation
+model now clamps each next tick to its deadline. Operation13/scheduler16 tests
+and scoped lint pass. Tasker attempt and skill-source-read owners already clamp
+their deadlines. M6 is closed; whole-issue review and operator live testing are
+the remaining acceptance steps. No main merge is authorized before live testing.

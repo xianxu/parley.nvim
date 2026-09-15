@@ -354,7 +354,7 @@ its own `sdlc milestone-close` after implementation:
 - [x] M3 — Document ownership and shared highlighting/folding/layout index.
 - [x] M4 — Scoped concurrent generation/child-slot writes and human editing.
 - [x] M5 — Fixed batch identities and recoverable answer replacement.
-- [ ] M6 — Asynchronous concurrent tools, resource/outcome enforcement, final verification.
+- [x] M6 — Asynchronous concurrent tools, resource/outcome enforcement, final verification.
 
 ### Earlier exploration checklist (superseded for execution)
 
@@ -550,6 +550,7 @@ remains active. Scoped luacheck and whitespace checks pass. BR-1 and BR-2 fixes
 are ready for the required repeated review after REWORK.
 
 ### 2026-09-15 — M1 closed; M2 integration checkpoint
+- 2026-09-15: closed M6 — 149 affected specs/1939 assertions pass; combined365-spec evidence5636 assertions; lint616+worker clean;600 benchmark samples pass work bounds. Pure lifecycle owners authorize scheduler execution/release/retirement, filesystem requests/cleanup and skill final reads, with rejection controls and reordered completion tests. Actuals N/A: mixed issue192/254 attribution cannot be measured reliably without fabrication.; review verdict: SHIP
 - 2026-09-15: closed M5 — 92 mapped specs/1103 passes before final save-order correction; final changed lifecycle sweep 167 tests across 9 specs all exit0 zero failed/errors incl exact reviewer repro34; lint clean. Evidence /tmp/parley254-save-join-final.json and /tmp/parley254-m5-rework-verification.txt. Actual N/A because mixed #192/#254 attribution is unreliable.; review verdict: SHIP
 - 2026-09-15: closed M4 — Fresh complete146-spec mapped union1739 finalpassingtests,0 finalfailures/errors/incomplete; lint559clean; allmappedperf under unchangeddeadlines. BR18 exactreviewrepro and117focusedtests pass; BR19 consumedprefix+negativesuffix preparation passes. OriginalintermittentGCfailure explicitlyrecorded: unchanged4/5, interpreterprobe5/5, realcleanupmutation stillfails, final30pass. Evidence/tmp/parley254-m4-rework-verification.txt. M5/M6 remain isolatedlaterboundaries. ActualN/A mixed192/254 attribution unreliable.; review verdict: SHIP
 - 2026-09-15: closed M3 — BR-11 suspended cleanup ownership:50 focused tests across10 files passed, including two native50k suspended apply/uncertainty retirement regressions and scoped test-runner contract;47 existing presentation/fold/batch tests retained. Five changed Lua files lint clean; git diff --check clean. Prior combined M4 mapping131files1624tests and full556lint passed; integrated performance30scenarios x20samples passed hard gates with zero full-buffer stream reads. Broad native repair remains an explicit expensive exception. Actual N/A: mixed issue192/254 session attribution is unreliable; no invented hours. Review with Codex per operator instruction; no verdict guard bypass.; review verdict: FIX-THEN-SHIP
@@ -1540,3 +1541,15 @@ with original-run and focused-override provenance retained. Reports:
 `/tmp/parley254-m6-rework3-final-verification.txt` and
 `/tmp/parley254-m6-complete-latest-verification.txt`. Entering fourth Codex M6
 review with round cap5 to retain Important findings as blocking. Runtime frozen.
+
+### 2026-09-15 M6 SHIP and integration handoff
+
+Codex SHIP4e8088ec..3c77070a disposes BR31 and all prior M6 behavioral findings.
+Minor BR32 is fixed in this close commit: scheduled reconciliation clamps to5000ms;
+the new full-sequence test failed at5550ms before correction, then operation13 and
+scheduler16 pass with lint clean. The other reconciliation owners already clamp.
+Final whole-issue review must also dispose BR13: `scripts/spec_test_map.sh
+list-tests chat/document` includes both document_fold_retirement_spec.lua and
+document_fold_uncertainty_retirement_spec.lua, and both have passing evidence.
+The M6 focused override adds one assertion to the global365-spec record (5637).
+Live testing remains required before merging main.

@@ -2645,3 +2645,7 @@ download.
   and retirement. A reducer whose permission is ignored is documentation, not a
   boundary. Test adapters with denied transitions and reordered effect/cleanup
   evidence; keep handles and payloads in adapters, decisions in the model.
+
+- #254 BR32: test the complete scheduled backoff sequence, not only a manually
+  advanced clock. Clamp every next probe to the declared deadline so an interval
+  cannot extend the operating envelope.

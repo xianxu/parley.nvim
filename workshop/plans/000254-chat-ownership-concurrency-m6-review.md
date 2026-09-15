@@ -402,3 +402,120 @@ findings:
     detail: |
       scheduler.lua:76-115 releases claims and starts effects from integration-owned flags; operation.lua:85 emits effect_start with zero production consumers. skill_invoke.lua:146-216 independently owns final-read admission and retirement transitions. This is the 3rd finding in this family: enumerate scheduler, filesystem-operation, and skill final-read lifecycle owners, enforce execution/release/retirement through pure transition results, and test rejected transitions plus reordered completion evidence. ARCH-PURE, ARCH-ORDER.
 ```
+
+---
+
+## Re-review — 2026-09-15T14:00:30-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 254 — Harden chat ownership and concurrency |
+| repo | 000254-chat-ownership-concurrency |
+| issue file | workshop/issues/000254-chat-ownership-concurrency.md |
+| boundary | milestone M6 |
+| milestone | M6 |
+| window | 4e8088ecefd6a3c4187dc8e76868fd6a8c9d1a31..3c77070a28b2feb78b91ebf81ad7233860944208 |
+| command | sdlc milestone-close --issue 254 --milestone M6 |
+| reviewer | codex |
+| timestamp | 2026-09-15T14:00:30-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: medium
+```
+
+BR-31 is addressed: pure transition results now control execution, cleanup, and retirement across all three identified owners. Regression tests fail when the pre-fix adapters are restored in scratch. Focused suites and lint pass. One minor reconciliation-timer overrun remains; it does not release unresolved ownership or authorize effects.
+
+## 1. Strengths
+
+- Scheduler launch, claim release, and retirement consume model permissions; rejection tests exercise each boundary.
+- Filesystem completion IDs reject stale callbacks, while pending operations retain ownership through cancellation.
+- Skill final reads separate logical completion from physical retirement, with deterministic event-order tests.
+- README, atlas, and traceability document the new commands, configuration, lifecycle models, and compatibility requirements.
+
+## 2. Critical findings
+
+None.
+
+## 3. Important findings
+
+None.
+
+## 4. Minor findings
+
+- **Reconciliation deadline overshoots:** `lua/parley/tools/operation.lua:121` schedules `next=event.now+delay` without clamping to the deadline. A deterministic run produces probes through 4550 ms, then the diagnostic at **5550 ms**, despite the documented five-second limit. Clamp the next tick to `math.min(deadline, now+delay)` and test the complete scheduled sequence. **ARCH-CONSTRAINTS.**
+
+## 5. Test coverage notes
+
+Passed:
+
+- `providers/tool_execution` mapped suite.
+- `skills/skill-system` mapped suite.
+- Document ownership architecture tests: seven passed.
+- `make lint`: 616 files, zero warnings/errors.
+
+Scratch restoration of each pre-fix adapter made the relevant rejection regressions fail: scheduler start/release/retirement, filesystem request/completion/publication, and skill admission/completion/observation.
+
+The full suite, performance benchmark, and operator live testing were not rerun in this review. Repository files were unchanged.
+
+## 6. Architectural notes
+
+| Marker | Assessment |
+|---|---|
+| ARCH-DRY | **Pass:** shared transformation, traversal, and result-evidence policies serve their consumers. |
+| ARCH-PURE | **Pass:** the three BR-31 lifecycle owners are IO-free; adapters execute their permissions. |
+| ARCH-PURPOSE | **Pass:** correction covers the enumerated scheduler, filesystem, and skill owners. |
+| ARCH-MOCK | **Pass:** stateful process/filesystem seams and isolated native conformance tests exercise production boundaries. |
+| ARCH-CONSTRAINTS | **Flag, Minor:** reconciliation tick can exceed its declared deadline by 550 ms. Admission and retention remain bounded. |
+| ARCH-SECURE | **Pass:** captured capabilities, identity-bound paths, private exclusions, and bounded evidence remain enforced. |
+| ARCH-ORDER | **Pass:** rejected transitions and reordered completion evidence are tested; uncertainty retains ownership. |
+| ARCH-FUNERAL | **Pass:** model-authorized retirement releases records, handles, and read slots; unresolved work retains bounded admission. |
+
+The revised M6 inventory matches the inspected module locations and PURE/INTEGRATION roles.
+
+## 7. Plan revision recommendations
+
+No structural revision needed. Keep the five-second contract and correct the timer arithmetic.
+
+```findings
+dispose:
+  - id: BR-31
+    disposition: addressed
+    note: |
+      All three enumerated owners consume pure lifecycle permissions. Reordered-completion and rejection tests pass; restoring each pre-fix adapter in scratch makes its rejection regressions fail.
+  - id: BR-25
+    disposition: addressed
+    note: |
+      Identity-bound path and backup publication protections remain present; mapped native path-authority regressions pass.
+  - id: BR-26
+    disposition: addressed
+    note: |
+      Shared committed-byte buffer reconciliation remains wired into mutation tools; mapped file-refresh tests pass.
+  - id: BR-27
+    disposition: addressed
+    note: |
+      Bounded result-evidence publication retains truncation notices; mapped result-evidence tests pass.
+  - id: BR-28
+    disposition: addressed
+    note: |
+      Async and compatibility adapters consume the shared file-transform policy; mapped transformation tests pass.
+  - id: BR-29
+    disposition: addressed
+    note: |
+      Mandatory exclusions remain applied through shared traversal policy after optional filters; mapped traversal tests pass.
+  - id: BR-30
+    disposition: addressed
+    note: |
+      Skill completion retains sole source-buffer refresh ownership and original proof; the skill-system suite passes.
+findings:
+  - id: new
+    severity: Minor
+    family: reconciliation-deadline-enforcement
+    title: |
+      Scheduler reconciliation schedules beyond its five-second deadline
+    detail: |
+      lua/parley/tools/operation.lua:121 does not clamp the next tick to the deadline. Deterministic scheduled ticks reach the diagnostic at 5550 ms instead of 5000 ms. Clamp next to min(deadline, now + delay) and test the complete timer sequence. Ownership remains retained throughout. ARCH-CONSTRAINTS.
+```
