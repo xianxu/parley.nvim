@@ -95,6 +95,41 @@ describe('checked answer recovery store',function()
         local retry=sample();retry.bytes='partial replacement'
         assert.is_false(R.publish(restarted,retry).ok)
     end)
+    for _,kind in ipairs({'sole','all revisions','quarantined','failed quarantine','unknown name'})do
+        it('refuses new originals when corrupt association is unknown: '..kind,function()
+            local result=R.publish(store,sample());assert.is_true(result.ok)
+            if kind=='all revisions'then
+                fs.fail('unlink','retain predecessor')
+                assert.is_true(R.update(store,result.id,{bytes='partial'}).ok)
+            end
+            local names={};for path in pairs(fs.files)do if path:match('%.json$')then names[#names+1]=path end end
+            for _,path in ipairs(names)do
+                fs.files[path].bytes='{corrupt'
+                if kind=='quarantined'then assert(fs.rename(path,path..'.quarantine'))end
+                if kind=='unknown name'then assert(fs.rename(path,'/recovery/unknown.json'))end
+            end
+            if kind=='failed quarantine'then fs.fail('rename','denied')end
+            for _=1,2 do
+                store=assert(R.open({directory='/recovery',fs=fs}))
+                local before=R.stats(store).bytes
+                local retry=sample();retry.bytes='partial replacement'
+                local denied=R.publish(store,retry)
+                assert.is_false(denied.ok);assert.matches('association unavailable',denied.reason)
+                retry.key='unrelated'
+                assert.is_false(R.publish(store,retry).ok,'unknown association cannot prove a disjoint key')
+                assert.equals(before,R.stats(store).bytes)
+                assert.equals(0,R.stats(store).records)
+            end
+        end)
+    end
+    it('permits disjoint publication when a readable sibling identifies a corrupt key',function()
+        local first=R.publish(store,sample());fs.fail('unlink','retain predecessor')
+        assert.is_true(R.update(store,first.id,{bytes='partial'}).ok)
+        fs.files['/recovery/'..first.id..'.2.json'].bytes='{corrupt'
+        local other=sample();other.key='other'
+        assert.is_true(R.publish(store,other).ok)
+        assert.is_false(R.publish(store,sample()).ok)
+    end)
     it('reconfirms directory durability before allowing a retained retry',function()
         fs.fail('fsync',false,'directory failure')
         assert.is_false(R.publish(store,sample()).ok)
