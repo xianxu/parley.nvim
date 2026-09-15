@@ -1090,3 +1090,24 @@ Remaining: receive/dispose M3 review, finish combined performance evidence, clos
 M4 through its mandatory review, implement M5 recovery/batch and M6 asynchronous
 builtin/resource supervision. Do not merge to main; operator live testing follows
 the completed issue and precedes merge. No fabricated actual-time value recorded.
+
+### 2026-09-15 — M5 isolated implementation checkpoint
+
+Codex is the reviewer for all remaining boundaries, as requested by the operator.
+Its M3 review retained BR-11: cancellation inside an already-suspended fold slice
+can overwrite retirement cleanup. The feature worktree owns that focused fix; M5
+continues separately in /tmp/parley254-m5-stage until M3/M4 gates close.
+
+Combined M4 performance completed: all30 scenarios x20 samples passed hard gates;
+27 non-stream scenarios have identical work counters to staging. At5000 rows,
+stream median/p9568.80/114.28ms,17 structural rows, zero full reads. Broad repair
+11.01/13.02s with unchanged counters; reviewer CPU overlap limits timing attribution.
+Report: /tmp/parley254-m4-integrated-perf-summary.md.
+
+M5 recovery core has22 passing tests and clean lint, including native temporary
+filesystem publication and stateful fault coverage. Root batch reducer tests have
+the expected missing-module red (/tmp/parley254-batch-red.log); implementation is
+next. Document question/context revision proofs are independently in progress.
+Batch membership is fixed; only positive leg completion advances progress; opaque
+proofs defer and unknown effects cannot be replayed by resume. Recovery host/UI
+integration and atomic Document restore proof remain outstanding.
