@@ -2606,3 +2606,15 @@ download.
   runtime retention from compiled fixture locals with repeated controlled runs.
   Keep the weak-reference assertion and demonstrate that disabling actual cleanup
   still fails after isolating the probe; do not hide failures with extra retries.
+
+- #254 BR-20–24: test recovery through the full production success/failure,
+  terminal cleanup, retry and confirmed-save sequence. Calling adapters in
+  isolation can accidentally keep association state that production retires.
+  Keep edit authority, pending settlement, retry evidence and registry membership
+  as separate lifetimes, with an explicit retirement path for each.
+- #254 BR-22: corrupt persisted evidence is unknown, not absent. Include the sole
+  record, every revision, prior quarantine and failed quarantine in admission
+  regressions; a readable predecessor can otherwise mask the missing-proof case.
+- #254 M6: use native provider JSON in public execution tests, including empty
+  objects. Editor-specific representation metadata must cross the strict pure
+  boundary deliberately; table literals do not exercise that conversion.
