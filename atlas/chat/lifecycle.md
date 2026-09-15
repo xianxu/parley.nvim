@@ -96,7 +96,7 @@ non-empty shortcut is registered and shown through the shared keybinding
 registry.
 
 ## Response (`:ParleyChatRespond` / `<M-CR>` / `<C-g><C-g>`)
-Assembles context (with memory summarization), streams LLM response into buffer. The [exchange model](exchange_model.md) is the single source of truth for all transcript mutations during the response lifecycle — streaming text growth, tool block insertion, and prompt append all go through the model. [Response progress](response_progress.md) is cosmetic extmark state that begins at the response header (or a recursive leg's last visible block), then follows the current generation tip; it never becomes a model block. A per-buffer pending-session guard prevents duplicate calls.
+Assembles context (with memory summarization), streams LLM response into buffer. The [exchange model](exchange_model.md) is the single source of truth for all transcript mutations during the response lifecycle — streaming text growth, tool block insertion, and prompt append all go through the model. [Response progress](response_progress.md) is cosmetic extmark state that begins at the response header (or a recursive leg's last visible block), then follows the current generation tip; it never becomes a model block. A per-buffer pending-session guard prevents duplicate calls. An exchange preface (`@@…@@` immediately above its question) prefixes that question’s user message in initial, continuation and ancestor context; it is excluded from the preceding answer.
 
 Semantic folds are a pure projection of one exchange's positive-size thinking,
 summary, tool-use, and tool-result blocks (`lua/parley/fold_projection.lua`).

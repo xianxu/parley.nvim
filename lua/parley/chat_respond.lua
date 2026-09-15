@@ -155,7 +155,9 @@ M.build_ancestor_messages = function(ancestor_chain)
                 break
             end
             if exchange.question then
-                local content = (exchange.question.content or ""):gsub("^%s*(.-)%s*$", "%1")
+                local content = require("parley.question_tags").compose_question(
+                    exchange.preface and exchange.preface.content, exchange.question.content)
+                    :gsub("^%s*(.-)%s*$", "%1")
                 if content ~= "" then
                     table.insert(msgs, { role = "user", content = content })
                 end
@@ -566,9 +568,18 @@ M.build_messages_from_model = function(buf, model, target_idx, agent_info, opts)
 
             if blk.kind == "question" then
                 local text = read_block_text(k, b)
-                -- Strip 💬: prefix and trim
-                text = text:gsub("^💬:%s*", ""):gsub("^%s*(.-)%s*$", "%1")
-                text = define.strip_definition_footnote_footer(text)
+                -- Prefix matching is literal: configured prefixes may contain Lua pattern characters.
+                local user_prefix = (_parley and _parley.config.chat_user_prefix) or "💬:"
+                if text:sub(1, #user_prefix) == user_prefix then
+                    text = text:sub(#user_prefix + 1)
+                end
+                text = define.strip_definition_footnote_footer(text:gsub("^%s*(.-)%s*$", "%1"))
+                local preface
+                if model.exchanges[k].preface then
+                    preface = table.concat(vim.api.nvim_buf_get_lines(buf,
+                        model:preface_start(k), model:preface_end(k) + 1, false), "\n")
+                end
+                text = require("parley.question_tags").compose_question(preface, text)
                 if text ~= "" then
                     -- Defensive: an answer never precedes its question, but
                     -- flush any accumulated answer blocks to keep ordering stable.
@@ -895,7 +906,9 @@ M.build_messages = function(opts)
                 -- Process the question
                 if should_preserve then
                     -- Get the question content and process any file loading directives
-                    local question_content = define.strip_definition_footnote_footer(exchange.question.content)
+                    local question_content = require("parley.question_tags").compose_question(
+                        exchange.preface and exchange.preface.content,
+                        define.strip_definition_footnote_footer(exchange.question.content))
                     local file_content_parts = {}
 
                     -- Raw request input feature: detect a `yaml {"type":"request"}`

@@ -60,6 +60,7 @@ end)
 
 describe("arch: pure files have no nvim state interaction", function()
     local PURE_FILES = {
+        "lua/parley/question_tags.lua",
         "lua/parley/stream_position.lua",
         "lua/parley/highlight_structure.lua",
         "lua/parley/fence.lua",

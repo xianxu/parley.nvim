@@ -891,3 +891,84 @@ describe("attachments (#231)", function()
         end
     end)
 end)
+
+-- A preface is owned by the following question without moving its 💬 anchor.
+describe("parse_chat: question prefaces", function()
+    local function parsed(body)
+        local lines = { "---", "topic: Prefaces", "file: prefaces.md", "---" }
+        vim.list_extend(lines, body)
+        return parse_chat(lines, 4)
+    end
+
+    for _, marker in ipairs({ "@@topic@@", "@@_@@" }) do
+        it("captures " .. marker .. " before the first question without changing question text", function()
+            local ex = parsed({ marker, "💬: literal question" }).exchanges[1]
+            assert.same({ line_start = 5, line_end = 5, content = marker, label = marker:sub(3, -3) }, ex.preface)
+            assert.equals(6, ex.question.line_start)
+            assert.equals("literal question", ex.question.content)
+        end)
+    end
+
+    for _, answer in ipairs({ { "answer text" }, { "🧠: thinking", "thought" },
+        { "🔧: read id=x", "```json", "{}", "```", "📎: read id=x", "```", "ok", "```" } }) do
+        it("excludes an attached preface from every prior answer representation: " .. answer[1], function()
+            local body = { "💬: first", "🤖: [A]" }
+            vim.list_extend(body, answer)
+            vim.list_extend(body, { "@@next topic@@", "💬: second" })
+            local p = parsed(body)
+            local tag_row = #body + 3
+            assert.equals(tag_row, p.exchanges[2].preface.line_start)
+            local previous = p.exchanges[1].answer
+            assert.equals(tag_row - 1, previous.line_end)
+            assert.is_nil(previous.content:find("@@next topic@@", 1, true))
+            for _, block in ipairs(previous.content_blocks) do
+                assert.is_true(block.line_end < tag_row)
+                assert.is_nil((block.text or ""):find("@@next topic@@", 1, true))
+            end
+            for _, section in ipairs(previous.semantic_sections) do
+                assert.is_true(section.line_end < tag_row)
+            end
+            assert.equals("second", p.exchanges[2].question.content)
+        end)
+    end
+
+    it("transfers the preface after an unanswered question without changing either question anchor", function()
+        local p = parsed({ "💬: first", "@@second topic@@", "💬: second" })
+        assert.equals("first", p.exchanges[1].question.content)
+        assert.equals(5, p.exchanges[1].question.line_start)
+        assert.equals(5, p.exchanges[1].question.line_end)
+        assert.equals(6, p.exchanges[2].preface.line_start)
+        assert.equals(7, p.exchanges[2].question.line_start)
+        assert.equals("second", p.exchanges[2].question.content)
+    end)
+
+    it("keeps a separated tag in its original answer", function()
+        local p = parsed({ "💬: first", "🤖: [A]", "@@standalone@@", "", "💬: second" })
+        assert.is_nil(p.exchanges[2].preface)
+        assert.truthy(p.exchanges[1].answer.content:find("@@standalone@@", 1, true))
+    end)
+
+    for _, first in ipairs({ { "💬: first", "🤖: [A]", "answer" }, { "💬: first" } }) do
+        it("finds the following exchange on its preface after " .. (#first == 1 and "an unanswered" or "an answered")
+            .. " question", function()
+            local body = vim.deepcopy(first)
+            vim.list_extend(body, { "@@next@@", "💬: second", "🤖: [A]", "second answer" })
+            local p = parsed(body)
+            local preface_row = #first + 5
+            assert.equals(2, chat_parser.find_exchange_at_line(p, preface_row))
+            local exchange_index, section_index = chat_parser.find_section_at_line(p, preface_row)
+            assert.equals(2, exchange_index)
+            assert.is_nil(section_index)
+            assert.equals(preface_row + 1, p.exchanges[2].question.line_start)
+            assert.is_nil(chat_parser.find_exchange_at_line(p, 4))
+        end)
+    end
+
+    it("collects canonical preface references with their source rows before question references", function()
+        local p = parsed({ "@@./context.md@@", "💬: question @@https://example.com/page@@" })
+        assert.same({
+            { line = "@@./context.md@@", path = "./context.md", original_line_index = 5 },
+            { line = "💬: question @@https://example.com/page@@", path = "https://example.com/page", original_line_index = 6 },
+        }, p.exchanges[1].question.file_references)
+    end)
+end)

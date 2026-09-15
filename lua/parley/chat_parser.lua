@@ -160,6 +160,7 @@ end
 --   headers = { key-value pairs },
 --   exchanges = {
 --     {
+--       preface = { line_start = N, line_end = N, content = "@@tag@@", label = "tag" }, -- optional
 --       question = { line_start = N, line_end = N, content = "text",
 --                    file_references = { {line, path, original_line_index}, ... } },
 --       answer   = { line_start = N, line_end = N, content = "text" },  -- or nil
@@ -217,11 +218,12 @@ end
 ---@return number|nil         # exchange index, or nil outside any exchange
 function M.find_exchange_at_line(parsed, line_no)
 	for i, ex in ipairs(parsed.exchanges or {}) do
-		local q_start = ex.question and ex.question.line_start or math.huge
+		local exchange_start = (ex.preface and ex.preface.line_start)
+			or (ex.question and ex.question.line_start) or math.huge
 		local a_end = (ex.answer and ex.answer.line_end)
 			or (ex.question and ex.question.line_end)
 			or 0
-		if line_no >= q_start and line_no <= a_end then
+		if line_no >= exchange_start and line_no <= a_end then
 			return i
 		end
 	end
@@ -301,6 +303,9 @@ local fence = require("parley.fence")
 	local reasoning_prefix = decoration_patterns.reasoning_prefix
 	local user_prefix = decoration_patterns.user_prefix
 	local branch_prefix = decoration_patterns.branch_prefix
+	local prefaces = require("parley.question_tags").associations(lines, config, header_end)
+	local preface_rows = {}
+	for _, preface in pairs(prefaces) do preface_rows[preface.line_start] = true end
 	-- M2 Task 2.5 of #81: tool_use / tool_result prefixes for the
 	-- content_blocks list on an assistant answer.
 	logger.debug("memory config: " .. vim.inspect({memory_enabled, summary_prefix, reasoning_prefix}))
@@ -599,6 +604,11 @@ local fence = require("parley.fence")
 		-- Check for branch reference (🌿:) — always detected, even between consecutive links.
 		-- Before the first question: first 🌿: is parent_link, subsequent ones are children.
 		-- After the first question: all 🌿: are child branches.
+		if preface_rows[i] then
+			-- This row belongs to the following exchange. Keep it out of every
+			-- prior component accumulator, including reasoning and tool text.
+			goto continue
+		end
 		if decoration_kind == "branch" then
 			in_reasoning_block = false
 			local rest = line:sub(#branch_prefix + 1):gsub("^%s*(.-)%s*$", "%1")
@@ -637,10 +647,11 @@ local fence = require("parley.fence")
 			first_question_seen = true
 			-- Content_blocks for the closing answer (if any) get attached
 			-- before we finalize the old component and start a new exchange.
-			local current_component_start = i
-			cb_attach_to_current_answer(current_component_start - 1)
+			local preface = prefaces[i]
+			local previous_end = preface and (preface.line_start - 1) or (i - 1)
+			cb_attach_to_current_answer(previous_end)
 			-- If we were building a previous exchange, finalize it
-			finalize_component(current_component_start - 1)
+			finalize_component(previous_end)
 
 			-- Extract question content
 			local question_content = line:sub(#user_prefix + 1)
@@ -653,6 +664,7 @@ local fence = require("parley.fence")
 
 			-- Start a new exchange
 			current_exchange = {
+				preface = preface,
 				question = {
 					line_start = i,
 					line_end = nil,
@@ -679,6 +691,17 @@ local fence = require("parley.fence")
 				})
 			end
 
+			-- Preface references use the same grammar as question references,
+			-- while keeping the physical source row for file-loading diagnostics.
+			if preface then
+				for _, ref_path in ipairs(extract_file_refs(preface.content)) do
+					table.insert(current_exchange.question.file_references, {
+						line = preface.content,
+						path = ref_path,
+						original_line_index = preface.line_start,
+					})
+				end
+			end
 			-- Check for inline @@ file references on the user prefix line itself
 			local inline_refs = extract_file_refs(question_content)
 			for _, ref_path in ipairs(inline_refs) do
@@ -910,6 +933,7 @@ local fence = require("parley.fence")
 				end
 			end
 		end
+		::continue::
 	end
 
 	-- Finalize the last component. The trimming for questions is

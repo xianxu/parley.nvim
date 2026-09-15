@@ -4,6 +4,7 @@
 local M = {}
 
 local highlight_structure = require("parley.highlight_structure")
+local question_tags = require("parley.question_tags")
 
 -- Code-block memo for a buffer. Delegates to highlight_structure so the fence
 -- grammar and the #218 partition containment have ONE definition — outline used
@@ -40,12 +41,12 @@ local function is_outline_item(bufnr, line_number, config, code_block_memo, all_
   if line:match("^" .. vim.pesc(user_prefix)) then
     return true, "question", "  " .. line
   -- Match annotations
-  elseif line:match("^@@.+@@$") then
+  elseif question_tags.parse_tag(line) then
     -- Both delimiters are two characters: `@@my note@@` → `  → my note` (#232;
     -- the old 2,-2 slice left one `@` on each side). Indented like a question:
     -- an annotation is a navigation entry at the conversation's own level, not
     -- a heading above it (operator, 2026-09-12).
-    return true, "annotation", "  → " .. string.sub(line, 3, -3)
+    return true, "annotation", "  → " .. question_tags.parse_tag(line)
   -- Match branch references
   elseif line:match("^" .. vim.pesc(config.chat_branch_prefix or "🌿:")) then
     return true, "branch", "🌿 " .. line
@@ -187,6 +188,7 @@ function M._build_picker_items(bufnr, config, opts)
       table.insert(items, { display = formatted_line, value = { lnum = i }, type = item_type })
     end
   end
+  items = question_tags.apply_outline(items, all_lines, config)
   -- Drop trailing empty question (the placeholder prompt for the user to continue)
   if #items > 0 then
     local last = items[#items]
@@ -268,11 +270,19 @@ local function build_file_outline_items(file_path, config, depth)
   for i = header_end + 1, #file_lines do
     local branches = branch_at_line[i]
 
+    -- Classify once. A question containing inline branches still owns a
+    -- question row, so its preface can label it independently of those links.
+    local is_item, item_type, formatted_line =
+      is_outline_item(nil, i, config, code_memo, file_lines, { is_chat = true })
+    if is_item and item_type ~= "branch" and (not branches or item_type == "question") then
+      table.insert(items, {
+        display = indent .. formatted_line,
+        value = { lnum = i, file = abs_path },
+        type = item_type,
+      })
+    end
     if branches then
       for _, branch in ipairs(branches) do
-        -- Resolved ONCE. Under prefix identity each resolve is a glob per chat
-        -- root, so the old shape paid double on every untopiced branch — on a
-        -- keystroke path (ARCH-CONSTRAINTS, ARCH-DRY).
         local child_abs = require("parley").resolve_chat_path(branch.path, file_dir)
         local topic = branch.topic
         if topic == "" then
@@ -284,26 +294,10 @@ local function build_file_outline_items(file_path, config, depth)
           value = { lnum = branch.line, file = abs_path, child_path = child_abs, inline = branch.inline },
         })
       end
-    else
-      -- #232: ONE item rule, shared with the flat builder. This branch used to
-      -- keep its own question-only match, so the `@@…@@` annotations the flat
-      -- rule knows never reached a chat outline — and chats always use the
-      -- tree (ARCH-DRY). The shared rule owns the code-block skip and the
-      -- no-headings-in-chats rule too. Branch rows come from the parser above;
-      -- a 🌿 line the parser did NOT list as a branch — a child's upward
-      -- parent_link — is skipped rather than rendered as a branch.
-      local is_item, item_type, formatted_line =
-        is_outline_item(nil, i, config, code_memo, file_lines, { is_chat = true })
-      if is_item and item_type ~= "branch" then
-        table.insert(items, {
-          display = indent .. formatted_line,
-          value = { lnum = i, file = abs_path },
-          type = item_type,
-        })
-      end
     end
   end
 
+  items = question_tags.apply_outline(items, file_lines, config, header_end)
   -- Drop trailing empty question (the placeholder prompt for the user to continue)
   if #items > 0 then
     local last = items[#items]
@@ -399,6 +393,7 @@ function M.question_picker(config)
     float_picker.open({
       title = "Outline",
       items = items,
+      initial_index = question_tags.initial_index(items, buf_name, vim.api.nvim_win_get_cursor(0)[1]),
       anchor = "top",
       on_select = function(item)
         if not vim.api.nvim_buf_is_valid(current_bufnr) then return end
@@ -440,7 +435,7 @@ function M.question_picker(config)
       title = "🌳 Chat Tree Outline",
       items = items,
       anchor = "top",
-      initial_index = sel_index or 1,
+      initial_index = sel_index or question_tags.initial_index(items, buf_name, vim.api.nvim_win_get_cursor(0)[1]),
       on_select = function(item)
         local entry = item.value
         if entry.child_path then

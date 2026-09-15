@@ -671,6 +671,50 @@ describe("chat_respond: buffer state after completion", function()
         assert.equals(2, call_count, "Dispatcher should be called twice for topic generation")
     end)
 
+    for _, tag in ipairs({ "@@polar alignment@@", "@@_@@" }) do
+        for _, target in ipairs({ "First question", "Second question", "preface" }) do
+            it("preserves " .. tag .. " while regenerating " .. target, function()
+                local lines = { "# topic: Preface regeneration", "- file: test.md", "---", "", "💬: First question",
+                    "", "🤖:", "Old first answer", "", tag, "💬: Second question",
+                    "", "🤖:", "Old second answer", "", "💬: Third question" }
+                vim.fn.writefile(lines, test_file)
+                vim.cmd("edit " .. test_file)
+                local buf = vim.api.nvim_get_current_buf()
+                local cursor_text = target == "preface" and tag or "💬: " .. target
+                vim.api.nvim_win_set_cursor(0, { find_line_number(buf, cursor_text), 0 })
+                local completed, completion_error = false, nil
+                parley.dispatcher.query = function(query_buf, _, _, handler, callback)
+                    local qid = "preface_" .. tostring(math.random(100000))
+                    parley.tasker.set_query(qid, { response = "Replacement answer", buf = query_buf })
+                    vim.schedule(function()
+                        local ok, err = pcall(function()
+                            handler(qid, "Replacement answer")
+                            callback(qid)
+                        end)
+                        completion_error = not ok and err or nil
+                        completed = true
+                    end)
+                end
+                parley.chat_respond({ range = 0 })
+                assert.is_true(vim.wait(1000, function() return completed end, 10), vim.inspect(vim.api.nvim_buf_get_lines(buf, 0, -1, false)))
+                assert.is_nil(completion_error)
+                local current = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+                local question_row = find_line_number(buf, "💬: Second question")
+                assert.is_number(question_row)
+                assert.equals(tag, current[question_row - 1])
+                local count = 0
+                for _, line in ipairs(current) do if line == tag then count = count + 1 end end
+                assert.equals(1, count)
+                assert.is_true(buffer_contains(buf, "Replacement answer"))
+                assert.is_true(buffer_contains(buf, "💬: Third question"))
+                if target == "preface" then
+                    assert.is_true(buffer_contains(buf, "Old first answer"))
+                    assert.is_false(buffer_contains(buf, "Old second answer"))
+                end
+            end)
+        end
+    end
+
     it("middle-document resubmit replaces old answer without appending new prompt", function()
         local chat_content = [[
 # topic: Test

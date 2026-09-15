@@ -98,10 +98,10 @@ the outline shows.
 
 ## Plan
 
-- [ ] Pure `apply_tag_conventions(items, lines)` in `outline.lua`; unit tests on hand-built items
-- [ ] Call it from `_build_picker_items` and the tree builder; parity test cases
-- [ ] `find_nearest_outline_line` / picker preselect: tag line maps to the merged row
-- [ ] Help text: tag replaces the label; `_` is anonymous
+- [x] Pure `apply_tag_conventions(items, lines)` in `outline.lua`; unit tests on hand-built items
+- [x] Call it from `_build_picker_items` and the tree builder; parity test cases
+- [x] `find_nearest_outline_line` / picker preselect: tag line maps to the merged row
+- [x] Help text: tag replaces the label; `_` is anonymous
 
 ## Log
 
@@ -165,3 +165,7 @@ Baseline measured before implementation, synthetic100/1,000/5,000-line transcrip
 Implemented exchange preface ownership through parser, live model, rendering, context, outline and cursor lookup. Bounded workers are finished. Focused suites passed: parser70, section7, build_messages84, ancestors9, respond integration73; model/render/tool regressions also passed. Regeneration regressions reproduce deletion with the original parser and pass with preface ownership. Cursor on a preface now resolves to its following exchange, including when the preceding question is unanswered. Full-suite and boundary review remain.
 
 Synthetic median performance at5,000 lines: parse45.44ms (+1.30ms), outline51.16ms (+2.58ms), within the planned20ms incremental budget. Unrelated defaults and workshop chat edits are preserved outside this issue.
+
+### 2026-09-14 — Verification complete
+
+All plan work implemented under the approved exchange-preface revision (the shared helper is question_tags.apply_outline, superseding the original outline-local helper name). Full make test passed in an indexed isolated checkout excluding the unrelated pending SVG-default edit; lint clean and all test files passed. The working-checkout run confirmed that SVG edit alone changes11 golden payloads, so no unrelated defaults or golden fixtures were changed for this issue. Scoped diff check clean. Ready for boundary review.
