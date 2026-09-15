@@ -65,8 +65,8 @@ For explicit effect reconciliation, the internal API is
 evidence=...})`. It requires a typed known effect and nonempty bounded evidence;
 it never re-executes the effect. A caller-supplied `physical_resolved` cannot
 replace backend cleanup evidence. `service:reconcile_step()` and handle probes
-only inspect outstanding work. These are Lua service APIs; this page does not
-specify a public reconciliation command.
+only inspect outstanding work. `ParleyToolOperations` presents this evidence and
+accepts an explicit effect classification, as described below.
 
 ## Checked filesystem transactions
 
