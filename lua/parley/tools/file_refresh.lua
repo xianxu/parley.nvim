@@ -4,10 +4,10 @@ local M={}
 local states=setmetatable({},{__mode='k'})
 local Edit=require('parley.buffer_edit')
 local function canonical(path)return vim.fn.resolve(vim.fn.fnamemodify(path,':p'))end
-function M.capture(path)
+function M.capture(path,deferred_buf)
     local ticket={};local s={path=canonical(path),buffers={}}
     for _,buf in ipairs(vim.api.nvim_list_bufs())do
-        if vim.api.nvim_buf_is_loaded(buf) and canonical(vim.api.nvim_buf_get_name(buf))==s.path then
+        if buf~=deferred_buf and vim.api.nvim_buf_is_loaded(buf) and canonical(vim.api.nvim_buf_get_name(buf))==s.path then
             local old={buf=buf,name=vim.api.nvim_buf_get_name(buf),tick=vim.api.nvim_buf_get_changedtick(buf),
                 modified=vim.bo[buf].modified,autoread=vim.bo[buf].autoread,fileformat=vim.bo[buf].fileformat,encoding=vim.bo[buf].fileencoding}
             if require('parley.document').get(buf)then

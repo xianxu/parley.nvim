@@ -69,12 +69,14 @@ function M.new(opts)
         local function outcome()
             local runtime_unknown=runtime.unresolved and runtime.unresolved()
             local uncertain=c.pending~=nil or next(c.fds)~=nil or c.temporary~=nil or c.target_uncertain or runtime_unknown
+                or runtime.uncertain and runtime.uncertain()
             local effect=c.applied and 'applied' or c.mutated and 'partial' or c.target_uncertain and 'unknown' or 'not_applied'
             return {certainty=uncertain and 'unknown' or 'known',effect=effect,cancelled=c.cancelled,
                 physical_resolved=c.pending==nil and next(c.fds)==nil and not runtime_unknown,
                 error_code=c.error_code,cleanup_error=c.cleanup_error,data=c.data,revision=copy(c.revision),
                 evidence={written=c.written,backup_path=c.backup_published and c.backup_path or nil,
-                    backup_confirmed=c.backup_confirmed or false,temporary=c.temporary,steps=c.steps}}
+                    backup_confirmed=c.backup_confirmed or false,temporary=c.temporary,steps=c.steps,
+                    uncertain_artifacts=runtime.uncertain_artifacts and runtime.uncertain_artifacts() or nil}}
         end
         local function publish()
             local result=outcome()
@@ -108,6 +110,27 @@ function M.new(opts)
                 else c.fds[fd]=nil;cb(true)end
             end,true)
         end
+        local function remove_temporary(cb)
+            local temporary=c.temporary
+            if runtime.fs_unlink_checked then
+                if not c.temporary_identity then c.cleanup_error='temporary identity unavailable';cb('identity');return end
+                rpc('unlink_checked',{temporary,c.temporary_identity},function(err)
+                    if not err or absent(err)then c.temporary=nil else c.cleanup_error='temporary identity or unlink failure'end
+                    cb(err)
+                end,true)
+                return
+            end
+            rpc('lstat',{temporary},function(err,metadata)
+                if absent(err)then c.temporary=nil;cb();return end
+                if err or not same_identity(c.temporary_identity,revision(metadata))then
+                    c.cleanup_error='temporary identity changed';cb('identity');return
+                end
+                rpc('unlink',{temporary},function(problem)
+                    if not problem or absent(problem)then c.temporary=nil else c.cleanup_error='unlink'end
+                    cb(problem)
+                end,true)
+            end,true)
+        end
         cleanup=function(probe_only)
             local pending={};if not probe_only then for fd in pairs(c.fds)do pending[#pending+1]=fd end end
             local index=0
@@ -115,11 +138,7 @@ function M.new(opts)
                 index=index+1;local fd=pending[index]
                 if fd then close(fd,next_close);return end
                 if c.temporary and not next(c.fds)then
-                    local temporary=c.temporary
-                    rpc('unlink',{temporary},function(err)
-                        if not err or absent(err)then c.temporary=nil else c.cleanup_error='unlink'end
-                        publish()
-                    end,true)
+                    remove_temporary(publish)
                 else publish()end
             end
             next_close()
@@ -147,6 +166,7 @@ function M.new(opts)
                     if failure then fail('stat');return end
                     c.identities[fd]=revision(metadata)
                     if not c.identities[fd]then fail('stat');return end
+                    if file==c.temp_candidate then c.temporary_identity=copy(c.identities[fd])end
                     if proceed()then cb(fd)end
                 end)
             end,false,flags=='wx' and file==c.path)
@@ -260,7 +280,7 @@ function M.new(opts)
         end
         function handle.snapshot(_)return outcome()end
         c.stat=stat;c.open=open;c.read_snapshot=read_snapshot;c.write_bytes=write_bytes;c.sync_parent=sync_parent
-        c.rpc=rpc;c.fail=fail;c.proceed=proceed;c.publish=publish;c.cleanup=cleanup
+        c.rpc=rpc;c.fail=fail;c.proceed=proceed;c.publish=publish;c.cleanup=cleanup;c.remove_temporary=remove_temporary
         return c,handle
     end
     function fs.stat(_,file,done)
@@ -348,10 +368,14 @@ function M.new(opts)
                         if err or not same(revision(value),c.expected)then c.fail('conflict');return end
                         c.stat(c.path,function(last)
                             if not same(last,c.expected)then c.fail('conflict');return end
-                            c.rpc('ftruncate',{fd,0},function(failure)
-                                if failure then c.fail('truncate');return end
-                                c.target_uncertain=false;c.mutated=true;write()
-                            end,false,true)
+                            c.stat(c.backup_path,function(backup)
+                                if not same(backup,c.backup_revision)then c.backup_confirmed=false;c.fail('backup_changed');return end
+                                if runtime.require_preimage then runtime.require_preimage(c.backup_path,c.backup_revision)end
+                                c.rpc('ftruncate',{fd,0},function(failure)
+                                    if failure then c.backup_confirmed=false;c.fail('truncate');return end
+                                    c.target_uncertain=false;c.mutated=true;write()
+                                end,false,true)
+                            end)
                         end)
                     end)
                 end)
@@ -368,10 +392,16 @@ function M.new(opts)
                         c.rpc('link',{c.temporary,c.backup_path},function(err)
                             if err then c.fail('backup_publish');return end
                             c.backup_published=true
-                            c.rpc('unlink',{c.temporary},function(failure)
+                            c.remove_temporary(function(failure)
                                 if failure then c.fail('backup_cleanup');return end
-                                c.temporary=nil
-                                c.sync_parent(c.backup_path,function()c.backup_confirmed=true;target()end)
+                                c.sync_parent(c.backup_path,function()
+                                    c.read_snapshot(c.backup_path,nil,max_bytes-#c.content,function(bytes,observed)
+                                        if not same_identity(observed,c.temporary_identity) or bytes~=prior then
+                                            c.fail('backup_changed');return
+                                        end
+                                        c.backup_revision=observed;c.backup_confirmed=true;target()
+                                    end)
+                                end)
                             end)
                         end)
                     end)

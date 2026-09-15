@@ -7,8 +7,12 @@ describe('native captured subprocess authority',function()
     local root
     before_each(function()root=vim.fn.resolve(vim.fn.tempname());vim.fn.mkdir(root..'/inside','p');vim.fn.mkdir(root..'/outside','p')end)
     after_each(function()vim.fn.delete(root,'rf')end)
-    local function run(command,authority)
+    local function run(command,authority,private)
         local plan=assert(Scope.plan(command))[1]
+        if private then
+            plan.command=assert(require('parley.tools.traversal_policy').apply(plan.command,private,plan.path))
+            plan.target_position=plan.command[1]=='find' and 2 or #plan.command
+        end
         local argv=assert(Bootstrap.command(plan,authority));local executable=table.remove(argv,1)
         local value=vim.system(vim.list_extend({executable},argv),{text=true}):wait(10000)
         return value,Scope.restore(value.stdout or '',plan.path,plan.command[1])
@@ -113,6 +117,59 @@ describe('native captured subprocess authority',function()
         producer.cancel(handle);producer.close()
         assert.is_true(vim.wait(10000,function()return Tasker.stats().active==baseline end,1))
         assert.equals(0,delivered)
+    end)
+
+    for _,private_name in ipairs({'state','[state]*?'})do
+        it('keeps mandatory private exclusions after broad optional globs: '..private_name,function()
+            local state=root..'/'..private_name;local private=state..'/answer-recovery';vim.fn.mkdir(private,'p')
+            vim.fn.writefile({'PRIVATE_SECRET'},private..'/secret')
+            vim.fn.writefile({'PUBLIC_SECRET'},root..'/inside/public')
+            local value=produce('grep',{pattern='SECRET',path=root,glob='**/*',flags={'--hidden','--no-ignore'}},
+                {state_dir=state})
+            assert.is_false(value.is_error,value.content)
+            assert.truthy(value.content:find('PUBLIC_SECRET',1,true))
+            assert.is_nil(value.content:find('PRIVATE_SECRET',1,true))
+        end)
+    end
+
+    for _,backend in ipairs({'rg','grep','ack','find'})do
+        it('protects literal metacharacter private names with '..backend..' filters',function()
+            if vim.fn.executable(backend)~=1 then pending(backend..' unavailable');return end
+            local private=root..'/[private]*?\\suffix';vim.fn.mkdir(private,'p')
+            vim.fn.writefile({'PRIVATE_SECRET'},private..'/private.lua')
+            vim.fn.writefile({'PUBLIC_SECRET'},root..'/public.lua')
+            local command
+            if backend=='rg'then command={'rg','--glob','**/*','--hidden','--no-ignore','--','SECRET',root}
+            elseif backend=='grep'then command={'grep','-r','-H','--include','*','--','SECRET',root}
+            elseif backend=='ack'then command={'ack','-H','--type=lua','--','SECRET',root}
+            else command={'find',root,'-name','*'}end
+            local value,text=run(command,assert(A.capture({root})),private)
+            assert.equals(0,value.code,value.stderr)
+            assert.is_nil(text:find('PRIVATE_SECRET',1,true))
+            assert.is_nil(text:find('private.lua',1,true))
+            assert.truthy(text:find(backend=='find' and 'public.lua' or 'PUBLIC_SECRET',1,true))
+        end)
+    end
+    it('preserves exclusions across multiple captured search roots',function()
+        local state=root..'/inside/state';local private=state..'/answer-recovery';vim.fn.mkdir(private,'p')
+        vim.fn.writefile({'PRIVATE_SECRET'},private..'/secret')
+        vim.fn.writefile({'PUBLIC_SECRET'},root..'/outside/public')
+        local value=produce('grep',{pattern='SECRET',paths={root..'/inside',root..'/outside'},glob='**/*'},
+            {state_dir=state})
+        assert.is_false(value.is_error,value.content)
+        assert.is_nil(value.content:find('PRIVATE_SECRET',1,true))
+        assert.truthy(value.content:find('PUBLIC_SECRET',1,true))
+    end)
+
+    it('keeps chat-history glob expansion outside private recovery bytes',function()
+        local state=root..'/inside/state';local private=state..'/answer-recovery';vim.fn.mkdir(private,'p')
+        vim.fn.writefile({'PRIVATE_SECRET'},private..'/secret.md')
+        vim.fn.writefile({'PUBLIC_SECRET'},root..'/inside/public.md')
+        local value=produce('chat_history_search',{pattern='SECRET',glob='**/*'},
+            {state_dir=state,chat_roots={{dir=root..'/inside',label='fixture'}}})
+        assert.is_false(value.is_error,value.content)
+        assert.is_nil(value.content:find('PRIVATE_SECRET',1,true))
+        assert.truthy(value.content:find('PUBLIC_SECRET',1,true))
     end)
 
 end)

@@ -1452,3 +1452,23 @@ checked read (or a trusted bounded committed-byte receipt), not a fresh pathname
 guess. Cover autoread on/off, no_reload, before/after-completion human edits/ABA,
 reload/cancel and ancestor replacement during completion. ARCH-SECURE/ORDER,
 ARCH-DRY and ARCH-PURPOSE govern these full-class corrections.
+
+### 2026-09-15 — Concrete final M6 ownership mechanisms
+
+Reason: the second review's reproductions require identity and ownership through
+the last consumer. Delta: native path authority binds up to256 created identities
+within64KiB. Temporary source and published backup identity survive close; exact
+pre-image readback plus a full backup revision check at truncation prevent false
+backup confirmation. Cleanup refuses substituted leaves instead of deleting them.
+
+New `tools/traversal_policy.lua` is PURE and owns mandatory exclusions after
+optional filters and per-root expansion; it replaces async-local exclusion logic
+and Scope's separate string rewriting. Native rg/grep/ack/find, recursive ls,
+chat-history, multi-root, broad-glob/hidden/ignore, metacharacter/backslash-name
+and slash-root cases cover the adapter enumeration. Source skill completion uses
+one original proof and an identity-bound final read; intermediate tool refresh
+skips exactly that captured source buffer. Existing skill per-buffer ownership
+retains unknown reads, with a shared16-read/1MiB-per-read admission ceiling and
+five-second bounded polling. Logical completion releases its edit/UI authority;
+physical cleanup alone releases the retained slot. Tests cover both event orders,
+autoread on/off, late cleanup, cancellation/reload/detach, and a lost callback.

@@ -7,7 +7,6 @@ local source = debug.getinfo(1, 'S').source:sub(2)
 local help_root = source:match('^(.*)/lua/parley/tools/async_builtin%.lua$')
 help_root = help_root and (vim.uv or vim.loop).fs_realpath(help_root)
 local function result(name,content,failed)return {name=name,content=content,is_error=failed or false}end
-local function inside(parent,path)return path==parent or path:sub(1,#parent+1)==parent..'/'end
 local function await(method,...)
     local value=coroutine.yield({method=method,args={...}})
     if value.error_code or value.cancelled then error({outcome=value},0)end
@@ -80,31 +79,6 @@ local function help_body(input,context)
     return result('parley_help','    '..read(catalog.paths[input.topic]):gsub('\n','\n    '))
 end
 
--- Apply exclusions as argv before a traversal process can read private bytes.
--- rg/ack do not follow child symlinks. grep -r also leaves child symlinks alone.
-local function private_argv(command,context)
-    local private=context.private_directory
-    if not private then return command end
-    local out=vim.deepcopy(command);local program=out[1]
-    if program=='rg'then
-        local escaped=private:gsub('([%*%?%[%]{}!])', '\\%1')
-        table.insert(out,2,'--glob');table.insert(out,3,'!**'..escaped..'/**')
-    elseif program=='grep'then table.insert(out,2,'--exclude-dir='..private:match('[^/]+$'))
-    elseif program=='ack'then table.insert(out,2,'--ignore-dir=is:'..private:match('[^/]+$'))
-    elseif program=='find'then
-        -- Existing builder starts with a single canonical root, followed by predicates.
-        table.insert(out,3,'(');table.insert(out,4,'-path');table.insert(out,5,private)
-        table.insert(out,6,'-prune');table.insert(out,7,')');table.insert(out,8,'-o')
-        out[#out+1]='-print'
-    elseif program=='ls'then
-        for _,arg in ipairs(out)do
-            if arg:sub(1,1)=='-' and arg:find('R',1,true) and inside(out[#out],private)then
-                error({message='recursive listing overlaps private recovery storage'},0)
-            end
-        end
-    end
-    return out
-end
 
 local function execute(definition,input,context,done)
     input=vim.deepcopy(input or {})
@@ -116,7 +90,7 @@ local function execute(definition,input,context,done)
     if context.authority then fs=fs:authorized(context.authority)end
     local tasker=context.tasker or require('parley.tasker')
     local refresh=write_tools[definition.name] and type(input.file_path or input.path)=='string'
-        and require('parley.tools.file_refresh').capture(input.file_path or input.path) or nil
+        and require('parley.tools.file_refresh').capture(input.file_path or input.path,context.deferred_refresh_buf) or nil
     local cancelled,finished=false,false
     local active,sequence=nil,0
     local process_bytes=0
@@ -152,17 +126,25 @@ local function execute(definition,input,context,done)
     end
     local execution={chat_roots=context.chat_roots or {},root_policy=context.root_policy}
     execution.run=function(command)
-        command=private_argv(command,context)
+        local policy=require('parley.tools.traversal_policy')
         if not context.authority then
-            local observed=await('process',command)
+            local guarded,problem=policy.apply(command,context.private_directory)
+            if not guarded then error({message=problem},0)end
+            local observed=await('process',guarded)
             return observed.data,observed.code
         end
         local scope=require('parley.tools.process_scope')
-        local plans,problem=scope.plan(command,context.private_directory)
+        local plans,problem=scope.plan(command)
         if not plans then error({message=problem},0)end
         local outputs,code={},nil
         for _,plan in ipairs(plans)do
-            local observed=await('process',plan.command,plan)
+            local guarded,why=policy.apply(plan.command,context.private_directory,plan.path)
+            if not guarded then error({message=why},0)end
+            plan.command=guarded
+            -- Policy adds options before operands; the pinned target stays the
+            -- final search/ls operand, while find retains operand two.
+            plan.target_position=guarded[1]=='find' and 2 or #guarded
+            local observed=await('process',guarded,plan)
             local remaining=math.max(0,(context.max_bytes or 1048576)-process_formatted_bytes)
             local separator=#outputs>0 and remaining>0 and '\n' or ''
             local rendered,truncated=scope.restore(observed.data or '',plan.path,plan.command[1],remaining-#separator)

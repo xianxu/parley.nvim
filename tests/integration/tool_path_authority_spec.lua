@@ -111,4 +111,67 @@ describe('descriptor-relative tool path authority',function()
         assert.is_true(vim.wait(5000,function()return result~=nil end));assert.is_nil(result.error_code)
         assert.equals('applied',result.effect);assert.is_true(result.physical_resolved)
     end)
+    for _,kind in ipairs({'symlink','regular'})do
+        it('rejects '..kind..' substitution of the temporary pre-image before publication',function()
+            local dir=root..'/allowed/child';local file=dir..'/file'
+            local A=require('parley.tools.path_authority')
+            local runtime=A.runtime(assert(A.capture({dir,file},{{path=dir,scope='subtree'}})))
+            local fs=require('parley.tools.filesystem').new({runtime=runtime})
+            local before;fs:read(file,function(v)before=v end);assert.is_true(vim.wait(5000,function()return before~=nil end))
+            local link=runtime.fs_link;local substituted
+            runtime.fs_link=function(source,...)
+                substituted=source;assert(uv.fs_unlink(source))
+                if kind=='symlink'then assert(uv.fs_symlink(root..'/outside/file',source))
+                else vim.fn.writefile({'REPLACED'},source)end
+                return link(source,...)
+            end
+            local result;fs:write_checked({path=file,content='CHANGED',expected=before.revision,backup_path=file..'.backup'},function(v)result=v end)
+            assert.is_true(vim.wait(5000,function()return result~=nil end))
+            assert.equals('not_applied',result.effect);assert.is_false(result.evidence.backup_confirmed)
+            assert.same({'INSIDE'},vim.fn.readfile(file));assert.is_not_nil(uv.fs_lstat(substituted),'replacement must not be unlinked')
+        end)
+    end
+    for _,stage in ipairs({'after-link','same-inode-content','before-truncate'})do
+        it('keeps the target intact when backup proof changes at '..stage,function()
+            local dir=root..'/allowed/child';local file=dir..'/file';local backup=file..'.backup'
+            local A=require('parley.tools.path_authority')
+            local runtime=A.runtime(assert(A.capture({dir,file},{{path=dir,scope='subtree'}})))
+            local fs=require('parley.tools.filesystem').new({runtime=runtime})
+            local before;fs:read(file,function(v)before=v end);assert.is_true(vim.wait(5000,function()return before~=nil end))
+            local link=runtime.fs_link
+            runtime.fs_link=function(source,dest,cb)
+                if stage=='same-inode-content'then vim.fn.writefile({'TAMPERED'},source)end
+                return link(source,dest,function(err,value)
+                    vim.schedule(function()
+                        if not err and stage=='after-link'then assert(uv.fs_unlink(dest));vim.fn.writefile({'REPLACEMENT'},dest)end
+                        cb(err,value)
+                    end)
+                end)
+            end
+            if stage=='before-truncate'then
+                local truncate=runtime.fs_ftruncate
+                runtime.fs_ftruncate=function(...)
+                    assert(uv.fs_unlink(backup));vim.fn.writefile({'REPLACEMENT'},backup);return truncate(...)
+                end
+            end
+            local result;fs:write_checked({path=file,content='CHANGED',expected=before.revision,backup_path=backup},function(v)result=v end)
+            assert.is_true(vim.wait(5000,function()return result~=nil end))
+            assert.are_not.equals('applied',result.effect);assert.same({'INSIDE'},vim.fn.readfile(file))
+            assert.is_not_nil(uv.fs_lstat(backup),'replacement backup is not our cleanup target')
+        end)
+    end
+    it('binds newly created directory identities before descendant effects',function()
+        local dir=root..'/allowed/child';local A=require('parley.tools.path_authority')
+        local runtime=A.runtime(assert(A.capture({dir},{{path=dir,scope='subtree'}})))
+        local mkdir=runtime.fs_mkdir;local substituted=false
+        runtime.fs_mkdir=function(path,mode,cb)return mkdir(path,mode,function(err,value)
+            if not err and not substituted then
+                substituted=true;assert(uv.fs_rename(path,path..'-moved'));assert(uv.fs_symlink(root..'/outside',path))
+            end
+            cb(err,value)
+        end)end
+        local result;require('parley.tools.filesystem').new({runtime=runtime}):ensure_dir({path=dir..'/new/nested',root=dir},function(v)result=v end)
+        assert.is_true(vim.wait(5000,function()return result~=nil end))
+        assert.is_true(substituted);assert.is_nil(uv.fs_stat(root..'/outside/nested'));assert.is_not_nil(result.error_code)
+    end)
 end)

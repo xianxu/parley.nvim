@@ -1,7 +1,7 @@
 -- Pure argv planning: each builtin traversal runs against one pinned target.
 local M={exec_marker='PARLEY_SCOPED_EXEC\n'}
 local function copy(value)local out={};for i,v in ipairs(value)do out[i]=v end;return out end
-function M.plan(command,private)
+function M.plan(command)
     if type(command)~='table' then return nil,'invalid scoped command'end
     local program=command[1]
     local positions={}
@@ -23,24 +23,6 @@ function M.plan(command,private)
             for i=#argv,positions[1],-1 do table.remove(argv,i)end
             argv[#argv+1]='.'
         else argv[position]='.'end
-        -- A find prune target is below the pinned directory; keep that exclusion
-        -- effective after replacing its original absolute traversal operand.
-        if program=='rg' and private and private:sub(1,#path+1)==path..'/'then
-            local function escaped(value)return (value:gsub('([%*%?%[%]{}!])','\\%1'))end
-            local original='!**'..escaped(private)..'/**'
-            for i=3,#argv do
-                if argv[i-1]=='--glob' and argv[i]==original then
-                    argv[i]='!**/'..escaped(private:sub(#path+2))..'/**'
-                end
-            end
-        end
-        if program=='find'then
-            for i=3,#argv do
-                if argv[i-1]=='-path' and argv[i]:sub(1,#path+1)==path..'/'then
-                    argv[i]='.'..argv[i]:sub(#path+1)
-                end
-            end
-        end
         plans[#plans+1]={path=path,command=argv,target_position=(program=='find' and 2 or #argv)}
     end
     return plans
@@ -63,7 +45,8 @@ function M.restore(text,path,program,maximum)
             local tail=line:match('^/dev/fd/%d+(.*)$')
             if tail then rendered=path..tail
             elseif line=='.'then rendered=path
-            elseif line:sub(1,2)=='./' or line:sub(1,2)=='.:'then rendered=path..line:sub(2)end
+            elseif line:sub(1,2)=='./'then rendered=(path=='/' and '' or path)..line:sub(2)
+            elseif line:sub(1,2)=='.:'then rendered=path..line:sub(2)end
         end
         if ending then rendered=rendered..'\n'end
         local remaining=math.max(0,maximum-used)

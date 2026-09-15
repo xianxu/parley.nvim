@@ -203,3 +203,26 @@ scheduler caps, paging, normalization, path-label expansion, serialization,
 provider continuation and skill results. Body retention remains capped. Fixed
 notices use at most72 metadata bytes per result (9216 across128 records), including
 zero body capacity; they cannot disappear into an empty apparent success.
+
+### Publication identity and final source ownership
+
+A completed temporary pre-image keeps its descriptor-derived identity through
+link publication and cleanup. The published backup is checked for exact bytes
+and identity after directory sync; native truncation revalidates its revision.
+Substituted temporary/backup leaves are not certified or deleted. Dynamic created
+identities are bounded to256 entries/64KiB per authority. Uncertain artifact
+obligations remain visible separately from unresolved descriptors.
+
+`traversal_policy` applies mandatory exclusions after each target is expanded and
+after optional filters. Literal-safe rg/grep/find patterns and exact ack directory
+exclusion prevent globs, hidden/ignore flags or metacharacter names from widening
+private access. Recursive ls still refuses overlap. Chat-history search shares
+the same policy; there is no independent exclusion-string implementation.
+
+Skills defer intermediate refresh only for their captured source buffer, leaving
+other open buffers on the shared tool-refresh path. The skill owns the original
+User proof and final identity-bound read; it cannot forgive its own or a human's
+unrelated edit by recapturing authority. Up to16 final source reads retain at most
+1MiB each. Cancellation revokes logical completion but retains the per-buffer
+physical slot until cleanup is positive. Reconciliation stops polling after five
+seconds and reports uncertainty; a late positive callback can still retire it.

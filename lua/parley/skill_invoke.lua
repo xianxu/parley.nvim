@@ -26,7 +26,10 @@ local _in_flight = {}
 -- (killed) query's late callback can't clobber the new one's state. (#133)
 local _gen = {}
 -- The exact-once terminal owned by the active generation for each buffer.
+-- Cancelled final reads keep this physical owner until positive cleanup.
 local _terminals = {}
+local source_reads=0
+local MAX_SOURCE_READS=16 -- at most 16MiB of final-read capture across buffers
 
 --- Is a skill exchange in flight for `buf`? Cleared on on_exit/on_abort, so an
 --- abort that can't start the query doesn't block the buffer forever (#131).
@@ -36,10 +39,8 @@ function M.is_in_flight(buf)
     return _in_flight[buf] == true
 end
 
---- Cancel an in-flight exchange for `buf`: invalidate it (bump the generation so
---- its callback no-ops), clear the in-flight flag, and stop the running query.
---- `tasker.stop` halts in-flight queries (review is headless, so this is the
---- review job). Lets a new round supersede a stuck/slow one (#133).
+--- Cancel this buffer's provider/tool owners and revoke source-edit permission.
+--- An unresolved final read keeps its admission slot until positive cleanup.
 --- @param buf number
 function M.cancel(buf)
     local finish = _terminals[buf]
@@ -47,8 +48,7 @@ function M.cancel(buf)
         finish({ ok = false, msg = "cancelled" }, false)
     end
     _gen[buf] = (_gen[buf] or 0) + 1
-    _in_flight[buf] = nil
-    pcall(function() require("parley.tasker").stop() end)
+    if not _terminals[buf] then _in_flight[buf] = nil end
 end
 
 local function parley()
@@ -107,13 +107,16 @@ function M.invoke(buf, manifest, args, opts)
     local assembly = require("parley.skill_assembly")
     local skill_render = require("parley.skill_render")
 
+    local terminal_callback,done_callback=opts.on_terminal,opts.on_done
     local function deliver_attempt(result, deliver_done)
-        if opts.on_terminal then
-            local ok = pcall(opts.on_terminal, result)
+        local terminal,done=terminal_callback,done_callback
+        terminal_callback,done_callback=nil,nil
+        if terminal then
+            local ok = pcall(terminal, result)
             if not ok then p.logger.error("skill terminal callback failed") end
         end
-        if deliver_done and opts.on_done then
-            local ok = pcall(opts.on_done, result)
+        if deliver_done and done then
+            local ok = pcall(done, result)
             if not ok then p.logger.error("skill completion callback failed") end
         end
     end
@@ -130,10 +133,19 @@ function M.invoke(buf, manifest, args, opts)
         return
     end
 
+    -- Continuations retain options, but must not retain UI callbacks after terminal.
+    local invocation_options={}
+    for key,value in pairs(opts)do
+        if key~='on_done' and key~='on_terminal' then invocation_options[key]=value end
+    end
+    opts=invocation_options
+
     -- This exchange's generation; on_exit/on_abort no-op if superseded (#133).
     local gen = (_gen[buf] or 0) + 1
     _gen[buf] = gen
-    local source_capture,tool_producer
+    local source_capture,tool_producer,source_read,source_filesystem,source_completion
+    local read_admitted,read_timer,read_deadline,read_delay=false,nil,nil,10
+    local retire_read,on_source_read
     local process_owner="skill:"..tostring(buf)..":"..tostring(gen)
     local finished = false
     local detached_progress = opts.detached_progress ~= false
@@ -141,14 +153,17 @@ function M.invoke(buf, manifest, args, opts)
     local function finish(result, deliver_done)
         if finished then return false end
         finished = true
+        source_completion=nil
+        if source_read then source_read:cancel() end
         if tool_producer then tool_producer.close();tool_producer=nil end
         tasker.stop_owner(process_owner)
         require("parley.buffer_edit").cancel_user(source_capture)
+        source_capture=nil
         if progress_started then
             pcall(function() require("parley.progress").stop() end)
             progress_started = false
         end
-        if _terminals[buf] == finish then
+        if not read_admitted and _terminals[buf] == finish then
             _terminals[buf] = nil
             _in_flight[buf] = nil
         end
@@ -156,6 +171,51 @@ function M.invoke(buf, manifest, args, opts)
         return true
     end
     _terminals[buf] = finish
+    local function stop_read_timer()
+        if read_timer then
+            local timer=read_timer;read_timer=nil
+            if not timer:is_closing()then timer:stop();timer:close()end
+        end
+    end
+    retire_read=function()
+        if not read_admitted then return end
+        read_admitted=false;source_reads=source_reads-1;source_read=nil;source_filesystem=nil
+        stop_read_timer()
+        if finished and _terminals[buf]==finish then _terminals[buf]=nil;_in_flight[buf]=nil end
+    end
+    local function reconcile_read()
+        if not read_admitted or read_timer then return end
+        read_timer=vim.defer_fn(function()
+            read_timer=nil
+            if not read_admitted or not source_read then return end
+            local handle=source_read
+            handle:reconcile()
+            local outcome=handle:snapshot()
+            if outcome and outcome.physical_resolved then on_source_read(outcome);return end
+            if vim.uv.hrtime()>=read_deadline then
+                p.logger.warning('Skill source read cleanup unresolved; buffer remains busy for reconciliation')
+                finish({ok=false,certainty='unknown',reconciliation_required=true,
+                    msg='Source read unresolved; skill result requires reconciliation'},true)
+                return
+            end
+            read_delay=math.min(read_delay*2,250);reconcile_read()
+        end,read_delay)
+    end
+
+    -- This callback retains only the physical owner after logical completion.
+    -- The payload/UI continuation is nullable and cleared by finish.
+    on_source_read=function(read)
+        if not read_admitted then return end
+        local continuation=source_completion
+        if read.physical_resolved then
+            source_completion=nil
+            retire_read()
+        end
+        if continuation and not finished then
+            local ok=pcall(continuation,read)
+            if not ok then finish({ok=false,msg='source completion failed',reconciliation_required=true},true)end
+        end
+    end
 
     local function start_invocation()
     if not vim.api.nvim_buf_is_valid(buf) then
@@ -191,6 +251,14 @@ function M.invoke(buf, manifest, args, opts)
             finish({ ok = false, msg = "source capture unavailable: " .. tostring(reason) }, true)
             return
         end
+    end
+    if not opts.no_reload then
+        local authority,reason=require('parley.tools.path_authority').capture({vim.fn.resolve(artifact_path)})
+        if not authority then
+            finish({ok=false,msg='source authority unavailable',reason=reason},true);return
+        end
+        source_filesystem=require('parley.tools.filesystem').new({max_bytes=1048576}):authorized(authority)
+        artifact_path=vim.fn.resolve(artifact_path)
     end
     -- source(ctx) does IO (reads SKILL.md / style guides) and can fail — e.g.
     -- voice_apply with a missing style file. Route the failure through the SAME
@@ -322,7 +390,7 @@ function M.invoke(buf, manifest, args, opts)
     local root_policy = neighborhood.policy_for_buf(buf)
         or neighborhood.policy_from_roots(vim.fn.fnamemodify(artifact_path, ":h"), nil, {})
     local tool_error
-    tool_producer,tool_error=require('parley.tools.producer').new({buf=buf,registry=tools_registry,
+    tool_producer,tool_error=require('parley.tools.producer').new({buf=buf,deferred_refresh_buf=buf,registry=tools_registry,
         allowed_tools=inv.tools,root_policy=root_policy,state_dir=p.config.state_dir,
         page_limit=p.config.tool_result_page_lines,
         help_root=vim.fn.fnamemodify(debug.getinfo(1,'S').source:sub(2):match('^(.*)/lua/parley/skill_invoke%.lua$'),':p')})
@@ -384,25 +452,7 @@ function M.invoke(buf, manifest, args, opts)
                         finish({ ok = false, msg = "buffer invalid" }, false)
                         return
                     end
-                    if not opts.no_reload then
-                        -- Unknown tool targets require the original whole-source proof.
-                        -- An external result never authorizes replacing newer live text.
-                        local edits = require("parley.buffer_edit")
-                        local live, reason = edits.resolve_user(source_capture)
-                        local result
-                        if live then
-                            local disk = table.concat(vim.fn.readfile(artifact_path), "\n")
-                            result = edits.apply_user(source_capture, { { region = 1, text = disk } })
-                        end
-                        if not live or result.status ~= "applied" then
-                            local msg = "Live text changed; skill result remains on disk for reconciliation"
-                            p.logger.warning(msg .. ": " .. artifact_path)
-                            finish({ ok = false, msg = msg, reason = reason or result and result.reason,
-                                reconciliation_required = true, external_path = artifact_path,
-                                calls = calls, results = results, original = original }, true)
-                            return
-                        end
-                    end
+                    local function deliver_completion()
                     if not vim.api.nvim_buf_is_valid(buf) then
                         finish({ ok = false, msg = "buffer invalid" }, false)
                         return
@@ -442,6 +492,40 @@ function M.invoke(buf, manifest, args, opts)
                         new_content = new_content,
                         decorations = decorations,
                     }, true)
+                    end
+                    if opts.no_reload then deliver_completion();return end
+                    local edits=require('parley.buffer_edit')
+                    local function refuse(reason)
+                        finish({ok=false,msg='Live text or source authority changed; skill result remains on disk for reconciliation',
+                            reason=reason,reconciliation_required=true,external_path=artifact_path,
+                            calls=calls,results=results,original=original},true)
+                    end
+                    if not edits.resolve_user(source_capture) then refuse('source changed');return end
+                    if source_reads>=MAX_SOURCE_READS then refuse('source read capacity');return end
+                    source_reads=source_reads+1;read_admitted=true
+                    read_deadline=vim.uv.hrtime()+5000000000
+                    source_completion=function(read)
+                        if not read.physical_resolved then
+                            if read.error_code then refuse(read.error_code) end
+                            return
+                        end
+                        if finished or _gen[buf]~=gen then return end
+                        if read.error_code or read.certainty~='known' or type(read.data)~='string' then
+                            refuse(read.error_code or 'source read unresolved');return
+                        end
+                        if not edits.resolve_user(source_capture) then refuse('source changed');return end
+                        -- readfile compatibility: a final file newline is buffer metadata.
+                        local disk=read.data:gsub('\r\n','\n'):gsub('\n$','')
+                        local receipt=edits.apply_user(source_capture,{{region=1,text=disk}})
+                        if receipt.status~='applied' then refuse(receipt.reason);return end
+                        deliver_completion()
+                    end
+                    local handle=source_filesystem:read(artifact_path,on_source_read)
+                    if read_admitted then
+                        source_read=handle
+                        if finished then source_read:cancel()end
+                        reconcile_read()
+                    end
                     end
                     local remaining=#calls
                     local uncertain=false

@@ -84,6 +84,8 @@ local function worker(encoded)
     local cloexec=ffi.os=='OSX' and 16777216 or 524288
     local nonblock=ffi.os=='OSX' and 4 or 2048
     local owned={}
+    local bindings={}
+    local created={}
     local function close(fd)
         local ok=uv.fs_close(fd);if ok then owned[fd]=nil end;return ok
     end
@@ -108,6 +110,21 @@ local function worker(encoded)
         return fd,parts[#parts] or '.'
     end
     local function execute()
+        if spec.name=='ftruncate'then
+            local guard=spec.preimage
+            if not guard then return nil,'EACCES: checked pre-image required'end
+            local parent,leaf=pin(guard.path);if not parent then return nil,leaf end
+            local fd=ffi.C.openat(parent,leaf,nofollow+cloexec+nonblock)
+            if fd<0 then return nil,error_code()end;fd=tonumber(fd);owned[fd]=true
+            local stat=uv.fs_fstat(fd);local expected=guard.revision
+            if not stat or stat.dev~=expected.dev or stat.ino~=expected.ino or stat.type~=expected.type
+                or stat.size~=expected.size or stat.mode~=expected.mode
+                or stat.mtime.sec~=expected.mtime.sec or stat.mtime.nsec~=expected.mtime.nsec
+                or stat.ctime.sec~=expected.ctime.sec or stat.ctime.nsec~=expected.ctime.nsec then
+                return nil,'ESTALE: durable pre-image changed before truncate'
+            end
+            return uv.fs_ftruncate(spec.args[1],spec.args[2])
+        end
         local parent,leaf=pin(spec.args[1]);if not parent then return nil,leaf end
         local name=spec.name
         if name=='open' or name=='lstat'then
@@ -120,21 +137,56 @@ local function worker(encoded)
             end
             local fd=ffi.C.openat(parent,leaf,flags+nofollow+cloexec+nonblock,ffi.cast('unsigned int',spec.args[3] or 0))
             if fd<0 then return nil,error_code()end;fd=tonumber(fd);owned[fd]=true
+            if name=='open' and spec.args[2]=='wx'then created[spec.args[1]]=true end
             local stat,err=uv.fs_fstat(fd);if not stat then return nil,err end
             if stat.type~='file' and stat.type~='directory'then return nil,'EACCES: unsupported resource type'end
             local expected=spec.evidence[spec.args[1]]
             if expected and (stat.dev~=expected.dev or stat.ino~=expected.ino or stat.type~=expected.type)then
                 return nil,'ESTALE: resource identity changed'
             end
-            if name=='open'then owned[fd]=nil;return fd end
+            if name=='open'then
+                if spec.args[2]=='wx'then
+                    bindings[spec.args[1]]={dev=stat.dev,ino=stat.ino,type=stat.type};created[spec.args[1]]=nil
+                end
+                owned[fd]=nil;return fd
+            end
             return stat
         elseif name=='mkdir'then
-            if ffi.C.mkdirat(parent,leaf,spec.args[2])~=0 then return nil,error_code()end;return true
+            if ffi.C.mkdirat(parent,leaf,spec.args[2])~=0 then return nil,error_code()end
+            created[spec.args[1]]=true
+            local fd=ffi.C.openat(parent,leaf,nofollow+directory+cloexec)
+            if fd<0 then return nil,error_code()end;fd=tonumber(fd);owned[fd]=true
+            local stat=uv.fs_fstat(fd);if not stat then return nil,'EIO: created directory identity unavailable'end
+            bindings[spec.args[1]]={dev=stat.dev,ino=stat.ino,type=stat.type};created[spec.args[1]]=nil;return true
         elseif name=='unlink'then
+            local expected=spec.evidence[spec.args[1]]
+            if not expected then return nil,'ESTALE: unlink requires owned leaf identity'end
+            local fd=ffi.C.openat(parent,leaf,nofollow+cloexec+nonblock)
+            if fd<0 then return nil,error_code()end;fd=tonumber(fd);owned[fd]=true
+            local stat=uv.fs_fstat(fd)
+            if not stat or stat.dev~=expected.dev or stat.ino~=expected.ino or stat.type~=expected.type then
+                return nil,'ESTALE: cleanup leaf replaced'
+            end
             if ffi.C.unlinkat(parent,leaf,0)~=0 then return nil,error_code()end;return true
         elseif name=='link'then
+            local expected=spec.evidence[spec.args[1]]
+            if not expected then return nil,'ESTALE: publication requires owned leaf identity'end
+            local fd=ffi.C.openat(parent,leaf,nofollow+cloexec+nonblock)
+            if fd<0 then return nil,error_code()end;fd=tonumber(fd);owned[fd]=true
+            local source=uv.fs_fstat(fd)
+            if not source or source.dev~=expected.dev or source.ino~=expected.ino or source.type~='file'then
+                return nil,'ESTALE: pre-image leaf replaced'
+            end
             local other,target=pin(spec.args[2]);if not other then return nil,target end
-            if ffi.C.linkat(parent,leaf,other,target,0)~=0 then return nil,error_code()end;return true
+            if ffi.C.linkat(parent,leaf,other,target,0)~=0 then return nil,error_code()end
+            created[spec.args[2]]=true
+            local published=ffi.C.openat(other,target,nofollow+cloexec+nonblock)
+            if published<0 then return nil,error_code()end;published=tonumber(published);owned[published]=true
+            local stat=uv.fs_fstat(published)
+            if not stat or stat.dev~=source.dev or stat.ino~=source.ino or stat.type~='file'then
+                return nil,'ESTALE: published pre-image identity changed'
+            end
+            bindings[spec.args[2]]={dev=stat.dev,ino=stat.ino,type=stat.type};created[spec.args[2]]=nil;return true
         end
         return nil,'EINVAL'
     end
@@ -147,15 +199,20 @@ local function worker(encoded)
         local out={'{'};for k,x in pairs(v)do out[#out+1]='['..serialize(k)..']='..serialize(x)..','end
         out[#out+1]='}';return table.concat(out)
     end
-    if not ok then return serialize({error=tostring(value),unresolved=unresolved})end
-    return serialize({value=value,error=err,unresolved=unresolved})
+    if not ok then return serialize({error=tostring(value),unresolved=unresolved,bindings=bindings,created=created})end
+    return serialize({value=value,error=err,unresolved=unresolved,bindings=bindings,created=created})
 end
 function M.runtime(token)
     local authority=tokens[token];assert(authority,'invalid path authority')
-    local evidence=authority.evidence
+    local evidence=vim.deepcopy(authority.evidence)
+    local additions=0
+    local preimage
     local uv=vim.uv or vim.loop;local runtime=setmetatable({},{__index=uv})
     local unresolved={}
+    local uncertain_created={}
     function runtime.unresolved()return next(unresolved)~=nil end
+    function runtime.uncertain_artifacts()return vim.deepcopy(uncertain_created)end
+    function runtime.uncertain()return next(uncertain_created)~=nil end
     function runtime.reconcile()
         for fd,identity in pairs(unresolved)do
             local stat,err=uv.fs_fstat(fd)
@@ -171,20 +228,41 @@ function M.runtime(token)
         end
         return false
     end
-    for _,name in ipairs({'open','lstat','mkdir','link','unlink'})do
+    function runtime.require_preimage(path,revision)
+        assert(permitted(path),'pre-image outside captured authority')
+        preimage={path=path,revision=vim.deepcopy(revision)}
+    end
+    for _,name in ipairs({'open','lstat','mkdir','link','unlink','ftruncate'})do
         runtime['fs_'..name]=function(...)
             local args={...};local callback=table.remove(args)
-            if not permitted(args[1]) or name=='link' and not permitted(args[2])then
+            if name~='ftruncate' and (not permitted(args[1]) or name=='link' and not permitted(args[2]))then
                 vim.schedule(function()callback('EACCES: outside captured resources')end);return {}
             end
             local work
             work=uv.new_work(worker,function(encoded)
                 local result=assert(loadstring('return '..encoded))()
                 for _,item in ipairs(result.unresolved or {})do unresolved[item.fd]=item.identity or false end
+                for path in pairs(result.created or {})do uncertain_created[path]=true end
+                for path,identity in pairs(result.bindings or {})do
+                    if not evidence[path]then additions=additions+1 end
+                    evidence[path]=identity
+                end
                 callback(result.error,result.value);work=nil
             end)
-            work:queue(encode({name=name,args=args,evidence=evidence}));return work
+            local creates=name=='mkdir' or name=='link' or name=='open' and args[2]=='wx'
+            local newpath=name=='link' and args[2] or args[1]
+            if creates and (additions>=256 or #encode(evidence)+#newpath+128>65536)then
+                vim.schedule(function()callback('E2BIG: created resource identity capacity')end);return {}
+            end
+            work:queue(encode({name=name,args=args,evidence=evidence,preimage=preimage}));return work
         end
+    end
+    function runtime.fs_unlink_checked(path,expected,callback)
+        local bound=evidence[path]
+        if not bound or not expected or bound.dev~=expected.dev or bound.ino~=expected.ino or bound.type~=expected.type then
+            vim.schedule(function()callback('ESTALE: cleanup identity unavailable')end);return {}
+        end
+        return runtime.fs_unlink(path,callback)
     end
     return runtime
 end

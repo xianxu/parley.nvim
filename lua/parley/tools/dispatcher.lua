@@ -336,6 +336,7 @@ local profiles=setmetatable({},{__mode='k'})
 local preparations=setmetatable({},{__mode='k'})
 function M.capture(definitions,opts)
     if type(definitions)~='table' or type(opts)~='table' or type(opts.root_policy)~='table'then return nil,'captured root policy required'end
+    if opts.deferred_refresh_buf~=nil and opts.deferred_refresh_buf~=opts.buf then return nil,'invalid deferred refresh owner'end
     local policy=vim.deepcopy(opts.root_policy)
     policy.write_root=M.canonical_path(policy.write_root)
     if not policy.write_root then return nil,'invalid write root'end
@@ -346,7 +347,7 @@ function M.capture(definitions,opts)
     end
     policy.read_roots=roots
     local context={root_policy=policy,cwd=policy.write_root}
-    for _,key in ipairs({'buf','chat_roots','help_root','help_catalog','max_file_bytes','max_bytes'})do
+    for _,key in ipairs({'buf','chat_roots','help_root','help_catalog','max_file_bytes','max_bytes','deferred_refresh_buf'})do
         context[key]=vim.deepcopy(opts[key])
     end
     local private=opts.private_directory or opts.state_dir and require('parley.recovery_paths').directory(opts.state_dir)

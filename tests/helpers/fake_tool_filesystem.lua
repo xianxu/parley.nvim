@@ -62,6 +62,11 @@ function M.new()
         if s.files[new]then return 'EEXIST'end
         if not s.files[old]then return 'ENOENT'end;s.files[new]=s.files[old];return nil,true
     end)end
+    runtime.fs_unlink_checked=function(path,expected,cb)return enqueue('unlink',{path},cb,function()
+        local f=s.files[path];if not f then return 'ENOENT'end
+        if not expected or f.dev~=expected.dev or f.ino~=expected.ino or f.type~=expected.type then return 'ESTALE'end
+        s.files[path]=nil;return nil,true
+    end)end
     runtime.fs_unlink=function(path,cb)return enqueue('unlink',{path},cb,function()
         if not s.files[path]then return 'ENOENT'end;s.files[path]=nil;return nil,true
     end)end

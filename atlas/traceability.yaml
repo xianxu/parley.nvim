@@ -792,6 +792,7 @@ atlas:
       - lua/parley/tools/filesystem.lua
       - lua/parley/tools/path_authority.lua
       - lua/parley/tools/process_scope.lua
+      - lua/parley/tools/traversal_policy.lua
       - lua/parley/tools/process_bootstrap.lua
       - scripts/tool_process.lua
       - lua/parley/tools/file_transform.lua
@@ -814,6 +815,7 @@ atlas:
       - tests/integration/chat_async_tools_spec.lua
       - tests/unit/tool_path_authority_lifecycle_spec.lua
       - tests/unit/tool_process_scope_spec.lua
+      - tests/unit/tool_traversal_policy_spec.lua
       - tests/unit/tool_file_transform_spec.lua
       - tests/unit/tool_result_evidence_spec.lua
       - tests/integration/tool_path_authority_spec.lua

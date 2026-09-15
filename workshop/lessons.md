@@ -2633,3 +2633,10 @@ download.
 - #254 BR27: enumerate every lossy output stage and consumer. Body limits must
   preserve bounded visible incompleteness and reconciliation metadata even at
   zero remaining capacity; test the final provider/skill representation.
+
+- #254 BR25/29: carry leaf identity through publication and cleanup, not only
+  ancestor traversal. Mandatory exclusions run after optional filters and target
+  expansion; test actual backend precedence and literal metacharacter paths.
+- #254 BR30: two layers must not independently refresh one source buffer. Keep
+  one original proof and one completion owner, and separate logical completion
+  from retained physical-read cleanup when cancellation or a callback is lost.

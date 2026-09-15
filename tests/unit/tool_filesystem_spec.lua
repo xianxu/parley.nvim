@@ -16,6 +16,26 @@ local function write(fs,revision,done,extra)
 end
 
 describe('checked asynchronous tool filesystem',function()
+    for _,boundary in ipairs({'link','unlink'})do
+        it('preserves a substituted temporary leaf at the '..boundary..' effect boundary',function()
+            local fs,f=fixture();local prior=read(fs,f);local replaced
+            f.fail(boundary,{before=function(state,args)
+                replaced=args[1];state.put(replaced,'unrelated replacement')
+            end})
+            local result;write(fs,prior.revision,function(r)result=r end);f.drain()
+            assert.equals('original',f.files['/file'].bytes)
+            assert.equals('unrelated replacement',f.files[replaced].bytes)
+            assert.equals('not_applied',result.effect);assert.is_false(result.evidence.backup_confirmed)
+            assert.equals(0,f.count('ftruncate'))
+        end)
+    end
+    it('requires exact saved pre-image bytes even when temporary identity is unchanged',function()
+        local fs,f=fixture();local prior=read(fs,f)
+        f.fail('link',{before=function(state,args)state.files[args[1]].bytes='tampered same inode'end})
+        local result;write(fs,prior.revision,function(r)result=r end);f.drain()
+        assert.equals('original',f.files['/file'].bytes);assert.equals('not_applied',result.effect)
+        assert.is_false(result.evidence.backup_confirmed);assert.equals(0,f.count('ftruncate'))
+    end)
     it('uses callback IO and publishes a checked backup before truncation',function()
         local fs,f=fixture();local prior=read(fs,f);assert.equals('original',prior.data)
         f.short_write=2;local result
