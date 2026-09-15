@@ -1011,6 +1011,29 @@ assertions remain in place. Editor frame proof and finite released insertion fix
 are underway; captured footer exclusion and terminal failure-notice ordering have
 been implemented and are being rechecked. This is WIP, not an M4 completion claim.
 
+
+### 2026-09-15 — BR-11/BR-12 fixed and M4 checkpoint preserved
+
+The fold class fix restores captured window state regardless of publication
+supersession, constructs window plans atomically, discards only the expected job,
+and reschedules surviving windows after setup interruption. Four added native
+controls fail with the prior file; 43 focused tests (eight reentrancy plus existing
+fold/batch/retention/join suites) pass, including broad native folds. Full lint
+checks 506 files without warnings/errors. The fourth review's ledger refusal
+requires another review to dispose BR-11/BR-12; the per-boundary budget is extended
+to five, with all review/ledger gates still enabled.
+
+M4 checkpoint `3954cc0d` commits production response composition in isolated
+staging. Follow-up native regressions now pass: 23 migrated public response cases,
+21 completion cases, five ownership cases, seven stateful-process progress cases,
+six public scoped-response cases and 62 branch cases. Lint checked 548 files clean.
+The first owned native append now authenticates a captured frame even after save
+advances changedtick without callbacks. Normal typing/streaming aggregate repair
+remains under investigation: a 1,000-row probe preserved bytes but repaired 1,639
+rows. Tracing identifies structural-token fallback overbroad dependency channels
+and loss of the prepared tail-row extent for a newline append. No performance
+completion is claimed; M4 legacy removal/full verification and M5/M6 remain.
+
 ## Revisions
 
 ### 2026-09-14 — Incremental rendering is part of the core contract
