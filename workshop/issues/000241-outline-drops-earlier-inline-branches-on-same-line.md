@@ -1,12 +1,13 @@
 ---
 id: 000241
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-09-12
 updated: 2026-09-14
 estimate_hours: 0.3075
 started: 2026-09-14T18:16:23-07:00
+actual_hours: 0.09
 ---
 
 # Chat outline shows only the last inline branch on a line: the tree builder keys branches by line number, so a second [🌿:…](…) on the same line overwrites the first
@@ -82,6 +83,8 @@ more than one branch per line — a map where a list was needed.
 
 ## Log
 
+
+- 2026-09-14: closed — All 185 tests in five ui/outline specs pass; four same-line regressions RED then GREEN, mixed branch parity and existing child-file navigation pass; lint451 files clean; diff check clean.; review verdict: SHIP
 ### 2026-09-12
 
 - Filed from the brain advisor session. Reproduced by running
@@ -113,3 +116,5 @@ total: 0.3075
 ### 2026-09-14 — Implementation and verification
 
 Plan-quality CLEAN in one round; estimate-quality INFO (small budget relies on reuse; review allowance includes close/PR bookkeeping). Real-file regressions: all four same-line cases failed before the fix, while all four mixed standalone/inline cases passed. After ordered-array grouping, all eight cases pass, including exact source/child attribution, left-to-right order and interleaved child questions/annotations under independent expansion states. Existing #250 navigation tests still pass. `make test-spec SPEC=ui/outline` and `make lint` passed (451 files, zero warnings/errors); `git diff --check` clean. No parser or navigation change. Unrelated local prompt/chat edits preserved.
+
+Fresh review: SHIP, no findings. Reviewer independently verified190 passing tests and repeated the base/head regression check in an isolated archive. Correction to the close command's evidence count: the five specs contain190 tests, not185; the complete suite was run in both checks.
