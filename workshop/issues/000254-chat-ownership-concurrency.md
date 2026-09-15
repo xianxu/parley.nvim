@@ -1082,3 +1082,12 @@ separately integrated and checkpointed at43e7e3a7 in /tmp/parley254-integrate,
 passing131unique mapped files/1624tests and556-file lint; its combined fullperf
 is running. An unrelated workshop/parley transcript modification is present in
 this feature worktree and is not part of these issue/review commits.
+
+### 2026-09-15 — Codex reviewer result
+
+Codex reviewed2afd7de9..7507d370, verdict REWORK. BR-12 disposed; BR-11 remains
+open for cancellation inside already-suspended fold slices. Native red reproduced;
+focused cleanup-ownership fix and regression matrix are in progress. Plan revision
+records the corrected ownership rule. Operator requested Codex for every remaining
+review. M4 combined benchmark passed all hard gates; M5 work remains isolated until
+M3/M4 boundaries close.
