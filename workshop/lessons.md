@@ -2507,3 +2507,18 @@ download.
 - Measure deferred work through semantic convergence. A fast Enter/Backspace
   callback can still queue a whole-document repair; immediate counters alone
   conceal that cost.
+
+## 2026-09-15 (#254 M3 boundary review)
+
+- Native undo may expose final buffer text while delivering intermediate edits.
+  Matching row and byte counts does not prove coordinate-frame provenance.
+  Conformance must assert settled semantic parity under equal-size shifted edits.
+- Surviving row identity proves neither current role nor current fence context.
+  Apply the same semantic-evidence rule to highlighting, folds and write authority;
+  never encode stale presentation as an expected test result.
+- Weak-key tables do not collect a key retained by its value's callback under
+  LuaJIT. Break callback cycles on detach and test native weak-reference collection
+  and autocmd removal independently of buffer validity checks.
+- At a review boundary, compare the full concept/function inventory with the
+  actual diff. Distinguish reused policy, documentation-only changes and explicitly
+  deferred consumers; proposed function names are not implementation evidence.

@@ -644,3 +644,65 @@ Enter+join six; viewport redraw no semantic rows; all hot phases have zero full
 buffer reads. Timing remains report-only and was collected with concurrent test
 load: the 5,000-row stream/human p95 is 52.326 ms. This does not meet the 8 ms
 aspiration; M4 still owns removal of the legacy generation model/stream rewrite.
+
+### 2026-09-15 — M3 review inventory correction (BR-7)
+
+Reason: the original proposal names anticipated files/functions that were not the
+ones delivered. Delta: the following is the **current M3 inventory**, superseding
+the original M3 rows in Core concepts, Integration points, Files, and the
+function-level strategy table. The original proposal remains as design history.
+No unchanged module is claimed as modified merely because a caller now reuses it.
+
+| Current entity or integration | Actual module(s) | M3 change and ownership |
+|---|---|---|
+| Ownership transitions and resolution | `document/state.lua` | New private grants, dependency snapshots, lifetime transitions; no editor IO. |
+| Buffer coordinator | `document/init.lua` | New composition of index, state, editor, query subscriptions and bounded repair. |
+| Native editor boundary | `document/editor.lua` | New native observation, byte-frame normalization, scoped patches, exact receipts and undo separation. |
+| Indexed semantic projection | `document/projection.lua` | New aggregate summaries, exchange lookup, fold pagination and projection validation; owns live projected ranges. |
+| Existing fold policy | `fold_projection.lua` | Reused unchanged. `is_foldable` supplies policy; `desired_folds` remains the materialized-model oracle. There is no `fold_projection.project`. |
+| Materialized layout | `exchange_model.lua` | Documentation-only correction of its scope. Existing pure layout implementation remains for materialization and legacy generation preparation; live rendering no longer treats it as authority. |
+| Legacy buffer primitives | `buffer_edit.lua` | Unchanged at M3. Generation and explicit-user mutation migration remains M4; M3 adds the editor boundary that it will use. |
+| Live rendering | `highlighter.lua`, `tool_folds.lua`, `outline.lua` | Modified to use coordinator queries; per-consumer authoritative structural caches removed. |
+| Live diagnostics | `diagnostic_refresh.lua`, `define.lua`, `skill_render.lua`, `timezone_diagnostics.lua` | Modified to use indexed candidate discovery, bounded derivation and scheduled publication. |
+| Fair scheduled work | `deferred_work.lua` | New coalesced timer work lifecycle shared by repair, folds, outline and diagnostics. |
+| Teardown | `buffer_lifecycle.lua` | Modified to retire shared document and consumer state. |
+| Extmark identity registry | `exchange_anchors.lua` | Deleted; indexed entities supply current identity/location. |
+| Materialized parser | `chat_parser.lua` | Comment-only update removing obsolete anchor ownership description; parser remains an explicit materialization/oracle. |
+| M2 core integration refinements | `document/sequence.lua`, `dependencies.lua`, `grammar.lua`, `lexical.lua`, `lexer.lua`, `semantic.lua`, `structure.lua` | Modified for bounded navigation, fragment convergence, fair read progress, projection and diagnostic integration. Existing facts implementation is reused unchanged in M3. |
+
+Paths in this table are relative to `lua/parley/`. The complete production change
+list was checked against `git diff --name-status 2afd7de9..626e565e -- lua`.
+
+Current function-level verification replaces the corresponding proposed M3 names:
+
+| Function | Verification strategy |
+|---|---|
+| `state.transition`, `state.resolve` | Seeded edit/ownership histories with independent exclusive-region, preservation and monotonic-revocation invariants. |
+| `Editor.observe`, `Editor.apply`, `Editor.can_join_undo` | Native callback/undo histories and stateful fault schedules; compare settled text/semantics and exact partial receipts. |
+| `Document.repair_step` | Continuous disjoint edits and source replacement between reads; progress plus byte/row/navigation limits per slice. |
+| `projection.exchange`, `projection.folds`, `projection.validate` | Independently derived exchange/fold intervals, paginated queries and stale local proof rejection. |
+| `highlighter._compute_window_decorations` | Native viewport, long-line and uncertainty corpus; independent style expectations and bounded reads. |
+| `tool_folds.step`, `tool_folds.flush` | Actual native folds across uncertainty, batched clear/recreation, window edits and teardown; open/view state and operation counters. |
+| `outline._load_live_items`, `diagnostic_refresh.step` | Indexed live candidate pages, disjoint progress, cancellation and independent final output parity. |
+| `deferred_work.new` | Native timer fairness, coalescing, cancellation and no retained polling callback after retirement. |
+
+### 2026-09-15 — M3 review evidence and retirement rules (BR-5, BR-6, BR-8)
+
+Reason: fresh-context review reproduced equal-extent grouped-undo corruption,
+stale semantic presentation and retired callback retention. Delta: reopen the
+M3 implementation conclusion pending these fixes and verification. Native callback
+text may be classified only with evidence that its byte coordinate frame belongs
+to that event; equal row/byte extents alone are insufficient. Settled native
+undo/redo tests compare token kinds and exchanges to actual buffer text.
+
+Unconfirmed context cannot authorize role, reasoning, fence, footer/draft styling
+or semantic folds. Only local lexical presentation and separately proven
+unaffected context may survive; fold invalidation is separate from certified
+recreation. Tests that required stale styling/folds must be replaced with the
+plan's uncertainty invariants, retaining bounded foreground work.
+
+Retirement must break document/editor callback reference cycles and remove all
+buffer-owned fold autocmds. Native LuaJIT weak-reference tests verify reclamation,
+while externally retained detached handles continue to return detached state.
+M4 staging is paused until these M3 findings are resolved (ARCH-ORDER,
+ARCH-PURPOSE, ARCH-FUNERAL).

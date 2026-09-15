@@ -67,6 +67,36 @@ rounds:
           round: 4
       boundary: M2
       blocked: false
+    - "n": 5
+      timestamp: "2026-09-15T02:40:58-07:00"
+      agent: codex
+      findings:
+        - id: BR-5
+          severity: Critical
+          title: Grouped undo can leave the settled index confirming incorrect marker kinds
+          detail: 'lua/parley/document/init.lua:118–149 accepts callback text from matching row/byte extents. Native grouped insertion/deletion followed by undo restored a visible user marker but left its indexed token assistant, confirmed=true, with repair idle. This is the 2nd finding in this family: establish and sweep the callback provenance rule across edit shapes and undo/redo; add native settled-semantic parity regression coverage.'
+          family: semantic-publication-evidence
+          round: 5
+        - id: BR-6
+          severity: Critical
+          title: Unconfirmed semantics still control highlights and native folds
+          detail: 'document/structure.lua:49–59 preserves invalidated render/footer/draft state consumed by highlighter.lua:75–80; tool_folds.lua:260–271 retains affected folds while uncertain. Native reproduction and highlight_typing_spec.lua:44–56 confirm stale question styling after a role change; document_folds_spec.lua:42–47 requires stale folds. This is the 3rd finding in this family: enforce current semantic evidence across presentation consumers and replace assertions contrary to plan section C.'
+          family: semantic-publication-evidence
+          round: 5
+        - id: BR-7
+          severity: Critical
+          title: M3 Core concepts and function declarations disagree with the pinned implementation
+          detail: 'workshop/plans/000254-chat-ownership-concurrency-plan.md:59–72 declares fold_projection.lua and buffer_edit.lua modified at M3, but both are unchanged; indexed projection lives in document/projection.lua and the strategy names nonexistent fold_projection.project. This is the 2nd finding in this family: reconcile the full M3 entity/function inventory and add a Revisions entry. This prose-only correction does not require a wording test.'
+          family: deferred-contract-traceability
+          round: 5
+        - id: BR-8
+          severity: Important
+          title: Detached documents and fold callbacks are not reclaimed
+          detail: 'lua/parley/document/init.lua:176–191 leaves the weak-key registry value holding an editor callback that captures its document key. A native LuaJIT probe retained all 50 deleted documents after repeated full GC. tool_folds.lua also leaves four autocmd registrations after deletion. ARCH-FUNERAL: break retired callback references, remove scope-owned autocmds, and test reclamation through native weak references.'
+          family: scope-owned-callback-cleanup
+          round: 5
+      boundary: M3
+      blocked: true
 ---
 
 # Gate ledger — 000254-chat-ownership-concurrency#254 (boundary-review)
@@ -106,6 +136,22 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - BR-3 — addressed — structure.lua:144–169 restricts publication to lexical metadata and invalidates changed classifications. document_structure_spec.lua:109 and :135 pass at HEAD and both fail with the pre-fix module substituted in memory; disjoint-edit acceptance remains covered.
 - BR-4 — addressed — grammar.lua:225 retains original structural kind for termination. document_grammar_spec.lua:205 and document_semantic_spec.lua:61 pass at HEAD and both fail with the pre-fix module substituted in memory; coverage sweeps both tool-marker kinds across section and fence states.
 
+## Round 5 — 2026-09-15T02:40:58-07:00 (codex) — BLOCKED
+
+### Raised
+
+- **BR-5** [Critical] `semantic-publication-evidence` Grouped undo can leave the settled index confirming incorrect marker kinds
+  lua/parley/document/init.lua:118–149 accepts callback text from matching row/byte extents. Native grouped insertion/deletion followed by undo restored a visible user marker but left its indexed token assistant, confirmed=true, with repair idle. This is the 2nd finding in this family: establish and sweep the callback provenance rule across edit shapes and undo/redo; add native settled-semantic parity regression coverage.
+- **BR-6** [Critical] `semantic-publication-evidence` Unconfirmed semantics still control highlights and native folds
+  document/structure.lua:49–59 preserves invalidated render/footer/draft state consumed by highlighter.lua:75–80; tool_folds.lua:260–271 retains affected folds while uncertain. Native reproduction and highlight_typing_spec.lua:44–56 confirm stale question styling after a role change; document_folds_spec.lua:42–47 requires stale folds. This is the 3rd finding in this family: enforce current semantic evidence across presentation consumers and replace assertions contrary to plan section C.
+- **BR-7** [Critical] `deferred-contract-traceability` M3 Core concepts and function declarations disagree with the pinned implementation
+  workshop/plans/000254-chat-ownership-concurrency-plan.md:59–72 declares fold_projection.lua and buffer_edit.lua modified at M3, but both are unchanged; indexed projection lives in document/projection.lua and the strategy names nonexistent fold_projection.project. This is the 2nd finding in this family: reconcile the full M3 entity/function inventory and add a Revisions entry. This prose-only correction does not require a wording test.
+- **BR-8** [Important] `scope-owned-callback-cleanup` Detached documents and fold callbacks are not reclaimed
+  lua/parley/document/init.lua:176–191 leaves the weak-key registry value holding an editor callback that captures its document key. A native LuaJIT probe retained all 50 deleted documents after repeated full GC. tool_folds.lua also leaves four autocmd registrations after deletion. ARCH-FUNERAL: break retired callback references, remove scope-owned autocmds, and test reclamation through native weak references.
+
 ## Open findings
 
-(none — every finding has been disposed)
+- **BR-5** [Critical] `semantic-publication-evidence` Grouped undo can leave the settled index confirming incorrect marker kinds
+- **BR-6** [Critical] `semantic-publication-evidence` Unconfirmed semantics still control highlights and native folds
+- **BR-7** [Critical] `deferred-contract-traceability` M3 Core concepts and function declarations disagree with the pinned implementation
+- **BR-8** [Important] `scope-owned-callback-cleanup` Detached documents and fold callbacks are not reclaimed
