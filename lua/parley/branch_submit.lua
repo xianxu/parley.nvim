@@ -1,4 +1,4 @@
--- parley/branch_submit.lua — the PURE half of `<M-S-CR>` (#214 M3).
+-- parley/branch_submit.lua — the PURE half of branch submission (#214 M3).
 --
 -- The chord inserts a branch reference at the cursor and creates the child it
 -- points at. Where pending <M-q> markers exist it gathers them into that child,
@@ -18,7 +18,7 @@
 -- owns the durability rule (create the child, commit the parent, then navigate).
 --
 -- WHERE the reference lands (operator, 2026-09-07, revising the earlier
--- end-of-answer rule): at the CURSOR. `<M-S-CR>` reads as a *submission*, whose
+-- end-of-answer rule): at the CURSOR. The branch shortcut reads as a *submission*, whose
 -- effect is not local to anywhere — but `<M-i>` is the key that actually works
 -- in a terminal, and it reads as an *insertion*, which has to happen where you
 -- are. Relocating the line to the end of the answer made the keypress jump.
@@ -68,12 +68,10 @@ end
 ---   `<M-i>` reads as an INSERTION. An insertion must not delete your answer.
 ---
 --- The earlier design copied the question into the child and deleted the answer
---- it replaced, mirroring `<M-CR>`'s resubmit. That is coherent for
---- `<M-S-CR>` — a *submission*, whose effect is not local to anywhere — but
---- `<M-i>`, `<M-S-CR>` and `<C-g>i` are one registry entry with one callback, and
---- `<M-S-CR>` does not survive most terminals. So the destructive reading would
---- only ever be reachable from the key that reads as "insert here". Dropped
---- rather than left as unreachable code.
+--- it replaced, mirroring `<M-CR>`'s resubmit. That fits submission semantics,
+--- but `<M-i>` and `<C-g>i` share one registry entry and callback. Destructive
+--- submission would therefore be reachable from the key that reads as
+--- "insert here". That behavior was dropped rather than left unreachable.
 ---
 --- @param parsed_chat table   chat_parser output
 --- @param cursor_line integer 1-indexed

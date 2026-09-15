@@ -336,17 +336,14 @@ describe("branch/prune chords (#214 M1)", function()
 
     before_each(function() parley.setup({}) end)
 
-    it("branch_ref resolves the portable key FIRST, then mnemonic, then legacy", function()
+    it("branch_ref resolves the portable key and legacy alias", function()
         local keys = reg.resolve_keys(entry("branch_ref"), parley.config)
-        assert.same({ "<M-i>", "<M-S-CR>", "<C-g>i" }, keys)
+        assert.same({ "<M-i>", "<C-g>i" }, keys)
     end)
 
     it("the help float advertises a key that works in a plain terminal", function()
-        -- The invariant is about the PRIMARY column, not about <M-S-CR> being
-        -- absent: since #214 I2 the float also names aliases, and <M-S-CR> is a
-        -- legitimate one. What must not happen is leading with a chord most
-        -- terminals cannot distinguish from <CR>. Asserting absence was a proxy
-        -- for that, and the proxy broke the moment aliases became visible.
+        -- The primary key remains portable, and Shift+Alt+Return is intentionally
+        -- absent because it collides with Pair's pane-level shortcut.
         local lines = parley._keybinding_help_lines("chat")
         local shown
         for _, l in ipairs(lines) do
@@ -356,8 +353,8 @@ describe("branch/prune chords (#214 M1)", function()
         local primary = shown:match("^%s*(%S+)")
         assert.are.equal("<M-i>", primary,
             "help must LEAD with the portable key, got: " .. tostring(shown))
-        assert.is_truthy(shown:find("(also", 1, true),
-            "the aliases are no longer advertised at all: " .. tostring(shown))
+        assert.is_truthy(shown:find("(also <C-g>i)", 1, true),
+            "the legacy alias is no longer advertised: " .. tostring(shown))
     end)
 
     it("prune keeps <C-g>b as a legacy alias alongside <M-p>", function()
@@ -373,7 +370,7 @@ describe("branch/prune chords (#214 M1)", function()
     -- falls back to default_key. Assert the SHIPPED file carries the list.
     it("config.lua itself ships both chord lists", function()
         local shipped = dofile("lua/parley/config.lua")
-        assert.same({ "<M-i>", "<M-S-CR>", "<C-g>i" },
+        assert.same({ "<M-i>", "<C-g>i" },
             shipped.chat_shortcut_branch_ref.shortcut)
         assert.same({ "<M-p>", "<C-g>b" }, shipped.chat_shortcut_prune.shortcut)
     end)
@@ -692,8 +689,8 @@ describe("default_keymaps master switch (#214 M2)", function()
 end)
 
 -- #214 I2 / Done-when: "no registry-derived binding exists that <C-g>? cannot
--- show — asserted in both directions". Rendering only keys[1] left <M-q>,
--- <M-t>, <M-S-CR> and <C-g>i invisible, so the criterion was ticked without
+-- show — asserted in both directions". Rendering only keys[1] left aliases such
+-- as <M-q>, <M-t> and <C-g>i invisible, so the criterion was ticked without
 -- being met. This is the assertion that closes it.
 describe("<C-g>? can show every bound key (#214 I2)", function()
     local parley = require("parley")
@@ -730,7 +727,7 @@ describe("<C-g>? can show every bound key (#214 I2)", function()
     it("the aliases the chords depend on are visible by name", function()
         local chat = help_text("chat")
         for _, k in ipairs({ "<M-q>", "<C-g>q", "<M-t>", "<C-g>t",
-                             "<M-i>", "<M-S-CR>", "<C-g>i", "<M-p>", "<C-g>b" }) do
+                             "<M-i>", "<C-g>i", "<M-p>", "<C-g>b" }) do
             assert.is_truthy(chat:find(k, 1, true), k .. " is not shown in the chat help")
         end
     end)

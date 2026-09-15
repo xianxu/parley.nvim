@@ -79,14 +79,14 @@ Both `default_key` and a config `shortcut` accept a string or a **list**; the
 list is the alias mechanism (`chat_drill_in` = `{ "<C-g>q", "<M-q>" }`).
 
 Help shows **every** bound key: the primary holds the aligned column and the
-aliases follow the description as `(also <M-S-CR>, <C-g>i)`. The shipped order
+aliases follow the description as `(also <C-g>i)`. The shipped order
 puts the key a reader should reach for first, because the column is the one they
 see. Two rules decide it: the **alt spelling leads** for transcript actions —
 `branch_ref` with `<M-i>`, `chat_prune` with `<M-p>`, `open_file` with `<M-o>`,
 each keeping its `<C-g>` spelling as a legacy alias rather than revoking it — and
 the **portable key leads** where portability is the issue, so `branch_ref` shows
-`<M-i>` and not the `<M-S-CR>` mnemonic most terminals cannot distinguish from
-`<CR>`.
+`<M-i>`, with `<C-g>i` retained for terminals that need the legacy escape
+sequence.
 
 The alt family means "act on this transcript": quote, respond/define, accept,
 reject, branch, prune, outline, skill picker (`<M-s>`), paste an image as an

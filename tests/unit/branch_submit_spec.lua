@@ -1,4 +1,4 @@
--- #214 M3. `<M-S-CR>` performs the submission `<M-CR>` would perform, into a new
+-- #214 M3. The branch shortcut performs the submission `<M-CR>` would perform, into a new
 -- child chat, and leaves a 🌿: reference where `<M-CR>`'s output would have
 -- appeared. The DECISION — which case applies, what the child is seeded with,
 -- which parent line the reference follows — is pure and lives here; the effects
@@ -66,7 +66,7 @@ describe("branch_submit.plan_submission", function()
     -- rearrange, so the planner declines and the caller inserts a plain
     -- reference at the cursor. `<M-i>` reads as an INSERTION; an insertion must
     -- not delete your answer. The earlier "copy the question, delete the answer"
-    -- reading was coherent only for `<M-S-CR>` as a *submission* — and the three
+    -- reading was coherent only for the branch shortcut as a *submission* — and the two
     -- keys share one callback, so it would have been reachable from the key that
     -- says "insert here".
     describe("no markers — the planner declines so the caller inserts in place", function()

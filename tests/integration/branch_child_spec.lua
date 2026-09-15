@@ -311,7 +311,7 @@ describe("residual M1 fixes, pinned (#214)", function()
     end)
 end)
 
--- #214 M3. `<M-S-CR>` performs the submission `<M-CR>` would perform, into a new
+-- #214 M3. The branch shortcut performs the submission `<M-CR>` would perform, into a new
 -- child chat, and leaves a 🌿: reference where `<M-CR>`'s output would have
 -- appeared. Driven through the real keymap callback on a real chat buffer — the
 -- transition, not the sub-step (round-11 lesson).
@@ -625,7 +625,7 @@ describe("branched submission (#214 M3)", function()
 end)
 
 -- #214 M3: generalising the chord must not delete the affordance M1 shipped.
--- With nothing to submit, <M-S-CR> still makes a side chat — it is never a no-op.
+-- With nothing to submit, the branch shortcut still makes a side chat — it is never a no-op.
 describe("branched submission falls back, never no-ops (#214 M3)", function()
     local tmpdir, parent_path, parent_buf
 

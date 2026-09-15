@@ -394,13 +394,8 @@ local config = {
 	-- prune); <C-g>b stays as a legacy alias so muscle memory keeps working.
 	chat_shortcut_prune = { modes = { "n" }, shortcut = { "<M-p>", "<C-g>b" } },
 	-- Branch: create a sub-transcript at this point in the chat tree.
-	-- <M-i> is FIRST deliberately. <M-S-CR> is the better mnemonic (shift as
-	-- "same action, redirected destination"), but most terminals cannot
-	-- distinguish Shift+Enter from Enter without the kitty keyboard protocol /
-	-- CSI-u / modifyOtherKeys — and the <C-g>? help float renders only keys[1],
-	-- so leading with <M-S-CR> would advertise a key that silently does nothing
-	-- for most users. Portable key first, mnemonic second, <C-g>i legacy alias.
-	chat_shortcut_branch_ref = { modes = { "n", "i", "v" }, shortcut = { "<M-i>", "<M-S-CR>", "<C-g>i" } },
+	-- <M-i> is the portable primary; <C-g>i remains the legacy alias.
+	chat_shortcut_branch_ref = { modes = { "n", "i", "v" }, shortcut = { "<M-i>", "<C-g>i" } },
 	-- #231: paste the clipboard image as an attachment. <M-v> — v for paste,
 	-- free, joins the alt family. (<M-i> was the request; it is branch_ref.)
 	chat_shortcut_paste_image = { modes = { "n", "i" }, shortcut = "<M-v>" },

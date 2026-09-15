@@ -2375,7 +2375,7 @@ local function branch_inserters(buf, abs_link, owns_file)
 	-- (BR-28). It therefore does what it did before #214: insert the reference,
 	-- put the cursor on it, and let the user type the topic. The child is created
 	-- when the link is followed.
-	--- #214 M3: `<M-S-CR>` in normal/insert mode on a CHAT buffer submits what
+	--- #214 M3: the branch shortcut in normal/insert mode on a CHAT buffer submits what
 	--- `<M-CR>` would submit, into a new child, leaving the reference where
 	--- `<M-CR>`'s output would have appeared.
 	---

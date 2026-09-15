@@ -486,7 +486,7 @@ M.entries = {
 		-- resolve_keys falls back to `default_key` unless config supplies a table
 		-- with a NON-EMPTY `shortcut` — but config.lua does supply one here, so
 		-- the shipped list must live there; a registry-side edit would be inert.
-		default_key = { "<M-i>", "<M-S-CR>", "<C-g>i" },
+		default_key = { "<M-i>", "<C-g>i" },
 		default_modes = { "n", "i", "v" },
 		scope = "parley_buffer",
 		desc = "Parley create and insert new chat",

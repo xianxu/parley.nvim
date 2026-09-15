@@ -3,7 +3,7 @@
 ## Syntax
 - `[🌿:display text](file.md)` — inline within any line (vs full-line `🌿:` on its own line)
 
-## Creation (`<M-i>`, `<M-S-CR>`, `<C-g>i`)
+## Creation (`<M-i>`, `<C-g>i`)
 One implementation — `branch_inserters(buf, abs_link)` in `init.lua`, with the
 pure line editing in `lua/parley/branch_ref.lua`. It replaced four
 near-identical functions that had drifted (#214).
@@ -26,7 +26,7 @@ is timestamped; later topic updates may add its slug.
 
 ### What `<M-i>` does (#214 M3)
 
-`<M-i>` / `<M-S-CR>` / `<C-g>i` are one binding. The chord **inserts a branch
+`<M-i>` / `<C-g>i` are one binding. The chord **inserts a branch
 reference at the cursor** and creates the child it points at:
 
 | context | what happens | the child gets |
