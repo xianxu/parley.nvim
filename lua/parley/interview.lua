@@ -264,15 +264,24 @@ M.enter = function()
 	_logger.info("Interview mode enabled")
 	vim.notify("Interview mode enabled", vim.log.levels.INFO)
 
-	-- Insert :00min marker at current cursor position
-	local mode = vim.fn.mode()
-	if mode == "i" then
-		vim.api.nvim_put({ ":00min " }, "c", true, true)
+	-- Capture the actual buffer and insertion boundary before entering insert mode.
+	local buf = vim.api.nvim_get_current_buf()
+	local cursor = vim.api.nvim_win_get_cursor(0)
+	local edits = require("parley.buffer_edit")
+	local line=vim.api.nvim_buf_get_lines(buf,cursor[1]-1,cursor[1],false)[1] or ""
+	local column=math.min(cursor[2]+#vim.fn.strcharpart(line:sub(cursor[2]+1),0,1),#line)
+	local capture, reason = edits.capture_user(buf, "interview-timestamp", {
+		{ first = { row = cursor[1] - 1, col = column },
+			last = { row = cursor[1] - 1, col = column } },
+	})
+	if capture then
+		local result = edits.apply_user(capture, { { region = 1, text = ":00min " } })
+		if result.status == "applied" and vim.api.nvim_get_current_buf() == buf then
+			vim.api.nvim_win_set_cursor(0, { cursor[1], column + 7 })
+			if vim.fn.mode() ~= "i" then vim.cmd(column==#line and "startinsert!" or "startinsert") end
+		end
 	else
-		vim.cmd("startinsert")
-		vim.schedule(function()
-			vim.api.nvim_put({ ":00min " }, "c", true, true)
-		end)
+		_logger.warning("Interview timestamp unavailable: " .. tostring(reason))
 	end
 
 	M.setup_keymap()

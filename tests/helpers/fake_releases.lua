@@ -15,8 +15,11 @@ local ready_port = require("tests.helpers.ready_port")
 
 local M = {}
 
-local SERVER = vim.fn.getcwd() .. "/tests/fixtures/fake_github_releases"
-local FAKE_PROXY = vim.fn.getcwd() .. "/tests/fixtures/fake_cliproxy"
+-- Resolve fixtures beside this module, never by changing the guest's cwd.
+-- Cwd also selects Parley's project/chat roots and must remain isolated.
+local FIXTURES = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h:h") .. "/fixtures"
+local SERVER = FIXTURES .. "/fake_github_releases"
+local FAKE_PROXY = FIXTURES .. "/fake_cliproxy"
 
 local function sha256(path)
     local cmd = vim.fn.executable("sha256sum") == 1 and { "sha256sum", path } or { "shasum", "-a", "256", path }

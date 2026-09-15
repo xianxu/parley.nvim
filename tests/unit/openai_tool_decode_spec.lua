@@ -85,7 +85,7 @@ describe("wire_openai.decode_tool_calls_from_stream (synthetic)", function()
         assert.same({ id = "call_b", name = "ls", input = { path = "/tmp" } }, calls[2])
     end)
 
-    it("orders by first appearance, not by numeric index", function()
+    it("orders by declared numeric index, not first appearance", function()
         local calls = wire.decode_tool_calls_from_stream(sse({
             tc_chunk({ { index = 7, id = "call_seven", ["function"] = { name = "b", arguments = "{}" } } }),
             tc_chunk({ { index = 2, id = "call_two", ["function"] = { name = "a", arguments = "{}" } } }),
@@ -93,8 +93,8 @@ describe("wire_openai.decode_tool_calls_from_stream (synthetic)", function()
         }))
 
         assert.equals(2, #calls)
-        assert.equals("call_seven", calls[1].id)
-        assert.equals("call_two", calls[2].id)
+        assert.equals("call_two", calls[1].id)
+        assert.equals("call_seven", calls[2].id)
     end)
 
     it("handles several chunks carrying multiple calls each", function()
@@ -216,13 +216,12 @@ describe("wire_openai.decode_tool_calls_from_stream (synthetic)", function()
         assert.equals("ls", calls[1].name)
     end)
 
-    it("tolerates a missing index by defaulting to 0", function()
+    it("rejects a missing declared index", function()
         local calls = wire.decode_tool_calls_from_stream(sse({
             tc_chunk({ { id = "call_a", ["function"] = { name = "x", arguments = "{}" } } }),
             tc_chunk(nil, "tool_calls"),
         }))
-        assert.equals(1, #calls)
-        assert.equals("call_a", calls[1].id)
+        assert.equals(0, #calls)
     end)
 end)
 

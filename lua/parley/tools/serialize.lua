@@ -3,8 +3,7 @@
 --
 -- This module is the SINGLE SOURCE OF TRUTH for the schema. The chat
 -- parser (chat_parser.lua) reads blocks rendered here, and every
--- site that writes a tool block to the buffer (tool_loop.lua,
--- cancellation cleanup, synthetic iteration-cap results) goes
+-- response adapter that prepares tool calls or result slots goes
 -- through render_call / render_result. Changes to the schema must
 -- land in this file AND this file only.
 --
@@ -95,7 +94,7 @@ end
 --- @param result ToolResult { id, content, is_error?, name? }
 --- @return string block
 function M.render_result(result)
-    local content = result.content or ""
+    local content = require("parley.tools.result_evidence").publish(result).content
     local pair = fence_for(content)
     local err_tag = result.is_error and " error=true" or ""
     return string.format(

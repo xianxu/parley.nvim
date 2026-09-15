@@ -83,6 +83,7 @@ describe("skill_render", function()
         end, vim.fn.range(1, 30)), " ")
         local buf = scratch({ "ASIN[^asin]", "", "[^asin]: " .. definition })
         skill_render.refresh_footnote_diagnostics(buf)
+        require("parley.diagnostic_refresh").drain(buf,10000)
         local d = vim.diagnostic.get(buf, { namespace = skill_render.diag_namespace() })[1]
         assert.are.equal("ASIN — " .. definition, d.message)
         assert.is_nil(d.message:find("\n", 1, true))

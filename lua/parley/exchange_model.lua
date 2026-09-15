@@ -4,11 +4,11 @@
 -- line positions. No nvim API — this module is fully testable without
 -- a running Neovim instance.
 --
--- The model is the single source of truth for "where does block S
--- of exchange K live in the buffer?" Callers mutate the model (add
--- blocks, grow blocks) and the model recomputes positions on demand
--- from accumulated sizes. No absolute line numbers are ever stored —
--- sizes and the gaps recorded before visible items.
+-- This is a materialized layout for request preparation, serialization and
+-- legacy generation planning. It is not live buffer identity: document queries
+-- own current locations and presentation, including edits made outside Parley.
+-- Callers constructing a layout can add/grow blocks; positions derive from
+-- accumulated sizes and gaps. Generation write migration is tracked in #254 M4.
 --
 -- See #90 design: size-based architecture.
 --

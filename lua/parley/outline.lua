@@ -6,17 +6,15 @@ local M = {}
 local highlight_structure = require("parley.highlight_structure")
 local question_tags = require("parley.question_tags")
 
--- Code-block memo for a buffer. Delegates to highlight_structure so the fence
--- grammar and the #218 partition containment have ONE definition — outline used
--- to carry three independent copies of this loop, and the close review found the
--- bug still live in the one that had been missed.
---
--- `config` is REQUIRED: patterns() without it uses default prefixes, which
--- silently disables containment for anyone who set chat_user_prefix.
-local function build_code_block_memo(bufnr, config)
-  local all_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-  return highlight_structure.code_block_memo(
-    all_lines, highlight_structure.patterns(config), true)
+local Document = require("parley.document")
+local Reader = require("parley.line_reader")
+local cursors = setmetatable({}, {__mode="k"})
+local function document(buf,config)
+  return Document.get(buf) or Document.attach(buf,{patterns=highlight_structure.patterns(config)})
+end
+local function label(buf,row)
+  local result=Reader.for_buffer(buf):chunk({row=row,col=0,max_bytes=4096})
+  return result.bytes .. (result.eol and "" or "…"),result.eol
 end
 
 local function is_in_code_block(_bufnr, line_number, memo)
@@ -69,74 +67,57 @@ end
 M._is_in_code_block = is_in_code_block
 M._is_outline_item = is_outline_item
 
-local function find_nearest_outline_line(target_buf, lnum, config)
-  local line_count = vim.api.nvim_buf_line_count(target_buf)
-  local safe_lnum = math.min(lnum, line_count)
-  local all_lines = vim.api.nvim_buf_get_lines(target_buf, 0, -1, false)
-  local code_block_memo = build_code_block_memo(target_buf, config)
-  local is_valid_line = is_outline_item(target_buf, safe_lnum, config, code_block_memo, all_lines)
-
-  if is_valid_line then
-    return safe_lnum
+local function find_nearest_outline_line(target_buf, lnum, config, is_chat)
+  local doc=document(target_buf,config)
+  local count=Document.size(doc).rows
+  local safe=math.max(1,math.min(lnum,count))
+  local first,last=math.max(0,safe-6),math.min(count,safe+5)
+  local best,distance=nil,6
+  for _=1,11 do
+    local found=Document.outline(doc,first,last,{is_chat=is_chat,budget_nodes=2048,budget_entries=4096})
+    if found.status~="found" then break end
+    local row=found.span.start_row+1
+    local delta=math.abs(row-safe)
+    if delta<distance then best,distance=row,delta end
+    first=found.span.end_row
+    if first>=last then break end
   end
-
-  for offset = 1, 5 do
-    local previous_lnum = safe_lnum - offset
-    if previous_lnum > 0 then
-      local previous_is_item = is_outline_item(target_buf, previous_lnum, config, code_block_memo, all_lines)
-      if previous_is_item then
-        return previous_lnum
-      end
-    end
-
-    local next_lnum = safe_lnum + offset
-    if next_lnum <= line_count then
-      local next_is_item = is_outline_item(target_buf, next_lnum, config, code_block_memo, all_lines)
-      if next_is_item then
-        return next_lnum
-      end
-    end
-  end
-
-  return safe_lnum
+  return best
 end
+M._nearest_outline_line=find_nearest_outline_line
 
-local function focus_buffer_line(target_buf, target_name, preferred_windows, lnum)
+local function focus_buffer_line(target_buf, target_name, preferred_windows, lnum, validate)
+  local function place_cursor(win)
+    if vim.api.nvim_win_get_buf(win)~=target_buf then return false end
+    local current=lnum
+    if validate then current=validate() end
+    if validate and not current then return false end
+    vim.api.nvim_win_set_cursor(win, { current, 0 })
+    vim.cmd("normal! zz")
+    return true
+  end
   for _, win in ipairs(preferred_windows or {}) do
     if vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == target_buf then
       vim.api.nvim_set_current_win(win)
-      vim.api.nvim_win_set_cursor(win, { lnum, 0 })
-      vim.cmd("normal! zz")
-      return true
+      return place_cursor(win)
     end
   end
 
   for _, win in ipairs(vim.api.nvim_list_wins()) do
     if vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == target_buf then
       vim.api.nvim_set_current_win(win)
-      vim.api.nvim_win_set_cursor(win, { lnum, 0 })
-      vim.cmd("normal! zz")
-      return true
+      return place_cursor(win)
     end
-  end
-
-  local function safe_set_cursor(safe_lnum)
-    local line_count = vim.api.nvim_buf_line_count(vim.api.nvim_get_current_buf())
-    local clamped = math.max(1, math.min(safe_lnum, line_count))
-    vim.api.nvim_win_set_cursor(0, { clamped, 0 })
-    vim.cmd("normal! zz")
   end
 
   if vim.fn.filereadable(target_name) == 1 then
     vim.cmd("edit " .. vim.fn.fnameescape(target_name))
-    safe_set_cursor(lnum)
-    return true
+    return place_cursor(0)
   end
 
   if vim.api.nvim_buf_is_valid(target_buf) then
     vim.cmd("buffer " .. target_buf)
-    safe_set_cursor(lnum)
-    return true
+    return place_cursor(0)
   end
 
   return false
@@ -146,13 +127,60 @@ local function jump_to_outline_location(selection, config)
   local target_buf = selection.bufnr
   local target_name = selection.name
 
-  if not vim.api.nvim_buf_is_valid(target_buf) then
+  if not vim.api.nvim_buf_is_valid(target_buf) or not vim.api.nvim_buf_is_loaded(target_buf) then
     vim.notify("Buffer " .. target_buf .. " is no longer valid - cannot navigate", vim.log.levels.ERROR)
     return false
   end
 
-  local safe_lnum = find_nearest_outline_line(target_buf, selection.lnum or 1, config)
-  local focused = focus_buffer_line(target_buf, target_name, selection.windows, safe_lnum)
+  local function resolve_location()
+    if not vim.api.nvim_buf_is_valid(target_buf) or not vim.api.nvim_buf_is_loaded(target_buf) then return nil end
+    local doc=document(target_buf,config)
+    local live=selection.identity and Document.lookup(doc,selection.identity)
+    local safe_lnum
+    if selection.identity then
+      -- Identity proves location only. Context can invalidate a surviving row or
+      -- reclassify it without replacing its handle.
+      local current=live and Document.outline(doc,live.start_row,live.end_row,
+        {is_chat=selection.is_chat,budget_nodes=2048,budget_entries=4096})
+      if not current or current.status~="found" or current.span.handle~=selection.identity then
+        vim.notify("Outline item is no longer eligible or is awaiting repair",vim.log.levels.WARN)
+        return nil
+      end
+      safe_lnum=live.start_row+1
+    elseif selection.exact then
+      local row=math.max(0,(selection.lnum or 1)-1)
+      if row>=Document.size(doc).rows then return nil end
+      local current=Document.outline(doc,row,row+1,
+        {is_chat=selection.is_chat,budget_nodes=2048,budget_entries=4096})
+      if current.status~="found" or current.span.start_row~=row then
+        vim.notify("Outline item is no longer eligible or is awaiting repair",vim.log.levels.WARN)
+        return nil
+      end
+      if selection.source_bound then
+        local text,complete=label(target_buf,row)
+        if not selection.expected_line or not complete or text~=selection.expected_line then
+          vim.notify("Outline source changed; reopen the outline",vim.log.levels.WARN)
+          return nil
+        end
+      end
+      safe_lnum=row+1
+    else
+      safe_lnum=find_nearest_outline_line(target_buf,selection.lnum or 1,config,selection.is_chat)
+      if not safe_lnum then
+        vim.notify("Outline location is unavailable or is awaiting repair",vim.log.levels.WARN)
+        return nil
+      end
+    end
+    return safe_lnum
+  end
+  local safe_lnum=resolve_location()
+  if not safe_lnum then return false end
+  local focused=focus_buffer_line(target_buf,target_name,selection.windows,safe_lnum,function()
+    -- Window/buffer entry can run user autocommands. Check the projection
+    -- again after that boundary, immediately before placing the cursor.
+    safe_lnum=resolve_location()
+    return safe_lnum
+  end)
   if not focused then
     vim.notify("Could not navigate to outline selection", vim.log.levels.WARN)
     return false
@@ -176,32 +204,95 @@ end
 
 M._jump_to_outline_location = jump_to_outline_location
 
--- Build the list of picker items from a buffer. Exposed for testing.
--- Returns items in document order: { display: string, value: { lnum: number } }
+-- One page visits at most eight candidates and reads at most 4 KiB per label.
+-- The cursor retains only progress and a possible trailing empty question.
 function M._build_picker_items(bufnr, config, opts)
-  local all_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-  local code_block_memo = build_code_block_memo(bufnr, config)
-  local items = {}
-  for i = 1, #all_lines do
-    local is_item, item_type, formatted_line = is_outline_item(bufnr, i, config, code_block_memo, all_lines, opts)
-    if is_item then
-      table.insert(items, { display = formatted_line, value = { lnum = i }, type = item_type })
-    end
+  opts=opts or {}
+  local doc=document(bufnr,config)
+  local tick=vim.api.nvim_buf_get_changedtick(bufnr)
+  local saved=opts.cursor and cursors[opts.cursor]
+  if opts.cursor and (not saved or saved.doc~=doc or saved.tick~=tick) then
+    return {},{status="stale"}
   end
-  items = question_tags.apply_outline(items, all_lines, config)
-  -- Drop trailing empty question (the placeholder prompt for the user to continue)
-  if #items > 0 then
-    local last = items[#items]
-    if last.type == "question" then
-      local line = all_lines[last.value.lnum] or ""
-      local after_prefix = line:sub(#config.chat_user_prefix + 1)
-      if after_prefix:match("^%s*$") then
-        table.remove(items)
+  local state=saved or {doc=doc,tick=tick,next=0,last=Document.size(doc).rows}
+  local items={}
+  local function pause(status)
+    local key={};cursors[key]=state
+    return items,{status=status,cursor=key}
+  end
+  for _=1,8 do
+    if #items+(state.pending and 2 or 1)>8 then return pause("more") end
+    if state.next>=state.last then return items,{status="ready"} end
+    local found=Document.outline(doc,state.next,state.last,{is_chat=opts.is_chat,
+      cursor=state.query,budget_nodes=2048,budget_entries=4096})
+    state.query=found.status=="budget" and found.cursor or nil
+    if found.status=="not_found" then return items,{status="ready"} end
+    if found.status~="found" then return pause(found.status) end
+    local row=found.span
+    state.next=row.end_row
+    local metadata=row.metadata or {}
+    local token,sem=metadata.token or {},metadata.semantic or {}
+    local text,complete=label(bufnr,row.start_row)
+    local item={value={lnum=row.start_row+1,identity=row.handle}}
+    local tag=token.preface_tag and question_tags.parse_tag(text)
+    if token.kind=="user" then
+      item.type="question";item.display="  "..text
+      if sem.preface_origin then
+        local preface=Document.lookup(doc,sem.preface_origin)
+        if preface then
+          local content=label(bufnr,preface.start_row)
+          local attached=question_tags.parse_tag(content) or content:sub(3)
+          if attached=="_" then item=nil
+          else item.display="  "..attached;item.value.tag_lnum=preface.start_row+1 end
+        end
       end
+    elseif token.preface_tag then
+      if sem.preface or tag=="_" then item=nil
+      else item.type="annotation";item.display="  → "..(tag or text:sub(3)) end
+    elseif token.kind=="branch" then item.type="branch";item.display="🌿 "..text
+    elseif token.heading_level and token.heading_level<=3 then
+      item.type="heading";item.display=string.rep("  ",token.heading_level)..text
+    else item=nil end
+    if item then
+      if state.pending then items[#items+1]=state.pending;state.pending=nil end
+      local empty=item.type=="question" and complete and text:sub(#config.chat_user_prefix+1):match("^%s*$")
+      if empty then state.pending=item else items[#items+1]=item end
     end
   end
-  return items
+  return pause("more")
 end
+
+local function load_live_items(buf,config,opts,done)
+  local items,cursor={},nil
+  local unsubscribe
+  local pump,stopped=nil,false
+  local doc=document(buf,config)
+  local function stop()
+    stopped=true
+    if pump then pump:close() end
+    if unsubscribe then unsubscribe() end
+  end
+  local function step()
+    if stopped then return end
+    if not vim.api.nvim_buf_is_valid(buf) or not vim.api.nvim_buf_is_loaded(buf)
+      or Document.get(buf)~=doc then stop();return end
+    local page,result=M._build_picker_items(buf,config,{is_chat=opts.is_chat,cursor=cursor})
+    if result.status=="stale" then items,cursor={},nil
+    else vim.list_extend(items,page);cursor=result.cursor end
+    if result.status=="ready" then
+      stop()
+      done(items);return
+    end
+    return result.status~="opaque"
+  end
+  pump=require("parley.deferred_work").new(step)
+  unsubscribe=Document.subscribe(doc,function(event)
+    if event.kind=="detach" then stop()
+    elseif not stopped then pump:request() end
+  end)
+  pump:request()
+end
+M._load_live_items=load_live_items
 
 --------------------------------------------------------------------------------
 -- Tree-aware outline: recursively build outline items across 🌿: linked files
@@ -310,6 +401,27 @@ local function build_file_outline_items(file_path, config, depth)
     end
   end
 
+  -- A live confirmed row supplies identity; an unopened disk item supplies
+  -- only a file/row/content location, never a nearest-item substitution.
+  local live_buf=vim.fn.bufnr(abs_path)
+  local doc=live_buf~=-1 and Document.get(live_buf)
+  for _,item in ipairs(items) do
+    local entry=item.value
+    if not entry.child_path then
+      local expected=file_lines[entry.lnum] or ""
+      entry.source_bound=true
+      entry.expected_line=#expected<=4096 and expected or nil
+      if doc and entry.expected_line and entry.lnum<=Document.size(doc).rows then
+        local row=entry.lnum-1
+        local found=Document.outline(doc,row,row+1,{is_chat=true,budget_nodes=2048,budget_entries=4096})
+        if found.status=="found" and found.span.start_row==row then
+          local text,complete=label(live_buf,row)
+          if complete and text==expected then entry.identity=found.span.handle end
+        end
+      end
+    end
+  end
+
   return items
 end
 
@@ -337,7 +449,7 @@ function M._build_tree_outline_items(root_path, config, expanded_set, depth, vis
     local topic = parley.get_chat_topic(abs_path) or vim.fn.fnamemodify(abs_path, ":t")
     table.insert(items, {
       display = "📋 " .. topic,
-      value = { lnum = 1, file = abs_path },
+      value = { lnum = 1, file = abs_path, file_start = true },
     })
   end
 
@@ -388,7 +500,7 @@ function M.question_picker(config)
 
   if not is_chat then
     -- Non-chat: use flat outline (include markdown headings)
-    local items = M._build_picker_items(current_bufnr, config, { is_chat = false })
+    load_live_items(current_bufnr, config, { is_chat = false }, function(items)
     local keybindings_key = require("parley.keybinding_registry").keys_for("help", parley.config)
     float_picker.open({
       title = "Outline",
@@ -402,6 +514,8 @@ function M.question_picker(config)
           name = buf_name,
           windows = target_windows,
           lnum = item.value.lnum,
+          identity = item.value.identity,
+          is_chat = false,
         }, config)
       end,
       mappings = {
@@ -415,6 +529,7 @@ function M.question_picker(config)
         },
       },
     })
+    end)
     return
   end
 
@@ -427,7 +542,14 @@ function M.question_picker(config)
   local function open_tree_picker(sel_index)
     local items = M._build_tree_outline_items(root, config, expanded_set)
     if #items == 0 then
-      items = M._build_picker_items(current_bufnr, config, { is_chat = true })
+      load_live_items(current_bufnr,config,{is_chat=true},function(live_items)
+        require("parley.float_picker").open({title="Outline",items=live_items,anchor="top",
+          on_select=function(item)
+            jump_to_outline_location({bufnr=current_bufnr,name=buf_name,windows=target_windows,
+              lnum=item.value.lnum,identity=item.value.identity,is_chat=true},config)
+          end})
+      end)
+      return
     end
 
     local keybindings_key = require("parley.keybinding_registry").keys_for("help", parley.config)
@@ -438,25 +560,32 @@ function M.question_picker(config)
       initial_index = sel_index or question_tags.initial_index(items, buf_name, vim.api.nvim_win_get_cursor(0)[1]),
       on_select = function(item)
         local entry = item.value
-        if entry.child_path then
-          if vim.fn.filereadable(entry.child_path) ~= 1 then
-            vim.notify("Cannot open outline branch: " .. entry.child_path, vim.log.levels.WARN)
+        if entry.child_path or entry.file_start then
+          local path=entry.child_path or entry.file
+          if vim.fn.filereadable(path) ~= 1 then
+            vim.notify("Cannot open outline file: " .. path, vim.log.levels.WARN)
             return
           end
-          local child_buf = vim.fn.bufadd(entry.child_path)
+          local child_buf = vim.fn.bufadd(path)
           vim.fn.bufload(child_buf)
-          -- A branch targets the file start, not the nearest question/heading.
-          focus_buffer_line(child_buf, entry.child_path, target_windows, 1)
+          -- File entries select a path, independently of semantic row eligibility.
+          focus_buffer_line(child_buf, path, target_windows, 1)
           return
         end
         do
           local target_file = entry.file or buf_name
-          local target_buf = vim.fn.bufnr(target_file)
+          local target_buf = vim.fn.bufadd(target_file)
+          vim.fn.bufload(target_buf)
           jump_to_outline_location({
-            bufnr = target_buf ~= -1 and target_buf or current_bufnr,
+            bufnr = target_buf,
             name = target_file,
             windows = target_windows,
             lnum = entry.lnum,
+            identity = entry.identity,
+            source_bound = entry.source_bound,
+            expected_line = entry.expected_line,
+            exact = true,
+            is_chat = true,
           }, config)
         end
       end,

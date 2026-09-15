@@ -287,6 +287,166 @@ local function slug_anchor_term(id)
     return term
 end
 
+-- Byte-reader diagnostic grammar. A reader may yield between byte operations;
+-- retained text is only derived identifiers/messages, stored in bounded pieces.
+local function rope(source)
+    local r={parts={},tail={},length=0,hash=0,tick=source.tick or function()end}
+    function r.push(ch)
+        r.tick();r.length=r.length+1;r.hash=(r.hash*131+ch:byte())%2147483647
+        r.tail[#r.tail+1]=ch
+        if #r.tail==4096 then r.parts[#r.parts+1]=table.concat(r.tail);r.tail={} end
+    end
+    function r.byte(pos)
+        r.tick()
+        if pos<1 or pos>r.length then return '' end
+        local part=math.floor((pos-1)/4096)+1;local col=(pos-1)%4096+1
+        return r.parts[part] and r.parts[part]:sub(col,col) or r.tail[col]
+    end
+    return r
+end
+local function rope_slice(value,first,last)
+    return {length=math.max(0,last-first+1),byte=function(pos)
+        return pos>=1 and pos<=last-first+1 and value.byte(first+pos-1) or ''
+    end,tick=value.tick}
+end
+local function literal(value,source)
+    local r=rope(source);for i=1,#value do r.push(value:sub(i,i)) end;return r
+end
+local function space(ch)return ch~='' and ch:match('%s')~=nil end
+local function normalized(source,first,last)
+    local result=rope(source);local pending=false
+    for i=first,last do
+        local ch=source.byte(i)
+        if space(ch) then pending=result.length>0
+        else
+            if pending then result.push(' ');pending=false end
+            result.push(ch)
+        end
+    end
+    if result.length==0 then return literal('(no definition)',source) end
+    return result
+end
+function M.read_diagnostic_definition(source)
+    local at=1
+    while space(source.byte(at)) do at=at+1 end
+    if source.byte(at)~='[' or source.byte(at+1)~='^' then return nil end
+    at=at+2;local identifier=rope(source)
+    while at<=source.length and source.byte(at)~=']' do identifier.push(source.byte(at));at=at+1 end
+    if identifier.length==0 or source.byte(at)~=']' or source.byte(at+1)~=':' then return nil end
+    local definition=normalized(source,at+2,source.length)
+    local term,body
+    local quote=definition.byte(1)
+    if quote=='"' or quote=='`' then
+        local close=2
+        while close<=definition.length and definition.byte(close)~=quote do close=close+1 end
+        if close>2 and close<=definition.length then
+            term=rope_slice(definition,2,close-1);at=close+1
+            while space(definition.byte(at)) do at=at+1 end
+            if definition.byte(at)=='.' then at=at+1 end
+            body=normalized(definition,at,definition.length)
+        end
+    end
+    return {identifier=identifier,definition=body or definition,term=term}
+end
+local function equal_identifier(a,b)
+    if a.length~=b.length or a.hash~=b.hash then return false end
+    for i=1,a.length do if a.byte(i)~=b.byte(i) then return false end end
+    return true
+end
+local function slug(identifier,source)
+    local out=rope(source);local pending,has_dash=false,false
+    for i=1,identifier.length do
+        local ch=identifier.byte(i)
+        if ch=='-' then pending=out.length>0;has_dash=true
+        else
+            if pending then out.push(' ');pending=false end
+            out.push(ch)
+        end
+    end
+    if not has_dash then return nil end
+    local first,last=1,out.length
+    while space(out.byte(first)) do first=first+1 end
+    while space(out.byte(last)) do last=last-1 end
+    return last>=first and rope_slice(out,first,last) or nil
+end
+local function anchor(source,ref_start,term,ignore_case)
+    if not term or term.length==0 then return nil end
+    local phase=0
+    for finish=ref_start-1,term.length,-1 do
+        local matched=true
+        for i=term.length,1,-1 do
+            local actual,expected=source.byte(finish-term.length+i),term.byte(i)
+            if ignore_case then actual=actual:lower();expected=expected:lower() end
+            if actual~=expected then matched=false;break end
+        end
+        if matched then return finish-term.length+1 end
+        local ch=source.byte(finish)
+        if space(ch) then if phase==1 then phase=2 end
+        elseif ch:match("[\"'”’%]%)%}]") and phase~=2 then phase=1
+        else break end
+    end
+end
+function M.read_diagnostic_references(source,definitions,emit)
+    local output={};local at=1
+    local tick=source.tick or function()end
+    while at<=source.length do
+        if source.byte(at)=='[' and source.byte(at+1)=='^' then
+            local finish=at+2;local identifier=rope(source)
+            while finish<=source.length and source.byte(finish)~=']' do
+                identifier.push(source.byte(finish));finish=finish+1
+            end
+            if identifier.length>0 and source.byte(finish)==']' then
+                if source.on_match then source.on_match() end
+                local definition
+                for i=#definitions,1,-1 do
+                    tick()
+                    if equal_identifier(identifier,definitions[i].identifier) then definition=definitions[i];break end
+                end
+                if definition then
+                    local start=anchor(source,at,definition.term,false)
+                    local slug_term
+                    if not start then
+                        slug_term=slug(identifier,source)
+                        start=anchor(source,at,slug_term,true)
+                    end
+                    if not start then
+                        start=at
+                        while start>1 and source.byte(start-1):match('[%w_-]') do start=start-1 end
+                        slug_term=nil
+                    end
+                    local term=definition.term or (slug_term and rope_slice(source,start,start+slug_term.length-1))
+                    if not term then
+                        term=rope(source);for pos=start,at-1 do term.push(source.byte(pos)) end
+                    elseif not definition.term then
+                        local stable=rope(source);for pos=1,term.length do stable.push(term.byte(pos)) end;term=stable
+                    end
+                    local record={identifier=identifier,term=term,definition=definition.definition,col=start-1,end_col=finish}
+                    if emit then emit(record) else output[#output+1]=record end
+                end
+                at=finish
+            end
+        end
+        at=at+1
+    end
+    return output
+end
+local function materialize(value)
+    if not value then return nil end
+    -- This is output materialization, called by the publication phase only.
+    local parts={};local piece={}
+    for i=1,value.length do
+        piece[#piece+1]=value.byte(i)
+        if #piece==4096 then parts[#parts+1]=table.concat(piece);piece={} end
+    end
+    parts[#parts+1]=table.concat(piece)
+    return table.concat(parts)
+end
+function M.materialize_diagnostic(record)
+    local term=materialize(record.term)
+    return {id=materialize(record.identifier),term=term~='' and term or nil,
+        definition=materialize(record.definition),col=record.col,end_col=record.end_col}
+end
+
 --- Derive persisted definition diagnostics from inline footnote references and
 --- the final managed definition footer.
 --- @param lines string[]

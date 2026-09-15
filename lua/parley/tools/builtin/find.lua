@@ -4,16 +4,7 @@
 -- advertises which version is available so Claude adapts its syntax.
 
 local function detect_find()
-    if vim.fn.executable("find") == 1 then
-        -- macOS find doesn't support --version; just identify it by OS
-        local uname = vim.fn.system("uname -s"):gsub("%s+$", "")
-        if uname == "Darwin" then
-            return "find", "BSD find (macOS)"
-        else
-            local version = vim.fn.system("find --version 2>&1"):match("[^\n]+") or "find"
-            return "find", version
-        end
-    end
+    if vim.fn.executable("find") == 1 then return "find", "find" end
     return nil, nil
 end
 
@@ -40,7 +31,7 @@ local function build_description()
     end
 end
 
-return {
+local definition = {
     name = "find",
     kind = "read",
     description = build_description(),
@@ -74,7 +65,7 @@ return {
         },
         required = { "path" },
     },
-    handler = function(input)
+    handler = function(input, execution)
         input = input or {}
         local ok_fields, fields_err = argv.reject_unknown_fields(input, ALLOWED_FIELDS)
         if not ok_fields then
@@ -141,8 +132,9 @@ return {
             cmd[#cmd + 1] = input.type
         end
 
-        local result = vim.fn.system(cmd)
-        local exit_code = vim.v.shell_error
+        local result, exit_code
+        if execution and execution.run then result, exit_code = execution.run(cmd)
+        else result = vim.fn.system(cmd); exit_code = vim.v.shell_error end
 
         if exit_code ~= 0 then
             return {
@@ -168,3 +160,5 @@ return {
         }
     end,
 }
+
+return require("parley.tools.async_builtin").bind(definition)

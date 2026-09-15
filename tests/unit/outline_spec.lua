@@ -1,4 +1,144 @@
 local outline = require("parley.outline")
+local Document=require('parley.document')
+local function settle(buf) Document.drain(Document.attach(buf,{schedule=false}),1000) end
+
+describe('Indexed live outline',function()
+    it('returns bounded pages and follows surviving selection identity',function()
+        local b=vim.api.nvim_create_buf(false,true); vim.api.nvim_set_current_buf(b)
+        local lines={}; for i=1,25 do lines[i]='💬: q'..i end
+        vim.api.nvim_buf_set_lines(b,0,-1,false,lines); settle(b)
+        local page,result=outline._build_picker_items(b,{chat_user_prefix='💬:'},{is_chat=true})
+        assert.is_true(#page<=8); assert.equals('more',result.status)
+        assert.is_not_nil(page[1].value.identity)
+        local chosen=page[2].value
+        vim.api.nvim_buf_set_lines(b,0,0,false,{'new'}); settle(b)
+        local success,row=outline._jump_to_outline_location({bufnr=b,name='',lnum=chosen.lnum,
+            identity=chosen.identity,windows={vim.api.nvim_get_current_win()}},{chat_user_prefix='💬:'})
+        assert.is_true(success); assert.equals(3,row)
+        vim.api.nvim_buf_delete(b,{force=true})
+    end)
+    it('refuses a surviving heading during uncertainty and after code reclassification',function()
+        local b=vim.api.nvim_create_buf(false,true);vim.api.nvim_set_current_buf(b)
+        vim.api.nvim_buf_set_lines(b,0,-1,false,{'intro','# heading','body','tail'});settle(b)
+        local page=outline._build_picker_items(b,{chat_user_prefix='💬:'},{is_chat=false})
+        local chosen=page[1].value
+        local selection={bufnr=b,name='',lnum=chosen.lnum,identity=chosen.identity,is_chat=false}
+        vim.api.nvim_buf_set_lines(b,0,1,false,{'```'})
+        assert.is_false(Document.lookup(Document.get(b),chosen.identity).metadata.confirmed)
+        vim.api.nvim_win_set_cursor(0,{4,0})
+        assert.is_false(outline._jump_to_outline_location(selection,{chat_user_prefix='💬:'}))
+        assert.same({4,0},vim.api.nvim_win_get_cursor(0))
+        settle(b)
+        assert.is_true(Document.lookup(Document.get(b),chosen.identity).metadata.confirmed)
+        assert.is_false(outline._jump_to_outline_location(selection,{chat_user_prefix='💬:'}))
+        assert.same({4,0},vim.api.nvim_win_get_cursor(0))
+        vim.api.nvim_buf_delete(b,{force=true})
+    end)
+    it('refuses identityless navigation when no current outline candidate is confirmed',function()
+        local b=vim.api.nvim_create_buf(false,true);vim.api.nvim_set_current_buf(b)
+        vim.api.nvim_buf_set_lines(b,0,-1,false,{'plain','tail'})
+        Document.attach(b,{schedule=false});vim.api.nvim_win_set_cursor(0,{2,0})
+        local selection={bufnr=b,name='',lnum=1}
+        assert.is_false(outline._jump_to_outline_location(selection,{chat_user_prefix='💬:'}))
+        settle(b)
+        assert.is_false(outline._jump_to_outline_location(selection,{chat_user_prefix='💬:'}))
+        assert.same({2,0},vim.api.nvim_win_get_cursor(0))
+        vim.api.nvim_buf_delete(b,{force=true})
+    end)
+    it('revalidates after focus autocommands invalidate the selected context',function()
+        local b=vim.api.nvim_create_buf(false,true);vim.api.nvim_set_current_buf(b)
+        vim.api.nvim_buf_set_lines(b,0,-1,false,{'intro','# heading','tail'});settle(b)
+        local page=outline._build_picker_items(b,{chat_user_prefix='💬:'},{is_chat=false})
+        local chosen=page[1].value
+        local other=vim.api.nvim_create_buf(false,true);vim.api.nvim_set_current_buf(other)
+        local id=vim.api.nvim_create_autocmd('BufEnter',{buffer=b,once=true,callback=function()
+            vim.api.nvim_buf_set_lines(b,0,1,false,{'```'})
+        end})
+        local ok=outline._jump_to_outline_location({bufnr=b,name='',identity=chosen.identity,
+            lnum=chosen.lnum,is_chat=false},{chat_user_prefix='💬:'})
+        pcall(vim.api.nvim_del_autocmd,id)
+        assert.is_false(ok)
+        vim.api.nvim_buf_delete(b,{force=true});vim.api.nvim_buf_delete(other,{force=true})
+    end)
+    it('returns pending without materializing an unread buffer',function()
+        local b=vim.api.nvim_create_buf(false,true)
+        vim.api.nvim_buf_set_lines(b,0,-1,false,{'💬: q'})
+        Document.attach(b,{schedule=false})
+        local items,result=outline._build_picker_items(b,{chat_user_prefix='💬:'},{is_chat=true})
+        assert.same({},items); assert.equals('opaque',result.status)
+        vim.api.nvim_buf_delete(b,{force=true})
+    end)
+    it('caps label reads, pages all candidates, and rejects stale cursors',function()
+        local b=vim.api.nvim_create_buf(false,true)
+        local lines={};for i=1,20 do lines[i]='💬: '..string.rep('x',10000)..i end
+        vim.api.nvim_buf_set_lines(b,0,-1,false,lines); settle(b)
+        local reader=require('parley.line_reader');local read_bytes=0;local largest=0;local full=false
+        local observer=reader.set_observer(b,function(e)
+            read_bytes=read_bytes+(e.bytes_read or 0);largest=math.max(largest,e.bytes_read or 0)
+            full=full or e.full_buffer
+        end)
+        local cursor,first_cursor,count=nil,nil,0
+        repeat
+            local page,result=outline._build_picker_items(b,{chat_user_prefix='💬:'},{is_chat=true,cursor=cursor})
+            assert.is_true(#page<=8);count=count+#page;cursor=result.cursor;first_cursor=first_cursor or cursor
+        until not cursor
+        assert.equals(20,count); assert.is_true(largest<=4096); assert.equals(20*4096,read_bytes)
+        assert.is_false(full)
+        reader.clear_observer(b,observer)
+        vim.api.nvim_buf_set_text(b,0,10,0,10,{'x'})
+        local _,stale=outline._build_picker_items(b,{chat_user_prefix='💬:'},{is_chat=true,cursor=first_cursor})
+        assert.equals('stale',stale.status)
+        vim.api.nvim_buf_delete(b,{force=true})
+    end)
+    it('loads pending live pages asynchronously and refuses a deleted selection',function()
+        local b=vim.api.nvim_create_buf(false,true);vim.api.nvim_set_current_buf(b)
+        vim.api.nvim_buf_set_lines(b,0,-1,false,{'💬: q','body'})
+        local loaded
+        outline._load_live_items(b,{chat_user_prefix='💬:'},{is_chat=true},function(items) loaded=items end)
+        assert.is_true(vim.wait(2000,function()return loaded~=nil end,5))
+        assert.equals(1,#loaded)
+        local chosen=loaded[1].value
+        vim.api.nvim_buf_set_lines(b,0,1,false,{'plain'})
+        local success=outline._jump_to_outline_location({bufnr=b,name='',identity=chosen.identity,
+            lnum=chosen.lnum},{chat_user_prefix='💬:'})
+        assert.is_false(success)
+        vim.api.nvim_buf_delete(b,{force=true})
+    end)
+    it('lets native timers run before all live outline pages complete',function()
+        local b=vim.api.nvim_create_buf(false,true)
+        local lines={};for i=1,160 do lines[i]='💬: question '..i end
+        vim.api.nvim_buf_set_lines(b,0,-1,false,lines);settle(b)
+        local completed,observed=false,nil
+        outline._load_live_items(b,{chat_user_prefix='💬:'},{is_chat=true},function()completed=true end)
+        vim.defer_fn(function()observed=completed end,2)
+        assert.is_true(vim.wait(500,function()return observed~=nil end,1))
+        vim.api.nvim_buf_delete(b,{force=true})
+        assert.is_false(observed)
+    end)
+    it('cancels queued loading when an unloaded buffer remains valid',function()
+        local b=vim.api.nvim_create_buf(false,true)
+        vim.api.nvim_buf_set_lines(b,0,-1,false,{'💬: q'})
+        local doc=Document.attach(b,{schedule=false})
+        local scheduled={};local original=vim.defer_fn
+        vim.defer_fn=function(fn)
+            scheduled[#scheduled+1]=fn
+            return {is_closing=function()return false end,stop=function()end,close=function()end}
+        end
+        local completed=false
+        local success,err=pcall(function()
+            outline._load_live_items(b,{chat_user_prefix='💬:'},{is_chat=true},function()completed=true end)
+            Document.repair_step(doc)
+            assert.is_true(#scheduled>0)
+            vim.api.nvim_buf_delete(b,{unload=true,force=true})
+            assert.is_true(vim.api.nvim_buf_is_valid(b));assert.is_false(vim.api.nvim_buf_is_loaded(b))
+            for _,fn in ipairs(scheduled) do fn() end
+            assert.is_nil(Document.get(b));assert.is_false(completed)
+        end)
+        vim.defer_fn=original
+        vim.api.nvim_buf_delete(b,{force=true})
+        assert.is_true(success,err)
+    end)
+end)
 
 describe("Outline navigation", function()
     local original_notify
@@ -23,6 +163,7 @@ describe("Outline navigation", function()
             "## Section",
         })
 
+        settle(bufnr)
         local ok, jumped_lnum = outline._jump_to_outline_location({
             bufnr = bufnr,
             name = vim.api.nvim_buf_get_name(bufnr),
@@ -48,6 +189,7 @@ describe("Outline navigation", function()
             "More text",
         })
 
+        settle(bufnr)
         local ok, jumped_lnum = outline._jump_to_outline_location({
             bufnr = bufnr,
             name = vim.api.nvim_buf_get_name(bufnr),
@@ -134,6 +276,7 @@ describe("Outline branch destinations (#250)", function()
         assert.same({ 1, 0 }, vim.api.nvim_win_get_cursor(0))
         for _, item in ipairs(options.items) do
             if item.value.file == leaf and item.type == "question" then
+                settle(vim.api.nvim_get_current_buf())
                 options.on_select(item)
                 assert.same({ 5, 0 }, vim.api.nvim_win_get_cursor(0))
                 return
@@ -152,8 +295,58 @@ describe("Outline branch destinations (#250)", function()
         local selected = options.items[options.initial_index]
         assert.equals("  label", selected.display)
         assert.equals(9, selected.value.lnum)
+        settle(vim.api.nvim_get_current_buf())
         options.on_select(selected)
         assert.same({ 9, 0 }, vim.api.nvim_win_get_cursor(0))
+    end)
+
+    it("refuses a stale tree question instead of navigating to its neighbor", function()
+        local path=chat("parent")
+        open_outline(path)
+        local chosen
+        for _,item in ipairs(options.items) do
+            if item.type=="question" then chosen=item;break end
+        end
+        assert.is_not_nil(chosen)
+        local b=vim.api.nvim_get_current_buf()
+        vim.api.nvim_buf_set_lines(b,4,-1,false,{"plain", "💬: neighbor"})
+        settle(b)
+        vim.api.nvim_win_set_cursor(0,{1,0})
+        options.on_select(chosen)
+        assert.same({1,0},vim.api.nvim_win_get_cursor(0))
+        assert.truthy(table.concat(notices,"\n"):find("Outline",1,true))
+    end)
+
+    it("binds a disk-derived selection to its original question text", function()
+        open_outline(chat("parent"))
+        local chosen
+        for _,item in ipairs(options.items) do if item.type=="question" then chosen=item;break end end
+        assert.is_not_nil(chosen)
+        local b=vim.api.nvim_get_current_buf()
+        vim.api.nvim_buf_set_lines(b,4,5,false,{"💬: replacement question"});settle(b)
+        vim.api.nvim_win_set_cursor(0,{1,0});options.on_select(chosen)
+        assert.same({1,0},vim.api.nvim_win_get_cursor(0))
+    end)
+    it("binds a confirmed live tree selection to its relocating identity", function()
+        local path=chat("parent")
+        vim.cmd("edit "..vim.fn.fnameescape(path));settle(vim.api.nvim_get_current_buf())
+        outline.question_picker(parley.config)
+        local chosen
+        for _,item in ipairs(options.items) do if item.type=="question" then chosen=item;break end end
+        assert.is_not_nil(chosen)
+        local b=vim.api.nvim_get_current_buf()
+        vim.api.nvim_buf_set_lines(b,4,4,false,{"new text"});settle(b)
+        vim.api.nvim_win_set_cursor(0,{1,0});options.on_select(chosen)
+        assert.same({6,0},vim.api.nvim_win_get_cursor(0))
+    end)
+
+    it("opens the root file entry at file start without claiming row semantics", function()
+        open_outline(chat("parent"))
+        local root_item=options.items[1]
+        assert.is_true(root_item.value.file_start)
+        vim.api.nvim_win_set_cursor(0,{5,0})
+        options.on_select(root_item)
+        assert.same({1,0},vim.api.nvim_win_get_cursor(0))
     end)
 
     it("reports a missing child without opening an empty file", function()

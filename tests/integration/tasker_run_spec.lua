@@ -12,14 +12,14 @@ local logger = require("parley.logger")
 describe("tasker.run integration", function()
     before_each(function()
         -- Clean up any stale handles before each test
-        tasker._handles = {}
+        tasker._reset()
         tasker._queries = {}
     end)
 
     after_each(function()
         -- Stop any running processes
         tasker.stop()
-        tasker._handles = {}
+        tasker._reset()
         tasker._uv = nil
     end)
 
@@ -504,40 +504,7 @@ describe("tasker.run integration", function()
     end)
 
     describe("Group G: drain-safe terminal", function()
-        local function fake_uv(opts)
-            opts = opts or {}
-            local state = { pipes = {}, spawn_calls = 0 }
-            local runtime = {}
-            runtime.new_pipe = function()
-                local pipe = { closing = false, close_calls = 0 }
-                pipe.read_stop = function() end
-                pipe.is_closing = function(self) return self.closing end
-                pipe.close = function(self)
-                    self.closing = true
-                    self.close_calls = self.close_calls + 1
-                end
-                table.insert(state.pipes, pipe)
-                return pipe
-            end
-            runtime.spawn = function(_cmd, _spawn_opts, on_exit)
-                state.spawn_calls = state.spawn_calls + 1
-                state.on_exit = on_exit
-                if opts.spawn_error then return nil, opts.spawn_error end
-                local handle = { closing = false }
-                handle.is_closing = function(self) return self.closing end
-                handle.close = function(self) self.closing = true end
-                state.handle = handle
-                return handle, 4242
-            end
-            runtime.read_start = function(pipe, reader)
-                local stream = pipe == state.pipes[1] and "stdout" or "stderr"
-                if opts[stream .. "_start_throw"] then error(stream .. " start exploded") end
-                if opts[stream .. "_start_reject"] then return false, stream .. " start rejected" end
-                pipe.reader = reader
-                return 0
-            end
-            return runtime, state
-        end
+        local fake_uv = require("tests.helpers.fake_process").new
 
         for _, case in ipairs({
             { name = "exit before both EOFs", exit_first = true },
@@ -723,17 +690,15 @@ describe("tasker.run integration", function()
         it("rejects busy work before allocating pipes", function()
             local runtime, state = fake_uv()
             tasker._uv = runtime
-            local original_is_busy = tasker.is_busy
-            tasker.is_busy = function() return true end
+            tasker.run(9, "fake", {})
             local starts = 0
             local terminals = 0
             tasker.run(9, "fake", {}, function() terminals = terminals + 1 end,
                 nil, nil, function() starts = starts + 1 end)
-            tasker.is_busy = original_is_busy
             assert.is_true(vim.wait(100, function() return starts == 1 end, 5))
-            assert.equals(0, #state.pipes)
-            assert.equals(0, state.spawn_calls)
-            assert.equals(0, #tasker._handles)
+            assert.equals(2, #state.pipes)
+            assert.equals(1, state.spawn_calls)
+            assert.equals(1, #tasker._handles)
             assert.equals(0, terminals)
         end)
 
@@ -820,94 +785,140 @@ describe("tasker.run integration", function()
         end)
     end)
 
-    describe("Group C2: buffer-scoped stopping", function()
-        local function fake_handle(closing)
-            return {
-                is_closing = function() return closing == true end,
-            }
+    describe("ownership", function()
+        local fake = require("tests.helpers.fake_process")
+        it("retains ownership after signal and unknown probe until exit plus drain", function()
+            local runtime, state = fake.new()
+            runtime.kill = function() return nil, "EPERM", "EPERM" end
+            tasker._uv = runtime
+            tasker.run(11, "fake", {}, nil, nil, nil, nil, {generation_id="g"})
+            assert.is_function(tasker.stop_owner)
+            assert.is_false(pcall(tasker.stop_owner, "g"))
+            tasker._handles = {}
+            tasker.cleanup_stale_handles()
+            assert.is_true(tasker.is_busy(11, true))
+            state.on_exit(0, 0)
+            assert.is_true(tasker.is_busy(11, true))
+            state.pipes[1].reader(nil, nil)
+            state.pipes[2].reader(nil, nil)
+            vim.wait(100, function() return not tasker.is_busy(11, true) end, 5)
+            assert.is_false(tasker.is_busy(11, true))
+        end)
+        it("releases admission before callback launches retry with reused PID", function()
+            local runtime, state = fake.new({reuse_pid=true})
+            tasker._uv = runtime
+            local retry
+            tasker.run(11, "fake", {}, function()
+                retry = tasker.run(11, "fake", {})
+            end)
+            state.on_exit(0, 0)
+            state.pipes[1].reader(nil, nil)
+            state.pipes[2].reader(nil, nil)
+            assert.is_true(vim.wait(100, function() return retry ~= nil end, 5))
+            assert.is_true(tasker.is_busy(11, true))
+            assert.equals(2, state.spawn_calls)
+        end)
+        it("allows explicit owners on the same buffer", function()
+            local runtime, state = fake.new()
+            tasker._uv = runtime
+            local a = tasker.run(11, "fake", {}, nil,nil,nil,nil,{admission_key="a"})
+            local b = tasker.run(11, "fake", {}, nil,nil,nil,nil,{admission_key="b"})
+            assert.is_not_nil(a)
+            assert.is_not.equal(a,b)
+            assert.equals(2,state.spawn_calls)
+        end)
+        it("successful stop retains ownership and emits finished only after drain", function()
+            local runtime,state=fake.new()
+            tasker._uv=runtime
+            local done=0
+            tasker.run(11,"fake",{},function() done=done+1 end,nil,nil,nil,{generation_id="a"})
+            tasker.run(11,"fake",{},nil,nil,nil,nil,{generation_id="b",admission_key="b"})
+            assert.equals(1,tasker.stop_owner("a"))
+            assert.equals(1,#state.signals)
+            assert.equals(4242,state.signals[1].pid)
+            assert.is_true(tasker.is_busy(11,true))
+            assert.equals(0,done)
+            state.processes[4242]:finish()
+            vim.wait(100,function() return done==1 end,5)
+            assert.equals(1,done)
+            assert.equals(1,#tasker._handles)
+            assert.equals(4243,tasker._handles[1].pid)
+        end)
+        it("query rejection cannot retire attached attempts or forged payloads",function()
+            local runtime,state=fake.new()
+            tasker._uv=runtime
+            tasker.set_query("q",{buf=11})
+            tasker.run(11,"fake",{},nil,nil,nil,nil,{query_id="q"})
+            assert.is_false(tasker.reject_query("q"))
+            tasker.get_query("q").terminal=true
+            tasker.get_query("q").timestamp=0
+            tasker.cleanup_old_queries(0,-1)
+            assert.is_not_nil(tasker.get_query("q"))
+            state.processes[4242]:exit()
+            tasker.cleanup_old_queries(0,-1)
+            assert.is_not_nil(tasker.get_query("q"))
+            state.processes[4242]:emit("stdout",nil)
+            state.processes[4242]:emit("stderr",nil)
+            vim.wait(100,function() return #tasker._handles==0 end,5)
+            tasker.cleanup_old_queries(0,-1)
+            assert.is_nil(tasker.get_query("q"))
+        end)
+        for _,opts in ipairs({{pipe_fail_at=2},{spawn_throw=true},{spawn_error="ENOENT"}}) do
+            it("partial launch releases admission and closes allocated pipes",function()
+                local runtime,state=fake.new(opts)
+                tasker._uv=runtime
+                local rejected=0
+                tasker.set_query("q",{buf=11})
+                tasker.run(11,"fake",{},nil,nil,nil,function() rejected=rejected+1 end,{query_id="q"})
+                assert.is_true(vim.wait(100,function() return rejected==1 end,5))
+                for _,pipe in ipairs(state.pipes) do assert.equals(1,pipe.close_calls) end
+                assert.is_false(tasker.is_busy(11,true))
+                tasker.cleanup_old_queries(0,-1)
+                assert.is_nil(tasker.get_query("q"))
+            end)
         end
-
-        it("stops only matching buffer handles and is idempotent", function()
-            local killed = {}
-            tasker._uv = {
-                kill = function(pid, signal)
-                    table.insert(killed, { pid = pid, signal = signal })
-                    return 0
-                end,
-            }
-            tasker._handles = {
-                { handle = fake_handle(false), pid = 101, buf = 11 },
-                { handle = fake_handle(false), pid = 203, buf = 22 },
-                { handle = fake_handle(false), pid = 102, buf = 11 },
-            }
-
-            assert.equals(2, tasker.stop_buf(11))
-            assert.same({
-                { pid = 101, signal = 15 },
-                { pid = 102, signal = 15 },
-            }, killed)
-            assert.same({ 203 }, vim.tbl_map(function(item) return item.pid end, tasker._handles))
-
-            assert.equals(0, tasker.stop_buf(11))
-            assert.equals(2, #killed)
-            assert.same({ 203 }, vim.tbl_map(function(item) return item.pid end, tasker._handles))
+        it("handles reentrant exit and EOF during launch",function()
+            local runtime,state=fake.new({exit_during_spawn=true,eof_during_read_start=true})
+            tasker._uv=runtime
+            local done=0
+            tasker.run(11,"fake",{},function() done=done+1 end)
+            assert.is_true(vim.wait(100,function() return done==1 end,5))
+            assert.is_false(tasker.is_busy(11,true))
+            assert.is_true(state.handle.closing)
         end)
-
-        it("retires an already-closing match and emits one finished event", function()
-            local killed = {}
-            tasker._uv = {
-                kill = function(pid)
-                    table.insert(killed, pid)
-                    return 0
-                end,
-            }
-            tasker._handles = {
-                { handle = fake_handle(true), pid = 101, buf = 11 },
-                { handle = fake_handle(false), pid = 203, buf = 22 },
-            }
-            local scheduled = {}
-            local original_schedule = vim.schedule
-            vim.schedule = function(callback) table.insert(scheduled, callback) end
-
-            assert.equals(1, tasker.stop_buf(11))
-            assert.equals(1, #scheduled)
-            assert.same({}, killed)
-            assert.same({ 203 }, vim.tbl_map(function(item) return item.pid end, tasker._handles))
-
-            assert.equals(0, tasker.stop_buf(11))
-            assert.equals(1, #scheduled)
-            vim.schedule = original_schedule
-            scheduled[1]()
+        it("missing probe retains a detached attempt until explicit exit and drain",function()
+            local runtime,state=fake.new()
+            tasker._uv=runtime
+            local buf=vim.api.nvim_create_buf(false,true)
+            local id=tasker.run(buf,"fake",{})
+            vim.api.nvim_buf_delete(buf,{force=true})
+            state.processes[4242].probe="missing"
+            tasker.cleanup_stale_handles()
+            assert.is_true(tasker.is_busy(buf,true))
+            local copy=tasker.get_attempt(id)
+            copy.exited,copy.stdout_eof,copy.stderr_eof=true,true,true
+            assert.is_true(tasker.is_busy(buf,true))
+            state.processes[4242]:finish()
+            assert.is_true(vim.wait(100,function() return not tasker.is_busy(buf,true) end,5))
         end)
-
-        it("retires scoped handles but reports a transport signal failure", function()
-            tasker._uv = {
-                kill = function() error("signal rejected") end,
-            }
-            tasker._handles = {
-                { handle = fake_handle(false), pid = 101, buf = 11 },
-                { handle = fake_handle(false), pid = 203, buf = 22 },
-            }
-
-            local ok = pcall(tasker.stop_buf, 11)
-
-            assert.is_false(ok)
-            assert.same({ 203 }, vim.tbl_map(function(item) return item.pid end, tasker._handles))
+        it("successful signals are idempotent but failed signals can retry",function()
+            local runtime,state=fake.new()
+            tasker._uv=runtime
+            local id=tasker.run(11,"fake",{},nil,nil,nil,nil,{generation_id="a"})
+            state.processes[4242].signal_result="unknown"
+            assert.is_false(pcall(tasker.stop_owner,"a"))
+            assert.equals("unknown",tasker.get_attempt(id).signal_observation)
+            state.processes[4242].signal_result="alive"
+            assert.equals(1,tasker.stop_owner("a"))
+            assert.equals(1,tasker.stop_owner("a"))
+            assert.equals(2,#state.signals)
         end)
-
-        it("reports libuv's non-throwing signal failure result", function()
-            tasker._uv = {
-                kill = function() return nil, "EPERM: operation not permitted", "EPERM" end,
-            }
-            tasker._handles = {
-                { handle = fake_handle(false), pid = 101, buf = 11 },
-                { handle = fake_handle(false), pid = 203, buf = 22 },
-            }
-
-            local ok = pcall(tasker.stop_buf, 11)
-
-            assert.is_false(ok)
-            assert.same({ 203 }, vim.tbl_map(function(item) return item.pid end, tasker._handles))
+        it("an absent owner cannot signal unscoped utility attempts",function()
+            local runtime,state=fake.new()
+            tasker._uv=runtime
+            tasker.run(nil,"fake",{})
+            assert.equals(0,tasker.stop_owner(nil))
+            assert.equals(0,#state.signals)
         end)
     end)
 end)

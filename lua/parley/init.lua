@@ -244,25 +244,21 @@ M.remove_note_dir = function(d, p) return note_dirs.remove_note_dir(d, p) end
 M.rename_note_dir = function(d, l, p) return note_dirs.rename_note_dir(d, l, p) end
 
 
-local function set_chat_topic_line(buf, lines, topic)
-	local header_end = find_chat_header_end(lines)
-	if not header_end then
-		vim.api.nvim_buf_set_lines(buf, 0, 1, false, { "# topic: " .. topic })
-		return
-	end
-
-	if lines[1] and lines[1]:gsub("^%s*(.-)%s*$", "%1") == "---" then
-		for i = 2, header_end - 1 do
-			if lines[i]:match("^%s*topic:%s*") then
-				vim.api.nvim_buf_set_lines(buf, i - 1, i, false, { "topic: " .. topic })
-				return
-			end
+local function capture_chat_topic(buf, lines)
+	local row,prefix,suffix=0,"# topic: ",""
+	local header_end=find_chat_header_end(lines)
+	local insertion=false
+	if header_end and lines[1] and lines[1]:match("^%s*%-%-%-%s*$") then
+		row,prefix,insertion=1,"topic: ",true
+		for i=2,header_end-1 do
+			if lines[i]:match("^%s*topic:%s*") then row,insertion=i-1,false;break end
 		end
-		vim.api.nvim_buf_set_lines(buf, 1, 1, false, { "topic: " .. topic })
-		return
 	end
-
-	vim.api.nvim_buf_set_lines(buf, 0, 1, false, { "# topic: " .. topic })
+	if insertion then suffix="\n" end
+	local capture=require("parley.buffer_edit").capture_user(buf,"prune-child-topic",{
+		{first={row=row,col=0},last={row=row,col=insertion and 0 or #(lines[row+1] or "")}},
+	})
+	return capture,prefix,suffix
 end
 
 local function is_follow_cursor_enabled(override_free_cursor)
@@ -644,6 +640,10 @@ M.setup = function(opts)
 	-- now merge the rest of opts into M.config, this would be fully override.
 	for k, v in pairs(opts) do
 		M.config[k] = v
+	end
+	local tool_limits = require("parley.tools.producer").configure(M.config.tool_execution)
+	if not tool_limits.ok then
+		error("Invalid tool execution configuration: " .. tostring(tool_limits.reason))
 	end
 
 	-- Bind image conversion to this setup, resetting cached probes and notices.
@@ -1316,11 +1316,17 @@ M.setup = function(opts)
 	-- register default commands
 	for cmd, _ in pairs(M.cmd) do
 		if M.hooks[cmd] == nil then
-			M.helpers.create_user_command(M.config.cmd_prefix .. cmd, function(params)
+			local function invoke(params)
 				M.logger.debug("running command: " .. cmd)
 				M.refresh_state()
 				M.cmd[cmd](params)
-			end, completions[cmd])
+			end
+			if cmd == "ChatResumeBatch" then
+				vim.api.nvim_create_user_command(M.config.cmd_prefix .. cmd, invoke,
+					{ bang = true, nargs = 0, desc = "Resume batch; ! accepts edited input" })
+			else
+				M.helpers.create_user_command(M.config.cmd_prefix .. cmd, invoke, completions[cmd])
+			end
 		end
 	end
 
@@ -1583,9 +1589,20 @@ M._get_chat_remote_reference_cache = function(f) return chat_respond.get_chat_re
 M._format_remote_reference_error_content = function(u, e) return chat_respond.format_remote_reference_error_content(u, e) end
 M._format_missing_remote_reference_cache_content = function(u) return chat_respond.format_missing_remote_reference_cache_content(u) end
 
--- stop receiving responses for all processes and clean the handles
----@param signal number | nil # signal to send to the process
+-- Stop one captured response generation, or explicitly stop this document.
 M.cmd.Stop = function(signal) chat_respond.cmd_stop(signal) end
+M.cmd.StopDocument = function() chat_respond.cmd_stop_document() end
+M.cmd.ChatResumeResponse = function() chat_respond.cmd_resume_response() end
+
+
+M.cmd.ToolOperations = function() require("parley.tool_operations").open() end
+M.cmd.ChatResumeBatch = function(params) return chat_respond.resume_batch(params) end
+M.cmd.AnswerRecovery = function()
+    local recovery = require('parley.chat_recovery'); recovery.setup(M); return recovery.open()
+end
+M.cmd.AnswerRestore = function()
+    local recovery = require('parley.chat_recovery'); recovery.setup(M); return recovery.restore()
+end
 
 --------------------------------------------------------------------------------
 -- Keybinding help (driven by keybinding_registry)
@@ -1875,7 +1892,7 @@ local function drill_in_visual(buf)
 		table.insert(new_lines, wrapped_lines[#wrapped_lines] .. suffix)
 	end
 
-	vim.api.nvim_buf_set_lines(buf, sr - 1, er, false, new_lines)
+	require("parley.buffer_edit").replace_user_lines(buf, sr - 1, er, false, new_lines)
 
 	-- Cursor between [ and ] in the last line of wrapped text. Wrap always
 	-- ends with `[]`, so placing the cursor at the index of `]` (0-based)
@@ -1901,7 +1918,7 @@ end
 -- the footnote edit lands on the pre-edit content-hash → the empty snapshot
 -- renders → both decorations clear.
 -- `span` = the visual selection {sr, sc, er, ec} (1-based getpos values).
-local function render_definition(buf, span, phrase, result)
+local function render_definition(buf, capture, phrase, result)
 	if not vim.api.nvim_buf_is_valid(buf) then
 		return
 	end
@@ -1922,7 +1939,15 @@ local function render_definition(buf, span, phrase, result)
 		return
 	end
 
-	local sr, sc, er, ec = span[1], span[2], span[3], span[4]
+	local edits = require("parley.buffer_edit")
+	local resolved = edits.resolve_user(capture)
+	if not resolved then
+		M.logger.warning("Define: selection changed during lookup — re-select to define")
+		return
+	end
+	local region = resolved.regions[1]
+	local sr, sc = region.first.row + 1, region.first.col + 1
+	local er, ec = region.last.row + 1, region.last.col
 	local define = require("parley.define")
 	local skill_render = require("parley.skill_render")
 	local projection = require("parley.skills.review.projection")
@@ -1942,19 +1967,27 @@ local function render_definition(buf, span, phrase, result)
 	projection.set_applying(buf, true)
 	local input = call.input or {}
 	local e = define.apply_definition_footnote(lines, sr, sc - 1, er, ec - 1, input.term or phrase, input.definition)
-	require("parley.buffer_edit").replace_all_lines_for_definition(buf, e.lines)
+	local applied = edits.apply_user_line_hunks(capture, lines, e.lines)
+	if applied.status ~= "applied" then
+		projection.set_applying(buf, false)
+		M.logger.warning("Define: edit cancelled: " .. tostring(applied.reason or applied.error or applied.status))
+		return
+	end
 
 	local diag_span = e.diagnostic_span
 	skill_render.highlight_span(buf, diag_span.lnum, diag_span.col, diag_span.end_lnum, diag_span.end_col)
-	skill_render.refresh_footnote_diagnostics(buf)
 
 	-- Record projection states so undo/redo of the footnote edit clears/restores
 	-- the decorations (#133 M5 machinery, reused): pre-edit hash → empty
 	-- snapshot, footnoted hash → highlight+diagnostic; attach the watcher.
 	projection.record_empty_for(buf, original)
-	projection.record(buf)
 	projection.ensure_watch(buf)
 	projection.set_applying(buf, false)
+	-- The post-edit snapshot includes diagnostics only after their current
+	-- source revision has actually published; edits/undo cancel this callback.
+	skill_render.refresh_footnote_diagnostics(buf, { on_publish = function()
+		projection.record(buf)
+	end })
 
 	-- Park the cursor on the term's line so diag_display's current-line
 	-- virtual_lines reveals the definition immediately.
@@ -1987,15 +2020,25 @@ function M.define_visual(buf)
 	local parsed = M.parse_chat(lines, header_end)
 	local context = define.context_for_selection(parsed, sr, lines, M.find_exchange_at_line)
 
-	local span = { sr, sc, er, ec }
+	local capture, reason = require("parley.buffer_edit").capture_user(buf, "define-selection", {
+		{ first = { row = sr - 1, col = sc - 1 }, last = { row = er - 1, col = math.min(ec, #(lines[er] or "")) } },
+	})
+	if not capture then M.logger.warning("Define: " .. tostring(reason)); return end
 	local manifest = require("parley.skills.define")
 	local stop_selection_spinner = require("parley.selection_spinner").start(buf, er - 1, ec)
 	require("parley.skill_invoke").invoke(buf, manifest, { phrase = phrase }, {
 		document = context,
 		no_reload = true,
 		detached_progress = false,
-		on_terminal = stop_selection_spinner,
-		on_done = function(result) render_definition(buf, span, phrase, result) end,
+		on_terminal = function(result)
+			stop_selection_spinner()
+			if not result.ok then require("parley.buffer_edit").cancel_user(capture) end
+		end,
+		on_done = function(result)
+			local ok,err=pcall(render_definition,buf,capture,phrase,result)
+			require("parley.buffer_edit").cancel_user(capture)
+			if not ok then error(err,0) end
+		end,
 	})
 end
 
@@ -2095,6 +2138,20 @@ local function drill_in_resolve_at_cursor_with_mode(buf, mode)
 	local marker_len = m.byte_end - m.byte_start + 1
 	local inserted_len = #new_text - #text + marker_len
 
+	local document = require("parley.document")
+	local doc = document.get(buf) or document.attach(buf)
+	local sr, sc = byte_offset_to_rowcol(lines, m.byte_start - 1)
+	local er, ec = byte_offset_to_rowcol(lines, m.byte_end)
+	local token, reason = document.capture_user(doc, {
+		operation = "drill-in-" .. mode,
+		regions = { { first = { row = sr, col = sc }, last = { row = er, col = ec } } },
+	})
+	if not token then
+		M.logger.warning("Marker edit unavailable: " .. tostring(reason))
+		return false
+	end
+	local replacement = new_text:sub(m.byte_start, m.byte_start + inserted_len - 1)
+
 	-- Phase 1: flash the text that's about to be removed, red. For a strike
 	-- marker (🤖~D~{R}) only `🤖~D~` is the deletion — the `{R}` chain is the
 	-- replacement that survives, so red stops at the strike's closing `~`
@@ -2109,40 +2166,29 @@ local function drill_in_resolve_at_cursor_with_mode(buf, mode)
 		if not vim.api.nvim_buf_is_valid(buf) then return end
 		drill_in_flash_clear(buf)
 
-		local new_lines = vim.split(new_text, "\n", { plain = true })
-		-- Replace ONLY the marker's line range (not the whole buffer) so review
-		-- decorations elsewhere RIDE the edit via extmark gravity — exactly like a
-		-- manual edit. A full set_lines(0,-1) would wipe every extmark + diagnostic
-		-- (#133). A content-verification fallback guarantees correctness if the
-		-- range math is ever off.
-		local start0, end0, region = _drill_in_mod.narrow_replace_range(lines, new_text, m.byte_start, m.byte_end)
-		local ok_narrow = pcall(vim.api.nvim_buf_set_lines, buf, start0, end0, false, region)
-		if not ok_narrow
-			or table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n") ~= new_text then
-			vim.api.nvim_buf_set_lines(buf, 0, -1, false, new_lines) -- safe fallback
+		local resolved, stale = document.resolve_user(doc, token)
+		if not resolved then
+			document.cancel_user(doc, token)
+			M.logger.warning("Marker edit cancelled: " .. tostring(stale))
+			return
 		end
-
-		local target = m.byte_start
-		local target_row, target_col = 1, 0
-		local pos = 1
-		for i, line in ipairs(new_lines) do
-			if pos + #line >= target then
-				target_row = i
-				target_col = target - pos
-				break
-			end
-			pos = pos + #line + 1
+		local first = resolved.regions[1].first
+		local result = document.apply_user(doc, token, { patches = { { region = 1, text = replacement } } })
+		if result.status ~= "applied" then
+			document.cancel_user(doc, token)
+			M.logger.warning("Marker edit cancelled: " .. tostring(result.reason or result.error or result.status))
+			return
 		end
-		local line_len = #(new_lines[target_row] or "")
-		if target_col > line_len then target_col = line_len end
-		if target_col < 0 then target_col = 0 end
 		if vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == buf then
-			pcall(vim.api.nvim_win_set_cursor, win, { target_row, target_col })
+			pcall(vim.api.nvim_win_set_cursor, win, { first.row + 1, first.col })
 		end
-
 		if inserted_len > 0 then
-			drill_in_flash(buf, new_lines, m.byte_start - 1, m.byte_start - 1 + inserted_len,
-				"ParleyReviewFlashInsert")
+			local parts = vim.split(replacement, "\n", { plain = true })
+			pcall(vim.api.nvim_buf_set_extmark, buf, drill_in_flash_ns, first.row, first.col, {
+				end_row = first.row + #parts - 1,
+				end_col = #parts == 1 and first.col + #replacement or #parts[#parts],
+				hl_group = "ParleyReviewFlashInsert", priority = 250,
+			})
 			vim.defer_fn(function() drill_in_flash_clear(buf) end, DRILL_IN_FLASH_INSERT_MS)
 		end
 	end
@@ -2174,7 +2220,7 @@ local function drill_in_insert(buf)
 	local line = vim.api.nvim_buf_get_lines(buf, row, row + 1, false)[1] or ""
 	local before = line:sub(1, col)
 	local after = line:sub(col + 1)
-	vim.api.nvim_buf_set_lines(buf, row, row + 1, false, { before .. "🤖[]" .. after })
+	require("parley.buffer_edit").replace_user_lines(buf, row, row + 1, false, { before .. "🤖[]" .. after })
 	-- 🤖 = 4 bytes, `[` = 1 byte → cursor between [ and ] sits at col + 5.
 	vim.api.nvim_win_set_cursor(0, { row + 1, col + 5 })
 end
@@ -2371,6 +2417,17 @@ local function branch_inserters(buf, abs_link, owns_file)
 		local new_chat_file = (new_target())
 		local rel_path = vim.fn.fnamemodify(new_chat_file, ":t")
 
+		local regions = {}
+		for _,edit in ipairs(marker_edits) do
+			local sr,sc=byte_offset_to_rowcol(lines,edit.start_byte-1)
+			local er,ec=byte_offset_to_rowcol(lines,edit.end_byte-1)
+			regions[#regions+1]={first={row=sr,col=sc},last={row=er,col=ec}}
+		end
+		regions[#regions+1]={first={row=plan.ref_after-1,col=0},
+			last={row=plan.ref_after-1,col=#(lines[plan.ref_after] or "")}}
+		local capture,capture_error=buffer_edit.capture_user(buf,"branch-gather",regions)
+		if not capture then M.logger.warning("Branch: "..tostring(capture_error));return true end
+
 		-- Create the child FIRST, before touching the parent (#214 BR-63). The
 		-- write was pcall-guarded and this was not, so an unwritable chat_dir
 		-- raised out of the keymap callback with the markers already stripped and
@@ -2383,42 +2440,50 @@ local function branch_inserters(buf, abs_link, owns_file)
 		-- orphan and is handled below by not navigating away on a failed write.
 		local created_ok = pcall(create_child_if_owned, new_chat_file, "?", question)
 		if not created_ok then
+			buffer_edit.cancel_user(capture)
 			M.logger.warning("Branch: could not create " .. rel_path
 				.. " — nothing was changed in this chat")
 			return true
 		end
 
-		-- #214 BR-58: anchor the insertion point BEFORE stripping. `ref_after` is
-		-- a pre-strip line number and `apply_text_edits` changes the line count
-		-- whenever a removed marker owned whole lines — which the ordinary
-		-- standalone `🤖[…]` form does. An extmark travels with the edit;
-		-- chat_respond solves the same problem the same way (`make_handle` around
-		-- its own gather). The earlier code kept the raw number, so the reference
-		-- drifted by however many lines the strip removed, in the common case
-		-- landing past the exchange's `📝:` summary.
-		-- Anchor ON the cursor line, not on the line after it. `ref_after` is
-		-- 1-indexed and `make_handle` takes a 0-indexed row, so passing it
-		-- directly put the mark on the following line — usually the blank gap
-		-- that `drill_in`'s edit swallows, and with left gravity the mark then
-		-- collapsed and the reference landed ABOVE the cursor. Visible only with
-		-- a marker BELOW the cursor; every fixture in the first fix put one
-		-- above, sampling one side of the axis (#214 BR-58, round 2).
-		local anchor = buffer_edit.make_handle(buf, plan.ref_after - 1)
-		buffer_edit.apply_text_edits(buf, 0, text, marker_edits)
-		local insert_at = buffer_edit.handle_line(anchor) + 1
-		buffer_edit.handle_invalidate(anchor)
-
-		-- AT THE CURSOR (operator, 2026-09-07), as its own block — one blank line
-		-- on each side, added only where there is not one already. `ref_block`
-		-- owns that rule for both insert paths (#214 BR-68); this used to emit
-		-- `{ "", ref }`, a blank before only, so the reference abutted whatever
-		-- followed it.
-		local around = vim.api.nvim_buf_get_lines(buf, math.max(insert_at - 1, 0),
-			insert_at + 1, false)
-		vim.api.nvim_buf_set_lines(buf, insert_at, insert_at, false,
-			br.ref_block(br.format_ref_line(get_branch_prefix(), rel_path, label or ""),
-				insert_at > 0 and around[1] or nil,
-				around[insert_at > 0 and 2 or 1]))
+		local resolved=buffer_edit.resolve_user(capture)
+		if not resolved then
+			buffer_edit.cancel_user(capture)
+			M.logger.warning("Branch: source changed while creating the child; parent left intact")
+			return true
+		end
+		-- Resolve every source edit and the reference anchor in the current
+		-- coordinate frame, then publish the composed result in one transaction.
+		local current=vim.api.nvim_buf_get_lines(buf,0,-1,false)
+		local transformed=table.concat(current,"\n")
+		local anchor=resolved.regions[#regions].first.byte
+		local shift=0
+		for index,edit in ipairs(marker_edits) do
+			local region=resolved.regions[index]
+			local first,last=region.first.byte,region.last.byte
+			if last<=anchor and first<anchor then
+				shift=shift+#edit.replacement-(last-first)
+			elseif first<anchor and last>anchor then
+				anchor=first;break
+			end
+		end
+		anchor=anchor+shift
+		for index=#marker_edits,1,-1 do
+			local region=resolved.regions[index]
+			transformed=transformed:sub(1,region.first.byte)..marker_edits[index].replacement
+				..transformed:sub(region.last.byte+1)
+		end
+		local _,breaks=transformed:sub(1,anchor):gsub("\n","")
+		local insert_at=breaks+1
+		local after=vim.split(transformed,"\n",{plain=true})
+		local block=br.ref_block(br.format_ref_line(get_branch_prefix(),rel_path,label or ""),
+			after[insert_at],after[insert_at+1])
+		for index=#block,1,-1 do table.insert(after,insert_at+1,block[index]) end
+		local applied=buffer_edit.apply_user_line_hunks(capture,current,after)
+		if applied.status~="applied" then
+			M.logger.warning("Branch: parent edit cancelled: "..tostring(applied.reason or applied.error or applied.status))
+			return true
+		end
 		M.highlight_chat_branch_refs(buf)
 		if not commit_reference() then
 			return true
@@ -2451,7 +2516,7 @@ local function branch_inserters(buf, abs_link, owns_file)
 		local block = br.ref_block(br.format_ref_line(get_branch_prefix(), rel_path, ""),
 			cursor_pos[1] > 0 and near[1] or nil,
 			near[cursor_pos[1] > 0 and 2 or 1])
-		vim.api.nvim_buf_set_lines(buf, cursor_pos[1], cursor_pos[1], false, block)
+		require("parley.buffer_edit").replace_user_lines(buf, cursor_pos[1], cursor_pos[1], false, block)
 		M.highlight_chat_branch_refs(buf)
 
 		-- Which of the inserted lines IS the reference — the block may open with
@@ -2517,7 +2582,7 @@ local function branch_inserters(buf, abs_link, owns_file)
 		-- #214 M3: the topic names the SUBJECT (it becomes the filename slug) and
 		-- the child is seeded with the instruction, not with `<topic>?`. One
 		-- place owns that wording — three call sites would each invent their own.
-		vim.api.nvim_buf_set_lines(buf, start_line - 1, start_line, false, { spliced })
+		require("parley.buffer_edit").replace_user_lines(buf, start_line - 1, start_line, false, { spliced })
 		create_child_if_owned(new_chat_file, topic,
 			require("parley.branch_submit").seed_question("define", selected))
 		M.highlight_chat_branch_refs(buf)
@@ -2527,29 +2592,12 @@ local function branch_inserters(buf, abs_link, owns_file)
 		open_branch_question(new_chat_file)
 	end
 
-	--- ARCH-ORDER, applied to the WHOLE chord (#214 BR-69). A streaming response
-	--- owns this buffer's exchange model and holds a chat lease on its 🤖: line;
-	--- any of these three paths edits the transcript under it. The guard sat
-	--- inside `insert_planned`, which only n/i reach, so visual mode created a
-	--- child and wrote the parent mid-stream — while the README and the atlas
-	--- said the chord declines. This file already states the governing rule
-	--- ("The enumeration is the dispatch table below — n, i, v"); wrapping the
-	--- table is what applies it, rather than guarding the path in front of me.
-	local function refuse_while_pending(fn)
-		return function()
-			if require("parley.chat_pending").identity(buf) then
-				M.logger.warning("Branch: this chat has a response in flight — "
-					.. "wait for it, or stop it with the stop shortcut, then branch")
-				return
-			end
-			fn()
-		end
-	end
-
+	-- Native user transactions decide which source survives; pending decoration
+	-- has no authority to block a disjoint branch command.
 	return {
-		n = refuse_while_pending(insert_plain),
-		i = refuse_while_pending(function() vim.cmd("stopinsert"); insert_plain() end),
-		v = refuse_while_pending(insert_inline),
+		n = insert_plain,
+		i = function() vim.cmd("stopinsert"); insert_plain() end,
+		v = insert_inline,
 	}
 end
 
@@ -2687,8 +2735,7 @@ M.prep_chat = function(buf, file_name)
 		end, "Parley: search whole [...] anchor (#141)")
 	end
 
-	-- Standard history keys stay native unless this chat owns a pending response.
-	-- Confirmed history changes stop only this buffer before retiring its session.
+	-- History stays native; document edit observation revokes only affected grants.
 	local history = require("parley.chat_history")
 	local function guarded_history(key)
 		return function()
@@ -2703,15 +2750,12 @@ M.prep_chat = function(buf, file_name)
 			end
 			history.guard({
 				buf = buf,
-				pending_identity = require("parley.chat_pending").identity,
 				native_history = native_history,
-				confirm = history.confirm,
-				cancel_for_history = chat_respond.cancel_for_history,
 			})
 		end
 	end
-	native_map("u", guarded_history("u"), "Parley: guard chat history undo")
-	native_map("<C-r>", guarded_history("redo"), "Parley: guard chat history redo")
+	native_map("u", guarded_history("u"), "Parley: native chat history undo")
+	native_map("<C-r>", guarded_history("redo"), "Parley: native chat history redo")
 
 	-- #161: one respond-callback set, shared by chat_respond and chat_define.
 	local respond_cb = make_respond_cb("ChatRespond")
@@ -2944,6 +2988,12 @@ M.setup_markdown_keymaps = function(buf)
 			md_add_chat_ref = {
 				n = function()
 					local cursor_pos = vim.api.nvim_win_get_cursor(0)
+					local capture, reason = require("parley.buffer_edit").capture_user(buf, "insert-chat-reference", {
+						{ first = { row = cursor_pos[1] - 1, col = 0 },
+							last = { row = cursor_pos[1] - 1, col = 0 } },
+					})
+					if not capture then M.logger.warning(tostring(reason)); return end
+					M._chat_finder.insert_capture = capture
 					M._chat_finder.insert_mode = true
 					M._chat_finder.insert_buf = buf
 					M._chat_finder.insert_line = cursor_pos[1]
@@ -2955,6 +3005,12 @@ M.setup_markdown_keymaps = function(buf)
 				end,
 				i = function()
 					local cursor_pos = vim.api.nvim_win_get_cursor(0)
+					local capture, reason = require("parley.buffer_edit").capture_user(buf, "insert-chat-reference", {
+						{ first = { row = cursor_pos[1] - 1, col = cursor_pos[2] },
+							last = { row = cursor_pos[1] - 1, col = cursor_pos[2] } },
+					})
+					if not capture then M.logger.warning(tostring(reason)); return end
+					M._chat_finder.insert_capture = capture
 					M._chat_finder.insert_mode = true
 					M._chat_finder.insert_buf = buf
 					M._chat_finder.insert_line = cursor_pos[1]
@@ -3118,14 +3174,12 @@ M._slug_rename_chat = function(buf)
 	-- Update file: header in buffer
 	for i, line in ipairs(vim.api.nvim_buf_get_lines(buf, 0, 20, false)) do
 		if line:match("^file:") then
-			vim.api.nvim_buf_set_lines(buf, i - 1, i, false, { "file: " .. new_basename })
+			require("parley.buffer_edit").replace_user_lines(buf, i - 1, i, false, { "file: " .. new_basename })
 			-- Save the updated header; guard flag prevents recursive rename
 			M._in_slug_rename = true
 			local write_ok, write_err = pcall(function()
 				vim.api.nvim_buf_call(buf, function()
 					vim.cmd("silent! write!")
-					-- Reload to clear "new file" flag so next :w doesn't warn "file exists"
-					vim.cmd("silent! edit!")
 				end)
 			end)
 			M._in_slug_rename = false
@@ -3161,10 +3215,9 @@ end
 ---   * the resolved name differs — otherwise there is nothing to do, and a
 ---     no-op must not set `modified`;
 ---   * not in insert mode — repair must not fight a half-typed reference;
----   * not busy — a streaming response is a concurrent writer, and `chat_lease`
----     invalidates on concurrent mutation. It IGNORES rather than queues: the
----     next CursorHold retries for free, and queuing would land the write at
----     the least predictable moment.
+---   * not busy — defer cosmetic link repair while a response is active.
+---     The next CursorHold retries; the captured user transaction below
+---     validates the source before making the change.
 ---
 ---@param buf integer
 ---@param lnum integer # 1-indexed
@@ -3227,7 +3280,7 @@ M.repair_reference_at_cursor = function(buf, lnum)
 	-- SHRINKING allowlist in tests/arch/buffer_mutation_spec.lua (#90 — "after
 	-- Phase 3, ONLY buffer_edit.lua remains"), so a new direct call moves that
 	-- list the wrong way. replace_line_at is exactly this operation.
-	require("parley.buffer_edit").replace_line_at(buf, lnum - 1, updated)
+	require("parley.buffer_edit").replace_user_lines(buf, lnum - 1, lnum, false, { updated })
 	return true
 end
 
@@ -3613,6 +3666,12 @@ M.delete_chat_file = function(path)
 		vim.notify("not deleted: " .. tostring(path) .. " (" .. tostring(err) .. ")", vim.log.levels.ERROR)
 		return nil, err
 	end
+	local recovery = require("parley.chat_recovery")
+	recovery.setup(M)
+	local cleaned = recovery.deleted(path)
+	if not cleaned.ok then
+		vim.notify("Deleted " .. path .. " but answer recovery cleanup failed: " .. tostring(cleaned.reason), vim.log.levels.WARN)
+	end
 	local fok, ferr = require("parley.assets").delete_with(path)
 	if not fok then
 		vim.notify("Deleted " .. path .. " but " .. tostring(ferr), vim.log.levels.WARN)
@@ -3711,7 +3770,9 @@ M.move_chat_tree = function(file_name, target_dir)
 	local branch_prefix = M.config.chat_branch_prefix or "🌿:"
 	for _, new_path in pairs(path_map) do
 		if vim.fn.filereadable(new_path) == 1 then
-			local lines = vim.fn.readfile(new_path)
+			local live_buf = vim.fn.bufnr(new_path)
+			local live = live_buf ~= -1 and vim.api.nvim_buf_is_loaded(live_buf)
+			local lines = live and vim.api.nvim_buf_get_lines(live_buf, 0, -1, false) or vim.fn.readfile(new_path)
 			local changed = false
 			for i, line in ipairs(lines) do
 				if line:sub(1, #branch_prefix) == branch_prefix then
@@ -3725,6 +3786,9 @@ M.move_chat_tree = function(file_name, target_dir)
 							if ref_abs == old_abs or resolve_chat_path(ref_path, current_root) == old_abs then
 								local new_rel = vim.fn.fnamemodify(new_abs, ":t")
 								lines[i] = require("parley.branch_ref").format_ref_line(branch_prefix, new_rel, topic)
+								if live then
+									require("parley.buffer_edit").replace_user_lines(live_buf, i - 1, i, false, { lines[i] })
+								end
 								changed = true
 								break
 							end
@@ -3732,15 +3796,8 @@ M.move_chat_tree = function(file_name, target_dir)
 					end
 				end
 			end
-			if changed then
+			if changed and not live then
 				vim.fn.writefile(lines, new_path)
-				-- Update buffer if open
-				local buf = vim.fn.bufnr(new_path)
-				if buf ~= -1 and vim.api.nvim_buf_is_valid(buf) then
-					vim.api.nvim_buf_call(buf, function()
-						vim.cmd("edit!")
-					end)
-				end
 			end
 		end
 	end
@@ -3913,7 +3970,7 @@ M.cmd.ChatReview = function(_params)
 	local lines = vim.api.nvim_buf_get_lines(source_buf, 0, -1, false)
 	local header_end = chat_parser.find_header_end(lines)
 	if header_end then
-		vim.api.nvim_buf_set_lines(source_buf, header_end - 1, header_end - 1, false, {
+		require("parley.buffer_edit").replace_user_lines(source_buf, header_end - 1, header_end - 1, false, {
 			format_branch_ref(rel_path, "proof read"),
 		})
 	end
@@ -4283,7 +4340,7 @@ M.cmd.ChatPrune = function()
 	-- Replace pruned lines in parent with a branch reference + fresh question starter
 	local branch_line = require("parley.branch_ref").format_ref_line(branch_prefix, rel_child, "")
 	local user_prefix = M.config.chat_user_prefix
-	vim.api.nvim_buf_set_lines(buf, prune_start - 1, prune_end, false, { "", branch_line, "", user_prefix, "", "" })
+	require("parley.buffer_edit").replace_user_lines(buf, prune_start - 1, prune_end, false, { "", branch_line, "", user_prefix, "", "" })
 
 	-- Save parent
 	vim.cmd("write")
@@ -4316,35 +4373,40 @@ M.cmd.ChatPrune = function()
 				return chat_respond.find_topic_line(child_buf)
 			end }
 		end
+		local edits=require("parley.buffer_edit")
+		local parent_capture=edits.capture_user(buf,"prune-reference-topic",{
+			{first={row=prune_start,col=0},last={row=prune_start,col=#branch_line}},
+		})
+		local child_capture,topic_prefix,topic_suffix
+		if child_buf~=-1 and vim.api.nvim_buf_is_loaded(child_buf) then
+			child_capture,topic_prefix,topic_suffix=capture_chat_topic(child_buf,
+				vim.api.nvim_buf_get_lines(child_buf,0,-1,false))
+		end
+		local disk_source=not child_capture and table.concat(vim.fn.readfile(new_file),"\n") or nil
+		local disk_version=disk_source and vim.uv.fs_stat(new_file)
 		chat_respond.generate_topic(topic_msgs, agent_info.provider, agent_info.model, function(topic, _reason)
-			if not topic then return end
-			-- Update child file's topic header
-			local cbuf = vim.fn.bufnr(new_file)
-			if cbuf ~= -1 and vim.api.nvim_buf_is_valid(cbuf) then
-				local child_lines_now = vim.api.nvim_buf_get_lines(cbuf, 0, -1, false)
-				set_chat_topic_line(cbuf, child_lines_now, topic)
-			else
-				-- Child not open in a buffer — update the file directly
-				local file_lines = vim.fn.readfile(new_file)
-				for i, line in ipairs(file_lines) do
-					if line:match("^%s*topic:%s*") then
-						file_lines[i] = "topic: " .. topic
-						vim.fn.writefile(file_lines, new_file)
-						break
+			if not topic then edits.cancel_user(parent_capture);edits.cancel_user(child_capture);return end
+			if child_capture then
+				edits.apply_user(child_capture,{{region=1,text=topic_prefix..topic..topic_suffix}})
+			elseif disk_source and vim.fn.filereadable(new_file)==1
+				and not vim.api.nvim_buf_is_loaded(vim.fn.bufnr(new_file)) then
+				local file_lines=vim.fn.readfile(new_file)
+				local version=vim.uv.fs_stat(new_file)
+				if version and disk_version and version.ino==disk_version.ino and version.dev==disk_version.dev
+					and version.size==disk_version.size and vim.deep_equal(version.mtime,disk_version.mtime)
+					and table.concat(file_lines,"\n")==disk_source then
+					for i,line in ipairs(file_lines) do
+						if line:match("^%s*topic:%s*") then
+							file_lines[i]="topic: "..topic;vim.fn.writefile(file_lines,new_file);break
+						end
 					end
 				end
 			end
-
-			-- Update parent's 🌿: line with the generated topic
-			if vim.api.nvim_buf_is_valid(buf) then
-				local parent_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-				for i, line in ipairs(parent_lines) do
-					if line:match("^" .. vim.pesc(branch_prefix)) and line:find(rel_child, 1, true) then
-						local updated = require("parley.branch_ref").format_ref_line(branch_prefix, rel_child, topic)
-						vim.api.nvim_buf_set_lines(buf, i - 1, i, false, { updated })
-						vim.cmd("write")
-						break
-					end
+			if parent_capture then
+				local updated=require("parley.branch_ref").format_ref_line(branch_prefix,rel_child,topic)
+				local applied=edits.apply_user(parent_capture,{{region=1,text=updated}})
+				if applied.status~="applied" then
+					M.logger.warning("Prune topic: parent reference changed; leaving it intact")
 				end
 			end
 
@@ -4414,15 +4476,25 @@ M.cmd.ExchangeCut = function(opts)
 
 	_exchange_clipboard = extracted
 	vim.fn.setreg("+", table.concat(extracted, "\n") .. "\n")
-	vim.api.nvim_buf_set_lines(buf, start_line - 1, end_line, false, {})
-
-	-- Clean up consecutive blank lines at the cut seam
-	local new_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+	-- Compute the seam cleanup before publishing, so cut and cleanup share one undo entry.
+	local new_lines = {}
+	for i, line in ipairs(lines) do
+		if i < start_line or i > end_line then new_lines[#new_lines + 1] = line end
+	end
+	if #new_lines == 0 then new_lines = { "" } end
 	local cut_point = math.min(start_line, #new_lines + 1)
 	local seam_start, seam_end, replacement = exchange_clipboard.compute_cut_cleanup(new_lines, cut_point, #new_lines)
 	if seam_start then
-		vim.api.nvim_buf_set_lines(buf, seam_start - 1, seam_end, false, replacement)
+		for _ = seam_start, seam_end do table.remove(new_lines, seam_start) end
+		for i = #replacement, 1, -1 do table.insert(new_lines, seam_start, replacement[i]) end
 	end
+	local prefix, suffix = 0, 0
+	while prefix < #lines and prefix < #new_lines and lines[prefix + 1] == new_lines[prefix + 1] do prefix = prefix + 1 end
+	while suffix < #lines - prefix and suffix < #new_lines - prefix
+		and lines[#lines - suffix] == new_lines[#new_lines - suffix] do suffix = suffix + 1 end
+	local insert = {}
+	for i = prefix + 1, #new_lines - suffix do insert[#insert + 1] = new_lines[i] end
+	require("parley.buffer_edit").replace_user_lines(buf, prefix, #lines - suffix, false, insert)
 
 	M.logger.info("Cut " .. #exchange_indices .. " exchange(s) (" .. #extracted .. " lines)")
 end
@@ -4454,7 +4526,7 @@ M.cmd.ExchangePaste = function()
 	local paste_after = exchange_clipboard.get_paste_line(parsed_chat, cursor_line, header_end, #lines)
 
 	local to_insert = exchange_clipboard.build_paste_lines(lines, paste_after, _exchange_clipboard, #lines)
-	vim.api.nvim_buf_set_lines(buf, paste_after, paste_after, false, to_insert)
+	require("parley.buffer_edit").replace_user_lines(buf, paste_after, paste_after, false, to_insert)
 	M.logger.info("Pasted " .. #_exchange_clipboard .. " lines after line " .. paste_after)
 end
 

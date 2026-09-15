@@ -20,6 +20,33 @@ Cross-provider behavior therefore belongs at the dispatcher boundary rather than
 inside just the OpenAI adapter. `lua/parley/sse.lua` supplies shared SSE/JSON
 primitives.
 
+### Chat response ownership
+
+`chat_respond` captures submission intent and delegates to `response_session`.
+The Session composes guarded preparation, `response_provider`, `response_tools`,
+and pending presentation. Provider callbacks deliver bytes and round outcomes to
+`response_runner`; they hold no saved buffer ranges. The runner applies output
+through current Document grants, so disjoint human edits and sibling generations
+can proceed in the same buffer.
+
+`response_provider` freezes decoded tool declarations from a successful response.
+`response_tools` reserves ordered result slots before starting children, then
+builds the next request from captured messages and settled results. It does not
+reparse the live buffer or recursively submit a new chat. See the
+[tool loop model](tool_use.md#loop-model) for limits and producer outcomes.
+
+Cancellation stops admission before cleanup completes. Each provider operation
+has its own Tasker owner, and stopping one owner does not stop sibling responses.
+Process exit alone is not completion: process and pipe cleanup, or an explicit
+startup abort, provide the evidence that releases the operation. A zero-match
+stop can still mean asynchronous readiness is pending. Tool producers likewise
+must report positive cleanup; an unknown effect prevents continuation.
+
+Automatic topic generation uses a separate header grant and captured parent
+marker guards. It collects output without buffer writes, then replaces the
+bounded `?` suffix only after successful completion and cleanup. Answer success
+can leave that independent topic operation active; invalidation cancels it.
+
 Query diagnostics live in the dispatcher's cache `query_dir`. Setup prunes an
 oversized store; explicit per-chat logs are described in [raw mode](../modes/raw_mode.md).
 
@@ -49,4 +76,6 @@ default does not raise the limit for every model behind the same provider.
 `tests/unit/empty_response_reason_spec.lua` covers classifications and provider
 reason spellings; `tests/unit/provider_params_output_cap_spec.lua` covers output
 budgets; `tests/unit/providers_pre_query_spec.lua` and the CLIProxyAPI integration
-specs cover startup/abort behavior.
+specs cover startup/abort behavior. Native `response_provider_spec.lua`,
+`response_session_spec.lua`, and `response_topic_spec.lua` integration tests
+exercise scoped ownership and positive cleanup with fake processes.

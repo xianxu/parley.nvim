@@ -68,13 +68,13 @@ Two forms, both preserved:
 
 - a **line-start** `🌿:`/`🔒:` survives verbatim, in order, at the deletion point;
 - an **inline** `[🌿:anchor](file)` — what the visual branch produces — survives
-  as a **standalone** `🌿: file: anchor` line. The prose around it belonged to the
-  answer being replaced, so keeping the whole line would leave a stale sentence
-  inside the new answer; the link is what must not be lost.
+  as the **exact raw link bytes** on their own line during scoped regeneration.
+  The surrounding generated prose is replaced; the link source is excluded from
+  every finite replacement grant.
 
-**Refusals.** The chord declines while the buffer owns a pending response — a
-streaming answer holds a chat lease on its `🤖:` line, and editing under it
-corrupts the transcript rather than erroring.
+**Concurrent editing.** Branch commands use captured native user transactions.
+Pending presentation does not block a disjoint command. Editing an active output
+revokes that output grant; late provider callbacks cannot overwrite the branch.
 
 - **Normal / insert mode, chat buffer, nothing to submit**: inserts a full-line
   `🌿: <filename>: `, creates the child, saves the parent, and **opens the

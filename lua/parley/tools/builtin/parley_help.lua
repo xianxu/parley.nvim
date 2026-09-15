@@ -1,4 +1,4 @@
-return {
+local definition = {
     name = 'parley_help',
     kind = 'read',
     description = 'Read the installed Parley README, tutorials and atlas. Omit topic to list topics, '
@@ -22,3 +22,5 @@ return {
         return {content = text or err, is_error = text == nil}
     end,
 }
+
+return require("parley.tools.async_builtin").bind(definition)

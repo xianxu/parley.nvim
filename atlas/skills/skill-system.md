@@ -68,7 +68,8 @@ fallback-to-selection behavior.
 | `skill_providers.lua`, `skill_registry.lua` | Load disk/virtual providers and resolve overrides |
 | `skill_picker.lua` | Select skill/arguments and dispatch review or generic invocation |
 | `skill_assembly.lua` | Build invocation context and resolve the agent |
-| `skill_invoke.lua` | Run one exchange, execute tools, guard concurrency, reload, call completion hooks |
+| `skill_invoke.lua` | Run one exchange, execute tools, refresh the captured source and call completion hooks |
+| `skill_source_read.lua` | Pure admission, logical completion, deadline and physical retirement decisions for final source reads |
 | `skill_edits.lua`, `tools/builtin/propose_edits.lua` | Compute and apply document edits |
 | `tools/backup.lua`, `skill_render.lua` | Backups, highlights, diagnostics |
 | `skills/review/`, `skills/voice_apply/`, `skills/define/` | Built-in manifests and behavior |
@@ -79,7 +80,8 @@ provider transport.
 ## Verification
 
 Unit coverage: `tests/unit/skill_manifest_spec.lua`, `skill_assembly_spec.lua`,
-`skill_edits_spec.lua`, `skill_picker_spec.lua`, and `skill_render_spec.lua`.
+`skill_edits_spec.lua`, `skill_picker_spec.lua`, `skill_source_read_spec.lua`, and
+`skill_render_spec.lua`.
 Integration coverage: `tests/integration/skill_registry_spec.lua`,
 `skill_providers_spec.lua`, `skill_invoke_spec.lua`, `skill_invoke_review_spec.lua`,
 `voice_apply_spec.lua`, and `define_spec.lua`.

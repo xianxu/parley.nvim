@@ -7,7 +7,7 @@
 -- Parameter names match Claude Code conventions (file_path, offset,
 -- limit) so Claude uses them naturally.
 
-return {
+local definition = {
     name = "read_file",
     kind = "read",
     self_paginates = true, -- #139: native offset/limit IS the output pager
@@ -51,28 +51,12 @@ return {
             }
         end
 
-        -- Accept both offset/limit (Claude Code) and line_start/line_end (legacy)
-        local start_line = input.offset or input.line_start or 1
-        local max_lines = input.limit  -- nil = no limit
-        if not max_lines and input.line_end then
-            max_lines = input.line_end - start_line + 1
-        end
-
-        local out = {}
-        local n = 0
-        for line in f:lines() do
-            n = n + 1
-            if max_lines and #out >= max_lines then break end
-            if n >= start_line then
-                table.insert(out, string.format("%5d  %s", n, line))
-            end
-        end
-        f:close()
-
-        return {
-            content = table.concat(out, "\n"),
-            is_error = false,
-            name = "read_file",
-        }
+        local bytes=f:read('*a');f:close()
+        local content,reason,metadata=require('parley.tools.file_transform').numbered_read(input,bytes)
+        local value={content=content or reason,is_error=content==nil,name='read_file'}
+        for key,item in pairs(metadata or {})do value[key]=item end
+        return value
     end,
 }
+
+return require("parley.tools.async_builtin").bind(definition)

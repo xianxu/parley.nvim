@@ -2,7 +2,7 @@
 --
 -- The e2e spec proves the abort CHAIN reaches on_abort via a spy; these drive
 -- the REAL teardown bodies at each D.query caller so an arg-position regression
--- or a collapse_empty_answer bug is actually caught.
+-- or a response-retirement bug is actually caught.
 
 local uv = vim.uv or vim.loop
 local FAKE = vim.fn.getcwd() .. "/tests/fixtures/fake_cliproxy"
@@ -124,45 +124,44 @@ describe("cliproxy on_abort teardown per caller", function()
         assert.same({}, done)
     end)
 
-    -- chat_respond main path: mock D.query to invoke the real on_abort (arg 8);
-    -- assert it's wired at the right position AND collapses the inserted answer
-    -- block (default, non-web-search path — the round-2 gate's demanded test).
-    it("chat_respond on_abort collapses the inserted empty answer block", function()
-        -- filename needs a timestamp format to pass not_chat validation
-        local test_file = tmp_dir .. "/2026-03-01-abort-" .. os.time() .. ".md"
-        vim.fn.writefile({ "", "# topic: t", "- file: x.md", "---", "", "💬: What is Lua?" }, test_file)
+    -- Public submission reaches the real response-provider abort callback at
+    -- argument 8 and retires its write authority after positive transport stop.
+    it("chat_respond on_abort retires the response and preserves its question", function()
+        local test_file = tmp_dir .. "/2026-03-01.12-00-00.000_abort.md"
+        local original = { "", "# topic: t", "- file: x.md", "---", "", "💬: What is Lua?" }
+        vim.fn.writefile(original, test_file)
         vim.cmd("edit " .. test_file)
         local buf = vim.api.nvim_get_current_buf()
-        vim.api.nvim_win_set_cursor(0, { 6, 0 }) -- on the 💬 question line
-
+        vim.api.nvim_win_set_cursor(0, { 6, 0 })
+        -- Earlier negative-path fixtures leave errors in Neovim's message area.
+        -- Consume that redraw before timing asynchronous response completion.
+        vim.cmd("redraw!")
         local saved_query = parley.dispatcher.query
-        local mock_called, saw_fn, lines_at_query = false, false, nil
+        local mock_called, saw_fn = false, false
         parley.dispatcher.query = function(_b, _p, _pl, _h, _oe, _cb, _op, on_abort)
             mock_called = true
             saw_fn = type(on_abort) == "function"
-            lines_at_query = vim.api.nvim_buf_line_count(buf)
             if on_abort then on_abort("test abort") end
         end
-        local notes = {}
-        local saved_notify = vim.notify
-        vim.notify = function(msg, level)
-            table.insert(notes, { msg = msg, level = level })
-        end
-
-        pcall(function() parley.chat_respond({ range = 0 }) end)
-        vim.wait(1000, function()
-            return vim.tbl_contains(vim.tbl_map(function(n) return n.msg end, notes), "test abort")
+        local Respond = require("parley.chat_respond")
+        local started, response = pcall(Respond.respond, { range = 0 })
+        local settled = started and response and vim.wait(1000, function()
+            return Respond.response_snapshot(response).status == "terminal"
         end, 10)
-
         parley.dispatcher.query = saved_query
-        vim.notify = saved_notify
-
-        assert.is_true(mock_called, "dispatcher.query mock was not reached") -- respond got to the query
-        assert.is_true(saw_fn) -- on_abort passed at arg position 8
-        assert.is_truthy(lines_at_query) -- the placeholder was inserted before the query
-        assert.is_truthy(vim.tbl_contains(vim.tbl_map(function(n) return n.msg end, notes), "test abort"))
-        local lines_after = vim.api.nvim_buf_line_count(buf)
-        assert.is_truthy(lines_after < lines_at_query) -- collapse removed the empty answer block
+        assert.is_true(started, tostring(response))
+        assert.is_true(mock_called, "dispatcher.query mock was not reached")
+        assert.is_true(saw_fn)
+        assert.is_true(settled, vim.inspect(Respond.response_snapshot(response)))
+        local generation = Respond.response_snapshot(response).generation
+        assert.equals("provider_failed", generation.outcome)
+        assert.equals("test abort", generation.failure)
+        assert.equals(0, generation.outstanding_operations)
+        local Document = require("parley.document")
+        assert.same({}, Document.snapshot(Document.get(buf)).grants)
+        assert.same(original, vim.api.nvim_buf_get_lines(buf, 0, #original, false))
+        assert.is_nil(require("parley.chat_pending").identity(buf))
+        vim.api.nvim_buf_delete(buf, { force = true })
     end)
 
     -- skill_invoke: mock D.query to invoke the real on_abort (arg 8); assert the

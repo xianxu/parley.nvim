@@ -9,8 +9,9 @@ choose not to call a tool even when one is available.
 
 Anthropic and OpenAI-compatible providers have client tool wires; direct Google
 AI does not. Server-side web search is independent of this loop. A turn stops
-at `max_tool_iterations` (42 by default), and cancellation supplies a result for
-outstanding calls so the transcript remains valid.
+at `max_tool_iterations` (42 by default). Cancellation revokes further writes
+and waits for positive producer cleanup; it does not repair the live transcript
+by inventing tool results.
 
 ## Tool Set
 
@@ -30,7 +31,7 @@ File operations and structured wrappers around locally available Unix tools:
 | `emit_definition` | output | Return a structured inline definition to the definition skill |
 | `ack` | read | Optional, registered only if `ack` is installed; structured pattern/path/filter fields |
 
-Tool descriptions dynamically advertise the locally available command version (e.g., "ripgrep 14.1" vs "GNU grep 3.11").
+Tool descriptions identify the selected local command. Registering builtin tools does not launch version-probe subprocesses.
 
 ## Selecting Tools (agent config)
 
@@ -56,7 +57,7 @@ resolve through; the protocols themselves are pure modules beside it. Before
 hardcoded it.
 
 Every consumer resolves through the registry: `dispatcher.prepare_payload`
-(translate + encode), `dispatcher`'s `empty_response` probe, `tool_loop`, and
+(translate + encode), `dispatcher`'s `empty_response` probe, `response_provider`, and
 `skill_invoke`. No provider is hardcoded at a call site.
 
 | Module | Speaks for |
@@ -108,11 +109,15 @@ Anthropic frames each call with `content_block_start`/`_stop` around a top-level
 `.index`. OpenAI streams an *array* of partial `delta.tool_calls[]` where `id`
 and `function.name` arrive only in that call's first chunk, `arguments`
 accumulates as string fragments, and **nothing closes a call**. The OpenAI
-decoder therefore keys on the array index, orders by first appearance, and is
+decoder therefore keys on the array index. Both wires return calls in declared
+numeric index order, independent of start, fragment, or completion arrival.
+Sparse indexes are supported; missing or invalid indexes are rejected rather
+than aliased to index zero. Conflicting identities invalidate that index. The
+OpenAI decoder is
 deliberately *not* gated on `finish_reason == "tool_calls"` — a truncated stream
-still surfaces what assembled, so the loop can write a synthetic result instead
-of stranding the buffer with an unmatched 🔧:. Malformed `arguments` yield an
-empty input rather than raising.
+still surfaces what assembled. The response adapter admits tool rounds only
+from a successful provider completion; failure does not launch tools from a
+partial stream. Malformed `arguments` yield an empty input rather than raising.
 
 Wire shapes are pinned by real captures in `tests/fixtures/openai_*.sse`, plus a
 live conformance spec (`cliproxy_tool_conformance_spec.lua`, gated behind
@@ -132,20 +137,51 @@ and the serialized payload, whose `model` is a bare NAME. That is not enough —
 `web_search_strategy`, so re-deriving on the response side would silently pick
 the wrong decoder. Instead `prepare_payload` stamps `_parley_tool_wire` on the
 payload, `dispatcher.query` consumes it onto the query table before the body is
-serialized, and the `empty_response` probe resolves via `wire.by_name`. (`tool_loop` and `skill_invoke` still resolve by `(provider, model)` — they run where the agent is in scope and need no stamp.) The stamp never goes
+serialized, and the `empty_response` probe resolves via `wire.by_name`. The chat `response_provider` also prefers this stamped wire, with the captured
+request provider/model as its fallback; `skill_invoke` resolves where the agent
+is in scope. The stamp never goes
 over the network; `scripts/parley_harness.lua` strips it too, so the golden
 payloads stay an accurate model of the request.
 
 ## Loop Model
 
-1. User submits → the selected agent responds (may include `tool_use` content blocks)
-2. `tool_loop.process_response` decodes tool calls, executes each via `dispatcher.execute_call`
-3. Writes 🔧: (tool call) and 📎: (tool result) blocks into the buffer via the exchange model
-4. Returns `"recurse"` → `M.respond` is called again with the live model
-5. `build_messages_from_model` reads content from the buffer at model positions — no re-parsing
-6. Repeats until the agent responds with text only (no tool_use) → `"done"`
+`response_session.lua` composes submission, preparation, provider transport,
+tool rounds, and pending presentation under one document generation. The
+`response_runner` and supervisor own admission and completion; transport and tool
+adapters receive operation handles, not authority to write arbitrary positions.
 
-The chat response lease guards this loop via an extmark anchored on the response's agent-header line (#138): before the scheduled recursive `M.respond`, the lease is validated again. If the user undoes/redoes or deletes the response in that gap, the anchor invalidates and recursive resubmit is cancelled rather than inserting a new placeholder from stale live-model positions. (Pre-#138 the lease committed a new `changedtick` after appending tool blocks; the extmark anchor needs no such commit.)
+1. Submission captures the target and request source before asynchronous
+   preparation. Preparation validates ownership before changing the answer shell.
+2. `response_provider` streams position-free output into the runner. On successful
+   completion it decodes and freezes tool declarations using the request's wire.
+3. `response_tools` reserves document capacity, appends calls and ordered
+   `(Tool result pending)` result slots, then acquires a separate grant for each result slot.
+   No child starts before its slot reservation is confirmed.
+4. Producers may complete out of order. Each known result replaces only its own
+   granted slot through the runner; results retain declaration order in both the
+   transcript and the next request.
+5. After the round is settled, `response_tools` builds continuation messages from
+   the frozen previous request, assistant text, calls, and known results. The same
+   Session admits the next provider operation; it neither recursively calls
+   `respond` nor rebuilds the request from the mutable transcript.
+
+The prepared response profile captures iteration and result-byte limits once per
+generation, including an agent explicitly chosen during onboarding. Limits are
+validated before preparation writes. Later configuration changes or continuation
+metadata cannot raise these captured limits.
+
+Logical cancellation and physical cleanup are separate. Stopping or invalidating
+an answer prevents further admission immediately, but its operation remains
+unresolved until the producer reports cleanup. A throwing producer may already
+have caused an effect: an `unknown` outcome prevents continuation and is not
+converted into a successful or cancelled result. A later known outcome and
+positive cleanup can settle it; a cancellation request alone cannot.
+
+Builtin definitions expose asynchronous execution and resource declarations.
+The captured dispatcher profile, process-scoped scheduler, checked filesystem
+seam, and Tasker supervise effects independently from transcript grants. See
+[Tool Execution and Cleanup](tool_execution.md) for admission, bounds, uncertain
+outcomes, and internal reconciliation APIs.
 
 ## Buffer Representation
 
@@ -244,29 +280,33 @@ block still starts a turn.
   not a tool permission grant.
 - **Tool argv safety** (#144, #149): `ls`, `grep`, `find`, `chat_history_search`, and optional `ack` no longer accept raw shell fragments. Each exposes structured fields and builds argv lists for the named binary, so shell metacharacters (`;`, `|`, `$()`, backticks, `>`) are data, not syntax. The shared pure helper (`lua/parley/tools/builtin/argv.lua`) validates local positive allowlists and numeric process flags: `ls` allows compact display flags only; `grep` allows a small read-only flag set and rejects `rg` execution/arbitrary-read flags such as `--pre`, `--hostname-bin`, and `-f`; `find` has no free `flags` field and only exposes path/name/type/depth predicates; `ack` exposes pattern/path/type/context fields with no raw `command` or `flags` escape hatch; `chat_history_search` searches only policy-admitted chat roots and validates `before`/`after`/`max_count` as non-negative integers before invoking `rg` or `grep` through argv-list execution. `grep`, `ack`, and `chat_history_search` insert `--` before pattern/path positionals so dash-leading patterns cannot be parsed as options; omitted-path defaults for cwd-confined tools are declared as `default_path = "."` so the dispatcher canonicalizes them through the cwd/read-root guard before execution.
 - **Output pager** (#139): a horizontal substrate cap — *every tool's output is a paged stream.* The registry (`register`) injects `offset`/`limit` params into every non-write, non-`self_paginates` tool's schema, and the dispatcher windows each result to lines `[offset, offset+limit)` (offset 1-indexed; `limit` defaults to `tool_result_page_lines` = 200, clamped ≤ 2000), stripping the params so the handler never sees them. When the window is partial it appends a footer naming the **true total** + the next page: `[lines 1-200 of 1,240,118 — pass offset=201 for the next page, or narrow your query]`. `read_file` sets `self_paginates = true` — its native `offset`/`limit` (line-window of the file) *is* the contract, so the dispatcher neither injects nor slices it (a no-limit read falls back to the byte-cap). Deep paging on shell tools re-runs the tool (run+slice, no cache — v1). The 100KB byte-cap (`truncate`) stays as the backstop for pathological single lines. Orthogonal to input safety (#144) — slices *after* the handler.
-- **Iteration cap**: `max_tool_iterations` (default 42, single-sourced in `defaults.lua` `#154`) — writes synthetic `📎: (iteration limit reached — max N rounds)` when hit
-- **Cancellation**: `cmd_stop` triggers `repair_unmatched_tool_blocks` — writes `📎: (cancelled by user)` for any 🔧: without matching 📎:
-- **Tool_use↔tool_result invariant → valid payload by construction** (#155, #156): the single pure emitter `_emit_content_blocks_as_messages` (shared by both build paths — `build_messages` and `build_messages_from_model` normalize into it) tracks pending tool_use ids and synthesizes a neutral `is_error` result (`M.DANGLING_TOOL_RESULT_TEXT`) for any not answered by a real `📎:`, in the immediately-following user message (partial parallel calls handled). So an unanswered 🔧: (crash / kill / reload / hand-edited buffer that `repair_unmatched_tool_blocks` never covered) never reaches Anthropic as an assistant `tool_use` without a matching user `tool_result`. Symmetrically (#156), an **orphan** `📎:` (no preceding 🔧:) or a **duplicate** result is dropped: `resolve_pending` returns whether the id matched a still-pending `tool_use`, and an unmatched result is skipped — so the payload never carries an unmatched user `tool_result` either. Empty tool input coerces to `{}` here (one source). The stop-time buffer repair is now a UX nicety, not load-bearing for payload validity.
-- **Backup**: `write_file` creates numbered `.parley-backup.N` on every write
+- **Iteration cap**: `max_tool_iterations` (default 42, single-sourced in `defaults.lua`) is captured by the Session; a further tool round is refused when the limit is reached, without executing its calls.
+- **Cancellation**: scoped generation cancellation revokes answer/tool grants and stops owned operations. It waits for positive cleanup and does not scan or repair unmatched transcript blocks.
+- **Tool_use↔tool_result invariant → valid payload by construction** (#155, #156): the single pure emitter `_emit_content_blocks_as_messages` (shared by both build paths — `build_messages` and `build_messages_from_model` normalize into it) tracks pending tool_use ids and synthesizes a neutral `is_error` result (`M.DANGLING_TOOL_RESULT_TEXT`) for any not answered by a real `📎:`, in the immediately-following user message (partial parallel calls handled). So an unanswered 🔧: (crash / kill / reload / hand-edited buffer) never reaches Anthropic as an assistant `tool_use` without a matching user `tool_result`. Symmetrically (#156), an **orphan** `📎:` (no preceding 🔧:) or a **duplicate** result is dropped: `resolve_pending` returns whether the id matched a still-pending `tool_use`, and an unmatched result is skipped — so the payload never carries an unmatched user `tool_result` either. Empty tool input coerces to `{}` here (one source). This normalization belongs to request construction; it does not rewrite the buffer.
+- **Backup**: asynchronous existing-file writes and edits publish a checked numbered `.parley-backup.N` before destructive IO; a failed backup prevents the target write. New files use exclusive creation.
 - **Unknown tools**: return friendly error "Tool 'X' is not available on this client"
 - **Malformed blocks**: `build_messages_from_model` degrades to text (no Anthropic rejection)
 - **Buffer diagnostic**: `:lua require('parley').check_buffer()` validates invariants
-- **Transcript drift**: pending chat leases cancel stale stream/tool/progress/topic callbacks when the response's agent-header line is deleted (e.g. undo/redo of the inserted response) — ordinary edits/streaming no longer invalidate (#138)
+- **Transcript drift**: Document grants and captured source guards fence answer, tool, progress, and topic callbacks. Editing a protected region or deleting its marker invalidates that work; disjoint draft edits and sibling generations can continue. Reload invalidates active writes.
 
 ## Visual Treatment
 
 - 🔧:/📎: blocks are dimmed (`ParleyThinking` highlight = `Comment`)
 - Error results highlighted with `ParleyToolError` = `DiagnosticError`
 - Completed tool blocks auto-folded via model-based manual folds
-- Each initial or recursive LLM round uses the delayed virtual
+- Each provider round uses the delayed virtual
   [response-progress](../chat/response_progress.md) presentation; fast visible
   output bypasses it, and local tool execution itself shows no spinner
 
 ## Implementation and verification
 
-The builtin list lives in `lua/parley/tools/init.lua`; `tool_loop.lua` owns the
-chat recursion, `tools/dispatcher.lua` owns execution/root checks/paging, and
-`tools/wire.lua` selects the protocol. Tests include
+The builtin list lives in `lua/parley/tools/init.lua`; `response_session.lua`
+composes the chat response, `response_provider.lua` owns transport callbacks,
+and `response_tools.lua` owns reserved result slots and frozen continuations.
+`tools/dispatcher.lua` owns execution/root checks/paging, and `tools/wire.lua`
+selects the protocol. Native integration coverage includes
+`response_session_spec.lua`, `response_tools_spec.lua`, and
+`response_profile_spec.lua` under `tests/integration/`. Protocol tests include
 `tests/unit/tool_wire_registry_spec.lua`,
 `tests/unit/anthropic_tool_wire_spec.lua`,
 `tests/unit/tools_builtin_propose_edits_spec.lua`, and
@@ -276,3 +316,13 @@ chat recursion, `tools/dispatcher.lua` owns execution/root checks/paging, and
 history search, explicit additional roots, symlink rejection, and forged input
 policy. The dispatcher passes policy as handler context, separately from model
 arguments.
+
+Pending reservations use fixed inert text, never result Markdown. Only a confirmed
+child outcome passes through the result serializer. Reloaded or cancelled pending
+calls remain unmatched calls; historical provider projection may report their
+missing result as an error, and never as successful execution evidence.
+
+Tool adapter retirement joins known outcome, positive producer cleanup and the
+publication decision. Every contributing event reevaluates that join, including
+late outcomes after cancellation. Publication is reserved before calling outcome
+observers, so a reentrant cleanup callback cannot retire the pending write.

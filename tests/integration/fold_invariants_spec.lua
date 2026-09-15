@@ -52,6 +52,9 @@ describe("fold invariants over dedicated transcript fixtures", function()
             vim.api.nvim_win_set_buf(win, buf)
             vim.api.nvim_set_option_value("foldenable", true, { win = win })
             tool_folds.hydrate_window(buf, win)
+            local document = require("parley.document")
+            assert.equals("idle", document.drain(document.get(buf)).status)
+            assert.equals("idle", tool_folds.flush(buf))
             vim.api.nvim_win_call(win, function() vim.cmd("normal! zM") end)
 
             local model = require("parley.exchange_model").from_parsed_chat(

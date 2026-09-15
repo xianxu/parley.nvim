@@ -294,6 +294,8 @@ local config = {
 	-- tool's output is windowed to this many lines unless the agent passes a
 	-- larger `limit` (clamped to 2000). The 100KB byte-cap remains the backstop.
 	tool_result_page_lines = 200,
+	-- Finite process/resource limits; lowering them never evicts unresolved work.
+	tool_execution = require("parley.tools.producer").defaults(),
 	-- The banner shown at the top of each chat file.
 	chat_template = require("parley.defaults").short_chat_template,
 	-- if you want more real estate in your chat files and don't need the helper text

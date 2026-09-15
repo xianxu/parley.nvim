@@ -12,9 +12,8 @@
 -- inline here today (the dispatcher's write-path prelude is deferred). The
 -- diagnostics/highlights rendering stays driver-side (M3), not here.
 
-local skill_edits = require("parley.skill_edits")
 
-return {
+local definition = {
     name = "propose_edits",
     kind = "write",
     needs_backup = true,
@@ -42,20 +41,12 @@ return {
     handler = function(input)
         input = input or {}
         local path = input.file_path or input.path
-        local edits = input.edits
 
         if type(path) ~= "string" or path == "" then
             return { content = "missing or invalid required field: file_path", is_error = true, name = "propose_edits" }
         end
-        if type(edits) ~= "table" then
-            return { content = "missing or invalid required field: edits", is_error = true, name = "propose_edits" }
-        end
-        if #edits == 0 then
-            -- An empty batch is a no-op write; reject it so callers (review) see a
-            -- failure rather than a "successful" non-edit (which would otherwise
-            -- back up + rewrite unchanged content and look like progress).
-            return { content = "no edits provided", is_error = true, name = "propose_edits" }
-        end
+        local invalid=require('parley.tools.file_transform').validate('propose_edits',input)
+        if invalid then return {content=invalid,is_error=true,name='propose_edits'}end
 
         local f, err = io.open(path, "r")
         if not f then
@@ -64,32 +55,38 @@ return {
         local content = f:read("*a")
         f:close()
 
-        local result = skill_edits.compute_edits(content, edits)
-        if not result.ok then
-            return { content = result.msg, is_error = true, name = "propose_edits" }
-        end
+        local changed,message=require('parley.tools.file_transform').transform('propose_edits',input,content,path)
+        if not changed then return {content=message,is_error=true,name='propose_edits'}end
 
         -- Back up the prior content before the (now-known-valid) write. Runs only
         -- once compute_edits succeeds, so an invalid batch leaves no backup (no
         -- destructive write happened). Shared numbered-backup helper (ARCH-DRY).
         require("parley.tools.backup").numbered(path, content)
 
+        local refresh=require('parley.tools.file_refresh').capture(path)
         local wf, werr = io.open(path, "w")
         if not wf then
+            require('parley.tools.file_refresh').release(refresh)
             return { content = "cannot write: " .. (werr or path), is_error = true, name = "propose_edits" }
         end
-        wf:write(result.content)
-        wf:close()
+        local written,write_error=wf:write(changed)
+        local closed,close_error=wf:close()
+        if not written or not closed then
+            require('parley.tools.file_refresh').release(refresh)
+            return {content='write completion failed: '..tostring(write_error or close_error),is_error=true,name='propose_edits'}
+        end
 
-        -- Trigger Neovim to reload if the file's buffer is open.
-        vim.schedule(function()
-            pcall(vim.cmd, "checktime")
-        end)
+        local completion=require('parley.tools.file_refresh').complete(refresh,changed)
+        if completion.reconciliation_required then
+            vim.notify('[Disk updated; buffer reconciliation required]',vim.log.levels.WARN)
+        end
 
         return {
-            content = result.msg .. " to " .. path,
+            content = message,
             is_error = false,
             name = "propose_edits",
         }
     end,
 }
+
+return require("parley.tools.async_builtin").bind(definition)

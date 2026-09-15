@@ -54,6 +54,20 @@ describe("parley.line_reader", function()
         assert.equals(3, events[3].lines_requested)
     end)
 
+    it("counts returned bytes without inventing newline bytes", function()
+        local events = {}
+        LineReader.set_observer(11, function(e) events[#events + 1] = e end)
+        local reader = LineReader.for_buffer(11, { delegate = fake_delegate({ "é", "abc", "" }) })
+        reader:lines(0, -1, false)
+        reader:line(0)
+        reader:text(0, 0, 1, 1, {})
+        pcall(function() reader:line(-1) end)
+        assert.equals(5, events[1].bytes_read)
+        assert.equals(2, events[2].bytes_read)
+        assert.equals(3, events[3].bytes_read)
+        assert.equals(0, events[4].bytes_read)
+    end)
+
     it("forwards nil text options unchanged to the production API", function()
         local original = vim.api.nvim_buf_get_text
         local seen_opts = "not-called"

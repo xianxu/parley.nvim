@@ -26,6 +26,9 @@ local function cancel(opts, reason)
 end
 
 local function source_context(opts)
+    if type(opts.validate_source) == 'function' then
+        return {validate = opts.validate_source}
+    end
     local buf = opts.buf
     if buf == nil or buf == 0 then buf = vim.api.nvim_get_current_buf() end
     if not vim.api.nvim_buf_is_valid(buf) then
@@ -53,6 +56,11 @@ local function source_context(opts)
 end
 
 local function source_problem(source)
+    if source.validate then
+        local ok, reason = source.validate()
+        if not ok then return reason or 'the captured response is no longer current' end
+        return nil
+    end
     if not vim.api.nvim_buf_is_valid(source.buf) then
         return 'the source buffer no longer exists'
     end
@@ -71,7 +79,7 @@ end
 --- Returns false only when the caller should continue the action immediately.
 --- @param parley table
 --- @param action function
---- @param opts? table { buf?: integer, on_cancel?: fun(reason: string) }
+--- @param opts? table { buf?: integer, on_cancel?: fun(reason: string), validate_source?: function }
 --- @return boolean deferred
 function M.defer(parley, action, opts)
     opts = opts or {}
@@ -114,8 +122,10 @@ function M.defer(parley, action, opts)
             cancel(opts, problem)
             return
         end
-        vim.api.nvim_set_current_win(source.win)
-        vim.api.nvim_win_set_cursor(source.win, source.cursor)
+        if source.win then
+            vim.api.nvim_set_current_win(source.win)
+            vim.api.nvim_win_set_cursor(source.win, source.cursor)
+        end
         grants[parley] = true
         local ok, err = xpcall(action, debug.traceback)
         grants[parley] = nil

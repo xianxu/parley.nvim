@@ -6,7 +6,7 @@
 -- so the dispatcher does not inject offset/limit pager params (it isn't a reader
 -- and has nothing to page).
 
-return {
+local definition = {
     name = "emit_definition",
     self_paginates = true,
     description = "Return a concise definition of the selected term as used in "
@@ -28,3 +28,5 @@ return {
         return { content = "", name = "emit_definition" }
     end,
 }
+
+return require("parley.tools.async_builtin").bind(definition)

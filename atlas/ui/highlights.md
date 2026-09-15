@@ -51,43 +51,23 @@ anchored at column zero, indented content never matches, so a correctly
 formatted quoted transcript still nests. Both shapes are pinned by tests, so the
 convention degrades safely when a model ignores it.
 
-## The structure cache while typing (#227)
+## Shared incremental structure (#254)
 
-Decorations are computed on redraw from a buffer-owned structure
-(`highlight_structure`), and that structure must line up with the buffer
-row-for-row: the footer start, draft ranges and `state_before` are all
-row-indexed.
+The [document coordinator](../chat/document.md) owns the buffer attachment and
+structural repair. The decoration provider consumes copied viewport metadata;
+it owns no independent structural cache, full-row arrays, or repair timer.
 
-- **Every edit is spliced.** `highlight_structure.replace` splices the edit's
-  rows in and re-derives tokens, footer and drafts, so the cache never renders a
-  misaligned structure. Fingerprint-identical edits share the old arrays;
-  anything else costs one shallow O(n) copy (0.10 ms at 5,000 lines, `make perf`
-  `structure_splice`).
-- **Exact vs approximate.** A splice is exact when every touched row is inert —
-  text, blank, fence, draft delimiter — and the first row below the edit is
-  entered in the same state as before. That covers ordinary typing, Enter and
-  joins. Turn markers, `📝`/`🔧`/`📎`, `🧠:`, `🧠:[END]` and footnotes can move
-  state a splice cannot see; those leave the cache *approximate*.
-- **Fail open.** The provider renders approximate structures. Its visible rows
-  are walked from the actual lines, so what can lag is limited to `🧠:`
-  lookahead (which can reach rows above the edit) and windows whose top is
-  below the edit. Only a missing cache draws nothing.
-- **One repair per burst.** An approximate cache arms a 250 ms deferral
-  (`STRUCTURE_REPAIR_MS`); every further edit restarts it, and any successful
-  rebuild — including the `buffer_lifecycle` convergence events — stops it. It
-  repaints with `nvim__redraw({ buf, valid = false })`; `valid = true` re-runs
-  `on_win` but redraws no lines of an unedited buffer (a guarded call: it is
-  experimental API). Under the test harness (`$PARLEY_TEST_MODE`) no repair
-  fires on its own; specs fire one by hand or opt into the real clock through
-  `highlighter._set_repair_deferral` — see [infra/test_harness](../infra/test_harness.md).
-- **Accounted.** Each splice reports its real work — rows classified/walked and
-  `structure_entries_copied` — to the LineReader observer, and `make perf`
-  gates it: a prose edit copies nothing, an Enter copies exactly two arrays.
-- **Resync.** A splice that throws or no longer matches the buffer's line count
-  (Nvim reports emptying a buffer as zero lines though one remains), and a
-  `:checktime` reload (`on_reload` — without it Nvim detaches the attachment),
-  rebuild synchronously; a cache that cannot be realigned is dropped rather
-  than drawn.
+Each viewport page reads at most 256 rows and 64 KiB. Byte windows account for
+horizontal scrolling and wrapped-line offsets, so a long first row cannot starve
+later rows. Tall windows advance through pages. Edits intersecting cached pages
+invalidate those pages; disjoint edits do not restart their progress.
+
+Confirmed inert edits transfer local checkpoints and retain the suffix. Broad or
+structural changes become uncertain and repair in bounded scheduled slices.
+Unconfirmed regions use neutral or local lexical styling. Surviving row identity
+does not preserve question, reasoning, fence, footer, or draft context. Confirmed
+regions retain their styles; semantic deltas trigger coalesced redraw. Redraw
+never repairs by scanning the whole document.
 
 ## Key Behaviors
 - Applied via decoration providers with ephemeral extmarks per window viewport
@@ -111,6 +91,7 @@ Set `highlight` entries in Parley setup options to Neovim highlight attributes,
 for example `highlight = { reference = { underline = true, fg = "#80c0ff" } }`.
 Other entries include `question`, `inline_branch`, and `footnote`.
 `lua/parley/highlighter.lua` (`setup_highlights`) defines supported entries and
-fallback groups; `lua/parley/highlight_structure.lua` owns structural parsing.
+fallback groups; `lua/parley/document/` owns live structural indexing; `highlight_structure`
+remains the pure materialized compatibility oracle.
 `tests/unit/highlighter_spec.lua`, `tests/unit/highlight_structure_spec.lua`, and
 `tests/integration/highlighting_spec.lua` exercise rendering and state.

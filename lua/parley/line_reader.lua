@@ -58,6 +58,7 @@ function M.record_work(buf, event)
     for key, value in pairs(event or {}) do copy[key] = value end
     copy.operation = copy.operation or "work"
     copy.requested = copy.requested or {}
+    copy.bytes_read = copy.bytes_read or 0
     copy.returned_lines = copy.returned_lines or 0
     copy.lines_requested = copy.lines_requested or 0
     copy.full_buffer = copy.full_buffer or false
@@ -68,6 +69,7 @@ end
 
 local function production_delegate()
     return {
+        offset = function(buf, row) return vim.api.nvim_buf_get_offset(buf, row) end,
         lines = function(buf, start0, end0, strict)
             return vim.api.nvim_buf_get_lines(buf, start0, end0, strict)
         end,
@@ -84,6 +86,17 @@ local function invoke(buf, event, fn)
     local result = pack(pcall(fn))
     if result[1] then
         local value = result[2]
+        -- Count payload bytes only: API arrays contain no newline separators.
+        -- Only scan returned strings when observed; ordinary reads pay no scan.
+        event.bytes_read = 0
+        local state = states[buf]
+        if state and state.observer then
+            if type(value) == "table" then
+                for _, line in ipairs(value) do event.bytes_read = event.bytes_read + #line end
+            elseif type(value) == "string" then
+                event.bytes_read = #value
+            end
+        end
         event.returned_lines = type(value) == "table" and #value or (value ~= nil and 1 or 0)
         if event.operation == "lines" and event.requested.end_row == -1 then
             event.lines_requested = event.returned_lines
@@ -92,6 +105,7 @@ local function invoke(buf, event, fn)
         return unpack(result, 2, result.n)
     end
     event.returned_lines = 0
+    event.bytes_read = 0
     observe(buf, event)
     error(result[2], 0)
 end
@@ -134,6 +148,26 @@ function M.for_buffer(buf, opts)
             structure_rows_processed = 0,
             structure_entries_copied = 0,
         }, function() return delegate.line(buf, row0) end)
+    end
+
+    -- Byte offsets provide line length without materializing a long line.
+    -- Neovim's serialized buffer offsets include one separator per row.
+    function reader.chunk(_, request)
+        local function integer(value)
+            return type(value) == "number" and value >= 0 and value < math.huge and value % 1 == 0
+        end
+        assert(type(request) == "table" and integer(request.row) and integer(request.col), "invalid chunk position")
+        assert(integer(request.max_bytes) and request.max_bytes >= 1 and request.max_bytes <= 65536,
+            "chunk size must be between 1 and 65536 bytes")
+        local first = delegate.offset(buf, request.row)
+        local last = delegate.offset(buf, request.row + 1)
+        assert(first >= 0 and last > first, "chunk row is outside the buffer")
+        local length = last - first - 1
+        assert(request.col <= length, "chunk column is outside the row")
+        local stop = math.min(length, request.col + request.max_bytes)
+        local bytes = reader:text(request.row, request.col, request.row, stop, {})[1] or ""
+        return { request_id = request.request_id, bytes = bytes, eol = stop == length,
+            start_byte = first, separator_bytes = 1 }
     end
 
     return reader

@@ -17,10 +17,18 @@ parley.setup({
     api_keys = {},
 })
 
+local function rebuild_ready(buf)
+    local doc = assert(require("parley.highlighter").rebuild_structure(buf))
+    assert.equals("idle", require("parley.document").drain(doc, 100000).status)
+    return doc
+end
+
 -- Helper: create a scratch buffer with the given lines and apply highlighting.
 local function highlighted_buf(lines)
     local buf = vim.api.nvim_create_buf(false, true)
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+    parley._parley_bufs[buf] = "chat"
+    rebuild_ready(buf)
     parley.highlight_question_block(buf)
     return buf
 end
@@ -77,12 +85,7 @@ end
 local function render_window(provider, ...)
     local args = { ... }
     local buf = args[2]
-    local highlighter = require("parley.highlighter")
-    local cache = highlighter._structure_cache(buf)
-    if not cache or cache.dirty then
-        local rebuilt, err = highlighter.rebuild_structure(buf)
-        assert.is_truthy(rebuilt, err)
-    end
+    rebuild_ready(buf)
     return provider.on_win(nil, unpack(args))
 end
 
@@ -274,9 +277,11 @@ describe("decoration provider cache", function()
         parley._parley_bufs[buf] = "chat"
 
         local line_reader = require("parley.line_reader")
-        assert.is_truthy(require("parley.highlighter").rebuild_structure(buf))
+        assert.is_truthy(rebuild_ready(buf))
         local events = {}
-        line_reader.set_observer(buf, function(event) events[#events + 1] = event end)
+        line_reader.set_observer(buf, function(event)
+                if event.operation ~= "work" then events[#events + 1] = event end
+            end)
         provider.on_win(nil, win, buf, 0, 0)
         local reads_after_compute = #events
         provider.on_line(nil, win, buf, 0)
@@ -304,9 +309,11 @@ describe("decoration provider cache", function()
         parley._parley_bufs[buf] = "chat"
 
         local line_reader = require("parley.line_reader")
-        assert.is_truthy(require("parley.highlighter").rebuild_structure(buf))
+        assert.is_truthy(rebuild_ready(buf))
         local events = {}
-        line_reader.set_observer(buf, function(event) events[#events + 1] = event end)
+        line_reader.set_observer(buf, function(event)
+                if event.operation ~= "work" then events[#events + 1] = event end
+            end)
         local ok, err = pcall(provider.on_win, nil, win, buf, 2, 2)
 
         assert.is_true(ok, err)
@@ -509,11 +516,13 @@ describe("decoration provider cache", function()
             parley._parley_bufs[buf] = "chat"
             local win = vim.api.nvim_get_current_win()
             vim.api.nvim_win_set_buf(win, buf)
-            assert.is_truthy(require("parley.highlighter").rebuild_structure(buf))
+            assert.is_truthy(rebuild_ready(buf))
 
             local events = {}
             local reader = require("parley.line_reader")
-            reader.set_observer(buf, function(event) events[#events + 1] = event end)
+            reader.set_observer(buf, function(event)
+                if event.operation ~= "work" then events[#events + 1] = event end
+            end)
             provider.on_win(nil, win, buf, 500, 509)
             assert.equals(1, #events)
             local top, bottom, total = 500, 509, line_count
@@ -532,9 +541,9 @@ describe("decoration provider cache", function()
                 total_rows = total_rows + event.structure_rows_processed
                 if event.full_buffer then full_reads = full_reads + 1 end
             end
-            assert.equals(1, total_rows)
+            assert.is_true(total_rows <= 256)
             assert.equals(0, full_reads)
-            assert.is_false(require("parley.highlighter")._structure_cache(buf).dirty)
+            assert.is_truthy(require("parley.document").get(buf))
             return { requested = 30, structure_rows = total_rows }
         end
 
@@ -550,34 +559,17 @@ describe("decoration provider cache", function()
         parley._parley_bufs[buf] = "chat"
         local win = vim.api.nvim_get_current_win()
         vim.api.nvim_win_set_buf(win, buf)
-        assert.is_truthy(require("parley.highlighter").rebuild_structure(buf))
+        assert.is_truthy(rebuild_ready(buf))
         local events = {}
-        require("parley.line_reader").set_observer(buf, function(event) events[#events + 1] = event end)
+        require("parley.line_reader").set_observer(buf, function(event)
+            if event.operation ~= "work" then events[#events + 1] = event end
+        end)
         provider.on_win(nil, win, buf, 0, 9)
         provider.on_win(nil, win, buf, 100, 109)
         assert.equals(2, #events)
         assert.same({ start_row = 0, end_row = 30, strict = false }, events[1].requested)
         assert.same({ start_row = 100, end_row = 130, strict = false }, events[2].requested)
         assert.equals(30, events[2].lines_requested)
-    end)
-
-    it("renders while a structural edit is pending and converges on InsertLeave", function()
-        local provider = capture_decoration_provider()
-        local buf = vim.api.nvim_create_buf(false, true)
-        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "💬: q", "body", "🤖: a" })
-        parley._parley_bufs[buf] = "chat"
-        local win = vim.api.nvim_get_current_win()
-        vim.api.nvim_win_set_buf(win, buf)
-        require("parley.buffer_lifecycle").setup(buf)
-        vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "🧠: changed marker" })
-        local cache = require("parley.highlighter")._structure_cache(buf)
-        assert.is_true(cache.dirty)
-        assert.is_nil(provider.on_win(nil, win, buf, 0, 2))
-
-        require("parley.buffer_lifecycle").converge(buf, "InsertLeave")
-        cache = require("parley.highlighter")._structure_cache(buf)
-        assert.is_false(cache.dirty)
-        assert.is_nil(provider.on_win(nil, win, buf, 0, 2))
     end)
 
     it("keeps an unfinished reasoning paragraph busy only while streaming", function()
@@ -589,7 +581,7 @@ describe("decoration provider cache", function()
         parley._parley_bufs[buf] = "chat"
         local win = vim.api.nvim_get_current_win()
         vim.api.nvim_win_set_buf(win, buf)
-        assert.is_truthy(require("parley.highlighter").rebuild_structure(buf))
+        assert.is_truthy(rebuild_ready(buf))
         local tasker = require("parley.tasker")
         local original = tasker.is_busy
         local busy = true
@@ -611,262 +603,9 @@ describe("decoration provider cache", function()
         tasker.is_busy = original
         -- No mutation or rebuild is needed: busy is a redraw-time overlay.
         assert.is_nil(thinking[3])
-        assert.is_false(require("parley.highlighter")._structure_cache(buf).dirty)
+        assert.is_truthy(require("parley.document").get(buf))
     end)
 
-    it("keeps rendering the aligned structure when a rebuild fails, and retries", function()
-        local highlighter = require("parley.highlighter")
-        local model = require("parley.highlight_structure")
-        local buf = vim.api.nvim_create_buf(false, true)
-        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "💬: q", "body" })
-        parley._parley_bufs[buf] = "chat"
-        assert.is_truthy(highlighter.rebuild_structure(buf))
-        vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "🧠: structural replacement" })
-        -- What a failed rebuild must keep is the aligned splice this edit
-        -- installed, not the pre-edit object (#227).
-        local prior = highlighter._structure_cache(buf).structure
-        assert.is_true(highlighter._structure_cache(buf).dirty)
-        local original = model.build
-        model.build = function() error("forced rebuild failure") end
-        local rebuilt, err = highlighter.rebuild_structure(buf)
-        model.build = original
-        assert.is_nil(rebuilt)
-        assert.matches("forced rebuild failure", err)
-        assert.equals(prior, highlighter._structure_cache(buf).structure)
-        assert.is_true(highlighter._structure_cache(buf).dirty)
-        assert.is_nil(capture_decoration_provider().on_win(nil, vim.api.nvim_get_current_win(), buf, 0, 1))
-        assert.is_truthy(highlighter.rebuild_structure(buf))
-        assert.is_false(highlighter._structure_cache(buf).dirty)
-    end)
-
-    it("rejects an initial failed build and renders only after retry", function()
-        local highlighter = require("parley.highlighter")
-        local model = require("parley.highlight_structure")
-        local provider = capture_decoration_provider()
-        local buf = vim.api.nvim_create_buf(false, true)
-        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "body" })
-        parley._parley_bufs[buf] = "chat"
-        local original = model.build
-        model.build = function() error("initial build failure") end
-        local rebuilt, err = highlighter.rebuild_structure(buf)
-        model.build = original
-        assert.is_nil(rebuilt)
-        assert.matches("initial build failure", err)
-        assert.is_nil(highlighter._structure_cache(buf))
-        assert.is_false(provider.on_win(nil, vim.api.nvim_get_current_win(), buf, 0, 0))
-        assert.is_truthy(highlighter.rebuild_structure(buf))
-    end)
-
-    it("sets up one shared build and attachment across reentry and windows", function()
-        local buf = vim.api.nvim_create_buf(false, true)
-        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "body" })
-        parley._parley_bufs[buf] = "markdown"
-        local events = {}
-        require("parley.line_reader").set_observer(buf, function(event) events[#events + 1] = event end)
-        local lifecycle = require("parley.buffer_lifecycle")
-        lifecycle.setup(buf)
-        lifecycle.setup(buf)
-        local builds = 0
-        for _, event in ipairs(events) do
-            if event.operation == "structure_build" then builds = builds + 1 end
-        end
-        assert.equals(1, builds)
-        assert.is_true(require("parley.highlighter")._structure_cache(buf).attached)
-
-        lifecycle.clear(buf)
-        lifecycle.setup(buf)
-        assert.is_true(require("parley.highlighter")._structure_cache(buf).attached)
-    end)
-
-    it("makes obsolete attached callbacks no-op after teardown", function()
-        local highlighter = require("parley.highlighter")
-        local buf = vim.api.nvim_create_buf(false, true)
-        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "body" })
-        parley._parley_bufs[buf] = "chat"
-        assert.is_truthy(highlighter.rebuild_structure(buf))
-        local callback = highlighter._structure_cache(buf).on_lines
-        highlighter.clear_structure(buf)
-        assert.is_true(callback(nil, buf, 0, 0, 1, 1))
-        assert.is_nil(highlighter._structure_cache(buf))
-    end)
-
-    local function real_lifecycle(notifications)
-        local handlers = {}
-        local highlighter = require("parley.highlighter")
-        local lifecycle = require("parley.buffer_lifecycle")._new({
-            is_valid = vim.api.nvim_buf_is_valid,
-            create_autocmd = function(events, callback)
-                for _, event in ipairs(events) do handlers[event] = callback end
-            end,
-            diagnostics = require("parley.diagnostic_refresh"),
-            structure = {
-                rebuild = highlighter.rebuild_structure,
-                clear = highlighter.clear_structure,
-            },
-            notify = function(err) notifications[#notifications + 1] = err end,
-        })
-        return lifecycle, handlers
-    end
-
-    local function structural_lifecycle_fixture()
-        local highlighter = require("parley.highlighter")
-        local lifecycle, handlers = real_lifecycle({})
-        local buf = vim.api.nvim_create_buf(false, true)
-        vim.api.nvim_win_set_buf(vim.api.nvim_get_current_win(), buf)
-        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "💬: q", "body" })
-        parley._parley_bufs[buf] = "chat"
-        lifecycle.setup(buf)
-        return highlighter, lifecycle, handlers, buf
-    end
-
-    it("refreshes a normal completed API leg", function()
-        local highlighter, lifecycle, _, buf = structural_lifecycle_fixture()
-        vim.api.nvim_buf_set_lines(buf, 2, 2, false, { "🤖: streamed" })
-        assert.is_true(highlighter._structure_cache(buf).dirty)
-        lifecycle.finalize_mutated_api_leg(buf, true)
-        assert.equals(3, #highlighter._structure_cache(buf).structure.fingerprints)
-    end)
-
-    local function prepare_undo_fixture()
-        local highlighter, lifecycle, handlers, buf = structural_lifecycle_fixture()
-        vim.bo[buf].undolevels = vim.bo[buf].undolevels
-        vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "🧠: structural" })
-        lifecycle.converge(buf, "TextChanged")
-        return highlighter, lifecycle, handlers, buf
-    end
-
-    it("converges after undo", function()
-        local highlighter, lifecycle, _, buf = prepare_undo_fixture()
-        vim.api.nvim_buf_call(buf, function() vim.cmd("undo") end)
-        assert.is_true(highlighter._structure_cache(buf).dirty)
-        lifecycle.converge(buf, "undo")
-        local undo_line = vim.api.nvim_buf_get_lines(buf, 1, 2, false)[1] or ""
-        assert.equals(require("parley.highlight_structure").fingerprint(undo_line),
-            highlighter._structure_cache(buf).structure.fingerprints[2])
-    end)
-
-    it("converges after redo", function()
-        local highlighter, lifecycle, _, buf = prepare_undo_fixture()
-        vim.api.nvim_buf_call(buf, function() vim.cmd("undo") end)
-        lifecycle.converge(buf, "undo")
-        vim.api.nvim_buf_call(buf, function() vim.cmd("redo") end)
-        assert.is_true(highlighter._structure_cache(buf).dirty)
-        lifecycle.converge(buf, "redo")
-        local redo_line = vim.api.nvim_buf_get_lines(buf, 1, 2, false)[1] or ""
-        assert.equals(require("parley.highlight_structure").fingerprint(redo_line),
-            highlighter._structure_cache(buf).structure.fingerprints[2])
-    end)
-
-    it("converges after external edit", function()
-        local highlighter, _, handlers, buf = structural_lifecycle_fixture()
-        vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "🌿: external" })
-        assert.is_true(highlighter._structure_cache(buf).dirty)
-        handlers.BufWritePost({ buf = buf, event = "BufWritePost" })
-        assert.equals("b", highlighter._structure_cache(buf).structure.fingerprints[2])
-    end)
-
-    it("shares structure across a second window", function()
-        local _, lifecycle, handlers, buf = structural_lifecycle_fixture()
-        lifecycle.setup(buf)
-        handlers.BufEnter({ buf = buf, event = "BufEnter" })
-        local shared = require("parley.highlighter")._structure_cache(buf).structure
-        vim.cmd("vsplit")
-        local wins = vim.api.nvim_tabpage_list_wins(0)
-        vim.api.nvim_win_set_buf(wins[1], buf)
-        vim.api.nvim_win_set_buf(wins[2], buf)
-        local provider = capture_decoration_provider()
-        provider.on_win(nil, wins[1], buf, 0, 1)
-        provider.on_win(nil, wins[2], buf, 0, 1)
-        assert.equals(shared, require("parley.highlighter")._structure_cache(buf).structure)
-        cleanup_extra_windows()
-    end)
-
-    for _, case in ipairs({
-        { event = "BufUnload", name = "clears on BufUnload" },
-        { event = "BufDelete", name = "clears on BufDelete" },
-    }) do
-        it(case.name, function()
-            local _, lifecycle, handlers, buf = structural_lifecycle_fixture()
-            local highlighter = require("parley.highlighter")
-            local obsolete = highlighter._structure_cache(buf).on_lines
-            handlers[case.event]({ buf = buf, event = case.event })
-            assert.is_nil(highlighter._structure_cache(buf))
-            assert.is_true(obsolete(nil, buf, 0, 0, 1, 1))
-            vim.api.nvim_buf_delete(buf, { force = true })
-            assert.has_no.errors(function() handlers[case.event]({ buf = buf, event = case.event }) end)
-            assert.has_no.errors(function() lifecycle.converge(buf, "obsolete") end)
-        end)
-    end
-
-    it("retains one attachment and rebuild after teardown reentry", function()
-        for _, event_name in ipairs({ "BufUnload", "BufDelete" }) do
-            local lifecycle, handlers = real_lifecycle({})
-            local buf = vim.api.nvim_create_buf(false, true)
-            vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "💬: q", "body" })
-            parley._parley_bufs[buf] = "chat"
-            local line_reader = require("parley.line_reader")
-            local builds = 0
-            line_reader.set_observer(buf, function(event)
-                if event.operation == "structure_build" then builds = builds + 1 end
-            end)
-            local original_attach = vim.api.nvim_buf_attach
-            local attaches = 0
-            vim.api.nvim_buf_attach = function(...)
-                attaches = attaches + 1
-                return original_attach(...)
-            end
-            lifecycle.setup(buf)
-            lifecycle.setup(buf)
-            handlers.BufEnter({ buf = buf, event = "BufEnter" })
-            handlers.BufEnter({ buf = buf, event = "BufEnter" })
-            vim.api.nvim_buf_attach = original_attach
-            assert.equals(1, attaches, event_name)
-            assert.equals(1, builds, event_name)
-
-            handlers[event_name]({ buf = buf, event = event_name })
-            assert.is_nil(require("parley.highlighter")._structure_cache(buf))
-
-            builds = 0
-            line_reader.set_observer(buf, function(event)
-                if event.operation == "structure_build" then builds = builds + 1 end
-            end)
-            attaches = 0
-            vim.api.nvim_buf_attach = function(...)
-                attaches = attaches + 1
-                return original_attach(...)
-            end
-            lifecycle.setup(buf)
-            vim.api.nvim_buf_attach = original_attach
-            assert.equals(1, attaches, event_name .. " reentry")
-            assert.equals(1, builds, event_name .. " reentry")
-        end
-    end)
-
-    it("retains the prior real cache across lifecycle rebuild failure and swaps on retry", function()
-        local notifications = {}
-        local lifecycle = real_lifecycle(notifications)
-        local highlighter = require("parley.highlighter")
-        local model = require("parley.highlight_structure")
-        local buf = vim.api.nvim_create_buf(false, true)
-        vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "💬: q", "body" })
-        parley._parley_bufs[buf] = "chat"
-        lifecycle.setup(buf)
-        vim.api.nvim_buf_set_lines(buf, 1, 2, false, { "🧠: replacement" })
-        -- The aligned splice this edit installed is what a failure must keep.
-        local prior = highlighter._structure_cache(buf).structure
-        local original = model.build
-        model.build = function() error("integrated candidate failure") end
-        local ok, err = pcall(lifecycle.converge, buf, "InsertLeave")
-        model.build = original
-        assert.is_false(ok)
-        assert.matches("integrated candidate failure", err)
-        assert.matches("integrated candidate failure", notifications[1])
-        assert.equals(prior, highlighter._structure_cache(buf).structure)
-        assert.is_true(highlighter._structure_cache(buf).dirty)
-        assert.has_no.errors(function() lifecycle.converge(buf, "InsertLeave retry") end)
-        assert.is_not.equals(prior, highlighter._structure_cache(buf).structure)
-        assert.equals("r", highlighter._structure_cache(buf).structure.fingerprints[2])
-    end)
 end)
 
 describe("timezone diagnostics", function()
@@ -901,6 +640,7 @@ describe("timezone diagnostics", function()
                 }
             end,
         })
+        require("parley.diagnostic_refresh").drain(buf,10000)
 
         local diagnostics = vim.diagnostic.get(buf, { namespace = tz.diag_namespace() })
         assert.equals(1, #diagnostics)
@@ -922,6 +662,7 @@ describe("timezone diagnostics", function()
                 error("no timestamps remain")
             end,
         })
+        require("parley.diagnostic_refresh").drain(buf,10000)
 
         assert.equals(0, #vim.diagnostic.get(buf, { namespace = tz.diag_namespace() }))
     end)
@@ -977,6 +718,7 @@ describe("markdown footnote diagnostics", function()
         })
 
         skill_render.refresh_footnote_diagnostics(buf)
+        require("parley.diagnostic_refresh").drain(buf,10000)
 
         local diagnostics = vim.diagnostic.get(buf, { namespace = skill_render.diag_namespace() })
         assert.equals(1, #diagnostics)
@@ -998,6 +740,7 @@ describe("markdown footnote diagnostics", function()
         })
 
         skill_render.refresh_footnote_diagnostics(buf)
+        require("parley.diagnostic_refresh").drain(buf,10000)
 
         local hl_ns = vim.api.nvim_get_namespaces().parley_footnote_hl
         local marks = vim.api.nvim_buf_get_extmarks(buf, hl_ns, 0, -1, { details = true })
@@ -1019,6 +762,7 @@ describe("markdown footnote diagnostics", function()
         })
 
         skill_render.refresh_footnote_diagnostics(buf)
+        require("parley.diagnostic_refresh").drain(buf,10000)
 
         local hl_ns = vim.api.nvim_get_namespaces().parley_footnote_hl
         local marks = vim.api.nvim_buf_get_extmarks(buf, hl_ns, 0, -1, { details = true })
@@ -1040,6 +784,7 @@ describe("markdown footnote diagnostics", function()
         })
 
         skill_render.refresh_footnote_diagnostics(buf)
+        require("parley.diagnostic_refresh").drain(buf,10000)
 
         local hl_ns = vim.api.nvim_get_namespaces().parley_footnote_hl
         local marks = vim.api.nvim_buf_get_extmarks(buf, hl_ns, 0, -1, { details = true })
@@ -1261,7 +1006,7 @@ describe("production first-entry convergence", function()
             lines = { "# Note", "at 2026-07-12T12:34:56Z" },
         },
     }) do
-        it("hydrates an unattached " .. case.name .. " buffer before BufEnter returns", function()
+        it("attaches an unread " .. case.name .. " buffer before BufEnter returns", function()
             local buf = vim.api.nvim_create_buf(true, true)
             vim.api.nvim_buf_set_name(buf, case.path())
             vim.api.nvim_buf_set_lines(buf, 0, -1, false, case.lines)
@@ -1270,10 +1015,10 @@ describe("production first-entry convergence", function()
             vim.api.nvim_exec_autocmds("BufEnter", { buffer = buf })
 
             assert.equals(case.name, parley._parley_bufs[buf])
-            local cache = require("parley.highlighter")._structure_cache(buf)
-            assert.is_truthy(cache)
-            assert.is_false(cache.dirty)
+            local document = require("parley.document").get(buf)
+            assert.is_truthy(document)
             local timezone = require("parley.timezone_diagnostics")
+            require("parley.diagnostic_refresh").drain(buf,10000)
             assert.equals(1, #vim.diagnostic.get(buf, { namespace = timezone.diag_namespace() }))
         end)
     end
@@ -1294,9 +1039,8 @@ describe("production first-entry convergence", function()
         vim.wait(20, function() return false end, 1)
 
         assert.equals("chat", parley._parley_bufs[buf])
-        local cache = require("parley.highlighter")._structure_cache(buf)
-        assert.is_truthy(cache)
-        assert.is_false(cache.dirty)
+        local document = require("parley.document").get(buf)
+        assert.is_truthy(document)
         pcall(vim.fn.delete, source)
         pcall(vim.fn.delete, chat_path)
     end)

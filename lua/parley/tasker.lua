@@ -1,193 +1,314 @@
---------------------------------------------------------------------------------
--- Task managmenet module
---------------------------------------------------------------------------------
-
 local logger = require("parley.logger")
-
+local attempt = require("parley.attempt")
 local uv = vim.uv or vim.loop
 
 local M = {}
-M._handles = {}
-M._uv = nil -- injectable transport seam for deterministic drain-order tests
-M._queries = {} -- table of latest queries
+M._handles = {} -- Compatibility snapshots, never lifecycle authority.
+M._queries = {} -- Mutable provider payloads; lifecycle metadata stays private.
+M._uv = nil
 M._debug = {
     is_busy_calls = 0,
     warnings_suppressed = 0,
     last_warning_time = 0,
-    warning_interval = 1 -- seconds between warnings
+    warning_interval = 1,
 }
-M._cache_metrics = {
-    creation = 0,   -- tokens created in cache
-    read = 0,       -- tokens read from cache
-    input = 0       -- total input tokens
-}
+M._cache_metrics = { creation = 0, read = 0, input = 0 }
 
----@param fn function # function to wrap so it only gets called once
-M.once = function(fn)
-	local once = false
-	return function(...)
-		if once then
-			return
-		end
-		once = true
-		fn(...)
-	end
+local records, admissions, queries = {}, {}, {}
+local sequence = 0
+
+local DEFAULT_LIMITS={provider_attempts=16,tool_attempts=16,total_attempts=32,
+    document_generations=4,document_tools=8,generation_tools=4,retained_bytes=16*1024*1024}
+local limits=vim.deepcopy(DEFAULT_LIMITS)
+local retained_bytes=0
+local schedule_reconcile,close_reconcile
+local function clock()return M._clock and M._clock() or uv.hrtime()/1000000 end
+local function integer(value,maximum)return type(value)=='number' and value>=1 and value<=maximum and value%1==0 end
+-- Limits may be lowered for a profile, but cannot exceed the shared hard bounds.
+-- Utility processes consume the total ceiling rather than an uncounted allowance.
+function M.configure_limits(value)
+    if type(value)~='table'then return {ok=false,reason='invalid process limits'}end
+    local next_limits=vim.deepcopy(limits)
+    for name,limit in pairs(value)do
+        if not DEFAULT_LIMITS[name] or not integer(limit,DEFAULT_LIMITS[name])then return {ok=false,reason='invalid process limit: '..tostring(name)}end
+        next_limits[name]=limit
+    end
+    limits=next_limits;return {ok=true}
 end
-
----@param N number # number of queries to keep
----@param age number # age of queries to keep in seconds
-M.cleanup_old_queries = function(N, age)
-	local current_time = os.time()
-
-	local query_count = 0
-	for _ in pairs(M._queries) do
-		query_count = query_count + 1
-	end
-
-	if query_count <= N then
-		return
-	end
-
-	for qid, query_data in pairs(M._queries) do
-		if current_time - query_data.timestamp > age then
-			M._queries[qid] = nil
-		end
-	end
+function M.stats()
+    local out={active=0,providers=0,tools=0,retained_bytes=retained_bytes,timers=0}
+    for _,record in pairs(records)do
+        out.active=out.active+1
+        if record.state.kind=='provider'then out.providers=out.providers+1 end
+        if record.state.kind=='tool'then out.tools=out.tools+1 end
+        if record.timer then out.timers=out.timers+1 end
+    end
+    return out
 end
-
----@param qid string # query id
----@return table | nil # query data
-M.get_query = function(qid)
-	if not M._queries[qid] then
-		logger.error("query with ID " .. tostring(qid) .. " not found.")
-		return nil
-	end
-	return M._queries[qid]
-end
-
----@param buf number | nil # buffer number
----@return table | nil # newest query for this buffer
-M.get_active_query_by_buf = function(buf)
-	if buf == nil then
-		return nil
-	end
-
-	local active_query = nil
-	for _, query_data in pairs(M._queries) do
-		if query_data.buf == buf then
-			if not active_query or (query_data.timestamp or 0) > (active_query.timestamp or 0) then
-				active_query = query_data
-			end
-		end
-	end
-
-	return active_query
-end
-
----@param qid string # query id
----@param payload table # query payload
-M.set_query = function(qid, payload)
-	M._queries[qid] = payload
-	M._queries[qid].timestamp = os.time()
-	M.cleanup_old_queries(10, 60)
-
-	-- Trigger event for lualine update
-	vim.schedule(function()
-		vim.cmd("doautocmd User ParleyQueryStarted")
-	end)
-end
-
--- add a process handle and its corresponding pid to the _handles table
----@param handle userdata | nil # the Lua uv handle
----@param pid number | string # the process id
----@param buf number | nil # buffer number
-M.add_handle = function(handle, pid, buf)
-    -- Check if this PID is already in the handles table
-    for _, h in ipairs(M._handles) do
-        if h.pid == pid then
-            logger.debug("Process " .. pid .. " is already in handles table, not adding duplicate")
-            return
+local function capacity(candidate)
+    local total,providers,tools,document_tools,generation_tools=0,0,0,0,0
+    local generations={}
+    for _,record in pairs(records)do
+        local state=record.state;total=total+1
+        if state.kind=='provider'then providers=providers+1 end
+        if state.kind=='tool'then tools=tools+1 end
+        if candidate.buf~=nil and state.buf==candidate.buf then
+            generations[state.logical_generation]=true
+            if state.kind=='tool'then document_tools=document_tools+1
+                if state.logical_generation==candidate.logical_generation then generation_tools=generation_tools+1 end
+            end
         end
     end
-	table.insert(M._handles, { handle = handle, pid = pid, buf = buf })
-	logger.debug("Added handle for PID " .. pid .. ", total handles: " .. #M._handles)
+    if total>=limits.total_attempts or candidate.kind=='provider' and providers>=limits.provider_attempts
+        or candidate.kind=='tool' and tools>=limits.tool_attempts then return false end
+    if candidate.buf~=nil then
+        if not generations[candidate.logical_generation] and vim.tbl_count(generations)>=limits.document_generations then return false end
+        if candidate.kind=='tool' and (document_tools>=limits.document_tools or generation_tools>=limits.generation_tools)then return false end
+    end
+    return true
+end
+local function collection()return {pieces={},chunks={},piece_bytes=0,bytes=0}end
+local function collect(buffer,data)
+    local offset=1
+    while offset<=#data do
+        local last=math.min(#data,offset+65536-buffer.piece_bytes-1)
+        buffer.pieces[#buffer.pieces+1]=data:sub(offset,last)
+        buffer.piece_bytes=buffer.piece_bytes+last-offset+1;offset=last+1
+        if buffer.piece_bytes==65536 or #buffer.pieces==128 then
+            buffer.chunks[#buffer.chunks+1]=table.concat(buffer.pieces)
+            buffer.pieces={};buffer.piece_bytes=0
+        end
+    end
+    buffer.bytes=buffer.bytes+#data
+end
+local function collected(buffer)
+    if #buffer.pieces>0 then buffer.chunks[#buffer.chunks+1]=table.concat(buffer.pieces)end
+    return table.concat(buffer.chunks)
 end
 
--- remove a process handle from the _handles table using its pid
----@param pid number | string # the process id to find the corresponding handle
-M.remove_handle = function(pid)
-	for i, h in ipairs(M._handles) do
-		if h.pid == pid then
-			table.remove(M._handles, i)
-			logger.debug("Removed handle for PID " .. pid .. ", remaining handles: " .. (#M._handles))
-			return
-		end
-	end
-	logger.debug("Attempted to remove nonexistent handle for PID " .. pid)
+local function snapshot()
+    M._handles = {}
+    for _, record in pairs(records) do
+        table.insert(M._handles, vim.deepcopy(record.state))
+    end
+    table.sort(M._handles, function(a, b) return a.order < b.order end)
 end
 
---- check if there is some pid running for the given buffer
----@param buf number | nil # buffer number
----@return boolean
-M.is_busy = function(buf, skip_warning)
-	-- Increment debug counter
-	M._debug.is_busy_calls = M._debug.is_busy_calls + 1
+-- Test isolation must be explicit; replacing a public snapshot cannot retire work.
+function M._reset()
+    for _,record in pairs(records)do if close_reconcile then close_reconcile(record)end end
+    limits=vim.deepcopy(DEFAULT_LIMITS);retained_bytes=0
+    records, admissions, queries = {}, {}, {}
+    M._handles, M._queries = {}, {}
+end
 
-	if buf == nil then
-		return false
-	end
+function M.get_attempt(id)
+    return records[id] and vim.deepcopy(records[id].state) or nil
+end
 
-	-- Initialize variables to track the first active process we find
-	local active_pid = nil
+function M.once(fn)
+    local called = false
+    return function(...)
+        if not called then
+            called = true
+            fn(...)
+        end
+    end
+end
 
-	-- Count active processes for this buffer
-	local active_count = 0
+function M.cleanup_old_queries(count, age)
+    if vim.tbl_count(M._queries) <= count then return end
+    for id, query in pairs(queries) do
+        if query.terminal and os.time() - query.timestamp > age then
+            queries[id], M._queries[id] = nil, nil
+        end
+    end
+end
 
-	for _, h in ipairs(M._handles) do
-		if h.buf == buf then
-			-- Check if the process is still active by sending signal 0 (doesn't kill the process, just checks existence)
-			local is_active = false
+function M.set_query(id, payload)
+    sequence = sequence + 1
+    M._queries[id] = payload
+    payload.timestamp = os.time()
+    queries[id] = {
+        timestamp = payload.timestamp,
+        order = sequence,
+        buf = payload.buf,
+        terminal = false,
+    }
+    M.cleanup_old_queries(10, 60)
+    vim.schedule(function() vim.cmd("doautocmd User ParleyQueryStarted") end)
+end
 
-			-- Use pcall since kill might throw an error if process doesn't exist
-			pcall(function()
-				if type(h.pid) == "number" and h.pid > 0 then
-					is_active = uv.kill(h.pid, 0) == 0
-				end
-			end)
+-- Only unlaunched preparation can be rejected by callers. Attempts own completion.
+function M.reject_query(id)
+    for _, record in pairs(records) do
+        if record.state.query_id == id then return false end
+    end
+    if not queries[id] then return false end
+    queries[id].terminal = true
+    return true
+end
 
-			if is_active then
-				active_count = active_count + 1
-				if active_pid == nil then
-					active_pid = h.pid -- Store the first active PID we find
-				end
-			else
-				-- Process no longer exists, remove it from handles
-				logger.debug("Removing stale process handle: " .. h.pid)
-				M.remove_handle(h.pid)
-			end
-		end
-	end
+function M.get_query(id)
+    return M._queries[id]
+end
 
-	-- After processing all handles, report the result once
-	if active_pid ~= nil then
-		-- Only log warnings if not explicitly suppressed (for UI calls)
-		if not skip_warning then
-			-- Limit warning frequency to prevent log spam
-			local current_time = os.time()
-			if (current_time - M._debug.last_warning_time) >= M._debug.warning_interval then
-				-- Only log warning if enough time has passed since the last one
-				logger.warning("Another Parley process [" .. active_pid .. "] is already running for buffer " .. buf ..
-							" (found " .. active_count .. " active process(es))")
-				M._debug.last_warning_time = current_time
-			else
-				-- Count suppressed warnings
-				M._debug.warnings_suppressed = M._debug.warnings_suppressed + 1
-			end
-		end
-		return true
-	end
+function M.get_active_query_by_buf(buf)
+    local best, order = nil, -1
+    for id, query in pairs(queries) do
+        if buf ~= nil and query.buf == buf and not query.terminal and query.order > order then
+            best, order = M._queries[id], query.order
+        end
+    end
+    return best
+end
 
-	return false
+local function retire(record)
+    close_reconcile(record)
+    retained_bytes=math.max(0,retained_bytes-(record.retained or 0));record.retained=0
+    local state = record.state
+    if admissions[state.admission_key] == state.attempt_id then
+        admissions[state.admission_key] = nil
+    end
+    records[state.attempt_id] = nil
+    if queries[state.query_id] then queries[state.query_id].terminal = true end
+    snapshot()
+end
+
+local function event(record, observation)
+    record.state = attempt.transition(record.state, observation)
+end
+
+close_reconcile=function(record)
+    local timer=record.timer;record.timer=nil
+    if timer then pcall(function()timer:stop()end);pcall(function()if not timer:is_closing()then timer:close()end end)end
+end
+schedule_reconcile=function(record)
+    if not record.state.reconcile_due or not attempt.is_unresolved(record.state)then close_reconcile(record);return end
+    if not record.timer then
+        if not record.runtime.new_timer then return end
+        local ok,timer=pcall(record.runtime.new_timer)
+        if not ok or not timer then record.state.timer_error=true;return end
+        record.timer=timer
+    end
+    local delay=math.max(1,math.ceil(record.state.reconcile_due-clock()))
+    local ok=pcall(function()record.timer:start(delay,0,function()
+        vim.schedule(function()if records[record.state.attempt_id]==record then M.reconcile_step()end end)
+    end)end)
+    if not ok then record.state.timer_error=true;close_reconcile(record)end
+end
+-- Reconciliation observes liveness only. After five seconds the timer retires,
+-- while the unresolved attempt and its admission slot remain until positive drain.
+function M.reconcile_step(now)
+    now=now or clock()
+    for _,record in pairs(records)do
+        if attempt.is_unresolved(record.state)then
+            local effects;record.state,effects=attempt.transition(record.state,{type='reconcile_tick',now=now})
+            if effects.probe and not record.state.exited and record.state.pid then
+                local ok,result,detail,code=pcall(record.runtime.kill,record.state.pid,0)
+                local observation=ok and result==0 and 'alive' or 'unknown'
+                if ok and (code=='ESRCH' or tostring(detail):find('ESRCH',1,true))then observation='missing'end
+                event(record,{type='observation',observation=observation})
+            end
+            if effects.unresolved then
+                close_reconcile(record)
+                logger.warning('Parley process remains unresolved after cancellation/exit; resource ownership retained')
+                if record.on_unresolved then pcall(record.on_unresolved,vim.deepcopy(record.state))end
+            else schedule_reconcile(record)end
+        else close_reconcile(record)end
+    end
+    snapshot();return M.stats()
+end
+
+function M.is_busy(buf, skip_warning)
+    M._debug.is_busy_calls = M._debug.is_busy_calls + 1
+    if buf == nil then return false end
+    for _, record in pairs(records) do
+        if record.state.buf == buf and attempt.is_unresolved(record.state) then
+            if not skip_warning then
+                local now = os.time()
+                if now - M._debug.last_warning_time >= M._debug.warning_interval then
+                    logger.warning("Another Parley process [" .. tostring(record.state.pid)
+                        .. "] is already running for buffer " .. buf)
+                    M._debug.last_warning_time = now
+                else
+                    M._debug.warnings_suppressed = M._debug.warnings_suppressed + 1
+                end
+            end
+            return true
+        end
+    end
+    return false
+end
+
+-- Explicit unresolved retention: a probe is diagnostic, never exit/drain evidence.
+-- Manual probes do not bypass the finite cancellation reconciliation schedule.
+function M.cleanup_stale_handles()
+    for _, record in pairs(records) do
+        local state = record.state
+        if not state.exited and state.pid then
+            local ok, result, detail, code = pcall(record.runtime.kill, state.pid, 0)
+            local observation = "unknown"
+            if ok and result == 0 then
+                observation = "alive"
+            elseif ok and (code == "ESRCH" or tostring(detail):find("ESRCH", 1, true)) then
+                observation = "missing"
+            end
+            event(record, { type = "observation", observation = observation })
+        end
+    end
+    snapshot()
+end
+
+local function stop_matching(matches, signal)
+    local count, failed = 0, false
+    signal = signal or 15
+    for _, record in pairs(records) do
+        local state = record.state
+        if matches(state) and attempt.is_unresolved(state) then
+            count = count + 1
+            event(record, { type = 'stop_requested', now=clock() })
+            if not state.exited and state.accepted_signal ~= signal then
+                local ok, result, detail, code = pcall(record.runtime.kill, state.pid, signal)
+                local observation = "unknown"
+                if ok and result == 0 then
+                    observation = "accepted"
+                else
+                    failed = true
+                    if ok and (code == "ESRCH" or tostring(detail):find("ESRCH", 1, true)) then
+                        observation = "missing"
+                    end
+                end
+                event(record, { type = "signal_observation", observation = observation, signal = signal })
+            end
+            schedule_reconcile(record)
+        end
+    end
+    snapshot()
+    return count, failed
+end
+
+function M.stop(signal)
+    return stop_matching(function() return true end, signal)
+end
+
+local function scoped_stop(matches, signal)
+    local count, failed = stop_matching(matches, signal)
+    if failed then error("task transport stop failed", 0) end
+    return count
+end
+
+function M.stop_buf(buf, signal)
+    return scoped_stop(function(state) return state.buf == buf end, signal)
+end
+
+function M.stop_owner(owner, signal)
+    if owner == nil then return 0 end
+    return scoped_stop(function(state) return state.generation_id == owner end, signal)
+end
+
+function M.stop_attempt(id,signal)
+    return scoped_stop(function(state)return state.attempt_id==id end,signal)
 end
 
 -- Set cache metrics
@@ -220,88 +341,6 @@ M.get_cache_metrics = function()
     }
 end
 
--- report_debug_stats function removed - only used internally
-
--- Clean up stale process handles that are no longer running
-M.cleanup_stale_handles = function()
-	local i = 1
-	local active_count = 0
-	local removed_count = 0
-
-	while i <= #M._handles do
-		local h = M._handles[i]
-
-		-- Check if process still exists
-		local process_exists = false
-		pcall(function()
-			if type(h.pid) == "number" and h.pid > 0 then
-				process_exists = uv.kill(h.pid, 0) == 0
-			end
-		end)
-
-		if not process_exists then
-			-- Process no longer exists, remove from handles
-			logger.debug("Cleanup: Removing stale process handle [" .. h.pid .. "]")
-			table.remove(M._handles, i)
-			removed_count = removed_count + 1
-		else
-			active_count = active_count + 1
-			i = i + 1
-		end
-	end
-
-	logger.debug("Cleanup completed: " .. active_count .. " active processes, " ..
-				 removed_count .. " stale processes removed")
-
-end
-
-local function stop_matching(matches, signal)
-	local kept = {}
-	local stopped = 0
-	local signal_failed = false
-	local runtime = M._uv or uv
-	for _, h in ipairs(M._handles) do
-		if matches(h) then
-			stopped = stopped + 1
-			if h.handle ~= nil and not h.handle:is_closing() then
-				local ok, result = pcall(function()
-					if type(h.pid) == "number" and h.pid > 0 then
-						return runtime.kill(h.pid, signal or 15)
-					end
-					return 0
-				end)
-				if not ok or result == nil or result == false then signal_failed = true end
-			end
-		else
-			table.insert(kept, h)
-		end
-	end
-	M._handles = kept
-	if stopped > 0 then
-		vim.schedule(function()
-			vim.cmd("doautocmd User ParleyQueryFinished")
-		end)
-	end
-	return stopped, signal_failed
-end
-
--- Stop receiving responses for all processes and clean the handles.
----@param signal number | nil # signal to send to the process
-M.stop = function(signal)
-	return stop_matching(function() return true end, signal)
-end
-
--- Stop only processes owned by one buffer, preserving unrelated work.
----@param buf number # buffer number
----@param signal number | nil # signal to send to the process
----@return number # matching handle records retired
-M.stop_buf = function(buf, signal)
-	local stopped, signal_failed = stop_matching(function(handle) return handle.buf == buf end, signal)
-	if signal_failed then
-		error("task transport stop failed", 0)
-	end
-	return stopped
-end
 
 ---@param buf number | nil # buffer number
 ---@param cmd string # command to execute
@@ -310,160 +349,215 @@ end
 ---@param out_reader function | nil # stdout reader function(err, data)
 ---@param err_reader function | nil # stderr reader function(err, data)
 ---@param on_start_error function | nil # scheduled launch rejection callback(message)
-M.run = function(buf, cmd, args, callback, out_reader, err_reader, on_start_error)
-	logger.debug("run command: " .. cmd .. " " .. table.concat(args, " "), true)
-	local run_uv = M._uv or uv
+---@param opts table | nil # Captured cwd/kind/owner, bounded collection policy, and unresolved callback.
+-- Provider readers use collect_stdout=false: bounded delivery chunks do not cap the
+-- total answer. Tool/utility output is retained within per-stream and shared caps.
+-- An overflow requests cancellation; only exit plus both EOFs releases ownership.
+M.run = function(buf, cmd, args, callback, out_reader, err_reader, on_start_error, opts)
+    logger.debug("starting owned task process", true)
+    local run_uv = M._uv or uv
 
-	-- Run cleanup routine to remove stale processes
-	M.cleanup_stale_handles()
+    opts = vim.tbl_extend("force", {}, opts or {})
+    sequence = sequence + 1
+    local id = opts.attempt_id or ("attempt:" .. sequence)
+    local key = opts.admission_key or (buf and ("legacy:" .. buf) or id)
+    local record = {
+        runtime = run_uv,
+        retained=0,on_unresolved=opts.on_unresolved,
+        state = attempt.new({
+            attempt_id = id,
+            generation_id = opts.generation_id,
+            logical_generation = opts.logical_generation or opts.generation_id or id,
+            kind = opts.kind or 'utility',
+            stdout_bytes=0,stderr_bytes=0,
+            query_id = opts.query_id,
+            admission_key = key,
+            buf = buf,
+            order = sequence,
+        }),
+    }
+    local function reject(message)
+        event(record, { type = "spawn_failed" })
+        if records[id] == record then
+            retire(record)
+        else
+            M.reject_query(opts.query_id)
+        end
+        if on_start_error then vim.schedule(function() on_start_error(message) end) end
+    end
+    if records[id] or admissions[key] then
+        reject("task start rejected: owner is busy")
+        return nil
+    end
+    local stdout_limit,stderr_limit=opts.stdout_limit or 1048576,opts.stderr_limit or 65536
+    if not integer(stdout_limit,16*1024*1024) or not integer(stderr_limit,1048576)
+        or opts.collect_stdout~=nil and type(opts.collect_stdout)~='boolean'
+        or opts.cwd~=nil and (type(opts.cwd)~='string' or opts.cwd=='')
+        or record.state.kind~='provider' and record.state.kind~='tool' and record.state.kind~='utility' then
+        reject('task start rejected: invalid process options');return nil
+    end
+    if not capacity(record.state)then reject('task start rejected: process admission capacity');return nil end
+    records[id], admissions[key] = record, id
+    snapshot()
 
-	if M.is_busy(buf, false) then
-		if on_start_error then
-			vim.schedule(function()
-				on_start_error("task start rejected: buffer is busy")
-			end)
-		end
-		return
-	end
+    local handle, pid
+    local stdout, stderr
+    local pipes_ok, pipes_error = pcall(function()
+        stdout = assert(run_uv.new_pipe(false))
+        stderr = assert(run_uv.new_pipe(false))
+    end)
+    if not pipes_ok then
+        if stdout then pcall(function() stdout:close() end) end
+        if stderr then pcall(function() stderr:close() end) end
+        reject("task start failed: " .. tostring(pipes_error))
+        return nil
+    end
+    local stdout_buffer,stderr_buffer=collection(),collection()
+    local io_error
 
-	local handle, pid
-	local stdout = run_uv.new_pipe(false)
-	local stderr = run_uv.new_pipe(false)
-	local stdout_data = ""
-	local stderr_data = ""
-	local exit_code
-	local exit_signal
-	local process_done = false
-	local stdout_done = false
-	local stderr_done = false
-	local io_error
+    local function call_safely(label, fn, ...)
+        if not fn then return end
+        local call_args = { ... }
+        local arg_count = select("#", ...)
+        local ok = xpcall(function()
+            fn(unpack(call_args, 1, arg_count))
+        end, function() return nil end)
+        if not ok then
+            logger.error(label .. " callback failed")
+        end
+    end
 
-	local function call_safely(label, fn, ...)
-		if not fn then return end
-		local call_args = { ... }
-		local arg_count = select("#", ...)
-		local ok = xpcall(function()
-			fn(unpack(call_args, 1, arg_count))
-		end, function() return nil end)
-		if not ok then
-			logger.error(label .. " callback failed")
-		end
-	end
+    local finish = M.once(function()
+        vim.schedule(function()
+            local stdout_data,stderr_data=collected(stdout_buffer),collected(stderr_buffer)
+            stdout_buffer,stderr_buffer=nil,nil
+            event(record, { type = "delivered" })
+            retire(record)
+            call_safely("task terminal", callback,
+                record.state.code, record.state.signal, stdout_data, stderr_data, io_error)
+            local ok, message = pcall(vim.cmd, "doautocmd User ParleyQueryFinished")
+            if not ok then logger.error("ParleyQueryFinished failed: " .. tostring(message)) end
+        end)
+    end)
 
-	local finish = M.once(function()
-		vim.schedule(function()
-			call_safely("task terminal", callback,
-				exit_code, exit_signal, stdout_data, stderr_data, io_error)
-			M.remove_handle(pid)
-			local ok, message = pcall(vim.cmd, "doautocmd User ParleyQueryFinished")
-			if not ok then logger.error("ParleyQueryFinished failed: " .. tostring(message)) end
-		end)
-	end)
+    local function maybe_finish()
+        if attempt.can_deliver_terminal(record.state) then
+            close_reconcile(record)
+            finish()
+        end
+    end
 
-	local function maybe_finish()
-		if process_done and stdout_done and stderr_done then
-			finish()
-		end
-	end
+    local function close_pipe(pipe)
+        pcall(function() pipe:read_stop() end)
+        if not pipe:is_closing() then
+            pipe:close()
+        end
+    end
 
-	local function close_pipe(pipe)
-		pcall(function() pipe:read_stop() end)
-		if not pipe:is_closing() then
-			pipe:close()
-		end
-	end
+    local function on_exit(code, signal)
+        event(record, { type = "exit", code = code, signal = signal })
+        if handle and not handle:is_closing() then
+            handle:close()
+        end
+        if attempt.is_unresolved(record.state)then
+            event(record,{type='reconcile_requested',now=clock()});schedule_reconcile(record)
+        end
+        maybe_finish()
+    end
 
-	local function on_exit(code, signal)
-		exit_code = code
-		exit_signal = signal
-		process_done = true
-		if handle and not handle:is_closing() then
-			handle:close()
-		end
-		maybe_finish()
-	end
+    local spawn_error
+    local spawn_ok
+    spawn_ok, handle, pid = pcall(run_uv.spawn, cmd, {
+        args = args,
+        cwd = opts.cwd,
+        stdio = { nil, stdout, stderr },
+        hide = true,
+        detach = true,
+    }, on_exit)
+    if not spawn_ok or not handle then
+        spawn_error = spawn_ok and pid or handle
+        close_pipe(stdout)
+        close_pipe(stderr)
+        reject("task start failed: " .. tostring(spawn_error))
+        return
+    end
 
-	local spawn_error
-	handle, pid = run_uv.spawn(cmd, {
-		args = args,
-		stdio = { nil, stdout, stderr },
-		hide = true,
-		detach = true,
-	}, on_exit)
-	if not handle then
-		spawn_error = pid
-		close_pipe(stdout)
-		close_pipe(stderr)
-		if on_start_error then
-			local report_start_error = M.once(on_start_error)
-			vim.schedule(function()
-				report_start_error("task start failed: " .. tostring(spawn_error))
-			end)
-		end
-		return
-	end
+    logger.debug("owned task process started with pid: " .. pid, true)
 
-	logger.debug(cmd .. " command started with pid: " .. pid, true)
+    record.handle = handle
+    event(record, { type = "spawned", pid = pid })
+    if record.state.exited and not handle:is_closing() then handle:close() end
+    snapshot()
 
-	M.add_handle(handle, pid, buf)
+    local function deliver(stream,buffer,limit,reader,err,data,collecting)
+        if not data or data == '' then call_safely(stream..' reader',reader,err,data);return end
+        local amount=#data
+        if collecting then amount=math.min(amount,limit-buffer.bytes,limits.retained_bytes-retained_bytes)end
+        amount=math.max(0,amount)
+        if collecting and amount>0 then
+            collect(buffer,data:sub(1,amount));record.retained=record.retained+amount;retained_bytes=retained_bytes+amount
+            record.state[stream..'_bytes']=buffer.bytes
+        end
+        for first=1,amount,65536 do call_safely(stream..' reader',reader,err,data:sub(first,math.min(first+65535,amount)))end
+        if amount<#data then
+            io_error=io_error or (stream..' retention limit exceeded')
+            record.state.output_overflow=true
+            pcall(M.stop_attempt,id)
+        end
+    end
 
-	local function stdout_callback(err, data)
-		if stdout_done then return end
-		if err then
-			logger.error("Error reading stdout: " .. vim.inspect(err))
-			io_error = io_error or ("stdout: " .. tostring(err))
-		end
-		if data then
-			stdout_data = stdout_data .. data
-		end
-		call_safely("stdout reader", out_reader, err, data)
-		if err then
-			call_safely("stdout reader EOF", out_reader, nil, nil)
-		end
-		if err or data == nil then
-			stdout_done = true
-			close_pipe(stdout)
-			maybe_finish()
-		end
-	end
+    local function stdout_callback(err, data)
+        if record.state.stdout_eof then return end
+        if err then
+            logger.error("Error reading stdout: " .. vim.inspect(err))
+            io_error = io_error or ("stdout: " .. tostring(err))
+        end
+        deliver('stdout',stdout_buffer,stdout_limit,out_reader,err,data,opts.collect_stdout~=false)
+        if err then
+            call_safely("stdout reader EOF", out_reader, nil, nil)
+        end
+        if err or data == nil then
+            event(record, { type = "stdout_eof" })
+            close_pipe(stdout)
+            maybe_finish()
+        end
+    end
 
-	local function stderr_callback(err, data)
-		if stderr_done then return end
-		if err then
-			logger.error("Error reading stderr: " .. vim.inspect(err))
-			io_error = io_error or ("stderr: " .. tostring(err))
-		end
-		if data then
-			stderr_data = stderr_data .. data
-		end
-		call_safely("stderr reader", err_reader, err, data)
-		if err then
-			call_safely("stderr reader EOF", err_reader, nil, nil)
-		end
-		if err or data == nil then
-			stderr_done = true
-			close_pipe(stderr)
-			maybe_finish()
-		end
-	end
+    local function stderr_callback(err, data)
+        if record.state.stderr_eof then return end
+        if err then
+            logger.error("Error reading stderr: " .. vim.inspect(err))
+            io_error = io_error or ("stderr: " .. tostring(err))
+        end
+        deliver('stderr',stderr_buffer,stderr_limit,err_reader,err,data,true)
+        if err then
+            call_safely("stderr reader EOF", err_reader, nil, nil)
+        end
+        if err or data == nil then
+            event(record, { type = "stderr_eof" })
+            close_pipe(stderr)
+            maybe_finish()
+        end
+    end
 
-	local function start_read(stream, pipe, reader, reject)
-		local ok, result, detail = pcall(run_uv.read_start, pipe, reader)
-		local failed = not ok or result == false
-			or (type(result) == "number" and result ~= 0)
-			or (result == nil and detail ~= nil)
-		if failed then
-			local reason = ok and (detail or result) or result
-			reject(stream .. " read_start failed: " .. tostring(reason))
-		end
-	end
+    local function start_read(stream, pipe, reader, reject_read)
+        local ok, result, detail = pcall(run_uv.read_start, pipe, reader)
+        local failed = not ok or result == false
+            or (type(result) == "number" and result ~= 0)
+            or (result == nil and detail ~= nil)
+        if failed then
+            local reason = ok and (detail or result) or result
+            reject_read(stream .. " read_start failed: " .. tostring(reason))
+        end
+    end
 
-	start_read("stdout", stdout, stdout_callback, function(message)
-		stdout_callback(message, nil)
-	end)
-	start_read("stderr", stderr, stderr_callback, function(message)
-		stderr_callback(message, nil)
-	end)
+    start_read("stdout", stdout, stdout_callback, function(message)
+        stdout_callback(message, nil)
+    end)
+    start_read("stderr", stderr, stderr_callback, function(message)
+        stderr_callback(message, nil)
+    end)
+    return id
 end
 
 -- grep_directory function removed as it's not used anywhere in the codebase

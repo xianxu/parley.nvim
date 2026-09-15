@@ -68,17 +68,13 @@ end
 --- Existing non-footnote diagnostics in the shared namespace are preserved.
 --- @param buf number|nil
 --- @param opts table|nil optional { reader = LineReader }
-function M.refresh_footnote_diagnostics(buf, opts)
-    ensure_namespaces()
-    buf = buf or vim.api.nvim_get_current_buf()
-    if not vim.api.nvim_buf_is_valid(buf) then
-        return
-    end
+function M.refresh_footnote_diagnostics(buf,opts)
+    return require('parley.diagnostic_refresh').refresh(buf or vim.api.nvim_get_current_buf(),opts)
+end
 
-    opts = opts or {}
-    local define = require("parley.define")
-    local reader = opts.reader or require("parley.line_reader").for_buffer(buf)
-    local lines = reader:lines(0, -1, false)
+function M.publish_footnotes(buf,footnotes)
+    ensure_namespaces()
+    local define=require('parley.define')
     local diagnostics = {}
     vim.api.nvim_buf_clear_namespace(buf, footnote_hl_ns_id, 0, -1)
 
@@ -88,7 +84,7 @@ function M.refresh_footnote_diagnostics(buf, opts)
         end
     end
 
-    for _, footnote in ipairs(define.footnote_diagnostics(lines)) do
+    for _, footnote in ipairs(footnotes) do
         highlight_footnote_span(buf, footnote.lnum, footnote.col, footnote.end_lnum or footnote.lnum, footnote.end_col)
         table.insert(diagnostics, {
             lnum = footnote.lnum,
@@ -103,6 +99,8 @@ function M.refresh_footnote_diagnostics(buf, opts)
     end
 
     vim.diagnostic.set(diag_ns_id, buf, diagnostics)
+    local bytes=0;for _,record in ipairs(diagnostics) do bytes=bytes+#record.message end
+    return {entries=#diagnostics,message_bytes=bytes}
 end
 
 --- Clear only managed-footnote diagnostics/highlights. Other diagnostics in

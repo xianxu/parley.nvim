@@ -213,6 +213,39 @@ describe("ChatFinder logic", function()
         require("parley.chat_finder").clear_cache()
     end)
 
+    it("does not borrow a newer picker's insertion target for an older callback", function()
+        local path=tmpdir.."/2026-09-15.12-00-00.000_choice.md"
+        vim.fn.writefile({"# topic: Choice"},path)
+        local Edit=require("parley.buffer_edit")
+        local calls,buffers={},{}
+        M.float_picker.open=function(opts) calls[#calls+1]=opts;return picker_stub(opts) end
+        local function open_target(text)
+            local buf=vim.api.nvim_create_buf(false,true);buffers[#buffers+1]=buf
+            vim.api.nvim_set_current_buf(buf);vim.api.nvim_buf_set_lines(buf,0,-1,false,{text})
+            M._chat_finder.opened=false;M._chat_finder.insert_mode=true
+            M._chat_finder.insert_buf=buf;M._chat_finder.insert_normal_mode=true
+            M._chat_finder.source_win=vim.api.nvim_get_current_win()
+            M._chat_finder.insert_capture=assert(Edit.capture_user(buf,"picker",{
+                {first={row=0,col=0},last={row=0,col=0}},
+            }))
+            M.cmd.ChatFinder()
+            return buf
+        end
+        local ok,err=pcall(function()
+            local first=open_target("first")
+            local second=open_target("second")
+            assert.equals(2,#calls)
+            calls[1].on_select(calls[1].items[1])
+            assert.same({"first"},vim.api.nvim_buf_get_lines(first,0,-1,false))
+            assert.same({"second"},vim.api.nvim_buf_get_lines(second,0,-1,false))
+            calls[2].on_select(calls[2].items[1])
+            assert.equals(2,vim.api.nvim_buf_line_count(second))
+            assert.is_truthy(vim.api.nvim_buf_get_lines(second,0,1,false)[1]:match("^🌿:"))
+        end)
+        for _,buf in ipairs(buffers) do vim.api.nvim_buf_delete(buf,{force=true}) end
+        assert.is_true(ok,tostring(err))
+    end)
+
     describe("finder delete keys (#249)", function()
         for _, defaults in ipairs({ "config", "registry fallback", "starter" }) do
             for _, case in ipairs({ { key = "<C-d>", answer = "y" },
