@@ -140,3 +140,64 @@ describe("annotation delimiters (#232)", function()
         assert.is_true((classify("@@a@@")))
     end)
 end)
+
+-- Tree-only contract: a source line can own several branch rows. Do not
+-- normalize by line number here; that would hide the loss this test guards.
+describe("outline preserves sibling branches (#241)", function()
+    local dir
+    before_each(function()
+        dir = vim.fn.tempname()
+        vim.fn.mkdir(dir, "p")
+        dir = vim.uv.fs_realpath(dir)
+    end)
+    after_each(function() vim.fn.delete(dir, "rf") end)
+
+    for _, same_line in ipairs({ true, false }) do
+        for _, expansion in ipairs({ "none", "first", "second", "all" }) do
+            it((same_line and "same-line inline" or "mixed standalone/inline") .. " branches, expanded " .. expansion, function()
+                local names = { "2026-09-14.12-00-00.000_root.md",
+                    "2026-09-14.12-00-01.000_first.md", "2026-09-14.12-00-02.000_second.md" }
+                local paths = { dir .. "/" .. names[1], dir .. "/" .. names[2], dir .. "/" .. names[3] }
+                local function write(index, body)
+                    local lines = { "---", "topic: " .. index, "file: " .. names[index], "---" }
+                    vim.list_extend(lines, body)
+                    vim.fn.writefile(lines, paths[index])
+                end
+                local first = "[🌿: First](" .. names[2] .. ")"
+                local second = "[🌿: Second](" .. names[3] .. ")"
+                local body = { "💬: root question", "🤖: answer" }
+                if same_line then
+                    body[#body + 1] = "Compare " .. first .. " and " .. second .. "."
+                else
+                    vim.list_extend(body, { "🌿: " .. names[2] .. ": First", "Also " .. second })
+                end
+                write(1, body)
+                for i = 2, 3 do
+                    write(i, { "🌿: " .. names[1] .. ": Root", "💬: child " .. i, "@@note " .. i .. "@@" })
+                end
+                local expanded = {}
+                if expansion == "first" then expanded[paths[2]] = true end
+                if expansion == "second" then expanded[paths[3]] = true end
+                if expansion == "all" then expanded = nil end
+                local tree = outline._build_tree_outline_items(paths[1], cfg, expanded)
+                local expected = { { file = paths[1], lnum = 1 }, { file = paths[1], lnum = 5 } }
+                for i = 2, 3 do
+                    expected[#expected + 1] = { file = paths[1], lnum = same_line and 7 or (i + 5),
+                        child_path = paths[i], inline = (same_line or i == 3) and true or nil }
+                    if not expanded or expanded[paths[i]] then
+                        expected[#expected + 1] = { file = paths[i], lnum = 6 }
+                        expected[#expected + 1] = { file = paths[i], lnum = 7 }
+                    end
+                end
+                local actual = {}
+                for _, item in ipairs(tree) do actual[#actual + 1] = item.value end
+                assert.same(expected, actual)
+                local branches = {}
+                for _, item in ipairs(tree) do
+                    if item.value.child_path then branches[#branches + 1] = item.display end
+                end
+                assert.same({ (same_line and "    " or "  ") .. "🌿 First", "    🌿 Second" }, branches)
+            end)
+        end
+    end
+end)

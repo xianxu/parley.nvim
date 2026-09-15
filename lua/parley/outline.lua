@@ -251,10 +251,11 @@ local function build_file_outline_items(file_path, config, depth)
   local items = {}
   local file_dir = vim.fn.fnamemodify(abs_path, ":h")
 
-  -- Map line_number -> branch for interleaving
+  -- Keep every branch at a source line, in parser (left-to-right) order.
   local branch_at_line = {}
   for _, branch in ipairs(parsed.branches) do
-    branch_at_line[branch.line] = branch
+    branch_at_line[branch.line] = branch_at_line[branch.line] or {}
+    table.insert(branch_at_line[branch.line], branch)
   end
 
   -- Code block memo — the SAME helper the buffer paths use. This third copy is
@@ -265,22 +266,24 @@ local function build_file_outline_items(file_path, config, depth)
 
   local user_prefix = config.chat_user_prefix
   for i = header_end + 1, #file_lines do
-    local branch = branch_at_line[i]
+    local branches = branch_at_line[i]
 
-    if branch then
-      -- Resolved ONCE. Under prefix identity each resolve is a glob per chat
-      -- root, so the old shape paid double on every untopiced branch — on a
-      -- keystroke path (ARCH-CONSTRAINTS, ARCH-DRY).
-      local child_abs = require("parley").resolve_chat_path(branch.path, file_dir)
-      local topic = branch.topic
-      if topic == "" then
-        topic = require("parley").get_chat_topic(child_abs) or branch.path
+    if branches then
+      for _, branch in ipairs(branches) do
+        -- Resolved ONCE. Under prefix identity each resolve is a glob per chat
+        -- root, so the old shape paid double on every untopiced branch — on a
+        -- keystroke path (ARCH-CONSTRAINTS, ARCH-DRY).
+        local child_abs = require("parley").resolve_chat_path(branch.path, file_dir)
+        local topic = branch.topic
+        if topic == "" then
+          topic = require("parley").get_chat_topic(child_abs) or branch.path
+        end
+        local branch_indent = branch.inline and (indent .. "    ") or (indent .. "  ")
+        table.insert(items, {
+          display = branch_indent .. "🌿 " .. topic,
+          value = { lnum = branch.line, file = abs_path, child_path = child_abs, inline = branch.inline },
+        })
       end
-      local branch_indent = branch.inline and (indent .. "    ") or (indent .. "  ")
-      table.insert(items, {
-        display = branch_indent .. "🌿 " .. topic,
-        value = { lnum = branch.line, file = abs_path, child_path = child_abs, inline = branch.inline },
-      })
     else
       -- #232: ONE item rule, shared with the flat builder. This branch used to
       -- keep its own question-only match, so the `@@…@@` annotations the flat

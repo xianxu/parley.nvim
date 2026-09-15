@@ -75,9 +75,9 @@ more than one branch per line — a map where a list was needed.
 
 ## Plan
 
-- [ ] Extend `tests/unit/outline_parity_spec.lua` with synthetic real-file sibling chats; exercise `_build_tree_outline_items` for multiple same-line inline branches and mixed line-form/single-inline branches, parser order, subtree interleaving, collapsed and independently expanded children. Observe the same-line cases fail before changing production code.
-- [ ] In `build_file_outline_items` (`lua/parley/outline.lua`), group parser branches into ordered arrays by source line and emit every entry using the existing row/resolver path. Keep recursion, expansion, cycle guard and child-file selection unchanged. Update `atlas/ui/outline.md` with same-line ordering.
-- [ ] Run `make test-spec SPEC=ui/outline`, lint and diff checks; existing #250 real-buffer selection tests defend child-file landing. Commit and close through the fresh SDLC review, then open a PR.
+- [x] Extend `tests/unit/outline_parity_spec.lua` with synthetic real-file sibling chats; exercise `_build_tree_outline_items` for multiple same-line inline branches and mixed line-form/single-inline branches, parser order, subtree interleaving, collapsed and independently expanded children. Observe the same-line cases fail before changing production code.
+- [x] In `build_file_outline_items` (`lua/parley/outline.lua`), group parser branches into ordered arrays by source line and emit every entry using the existing row/resolver path. Keep recursion, expansion, cycle guard and child-file selection unchanged. Update `atlas/ui/outline.md` with same-line ordering.
+- [x] Run `make test-spec SPEC=ui/outline`, lint and diff checks; existing #250 real-buffer selection tests defend child-file landing. Commit and close through the fresh SDLC review, then open a PR.
 
 
 ## Log
@@ -109,3 +109,7 @@ item: milestone-review design=0 impl=0.1
 design-buffer: 0.15
 total: 0.3075
 ```
+
+### 2026-09-14 — Implementation and verification
+
+Plan-quality CLEAN in one round; estimate-quality INFO (small budget relies on reuse; review allowance includes close/PR bookkeeping). Real-file regressions: all four same-line cases failed before the fix, while all four mixed standalone/inline cases passed. After ordered-array grouping, all eight cases pass, including exact source/child attribution, left-to-right order and interleaved child questions/annotations under independent expansion states. Existing #250 navigation tests still pass. `make test-spec SPEC=ui/outline` and `make lint` passed (451 files, zero warnings/errors); `git diff --check` clean. No parser or navigation change. Unrelated local prompt/chat edits preserved.
