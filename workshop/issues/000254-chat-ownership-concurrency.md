@@ -766,6 +766,18 @@ made; its old production writer is explicitly the next milestone's migration.
 M3 implementation is ready for mandatory review. Actual-time attribution remains
 N/A for the unreliable cross-issue worktree measurement explained above.
 
+### 2026-09-15 — M3 review REWORK
+
+The mandatory `2afd7de9..626e565e` review raised BR-5 (grouped-undo callback
+provenance), BR-6 (unconfirmed semantic presentation), BR-7 (stale proposed entity
+inventory), and BR-8 (document/editor and fold-autocmd retention). M3 remains
+open. M4 staging is preserved and paused while three bounded fixes proceed in
+`/tmp/parley254-m3-review-stage`; the feature branch owns documentation and review
+state. The plan now contains a complete current M3 module/function inventory,
+explicitly superseding the original proposed paths and deferred migration claims.
+No review finding is waived; grouped-undo parity, uncertainty presentation, and
+native reclamation regressions precede the next gate.
+
 ## Revisions
 
 ### 2026-09-14 — Incremental rendering is part of the core contract
