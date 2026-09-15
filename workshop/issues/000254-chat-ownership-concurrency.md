@@ -453,7 +453,8 @@ path ownership specs use a stateful process fake. Tests first reproduced the thr
 response bugs and pre-launch query leak, then passed after containment fixes.
 Transport agent reports 134 focused tests passing; instrumentation agent reports
 46 focused tests passing, both with scoped luacheck clean. Root dispatcher ownership
-spec passed 2/2. Full mapped verification and automatic M1 review remain outstanding;
+spec passed 2/2. Mapped lifecycle (530 tests) and exchange-model (281 tests) suites passed with
+zero failures/errors; automatic M1 review remains outstanding;
 no milestone is closed and concurrent document/tool scheduling is not implemented.
 
 Schema-2 performance report `/tmp/parley-254-m1-perf.json` passes. Darwin/Neovim
@@ -467,9 +468,9 @@ and native fold operations. Anchor/fold unit cases exercise actual producers;
 typing scenarios have zero anchor/fold work. Representative concurrent-stream and
 fold-maintenance baseline scenarios still need checking against the M1 checklist.
 
-Resume next: run `sdlc state` in the implementation worktree, inspect the pending
-mapped lifecycle result `/tmp/parley-254-m1-lifecycle.log`, run mapped exchange
-verification, finish baseline coverage and root integration review, then commit
+Resume next: run `sdlc state` in the implementation worktree, read mapped lifecycle and exchange evidence in `/tmp/parley-254-m1-lifecycle.log`
+and `/tmp/parley-254-m1-exchange.log`, finish baseline coverage and root
+integration review, then commit
 and use the single automatic `sdlc milestone-close --issue 254 --milestone M1`
 review. Continue M2–M6 from the approved durable plan. Keep unrelated main-checkout
 changes untouched. M1 intentionally retains unresolved attempts without timers;
