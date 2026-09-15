@@ -813,6 +813,24 @@ All M4 agents paused at this state for BR-5/6/8. Preserve their files when bring
 M3 frame/presentation/retirement fixes into that staging tree; do not overwrite
 shared document/editor/sequence hooks with whole-file copies.
 
+
+### 2026-09-15 — M3 review verification and isolated staging durability
+
+BR-5/6/8 fixes are now on the feature working tree, including native callback-frame,
+undo-history and retention conformance. Highlight mapping passes 85 cases and lint
+passes 504 files. The document mapping's sole attachment fixture failure was an
+obsolete assertion that no `on_lines` hook exists: the same byte observer now owns
+a non-mutating frame barrier. The corrected fixture checks one paired attachment;
+the resumed document mapping passes. Exchange mapping still fails the first
+stream-observer assertion in `chat_respond_spec`; root-cause investigation and
+lifecycle checks are ongoing. No final benchmark or review clearance is claimed.
+
+M4 preparation is now committed in its isolated staging checkout: `6cf67e52`, then
+`b6723424` merges current M3 review fixes while preserving generation/user hooks.
+Its focused append/generation/runner/frame/retention/header/user tests pass 83 cases.
+Only the bounded ephemeral source-guard task resumes there; integration waits for
+M3 review clearance. The source-materialization blocker remains open.
+
 ## Revisions
 
 ### 2026-09-14 — Incremental rendering is part of the core contract
