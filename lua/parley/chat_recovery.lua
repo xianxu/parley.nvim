@@ -178,7 +178,7 @@ end
 function M.snapshot(job)return RR.snapshot(job)end
 local function scratch(record,title)
     local buf=vim.api.nvim_create_buf(false,true)
-    vim.api.nvim_buf_set_lines(buf,0,-1,false,vim.split(record.bytes,'\n',{plain=true}))
+    require('parley.buffer_edit').replace_all_lines(buf,vim.split(record.bytes,'\n',{plain=true}))
     vim.bo[buf].buftype='nofile';vim.bo[buf].bufhidden='wipe';vim.bo[buf].swapfile=false
     vim.api.nvim_set_current_buf(buf);vim.bo[buf].modifiable=false
     vim.b[buf].parley_recovery_id=record.id;vim.b[buf].parley_recovery_title=title
