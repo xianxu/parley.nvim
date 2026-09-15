@@ -578,6 +578,17 @@ legacy malformed-fence parity, 100 seeded range edits, and zero-row semantic
 repair after a classified body-only edit. Scoped lint is clean. Live consumers
 remain scheduled for M3; M2 is not yet closed.
 
+### 2026-09-15 — Durable M2 checkpoint and newline follow-up
+
+Committed the verified assembled core at 9f1ca367: document mapping 96 tests,
+parsing 239, highlights 108, exchange model 281, all passing. Schema 3 exposes
+index-entry visits and nested metadata/summary copies. M2 remains open while the
+newline audit's selective fact proofs and bounded fragment convergence are
+implemented in /tmp/parley254-m2-stage. Sequence, facts/dependencies, and semantic
+workers have separate file owners; root composes and verifies integration.
+A bounded production line-reader chunk seam also passes real-Neovim tests for
+100KB UTF-8 lines, the final empty row, and rejected unbounded requests.
+
 ## Revisions
 
 ### 2026-09-14 — Incremental rendering is part of the core contract
