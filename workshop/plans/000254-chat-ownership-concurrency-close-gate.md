@@ -355,6 +355,36 @@ rounds:
           round: 14
       boundary: M4
       blocked: true
+    - "n": 15
+      timestamp: "2026-09-15T11:32:05-07:00"
+      agent: codex
+      dispose:
+        - id: BR-18
+          disposition: addressed
+          note: response_tools.lua:98–104 reserves publication before callbacks and reevaluates retirement after outcome updates. All 35 tool tests pass; restoring the pre-fix implementation in a scratch copy produces nine failures.
+          round: 15
+        - id: BR-19
+          disposition: addressed
+          note: generation_input_affinity_spec.lua:39–65 separately tests consumed-prefix staleness and excluded-suffix freshness through preparation. All three tests pass; disabling runner stale-evidence propagation makes the consumed-prefix regression fail.
+          round: 15
+        - id: BR-14
+          disposition: addressed
+          note: Pending reservations remain inert text. Passing response_tools regressions verify that cancellation, reload, unknown outcomes, and reparsing cannot turn reservations into successful tool results.
+          round: 15
+        - id: BR-15
+          disposition: addressed
+          note: The public resume command selects stale paused responses and validates captured identity through resume_original. The changed chat_stop_generation regression suite passes.
+          round: 15
+        - id: BR-16
+          disposition: addressed
+          note: README.md documents cursor-scoped ParleyStop, its picker, and ParleyStopDocument; chat_respond.cmd_stop and cmd_stop_document implement those respective scopes.
+          round: 15
+        - id: BR-17
+          disposition: addressed
+          note: response_target.lua derives waiting guards and admitted dependencies from input_regions. Passing target, submission, and native affinity tests preserve freshness for excluded suffix edits.
+          round: 15
+      boundary: M4
+      blocked: false
 ---
 
 # Gate ledger — 000254-chat-ownership-concurrency#254 (boundary-review)
@@ -524,8 +554,17 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-19** [Important] `semantic-publication-evidence` Existing affinity regression still requires an unrelated suffix edit to stale input
   tests/integration/generation_input_affinity_spec.lua:39–56 appends a later question and asserts input_stale=true; the pinned Head fails at line 45. This is the 9th finding in family semantic-publication-evidence. Do NOT merely flip this assertion: apply the consumed-dependency rule across the stale-input test inventory, use an actual consumed-prefix edit to test stale evidence propagation into preparation, and retain a separate negative suffix case (ARCH-PURPOSE).
 
+## Round 15 — 2026-09-15T11:32:05-07:00 (codex) — passed
+
+### Disposed
+
+- BR-18 — addressed — response_tools.lua:98–104 reserves publication before callbacks and reevaluates retirement after outcome updates. All 35 tool tests pass; restoring the pre-fix implementation in a scratch copy produces nine failures.
+- BR-19 — addressed — generation_input_affinity_spec.lua:39–65 separately tests consumed-prefix staleness and excluded-suffix freshness through preparation. All three tests pass; disabling runner stale-evidence propagation makes the consumed-prefix regression fail.
+- BR-14 — addressed — Pending reservations remain inert text. Passing response_tools regressions verify that cancellation, reload, unknown outcomes, and reparsing cannot turn reservations into successful tool results.
+- BR-15 — addressed — The public resume command selects stale paused responses and validates captured identity through resume_original. The changed chat_stop_generation regression suite passes.
+- BR-16 — addressed — README.md documents cursor-scoped ParleyStop, its picker, and ParleyStopDocument; chat_respond.cmd_stop and cmd_stop_document implement those respective scopes.
+- BR-17 — addressed — response_target.lua derives waiting guards and admitted dependencies from input_regions. Passing target, submission, and native affinity tests preserve freshness for excluded suffix edits.
+
 ## Open findings
 
 - **BR-13** [Important] `deferred-contract-traceability` BR-11 regressions are missing from the documented verification mapping
-- **BR-18** [Critical] `scope-owned-callback-cleanup` Cancelled tools remain outstanding when positive outcome evidence arrives after cleanup acknowledgment
-- **BR-19** [Important] `semantic-publication-evidence` Existing affinity regression still requires an unrelated suffix edit to stale input
