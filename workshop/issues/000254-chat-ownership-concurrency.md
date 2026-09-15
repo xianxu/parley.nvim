@@ -437,6 +437,44 @@ review next. Run the SDLC plan-quality gate, derive/reconcile the estimate only
 after acceptance, then enter implementation. No additional plan-approval request
 is required for the approved scope.
 
+### 2026-09-14 — Plan gate passed; M1 implementation checkpoint
+
+The SDLC plan-quality round 2 returned CLEAN after replacing repeated case lists
+with named-function adversarial verification strategies (PQ-1). The estimate gate
+accepted 33.107 focused ship-hours with advisory calibration/allocation notes.
+`change-code --issue 254 --agent codex --worktree=yes` entered implementation at
+`/Users/xianxu/workspace/worktree/parley.nvim/000254-chat-ownership-concurrency`
+on branch `000254-chat-ownership-concurrency`. Operator approval remains valid.
+
+M1 work in progress: private transport attempt reducer; owner-specific cancellation;
+exit plus both-stream drain admission; rejected query preparation retirement;
+completion preservation of typed-ahead questions and unmarked text. New production-
+path ownership specs use a stateful process fake. Tests first reproduced the three
+response bugs and pre-launch query leak, then passed after containment fixes.
+Transport agent reports 134 focused tests passing; instrumentation agent reports
+46 focused tests passing, both with scoped luacheck clean. Root dispatcher ownership
+spec passed 2/2. Full mapped verification and automatic M1 review remain outstanding;
+no milestone is closed and concurrent document/tool scheduling is not implemented.
+
+Schema-2 performance report `/tmp/parley-254-m1-perf.json` passes. Darwin/Neovim
+0.11.7 baseline at 5,000 rows: newline insert/join copies 20,002 structure slots,
+reads 3 lines and processes 6 rows; decoration reads 61 lines, neither makes a
+full-buffer read. New byte counts are 78 for splice and 2,379 for decoration.
+Baseline timing before implementation: decoration p95 0.354208 ms, structure
+splice p95 0.291542 ms, full rebuild p95 7.262084 ms. Timing is report-only.
+New counters cover bytes, index/dependency visits, anchors, outer fold groups,
+and native fold operations. Anchor/fold unit cases exercise actual producers;
+typing scenarios have zero anchor/fold work. Representative concurrent-stream and
+fold-maintenance baseline scenarios still need checking against the M1 checklist.
+
+Resume next: run `sdlc state` in the implementation worktree, inspect the pending
+mapped lifecycle result `/tmp/parley-254-m1-lifecycle.log`, run mapped exchange
+verification, finish baseline coverage and root integration review, then commit
+and use the single automatic `sdlc milestone-close --issue 254 --milestone M1`
+review. Continue M2–M6 from the approved durable plan. Keep unrelated main-checkout
+changes untouched. M1 intentionally retains unresolved attempts without timers;
+global bounded admission/reconciliation scheduling remains later milestone work.
+
 ## Revisions
 
 ### 2026-09-14 — Incremental rendering is part of the core contract
