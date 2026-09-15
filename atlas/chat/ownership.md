@@ -22,3 +22,11 @@ StopDocument explicitly selects every generation in the current chat.
 
 See [response progress](response_progress.md) for the presentation lifecycle and
 [tool use](../providers/tool_use.md) for ordered child slots and effect outcomes.
+
+`ChatResumeResponse` captures the selected session, epoch, round and input identity
+before its confirmation picker. `generation_runner.resume_original` validates
+those identities, a ready continuation and every live grant before accepting the
+explicit original-input policy. Unknown child outcomes and revoked output do not
+qualify. `response_status` keeps at most 256 display-only stale annotations per
+buffer, using indexed identity lookup and moving extmarks; reload/detach clears
+them. No source scan is part of status rendering.

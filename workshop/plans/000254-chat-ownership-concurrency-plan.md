@@ -1125,6 +1125,44 @@ overlap limits timing attribution. This remains an expensive documented exceptio
 M4 now enters its mandatory Codex review; M5/M6 stay isolated until their preceding
 boundaries close. No merge to main is authorized before operator live testing.
 
+### 2026-09-15 — M4 Codex BR-14–BR-16 correction
+
+Reason: production review exposed incomplete outcome publication and stale-input
+workflow despite internal lifecycle coverage. Delta: reserve fixed inert pending
+text (no completed-result syntax); publish results only after known outcomes.
+Expose stale/paused presentation and `ChatResumeResponse`, whose captured decision
+validates document, generation, round, input and live output grants and explicitly
+keeps original input/confirmed results. A revoked writer cannot resume. Runtime
+stale annotations survive completion, clear on new generation/reload, and are
+bounded to 256 per buffer. Add public focus-change, refusal and fresh-answer
+checks; sweep README for Stop, StopDocument, active-output editing, reload, native
+history, pending results and stale continuation (ARCH-PURPOSE, ARCH-ORDER).
+
+### 2026-09-15 — Pre-admission dependency affinity (BR-17)
+
+Reason: the same next-draft edit behaved differently before and after generation
+admission. Delta: one consumed-input region builder now defines both the waiting
+target's native source proof and the admitted runner's byte dependencies. Only
+invalidated consumed-input provenance establishes stale evidence; unrelated suffix
+edits and semantic repair alone do not. Restored/undone input remains stale.
+Protected question/output provenance still cancels unsafe target admission.
+A separate bounded input guard is released on every retirement/refusal path.
+Public tests compare pre/post-admission suffix and consumed-prefix edits, native
+undo and an independent later writer (ARCH-DRY, ARCH-ORDER, ARCH-PURPOSE).
+
+### 2026-09-15 — Complete retirement joins and stale-test inventory (BR-18/19)
+
+Reason: cleanup could finish before a cancelled tool's known outcome, leaving
+local ownership stranded; a previous suffix-staleness fixture contradicted the
+new dependency rule. Delta: every contributing outcome, physical-resolution and
+publication-completion update reevaluates retirement. Reserve publication before
+notifying outcome observers so reentrant cleanup cannot retire its context.
+Cancellation suppresses publication, not retirement. Add cancellation/detach,
+duplicate, late terminal and reentrant-publication histories. Replace unsupported
+suffix-positive evidence with genuine consumed-prefix edits and retain an explicit
+negative suffix case into pre-IO preparation. Sweep the complete stale assertion
+inventory and rerun the full146-file mapped union (ARCH-ORDER, ARCH-FUNERAL).
+
 ### 2026-09-15 — M5 fixed input membership and completion evidence
 
 Native public regression showed a newly inserted question could enter a later

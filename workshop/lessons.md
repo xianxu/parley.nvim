@@ -2581,3 +2581,28 @@ download.
   transaction and must stop admission after an interrupted receipt. Partial
   edits may remain; newer human text must survive. Install native test wrappers
   before attaching a driver that caches API functions.
+
+- #254 BR-14: reserve space without publishing outcome evidence. Test persisted
+  and provider-projected placeholders under pending, cancellation, reload and
+  unknown outcome, not only the final renderer.
+- #254 BR-15: every reachable paused state needs visible status and a production
+  operator transition. Test that transition through public commands with focus
+  changes and revoked authority; an internal resume test is insufficient.
+- #254 BR-16: sweep the full changed command/behavior inventory into README before
+  a boundary, including native-edit consequences and cancellation scope.
+
+- #254 BR-17: dependency semantics must survive admission boundaries. Compare
+  identical human edits immediately before and after admission; a generic edit
+  event proves neither changed consumed input nor stale provider evidence.
+
+- #254 BR-18: a lifecycle join must be reevaluated on every contributing event,
+  including a late known outcome after cleanup. Reserve publication before any
+  callback that can reentrantly complete cleanup or cancel the operation.
+- #254 BR-19: when an invariant changes, sweep existing positive and negative
+  fixtures and run the full mapped family before review. New regressions alone
+  can leave an older test defending the opposite semantics.
+
+- #254 GC probe: when a reachability assertion is intermittent, distinguish
+  runtime retention from compiled fixture locals with repeated controlled runs.
+  Keep the weak-reference assertion and demonstrate that disabling actual cleanup
+  still fails after isolating the probe; do not hide failures with extra retries.

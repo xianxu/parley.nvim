@@ -161,6 +161,7 @@ function M.start(doc,spec,opts)
         end
     end
     local hooks={prepare=prepare,request=wrap('provider',function(ctx,cb)
+            presentation(ctx)
             safe(opts.requesting,ctx)
             return provider.request(ctx,cb)
         end),
@@ -173,6 +174,11 @@ function M.start(doc,spec,opts)
         written=function(ctx,receipt)
             if s.pending and receipt.kind=='output' and receipt.tip then s.pending:written(receipt.tip.row,receipt.tip.col)end
             safe(opts.written,ctx,receipt)
+        end,
+        changed=function(value)
+            if not s.active then return end
+            if value.phase=='paused' and s.pending then s.pending:cancel();s.pending=nil end
+            safe(opts.changed,value)
         end,
         terminal=function(result)finish(result,false)end,rejected=function(reason)finish(reason,true)end}
     function hooks.cancel_operation(ctx,done)
@@ -216,4 +222,5 @@ function M.step(session)
 end
 function M.cancel(session,reason)return Submission.cancel(state(session).submission,reason)end
 function M.resume(session,policy)return Submission.resume(state(session).submission,policy)end
+function M.resume_original(session,identity)return Submission.resume_original(state(session).submission,identity)end
 return M

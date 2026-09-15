@@ -1153,6 +1153,63 @@ passed separately. Per-file evidence in /tmp/parley254-m4-final-verification.txt
 M4 enters mandatory Codex review. M5 recovery/batch and M6 async tool work remain
 staged separately. Actual time N/A due mixed-session attribution, not guessed.
 
+### 2026-09-15 M4 Codex rework verification
+
+Codex reviewed 506d2c34..ae2e12ec and returned REWORK (BR-14–BR-16).
+BR-14 now reserves fixed inert text and only serializes known result evidence;
+parser/provider projections remain truthful on cancel, reload and unknown results.
+BR-15 connects state changes to bounded stale annotations and an identity-checked
+public original-input continuation decision. Native tests cover successful stale
+completion, fresh-answer clearing, focus changes, revoked output and detach.
+BR-16 sweeps README and atlas for all changed user behavior. No main merge.
+Verification: 83 tests across seven directly affected production/lifecycle files
+pass; BR-14's independent six-file run passed105 tests (overlapping, not additive).
+Full lint559 files clean. Changed-code/docs diff check clean; the unrelated user
+transcript has pre-existing trailing whitespace and is excluded from our check.
+Next: rerun the M4 boundary with --agent codex. M5 remains isolated and verified;
+M6 asynchronous execution work continues separately.
+
+### 2026-09-15 M4 BR-17 corrected
+
+Second Codex review disposedBR14–16 and reproduced unsupported stale evidence
+from later-draft edits while target admission waited. response_target now uses a
+separate native input guard built from the same regions as runner dependencies.
+43 tests pass across target unit/native, submission and public workflows; five
+changed files lint clean, scoped diff check clean. Baseline public reproduction
+failed only the pre-admission suffix case; fixed pre/post cases pass, including
+ABA/nativeundo and disjoint writer checks. No Document helper change required.
+Evidence:/tmp/parley254-br17-public-red.log and matching br17 focused logs.
+
+### 2026-09-15 M4 BR-18/19 checkpoint
+
+Codex disposedBR17 and confirmedBR14–16, then reproduced a cancelled-tool
+retirement-order bug and found one leftover contradictory suffix-affinity test.
+BR18 now joins outcome/physical/publication evidence after every contributing
+update and reserves publication before reentrant observers.117 focused tests pass,
+including the exact reviewer reproduction and20 added ordering/teardown cases.
+BR19 now tests genuine consumed-prefix staleness and excluded-suffix freshness
+through pre-IO preparation; three native affinity tests pass. The full stale-test
+inventory was swept without another contradiction. Full146-file canonical mapped
+verification and lint are running before the next Codex review; no partial-run
+success claim is being substituted for those results.
+
+### 2026-09-15 M4 full rework verification complete
+
+Final unique union146 specs/1739 passing tests, no final failures/errors/incomplete
+files. Full lint559 clean; source/test/atlas/README diffcheck clean. All mapped
+performance specs completed under unchanged deadlines. Five expected Neovim error
+headers were inspected as deliberate authorization/cancellation/read-error fixtures,
+not runner failures. Exact per-file evidence:/tmp/parley254-m4-rework-verification.txt.
+
+One original GC assertion failed: five unchanged repeats produced4passes/1same
+failure. A local interpreter-only fixture produced5/5passes; removing actual
+Deferred.close callback cleanup still failed the weak-reference assertion. The
+localized test-probe change is e72fd6cd; its final30-test file and lint pass. No
+runtime cleanup or assertion was weakened, and the initial failure remains in the
+report. This final rerun supersedes that file only, not the whole-suite evidence.
+Next: Codex M4 review of the fully verified candidate; M6 full140-file run proceeds
+in isolation. M5/M6 boundaries remain open and main remains unmerged.
+
 ### 2026-09-15 — M5 isolated implementation checkpoint
 
 Codex is the reviewer for all remaining boundaries, as requested by the operator.

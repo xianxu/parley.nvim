@@ -151,7 +151,7 @@ adapters receive operation handles, not authority to write arbitrary positions.
 2. `response_provider` streams position-free output into the runner. On successful
    completion it decodes and freezes tool declarations using the request's wire.
 3. `response_tools` reserves document capacity, appends calls and ordered
-   `(pending)` result slots, then acquires a separate grant for each result slot.
+   `(Tool result pending)` result slots, then acquires a separate grant for each result slot.
    No child starts before its slot reservation is confirmed.
 4. Producers may complete out of order. Each known result replaces only its own
    granted slot through the runner; results retain declaration order in both the
@@ -310,3 +310,13 @@ selects the protocol. Native integration coverage includes
 history search, explicit additional roots, symlink rejection, and forged input
 policy. The dispatcher passes policy as handler context, separately from model
 arguments.
+
+Pending reservations use fixed inert text, never result Markdown. Only a confirmed
+child outcome passes through the result serializer. Reloaded or cancelled pending
+calls remain unmatched calls; historical provider projection may report their
+missing result as an error, and never as successful execution evidence.
+
+Tool adapter retirement joins known outcome, positive producer cleanup and the
+publication decision. Every contributing event reevaluates that join, including
+late outcomes after cancellation. Publication is reserved before calling outcome
+observers, so a reentrant cleanup callback cannot retire the pending write.

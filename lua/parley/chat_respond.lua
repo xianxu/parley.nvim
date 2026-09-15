@@ -1356,6 +1356,36 @@ function M.stop_at_cursor(buf, row)
     return 0
 end
 
+function M.cmd_resume_response()
+    local buf=vim.api.nvim_get_current_buf()
+    local D=require('parley.document')
+    local doc,group=D.get(buf),responses[buf]
+    if not doc or not group then _parley.logger.warning('No paused response in this chat');return end
+    local epoch=D.snapshot(doc).epoch
+    local selected=D.exchange(doc,vim.api.nvim_win_get_cursor(0)[1]-1)
+    local choices={}
+    for entry in pairs(group)do
+        local value=entry.session and M.response_snapshot(entry.session).generation
+        if value and value.phase=='paused' and value.stale_input and entry.doc==doc and entry.epoch==epoch then
+            local choice={entry=entry,identity=vim.deepcopy(value)}
+            choices[#choices+1]=choice
+            if selected.status=='ready' and value.exchange==selected.identity then choices={choice};break end
+        end
+    end
+    if #choices==0 then _parley.logger.warning('No stale response is paused; edited output requires a new response');return end
+    table.sort(choices,function(a,b)return a.entry.order<b.entry.order end)
+    local admitted={};for _,choice in ipairs(choices)do admitted[choice]=true end
+    vim.ui.select(choices,{prompt='Continue with ORIGINAL input and confirmed tool results? (Esc cancels)',
+        format_item=function(choice)return choice.entry.label end},function(choice)
+        if not choice or not admitted[choice] then return end
+        if D.get(buf)~=doc or D.snapshot(doc).epoch~=epoch or responses[buf]~=group or not group[choice.entry] then
+            _parley.logger.warning('Response changed; continuation cancelled');return
+        end
+        local result=require('parley.response_session').resume_original(choice.entry.session,choice.identity)
+        if not result.accepted then _parley.logger.warning('Response not resumed: '..tostring(result.reason))end
+    end)
+end
+
 local function start_scoped_response(frame)
     local D = require('parley.document')
     local Session = require('parley.response_session')
@@ -1589,6 +1619,14 @@ local function start_scoped_response(frame)
         root_policy = info.root_policy, max_iterations = info.max_tool_iterations or config.max_tool_iterations,
         max_result_bytes = info.tool_result_max_bytes, prepare_input = prepare_input, build_input = payload,
         requesting = capture_topic_parent,
+        changed = function(value)
+            require('parley.response_status').update(buf,doc,value)
+            if value.phase=='paused' then
+                _parley.logger.warning(value.stale_input
+                    and 'Response paused after input changed. :ParleyChatResumeResponse continues with original input; :ParleyStop cancels.'
+                    or 'Response paused: output or tool ownership changed. Stop it before generating a new answer.')
+            end
+        end,
         on_result = function(_, qt, _, failure)
             latest = {response = qt.response, stop_reason = qt.stop_reason, usage = vim.deepcopy(qt.usage)}
             if failure then failure_notice = M._failure_notice(failure) end

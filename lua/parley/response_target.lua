@@ -17,6 +17,7 @@ local function retire(s,status,reason,result)
     if s.off then s.off();s.off=nil end
     if s.work then s.work:close();s.work=nil end
     D.cancel_user(s.doc,s.guard);s.guard=nil
+    D.cancel_user(s.doc,s.input_guard);s.input_guard=nil
     local group=pending[s.doc]
     if group then group[s.key]=nil;if not next(group)then pending[s.doc]=nil end end
     s.doc=nil;s.key=nil
@@ -28,6 +29,15 @@ function M.snapshot(target)return snapshot(state(target))end
 function M.cancel(target,reason)
     local s=state(target);if s.status~='waiting'then return false end
     retire(s,'cancelled',reason or 'cancelled');return true
+end
+-- One consumed-input selection defines both waiting provenance and the
+-- admitted runner's byte dependencies. Native guard invalidation is monotonic:
+-- restoring bytes cannot erase an intervening edit, and repair alone is no edit.
+local function input_regions(regions,prefix)
+    local question=regions[1]
+    local out={{first=prefix and {row=0,col=0,byte=0} or question.first,last=question.last}}
+    for i=3,#regions do out[#out+1]=regions[i]end
+    return out
 end
 local function readiness(s,resolved)
     local question,output=resolved.regions[1],resolved.regions[2]
@@ -46,8 +56,10 @@ local function readiness(s,resolved)
     if not qend.metadata.semantic or qend.metadata.semantic.role~='question'
         or question.last.byte~=qend.end_byte-1 or output.first.byte~=question.last.byte
         or output.last.row>=exchange.last or output.last.byte~=last.end_byte-1 then return false,'range changed' end
-    local dependencies={{first=s.input_prefix and 0 or question.first.byte,last=question.last.byte}}
-    for i=3,#resolved.regions do local r=resolved.regions[i];dependencies[#dependencies+1]={first=r.first.byte,last=r.last.byte}end
+    local dependencies={}
+    for _,r in ipairs(input_regions(resolved.regions,s.input_prefix))do
+        dependencies[#dependencies+1]={first=r.first.byte,last=r.last.byte}
+    end
     return {entity=marker.handle,first=output.first.byte,last=output.last.byte,question_row=question.first.row,
         regions=resolved.regions,dependencies=dependencies,input_ref=s.input_ref,dependencies_ref=s.dependencies_ref,
         input_stale=s.input_stale}
@@ -86,9 +98,12 @@ function M.start(doc,spec,callbacks)
     local regions={spec.question,spec.output};for _,r in ipairs(spec.guards or {})do regions[#regions+1]=r end
     local guard,reason=D.capture_user(doc,{operation=spec.operation,regions=regions})
     if not guard then return nil,reason end
+    local input_guard,input_reason=D.capture_user(doc,{operation=spec.operation,
+        regions=input_regions(regions,spec.input_prefix)})
+    if not input_guard then D.cancel_user(doc,guard);return nil,input_reason end
     local target={};local key={}
     local scheduling=spec.schedule~=false
-    local s={doc=doc,key=key,guard=guard,status='waiting',input_stale=false,
+    local s={doc=doc,key=key,guard=guard,input_guard=input_guard,status='waiting',input_stale=false,
         callbacks={ready=callbacks.ready,cancelled=callbacks.cancelled},
         input_ref=spec.input_ref,dependencies_ref=spec.dependencies_ref,input_prefix=spec.input_prefix}
     states[target]=s;group[key]=true;pending[doc]=group
@@ -97,7 +112,8 @@ function M.start(doc,spec,callbacks)
         if s.status~='waiting'then return end
         if event.kind=='reload' or event.kind=='detach' then retire(s,'cancelled',event.kind);return end
         if event.kind=='edit' then
-            s.input_stale=true;s.cursor=nil
+            s.input_stale=s.input_stale or D.resolve_user(doc,input_guard)==nil
+            s.cursor=nil
             if not D.resolve_user(doc,guard)then retire(s,'cancelled','source changed');return end
         end
         if scheduling and s.work then s.work:request()end

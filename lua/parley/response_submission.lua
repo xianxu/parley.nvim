@@ -94,4 +94,9 @@ function M.resume(session,policy_ref)
     if s.status~='running' then return {accepted=false,reason='not running'}end
     return Runner.resume(s.runner,policy_ref)
 end
+function M.resume_original(session,identity)
+    local s=state(session)
+    if s.status~='running' then return {accepted=false,reason='not running'}end
+    return Runner.resume_original(s.runner,identity)
+end
 return M
