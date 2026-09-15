@@ -702,6 +702,30 @@ now observe zero deferred semantic rows, and an explicit 5,000-row fixture clean
 probe is idle with zero work. This removes the earlier hidden whole-document
 repair debt; an exact feature-commit `make perf` run will anchor review evidence.
 
+### 2026-09-15 — M3 full feature benchmark and contract audit
+
+`make perf` passed all 30 scenarios on feature commit `7d320240`, with five
+warmups and 20 measured samples per scenario. At 5,000 rows: typing median/p95
+8.346/10.193 ms, Enter+join 18.274/27.298 ms, viewport redraw 0.458/0.510 ms,
+and current production stream+human interleaving 22.312/24.098 ms. Ordinary input
+and viewport phases perform no full-buffer reads. The explicit structural-change
+repair phase costs 3.538 s median across its repair/restore workload; this is
+scheduled broad invalidation, not hidden debt after ordinary input. Report:
+`/tmp/parley254-m3-feature-perf.json` (schema 4; environment records exact commit).
+
+Mapped verification is green: document 233, lifecycle 510, exchange/layout 264,
+highlights 84, outline 216 tests; mappings overlap. Full `make lint` passes all
+496 Lua files. Two remaining contract-audit fixes precede M3 review: batched native
+fold application (including the >50,000-row mode) and preservation/relocation of
+an unread repair request under continuous disjoint edits. The latter reproduced
+zero bytes of progress across 1,000 slices because every keystroke cleared the
+coordinator's pending request. These are active fixes, not waived requirements.
+
+` sdlc actual --issue 254` currently reports 0.28 cumulative hours and attributes
+the window across #192 and #254. Existing worktree attribution remains unreliable
+for this multi-hour effort; retain explicit N/A rather than invent a per-milestone
+increment or pollute calibration with that undercount.
+
 ## Revisions
 
 ### 2026-09-14 — Incremental rendering is part of the core contract
