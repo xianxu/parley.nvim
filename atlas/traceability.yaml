@@ -265,12 +265,15 @@ atlas:
 
       - tests/unit/deferred_work_spec.lua
       - tests/unit/document_coordinator_spec.lua
+      - tests/unit/document_progress_spec.lua
       - tests/unit/document_projection_spec.lua
       - tests/unit/document_deferred_fragment_spec.lua
       - tests/unit/document_state_spec.lua
       - tests/unit/document_write_plan_spec.lua
       - tests/integration/document_scheduler_spec.lua
       - tests/integration/document_edit_spec.lua
+      - tests/integration/document_fold_batches_spec.lua
+      - tests/integration/document_fold_join_spec.lua
       - tests/integration/document_fold_native_spec.lua
       - tests/integration/document_folds_spec.lua
       - tests/integration/highlighter_document_spec.lua

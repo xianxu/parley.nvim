@@ -357,6 +357,25 @@ function M.publish(document, job, spans)
 end
 
 -- One call performs one semantic slice or one bounded lexical read transition.
+-- Refresh an unread intent immediately before native IO. Already-read replies
+-- still take repair_step's request/certificate validation path unchanged.
+function M.refresh_read_request(document,budget)
+    local current=state(document)
+    if not current.read_pending or not current.lexer then return {status='idle',work={}} end
+    budget=budget or {}
+    -- One group covers this preflight; the other groups cover validating and
+    -- publishing the subsequent bounded lexical response in the same slice.
+    local required=sequence.navigation_budget(current.index,4)
+    if (budget.nodes or 32768)<required.nodes or (budget.entries or 32768)<required.entries
+        or (budget.bytes or 4096)<1 or (budget.rows or 1)<1 then
+        required.bytes,required.rows=1,1
+        return {status='budget',required=required,work={}}
+    end
+    local result=require('parley.document.lexer').step(current.lexer,nil,budget)
+    current.read_pending=result.status=='read'
+    return result
+end
+
 -- The caller owns reading text and scheduling the next turn.
 function M.repair_step(document, input, budget)
     local current = state(document)

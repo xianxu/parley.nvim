@@ -106,6 +106,12 @@ for a complete, confirmed, still-valid projection. Ordinary body edits let Neovi
 move existing folds without rebuilding them. Structural changes rebuild affected
 fold groups while preserving each window's view, open state, and fold enablement.
 Native application costs scale with affected fold groups and are counted separately.
+Creation applies at most 64 groups per timer turn. Above 50,000 affected rows,
+cleanup also caps each native fold-jump batch at 64 groups and temporarily disables
+fold display in affected windows. Completion, cancellation, reload, and detach
+restore operator fold preferences. Each yield revalidates the projection; edits
+that invalidate it abort and rederive the remaining plan. A deferred ordinary join
+that proves unchanged topology schedules no native fold work.
 
 Outline candidates and diagnostic candidates come from index summaries. Picker
 labels use bounded text slices and selection resolves the current stable handle.

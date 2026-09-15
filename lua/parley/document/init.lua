@@ -99,7 +99,6 @@ local function observe_edit(doc,s,event)
     effects(s,State.transition(s.authority,{kind='observed_edit',epoch=event.epoch,
         first=event.first,last=event.last,new_bytes=event.new_bytes,
         owner_grant=event.owner and event.owner.grant}))
-    s.input=nil
     local first=math.min(event.start.row,event.old_rows)
     local whole_rows=event.start.col==0 and event.old_end.col==0 and event.new_end.col==0
     local last=math.min(event.old_rows,event.old_end.row+(whole_rows and 0 or 1))
@@ -159,7 +158,8 @@ local function observe_edit(doc,s,event)
     work.dependency_nodes_visited=repair_work.dependency_nodes_visited
     record(s,work)
     notify(s,{kind='edit',first_row=first,last_row=newlast,old_last_row=last,
-        reused_suffix=reused,semantic_changed=not reused,diagnostic_changed=diagnostic_changed})
+        reused_suffix=reused,semantic_changed=not reused,diagnostic_changed=diagnostic_changed,
+        deferred_fragment=s.deferred~=nil})
     schedule(doc)
 end
 local function observe(doc,event)
@@ -168,14 +168,14 @@ local function observe(doc,event)
     if event.kind=='edit' then observe_edit(doc,s,event)
     elseif event.kind=='reload' then
         cancel_schedule(s)
-        s.epoch=epoch(); s.input=nil; s.deferred=nil; s.idle=false
+        s.epoch=epoch(); s.deferred=nil; s.idle=false
         effects(s,State.transition(s.authority,{kind='reload',next_epoch=s.epoch}))
         s.editor:set_epoch(s.epoch)
         Structure.reload(s.structure,opaque(event.rows,event.total))
         notify(s,{kind='reload'}); schedule(doc)
     elseif event.kind=='detach' then
         cancel_schedule(s)
-        s.dead=true; s.input=nil; s.deferred=nil; buffers[s.buf]=nil
+        s.dead=true; s.deferred=nil; buffers[s.buf]=nil
         if s.work then s.work:close() end
         effects(s,State.transition(s.authority,{kind='detach'}))
         notify(s,{kind='detach'}); s.subscribers={}; s.structure=nil
@@ -293,9 +293,18 @@ function M.repair_step(doc,budget)
         record(s,result.work);notify(s,{kind='repair',result=result})
         return result
     end
-    local input=s.input and s.editor:chunk(s.input) or nil; s.input=nil
-    local result=Structure.repair_step(s.structure,input,limits)
-    if result.status=='read' then s.input=result.request end
+    -- Refresh unread intents from the lexer's live provenance immediately
+    -- before IO so disjoint edits cannot starve
+    -- delivery or redirect it to a different row.
+    local refreshed=Structure.refresh_read_request(s.structure,limits)
+    local result
+    if refreshed.status=='read' then
+        limits.nodes=limits.nodes-(refreshed.work.nodes_visited or 0)
+        limits.entries=limits.entries-(refreshed.work.entries_visited or 0)
+        result=Structure.repair_step(s.structure,s.editor:chunk(refreshed.request),limits)
+    elseif refreshed.status=='idle' then
+        result=Structure.repair_step(s.structure,nil,limits)
+    else result=refreshed end
     if result.status=='idle' then s.idle=true end
     reconcile(s,true)
     for key,value in pairs(Structure.stats(s.structure)) do result.work[key]=value-(before[key] or 0) end
