@@ -343,3 +343,14 @@ slots, scoped cancellation/resource admission, and production sequence tests.
 Review also requires local-provenance repair validation to avoid starvation from
 unrelated streams, explicit negative-dependency indexing, and resumable long-line
 analysis.
+
+### 2026-09-14 — Fresh-context review approved
+
+Reason: review found lifecycle and recovery gaps in the first draft. Delta:
+retained unresolved effects in a process-scoped supervisor after document teardown,
+added durable recovery association/publication evidence, enumerated paused/stopping
+and pre-effect cancellation states, and separated M4 coordinator concurrency from
+M6 actual asynchronous tool execution. The fold probe selected native manual-fold
+deltas and an explicit broad-edit cost/overload policy. Both design and
+implementation-plan chunks received Approved on the second review. This is plan
+review evidence, not proof of implementation or operator approval.
