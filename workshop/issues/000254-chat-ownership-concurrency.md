@@ -601,6 +601,19 @@ visits, and 175 leaf copies; median 3.020 ms across three measured samples.
 The pure core is ready for mandatory review; live authority/rendering migration
 remains M3, with the end-of-issue operator live-test handoff unchanged.
 
+
+### 2026-09-15 — M2 review correction and M3 staging checkpoint
+
+M2 boundary review returned REWORK (BR-3: a text-only publication certificate
+could overwrite confirmed semantics after context changed; BR-4: fenced tool
+markers failed to terminate reasoning under the legacy section grammar). M2
+remains open. Fix publication authority and grammar parity with regressions,
+then repeat the gate. M3 preparation is isolated at `/tmp/parley254-m3-stage`
+(base `48c9d6c4`): editor adapter/fake (9 tests), pure grant state (14 tests),
+and shared projection summaries/queries in progress. No live consumer migration
+has landed. The operator authorized autonomous completion through #254, with
+extensive operator live testing before any merge to main.
+
 ## Revisions
 
 ### 2026-09-14 — Incremental rendering is part of the core contract
