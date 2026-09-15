@@ -213,6 +213,30 @@ implementation. The chat findings predated concurrent #240 changes.
 
 ## Log
 
+### 2026-09-14 — Claimed; structural design in progress
+
+Claimed with `sdlc claim --issue 254`, then entered `sdlc start-plan`. The operator
+authorized substantial design and planning before implementation. Current design
+work is recorded in `workshop/plans/000254-chat-ownership-concurrency-plan.md`.
+No implementation is authorized until the durable plan is reviewed and approved.
+
+The discussion established a buffer-authoritative document coordinator: interpret
+human changes against the previous structure, revoke overlapping write grants
+immediately, then reconcile semantic identities without forcing malformed text
+into valid exchanges. Rendering must consume an incremental index, never trigger
+a whole-document parse on redraw. Ordinary edits must not copy document-sized
+arrays or resolve every exchange anchor. Structural repair must account for
+backward dependencies (reasoning terminators and closed-fence lookahead), not only
+forward parser-state convergence (ARCH-ORDER, ARCH-CONSTRAINTS, ARCH-DRY).
+
+Read-only audits cover structure/rendering and generation/process/tool lifetimes.
+The repository currently has command-specific pending guards and `stopinsert` on
+submission, but no generic chat typing lock was found; the reported deployed
+restriction remains an operator/environment observation, not a core invariant.
+The planning assumption is one Neovim process with human and asynchronous writers;
+external reload revokes ownership. Cross-process concurrent saving is a distinct
+persistence protocol; scope clarification was requested.
+
 ### 2026-09-14
 
 Captured the read-only chat audit and operator discussion. Core insight: exchange
@@ -223,6 +247,15 @@ exposed missing sequence invariants. No implementation changes made. Issue remai
 open for future hardening; the proposed steps are not a costed implementation plan.
 
 ## Revisions
+
+### 2026-09-14 — Incremental rendering is part of the core contract
+
+Reason: the operator requires fast highlighting/colorization/folding while arbitrary
+human edits can span and partially destroy exchanges. Delta: add incremental
+structural reconciliation, explicit uncertain regions, bounded scheduled repair,
+and rendering work-count acceptance to the detailed design. Preserve the original
+audit and proposed policies below; the durable plan will specify refinements and
+actual review boundaries before implementation.
 
 ### 2026-09-14 — Fine-grained ownership and exchange deletion
 
