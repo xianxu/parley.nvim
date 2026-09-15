@@ -274,3 +274,131 @@ findings:
     detail: |
       lua/parley/tools/file_refresh.lua:56 applies the tool refresh, then lua/parley/skill_invoke.lua:391 rejects its older source proof and returns ok=false with a live-text-changed warning. Enabling autoread in the existing skill fixture turns two successful proposal tests red without human edits. This is the 2nd finding in this family: establish one reconciliation owner and propagate authorized completion evidence across all consumers, retaining human-edit refusal tests. ARCH-DRY, ARCH-ORDER, ARCH-PURPOSE.
 ```
+
+---
+
+## Re-review — 2026-09-15T13:43:12-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 254 — Harden chat ownership and concurrency |
+| repo | 000254-chat-ownership-concurrency |
+| issue file | workshop/issues/000254-chat-ownership-concurrency.md |
+| boundary | milestone M6 |
+| milestone | M6 |
+| window | 4e8088ecefd6a3c4187dc8e76868fd6a8c9d1a31..4bba51cbc458f21163cf8b978c9497e046fcc7ff |
+| command | sdlc milestone-close --issue 254 --milestone M6 |
+| reviewer | codex |
+| timestamp | 2026-09-15T13:43:12-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: medium
+```
+
+The three open behavioral findings are addressed, with regression tests that fail when their fixes are removed in scratch copies. Targeted tests and lint pass. One Important architecture gap remains: lifecycle decisions still live in mutable integration-layer state rather than being enforced by the promised pure transition model. The repository and tracker were left unchanged.
+
+## 1. Strengths
+
+- Descriptor-relative filesystem operations reject redirected ancestors and substituted backup leaves; native tests exercise publication, cleanup, and truncation boundaries.
+- Mandatory traversal exclusions now follow optional filters and target expansion. Tests cover multiple roots, metacharacter names, and chat-history searches.
+- Skills retain one source-buffer completion owner while preserving human-edit, reload, cancellation, and late-cleanup protections.
+- README and atlas changes document asynchronous tools, configuration limits, reconciliation, and compatibility requirements.
+
+## 2. Critical findings
+
+None.
+
+## 3. Important findings
+
+### Lifecycle decisions bypass the pure transition boundary
+
+**Locations:** `lua/parley/tools/scheduler.lua:76`, `:88`, `:115`; `lua/parley/tools/operation.lua:74`; `lua/parley/skill_invoke.lua:146`.
+
+The scheduler directly changes `known`, `physical`, `released`, and polling state, then uses those fields to release claims and retire records. The operation reducer has no physical-completion or owner-retirement events. Its `effect_start` permission has **zero production consumers**: the scheduler calls the transitions and starts execution without checking their results. The new skill final-read lifecycle likewise makes admission, cancellation, deadline, and retirement decisions through mutable locals.
+
+This violates the Spec’s structural requirement that authoritative lifecycle decisions pass through pure transitions. Existing integration tests cover useful sequences, but do not establish that the model controls those decisions. **ARCH-PURE, ARCH-ORDER.**
+
+**This is the 3rd finding in family `lifecycle-state-observability`.** State the rule for the complete class: lifecycle transitions must authorize execution, release, and retirement. Enumerate the scheduler, filesystem-operation owner, and skill final-read owner; move those decisions into explicit pure models, retaining handles and IO execution in adapters. Add enforcement and sequence tests, including rejected transitions and both effect/cleanup completion orders.
+
+## 4. Minor findings
+
+None.
+
+## 5. Test coverage notes
+
+Validated:
+
+- Required pinned-range stat, name-status, targeted diffs, and `diff --check`.
+- All **19 files** mapped to `providers/tool_execution`.
+- Skill invocation: **37 passed**.
+- Document ownership architecture: **6 passed**.
+- Lint: **612 files, zero warnings/errors**.
+
+Scratch mutation checks:
+
+| Finding | Removed protection | Result |
+|---|---|---|
+| BR-25 | Cleanup leaf identity validation | Replacement-preservation regression failed |
+| BR-29 | Mandatory exclusion precedence | Five traversal regressions failed |
+| BR-30 | Deferred source-buffer refresh | Twelve skill regressions failed |
+
+Full-suite and performance reports were not independently rerun.
+
+## 6. Architectural notes
+
+| Marker | Assessment |
+|---|---|
+| ARCH-DRY | **Pass:** shared transforms, exclusions, and refresh policy. |
+| ARCH-PURE | **Flag:** lifecycle decisions remain in integration owners. |
+| ARCH-PURPOSE | **Pass:** prior fixes cover enumerated consumers rather than isolated symptoms. |
+| ARCH-MOCK | **Pass:** controlled stateful seams and native conformance tests. |
+| ARCH-CONSTRAINTS | **Pass:** admission, output, queue-work, and reconciliation bounds have targeted coverage. |
+| ARCH-SECURE | **Pass:** inspected replacement and exclusion regressions pass. |
+| ARCH-ORDER | **Flag:** pure transition results do not structurally control the complete lifecycle. |
+| ARCH-FUNERAL | **Pass:** inspected artifacts and handles have cleanup, retained ownership, or capacity policies. |
+
+The revised entity inventory matches the inspected files; no PURE classification contradiction was found.
+
+## 7. Plan revision recommendations
+
+Add a `## Revisions` entry identifying the pure owner of execution permission, effect/cleanup joins, cancellation, deadline handling, and retirement. Update the entity inventory and enforcement-test mapping accordingly.
+
+```findings
+dispose:
+  - id: BR-25
+    disposition: addressed
+    note: |
+      Native tests cover ancestor and backup-leaf replacement, publication, truncation, and directory creation. Removing cleanup identity validation in a scratch module makes the replacement-preservation regression fail.
+  - id: BR-29
+    disposition: addressed
+    note: |
+      Shared traversal policy applies mandatory exclusions after optional filters and target expansion. Restoring the old rg exclusion ordering causes five native traversal regressions to fail.
+  - id: BR-30
+    disposition: addressed
+    note: |
+      Skills defer intermediate refresh of their captured source and perform an identity-bound final read. The 37-test skill suite passes; removing refresh deferral causes twelve failures, including successful proposal cases.
+  - id: BR-26
+    disposition: addressed
+    note: |
+      Prior disposition retained. Shared guarded file refresh remains in place and its mapped integration tests pass.
+  - id: BR-27
+    disposition: addressed
+    note: |
+      Prior disposition retained. Bounded result-evidence tests pass across publication and serialization consumers.
+  - id: BR-28
+    disposition: addressed
+    note: |
+      Prior disposition retained. Async and compatibility adapters consume shared transformation policy; direct transformation tests pass.
+findings:
+  - id: new
+    severity: Important
+    family: lifecycle-state-observability
+    title: |
+      Authoritative cleanup and execution decisions bypass the pure transition boundary
+    detail: |
+      scheduler.lua:76-115 releases claims and starts effects from integration-owned flags; operation.lua:85 emits effect_start with zero production consumers. skill_invoke.lua:146-216 independently owns final-read admission and retirement transitions. This is the 3rd finding in this family: enumerate scheduler, filesystem-operation, and skill final-read lifecycle owners, enforce execution/release/retirement through pure transition results, and test rejected transitions plus reordered completion evidence. ARCH-PURE, ARCH-ORDER.
+```

@@ -538,6 +538,43 @@ rounds:
           round: 20
       boundary: M6
       blocked: true
+    - "n": 21
+      timestamp: "2026-09-15T13:43:12-07:00"
+      agent: codex
+      dispose:
+        - id: BR-25
+          disposition: addressed
+          note: Native tests cover ancestor and backup-leaf replacement, publication, truncation, and directory creation. Removing cleanup identity validation in a scratch module makes the replacement-preservation regression fail.
+          round: 21
+        - id: BR-29
+          disposition: addressed
+          note: Shared traversal policy applies mandatory exclusions after optional filters and target expansion. Restoring the old rg exclusion ordering causes five native traversal regressions to fail.
+          round: 21
+        - id: BR-30
+          disposition: addressed
+          note: Skills defer intermediate refresh of their captured source and perform an identity-bound final read. The 37-test skill suite passes; removing refresh deferral causes twelve failures, including successful proposal cases.
+          round: 21
+        - id: BR-26
+          disposition: addressed
+          note: Prior disposition retained. Shared guarded file refresh remains in place and its mapped integration tests pass.
+          round: 21
+        - id: BR-27
+          disposition: addressed
+          note: Prior disposition retained. Bounded result-evidence tests pass across publication and serialization consumers.
+          round: 21
+        - id: BR-28
+          disposition: addressed
+          note: Prior disposition retained. Async and compatibility adapters consume shared transformation policy; direct transformation tests pass.
+          round: 21
+      findings:
+        - id: BR-31
+          severity: Important
+          title: Authoritative cleanup and execution decisions bypass the pure transition boundary
+          detail: 'scheduler.lua:76-115 releases claims and starts effects from integration-owned flags; operation.lua:85 emits effect_start with zero production consumers. skill_invoke.lua:146-216 independently owns final-read admission and retirement transitions. This is the 3rd finding in this family: enumerate scheduler, filesystem-operation, and skill final-read lifecycle owners, enforce execution/release/retirement through pure transition results, and test rejected transitions plus reordered completion evidence. ARCH-PURE, ARCH-ORDER.'
+          family: lifecycle-state-observability
+          round: 21
+      boundary: M6
+      blocked: true
 ---
 
 # Gate ledger — 000254-chat-ownership-concurrency#254 (boundary-review)
@@ -782,9 +819,23 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-30** [Critical] `file-editor-completion-consistency` Skill completion treats its own successful buffer refresh as a human conflict
   lua/parley/tools/file_refresh.lua:56 applies the tool refresh, then lua/parley/skill_invoke.lua:391 rejects its older source proof and returns ok=false with a live-text-changed warning. Enabling autoread in the existing skill fixture turns two successful proposal tests red without human edits. This is the 2nd finding in this family: establish one reconciliation owner and propagate authorized completion evidence across all consumers, retaining human-edit refusal tests. ARCH-DRY, ARCH-ORDER, ARCH-PURPOSE.
 
+## Round 21 — 2026-09-15T13:43:12-07:00 (codex) — BLOCKED
+
+### Disposed
+
+- BR-25 — addressed — Native tests cover ancestor and backup-leaf replacement, publication, truncation, and directory creation. Removing cleanup identity validation in a scratch module makes the replacement-preservation regression fail.
+- BR-29 — addressed — Shared traversal policy applies mandatory exclusions after optional filters and target expansion. Restoring the old rg exclusion ordering causes five native traversal regressions to fail.
+- BR-30 — addressed — Skills defer intermediate refresh of their captured source and perform an identity-bound final read. The 37-test skill suite passes; removing refresh deferral causes twelve failures, including successful proposal cases.
+- BR-26 — addressed — Prior disposition retained. Shared guarded file refresh remains in place and its mapped integration tests pass.
+- BR-27 — addressed — Prior disposition retained. Bounded result-evidence tests pass across publication and serialization consumers.
+- BR-28 — addressed — Prior disposition retained. Async and compatibility adapters consume shared transformation policy; direct transformation tests pass.
+
+### Raised
+
+- **BR-31** [Important] `lifecycle-state-observability` Authoritative cleanup and execution decisions bypass the pure transition boundary
+  scheduler.lua:76-115 releases claims and starts effects from integration-owned flags; operation.lua:85 emits effect_start with zero production consumers. skill_invoke.lua:146-216 independently owns final-read admission and retirement transitions. This is the 3rd finding in this family: enumerate scheduler, filesystem-operation, and skill final-read lifecycle owners, enforce execution/release/retirement through pure transition results, and test rejected transitions plus reordered completion evidence. ARCH-PURE, ARCH-ORDER.
+
 ## Open findings
 
 - **BR-13** [Important] `deferred-contract-traceability` BR-11 regressions are missing from the documented verification mapping
-- **BR-25** [Critical] `resource-authority-at-effect` Deferred tool execution can follow a replaced ancestor outside captured roots
-- **BR-29** [Critical] `resource-authority-at-effect` Model-supplied search globs override private recovery exclusions
-- **BR-30** [Critical] `file-editor-completion-consistency` Skill completion treats its own successful buffer refresh as a human conflict
+- **BR-31** [Important] `lifecycle-state-observability` Authoritative cleanup and execution decisions bypass the pure transition boundary

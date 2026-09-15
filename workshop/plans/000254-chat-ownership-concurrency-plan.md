@@ -1472,3 +1472,25 @@ retains unknown reads, with a shared16-read/1MiB-per-read admission ceiling and
 five-second bounded polling. Logical completion releases its edit/UI authority;
 physical cleanup alone releases the retained slot. Tests cover both event orders,
 autoread on/off, late cleanup, cancellation/reload/detach, and a lost callback.
+
+### 2026-09-15 — M6 BR31: pure lifecycle authorization
+
+Codex disposed BR25/29/30 with mutation controls, but found that scheduler
+execution and cleanup, filesystem request ownership, and skill final-read
+ownership still use adapter booleans as authority. This is a structural Spec
+requirement, not a request to add another passive mirror (ARCH-PURE, ARCH-ORDER).
+
+The complete correction class has three owners:
+
+| Owner | Pure authority | Adapter responsibility | Verification |
+|---|---|---|---|
+| Tool execution | Extend tools/operation.lua transitions for physical completion, scope closure, claim release and record retirement; consume effect_start permission before launch. Poll scheduling/deadline decisions belong to model events. | scheduler.lua retains callbacks, handles, presentation and timer execution; rejected transitions cannot launch/release/forget. | Pure reordered effect/cleanup/cancel/close sequences plus scheduler rejected-transition enforcement. |
+| Filesystem operation | New tools/filesystem_operation.lua owns request admission/identity, cancellation, stop, pending completion and terminal cleanup decisions. | filesystem.lua performs IO, stores bytes/fd handles and observed identity evidence, executes model permissions. | Direct pure sequences and adapter mutation/rejection tests; retain native authority and missing-callback regressions. |
+| Skill final read | New skill_source_read.lua owns admission, active/cancel/deadline/physical completion and exact-once logical/physical retirement. | skill_invoke.lua retains source proof, callbacks/read handle/timer; only model permissions allow read, source delivery or slot release. | Pure transition permutations plus existing37 native skill tests and rejected-transition/deadline tests. |
+
+Implement each owner with TDD and no redundant mirror flags used as authority.
+Keep existing capacities, effect uncertainty, five-second diagnostic limits,
+late cleanup and callback-collection behavior. Register pure models and direct
+tests in traceability. Run all affected mappings and lint before Codex re-review;
+no review finding or round limit is waived. Whole-issue integration review and
+operator live testing remain required before main merge.
