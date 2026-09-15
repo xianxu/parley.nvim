@@ -240,3 +240,98 @@ dispose:
     note: |
       Unlink failures now notify, with a regression that fails without the fix. However, chat_recovery.lua:298-299 discards saved-file fs_stat errors and silently returns. Injected EACCES yields zero notifications. Apply the common error-publication rule to every cleanup IO stage.
 ```
+
+---
+
+## Re-review — 2026-09-15T12:26:49-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 254 — Harden chat ownership and concurrency |
+| repo | 000254-chat-ownership-concurrency |
+| issue file | workshop/issues/000254-chat-ownership-concurrency.md |
+| boundary | milestone M5 |
+| milestone | M5 |
+| window | 8c40b9c637acfb5763ba339e8e2d5d5d5783d46b..b4cf59a0a64135c85245e07518e0264bbb49d554 |
+| command | sdlc milestone-close --issue 254 --milestone M5 |
+| reviewer | codex |
+| timestamp | 2026-09-15T12:26:49-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: medium
+```
+
+The pinned M5 range delivers fixed batch membership and recoverable answer replacement. Both open findings are addressed with reachable production changes and regression tests that fail when those changes are disabled. All 14 changed test files pass: 222 tests. No new blocking findings identified. Review scope is M5; this does not establish M6 readiness.
+
+```findings
+dispose:
+  - id: BR-20
+    disposition: addressed
+    note: |
+      chat_recovery.lua retains save evidence and joins it with guarded settlement; chat_respond.lua waits for settlement before completing. Disabling the join in a scratch copy fails six recovery tests and both public single/batch early-save tests. Edit/undo, cancellation, reload, detach, and disjoint-edit cases pass.
+  - id: BR-24
+    disposition: addressed
+    note: |
+      The shared recovery reporter publishes cleanup errors and saved-file stat/read failures while retaining physical accounting. Disabling stat-error reporting fails two regression tests. Save unlink failure, repeated-error suppression, and retained-byte tests pass.
+  - id: BR-21
+    disposition: addressed
+    note: |
+      Public single/batch failure and cancellation retry tests preserve the original snapshot identity and bytes; fresh revision evidence rejects affected edit/undo while allowing disjoint draft edits.
+  - id: BR-22
+    disposition: addressed
+    note: |
+      Store scanning distinguishes unavailable association evidence from absence and blocks unsafe original publication. Corruption, restart, and failed-quarantine regression cases pass.
+  - id: BR-23
+    disposition: addressed
+    note: |
+      Adapter release invokes host retirement, removes registry membership, and cancels pending settlement. Detach and retained-snapshot lifetime regression cases pass.
+```
+
+### 1. Strengths
+
+- **Completion preserves evidence across event ordering.** `chat_recovery.lua:198` and `:331` retain guarded settlement and confirmed-save observations; public single/batch tests exercise the join.
+- **Batch progress has one pure owner.** `batch.lua` encapsulates membership and transitions; tests cover stale events, cancellation races, unknown outcomes, and independently stated progress invariants.
+- **Recovery publication is checked before destructive replacement.** `answer_recovery.lua` tests short writes, durability failures, corruption, ambiguous closes, descriptor reuse, and physical capacity.
+- **User documentation covers the new surface.** README links to batch and recovery guides documenting resume, explicit adoption, restore, and retention behavior.
+
+### 2. Critical findings
+
+None.
+
+### 3. Important findings
+
+None.
+
+### 4. Minor findings
+
+None.
+
+### 5. Test coverage notes
+
+- Ran all 14 changed spec files against the pinned head: **222 passed**.
+- Scratch mutations confirmed BR-20 and BR-24 regressions fail without their fixes.
+- Tests use isolated storage, stateful filesystem doubles, controlled callbacks, and real Neovim save events.
+- Did not rerun the entire repository suite or performance report. The unrelated working-tree modification was left untouched.
+
+### 6. Architectural notes
+
+| Marker | Result | Evidence |
+|---|---|---|
+| ARCH-DRY | Pass | Single and batch responses share generation and recovery paths. |
+| ARCH-PURE | Pass | Batch decisions remain IO-free; Document and recovery adapters execute effects. |
+| ARCH-PURPOSE | Pass | Fixed membership, revision validation, partial progress, and original-answer recovery are implemented. |
+| ARCH-MOCK | Pass | Stateful filesystem faults share the production seam; isolated native filesystem tests check real behavior. |
+| ARCH-CONSTRAINTS | Pass | Scheduled validation enforces aggregate query budgets; recovery enforces serialized and physical limits. |
+| ARCH-SECURE | Pass | Persisted records are validated; corruption cannot establish absence or authorize replacement. |
+| ARCH-ORDER | Pass | Production transitions and save/settlement joins have cancellation, late-event, and interruption coverage. |
+| ARCH-FUNERAL | Pass | Document retirement releases volatile ownership; saved, discarded, and deleted snapshots have cleanup paths with failure accounting. |
+
+M6’s documented tool-path exclusion and effect-admission work remains outside this verdict.
+
+### 7. Plan revision recommendations
+
+None required for the reviewed corrections. Existing revisions describe the implemented evidence join and retirement rules.

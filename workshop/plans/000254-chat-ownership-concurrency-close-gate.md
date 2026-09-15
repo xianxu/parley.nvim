@@ -447,6 +447,32 @@ rounds:
           round: 17
       boundary: M5
       blocked: true
+    - "n": 18
+      timestamp: "2026-09-15T12:26:49-07:00"
+      agent: codex
+      dispose:
+        - id: BR-20
+          disposition: addressed
+          note: chat_recovery.lua retains save evidence and joins it with guarded settlement; chat_respond.lua waits for settlement before completing. Disabling the join in a scratch copy fails six recovery tests and both public single/batch early-save tests. Edit/undo, cancellation, reload, detach, and disjoint-edit cases pass.
+          round: 18
+        - id: BR-24
+          disposition: addressed
+          note: The shared recovery reporter publishes cleanup errors and saved-file stat/read failures while retaining physical accounting. Disabling stat-error reporting fails two regression tests. Save unlink failure, repeated-error suppression, and retained-byte tests pass.
+          round: 18
+        - id: BR-21
+          disposition: addressed
+          note: Public single/batch failure and cancellation retry tests preserve the original snapshot identity and bytes; fresh revision evidence rejects affected edit/undo while allowing disjoint draft edits.
+          round: 18
+        - id: BR-22
+          disposition: addressed
+          note: Store scanning distinguishes unavailable association evidence from absence and blocks unsafe original publication. Corruption, restart, and failed-quarantine regression cases pass.
+          round: 18
+        - id: BR-23
+          disposition: addressed
+          note: Adapter release invokes host retirement, removes registry membership, and cancels pending settlement. Detach and retained-snapshot lifetime regression cases pass.
+          round: 18
+      boundary: M5
+      blocked: false
 ---
 
 # Gate ledger — 000254-chat-ownership-concurrency#254 (boundary-review)
@@ -652,8 +678,16 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - BR-23 — addressed — Adapter release now invokes host retirement and cancels pending settlement. Detach registry assertions pass at head and fail against the pre-fix implementation; cancellation, reload, and failed-settlement retirement tests also pass.
 - BR-24 — not-addressed — Unlink failures now notify, with a regression that fails without the fix. However, chat_recovery.lua:298-299 discards saved-file fs_stat errors and silently returns. Injected EACCES yields zero notifications. Apply the common error-publication rule to every cleanup IO stage.
 
+## Round 18 — 2026-09-15T12:26:49-07:00 (codex) — passed
+
+### Disposed
+
+- BR-20 — addressed — chat_recovery.lua retains save evidence and joins it with guarded settlement; chat_respond.lua waits for settlement before completing. Disabling the join in a scratch copy fails six recovery tests and both public single/batch early-save tests. Edit/undo, cancellation, reload, detach, and disjoint-edit cases pass.
+- BR-24 — addressed — The shared recovery reporter publishes cleanup errors and saved-file stat/read failures while retaining physical accounting. Disabling stat-error reporting fails two regression tests. Save unlink failure, repeated-error suppression, and retained-byte tests pass.
+- BR-21 — addressed — Public single/batch failure and cancellation retry tests preserve the original snapshot identity and bytes; fresh revision evidence rejects affected edit/undo while allowing disjoint draft edits.
+- BR-22 — addressed — Store scanning distinguishes unavailable association evidence from absence and blocks unsafe original publication. Corruption, restart, and failed-quarantine regression cases pass.
+- BR-23 — addressed — Adapter release invokes host retirement, removes registry membership, and cancels pending settlement. Detach and retained-snapshot lifetime regression cases pass.
+
 ## Open findings
 
 - **BR-13** [Important] `deferred-contract-traceability` BR-11 regressions are missing from the documented verification mapping
-- **BR-20** [Critical] `semantic-publication-evidence` Successful replacement abandons settlement while semantic repair is pending
-- **BR-24** [Important] `lifecycle-state-observability` Recovery cleanup IO failures are swallowed by production callers
