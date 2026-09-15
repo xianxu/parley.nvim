@@ -744,6 +744,28 @@ Plenary's 50-second timeout during the mapped run. A narrowly scoped harness
 timeout is being added; final integrated verification and M3 review remain pending.
 The timed-out child has exited; no process cleanup is required.
 
+### 2026-09-15 — M3 final verification and review submission
+
+Document mapping: 245 passing tests (`document-complete`, `semantic-final`, and
+`document-rest` logs under `/tmp/parley254-m3-*`). The large semantic corpus also
+hit Plenary's default deadline under load; both 50,000-row corpora now have exact
+file-scoped 180-second deadlines. The selection regression passes, normal test
+deadlines remain unchanged, and the resumed corpus passes all 20 tests.
+Exchange/layout 264, lifecycle 510, highlights 84, outline 216 are green as
+recorded above; mappings overlap. Full lint passes 501 files, with the final
+runner-only changes re-linted separately.
+
+`make perf` passes 30 schema-4 scenarios on `ea933f51` (five warmups, 20 samples;
+report `/tmp/parley254-m3-current-perf.json`). At 5,000 rows, median/p95 milliseconds:
+typing 7.870/13.452; Enter+join 17.447/19.493; redraw 0.529/0.894; fold maintenance
+1.343/1.626; stream/human 23.556/52.326. Samples ran alongside conformance tests,
+so timing includes contention. Deterministic work remains one copied typing row,
+six Enter/join rows, zero redraw semantic rows, and zero hot full-buffer reads.
+Broad explicit repair/restore costs 3.867 s median. No 8 ms streaming claim is
+made; its old production writer is explicitly the next milestone's migration.
+M3 implementation is ready for mandatory review. Actual-time attribution remains
+N/A for the unreliable cross-issue worktree measurement explained above.
+
 ## Revisions
 
 ### 2026-09-14 — Incremental rendering is part of the core contract
