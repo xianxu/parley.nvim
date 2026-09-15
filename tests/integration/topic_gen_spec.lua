@@ -79,7 +79,7 @@ describe("generate_topic", function()
         assert.is_nil(last.content:find("🧠"))
     end)
 
-    it("falls back through real dispatcher teardown on drained transport failure", function()
+    it("rejects a drained transport failure with an explicit failure reason", function()
         local tasker = require("parley.tasker")
         local vault = require("parley.vault")
         vault.resolve_secret("openai", "test-secret", function() end)
@@ -106,7 +106,7 @@ describe("generate_topic", function()
         tasker.run = original_run
 
         assert.is_nil(result.topic)
-        assert.equals("empty", result.reason)
+        assert.is_truthy(result.reason:find("provider request failed", 1, true))
     end)
 end)
 

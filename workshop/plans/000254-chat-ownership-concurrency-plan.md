@@ -771,3 +771,31 @@ This is focused evidence; the full mapped lifecycle/performance report and M4
 boundary review remain outstanding. M3's fifth ledger-disposition review runs
 against the separate feature checkout; these changes remain staged in the M4
 worktree until that boundary closes.
+
+### 2026-09-15 — M4 public-command compatibility and IO lifetime audit
+
+Reason: composition through the real command exposed gaps absent from isolated
+adapter tests. Delta: explicit onboarding updates the placeholder model, header,
+pending label, and tool limits as one prepared profile while retaining captured
+source geometry; subsequent configuration/continuation changes cannot alter it.
+Remote reference launches register child lifetimes before IO, stop admission on
+failure, and retain unknown launches until positive callbacks arrive. Duplicate
+callbacks cannot resolve siblings, and cancelled callbacks cannot publish cache
+updates or spawn a provider. Failed utility topic transports reject partial text.
+
+Drill-in gather now computes its result from frozen text and applies local hunks
+through one captured user transaction. Intervening edits preserve human text and
+stop further response admission; partial already-applied edits are not rolled
+back. Message construction returns its system-prefix length so ancestor context
+follows zero, one, or two leading messages, and automatic topics receive only the
+current-file conversation. Architecture checks reject positional async writes,
+current-selection rediscovery, pending-owned content authority, and production
+calls to the retired streaming writer. ARCH-PURE and ARCH-FUNERAL shape these
+boundaries; no new independent live exchange registry is introduced.
+
+Focused evidence: onboarding/profile/session/tools/remote 34 tests; existing
+remote references 11 and topic utility 9; branch/topic ordering 6; native drill-in
+interruption 2 and existing public response compatibility 23; architecture 6.
+Each targeted regression passed after its observed failure. The ownership
+performance mapping now passes all 3 cases at 100/1000/5000 rows. Full performance
+report and the combined mapped validation remain in progress; M4 is not closed.

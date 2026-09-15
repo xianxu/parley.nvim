@@ -1,4 +1,4 @@
--- Tool dispatcher — the DRY safety layer between tool_loop and
+-- Tool dispatcher — the DRY safety layer between response_tools and
 -- individual handler functions.
 --
 -- Handlers (lua/parley/tools/builtin/*.lua) are pure. They know
@@ -242,7 +242,7 @@ function M.execute_call(call, tools_registry, opts)
     -- `tool_read_roots` (#140); write tools stay cwd-confined.
     -- (M5 adds write-specific additional guards on top of this.)
     --
-    -- `opts.cwd` is optional — the tool_loop passes it explicitly so
+    -- `opts.cwd` is optional — the response adapter passes it explicitly so
     -- the dispatcher does not need to know about vim.fn.getcwd() from
     -- pure test contexts. When absent, the check is skipped (caller
     -- accepts responsibility).

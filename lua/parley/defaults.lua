@@ -98,7 +98,7 @@ tags:
 -- Default tool-loop rounds per chat response for a tool-enabled agent, applied
 -- at setup (init.lua) when an agent declares no explicit `max_tool_iterations`.
 -- Single source of truth — referenced by the defensive fallbacks in
--- tool_loop.lua and chat_respond.lua so no code path can disagree (#154).
+-- response_tools.lua and chat_respond.lua so no code path can disagree (#154).
 M.max_tool_iterations = 42
 
 return M

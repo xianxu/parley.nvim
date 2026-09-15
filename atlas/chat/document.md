@@ -3,8 +3,10 @@
 The structural core under `lua/parley/document/` indexes metadata over externally
 owned text. The buffer coordinator owns the live index used by highlighting, folds, outline,
 and diagnostic candidate queries. Explicit materialization still uses the
-[parser and exchange model](parsing.md). Generation write migration is the next
-#254 milestone; its existing response model is not rendering authority.
+[parser and exchange model](parsing.md). Response sessions capture source and
+acquire document grants before asynchronous preparation. Provider text, tool
+slots, completion prompts, and automatic topics use those scoped operations;
+the materialized exchange model supplies request input only.
 
 ## Ownership and data flow
 
@@ -20,6 +22,7 @@ and diagnostic candidate queries. Explicit materialization still uses the
 | `projection` | Derived index summaries for exchange boundaries, folds, outline, and diagnostics. |
 | `state` | Pure generation/grant transitions, dependency staleness, and write-plan revisions. |
 | `editor` | One native buffer attachment, normalized edit events, exact mutation receipts, and undo ownership. |
+| `replacement` | Finite replacement cursors, bounded native writes, and private successor evidence across deletion/insertion receipts. |
 | `init` | Per-buffer coordinator, immediate authority invalidation, bounded repair, and subscriptions. |
 
 The index retains no transcript payload. An unread region occupies one aggregate

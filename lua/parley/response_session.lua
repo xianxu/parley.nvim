@@ -11,6 +11,22 @@ local M={}
 local states=setmetatable({},{__mode='k'})
 local function state(session)return assert(states[session],'invalid response session')end
 local function safe(fn,...)if type(fn)=='function'then return pcall(fn,...)end;return true end
+local function preparation_override(original,override)
+    if override==nil then return original end
+    if type(override)~='table' or type(override.gaps)~='table' or #override.gaps~=#original.gaps then return nil end
+    local candidate=vim.deepcopy(override)
+    local geometry=vim.deepcopy(original)
+    for index,gap in ipairs(candidate.gaps)do
+        if type(gap)~='table' or type(gap.bytes)~='string' then return nil end
+        gap.bytes=original.gaps[index].bytes
+        gap.retain_prefix=original.gaps[index].retain_prefix
+    end
+    if not vim.deep_equal(candidate,geometry)then return nil end
+    -- Only output bytes and the amount retained by the existing primary grant
+    -- may change; every source boundary remains the command-time geometry.
+    return vim.deepcopy(override)
+end
+
 function M.start(doc,spec,opts)
     opts=opts or {}
     if type(spec)~='table' or type(spec.preparation)~='table' or type(opts.prepare_input)~='function'
@@ -20,14 +36,11 @@ function M.start(doc,spec,opts)
     local s={doc=doc,opts=vim.tbl_extend('force',{},opts),preparations={},active=true}
     opts=s.opts
     local session={};states[session]=s
-    local tools=Tools.new(doc,{producer=opts.producer,registry=opts.registry,root_policy=opts.root_policy,
-        max_iterations=opts.max_iterations,max_result_bytes=opts.max_result_bytes,
-        build_input=opts.build_input,schedule=frozen.schedule})
-    s.tools=tools
+    local tools
     local function finish(result,rejected)
         if not s.active then return end;s.active=false
         if s.pending then s.pending:complete();s.pending=nil end
-        tools.close()
+        if tools then tools.close()end
         local callback=rejected and opts.rejected or opts.terminal
         s.preparations={};s.doc=nil;s.tools=nil;s.opts=nil
         opts=nil;doc=nil;plan=nil;frozen=nil;tools=nil
@@ -44,6 +57,34 @@ function M.start(doc,spec,opts)
                 return grant and grant.status~='revoked' and D.byte_position(s.doc,grant.last) or nil
             end})
         if success then s.pending=pending end
+    end
+    local function capture_profile(input,ctx)
+        local profile=input.response_profile
+        if profile~=nil and type(profile)~='table'then return false,'invalid response profile'end
+        profile=profile or {}
+        if profile.agent~=nil and (type(profile.agent)~='string' or #profile.agent==0 or #profile.agent>256)then
+            return false,'invalid response display name'
+        end
+        for _,name in ipairs({'max_iterations','max_result_bytes'})do
+            if profile[name]~=nil and type(profile[name])~='number'then return false,'invalid response tool limit'end
+        end
+        local function limit(name)
+            if profile[name]~=nil then return profile[name]end
+            return opts[name]
+        end
+        -- Construction validates the same limits as every other Tools caller.
+        -- It runs once, before preparation writes or provider admission, after
+        -- an explicit onboarding choice has become the frozen request profile.
+        local ok,adapter=pcall(Tools.new,doc,{producer=opts.producer,registry=opts.registry,
+            root_policy=opts.root_policy,max_iterations=limit('max_iterations'),
+            max_result_bytes=limit('max_result_bytes'),build_input=opts.build_input,schedule=frozen.schedule})
+        if not ok then return false,tostring(adapter)end
+        tools=adapter;s.tools=adapter
+        if profile.agent and profile.agent~=opts.agent then
+            if s.pending then s.pending:cancel();s.pending=nil end
+            opts.agent=profile.agent;presentation(ctx)
+        end
+        return true
     end
     local provider=Provider.new({dispatcher=opts.dispatcher,tasker=opts.tasker,wire=opts.wire,
         on_result=function(ctx,qt,calls,failure)
@@ -71,9 +112,13 @@ function M.start(doc,spec,opts)
             r.local_done=true;resolve()
         end
         local callbacks={}
-        function callbacks.prepared(input)
+        function callbacks.prepared(input,override)
             if r.retired or r.cancelled or r.input or ctx.cancelled()then return false end
             if type(input)~='table'then failed('invalid prepared input');return false end
+            local replacement=preparation_override(plan,override)
+            if not replacement then failed('preparation override changed captured geometry');return false end
+            local profiled,profile_error=capture_profile(input,ctx)
+            if not profiled then failed(profile_error);return false end
             r.input=vim.deepcopy(input)
             local prepared_ctx=vim.tbl_extend('force',{},ctx,{input=r.input})
             local op,reason=Preparation.start(doc,prepared_ctx,{
@@ -83,7 +128,7 @@ function M.start(doc,spec,opts)
                 end,
                 failed=failed,
                 resolved=function()r.local_done=true;resolve()end,
-            },plan,{schedule=frozen.schedule})
+            },replacement,{schedule=frozen.schedule})
             if not op then failed(reason);return false end
             r.op=op
             return true
@@ -109,12 +154,18 @@ function M.start(doc,spec,opts)
     local function wrap(kind,fn)
         return function(ctx,cb)return {kind=kind,handle=fn(ctx,cb)}end
     end
+    local function tool_adapter(name)
+        return function(...)
+            assert(tools,'tool profile not prepared')
+            return tools[name](...)
+        end
+    end
     local hooks={prepare=prepare,request=wrap('provider',function(ctx,cb)
             safe(opts.requesting,ctx)
             return provider.request(ctx,cb)
         end),
-        reserve_round=tools.reserve_round,cancel_reservation=tools.cancel_reservation,
-        start_child=wrap('tool',tools.start_child),continue_round=wrap('continuation',tools.continue_round),
+        reserve_round=tool_adapter('reserve_round'),cancel_reservation=tool_adapter('cancel_reservation'),
+        start_child=wrap('tool',tool_adapter('start_child')),continue_round=wrap('continuation',tool_adapter('continue_round')),
         finalize=function(ctx,done)
             if opts.finalize then return opts.finalize(ctx,done)end
             done('applied')

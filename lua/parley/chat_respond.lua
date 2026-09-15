@@ -989,7 +989,7 @@ M.build_messages = function(opts)
     -- request as it will go out and the text blocks carry the trimmed text.
     attach_question_images(messages, slots, opts.chat_path, logger)
 
-    return messages
+    return messages, #leading
 end
 
 -- Find the 0-indexed line number of the `topic:` header line in a buffer.
@@ -1170,7 +1170,11 @@ M.generate_topic = function(messages, provider, model, callback, spinner, transp
         nil,
         on_abort,
         nil,
-        nil,
+        function(_, failure)
+            -- The dispatcher's legacy completion fallback accepts partial text
+            -- on failure. A utility topic must never publish that as success.
+            finish(nil, M._failure_notice(failure))
+        end,
         transport_opts
     )
 end
@@ -1229,32 +1233,72 @@ M.resolve_remote_references = function(opts, callback)
         end
     end
 
-    if #urls_to_fetch == 0 then
-        callback(resolved)
-        return
+    local operation = {pending = 0, launching = true, cancelled = false, finished = false}
+    local on_failure, cancelled = opts.on_failure, opts.cancelled
+    local function admission_open()
+        if cancelled then
+            local ok, value = pcall(cancelled)
+            if not ok or value then operation.cancelled = true end
+        end
+        return not operation.cancelled
     end
-
-    local pending = #urls_to_fetch
-
+    local function finish()
+        if operation.finished or operation.launching or operation.pending > 0 then return end
+        operation.finished = true
+        local done, value, reason = callback, resolved, operation.failure
+        if operation.cancelled then reason = reason or 'remote preparation cancelled' end
+        callback = nil; on_failure = nil; cancelled = nil; resolved = nil
+        -- The callback acknowledges completion of every started child, including
+        -- a throwing launch whose retained callback later supplied evidence.
+        pcall(done, reason and nil or value, reason)
+    end
+    local function failed(reason)
+        if operation.failure or operation.finished then return end
+        operation.failure = tostring(reason)
+        if on_failure then pcall(on_failure, operation.failure) end
+    end
+    function operation:cancel()
+        if self.finished or self.cancelled then return false end
+        self.cancelled = true
+        -- OAuth currently has no cancellation/physical-resolution handle. Its
+        -- callback is the positive terminal evidence; a stop request cannot
+        -- replace that evidence or decrement pending children.
+        finish()
+        return true
+    end
     for _, url in ipairs(urls_to_fetch) do
-        -- Delegate remote URL handling to the OAuth fetcher. It owns provider
-        -- detection and can fall back to the auth picker for unknown patterns.
-        oauth.fetch_content(url, opts_config.oauth or opts_config.google_drive, function(content, err)
-            local cached_content = content
-            if not cached_content then
-                cached_content = M.format_remote_reference_error_content(url, err)
-                _parley.logger.warning("Failed to fetch remote content: " .. (err or "unknown error"))
+        if not admission_open() or operation.failure then break end
+        local child = {done = false}
+        operation.pending = operation.pending + 1
+        local function complete(content, err)
+            if child.done then return end
+            child.done = true
+            if admission_open() and not operation.failure then
+                local ok, failure = pcall(function()
+                    local cached_content = content
+                    if not cached_content then
+                        cached_content = M.format_remote_reference_error_content(url, err)
+                        _parley.logger.warning('Failed to fetch remote content: ' .. (err or 'unknown error'))
+                    end
+                    resolved[url] = cached_content
+                    chat_cache[url] = cached_content
+                    M.save_remote_reference_cache()
+                end)
+                if not ok then failed(failure) end
             end
-
-            resolved[url] = cached_content
-            chat_cache[url] = cached_content
-            M.save_remote_reference_cache()
-            pending = pending - 1
-            if pending == 0 then
-                callback(resolved)
-            end
+            operation.pending = operation.pending - 1
+            finish()
+        end
+        -- Register before invoking IO. A throw may happen after a process or
+        -- picker starts; retain this child until complete positively settles it.
+        local ok, reason = pcall(function()
+            oauth.fetch_content(url, opts_config.oauth or opts_config.google_drive, complete)
         end)
+        if not ok then failed(reason) end
     end
+    operation.launching = false
+    finish()
+    return operation
 end
 
 --------------------------------------------------------------------------------
@@ -1297,18 +1341,25 @@ local function start_scoped_response(frame)
     local footer = trailing_footnote_boundary(frame.lines, question.line_end)
     if footer then last = math.max(question.line_end, math.min(last, footer)) end
     local agent = vim.deepcopy(_parley.get_agent())
+    local selected_record = (_parley.agents or {})[agent.name]
+    local model_name = type(agent.model) == 'table' and agent.model.model or agent.model
+    local needs_agent = selected_record and selected_record.placeholder == true or model_name == 'choose-a-model'
     local info = _parley.get_agent_info(parsed.headers, agent)
-    info.root_policy = frame.params.root_policy or require('parley.neighborhood').policy_for_buf(buf)
-    local prefix = config.chat_assistant_prefix
-    local suffix = type(prefix) == 'table' and prefix[2] or ''
-    prefix = type(prefix) == 'table' and prefix[1] or prefix
-    suffix = _parley.render.template(suffix or '', {['{{agent}}'] = info.display_name})
+    local root_policy = frame.params.root_policy or require('parley.neighborhood').policy_for_buf(buf)
+    info.root_policy = root_policy
     local source = {}
     for row = question.line_end + 1, last do source[#source + 1] = frame.lines[row] end
     local first_byte = vim.api.nvim_buf_get_offset(buf, question.line_end)
-    local layout = Layout.prepare({lines = source, first_row = question.line_end,
-        first_byte = first_byte, header_lines = {prefix .. suffix}}, config)
-    local plan = Preparation.plan(layout, {at_eof = last == #frame.lines})
+    local function preparation_plan()
+        local prefix = config.chat_assistant_prefix
+        local suffix = type(prefix) == 'table' and prefix[2] or ''
+        prefix = type(prefix) == 'table' and prefix[1] or prefix
+        suffix = _parley.render.template(suffix or '', {['{{agent}}'] = info.display_name})
+        local layout = Layout.prepare({lines = source, first_row = question.line_end,
+            first_byte = first_byte, header_lines = {prefix .. suffix}}, config)
+        return Preparation.plan(layout, {at_eof = last == #frame.lines})
+    end
+    local plan = preparation_plan()
     local point = {row = question.line_end - 1, col = #frame.lines[question.line_end]}
     local spec = {operation = 'respond', question = {first = {row = question.line_start - 1, col = 0}, last = point},
         output = {first = point, last = {row = last - 1, col = #frame.lines[last]}},
@@ -1320,6 +1371,7 @@ local function start_scoped_response(frame)
     local group = responses[buf] or {}; responses[buf] = group
     local entry = {}; group[entry] = true
     local latest, messages, final_payload, topic_source, topic_parent, failure_notice
+    local message_lead = 0
     local topic_attempted, main_finished, topic_finished = false, false, true
     if parsed.headers.topic == '?' then
         for row = 1, find_chat_header_end(frame.lines) do
@@ -1369,7 +1421,7 @@ local function start_scoped_response(frame)
         local parents = topic_parent and D.resolve_user(doc, topic_parent)
         if not header or not parents then return end
         local Topic = require('parley.response_topic')
-        local conversation = vim.deepcopy(messages or {})
+        local conversation = M._conversation_after_lead(messages or {}, message_lead)
         conversation[#conversation + 1] = {role = 'assistant', content = latest and latest.response or ''}
         local input = Topic.input(conversation, info.provider, info.model, config.chat_topic_gen_prompt, _parley.dispatcher)
         input.buf = buf
@@ -1400,21 +1452,24 @@ local function start_scoped_response(frame)
         function operation:cancel(done)
             self.cancelled = true
             if self.resolved then done() else self.cancel_done = done end
+            if self.remote then self.remote:cancel() end
         end
         local function fail(reason)
             if not operation.cancelled then cb.failed(reason) end
             resolve()
         end
-        local function build(remote)
+        local function build(remote, remote_error)
             if operation.cancelled or ctx.cancelled() then resolve(); return end
+            if remote_error then fail(remote_error); return end
             local ok, err = xpcall(function()
-                messages = M.build_messages({parsed_chat = parsed, start_index = frame.start_index,
+                messages, message_lead = M.build_messages({parsed_chat = parsed, start_index = frame.start_index,
                     end_index = frame.end_index, exchange_idx = index, agent = agent, config = config,
                     helpers = _parley.helpers, logger = _parley.logger, resolved_remote_content = remote,
                     root_policy = info.root_policy, chat_path = frame.file_name})
                 if parsed.parent_link then
                     local ancestors = collect_ancestor_messages(frame.file_name, parsed)
-                    for i = #ancestors, 1, -1 do table.insert(messages, 2, ancestors[i]) end
+                    for i = #ancestors, 1, -1 do table.insert(messages, message_lead + 1, ancestors[i]) end
+                    message_lead = message_lead + #ancestors
                 end
                 final_payload = question.raw_payload or _parley.dispatcher.prepare_payload(
                     messages, info.model, info.provider, info.tools)
@@ -1423,15 +1478,40 @@ local function start_scoped_response(frame)
                     error('request with images exceeds the request byte limit')
                 end
                 cb.prepared({buf = buf, provider = info.provider, model = info.model,
-                    messages = messages, payload = final_payload})
+                    messages = messages, payload = final_payload, response_profile = {
+                        agent = info.display_name,
+                        max_iterations = info.max_tool_iterations or config.max_tool_iterations,
+                        max_result_bytes = info.tool_result_max_bytes,
+                    }}, plan)
             end, debug.traceback)
             if not ok then fail(err) else resolve() end
         end
         local function ready()
             if operation.cancelled or ctx.cancelled() then resolve(); return end
-            local ok, err = pcall(M.resolve_remote_references, {parsed_chat = parsed, config = config,
-                chat_file = frame.file_name, exchange_idx = index}, build)
-            if not ok then fail(err) end
+            if needs_agent then
+                local chosen = vim.deepcopy(_parley.get_agent())
+                local record = (_parley.agents or {})[chosen.name]
+                local model = type(chosen.model) == 'table' and chosen.model.model or chosen.model
+                if record and record.placeholder or model == 'choose-a-model' or not model then
+                    fail('Choose a model before submitting'); return
+                end
+                agent = chosen
+                info = _parley.get_agent_info(parsed.headers, agent)
+                info.root_policy = root_policy
+                plan = preparation_plan()
+                needs_agent = false
+            end
+            local ok, remote = pcall(M.resolve_remote_references, {parsed_chat = parsed, config = config,
+                chat_file = frame.file_name, exchange_idx = index,
+                cancelled = function()return operation.cancelled or ctx.cancelled()end,
+                on_failure = function(reason)
+                    if not operation.cancelled then cb.failed(reason) end
+                end}, build)
+            if not ok then fail(remote)
+            else
+                operation.remote = remote
+                if operation.cancelled and remote then remote:cancel() end
+            end
         end
         local deferred = require('parley.llm_readiness').defer(_parley, ready,
             {buf = buf, validate_source = function() return not operation.cancelled and not ctx.cancelled() end,
@@ -1577,20 +1657,28 @@ M.respond = function(params, callback, override_free_cursor)
         local exch_lines = {}
         for i = exch_start, exch_end do table.insert(exch_lines, lines[i]) end
         local exchange_text = table.concat(exch_lines, "\n")
-        local blocks, _, marker_edits = drill_in.gather_edit_plan(exchange_text, di_opts)
+        local blocks, transformed = drill_in.gather_edit_plan(exchange_text, di_opts)
         if #blocks > 0 then
             local user_prefix = _parley.config.chat_user_prefix or "💬:"
             local block_lines = drill_in.format_blocks(blocks)
             local buffer_edit = require("parley.buffer_edit")
-            local boundary = exch_end < #lines and buffer_edit.make_handle(buf, exch_end) or nil
-            buffer_edit.apply_text_edits(buf, exch_start - 1, exchange_text, marker_edits)
-            local insert_at = boundary and buffer_edit.handle_line(boundary)
-                or vim.api.nvim_buf_line_count(buf)
-            if boundary then buffer_edit.handle_invalidate(boundary) end
-            local insert_lines = { "", user_prefix }
-            for _, line in ipairs(block_lines) do insert_lines[#insert_lines + 1] = line end
-            buffer_edit.insert_lines_at(buf, insert_at, insert_lines)
-            local new_turn_end = insert_at + #insert_lines
+            local capture, why = buffer_edit.capture_user(buf, 'drill-in-branch', {{
+                first = {row = exch_start - 1, col = 0},
+                last = {row = exch_end - 1, col = #lines[exch_end]},
+            }})
+            if not capture then _parley.logger.warning('Drill-in stopped: ' .. tostring(why)); return end
+            local after = {}
+            for i = 1, exch_start - 1 do after[#after + 1] = lines[i] end
+            for _, line in ipairs(vim.split(transformed, '\n', {plain = true})) do after[#after + 1] = line end
+            after[#after + 1] = ''
+            after[#after + 1] = user_prefix
+            for _, line in ipairs(block_lines) do after[#after + 1] = line end
+            local new_turn_end = #after
+            for i = exch_end + 1, #lines do after[#after + 1] = lines[i] end
+            local result = buffer_edit.apply_user_line_hunks(capture, lines, after)
+            if result.status ~= 'applied' then
+                _parley.logger.warning('Drill-in stopped: ' .. tostring(result.reason or result.status)); return
+            end
             _parley.logger.info(string.format(
                 "Drill-in branch: %d marker(s) → new turn after exchange #%d",
                 #blocks, exchange_idx
@@ -1628,22 +1716,21 @@ M.respond = function(params, callback, override_free_cursor)
     end
     if not branch_handled and not is_resubmit then
         local source_text = table.concat(lines, "\n")
-        local di_blocks, _, marker_edits = drill_in.gather_edit_plan(source_text, di_opts)
+        local di_blocks, transformed = drill_in.gather_edit_plan(source_text, di_opts)
         if #di_blocks > 0 then
             local buffer_edit = require("parley.buffer_edit")
-            buffer_edit.apply_text_edits(buf, 0, source_text, marker_edits)
-            local current = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-            local keep = #current
-            while keep > 0 and current[keep] == "" do keep = keep - 1 end
-            if keep < #current then
-                buffer_edit.delete_lines_after(buf, keep, #current - keep)
+            local capture, why = buffer_edit.capture_user(buf, 'drill-in-gather', {{
+                first = {row = 0, col = 0}, last = {row = #lines - 1, col = #lines[#lines]},
+            }})
+            if not capture then _parley.logger.warning('Drill-in stopped: ' .. tostring(why)); return end
+            local after = vim.split(transformed, '\n', {plain = true})
+            while #after > 0 and after[#after] == '' do after[#after] = nil end
+            if #after > 0 then after[#after + 1] = '' end
+            for _, line in ipairs(drill_in.format_blocks(di_blocks)) do after[#after + 1] = line end
+            local result = buffer_edit.apply_user_line_hunks(capture, lines, after)
+            if result.status ~= 'applied' then
+                _parley.logger.warning('Drill-in stopped: ' .. tostring(result.reason or result.status)); return
             end
-            local insert_lines = {}
-            if keep > 0 then insert_lines[#insert_lines + 1] = "" end
-            for _, line in ipairs(drill_in.format_blocks(di_blocks)) do
-                insert_lines[#insert_lines + 1] = line
-            end
-            buffer_edit.insert_lines_at(buf, keep, insert_lines)
             _parley.logger.info(string.format(
                 "Drill-in: gathered %d marker(s) into next turn", #di_blocks
             ))

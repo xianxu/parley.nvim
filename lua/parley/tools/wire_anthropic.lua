@@ -82,7 +82,7 @@ end
 ---   - web_search_tool_result / web_fetch_tool_result (server replies)
 ---
 --- Returns a flat list of ToolCalls in the order they were streamed.
---- Called once after streaming completes by the tool_loop driver,
+--- Called once after streaming completes by the response provider adapter,
 --- same pattern as `anthropic.parse_usage`.
 ---
 --- @param raw_response string the full captured SSE response

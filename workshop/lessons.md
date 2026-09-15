@@ -2507,3 +2507,23 @@ download.
 - Measure deferred work through semantic convergence. A fast Enter/Backspace
   callback can still queue a whole-document repair; immediate counters alone
   conceal that cost.
+
+
+## #254 M4 response composition audit
+
+- Register each asynchronous child before calling its launcher. A thrown launch
+  can follow a started effect; logical failure must not resolve that child or its
+  siblings without positive completion evidence. Test held, duplicate, and late
+  callbacks across failure and cancellation.
+- Replacing a response driver requires preserving request construction through
+  the public command. Exercise zero-, one-, and two-message system prefixes,
+  ancestor ordering, and the separate topic excerpt; helper-only tests missed
+  the composition regression.
+- Explicit onboarding selection may replace the placeholder request profile,
+  but must retain captured source geometry. Freeze model, display, and tool
+  limits together before writes; ordinary later configuration changes cannot
+  alter an admitted response.
+- An explicit user transformation with several edits needs one captured source
+  transaction and must stop admission after an interrupted receipt. Partial
+  edits may remain; newer human text must survive. Install native test wrappers
+  before attaching a driver that caches API functions.

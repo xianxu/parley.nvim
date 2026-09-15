@@ -3194,10 +3194,9 @@ end
 ---   * the resolved name differs — otherwise there is nothing to do, and a
 ---     no-op must not set `modified`;
 ---   * not in insert mode — repair must not fight a half-typed reference;
----   * not busy — a streaming response is a concurrent writer, and `chat_lease`
----     invalidates on concurrent mutation. It IGNORES rather than queues: the
----     next CursorHold retries for free, and queuing would land the write at
----     the least predictable moment.
+---   * not busy — defer cosmetic link repair while a response is active.
+---     The next CursorHold retries; the captured user transaction below
+---     validates the source before making the change.
 ---
 ---@param buf integer
 ---@param lnum integer # 1-indexed

@@ -90,9 +90,9 @@ end
 ---     to the call's input only once complete.
 ---
 --- Deliberately NOT gated on `finish_reason == "tool_calls"`. A truncated
---- stream still yields whatever assembled, and tool_loop already writes
---- synthetic error results for calls it cannot resolve. Gating would drop
---- them silently and strand the buffer with an unmatched tool_use block.
+--- stream still yields the assembled declarations. The response adapter owns
+--- transport outcome validation and decides whether the round may execute;
+--- decoding alone does not grant tool execution authority.
 ---
 --- Never raises: malformed JSON in `arguments` yields an empty input rather
 --- than an error, because this runs mid-chat on whatever the network gave us.
