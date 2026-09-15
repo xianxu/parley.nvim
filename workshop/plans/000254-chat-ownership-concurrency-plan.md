@@ -1291,3 +1291,30 @@ Retire fixture editor buffers before deleting canonical temporary paths.
 M6 also integrates M4 truthful pending publication, retirement joins and explicit
 stale-input continuation. Run the fresh merged inventory and whole performance
 report before Codex M6 review (ARCH-PURE, ARCH-PURPOSE, ARCH-MOCK, ARCH-FUNERAL).
+
+### 2026-09-15 — Final M6 implementation inventory
+
+Reason: the initial file/API list predates removal of tool_loop and the captured
+producer seam. This inventory supersedes the proposed M6 names above; it does
+not add another runtime abstraction (ARCH-DRY, ARCH-PURE).
+
+| Entity | Kind | Location | Final status and boundary |
+| --- | --- | --- | --- |
+| Operation outcome ledger | PURE | `lua/parley/tools/operation.lua` | New; `accept`, `transition`, `forget` govern scoped identity and outcome evidence |
+| Resource admission | PURE | `lua/parley/tools/resources.lua` | New; atomic claims, conflict ordering and bounded admission |
+| Shared execution scheduler | INTEGRATION | `lua/parley/tools/scheduler.lua` | New; executes captured backends and joins effect/physical evidence |
+| Generation producer | INTEGRATION | `lua/parley/tools/producer.lua` | New; captures capabilities, supervises cancelled work, bounds shared configuration |
+| Captured dispatch | INTEGRATION | `lua/parley/tools/dispatcher.lua` | Modified; `capture`, `prepare`, `normalize`; legacy synchronous API retained only for compatibility |
+| Checked filesystem | INTEGRATION | `lua/parley/tools/filesystem.lua` | New; `stat`, `read`, `write_checked`, `ensure_dir` with stateful failure model |
+| Builtin asynchronous execution | INTEGRATION | `lua/parley/tools/async_builtin.lua` | New; ten mandatory builtins plus optional ack use checked filesystem or Tasker |
+| Process supervision | INTEGRATION | `lua/parley/tasker.lua` | Modified; finite admission, bounded capture, positive exit/drain retirement and reconciliation |
+| Provider wire ordering | PURE | `lua/parley/tools/wire_anthropic.lua`, `wire_openai.lua` | Modified; declaration indexes and fragmented arguments determine order |
+| Operator reconciliation | INTEGRATION | `lua/parley/tool_operations.lua` | New; captured stable operation selection and explicit effect evidence |
+| Chat/skill composition | INTEGRATION | `lua/parley/response_tools.lua`, `skill_invoke.lua` | Modified; both use the shared producer, with scoped cancellation and ordered round joins |
+
+`tool_loop.lua` was already deleted before M6; `argv.lua` is a pure helper rather
+than an executable builtin. Checked backups live inside `filesystem.write_checked`,
+not a parallel backup adapter. The dispatcher preparation receipt replaces the
+proposed `dispatcher.execute_async` entry point. Configuration lives in the
+producer defaults and `config.tool_execution`. The user-facing commands, limits
+and operation evidence are documented in `atlas/providers/tool_execution.md`.
