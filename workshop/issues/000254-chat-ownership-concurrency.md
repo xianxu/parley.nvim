@@ -932,6 +932,21 @@ no M3 completion is claimed. The next review must include both fixes and the
 cross-consumer callback-boundary contract, even though the default three-round
 review budget has been used.
 
+### 2026-09-15 — BR-10 fixes ready for broad verification
+
+The diagnostic class sweep passes nine new native cases plus existing 12/14/6
+integration/unit/text cases. Four native presentation tests pass: source edits
+during fold restoration, replacement fold jobs without text changes, detach
+inside option configuration, and redraw textlock. Existing document-fold,
+tool-fold, join, retention and highlighter-document suites all pass. Four-file
+lint and diff checks are clean. Detach now removes the fold-generation scalar;
+standalone native fold clearing also supports an unattached buffer.
+
+M4 checkpoint `38e0ed14` preserves the released adapters and caller migrations.
+Additional reservation cancellation, copied continuation input, provider result
+and preparation geometry fixes remain isolated. The tool-round adapter draft is
+not yet verified or wired. No milestone or whole-issue completion is claimed.
+
 ## Revisions
 
 ### 2026-09-14 — Incremental rendering is part of the core contract
