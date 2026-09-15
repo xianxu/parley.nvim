@@ -1,6 +1,9 @@
 local harness = require("tests.perf.harness")
 
 local function scenario(line_count, phase, attribution, median, p95)
+    local work = {}
+    for _, field in ipairs(harness.WORK_FIELDS) do work[field] = 0 end
+    work.line_read_calls, work.lines_requested, work.structure_rows_processed = 1, line_count, line_count
     return {
         name = phase .. "-" .. attribution .. "-" .. line_count,
         phase = phase,
@@ -8,13 +11,7 @@ local function scenario(line_count, phase, attribution, median, p95)
         line_count = line_count,
         iteration_count = 3,
         elapsed_ms = { samples = { median, p95, median }, median = median, p95 = p95 },
-        work = {
-            line_read_calls = 1,
-            lines_requested = line_count,
-            full_buffer_reads = 0,
-            structure_rows_processed = line_count,
-            structure_entries_copied = 0,
-        },
+        work = work,
     }
 end
 
@@ -63,13 +60,13 @@ describe("performance harness", function()
         local keys = vim.tbl_keys(report)
         table.sort(keys)
         assert.same({ "environment", "generated_at", "scenarios", "schema_version", "timing_unit" }, keys)
-        assert.equals(1, report.schema_version)
+        assert.equals(4, report.schema_version)
         assert.equals("milliseconds", report.timing_unit)
         assert.equals("test", report.environment.machine)
         assert.is_string(report.generated_at)
         assert.same({}, report.scenarios)
         local decoded = vim.json.decode(harness.encode(report))
-        assert.equals(1, decoded.schema_version)
+        assert.equals(4, decoded.schema_version)
         assert.equals("milliseconds", decoded.timing_unit)
     end)
 

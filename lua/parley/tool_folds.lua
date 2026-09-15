@@ -1,58 +1,52 @@
--- Chat buffer folding for parley.
---
--- Uses a pure exchange-model projection to compute fold regions. Thinking,
--- summary, tool-use, and tool-result blocks fold; questions, ordinary answer
--- text, and agent headers do not.
---
--- foldmethod=manual — folds are created explicitly from model positions.
--- No foldexpr evaluation, no backward scanning.
-
-local M = {}
-local projection = require("parley.fold_projection")
-local exchange_anchors = require("parley.exchange_anchors")
-local initialized = {}
-
-local function valid_target(buf, win)
-    return vim.api.nvim_buf_is_valid(buf)
-        and vim.api.nvim_win_is_valid(win)
-        and vim.api.nvim_win_get_buf(win) == buf
+-- Native folds are a presentation of confirmed document sections. Neovim moves
+-- them on ordinary edits; only structural deltas schedule reconciliation.
+local M={}
+local line_reader=require('parley.line_reader')
+local Document=require('parley.document')
+local buffers={}
+local setting_foldenable=0
+local generation=0
+local function invalidate(s)
+    generation=generation+1;s.generation=generation
+    if vim.api.nvim_buf_is_valid(s.buf) then vim.b[s.buf].parley_fold_generation=generation end
+end
+local function valid_target(buf,win)
+    return vim.api.nvim_buf_is_valid(buf) and vim.api.nvim_win_is_valid(win)
+        and vim.api.nvim_win_get_buf(win)==buf
+end
+local function notify(event) if M._observer then M._observer(event) end end
+-- A slice owns temporary editor state even after it loses publication authority.
+-- Cleanup targets the captured window, never whichever window a callback selects.
+local function restore_window(buf,win,enabled,view,owner)
+    if not valid_target(buf,win) then return end
+    local ok,err=true,nil
+    -- Retirement may run inside an option callback. Once it restores the
+    -- operator preference, nested slices must not reinstate temporary suspension.
+    if not (owner and owner.released_preference) then
+        ok,err=pcall(vim.api.nvim_set_option_value,'foldenable',enabled,{win=win})
+    end
+    if valid_target(buf,win) then
+        local restored,failure=pcall(vim.api.nvim_win_call,win,function()vim.fn.winrestview(view)end)
+        if not restored and ok then ok,err=false,failure end
+    end
+    if not ok then error(err,0) end
 end
 
-local function notify(event)
-    if M._observer then M._observer(event) end
-end
-
---- Report a refused reconcile. The observer seam carries the detail for tests;
---- production gets one debug line, because an exchange that silently stops
---- folding is indistinguishable from one that has nothing to fold.
-local function report_drift(buf, win, exchange_index, failed_index, which, ranges, do_log)
-    notify({
-        phase = "drift", win = win, exchange_index = exchange_index, ranges = {},
-        failed_index = failed_index, which = which,
-        failed_range = failed_index and ranges and ranges[failed_index] or nil,
-    })
-    if not do_log then return end
-    local range = failed_index and ranges and ranges[failed_index]
-    require("parley.logger").debug(string.format(
-        "tool_folds: refused fold reconcile for buf %d exchange %d — %s drift%s",
-        buf, exchange_index, which or "model",
-        range and string.format(" at rows %d..%d (%s)", range.start_0, range.end_0, range.kind) or ""))
-end
-
---- Delete every fold overlapping rows [first_0, last_0].
----
---- Parley owns every fold within an exchange span (#200): the projection is a
---- desired state, and a fold the projection no longer wants must not survive.
---- Deleting only at projected start rows — the previous behavior — left a
---- drifted fold in place forever, since nothing else ever removes one.
---- Folds outside every exchange span are untouched.
-local function clear_folds_in_span(buf, win, first_0, last_0)
+local function clear_folds_in_span(buf, win, first_0, last_0, command_limit, remember, current, owner)
     -- Reset first: an early return must not leave a previous call's count
     -- readable as if it described this one.
     M._last_clear_iters = nil
     if not valid_target(buf, win) then return end
     if first_0 == nil or last_0 == nil or last_0 < first_0 then return end
+    local next_row,done
+    local tick=vim.api.nvim_buf_get_changedtick(buf)
+    local owner_generation=vim.b[buf].parley_fold_generation or 0
+    local function live()
+        return valid_target(buf,win) and vim.api.nvim_buf_get_changedtick(buf)==tick
+            and (vim.b[buf].parley_fold_generation or 0)==owner_generation and (not current or current())
+    end
     vim.api.nvim_win_call(win, function()
+        if not live() then return end
         local line_count = vim.api.nvim_buf_line_count(buf)
         local last_row = math.min(last_0 + 1, line_count)
         local first_row = math.max(first_0 + 1, 1)
@@ -80,374 +74,82 @@ local function clear_folds_in_span(buf, win, first_0, last_0)
         -- Reachable from a user's `set nofoldenable`, `zi`, or parley's own
         -- chat_toggle_tool_folds. Saved and restored so the operator's setting
         -- is not changed underneath them.
-        local ok, err = pcall(vim.api.nvim_exec2, string.format([[
+        local command = string.format([[
+            let s:owner_buf = %d
+            let s:owner_win = %d
+            let s:owner_tick = %d
+            let s:owner_generation = %d
             setlocal foldenable
+            if bufnr() == s:owner_buf && win_getid() == s:owner_win && b:changedtick == s:owner_tick && get(b:, 'parley_fold_generation', 0) == s:owner_generation
             execute %d
             let s:guard = 0
+            let s:states = []
+            let s:groups = 0
+            let s:ops = 0
             let s:limit = %d
-            while line('.') <= %d && s:guard < s:limit
+            while line('.') <= %d && s:guard < s:limit && s:ops + 2 < s:limit
+              if bufnr() != s:owner_buf || win_getid() != s:owner_win || b:changedtick != s:owner_tick || get(b:, 'parley_fold_generation', 0) != s:owner_generation | break | endif
               let s:guard += 1
-              if foldlevel(line('.')) > 0
+              let s:level = foldlevel(line('.'))
+              if bufnr() != s:owner_buf || win_getid() != s:owner_win || b:changedtick != s:owner_tick || get(b:, 'parley_fold_generation', 0) != s:owner_generation | break | endif
+              if s:level > 0
+                let s:groups += 1
+                let s:ops += 1
+                let s:was_open = foldclosed(line('.')) == -1
+                if bufnr() != s:owner_buf || win_getid() != s:owner_win || b:changedtick != s:owner_tick || get(b:, 'parley_fold_generation', 0) != s:owner_generation | break | endif
+                if s:was_open
+                  silent! normal! zc
+                  if bufnr() != s:owner_buf || win_getid() != s:owner_win || b:changedtick != s:owner_tick || get(b:, 'parley_fold_generation', 0) != s:owner_generation | break | endif
+                  let s:ops += 1
+                endif
+                call add(s:states, [foldclosed(line('.')) - 1, s:was_open])
+                if bufnr() != s:owner_buf || win_getid() != s:owner_win || b:changedtick != s:owner_tick || get(b:, 'parley_fold_generation', 0) != s:owner_generation | break | endif
                 silent! normal! zD
+                if bufnr() != s:owner_buf || win_getid() != s:owner_win || b:changedtick != s:owner_tick || get(b:, 'parley_fold_generation', 0) != s:owner_generation | break | endif
                 if foldlevel(line('.')) > 0
                   break
                 endif
               else
                 let s:before = line('.')
+                let s:ops += 1
                 silent! normal! zj
+                if bufnr() != s:owner_buf || win_getid() != s:owner_win || b:changedtick != s:owner_tick || get(b:, 'parley_fold_generation', 0) != s:owner_generation | break | endif
                 if line('.') == s:before
                   break
                 endif
               endif
             endwhile
+            let b:parley_fold_clear_states = s:states
             let b:parley_fold_clear_iters = s:guard
-        ]], first_row, (last_row - first_row + 2) * 2, last_row), {})
+            let b:parley_fold_clear_work = [s:groups, s:ops]
+            let b:parley_fold_clear_next = line('.')
+            let b:parley_fold_clear_done = (s:guard < s:limit && s:ops + 2 < s:limit) || line('.') > %d
+            endif
+        ]], buf, win, tick, owner_generation, first_row, command_limit or (last_row - first_row + 2) * 2, last_row, last_row)
+        local ok, err = pcall(vim.api.nvim_exec2, command, {})
         -- Restore both even if the walk fails; its temporary editor state must
         -- not become the reader's new position or folding preference.
-        vim.api.nvim_set_option_value("foldenable", foldenable, { win = win })
-        vim.fn.winrestview(view)
+        restore_window(buf,win,foldenable,view,owner)
         if not ok then error(err, 0) end
+        if not live() then return end
         -- Loop iterations, exposed so a test can assert this walks folds rather
         -- than rows without timing anything. A wall-clock assertion measures the
         -- machine as much as the algorithm.
         M._last_clear_iters = vim.b[buf].parley_fold_clear_iters
+        -- Count the existing native walk, including unsuccessful commands.
+        -- Nested folds deleted together by zD constitute one outer group.
+        local work = vim.b[buf].parley_fold_clear_work
+        line_reader.record_work(buf, { fold_groups_visited = work[1], native_fold_ops = work[2] })
+        if remember then
+            for _,entry in ipairs(vim.b[buf].parley_fold_clear_states or {}) do remember(entry[1],entry[2]==1) end
+        end
+        next_row=vim.b[buf].parley_fold_clear_next-1
+        done=vim.b[buf].parley_fold_clear_done==1
     end)
+    return next_row,done
 end
 
---- Read every buffer row the ranges cover, keyed by 0-based row. Rows past the
---- end of the buffer are simply absent; verify_anchors treats a missing row as
---- drift.
-local function covered_lines(buf, ranges)
-    local out = {}
-    local line_count = vim.api.nvim_buf_line_count(buf)
-    for _, range in ipairs(ranges) do
-        local last = math.min(range.end_0, line_count - 1)
-        if range.start_0 <= last then
-            local chunk = vim.api.nvim_buf_get_lines(buf, range.start_0, last + 1, false)
-            for offset, line in ipairs(chunk) do
-                out[range.start_0 + offset - 1] = line
-            end
-        end
-    end
-    return out
-end
 
---- True when the model still describes the buffer, for BOTH halves of the
---- reconcile: the ranges it will create and the span it will clear. Returns the
---- failing range index when range verification is what failed, so the caller
---- can say which block drifted rather than only that something did.
---- @return boolean ok, integer|nil failed_range_index, string|nil which
-local function model_fits(buf, ranges, patterns)
-    -- A missing row is drift, which verify_anchors already reports, so the
-    -- fits-in-buffer rule is not restated here. The span is NOT checked here:
-    -- it is established by identity in owned_span, not by inspecting rows.
-    local ok, failed = projection.verify_anchors(ranges, covered_lines(buf, ranges), patterns)
-    if not ok then return false, failed, "ranges" end
-    return true
-end
-
-local function default_model_provider(buf)
-    local chat_parser = require("parley.chat_parser")
-    local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-    local header_end = chat_parser.find_header_end(lines)
-    if not header_end then return nil end
-    local parsed = chat_parser.parse_chat(lines, header_end, require("parley.config"))
-    return require("parley.exchange_model").from_parsed_chat(parsed)
-end
-
--- The drift re-derive parses the WHOLE buffer, and reconcile runs once per
--- exchange (apply_folds/hydrate_window) and once per streamed chunk. Measured
--- 1356 ms per refused reconcile on a 4805-line chat, so re-parsing per call is
--- not affordable. Keyed on changedtick: identical buffer content yields an
--- identical parse, so reusing it within a tick is exact, not an approximation.
--- Unlike a fold-state memo this cannot go stale silently — any edit moves the
--- tick.
--- Keyed by buffer number. NOT weak: `__mode = "k"` collects only GC-able keys,
--- and an integer is never collected, so a weak table here would look like
--- cleanup while retaining a parsed model per buffer forever. Cleared explicitly
--- on the buffer lifecycle events below.
-local rederived = {}
-
--- Minimum gap between re-parses once one has failed to resolve the drift. The
--- changedtick key alone only collapses the same-tick fan-out (reconcile runs
--- per exchange); on the streaming path every chunk is a NEW tick, so persistent
--- drift would re-parse per chunk — 81.8 ms/call on a 4325-line chat. Drift is
--- exceptional and does not clear by itself, so retrying every chunk buys
--- nothing; retrying a few times a second recovers promptly once the buffer is
--- parseable again.
-local REDERIVE_RETRY_MS = 250
-
-local function rederive_model(buf)
-    local tick = vim.api.nvim_buf_get_var(buf, "changedtick")
-    local hit = rederived[buf]
-    if hit and hit.tick == tick then return hit.model, hit.logged end
-    -- Deliberately NOT conditioned on hit.model == nil: the common case is a
-    -- parse that SUCCEEDED but still did not verify, which is exactly what
-    -- mark_rederive_unhelpful stamps. Gating on a nil model excluded those and
-    -- left the streaming path re-parsing once per tick.
-    if hit and hit.failed_at
-        and (vim.loop.now() - hit.failed_at) < REDERIVE_RETRY_MS then
-        -- A recent re-parse of this buffer already failed to resolve the drift;
-        -- the content has changed, but not yet worth another full parse.
-        return nil, hit.logged
-    end
-    local ok, model = pcall(M._model_provider or default_model_provider, buf)
-    model = ok and model or nil
-    rederived[buf] = {
-        tick = tick,
-        model = model,
-        -- Deliberately not carried forward from `hit`: suppression is per
-        -- buffer STATE. Inheriting it silenced every later refusal in the
-        -- session after the first, and silent persistent non-folding is #200's
-        -- own pathology.
-        logged = false,
-        failed_at = model == nil and vim.loop.now() or nil,
-    }
-    return model, rederived[buf].logged
-end
-
---- The re-derived model did not resolve the drift, so start the retry clock
---- even though the parse itself succeeded.
-local function mark_rederive_unhelpful(buf)
-    local hit = rederived[buf]
-    if hit and not hit.failed_at then hit.failed_at = vim.loop.now() end
-end
-
-local function mark_drift_logged(buf)
-    if rederived[buf] then rederived[buf].logged = true end
-end
-
---- Install exchange identity from `model`, if its structure holds up.
----
---- Anchoring a structurally wrong model would make aliasing worse rather than
---- better, so the start rows are validated first: strictly ascending, inside
---- the buffer, and each on a question line (exchange 1 excepted — the parser
---- can legitimately start it off-question).
---- @return boolean installed
-local function anchor_from(buf, model, patterns)
-    local starts = {}
-    for k in ipairs(model.exchanges) do starts[k] = model:exchange_start(k) end
-    local lines = {}
-    local line_count = vim.api.nvim_buf_line_count(buf)
-    for _, row in ipairs(starts) do
-        if row >= 0 and row < line_count then
-            lines[row] = vim.api.nvim_buf_get_lines(buf, row, row + 1, false)[1]
-        end
-    end
-    if not projection.verify_starts(starts, lines, patterns) then return false end
-    exchange_anchors.set(buf, starts)
-    return true
-end
-
---- The rows exchange K owns, from extmark identity.
----
---- Identity may be absent or stale — most commonly because the chat gained an
---- exchange, which makes the anchor count disagree with the model and would
---- otherwise leave identity declined for every exchange from then on. So a
---- decline can reinstall identity, but ONLY from a model just parsed from this
---- buffer (`verified`).
----
---- The `verified` gate is not ceremony. `verify_starts` can only judge the rows
---- it is given: a *prefix-stale* model — the buffer grew a trailing exchange the
---- model never saw — passes it trivially, because its starts really are
---- ascending question lines. Installing from it lays down too FEW anchors, so
---- the last one owns to end-of-buffer and its clear swallows every exchange
---- after it. Prefix-staleness is the canonical drift, which makes the untrusted
---- model exactly the one that must not define identity.
----
---- There is deliberately no positional fallback. A row-span is not an identity:
---- "starts on a question, contains no other" is satisfied equally by another
---- exchange's rows, and with no foldable blocks the range check is vacuous, so
---- falling through would clear rows we cannot prove we own. Returning nil sends
---- the caller to the re-derive, which installs identity from a fresh parse.
-local function owned_span(buf, model, exchange_index, patterns, verified)
-    -- With a verified model in hand, reinstall FIRST: it was parsed from the
-    -- current buffer, so it is strictly better evidence than marks that may
-    -- predate the edit which sent us here.
-    if verified then
-        if not anchor_from(buf, model, patterns) then return nil end
-        return exchange_anchors.span(buf, exchange_index, #model.exchanges)
-    end
-    return exchange_anchors.span(buf, exchange_index, #model.exchanges)
-end
-
---- Reconcile exchange K's folds to the projection's desired state.
----
---- The projection is a desired state, not an append list: the exchange's span is
---- cleared before the desired folds are created, so a fold the projection no
---- longer wants cannot survive. Before anything is applied, every range is
---- checked against the buffer — it must fit, must anchor on its own marker, and
---- must not cover a question. A model that has drifted from the buffer (any
---- mutation not wrapped in with_exchange_update) would otherwise anchor a fold
---- on a 💬: line and leave it there for the rest of the session (#200). On drift
---- the model is re-derived from the buffer once; if that still does not verify,
---- no fold is created rather than a wrong one.
-function M.reconcile_exchange(buf, win, model, exchange_index)
-    if not valid_target(buf, win) or not model.exchanges[exchange_index] then return false end
-    local patterns = require("parley.highlight_structure").patterns(require("parley.config"))
-    local ranges = projection.desired_folds(model, exchange_index)
-    -- The caller's model is not trusted to define identity; only a parse of the
-    -- current buffer is (see owned_span).
-    local first_0, last_0 = owned_span(buf, model, exchange_index, patterns, false)
-
-    local fits, failed_index, which = model_fits(buf, ranges, patterns)
-    if fits and first_0 == nil then fits, which = false, "span" end
-    -- Creation and destruction are proved by different means and must be tied
-    -- together: model_fits shows a range matches the buffer's TEXT, identity
-    -- shows which rows this exchange owns, and neither shows they describe the
-    -- SAME exchange. Without this, a stale model's ranges can verify against a
-    -- LATER exchange's markers while the clear removes this one's folds.
-    -- A freshly installed identity always satisfies it — anchors sit at
-    -- model:exchange_start(k), and desired_folds already asserts every range
-    -- lies inside the exchange bounds — so it cannot cause a permanent refusal.
-    -- O(#ranges), so it stays off the per-chunk scaling path.
-    if fits then
-        local within, offender = projection.ranges_within(ranges, first_0, last_0)
-        if not within then fits, failed_index, which = false, offender, "containment" end
-    end
-    if not fits then
-        local fresh, already_logged = rederive_model(buf)
-        local fresh_ranges, fresh_first, fresh_last
-        if fresh and fresh.exchanges[exchange_index] then
-            fresh_ranges = projection.desired_folds(fresh, exchange_index)
-            fits = model_fits(buf, fresh_ranges, patterns)
-            if fits then
-                -- A parse that verifies is authoritative: install identity from
-                -- it, then read the span back through those marks.
-                fresh_first, fresh_last = owned_span(buf, fresh, exchange_index, patterns, true)
-                fits = fresh_first ~= nil
-            end
-        else
-            fits = false
-        end
-        if not fits then
-            -- Refuse rather than fold wrongly — but do not swallow the
-            -- diagnosis with it. A silently unfolded exchange is the same
-            -- shape of invisible failure that let #200 persist unnoticed.
-            -- Logged once per buffer state: reconcile runs per exchange and
-            -- per streamed chunk, so a persistent drift would otherwise flood.
-            report_drift(buf, win, exchange_index, failed_index, which, ranges,
-                not already_logged)
-            mark_drift_logged(buf)
-            mark_rederive_unhelpful(buf)
-            return false
-        end
-        ranges, first_0, last_0 = fresh_ranges, fresh_first, fresh_last
-    end
-
-    clear_folds_in_span(buf, win, first_0, last_0)
-    vim.api.nvim_win_call(win, function()
-        vim.api.nvim_set_option_value("foldminlines", 0, { win = win })
-        for _, range in ipairs(ranges) do
-            vim.cmd(string.format("%d,%dfold", range.start_0 + 1, range.end_0 + 1))
-        end
-    end)
-    -- The exchange folded, so any earlier refusal for this buffer is resolved:
-    -- drop the memo so a later, unrelated drift is reported rather than
-    -- swallowed by a stale suppression flag.
-    rederived[buf] = nil
-    notify({ phase = "reconcile", win = win, exchange_index = exchange_index, ranges = ranges })
-    return true
-end
-
-function M.prepare_exchange_update(buf, model, exchange_index)
-    if not vim.api.nvim_buf_is_valid(buf) or not model.exchanges[exchange_index] then return {} end
-    local first_0, last_0
-    local patterns = require("parley.highlight_structure").patterns(require("parley.config"))
-    -- Same destructive operation as reconcile, so the same rule: clear only
-    -- rows this exchange can be shown to own, and never let an untrusted model
-    -- define that. A stale span here would clear a neighbour's folds before the
-    -- mutation even runs, and finalize would not recreate them (#200 C1). When
-    -- identity declines there is nothing safe to clear — say so rather than
-    -- clearing silently.
-    first_0, last_0 = owned_span(buf, model, exchange_index, patterns, false)
-    -- Skipping the clear is safe: finalize's reconcile owns the span and will
-    -- clear it there. Surfaced on the existing prepare event rather than as a
-    -- drift event, because "identity not established yet" is the ordinary
-    -- first-call state, not a fault, and a fault-shaped signal for it would
-    -- drown the real ones.
-    local identified = first_0 ~= nil
-    local windows = vim.fn.win_findbuf(buf) or {}
-    for _, win in ipairs(windows) do
-        if valid_target(buf, win) then
-            clear_folds_in_span(buf, win, first_0, last_0)
-            -- desired_folds is deliberately NOT computed here: prepare only
-            -- clears, and this runs per streamed chunk, so it must not do work
-            -- solely to populate an observer payload.
-            notify({ phase = "prepare", win = win, exchange_index = exchange_index,
-                identified = identified })
-        end
-    end
-    return windows
-end
-
-function M.finalize_exchange_update(buf, windows, model, exchange_index)
-    for _, win in ipairs(windows or {}) do
-        M.reconcile_exchange(buf, win, model, exchange_index)
-    end
-end
-
-function M.with_exchange_update(buf, model, exchange_index, mutate)
-    local windows = M.prepare_exchange_update(buf, model, exchange_index)
-    local result
-    local ok, err = xpcall(function() result = mutate() end, debug.traceback)
-    local final_model = model
-    if not ok then
-        local recovered, parsed = pcall(M._model_provider or default_model_provider, buf)
-        final_model = recovered and parsed or nil
-    end
-    if ok then
-        M.finalize_exchange_update(buf, windows, final_model, exchange_index)
-    else
-        if final_model then
-            for _, win in ipairs(windows) do
-                pcall(M.reconcile_exchange, buf, win, final_model, exchange_index)
-            end
-        end
-        error(err, 0)
-    end
-    return result
-end
-
---- Compute and apply folds from the exchange model.
---- @param buf integer
-function M.apply_folds(buf, win, model_provider)
-    if not vim.api.nvim_buf_is_valid(buf) then return false end
-    local model = (model_provider or M._model_provider or default_model_provider)(buf)
-    if not model then return false end
-    local windows = win and { win } or vim.fn.win_findbuf(buf)
-    for k in ipairs(model.exchanges) do
-        for _, target_win in ipairs(windows) do
-            M.reconcile_exchange(buf, target_win, model, k)
-        end
-    end
-    return true
-end
-
-function M.hydrate_window(buf, win, model_provider)
-    if not valid_target(buf, win) then return false end
-    initialized[buf] = initialized[buf] or {}
-    if initialized[buf][win] then return false end
-    vim.api.nvim_set_option_value("foldmethod", "manual", { win = win })
-    vim.api.nvim_set_option_value("foldtext", "v:lua.require('parley.tool_folds').foldtext()", { win = win })
-    vim.api.nvim_set_option_value("foldcolumn", "1", { win = win })
-    vim.api.nvim_set_option_value("foldminlines", 0, { win = win })
-    local provider = model_provider or M._model_provider or default_model_provider
-    local model = provider(buf)
-    if not model then return false end
-    -- Freshly parsed from this buffer, so it may define identity.
-    anchor_from(buf, model, require("parley.highlight_structure").patterns(require("parley.config")))
-    vim.api.nvim_win_call(win, function()
-        vim.cmd("normal! zE")
-    end)
-    for exchange_index in ipairs(model.exchanges) do
-        M.reconcile_exchange(buf, win, model, exchange_index)
-    end
-    initialized[buf][win] = true
-    return true
-end
-
---- Custom fold text.
 function M.foldtext()
     local start_line = vim.fn.getline(vim.v.foldstart)
     local line_count = vim.v.foldend - vim.v.foldstart + 1
@@ -482,36 +184,412 @@ function M.foldtext()
     return "⚠ unexpected fold: " .. preview .. " (" .. line_count .. " lines) "
 end
 
---- Set up folding on a chat buffer.
-function M.setup(buf)
-    local group = vim.api.nvim_create_augroup("ParleyToolFolds" .. buf, { clear = true })
-    vim.api.nvim_create_autocmd({ "BufWinEnter", "WinEnter" }, {
-        group = group,
-        callback = function(args)
-            if args.buf ~= buf then return end
-            local target = vim.api.nvim_get_current_win()
-            vim.schedule(function() M.hydrate_window(buf, target) end)
-        end,
-    })
-    vim.api.nvim_create_autocmd("WinClosed", {
-        group = group,
-        callback = function(args)
-            local closed = tonumber(args.match)
-            if initialized[buf] then initialized[buf][closed] = nil end
-        end,
-    })
-    vim.api.nvim_create_autocmd({ "BufUnload", "BufDelete" }, {
-        group = group, buffer = buf,
-        callback = function()
-            initialized[buf] = nil
-            rederived[buf] = nil
-            exchange_anchors.clear(buf)
-        end,
-    })
-    local win = vim.api.nvim_get_current_win()
-    vim.schedule(function()
-        M.hydrate_window(buf, win)
-    end)
+local function configure(win,current)
+    for _,option in ipairs({{'foldmethod','manual'},
+        {'foldtext',"v:lua.require('parley.tool_folds').foldtext()"},{'foldcolumn','1'},{'foldminlines',0}}) do
+        if current and not current() then return false end
+        vim.api.nvim_set_option_value(option[1],option[2],{win=win})
+    end
+    return not current or current()
 end
-
+local BATCH_GROUPS=64
+local INTERACTIVE_ROWS=50000
+local function release_window(buf,window)
+    local suspended=window.suspended;window.suspended=false
+    if suspended then window.released_preference=true end
+    if suspended and valid_target(buf,window.win) then
+        if vim.api.nvim_get_option_value('foldenable',{win=window.win})~=window.enabled then
+            setting_foldenable=setting_foldenable+1
+            local ok,err=pcall(vim.api.nvim_set_option_value,'foldenable',window.enabled,{win=window.win})
+            setting_foldenable=setting_foldenable-1
+            if not ok then error(err,0) end
+        end
+    end
+    window.suspended=false
+end
+local function release_windows(buf,windows)
+    local failure
+    for _,window in ipairs(windows or {}) do
+        local ok,err=pcall(release_window,buf,window)
+        if not ok and not failure then failure=err end
+    end
+    if failure then error(failure,0) end
+end
+local function configure_target(buf,s,win)
+    return configure(win,function()return buffers[buf]==s and valid_target(buf,win)end)
+end
+-- Open hints belong to live fold markers. Retire deleted/non-fold identities
+-- in scheduled slices, including when repeated edits abort reconstruction.
+local function prune_hints(s)
+    local scan=s.hint_scan
+    if not scan then return false end
+    if not scan.windows then
+        scan.windows={};scan.index=0
+        for _,map in pairs(s.opened) do scan.windows[#scan.windows+1]=map end
+    end
+    local visited=0
+    while visited<BATCH_GROUPS do
+        if not scan.map then
+            scan.index=scan.index+1
+            local map=scan.windows[scan.index]
+            if not map then s.hint_scan=nil;return false end
+            scan.map,scan.key=map,next(map)
+        end
+        local key=scan.key
+        if not key then scan.map=nil else
+            scan.key=next(scan.map,key)
+            local row=Document.lookup(s.doc,key)
+            if not row or row.metadata and row.metadata.confirmed
+                and not require('parley.document.projection').summary(row.metadata).fold_start then
+                scan.map[key]=nil
+            end
+            visited=visited+1
+        end
+    end
+    return true
+end
+local function discard_uncertainty(s,expected)
+    local job=s.uncertainty
+    if expected and job~=expected then return end
+    s.uncertainty=nil
+    release_windows(s.buf,job and job.windows)
+end
+local function clear_uncertainty(s)
+    local scope=Document.uncertain_range(s.doc)
+    if not scope then discard_uncertainty(s);return false end
+    if s.uncertainty_cleared then return false end
+    local job=s.uncertainty
+    if not job then
+        job={first=math.max(scope.first,s.owned_first or scope.first),last=scope.last,windows={},index=1}
+        for _,win in ipairs(vim.fn.win_findbuf(s.buf)) do
+            job.windows[#job.windows+1]={win=win,row=job.first,
+                enabled=vim.api.nvim_get_option_value('foldenable',{win=win}),
+                suspended=job.last-job.first>INTERACTIVE_ROWS}
+        end
+        s.uncertainty=job
+        -- Recreation must include every removed suffix fold once context returns.
+        s.first=math.min(s.first or job.first,job.first)
+        s.last=math.max(s.last or job.last,job.last)
+    end
+    local tick=vim.api.nvim_buf_get_changedtick(s.buf)
+    local owner_generation=s.generation
+    local function current()
+        return buffers[s.buf]==s and s.generation==owner_generation and s.uncertainty==job and vim.api.nvim_buf_is_valid(s.buf)
+            and vim.api.nvim_buf_get_changedtick(s.buf)==tick
+    end
+    local window=job.windows[job.index]
+    if not window then
+        s.uncertainty_cleared=true;discard_uncertainty(s,job);return true
+    end
+    if valid_target(s.buf,window.win) then
+        s.opened[window.win]=s.opened[window.win] or {}
+        setting_foldenable=setting_foldenable+1
+        local ok,next_row,done=pcall(clear_folds_in_span,s.buf,window.win,window.row,job.last-1,
+            BATCH_GROUPS*2,function(row,opened)
+                if not current() then return end
+                local found=Document.query(s.doc,row,row+1)[1]
+                if found then s.opened[window.win][found.handle]=opened end
+            end,current,window)
+        setting_foldenable=setting_foldenable-1
+        if not ok then discard_uncertainty(s,job);error(next_row,0) end
+        if not current() then return true end
+        window.row=next_row
+        if window.suspended and not done then
+            setting_foldenable=setting_foldenable+1
+            local disabled,err=pcall(vim.api.nvim_set_option_value,'foldenable',false,{win=window.win})
+            setting_foldenable=setting_foldenable-1
+            if not disabled then discard_uncertainty(s,job);error(err,0) end
+            if not current() then return true end
+        end
+        if not done then return true end
+    end
+    release_window(s.buf,window)
+    if not current() then return true end
+    job.index=job.index+1
+    return true
+end
+local function discard_plan(s,expected)
+    local plan=s.plan
+    if expected and plan~=expected then return end
+    s.plan=nil
+    release_windows(s.buf,plan and plan.windows)
+end
+local function mark(s,first,last)
+    invalidate(s)
+    s.first=math.min(s.first or first,first)
+    s.last=math.max(s.last or last,last)
+    discard_plan(s)
+end
+local function apply(buf,s,plan)
+    local tick=vim.api.nvim_buf_get_changedtick(buf)
+    local function current()
+        return buffers[buf]==s and s.plan==plan and vim.api.nvim_buf_is_valid(buf)
+            and vim.api.nvim_buf_get_changedtick(buf)==tick
+    end
+    if not Document.validate_projection(s.doc,plan.certificate) then discard_plan(s,plan);return 'more' end
+    if not plan.windows then
+        local windows={}
+        for _,win in ipairs(vim.fn.win_findbuf(buf)) do
+            if valid_target(buf,win) then
+                if not configure(win,current) then discard_plan(s,plan);return 'more' end
+                s.opened[win]=s.opened[win] or {}
+                windows[#windows+1]={win=win,phase='capture',index=1,opened=s.opened[win],
+                    enabled=vim.api.nvim_get_option_value('foldenable',{win=win})}
+            end
+        end
+        plan.windows=windows;plan.window=1
+    end
+    local window=plan.windows[plan.window]
+    if not window then return 'idle' end
+    local win=window.win
+    if not valid_target(buf,win) then
+        release_window(buf,window);plan.window=plan.window+1;return 'more'
+    end
+    -- Each slice restores its entry view, preserving scrolling between slices.
+    setting_foldenable=setting_foldenable+1
+    local ok,err=pcall(vim.api.nvim_win_call,win,function()
+        if not current() or not valid_target(buf,win) then return end
+        local view=vim.fn.winsaveview()
+        local enabled=vim.wo.foldenable
+        local success,failure=pcall(function()
+            vim.wo.foldenable=true
+            if not current() or not valid_target(buf,win) then return end
+            if window.phase=='capture' then
+                local last=math.min(#plan.ranges,window.index+BATCH_GROUPS-1)
+                for index=window.index,last do
+                    local range=plan.ranges[index]
+                    line_reader.record_work(buf,{fold_groups_visited=1})
+                    local level=vim.fn.foldlevel(range.start_0+1)
+                    if not current() or not valid_target(buf,win) then return end
+                    if level>0 then
+                        local opened=vim.fn.foldclosed(range.start_0+1)==-1
+                        if not current() or not valid_target(buf,win) then return end
+                        window.opened[range.identity]=opened
+                    end
+                end
+                window.index=last+1
+                if window.index>#plan.ranges then
+                    window.phase='clear';window.clear_row=plan.first
+                    if plan.last-plan.first>INTERACTIVE_ROWS then window.suspended=true end
+                end
+            elseif window.phase=='clear' then
+                -- At most 50k affected rows retain the measured native-clear
+                -- exception. Larger scopes visit bounded fold groups per slice.
+                local next_row,done=clear_folds_in_span(buf,win,window.clear_row,plan.last-1,
+                    window.suspended and BATCH_GROUPS*2 or nil,nil,current,window)
+                if not current() then return end
+                window.clear_row=next_row
+                if done then window.phase='create';window.index=1 end
+            elseif window.phase=='create' then
+                local last=math.min(#plan.ranges,window.index+BATCH_GROUPS-1)
+                for index=window.index,last do
+                    local range=plan.ranges[index]
+                    line_reader.record_work(buf,{native_fold_ops=1,fold_groups_visited=1})
+                    vim.cmd(string.format('%d,%dfold',range.start_0+1,range.end_0+1))
+                    if not current() or not valid_target(buf,win) then return end
+                    if window.opened[range.identity] then
+                        line_reader.record_work(buf,{native_fold_ops=1})
+                        vim.cmd(string.format('%dfoldopen',range.start_0+1))
+                        if not current() or not valid_target(buf,win) then return end
+                    end
+                end
+                window.index=last+1
+                if window.index>#plan.ranges then
+                    window.phase='done';s.windows[win]=true
+                    notify({phase='reconcile',win=win,ranges=plan.ranges})
+                end
+            end
+        end)
+        -- Superseded work restores its entry preference; only a live job may
+        -- leave folds suspended between slices of a large reconciliation.
+        local restore_enabled=enabled
+        if current() and window.suspended then restore_enabled=false end
+        restore_window(buf,win,restore_enabled,view,window)
+        if not success then error(failure,0) end
+    end)
+    setting_foldenable=setting_foldenable-1
+    if not ok then discard_plan(s,plan);error(err,0) end
+    if not current() then discard_plan(s,plan);return 'more' end
+    if window.phase=='done' then
+        release_window(buf,window)
+        if not current() then discard_plan(s,plan);return 'more' end
+        s.opened[win]=nil;plan.window=plan.window+1
+    end
+    return plan.window>#plan.windows and 'idle' or 'more'
+end
+-- One bounded query page per step. Destructive native work begins only after
+-- every desired range is confirmed and its local projection proof still holds.
+function M.step(buf)
+    local s=buffers[buf]
+    if not s then return 'idle' end
+    if prune_hints(s) then return 'more' end
+    if clear_uncertainty(s) then return 'more' end
+    if buffers[buf]~=s then return 'idle' end
+    if s.first==nil then return 'idle' end
+    local size=Document.size(s.doc).rows
+    local plan=s.plan
+    if plan and plan.certificate then
+        local status=apply(buf,s,plan)
+        if status=='idle' and s.plan==plan and buffers[buf]==s then s.first,s.last,s.plan=nil,nil,nil end
+        return status
+    end
+    if not plan then
+        local first=math.min(s.first,math.max(0,size-1))
+        local last=math.min(math.max(first,s.last-1),math.max(0,size-1))
+        local earliest=Document.next_exchange(s.doc,0,size)
+        if earliest.status=='opaque' or earliest.status=='budget' then return 'pending' end
+        local owned=earliest.span and earliest.span.start_row or s.owned_first
+        if owned==nil then s.first,s.last=nil,nil;return 'idle' end
+        s.owned_first=math.min(s.owned_first or owned,owned)
+        first=math.max(first,s.owned_first)
+        if last<first then s.first,s.last=nil,nil;return 'idle' end
+        local a=Document.exchange(s.doc,first)
+        local z=Document.exchange(s.doc,last)
+        if a.status=='opaque' or z.status=='opaque' then return 'pending' end
+        if a.status=='budget' or z.status=='budget' then return 'pending' end
+        -- Prefix/header edits can precede the first exchange. Clearing this
+        -- confirmed prefix is safe only after the full requested scope settles.
+        plan={first=a.status=='ready' and a.first or first,
+            last=z.status=='ready' and z.last or math.min(size,last+1),ranges={}}
+        s.plan=plan
+    end
+    local result=Document.folds(s.doc,plan.first,plan.last,{cursor=plan.cursor})
+    if result.status=='opaque' then discard_plan(s);return 'pending' end
+    if result.status=='stale' then discard_plan(s);return 'more' end
+    for _,range in ipairs(result.ranges or {}) do plan.ranges[#plan.ranges+1]=range end
+    plan.cursor=result.cursor
+    if result.status=='budget' then return 'more' end
+    if result.status~='ready' then discard_plan(s);return 'pending' end
+    plan.certificate=result.certificate
+    return 'more'
+end
+local function schedule(buf,s)
+    if not s.work then
+        s.work=require('parley.deferred_work').new(function()
+            return buffers[buf]==s and M.step(buf)=='more'
+        end)
+    end
+    s.work:request()
+end
+local function ensure(buf)
+    local hit=buffers[buf];if hit then return hit end
+    local doc=Document.get(buf) or Document.attach(buf,{
+        patterns=require('parley.highlight_structure').patterns(require('parley.config'))})
+    if not doc then return nil end
+    local s={buf=buf,doc=doc,windows={},opened={}};buffers[buf]=s
+    s.unsubscribe=Document.subscribe(doc,function(event)
+        if event.kind=='detach' then
+            invalidate(s)
+            discard_uncertainty(s)
+            discard_plan(s)
+            if s.work then s.work:close() end
+            if s.group then vim.api.nvim_del_augroup_by_id(s.group);s.group=nil end
+            if s.unsubscribe then s.unsubscribe();s.unsubscribe=nil end
+            s.doc=nil;s.work=nil
+            buffers[buf]=nil
+            if vim.api.nvim_buf_is_valid(buf) then vim.b[buf].parley_fold_generation=nil end
+            return
+        end
+        if event.kind=='reload' then
+            discard_uncertainty(s);s.uncertainty_cleared=nil;s.hint_scan=nil;s.opened={}
+            if s.work then s.work:cancel() end
+            s.owned_first=nil;mark(s,0,Document.size(doc).rows)
+        elseif event.kind=='edit' then
+            s.hint_scan=s.hint_scan or {}
+            discard_uncertainty(s);s.uncertainty_cleared=nil
+            if s.owned_first then
+                if event.old_last_row<=s.owned_first then
+                    s.owned_first=s.owned_first+event.last_row-event.old_last_row
+                elseif event.first_row<=s.owned_first then s.owned_first=event.first_row end
+            end
+            -- Native coordinates of queued work move with every edit, even
+            -- one that needs no structural repair of its own.
+            if s.first then
+                local delta=event.last_row-event.old_last_row
+                if event.old_last_row<=s.first then s.first=s.first+delta;s.last=s.last+delta
+                elseif event.first_row<s.last then s.last=math.max(event.last_row,s.last+delta) end
+                if delta~=0 then discard_plan(s) end
+            end
+            if event.semantic_changed and not event.deferred_fragment then mark(s,event.first_row,event.last_row) end
+        elseif event.kind=='repair' then
+            for _,delta in ipairs(not event.result.reused_suffix and event.result.deltas or {}) do
+                local row=Document.lookup(doc,delta.handle)
+                if row then mark(s,row.start_row,row.end_row) end
+            end
+        end
+        if s.first~=nil or event.kind=='edit' and event.semantic_changed then schedule(buf,s) end
+    end)
+    mark(s,0,Document.size(doc).rows)
+    return s
+end
+-- Deterministic test/explicit maintenance seam; ordinary callbacks use step.
+function M.flush(buf,limit)
+    for _=1,limit or 10000 do
+        local status=M.step(buf)
+        if status~='more' then return status end
+    end
+    return 'more'
+end
+function M.hydrate_window(buf,win)
+    if not valid_target(buf,win) then return false end
+    local s=ensure(buf);if not s then return false end
+    if s.windows[win] then return false end
+    if not configure_target(buf,s,win) then
+        if buffers[buf]==s then schedule(buf,s) end
+        return false
+    end
+    mark(s,0,Document.size(s.doc).rows);schedule(buf,s);return true
+end
+function M.apply_folds(buf,win)
+    if not vim.api.nvim_buf_is_valid(buf) then return false end
+    local s=ensure(buf);if not s then return false end
+    local configured=not win or not valid_target(buf,win) or configure_target(buf,s,win)
+    if buffers[buf]~=s then return false end
+    mark(s,0,Document.size(s.doc).rows);schedule(buf,s);return configured
+end
+-- Legacy streaming brackets no longer clear/reparse a mutable layout model.
+-- The document observer handles both successful and partially failing edits.
+function M.prepare_exchange_update(buf)
+    ensure(buf)
+    return vim.fn.win_findbuf(buf)
+end
+function M.finalize_exchange_update(buf)
+    local s=buffers[buf];if s and s.first~=nil then schedule(buf,s) end
+end
+function M.with_exchange_update(buf,_,_exchange,mutate)
+    ensure(buf)
+    return mutate()
+end
+function M.setup(buf)
+    if not vim.api.nvim_buf_is_valid(buf) then return end
+    local s=ensure(buf);if not s then return end
+    if s.setup then return end
+    s.setup=true
+    local group=vim.api.nvim_create_augroup('ParleyToolFolds'..buf,{clear=true})
+    s.group=group
+    vim.api.nvim_create_autocmd({'BufWinEnter','WinEnter'},{group=group,callback=function(args)
+        if args.buf==buf then M.hydrate_window(buf,vim.api.nvim_get_current_win()) end
+    end})
+    vim.api.nvim_create_autocmd('OptionSet',{group=group,pattern='foldenable',callback=function()
+        if setting_foldenable>0 then return end
+        local win=vim.api.nvim_get_current_win()
+        for _,job in ipairs({s.plan or {},s.uncertainty or {}}) do
+            for _,window in ipairs(job.windows or {}) do
+                if window.win==win and window.suspended then
+                    window.enabled=vim.api.nvim_get_option_value('foldenable',{win=win})
+                end
+            end
+        end
+    end})
+    vim.api.nvim_create_autocmd('WinClosed',{group=group,callback=function(args)
+        s.windows[tonumber(args.match)]=nil;s.opened[tonumber(args.match)]=nil
+    end})
+    for _,win in ipairs(vim.fn.win_findbuf(buf)) do
+        if buffers[buf]~=s then return end
+        if valid_target(buf,win) then
+            configure_target(buf,s,win)
+        end
+    end
+    if buffers[buf]==s then schedule(buf,s) end
+end
 return M

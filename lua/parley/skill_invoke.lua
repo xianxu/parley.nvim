@@ -26,7 +26,10 @@ local _in_flight = {}
 -- (killed) query's late callback can't clobber the new one's state. (#133)
 local _gen = {}
 -- The exact-once terminal owned by the active generation for each buffer.
+-- Cancelled final reads keep this physical owner until positive cleanup.
 local _terminals = {}
+local SourceRead=require('parley.skill_source_read')
+local source_pool=SourceRead.pool(16) -- at most 16MiB across all buffers
 
 --- Is a skill exchange in flight for `buf`? Cleared on on_exit/on_abort, so an
 --- abort that can't start the query doesn't block the buffer forever (#131).
@@ -36,19 +39,14 @@ function M.is_in_flight(buf)
     return _in_flight[buf] == true
 end
 
---- Cancel an in-flight exchange for `buf`: invalidate it (bump the generation so
---- its callback no-ops), clear the in-flight flag, and stop the running query.
---- `tasker.stop` halts in-flight queries (review is headless, so this is the
---- review job). Lets a new round supersede a stuck/slow one (#133).
+--- Cancel this buffer's provider/tool owners and revoke source-edit permission.
+--- An unresolved final read keeps its admission slot until positive cleanup.
 --- @param buf number
 function M.cancel(buf)
     local finish = _terminals[buf]
-    if finish then
-        finish({ ok = false, msg = "cancelled" }, false)
-    end
+    if finish and not finish({ ok = false, msg = "cancelled" }, false) then return false end
     _gen[buf] = (_gen[buf] or 0) + 1
-    _in_flight[buf] = nil
-    pcall(function() require("parley.tasker").stop() end)
+    if not _terminals[buf] then _in_flight[buf] = nil end
 end
 
 local function parley()
@@ -86,16 +84,6 @@ local function render_propose_edits(buf, call, original, new_content)
     return edits
 end
 
--- Reload the artifact buffer from its (now-edited) file. Uses `:edit!` (a
--- command, run with the buffer current) rather than nvim_buf_set_lines so buffer
--- mutation stays out of this module — the #90 arch boundary keeps direct
--- line-setting in buffer_edit.lua. Deterministic (synchronous force-reload).
-local function reload_buffer(buf)
-    vim.api.nvim_buf_call(buf, function()
-        pcall(vim.cmd, "silent edit!")
-    end)
-end
-
 --- Invoke a skill on an artifact buffer (one exchange).
 --- @param buf number the artifact buffer
 --- @param manifest table SkillManifest
@@ -111,20 +99,22 @@ function M.invoke(buf, manifest, args, opts)
 
     local p = parley()
     local llm = require("parley.dispatcher") -- LLM dispatcher: prepare_payload / query
-    local tools_dispatcher = require("parley.tools.dispatcher") -- tool dispatcher: execute_call
     local wire = require("parley.tools.wire") -- per-provider tool protocol (#198)
     local tasker = require("parley.tasker")
     local tools_registry = require("parley.tools")
     local assembly = require("parley.skill_assembly")
     local skill_render = require("parley.skill_render")
 
+    local terminal_callback,done_callback=opts.on_terminal,opts.on_done
     local function deliver_attempt(result, deliver_done)
-        if opts.on_terminal then
-            local ok = pcall(opts.on_terminal, result)
+        local terminal,done=terminal_callback,done_callback
+        terminal_callback,done_callback=nil,nil
+        if terminal then
+            local ok = pcall(terminal, result)
             if not ok then p.logger.error("skill terminal callback failed") end
         end
-        if deliver_done and opts.on_done then
-            local ok = pcall(opts.on_done, result)
+        if deliver_done and done then
+            local ok = pcall(done, result)
             if not ok then p.logger.error("skill completion callback failed") end
         end
     end
@@ -141,27 +131,94 @@ function M.invoke(buf, manifest, args, opts)
         return
     end
 
+    -- Continuations retain options, but must not retain UI callbacks after terminal.
+    local invocation_options={}
+    for key,value in pairs(opts)do
+        if key~='on_done' and key~='on_terminal' then invocation_options[key]=value end
+    end
+    opts=invocation_options
+
     -- This exchange's generation; on_exit/on_abort no-op if superseded (#133).
     local gen = (_gen[buf] or 0) + 1
     _gen[buf] = gen
-    local finished = false
+    local source_capture,tool_producer,source_read,source_filesystem,source_completion
+    local read_state=SourceRead.new()
+    local read_timer,on_source_read
+    local function transition(event)
+        local permissions
+        source_pool,read_state,permissions=SourceRead.transition(source_pool,read_state,event)
+        return permissions
+    end
+    local process_owner="skill:"..tostring(buf)..":"..tostring(gen)
     local detached_progress = opts.detached_progress ~= false
     local progress_started = false
-    local function finish(result, deliver_done)
-        if finished then return false end
-        finished = true
+    local finish
+    local function complete_logical(result,deliver_done,permissions)
+        if not permissions.deliver then return false end
+        source_completion=nil
+        if permissions.cancel and source_read then source_read:cancel() end
+        if tool_producer then tool_producer.close();tool_producer=nil end
+        tasker.stop_owner(process_owner)
+        require("parley.buffer_edit").cancel_user(source_capture)
+        source_capture=nil
         if progress_started then
             pcall(function() require("parley.progress").stop() end)
-            progress_started = false
+            progress_started=false
         end
-        if _terminals[buf] == finish then
-            _terminals[buf] = nil
-            _in_flight[buf] = nil
+        if permissions.release_owner and _terminals[buf]==finish then
+            _terminals[buf]=nil;_in_flight[buf]=nil
         end
-        deliver_attempt(result, deliver_done)
+        deliver_attempt(result,deliver_done)
         return true
     end
-    _terminals[buf] = finish
+    finish=function(result,deliver_done)
+        return complete_logical(result,deliver_done,transition({type='finish'}))
+    end
+    _terminals[buf]=finish
+    local function stop_read_timer()
+        if read_timer then
+            local timer=read_timer;read_timer=nil
+            if not timer:is_closing()then timer:stop();timer:close()end
+        end
+    end
+    local function reconcile_read()
+        if read_timer then return end
+        local permission=transition({type='schedule',now=vim.uv.hrtime()/1000000})
+        if not permission.delay then return end
+        read_timer=vim.defer_fn(function()
+            read_timer=nil
+            local effects=transition({type='tick',now=vim.uv.hrtime()/1000000})
+            if effects.deadline then
+                p.logger.warning('Skill source read cleanup unresolved; buffer remains busy for reconciliation')
+                complete_logical({ok=false,certainty='unknown',reconciliation_required=true,
+                    msg='Source read unresolved; skill result requires reconciliation'},true,effects)
+            end
+            if effects.probe and source_read then
+                local handle=source_read
+                handle:reconcile()
+                on_source_read(handle:snapshot())
+            end
+            if effects.delay then reconcile_read()end
+        end,permission.delay)
+    end
+
+    -- Only model permission can retire the physical owner or invoke completion.
+    -- Logical termination clears the payload/UI continuation independently.
+    on_source_read=function(read)
+        local effects=transition({type='observation',physical_resolved=read.physical_resolved})
+        local continuation=effects.complete and source_completion
+        if effects.retire then
+            source_completion=nil;source_read=nil;source_filesystem=nil
+            stop_read_timer()
+        end
+        if effects.release_owner and _terminals[buf]==finish then
+            _terminals[buf]=nil;_in_flight[buf]=nil
+        end
+        if continuation then
+            local ok=pcall(continuation,read)
+            if not ok then finish({ok=false,msg='source completion failed',reconciliation_required=true},true)end
+        end
+    end
 
     local function start_invocation()
     if not vim.api.nvim_buf_is_valid(buf) then
@@ -185,6 +242,27 @@ function M.invoke(buf, manifest, args, opts)
     end
 
     local original = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
+    if not opts.no_reload then
+        local last_row = vim.api.nvim_buf_line_count(buf) - 1
+        local last_line = vim.api.nvim_buf_get_lines(buf, last_row, last_row + 1, false)[1] or ""
+        local reason
+        source_capture, reason = require("parley.buffer_edit").capture_user(buf,
+            "skill:" .. tostring(manifest.name), {
+                { first = { row = 0, col = 0 }, last = { row = last_row, col = #last_line } },
+            })
+        if not source_capture then
+            finish({ ok = false, msg = "source capture unavailable: " .. tostring(reason) }, true)
+            return
+        end
+    end
+    if not opts.no_reload then
+        local authority,reason=require('parley.tools.path_authority').capture({vim.fn.resolve(artifact_path)})
+        if not authority then
+            finish({ok=false,msg='source authority unavailable',reason=reason},true);return
+        end
+        source_filesystem=require('parley.tools.filesystem').new({max_bytes=1048576}):authorized(authority)
+        artifact_path=vim.fn.resolve(artifact_path)
+    end
     -- source(ctx) does IO (reads SKILL.md / style guides) and can fail — e.g.
     -- voice_apply with a missing style file. Route the failure through the SAME
     -- on_done({ok=false}) channel as the other early-outs (no file / no agent)
@@ -314,7 +392,12 @@ function M.invoke(buf, manifest, args, opts)
     local neighborhood = require("parley.neighborhood")
     local root_policy = neighborhood.policy_for_buf(buf)
         or neighborhood.policy_from_roots(vim.fn.fnamemodify(artifact_path, ":h"), nil, {})
-    local cwd = root_policy.write_root
+    local tool_error
+    tool_producer,tool_error=require('parley.tools.producer').new({buf=buf,deferred_refresh_buf=buf,registry=tools_registry,
+        allowed_tools=inv.tools,root_policy=root_policy,state_dir=p.config.state_dir,
+        page_limit=p.config.tool_result_page_lines,
+        help_root=vim.fn.fnamemodify(debug.getinfo(1,'S').source:sub(2):match('^(.*)/lua/parley/skill_invoke%.lua$'),':p')})
+    if not tool_producer then finish({ok=false,msg=tool_error},true);return end
 
     _in_flight[buf] = true
     -- Detached progress bar: this is a ~30s headless op, so show a running cue
@@ -335,7 +418,7 @@ function M.invoke(buf, manifest, args, opts)
             vim.schedule(function()
                 -- Superseded by a newer exchange (the old one was cancelled) →
                 -- no-op so we don't reload/re-render or clobber the new state.
-                if finished or _gen[buf] ~= gen then
+                if read_state.logical or _gen[buf] ~= gen then
                     return
                 end
                 if not vim.api.nvim_buf_is_valid(buf) then
@@ -354,38 +437,25 @@ function M.invoke(buf, manifest, args, opts)
                     local results = {}
                     local applied = 0
                     local errors = {}
-                    for i, call in ipairs(calls) do
-                        if call.name == "propose_edits" then
-                            call.input = call.input or {}
-                            call.input.file_path = artifact_path -- artifact-bound
-                            -- Some models emit `edits` as a JSON STRING rather than an
-                            -- array; coerce it once here so the batch actually applies
-                            -- (and render_propose_edits below gets a table). #133
-                            if type(call.input.edits) == "string" then
-                                local ok, decoded = pcall(vim.json.decode, call.input.edits)
-                                if ok and type(decoded) == "table" then
-                                    call.input.edits = decoded
-                                end
-                            end
-                        end
-                        results[i] = tools_dispatcher.execute_call(call, tools_registry,
-                            { cwd = cwd, root_policy = root_policy,
-                              page_limit = require("parley.config").tool_result_page_lines }) -- #140 #139
-                        if call.name == "propose_edits" then
-                            if results[i].is_error then
-                                table.insert(errors, results[i].content)
-                            else
-                                applied = applied + 1
-                            end
-                        end
+                    assert(#calls<=32,'skill tool call capacity')
+                    local seen={}
+                    for _,call in ipairs(calls)do
+                        assert(require('parley.tools.types').validate_call(call),'invalid skill tool call')
+                        assert(not seen[call.id],'duplicate skill tool call');seen[call.id]=true
                     end
+                    local function finish_tools()
+                        if read_state.logical or _gen[buf]~=gen then return end
+                        for i,call in ipairs(calls)do
+                            if call.name=='propose_edits' then
+                                if results[i].is_error then errors[#errors+1]=results[i].content
+                                else applied=applied+1 end
+                            elseif results[i].is_error then errors[#errors+1]=results[i].content end
+                        end
                     if not vim.api.nvim_buf_is_valid(buf) then
                         finish({ ok = false, msg = "buffer invalid" }, false)
                         return
                     end
-                    if not opts.no_reload then
-                        reload_buffer(buf)
-                    end
+                    local function deliver_completion()
                     if not vim.api.nvim_buf_is_valid(buf) then
                         finish({ ok = false, msg = "buffer invalid" }, false)
                         return
@@ -425,6 +495,80 @@ function M.invoke(buf, manifest, args, opts)
                         new_content = new_content,
                         decorations = decorations,
                     }, true)
+                    end
+                    if opts.no_reload then deliver_completion();return end
+                    local edits=require('parley.buffer_edit')
+                    local function refuse(reason)
+                        finish({ok=false,msg='Live text or source authority changed; skill result remains on disk for reconciliation',
+                            reason=reason,reconciliation_required=true,external_path=artifact_path,
+                            calls=calls,results=results,original=original},true)
+                    end
+                    if not edits.resolve_user(source_capture) then refuse('source changed');return end
+                    local permission=transition({type='admit',now=vim.uv.hrtime()/1000000})
+                    if not permission.launch then refuse('source read '..tostring(permission.reason or 'refused'));return end
+                    source_completion=function(read)
+                        if not read.physical_resolved then
+                            if read.error_code then refuse(read.error_code) end
+                            return
+                        end
+                        if read_state.logical or _gen[buf]~=gen then return end
+                        if read.error_code or read.certainty~='known' or type(read.data)~='string' then
+                            refuse(read.error_code or 'source read unresolved');return
+                        end
+                        if not edits.resolve_user(source_capture) then refuse('source changed');return end
+                        -- readfile compatibility: a final file newline is buffer metadata.
+                        local disk=read.data:gsub('\r\n','\n'):gsub('\n$','')
+                        local receipt=edits.apply_user(source_capture,{{region=1,text=disk}})
+                        if receipt.status~='applied' then refuse(receipt.reason);return end
+                        deliver_completion()
+                    end
+                    local handle=source_filesystem:read(artifact_path,on_source_read)
+                    local attached=transition({type='attach'})
+                    if attached.retain then
+                        source_read=handle
+                        if attached.cancel then source_read:cancel()end
+                        reconcile_read()
+                    end
+                    end
+                    local remaining=#calls
+                    local uncertain=false
+                    local function joined()
+                        if remaining>0 or read_state.logical then return end
+                        if uncertain then
+                            finish({ok=false,msg='tool effect unresolved',calls=calls,results=results},true);return
+                        end
+                        local success=xpcall(finish_tools,function()return nil end)
+                        if not success then finish({ok=false,msg='completion failed'},true)end
+                    end
+                    if remaining==0 then joined();return end
+                    for i, call in ipairs(calls) do
+                        if call.name == "propose_edits" then
+                            call.input = call.input or {}
+                            call.input.file_path = artifact_path -- artifact-bound
+                            -- Some models emit `edits` as a JSON STRING rather than an
+                            -- array; coerce it once here so the batch actually applies
+                            -- (and render_propose_edits below gets a table). #133
+                            if type(call.input.edits) == "string" then
+                                local ok, decoded = pcall(vim.json.decode, call.input.edits)
+                                if ok and type(decoded) == "table" then
+                                    call.input.edits = decoded
+                                end
+                            end
+                        end
+                        local item={}
+                        tool_producer.start(call,{epoch='skill:'..tostring(buf),generation=gen,round='1',attempt=qid},{
+                            outcome=function(kind,result)
+                                if read_state.logical then return end
+                                item.kind=kind;results[i]=result
+                            end,
+                            resolved=function()
+                                if read_state.logical or item.resolved then return end
+                                item.resolved=true;remaining=remaining-1
+                                if item.kind~='known' then uncertain=true end
+                                joined()
+                            end})
+                        if read_state.logical then break end
+                    end
                 end
                 local ok_completion = xpcall(complete, function() return nil end)
                 if not ok_completion then
@@ -436,7 +580,7 @@ function M.invoke(buf, manifest, args, opts)
         nil,
         nil,
         function(msg) -- on_abort
-            if finished or _gen[buf] ~= gen then
+            if read_state.logical or _gen[buf] ~= gen then
                 return -- superseded by a newer exchange (cancelled) → no-op
             end
             p.logger.error("skill " .. tostring(manifest.name) .. " abort: " .. tostring(msg))
@@ -444,10 +588,11 @@ function M.invoke(buf, manifest, args, opts)
         end,
         nil,
         function(_qid, transport_error) -- on_error (dispatcher argument 10)
-            if finished or _gen[buf] ~= gen then return end
+            if read_state.logical or _gen[buf] ~= gen then return end
             p.logger.error("skill " .. tostring(manifest.name) .. " transport error")
             finish({ ok = false, msg = "transport error", error = transport_error }, true)
-        end
+        end,
+        {generation_id=process_owner,logical_generation=process_owner,alive=function()return not read_state.logical end}
     )
     if not ok_query then
         p.logger.error("skill " .. tostring(manifest.name) .. " query failed")

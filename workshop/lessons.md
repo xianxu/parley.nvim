@@ -2437,3 +2437,215 @@ download.
 
 - Adding an exchange-owned component requires sweeping semantic range consumers as well as parsing and sending: cut, paste, visual selection, prune and scoped context must use a shared semantic start. Keep the physical question marker only for cursor/highlight and model block anchors.
 - Classify functions by their actual dependency effects; a parser that calls a file-backed logger is INTEGRATION even if its primary output is a data structure.
+
+
+## 2026-09-14 (#254 design review)
+
+- An incremental parser's dependency includes negative lookahead: adding a missing
+  closer can change earlier interpretation. Track both matched and unmatched
+  delimiter dependencies; forward-state convergence alone is insufficient.
+- Validate repair against the text and dependencies it consumed, not a global
+  buffer tick. An unrelated continuous stream must not starve local repair.
+- Closing a document retires write authority, not outstanding effects. Keep
+  unresolved processes/tools in a supervisor whose lifetime exceeds the UI.
+- Session-local IDs cannot identify recovery targets after restart. Persist
+  association and expected-content evidence; ambiguous restoration must not guess.
+- Separate concurrent document-slot support from real asynchronous tool execution
+  in milestone acceptance. Scheduling a blocking handler on the main loop does
+  not make it concurrent or keep typing responsive.
+- Native editor operations have costs outside Lua counters. Measure broad fold
+  clearing and state its affected-range cost instead of claiming constant work.
+
+## 2026-09-14 (#254 M1 integration)
+
+- When admission moves from a public busy predicate to private owner state, tests
+  must seed a competing admission through the actual transport seam. Mocking the
+  old predicate can silently turn a launch-rejection test into a network request.
+  Exercise pending cleanup with a stateful process fixture (ARCH-MOCK).
+
+- Cancellation scope must reach every child launch, including automatic topic
+  generation and provider retries. Enumerate launch paths when replacing global
+  stop; fixtures with prefilled topics miss this branch. Lifetime validation must
+  run even when a spinner has no drawable target (ARCH-ORDER, ARCH-PURPOSE).
+- A deferred operational contract needs a named remaining milestone, implementation
+  task, observable outcome, and deterministic tests; prose saying “later scheduler”
+  is not delivery traceability (ARCH-CONSTRAINTS).
+
+
+## 2026-09-15 (#254 structural-core verification)
+
+- A tree detached in Lua can remain reachable through JIT trace constants that
+  retain an operation-local recursive closure and its captured leaf array.
+  Measure reclamation with JIT enabled in a fresh process; move traversal workers
+  to module scope with explicit state rather than disabling JIT to pass the test.
+- Separate payload authority from structural evidence, and narrow lookahead
+  evidence to the predicates queried. Otherwise Enter invalidates a global
+  negative-footer fact even though the inserted row cannot introduce a footer.
+- A delayed read request contains coordinates from a particular observation.
+  Refresh an unread request after a disjoint edit moves its source; retain the
+  old frame only for a response already read under that frame.
+
+## #254 M2 review — match evidence to the effect
+
+- A local text certificate authorizes lexical results only. Derived semantic
+  state also needs its incoming context and lookahead dependencies; public repair
+  APIs must not accept arbitrary metadata under weaker proof.
+- Grammar compatibility can require two views of a token: its original structural
+  boundary and whether a fence admits a section. Suppressing section admission
+  must not erase boundary effects. Sweep the cross-product against an independent
+  reducer, including malformed and unterminated fences.
+
+## #254 M3 native scheduling and edit observation
+
+- Bounded callbacks do not imply a responsive event loop. Recursive scheduling
+  can drain every slice in one turn; verify native timers and input can interleave
+  before completion, and share a cancellable next-turn scheduler across consumers.
+- Native byte callbacks can expose pre-edit text for Insert-mode Backspace and
+  final text for intermediate grouped undo events. Treat the event coordinates
+  and the visible text frame separately; defer bounded lexical validation when
+  they disagree, and cancel saved evidence on intervening edits.
+- Measure deferred work through semantic convergence. A fast Enter/Backspace
+  callback can still queue a whole-document repair; immediate counters alone
+  conceal that cost.
+
+## 2026-09-15 (#254 M3 boundary review)
+
+- Native undo may expose final buffer text while delivering intermediate edits.
+  Matching row and byte counts does not prove coordinate-frame provenance.
+  Conformance must assert settled semantic parity under equal-size shifted edits.
+- Surviving row identity proves neither current role nor current fence context.
+  Apply the same semantic-evidence rule to highlighting, folds and write authority;
+  never encode stale presentation as an expected test result.
+- Weak-key tables do not collect a key retained by its value's callback under
+  LuaJIT. Break callback cycles on detach and test native weak-reference collection
+  and autocmd removal independently of buffer validity checks.
+- At a review boundary, compare the full concept/function inventory with the
+  actual diff. Distinguish reused policy, documentation-only changes and explicitly
+  deferred consumers; proposed function names are not implementation evidence.
+
+- A controlled presentation scheduler does not drain Neovim's native redraw queue.
+  After explicit index bootstrap, cross an observable native scheduling barrier
+  before measuring stream delivery; a timed wait can expire while its queued
+  callback actually succeeds. Keep work bounds and delivery assertions intact.
+
+- Identity lookup is not semantic eligibility. A delayed navigation action must
+  revalidate its exact current projection, including after focus callbacks; a
+  nearby row is never a substitute for a vanished selected item. Sweep every
+  action that consumes surviving handles, not only drawing code.
+- Diagnostic candidate flags cannot stand in for semantic-context validity.
+  Retire pending derivations on incoming-context changes as well as edits to
+  candidate text, and test invalidation immediately before read and publication.
+
+- Native presentation effects are reentrant: DiagnosticChanged and OptionSet can
+  edit or retire the source synchronously. Recheck captured job ownership after
+  every callback-capable effect, including cleanup/restoration, before subsequent
+  effects or dirty-state completion. Test replacement work started inside cleanup.
+
+## 2026-09-15 (#254 M3 superseded fold cleanup)
+
+- Publication authority and cleanup obligations have different lifetimes. Losing
+  a generation or tick check stops publication, but does not excuse restoring
+  temporary fold options and the captured window view. Retire job pointers first,
+  then clean every captured window even if one cleanup callback edits or throws.
+- Build a resumable job's window list locally and publish it only after all
+  callback-capable configuration succeeds. A partially constructed empty list
+  must never be interpreted as completed work. Test both changed-text and
+  tick-only callback interruption, plus loss of one window during setup.
+
+- #254 BR-11: temporary editor suspension is not the operator preference. When
+  retirement restores that preference inside a callback, transfer cleanup ownership
+  before callbacks and prevent every returning nested slice from restoring its
+  captured temporary value. Test cancellation inside suspended native operations,
+  in addition to cancellation between slices.
+
+- #254 BR-13: before every boundary, compare every newly added *_spec.lua against
+  atlas/traceability.yaml and the documented mapping output. A test passing when
+  invoked directly is not evidence that the mapped suite will defend it later.
+
+
+## #254 M4 response composition audit
+
+- Register each asynchronous child before calling its launcher. A thrown launch
+  can follow a started effect; logical failure must not resolve that child or its
+  siblings without positive completion evidence. Test held, duplicate, and late
+  callbacks across failure and cancellation.
+- Replacing a response driver requires preserving request construction through
+  the public command. Exercise zero-, one-, and two-message system prefixes,
+  ancestor ordering, and the separate topic excerpt; helper-only tests missed
+  the composition regression.
+- Explicit onboarding selection may replace the placeholder request profile,
+  but must retain captured source geometry. Freeze model, display, and tool
+  limits together before writes; ordinary later configuration changes cannot
+  alter an admitted response.
+- An explicit user transformation with several edits needs one captured source
+  transaction and must stop admission after an interrupted receipt. Partial
+  edits may remain; newer human text must survive. Install native test wrappers
+  before attaching a driver that caches API functions.
+
+- #254 BR-14: reserve space without publishing outcome evidence. Test persisted
+  and provider-projected placeholders under pending, cancellation, reload and
+  unknown outcome, not only the final renderer.
+- #254 BR-15: every reachable paused state needs visible status and a production
+  operator transition. Test that transition through public commands with focus
+  changes and revoked authority; an internal resume test is insufficient.
+- #254 BR-16: sweep the full changed command/behavior inventory into README before
+  a boundary, including native-edit consequences and cancellation scope.
+
+- #254 BR-17: dependency semantics must survive admission boundaries. Compare
+  identical human edits immediately before and after admission; a generic edit
+  event proves neither changed consumed input nor stale provider evidence.
+
+- #254 BR-18: a lifecycle join must be reevaluated on every contributing event,
+  including a late known outcome after cleanup. Reserve publication before any
+  callback that can reentrantly complete cleanup or cancel the operation.
+- #254 BR-19: when an invariant changes, sweep existing positive and negative
+  fixtures and run the full mapped family before review. New regressions alone
+  can leave an older test defending the opposite semantics.
+
+- #254 GC probe: when a reachability assertion is intermittent, distinguish
+  runtime retention from compiled fixture locals with repeated controlled runs.
+  Keep the weak-reference assertion and demonstrate that disabling actual cleanup
+  still fails after isolating the probe; do not hide failures with extra retries.
+
+- #254 BR-20–24: test recovery through the full production success/failure,
+  terminal cleanup, retry and confirmed-save sequence. Calling adapters in
+  isolation can accidentally keep association state that production retires.
+  Keep edit authority, pending settlement, retry evidence and registry membership
+  as separate lifetimes, with an explicit retirement path for each.
+- #254 BR-22: corrupt persisted evidence is unknown, not absent. Include the sole
+  record, every revision, prior quarantine and failed quarantine in admission
+  regressions; a readable predecessor can otherwise mask the missing-proof case.
+- #254 M6: use native provider JSON in public execution tests, including empty
+  objects. Editor-specific representation metadata must cross the strict pure
+  boundary deliberately; table literals do not exercise that conversion.
+
+- #254 BR-20/24: test both orders of independent save and settlement events.
+  Capture native write destinations before callbacks can rename a buffer, and
+  cover nested writes and aborted writes without Post. Read-back failures must
+  preserve evidence and remain observable.
+
+- #254 BR25: canonical path strings are not durable identity. Exercise ancestor
+  replacement between admission and effect, including traversal and backups;
+  preserve descriptor-close uncertainty as physical ownership.
+- #254 BR26/28: migration parity includes editor side effects and shared pure
+  transformation policy. Refresh from positively committed bytes under captured
+  buffer revision; an intervening edit must never become an unmodified buffer.
+- #254 BR27: enumerate every lossy output stage and consumer. Body limits must
+  preserve bounded visible incompleteness and reconciliation metadata even at
+  zero remaining capacity; test the final provider/skill representation.
+
+- #254 BR25/29: carry leaf identity through publication and cleanup, not only
+  ancestor traversal. Mandatory exclusions run after optional filters and target
+  expansion; test actual backend precedence and literal metacharacter paths.
+- #254 BR30: two layers must not independently refresh one source buffer. Keep
+  one original proof and one completion owner, and separate logical completion
+  from retained physical-read cleanup when cancellation or a callback is lost.
+
+- #254 BR31: a pure lifecycle model must authorize production execution, release
+  and retirement. A reducer whose permission is ignored is documentation, not a
+  boundary. Test adapters with denied transitions and reordered effect/cleanup
+  evidence; keep handles and payloads in adapters, decisions in the model.
+
+- #254 BR32: test the complete scheduled backoff sequence, not only a manually
+  advanced clock. Clamp every next probe to the declared deadline so an interval
+  cannot extend the operating envelope.

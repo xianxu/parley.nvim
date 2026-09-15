@@ -6,7 +6,7 @@
 --
 -- After writing, triggers :checktime so Neovim reloads the buffer.
 
-return {
+local definition = {
     name = "write_file",
     kind = "write",
     needs_backup = true,
@@ -28,14 +28,14 @@ return {
     handler = function(input)
         input = input or {}
         local path = input.file_path or input.path
-        local content = input.content
+        local content
 
         if type(path) ~= "string" or path == "" then
             return { content = "missing or invalid required field: file_path", is_error = true, name = "write_file" }
         end
-        if type(content) ~= "string" then
-            return { content = "missing or invalid required field: content", is_error = true, name = "write_file" }
-        end
+        local message
+        content,message=require('parley.tools.file_transform').transform('write_file',input,'',path)
+        if not content then return {content=message,is_error=true,name='write_file'}end
 
         -- Backup: save prior contents before every write (shared numbered-backup
         -- helper — .parley-backup.1, .2, …; ARCH-DRY with propose_edits).
@@ -53,19 +53,25 @@ return {
         end
 
         -- Write the file
+        local refresh=require('parley.tools.file_refresh').capture(path)
         local f, err = io.open(path, "w")
         if not f then
+            require('parley.tools.file_refresh').release(refresh)
             return { content = "cannot write: " .. (err or path), is_error = true, name = "write_file" }
         end
-        f:write(content)
-        f:close()
+        local written,write_error=f:write(content)
+        local closed,close_error=f:close()
+        if not written or not closed then
+            require('parley.tools.file_refresh').release(refresh)
+            return {content='write completion failed: '..tostring(write_error or close_error),is_error=true,name='write_file'}
+        end
 
-        -- Trigger Neovim to reload if buffer was open
-        vim.schedule(function()
-            pcall(vim.cmd, "checktime")
-        end)
+        local completion=require('parley.tools.file_refresh').complete(refresh,content)
+        if completion.reconciliation_required then
+            vim.notify('[Disk updated; buffer reconciliation required]',vim.log.levels.WARN)
+        end
 
-        local msg = "Written " .. #content .. " bytes to " .. path
+        local msg = message
 
         return {
             content = msg,
@@ -74,3 +80,5 @@ return {
         }
     end,
 }
+
+return require("parley.tools.async_builtin").bind(definition)

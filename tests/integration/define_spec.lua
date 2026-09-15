@@ -118,7 +118,7 @@ describe("define: skill_invoke read-only seams (#161)", function()
         parley.dispatcher.query = orig_query
         assembly.resolve_agent = orig_resolve
         pcall(function() require("parley.progress").stop() end)
-        vim.fn.delete(tmpdir, "rf")
+        require("tests.helpers.fixture_directory").remove(tmpdir)
     end)
 
     local function define_manifest()
@@ -260,7 +260,7 @@ describe("define: transcript agent reaches the cascade (#215)", function()
         assembly.resolve_agent = orig_resolve
         parley.set_chat_dirs(saved_dirs, false)
         pcall(function() require("parley.progress").stop() end)
-        vim.fn.delete(tmpdir, "rf")
+        require("tests.helpers.fixture_directory").remove(tmpdir)
     end)
 
     -- current_agent is passed as a THUNK (#215 BR-3: tiers 1-4 must not pay for
@@ -414,6 +414,13 @@ describe("define_visual + render_definition (#161)", function()
             vim.schedule(function() on_exit("qid_dv") end)
         end
         vim.diagnostic.reset(ns, buf)
+        -- Finish cold document setup before measuring terminal timer cleanup.
+        local Document=require("parley.document")
+        local doc=Document.get(buf) or Document.attach(buf)
+        assert.equals("idle",Document.drain(doc,10000).status)
+        local ready=false
+        vim.defer_fn(function() ready=true end,0)
+        assert.is_true(vim.wait(2000,function() return ready end,5))
     end)
 
     after_each(function()
@@ -421,7 +428,8 @@ describe("define_visual + render_definition (#161)", function()
         parley.dispatcher.prepare_payload = orig_prepare
         assembly.resolve_agent = orig_resolve
         pcall(function() require("parley.progress").stop() end)
-        vim.fn.delete(tmpdir, "rf")
+        if vim.api.nvim_buf_is_valid(buf) then vim.api.nvim_buf_delete(buf,{force=true}) end
+        require("tests.helpers.fixture_directory").remove(tmpdir)
     end)
 
     local hl_ns = vim.api.nvim_create_namespace("parley_skill_hl")
@@ -439,6 +447,29 @@ describe("define_visual + render_definition (#161)", function()
     local function first_hl_mark(b)
         return vim.api.nvim_buf_get_extmarks(b, hl_ns, 0, -1, { details = true })[1]
     end
+
+    it("relocates the selected term and preserves disjoint human text during lookup", function()
+        vim.fn.setpos("'<", {buf,3,9,0});vim.fn.setpos("'>", {buf,3,12,0})
+        require("parley").define_visual(buf)
+        vim.api.nvim_buf_set_lines(buf,0,0,false,{"human introduction"})
+        vim.api.nvim_buf_set_text(buf,4,9,4,9,{" human ending"})
+        assert.is_true(vim.wait(2000,function()
+            return #vim.diagnostic.get(buf,{namespace=ns})>0
+        end))
+        assert.equals("human introduction",vim.api.nvim_buf_get_lines(buf,0,1,false)[1])
+        assert.equals("here is ASIN[^asin] in context",vim.api.nvim_buf_get_lines(buf,3,4,false)[1])
+        assert.equals("line four human ending",vim.api.nvim_buf_get_lines(buf,4,5,false)[1])
+    end)
+
+    it("does not define a selection replaced with identical bytes during lookup", function()
+        vim.fn.setpos("'<", {buf,3,9,0});vim.fn.setpos("'>", {buf,3,12,0})
+        require("parley").define_visual(buf)
+        vim.api.nvim_buf_set_text(buf,2,8,2,12,{"ASIN"})
+        vim.wait(200,function() return false end)
+        assert.equals("here is ASIN in context",vim.api.nvim_buf_get_lines(buf,2,3,false)[1])
+        assert.equals(0,#vim.diagnostic.get(buf,{namespace=ns}))
+        assert.is_nil(table.concat(vim.api.nvim_buf_get_lines(buf,0,-1,false),"\n"):find("[^asin]:",1,true))
+    end)
 
     it("stores the definition as a durable footnote, highlights the term/reference span, and shows the diagnostic", function()
         -- select "ASIN" on line 3 (cols 9..12, 1-based)
@@ -651,24 +682,34 @@ describe("define_visual + render_definition (#161)", function()
             held_exit = on_exit
         end
         local original_new_timer = vim.uv.new_timer
-        local timer = { stopped = false, closed = false }
-        function timer:start(_delay, _repeat_ms, callback) self.callback = callback end
-        function timer:stop() self.stopped = true end
-        function timer:close() self.closed = true end
-        vim.uv.new_timer = function() return timer end
+        local timers = {}
+        vim.uv.new_timer = function()
+            local timer=original_new_timer()
+            if not debug.getinfo(2,"S").source:match("selection_spinner%.lua$") then return timer end
+            local observed={handle=timer,closed=false,stopped=false}
+            function observed:start(...) return self.handle:start(...) end
+            function observed:stop() self.stopped=true;return self.handle:stop() end
+            function observed:close() self.closed=true;return self.handle:close() end
+            timers[#timers+1]=observed
+            return observed
+        end
+        local ok,err=pcall(function()
+            vim.fn.setpos("'<", { buf, 3, 9, 0 })
+            vim.fn.setpos("'>", { buf, 3, 12, 0 })
+            require("parley").define_visual(buf)
+            assert.are.equal(1, #spinner_marks(buf))
+            vim.api.nvim_buf_delete(buf, { force = true })
+            tasker.set_query("deleted-definition", { raw_response = "" })
+            held_exit("deleted-definition")
+            assert.is_true(vim.wait(1000, function()
+                for _,timer in ipairs(timers) do if not timer.closed then return false end end
+                return true
+            end,10))
+        end)
+        vim.uv.new_timer=original_new_timer
+        assert.is_true(ok,tostring(err))
+        assert.is_true(#timers>0)
 
-        vim.fn.setpos("'<", { buf, 3, 9, 0 })
-        vim.fn.setpos("'>", { buf, 3, 12, 0 })
-        require("parley").define_visual(buf)
-        assert.are.equal(1, #spinner_marks(buf))
-        vim.api.nvim_buf_delete(buf, { force = true })
-        tasker.set_query("deleted-definition", { raw_response = "" })
-        held_exit("deleted-definition")
-        assert.is_true(vim.wait(1000, function() return timer.closed end, 10))
-        vim.uv.new_timer = original_new_timer
-
-        assert.is_true(timer.stopped)
-        assert.is_true(timer.closed)
         assert.is_false(require("parley.progress").is_active())
     end)
 

@@ -52,7 +52,13 @@ end
 local function flat_items(lines)
     local buf = vim.api.nvim_create_buf(false, true)
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-    local items = outline._build_picker_items(buf, cfg, { is_chat = true })
+    local document=require('parley.document')
+    document.drain(document.attach(buf,{schedule=false}),1000)
+    local items, cursor = {}, nil
+    repeat
+        local page, result = outline._build_picker_items(buf, cfg, { is_chat = true, cursor=cursor })
+        vim.list_extend(items,page); cursor=result and result.cursor
+    until not cursor
     vim.api.nvim_buf_delete(buf, { force = true })
     return items
 end
@@ -190,7 +196,13 @@ describe("outline preserves sibling branches (#241)", function()
                     end
                 end
                 local actual = {}
-                for _, item in ipairs(tree) do actual[#actual + 1] = item.value end
+                for _, item in ipairs(tree) do
+                    local value=item.value
+                    -- Provenance accompanies locations but does not change
+                    -- sibling ordering or branch destinations.
+                    actual[#actual + 1]={file=value.file,lnum=value.lnum,
+                        child_path=value.child_path,inline=value.inline}
+                end
                 assert.same(expected, actual)
                 local branches = {}
                 for _, item in ipairs(tree) do

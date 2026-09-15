@@ -169,3 +169,14 @@ remains independent of those maintainer tools.
 ### Concurrent directory creation
 
 `tests/unit/prepare_dir_spec.lua` reproduces a competing directory creator at the mkdir boundary using real temporary directories. `lua/parley/fs.lua` owns the literal-path directory postcondition; helper path expansion remains in `helper.prepare_dir`. A source guard keeps all production directory creators on that seam.
+
+### Large native fold conformance
+
+`tests/helpers/spec_runner.lua` keeps Plenary’s normal 50-second per-file deadline,
+with a 180-second deadline for `document_fold_batches_spec.lua` and
+`document_semantic_spec.lua`. The fold spec builds
+a real 50,010-row document to exercise bounded native fold cleanup and window
+preference restoration. The semantic corpus checks Enter/join scaling through 50,000 rows. These index
+bootstraps can exceed 50 seconds under parallel load. The override applies to the
+exact repository files and is shared by mapped,
+full-suite, and direct `PlenaryBustedFile` invocations.

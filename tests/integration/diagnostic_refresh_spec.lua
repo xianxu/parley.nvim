@@ -32,6 +32,7 @@ describe("diagnostic refresh lifecycle", function()
             "[^asin]: Amazon Standard Identification Number.",
         })
         lifecycle.setup(buf)
+        diagnostic_refresh.drain(buf,10000)
     end)
 
     after_each(function()
@@ -50,15 +51,16 @@ describe("diagnostic refresh lifecycle", function()
     end)
 
     for _, case in ipairs({
-        { event = "InsertLeave", name = "refreshes synchronously on InsertLeave" },
-        { event = "TextChanged", name = "refreshes synchronously on TextChanged" },
-        { event = "BufWritePost", name = "refreshes synchronously on BufWritePost" },
+        { event = "InsertLeave", name = "converges through scheduled repair after InsertLeave" },
+        { event = "TextChanged", name = "converges through scheduled repair after TextChanged" },
+        { event = "BufWritePost", name = "converges through scheduled repair after BufWritePost" },
         { event = "BufEnter", name = "hydrates on BufEnter" },
         { event = "WinEnter", name = "hydrates on WinEnter" },
     }) do
         it(case.name, function()
             vim.api.nvim_buf_set_lines(buf, 0, 1, false, { "time and reference removed" })
             vim.api.nvim_exec_autocmds(case.event, { buffer = buf })
+            diagnostic_refresh.drain(buf,10000)
             assert.equals(0, #vim.diagnostic.get(buf, { namespace = timezone.diag_namespace() }))
             assert.equals(0, #footnotes(buf))
         end)
@@ -91,10 +93,50 @@ describe("diagnostic refresh lifecycle", function()
             })
             vim.diagnostic.set(ns, buf, existing)
             vim.api.nvim_exec_autocmds(case.event, { buffer = buf })
+            diagnostic_refresh.drain(buf,10000)
             assert.equals(0, #vim.diagnostic.get(buf, { namespace = timezone.diag_namespace() }))
             local remaining = vim.diagnostic.get(buf, { namespace = ns })
             assert.equals(1, #remaining)
             assert.equals("unrelated", remaining[1].message)
         end)
     end
+end)
+
+describe('diagnostic publication evidence',function()
+    local buf,doc
+    local D=require('parley.document')
+    before_each(function()
+        buf=vim.api.nvim_create_buf(false,true)
+        vim.api.nvim_buf_set_lines(buf,0,-1,false,{'intro','time 2026-07-12T12:00:00Z'})
+        doc=D.attach(buf,{schedule=false})
+        assert.equals('idle',D.drain(doc,1000).status)
+        diagnostic_refresh.refresh(buf,{schedule=false})
+    end)
+    after_each(function()
+        if vim.api.nvim_buf_is_valid(buf) then vim.api.nvim_buf_delete(buf,{force=true}) end
+    end)
+    local function prepare_publication(phase)
+        for _=1,100 do
+            if diagnostic_refresh.step(buf).status==(phase or 'publish') then return end
+        end
+        error('diagnostic derivation did not reach publication')
+    end
+    for _,phase in ipairs({'read','publish'}) do
+    it('revalidates pending '..phase..' work after incoming context becomes uncertain',function()
+        prepare_publication(phase)
+        vim.api.nvim_buf_set_text(buf,0,0,0,5,{'```'})
+        assert.is_false(D.query(doc,1,2)[1].metadata.confirmed)
+        assert.not_equals('idle',diagnostic_refresh.step(buf).status)
+        assert.equals(0,#vim.diagnostic.get(buf,{namespace=timezone.diag_namespace()}))
+        assert.equals('idle',diagnostic_refresh.drain(buf,1000).status)
+        assert.equals(1,#vim.diagnostic.get(buf,{namespace=timezone.diag_namespace()}))
+    end)
+    end
+    it('retains prepared results when an unrelated text edit preserves semantic context',function()
+        prepare_publication()
+        vim.api.nvim_buf_set_text(buf,0,5,0,5,{' extended'})
+        assert.is_true(D.query(doc,1,2)[1].metadata.confirmed)
+        assert.equals('idle',diagnostic_refresh.step(buf).status)
+        assert.equals(1,#vim.diagnostic.get(buf,{namespace=timezone.diag_namespace()}))
+    end)
 end)

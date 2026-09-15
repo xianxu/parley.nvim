@@ -1,13 +1,10 @@
--- Main-loop adapter for one chat-producing LLM leg's pending presentation.
-local M = {}
-
-local logger = require("parley.logger")
-local presentation = require("parley.chat_presentation")
-local spinner = require("parley.progress").SPINNER
-local unpack_values = unpack
-
-local namespace = vim.api.nvim_create_namespace("parley_chat_pending")
-local active_by_buf = {}
+-- Presentation only. The generation runner owns bytes, grants and completion.
+local M={}
+local Presentation=require('parley.chat_presentation')
+local spinner=require('parley.progress').SPINNER
+local namespace=vim.api.nvim_create_namespace('parley_chat_pending')
+local groups={}
+local version=0
 local verbs = {
     "Baking",
     "Brewing",
@@ -39,551 +36,172 @@ local verbs = {
     "Zesting",
 }
 
-local function monotonic_now_ms()
-    local uv = vim.uv or vim.loop
-    return uv.hrtime() / 1000000
-end
-
-local function close_timer(timer)
-    if not timer then
-        return
-    end
-    pcall(function() timer:stop() end)
-    if not timer:is_closing() then
-        pcall(function() timer:close() end)
-    end
-end
-
-local function production_timer(delay_ms, repeat_ms, callback)
-    local uv = vim.uv or vim.loop
-    local timer = uv.new_timer()
-    local cancelled = false
-    timer:start(delay_ms, repeat_ms, callback)
+local function now()return (vim.uv or vim.loop).hrtime()/1000000 end
+local function timer(delay,repeat_ms,callback)
+    local handle=(vim.uv or vim.loop).new_timer();local closed=false
+    handle:start(delay,repeat_ms,callback)
     return function()
-        if cancelled then
-            return
-        end
-        cancelled = true
-        close_timer(timer)
+        if closed then return end;closed=true
+        handle:stop();if not handle:is_closing()then handle:close()end
     end
 end
-
-local production_scheduler = {
-    enqueue = vim.schedule,
-    after = function(delay_ms, callback)
-        return production_timer(delay_ms, 0, callback)
-    end,
-    every = function(delay_ms, callback)
-        return production_timer(delay_ms, delay_ms, callback)
-    end,
-}
-
-local function call_safely(label, callback, ...)
-    if type(callback) ~= "function" then
-        return
-    end
-    local arguments = { n = select("#", ...), ... }
-    local ok = xpcall(function()
-        callback(unpack_values(arguments, 1, arguments.n))
-    end, function()
-        -- Callback errors can contain provider output, chunks, or secrets.
-        return nil
-    end)
-    if not ok then
-        logger.error("chat pending " .. label .. " callback failed")
-    end
+local default_scheduler={enqueue=vim.schedule,
+    after=function(delay,callback)return timer(delay,0,callback)end,
+    every=function(delay,callback)return timer(delay,delay,callback)end}
+local function scalar(v)return type(v)=='string' and #v>0 and #v<=256
+    or type(v)=='number' and v>=0 and v<math.huge and v%1==0 end
+local function bump(group)version=version+1;group.version=version end
+local function close_group(group)
+    if group.unsubscribe then group.unsubscribe();group.unsubscribe=nil end
+    if group.augroup then pcall(vim.api.nvim_del_augroup_by_id,group.augroup);group.augroup=nil end
+    if groups[group.buf]==group then groups[group.buf]=nil end
 end
-
--- Start one serialized presentation session for a response header.
-M.start = function(opts)
-    opts = opts or {}
-    local buf = assert(opts.buf, "buf is required")
-    local agent = assert(opts.agent, "agent is required")
-    assert(type(agent) == "string" and agent ~= "", "agent must be a non-empty string")
-    local existing = active_by_buf[buf]
-    assert(not existing or existing.finished, "chat pending session already active for buffer")
-
-    local scheduler = opts.scheduler or production_scheduler
-    local clock = opts.clock or { now_ms = monotonic_now_ms }
-    assert(type(scheduler.enqueue) == "function", "scheduler.enqueue is required")
-    assert(type(scheduler.after) == "function", "scheduler.after is required")
-    assert(type(scheduler.every) == "function", "scheduler.every is required")
-    assert(type(clock.now_ms) == "function", "clock.now_ms is required")
-
-    local session = {
-        buf = buf,
-        agent = agent,
-        anchor_line = assert(opts.anchor_line, "anchor_line is required"),
-        lease_valid = assert(opts.lease_valid, "lease_valid is required"),
-        emit_content = assert(opts.emit_content, "emit_content is required"),
-        choose_verb_index = assert(opts.choose_verb_index, "choose_verb_index is required"),
-        on_discard = opts.on_discard,
-        scheduler = scheduler,
-        clock = clock,
-        timers = {},
-        frame_index = 2, -- The approved first visible frame is ⠙.
-        detail_state = {},
-        finished = false,
-    }
-    local function now_ms()
-        return session.clock.now_ms()
+local function retire_group(group)
+    local sessions={};for _,s in pairs(group.sessions)do sessions[#sessions+1]=s end
+    for _,s in ipairs(sessions)do s:cancel()end
+end
+local function group_for(buf)
+    local group=groups[buf];if group then return group end
+    group={buf=buf,sessions={}};groups[buf]=group;bump(group)
+    group.augroup=vim.api.nvim_create_augroup('ParleyChatPending'..buf,{clear=true})
+    vim.api.nvim_create_autocmd({'BufUnload','BufWipeout'},{group=group.augroup,buffer=buf,
+        callback=function()retire_group(group)end})
+    local Document=require('parley.document');local doc=Document.get(buf)
+    if doc then group.unsubscribe=Document.subscribe(doc,function(event)
+        if event.kind=='detach' or event.kind=='reload' then retire_group(group)end
+    end)end
+    return group
+end
+function M.start(opts)
+    assert(type(opts)=='table' and vim.api.nvim_buf_is_valid(opts.buf),'valid buffer required')
+    assert(scalar(opts.generation) and scalar(opts.entity),'generation and entity identities required')
+    assert(type(opts.agent)=='string' and #opts.agent>0 and #opts.agent<=256,'agent display name required')
+    assert(type(opts.alive)=='function' and type(opts.resolve_tip)=='function','presentation resolvers required')
+    local group=groups[opts.buf];local count=0
+    if group then
+        assert(not group.sessions[opts.generation],'generation presentation already active')
+        for _ in pairs(group.sessions)do count=count+1 end
     end
-
-    local initial_index = session.choose_verb_index(#verbs)
-    session.state = presentation.initial({
-        now_ms = now_ms(),
-        verbs = verbs,
-        verb_index = initial_index,
-    })
-    assert(session.on_discard == nil or type(session.on_discard) == "function",
-        "on_discard must be a function")
-
+    assert(count<4,'presentation session limit')
+    local scheduler=opts.scheduler or default_scheduler
+    local clock=opts.clock or {now_ms=now}
+    local choose=opts.choose_verb_index or function(n)return math.random(n)end
+    local s={buf=opts.buf,generation=opts.generation,entity=opts.entity,agent=opts.agent,
+        alive=opts.alive,resolve_tip=opts.resolve_tip,timers={},frame_index=2,detail_state={},finished=false}
+    s.state=Presentation.initial({now_ms=clock.now_ms(),verbs=verbs,verb_index=choose(#verbs)})
+    group=group_for(s.buf);group.sessions[s.generation]=s;bump(group)
     local function cancel_timer(name)
-        local cancel = session.timers[name]
-        session.timers[name] = nil
-        call_safely("timer cancellation", cancel)
+        local cancel=s.timers[name];s.timers[name]=nil;if cancel then pcall(cancel)end
     end
-
-    local function cancel_timers()
-        local names = {}
-        for name in pairs(session.timers) do
-            table.insert(names, name)
-        end
-        for _, name in ipairs(names) do
-            cancel_timer(name)
-        end
-    end
-
     local function hide()
-        if session.extmark_id then
-            if vim.api.nvim_buf_is_valid(session.buf) then
-                local position = vim.api.nvim_buf_get_extmark_by_id(
-                    session.buf, namespace, session.extmark_id, { details = true })
-                if #position >= 2 and not (position[3] and position[3].invalid) then
-                    session.last_mark_row = position[1]
-                    session.last_mark_col = position[2]
-                end
-            end
-            pcall(vim.api.nvim_buf_del_extmark, session.buf, namespace, session.extmark_id)
-            session.extmark_hidden = true
-        end
-        session.visible_text = nil
-        session.playful_verb = nil
+        if s.extmark_id then pcall(vim.api.nvim_buf_del_extmark,s.buf,namespace,s.extmark_id);s.extmark_id=nil end
+        s.visible_text=nil;s.playful_verb=nil
     end
-
-    local function set_mark(text, row, col)
-        local ok, mark_id = pcall(vim.api.nvim_buf_set_extmark, session.buf, namespace,
-            row, col, {
-                id = session.extmark_id,
-                virt_lines = { { { text, "Comment" } } },
-                virt_lines_above = false,
-                invalidate = true,
-            })
-        if not ok then
-            return false
-        end
-        session.extmark_id = mark_id
-        session.extmark_hidden = false
-        session.last_mark_row = row
-        session.last_mark_col = col
-        session.visible_text = text
-        return true
-    end
-
-    local function render(text)
-        if not vim.api.nvim_buf_is_valid(session.buf) then
-            return false
-        end
-        local row = session.anchor_line
-        local col = 0
-        if session.extmark_id then
-            local position = vim.api.nvim_buf_get_extmark_by_id(
-                session.buf, namespace, session.extmark_id, { details = true })
-            if #position >= 2 and not (position[3] and position[3].invalid) then
-                row = position[1]
-                col = position[2]
-            elseif session.extmark_hidden and session.last_mark_row then
-                row = session.last_mark_row
-                col = session.last_mark_col
-            else
-                return false
-            end
-        end
-        return set_mark(text, row, col)
-    end
-
-    local function render_playful()
-        return render(spinner[session.frame_index] .. " " .. session.playful_verb)
-    end
-
     local function finish()
-        if session.finished then
-            return
-        end
-        session.finished = true
-        cancel_timers()
-        hide()
-        if active_by_buf[session.buf] == session then
-            active_by_buf[session.buf] = nil
-        end
+        if s.finished then return end;s.finished=true
+        s.state=Presentation.transition(s.state,{type='complete'})
+        cancel_timer('reveal');cancel_timer('frame');cancel_timer('idle');hide()
+        s.pending=nil;s.detail_state={};s.alive=nil;s.resolve_tip=nil
+        group.sessions[s.generation]=nil;bump(group)
+        if not next(group.sessions)then close_group(group)end
     end
-
-    local dispatch
-
-    local function enqueue_timer_event(event_factory)
-        scheduler.enqueue(function()
-            if session.finished then
-                return
-            end
-            if not vim.api.nvim_buf_is_valid(session.buf) then
-                dispatch({ type = "invalid" })
-                return
-            end
-            dispatch(event_factory())
-        end)
+    local function valid()
+        if s.finished or not vim.api.nvim_buf_is_valid(s.buf)then return false end
+        local ok,alive=pcall(s.alive);return ok and alive==true
     end
-
-    local function schedule_after(name, delay_ms, event_factory)
+    local function render(text)
+        local ok,tip=pcall(s.resolve_tip)
+        if not ok or type(tip)~='table' or type(tip.row)~='number' then finish();return end
+        local success,mark=pcall(vim.api.nvim_buf_set_extmark,s.buf,namespace,tip.row,tip.col or 0,
+            {id=s.extmark_id,virt_lines={{{text or '', 'Comment'}}},invalidate=true})
+        if not success then finish();return end
+        s.extmark_id=mark;s.visible_text=text;s.anchor_line=tip.row
+    end
+    local dispatch,submit
+    local function after(name,delay,event)
         cancel_timer(name)
-        session.timers[name] = scheduler.after(delay_ms, function()
-            enqueue_timer_event(event_factory)
+        s.timers[name]=scheduler.after(math.max(1,delay),function()
+            scheduler.enqueue(function()if not s.finished then dispatch(event)end end)
         end)
     end
-
-    local function start_frame_timer()
-        if session.timers.frame then
+    local function frames()
+        if not s.timers.frame then s.timers.frame=scheduler.every(120,function()submit({type='frame'})end)end
+    end
+    dispatch=function(event)
+        if not valid()then finish();return end
+        event.now_ms=clock.now_ms();event.verb_index=choose(#verbs)
+        if event.type=='frame' then
+            if s.playful_verb then s.frame_index=s.frame_index%#spinner+1;render(spinner[s.frame_index]..' '..s.playful_verb)end
             return
         end
-        session.timers.frame = scheduler.every(120, function()
-            scheduler.enqueue(function()
-                if session.finished then
-                    return
-                end
-                if not vim.api.nvim_buf_is_valid(session.buf) then
-                    dispatch({ type = "invalid" })
-                    return
-                end
-                local ok, valid = pcall(session.lease_valid)
-                if not ok or not valid then
-                    dispatch({ type = "stale" })
-                    return
-                end
-                if session.playful_verb then
-                    session.frame_index = session.frame_index % #spinner + 1
-                    if not render_playful() then
-                        dispatch({ type = "invalid" })
-                    end
-                end
-            end)
-        end)
+        local actions;s.state,actions=Presentation.transition(s.state,event)
+        for _,action in ipairs(actions)do
+            if action.type=='hide' then hide()
+            elseif action.type=='show_playful' then s.playful_verb=action.verb;render(spinner[s.frame_index]..' '..action.verb);if not s.finished then frames()end
+            elseif action.type=='render_status' then cancel_timer('frame');render(action.message)end
+        end
+        if s.finished then return end
+        if s.state.phase=='released' then cancel_timer('reveal');cancel_timer('frame');cancel_timer('idle')
+        elseif event.type=='reveal_due' and s.state.phase=='waiting' then after('reveal',s.state.reveal_at-event.now_ms,{type='reveal_due'})
+        elseif event.type=='activity' or event.type=='idle' then after('idle',s.state.verb_due_at-event.now_ms,{type='idle'})end
     end
-
-    local function reset_idle_timer()
-        schedule_after("idle", 15000, function()
-            return {
-                type = "idle",
-                now_ms = now_ms(),
-                verb_index = session.choose_verb_index(#verbs),
-            }
-        end)
-    end
-
-    local function rearm_early_timer(event, state)
-        local deadline
-        local name
-        local event_factory
-        if event.type == "reveal_due" and state.phase == "waiting" then
-            deadline = state.reveal_at
-            name = "reveal"
-            event_factory = function()
-                return { type = "reveal_due", now_ms = now_ms() }
-            end
-        elseif event.type == "minimum_due" and state.phase == "showing" then
-            deadline = state.minimum_at
-            name = "minimum"
-            event_factory = function()
-                return { type = "minimum_due", now_ms = now_ms() }
-            end
-        elseif event.type == "idle"
-                and (state.phase == "waiting" or state.phase == "showing") then
-            deadline = state.verb_due_at
-            name = "idle"
-            event_factory = function()
-                return {
-                    type = "idle",
-                    now_ms = now_ms(),
-                    verb_index = session.choose_verb_index(#verbs),
-                }
-            end
-        end
-        if deadline and event.now_ms < deadline then
-            schedule_after(name, math.max(1, math.ceil(deadline - event.now_ms)), event_factory)
-            return true
-        end
-        return false
-    end
-
-    local function apply_actions(actions, context)
-        for _, action in ipairs(actions) do
-            if action.type == "show_playful" then
-                session.playful_verb = action.verb
-                if not render_playful() then
-                    finish()
-                    return
-                end
-                start_frame_timer()
-            elseif action.type == "render_status" then
-                session.playful_verb = nil
-                cancel_timer("frame")
-                if not render(action.message) then
-                    finish()
-                    return
-                end
-            elseif action.type == "emit_content" then
-                call_safely("content emitter", session.emit_content, action.qid, action.chunk)
-            elseif action.type == "hide" then
-                hide()
-            elseif action.type == "continue_completion" then
-                hide()
-                call_safely("completion", action.completion)
-            elseif action.type == "surface_failure" then
-                hide()
-                call_safely("failure surface", context and context.surface_failure, action.error)
-            end
-        end
-    end
-
-    dispatch = function(event, context)
-        if session.finished then
-            return
-        end
-        if event.type ~= "cancel" and event.type ~= "invalid" and not event.skip_lease_validation then
-            local ok, valid = pcall(session.lease_valid)
-            if not ok or not valid then
-                event = { type = "stale" }
-            end
-        end
-        local previous_phase = session.state.phase
-        local next_state, actions = presentation.transition(session.state, event)
-        session.state = next_state
-        if next_state.phase == "finished" then
-            -- Release registry/timer ownership before a continuation starts a
-            -- recursive LLM leg in this buffer.
-            finish()
-            if event.type == "cancel" or event.type == "stale" or event.type == "invalid" then
-                call_safely("discard terminal", session.on_discard, event.type, event.reason)
-            end
-            apply_actions(actions, context)
-            return
-        end
-        apply_actions(actions, context)
-
-        if session.finished then
-            return
-        end
-        if rearm_early_timer(event, next_state) then
-            return
-        end
-        if previous_phase == "waiting" and next_state.phase ~= "waiting" then
-            cancel_timer("reveal")
-            if next_state.phase == "released" then
-                cancel_timer("idle")
-            end
-        end
-        if next_state.phase == "showing" and previous_phase ~= "showing" then
-            schedule_after("minimum", 1000, function()
-                return { type = "minimum_due", now_ms = now_ms() }
-            end)
-        end
-        if previous_phase == "showing" and next_state.phase ~= "showing" then
-            cancel_timer("minimum")
-            cancel_timer("frame")
-            cancel_timer("idle")
-        elseif (event.type == "activity" or event.type == "idle")
-                and (next_state.phase == "waiting" or next_state.phase == "showing") then
-            reset_idle_timer()
-        end
-    end
-
-    local function submit(event_factory, context)
+    -- Coalesce UI updates while the main loop is busy. No chunk or completion
+    -- callback is ever admitted into this bounded display slot.
+    submit=function(event)
+        if s.finished then return end
+        if not s.pending or event.type=='progress' or s.pending.type~='progress' and event.type~='frame' then s.pending=event end
+        if s.enqueued then return end;s.enqueued=true
         scheduler.enqueue(function()
-            if session.finished then
-                return
-            end
-            if not vim.api.nvim_buf_is_valid(session.buf) then
-                dispatch({ type = "invalid" })
-                return
-            end
-            dispatch(event_factory(), context)
+            s.enqueued=false;local pending=s.pending;s.pending=nil
+            if not s.finished and pending then dispatch(pending)end
         end)
     end
-
-    -- Validate immediately before the stream writer mutates the pending line.
-    -- Since before_write, mutation, and tip_written share one scheduled callback,
-    -- this authorization can only cover invalidation caused by that mutation.
-    session.before_write = function(_self)
-        session.tip_repair_authorized = false
-        if session.finished then
-            -- Reducer actions may already have emitted staged content into the
-            -- scheduled stream writer before finish hid the presentation.
-            return session.visible_text == nil
-        end
-        if not vim.api.nvim_buf_is_valid(session.buf) then
-            dispatch({ type = "invalid" })
-            return false
-        end
-        if session.visible_text then
-            local position = vim.api.nvim_buf_get_extmark_by_id(
-                session.buf, namespace, session.extmark_id, { details = true })
-            if #position < 2 or (position[3] and position[3].invalid) then
-                dispatch({ type = "invalid" })
-                return false
-            end
-        end
-        session.tip_repair_authorized = true
-        return true
+    function s.activity(_self)submit({type='activity'})end
+    function s:progress(event)
+        if self.finished then return end
+        if type(event)~='table'then event={message=tostring(event or '')}end
+        local message;self.detail_state,message=Presentation.progress_message(self.detail_state,event)
+        submit({type='progress',message=type(message)=='string' and Presentation.bounded_message(message) or ''})
     end
-
-    -- Called synchronously from dispatcher.create_handler's scheduled writer.
-    -- The pending stream line may have just invalidated this extmark; repaint it
-    -- before the writer yields so queued frame/progress work never sees a gap.
-    session.tip_written = function(_self, last_written_line_0)
-        local repair_authorized = session.tip_repair_authorized
-        session.tip_repair_authorized = false
-        if session.finished or type(last_written_line_0) ~= "number"
-                or not vim.api.nvim_buf_is_valid(session.buf) then
-            return
-        end
-        session.anchor_line = last_written_line_0
-        session.last_mark_row = last_written_line_0
-        session.last_mark_col = 0
-        if not session.visible_text then
-            return
-        end
-        local position = vim.api.nvim_buf_get_extmark_by_id(
-            session.buf, namespace, session.extmark_id, { details = true })
-        local mark_is_valid = #position >= 2 and not (position[3] and position[3].invalid)
-        if not mark_is_valid and not repair_authorized then
-            dispatch({ type = "invalid" })
-            return
-        end
-        if not set_mark(session.visible_text, last_written_line_0, 0) then
-            dispatch({ type = "invalid" })
-        end
+    function s:written(row,col)
+        if self.finished then return end
+        self.pending=nil;self.anchor_line=row;self.anchor_col=col or 0
+        self.state=Presentation.transition(self.state,{type='written'});hide()
+        cancel_timer('reveal');cancel_timer('frame');cancel_timer('idle')
     end
-
-    session.activity = function(_self, _qid)
-        submit(function()
-            return {
-                type = "activity",
-                now_ms = now_ms(),
-                verb_index = session.choose_verb_index(#verbs),
-            }
-        end)
-    end
-
-    session.content = function(_self, qid, chunk)
-        submit(function()
-            return { type = "content", now_ms = now_ms(), qid = qid, chunk = chunk }
-        end)
-    end
-
-    session.progress = function(_self, _qid, event)
-        submit(function()
-            if type(event) ~= "table" then
-                event = { message = tostring(event or "") }
-            end
-            local message
-            session.detail_state, message = presentation.progress_message(session.detail_state, event)
-            return { type = "progress", now_ms = now_ms(), message = message }
-        end)
-    end
-
-    session.complete = function(_self, _qid, continuation)
-        submit(function()
-            return { type = "complete", now_ms = now_ms(), completion = continuation }
-        end)
-    end
-
-    session.failure = function(_self, _qid, err, surface_failure)
-        submit(function()
-            return {
-                type = "failure",
-                error = err,
-                owns_transcript = type(surface_failure) == "function",
-            }
-        end, { surface_failure = surface_failure })
-    end
-
-    session.cancel = function(_self, reason)
-        submit(function() return { type = "cancel", reason = reason } end)
-    end
-
-    -- Synchronously retire a structurally stale session. This public contract
-    -- never throws: all external callbacks reached by dispatch are contained.
-    session.retire_stale_now = function(_self, reason)
-        dispatch({ type = "stale", reason = reason, skip_lease_validation = true })
-    end
-
-    active_by_buf[buf] = session
-    local enqueued, enqueue_error = pcall(scheduler.enqueue, function()
-        if session.finished then
-            return
-        end
-        if not vim.api.nvim_buf_is_valid(session.buf) then
-            dispatch({ type = "invalid" })
-            return
-        end
-        schedule_after("reveal", 1000, function()
-            return { type = "reveal_due", now_ms = now_ms() }
-        end)
-        reset_idle_timer()
+    function s.complete(_self)finish()end
+    function s.cancel(_self)finish()end
+    function s.retire_stale_now(_self)finish()end
+    local ok,err=pcall(function()
+        after('reveal',1000,{type='reveal_due'});after('idle',15000,{type='idle'})
     end)
-    if not enqueued then
-        finish()
-        error(enqueue_error, 0)
-    end
-
-    return session
+    if not ok then finish();error(err,0)end
+    return s
 end
-
--- Cancel every registered chat session before global task termination.
-M.cancel_all = function(reason)
-    local sessions = {}
-    for _, session in pairs(active_by_buf) do
-        table.insert(sessions, session)
-    end
-    for _, session in ipairs(sessions) do
-        session:cancel(reason)
-    end
+function M.is_active(buf,generation)
+    local g=groups[buf];return g~=nil and (generation==nil or g.sessions[generation]~=nil)
 end
-
--- Report only a fully constructed session that still owns this buffer.
-M.is_active = function(buf)
-    local session = active_by_buf[buf]
-    return session ~= nil and not session.finished
-end
-
--- Return a copied display identity only for a fully constructed active session.
-function M.identity(buf)
-    local session = active_by_buf[buf]
-    if not session or session.finished then
-        return nil
+-- Copied display values. Compare version for membership identity; table
+-- identity is deliberately not an authorization or stability contract.
+function M.identity(buf,generation)
+    local g=groups[buf];if not g then return nil end
+    if generation~=nil then
+        local s=g.sessions[generation];if not s then return nil end
+        return {agent=s.agent,generation=s.generation,entity=s.entity,version=g.version,count=1}
     end
-    return { agent = session.agent }
+    local identities={}
+    for _,s in pairs(g.sessions)do identities[#identities+1]={agent=s.agent,generation=s.generation,entity=s.entity}end
+    table.sort(identities,function(a,b)return type(a.generation)..tostring(a.generation)<type(b.generation)..tostring(b.generation)end)
+    return {count=#identities,identities=identities,version=g.version,agent=#identities==1 and identities[1].agent or nil}
 end
-
--- Synchronously retire one stale session; no-op after ownership is gone.
----@param buf number
----@param reason string|nil
----@return boolean retired
-function M.retire_stale_now(buf, reason)
-    local session = active_by_buf[buf]
-    if not session or session.finished then
-        return false
-    end
-    session:retire_stale_now(reason)
+function M.retire_stale_now(buf,_reason,generation)
+    local g=groups[buf];if not g then return false end
+    if generation then local s=g.sessions[generation];if not s then return false end;s:cancel()
+    else retire_group(g)end
     return true
 end
-
+function M.cancel_all()
+    local list={};for _,g in pairs(groups)do list[#list+1]=g end
+    for _,g in ipairs(list)do retire_group(g)end
+end
 return M

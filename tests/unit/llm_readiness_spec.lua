@@ -192,4 +192,24 @@ describe('llm readiness deferral', function()
         end
         assert.equals(0, state.ensure)
     end)
+    it('resumes scoped preparation after disjoint typing without restoring editor focus', function()
+        local actions=0
+        readiness.defer(parley,function() actions=actions+1 end,{buf=source_buf,
+            validate_source=function()return true end})
+        vim.api.nvim_buf_set_lines(source_buf,0,1,false,{'human draft'})
+        local other=make_buffer({'elsewhere'});local win=make_float(other)
+        state.ready()
+        assert.equals(1,actions)
+        assert.equals(win,vim.api.nvim_get_current_win())
+        assert.equals(other,vim.api.nvim_get_current_buf())
+    end)
+    it('refuses scoped preparation after its captured authority is revoked', function()
+        local current=true;local actions,reason=0,nil
+        readiness.defer(parley,function()actions=actions+1 end,{validate_source=function()
+            return current,'response revoked'
+        end,on_cancel=function(value)reason=value end})
+        current=false;state.ready();state.ready()
+        assert.equals(0,actions);assert.equals('response revoked',reason)
+    end)
+
 end)

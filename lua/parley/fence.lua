@@ -16,8 +16,9 @@
 -- Pure: no Neovim API, no state.
 
 local M = {}
+local lexical = require("parley.document.lexical")
 
-M.MIN = 3
+M.MIN = lexical.FENCE_MIN
 
 --- Length of the fence this line opens, or nil when it opens none.
 ---
@@ -30,25 +31,8 @@ M.MIN = 3
 --- defend "a question is never folded" blind themselves (#200 BR-43).
 --- @param line string
 --- @return integer|nil
-function M.open_len(line)
-    if type(line) ~= "string" then return nil end
-    local ticks, info = line:match("^(`+)([^`]*)$")
-    if not ticks or #ticks < M.MIN then return nil end
-    return #ticks, info
-end
-
---- Whether this line closes a fence of length `n`.
----
---- Exactly `n` backticks and nothing else. A shorter run is body content; a
---- longer one belongs to some other pair, and treating it as a close is how a
---- reader can terminate a body early.
---- @param line string
---- @param n integer
---- @return boolean
-function M.closes(line, n)
-    if type(line) ~= "string" or type(n) ~= "number" then return false end
-    return line:match("^(`+)%s*$") ~= nil and #(line:match("^(`+)")) == n
-end
+M.open_len = lexical.ordinary_open_len
+M.closes = lexical.ordinary_closes
 
 --- Longest run of backticks anywhere in `s`.
 --- @return integer

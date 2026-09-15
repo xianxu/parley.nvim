@@ -659,6 +659,13 @@ M.open = function(_)
 			_parley.logger.debug("ChatFinder captured fallback source_win: " .. source_win)
 		end
 
+		-- Each picker callback retains its own target; later picker invocations
+		-- must not replace the provenance of an already queued selection.
+		local insert_capture=_parley._chat_finder.insert_capture
+		local insert_buf=_parley._chat_finder.insert_buf
+		local insert_normal=_parley._chat_finder.insert_normal_mode
+		local insert_mode=_parley._chat_finder.insert_mode
+
 		-- The two recency-cycle handlers differ only by direction; one factory,
 		-- four keys: <C-a>/<Tab> (left) and <C-s>/<S-Tab> (right). #159 (ARCH-DRY).
 		local function make_recency_cycle(direction)
@@ -756,19 +763,22 @@ M.open = function(_)
 				_parley._chat_finder.sticky_query = finder_sticky.extract(query, { "root", "tag" })
 			end,
 				on_select = function(item)
+					if insert_capture and _parley._chat_finder.insert_capture~=insert_capture then
+						require("parley.buffer_edit").cancel_user(insert_capture);return
+					end
 					_parley._chat_finder.opened = false
 					local file_path = item.value
 				local display = item.display
 
 				-- Check if we're in insert mode (for inserting chat references)
-				if _parley._chat_finder.insert_mode then
+				if insert_mode then
 					-- Switch to the original source window first
 					if source_win and vim.api.nvim_win_is_valid(source_win) then
 						vim.api.nvim_set_current_win(source_win)
 						_parley.logger.debug("Switched to source window for insert: " .. source_win)
 					end
 
-					if _parley._chat_finder.insert_buf and vim.api.nvim_buf_is_valid(_parley._chat_finder.insert_buf) then
+					if insert_buf and vim.api.nvim_buf_is_valid(insert_buf) then
 						-- Extract topic from the display
 						local topic = display:match(" %- (.+) %[") or "Chat"
 
@@ -777,52 +787,31 @@ M.open = function(_)
 
 						local branch_prefix = _parley.config.chat_branch_prefix or "🌿:"
 
-						-- Handle normal mode insertion (full-line branch ref)
-						if _parley._chat_finder.insert_normal_mode then
-							vim.api.nvim_buf_set_lines(
-								_parley._chat_finder.insert_buf,
-								_parley._chat_finder.insert_line - 1,
-								_parley._chat_finder.insert_line - 1,
-								false,
-								{ require("parley.branch_ref").format_ref_line(branch_prefix, rel_path, topic) }
-							)
+						local edits = require("parley.buffer_edit")
+						local capture = insert_capture
+						local resolved = capture and edits.resolve_user(capture)
+						if resolved then
+							local normal = insert_normal
+							local text = normal
+								and require("parley.branch_ref").format_ref_line(branch_prefix, rel_path, topic) .. "\n"
+								or "[" .. branch_prefix .. topic .. "](" .. rel_path .. ")"
+							local result = edits.apply_user(capture, { { region = 1, text = text } })
+							if result.status == "applied" then
+								local first = resolved.regions[1].first
+								if not normal and vim.api.nvim_get_current_buf() == insert_buf then
+									vim.api.nvim_win_set_cursor(0, { first.row + 1, first.col + #text })
+									vim.cmd("startinsert")
+								end
+								_parley.logger.info("Inserted chat reference: " .. rel_path)
+							end
 						else
-							-- Handle insert mode insertion (inline branch link)
-							local current_line = vim.api.nvim_buf_get_lines(
-								_parley._chat_finder.insert_buf,
-								_parley._chat_finder.insert_line - 1,
-								_parley._chat_finder.insert_line,
-								false
-							)[1]
-
-							local col = _parley._chat_finder.insert_col
-							local inline_link = "[" .. branch_prefix .. topic .. "](" .. rel_path .. ")"
-							local new_line = current_line:sub(1, col) .. inline_link .. current_line:sub(col + 1)
-
-							vim.api.nvim_buf_set_lines(
-								_parley._chat_finder.insert_buf,
-								_parley._chat_finder.insert_line - 1,
-								_parley._chat_finder.insert_line,
-								false,
-								{ new_line }
-							)
-
-							-- Move cursor to the end of the inserted reference
-							vim.api.nvim_win_set_cursor(0, {
-								_parley._chat_finder.insert_line,
-								col + #inline_link,
-							})
-
-							-- Return to insert mode
-							vim.schedule(function()
-								vim.cmd("startinsert")
-							end)
+							_parley.logger.warning("Chat reference cancelled: insertion target changed")
 						end
-
-						_parley.logger.info("Inserted chat reference: " .. rel_path)
 					end
 
 					-- Reset insert mode flags
+					require("parley.buffer_edit").cancel_user(_parley._chat_finder.insert_capture)
+					_parley._chat_finder.insert_capture = nil
 					_parley._chat_finder.insert_mode = false
 					_parley._chat_finder.insert_buf = nil
 					_parley._chat_finder.insert_line = nil
@@ -838,6 +827,10 @@ M.open = function(_)
 				end
 			end,
 			on_cancel = function()
+				require("parley.buffer_edit").cancel_user(insert_capture)
+				if insert_capture and _parley._chat_finder.insert_capture~=insert_capture then return end
+				_parley._chat_finder.insert_capture = nil
+				_parley._chat_finder.insert_mode = false
 				_parley._chat_finder.opened = false
 				_parley._chat_finder.initial_index = nil
 				_parley._chat_finder.initial_value = nil

@@ -230,9 +230,8 @@ describe("anthropic.decode_tool_calls_from_stream (synthetic fixtures)", functio
         assert.same({}, providers.decode_anthropic_tool_calls_from_stream("garbage\ndata: not json\n"))
     end)
 
-    it("tolerates missing `index` field by defaulting to 0", function()
-        -- Defensive: some event shapes might omit index. If there's
-        -- only one block, default-to-0 keeps the accumulation working.
+    it("rejects a missing declared index", function()
+        -- No declared identity: never alias this block to valid index zero.
         local raw = sse({
             { type = "content_block_start",
               content_block = { type = "tool_use", id = "toolu_G", name = "read_file", input = {} } },
@@ -242,8 +241,7 @@ describe("anthropic.decode_tool_calls_from_stream (synthetic fixtures)", functio
             { type = "message_stop" },
         })
         local calls = providers.decode_anthropic_tool_calls_from_stream(raw)
-        assert.equals(1, #calls)
-        assert.equals("a", calls[1].input.path)
+        assert.equals(0, #calls)
     end)
 end)
 

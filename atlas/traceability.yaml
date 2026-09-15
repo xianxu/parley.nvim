@@ -139,6 +139,17 @@ atlas:
 
   chat/lifecycle:
     code:
+      - lua/parley/generation.lua
+      - lua/parley/generation_runner.lua
+      - lua/parley/response_target.lua
+      - lua/parley/response_submission.lua
+      - lua/parley/response_layout.lua
+      - lua/parley/response_preparation.lua
+      - lua/parley/response_session.lua
+      - lua/parley/response_provider.lua
+      - lua/parley/response_tools.lua
+      - lua/parley/response_completion.lua
+      - lua/parley/response_topic.lua
       - lua/parley/chat_slug.lua
       - lua/parley/outline.lua
       - lua/parley/answer_structure.lua
@@ -155,11 +166,40 @@ atlas:
       - lua/parley/chat_finder.lua
       - lua/parley/dispatcher.lua
       - lua/parley/render.lua
-      - lua/parley/chat_lease.lua
       - lua/parley/chat_history.lua
       - lua/parley/chat_pending.lua
       - lua/parley/tasker.lua
+      - lua/parley/attempt.lua
     tests:
+      - tests/unit/response_preparation_spec.lua
+      - tests/unit/response_target_spec.lua
+      - tests/integration/response_target_spec.lua
+      - tests/unit/generation_spec.lua
+      - tests/unit/response_layout_spec.lua
+      - tests/integration/generation_sequences_spec.lua
+      - tests/integration/response_submission_spec.lua
+      - tests/integration/response_session_spec.lua
+      - tests/integration/response_profile_spec.lua
+      - tests/integration/response_provider_spec.lua
+      - tests/integration/response_tools_spec.lua
+      - tests/integration/response_completion_spec.lua
+      - tests/integration/response_topic_spec.lua
+      - tests/integration/chat_scoped_response_spec.lua
+      - tests/integration/chat_stop_generation_spec.lua
+      - tests/integration/document_owned_frame_spec.lua
+      - tests/integration/document_append_extent_spec.lua
+      - tests/integration/document_structural_locality_spec.lua
+      - tests/unit/document_splice_admission_spec.lua
+      - tests/integration/chat_onboarding_capture_spec.lua
+      - tests/integration/chat_remote_preparation_spec.lua
+      - tests/integration/branch_topic_input_spec.lua
+      - tests/integration/drill_in_transaction_spec.lua
+      - tests/arch/document_ownership_spec.lua
+      - tests/integration/chat_progress_process_spec.lua
+      - tests/unit/attempt_spec.lua
+      - tests/unit/tasker_unit_spec.lua
+      - tests/integration/chat_ownership_spec.lua
+      - tests/integration/dispatcher_ownership_spec.lua
       - tests/unit/keybindings_spec.lua
       - tests/unit/config_tools_spec.lua
       - tests/unit/perf_harness_spec.lua
@@ -170,11 +210,12 @@ atlas:
       - tests/unit/chat_history_spec.lua
       - tests/unit/highlight_structure_spec.lua
       - tests/integration/perf_chat_typing_spec.lua
+      - tests/integration/perf_ownership_spec.lua
       - tests/integration/diagnostic_refresh_spec.lua
+      - tests/integration/diagnostic_reentrancy_spec.lua
       - tests/integration/highlighting_spec.lua
       - tests/integration/highlight_typing_spec.lua
       - tests/arch/performance_line_reader_spec.lua
-      - tests/integration/chat_lease_spec.lua
       - tests/integration/chat_pending_spec.lua
       - tests/integration/tasker_run_spec.lua
       - tests/integration/chat_move_spec.lua
@@ -191,17 +232,21 @@ atlas:
 
   chat/response_progress:
     code:
+      - lua/parley/response_session.lua
+      - lua/parley/generation_runner.lua
+      - lua/parley/response_provider.lua
       - lua/parley/chat_presentation.lua
       - lua/parley/chat_pending.lua
       - lua/parley/chat_respond.lua
       - lua/parley/exchange_model.lua
-      - lua/parley/chat_lease.lua
       - lua/parley/dispatcher.lua
       - lua/parley/tasker.lua
       - lua/parley/vault.lua
       - lua/parley/progress.lua
       - tests/fixtures/fake_sse_server
     tests:
+      - tests/integration/response_session_spec.lua
+      - tests/integration/chat_scoped_response_spec.lua
       - tests/unit/chat_presentation_spec.lua
       - tests/unit/dispatcher_query_spec.lua
       - tests/unit/vault_spec.lua
@@ -228,6 +273,119 @@ atlas:
       - tests/integration/read_repair_spec.lua
       - tests/arch/single_resolver_spec.lua
       - tests/integration/chat_respond_spec.lua
+
+  chat/ownership:
+    code:
+      - lua/parley/document/state.lua
+      - lua/parley/document/editor.lua
+      - lua/parley/document/user_edits.lua
+      - lua/parley/document/replacement.lua
+      - lua/parley/generation.lua
+      - lua/parley/generation_runner.lua
+      - lua/parley/response_session.lua
+      - lua/parley/response_submission.lua
+      - lua/parley/response_provider.lua
+      - lua/parley/response_tools.lua
+    tests:
+      - tests/unit/document_state_spec.lua
+      - tests/unit/document_write_plan_spec.lua
+      - tests/unit/document_coordinator_spec.lua
+      - tests/unit/document_user_edits_spec.lua
+      - tests/integration/document_user_guards_spec.lua
+      - tests/integration/document_edit_spec.lua
+      - tests/integration/document_native_history_spec.lua
+      - tests/integration/generation_sequences_spec.lua
+      - tests/integration/response_session_spec.lua
+      - tests/integration/chat_scoped_response_spec.lua
+      - tests/integration/chat_stop_generation_spec.lua
+      - tests/arch/document_ownership_spec.lua
+      - tests/integration/diagnostic_publication_spec.lua
+      - tests/integration/document_header_authority_spec.lua
+      - tests/integration/generation_input_affinity_spec.lua
+      - tests/integration/topic_presentation_spec.lua
+      - tests/integration/user_edit_callers_spec.lua
+      - tests/unit/document_append_spec.lua
+      - tests/unit/document_capacity_spec.lua
+      - tests/unit/document_dependency_affinity_spec.lua
+      - tests/unit/document_replacement_spec.lua
+      - tests/unit/document_successor_guard_spec.lua
+      - tests/unit/document_tail_spec.lua
+      - tests/unit/stream_output_spec.lua
+      - tests/unit/user_buffer_edit_spec.lua
+
+  chat/batch:
+    code:
+      - lua/parley/batch.lua
+      - lua/parley/batch_response.lua
+      - lua/parley/chat_respond.lua
+      - lua/parley/document/structure.lua
+    tests:
+      - tests/unit/batch_spec.lua
+      - tests/unit/document_region_revision_spec.lua
+      - tests/integration/document_revision_spec.lua
+      - tests/integration/batch_respond_spec.lua
+      - tests/integration/batch_lifecycle_spec.lua
+      - tests/integration/batch_validation_budget_spec.lua
+      - tests/integration/chat_respond_spec.lua
+  chat/recovery:
+    code:
+      - lua/parley/chat_recovery.lua
+      - lua/parley/answer_recovery.lua
+      - lua/parley/response_recovery.lua
+    tests:
+      - tests/integration/chat_recovery_spec.lua
+      - tests/integration/recovery_paths_spec.lua
+      - tests/integration/answer_recovery_spec.lua
+      - tests/integration/response_recovery_spec.lua
+  chat/document:
+    code:
+      - lua/parley/line_reader.lua
+      - lua/parley/document/sequence.lua
+      - lua/parley/document/lexical.lua
+      - lua/parley/document/grammar.lua
+      - lua/parley/document/lexer.lua
+      - lua/parley/document/facts.lua
+      - lua/parley/document/dependencies.lua
+      - lua/parley/document/semantic.lua
+      - lua/parley/document/structure.lua
+      - lua/parley/deferred_work.lua
+      - lua/parley/document/init.lua
+      - lua/parley/document/editor.lua
+      - lua/parley/document/state.lua
+      - lua/parley/document/projection.lua
+    tests:
+      - tests/integration/diagnostic_reentrancy_spec.lua
+      - tests/unit/document_sequence_spec.lua
+      - tests/unit/document_lexical_spec.lua
+      - tests/unit/document_grammar_spec.lua
+      - tests/unit/document_lexer_spec.lua
+      - tests/unit/document_facts_spec.lua
+      - tests/unit/document_dependencies_spec.lua
+      - tests/unit/document_semantic_spec.lua
+      - tests/unit/document_structure_spec.lua
+      - tests/integration/perf_document_spec.lua
+      - tests/integration/document_reader_spec.lua
+
+      - tests/unit/deferred_work_spec.lua
+      - tests/unit/document_coordinator_spec.lua
+      - tests/unit/document_progress_spec.lua
+      - tests/unit/document_projection_spec.lua
+      - tests/unit/document_deferred_fragment_spec.lua
+      - tests/unit/document_state_spec.lua
+      - tests/unit/document_write_plan_spec.lua
+      - tests/integration/document_scheduler_spec.lua
+      - tests/integration/document_edit_spec.lua
+      - tests/integration/document_callback_frame_spec.lua
+      - tests/integration/document_retention_spec.lua
+      - tests/integration/document_native_history_spec.lua
+      - tests/integration/document_fold_batches_spec.lua
+      - tests/integration/document_fold_join_spec.lua
+      - tests/integration/document_presentation_reentrant_spec.lua
+      - tests/integration/document_fold_retirement_spec.lua
+      - tests/integration/document_fold_uncertainty_retirement_spec.lua
+      - tests/integration/document_fold_native_spec.lua
+      - tests/integration/document_folds_spec.lua
+      - tests/integration/highlighter_document_spec.lua
 
   chat/parsing:
     code:
@@ -256,10 +414,8 @@ atlas:
       - lua/parley/render_buffer.lua
       - lua/parley/fold_projection.lua
       - tests/fixtures/fold_multi_exchange.md
-      - lua/parley/exchange_anchors.lua
       - lua/parley/fence.lua
       - lua/parley/tool_folds.lua
-      - lua/parley/tool_loop.lua
       - lua/parley/dispatcher.lua
     tests:
       - tests/unit/question_tags_spec.lua
@@ -268,7 +424,7 @@ atlas:
       - tests/unit/answer_structure_spec.lua
       - tests/unit/tool_folds_spec.lua
       - tests/unit/fold_projection_spec.lua
-      - tests/unit/exchange_anchors_spec.lua
+      - tests/unit/document_identity_spec.lua
       - tests/integration/tool_folds_spec.lua
       - tests/integration/fold_invariants_spec.lua
       - tests/integration/create_handler_spec.lua
@@ -410,6 +566,7 @@ atlas:
       - tests/helpers/fresh_clone_probe.lua
       - tests/minimal_init.vim
       - tests/helpers/ready_port.lua
+      - tests/helpers/spec_runner.lua
       - tests/helpers/fixture_process.lua
       - tests/fixtures/fake_sse_server
       - tests/perf/chat_typing.lua
@@ -421,6 +578,7 @@ atlas:
       - tests/arch/destructive_recipe_spec.lua
       - tests/arch/superseded_comment_spec.lua
       - tests/unit/ready_port_spec.lua
+      - tests/unit/spec_runner_spec.lua
       - tests/integration/fixture_ready_publish_spec.lua
       - tests/integration/chat_progress_process_spec.lua
 
@@ -620,9 +778,62 @@ atlas:
       - tests/unit/custom_prompts_spec.lua
       - tests/unit/picker_items_spec.lua
 
+  providers/tool_execution:
+    code:
+      - lua/parley/tools/operation.lua
+      - lua/parley/tools/resources.lua
+      - lua/parley/tools/scheduler.lua
+      - lua/parley/tools/producer.lua
+      - lua/parley/tool_operations.lua
+      - lua/parley/recovery_paths.lua
+      - lua/parley/tools/dispatcher.lua
+      - lua/parley/tools/types.lua
+      - lua/parley/tools/async_builtin.lua
+      - lua/parley/tools/filesystem.lua
+      - lua/parley/tools/filesystem_operation.lua
+      - lua/parley/skill_source_read.lua
+      - lua/parley/tools/path_authority.lua
+      - lua/parley/tools/process_scope.lua
+      - lua/parley/tools/traversal_policy.lua
+      - lua/parley/tools/process_bootstrap.lua
+      - scripts/tool_process.lua
+      - lua/parley/tools/file_transform.lua
+      - lua/parley/tools/file_refresh.lua
+      - lua/parley/tools/result_evidence.lua
+      - lua/parley/tasker.lua
+      - lua/parley/attempt.lua
+      - tests/helpers/fake_process.lua
+      - tests/helpers/fake_tool_filesystem.lua
+    tests:
+      - tests/unit/tool_operation_spec.lua
+      - tests/unit/tool_resources_spec.lua
+      - tests/unit/tool_scheduler_spec.lua
+      - tests/unit/tool_filesystem_spec.lua
+      - tests/unit/tool_filesystem_operation_spec.lua
+      - tests/unit/skill_source_read_spec.lua
+      - tests/integration/tool_filesystem_native_spec.lua
+      - tests/integration/tasker_supervision_spec.lua
+      - tests/integration/async_builtin_spec.lua
+      - tests/integration/tool_dispatch_capture_spec.lua
+      - tests/integration/tool_producer_spec.lua
+      - tests/integration/chat_async_tools_spec.lua
+      - tests/unit/tool_path_authority_lifecycle_spec.lua
+      - tests/unit/tool_process_scope_spec.lua
+      - tests/unit/tool_traversal_policy_spec.lua
+      - tests/unit/tool_file_transform_spec.lua
+      - tests/unit/tool_result_evidence_spec.lua
+      - tests/integration/tool_path_authority_spec.lua
+      - tests/integration/tool_process_scope_spec.lua
+      - tests/integration/tool_file_refresh_spec.lua
+      - tests/integration/tool_result_evidence_spec.lua
+
   providers/tool_use:
     code:
-      - lua/parley/tool_loop.lua
+      - lua/parley/generation.lua
+      - lua/parley/generation_runner.lua
+      - lua/parley/response_provider.lua
+      - lua/parley/response_tools.lua
+      - lua/parley/response_session.lua
       - lua/parley/sse.lua
       - lua/parley/tools/wire.lua
       - lua/parley/tools/wire_anthropic.lua
@@ -643,16 +854,17 @@ atlas:
       - lua/parley/tools/builtin/write_file.lua
       - lua/parley/tools/backup.lua
       - lua/parley/chat_respond.lua
-      - lua/parley/chat_lease.lua
       - lua/parley/neighborhood.lua
       - lua/parley/repo_artifacts.lua
     tests:
+      - tests/integration/response_provider_spec.lua
+      - tests/integration/response_tools_spec.lua
+      - tests/integration/response_session_spec.lua
       - tests/unit/fence_spec.lua
-      - tests/integration/chat_lease_spec.lua
       - tests/integration/neighborhood_completion_spec.lua
       - tests/integration/openai_tool_loop_spec.lua
       - tests/integration/cliproxy_tool_conformance_spec.lua
-      - tests/unit/tool_loop_spec.lua
+      - tests/unit/tool_wire_order_spec.lua
       - tests/unit/tool_wire_registry_spec.lua
       - tests/unit/anthropic_tool_wire_spec.lua
       - tests/unit/openai_tool_encode_spec.lua
@@ -876,6 +1088,7 @@ atlas:
       - lua/parley/skill_edits.lua
       - lua/parley/skill_assembly.lua
       - lua/parley/skill_invoke.lua
+      - lua/parley/skill_source_read.lua
       - lua/parley/skill_render.lua
       - lua/parley/neighborhood.lua
       - lua/parley/tools/builtin/propose_edits.lua
@@ -893,6 +1106,7 @@ atlas:
       - tests/unit/skill_assembly_spec.lua
       - tests/unit/tools_builtin_propose_edits_spec.lua
       - tests/integration/skill_invoke_spec.lua
+      - tests/unit/skill_source_read_spec.lua
       - tests/integration/skill_invoke_review_spec.lua
       - tests/integration/voice_apply_spec.lua
       - tests/unit/skill_picker_spec.lua

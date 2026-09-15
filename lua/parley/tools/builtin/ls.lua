@@ -4,15 +4,7 @@
 -- advertises which version is available so Claude adapts its syntax.
 
 local function detect_ls()
-    if vim.fn.executable("ls") == 1 then
-        local uname = vim.fn.system("uname -s"):gsub("%s+$", "")
-        if uname == "Darwin" then
-            return "ls", "BSD ls (macOS)"
-        else
-            local version = vim.fn.system("ls --version 2>&1"):match("[^\n]+") or "ls"
-            return "ls", version
-        end
-    end
+    if vim.fn.executable("ls") == 1 then return "ls", "ls" end
     return nil, nil
 end
 
@@ -40,7 +32,7 @@ local function build_description()
     end
 end
 
-return {
+local definition = {
     name = "ls",
     kind = "read",
     description = build_description(),
@@ -59,7 +51,7 @@ return {
         },
         required = { "path" },
     },
-    handler = function(input)
+    handler = function(input, execution)
         input = input or {}
         local ok_fields, fields_err = argv.reject_unknown_fields(input, ALLOWED_FIELDS)
         if not ok_fields then
@@ -101,8 +93,9 @@ return {
             cmd[#cmd + 1] = flag
         end
         cmd[#cmd + 1] = path
-        local result = vim.fn.system(cmd)
-        local exit_code = vim.v.shell_error
+        local result, exit_code
+        if execution and execution.run then result, exit_code = execution.run(cmd)
+        else result = vim.fn.system(cmd); exit_code = vim.v.shell_error end
 
         if exit_code ~= 0 then
             return {
@@ -128,3 +121,5 @@ return {
         }
     end,
 }
+
+return require("parley.tools.async_builtin").bind(definition)

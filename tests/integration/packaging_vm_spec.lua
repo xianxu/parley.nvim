@@ -146,13 +146,19 @@ describe('disposable packaging VM ownership', function()
         vim.fn.writefile({
             'vim.opt.runtimepath:prepend(' .. string.format('%q', repository) .. ')',
             'require("parley.starter").start()',
+            'local profile = vim.fn.resolve(vim.fn.stdpath("data")) .. "/"',
+            'local function confined() assert(vim.fn.resolve(require("parley").config.chat_dir):sub(1, #profile) == profile, "guest chat root escaped isolated profile") end',
+            'confined()',
             'local ok, result = pcall(function() return dofile(' .. string.format('%q', repository .. '/tests/packaging/vm_chat.lua') .. ').run("fake") end)',
             'if not ok then io.stderr:write(tostring(result)); vim.cmd("cquit 1") end',
             'assert(result.first_use and result.managed_route and result.response_nonempty)',
+            'confined()',
+            'assert(vim.fn.resolve(vim.api.nvim_buf_get_name(0)):sub(1, #profile) == profile, "guest chat file escaped isolated profile")',
+            'assert(vim.fn.resolve(vim.fn.getcwd()) == vim.fn.resolve(' .. string.format('%q', root) .. '), "guest helper changed cwd")',
             'vim.cmd("qa!")',
         }, script)
         local result = vim.system({vim.v.progpath, '--headless', '-n', '-i', 'NONE', '-u', 'NONE', '-l', script},
-            {text = true, clear_env = true, env = {
+            {text = true, cwd = root, clear_env = true, env = {
                 HOME = root .. '/home', PATH = vim.env.PATH, NVIM_APPNAME = 'parley',
                 XDG_CONFIG_HOME = root .. '/config', XDG_DATA_HOME = root .. '/data',
                 XDG_STATE_HOME = root .. '/state', XDG_CACHE_HOME = root .. '/cache',

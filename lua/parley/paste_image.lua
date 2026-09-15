@@ -100,14 +100,21 @@ function M.paste(buf, deps)
     end
 
     local row = vim.api.nvim_win_get_cursor(0)[1]
-    local anchor = buffer_edit.make_handle(buf, row - 1)
+    local source = vim.api.nvim_buf_get_lines(buf, row - 1, row, false)[1] or ""
+    local capture, capture_error = buffer_edit.capture_user(buf, "paste-image", {
+        { first = { row = row - 1, col = #source }, last = { row = row - 1, col = #source } },
+    })
+    if not capture then
+        deps.notify("Parley: nothing pasted — " .. tostring(capture_error), "warn")
+        return
+    end
     local tmp = vim.fn.tempname() .. ".png"
     inflight[buf] = true
 
     local function finish(msg, level)
         inflight[buf] = nil
+        buffer_edit.cancel_user(capture)
         os.remove(tmp)
-        buffer_edit.handle_invalidate(anchor) -- safe after the buffer is gone
         deps.notify(msg, level)
     end
 
@@ -139,8 +146,10 @@ function M.paste(buf, deps)
                 return finish("Parley: nothing pasted — " .. save_err, "error")
             end
             local iok, ierr = pcall(function()
-                local line = buffer_edit.handle_line(anchor)
-                buffer_edit.insert_lines_at(buf, line + 1, { assets.markdown_link(rel) })
+                local result = buffer_edit.apply_user(capture, {
+                    { region = 1, text = "\n" .. assets.markdown_link(rel) },
+                })
+                if result.status ~= "applied" then error(result.reason or result.error or result.status) end
             end)
             if not iok then
                 rollback(abs, created)

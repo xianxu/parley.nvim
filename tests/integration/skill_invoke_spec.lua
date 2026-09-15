@@ -3,12 +3,14 @@
 -- Reuses the chat_respond_spec fake pattern: monkeypatch parley.dispatcher.query
 -- (the LLM dispatcher), inject a tool-use raw_response into tasker, fire on_exit;
 -- vim.wait for the (vim.scheduled) on_done. The propose_edits call applies through
--- the REAL tools dispatcher (execute_call) onto the artifact file.
+-- the real asynchronous producer and checked filesystem onto the artifact file.
 
 local skill_invoke = require("parley.skill_invoke")
 local parley = require("parley")
 local tasker = require("parley.tasker")
 local assembly = require("parley.skill_assembly")
+
+local remove_fixture_dir = require("tests.helpers.fixture_directory").remove
 
 -- SSE builder (same shape as tests/unit/anthropic_tool_decode_spec.lua).
 local function sse(events)
@@ -65,6 +67,7 @@ describe("skill_invoke.invoke", function()
         vim.fn.writefile({ "alpha beta" }, path)
         vim.cmd("edit " .. vim.fn.fnameescape(path))
         buf = vim.api.nvim_get_current_buf()
+        vim.bo[buf].autoread=true
 
         captured_payload, done_result = nil, nil
 
@@ -92,7 +95,252 @@ describe("skill_invoke.invoke", function()
         parley.dispatcher.query = orig_query
         assembly.resolve_agent = orig_resolve
         pcall(function() require("parley.progress").stop() end)
-        vim.fn.delete(tmpdir, "rf")
+        remove_fixture_dir(tmpdir)
+    end)
+
+    for _,denied in ipairs({'admit','finish','observation'})do
+        it('obeys pure model rejection of '..denied,function()
+            local Model=require('parley.skill_source_read');local transition=Model.transition
+            local FS=require('parley.tools.filesystem');local native_new=FS.new
+            local read_calls,observed,callback=0,nil,nil
+            FS.new=function(options)
+                FS.new=native_new
+                local fs=native_new(options);local authorize=fs.authorized
+                fs.authorized=function(self,token)
+                    local protected=authorize(self,token);local read=protected.read
+                    protected.read=function(reader,file,done)
+                        read_calls=read_calls+1;callback=done
+                        return read(reader,file,function(value)observed=value;done(value)end)
+                    end
+                    return protected
+                end
+                return fs
+            end
+            local rejected=false
+            Model.transition=function(pool,state,event)
+                if event.type==denied then rejected=true;return pool,state,{}end
+                return transition(pool,state,event)
+            end
+            skill_invoke.invoke(buf,manifest(),{},{on_done=function(r)done_result=r end})
+            FS.new=native_new
+            local reached=vim.wait(5000,function()return rejected end,1)
+            Model.transition=transition
+            assert.is_true(reached)
+            if denied=='admit' then
+                assert.equals(0,read_calls)
+                assert.is_false(done_result.ok)
+            elseif denied=='finish' then
+                assert.is_nil(done_result)
+                assert.is_true(skill_invoke.is_in_flight(buf))
+                skill_invoke.cancel(buf)
+                assert.is_false(skill_invoke.is_in_flight(buf))
+            else
+                assert.is_nil(done_result)
+                assert.same({'alpha beta'},vim.api.nvim_buf_get_lines(buf,0,-1,false))
+                assert.is_true(skill_invoke.is_in_flight(buf))
+                assert.is_true(observed.physical_resolved)
+                callback(observed)
+                assert.is_true(done_result.ok)
+                assert.is_false(skill_invoke.is_in_flight(buf))
+            end
+        end)
+    end
+
+    for _,autoread in ipairs({false,true})do
+        for _,mode in ipairs({'success','human','aba','cancel','ancestor','reload','detach'})do
+            it('retains one source completion owner '..tostring(autoread)..' '..mode,function()
+                vim.bo[buf].autoread=autoread
+                local FS=require('parley.tools.filesystem');local native_new=FS.new
+                local held,read_started
+                FS.new=function(options)
+                    FS.new=native_new
+                    local fs=native_new(options);local authorize=fs.authorized
+                    fs.authorized=function(self,token)
+                        local protected=authorize(self,token);local read=protected.read
+                        protected.read=function(reader,file,done)
+                            read_started=true
+                            local handle
+                            held=function()handle=read(reader,file,done);return handle end
+                            return {cancel=function()if handle then handle:cancel()end end,
+                                reconcile=function()if handle then return handle:reconcile()end end,
+                                snapshot=function()return handle and handle:snapshot() or {physical_resolved=false}end}
+                        end
+                        return protected
+                    end
+                    return fs
+                end
+                skill_invoke.invoke(buf,manifest(),{},{on_terminal=function(r)done_result=r end})
+                FS.new=native_new
+                assert.is_true(vim.wait(5000,function()return read_started or done_result~=nil end,1))
+                assert.is_nil(done_result)
+                assert.same({'ALPHA beta'},vim.fn.readfile(path))
+                assert.same({'alpha beta'},vim.api.nvim_buf_get_lines(buf,0,-1,false))
+                if mode=='human' or mode=='aba' then
+                    vim.api.nvim_buf_set_lines(buf,0,-1,false,{'human'})
+                    if mode=='aba' then vim.api.nvim_buf_set_lines(buf,0,-1,false,{'alpha beta'}) end
+                elseif mode=='cancel' then skill_invoke.cancel(buf)
+                elseif mode=='reload' then vim.cmd('edit! '..vim.fn.fnameescape(path))
+                elseif mode=='detach' then vim.api.nvim_buf_delete(buf,{force=true})
+                elseif mode=='ancestor' then
+                    assert(vim.uv.fs_rename(tmpdir,tmpdir..'-old'))
+                    vim.fn.mkdir(tmpdir,'p');vim.fn.writefile({'redirected'},path)
+                end
+                held()
+                assert.is_true(vim.wait(5000,function()return done_result~=nil end,1))
+                if mode=='success' then
+                    assert.is_true(done_result.ok)
+                    assert.same({'ALPHA beta'},vim.api.nvim_buf_get_lines(buf,0,-1,false))
+                else
+                    assert.is_false(done_result.ok)
+                    if mode~='detach' then
+                        assert.same({mode=='human' and 'human' or mode=='reload' and 'ALPHA beta' or 'alpha beta'},vim.api.nvim_buf_get_lines(buf,0,-1,false))
+                    end
+                end
+                if mode=='ancestor' then remove_fixture_dir(tmpdir..'-old')end
+            end)
+        end
+    end
+
+    it('bounds unresolved final reads and keeps cancelled slots until positive drain',function()
+        local FS=require('parley.tools.filesystem');local native_new=FS.new
+        local records,buffers={},{}
+        for i=1,17 do
+            local file=tmpdir..'/bounded-'..i..'.md';vim.fn.writefile({'alpha beta'},file)
+            vim.cmd('edit! '..vim.fn.fnameescape(file))
+            local b=vim.api.nvim_get_current_buf();buffers[#buffers+1]=b
+            local record={};records[i]=record
+            FS.new=function()
+                FS.new=native_new
+                return {authorized=function()return {read=function(_,_,done)
+                    record.done=done
+                    return {cancel=function()record.cancelled=true end,
+                        reconcile=function()return false end,
+                        snapshot=function()return {physical_resolved=false}end}
+                end}end}
+            end
+            skill_invoke.invoke(b,manifest(),{},{on_terminal=function(value)record.terminal=value end})
+            FS.new=native_new
+            assert.is_true(vim.wait(5000,function()return record.done~=nil or record.terminal~=nil end,1))
+            if i<=16 then
+                assert.is_nil(record.terminal)
+                skill_invoke.cancel(b)
+                assert.is_true(record.cancelled)
+                assert.is_true(skill_invoke.is_in_flight(b))
+            else
+                assert.equals('source read capacity',record.terminal.reason)
+                assert.is_true(record.terminal.reconciliation_required)
+            end
+        end
+        for i,record in ipairs(records)do
+            if record.done then
+                record.done({certainty='unknown',physical_resolved=false})
+                assert.is_true(skill_invoke.is_in_flight(buffers[i]))
+                record.done({certainty='known',physical_resolved=true})
+                record.done({certainty='known',physical_resolved=true})
+                assert.is_false(skill_invoke.is_in_flight(buffers[i]))
+            end
+            vim.api.nvim_buf_delete(buffers[i],{force=true})
+        end
+    end)
+
+    it('retires reconciliation polling after its diagnostic without releasing the read',function()
+        local FS=require('parley.tools.filesystem');local native_new=FS.new
+        local done,polls,diagnostics=nil,0,0
+        FS.new=function()
+            FS.new=native_new
+            return {authorized=function()return {read=function(_,_,callback)
+                done=callback
+                return {cancel=function()end,reconcile=function()polls=polls+1;return true end,
+                    snapshot=function()return {physical_resolved=false}end}
+            end}end}
+        end
+        skill_invoke.invoke(buf,manifest(),{},{on_terminal=function(r)done_result=r end})
+        FS.new=native_new
+        assert.is_true(vim.wait(5000,function()return done~=nil end,1))
+        skill_invoke.cancel(buf)
+        local clock=vim.uv.hrtime;local warning=parley.logger.warning
+        local now=clock()+6000000000
+        vim.uv.hrtime=function()return now end
+        parley.logger.warning=function(message)
+            if message:find('source read cleanup unresolved',1,true)then diagnostics=diagnostics+1 end
+        end
+        local observed=vim.wait(1000,function()return diagnostics==1 end,1)
+        vim.uv.hrtime=clock;parley.logger.warning=warning
+        assert.is_true(observed)
+        local count=polls;vim.wait(30,function()return false end,1)
+        assert.equals(count,polls)
+        assert.is_true(skill_invoke.is_in_flight(buf))
+        done({certainty='known',physical_resolved=true})
+        assert.is_false(skill_invoke.is_in_flight(buf))
+    end)
+
+    it('finishes missing-callback reads logically at the deadline while retaining cleanup ownership',function()
+        local FS=require('parley.tools.filesystem');local native_new=FS.new
+        local done,cancelled,deliveries=nil,false,0
+        FS.new=function()
+            FS.new=native_new
+            return {authorized=function()return {read=function(_,_,callback)
+                done=callback
+                return {cancel=function()cancelled=true end,reconcile=function()return false end,
+                    snapshot=function()return {physical_resolved=false}end}
+            end}end}
+        end
+        local progress=require('parley.progress');local stop=progress.stop;local stopped=0
+        progress.stop=function(...)stopped=stopped+1;return stop(...)end
+        local weak=setmetatable({},{__mode='v'})
+        local callback
+        do
+            local ui={};weak[1]=ui
+            callback=function(r)assert(ui);deliveries=deliveries+1;done_result=r end
+        end
+        skill_invoke.invoke(buf,manifest(),{},{on_done=callback})
+        callback=nil
+        FS.new=native_new
+        assert.is_true(vim.wait(5000,function()return done~=nil end,1))
+        local D=require('parley.document');local doc=D.get(buf)
+        assert.is_true(D.user_guard_stats(doc).live>0)
+        local clock=vim.uv.hrtime;local now=clock()+6000000000
+        vim.uv.hrtime=function()return now end
+        local observed=vim.wait(1000,function()return done_result~=nil end,1)
+        vim.uv.hrtime=clock;progress.stop=stop
+        assert.is_true(observed)
+        assert.equals(1,deliveries);assert.is_true(stopped>0)
+        assert.is_false(done_result.ok);assert.is_true(done_result.reconciliation_required)
+        assert.equals('unknown',done_result.certainty)
+        assert.equals(0,D.user_guard_stats(doc).live)
+        collectgarbage('collect');collectgarbage('collect')
+        assert.is_nil(weak[1],'physical cleanup must not retain UI callback captures')
+        assert.is_true(cancelled);assert.is_true(skill_invoke.is_in_flight(buf))
+        done({certainty='known',physical_resolved=true,data='late'})
+        done({certainty='known',physical_resolved=true,data='late'})
+        assert.equals(1,deliveries);assert.is_false(skill_invoke.is_in_flight(buf))
+        assert.same({'alpha beta'},vim.api.nvim_buf_get_lines(buf,0,-1,false))
+    end)
+
+    it('keeps the source untouched for no_reload even with autoread enabled',function()
+        skill_invoke.invoke(buf,manifest(),{},{no_reload=true,on_done=function(r)done_result=r end})
+        assert.is_true(vim.wait(5000,function()return done_result~=nil end,1))
+        assert.is_true(done_result.ok)
+        assert.same({'alpha beta'},vim.api.nvim_buf_get_lines(buf,0,-1,false))
+        assert.same({'ALPHA beta'},vim.fn.readfile(path))
+    end)
+
+    it("preserves truncation evidence in the skill result delivered to its caller", function()
+        local large = tmpdir .. "/large.txt"
+        vim.fn.writefile({ string.rep("x", 600000) }, large, "b")
+        parley.dispatcher.query = function(_b, _p, _payload, _h, on_exit)
+            tasker.set_query("qid_large_read", { raw_response = read_file_sse(large) })
+            vim.schedule(function() on_exit("qid_large_read") end)
+        end
+        skill_invoke.invoke(buf, manifest({ tools = { "read_file" }, elevated = {}, force_tool = "read_file" }), {}, {
+            no_reload = true, on_done = function(result) done_result = result end,
+        })
+        assert.is_true(vim.wait(5000, function() return done_result ~= nil end, 1))
+        assert.is_true(done_result.ok)
+        local result = done_result.results[1]
+        assert.is_true(result.truncated)
+        assert.truthy(result.content:find("[Tool result incomplete]", 1, true))
+        assert.is_true(#result.content <= 524288)
     end)
 
     it("drives one exchange: payload + force_tool, applies propose_edits, reloads, on_done", function()
@@ -120,6 +368,19 @@ describe("skill_invoke.invoke", function()
         assert.is_true(#done_result.decorations >= 1)
         assert.are.equal("edit", done_result.decorations[1].kind)
         assert.are.equal("uppercase", done_result.decorations[1].explain)
+    end)
+
+    it("preserves unsaved human text when a disk-editing skill completes", function()
+        skill_invoke.invoke(buf, manifest(), {}, {
+            on_done = function(r) done_result = r end,
+        })
+        vim.api.nvim_buf_set_text(buf, 0, 10, 0, 10, { " human" })
+        assert.is_true(vim.wait(2000, function() return done_result ~= nil end))
+        assert.equals("alpha beta human", table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n"))
+        assert.equals("ALPHA beta", table.concat(vim.fn.readfile(path), "\n"))
+        assert.is_false(done_result.ok)
+        assert.is_true(done_result.reconciliation_required)
+        assert.equals(vim.fn.resolve(path), vim.fn.resolve(done_result.external_path))
     end)
 
     it("coerces a stringified edits array and applies it (model quirk, #133)", function()
@@ -298,6 +559,31 @@ describe("skill_invoke.invoke", function()
         assert.is_true(done_result.ok)
         assert.equals("sibling repo root file", done_result.results[1].content:match("sibling repo root file"))
     end)
+    it("keeps asynchronous skill tools supervised while human buffer edits continue", function()
+        local registry=require('parley.tools')
+        local done,legacy= nil,0
+        registry.register({name='skill_async_fixture',description='async fixture',
+            input_schema={type='object',properties={}},
+            handler=function()legacy=legacy+1;return {content='legacy'}end,
+            resources=function()return {}end,
+            execute_async=function(_,_,callback)done=callback;return {cancel=function()end}end})
+        parley.dispatcher.query=function(_,_,_,_,exit)
+            tasker.set_query('async_skill',{raw_response=sse({
+                {type='content_block_start',index=0,content_block={type='tool_use',id='async',name='skill_async_fixture',input={}}},
+                {type='content_block_stop',index=0}})})
+            exit('async_skill')
+        end
+        skill_invoke.invoke(buf,manifest({tools={'skill_async_fixture'},elevated={},force_tool=nil}),{},
+            {no_reload=true,on_done=function(result)done_result=result end})
+        assert.is_true(vim.wait(2000,function()return done~=nil end,1))
+        assert.equals(0,legacy);assert.is_nil(done_result)
+        vim.api.nvim_buf_set_lines(buf,0,-1,false,{'human continued editing'})
+        done({certainty='known',effect='not_applied',physical_resolved=true,result={content='async',is_error=false}})
+        assert.is_true(vim.wait(2000,function()return done_result~=nil end,1))
+        assert.is_true(done_result.ok)
+        assert.same({'human continued editing'},vim.api.nvim_buf_get_lines(buf,0,-1,false))
+    end)
+
 end)
 
 describe("skill_invoke terminal ownership (#182)", function()
@@ -339,7 +625,7 @@ describe("skill_invoke terminal ownership (#182)", function()
         pcall(skill_invoke.cancel, buf)
         pcall(function() require("parley.progress").stop() end)
         pcall(vim.cmd, "enew!")
-        vim.fn.delete(tmpdir, "rf")
+        remove_fixture_dir(tmpdir)
     end)
 
     it("suppresses detached progress only when explicitly requested", function()

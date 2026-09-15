@@ -263,8 +263,8 @@ describe("anchor verification", function()
 end)
 
 -- #200: positional reasoning cannot police an individual clear (a row-span is
--- not an identity — see exchange_anchors), but it is the right check for
--- deciding whether a model is sound enough to anchor identity FROM.
+-- not an identity), but it remains useful for validating a materialized
+-- model. Live fold authority comes from document projection certificates.
 -- #200: containment is what ties the two halves together — verification proves
 -- a range matches the buffer's text, identity proves which rows the exchange
 -- owns, and only this proves they describe the same exchange. Pure, so it is

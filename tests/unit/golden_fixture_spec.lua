@@ -27,6 +27,51 @@ describe("golden fixture normalization", function()
             assert.same(golden.normalize_payload(old), golden.normalize_payload(new))
         end)
 
+        it("compares captures with backend-only descriptions on " .. wire, function()
+            local old = payload("15.1.0", openai)
+            local current = vim.deepcopy(old)
+            for _, tool in ipairs(current.tools) do
+                local definition = openai and tool["function"] or tool
+                definition.description = definition.description:gsub("ripgrep 15%.1%.0", "ripgrep")
+            end
+            assert.same(golden.normalize_payload(old), golden.normalize_payload(current))
+        end)
+
+        it("normalizes only the dedicated ls backend metadata on " .. wire, function()
+            local function listing(metadata)
+                local tool = {name="ls", description="List directory contents using the system ls command ("
+                    .. metadata .. "). Safe flags only. Extra (ripgrep 15.1.0).",
+                    input_schema={description="BSD ls (macOS)"}}
+                return {tools={openai and {type="function", ["function"]=tool} or tool},
+                    messages={{content="BSD ls (macOS)"}}}
+            end
+            local current = listing("ls")
+            for _, metadata in ipairs({"BSD ls (macOS)", "ls (GNU coreutils) 9.5"}) do
+                local captured = listing(metadata)
+                assert.same(golden.normalize_payload(current), golden.normalize_payload(captured))
+                local before = vim.deepcopy(captured)
+                golden.normalize_payload(captured)
+                assert.same(before, captured)
+            end
+            local changed = listing("ls")
+            local definition = openai and changed.tools[1]["function"] or changed.tools[1]
+            definition.description = definition.description:gsub("Safe flags only", "All flags allowed")
+            assert.are_not.same(golden.normalize_payload(current), golden.normalize_payload(changed))
+            definition.name = "other"
+            assert.same(changed, golden.normalize_payload(changed))
+        end)
+
+        it("normalizes only find backend metadata on " .. wire, function()
+            local function value(metadata, suffix)
+                local def={name="find",description="Search for files and directories using the system find command ("
+                    .. metadata .. "). " .. (suffix or "Structured fields only.")}
+                return {tools={openai and {type="function", ["function"]=def} or def}}
+            end
+            assert.same(golden.normalize_payload(value("find")), golden.normalize_payload(value("BSD find (macOS)")))
+            assert.same(golden.normalize_payload(value("find")), golden.normalize_payload(value("find (GNU findutils) 4.10.0")))
+            assert.are_not.same(golden.normalize_payload(value("find")), golden.normalize_payload(value("find", "Raw shell fragments allowed.")))
+        end)
+
         it("preserves meaningful description changes on " .. wire, function()
             local original = payload("15.1.0", openai)
             local changed = vim.deepcopy(original)

@@ -16,11 +16,15 @@ its feature pages, and the three tutorials without reading personal files.
 ## 1. Core Chat System
 - [Chat Format](chat/format.md): Transcript markers, header syntax, and tags.
 - [Chat Lifecycle](chat/lifecycle.md): Create, rename, respond, stop, and delete conversations.
+- [Answer Recovery](chat/recovery.md): Previous-answer snapshots and guarded restore.
+- [Question Batches](chat/batch.md): Fixed selection, progress, and explicit resume.
 - [Chat Response Progress](chat/response_progress.md)
 - [Chat Attachments](chat/attachments.md): Image syntax, limits, and file ownership.
 - [Chat Memory](chat/memory.md): Context windows and optional summarization.
 - [Memory Preferences](chat/memory_prefs.md): Opt-in preference profiles from past conversations.
 - [Chat Parsing](chat/parsing.md)
+- [Incremental Document Structure](chat/document.md): Shared index and bounded structural repair.
+- [Chat Write Ownership](chat/ownership.md): Captured sources, scoped write grants, and cancellation evidence.
 - [Exchange Model](chat/exchange_model.md)
 - [Inline Branch Links](chat/inline_branch_links.md): Create a sub-chat and follow a standalone or inline branch.
 - [Drill-In Markers](chat/drill_in.md)
@@ -36,6 +40,7 @@ its feature pages, and the three tutorials without reading personal files.
 - [Google AI Provider](providers/googleai.md)
 - [Agents](providers/agents.md)
 - [Tool Use](providers/tool_use.md)
+- [Tool Execution and Cleanup](providers/tool_execution.md): Captured capabilities, resource claims, checked IO, and uncertain effects.
 - [System Prompts](providers/system_prompts.md)
 
 ## 3. Context & References

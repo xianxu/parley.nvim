@@ -39,45 +39,4 @@ function M.has(drawn, row, hl_group)
     return false
 end
 
---- Structure-repair deferrals the test fires by hand (#227), for
---- `highlighter._set_repair_deferral(log.factory)`: arm / restart / cancel
---- ordering is then constructed rather than sampled from a real clock.
-function M.manual_deferrals()
-    local log = { starts = 0, all = {} }
-    function log.factory()
-        local d = { pending = nil, closed = false }
-        function d:start(_, fn)
-            log.starts = log.starts + 1
-            self.pending = fn
-        end
-        function d:stop() self.pending = nil end
-        function d:close()
-            self.closed = true
-            self.pending = nil
-        end
-        log.all[#log.all + 1] = d
-        return d
-    end
-    function log.pending()
-        local n = 0
-        for _, d in ipairs(log.all) do
-            if d.pending then n = n + 1 end
-        end
-        return n
-    end
-    function log.fire()
-        local fired = 0
-        for _, d in ipairs(log.all) do
-            local fn = d.pending
-            d.pending = nil
-            if fn then
-                fired = fired + 1
-                fn()
-            end
-        end
-        return fired
-    end
-    return log
-end
-
 return M
