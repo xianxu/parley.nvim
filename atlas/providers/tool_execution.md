@@ -181,7 +181,7 @@ with the captured command. Directory targets become its pinned cwd; regular file
 remain inherited descriptors. Multiple search targets run sequentially inside
 one owned tool operation. No child-follow flags are accepted, and private-path
 exclusions are translated before traversal. Tasker owns the same process through
-bootstrap, exec, cancellation, exit and drain. An18-byte stderr handshake
+bootstrap, exec, cancellation, exit and drain. A19-byte stderr handshake
 distinguishes successful bootstrap from a search returning no matches; Tasker
 accounts that bounded control metadata in addition to the body capture budget. This protects admitted path
 identity; it does not serialize arbitrary external writers or sandbox custom

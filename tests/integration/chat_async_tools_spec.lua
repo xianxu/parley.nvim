@@ -11,6 +11,24 @@ local function is_provider(process)
     for _,arg in ipairs(process.args)do if arg=='--write-out'then return true end end
     return false
 end
+local function scoped_tool(process)
+    local script
+    for i,arg in ipairs(process.args)do
+        if arg:match('/scripts/tool_process%.lua$')then
+            assert.equals('-l',process.args[i-1])
+            local payload=vim.json.decode(process.args[i+1])
+            assert.equals('ls',payload.command[1])
+            assert.is_table(payload.authority)
+            script=true
+        end
+    end
+    assert.is_true(script,'tool must use the production scoped bootstrap')
+end
+local function complete_tool(process,output)
+    scoped_tool(process)
+    process:emit('stderr',require('parley.tools.process_scope').exec_marker)
+    process:emit('stdout',output);process:finish()
+end
 local function http_ok(process)
     for i,arg in ipairs(process.args)do if arg=='--write-out'then
         local sentinel=process.args[i+1]:match('%%{stderr}(.-)%%{http_code}')
@@ -110,9 +128,9 @@ describe('public asynchronous chat tools',function()
         wait(function()return #tools()==2 end)
         local count=vim.api.nvim_buf_line_count(buf)
         vim.api.nvim_buf_set_text(buf,count-1,5,count-1,5,{' edited while tools run'})
-        tools()[2]:emit('stdout','SECOND_TOOL_RESULT\n');tools()[2]:finish()
+        complete_tool(tools()[2],'SECOND_TOOL_RESULT\n')
         vim.wait(30,function()return false end,1);assert.equals(1,#providers())
-        tools()[1]:emit('stdout','FIRST_TOOL_RESULT\n');tools()[1]:finish()
+        complete_tool(tools()[1],'FIRST_TOOL_RESULT\n')
         finish(session,2)
         local content=buffer_text(buf)
         assert.is_true(content:find('FIRST_TOOL_RESULT',1,true)<content:find('SECOND_TOOL_RESULT',1,true))
@@ -126,7 +144,7 @@ describe('public asynchronous chat tools',function()
         Registry.register(changed);parley.agents.AsyncFixture.tools={}
         tool_round(providers()[1],{{id='frozen',name='ls',input={path=root..'/one'}}})
         wait(function()return #tools()==1 end);assert.equals(0,replaced)
-        tools()[1]:emit('stdout','CAPTURED_FUNCTION\n');tools()[1]:finish();finish(session,2)
+        complete_tool(tools()[1],'CAPTURED_FUNCTION\n');finish(session,2)
         assert.is_not_nil(buffer_text(buf):find('CAPTURED_FUNCTION',1,true))
     end)
     it('refuses undeclared and synchronous-only tools without calling their handlers',function()
@@ -224,6 +242,17 @@ describe('public asynchronous chat tools',function()
         assert.equals('known',entries[1].certainty);assert.is_false(entries[1].physical_resolved)
         known(held[1],'physical completion')
         wait(function()return Producer.stats().records==0 end)
+    end)
+
+    it('publishes a missing scoped handshake as a tool error even on exit1',function()
+        local session=submit('first');wait(function()return #providers()==1 end)
+        tool_round(providers()[1],{{id='unconfirmed',name='ls',input={path=root..'/one'}}})
+        wait(function()return #tools()==1 end)
+        scoped_tool(tools()[1]);tools()[1]:finish(1)
+        finish(session,2)
+        local content=buffer_text(buf)
+        assert.is_not_nil(content:find('id=unconfirmed error=true',1,true))
+        assert.is_not_nil(content:find('scoped process bootstrap failed',1,true))
     end)
 
 end)
