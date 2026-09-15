@@ -1468,3 +1468,9 @@ this is not a fresh all-green whole make-test claim. Full lint610 plus explicit
 worker and post-correction fixtures clean. Reports: `/tmp/parley254-m6-complete-latest-verification.txt`,
 `...-complete-latest-results.json`, `...-rework-final-latest-results.json`.
 Final performance refresh is running on79527881 before Codex re-review.
+
+- 2026-09-15 final M6 performance on79527881 passed all30scenarios/600samples,
+  zero full reads.5000-row edit median8.17ms/Enter17.93ms, stream p9551.63ms,
+  broad repair median2.645s. Edit p95 worsened to13.97ms; limits retained in plan.
+  Entering Codex re-review with1872 passing affected tests,5569 combined inventory,
+  full lint610 plus worker clean. Runtime/test tree is checkpointed and frozen.
