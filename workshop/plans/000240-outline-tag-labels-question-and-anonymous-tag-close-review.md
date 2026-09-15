@@ -115,3 +115,84 @@ findings:
     detail: |
       README.md is unchanged in the pinned range despite introducing user-authored @@label@@ and @@_@@ behavior. Add a concise explanation of strict adjacency, outline visibility, and following-question context ownership; atlas and generated help already document this surface.
 ```
+
+---
+
+## Re-review — 2026-09-14T20:49:58-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 240 — Outline tag conventions: an @@tag@@ immediately before a question labels it; @@_@@ is anonymous and hides itself, or the question it precedes |
+| repo | parley.nvim |
+| issue file | workshop/issues/000240-outline-tag-labels-question-and-anonymous-tag.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 25197533d70f3399947d0f789bc8e217c6abfd2d..1888d4b2454f38da5309b414f5296bb25bc9c0af |
+| command | sdlc close --issue 240 |
+| reviewer | codex |
+| timestamp | 2026-09-14T20:49:58-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+The pinned change implements the revised exchange-preface design and addresses all three prior findings. Semantic ownership now reaches editing and scoped-context consumers while preserving physical question anchors. No blocking findings remain.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      question_tags.semantic_start is shared by clipboard ranges, selection, paste, prune, lookup, definition context and drill-in extraction. Relevant regression suites pass. Replacing its implementation with question.line_start in a scratch copy makes all six new clipboard regressions fail.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      The plan's Core concepts table now classifies parse_chat as INTEGRATION, with an appended boundary-review revision. This matches chat_parser.lua's logger.debug call and logger.lua:93's file-writing implementation.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      README.md:51-54 now explains strict adjacency, anonymous-question hiding and following-question AI-context ownership. The description agrees with question_tags.apply_outline and compose_question; atlas documentation covers standalone anonymous tags and filtering.
+```
+
+### 1. Strengths
+
+- Shared association and semantic-boundary helpers keep outline, context and editing behavior consistent.
+- Live preface positions derive from existing gaps, preserving question-block identity without double-counting rows.
+- Tests exercise real parser/model behavior, regeneration completion, clipboard movement and scoped context.
+
+### 2. Critical findings
+
+None.
+
+### 3. Important findings
+
+None.
+
+### 4. Minor findings
+
+None.
+
+### 5. Test coverage
+
+All **13 changed spec files passed: 430 tests**. The definition suite passed when rerun separately after a parallel cache-directory collision. Six clipboard regressions failed with the semantic-boundary fix removed. Pinned `git diff --check` passed.
+
+The full repository suite and performance benchmark were not independently rerun.
+
+### 6. Architecture
+
+- **ARCH-DRY — pass:** shared association, composition and semantic-start helpers.
+- **ARCH-PURE — pass:** pure helpers use direct tests; parser classification reflects logging IO.
+- **ARCH-PURPOSE — pass:** ownership reaches the reviewed context and movement consumers.
+- **ARCH-MOCK — pass:** no new external dependency; existing test seams remain.
+- **ARCH-CONSTRAINTS — pass:** linear scans, transient metadata, no added per-token work.
+- **ARCH-SECURE — pass:** existing reference extraction and loading policies remain in use.
+- **ARCH-ORDER — pass:** no new asynchronous state; regeneration tests exercise completion.
+- **ARCH-FUNERAL — pass:** preface metadata dies with existing parsed/model objects; no new durable artifacts.
+
+### 7. Plan revisions
+
+No additional revisions required.

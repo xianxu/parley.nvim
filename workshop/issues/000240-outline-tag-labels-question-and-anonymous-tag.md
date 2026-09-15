@@ -1,12 +1,13 @@
 ---
 id: 000240
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-09-12
 updated: 2026-09-14
 estimate_hours: 1.345
 started: 2026-09-14T20:14:11-07:00
+actual_hours: 2.04
 ---
 
 # Outline tag conventions: an @@tag@@ immediately before a question labels it; @@_@@ is anonymous and hides itself, or the question it precedes
@@ -105,6 +106,8 @@ the outline shows.
 
 ## Log
 
+
+- 2026-09-14: closed — Full isolated make test: 260 files pass, lint clean; clipboard/prune/definition/drill-in regressions RED to GREEN; parser/context/outline/regeneration coverage passes; unrelated SVG prompt excluded.; review verdict: SHIP
 ### 2026-09-12
 
 - Filed from the brain advisor session on the operator's conventions (1–3

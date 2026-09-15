@@ -26,6 +26,23 @@ rounds:
           family: user-facing-surface-documentation
           round: 1
       blocked: true
+    - "n": 2
+      timestamp: "2026-09-14T20:49:58-07:00"
+      agent: codex
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          note: question_tags.semantic_start is shared by clipboard ranges, selection, paste, prune, lookup, definition context and drill-in extraction. Relevant regression suites pass. Replacing its implementation with question.line_start in a scratch copy makes all six new clipboard regressions fail.
+          round: 2
+        - id: BR-2
+          disposition: addressed
+          note: The plan's Core concepts table now classifies parse_chat as INTEGRATION, with an appended boundary-review revision. This matches chat_parser.lua's logger.debug call and logger.lua:93's file-writing implementation.
+          round: 2
+        - id: BR-3
+          disposition: addressed
+          note: README.md:51-54 now explains strict adjacency, anonymous-question hiding and following-question AI-context ownership. The description agrees with question_tags.apply_outline and compose_question; atlas documentation covers standalone anonymous tags and filtering.
+          round: 2
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#240 (boundary-review)
@@ -44,8 +61,14 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-3** [Important] `user-facing-surface-documentation` README update is missing for the new outline-tag conventions
   README.md is unchanged in the pinned range despite introducing user-authored @@label@@ and @@_@@ behavior. Add a concise explanation of strict adjacency, outline visibility, and following-question context ownership; atlas and generated help already document this surface.
 
+## Round 2 — 2026-09-14T20:49:58-07:00 (codex) — passed
+
+### Disposed
+
+- BR-1 — addressed — question_tags.semantic_start is shared by clipboard ranges, selection, paste, prune, lookup, definition context and drill-in extraction. Relevant regression suites pass. Replacing its implementation with question.line_start in a scratch copy makes all six new clipboard regressions fail.
+- BR-2 — addressed — The plan's Core concepts table now classifies parse_chat as INTEGRATION, with an appended boundary-review revision. This matches chat_parser.lua's logger.debug call and logger.lua:93's file-writing implementation.
+- BR-3 — addressed — README.md:51-54 now explains strict adjacency, anonymous-question hiding and following-question AI-context ownership. The description agrees with question_tags.apply_outline and compose_question; atlas documentation covers standalone anonymous tags and filtering.
+
 ## Open findings
 
-- **BR-1** [Critical] `exchange-ownership-consumer-completeness` Exchange editing still assigns prefaces to the preceding exchange
-- **BR-2** [Critical] `core-concept-purity-classification` The plan declares parse_chat PURE despite direct logging IO
-- **BR-3** [Important] `user-facing-surface-documentation` README update is missing for the new outline-tag conventions
+(none — every finding has been disposed)
