@@ -130,3 +130,13 @@ the outline shows.
   prefix line itself (`🤖: first answer line one.`) was dropped from the
   answer content, while text on the `💬:` line is kept. parley never writes
   answers that way, so it is likely inert; noted so it is not rediscovered.
+
+## Revisions
+
+### 2026-09-14 — Question-owned context, approved by operator
+
+Reason: operator asked that an adjacent tag prefix the following question's AI context, and approved the proposed strict-adjacency behavior. Delta supersedes the Spec's “Context is untouched” paragraph and the prior display-only decision: an eligible whole-line tag immediately before a question is included once, verbatim, at the beginning of that user message, and removed from the preceding assistant message. This includes `@@_@@`; hiding is only an outline convention. Blank-separated and non-adjacent tags remain where authored. The visible document and physical parser/model positions stay unchanged.
+
+Use one pure association rule for outline labels and context ownership. Preserve attached tags when the preceding answer is regenerated; a tag belongs to the next question even if its physical line lies in the prior answer span. File-shaped markers keep existing file-reference semantics when projected into a question. Fenced lookalikes are excluded using the existing fence grammar and live prefixes.
+
+Detailed implementation plan: `workshop/plans/000240-question-tag-ownership-plan.md`. Work is claimed; no production changes yet.
