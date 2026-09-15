@@ -255,6 +255,7 @@ describe("chat_respond: completion callback", function()
         -- Assert no error
         assert.is_true(success, "chat_respond should not error: " .. tostring(err))
         assert.equals(1, finalize_count, "normal API leg should finalize once")
+        assert.equals("idle", require("parley.diagnostic_refresh").drain(buf).status)
         assert.equals(1, #vim.diagnostic.get(buf, {
             namespace = require("parley.timezone_diagnostics").diag_namespace(),
         }), "normal API leg should leave real UTC diagnostics current")
@@ -403,6 +404,7 @@ describe("chat_respond: buffer state after completion", function()
         vim.wait(300, function() return finalize_count == 1 end, 10)
         lifecycle.finalize_mutated_api_leg = original_finalize
         assert.equals(1, finalize_count)
+        assert.equals("idle", require("parley.diagnostic_refresh").drain(buf).status)
         assert.equals(1, #vim.diagnostic.get(buf, {
             namespace = require("parley.timezone_diagnostics").diag_namespace(),
         }))
@@ -2178,6 +2180,7 @@ local function open_simple_chat(topic, path, extra_header)
             if line == "🧠: first" then thinking_row = row break end
         end
         assert.is_not_nil(thinking_row)
+        assert.is_true(vim.wait(1000, function() return vim.fn.foldlevel(thinking_row) > 0 end, 5))
         vim.cmd("normal! zM")
         assert.equals(thinking_row, vim.fn.foldclosed(thinking_row))
         assert.equals(thinking_row + 1, vim.fn.foldclosedend(thinking_row))
@@ -2200,6 +2203,7 @@ local function open_simple_chat(topic, path, extra_header)
             return buffer_contains(buf, "📝: compact summary")
         end, 10))
         local summary_row = assert(find_line_number(buf, "📝: compact summary"))
+        assert.is_true(vim.wait(1000, function() return vim.fn.foldlevel(summary_row) > 0 end, 5))
         vim.cmd("normal! zM")
         assert.equals(summary_row, vim.fn.foldclosed(summary_row))
         assert.equals(summary_row, vim.fn.foldclosedend(summary_row))
@@ -2399,6 +2403,7 @@ local function open_simple_chat(topic, path, extra_header)
 
         assert.equals(2, call_count, "valid recursive respond should call dispatcher again")
         assert.equals(2, finalize_count, "each completed recursive API leg should finalize once")
+        assert.equals("idle", require("parley.diagnostic_refresh").drain(buf).status)
         assert.equals(1, #vim.diagnostic.get(buf, {
             namespace = require("parley.timezone_diagnostics").diag_namespace(),
         }), "final recursive leg should leave real UTC diagnostics current")

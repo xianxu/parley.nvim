@@ -246,6 +246,7 @@ atlas:
       - lua/parley/document/dependencies.lua
       - lua/parley/document/semantic.lua
       - lua/parley/document/structure.lua
+      - lua/parley/deferred_work.lua
       - lua/parley/document/init.lua
       - lua/parley/document/editor.lua
       - lua/parley/document/state.lua
@@ -262,10 +263,13 @@ atlas:
       - tests/integration/perf_document_spec.lua
       - tests/integration/document_reader_spec.lua
 
+      - tests/unit/deferred_work_spec.lua
       - tests/unit/document_coordinator_spec.lua
       - tests/unit/document_projection_spec.lua
+      - tests/unit/document_deferred_fragment_spec.lua
       - tests/unit/document_state_spec.lua
       - tests/unit/document_write_plan_spec.lua
+      - tests/integration/document_scheduler_spec.lua
       - tests/integration/document_edit_spec.lua
       - tests/integration/document_fold_native_spec.lua
       - tests/integration/document_folds_spec.lua

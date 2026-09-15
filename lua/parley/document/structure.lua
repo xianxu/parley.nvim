@@ -42,6 +42,7 @@ function M.stats(document, reset)
 end
 
 local function frontier(current)
+    if current.deferred then return current.deferred.first end
     return current.semantic and require("parley.document.semantic").confirmed_frontier(current.semantic)
         or sequence.size(current.index).rows
 end
@@ -174,6 +175,7 @@ function M.authority_range(document,entity,first_byte,last_byte,opts)
 end
 
 function M.splice(document, first, last, spans, opts)
+    M.cancel_deferred_fragment(document)
     local current = state(document)
     local evidence
     if current.semantic then
@@ -191,6 +193,7 @@ end
 -- Observe a classified single-row text replacement. Callers must obtain token
 -- through the bounded lexer; unread/structural range edits use splice instead.
 function M.replace_row(document, row, token, bytes)
+    M.cancel_deferred_fragment(document)
     local current = state(document)
     local old = sequence.at(current.index, row)
     assert(old and not old.opaque and old.rows == 1 and old.metadata and old.metadata.token,
@@ -210,6 +213,7 @@ function M.replace_row(document, row, token, bytes)
 end
 
 function M.replace_fragment(document, first, last, spans, budget)
+    M.cancel_deferred_fragment(document)
     local current = state(document)
     local semantic = require("parley.document.semantic")
     current.semantic = current.semantic or semantic.new(current.index)
@@ -227,11 +231,68 @@ function M.replace_fragment(document, first, last, spans, budget)
     return result
 end
 
+-- Keep one bounded pre-edit proof while a native callback still exposes old
+-- lines. The replacement remains opaque and all following authority is gated.
+function M.begin_deferred_fragment(document,first,last,rows,bytes,budget)
+    local current=state(document)
+    assert(not current.deferred,'pending deferred fragment')
+    assert(rows>=0 and rows<=256 and rows%1==0 and bytes>=rows and bytes<=65536,
+        'invalid deferred fragment extent')
+    local semantic=require("parley.document.semantic")
+    current.semantic=current.semantic or semantic.new(current.index)
+    local _,plain=grammar.lex_step(grammar.lex_start(current.patterns),'x',true,{bytes=1})
+    local prospective={}
+    for i=1,rows do prospective[i]={rows=1,bytes=1,metadata={token=plain}} end
+    local evidence=semantic.before_fragment(current.semantic,first,last,prospective,budget)
+    sequence.splice(current.index,first,last,rows>0 and {{rows=rows,bytes=bytes,opaque=true}} or {})
+    if evidence.status~='local' then
+        local result=semantic.cancel_fragment(current.semantic,evidence,first,first+rows)
+        result.work=evidence.work;return result
+    end
+    current.deferred={first=first,last=first+rows,bytes=bytes,evidence=evidence}
+    return {status='deferred',work=evidence.work}
+end
+
+function M.cancel_deferred_fragment(document)
+    local current=state(document)
+    local pending=current.deferred
+    if not pending then return end
+    current.deferred=nil
+    return require("parley.document.semantic").cancel_fragment(current.semantic,
+        pending.evidence,pending.first,pending.last)
+end
+
+function M.deferred_requirements(document)
+    local current=state(document)
+    local pending=assert(current.deferred,'no deferred fragment')
+    local reserve=sequence.navigation_budget(current.index)
+    local rows=pending.last-pending.first
+    return {rows=rows,nodes=reserve.nodes*(rows*8+24),entries=reserve.entries*(rows*8+24)}
+end
+
+function M.finish_deferred_fragment(document,spans)
+    local current=state(document)
+    local pending=assert(current.deferred,'no deferred fragment')
+    local semantic=require("parley.document.semantic")
+    local bytes,rows=0,0
+    for _,span in ipairs(spans) do bytes=bytes+span.bytes;rows=rows+span.rows end
+    if bytes~=pending.bytes or rows~=pending.last-pending.first
+        or not semantic.retarget_fragment(current.semantic,pending.evidence,spans) then
+        return M.cancel_deferred_fragment(document)
+    end
+    sequence.splice(current.index,pending.first,pending.last,spans)
+    current.deferred=nil
+    local result=semantic.after_fragment(current.semantic,pending.evidence,pending.first,pending.last)
+    result.reused_suffix=result.status=='reused'
+    if result.reused_suffix then result.status=semantic.is_idle(current.semantic) and 'idle' or 'more' end
+    return result
+end
+
 function M.reload(document, spans)
     local current = state(document)
     current.index = new_sequence(spans)
     current.epoch = current.epoch + 1
-    current.lexer, current.semantic, current.read_pending = nil, nil, nil
+    current.lexer, current.semantic, current.read_pending, current.deferred = nil, nil, nil, nil
 end
 
 -- A job proves only local text identity. It cannot authorize semantic state;
@@ -250,6 +311,7 @@ function M.capture(document, first, last)
 end
 
 function M.publish(document, job, spans)
+    M.cancel_deferred_fragment(document)
     local current, captured = state(document), jobs[job]
     if not captured or captured.document ~= document or captured.epoch ~= current.epoch then
         return { status = "stale" }
@@ -298,6 +360,7 @@ end
 -- The caller owns reading text and scheduling the next turn.
 function M.repair_step(document, input, budget)
     local current = state(document)
+    if current.deferred then return {status='deferred',work={}} end
     local lexer = require("parley.document.lexer")
     local semantic = require("parley.document.semantic")
     budget = budget or {}

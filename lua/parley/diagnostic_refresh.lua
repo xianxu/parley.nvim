@@ -158,14 +158,8 @@ function M.step(buf)
     return result
 end
 schedule=function(s)
-    if s.dead or s.scheduled or s.opts.schedule==false then return end
-    s.scheduled=true
-    vim.schedule(function()
-        s.scheduled=false
-        if s.dead or buffers[s.buf]~=s then return end
-        local result=M.step(s.buf)
-        if result.status~='idle' and result.status~='opaque' and result.status~='detached' and result.status~='error' then schedule(s) end
-    end)
+    if s.dead or s.opts.schedule==false then return end
+    s.pump:request()
 end
 function M.refresh(buf,opts)
     if not vim.api.nvim_buf_is_valid(buf) or not vim.api.nvim_buf_is_loaded(buf) then return end
@@ -174,14 +168,22 @@ function M.refresh(buf,opts)
         local doc=Document.get(buf) or Document.attach(buf,{patterns=require('parley.document.lexical').patterns(require('parley.config'))})
         if not doc then return end
         s={buf=buf,doc=doc,opts=opts or {},dirty=true};buffers[buf]=s
+        s.pump=require('parley.deferred_work').new(function()
+            if s.dead or buffers[s.buf]~=s then return false end
+            local result=M.step(s.buf)
+            return result.status~='idle' and result.status~='opaque'
+                and result.status~='detached' and result.status~='error'
+        end)
         s.unsubscribe=Document.subscribe(doc,function(event)
             if event.kind=='detach' then M.clear(buf)
             elseif event.kind=='reload' or event.kind=='edit' and event.diagnostic_changed~=false then
+                if event.kind=='reload' then s.pump:cancel() end
                 s.job=nil;s.failure=nil;s.dirty=true;schedule(s)
             elseif event.kind=='repair' and s.dirty then schedule(s) end
         end)
     elseif opts then
         for key,value in pairs(opts) do s.opts[key]=value end
+        if opts.schedule==false then s.pump:cancel() end
         if opts.to_local then s.dirty=true;s.job=nil;s.failure=nil end
     end
     schedule(s)
@@ -199,7 +201,7 @@ function M.drain(buf,limit)
 end
 function M.clear(buf)
     local s=buffers[buf]
-    if s then s.dead=true;s.job=nil;s.unsubscribe();buffers[buf]=nil end
+    if s then s.dead=true;s.pump:close();s.job=nil;s.unsubscribe();buffers[buf]=nil end
     if vim.api.nvim_buf_is_valid(buf) then timezone.clear(buf);footnotes.clear_footnote_diagnostics(buf) end
 end
 return M

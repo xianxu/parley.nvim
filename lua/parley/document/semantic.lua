@@ -53,6 +53,11 @@ local function queue_answer(w,last)
     w.answer=nil
 end
 
+function M.is_idle(worker)
+    local w=state(worker)
+    return w.global_done==true and #w.queue==0
+end
+
 function M.step(worker,opts)
     local w=state(worker)
     opts=opts or {}
@@ -72,8 +77,21 @@ function M.step(worker,opts)
         local result=extra or {}; result.status=status; result.work=work(); result.deltas=deltas
         return result
     end
-    local function budget()
-        return finish('budget',{required={nodes=reserve.nodes*8+1,entries=reserve.entries*8+1}})
+    local function budget(required,setup,retry_dependency)
+        local nodes,entries=reserve.nodes*8+1,reserve.entries*8+1
+        if required then
+            -- Fact requirements are local to the resolver. Include this
+            -- caller's setup and reserved publication work in the public hint.
+            nodes=math.max(nodes,(required.budget_nodes or 0)+setup.nodes_visited+reserve.nodes*4)
+            entries=math.max(entries,(required.budget_entries or 0)+setup.entries_visited+reserve.entries*4)
+        end
+        if retry_dependency and rows==0 then
+            -- Dependency insertion retries atomically. Its consumed prefix
+            -- cannot resume with the same allowance; request a larger slice.
+            nodes=math.max(nodes,node_limit*2)
+            entries=math.max(entries,entry_limit*2)
+        end
+        return finish('budget',{required={nodes=nodes,entries=entries}})
     end
     while rows<row_limit do
         local used=work()
@@ -124,7 +142,7 @@ function M.step(worker,opts)
                     return finish('more')
                 else
                     job.fact_cursor,job.fact_need=answer.cursor,result.need.kind
-                    return finish('budget',{required=answer.required})
+                    return budget(answer.required,now)
                 end
             else
                 -- Reserve rank work for every dependency node the operation
@@ -133,7 +151,7 @@ function M.step(worker,opts)
                 for _,certificate in ipairs(result.dependencies) do
                     for _,part in ipairs(F.dependencies(certificate)) do
                         local dep_budget=512-dep_visits
-                        if dep_budget<1 then return budget() end
+                        if dep_budget<1 then return budget(nil,nil,true) end
                         local added=w.deps:add(part.origin,part.last,{first=part.first,channels=part.channels,
                             budget=dep_budget,before_rank=function()
                                 local current=work()
@@ -146,7 +164,7 @@ function M.step(worker,opts)
                                 return {nodes=nodes,entries=entries}
                             end})
                         dep_visits=dep_visits+added.work.dependency_nodes_visited
-                        if added.status~='ok' then return budget() end
+                        if added.status~='ok' then return budget(nil,nil,true) end
                     end
                 end
                 local metadata=span.metadata
@@ -370,6 +388,35 @@ function M.before_fragment(worker,first,last,new_spans,opts)
         active=active_valid and active or nil,nodes=nodes,entries=entries}
     token.work=fragment_work(w.seq,initial,0,visits)
     return token
+end
+
+-- A deferred native callback can expose old text. Replace speculative plain
+-- descriptors only after the editor supplies final text; the captured channel
+-- set is an upper bound on every descriptor admitted here.
+function M.retarget_fragment(worker,token,spans)
+    local captured=fragment_store[token]
+    assert(captured and captured.worker==worker,'invalid fragment evidence')
+    if token.status~='local' or #spans~=#captured.new_tokens then return false end
+    local total,next_tokens=0,{}
+    for i,span in ipairs(spans) do
+        local lexical=span.metadata and span.metadata.token
+        if span.rows~=1 or span.opaque or not plain_token(lexical) then return false end
+        if type(span.bytes)~='number' or span.bytes<1 or span.bytes%1~=0 then return false end
+        local allowed=G.channels(captured.new_tokens[i].token)
+        for channel in pairs(G.channels(lexical)) do if not allowed[channel] then return false end end
+        total=total+span.bytes
+        if total>65536 then return false end
+        next_tokens[i]={token=copy(lexical),bytes=span.bytes}
+    end
+    captured.new_tokens=next_tokens
+    return true
+end
+
+function M.cancel_fragment(worker,token,first,newlast)
+    local captured=fragment_store[token]
+    assert(captured and captured.worker==worker,'invalid fragment evidence')
+    fragment_store[token]=nil
+    return M.after_splice(worker,captured.normal,first,newlast)
 end
 
 function M.after_fragment(worker,token,first,newlast)

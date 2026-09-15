@@ -587,3 +587,22 @@ A stale plan is rejected without revoking a still-valid writer; subsequent plans
 must resolve current coordinates. Regressions cover repeated matching bytes,
 disjoint relocation and delegated insertion slots. This is an authority check,
 not a document-global changedtick barrier (ARCH-PURPOSE).
+
+### 2026-09-15 — M3 native callback timing and fair scheduling
+
+Reason: native Insert-mode Backspace emits its byte-change callback while reads
+can still expose the pre-join rows. Immediate safe invalidation therefore caused
+whole-suffix repair debt after an otherwise ordinary join. Delta: keep one bounded
+pre-edit fragment proof, splice an opaque extent immediately, and validate actual
+new lexical data in a later slice before restoring local semantic confirmation.
+Any intervening edit, reload, or detach cancels that proof. Retargeting cannot
+admit token channels beyond those conservatively captured (ARCH-ORDER).
+
+A second native regression proved recursive `vim.schedule` callbacks can occupy
+one event-loop turn until all work finishes despite per-callback budgets. Add
+`lua/parley/deferred_work.lua` as the single coalesced timer owner for document
+repair, diagnostics, folds, and outline loading. Each continuation yields to a
+new timer turn; cancellation invalidates queued callbacks and closes its timer.
+Tests require native timers to fire before multi-slice work completes, and verify
+reload/detach cleanup. This closes the scheduling class across live consumers
+rather than just the first observed document callback (ARCH-DRY).

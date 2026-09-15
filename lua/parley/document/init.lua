@@ -54,20 +54,24 @@ local function measured_query(s,fn,...)
     record(s,work)
     return a,b
 end
+local function cancel_schedule(s)
+    if s.work then s.work:cancel() end
+end
 local function schedule(doc)
     local s=state(doc)
-    if s.dead or not s.scheduling or s.scheduled then return end
-    s.scheduled=true; local expected=s.epoch
-    vim.schedule(function()
-        if s.dead or s.epoch~=expected then return end
-        s.scheduled=false
-        local start=(vim.uv or vim.loop).hrtime()
-        repeat
-            local result=M.repair_step(doc)
-            if result.status=='idle' or result.status=='detached' then return end
-        until (vim.uv or vim.loop).hrtime()-start>=2000000
-        schedule(doc)
-    end)
+    if s.dead or not s.scheduling then return end
+    if not s.work then
+        s.work=require('parley.deferred_work').new(function()
+            if s.dead then return false end
+            local start=(vim.uv or vim.loop).hrtime()
+            repeat
+                local result=M.repair_step(doc)
+                if result.status=='idle' or result.status=='detached' then return false end
+            until (vim.uv or vim.loop).hrtime()-start>=2000000
+            return true
+        end)
+    end
+    s.work:request()
 end
 local function preserve(s,old,token,event)
     if not old or old.opaque or not old.metadata or not old.metadata.token then return false end
@@ -89,6 +93,9 @@ local function observe_edit(doc,s,event)
     local before=Structure.stats(s.structure)
     local classified_rows,classified_bytes=0,0
     local repair_work={dependency_nodes_visited=0,rows_processed=0}
+    if s.deferred then
+        accumulate_repair(repair_work,Structure.cancel_deferred_fragment(s.structure));s.deferred=nil
+    end
     effects(s,State.transition(s.authority,{kind='observed_edit',epoch=event.epoch,
         first=event.first,last=event.last,new_bytes=event.new_bytes,
         owner_grant=event.owner and event.owner.grant}))
@@ -125,7 +132,12 @@ local function observe_edit(doc,s,event)
         -- Native undo can expose final text during an intermediate callback.
         -- Keep that callback's exact arithmetic extent opaque until delivery ends.
         if actual~=bytes or #spans~=added then
-            accumulate_repair(repair_work,Structure.splice(s.structure,first,last,opaque(added,bytes)))
+            local delayed
+            if added==1 then
+                delayed=accumulate_repair(repair_work,Structure.begin_deferred_fragment(s.structure,
+                    first,last,added,bytes,{rows=256,bytes=65536,nodes=65536,entries=65536}))
+            else delayed=accumulate_repair(repair_work,Structure.splice(s.structure,first,last,opaque(added,bytes))) end
+            if delayed.status=='deferred' then s.deferred={first=first,last=newlast,bytes=bytes} end
         elseif last>first and spans[1] and a and preserve(s,a,spans[1].metadata.token,event) then
             accumulate_repair(repair_work,Structure.replace_row(s.structure,first,spans[1].metadata.token,spans[1].bytes))
             if last-first==1 and #spans==1 then reused=true
@@ -155,13 +167,16 @@ local function observe(doc,event)
     if s.dead or event.epoch~=s.epoch then return end
     if event.kind=='edit' then observe_edit(doc,s,event)
     elseif event.kind=='reload' then
-        s.epoch=epoch(); s.input=nil; s.idle=false; s.scheduled=false
+        cancel_schedule(s)
+        s.epoch=epoch(); s.input=nil; s.deferred=nil; s.idle=false
         effects(s,State.transition(s.authority,{kind='reload',next_epoch=s.epoch}))
         s.editor:set_epoch(s.epoch)
         Structure.reload(s.structure,opaque(event.rows,event.total))
         notify(s,{kind='reload'}); schedule(doc)
     elseif event.kind=='detach' then
-        s.dead=true; s.input=nil; s.scheduled=false; buffers[s.buf]=nil
+        cancel_schedule(s)
+        s.dead=true; s.input=nil; s.deferred=nil; buffers[s.buf]=nil
+        if s.work then s.work:close() end
         effects(s,State.transition(s.authority,{kind='detach'}))
         notify(s,{kind='detach'}); s.subscribers={}; s.structure=nil
     end
@@ -239,9 +254,46 @@ end
 function M.repair_step(doc,budget)
     local s=state(doc); if s.dead then return {status='detached'} end
     local before=Structure.stats(s.structure)
-    local input=s.input and s.editor:chunk(s.input) or nil; s.input=nil
     local limits={bytes=4096,rows=1,nodes=32768,entries=32768}
-    for key,value in pairs(budget or {}) do limits[key]=value end
+    for key,value in pairs(budget or {}) do
+        assert(type(value)=='number' and value>=0 and value<math.huge and value%1==0,'invalid repair budget')
+        limits[key]=value
+    end
+    if s.deferred then
+        local pending=s.deferred
+        local result
+        if not pending.spans then
+            if limits.bytes<1 or limits.rows<1 then
+                result={status='budget',required={bytes=1,rows=1},work={}}
+            else
+                pending.lex=pending.lex or Grammar.lex_start(s.patterns)
+                local col=pending.col or 0
+                local chunk=s.editor.reader:chunk({row=pending.first,col=col,max_bytes=math.min(65536,limits.bytes,math.max(1,pending.bytes-1-col))})
+                local progress,token=Grammar.lex_step(pending.lex,chunk.bytes,chunk.eol,{bytes=limits.bytes})
+                pending.lex=progress;pending.col=col+#chunk.bytes
+                if token then pending.spans={{rows=1,bytes=pending.col+1,metadata={token=token}}} end
+                result={status='more',work={bytes_scanned=#chunk.bytes,rows_processed=token and 1 or 0}}
+                if pending.col>pending.bytes-1 or not chunk.eol and pending.col>=pending.bytes-1 then
+                    pending.spans={}
+                end
+            end
+        else
+            local required=Structure.deferred_requirements(s.structure)
+            if limits.nodes<required.nodes or limits.entries<required.entries or limits.rows<required.rows then
+                result={status='budget',required=required,work={}}
+            else
+                s.deferred=nil
+                result=Structure.finish_deferred_fragment(s.structure,pending.spans)
+                if result.status=='idle' then s.idle=true end
+                reconcile(s,true)
+            end
+        end
+        result.work=result.work or {}
+        for key,value in pairs(Structure.stats(s.structure)) do result.work[key]=value-(before[key] or 0) end
+        record(s,result.work);notify(s,{kind='repair',result=result})
+        return result
+    end
+    local input=s.input and s.editor:chunk(s.input) or nil; s.input=nil
     local result=Structure.repair_step(s.structure,input,limits)
     if result.status=='read' then s.input=result.request end
     if result.status=='idle' then s.idle=true end

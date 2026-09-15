@@ -110,3 +110,8 @@ Native application costs scale with affected fold groups and are counted separat
 Outline candidates and diagnostic candidates come from index summaries. Picker
 labels use bounded text slices and selection resolves the current stable handle.
 The index never stores a second transcript or a full row-position array.
+
+Repair and consumer pagination use a shared cancellable timer owner
+(`deferred_work`). Each continuation yields to a new event-loop turn. A bounded
+Lua slice alone is insufficient: recursively queued immediate callbacks can still
+starve input. Reload cancels pending work; detach closes its owner.

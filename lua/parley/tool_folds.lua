@@ -209,13 +209,12 @@ function M.step(buf)
     return 'idle'
 end
 local function schedule(buf,s)
-    if s.scheduled then return end
-    s.scheduled=true
-    vim.schedule(function()
-        if buffers[buf]~=s then return end
-        s.scheduled=false
-        if M.step(buf)=='more' then schedule(buf,s) end
-    end)
+    if not s.work then
+        s.work=require('parley.deferred_work').new(function()
+            return buffers[buf]==s and M.step(buf)=='more'
+        end)
+    end
+    s.work:request()
 end
 local function ensure(buf)
     local hit=buffers[buf];if hit then return hit end
@@ -224,8 +223,13 @@ local function ensure(buf)
     if not doc then return nil end
     local s={doc=doc,windows={}};buffers[buf]=s
     s.unsubscribe=Document.subscribe(doc,function(event)
-        if event.kind=='detach' then buffers[buf]=nil;return end
-        if event.kind=='reload' then s.owned_first=nil;mark(s,0,Document.size(doc).rows)
+        if event.kind=='detach' then
+            if s.work then s.work:close() end
+            buffers[buf]=nil;return
+        end
+        if event.kind=='reload' then
+            if s.work then s.work:cancel() end
+            s.owned_first=nil;mark(s,0,Document.size(doc).rows)
         elseif event.kind=='edit' then
             if s.owned_first then
                 if event.old_last_row<=s.owned_first then

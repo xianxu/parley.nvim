@@ -227,14 +227,14 @@ end
 local function load_live_items(buf,config,opts,done)
   local items,cursor={},nil
   local unsubscribe
-  local scheduled,stopped=false,false
+  local pump,stopped=nil,false
   local doc=document(buf,config)
   local function stop()
     stopped=true
+    if pump then pump:close() end
     if unsubscribe then unsubscribe() end
   end
   local function step()
-    scheduled=false
     if stopped then return end
     if not vim.api.nvim_buf_is_valid(buf) or not vim.api.nvim_buf_is_loaded(buf)
       or Document.get(buf)~=doc then stop();return end
@@ -245,13 +245,14 @@ local function load_live_items(buf,config,opts,done)
       stop()
       done(items);return
     end
-    if result.status~="opaque" then scheduled=true;vim.schedule(step) end
+    return result.status~="opaque"
   end
+  pump=require("parley.deferred_work").new(step)
   unsubscribe=Document.subscribe(doc,function(event)
     if event.kind=="detach" then stop()
-    elseif not stopped and not scheduled then scheduled=true;vim.schedule(step) end
+    elseif not stopped then pump:request() end
   end)
-  step()
+  pump:request()
 end
 M._load_live_items=load_live_items
 

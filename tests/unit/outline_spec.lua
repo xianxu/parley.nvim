@@ -61,12 +61,26 @@ describe('Indexed live outline',function()
         assert.is_false(success)
         vim.api.nvim_buf_delete(b,{force=true})
     end)
+    it('lets native timers run before all live outline pages complete',function()
+        local b=vim.api.nvim_create_buf(false,true)
+        local lines={};for i=1,160 do lines[i]='💬: question '..i end
+        vim.api.nvim_buf_set_lines(b,0,-1,false,lines);settle(b)
+        local completed,observed=false,nil
+        outline._load_live_items(b,{chat_user_prefix='💬:'},{is_chat=true},function()completed=true end)
+        vim.defer_fn(function()observed=completed end,2)
+        assert.is_true(vim.wait(500,function()return observed~=nil end,1))
+        vim.api.nvim_buf_delete(b,{force=true})
+        assert.is_false(observed)
+    end)
     it('cancels queued loading when an unloaded buffer remains valid',function()
         local b=vim.api.nvim_create_buf(false,true)
         vim.api.nvim_buf_set_lines(b,0,-1,false,{'💬: q'})
         local doc=Document.attach(b,{schedule=false})
-        local scheduled={};local original=vim.schedule
-        vim.schedule=function(fn)scheduled[#scheduled+1]=fn end
+        local scheduled={};local original=vim.defer_fn
+        vim.defer_fn=function(fn)
+            scheduled[#scheduled+1]=fn
+            return {is_closing=function()return false end,stop=function()end,close=function()end}
+        end
         local completed=false
         local success,err=pcall(function()
             outline._load_live_items(b,{chat_user_prefix='💬:'},{is_chat=true},function()completed=true end)
@@ -77,7 +91,7 @@ describe('Indexed live outline',function()
             for _,fn in ipairs(scheduled) do fn() end
             assert.is_nil(Document.get(b));assert.is_false(completed)
         end)
-        vim.schedule=original
+        vim.defer_fn=original
         vim.api.nvim_buf_delete(b,{force=true})
         assert.is_true(success,err)
     end)

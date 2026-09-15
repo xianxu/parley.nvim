@@ -9,7 +9,7 @@
 
 ## Logic
 - Identifies `💬:` user questions, `@@…@@` annotations, and `🌿:` branch references; `#`/`##`/`###` headings are included only in non-chat Markdown
-- **One item rule** (#232): both builders — the flat buffer scan and the
+- **One item rule** (#232): both builders — the indexed live candidate query and the
   tree's per-file extractor — classify lines through `is_outline_item`; the
   tree adds only its `📋` root row, the branch rows it takes from the parser
   (a child's upward parent link is therefore never a row), and indentation.
@@ -25,10 +25,9 @@
 - Headings indented by level: `#` → 2sp, `##` → 4sp, `###` → 6sp
 - Lines inside code blocks (``` / ~~~) are excluded — but a `💬:`/`🤖:` turn
   marker at column zero ENDS an open fence (#218), so an unmatched fence in one
-  answer no longer drops every later question from the outline. All three
-  outline scans share `highlight_structure.code_block_memo`; it must be given
-  patterns from the live config, or a custom `chat_user_prefix` silently loses
-  containment.
+  answer no longer drops every later question from the outline. Live candidates use the document index
+  and disk materialization uses the shared grammar. Both receive patterns from
+  the live configuration, including custom question prefixes.
 - Document order (ascending line number)
 
 ## Tree-Aware Outline (Chat Files)
@@ -50,3 +49,11 @@
 `lua/parley/outline.lua` owns classification, tree building, and navigation.
 `tests/unit/outline_spec.lua` verifies child-file navigation and missing-file
 handling; `tests/unit/outline_parity_spec.lua` keeps flat/tree classification aligned.
+
+## Live query bounds
+
+The current buffer uses document summary searches with at most eight candidates
+per page and at most 4096 bytes per label read. Picker loading advances through
+scheduled pages and resolves selection through a stable current handle. Closing
+the picker or detaching its document retires outstanding work. Explicit cross-file
+tree materialization remains a user-command operation over disk snapshots.

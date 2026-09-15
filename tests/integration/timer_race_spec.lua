@@ -94,8 +94,6 @@ describe("timer replacement race safety", function()
 
 	it("stale markdown topic callback does not double-close timer", function()
 		local timers
-		timers, restore_new_timer = install_fake_timers()
-
 		local missing_chat_path = tmp_dir .. "/missing-chat-" .. tostring(math.random(100000)) .. ".md"
 		local file = write_markdown_file("notes-topic-race.md", {
 			"🌿: "
@@ -104,6 +102,9 @@ describe("timer replacement race safety", function()
 		})
 		vim.cmd("edit " .. vim.fn.fnameescape(file))
 		local buf = vim.api.nvim_get_current_buf()
+		-- Observe only the replacement operations under test; document loading
+		-- also owns independent repair and diagnostic timers.
+		timers, restore_new_timer = install_fake_timers()
 
 		parley.highlight_chat_branch_refs(buf)
 		parley.highlight_chat_branch_refs(buf)

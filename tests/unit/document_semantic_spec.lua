@@ -32,6 +32,34 @@ describe('document semantic worker',function()
     it('provides the pure worker',function() assert.is_true(ok) end)
     if not ok then return end
 
+    it('adapts tiny budgets through reported requirements across many dependencies',function()
+        local lines={'# topic: adaptive','- file: adaptive.md','---',''}
+        for _=1,625 do
+            for _,line in ipairs({'💬: question','','🤖: answer','','🧠: thought','detail','','body'}) do
+                lines[#lines+1]=line
+            end
+        end
+        local worker=Semantic.new(sequence(lines))
+        local limits={rows=7,nodes=1,entries=1}
+        local stalled=0
+        for _=1,15000 do
+            local result=Semantic.step(worker,limits)
+            assert.is_true(result.work.nodes_visited<=limits.nodes)
+            assert.is_true(result.work.entries_visited<=limits.entries)
+            assert.is_true(result.work.dependency_nodes_visited<=512)
+            if result.status=='idle' then return end
+            if result.status=='budget' and result.work.rows_processed==0 then
+                assert.is_table(result.required)
+                local nodes=math.max(limits.nodes,result.required.nodes)
+                local entries=math.max(limits.entries,result.required.entries)
+                if nodes==limits.nodes and entries==limits.entries then stalled=stalled+1 else stalled=0 end
+                assert.is_true(stalled<3,'repeated inadequate adaptive requirement: '..vim.inspect(result))
+                limits.nodes,limits.entries=nodes,entries
+            else stalled=0 end
+        end
+        error('adaptive semantic fixture did not settle')
+    end)
+
     it('projects global roles and answer-scoped sections from independent fixtures',function()
         local parser=require('parley.chat_parser')
         for _,case in ipairs(require('tests.fixtures.document_edits')) do

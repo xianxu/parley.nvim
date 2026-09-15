@@ -274,6 +274,16 @@ function M.measure_edit_sample(scenario, opts, done)
             end, function()
                 vim.cmd("redraw!")
                 poll(function() return decoration_redraw end, "decoration_redraw", function()
+                    local repaired
+                    for _ = 1, 4 do
+                        repaired = require("parley.document").repair_step(scenario.document)
+                        if repaired.status == "idle" then break end
+                    end
+                    if repaired.status ~= "idle" then
+                        line_reader.clear_observer(buf, token)
+                        vim.api.nvim_del_augroup_by_id(group)
+                        return done(nil, "ordinary input left deferred semantic repair: " .. vim.inspect(repaired))
+                    end
                     local observed = { changedtick = true, text_changed_i = text_changed_i,
                         insert_mode = true, decoration_redraw = true,
                         elapsed_ms = (vim.uv.hrtime() - started) / 1000000,

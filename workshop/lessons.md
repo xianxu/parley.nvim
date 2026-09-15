@@ -2494,3 +2494,16 @@ download.
   boundary and whether a fence admits a section. Suppressing section admission
   must not erase boundary effects. Sweep the cross-product against an independent
   reducer, including malformed and unterminated fences.
+
+## #254 M3 native scheduling and edit observation
+
+- Bounded callbacks do not imply a responsive event loop. Recursive scheduling
+  can drain every slice in one turn; verify native timers and input can interleave
+  before completion, and share a cancellable next-turn scheduler across consumers.
+- Native byte callbacks can expose pre-edit text for Insert-mode Backspace and
+  final text for intermediate grouped undo events. Treat the event coordinates
+  and the visible text frame separately; defer bounded lexical validation when
+  they disagree, and cancel saved evidence on intervening edits.
+- Measure deferred work through semantic convergence. A fast Enter/Backspace
+  callback can still queue a whole-document repair; immediate counters alone
+  conceal that cost.
