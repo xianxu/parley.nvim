@@ -75,9 +75,10 @@ more than one branch per line — a map where a list was needed.
 
 ## Plan
 
-- [ ] `branch_at_line` → list per line; loop the consumer; tests on a two-link fixture
-- [ ] Parity test for the unchanged cases
-- [ ] Carry `col` from the extractor into the branch record and the row's `value`; picker jump uses it when present
+- [ ] Extend `tests/unit/outline_parity_spec.lua` with synthetic real-file sibling chats; exercise `_build_tree_outline_items` for multiple same-line inline branches and mixed line-form/single-inline branches, parser order, subtree interleaving, collapsed and independently expanded children. Observe the same-line cases fail before changing production code.
+- [ ] In `build_file_outline_items` (`lua/parley/outline.lua`), group parser branches into ordered arrays by source line and emit every entry using the existing row/resolver path. Keep recursion, expansion, cycle guard and child-file selection unchanged. Update `atlas/ui/outline.md` with same-line ordering.
+- [ ] Run `make test-spec SPEC=ui/outline`, lint and diff checks; existing #250 real-buffer selection tests defend child-file landing. Commit and close through the fresh SDLC review, then open a PR.
+
 
 ## Log
 
@@ -87,3 +88,11 @@ more than one branch per line — a map where a list was needed.
   `chat_parser.extract_inline_branch_links` and `parse_chat` headless on the
   operator's line: 2 links, 2 branches, both `line=8`. The loss is entirely
   in `outline.lua:255-268`.
+
+## Revisions
+
+### 2026-09-14 — Preserve shipped child navigation
+
+Reason: #250 shipped after this issue was filed and intentionally changed branch selection to open the child file at line1. Delta: supersede the optional source-column propagation and second-link landing acceptance criterion with preserving that child destination. The former plan's third checkbox (carry col through parser/picker) is removed from active scope; no parser or selection changes are needed. The remaining purpose is still every parsed branch row and each distinct child subtree, in document/column order.
+
+The three-file fix uses the existing `build_file_outline_items` IO boundary, with an ordered-list grouping local to that invocation; no new public function or separate business rule. ARCH-DRY: parser order and the existing row renderer remain authoritative. ARCH-PURE/MOCK: exercise real parser/files and tree builder without mocking filesystem or resolver. ARCH-PURPOSE: all branches survive, with independent expansion; unchanged global visited semantics still prevent cyclic recursion. ARCH-CONSTRAINTS: O(branches + lines + existing recursion), no additional file reads per branch. ARCH-ORDER: synchronous file projection has no pending operation state; arrays preserve parser order. ARCH-SECURE: existing path resolver is reused. ARCH-FUNERAL: arrays die with the build; synthetic fixture files are removed in teardown.
