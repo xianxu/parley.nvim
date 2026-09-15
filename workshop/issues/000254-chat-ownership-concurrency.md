@@ -1269,3 +1269,17 @@ settlement precedes revocation, batch input membership stays captured, and stale
 response continuation retains its explicit original-input decision. M5 enters
 mandatory review with Codex. Actual N/A because mixed192/254 attribution is
 unreliable; no guessed duration. Main remains reserved for operator live testing.
+
+### 2026-09-15 M5 Codex recovery rework
+
+Codex returned REWORK forBR20–24. Batch87, recovery65 and lifecycle722 tests
+passed in its review, but five new production regressions failed. Recovery
+settlement/retry/retirement/error visibility are being corrected as one ownership
+class. BR22 corruption admission is fixed at6f230f89: five new cases failed before
+and all35 store tests pass after, plus29 tests in the exact reviewer reproduction.
+Readable sibling evidence confines corruption to its key; absent association
+conservatively refuses all new originals across restarts. Two changed files lint
+clean. The recovery preview now uses the established mutation helper at92d7b5da;
+10 architecture and19 public recovery tests pass. M5 remains open pending the
+remaining lifecycle fixes and another Codex boundary review. M6 verification
+continues separately; its final integration will include the completed M5 fixes.
