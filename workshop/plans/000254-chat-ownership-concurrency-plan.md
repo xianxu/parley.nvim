@@ -1254,3 +1254,16 @@ measure max~13ms for both ordinary and4000-byte component chains; all-disjoint
 capacity queues are below0.1ms. No limits changed. A deterministic JIT-disabled
 VM-call budget fails the previous implementation; exact hash-collision/ancestry
 oracles defend correctness (ARCH-CONSTRAINTS, ARCH-PURPOSE).
+
+### 2026-09-15 — M6 native JSON admission and full verification corrections
+
+Reason: the public default producer path rejected valid zero-argument JSON calls,
+while stale direct-session and golden fixtures obscured the production failure.
+Delta: normalize only native empty-object metadata at captured dispatch, then use
+the unchanged pure ledger validation. Preserve arguments and reject unsupported
+null explicitly. Advertised capabilities are required in direct-session fixtures;
+golden normalization covers only removed startup backend-version metadata.
+Retire fixture editor buffers before deleting canonical temporary paths.
+M6 also integrates M4 truthful pending publication, retirement joins and explicit
+stale-input continuation. Run the fresh merged inventory and whole performance
+report before Codex M6 review (ARCH-PURE, ARCH-PURPOSE, ARCH-MOCK, ARCH-FUNERAL).
