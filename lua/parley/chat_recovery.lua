@@ -7,9 +7,11 @@ local M={}
 local parley
 local entries={}
 local order=0
+local join_saved
 local retries=setmetatable({},{__mode='k'})
 local function fail(reason)return {ok=false,reason=tostring(reason)}end
 local function notice(reason)vim.notify('Parley recovery: '..tostring(reason),vim.log.levels.WARN)end
+local function canonical(path)return vim.fn.resolve(vim.fn.fnamemodify(path,':p'))end
 local function report(job,result,phase)
     local reason=result.cleanup_error or (not result.ok and result.reason)
     local e=entries[job]
@@ -89,7 +91,22 @@ end
 function M.setup(value)
     parley=value
     local group=vim.api.nvim_create_augroup('ParleyAnswerRecovery',{clear=true})
-    vim.api.nvim_create_autocmd('BufWritePost',{group=group,callback=function(args)M.saved(args.buf)end})
+    vim.api.nvim_create_autocmd('BufWritePre',{group=group,callback=function(args)
+        local path=canonical(args.file)
+        local own=path==canonical(vim.api.nvim_buf_get_name(args.buf))
+        for _,e in pairs(entries)do
+            if e.buf==args.buf then
+                e.writes=e.writes or {}
+                -- Aborted writes may omit Post. Evict oldest observations;
+                -- never let stale Pre events disable later successful saves.
+                if #e.writes==8 then table.remove(e.writes,1)end
+                e.writes[#e.writes+1]={path=path,own=own,epoch=D.snapshot(e.doc).epoch}
+            end
+        end
+    end})
+    vim.api.nvim_create_autocmd('BufWritePost',{group=group,callback=function(args)
+        M.saved(args.buf,args.file)
+    end})
     vim.api.nvim_create_autocmd('BufWipeout',{group=group,callback=function(args)
         local copy={};for job,e in pairs(entries)do if e.buf==args.buf then copy[#copy+1]=job end end
         for _,job in ipairs(copy)do M.release(job)end
@@ -195,7 +212,11 @@ function M.settle(job,ctx,done)
         end
         return RR.settle(job,ctx,region)
     end
-    if not done then return report(job,attempt())end
+    if not done then
+        local result=report(job,attempt())
+        if result.ok then join_saved(job)end
+        return result
+    end
     local snapshot=D.snapshot(e.doc)
     local epoch=snapshot.epoch
     local grant=snapshot.grants[ctx.grant]
@@ -226,7 +247,9 @@ function M.settle(job,ctx,done)
         D.cancel_user(e.doc,fence);fence=nil
         if e.pending==handle then e.pending=nil end
         local callback=done;done=nil
-        report(job,result);callback(result)
+        report(job,result)
+        if result.ok then join_saved(job)end
+        callback(result)
     end
     function handle.cancel(_,resolved)
         finish(fail('replacement settlement cancelled'))
@@ -291,29 +314,59 @@ function M.list(buf)
     local out={};for _,record in ipairs(records)do if same_chat(record.association,a)then out[#out+1]=record end end
     return out
 end
-function M.saved(buf)
-    local list={};for job,e in pairs(entries)do if e.buf==buf and RR.snapshot(job).status=='settled'then list[#list+1]=job end end
-    if #list==0 then return end
+-- Save and settlement are independent observations. Retain only a path/epoch
+-- until both exist, then read the actual saved file and revalidate RR's proof.
+-- No file bytes or mutable current-buffer selection survive the observation.
+join_saved=function(job)
+    local e=entries[job]
+    if not e or not e.saved or RR.snapshot(job).status~='settled'then return end
+    local saved=e.saved
+    if D.get(e.buf)~=e.doc or D.snapshot(e.doc).epoch~=saved.epoch then return end
+    local ok,stat,why=pcall((vim.uv or vim.loop).fs_stat,saved.path)
+    if not ok or not stat then
+        report(job,fail('saved-file stat failed: '..tostring(ok and why or stat)),'save');return
+    end
+    if type(stat.size)~='number' or stat.size>256*1024*1024 then
+        report(job,fail('saved-file read limit'),'save');return
+    end
+    local read_ok,lines=pcall(vim.fn.readfile,saved.path)
+    if not read_ok then report(job,fail('saved-file read failed: '..tostring(lines)),'save');return end
+    if entries[job]~=e or e.saved~=saved then return end
+    local result=RR.saved(job,{read=function()
+        local candidates=materialize(e.buf,lines,saved.path,e.association.root);local match
+        for _,candidate in ipairs(candidates)do
+            if same_source(candidate.association,e.association)then
+                if match then return nil,'ambiguous saved exchange'end;match=candidate
+            end
+        end
+        return match and match.bytes or nil,'saved exchange not found'
+    end})
+    report(job,result,'save')
+    if result.ok then M.release(job)end
+end
+function M.saved(buf,event_path)
+    -- Called only for a real BufWritePost by setup; direct callers must supply
+    -- the same confirmed-save event contract, never a buffer-only save guess.
     local path=vim.api.nvim_buf_get_name(buf)
-    local stat=(vim.uv or vim.loop).fs_stat(path)
-    if not stat or stat.size>256*1024*1024 then return end
-    local ok,lines=pcall(vim.fn.readfile,path);if not ok then notice(lines);return end
-    for _,job in ipairs(list)do
-        local e=entries[job]
-        if e then
-            local result=RR.saved(job,{read=function()
-                local candidates=materialize(buf,lines,path,e.association.root);local match
-                for _,candidate in ipairs(candidates)do
-                    if same_source(candidate.association,e.association)then
-                        if match then return nil,'ambiguous saved exchange'end;match=candidate
-                    end
-                end
-                return match and match.bytes or nil,'saved exchange not found'
-            end})
-            report(job,result,'save')
-            if result.ok then M.release(job)end
+    local list={}
+    for job,e in pairs(entries)do
+        if e.buf==buf and D.get(buf)==e.doc then
+            local epoch=D.snapshot(e.doc).epoch
+            local writing
+            if event_path then
+                writing=e.writes and table.remove(e.writes)
+                if e.writes and #e.writes==0 then e.writes=nil end
+            end
+            -- Only writing the chat itself is save evidence. A prior pre-write
+            -- observation also survives the slug owner's synchronous rename in
+            -- an earlier BufWritePost callback; delayed joins keep this path.
+            if not event_path or writing and writing.own and writing.epoch==epoch
+                and writing.path==canonical(event_path)then
+                e.saved={path=path,epoch=epoch};list[#list+1]=job
+            end
         end
     end
+    for _,job in ipairs(list)do join_saved(job)end
 end
 function M.snapshot(job)return RR.snapshot(job)end
 local function scratch(record,title)
@@ -354,7 +407,6 @@ function M.deleted(path)
     local storage,err,status=open_store(false)
     if not storage then return status=='absent' and {ok=true} or fail(err)end
     local records,list_error=Store.list(storage);if not records then return fail(list_error)end
-    local function canonical(value)return vim.fn.resolve(vim.fn.fnamemodify(value,':p'))end
     local exact={};local key=canonical(path)
     for _,record in ipairs(records)do if canonical(record.association.path)==key then exact[#exact+1]=record end end
     local selected=exact

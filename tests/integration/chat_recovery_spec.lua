@@ -352,5 +352,138 @@ describe('chat recovery commands and lifecycle',function()
             assert.equals(0,D.user_guard_stats(doc).live)
         end)
     end
+    it('cleans a confirmed save made while completion settlement is queued',function()
+        local job=start();assert.is_true(C.publish(job,ctx).ok);replace()
+        local result
+        C.settle(job,ctx,function(value)result=value;C.finish(job,'success')end)
+        vim.api.nvim_buf_call(buf,function()vim.cmd('silent write')end)
+        assert.is_true(vim.wait(2000,function()return result~=nil end,1))
+        assert.is_true(result.ok)
+        assert.equals(0,#C.list(buf),'confirmed saved replacement must retire its recovery snapshot')
+    end)
+
+    it('reports a failed saved-file stat instead of silently dropping cleanup',function()
+        local job=start();assert.is_true(C.publish(job,ctx).ok);replace();assert.is_true(C.settle(job,ctx).ok)
+        local uv=vim.uv or vim.loop
+        local stat,notify=uv.fs_stat,vim.notify
+        local notices={};local path=vim.api.nvim_buf_get_name(buf)
+        uv.fs_stat=function(p,...)if p==path then return nil,'EACCES: saved chat probe denied' end;return stat(p,...)end
+        vim.notify=function(msg)notices[#notices+1]=msg end
+        local ok,err=pcall(C.saved,buf)
+        uv.fs_stat,vim.notify=stat,notify
+        assert.is_true(ok,tostring(err))
+        assert.equals(1,#C.list(buf))
+        assert.equals(1,#notices,'saved-file IO failures must be visible')
+        assert.matches('EACCES',notices[1])
+    end)
+    for _,change in ipairs({'edit-undo','cancel','reload','detach'})do
+        it('retains saved snapshot if pending settlement is invalidated by '..change,function()
+            local job=start();assert.is_true(C.publish(job,ctx).ok);replace()
+            local result
+            local handle=C.settle(job,ctx,function(value)result=value;C.finish(job,'success')end)
+            vim.api.nvim_buf_call(buf,function()vim.cmd('silent write')end)
+            if change=='edit-undo'then
+                vim.api.nvim_buf_set_text(buf,4,0,4,0,{'human '})
+                vim.api.nvim_buf_set_text(buf,4,0,4,6,{})
+            elseif change=='cancel'then handle:cancel()
+            elseif change=='reload'then vim.api.nvim_buf_call(buf,function()vim.cmd('edit!')end)
+            else D.detach(doc)end
+            assert.is_true(vim.wait(2000,function()return result~=nil end,1))
+            assert.is_false(result.ok);assert.equals(1,#C.list(buf))
+        end)
+    end
+    it('joins repeated early saves while a disjoint draft changes',function()
+        local job=start();assert.is_true(C.publish(job,ctx).ok);replace()
+        local result
+        C.settle(job,ctx,function(value)result=value end)
+        vim.api.nvim_buf_call(buf,function()vim.cmd('silent write')end)
+        vim.api.nvim_buf_set_text(buf,7,0,7,5,{'new draft'})
+        vim.api.nvim_buf_call(buf,function()vim.cmd('silent write')end)
+        assert.is_true(vim.wait(2000,function()return result~=nil end,1))
+        assert.is_true(result.ok);assert.equals(0,#C.list(buf))
+    end)
+    it('remembers an early save before settlement is even queued',function()
+        local job=start();assert.is_true(C.publish(job,ctx).ok);replace()
+        vim.api.nvim_buf_call(buf,function()vim.cmd('silent write')end)
+        assert.is_true(C.settle(job,ctx).ok);assert.equals(0,#C.list(buf))
+    end)
+    for _,stage in ipairs({'stat-throw','read','limit'})do
+        it('reports '..stage..' save IO failure once and retains recovery',function()
+            local job=start();assert.is_true(C.publish(job,ctx).ok);replace();assert.is_true(C.settle(job,ctx).ok)
+            local uv=vim.uv or vim.loop
+            local stat,readfile,notify=uv.fs_stat,vim.fn.readfile,vim.notify
+            local notices={};local path=vim.api.nvim_buf_get_name(buf)
+            uv.fs_stat=function(p,...)
+                if p==path then
+                    if stage=='stat-throw'then error('EACCES stat')end
+                    return {size=stage=='limit' and 256*1024*1024+1 or 1}
+                end
+                return stat(p,...)
+            end
+            vim.fn.readfile=function(p,...)if p==path then error('EACCES read')end;return readfile(p,...)end
+            vim.notify=function(msg)notices[#notices+1]=msg end
+            local ok,err=pcall(function()C.saved(buf);C.saved(buf)end)
+            uv.fs_stat,vim.fn.readfile,vim.notify=stat,readfile,notify
+            assert.is_true(ok,tostring(err));assert.equals(1,#notices)
+            assert.equals(1,#C.list(buf))
+        end)
+    end
+
+    it('uses the captured saved path after a later unsaved buffer rename',function()
+        local job=start();assert.is_true(C.publish(job,ctx).ok);replace()
+        local result
+        C.settle(job,ctx,function(value)result=value end)
+        vim.api.nvim_buf_call(buf,function()vim.cmd('silent write')end)
+        local path=vim.api.nvim_buf_get_name(buf)
+        local renamed=path:gsub('_fixture.md$','_unsaved.md');vim.api.nvim_buf_set_name(buf,renamed)
+        assert.is_true(vim.wait(2000,function()return result~=nil end,1))
+        assert.is_true(result.ok);assert.equals(0,#C.list(buf))
+    end)
+
+    it('does not treat an alternate-file write as saving the original chat',function()
+        local job=start();assert.is_true(C.publish(job,ctx).ok);replace()
+        local result
+        C.settle(job,ctx,function(value)result=value end)
+        local original=vim.api.nvim_buf_get_name(buf)
+        local alternate=original:gsub('_fixture.md$','_copy.md')
+        -- Coincidentally matching disk bytes are not a confirmed save event.
+        vim.fn.writefile(vim.api.nvim_buf_get_lines(buf,0,-1,false),original)
+        vim.api.nvim_buf_call(buf,function()vim.cmd('silent write! '..vim.fn.fnameescape(alternate))end)
+        assert.equals(original,vim.api.nvim_buf_get_name(buf))
+        assert.is_true(vim.wait(2000,function()return result~=nil end,1))
+        assert.is_true(result.ok);assert.equals(1,#C.list(buf))
+    end)
+
+    for _,nested in ipairs({false,true})do
+        it('joins a confirmed slug rename '..(nested and 'with nested write' or 'without nested write'),function()
+            local job=start();assert.is_true(C.publish(job,ctx).ok);replace()
+            local old=vim.api.nvim_buf_get_name(buf)
+            local renamed=old:gsub('_fixture.md$','_slug.md')
+            vim.api.nvim_create_autocmd('BufWritePost',{buffer=buf,once=true,nested=true,callback=function()
+                assert.is_true((vim.uv or vim.loop).fs_rename(old,renamed))
+                vim.api.nvim_buf_set_name(buf,renamed)
+                if nested then
+                    vim.api.nvim_buf_set_text(buf,0,9,0,#'# topic: Fixture',{'Renamed'})
+                    vim.cmd('silent write!')
+                end
+            end})
+            -- The real slug owner is registered before Recovery too.
+            C.setup(parley)
+            local result
+            C.settle(job,ctx,function(value)result=value end)
+            vim.api.nvim_buf_call(buf,function()vim.cmd('silent write!')end)
+            assert.is_true(vim.wait(2000,function()return result~=nil end,1))
+            assert.is_true(result.ok);assert.equals(0,#C.list(buf))
+        end)
+    end
+
+    it('admits a real save after bounded unmatched pre-write observations',function()
+        local job=start();assert.is_true(C.publish(job,ctx).ok);replace();assert.is_true(C.settle(job,ctx).ok)
+        -- Aborted writes need not emit Post. Pre alone never authorizes cleanup.
+        for _=1,12 do vim.api.nvim_exec_autocmds('BufWritePre',{buffer=buf})end
+        assert.equals(1,#C.list(buf))
+        vim.api.nvim_buf_call(buf,function()vim.cmd('silent write!')end)
+        assert.equals(0,#C.list(buf))
+    end)
 
 end)

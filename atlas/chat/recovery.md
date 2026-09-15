@@ -40,3 +40,10 @@ malformed records are unavailable rather than guessed. A corrupt record with
 unknown association blocks new snapshots until storage is inspected; it cannot
 turn a partial answer into a new original. Tool effects are not undone
 by restoring transcript text.
+
+Confirmed save and replacement settlement can arrive in either order. A bounded
+eight-observation pre/post write stack distinguishes writing the chat from an
+alternate destination and supports nested slug-renaming writes. Pending joins
+retain the saved path and document epoch, then reread disk and revalidate the
+regional replacement proof. Stat, read, and unlink failures remain visible and
+retain recovery; another confirmed save can retry cleanup.
