@@ -301,20 +301,23 @@ describe("paste image (#231)", function()
         vim.env.PARLEY_FAKE_CLIPBOARD = "png:" .. png
         local buf = open_chat(TS .. "_noinsert.md", chat_lines())
         vim.api.nvim_win_set_cursor(0, { 8, 0 })
-        local buffer_edit = require("parley.buffer_edit")
-        local saved_insert = buffer_edit.insert_lines_at
-        buffer_edit.insert_lines_at = function()
-            error("E21: Cannot make changes (simulated)")
+        local saved_save = assets.save
+        assets.save = function(...)
+            local rel,abs,err,outcome=saved_save(...)
+            vim.bo[buf].modifiable=false
+            return rel,abs,err,outcome
         end
         local ok, err = pcall(function()
             parley.paste_image(buf, { notify = notify })
             assert.is_true(wait_for(function() return #notices > 0 end))
         end)
-        buffer_edit.insert_lines_at = saved_insert
+        assets.save = saved_save
+        vim.bo[buf].modifiable=true
         assert.is_true(ok, tostring(err))
         assert.equals(1, #notices)
         assert.matches("nothing pasted — could not insert the link", notices[1].msg)
-        assert.matches("E21", notices[1].msg, "the insertion error is shown")
+        assert.is_truthy(notices[1].msg:find("modifiable",1,true),
+            "the actual native insertion refusal is shown: "..notices[1].msg)
         assert.equals("error", notices[1].level)
         assert.equals(9, line_count(buf), "no link")
         assert.same({}, vim.fn.glob(root .. "/assets/**", false, true), "no file under assets/")
@@ -333,16 +336,18 @@ describe("paste image (#231)", function()
         vim.fn.mkdir(folder, "p")
         vim.fn.writefile({ "older" }, folder .. "/older.png")
         local buf = open_chat(TS .. "_keepfolder.md", chat_lines())
-        local buffer_edit = require("parley.buffer_edit")
-        local saved_insert = buffer_edit.insert_lines_at
-        buffer_edit.insert_lines_at = function()
-            error("simulated")
+        local saved_save = assets.save
+        assets.save = function(...)
+            local rel,abs,err,outcome=saved_save(...)
+            vim.bo[buf].modifiable=false
+            return rel,abs,err,outcome
         end
         local ok, err = pcall(function()
             parley.paste_image(buf, { notify = notify })
             assert.is_true(wait_for(function() return #notices > 0 end))
         end)
-        buffer_edit.insert_lines_at = saved_insert
+        assets.save = saved_save
+        vim.bo[buf].modifiable=true
         assert.is_true(ok, tostring(err))
         assert.matches("could not insert", notices[1].msg)
         assert.same({ "older.png" }, vim.fn.readdir(folder), "only the rolled-back file is gone")

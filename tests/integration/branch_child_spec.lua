@@ -439,6 +439,21 @@ describe("branched submission (#214 M3)", function()
     -- used an INLINE marker, whose delta is zero: one interleaving, reported as
     -- coverage. A STANDALONE `🤖[…]` is the ordinary form (`<M-q>` on a blank
     -- line produces it) and gather_edit_plan deletes its newline too.
+    it("undo restores gathered markers and removes their branch reference together", function()
+        local original = {
+            "---", "topic: parent topic", "file: f", "---", "",
+            "💬: first question", "", "🤖:[A]", "",
+            "answer text", "🤖[follow up]", "cursor line", "📝: summary",
+        }
+        open(original)
+        parley.config.chat_dir = tmpdir
+        vim.cmd("let &undolevels = &undolevels")
+        branch_here(12)
+        assert.is_truthy(ref_line_index(lines_now()))
+        vim.api.nvim_buf_call(parent_buf, function() vim.cmd("silent undo") end)
+        assert.same(original, lines_now())
+    end)
+
     it("a standalone marker above the cursor does not move the reference", function()
         open({
             "---", "topic: parent topic", "file: f", "---", "",

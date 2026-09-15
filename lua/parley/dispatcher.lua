@@ -434,6 +434,15 @@ end
 ---@param on_exit function | nil # optional on_exit handler
 ---@param callback function | nil # optional callback handler
 ---@param on_progress function | nil # optional progress/status handler
+-- Optional operation liveness is checked after async preparation/recovery and
+-- again immediately before spawn. Cancellation cannot authorize a late retry.
+local function transport_alive(opts)
+    if not opts or opts.alive==nil then return true end
+    if type(opts.alive)~="function" then return false end
+    local ok,alive=pcall(opts.alive)
+    return ok and alive==true
+end
+
 local query = function(buf, provider, payload, handler, on_exit, callback, on_progress,
 	on_activity, on_error, abort_before_start, restart, attempt, transport_opts)
 	attempt = attempt or 0
@@ -840,6 +849,7 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 			legacy_complete(qid, qt)
 		end
 	end)
+	if not transport_alive(transport_opts) then start_error("query owner inactive");return end
 	local run_opts = vim.tbl_extend("force", {}, transport_opts or {}, { query_id = qid })
 	tasker.run(buf, "curl", curl_params, terminal, out_reader(), nil, start_error, run_opts)
 end
@@ -872,6 +882,7 @@ D.query = function(buf, provider, payload, handler, on_exit, callback, on_progre
 	-- itself, and the terminal closure that needs to re-issue the request is
 	-- nested inside it (#197).
 	local function start_query(attempt)
+		if not transport_alive(transport_opts) then abort_before_start("query owner inactive");return end
 		-- Per-attempt payload snapshot. format_headers CONSUMES fields from the
 		-- payload (cliproxyapi nils `_parley_route`, googleai nils `model`), so
 		-- a retry that reused the same table would re-issue a materially

@@ -168,6 +168,24 @@ describe("ChatPrune topic generation failure", function()
         assert.is_truthy(child_text:find("@@branch topic@@\n💬: prune this exchange", 1, true))
     end)
 
+    it("keeps human topic and reference edits made while the request is pending", function()
+        write_parent("2026-07-12-120008-parent-concurrent.md")
+        local parent_buf=vim.api.nvim_get_current_buf()
+        local finish
+        chat_respond.generate_topic=function(_,_,_,callback) finish=callback end
+        parley.cmd.ChatPrune()
+        local child_buf=vim.api.nvim_get_current_buf()
+        local parent_lines=vim.api.nvim_buf_get_lines(parent_buf,0,-1,false)
+        local ref
+        for row,line in ipairs(parent_lines) do if line:match("^🌿:") then ref=row;break end end
+        assert.is_not_nil(ref)
+        vim.api.nvim_buf_set_lines(parent_buf,ref-1,ref,false,{"human replacement"})
+        vim.api.nvim_buf_set_lines(child_buf,1,2,false,{"topic: human topic"})
+        finish("late generated topic")
+        assert.equals("human replacement",vim.api.nvim_buf_get_lines(parent_buf,ref-1,ref,false)[1])
+        assert.equals("topic: human topic",vim.api.nvim_buf_get_lines(child_buf,1,2,false)[1])
+    end)
+
     for _, reason in ipairs({ "abort", "empty" }) do
         it("keeps the pruned chat unchanged when topic generation returns " .. reason, function()
             local parent = write_parent("2026-07-12-12000" .. (#reason) .. "-parent-" .. reason .. ".md")

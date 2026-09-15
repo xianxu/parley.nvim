@@ -244,25 +244,21 @@ M.remove_note_dir = function(d, p) return note_dirs.remove_note_dir(d, p) end
 M.rename_note_dir = function(d, l, p) return note_dirs.rename_note_dir(d, l, p) end
 
 
-local function set_chat_topic_line(buf, lines, topic)
-	local header_end = find_chat_header_end(lines)
-	if not header_end then
-		require("parley.buffer_edit").replace_user_lines(buf, 0, 1, false, { "# topic: " .. topic })
-		return
-	end
-
-	if lines[1] and lines[1]:gsub("^%s*(.-)%s*$", "%1") == "---" then
-		for i = 2, header_end - 1 do
-			if lines[i]:match("^%s*topic:%s*") then
-				require("parley.buffer_edit").replace_user_lines(buf, i - 1, i, false, { "topic: " .. topic })
-				return
-			end
+local function capture_chat_topic(buf, lines)
+	local row,prefix,suffix=0,"# topic: ",""
+	local header_end=find_chat_header_end(lines)
+	local insertion=false
+	if header_end and lines[1] and lines[1]:match("^%s*%-%-%-%s*$") then
+		row,prefix,insertion=1,"topic: ",true
+		for i=2,header_end-1 do
+			if lines[i]:match("^%s*topic:%s*") then row,insertion=i-1,false;break end
 		end
-		require("parley.buffer_edit").replace_user_lines(buf, 1, 1, false, { "topic: " .. topic })
-		return
 	end
-
-	require("parley.buffer_edit").replace_user_lines(buf, 0, 1, false, { "# topic: " .. topic })
+	if insertion then suffix="\n" end
+	local capture=require("parley.buffer_edit").capture_user(buf,"prune-child-topic",{
+		{first={row=row,col=0},last={row=row,col=insertion and 0 or #(lines[row+1] or "")}},
+	})
+	return capture,prefix,suffix
 end
 
 local function is_follow_cursor_enabled(override_free_cursor)
@@ -1953,21 +1949,24 @@ local function render_definition(buf, capture, phrase, result)
 	local applied = edits.apply_user_line_hunks(capture, lines, e.lines)
 	if applied.status ~= "applied" then
 		projection.set_applying(buf, false)
-		M.logger.warning("Define: edit cancelled: " .. tostring(applied.reason or applied.status))
+		M.logger.warning("Define: edit cancelled: " .. tostring(applied.reason or applied.error or applied.status))
 		return
 	end
 
 	local diag_span = e.diagnostic_span
 	skill_render.highlight_span(buf, diag_span.lnum, diag_span.col, diag_span.end_lnum, diag_span.end_col)
-	skill_render.refresh_footnote_diagnostics(buf)
 
 	-- Record projection states so undo/redo of the footnote edit clears/restores
 	-- the decorations (#133 M5 machinery, reused): pre-edit hash → empty
 	-- snapshot, footnoted hash → highlight+diagnostic; attach the watcher.
 	projection.record_empty_for(buf, original)
-	projection.record(buf)
 	projection.ensure_watch(buf)
 	projection.set_applying(buf, false)
+	-- The post-edit snapshot includes diagnostics only after their current
+	-- source revision has actually published; edits/undo cancel this callback.
+	skill_render.refresh_footnote_diagnostics(buf, { on_publish = function()
+		projection.record(buf)
+	end })
 
 	-- Park the cursor on the term's line so diag_display's current-line
 	-- virtual_lines reveals the definition immediately.
@@ -2010,8 +2009,15 @@ function M.define_visual(buf)
 		document = context,
 		no_reload = true,
 		detached_progress = false,
-		on_terminal = stop_selection_spinner,
-		on_done = function(result) render_definition(buf, capture, phrase, result) end,
+		on_terminal = function(result)
+			stop_selection_spinner()
+			if not result.ok then require("parley.buffer_edit").cancel_user(capture) end
+		end,
+		on_done = function(result)
+			local ok,err=pcall(render_definition,buf,capture,phrase,result)
+			require("parley.buffer_edit").cancel_user(capture)
+			if not ok then error(err,0) end
+		end,
 	})
 end
 
@@ -2141,13 +2147,15 @@ local function drill_in_resolve_at_cursor_with_mode(buf, mode)
 
 		local resolved, stale = document.resolve_user(doc, token)
 		if not resolved then
+			document.cancel_user(doc, token)
 			M.logger.warning("Marker edit cancelled: " .. tostring(stale))
 			return
 		end
 		local first = resolved.regions[1].first
 		local result = document.apply_user(doc, token, { patches = { { region = 1, text = replacement } } })
 		if result.status ~= "applied" then
-			M.logger.warning("Marker edit cancelled: " .. tostring(result.reason or result.status))
+			document.cancel_user(doc, token)
+			M.logger.warning("Marker edit cancelled: " .. tostring(result.reason or result.error or result.status))
 			return
 		end
 		if vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == buf then
@@ -2388,6 +2396,17 @@ local function branch_inserters(buf, abs_link, owns_file)
 		local new_chat_file = (new_target())
 		local rel_path = vim.fn.fnamemodify(new_chat_file, ":t")
 
+		local regions = {}
+		for _,edit in ipairs(marker_edits) do
+			local sr,sc=byte_offset_to_rowcol(lines,edit.start_byte-1)
+			local er,ec=byte_offset_to_rowcol(lines,edit.end_byte-1)
+			regions[#regions+1]={first={row=sr,col=sc},last={row=er,col=ec}}
+		end
+		regions[#regions+1]={first={row=plan.ref_after-1,col=0},
+			last={row=plan.ref_after-1,col=#(lines[plan.ref_after] or "")}}
+		local capture,capture_error=buffer_edit.capture_user(buf,"branch-gather",regions)
+		if not capture then M.logger.warning("Branch: "..tostring(capture_error));return true end
+
 		-- Create the child FIRST, before touching the parent (#214 BR-63). The
 		-- write was pcall-guarded and this was not, so an unwritable chat_dir
 		-- raised out of the keymap callback with the markers already stripped and
@@ -2400,42 +2419,50 @@ local function branch_inserters(buf, abs_link, owns_file)
 		-- orphan and is handled below by not navigating away on a failed write.
 		local created_ok = pcall(create_child_if_owned, new_chat_file, "?", question)
 		if not created_ok then
+			buffer_edit.cancel_user(capture)
 			M.logger.warning("Branch: could not create " .. rel_path
 				.. " — nothing was changed in this chat")
 			return true
 		end
 
-		-- #214 BR-58: anchor the insertion point BEFORE stripping. `ref_after` is
-		-- a pre-strip line number and `apply_text_edits` changes the line count
-		-- whenever a removed marker owned whole lines — which the ordinary
-		-- standalone `🤖[…]` form does. An extmark travels with the edit;
-		-- chat_respond solves the same problem the same way (`make_handle` around
-		-- its own gather). The earlier code kept the raw number, so the reference
-		-- drifted by however many lines the strip removed, in the common case
-		-- landing past the exchange's `📝:` summary.
-		-- Anchor ON the cursor line, not on the line after it. `ref_after` is
-		-- 1-indexed and `make_handle` takes a 0-indexed row, so passing it
-		-- directly put the mark on the following line — usually the blank gap
-		-- that `drill_in`'s edit swallows, and with left gravity the mark then
-		-- collapsed and the reference landed ABOVE the cursor. Visible only with
-		-- a marker BELOW the cursor; every fixture in the first fix put one
-		-- above, sampling one side of the axis (#214 BR-58, round 2).
-		local anchor = buffer_edit.make_handle(buf, plan.ref_after - 1)
-		buffer_edit.apply_text_edits(buf, 0, text, marker_edits)
-		local insert_at = buffer_edit.handle_line(anchor) + 1
-		buffer_edit.handle_invalidate(anchor)
-
-		-- AT THE CURSOR (operator, 2026-09-07), as its own block — one blank line
-		-- on each side, added only where there is not one already. `ref_block`
-		-- owns that rule for both insert paths (#214 BR-68); this used to emit
-		-- `{ "", ref }`, a blank before only, so the reference abutted whatever
-		-- followed it.
-		local around = vim.api.nvim_buf_get_lines(buf, math.max(insert_at - 1, 0),
-			insert_at + 1, false)
-		require("parley.buffer_edit").replace_user_lines(buf, insert_at, insert_at, false,
-			br.ref_block(br.format_ref_line(get_branch_prefix(), rel_path, label or ""),
-				insert_at > 0 and around[1] or nil,
-				around[insert_at > 0 and 2 or 1]))
+		local resolved=buffer_edit.resolve_user(capture)
+		if not resolved then
+			buffer_edit.cancel_user(capture)
+			M.logger.warning("Branch: source changed while creating the child; parent left intact")
+			return true
+		end
+		-- Resolve every source edit and the reference anchor in the current
+		-- coordinate frame, then publish the composed result in one transaction.
+		local current=vim.api.nvim_buf_get_lines(buf,0,-1,false)
+		local transformed=table.concat(current,"\n")
+		local anchor=resolved.regions[#regions].first.byte
+		local shift=0
+		for index,edit in ipairs(marker_edits) do
+			local region=resolved.regions[index]
+			local first,last=region.first.byte,region.last.byte
+			if last<=anchor and first<anchor then
+				shift=shift+#edit.replacement-(last-first)
+			elseif first<anchor and last>anchor then
+				anchor=first;break
+			end
+		end
+		anchor=anchor+shift
+		for index=#marker_edits,1,-1 do
+			local region=resolved.regions[index]
+			transformed=transformed:sub(1,region.first.byte)..marker_edits[index].replacement
+				..transformed:sub(region.last.byte+1)
+		end
+		local _,breaks=transformed:sub(1,anchor):gsub("\n","")
+		local insert_at=breaks+1
+		local after=vim.split(transformed,"\n",{plain=true})
+		local block=br.ref_block(br.format_ref_line(get_branch_prefix(),rel_path,label or ""),
+			after[insert_at],after[insert_at+1])
+		for index=#block,1,-1 do table.insert(after,insert_at+1,block[index]) end
+		local applied=buffer_edit.apply_user_line_hunks(capture,current,after)
+		if applied.status~="applied" then
+			M.logger.warning("Branch: parent edit cancelled: "..tostring(applied.reason or applied.error or applied.status))
+			return true
+		end
 		M.highlight_chat_branch_refs(buf)
 		if not commit_reference() then
 			return true
@@ -4341,35 +4368,40 @@ M.cmd.ChatPrune = function()
 				return chat_respond.find_topic_line(child_buf)
 			end }
 		end
+		local edits=require("parley.buffer_edit")
+		local parent_capture=edits.capture_user(buf,"prune-reference-topic",{
+			{first={row=prune_start,col=0},last={row=prune_start,col=#branch_line}},
+		})
+		local child_capture,topic_prefix,topic_suffix
+		if child_buf~=-1 and vim.api.nvim_buf_is_loaded(child_buf) then
+			child_capture,topic_prefix,topic_suffix=capture_chat_topic(child_buf,
+				vim.api.nvim_buf_get_lines(child_buf,0,-1,false))
+		end
+		local disk_source=not child_capture and table.concat(vim.fn.readfile(new_file),"\n") or nil
+		local disk_version=disk_source and vim.uv.fs_stat(new_file)
 		chat_respond.generate_topic(topic_msgs, agent_info.provider, agent_info.model, function(topic, _reason)
-			if not topic then return end
-			-- Update child file's topic header
-			local cbuf = vim.fn.bufnr(new_file)
-			if cbuf ~= -1 and vim.api.nvim_buf_is_valid(cbuf) then
-				local child_lines_now = vim.api.nvim_buf_get_lines(cbuf, 0, -1, false)
-				set_chat_topic_line(cbuf, child_lines_now, topic)
-			else
-				-- Child not open in a buffer — update the file directly
-				local file_lines = vim.fn.readfile(new_file)
-				for i, line in ipairs(file_lines) do
-					if line:match("^%s*topic:%s*") then
-						file_lines[i] = "topic: " .. topic
-						vim.fn.writefile(file_lines, new_file)
-						break
+			if not topic then edits.cancel_user(parent_capture);edits.cancel_user(child_capture);return end
+			if child_capture then
+				edits.apply_user(child_capture,{{region=1,text=topic_prefix..topic..topic_suffix}})
+			elseif disk_source and vim.fn.filereadable(new_file)==1
+				and not vim.api.nvim_buf_is_loaded(vim.fn.bufnr(new_file)) then
+				local file_lines=vim.fn.readfile(new_file)
+				local version=vim.uv.fs_stat(new_file)
+				if version and disk_version and version.ino==disk_version.ino and version.dev==disk_version.dev
+					and version.size==disk_version.size and vim.deep_equal(version.mtime,disk_version.mtime)
+					and table.concat(file_lines,"\n")==disk_source then
+					for i,line in ipairs(file_lines) do
+						if line:match("^%s*topic:%s*") then
+							file_lines[i]="topic: "..topic;vim.fn.writefile(file_lines,new_file);break
+						end
 					end
 				end
 			end
-
-			-- Update parent's 🌿: line with the generated topic
-			if vim.api.nvim_buf_is_valid(buf) then
-				local parent_lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-				for i, line in ipairs(parent_lines) do
-					if line:match("^" .. vim.pesc(branch_prefix)) and line:find(rel_child, 1, true) then
-						local updated = require("parley.branch_ref").format_ref_line(branch_prefix, rel_child, topic)
-						require("parley.buffer_edit").replace_user_lines(buf, i - 1, i, false, { updated })
-						vim.cmd("write")
-						break
-					end
+			if parent_capture then
+				local updated=require("parley.branch_ref").format_ref_line(branch_prefix,rel_child,topic)
+				local applied=edits.apply_user(parent_capture,{{region=1,text=updated}})
+				if applied.status~="applied" then
+					M.logger.warning("Prune topic: parent reference changed; leaving it intact")
 				end
 			end
 

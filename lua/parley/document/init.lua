@@ -6,7 +6,9 @@ local Structure=require('parley.document.structure')
 local Grammar=require('parley.document.grammar')
 local Lexical=require('parley.document.lexical')
 local Reader=require('parley.line_reader')
+local User=require('parley.document.user_edits')
 local Append=require('parley.document.append')
+local Replacement=require('parley.document.replacement')
 local M={}
 local buffers={}
 local documents=setmetatable({},{__mode='k'})
@@ -30,7 +32,7 @@ end
 local function reconcile(s,only_suspended)
     local proofs={}
     for gid,grant in pairs(State.snapshot(s.authority).grants) do
-        if grant.status~='revoked' and (not only_suspended or grant.status=='suspended') then
+        if grant.status~='revoked' and not Replacement.owns(s,gid) and (not only_suspended or grant.status=='suspended') then
             proofs[gid]=proof(s,grant) or {entity=false}
         end
     end
@@ -67,7 +69,7 @@ local function schedule(doc)
             local start=(vim.uv or vim.loop).hrtime()
             repeat
                 local result=M.repair_step(doc)
-                if result.status=='idle' or result.status=='detached' then return false end
+                if result.status=='idle' or result.status=='detached' or result.status=='mutation' then return false end
             until (vim.uv or vim.loop).hrtime()-start>=2000000
             return true
         end)
@@ -91,6 +93,8 @@ local function accumulate_repair(work,result)
     return result
 end
 local function observe_edit(doc,s,event)
+    local successor=Replacement.observe(s,event)
+    Reader.record_work(s.buf,{operation='source_guard_edit',source_guards_visited=User.observe(s.editor,event)})
     local before=Structure.stats(s.structure)
     local classified_rows,classified_bytes=0,0
     local repair_work={dependency_nodes_visited=0,rows_processed=0}
@@ -99,7 +103,8 @@ local function observe_edit(doc,s,event)
     end
     effects(s,State.transition(s.authority,{kind='observed_edit',epoch=event.epoch,
         first=event.first,last=event.last,new_bytes=event.new_bytes,
-        owner_grant=event.owner and event.owner.grant}))
+        owner_grant=event.owner and event.owner.grant,successor=successor}))
+    Replacement.prune(s)
     Append.prune(s.append,State.snapshot(s.authority).grants)
     local appended=Append.observe(s.append,s.structure,event)
     local first=math.min(event.start.row,event.old_rows)
@@ -117,7 +122,7 @@ local function observe_edit(doc,s,event)
     local newlast=first+added
     local reused=false
     local diagnostic_changed=true
-    if event.source_frame==true and (appended or (added<=256 and last-first<=256 and bytes<=65536
+    if not successor and event.source_frame==true and (appended or (added<=256 and last-first<=256 and bytes<=65536
         and not (a and a.opaque) and not (z and z.opaque))) then
         local lines=not appended and s.editor.reader:lines(first,newlast,false) or {}
         local spans=appended and appended.spans or {}; local actual=0
@@ -154,15 +159,19 @@ local function observe_edit(doc,s,event)
             reused=accumulate_repair(repair_work,Structure.replace_fragment(s.structure,first,last,spans,
                 {rows=256,bytes=65536,nodes=65536,entries=65536})).reused_suffix
         end
-    elseif added==1 and last-first<=256 and bytes<=65536 and not (a and a.opaque) and not (z and z.opaque) then
+    elseif not successor and added==1 and last-first<=256 and bytes<=65536 and not (a and a.opaque) and not (z and z.opaque) then
         -- Capture only old indexed evidence here. No callback text is read;
         -- the settled repair turn may prove a bounded join against its suffix.
         local delayed=accumulate_repair(repair_work,Structure.begin_deferred_fragment(s.structure,
             first,last,added,bytes,{rows=256,bytes=65536,nodes=65536,entries=65536}))
         if delayed.status=='deferred' then s.deferred={first=first,last=newlast,bytes=bytes} end
     else accumulate_repair(repair_work,Structure.splice(s.structure,first,last,opaque(added,bytes))) end
+    if successor then
+        effects(s,State.transition(s.authority,{kind='uncertain',first=event.first,last=event.first+event.new_bytes}))
+    end
     if appended then Append.commit(s.append,s.structure,appended,newlast-1) end
     if not reused then s.idle=false end
+    Replacement.after_observe(s,event,reused)
     reconcile(s)
     local work=Structure.stats(s.structure)
     for key,value in pairs(work) do work[key]=value-(before[key] or 0) end
@@ -181,6 +190,8 @@ local function observe(doc,event)
     if s.dead or event.epoch~=s.epoch then return end
     if event.kind=='edit' then observe_edit(doc,s,event)
     elseif event.kind=='reload' then
+        Replacement.clear(s)
+        User.clear(s.editor)
         cancel_schedule(s)
         Append.clear(s.append)
         s.epoch=epoch(); s.deferred=nil; s.idle=false
@@ -189,6 +200,8 @@ local function observe(doc,event)
         Structure.reload(s.structure,opaque(event.rows,event.total))
         notify(s,{kind='reload'}); schedule(doc)
     elseif event.kind=='detach' then
+        Replacement.clear(s)
+        User.clear(s.editor)
         cancel_schedule(s)
         Append.clear(s.append)
         s.dead=true; s.deferred=nil; buffers[s.buf]=nil
@@ -226,6 +239,14 @@ end
 function M.exchange(doc,row,opts)
     local s=state(doc); return s.dead and {status='detached'} or measured_query(s,Structure.exchange,row,opts)
 end
+-- Display-only byte coordinates; no native reads or write authority.
+function M.byte_position(doc,offset)
+    local s=state(doc)
+    if s.dead or type(offset)~='number' or offset<0 or offset>=math.huge or offset%1~=0 then return nil end
+    local row=measured_query(s,Structure.at_byte,offset)
+    if not row or row.opaque or row.end_row-row.start_row~=1 then return nil end
+    return {row=row.start_row,col=offset-row.start_byte}
+end
 function M.next_exchange(doc,first,last,opts)
     local s=state(doc); return s.dead and {status='detached'} or measured_query(s,Structure.next_exchange,first,last,opts)
 end
@@ -252,11 +273,21 @@ function M.subscribe(doc,callback)
     local key={}; s.subscribers[key]=callback
     return function() s.subscribers[key]=nil end
 end
+-- Capacity reserves bounded grant slots only; acquisition still validates
+-- confirmed document regions through the ordinary authority path below.
+function M.reserve_capacity(doc,intent)
+    return M.transition(doc,{kind='reserve_capacity',epoch=intent.epoch,generation=intent.generation,
+        operation=intent.operation,count=intent.count})
+end
+function M.release_capacity(doc,intent)
+    return M.transition(doc,{kind='release_capacity',epoch=intent.epoch,generation=intent.generation,
+        operation=intent.operation,ticket=intent.ticket})
+end
 function M.transition(doc,event)
     local s=state(doc)
     if s.dead or type(event)~='table' then return effects(s,State.transition(s.authority,event)) end
     if event.kind~='register_generation' and event.kind~='acquire' and event.kind~='revoke'
-        and event.kind~='finish_generation' then return {ok=false,reason='coordinator-owned event',effects={}} end
+        and event.kind~='finish_generation' and event.kind~='reserve_capacity' and event.kind~='release_capacity' then return {ok=false,reason='coordinator-owned event',effects={}} end
     if event.kind=='acquire' then
         if type(event.regions)~='table' or #event.regions>16 then return {ok=false,reason='grant limit',effects={}} end
         for _,region in ipairs(event.regions or {}) do
@@ -270,6 +301,7 @@ function M.transition(doc,event)
         end
     end
     local result=effects(s,State.transition(s.authority,event))
+    if Replacement.prune(s) then schedule(doc) end
     Append.prune(s.append,State.snapshot(s.authority).grants)
     return result
 end
@@ -320,7 +352,9 @@ function M.repair_step(doc,budget)
     -- delivery or redirect it to a different row.
     local refreshed=Structure.refresh_read_request(s.structure,limits)
     local result
-    if refreshed.status=='read' then
+    if refreshed.status=='read' and Replacement.blocks(s,refreshed.request.row) then
+        return {status='mutation',work=refreshed.work}
+    elseif refreshed.status=='read' then
         limits.nodes=limits.nodes-(refreshed.work.nodes_visited or 0)
         limits.entries=limits.entries-(refreshed.work.entries_visited or 0)
         result=Structure.repair_step(s.structure,s.editor:chunk(refreshed.request),limits)
@@ -342,22 +376,58 @@ function M.drain(doc,limit,budget)
     end
     return result
 end
-local User=require('parley.document.user_edits')
 function M.capture_user(doc,intent)
     local s=state(doc)
+    if s.dead then return nil,'detached' end
     return measured_query(s,function() return User.capture(s.structure,s.editor,s.epoch,intent) end)
 end
 function M.resolve_user(doc,token)
     local s=state(doc)
+    if s.dead then return nil,'detached' end
     return measured_query(s,function() return User.resolve(s.structure,s.editor,s.epoch,token) end)
 end
 function M.extend_user(doc,token,intent)
     local s=state(doc)
+    if s.dead then return nil,'detached' end
     return measured_query(s,function() return User.extend(s.structure,s.editor,s.epoch,token,intent) end)
 end
+function M.cancel_user(doc,token)
+    local s=state(doc);return User.cancel(s.structure,s.editor,s.epoch,token)
+end
+function M.user_guard_stats(doc)return User.stats(state(doc).editor)end
 function M.apply_user(doc,token,request)
     local s=state(doc)
     return User.apply(s.structure,s.editor,s.epoch,token,request)
+end
+-- Fresh confirmation may restore only the current parent endpoint after all
+-- delegated writers have retired. This never uses finite successor authority.
+function M.reclaim_tail(doc,intent)
+    local s=state(doc)
+    if s.dead or type(intent)~='table' then return {ok=false,reason='detached',effects={}} end
+    local grant=State.snapshot(s.authority).grants[intent.grant]
+    if not grant or Replacement.owns(s,intent.grant) then return {ok=false,reason='ownership',effects={}} end
+    return effects(s,State.transition(s.authority,{kind='reclaim_tail',epoch=intent.epoch,
+        generation=intent.generation,grant=intent.grant,entity=intent.entity,revision=intent.revision,current=proof(s,grant)}))
+end
+function M.replace_new(doc,intent)
+    local s=state(doc)
+    if s.dead or type(intent)~='table' then return nil,'detached' end
+    local grant=State.snapshot(s.authority).grants[intent.grant]
+    if not grant then return nil,'grant' end
+    local entity=Structure.lookup(s.structure,grant.entity)
+    local offset=intent.first_offset or 0
+    if type(offset)~='number' or offset<0 or offset%1~=0 or offset>grant.last-grant.first
+        or not entity or grant.first+offset<entity.end_byte then return nil,'entity row overlap' end
+    return Replacement.new(s,intent,proof(s,grant))
+end
+function M.replace_step(doc,cursor)
+    local s=state(doc)
+    local result=Replacement.step(s,cursor,function(grant)return proof(s,grant)end)
+    if result.status~='more' then schedule(doc) end
+    return result
+end
+function M.replace_cancel(doc,cursor)
+    local s=state(doc);Replacement.cancel(s,cursor);schedule(doc)
 end
 function M.apply(doc,plan)
     local s=state(doc)

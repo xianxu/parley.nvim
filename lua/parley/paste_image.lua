@@ -113,6 +113,7 @@ function M.paste(buf, deps)
 
     local function finish(msg, level)
         inflight[buf] = nil
+        buffer_edit.cancel_user(capture)
         os.remove(tmp)
         deps.notify(msg, level)
     end
@@ -148,7 +149,7 @@ function M.paste(buf, deps)
                 local result = buffer_edit.apply_user(capture, {
                     { region = 1, text = "\n" .. assets.markdown_link(rel) },
                 })
-                if result.status ~= "applied" then error(result.reason or result.status) end
+                if result.status ~= "applied" then error(result.reason or result.error or result.status) end
             end)
             if not iok then
                 rollback(abs, created)

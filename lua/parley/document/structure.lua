@@ -339,39 +339,6 @@ end
 
 -- A job proves only local text identity. It cannot authorize semantic state;
 -- only the semantic worker validates context and publishes derived metadata.
--- Expose row boundaries without reading opaque text. All changes travel through
--- splice so outstanding lexical and semantic jobs lose their old provenance.
-function M.expose_text_range(document, first, last, first_byte, last_byte)
-    for _,boundary in ipairs({{last,last_byte},{first,first_byte}}) do
-        local row,byte=boundary[1],boundary[2]
-        if row<M.size(document).rows then
-            local span=M.at(document,row)
-            if span and span.opaque and row>span.start_row then
-                assert(byte>span.start_byte and byte<span.end_byte,"invalid opaque boundary")
-                M.splice(document,span.start_row,span.end_row,{
-                    {opaque=true,rows=row-span.start_row,bytes=byte-span.start_byte},
-                    {opaque=true,rows=span.end_row-row,bytes=span.end_byte-byte},
-                })
-            end
-        end
-    end
-end
-function M.capture_text(document, first, last)
-    local current=state(document)
-    local certificate,reason=sequence.range_certificate(current.index,first,last,{edges=false})
-    if not certificate then return nil,reason end
-    local token={}
-    jobs[token]={document=document,epoch=current.epoch,certificate=certificate,user_text=true}
-    return token
-end
-function M.validate_text(document, token)
-    local current,captured=state(document),jobs[token]
-    if not captured or not captured.user_text or captured.document~=document or captured.epoch~=current.epoch then
-        return false,"stale text proof"
-    end
-    return sequence.validate_certificate(current.index,captured.certificate)
-end
-
 function M.capture(document, first, last)
     local current = state(document)
     local certificate, reason = sequence.range_certificate(current.index, first, last)

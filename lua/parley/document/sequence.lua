@@ -560,7 +560,6 @@ function M.range_certificate(seq,first,last,opts)
     assert(kind=="text" or kind=="syntax" or kind=="projection","unknown certificate kind")
     local s=state(seq)
     check_range(s,first,last)
-    assert(not (opts and opts.edges==false) or kind=="text" and first<last,"edgeless proof requires nonempty text")
     local totals=aggregate(s,first,last)
     if not totals then return nil,"partial opaque range" end
     local size=M.size(seq).rows
@@ -568,7 +567,7 @@ function M.range_certificate(seq,first,last,opts)
     local z,zr=locate(s,last-1)
     local before=first>0 and locate(s,first-1) or nil
     local after=last<size and locate(s,last) or nil
-    local c={kind=kind,edges=not (opts and opts.edges==false),totals=totals,first=a and a.handle or s.eof,first_offset=a and first-ar or 0,
+    local c={kind=kind,totals=totals,first=a and a.handle or s.eof,first_offset=a and first-ar or 0,
         last=z and z.handle or s.eof,last_offset=z and last-zr or 0,
         before=before and before.handle,after=after and after.handle,empty=first==last}
     local token={}; s.certificates[token]=c
@@ -658,7 +657,7 @@ function M.validate_certificate(seq,token,opts)
     if c.empty then last=first end
     local before=first>0 and locate(s,first-1) or nil
     local after=last<M.size(seq).rows and locate(s,last) or nil
-    if c.edges~=false and ((before and before.handle)~=c.before or (after and after.handle)~=c.after) then return false,"changed edge" end
+    if (before and before.handle)~=c.before or (after and after.handle)~=c.after then return false,"changed edge" end
     local totals=aggregate(s,first,last)
     if not totals or totals.rows~=c.totals.rows then return false,"changed range" end
     if kind=="projection" then

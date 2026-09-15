@@ -107,13 +107,14 @@ describe('generation runner sequences',function()
         fake:prepare();Runner.drain(r,100);fake:complete(1);Runner.drain(r,100)
         assert.equals('terminal',Runner.snapshot(r).phase)
         assert.is_false(fake.finalizations[1].append('late',function()end))
+        assert.is_true(fake.finalizations[1].cancelled())
         assert.equals(0,Runner.snapshot(r).retained_staged_bytes)
     end)
 
     it('releases superseded inputs and round payloads across one hundred rounds',function()
         local doc=document();local fake=Fake.new();local child
         fake.adapters.reserve_round=function(ctx,done)
-            if not child then
+            if not child or not D.snapshot(doc).grants[child] or D.snapshot(doc).grants[child].status=='revoked' then
                 local parent=D.snapshot(doc).grants[ctx.grant]
                 local result=D.transition(doc,{kind='acquire',generation=ctx.generation,parent=ctx.grant,
                     regions={{entity=parent.entity,first=parent.last,last=parent.last,marker_revision=1,
@@ -223,4 +224,125 @@ describe('generation runner sequences',function()
         fake:complete(1);Runner.drain(r,100)
     end)
 
+    it('waits for bounded replacement before prepared input is requested',function()
+        local doc,editor=document();local fake=Fake.new()
+        local question=D.query(doc,0,1)[1];local body=D.query(doc,3,4)[1]
+        local totals={accepted=0,removed=0,ids={}}
+        fake.adapters.written=function(_,receipt)
+            assert.is_nil(totals.ids[receipt.id]);totals.ids[receipt.id]=true
+            totals.accepted=totals.accepted+receipt.accepted_bytes;totals.removed=totals.removed+receipt.removed_bytes
+        end
+        local runner=assert(Runner.start(doc,{entity=question.handle,first=question.end_byte,
+            last=body.end_byte-1,input={message='frozen'},schedule=false},fake.adapters))
+        runners[#runners+1]=runner;Runner.drain(runner,100)
+        local prep=fake.preparations[1];local done
+        assert.is_true(prep.ctx.replace('🤖: replaced\n'..string.rep('x',70000),function(r)done=r end))
+        prep.callbacks.prepared({message='captured'});prep.callbacks.resolved()
+        assert.equals(0,#fake.requests)
+        Runner.drain(runner,1000)
+        assert.equals('applied',done.status);assert.equals(1,#fake.requests)
+        assert.equals(done.accepted_bytes,totals.accepted);assert.equals(done.removed_bytes,totals.removed)
+        assert.equals('🤖: replaced',editor.lines[2])
+        assert.equals(0,Runner.snapshot(runner).retained_staged_bytes)
+    end)
+    it('cancels a partial replacement and releases its staged payload',function()
+        local doc=document();local fake=Fake.new()
+        local q=D.query(doc,0,1)[1];local body=D.query(doc,3,4)[1]
+        local r=assert(Runner.start(doc,{entity=q.handle,first=q.end_byte,last=body.end_byte-1,
+            input={},schedule=false},fake.adapters));runners[#runners+1]=r;Runner.drain(r,100)
+        local prep=fake.preparations[1];local done
+        assert.is_true(prep.ctx.replace(string.rep('x',70000),function(result)done=result end))
+        Runner.step(r);Runner.cancel(r);prep.callbacks.resolved();Runner.drain(r,1000)
+        assert.is_not_nil(done);assert.is_true(done.status~='applied')
+        assert.equals(0,Runner.snapshot(r).retained_staged_bytes)
+        assert.equals('idle',D.drain(doc,10000).status)
+    end)
+    it('notifies committed writes once after accounting even if presentation throws',function()
+        local doc=document();local fake=Fake.new();local notices={};local r
+        fake.adapters.written=function(ctx,receipt)
+            notices[#notices+1]={ctx=ctx,receipt=receipt}
+            assert.equals(receipt.accepted_bytes,Runner.snapshot(r).committed_bytes)
+            assert.equals('busy',Runner.step(r).status)
+            error('presentation failed')
+        end
+        r=start(doc,fake,2);fake:prepare();Runner.drain(r,100)
+        fake:output(1,'accepted');Runner.drain(r,100)
+        assert.equals(1,#notices);assert.equals(8,notices[1].receipt.accepted_bytes)
+        assert.equals('output',notices[1].receipt.kind);assert.is_nil(notices[1].ctx.append)
+        assert.is_nil(notices[1].receipt.payload);assert.is_not_nil(notices[1].receipt.tip)
+        fake:complete(1);Runner.drain(r,100)
+        assert.equals('success',Runner.snapshot(r).outcome);assert.equals(1,#notices)
+    end)
+    it('reclaims the parent tail only after the child effect resolves',function()
+        local doc,editor=document();local fake=Fake.new();local child_cb
+        fake.adapters.reserve_round=function(ctx,done)
+            local p=D.snapshot(doc).grants[ctx.grant]
+            local c=D.transition(doc,{kind='acquire',generation=ctx.generation,parent=ctx.grant,
+                regions={{entity=p.entity,first=p.last,last=p.last,marker_revision=1,revision=1,confirmed=true}}})
+            done(c.grants,{})
+        end
+        fake.adapters.start_child=function(_,cb)child_cb=cb;cb.outcome('known',{})end
+        fake.adapters.continue_round=function(ctx,cb)cb.prepared(ctx.input);cb.resolved()end
+        local r=start(doc,fake,2);fake:prepare();Runner.drain(r,100)
+        fake.requests[1].callbacks.round({{call_id='one',arguments={}}});fake.requests[1].callbacks.resolved()
+        Runner.drain(r,100);assert.equals(1,#fake.requests)
+        local gid=Runner.snapshot(r).grant;local before=D.snapshot(doc).grants[gid]
+        assert.is_true(before.first<before.last)
+        child_cb.resolved();Runner.drain(r,100)
+        local after=D.snapshot(doc).grants[gid];assert.equals(after.first,after.last)
+        fake:output(2,'after tool');Runner.drain(r,100)
+        assert.equals('after tool',editor.lines[4])
+    end)
+end)
+
+describe('atomic preparation grants',function()
+    after_each(function()
+        for _,r in ipairs(runners)do Runner.cancel(r);Runner.drain(r,100)end
+        for _,doc in ipairs(docs)do D.detach(doc)end;runners,docs={},{}
+    end)
+    it('acquires disjoint cleanup gaps together and blocks prepared until they retire',function()
+        local doc=document();local rows=D.query(doc,0,4);local fake=Fake.new()
+        local r=assert(Runner.start(doc,{entity=rows[1].handle,first=rows[2].start_byte,last=rows[2].end_byte-1,
+            preparation_regions={{first=rows[4].start_byte,last=rows[4].end_byte-1}},input={},schedule=false},fake.adapters))
+        runners[#runners+1]=r;Runner.drain(r,100)
+        local p=fake.preparations[1];assert.equals(1,#p.ctx.preparation_grants)
+        assert.is_not_equal(p.ctx.grant,p.ctx.preparation_grants[1])
+        assert.is_false(p.callbacks.prepared({}));assert.equals(0,#fake.requests)
+        D.transition(doc,{kind='revoke',grant=p.ctx.preparation_grants[1]})
+        assert.is_true(p.callbacks.prepared({}));p.callbacks.resolved();Runner.drain(r,100)
+        assert.equals(1,#fake.requests);assert.is_nil(fake.requests[1].ctx.preparation_grants)
+    end)
+    it('rolls back all admission if an ancillary region overlaps the primary',function()
+        local doc=document();local rows=D.query(doc,0,4);local fake=Fake.new()
+        local r=Runner.start(doc,{entity=rows[1].handle,first=rows[2].start_byte,last=rows[2].end_byte-1,
+            preparation_regions={{first=rows[2].start_byte,last=rows[2].end_byte-1}},input={},schedule=false},fake.adapters)
+        assert.is_nil(r);assert.is_nil(next(D.snapshot(doc).generations));assert.is_nil(next(D.snapshot(doc).grants))
+    end)
+end)
+
+describe('runner terminal retention',function()
+    it('collects a terminal runner captured by its own native adapter even when terminal throws',function()
+        for _,throws in ipairs({false,true}) do
+            local weak=setmetatable({},{__mode='v'})
+            local function run()
+                local buf=vim.api.nvim_create_buf(false,true)
+                vim.api.nvim_buf_set_lines(buf,0,-1,false,{'💬: q','🤖: a',''})
+                local doc=D.attach(buf,{schedule=false});D.drain(doc,1000)
+                local rows=D.query(doc,0,3);local r
+                local adapters={prepare=function(ctx,cb)cb.prepared(ctx.input);cb.resolved()end,
+                    request=function(_,cb)cb.complete();cb.resolved()end,
+                    finalize=function(_,done)done('applied')end,
+                    terminal=function()
+                        assert.equals('terminal',Runner.snapshot(r).phase)
+                        if throws then error('terminal UI failed') end
+                    end}
+                r=assert(Runner.start(doc,{entity=rows[2].handle,first=rows[2].start_byte,
+                    last=rows[3].end_byte-1,input={},schedule=false},adapters))
+                Runner.drain(r,1000);weak[1]=r
+                D.detach(doc);vim.api.nvim_buf_delete(buf,{force=true})
+            end
+            run();collectgarbage('collect');collectgarbage('collect')
+            assert.is_nil(weak[1])
+        end
+    end)
 end)

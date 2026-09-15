@@ -630,3 +630,91 @@ Fresh slots start an empty scanner; existing tails require one bounded bootstrap
 with local entry proof that survives unrelated neighboring edits. Candidate-rich
 long-line diagnostics require explicit work measurement rather than assuming
 that bounded per-slice parsing also proves bounded aggregate append work.
+
+### 2026-09-15 — M4 finite replacement successor authority
+
+Repeatedly repairing a shrinking opaque row between bounded deletion patches would
+make regeneration quadratic. A private finite replacement cursor therefore captures
+its immutable payload and initial confirmed leaf grant, then advances authority only
+through exact editor receipts. Each armed patch is at most 4096 bytes; no public
+apply/append flag or caller lexical metadata can bypass semantic confirmation.
+Unexpected source edits, revoked identity, reload, and detach retire the cursor.
+Disjoint structural uncertainty pauses it until ordinary authority is confirmed.
+Only lexical reads intersecting an actively mutating finite range are deferred;
+pause, cancellation, completion, and lifecycle invalidation release that deferral.
+Rendering continues to expose those rows as uncertain until genuine repair.
+
+An optional captured retained-prefix length may release the final generated suffix
+at successful completion, before semantic reconciliation. It cannot enlarge a grant,
+change its entity, or reclaim delegated slots, and never runs after partial failure.
+This is release of ownership, not a second source of document facts (ARCH-DRY).
+
+### 2026-09-15 — M4 cancellation-safe annotation replacement geometry
+
+Finite answer replacement must exclude the original bytes of every surviving
+annotation from every destructive grant. `response_layout.prepare` derives
+half-open byte gaps from the already captured target span: a prefix gap installs
+the answer shell, while later gaps remove generated prose and leave newline
+separators between preserved annotations. The caller captures all disjoint gap
+grants before mutation and refuses preparation if grant capacity is insufficient;
+it resolves each gap independently after preceding mutations or disjoint human
+edits. A first-offset-only cursor spanning the entire old answer is insufficient.
+The question marker, later prefaces, next composer, and footnotes outside the
+selected answer remain outside the replacement span. Geometry supplies no write
+authority (ARCH-PURPOSE, ARCH-ORDER).
+
+Line-start branch references and private notes retain their exact line text.
+Inline branch links retain their original `[🌿:label](path)` bytes on standalone
+lines instead of being reformatted as `🌿: path: label`. Both forms parse as the
+same branch reference; preserving the original source throughout cancellation
+supersedes the old delete-and-reinsert formatting behavior. The existing private
+note grammar is single-line: an unmarked continuation line has no private-note
+ownership implication. The helper uses canonical LF-terminated row byte offsets,
+including the final buffer row; the native editor must normalize canonical EOF
+rather than treating it as a physical `set_text` row. Pure provenance tests check
+that every original protected byte survives every partial destructive operation,
+including repeated identical links and UTF-8 columns.
+
+### 2026-09-15 — M4 preparation uses physical-EOL source capture
+
+`response_preparation.plan` narrows the canonical layout to the target capture's
+physical-EOL contract: every final gap excludes its terminating LF, not only at
+document EOF, and omits the equivalent final payload LF. Region offsets are
+relative to the captured question EOL and are rebased once by source readiness
+before atomic multi-grant admission. The prefix grant preserves the question's
+newline through `first_offset=1`; a zero-width source first appends an owned
+newline before replacement. Existing margins beyond the captured source remain
+untouched, even where legacy cleanup would have trimmed them. Preparation uses
+one bounded finite cursor at a time and positively retires its timer, subscription,
+cursor, and ancillary grants before prepared input can reach the provider.
+
+
+### 2026-09-15 — M4 admission and transport composition checkpoint
+
+Reason: production migration needs explicit source-to-runner admission, finite
+annotation-safe preparation and position-free provider transport. Delta: add
+`response_submission` (capture/freeze then same-stack runner acquisition),
+`response_target` (bounded confirmed target resolution), `response_layout` (pure
+protected-source geometry), `response_preparation` (finite disjoint gap grants),
+and `response_provider` (operation-scoped transport callbacks). They compose the
+existing document/runner boundaries rather than inventing independent authority.
+
+`Runner.start` acquires primary and ancillary preparation regions atomically;
+provider admission refuses until ancillary grants retire. Native successor point
+guards belong only to a live private replacement witness; ordinary user insertion
+captures still protect the containing source row. Input dependencies distinguish
+same-generation output insertion at the question seam from human question edits.
+Waiting-target stale evidence enters the reducer before preparation begins.
+
+Provider failure closes admission and drains already-admitted bytes while grants
+remain valid, then retires with provider_failed; human revocation/cancellation can
+still discard remaining staged bytes. Failed requests do not run success
+finalization. Positive transport exit/drain or no-spawn abortion resolves the
+operation; cancellation itself is not evidence of cleanup. Scoped readiness uses
+captured source validation without restoring an unrelated current cursor.
+
+This is an isolated WIP checkpoint. The legacy `chat_respond` production flow has
+NOT yet been replaced and is temporarily incompatible with the new pending UI
+API. Module/adapter regressions pass, but no end-to-end M4 completion is claimed.
+The next integration wires these adapters, then tool rounds, topic/header grants,
+scoped Stop/history, current lifecycle documentation, full mapping and M4 review.

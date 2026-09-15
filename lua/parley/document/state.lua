@@ -2,6 +2,7 @@
 -- this module neither owns document text nor treats coordinates as identity.
 local M = {}
 local states = setmetatable({}, {__mode='k'})
+local successors=setmetatable({},{__mode="k"})
 local serial = 0
 local function id() serial=serial+1; return serial end
 local function integer(n) return type(n)=='number' and n>=0 and n<math.huge and n%1==0 end
@@ -64,7 +65,7 @@ function M.new(opts)
     opts=opts or {}; assert(opts.epoch==nil or scalar(opts.epoch),'invalid epoch')
     local limit=opts.max_dependencies or 256
     assert(integer(limit) and limit<=256,'invalid dependency limit')
-    local doc={}; states[doc]={epoch=opts.epoch or id(),attached=true,generations={},grants={},max_dependencies=limit}
+    local doc={}; states[doc]={epoch=opts.epoch or id(),attached=true,generations={},grants={},capacity_tickets={},max_dependencies=limit}
     return doc
 end
 
@@ -90,6 +91,58 @@ function M.resolve(doc,request,current)
     return result
 end
 
+-- Opaque, finite operation authority. Never copied into public snapshots.
+function M.successor_new(doc,request,current)
+    local resolved=M.resolve(doc,request,current)
+    if not resolved.ok then return nil,resolved.reason end
+    local s=state(doc);local g=s.grants[request.grant]
+    for _,other in pairs(s.grants) do
+        if other.parent==g.id and other.status~='revoked' then return nil,'delegated parent' end
+    end
+    local token={};successors[token]={doc=doc,epoch=s.epoch,grant=g.id,generation=g.generation,
+        entity=g.entity,revision=g.revision}
+    return token
+end
+local function successor(doc,token)
+    local w=successors[token];local s=state(doc)
+    local g=w and s.grants[w.grant]
+    if not w or w.doc~=doc or w.epoch~=s.epoch or not s.attached or not g
+        or g.status=='revoked' or g.entity~=w.entity or g.generation~=w.generation
+        or not s.generations[w.generation] then return nil end
+    return w,g
+end
+function M.successor_arm(doc,token,patch)
+    local w,g=successor(doc,token)
+    if not w or w.armed or not range(patch) or not integer(patch.new_bytes)
+        or patch.last-patch.first>4096 or patch.new_bytes>4096 or not writable(g,patch)
+        or g.revision~=w.revision then return false end
+    w.armed={first=patch.first,last=patch.last,new_bytes=patch.new_bytes}
+    return true
+end
+-- Coordinator calls this only after a disjoint native source guard survives
+-- and the index proves complete semantic equivalence for that edit.
+function M.successor_relocate(doc,token)
+    local w,g=successor(doc,token)
+    if not w or w.armed then return false end
+    w.revision=g.revision
+    return true
+end
+function M.successor_finish(doc,token,last)
+    local w,g=successor(doc,token)
+    if not w or w.armed or w.revision~=g.revision or not integer(last)
+        or last<g.first or last>g.last or #g.slots~=1 then return false end
+    if last~=g.last then g.last=last;g.slots[1].last=last;g.revision=g.revision+1 end
+    successors[token]=nil
+    return true
+end
+function M.successor_cancel(doc,token)
+    local w=successors[token];if w and w.doc==doc then successors[token]=nil end
+end
+function M.successor_current(doc,token)
+    local w,g=successor(doc,token)
+    if not w or w.revision~=g.revision then return nil end
+    return copy(g)
+end
 local function count(t) local n=0; for _ in pairs(t) do n=n+1 end; return n end
 local function exclude(slots,child)
     local out={}
@@ -114,6 +167,18 @@ local function move(p,edit)
     p.first=endpoint(p.first,p.open_first); p.last=endpoint(p.last,not p.open_last)
 end
 
+local function capacity_used(s)
+    local used=0
+    for _,g in pairs(s.grants) do if g.status~='revoked' then used=used+1 end end
+    for _,ticket in pairs(s.capacity_tickets) do used=used+ticket.remaining end
+    return used
+end
+local function ticket_for(s,event,key)
+    local ticket=s.capacity_tickets[event[key]]
+    if not ticket or ticket.generation~=event.generation or ticket.operation~=event.operation then return nil end
+    return ticket
+end
+
 function M.transition(doc,event)
     local s=state(doc)
     if type(event)~='table' then return reject('invalid event') end
@@ -121,6 +186,7 @@ function M.transition(doc,event)
     if event.epoch~=nil and event.epoch~=s.epoch then return reject('epoch') end
     local kind=event.kind; local result={ok=true,effects={}}
     if kind=='register_generation' then
+        if event.input_stale~=nil and type(event.input_stale)~='boolean' then return reject('invalid stale evidence') end
         if count(s.generations)>=4 then return reject('generation limit') end
         local deps=event.dependencies or {}
         if type(deps)~='table' or #deps>s.max_dependencies then return reject('dependency limit') end
@@ -128,13 +194,32 @@ function M.transition(doc,event)
         local valid,input=pcall(copy,event.input_snapshot,4096)
         if not valid then return reject('invalid input snapshot') end
         local captured={}; for i,p in ipairs(deps) do captured[i]={first=p.first,last=p.last} end
-        local gid=id(); s.generations[gid]={id=gid,input_snapshot=input,dependencies=captured,stale=false}
+        local gid=id(); s.generations[gid]={id=gid,input_snapshot=input,dependencies=captured,stale=event.input_stale==true}
         result.generation=gid
+    elseif kind=='reserve_capacity' then
+        if not s.generations[event.generation] then return reject('generation') end
+        if not scalar(event.operation) or event.operation=='' then return reject('operation') end
+        if not integer(event.count) or event.count<1 or event.count>16 then return reject('grant limit') end
+        for _,ticket in pairs(s.capacity_tickets) do
+            if ticket.generation==event.generation and ticket.operation==event.operation then return reject('duplicate reservation') end
+        end
+        if capacity_used(s)+event.count>16 then return reject('grant limit') end
+        local ticket=id()
+        s.capacity_tickets[ticket]={id=ticket,generation=event.generation,operation=event.operation,remaining=event.count}
+        result.ticket=ticket
+    elseif kind=='release_capacity' then
+        local ticket=ticket_for(s,event,'ticket')
+        if not ticket then return reject('capacity identity') end
+        s.capacity_tickets[ticket.id]=nil
     elseif kind=='acquire' then
         if not s.generations[event.generation] then return reject('generation') end
         local regions=event.regions
-        local live=0; for _,g in pairs(s.grants) do if g.status~='revoked' then live=live+1 end end
-        if type(regions)~='table' or #regions==0 or #regions+live>16 then return reject('grant limit') end
+        local ticket=event.capacity~=nil and ticket_for(s,event,'capacity') or nil
+        if event.capacity~=nil and not ticket then return reject('capacity identity') end
+        if type(regions)~='table' or #regions==0 or #regions>16 then return reject('grant limit') end
+        if ticket then
+            if #regions>ticket.remaining then return reject('grant limit') end
+        elseif #regions+capacity_used(s)>16 then return reject('grant limit') end
         for k,p in pairs(regions) do
             if not integer(k) or k<1 or k>#regions or not proof(p) then return reject('invalid region') end
         end
@@ -165,12 +250,37 @@ function M.transition(doc,event)
             result.grants[#result.grants+1]=gid
         end
         if parent then parent.slots=slots end
+        if ticket then
+            ticket.remaining=ticket.remaining-#regions
+            if ticket.remaining==0 then s.capacity_tickets[ticket.id]=nil end
+        end
+    elseif kind=='reclaim_tail' then
+        if event.epoch~=s.epoch then return reject('epoch') end
+        local g=s.grants[event.grant]
+        if not g or g.status=='revoked' or g.generation~=event.generation or g.entity~=event.entity
+            or event.revision~=g.revision or not s.generations[event.generation] then return reject('ownership') end
+        if not identity(g,event.current) or not proof(event.current) then return reject('unconfirmed identity') end
+        if g.tail_lost then return reject('tail source changed') end
+        local tail={first=g.last,last=g.last}
+        for _,other in pairs(s.grants) do
+            if other.status~='revoked' and other~=g then
+                if other.parent==g.id then return reject('active child') end
+                for _,slot in ipairs(other.slots) do if overlaps(tail,slot) then return reject('overlap') end end
+            end
+        end
+        g.first=g.last;g.slots={tail};g.revision=g.revision+1;g.status='valid';g.reason=nil
+        result.first=g.first;result.last=g.last;result.revision=g.revision
     elseif kind=='observed_edit' then
         if not range(event) or not integer(event.new_bytes) or (event.revision~=nil and not integer(event.revision)) then
             return reject('invalid edit')
         end
         local owner=s.grants[event.owner_grant]
-        if owner and (owner.status~='valid' or not writable(owner,event)) then owner=nil end
+        local w,wg=successor(doc,event.successor)
+        local armed=w and w.armed
+        local continued=owner and wg==owner and armed and armed.first==event.first
+            and armed.last==event.last and armed.new_bytes==event.new_bytes and w.revision==owner.revision
+        if w then w.armed=nil end
+        if owner and ((owner.status~='valid' and not continued) or not writable(owner,event)) then owner=nil end
         for _,g in pairs(s.grants) do
             if g.status~='revoked' then
                 for _,slot in ipairs(g.slots) do
@@ -180,6 +290,17 @@ function M.transition(doc,event)
         end
         for _,g in pairs(s.grants) do
             local first,last=g.first,g.last
+            if event.first<=last and event.last>=last then
+                local ancestor=owner;local owned=false
+                for _=1,16 do
+                    if not ancestor then break end
+                    if ancestor==g then owned=true;break end
+                    ancestor=s.grants[ancestor.parent]
+                end
+                -- An excluded parent endpoint may move after a human edit in
+                -- a child's slot. Movement does not establish successor rights.
+                if not owned then g.tail_lost=true end
+            end
             move(g,event); for _,slot in ipairs(g.slots) do move(slot,event) end
             -- Plans contain absolute byte coordinates. A disjoint edit moving
             -- this grant invalidates old plans without revoking the writer.
@@ -187,10 +308,19 @@ function M.transition(doc,event)
                 g.revision=math.max(g.revision+1,g==owner and event.revision or 0)
             end
         end
+        if continued and owner.status~='revoked' then w.revision=owner.revision end
         for _,gen in pairs(s.generations) do
             for _,dep in ipairs(gen.dependencies) do
-                if overlaps(dep,event) and not gen.stale then gen.stale=true; effect(result,'stale',gen.id,'input edit') end
-                move(dep,event)
+                -- The question ends where its output grant starts. Exact
+                -- same-generation insertion at that seam belongs to output,
+                -- so it neither changes nor grows the consumed input range.
+                -- Human edits, other owners and edits inside input stay stale.
+                local output_seam=owner and owner.generation==gen.id and owner.first==dep.last
+                    and dep.first<dep.last and event.first==dep.last and event.last==event.first
+                if not output_seam then
+                    if overlaps(dep,event) and not gen.stale then gen.stale=true; effect(result,'stale',gen.id,'input edit') end
+                    move(dep,event)
+                end
             end
         end
     elseif kind=='uncertain' then
@@ -217,10 +347,13 @@ function M.transition(doc,event)
             if g.generation==event.generation then revoke(s,g,result,'generation finished'); s.grants[gid]=nil end
         end
         s.generations[event.generation]=nil
+        for tid,ticket in pairs(s.capacity_tickets) do
+            if ticket.generation==event.generation then s.capacity_tickets[tid]=nil end
+        end
     elseif kind=='reload' or kind=='detach' then
         if event.next_epoch~=nil and (not scalar(event.next_epoch) or event.next_epoch==s.epoch) then return reject('invalid epoch') end
         for _,g in pairs(s.grants) do revoke(s,g,result,kind) end
-        s.grants={}; s.generations={}; s.epoch=event.next_epoch or id(); s.attached=kind~='detach'; result.epoch=s.epoch
+        s.grants={}; s.generations={}; s.capacity_tickets={}; s.epoch=event.next_epoch or id(); s.attached=kind~='detach'; result.epoch=s.epoch
     else return reject('unknown event') end
     return result
 end

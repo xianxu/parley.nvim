@@ -11,6 +11,7 @@ local M = {}
 -- Explicit user/maintenance edits to editable artifacts. Capture before any
 -- asynchronous work; the document proof, not an extmark, owns the target.
 function M.capture_user(buf, operation, regions)
+    if buf == 0 then buf = vim.api.nvim_get_current_buf() end
     local document = require("parley.document")
     local doc = document.get(buf) or document.attach(buf)
     local token, reason = document.capture_user(doc, { operation = operation, regions = regions })
@@ -22,8 +23,14 @@ function M.resolve_user(capture)
     return require("parley.document").resolve_user(capture.document, capture.token)
 end
 
+function M.cancel_user(capture)
+    if capture then return require("parley.document").cancel_user(capture.document, capture.token) end
+end
+
 function M.apply_user(capture, patches)
-    return require("parley.document").apply_user(capture.document, capture.token, { patches = patches })
+    local result = require("parley.document").apply_user(capture.document, capture.token, { patches = patches })
+    M.cancel_user(capture)
+    return result
 end
 
 -- Extend an existing provenance token with freshly computed local line hunks.
@@ -33,7 +40,7 @@ function M.apply_user_line_hunks(capture, before, after)
     local hunks = vim.diff(table.concat(before, "\n") .. "\n", table.concat(after, "\n") .. "\n",
         { result_type = "indices" })
     local resolved, reason = M.resolve_user(capture)
-    if not resolved then return { status = "stale", reason = reason } end
+    if not resolved then M.cancel_user(capture); return { status = "stale", reason = reason } end
     for _, hunk in ipairs(hunks) do
         local first = hunk[2] == 0 and hunk[1] or hunk[1] - 1
         local last = first + hunk[2]
@@ -46,14 +53,16 @@ function M.apply_user_line_hunks(capture, before, after)
             text = "\n" .. text
         elseif last == #before then
             b = { row = #before - 1, col = #before[#before] }
+            if #text_lines==0 and first>0 then a={row=first-1,col=#before[first]} end
         elseif #text_lines > 0 then text = text .. "\n" end
         regions[#regions + 1] = { first = a, last = b }
         patches[#patches + 1] = { region = #resolved.regions + #regions, text = text }
     end
     local document = require("parley.document")
     local token, why = document.extend_user(capture.document, capture.token, { regions = regions })
+    M.cancel_user(capture)
     if not token then return { status = "stale", reason = why } end
-    return document.apply_user(capture.document, token, { patches = patches })
+    return M.apply_user({document=capture.document,token=token}, patches)
 end
 
 -- Synchronous artifact commands capture the exact live range immediately.
@@ -82,7 +91,7 @@ function M.replace_user_lines(buf, first, last, _, lines)
     local capture, reason = M.capture_user(buf, "replace-lines", { { first = a, last = b } })
     if not capture then error("User edit unavailable: " .. tostring(reason)) end
     local result = M.apply_user(capture, { { region = 1, text = text } })
-    if result.status ~= "applied" then error("User edit refused: " .. tostring(result.reason or result.status)) end
+    if result.status ~= "applied" then error("User edit refused: " .. tostring(result.reason or result.error or result.status)) end
     return result
 end
 

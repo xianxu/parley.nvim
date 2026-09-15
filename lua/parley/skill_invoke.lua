@@ -134,12 +134,14 @@ function M.invoke(buf, manifest, args, opts)
     -- This exchange's generation; on_exit/on_abort no-op if superseded (#133).
     local gen = (_gen[buf] or 0) + 1
     _gen[buf] = gen
+    local source_capture
     local finished = false
     local detached_progress = opts.detached_progress ~= false
     local progress_started = false
     local function finish(result, deliver_done)
         if finished then return false end
         finished = true
+        require("parley.buffer_edit").cancel_user(source_capture)
         if progress_started then
             pcall(function() require("parley.progress").stop() end)
             progress_started = false
@@ -175,7 +177,6 @@ function M.invoke(buf, manifest, args, opts)
     end
 
     local original = table.concat(vim.api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
-    local source_capture
     if not opts.no_reload then
         local last_row = vim.api.nvim_buf_line_count(buf) - 1
         local last_line = vim.api.nvim_buf_get_lines(buf, last_row, last_row + 1, false)[1] or ""
@@ -400,7 +401,7 @@ function M.invoke(buf, manifest, args, opts)
                         if not live or result.status ~= "applied" then
                             local msg = "Live text changed; skill result remains on disk for reconciliation"
                             p.logger.warning(msg .. ": " .. artifact_path)
-                            finish({ ok = false, msg = msg, reason = reason or result.reason,
+                            finish({ ok = false, msg = msg, reason = reason or result and result.reason,
                                 reconciliation_required = true, external_path = artifact_path,
                                 calls = calls, results = results, original = original }, true)
                             return

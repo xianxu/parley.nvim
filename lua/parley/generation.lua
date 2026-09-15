@@ -114,6 +114,11 @@ local function pump(s,effects)
         end
     end
     local bytes=staged(s)
+    if s.provider_failed and bytes==0 then
+        stop(s,effects,'provider_failed')
+        pump(s,effects)
+        return
+    end
     if s.round and s.round.prepared_input_ref and s.phase=='executing_tools'
         and bytes==0 and s.grant_status=='valid' then
         s.input_ref=s.round.prepared_input_ref;s.round=nil;s.phase='requesting'
@@ -252,8 +257,11 @@ function M.transition(handle,event)
         if event.dependencies_ref~=s.dependencies_ref or s.stale_input then return reject('dependency') end
         s.stale_input=true
     elseif kind=='provider_failed' then
-        if event.attempt~=s.attempt or not s.operations[event.attempt] or s.phase=='stopping' then return reject('attempt') end
-        stop(s,effects,'provider_failed')
+        local attempt=s.operations[event.attempt]
+        if phase(s)~='requesting' or event.attempt~=s.attempt or not attempt or attempt.complete then return reject('attempt') end
+        -- Transport failure ends admission, not already admitted output. Drain
+        -- valid writes before failure retirement; human revocation still wins.
+        attempt.complete=true;s.provider_failed=true;advance(s,'finalizing')
     elseif kind=='provider_complete' then
         local attempt=s.operations[event.attempt]
         if phase(s)~='requesting' or event.attempt~=s.attempt or not attempt or attempt.complete then return reject('attempt') end

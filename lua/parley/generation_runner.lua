@@ -39,7 +39,7 @@ local function sync(s)
     if s.terminal then return end
     local doc=D.snapshot(s.doc)
     if doc.epoch~=s.epoch or not doc.attached then
-        s.detached=true
+        s.detached=true;s.written=nil
         dispatch(s,{type='grant_revoked',grant=s.grant})
         return
     end
@@ -81,8 +81,9 @@ local function context(s,effect)
     local ctx={epoch=s.epoch,generation=s.generation,operation=effect.operation,grant=grant,
         entity=s.entity,exchange=s.entity,round=effect.round,call_id=effect.call_id,
         stale_input=G.snapshot(s.machine).stale_input}
+    if effect.type=='prepare' then ctx.preparation_grants=copy(s.preparation_grants) end
     local pending,completion,failed,sealed=0,nil,false,false
-    function ctx.append(bytes,done)
+    local function mutation(kind,bytes,done,options)
         sync(s)
         if sealed or s.detached or s.terminal or G.snapshot(s.machine).phase=='stopping'
             or (not alive(s,effect.operation) and effect.type~='finalize' and effect.type~='reserve_round') then
@@ -92,7 +93,8 @@ local function context(s,effect)
             issue(s,'staging overflow');dispatch(s,{type='cancel'});return false,'staging overflow'
         end
         local ref=blob(s,bytes,true);pending=pending+1;s.manual_items=s.manual_items+1
-        enqueue(s,{type='manual_append',operation=effect.operation or effect.id,grant=grant,
+        enqueue(s,{type=kind,operation=effect.operation or effect.id,grant=grant,
+            options=options and {first_offset=options.first_offset,retain_prefix=options.retain_prefix} or {},
             blob_ref=ref,offset=0,bytes=#bytes,accepted=0,done=function(result)
                 pending=pending-1;s.manual_items=s.manual_items-1;failed=failed or result.status~='applied'
                 local ok,err=pcall(done,result);if not ok then issue(s,err);failed=true end
@@ -100,9 +102,15 @@ local function context(s,effect)
             end})
         return true
     end
-    -- Root supplies a separate scoped replacement intent before regeneration;
-    -- this append-only context never accepts absolute replacement coordinates.
-    function ctx.cancelled()return s.detached or G.snapshot(s.machine).phase=='stopping' end
+    function ctx.append(bytes,done)return mutation('manual_append',bytes,done)end
+    function ctx.replace(bytes,done,options)
+        if options~=nil and type(options)~='table' then return false,'invalid replacement options' end
+        return mutation('manual_replace',bytes,done,options)
+    end
+    function ctx.cancelled()
+        local phase=G.snapshot(s.machine).phase
+        return s.detached or s.terminal or phase=='stopping' or phase=='terminal'
+    end
     return ctx,function(fn)
         sealed=true
         if pending>0 then completion=fn else fn(failed) end
@@ -120,6 +128,13 @@ local function callbacks(s,effect,after_writes)
     end
     function cb.prepared(input)
         if prepared or not alive(s,operation) then return false end
+        if effect.type=='prepare' then
+            local grants=D.snapshot(s.doc).grants
+            for _,gid in ipairs(s.preparation_grants) do
+                if grants[gid] and grants[gid].status~='revoked' then return false,'live preparation grant' end
+            end
+            for _,gid in ipairs(s.preparation_grants) do s.grants[gid]=nil end
+        end
         prepared=true
         local ref=blob(s,input,false)
         after_writes(function(failed)
@@ -209,11 +224,31 @@ local function start_operation(s,effect)
     if not ok then cb.failed(handle)
     elseif s.operations[effect.operation]==op then op.handle=handle end
 end
+-- Presentation receives copied receipt facts after accounting, never mutation
+-- capabilities or payloads. Its failure cannot change an accepted prefix.
+local function written(s,effect,result)
+    local accepted,removed=result.accepted_bytes or 0,result.removed_bytes or 0
+    if not s.written or accepted+removed==0 or s.detached or s.terminal then return end
+    local grant=D.snapshot(s.doc).grants[effect.grant]
+    local tip=grant and grant.status~='revoked' and D.byte_position(s.doc,grant.last)
+    if tip then tip.byte=grant.last end
+    s.written_serial=(s.written_serial or 0)+1
+    local receipt={id=s.prefix..':written:'..s.written_serial,
+        kind=effect.type=='write' and 'output' or effect.type=='manual_append' and 'append' or 'replace',
+        status=result.status,accepted_bytes=accepted,removed_bytes=removed,tip=tip}
+    local ctx={epoch=s.epoch,generation=s.generation,operation=effect.operation,grant=effect.grant,
+        entity=effect.entity or (grant and grant.entity) or s.entity,exchange=s.entity}
+    s.notifying=true
+    local ok,err=pcall(s.written,ctx,receipt)
+    s.notifying=false
+    if not ok then s.presentation_failure=tostring(err):sub(1,4096) end
+end
 local function write(s,effect)
     local value=s.blobs[effect.blob_ref]
     if not value then return false end
     local generation=G.snapshot(s.machine)
     local grant=not s.detached and D.snapshot(s.doc).grants[effect.grant]
+    if grant then effect.entity=grant.entity end
     local attempted=slice(value.value,effect.offset+1,math.min(4096,effect.bytes))
     local result
     if not grant or grant.status=='revoked' or generation.phase=='stopping' then
@@ -229,13 +264,47 @@ local function write(s,effect)
     if effect.type=='write' then
         dispatch(s,{type='write_result',write=effect.id,attempted_bytes=#attempted,
             committed_bytes=result.accepted_bytes,status=status})
+        written(s,effect,result)
         return false
     end
     effect.offset=effect.offset+result.accepted_bytes;effect.bytes=effect.bytes-result.accepted_bytes
     effect.accepted=effect.accepted+result.accepted_bytes
+    written(s,effect,result)
     if effect.bytes>0 and (status=='applied' or status=='suspended') then return true,status=='suspended' and 'waiting' end
     release(s,effect.blob_ref)
     effect.done({status=effect.bytes==0 and 'applied' or status,accepted_bytes=effect.accepted})
+    return false
+end
+local function replace(s,effect)
+    local value=s.blobs[effect.blob_ref]
+    local grant=not s.detached and D.snapshot(s.doc).grants[effect.grant]
+    if grant then effect.entity=grant.entity end
+    local phase=G.snapshot(s.machine).phase
+    local stopping=s.detached or s.terminal or phase=='stopping' or phase=='terminal'
+    local result
+    if stopping or not grant or grant.status=='revoked' or not value then
+        if effect.cursor then D.replace_cancel(s.doc,effect.cursor) end
+        result={status='stale',accepted_bytes=0,removed_bytes=0}
+    else
+        if not effect.cursor then
+            if grant.status=='suspended' then return true,'waiting' end
+            local reason
+            effect.cursor,reason=D.replace_new(s.doc,{epoch=s.epoch,generation=s.generation,
+                operation=effect.operation,grant=effect.grant,entity=grant.entity,revision=grant.revision,
+                bytes=value.value,first_offset=effect.options.first_offset,retain_prefix=effect.options.retain_prefix})
+            if not effect.cursor then result={status='refused',reason=reason,accepted_bytes=0,removed_bytes=0} end
+        end
+        if effect.cursor then result=D.replace_step(s.doc,effect.cursor) end
+    end
+    effect.accepted=effect.accepted+(result.accepted_bytes or 0)
+    effect.removed=(effect.removed or 0)+(result.removed_bytes or 0)
+    written(s,effect,result)
+    if result.status=='more' then return true end
+    if result.status=='suspended' then return true,'waiting' end
+    if effect.cursor then D.replace_cancel(s.doc,effect.cursor);effect.cursor=nil end
+    release(s,effect.blob_ref)
+    effect.done({status=result.status,accepted_bytes=effect.accepted,removed_bytes=effect.removed,
+        error=result.error,reason=result.reason})
     return false
 end
 local function execute(s,effect)
@@ -244,8 +313,36 @@ local function execute(s,effect)
             and G.snapshot(s.machine).stale_input and not s.stale_policy then
             dispatch(s,{type='pause'});return true,'waiting'
         end
+        if effect.type=='continue_round' then
+            local phase=G.snapshot(s.machine).phase
+            if phase=='paused' then return true,'waiting' end
+            if phase~='stopping' and phase~='terminal' and not effect.reclaimed then
+                -- This effect exists only after every declared child has a
+                -- known outcome and positively resolved effect ownership.
+                for gid in pairs(s.grants) do
+                    if gid~=s.grant then
+                        s.grants[gid]=nil
+                        if not s.detached and D.snapshot(s.doc).grants[gid] then
+                            D.transition(s.doc,{kind='revoke',grant=gid})
+                        end
+                    end
+                end
+                local parent=not s.detached and D.snapshot(s.doc).grants[s.grant]
+                if not parent then dispatch(s,{type='cancel'});return true end
+                local reclaimed=D.reclaim_tail(s.doc,{epoch=s.epoch,generation=s.generation,
+                    grant=s.grant,entity=parent.entity,revision=parent.revision})
+                if not reclaimed.ok then
+                    if reclaimed.reason~='unconfirmed identity' then
+                        issue(s,reclaimed.reason);dispatch(s,{type='pause'})
+                    end
+                    return true,'waiting'
+                end
+                effect.reclaimed=true
+            end
+        end
         start_operation(s,effect)
-    elseif effect.type=='write' or effect.type=='manual_append' then return write(s,effect)
+    elseif effect.type=='write'  or effect.type=='manual_append' then return write(s,effect)
+    elseif effect.type=='manual_replace' then return replace(s,effect)
     elseif effect.type=='revoke' then
         if not s.detached then D.transition(s.doc,{kind='revoke',grant=effect.grant}) end
     elseif effect.type=='cancel_operation' then
@@ -296,15 +393,19 @@ local function execute(s,effect)
         end
     elseif effect.type=='terminal' then
         if not s.detached then D.transition(s.doc,{kind='finish_generation',generation=s.generation}) end
-        s.terminal=true;s.off();s.work:close();active=active-1
+        s.terminal=true;s.written=nil;s.off();s.work:close();active=active-1
         for ref in pairs(s.blobs) do release(s,ref) end
-        s.queue={};s.pending=nil;s.seed=nil;s.capabilities=nil
-        if s.adapters.terminal then pcall(s.adapters.terminal,G.snapshot(s.machine)) end
+        local terminal=s.adapters.terminal
+        s.queue={};s.pending=nil;s.seed=nil;s.capabilities=nil;s.adapters={}
+        s.operations={};s.doc=nil;s.grants={};s.preparation_grants={};s.detached=true;s.off=nil
+        if terminal then pcall(terminal,G.snapshot(s.machine)) end
     end
     return false
 end
 function M.step(r)
-    local s=state(r);sync(s)
+    local s=state(r)
+    if s.notifying then return {status='busy'} end
+    sync(s)
     if s.terminal then return {status='terminal'} end
     local effect=s.pending or table.remove(s.queue,1)
     if not effect then return {status='waiting'} end
@@ -316,22 +417,39 @@ function M.start(doc,spec,adapters)
     if type(adapters)~='table' or type(adapters.prepare)~='function' or type(adapters.request)~='function'
         or type(adapters.finalize)~='function' then return nil,'prepare/request/finalize adapters required' end
     if type(spec)~='table' or (spec.limits~=nil and type(spec.limits)~='table') then return nil,'invalid specification' end
+    if spec.input_stale~=nil and type(spec.input_stale)~='boolean' then return nil,'invalid stale evidence' end
     if active>=16 then return nil,'process generation limit' end
     local limits=spec.limits or {};local limit=limits.staged_bytes or 1048576
     if type(limit)~='number' or limit<1 or limit>1048576 or limit%1~=0 then return nil,'invalid staging limit' end
     local queued=limits.queued_items or 256
     if type(queued)~='number' or queued<1 or queued>256 or queued%1~=0 then return nil,'invalid queue limit' end
-    local registered=D.transition(doc,{kind='register_generation',input_snapshot={runner=true},dependencies=spec.dependencies or {}})
+    local extras=spec.preparation_regions or {}
+    if type(extras)~='table' or #extras>15 then return nil,'preparation region limit' end
+    local regions={{entity=spec.entity,first=spec.first,last=spec.last,marker_revision=1,revision=1,confirmed=true}}
+    for k,region in pairs(extras) do
+        if type(k)~='number' or k%1~=0 or k<1 or k>#extras or type(region)~='table'
+            or region.entity~=nil and region.entity~=spec.entity then return nil,'invalid preparation region' end
+    end
+    for _,region in ipairs(extras) do
+        regions[#regions+1]={entity=spec.entity,first=region.first,last=region.last,marker_revision=1,revision=1,confirmed=true}
+    end
+    local registered=D.transition(doc,{kind='register_generation',input_snapshot={runner=true},dependencies=spec.dependencies or {},input_stale=spec.input_stale})
     if not registered.ok then return nil,registered.reason end
     local generation=registered.generation
-    local acquired=D.transition(doc,{kind='acquire',generation=generation,regions={{entity=spec.entity,first=spec.first,
-        last=spec.last,marker_revision=1,revision=1,confirmed=true}}})
+    local acquired=D.transition(doc,{kind='acquire',generation=generation,regions=regions})
     if not acquired.ok then D.transition(doc,{kind='finish_generation',generation=generation});return nil,acquired.reason end
     serial=serial+1
     local r={};local s={doc=doc,epoch=D.snapshot(doc).epoch,generation=generation,grant=acquired.grants[1],entity=spec.entity,
         blobs={},staged=0,manual_items=0,queue_limit=queued,serial=0,prefix='runner:'..serial,queue={},operations={},adapters=adapters,limit=limit,
         schedule=spec.schedule~=false,capabilities=copy(spec.capabilities or {}),grants={}}
-    runners[r]=s;s.grants[s.grant]='valid';active=active+1
+    s.written=adapters.written;s.adapters={}
+    for key,adapter in pairs(adapters) do if key~='written' then s.adapters[key]=adapter end end
+    s.preparation_grants={}
+    for i,gid in ipairs(acquired.grants) do
+        s.grants[gid]='valid'
+        if i>1 then s.preparation_grants[#s.preparation_grants+1]=gid end
+    end
+    runners[r]=s;active=active+1
     s.seed=blob(s,spec.input,false);s.dependencies_ref=blob(s,spec.dependencies or {},false)
     s.machine=G.new({epoch=s.epoch,generation=generation,exchange=s.entity,grant=s.grant,input_seed_ref=s.seed,
         dependencies_ref=s.dependencies_ref,capabilities_ref=blob(s,s.capabilities,false),limits=limits})
@@ -340,15 +458,16 @@ function M.start(doc,spec,adapters)
         sync(s)
         if s.schedule then s.work:request() end
     end)
+    sync(s) -- carry pre-admission stale input evidence before any preparation effect
     dispatch(s,{type='start'})
     return r
 end
 function M.snapshot(r)
     local s=state(r);local out=G.snapshot(s.machine)
     out.retained_blobs=0;for _ in pairs(s.blobs) do out.retained_blobs=out.retained_blobs+1 end
-    out.retained_staged_bytes=s.staged;out.failure=s.failure;return out
+    out.retained_staged_bytes=s.staged;out.failure=s.failure;out.presentation_failure=s.presentation_failure;return out
 end
-function M.cancel(r,reason)local s=state(r);if reason then issue(s,reason) end;return dispatch(s,{type='cancel'})end
+function M.cancel(r,reason)local s=state(r);s.written=nil;if reason then issue(s,reason) end;return dispatch(s,{type='cancel'})end
 function M.resume(r,policy_ref)
     local s=state(r);sync(s)
     local result=dispatch(s,{type='resume_validated',policy_ref=policy_ref})

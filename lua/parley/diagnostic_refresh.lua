@@ -31,6 +31,17 @@ local footnotes=require('parley.skill_render')
 local define=require('parley.define')
 local buffers={}
 local schedule
+local function finish_publication_callback(s, published)
+    local completion=s.completion;s.completion=nil
+    if not completion then return end
+    local current=published and vim.api.nvim_buf_is_valid(s.buf)
+        and vim.api.nvim_buf_get_changedtick(s.buf)==completion.tick
+    local callback=current and completion.on_publish or completion.on_cancel
+    if callback then
+        local ok,err=pcall(callback)
+        if not ok then require('parley.logger').error('Diagnostic publication callback failed: '..tostring(err)) end
+    end
+end
 local function tick(job)
     if job.materializing then return end
     job.work=job.work+1
@@ -128,6 +139,7 @@ local function publish(s)
     local event={operation='diagnostic_publication'};for key,value in pairs(work) do event[key]=value end
     Reader.record_work(s.buf,event)
     s.job=nil;s.dirty=false
+    finish_publication_callback(s,true)
     return {status='idle',work=work}
 end
 function M.step(buf)
@@ -175,6 +187,9 @@ function M.refresh(buf,opts)
                 and result.status~='detached' and result.status~='error'
         end)
         s.unsubscribe=Document.subscribe(doc,function(event)
+            if event.kind=='edit' or event.kind=='reload' or event.kind=='detach' then
+                finish_publication_callback(s,false)
+            end
             if event.kind=='detach' then M.clear(buf)
             elseif event.kind=='reload' or event.kind=='edit' and event.diagnostic_changed~=false then
                 if event.kind=='reload' then s.pump:cancel() end
@@ -185,6 +200,12 @@ function M.refresh(buf,opts)
         for key,value in pairs(opts) do s.opts[key]=value end
         if opts.schedule==false then s.pump:cancel() end
         if opts.to_local then s.dirty=true;s.job=nil;s.failure=nil end
+    end
+    if opts and opts.on_publish then
+        finish_publication_callback(s,false)
+        s.completion={tick=vim.api.nvim_buf_get_changedtick(buf),on_publish=opts.on_publish,on_cancel=opts.on_cancel}
+        s.opts.on_publish=nil;s.opts.on_cancel=nil
+        s.dirty=true;s.job=nil;s.failure=nil
     end
     schedule(s)
     return s
@@ -201,7 +222,10 @@ function M.drain(buf,limit)
 end
 function M.clear(buf)
     local s=buffers[buf]
-    if s then s.dead=true;s.pump:close();s.job=nil;s.unsubscribe();buffers[buf]=nil end
+    if s then
+        finish_publication_callback(s,false)
+        s.dead=true;s.pump:close();s.job=nil;s.unsubscribe();buffers[buf]=nil
+    end
     if vim.api.nvim_buf_is_valid(buf) then timezone.clear(buf);footnotes.clear_footnote_diagnostics(buf) end
 end
 return M

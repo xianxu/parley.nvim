@@ -1160,59 +1160,79 @@ M.generate_topic = function(messages, provider, model, callback, spinner, transp
     end
     table.insert(msgs, { role = "user", content = _parley.config.chat_topic_gen_prompt })
 
-    -- Start spinner animation on the topic line if requested
-    local spinner_frames = require("parley.progress").SPINNER -- single source (#133)
-    local spinner_idx = 1
-    local spinner_timer = nil
-    if spinner and spinner.buf and spinner.find_line then
+    -- Topic progress is decoration, not source text. Resolve the initial target
+    -- once; native extmarks relocate it without rescanning the transcript.
+    local spinner_frames = require("parley.progress").SPINNER
+    local spinner_idx, spinner_timer, spinner_mark = 1, nil, nil
+    local spinner_ns = vim.api.nvim_create_namespace("parley_topic_pending")
+    local finished, topic_parts, topic_bytes, line_complete, collection_error = false, {}, 0, false, nil
+    local function hide_spinner()
+        stop_and_close_timer(spinner_timer)
+        spinner_timer = nil
+        if spinner_mark and spinner and vim.api.nvim_buf_is_valid(spinner.buf) then
+            pcall(vim.api.nvim_buf_del_extmark, spinner.buf, spinner_ns, spinner_mark)
+        end
+        spinner_mark = nil
+    end
+    if spinner and spinner.buf and spinner.find_line and vim.api.nvim_buf_is_valid(spinner.buf) then
+        local row = spinner.find_line()
+        if row then
+            spinner_mark = vim.api.nvim_buf_set_extmark(spinner.buf, spinner_ns, row, 0,
+                { end_row = row + 1, end_col = 0, invalidate = true, undo_restore = false })
+        end
         spinner_timer = vim.uv.new_timer()
         spinner_timer:start(0, 120, vim.schedule_wrap(function()
-            -- Validate parent lifetime even when the topic line disappeared or
-            -- is not eligible for animation. The guard also cancels its owned
-            -- transport; a missing spinner target must not bypass that work.
-            if spinner.before_write and not spinner.before_write() then
-                stop_and_close_timer(spinner_timer)
-                spinner_timer = nil
+            -- Parent lifetime is checked even when no topic line is drawable.
+            if finished or spinner.before_write and not spinner.before_write()
+                or not vim.api.nvim_buf_is_valid(spinner.buf) then
+                hide_spinner()
                 return
             end
-            if not vim.api.nvim_buf_is_valid(spinner.buf) then
-                stop_and_close_timer(spinner_timer)
-                spinner_timer = nil
-                return
-            end
-            local line_nr = spinner.find_line()
-            if line_nr then
-                local text = "topic: " .. spinner_frames[spinner_idx] .. " generating..."
-                -- Issue #80: same undo-pollution fix as the agent-response
-                -- spinner. Each frame joins the previous undo block.
-                require("parley.helper").undojoin(spinner.buf)
-                require("parley.buffer_edit").replace_line_at(spinner.buf, line_nr, text)
-                if spinner.after_write then
-                    spinner.after_write()
-                end
+            if spinner_mark then
+                local mark = vim.api.nvim_buf_get_extmark_by_id(spinner.buf, spinner_ns, spinner_mark, { details = true })
+                if #mark < 2 or mark[3].invalid then hide_spinner(); return end
+                vim.api.nvim_buf_set_extmark(spinner.buf, spinner_ns, mark[1], mark[2], {
+                    id = spinner_mark, end_row = mark[3].end_row, end_col = mark[3].end_col,
+                    invalidate = true, undo_restore = false,
+                    virt_text = { { "topic: " .. spinner_frames[spinner_idx] .. " generating...", "Comment" } },
+                    virt_text_pos = "overlay",
+                })
             end
             spinner_idx = spinner_idx % #spinner_frames + 1
         end))
     end
 
-    local topic_buf = vim.api.nvim_create_buf(false, true)
-    local topic_handler = _parley.dispatcher.create_handler(topic_buf, nil, 0, false, "", false)
-
-    local finished = false
+    local topic_handler = _parley.dispatcher.create_output_handler(function(_, chunk)
+        if finished then return false end
+        if line_complete or collection_error then return true end
+        local prefix = chunk:sub(1, 4097 - topic_bytes)
+        local newline = prefix:find("\n", 1, true)
+        if newline then prefix = prefix:sub(1, newline - 1); line_complete = true end
+        if topic_bytes + #prefix > 4096 then
+            collection_error = "topic too long"
+            topic_parts = {}
+            hide_spinner()
+            if transport_opts and transport_opts.generation_id then
+                _parley.tasker.stop_owner(transport_opts.generation_id)
+            end
+            return false
+        end
+        topic_parts[#topic_parts + 1] = prefix
+        topic_bytes = topic_bytes + #prefix
+        return true
+    end)
     local function finish(topic, reason)
         if finished then return end
         finished = true
-        stop_and_close_timer(spinner_timer)
-        spinner_timer = nil
-        if vim.api.nvim_buf_is_valid(topic_buf) then
-            vim.api.nvim_buf_delete(topic_buf, { force = true })
-        end
+        hide_spinner()
+        topic_parts = {}
         callback(topic, reason)
     end
 
-    -- Abort teardown (#131): stop the topic spinner + drop the scratch buffer
+    -- Abort teardown (#131): stop the topic presentation
     -- if the managed cliproxy can't start, so topic-gen fails quietly (no hang).
     local function on_abort(msg)
+        if finished then return end
         finish(nil, "abort")
         vim.notify(msg or "parley: topic generation aborted", vim.log.levels.WARN)
     end
@@ -1223,7 +1243,9 @@ M.generate_topic = function(messages, provider, model, callback, spinner, transp
         _parley.dispatcher.prepare_payload(msgs, model, provider),
         topic_handler,
         vim.schedule_wrap(function()
-            local topic = vim.api.nvim_buf_get_lines(topic_buf, 0, -1, false)[1] or ""
+            if finished then return end
+            if collection_error then finish(nil, collection_error); return end
+            local topic = table.concat(topic_parts)
             topic = topic:gsub("^%s*(.-)%s*$", "%1")
             topic = topic:gsub("%.$", "")
             if topic ~= "" then

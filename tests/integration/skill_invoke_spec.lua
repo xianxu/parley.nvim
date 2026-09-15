@@ -132,7 +132,7 @@ describe("skill_invoke.invoke", function()
         assert.equals("ALPHA beta", table.concat(vim.fn.readfile(path), "\n"))
         assert.is_false(done_result.ok)
         assert.is_true(done_result.reconciliation_required)
-        assert.equals(path, done_result.external_path)
+        assert.equals(vim.fn.resolve(path), vim.fn.resolve(done_result.external_path))
     end)
 
     it("coerces a stringified edits array and applies it (model quirk, #133)", function()
