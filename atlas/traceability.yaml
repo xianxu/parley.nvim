@@ -237,6 +237,7 @@ atlas:
 
   chat/document:
     code:
+      - lua/parley/line_reader.lua
       - lua/parley/document/sequence.lua
       - lua/parley/document/lexical.lua
       - lua/parley/document/grammar.lua
@@ -255,6 +256,7 @@ atlas:
       - tests/unit/document_semantic_spec.lua
       - tests/unit/document_structure_spec.lua
       - tests/integration/perf_document_spec.lua
+      - tests/integration/document_reader_spec.lua
 
   chat/parsing:
     code:
