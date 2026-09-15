@@ -1428,3 +1428,14 @@ full596-file lint clean. Evidence: `/tmp/parley254-m6-complete-latest-verificati
 and `/tmp/parley254-m6-savejoin-verification.txt`. Final performance passes all30
 work scenarios/600samples; timing limits are recorded above. Entering Codex M6
 boundary review; no main merge before operator live testing.
+
+### 2026-09-15 M6 first Codex review — rework
+
+Codex independently passed144 assertions/13 specs but reproduced three critical
+production gaps: queued ancestor replacement redirects tool authority (BR25),
+async successful file mutations leave open buffers stale (BR26), and capped tool
+output loses its truncation notice (BR27). BR28 requires shared pure transforms
+instead of duplicated async/compatibility policy. Plan revisions enumerate each
+class. Bounded parallel repairs are underway; M6 remains open. Existing BR13
+mapping evidence was checked: chat/document includes both native retirement
+specs; whole-issue review must dispose the ledger entry explicitly.
