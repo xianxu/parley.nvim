@@ -539,6 +539,15 @@ inserted bytes while Neovim retains one empty line. Normalize this empty-buffer
 case against observed line count/offsets in the adapter and add a durable test;
 other UTF-8/multiline byte events reconstructed the actual buffer in the probe.
 
+### 2026-09-14 — M1 round-2 verification
+
+Affected mappings pass after topic ownership fixes: lifecycle 536 tests and
+response-progress 345 tests, zero failures/errors. Focused ownership 5/5 and
+dispatcher ownership 3/3 pass. Topic tests also verify scratch buffers survive
+signaling but disappear after confirmed process completion, while unrelated work
+remains active. Scoped luacheck and whitespace checks pass. BR-1 and BR-2 fixes
+are ready for the required repeated review after REWORK.
+
 ## Revisions
 
 ### 2026-09-14 — Incremental rendering is part of the core contract
