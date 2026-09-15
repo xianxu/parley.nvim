@@ -614,6 +614,14 @@ and shared projection summaries/queries in progress. No live consumer migration
 has landed. The operator authorized autonomous completion through #254, with
 extensive operator live testing before any merge to main.
 
+### 2026-09-15 — M2 review fixes verified
+
+BR-3/BR-4 regressions and class sweep pass. Document mapping: 131 passed,
+zero failures/errors; parsing mapping: 239 passed, zero failures/errors.
+Scoped lint and diff checks pass. Lexical publication can no longer install
+semantic state, and fenced tool markers retain the legacy boundary behavior.
+Repeat M2 boundary review on the correction commit.
+
 ## Revisions
 
 ### 2026-09-14 — Incremental rendering is part of the core contract
