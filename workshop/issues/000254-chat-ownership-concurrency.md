@@ -568,6 +568,16 @@ stable handle rank lookup is logarithmic; measured 50k-entry queries inspected
 16 dependency nodes and 158 sequence nodes, with no suffix sweep. This refines
 the original complexity shorthand while preserving bounded hot-path work.
 
+### 2026-09-15 — M2 assembled core verification
+
+The staged core is integrated into the feature worktree. The document mapping
+passed 94 tests; existing parsing passed 239 and highlighting 108. The newest
+syntax-certificate and disjoint-section-progress additions are receiving a final
+mapped rerun. Root integration covers opaque bootstrap, partial exchange deletion,
+legacy malformed-fence parity, 100 seeded range edits, and zero-row semantic
+repair after a classified body-only edit. Scoped lint is clean. Live consumers
+remain scheduled for M3; M2 is not yet closed.
+
 ## Revisions
 
 ### 2026-09-14 — Incremental rendering is part of the core contract
