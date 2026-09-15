@@ -84,6 +84,7 @@ local function scan(s)
     local names,err=s.fs.list(s.directory);if not names then return nil,err end
     local records,paths,keys={}, {},{}
     local total,unavailable=0,0
+    local unknown_association=false
     local blocked={}
     for _,name in ipairs(names)do
         local path=s.directory..'/'..name
@@ -108,7 +109,8 @@ local function scan(s)
         else
             unavailable=unavailable+1
             local committed=name:match('^([%w%-]+)%.%d+%.json$') or name:match('^([%w%-]+)%.%d+%.json%.quarantine$')
-            if committed then blocked[committed]=true end
+            if committed then blocked[committed]=true
+            elseif name:match('%.json$') or name:match('%.quarantine$')then unknown_association=true end
             -- Quarantine is unavailable even if renaming fails. It remains in
             -- the physical quota ledger and is never silently age-deleted.
             if name:match('%.json$')then s.fs.rename(path,path..'.quarantine')end
@@ -116,10 +118,10 @@ local function scan(s)
     end
     local blocked_keys={}
     for id in pairs(blocked)do
-        if records[id]then blocked_keys[records[id].key]=true end
+        if records[id]then blocked_keys[records[id].key]=true else unknown_association=true end
         records[id]=nil
     end
-    s.blocked_keys=blocked_keys
+    s.blocked_keys=blocked_keys;s.unknown_association=unknown_association
     for id,record in pairs(records)do
         if keys[record.key] and keys[record.key]~=id then return nil,'ambiguous recovery key' end
         keys[record.key]=id
@@ -207,6 +209,9 @@ function M.publish(store,spec)
     if type(spec)~='table' or not text(spec.key) or type(spec.bytes)~='string'
         or not association(spec.association) or not replacement(spec.replacement)then return fail('invalid recovery snapshot')end
     local ok,err=scan(s);if not ok then return fail(err)end
+    -- Corruption cannot prove absence. A readable sibling confines the block
+    -- to its key; otherwise any new original could replace the missing one.
+    if s.unknown_association then return fail('recovery association unavailable; inspect quarantined snapshots')end
     if s.blocked_keys[spec.key]then return fail('original recovery snapshot unavailable')end
     local existing=s.keys[spec.key]
     if existing then

@@ -57,7 +57,7 @@ function M.capture(doc,spec)
     if not token then return nil,err end
     local job={};local s={status='captured',doc=doc,buf=spec.buf,epoch=D.snapshot(doc).epoch,original=token,
         store=spec.store,key=spec.key,association=vim.deepcopy(spec.association),
-        annotations=vim.deepcopy(spec.annotations),reader=spec.reader}
+        annotations=vim.deepcopy(spec.annotations),reader=spec.reader,on_release=spec.on_release}
     states[job]=s
     s.off=D.subscribe(doc,function(event)
         if event.kind=='detach' or event.kind=='reload'then M.release(job)end
@@ -162,6 +162,9 @@ function M.release(job)
     local s=state(job)
     drop_guard(s,'original');drop_guard(s,'settled')
     if s.off then s.off();s.off=nil end
-    s.doc=nil;s.reader=nil;s.annotations=nil;s.evidence=nil;s.status='released'
+    s.doc=nil;s.reader=nil;s.annotations=nil;s.evidence=nil;s.association=nil;s.key=nil;s.status='released'
+    -- Keep only the store needed by the documented inspect(job) after release
+    -- contract; no source bytes, association payload or document authority.
+    local released=s.on_release;s.on_release=nil;if released then released(job)end
 end
 return M

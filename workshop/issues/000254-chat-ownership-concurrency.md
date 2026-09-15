@@ -1263,6 +1263,36 @@ files;575-file lint clean. Original nine failures were fixed and superseded by12
 focused reruns, not waived. Evidence:/tmp/parley254-m5-final-verification.txt.
 M4 Codex rework97ac5805 is under review before integration into this M5 candidate.
 
+### 2026-09-15 M5 integrated verification before Codex review
+
+M4 closed at8c40b9c6 with SHIP and no open blocking findings. Its response
+corrections are integrated with fixed batch membership and answer recovery.
+333 tests across25 affected specs pass; native command smoke confirms all six
+Stop/resume/recovery commands and the batch bang argument. The prior complete
+M5 union remains91 specs/1030 passes; this integration rerun covers changed seams,
+not a replacement claim for a new whole-suite run. Full integrated lint576 files
+clean. Evidence:/tmp/parley254-m5-merged-audit.md and accompanying verification
+JSON files; prior inventory:/tmp/parley254-m5-final-verification.txt.
+No behavior lost in the merge: snapshot publication precedes replacement,
+settlement precedes revocation, batch input membership stays captured, and stale
+response continuation retains its explicit original-input decision. M5 enters
+mandatory review with Codex. Actual N/A because mixed192/254 attribution is
+unreliable; no guessed duration. Main remains reserved for operator live testing.
+
+### 2026-09-15 M5 Codex recovery rework
+
+Codex returned REWORK forBR20–24. Batch87, recovery65 and lifecycle722 tests
+passed in its review, but five new production regressions failed. Recovery
+settlement/retry/retirement/error visibility are being corrected as one ownership
+class. BR22 corruption admission is fixed at6f230f89: five new cases failed before
+and all35 store tests pass after, plus29 tests in the exact reviewer reproduction.
+Readable sibling evidence confines corruption to its key; absent association
+conservatively refuses all new originals across restarts. Two changed files lint
+clean. The recovery preview now uses the established mutation helper at92d7b5da;
+10 architecture and19 public recovery tests pass. M5 remains open pending the
+remaining lifecycle fixes and another Codex boundary review. M6 verification
+continues separately; its final integration will include the completed M5 fixes.
+
 ### 2026-09-15 M6 public execution integration checkpoint
 
 M6 shared producer now captures capabilities and roots, shares process/resource

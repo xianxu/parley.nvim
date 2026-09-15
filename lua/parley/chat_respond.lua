@@ -1655,16 +1655,19 @@ local function start_scoped_response(frame)
         end,
         finalize = function(ctx, done)
             start_topic()
-            return require('parley.response_completion').start(doc, ctx, function(status)
-                if recovery then
-                    local settled = require('parley.chat_recovery').settle(recovery, ctx)
-                    if not settled.ok then
-                        pcall(vim.notify, 'Previous answer retained; restore needs a fresh target: '
-                            .. tostring(settled.reason), vim.log.levels.WARN)
-                    end
-                end
-                done(status)
+            local completion,settlement
+            local cancelled=false
+            completion=require('parley.response_completion').start(doc, ctx, function(status)
+                if recovery and status=='applied' and not cancelled then
+                    settlement=require('parley.chat_recovery').settle(recovery,ctx,function()done(status)end)
+                else done(status)end
             end, {user_prefix = config.chat_user_prefix})
+            return {cancel=function(_,resolved)
+                cancelled=true
+                if settlement then settlement:cancel()
+                elseif completion then completion:cancel()end
+                if resolved then resolved()end
+            end}
         end,
         rejected = function(why)
             main_finished = true; release(); _parley.logger.warning('Response not started: ' .. tostring(why))

@@ -1215,6 +1215,30 @@ probe-only reconciliation must never close a descriptor that may now belong to
 another operation. M5 recovery uses the same conservative rule and bounded retained
 owners. No unresolved operation is removed to make an admission counter look clean.
 
+### 2026-09-15 — M5 recovery evidence and retirement (BR-20–BR-24)
+
+Reason: Codex reproduced missed settlement after ordinary completion, refused
+partial retries after provider failure, corruption treated as absence, detached
+host retention, and swallowed cleanup errors. Delta: keep four lifetimes
+separate. Active replacement grants authorize edits. An edit-fenced completion
+obligation waits through bounded structural repair before releasing those grants.
+Small bounded retry association metadata may outlive a failed attempt without
+retaining its grants, callbacks, store, or document. Host registry membership
+retires with the adapter on reload/detach and explicit release.
+
+Completion settlement applies to both single and batch execution. Human edits,
+reload, cancellation and lost ownership invalidate the obligation rather than
+blessing later text. Retrying must preserve the original only when fresh captured
+evidence still matches; unknown effects are never automatically repeated.
+
+Corrupt committed records with readable siblings block their known key. Without
+readable association evidence, all new-original publication is refused, including
+after restart or failed quarantine rename. Unavailable bytes remain accounted;
+unpublished temporary files remain capacity evidence. Publication and cleanup
+failures use a common visible reporting rule across settlement, save, discard and
+confirmed deletion. Retained physical bytes never disappear merely because an
+error was reported (ARCH-SECURE, ARCH-ORDER, ARCH-FUNERAL, ARCH-PURPOSE).
+
 ### 2026-09-15 — M6 supervisor integration and bounded defaults
 
 Reason: asynchronous builtins require a shared owner across chat and skill paths,

@@ -32,5 +32,7 @@ publication and recovery-file discovery. [response_recovery.lua](../../lua/parle
 binds publication and restore to Document guards. [chat_recovery.lua](../../lua/parley/chat_recovery.lua)
 owns saved-file matching, profile integration, and captured UI actions. Renamed
 chats use timestamp/root and exact question/predecessor/replacement evidence;
-malformed records are unavailable rather than guessed. Tool effects are not undone
+malformed records are unavailable rather than guessed. A corrupt record with
+unknown association blocks new snapshots until storage is inspected; it cannot
+turn a partial answer into a new original. Tool effects are not undone
 by restoring transcript text.

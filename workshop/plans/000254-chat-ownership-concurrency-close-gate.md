@@ -385,6 +385,42 @@ rounds:
           round: 15
       boundary: M4
       blocked: false
+    - "n": 16
+      timestamp: "2026-09-15T11:41:52-07:00"
+      agent: codex
+      findings:
+        - id: BR-20
+          severity: Critical
+          title: Successful replacement abandons settlement while semantic repair is pending
+          detail: 'lua/parley/chat_respond.lua:1653 and lua/parley/chat_recovery.lua:141 attempt settlement once, then release completion despite an unconfirmed exchange. A public response followed by confirmed save leaves its snapshot retained. This is the 10th finding in family semantic-publication-evidence. Fix the rule across single and batch completion: retain edit-fenced evidence until bounded settlement succeeds or a real conflict invalidates it; test repair, edits, cancellation and detach.'
+          family: semantic-publication-evidence
+          round: 16
+        - id: BR-21
+          severity: Critical
+          title: Provider failure removes the association required for retrying partial replacements
+          detail: lua/parley/chat_recovery.lua:145 releases the runtime association on failure; lines 115–118 then require partial output to match the original persisted replacement bytes. Adding C.finish(job,'provider_failed') to the existing retry fixture makes retry refuse. Separate bounded retry association from retired grants and verify public failure/cancellation followed by single retry and batch resume.
+          family: recovery-retry-association
+          round: 16
+        - id: BR-22
+          severity: Critical
+          title: Corruption of the sole recovery record permits partial output to become a new original
+          detail: lua/parley/answer_recovery.lua:117–122 derives blocked keys only from readable sibling records. Corrupting the sole committed record makes a same-key retry publish successfully with partial bytes. This is the 11th finding in family semantic-publication-evidence. ARCH-SECURE/ARCH-ORDER require unknown persisted evidence never to imply absence; sweep sole-record, all-revisions-corrupt, quarantine and restart cases under one conservative admission rule.
+          family: semantic-publication-evidence
+          round: 16
+        - id: BR-23
+          severity: Important
+          title: Recovery adapter retirement leaves the host registry retaining detached documents
+          detail: 'lua/parley/response_recovery.lua:62–64 releases only adapter state; lua/parley/chat_recovery.lua:135 retains entries containing the document and store until separate host cleanup. A detach regression confirms the entry remains after status becomes released. This is the 4th finding in family scope-owned-callback-cleanup. ARCH-FUNERAL: define one retirement rule covering every recovery ownership layer and sweep detach, reload, wipeout and failed settlement.'
+          family: scope-owned-callback-cleanup
+          round: 16
+        - id: BR-24
+          severity: Important
+          title: Recovery cleanup IO failures are swallowed by production callers
+          detail: lua/parley/chat_recovery.lua:174 ignores failed RR.saved results, and lua/parley/chat_respond.lua:1655 ignores successful settlement results carrying cleanup_error. Injected unlink EACCES during confirmed-save cleanup produces no notification. This is the 2nd finding in family lifecycle-state-observability. Define and enforce one error-publication rule across save cleanup, superseded-record cleanup, discard and deletion; retain physical accounting and test visible outcomes.
+          family: lifecycle-state-observability
+          round: 16
+      boundary: M5
+      blocked: true
 ---
 
 # Gate ledger — 000254-chat-ownership-concurrency#254 (boundary-review)
@@ -565,6 +601,26 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - BR-16 — addressed — README.md documents cursor-scoped ParleyStop, its picker, and ParleyStopDocument; chat_respond.cmd_stop and cmd_stop_document implement those respective scopes.
 - BR-17 — addressed — response_target.lua derives waiting guards and admitted dependencies from input_regions. Passing target, submission, and native affinity tests preserve freshness for excluded suffix edits.
 
+## Round 16 — 2026-09-15T11:41:52-07:00 (codex) — BLOCKED
+
+### Raised
+
+- **BR-20** [Critical] `semantic-publication-evidence` Successful replacement abandons settlement while semantic repair is pending
+  lua/parley/chat_respond.lua:1653 and lua/parley/chat_recovery.lua:141 attempt settlement once, then release completion despite an unconfirmed exchange. A public response followed by confirmed save leaves its snapshot retained. This is the 10th finding in family semantic-publication-evidence. Fix the rule across single and batch completion: retain edit-fenced evidence until bounded settlement succeeds or a real conflict invalidates it; test repair, edits, cancellation and detach.
+- **BR-21** [Critical] `recovery-retry-association` Provider failure removes the association required for retrying partial replacements
+  lua/parley/chat_recovery.lua:145 releases the runtime association on failure; lines 115–118 then require partial output to match the original persisted replacement bytes. Adding C.finish(job,'provider_failed') to the existing retry fixture makes retry refuse. Separate bounded retry association from retired grants and verify public failure/cancellation followed by single retry and batch resume.
+- **BR-22** [Critical] `semantic-publication-evidence` Corruption of the sole recovery record permits partial output to become a new original
+  lua/parley/answer_recovery.lua:117–122 derives blocked keys only from readable sibling records. Corrupting the sole committed record makes a same-key retry publish successfully with partial bytes. This is the 11th finding in family semantic-publication-evidence. ARCH-SECURE/ARCH-ORDER require unknown persisted evidence never to imply absence; sweep sole-record, all-revisions-corrupt, quarantine and restart cases under one conservative admission rule.
+- **BR-23** [Important] `scope-owned-callback-cleanup` Recovery adapter retirement leaves the host registry retaining detached documents
+  lua/parley/response_recovery.lua:62–64 releases only adapter state; lua/parley/chat_recovery.lua:135 retains entries containing the document and store until separate host cleanup. A detach regression confirms the entry remains after status becomes released. This is the 4th finding in family scope-owned-callback-cleanup. ARCH-FUNERAL: define one retirement rule covering every recovery ownership layer and sweep detach, reload, wipeout and failed settlement.
+- **BR-24** [Important] `lifecycle-state-observability` Recovery cleanup IO failures are swallowed by production callers
+  lua/parley/chat_recovery.lua:174 ignores failed RR.saved results, and lua/parley/chat_respond.lua:1655 ignores successful settlement results carrying cleanup_error. Injected unlink EACCES during confirmed-save cleanup produces no notification. This is the 2nd finding in family lifecycle-state-observability. Define and enforce one error-publication rule across save cleanup, superseded-record cleanup, discard and deletion; retain physical accounting and test visible outcomes.
+
 ## Open findings
 
 - **BR-13** [Important] `deferred-contract-traceability` BR-11 regressions are missing from the documented verification mapping
+- **BR-20** [Critical] `semantic-publication-evidence` Successful replacement abandons settlement while semantic repair is pending
+- **BR-21** [Critical] `recovery-retry-association` Provider failure removes the association required for retrying partial replacements
+- **BR-22** [Critical] `semantic-publication-evidence` Corruption of the sole recovery record permits partial output to become a new original
+- **BR-23** [Important] `scope-owned-callback-cleanup` Recovery adapter retirement leaves the host registry retaining detached documents
+- **BR-24** [Important] `lifecycle-state-observability` Recovery cleanup IO failures are swallowed by production callers

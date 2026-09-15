@@ -7,8 +7,19 @@ local M={}
 local parley
 local entries={}
 local order=0
+local retries=setmetatable({},{__mode='k'})
 local function fail(reason)return {ok=false,reason=tostring(reason)}end
 local function notice(reason)vim.notify('Parley recovery: '..tostring(reason),vim.log.levels.WARN)end
+local function report(job,result,phase)
+    local reason=result.cleanup_error or (not result.ok and result.reason)
+    local e=entries[job]
+    local key=tostring(phase or 'publication')..tostring(reason)
+    if reason and (not e or e.reported~=key)then
+        if e then e.reported=key end
+        notice(reason)
+    end
+    return result
+end
 local function timestamp(path)
     local name=vim.fn.fnamemodify(path,':t')
     return require('parley.chat_slug').parse_filename(name) or 'legacy:'..name
@@ -102,6 +113,12 @@ function M.start(doc,spec)
     local target,why=current_region(doc,entity,spec.buf);if not target then return nil,why end
     local a=association(spec.path,spec.root,value)
     local key
+    local retry=retries[doc] and retries[doc][entity]
+    if retry and retry.epoch==D.snapshot(doc).epoch and (retry.proof
+        and D.validate_revision(doc,retry.proof).status=='valid'
+        or not retry.proof and retry.tick==vim.api.nvim_buf_get_changedtick(spec.buf))then
+        key=retry.key;a=vim.deepcopy(retry.association)
+    end
     for job,e in pairs(entries)do
         if e.doc==doc and e.entity==entity then key=e.key;a=vim.deepcopy(e.association)
             if RR.snapshot(job).status~='captured' then M.release(job)end
@@ -130,19 +147,141 @@ function M.start(doc,spec)
         if oldest then M.release(oldest)end
     end
     if not admitted()then return nil,'replacement ownership changed'end
-    local job,reason=RR.capture(doc,{buf=spec.buf,store=storage,key=key,association=a,region=target,annotations=spec.annotations})
+    local job,reason=RR.capture(doc,{buf=spec.buf,store=storage,key=key,association=a,region=target,annotations=spec.annotations,
+        on_release=function(retired)
+            local e=entries[retired];entries[retired]=nil
+            if e and e.pending then e.pending:cancel()end
+        end})
     if not job then return nil,reason end
     order=order+1;entries[job]={buf=spec.buf,doc=doc,entity=entity,key=key,association=a,order=order,store=storage}
     return job
 end
-function M.publish(job,ctx)return RR.publish(job,ctx)end
-function M.settle(job,ctx)
-    local e=entries[job];if not e then return fail('recovery job released')end
-    local region,err=current_region(e.doc,e.entity,e.buf);if not region then return fail(err)end
-    return RR.settle(job,ctx,region)
+function M.publish(job,ctx)
+    local result=RR.publish(job,ctx)
+    -- The preparation owner reports refusal; successful publication can still
+    -- carry a failed predecessor cleanup that would otherwise be invisible.
+    if result.ok then report(job,result)end
+    return result
+end
+-- Async completion keeps its grant until semantic repair can certify the answer.
+-- A User proof fences question/answer bytes through repair, permitting disjoint
+-- edits while rejecting edit/undo ABA. Numeric offsets are used only to capture
+-- this proof synchronously from the current grant, never after a yield.
+function M.settle(job,ctx,done)
+    local function refuse(result)
+        if not done then return result end
+        -- Async callers always receive the same cancellation interface, even
+        -- when refusal completes inline before they can retain the handle.
+        local handle={cancel=function(_,resolved)if resolved then resolved()end end}
+        done(result)
+        return handle
+    end
+    local e=entries[job]
+    if not e then
+        return refuse(fail('recovery job released'))
+    end
+    if type(ctx)~='table'then return refuse(fail('replacement ownership changed'))end
+    local fence
+    local function attempt()
+        local region,err=current_region(e.doc,e.entity,e.buf)
+        if not region then return fail(err)end
+        if fence then
+            local proof=D.resolve_user(e.doc,fence)
+            local bound=proof and proof.regions[1]
+            local function before(a,b)return a.row<b.row or a.row==b.row and a.col<=b.col end
+            if not bound or not before(bound.first,region.first) or not before(region.last,bound.last)then
+                return fail('replacement escaped settlement evidence')
+            end
+        end
+        return RR.settle(job,ctx,region)
+    end
+    if not done then return report(job,attempt())end
+    local snapshot=D.snapshot(e.doc)
+    local epoch=snapshot.epoch
+    local grant=snapshot.grants[ctx.grant]
+    local marker=D.lookup(e.doc,e.entity)
+    local function position(offset)
+        -- O(log rows) native offset lookup also works while semantic rows are
+        -- opaque; it reads no text and supplies no post-yield write authority.
+        local low,high=0,vim.api.nvim_buf_line_count(e.buf)
+        while low+1<high do
+            local mid=math.floor((low+high)/2)
+            if vim.api.nvim_buf_get_offset(e.buf,mid)<=offset then low=mid else high=mid end
+        end
+        return {row=low,col=offset-vim.api.nvim_buf_get_offset(e.buf,low)}
+    end
+    local why
+    if marker and grant and grant.status~='revoked' and grant.entity==e.entity
+        and grant.generation==ctx.generation and epoch==ctx.epoch then
+        fence,why=D.capture_user(e.doc,{operation='answer-recovery-pending-settlement',regions={{
+            first={row=marker.start_row,col=0},last=position(grant.last)}}})
+    end
+    if not fence then
+        local result=fail(why or 'replacement ownership changed');report(job,result);return refuse(result)
+    end
+    local handle,work,finished={},nil,false
+    local function finish(result)
+        if finished then return end
+        finished=true;if work then work:close();work=nil end
+        D.cancel_user(e.doc,fence);fence=nil
+        if e.pending==handle then e.pending=nil end
+        local callback=done;done=nil
+        report(job,result);callback(result)
+    end
+    function handle.cancel(_,resolved)
+        finish(fail('replacement settlement cancelled'))
+        if resolved then resolved()end
+    end
+    work=require('parley.deferred_work').new(function()
+        if entries[job]~=e or D.get(e.buf)~=e.doc or D.snapshot(e.doc).epoch~=epoch
+            or not vim.api.nvim_buf_is_valid(e.buf) or not D.resolve_user(e.doc,fence)
+            or ctx.cancelled and ctx.cancelled()then
+            finish(fail('replacement changed before settlement'));return false
+        end
+        local result=attempt()
+        if result.reason=='exchange is not confirmed'then D.repair_step(e.doc);return true end
+        finish(result);return false
+    end)
+    e.pending=handle;work:request();return handle
 end
 function M.release(job)RR.release(job);entries[job]=nil end
-function M.finish(job,outcome)if outcome~='success'then M.release(job)end end
+function M.finish(job,outcome)
+    local e=entries[job]
+    if outcome~='success' and e then
+        -- Retain identity only, never a write grant or store. Reload/detach drop
+        -- the entire epoch; intervening human edits refuse automatic retry.
+        if D.get(e.buf)==e.doc and RR.snapshot(job).id then
+            local retained=retries[e.doc]
+            if not retained then
+                retained={};retries[e.doc]=retained
+                local doc,buf=e.doc,e.buf;local off
+                off=D.subscribe(doc,function(event)
+                    if event.kind=='reload' or event.kind=='detach'then retries[doc]=nil;off()
+                    elseif event.kind=='repair'then
+                        for entity,r in pairs(retained)do
+                            if not r.proof and r.tick==vim.api.nvim_buf_get_changedtick(buf)then
+                                local proof=D.capture_revision(doc,entity,'context')
+                                if proof.status=='ready'then r.proof=proof.token end
+                            end
+                        end
+                    end
+                end)
+            end
+            if vim.tbl_count(retained)>=48 then
+                local oldest;for entity,r in pairs(retained)do if not oldest or r.order<retained[oldest].order then oldest=entity end end
+                retained[oldest]=nil
+            end
+            local proof=D.capture_revision(e.doc,e.entity,'context')
+            retained[e.entity]={proof=proof.status=='ready' and proof.token or nil,key=e.key,association=vim.deepcopy(e.association),order=e.order,
+                epoch=D.snapshot(e.doc).epoch,tick=vim.api.nvim_buf_get_changedtick(e.buf)}
+        end
+        M.release(job)
+    elseif e and RR.snapshot(job).status~='settled'then
+        -- Completion may succeed while human edits make settlement unavailable.
+        -- Keep the durable copy, but no stale host ownership or fresh authority.
+        M.release(job)
+    end
+end
 function M.inspect_record(id)local storage,err=open_store();if not storage then return nil,err end;return Store.inspect(storage,id)end
 function M.list(buf)
     buf=buf or vim.api.nvim_get_current_buf()
@@ -171,6 +310,7 @@ function M.saved(buf)
                 end
                 return match and match.bytes or nil,'saved exchange not found'
             end})
+            report(job,result,'save')
             if result.ok then M.release(job)end
         end
     end
