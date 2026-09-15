@@ -315,6 +315,13 @@ exchange-model, and highlight test mappings all resolve actual specs. No product
 code or tests changed. Operator plan approval remains pending; estimates wait for
 the plan-quality gate. Plan/review lessons are locally committed, not published.
 
+### 2026-09-14 — Operator approved implementation plan
+
+The operator approved the reviewed design and said to proceed, asking for plan
+review next. Run the SDLC plan-quality gate, derive/reconcile the estimate only
+after acceptance, then enter implementation. No additional plan-approval request
+is required for the approved scope.
+
 ## Revisions
 
 ### 2026-09-14 — Incremental rendering is part of the core contract
