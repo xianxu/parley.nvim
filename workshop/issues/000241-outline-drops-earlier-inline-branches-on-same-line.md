@@ -1,11 +1,12 @@
 ---
 id: 000241
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-09-12
-updated: 2026-09-12
+updated: 2026-09-14
 estimate_hours:
+started: 2026-09-14T18:16:23-07:00
 ---
 
 # Chat outline shows only the last inline branch on a line: the tree builder keys branches by line number, so a second [🌿:…](…) on the same line overwrites the first
