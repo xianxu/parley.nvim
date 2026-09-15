@@ -175,6 +175,19 @@ describe('checked answer recovery store',function()
         assert.is_false(R.reconcile(store).ok);assert.equals(closes,#fs.closed_fds)
         assert.equals(1,R.stats(store).pending_closes)
     end)
+    it('distinguishes absent storage from an unresolved owner without creating it',function()
+        local value,_,status=R.open({directory='/missing',fs=fs,create=false})
+        assert.is_nil(value);assert.equals('absent',status);assert.is_nil(fs.files['/missing'])
+        fs.fail('close','unknown close');assert.is_false(R.publish(store,sample()).ok)
+        local directory=fs.files['/recovery'];fs.files['/recovery']=nil
+        local pending,_,pending_status=R.open({directory='/recovery',fs=fs,create=false})
+        assert.is_nil(pending);assert.is_not.equals('absent',pending_status)
+        assert.is_nil(fs.files['/recovery']);fs.files['/recovery']=directory
+        directory.mode=493;assert.is_nil(R.open({directory='/recovery',fs=fs}));directory.mode=448
+        local inode=directory.ino;directory.ino=inode+1
+        assert.is_nil(R.open({directory='/recovery',fs=fs}));directory.ino=inode
+        assert.equals(store,R.open({directory='/recovery',fs=fs}))
+    end)
     it('retains unresolved owners across profile changes and rejects changed capacities',function()
         fs.fail('close','unknown close');assert.is_false(R.publish(store,sample()).ok)
         local held=setmetatable({store},{__mode='v'});store=nil

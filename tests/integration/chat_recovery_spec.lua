@@ -42,6 +42,28 @@ describe('chat recovery commands and lifecycle',function()
         for _=1,100 do local r=D.replace_step(doc,cursor);if r.status=='applied'then break end;D.repair_step(doc)end
         D.drain(doc,10000)
     end
+    it('revalidates a replaced or insecure recovery directory on each open',function()
+        old_state=parley.config.state_dir;parley.config.state_dir=vim.fn.tempname()..'-cache-state'
+        vim.fn.mkdir(parley.config.state_dir,'p')
+        assert.same({},C.list(buf))
+        local directory=parley.config.state_dir..'/answer-recovery'
+        assert.is_true((vim.uv or vim.loop).fs_chmod(directory,493))
+        assert.is_nil(C.list(buf),'cached store must not bypass permissions')
+        assert.is_true((vim.uv or vim.loop).fs_chmod(directory,448))
+        assert.is_true((vim.uv or vim.loop).fs_rmdir(directory))
+        assert.same({},C.list(buf),'deleted directory can be freshly recreated for explicit use')
+        assert.is_true((vim.uv or vim.loop).fs_rmdir(directory))
+        local target=vim.fn.tempname()..'-private-target'
+        assert.is_true((vim.uv or vim.loop).fs_mkdir(target,448))
+        assert.is_true((vim.uv or vim.loop).fs_symlink(target,directory))
+        assert.is_nil(C.list(buf),'symlink replacement is not the private directory')
+        vim.fn.delete(directory);vim.fn.delete(target,'d')
+    end)
+    it('treats absent recovery storage as empty during confirmed chat deletion',function()
+        old_state=parley.config.state_dir;parley.config.state_dir=vim.fn.tempname()..'-missing-state'
+        assert.is_true(C.deleted(vim.fn.tempname()..'-deleted-chat.md').ok)
+        assert.equals(0,vim.fn.isdirectory(parley.config.state_dir))
+    end)
     it('tracks original recovery and cleans only after the exact replacement is saved',function()
         local job=start();local published=C.publish(job,ctx);assert.is_true(published.ok)
         replace();assert.is_true(C.settle(job,ctx).ok)

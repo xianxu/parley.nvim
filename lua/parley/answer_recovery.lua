@@ -173,22 +173,32 @@ function M.open(opts)
     for _,limit in ipairs({{s.max_record,MAX_RECORD},{s.max_bytes,MAX_PROFILE}})do
         if type(limit[1])~='number' or limit[1]<1 or limit[1]%1~=0 or limit[1]>limit[2]then return nil,'invalid recovery capacity'end
     end
+    local retained
     for owner in pairs(pending_owners)do
         if owner.directory==s.directory and owner.runtime==s.runtime then
             if owner.max_record~=s.max_record or owner.max_bytes~=s.max_bytes then
                 return nil,'unresolved recovery owner has different capacities'
             end
-            return owner.store[1]
+            retained=owner;break
         end
     end
     local store={};s.store=setmetatable({store},{__mode='v'});states[store]=s
     local stat,err=s.fs.lstat(s.directory)
     if not stat then
         if not tostring(err):find('ENOENT',1,true)then return nil,err end
+        if retained then return nil,'recovery directory absent with unresolved close'end
+        if opts.create==false then return nil,err,'absent'end
         local made,why=s.fs.mkdir(s.directory,448);if not made then return nil,why end
         stat,err=s.fs.lstat(s.directory);if not stat then return nil,err end
     end
     if stat.type~='directory' or stat.mode%512~=448 then return nil,'recovery directory must be private (0700)'end
+    if retained then
+        if retained.directory_dev~=stat.dev or retained.directory_ino~=stat.ino then
+            return nil,'recovery directory changed with unresolved close'
+        end
+        return retained.store[1]
+    end
+    s.directory_dev,s.directory_ino=stat.dev,stat.ino
     local ok,why=scan(s);if not ok then return nil,why end
     return store
 end

@@ -4,7 +4,7 @@ local D=require('parley.document')
 local Store=require('parley.answer_recovery')
 local RR=require('parley.response_recovery')
 local M={}
-local parley,store,store_directory
+local parley
 local entries={}
 local order=0
 local function fail(reason)return {ok=false,reason=tostring(reason)}end
@@ -13,12 +13,10 @@ local function timestamp(path)
     local name=vim.fn.fnamemodify(path,':t')
     return require('parley.chat_slug').parse_filename(name) or 'legacy:'..name
 end
-local function open_store()
+local function open_store(create)
     if not parley then return nil,'recovery setup required'end
     local directory=require('parley.recovery_paths').directory(parley.config.state_dir)
-    if store and store_directory==directory then return store end
-    local value,err=Store.open({directory=directory});if not value then return nil,err end
-    store,store_directory=value,directory;return store
+    return Store.open({directory=directory,create=create})
 end
 local function slice(lines,first,last)
     local result={};for i=first,last do result[#result+1]=lines[i] or ''end
@@ -213,7 +211,8 @@ function M.deleted(path)
     local uv=vim.uv or vim.loop
     local present,why=uv.fs_lstat(path)
     if present or not tostring(why):find('ENOENT',1,true)then return fail('chat deletion is not confirmed')end
-    local storage,err=open_store();if not storage then return fail(err)end
+    local storage,err,status=open_store(false)
+    if not storage then return status=='absent' and {ok=true} or fail(err)end
     local records,list_error=Store.list(storage);if not records then return fail(list_error)end
     local function canonical(value)return vim.fn.resolve(vim.fn.fnamemodify(value,':p'))end
     local exact={};local key=canonical(path)
