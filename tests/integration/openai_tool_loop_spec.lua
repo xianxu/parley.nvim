@@ -117,7 +117,7 @@ describe("openai tool loop against a stateful fake (#198)", function()
         session=assert(Session.start(doc,{operation="respond",schedule=true,input={},preparation=plan,
             question={first={row=0,col=0},last={row=0,col=#"💬: read files"}},
             output={first={row=0,col=#"💬: read files"},last={row=2,col=4}}},{
-            buf=buf,pending=false,root_policy={write_root=tmpdir,read_roots={tmpdir}},
+            buf=buf,pending=false,allowed_tools={"read_file"},root_policy={write_root=tmpdir,read_roots={tmpdir}},
             prepare_input=function(_,cb)cb.prepared(initial);cb.resolved()end,
             build_input=function(previous,next_messages)
                 previous.messages=next_messages
