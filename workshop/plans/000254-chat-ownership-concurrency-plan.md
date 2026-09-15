@@ -1149,3 +1149,16 @@ Protected question/output provenance still cancels unsafe target admission.
 A separate bounded input guard is released on every retirement/refusal path.
 Public tests compare pre/post-admission suffix and consumed-prefix edits, native
 undo and an independent later writer (ARCH-DRY, ARCH-ORDER, ARCH-PURPOSE).
+
+### 2026-09-15 — Complete retirement joins and stale-test inventory (BR-18/19)
+
+Reason: cleanup could finish before a cancelled tool's known outcome, leaving
+local ownership stranded; a previous suffix-staleness fixture contradicted the
+new dependency rule. Delta: every contributing outcome, physical-resolution and
+publication-completion update reevaluates retirement. Reserve publication before
+notifying outcome observers so reentrant cleanup cannot retire its context.
+Cancellation suppresses publication, not retirement. Add cancellation/detach,
+duplicate, late terminal and reentrant-publication histories. Replace unsupported
+suffix-positive evidence with genuine consumed-prefix edits and retain an explicit
+negative suffix case into pre-IO preparation. Sweep the complete stale assertion
+inventory and rerun the full146-file mapped union (ARCH-ORDER, ARCH-FUNERAL).

@@ -22,7 +22,13 @@ local function setup(options)
     local hooks={prepare=function(ctx,cb)cb.prepared(ctx.input);cb.resolved()end,
         request=function(ctx,cb)requests[#requests+1]={ctx=ctx,cb=cb};return {}end,
         finalize=function(_,done)done('applied')end,terminal=adapter.close,
-        reserve_round=adapter.reserve_round,start_child=adapter.start_child,continue_round=adapter.continue_round,
+        reserve_round=adapter.reserve_round,start_child=function(ctx,cb)
+            if options.on_outcome then
+                local outcome=cb.outcome
+                cb.outcome=function(kind,value)local accepted=outcome(kind,value);options.on_outcome(kind);return accepted end
+            end
+            return adapter.start_child(ctx,cb)
+        end,continue_round=adapter.continue_round,
         cancel_operation=adapter.cancel_operation,cancel_reservation=adapter.cancel_reservation}
     local marker=D.query(doc,0,1)[1];local body=D.query(doc,2,3)[1]
     local runner=assert(Runner.start(doc,{entity=marker.handle,first=marker.end_byte-1,last=body.end_byte-1,
@@ -233,6 +239,72 @@ describe('production concurrent tool round composition',function()
         assert.truthy(text:find('````',1,true));assert.truthy(text:find('```lua',1,true))
         assert.equals(2,#f.requests)
         assert.truthy(f.requests[2].ctx.input.messages[3].content[1].content:find('local x = 1',1,true))
+    end)
+
+    local orders={
+        {'physical','stop','ack','known'},{'physical','stop','known','ack'},
+        {'stop','physical','ack','known'},{'stop','physical','known','ack'},
+        {'stop','ack','physical','known'},{'stop','ack','known','physical'},
+        {'stop','known','physical','ack'},{'stop','known','ack','physical'},
+    }
+    for _,mode in ipairs({'cancel','detach'})do for _,order in ipairs(orders)do
+        it('joins late outcome and cleanup after '..mode..': '..table.concat(order,','),function()
+            local f=setup();f.round({calls[1]});local op=f.producer.started[1]
+            op.events.outcome('unknown',{content='awaiting confirmation'});f.drain()
+            local before=table.concat(f.editor.lines,'\n')
+            for _,event in ipairs(order)do
+                if event=='physical'then op.events.resolved();op.events.resolved()
+                elseif event=='stop'then
+                    if mode=='detach'then D.detach(f.doc)else Runner.cancel(f.runner)end
+                elseif event=='ack'then
+                    assert.equals(1,#f.producer.cancelled)
+                    f.producer.cancelled[1].resolved();f.producer.cancelled[1].resolved()
+                else
+                    assert.is_true(op.events.outcome('known',{content='confirmed after cancellation'}))
+                    assert.is_false(op.events.outcome('known',{content='duplicate'}))
+                end
+                f.drain()
+                if event~='known' and op.events.outcome('unknown',{})then error('duplicate unknown accepted')end
+            end
+            assert.equals(0,Runner.snapshot(f.runner).outstanding_operations)
+            assert.equals('terminal',Runner.snapshot(f.runner).phase)
+            assert.is_true(f.adapter.close())
+            assert.equals(before,table.concat(f.editor.lines,'\n'));assert.equals(1,#f.requests)
+        end)
+    end end
+    it('reserves publication before a reentrant physical-resolution callback',function()
+        local f
+        f=setup({on_outcome=function(kind)
+            if kind=='known'then f.producer.started[1].events.resolved()end
+        end})
+        f.round({calls[1]});local op=f.producer.started[1]
+        assert.is_true(op.events.outcome('known',{content='published before retirement'}));f.drain()
+        assert.truthy(table.concat(f.editor.lines,'\n'):find('published before retirement',1,true))
+        assert.equals(2,#f.requests)
+        f.requests[2].cb.complete();f.requests[2].cb.resolved();f.drain()
+        assert.equals('terminal',Runner.snapshot(f.runner).phase)
+    end)
+
+    for _,outcome in ipairs({'rejected','cancelled_before_effect'})do
+        it('joins early physical cleanup with later '..outcome,function()
+            local f=setup();f.round({calls[1]});local op=f.producer.started[1]
+            op.events.resolved();op.events.resolved()
+            assert.is_true(op.events.outcome(outcome,{content='not executed'}));f.drain()
+            assert.equals(0,Runner.snapshot(f.runner).outstanding_operations)
+            assert.equals(1,#f.requests)
+            Runner.cancel(f.runner);f.drain();assert.equals('terminal',Runner.snapshot(f.runner).phase)
+        end)
+    end
+    it('waits for the publication decision when cancellation overtakes a known result',function()
+        local f=setup();f.round({calls[1]});local op=f.producer.started[1]
+        local before=table.concat(f.editor.lines,'\n')
+        op.events.outcome('known',{content='must not publish after cancellation'})
+        op.events.resolved();Runner.cancel(f.runner);f.drain()
+        for _,cancel in ipairs(f.producer.cancelled)do cancel.resolved()end
+        f.drain()
+        assert.equals('terminal',Runner.snapshot(f.runner).phase)
+        assert.equals(0,Runner.snapshot(f.runner).outstanding_operations)
+        assert.equals(before,table.concat(f.editor.lines,'\n'));assert.is_true(f.adapter.close())
     end)
 
 end)

@@ -36,28 +36,31 @@ describe('native generation input provenance',function()
             if not human then assert.same({{first=0,last=seam}},generation.dependencies)end
         end
     end)
-    it('carries stale waiting-target evidence into runner state and preparation before IO',function()
-        local buf,doc=document({'💬: question','body','🤖: answer','text'})
-        local fake=Fake.new();local runner
-        local target=assert(Target.start(doc,{operation='response',schedule=false,input_ref='frozen',
-            question={first={row=0,col=0},last={row=1,col=4}},
-            output={first={row=1,col=4},last={row=3,col=4}}},{ready=function(value)
-                assert.is_true(value.input_stale)
-                runner=assert(Runner.start(doc,{entity=value.entity,first=value.first,last=value.last,
-                    input={message='frozen'},dependencies=value.dependencies,input_stale=value.input_stale,
-                    capabilities={},schedule=false},fake.adapters))
-            end}))
-        vim.api.nvim_buf_set_lines(buf,4,4,false,{'💬: other'})
-        for _=1,1000 do if Target.step(target).status~='waiting'then break end end
-        assert.equals('ready',Target.snapshot(target).status)
-        assert.is_true(Runner.snapshot(runner).stale_input)
-        assert.equals(0,#fake.preparations)
-        Runner.step(runner)
-        assert.is_true(fake.preparations[1].ctx.stale_input)
-        assert.equals('frozen',fake.preparations[1].ctx.input.message)
-        Runner.cancel(runner)
-        fake.preparations[1].callbacks.resolved()
-        Runner.drain(runner,100)
-        assert.equals('terminal',Runner.snapshot(runner).phase)
-    end)
+    for _,consumed in ipairs({false,true})do
+        it('carries '..(consumed and 'consumed-prefix staleness' or 'excluded-suffix freshness')..' into preparation before IO',function()
+            local buf,doc=document({'context','💬: question','body','🤖: answer','text'})
+            local fake=Fake.new();local runner
+            local target=assert(Target.start(doc,{operation='response',schedule=false,input_ref='frozen',input_prefix=true,
+                question={first={row=1,col=0},last={row=2,col=4}},
+                output={first={row=2,col=4},last={row=4,col=4}}},{ready=function(value)
+                    assert.equals(consumed,value.input_stale)
+                    runner=assert(Runner.start(doc,{entity=value.entity,first=value.first,last=value.last,
+                        input={message='frozen'},dependencies=value.dependencies,input_stale=value.input_stale,
+                        capabilities={},schedule=false},fake.adapters))
+                end}))
+            if consumed then vim.api.nvim_buf_set_text(buf,0,0,0,1,{'C'})
+            else vim.api.nvim_buf_set_lines(buf,5,5,false,{'💬: other'})end
+            for _=1,1000 do if Target.step(target).status~='waiting'then break end end
+            assert.equals('ready',Target.snapshot(target).status)
+            assert.equals(consumed,Runner.snapshot(runner).stale_input)
+            assert.equals(0,#fake.preparations)
+            Runner.step(runner)
+            assert.equals(consumed,fake.preparations[1].ctx.stale_input)
+            assert.equals('frozen',fake.preparations[1].ctx.input.message)
+            Runner.cancel(runner)
+            fake.preparations[1].callbacks.resolved()
+            Runner.drain(runner,100)
+            assert.equals('terminal',Runner.snapshot(runner).phase)
+        end)
+    end
 end)

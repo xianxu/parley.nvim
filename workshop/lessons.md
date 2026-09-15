@@ -2594,3 +2594,10 @@ download.
 - #254 BR-17: dependency semantics must survive admission boundaries. Compare
   identical human edits immediately before and after admission; a generic edit
   event proves neither changed consumed input nor stale provider evidence.
+
+- #254 BR-18: a lifecycle join must be reevaluated on every contributing event,
+  including a late known outcome after cleanup. Reserve publication before any
+  callback that can reentrantly complete cleanup or cancel the operation.
+- #254 BR-19: when an invariant changes, sweep existing positive and negative
+  fixtures and run the full mapped family before review. New regressions alone
+  can leave an older test defending the opposite semantics.

@@ -203,3 +203,119 @@ The milestone-applicable core entities exist; future M5/M6 entities were not tre
 ## 7. Plan revision recommendations
 
 Add **“Pre-admission dependency affinity”** under `## Revisions`: specify one stale-evidence rule spanning target capture through generation completion, enumerate relevant edit classes, and require equivalent public-workflow outcomes for edits immediately before and after admission.
+
+---
+
+## Re-review — 2026-09-15T11:10:58-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 254 — Harden chat ownership and concurrency |
+| repo | 000254-chat-ownership-concurrency |
+| issue file | workshop/issues/000254-chat-ownership-concurrency.md |
+| boundary | milestone M4 |
+| milestone | M4 |
+| window | 506d2c344fd177cba7f9afaee6fe89980a675425..d30d8bff1578ecf45c195eb3f93b3c3e275cdb7c |
+| command | sdlc milestone-close --issue 254 --milestone M4 |
+| reviewer | codex |
+| timestamp | 2026-09-15T11:10:58-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+BR-17 is fixed and has meaningful regression evidence: its new public test passes at Head and fails with the pre-fix implementation. M4’s scoped ownership and documentation are substantially delivered. Shipping is blocked by a reproduced tool-retirement ordering bug and an existing integration test that still asserts the stale-input behavior BR-17 removed.
+
+```findings
+dispose:
+  - id: BR-17
+    disposition: addressed
+    note: |
+      response_target.lua shares consumed-input selection between waiting guards and admitted dependencies. Public pre/post-admission regressions pass; restoring the pre-fix target implementation makes chat_stop_generation_spec.lua:176 fail because continuation never starts.
+  - id: BR-14
+    disposition: addressed
+    note: |
+      response_tools.lua reserves inert pending text and serializes confirmed results. Passing response_tools_spec.lua cases cover pending, cancellation, reload, unknown/rejected outcomes, and confirmed sibling publication.
+  - id: BR-15
+    disposition: addressed
+    note: |
+      Public chat_stop_generation_spec.lua tests verify stale presentation, explicit original-input continuation across focus changes, and refusal after ownership changes or detach.
+  - id: BR-16
+    disposition: addressed
+    note: |
+      README.md's added editing section documents Stop selection, StopDocument, stale continuation, and native history; the command implementation and passing public command tests support these descriptions.
+findings:
+  - id: new
+    severity: Critical
+    family: scope-owned-callback-cleanup
+    title: |
+      Cancelled tools remain outstanding when positive outcome evidence arrives after cleanup acknowledgment
+    detail: |
+      lua/parley/response_tools.lua:98 returns without maybe_resolve after cancellation. Reproduced sequence: unknown outcome, producer resolved, cancellation, cancellation resolved, then known outcome; the generation remains stopping with one outstanding operation despite complete evidence. This is the 3rd finding in family scope-owned-callback-cleanup. Do NOT fix only this instance: enforce the rule that every update to outcome, physical completion, or publication completion reevaluates retirement; cancellation suppresses publication, not retirement. Sweep their orderings, duplicates, and teardown paths (ARCH-ORDER, ARCH-FUNERAL, ARCH-PURPOSE).
+  - id: new
+    severity: Important
+    family: semantic-publication-evidence
+    title: |
+      Existing affinity regression still requires an unrelated suffix edit to stale input
+    detail: |
+      tests/integration/generation_input_affinity_spec.lua:39–56 appends a later question and asserts input_stale=true; the pinned Head fails at line 45. This is the 9th finding in family semantic-publication-evidence. Do NOT merely flip this assertion: apply the consumed-dependency rule across the stale-input test inventory, use an actual consumed-prefix edit to test stale evidence propagation into preparation, and retain a separate negative suffix case (ARCH-PURPOSE).
+```
+
+## 1. Strengths
+
+- Consumed-input selection is shared across admission stages in `response_target.lua`; BR-17’s regression demonstrably fails without the fix.
+- Private generation transitions and architecture checks enforce separation from editor state and IO.
+- Tool tests validate parsed and wire-level outcomes, including independently completed siblings.
+- README and atlas cover the new ownership vocabulary and user commands.
+
+## 2. Critical findings
+
+**Tool retirement ordering — `lua/parley/response_tools.lua:98`.**  
+The reproduced sequence leaves the generation permanently `stopping`, retaining its admission capacity. Calling the existing retirement check on the early-return path makes the scratch regression pass, confirming the cause. The complete correction should enforce the retirement rule across all contributing events.
+
+Reproducer: [review_tool_order_spec.lua](/tmp/parley-m4-review-a0j6t0nc/source/tests/integration/review_tool_order_spec.lua:238).
+
+## 3. Important findings
+
+**Contradictory regression — `tests/integration/generation_input_affinity_spec.lua:45`.**  
+Repair the fixture to exercise genuine consumed-input invalidation while preserving its preparation-propagation checks. Sweep sibling assertions and rerun the mapped suites.
+
+## 4. Minor findings
+
+None.
+
+## 5. Test coverage notes
+
+- Tested an isolated archive of the pinned Head; the checkout was unchanged.
+- **57 changed spec files:** 55 passed; 767 test cases passed.
+- One genuine assertion failure: stale-input affinity.
+- Two HTTP fixture failures: local socket binding is prohibited here (`EPERM`); these do not establish a product defect.
+- BR-17 mutation check: regression fails without the fix.
+- New cancellation-ordering regression: fails at Head; passes with the diagnostic retirement-check correction.
+- Full performance validation was not rerun.
+
+## 6. Architectural notes
+
+| Principle | Assessment |
+|---|---|
+| ARCH-DRY | **Pass:** shared input-region builder and coordinator ownership. |
+| ARCH-PURE | **Pass:** generation decisions remain pure; IO uses adapters. |
+| ARCH-PURPOSE | **Flag:** complete the lifecycle-ordering and stale-test family sweeps. |
+| ARCH-MOCK | **Pass:** stateful seams permit deterministic reproduction; HTTP validation remains environment-limited. |
+| ARCH-CONSTRAINTS | **Flag:** stranded operations retain bounded admission slots. |
+| ARCH-SECURE | **Pass:** reviewed publication paths require provenance or confirmed outcomes. |
+| ARCH-ORDER | **Flag:** outcome-after-cleanup ordering fails retirement. |
+| ARCH-FUNERAL | **Flag:** confirmed cancelled work lacks effective retirement in that ordering. |
+
+M5/M6 work remains explicitly staged for later boundaries; it is not treated as missing M4 delivery.
+
+## 7. Plan revision recommendations
+
+Add `## Revisions` entries recording:
+
+- Retirement as a join of outcome, physical completion, and publication completion, reevaluated after every contributing event regardless of cancellation.
+- The stale-input regression inventory correction and fresh mapped verification results before claiming M4 closure.

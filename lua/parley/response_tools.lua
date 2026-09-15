@@ -94,10 +94,15 @@ local function tool_outcome(s,r,outcome,value)
         result={id=r.call.id,name=r.call.name,content=Dispatch.truncate(value.content,s.result_limit),is_error=value.is_error==true}
     else result={id=r.call.id,name=r.call.name,content=type(value)=='table' and tostring(value.content or '') or '',is_error=true}end
     r.outcome=outcome
+    -- Reserve publication before invoking outcome observers: they may report
+    -- physical cleanup or cancel reentrantly. Neither can retire this record
+    -- while a known result still needs its publication decision.
+    r.writing=outcome=='known' and not r.cancelled
     r.cb.outcome(outcome,result)
-    if r.cancelled or outcome~='known' then return true end
+    if r.cancelled or outcome~='known' then
+        r.writing=false;maybe_resolve(s,r);return true
+    end
     local text=Serialize.render_result(result)
-    r.writing=true
     local admitted=r.ctx.replace(text,function()
         r.writing=false;maybe_resolve(s,r)
     end)

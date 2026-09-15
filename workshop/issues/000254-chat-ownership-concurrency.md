@@ -1179,3 +1179,16 @@ changed files lint clean, scoped diff check clean. Baseline public reproduction
 failed only the pre-admission suffix case; fixed pre/post cases pass, including
 ABA/nativeundo and disjoint writer checks. No Document helper change required.
 Evidence:/tmp/parley254-br17-public-red.log and matching br17 focused logs.
+
+### 2026-09-15 M4 BR-18/19 checkpoint
+
+Codex disposedBR17 and confirmedBR14–16, then reproduced a cancelled-tool
+retirement-order bug and found one leftover contradictory suffix-affinity test.
+BR18 now joins outcome/physical/publication evidence after every contributing
+update and reserves publication before reentrant observers.117 focused tests pass,
+including the exact reviewer reproduction and20 added ordering/teardown cases.
+BR19 now tests genuine consumed-prefix staleness and excluded-suffix freshness
+through pre-IO preparation; three native affinity tests pass. The full stale-test
+inventory was swept without another contradiction. Full146-file canonical mapped
+verification and lint are running before the next Codex review; no partial-run
+success claim is being substituted for those results.

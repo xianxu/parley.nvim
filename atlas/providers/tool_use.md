@@ -315,3 +315,8 @@ Pending reservations use fixed inert text, never result Markdown. Only a confirm
 child outcome passes through the result serializer. Reloaded or cancelled pending
 calls remain unmatched calls; historical provider projection may report their
 missing result as an error, and never as successful execution evidence.
+
+Tool adapter retirement joins known outcome, positive producer cleanup and the
+publication decision. Every contributing event reevaluates that join, including
+late outcomes after cancellation. Publication is reserved before calling outcome
+observers, so a reentrant cleanup callback cannot retire the pending write.

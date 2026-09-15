@@ -320,6 +320,41 @@ rounds:
           round: 13
       boundary: M4
       blocked: true
+    - "n": 14
+      timestamp: "2026-09-15T11:10:58-07:00"
+      agent: codex
+      dispose:
+        - id: BR-17
+          disposition: addressed
+          note: response_target.lua shares consumed-input selection between waiting guards and admitted dependencies. Public pre/post-admission regressions pass; restoring the pre-fix target implementation makes chat_stop_generation_spec.lua:176 fail because continuation never starts.
+          round: 14
+        - id: BR-14
+          disposition: addressed
+          note: response_tools.lua reserves inert pending text and serializes confirmed results. Passing response_tools_spec.lua cases cover pending, cancellation, reload, unknown/rejected outcomes, and confirmed sibling publication.
+          round: 14
+        - id: BR-15
+          disposition: addressed
+          note: Public chat_stop_generation_spec.lua tests verify stale presentation, explicit original-input continuation across focus changes, and refusal after ownership changes or detach.
+          round: 14
+        - id: BR-16
+          disposition: addressed
+          note: README.md's added editing section documents Stop selection, StopDocument, stale continuation, and native history; the command implementation and passing public command tests support these descriptions.
+          round: 14
+      findings:
+        - id: BR-18
+          severity: Critical
+          title: Cancelled tools remain outstanding when positive outcome evidence arrives after cleanup acknowledgment
+          detail: 'lua/parley/response_tools.lua:98 returns without maybe_resolve after cancellation. Reproduced sequence: unknown outcome, producer resolved, cancellation, cancellation resolved, then known outcome; the generation remains stopping with one outstanding operation despite complete evidence. This is the 3rd finding in family scope-owned-callback-cleanup. Do NOT fix only this instance: enforce the rule that every update to outcome, physical completion, or publication completion reevaluates retirement; cancellation suppresses publication, not retirement. Sweep their orderings, duplicates, and teardown paths (ARCH-ORDER, ARCH-FUNERAL, ARCH-PURPOSE).'
+          family: scope-owned-callback-cleanup
+          round: 14
+        - id: BR-19
+          severity: Important
+          title: Existing affinity regression still requires an unrelated suffix edit to stale input
+          detail: 'tests/integration/generation_input_affinity_spec.lua:39–56 appends a later question and asserts input_stale=true; the pinned Head fails at line 45. This is the 9th finding in family semantic-publication-evidence. Do NOT merely flip this assertion: apply the consumed-dependency rule across the stale-input test inventory, use an actual consumed-prefix edit to test stale evidence propagation into preparation, and retain a separate negative suffix case (ARCH-PURPOSE).'
+          family: semantic-publication-evidence
+          round: 14
+      boundary: M4
+      blocked: true
 ---
 
 # Gate ledger — 000254-chat-ownership-concurrency#254 (boundary-review)
@@ -473,7 +508,24 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-17** [Critical] `semantic-publication-evidence` Later-draft edits before admission falsely stale and pause an earlier response
   response_target.lua:99–101 sets input_stale=true for every document edit, regardless of captured input dependencies. A scratch public-workflow regression submits the first question, immediately edits the later draft, then completes a tool round: the earlier generation becomes paused with stale_input=true and never issues its second request. This contradicts plan line 145. This is the 8th finding in family semantic-publication-evidence: do not patch only this site; enforce dependency-backed stale evidence across waiting-target admission, active generation, presentation, and continuation (ARCH-PURPOSE, ARCH-SECURE, ARCH-ORDER).
 
+## Round 14 — 2026-09-15T11:10:58-07:00 (codex) — BLOCKED
+
+### Disposed
+
+- BR-17 — addressed — response_target.lua shares consumed-input selection between waiting guards and admitted dependencies. Public pre/post-admission regressions pass; restoring the pre-fix target implementation makes chat_stop_generation_spec.lua:176 fail because continuation never starts.
+- BR-14 — addressed — response_tools.lua reserves inert pending text and serializes confirmed results. Passing response_tools_spec.lua cases cover pending, cancellation, reload, unknown/rejected outcomes, and confirmed sibling publication.
+- BR-15 — addressed — Public chat_stop_generation_spec.lua tests verify stale presentation, explicit original-input continuation across focus changes, and refusal after ownership changes or detach.
+- BR-16 — addressed — README.md's added editing section documents Stop selection, StopDocument, stale continuation, and native history; the command implementation and passing public command tests support these descriptions.
+
+### Raised
+
+- **BR-18** [Critical] `scope-owned-callback-cleanup` Cancelled tools remain outstanding when positive outcome evidence arrives after cleanup acknowledgment
+  lua/parley/response_tools.lua:98 returns without maybe_resolve after cancellation. Reproduced sequence: unknown outcome, producer resolved, cancellation, cancellation resolved, then known outcome; the generation remains stopping with one outstanding operation despite complete evidence. This is the 3rd finding in family scope-owned-callback-cleanup. Do NOT fix only this instance: enforce the rule that every update to outcome, physical completion, or publication completion reevaluates retirement; cancellation suppresses publication, not retirement. Sweep their orderings, duplicates, and teardown paths (ARCH-ORDER, ARCH-FUNERAL, ARCH-PURPOSE).
+- **BR-19** [Important] `semantic-publication-evidence` Existing affinity regression still requires an unrelated suffix edit to stale input
+  tests/integration/generation_input_affinity_spec.lua:39–56 appends a later question and asserts input_stale=true; the pinned Head fails at line 45. This is the 9th finding in family semantic-publication-evidence. Do NOT merely flip this assertion: apply the consumed-dependency rule across the stale-input test inventory, use an actual consumed-prefix edit to test stale evidence propagation into preparation, and retain a separate negative suffix case (ARCH-PURPOSE).
+
 ## Open findings
 
 - **BR-13** [Important] `deferred-contract-traceability` BR-11 regressions are missing from the documented verification mapping
-- **BR-17** [Critical] `semantic-publication-evidence` Later-draft edits before admission falsely stale and pause an earlier response
+- **BR-18** [Critical] `scope-owned-callback-cleanup` Cancelled tools remain outstanding when positive outcome evidence arrives after cleanup acknowledgment
+- **BR-19** [Important] `semantic-publication-evidence` Existing affinity regression still requires an unrelated suffix edit to stale input
