@@ -435,7 +435,7 @@ end
 ---@param callback function | nil # optional callback handler
 ---@param on_progress function | nil # optional progress/status handler
 local query = function(buf, provider, payload, handler, on_exit, callback, on_progress,
-	on_activity, on_error, abort_before_start, restart, attempt)
+	on_activity, on_error, abort_before_start, restart, attempt, transport_opts)
 	attempt = attempt or 0
 	-- make sure handler is a function
 	if type(handler) ~= "function" then
@@ -470,6 +470,15 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 		ns_id = nil,
 		ex_id = nil,
 	})
+
+	-- A query record exists before bearer validation/spawn. Rejecting that
+	-- preparation must release its lifecycle record, but cannot retire an
+	-- attached attempt (tasker owns exit/drain confirmation).
+	local report_abort = abort_before_start
+	abort_before_start = function(message)
+		tasker.reject_query(qid)
+		report_abort(message)
+	end
 
 	local function legacy_complete(query_id, qt)
 		local function invoke_surface(label, fn, ...)
@@ -831,7 +840,8 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 			legacy_complete(qid, qt)
 		end
 	end)
-	tasker.run(buf, "curl", curl_params, terminal, out_reader(), nil, start_error)
+	local run_opts = vim.tbl_extend("force", {}, transport_opts or {}, { query_id = qid })
+	tasker.run(buf, "curl", curl_params, terminal, out_reader(), nil, start_error, run_opts)
 end
 
 -- LLM query
@@ -850,7 +860,7 @@ end
 ---   Additive + backward compatible: a one-arg pre_query (e.g. copilot) simply
 ---   ignores the error callback the dispatcher passes it.
 D.query = function(buf, provider, payload, handler, on_exit, callback, on_progress, on_abort,
-	on_activity, on_error)
+	on_activity, on_error, transport_opts)
 	local abort_before_start = tasker.once(function(msg)
 		logger.error("query abort before start [" .. tostring(provider) .. "]: " .. tostring(msg))
 		if type(on_abort) == "function" then
@@ -868,7 +878,7 @@ D.query = function(buf, provider, payload, handler, on_exit, callback, on_progre
 		-- different request — an anthropic-routed claude call would retry against
 		-- the OpenAI-shaped endpoint with OpenAI headers.
 		query(buf, provider, vim.deepcopy(payload), handler, on_exit, callback, on_progress,
-			on_activity, on_error, abort_before_start, start_query, attempt or 0)
+			on_activity, on_error, abort_before_start, start_query, attempt or 0, transport_opts)
 	end
 	local adapter = providers.get(provider)
 	if adapter.pre_query then

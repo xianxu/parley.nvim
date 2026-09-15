@@ -140,6 +140,22 @@ callbacks and emits one bounded generic cancellation notice.
 
 ## Editing, Diagnostics, and Decoration Convergence
 
+### Transport ownership containment (#254 M1)
+
+Each provider launch has a private attempt identity, independent of its PID and
+mutable query payload. An attempt remains owned until process exit and both
+output streams terminate. Successful signaling, failed probes, and missing-PID
+observations do not prove completion. Unresolved attempts retain admission;
+explicit reconciliation records evidence without guessing that work has ended.
+Admission releases before the terminal callback so retries can launch safely.
+
+Response lease invalidation stops its generation's transport owner. Completion
+preserves subsequent human text, including an unfinished question with no marker.
+These are containment measures: current chat pending state and history controls
+still precede the regional coordinator and concurrent tool scheduler planned for
+later #254 milestones. See `lua/parley/attempt.lua`, `tasker.lua`, and the
+ownership integration specs.
+
 `lua/parley/buffer_lifecycle.lua` is the neutral owner of buffer convergence
 events. It invokes diagnostics and highlight structure independently on
 `InsertLeave`, normal `TextChanged`, `BufWritePost`, `BufEnter`, and `WinEnter`;

@@ -1290,7 +1290,6 @@ describe("chat_respond: pending request transcript drift", function()
     local original_pending_start
     local original_notify
     local original_history_confirm
-    local original_tasker_handles
     local original_tasker_uv
     local test_files
     local scratch_file
@@ -1307,9 +1306,8 @@ describe("chat_respond: pending request transcript drift", function()
         original_pending_start = canonical_pending_start
         original_notify = vim.notify
         original_history_confirm = require("parley.chat_history").confirm
-        original_tasker_handles = parley.tasker._handles
         original_tasker_uv = parley.tasker._uv
-        parley.tasker._handles = {}
+        parley.tasker._reset()
         parley.tasker._uv = { kill = function() return 0 end }
         test_files = { test_file }
     end)
@@ -1342,7 +1340,7 @@ describe("chat_respond: pending request transcript drift", function()
                 pcall(vim.api.nvim_buf_delete, buf, { force = true })
             end
         end
-        parley.tasker._handles = original_tasker_handles
+        parley.tasker._reset()
         parley.tasker._uv = original_tasker_uv
     end)
 
@@ -1531,16 +1529,10 @@ local function open_simple_chat(topic, path, extra_header)
         local pending = require("parley.chat_pending")
         local second_file = test_file:gsub("%.md$", "-second.md")
         table.insert(test_files, second_file)
-        local killed = {}
-        parley.tasker._uv = {
-            kill = function(pid)
-                table.insert(killed, pid)
-                return 0
-            end,
-        }
-        parley.dispatcher.query = function(buf)
-            local pid = 9000 + buf
-            parley.tasker.add_handle({ is_closing = function() return false end }, pid, buf)
+        local runtime, processes = require("tests.helpers.fake_process").new()
+        parley.tasker._uv = runtime
+        parley.dispatcher.query = function(buf, _, _, _, _, _, _, _, _, _, transport_opts)
+            parley.tasker.run(buf, "fake", {}, nil, nil, nil, nil, transport_opts)
         end
 
         local first_buf = open_simple_chat("First pending chat")
@@ -1556,11 +1548,15 @@ local function open_simple_chat(topic, path, extra_header)
 
         assert.is_nil(pending.identity(first_buf))
         assert.is_not_nil(pending.identity(second_buf))
-        assert.same({ 9000 + first_buf }, killed)
-        assert.equals(1, #parley.tasker._handles)
+        assert.same({ { pid = 4242, signal = 15 } }, processes.signals)
+        assert.equals(2, #parley.tasker._handles, "signal acceptance does not confirm exit")
+        processes.processes[4242]:finish()
+        assert.is_true(vim.wait(100, function() return #parley.tasker._handles == 1 end, 5))
         assert.equals(second_buf, parley.tasker._handles[1].buf)
 
         parley.tasker.stop_buf(second_buf)
+        processes.processes[4243]:finish()
+        vim.wait(100, function() return #parley.tasker._handles == 0 end, 5)
         pending.retire_stale_now(second_buf, "test cleanup")
     end)
 

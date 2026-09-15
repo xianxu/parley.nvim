@@ -14,6 +14,7 @@
 -- property `chat_lease` relies on for the streaming insertion point (#138).
 
 local M = {}
+local line_reader = require("parley.line_reader")
 
 local ns_id = vim.api.nvim_create_namespace("parley_exchange_anchors")
 local anchors = {}
@@ -50,6 +51,7 @@ end
 local function anchor_row(buf, ids, index)
     local id = ids[index]
     if not id then return nil end
+    line_reader.record_work(buf, { anchors_resolved = 1 })
     local mark = vim.api.nvim_buf_get_extmark_by_id(buf, ns_id, id, { details = true })
     if not mark or not mark[1] then return nil end
     if mark[3] and mark[3].invalid then return nil end

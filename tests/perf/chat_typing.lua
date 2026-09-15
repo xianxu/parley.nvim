@@ -28,12 +28,12 @@ function M.new_counter()
     return {
         observe = function(_, event)
             values.line_read_calls = values.line_read_calls + 1
-            values.lines_requested = values.lines_requested + (event.lines_requested or 0)
             values.full_buffer_reads = values.full_buffer_reads + (event.full_buffer and 1 or 0)
-            values.structure_rows_processed = values.structure_rows_processed
-                + (event.structure_rows_processed or 0)
-            values.structure_entries_copied = values.structure_entries_copied
-                + (event.structure_entries_copied or 0)
+            for _, field in ipairs(WORK_FIELDS) do
+                if field ~= "line_read_calls" and field ~= "full_buffer_reads" then
+                    values[field] = values[field] + (event[field] or 0)
+                end
+            end
         end,
         snapshot = function()
             return vim.deepcopy(values)

@@ -1,5 +1,11 @@
 local chat_typing = require("tests.perf.chat_typing")
 
+local function work(values)
+    local result = {}
+    for _, field in ipairs(require("tests.perf.harness").WORK_FIELDS) do result[field] = 0 end
+    return vim.tbl_extend("force", result, values)
+end
+
 describe("chat typing performance scenario", function()
     it("builds the exact deterministic fixture shape", function()
         for _, n in ipairs({ 100, 1000, 5000 }) do
@@ -24,19 +30,34 @@ describe("chat typing performance scenario", function()
             full_buffer = true, structure_rows_processed = 2, structure_entries_copied = 3 })
         counter:observe({ phase = "edit_total", operation = "line", lines_requested = 1,
             full_buffer = false, structure_rows_processed = 4 })
-        assert.same({ line_read_calls = 2, lines_requested = 9, full_buffer_reads = 1,
-            structure_rows_processed = 6, structure_entries_copied = 3 }, counter:snapshot())
+        assert.same(work({ line_read_calls = 2, lines_requested = 9, full_buffer_reads = 1,
+            structure_rows_processed = 6, structure_entries_copied = 3 }), counter:snapshot())
         counter:reset()
-        assert.same({ line_read_calls = 0, lines_requested = 0, full_buffer_reads = 0,
-            structure_rows_processed = 0, structure_entries_copied = 0 }, counter:snapshot())
+        assert.same(work({ line_read_calls = 0, lines_requested = 0, full_buffer_reads = 0,
+            structure_rows_processed = 0, structure_entries_copied = 0 }), counter:snapshot())
 
-        assert.same({ line_read_calls = 4, lines_requested = 20, full_buffer_reads = 2,
-            structure_rows_processed = 7, structure_entries_copied = 9 }, chat_typing.max_work({
-            { line_read_calls = 4, lines_requested = 2, full_buffer_reads = 2, structure_rows_processed = 1,
-                structure_entries_copied = 9 },
-            { line_read_calls = 1, lines_requested = 20, full_buffer_reads = 0, structure_rows_processed = 7,
-                structure_entries_copied = 0 },
+        assert.same(work({ line_read_calls = 4, lines_requested = 20, full_buffer_reads = 2,
+            structure_rows_processed = 7, structure_entries_copied = 9 }), chat_typing.max_work({
+            work({ line_read_calls = 4, lines_requested = 2, full_buffer_reads = 2, structure_rows_processed = 1,
+                structure_entries_copied = 9 }),
+            work({ line_read_calls = 1, lines_requested = 20, full_buffer_reads = 0, structure_rows_processed = 7,
+                structure_entries_copied = 0 }),
         }))
+    end)
+
+    it("sums each structural counter through the existing work observer", function()
+        local reader = require("parley.line_reader")
+        local counter = chat_typing.new_counter()
+        local token = reader.set_observer(998877, function(e) counter:observe(e) end)
+        local fields = { "bytes_read", "index_nodes_visited", "dependency_nodes_visited",
+            "anchors_resolved", "fold_groups_visited", "native_fold_ops" }
+        for _, field in ipairs(fields) do
+            reader.record_work(998877, { [field] = 2 })
+            reader.record_work(998877, { [field] = 3 })
+        end
+        reader.clear_buffer(998877)
+        assert.is_table(token)
+        for _, field in ipairs(fields) do assert.equals(5, counter:snapshot()[field]) end
     end)
 
     it("rejects invalid work samples before max aggregation", function()
@@ -106,16 +127,16 @@ describe("chat typing performance scenario", function()
 
     it("keeps inclusive and isolated JSON attribution explicit", function()
         local report = chat_typing.new_report({ os = "test", nvim = "test", commit = "test" })
-        chat_typing.add_result(report, "edit_total", "inclusive", 100, { 1, 2 }, {
+        chat_typing.add_result(report, "edit_total", "inclusive", 100, { 1, 2 }, work({
             line_read_calls = 1, lines_requested = 2, full_buffer_reads = 0, structure_rows_processed = 0,
             structure_entries_copied = 0,
-        })
-        chat_typing.add_result(report, "timezone_refresh", "isolated", 100, { 3, 4 }, {
+        }))
+        chat_typing.add_result(report, "timezone_refresh", "isolated", 100, { 3, 4 }, work({
             line_read_calls = 1, lines_requested = 100, full_buffer_reads = 1, structure_rows_processed = 0,
             structure_entries_copied = 0,
-        })
+        }))
         local decoded = vim.json.decode(require("tests.perf.harness").encode(report))
-        assert.equals(1, decoded.schema_version)
+        assert.equals(2, decoded.schema_version)
         assert.equals("milliseconds", decoded.timing_unit)
         assert.equals("inclusive", decoded.scenarios[1].attribution)
         assert.equals("isolated", decoded.scenarios[2].attribution)
@@ -134,18 +155,18 @@ describe("chat typing performance scenario", function()
         local function valid_report()
             local report = chat_typing.new_report({ os = "test", nvim = "test", commit = "test" })
             for _, n in ipairs({ 1000, 5000 }) do
-                chat_typing.add_result(report, "edit_total", "inclusive", n, { 1 }, {
+                chat_typing.add_result(report, "edit_total", "inclusive", n, { 1 }, work({
                     line_read_calls = 2, lines_requested = 88, full_buffer_reads = 0,
                     structure_rows_processed = 1, structure_entries_copied = 0,
-                })
-                chat_typing.add_result(report, "decoration_redraw", "isolated", n, { 1 }, {
+                }))
+                chat_typing.add_result(report, "decoration_redraw", "isolated", n, { 1 }, work({
                     line_read_calls = 1, lines_requested = 61, full_buffer_reads = 0,
                     structure_rows_processed = 0, structure_entries_copied = 0,
-                })
-                chat_typing.add_result(report, "structure_splice", "isolated", n, { 1 }, {
+                }))
+                chat_typing.add_result(report, "structure_splice", "isolated", n, { 1 }, work({
                     line_read_calls = 2, lines_requested = 3, full_buffer_reads = 0,
                     structure_rows_processed = 6, structure_entries_copied = 4 * n + 2,
-                })
+                }))
             end
             return report
         end

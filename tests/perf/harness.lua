@@ -6,7 +6,8 @@ local M = {}
 --- `structure_rows_processed` cannot see.
 M.WORK_FIELDS = {
     "line_read_calls", "lines_requested", "full_buffer_reads", "structure_rows_processed",
-    "structure_entries_copied",
+    "structure_entries_copied", "bytes_read", "index_nodes_visited", "dependency_nodes_visited",
+    "anchors_resolved", "fold_groups_visited", "native_fold_ops",
 }
 
 local function copy(value)
@@ -104,7 +105,7 @@ end
 
 function M.new_report(environment)
     return {
-        schema_version = 1,
+        schema_version = 2,
         generated_at = os.date("!%Y-%m-%dT%H:%M:%SZ"),
         timing_unit = "milliseconds",
         environment = copy(environment),

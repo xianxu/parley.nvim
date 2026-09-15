@@ -1736,6 +1736,9 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
             api_leg_finalized = true
             require("parley.buffer_lifecycle").finalize_mutated_api_leg(buf, api_leg_mutated)
         end
+        -- Transport authority is captured with this lease, never inferred from
+        -- whichever buffer or successor request is current in a late callback.
+        local transport_owner = "chat:" .. tostring(lease_generation)
         local lease_notice_sent = false
         local pending_session
         local function invalidate_pending_request(lease_reason)
@@ -1749,7 +1752,7 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                 pending_session:cancel("stale")
             end
             pcall(function()
-                _parley.tasker.stop()
+                _parley.tasker.stop_owner(transport_owner)
             end)
         end
         local function lease_valid()
@@ -2026,30 +2029,22 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
 
                     local streamed_cursor = stream_position.from_query(qt)
 
-                    -- Clean up trailing blanks after the current exchange.
-                    -- The model tracks content sizes precisely, but streaming
-                    -- may leave stray blank lines in the buffer. Delete
-                    -- everything between the exchange's model-computed end
-                    -- and the next exchange (or end of buffer).
+                    -- Completion may remove only currently blank margin lines.
+                    -- Submission-time exchange membership cannot establish that
+                    -- the suffix is still empty: the human may have typed ahead.
                     local exchange_end = model:exchange_start(target_idx) + model:exchange_total_size(target_idx)
                     local line_count = vim.api.nvim_buf_line_count(buf)
-                    -- Find where the next content starts (next 💬: or end of buffer).
-                    local next_content_start = line_count  -- default: end of buffer
                     local all_current_lines = vim.api.nvim_buf_get_lines(buf, 0, line_count, false)
                     local footnote_boundary = trailing_footnote_boundary(all_current_lines, exchange_end)
-                    if footnote_boundary then
-                        next_content_start = footnote_boundary
-                    elseif exchange_idx and exchange_idx < #parsed_chat.exchanges then
-                        -- There's a next exchange — find where it starts in the
-                        -- current buffer. Re-read to account for streaming mutations.
-                        local cur_lines = vim.api.nvim_buf_get_lines(buf, exchange_end, line_count, false)
-                        for i, l in ipairs(cur_lines) do
-                            if l:match("%S") then
-                                next_content_start = exchange_end + i - 1
-                                break
-                            end
+                    local next_content_start = line_count
+                    for row = exchange_end + 1, line_count do
+                        if all_current_lines[row]:match("%S") then
+                            next_content_start = row - 1
+                            break
                         end
                     end
+                    local may_append_prompt = next_content_start == line_count
+                        or next_content_start == footnote_boundary
                     -- Delete excess blanks: keep exactly 1 margin line between
                     -- current exchange end and next content.
                     local excess = next_content_start - exchange_end - 1  -- -1 for the 1 margin we keep
@@ -2067,7 +2062,7 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                     -- Only add a new user prompt at the end if we're not in the middle of the document
                     _parley.logger.debug("exchange_idx: " .. tostring(exchange_idx) .. " and #parsed_chat: " .. tostring(#parsed_chat))
 
-                    if exchange_idx == #parsed_chat.exchanges then
+                    if exchange_idx == #parsed_chat.exchanges and may_append_prompt then
                         -- Insert position is right after the cleaned-up exchange.
                         local insert_at = exchange_end
 
@@ -2229,7 +2224,8 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                         teardown_chat_leg(message)
                     end)
                 end)
-            end
+            end,
+            { generation_id = transport_owner, admission_key = transport_owner }
         )
     end)
 end

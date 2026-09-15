@@ -47,7 +47,7 @@ describe("tasker", function()
     describe("Group B: cleanup_old_queries", function()
         before_each(function()
             -- Clear queries
-            tasker._queries = {}
+            tasker._reset()
         end)
 
         it("B1: does nothing when query count <= N", function()
@@ -61,15 +61,19 @@ describe("tasker", function()
             assert.is_not_nil(tasker._queries.q2)
         end)
 
-        it("B2: removes queries older than age seconds", function()
-            local now = os.time()
-            tasker._queries = {
-                old = { timestamp = now - 120, payload = {} },
-                new = { timestamp = now, payload = {} },
-            }
-            tasker.cleanup_old_queries(0, 60) -- N=0 forces cleanup, age=60s
-            assert.is_nil(tasker._queries.old)
-            assert.is_not_nil(tasker._queries.new)
+        it("B2: public payload cannot forge terminal retention eligibility", function()
+            tasker.set_query("old", {buf=3})
+            tasker.get_query("old").timestamp = 0
+            tasker.get_query("old").terminal = true
+            tasker.cleanup_old_queries(0, -1)
+            assert.is_not_nil(tasker.get_query("old"))
+        end)
+        it("reject_query retires preparation for retention", function()
+            tasker.set_query("old", {buf=3})
+            assert.is_function(tasker.reject_query)
+            assert.is_true(tasker.reject_query("old"))
+            tasker.cleanup_old_queries(0, -1)
+            assert.is_nil(tasker.get_query("old"))
         end)
 
         it("B3: keeps queries newer than age seconds", function()
@@ -82,7 +86,7 @@ describe("tasker", function()
         end)
 
         it("B4: handles empty _queries table", function()
-            tasker._queries = {}
+            tasker._reset()
             -- Should not error
             local ok = pcall(tasker.cleanup_old_queries, 10, 60)
             assert.is_true(ok)
@@ -91,7 +95,7 @@ describe("tasker", function()
 
     describe("Group C: set_query + get_query", function()
         before_each(function()
-            tasker._queries = {}
+            tasker._reset()
         end)
 
         it("C1: set_query stores payload with timestamp", function()
@@ -114,16 +118,12 @@ describe("tasker", function()
             assert.is_nil(result)
         end)
 
-        it("C4: get_active_query_by_buf returns newest query for a buffer", function()
-            local now = os.time()
-            tasker._queries = {
-                old = { buf = 3, timestamp = now - 10 },
-                new = { buf = 3, timestamp = now },
-                other = { buf = 7, timestamp = now + 1 },
-            }
-            local result = tasker.get_active_query_by_buf(3)
-            assert.is_not_nil(result)
-            assert.equals(now, result.timestamp)
+        it("C4: active query ignores terminal and breaks timestamp ties by insertion", function()
+            tasker.set_query("first", {buf=3,name="first"})
+            tasker.set_query("second", {buf=3,name="second"})
+            assert.equals("second", tasker.get_active_query_by_buf(3).name)
+            tasker.reject_query("second")
+            assert.equals("first", tasker.get_active_query_by_buf(3).name)
         end)
 
         it("C5: get_active_query_by_buf returns nil when no query matches", function()

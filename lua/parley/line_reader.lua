@@ -58,6 +58,7 @@ function M.record_work(buf, event)
     for key, value in pairs(event or {}) do copy[key] = value end
     copy.operation = copy.operation or "work"
     copy.requested = copy.requested or {}
+    copy.bytes_read = copy.bytes_read or 0
     copy.returned_lines = copy.returned_lines or 0
     copy.lines_requested = copy.lines_requested or 0
     copy.full_buffer = copy.full_buffer or false
@@ -84,6 +85,17 @@ local function invoke(buf, event, fn)
     local result = pack(pcall(fn))
     if result[1] then
         local value = result[2]
+        -- Count payload bytes only: API arrays contain no newline separators.
+        -- Only scan returned strings when observed; ordinary reads pay no scan.
+        event.bytes_read = 0
+        local state = states[buf]
+        if state and state.observer then
+            if type(value) == "table" then
+                for _, line in ipairs(value) do event.bytes_read = event.bytes_read + #line end
+            elseif type(value) == "string" then
+                event.bytes_read = #value
+            end
+        end
         event.returned_lines = type(value) == "table" and #value or (value ~= nil and 1 or 0)
         if event.operation == "lines" and event.requested.end_row == -1 then
             event.lines_requested = event.returned_lines
@@ -92,6 +104,7 @@ local function invoke(buf, event, fn)
         return unpack(result, 2, result.n)
     end
     event.returned_lines = 0
+    event.bytes_read = 0
     observe(buf, event)
     error(result[2], 0)
 end

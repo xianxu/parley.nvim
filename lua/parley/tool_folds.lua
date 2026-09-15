@@ -8,6 +8,7 @@
 -- No foldexpr evaluation, no backward scanning.
 
 local M = {}
+local line_reader = require("parley.line_reader")
 local projection = require("parley.fold_projection")
 local exchange_anchors = require("parley.exchange_anchors")
 local initialized = {}
@@ -84,16 +85,21 @@ local function clear_folds_in_span(buf, win, first_0, last_0)
             setlocal foldenable
             execute %d
             let s:guard = 0
+            let s:groups = 0
+            let s:ops = 0
             let s:limit = %d
             while line('.') <= %d && s:guard < s:limit
               let s:guard += 1
               if foldlevel(line('.')) > 0
+                let s:groups += 1
+                let s:ops += 1
                 silent! normal! zD
                 if foldlevel(line('.')) > 0
                   break
                 endif
               else
                 let s:before = line('.')
+                let s:ops += 1
                 silent! normal! zj
                 if line('.') == s:before
                   break
@@ -101,6 +107,7 @@ local function clear_folds_in_span(buf, win, first_0, last_0)
               endif
             endwhile
             let b:parley_fold_clear_iters = s:guard
+            let b:parley_fold_clear_work = [s:groups, s:ops]
         ]], first_row, (last_row - first_row + 2) * 2, last_row), {})
         -- Restore both even if the walk fails; its temporary editor state must
         -- not become the reader's new position or folding preference.
@@ -111,6 +118,10 @@ local function clear_folds_in_span(buf, win, first_0, last_0)
         -- than rows without timing anything. A wall-clock assertion measures the
         -- machine as much as the algorithm.
         M._last_clear_iters = vim.b[buf].parley_fold_clear_iters
+        -- Count the existing native walk, including unsuccessful commands.
+        -- Nested folds deleted together by zD constitute one outer group.
+        local work = vim.b[buf].parley_fold_clear_work
+        line_reader.record_work(buf, { fold_groups_visited = work[1], native_fold_ops = work[2] })
     end)
 end
 
@@ -339,6 +350,7 @@ function M.reconcile_exchange(buf, win, model, exchange_index)
     vim.api.nvim_win_call(win, function()
         vim.api.nvim_set_option_value("foldminlines", 0, { win = win })
         for _, range in ipairs(ranges) do
+            line_reader.record_work(buf, { native_fold_ops = 1 })
             vim.cmd(string.format("%d,%dfold", range.start_0 + 1, range.end_0 + 1))
         end
     end)

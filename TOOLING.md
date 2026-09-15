@@ -97,7 +97,7 @@ directory) with:
 make perf PERF_OUTPUT=/path/to/parley-chat-typing.json
 ```
 
-The JSON envelope has `schema_version: 1`, `generated_at`,
+The JSON envelope has `schema_version: 2`, `generated_at`,
 `timing_unit: "milliseconds"`, `environment` (`os`, `nvim`, and the measured
 git `commit`), and `scenarios`. Every scenario records `name`, `phase`,
 `attribution` (`inclusive` or `isolated`), `line_count`, `iteration_count`,
@@ -105,7 +105,12 @@ git `commit`), and `scenarios`. Every scenario records `name`, `phase`,
 (`line_read_calls`, `lines_requested`, `full_buffer_reads`,
 `structure_rows_processed`, and `structure_entries_copied` — the slots a
 structure splice copies, which row counts cannot see; the list is single-sourced
-as `tests/perf/harness.lua`'s `WORK_FIELDS`). Generated reports are ignored
+as `tests/perf/harness.lua`'s `WORK_FIELDS`). Schema 2 adds `bytes_read`
+(returned string bytes, excluding newline separators), `index_nodes_visited`,
+`dependency_nodes_visited`, `anchors_resolved`, `fold_groups_visited` (outer
+fold deletion targets), and `native_fold_ops` (`zj`, `zD`, and fold creation
+commands). Node counters are reserved for the incremental core; zero does not
+mean existing array copies are free. Generated reports are ignored
 artifacts; durable baseline/optimized summaries belong in the issue log.
 
 Elapsed timings are report-only and never fail CI. Scenario validity and
