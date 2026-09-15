@@ -1186,3 +1186,12 @@ common admission/traversal migration and remains mandatory before issue completi
 M6 pure operation/resource contracts committed82a5fb12; async filesystem and
 Tasker supervision work proceeds in /tmp/parley254-m6-stage. No main merge or final
 completion is claimed. Operator live testing follows all six completed boundaries.
+
+### 2026-09-15 M5 final verification checkpoint
+
+M5 isolated head19272d82 includes fresh directory identity/privacy revalidation,
+no-create confirmed deletion cleanup, and unique public fixture chat identities.
+Final mapped union:91 unique specs,1030 passing tests, no failures/errors/incomplete
+files;575-file lint clean. Original nine failures were fixed and superseded by12
+focused reruns, not waived. Evidence:/tmp/parley254-m5-final-verification.txt.
+M4 Codex rework97ac5805 is under review before integration into this M5 candidate.
