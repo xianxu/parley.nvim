@@ -354,3 +354,10 @@ M6 actual asynchronous tool execution. The fold probe selected native manual-fol
 deltas and an explicit broad-edit cost/overload policy. Both design and
 implementation-plan chunks received Approved on the second review. This is plan
 review evidence, not proof of implementation or operator approval.
+
+### 2026-09-14 — Operator approval
+
+Reason: operator said “looks good. let's go. plan review next?” Delta: the design
+is approved for SDLC plan-quality review and implementation; previous pending
+approval statements record the earlier stage. Estimate remains deferred until
+the gate accepts.
