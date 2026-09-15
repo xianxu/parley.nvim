@@ -18,7 +18,10 @@ local FAKE = vim.fn.getcwd() .. "/tests/fixtures/fake_cliproxy"
 
 local dispatcher = require("parley.dispatcher")
 local ready_port = require("tests.helpers.ready_port")
-local tool_loop = require("parley.tool_loop")
+local Session = require("parley.response_session")
+local D = require("parley.document")
+local Layout = require("parley.response_layout")
+local Preparation = require("parley.response_preparation")
 local registry = require("parley.tools")
 local vault = require("parley.vault")
 local parley = require("parley")
@@ -50,9 +53,10 @@ end
 
 describe("openai tool loop against a stateful fake (#198)", function()
     local port, tmpdir, file_a, file_b
-    local saved_endpoint, saved_manage
+    local saved_endpoint, saved_manage, buf, doc, session
 
     before_each(function()
+        buf,doc,session=nil,nil,nil
         registry.register_builtins()
         parley._state = parley._state or {}
         parley._state.web_search = false
@@ -79,6 +83,9 @@ describe("openai tool loop against a stateful fake (#198)", function()
     end)
 
     after_each(function()
+        if session then Session.cancel(session)end
+        if doc then D.detach(doc)end
+        if buf and vim.api.nvim_buf_is_valid(buf)then vim.api.nvim_buf_delete(buf,{force=true})end
         for _, pid in ipairs(started) do
             pcall(function() uv.kill(pid, "sigterm") end)
         end
@@ -90,77 +97,53 @@ describe("openai tool loop against a stateful fake (#198)", function()
         registry.register_builtins()
     end)
 
-    -- Drive one request and hand the captured stream to the tool loop, which
-    -- is exactly what chat_respond's on_exit does.
-    local function run_round(bufnr, messages, model)
-        start_fake(port, "tool_call", {
-            "PARLEY_FAKE_TOOL_PATH_A=" .. file_a,
-            "PATH=" .. (vim.env.PATH or ""),
+    -- The session drives both HTTP legs. The server chooses its answer from
+    -- translated role:tool messages, so a lost tool result cannot pass by count.
+    local function run_session(mode)
+        start_fake(port, mode, {
+            "PARLEY_FAKE_TOOL_PATH_A="..file_a,"PARLEY_FAKE_TOOL_PATH_B="..file_b,
+            "PATH="..(vim.env.PATH or ""),
         })
-
-        local payload = dispatcher.prepare_payload(messages, model, "cliproxyapi", { "read_file" })
-        local done, raw = false, nil
-        dispatcher.query(nil, "cliproxyapi", payload, function() end, function(qid)
-            raw = (require("parley.tasker").get_query(qid) or {}).raw_response
-            done = true
-        end)
-        vim.wait(15000, function() return done end, 50)
-        assert.is_true(done, "query never completed")
-        return raw, payload
+        buf=vim.api.nvim_create_buf(false,true)
+        vim.api.nvim_buf_set_lines(buf,0,-1,false,{"💬: read files","🤖: old","text"})
+        doc=D.attach(buf)
+        local plan=Preparation.plan(Layout.prepare({lines={"🤖: old","text"},first_row=1,first_byte=1,
+            header_lines={"🤖: fixture"}},{chat_branch_prefix="🌿:",chat_local_prefix="🔒:"}))
+        local model={model="gpt-5.6-sol"}
+        local messages={{role="user",content="read files"}}
+        local initial={provider="cliproxyapi",model=model,buf=buf,messages=messages,
+            payload=dispatcher.prepare_payload(messages,model,"cliproxyapi",{"read_file"})}
+        local continuations,results={},{}
+        session=assert(Session.start(doc,{operation="respond",schedule=true,input={},preparation=plan,
+            question={first={row=0,col=0},last={row=0,col=#"💬: read files"}},
+            output={first={row=0,col=#"💬: read files"},last={row=2,col=4}}},{
+            buf=buf,pending=false,root_policy={write_root=tmpdir,read_roots={tmpdir}},
+            prepare_input=function(_,cb)cb.prepared(initial);cb.resolved()end,
+            build_input=function(previous,next_messages)
+                previous.messages=next_messages
+                previous.payload=dispatcher.prepare_payload(next_messages,model,"cliproxyapi",{"read_file"})
+                continuations[#continuations+1]=vim.deepcopy(previous.payload)
+                return previous
+            end,
+            on_result=function(_,query,calls)
+                results[#results+1]={response=query.response,calls=vim.deepcopy(calls)}
+            end,
+        }))
+        assert.is_true(vim.wait(15000,function()return Session.snapshot(session).status=="terminal"end,5),
+            vim.inspect(Session.snapshot(session)))
+        assert.equals("success",Session.snapshot(session).generation.outcome)
+        return table.concat(vim.api.nvim_buf_get_lines(buf,0,-1,false),"\n"),continuations,results
     end
 
-    it("completes a tool round: request → tool_calls → execute → buffer blocks", function()
-        local bufnr = vim.api.nvim_create_buf(false, true)
-        vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "💬: read alpha", "🤖: [ToolSol*]" })
-
-        local raw = run_round(bufnr,
-            { { role = "user", content = "read alpha" } },
-            { model = "gpt-5.6-sol" })
-
-        assert.is_truthy(raw, "no raw response captured")
-        assert.matches("tool_calls", raw)
-
-        local outcome = tool_loop.process_response(bufnr, raw, {
-            provider = "cliproxyapi",
-            model = { model = "gpt-5.6-sol" },
-            max_tool_iterations = 20,
-            cwd = tmpdir,
-        })
-
-        assert.equals("recurse", outcome)
-        local text = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
-        assert.matches("🔧: read_file id=call_fake_a", text)
-        assert.matches("📎: read_file id=call_fake_a", text)
-        -- the tool actually ran against the real file
-        assert.matches("ALPHA%-CONTENT", text)
-    end)
-
-    it("second leg: a request carrying role:tool gets a plain answer, loop ends", function()
-        local bufnr = vim.api.nvim_create_buf(false, true)
-        vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "💬: read alpha", "🤖: [ToolSol*]" })
-
-        -- history with a completed tool round, in parley's internal shape;
-        -- prepare_payload must translate it into role:"tool" for the fake to
-        -- recognise the second leg at all. That IS the assertion.
-        local raw = run_round(bufnr, {
-            { role = "user", content = "read alpha" },
-            { role = "assistant", content = {
-                { type = "tool_use", id = "call_fake_a", name = "read_file",
-                  input = { path = file_a } },
-            } },
-            { role = "user", content = {
-                { type = "tool_result", tool_use_id = "call_fake_a", content = "ALPHA-CONTENT" },
-            } },
-        }, { model = "gpt-5.6-sol" })
-
-        assert.matches("the tool result was received", raw)
-        local outcome = tool_loop.process_response(bufnr, raw, {
-            provider = "cliproxyapi",
-            model = { model = "gpt-5.6-sol" },
-            max_tool_iterations = 20,
-            cwd = tmpdir,
-        })
-        assert.equals("done", outcome)
+    it("composes real HTTP tool results into the next translated request and final answer",function()
+        local text,continuations,results=run_session("tool_call")
+        assert.equals(2,#results);assert.equals(1,#results[1].calls);assert.equals(0,#results[2].calls)
+        assert.matches("🔧: read_file id=call_fake_a",text)
+        assert.matches("📎: read_file id=call_fake_a",text)
+        assert.matches("ALPHA%-CONTENT",text)
+        assert.matches("the tool result was received",text)
+        assert.equals(1,#continuations)
+        assert.equals("tool",continuations[1].messages[#continuations[1].messages].role)
     end)
 
     it("the request body carries translated messages, not content blocks", function()
@@ -181,38 +164,16 @@ describe("openai tool loop against a stateful fake (#198)", function()
         assert.equals("function", payload.tools[1].type)
     end)
 
-    it("executes parallel tool calls in one round", function()
-        start_fake(port, "tool_call_parallel", {
-            "PARLEY_FAKE_TOOL_PATH_A=" .. file_a,
-            "PARLEY_FAKE_TOOL_PATH_B=" .. file_b,
-            "PATH=" .. (vim.env.PATH or ""),
-        })
-
-        local payload = dispatcher.prepare_payload(
-            { { role = "user", content = "read both" } },
-            { model = "gpt-5.6-sol" }, "cliproxyapi", { "read_file" })
-        local done, raw = false, nil
-        dispatcher.query(nil, "cliproxyapi", payload, function() end, function(qid)
-            raw = (require("parley.tasker").get_query(qid) or {}).raw_response
-            done = true
-        end)
-        vim.wait(15000, function() return done end, 50)
-        assert.is_true(done, "query never completed")
-
-        local bufnr = vim.api.nvim_create_buf(false, true)
-        vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "💬: read both", "🤖: [ToolSol*]" })
-        local outcome = tool_loop.process_response(bufnr, raw, {
-            provider = "cliproxyapi",
-            model = { model = "gpt-5.6-sol" },
-            max_tool_iterations = 20,
-            cwd = tmpdir,
-        })
-
-        assert.equals("recurse", outcome)
-        local text = table.concat(vim.api.nvim_buf_get_lines(bufnr, 0, -1, false), "\n")
-        assert.matches("🔧: read_file id=call_fake_a", text)
-        assert.matches("🔧: read_file id=call_fake_b", text)
-        assert.matches("ALPHA%-CONTENT", text)
-        assert.matches("BETA%-CONTENT", text)
+    it("preserves declaration order for multiple real tools through the HTTP continuation",function()
+        local text,continuations,results=run_session("tool_call_parallel")
+        assert.equals(2,#results[1].calls);assert.equals(1,#continuations)
+        assert.matches("ALPHA%-CONTENT",text);assert.matches("BETA%-CONTENT",text)
+        assert.matches("the tool result was received",text)
+        local messages=continuations[1].messages
+        assert.equals("call_fake_a",messages[#messages-1].tool_call_id)
+        assert.equals("call_fake_b",messages[#messages].tool_call_id)
+        local a=text:find("📎: read_file id=call_fake_a",1,true)
+        local b=text:find("📎: read_file id=call_fake_b",1,true)
+        assert.is_true(a<b)
     end)
 end)

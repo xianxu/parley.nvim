@@ -4,7 +4,8 @@ local Editor=require('tests.helpers.fake_document_editor')
 local Tools=require('parley.response_tools')
 local serial=117000
 local docs,runners,fixtures={},{},{}
-local function setup()
+local function setup(options)
+    options=options or {}
     serial=serial+1
     local editor=Editor.new({'💬: question','🤖: answer','text','','💬: next','draft'})
     local doc=D.attach(serial,{driver=editor.driver,schedule=false});docs[#docs+1]=doc;D.drain(doc,1000)
@@ -14,7 +15,8 @@ local function setup()
     end
     function producer.cancel(op,resolved)producer.cancelled[#producer.cancelled+1]={op=op,resolved=resolved}end
     local requests={}
-    local adapter=Tools.new(doc,{producer=producer,schedule=false,build_input=function(previous,messages)
+    local adapter=Tools.new(doc,{producer=not options.actual and producer or nil,root_policy=options.root_policy,
+        max_iterations=options.max_iterations,schedule=false,build_input=function(previous,messages)
         previous.messages=messages;previous.payload={model='fixture',messages=messages};return previous
     end})
     local hooks={prepare=function(ctx,cb)cb.prepared(ctx.input);cb.resolved()end,
@@ -38,7 +40,7 @@ local function setup()
         local declared={};for i,c in ipairs(calls)do declared[i]={call_id=c.id,arguments=c}end
         assert.is_true(req.cb.round(declared));req.cb.resolved();drain()
     end
-    local fixture={doc=doc,editor=editor,producer=producer,requests=requests,runner=runner,drain=drain,round=round}
+    local fixture={doc=doc,editor=editor,producer=producer,requests=requests,runner=runner,adapter=adapter,drain=drain,round=round}
     fixtures[#fixtures+1]=fixture
     return fixture
 end
@@ -129,6 +131,54 @@ describe('production concurrent tool round composition',function()
         assert.is_not_nil(text:find('sibling result',1,true))
         assert.equals(1,#f.requests)
         assert.is_false(first.events.outcome('known',{content='late output'}))
+    end)
+
+    it('enforces the round limit before serializing or starting another tool',function()
+        local f=setup({max_iterations=1});f.round({calls[1]})
+        local op=f.producer.started[1];op.events.outcome('known',{content='done'});op.events.resolved();f.drain()
+        assert.equals(2,#f.requests)
+        local before=table.concat(f.editor.lines,'\n')
+        local request=f.requests[2]
+        assert.has_error(function()f.adapter.on_result(request.ctx,{response='again'},calls)end,'tool iteration limit')
+        assert.equals(1,#f.producer.started);assert.equals(before,table.concat(f.editor.lines,'\n'))
+    end)
+    it('keeps real read errors inside ordered result messages without exposing outside-root data',function()
+        require('parley.tools').register_builtins()
+        local root=vim.fn.tempname();vim.fn.mkdir(root..'/narrow','p')
+        vim.fn.writefile({'DO NOT READ'},root..'/outside.txt')
+        local f=setup({actual=true,root_policy={write_root=root..'/narrow',read_roots={root..'/narrow'}}})
+        f.round({{id='outside',name='read_file',input={path=root..'/outside.txt'}}})
+        assert.equals(2,#f.requests)
+        local result=f.requests[2].ctx.input.messages[3].content[1]
+        assert.is_true(result.is_error)
+        assert.truthy(result.content:find('configured read roots',1,true))
+        assert.is_nil(table.concat(f.editor.lines,'\n'):find('DO NOT READ',1,true))
+    end)
+    it('widens reads while keeping real writes rooted in the captured nested directory',function()
+        require('parley.tools').register_builtins()
+        local root=vim.fn.tempname();local nested=root..'/data/nested';vim.fn.mkdir(nested,'p')
+        vim.fn.writefile({'root content'},root..'/README.md')
+        local f=setup({actual=true,root_policy={write_root=nested,read_roots={nested,root}}})
+        f.round({{id='read-root',name='read_file',input={path='../../README.md'}},
+            {id='bare',name='read_file',input={path='README.md'}}})
+        assert.equals(2,#f.requests)
+        local results=f.requests[2].ctx.input.messages[3].content
+        assert.truthy(results[1].content:find('root content',1,true));assert.is_true(results[2].is_error)
+        f.round({{id='write-nested',name='write_file',input={path='README.md',content='nested content'}}})
+        assert.equals(3,#f.requests)
+        assert.same({'nested content'},vim.fn.readfile(nested..'/README.md'))
+        assert.same({'root content'},vim.fn.readfile(root..'/README.md'))
+    end)
+    it('serializes real backtick-containing tool results without closing their surrounding fence',function()
+        require('parley.tools').register_builtins()
+        local root=vim.fn.tempname();vim.fn.mkdir(root,'p')
+        vim.fn.writefile({'```lua','local x = 1','```'},root..'/code.md')
+        local f=setup({actual=true,root_policy={write_root=root,read_roots={root}}})
+        f.round({{id='code',name='read_file',input={path='code.md'}}})
+        local text=table.concat(f.editor.lines,'\n')
+        assert.truthy(text:find('````',1,true));assert.truthy(text:find('```lua',1,true))
+        assert.equals(2,#f.requests)
+        assert.truthy(f.requests[2].ctx.input.messages[3].content[1].content:find('local x = 1',1,true))
     end)
 
 end)

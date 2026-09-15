@@ -1,9 +1,9 @@
 # Exchange Model
 
 The exchange model (`lua/parley/exchange_model.lua`) materializes parsed chats for
-preparation, serialization, and existing response planning. Live rendering and
-identity queries use the [document coordinator](document.md). The remaining
-generation model is scheduled for retirement with #254 M4 scoped writes.
+explicit command-time transformations, serialization and compatibility oracles.
+Live rendering, identity and generation writes use the [document coordinator](document.md).
+A materialized model never grants authority to an asynchronous callback.
 
 ## Core Principle: Everything Is a Block
 
@@ -40,18 +40,11 @@ Exchange = {
 
 ## Lifecycle
 
-The model is built once per `M.respond` call and lives through the entire response lifecycle:
-
-- **Streaming**: ordinary writes reduce and replace only the current insertion
-  block. A late `🧠:[END]` is the sole wider case: it reconciles only the
-  recorded provisional thinking opener through the insertion block. Neither
-  path reparses the chat.
-- **Tool loop**: `add_block` appends 🔧:/📎: blocks. The model is passed to recursive `M.respond` calls — no rebuilding.
-- **Pending presentation**: the current spinner/status is an extmark outside the model; see [Response Progress](response_progress.md). Legacy spinner block kinds remain tolerated by consumers.
-- **Prompt append**: uses `exchange_total_size` to compute insertion point.
-- **Folding**: live folds use the document index, independent of this model.
-
-Because the model is live state, `chat_respond` protects every pending async write with a chat lease anchored on an `invalidate=true` extmark on the response's agent-header line (#138). The anchor distinguishes Parley-owned writes from structural edits: streaming and ordinary edits move the anchor (valid), while deleting the header — undo/redo or other structural drift — invalidates the pending response instead of reconciling the model against a changed serialized transcript. (Pre-#138 the lease keyed on `changedtick` and committed each Parley write's new tick; the extmark anchor makes that commit unnecessary.)
+A command may build a temporary model from its captured parser snapshot. It does
+not survive as a live write registry. Provider chunks, tool result slots and
+prompt insertion use document grants through the [response session](lifecycle.md#response-parleychatrespond--m-cr--c-gc-g).
+Pending progress remains independent decoration. A callback must resolve current
+scoped authority; accumulated block sizes cannot authorize a future write.
 
 ## Fold reconciliation
 
@@ -71,8 +64,7 @@ See [document consumers](document.md#live-consumers) for paging and cost bounds.
 `answer_structure` reducer supplies semantic answer spans; the parser trims
 leading/trailing blank lines from item content, while adjacent absolute spans
 compile into relative gaps. Historical chats do not need canonical spacing.
-Streaming performs the same compilation from its bounded active-segment
-sections when replacing the insertion span.
+Streaming updates the shared document index from exact native edit receipts.
 
 ## API
 
