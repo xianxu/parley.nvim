@@ -7,21 +7,31 @@ local function copy(t)
     if type(t)~='table'then return t end
     local out={};for k,v in pairs(t)do out[k]=copy(v)end;return out
 end
-local function inside(parent,path)
-    return parent=='/' or path==parent or path:sub(1,#parent+1)==parent..'/'
+-- Component ordering keeps every subtree contiguous. Hashes only choose a
+-- sort order; exact component equality and a lexical collision tie-break keep
+-- ancestry checks exact, including adversarial collisions.
+local function compare(a,b)
+    local count=math.min(#a,#b)
+    for i=1,count do
+        local x,y=a[i],b[i]
+        if x.text~=y.text then
+            if x.hash~=y.hash then return x.hash<y.hash and -1 or 1,false end
+            return x.text<y.text and -1 or 1,false
+        end
+    end
+    return #a<#b and -1 or #a>#b and 1 or 0,true
 end
-local function conflict(a,b)
-    if a.scope=='global' or b.scope=='global'then return true end
-    if a.mode=='read' and b.mode=='read'then return false end
-    return a.path==b.path or a.scope=='subtree' and inside(a.path,b.path)
-        or b.scope=='subtree' and inside(b.path,a.path)
-end
-local function overlaps(a,b)
-    for _,x in ipairs(a.claims)do for _,y in ipairs(b.claims)do if conflict(x,y)then return true end end end
+local function intersects(a,b)
+    local i,j=1,1
+    while a[i] and b[j]do
+        local x,y=a[i],b[j];local order,prefix=compare(x.parts,y.parts)
+        if order==0 or prefix and (order<0 and x.subtree or order>0 and y.subtree)then return true end
+        if order<0 then i=i+1 else j=j+1 end
+    end
     return false
 end
-local function waiting_before(a,b)
-    return a.document==b.document or a.generation==b.generation or overlaps(a,b)
+local function overlaps(a,b)
+    return a.global or b.global or intersects(a.writes,b.all) or intersects(a.all,b.writes)
 end
 local function path_valid(path)
     return ref(path) and path:sub(1,1)=='/' and not path:find('%z')
@@ -46,7 +56,28 @@ local function request(value,limits)
         elseif (c.scope~='file' and c.scope~='subtree') or not path_valid(c.path)then return nil end
         claims[i]={scope=c.scope,mode=c.mode,path=c.path}
     end
-    return {id=value.id,document=value.document,generation=value.generation,claims=claims,status='queued'}
+    local all,writes,global,components={},{},false,{}
+    for _,c in ipairs(claims)do
+        if c.scope=='global'then global=true
+        else
+            local parts={}
+            for text in c.path:gmatch('[^/]+')do
+                local component=components[text]
+                if not component then
+                    local hash=5381
+                    for i=1,#text do hash=(hash*33+text:byte(i))%4294967296 end
+                    component={text=text,hash=hash};components[text]=component
+                end
+                parts[#parts+1]=component
+            end
+            local item={parts=parts,subtree=c.scope=='subtree'}
+            all[#all+1]=item;if c.mode=='write'then writes[#writes+1]=item end
+        end
+    end
+    local function less(a,b)return compare(a.parts,b.parts)<0 end
+    table.sort(all,less);table.sort(writes,less)
+    return {id=value.id,document=value.document,generation=value.generation,claims=claims,status='queued',
+        all=all,writes=writes,global=global}
 end
 local function capacity(s,record)
     local running,document,generation=0,0,0
@@ -57,10 +88,25 @@ local function capacity(s,record)
     end end
     return running<s.limits.running and document<s.limits.per_document and generation<s.limits.per_generation
 end
-local function eligible(s,record,older)
+local function available(s,record)
     if not capacity(s,record)then return false end
     for _,r in pairs(s.records)do if r.status~='queued' and overlaps(record,r)then return false end end
-    for _,id in ipairs(older)do if waiting_before(record,s.records[id])then return false end end
+    return true
+end
+local function eligible(s,record,older,blocked_prefix)
+    if not available(s,record)then return false end
+    for i,id in ipairs(older)do
+        local waiter=s.records[id]
+        if overlaps(record,waiter)then return false end
+        -- A blocked claim does not reserve its owner's unrelated resources.
+        -- A runnable older waiter does retain first use of newly freed capacity
+        -- until pump admits it. Check its preceding conflicts, not owner names.
+        if not blocked_prefix and available(s,waiter)then
+            local blocked=false
+            for j=1,i-1 do if overlaps(waiter,s.records[older[j]])then blocked=true;break end end
+            if not blocked then return false end
+        end
+    end
     return true
 end
 local function changed(s)
@@ -94,7 +140,9 @@ function M.pump(s)
     local next_state=changed(s);next_state.queue={};local admitted={}
     for _,id in ipairs(s.queue)do
         local record=next_state.records[id]
-        if eligible(next_state,record,next_state.queue)then
+        -- Earlier retained waiters were already blocked in this pump. Adding
+        -- running claims cannot make them runnable, so reuse that proof.
+        if eligible(next_state,record,next_state.queue,true)then
             record=copy(record);record.status='admitted';next_state.records[id]=record;admitted[#admitted+1]=id
         else next_state.queue[#next_state.queue+1]=id end
     end

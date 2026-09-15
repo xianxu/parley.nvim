@@ -1205,3 +1205,14 @@ blocked claims; conflicting and runnable-capacity waiters retain FIFO priority.
 Public tests cover actual provider/Scheduler/native FS+Tasker concurrency, draft
 editing, frozen capabilities, Stop/reload handoff and operator physical-evidence
 refusal (ARCH-ORDER, ARCH-FUNERAL, ARCH-CONSTRAINTS, ARCH-DRY).
+
+### 2026-09-15 — Bound resource queue callback work
+
+Reason: worst-case128queued/32claims caused a644ms synchronous pump despite finite
+admission counts. Delta: cache exact component-ordered claim intersections and
+reuse the already-blocked prefix proof during one pump. Preserve FIFO conflicts,
+runnable capacity priority and disjoint same-document bypass. Five native samples
+measure max~13ms for both ordinary and4000-byte component chains; all-disjoint
+capacity queues are below0.1ms. No limits changed. A deterministic JIT-disabled
+VM-call budget fails the previous implementation; exact hash-collision/ancestry
+oracles defend correctness (ARCH-CONSTRAINTS, ARCH-PURPOSE).

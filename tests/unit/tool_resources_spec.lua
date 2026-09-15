@@ -47,6 +47,53 @@ describe('pure tool resource admission',function()
         assert.same({running=2,queued=2,unknown=1},R.stats(s))
         s=R.cancel(s,'b');s=release(s,'d');local ready;s,ready=R.pump(s);assert.same({'e'},ready)
     end)
+    it('lets disjoint work in the same document and generation bypass an unknown conflict',function()
+        local s=admitted(R.new(),request('unknown',{claim('/one/a')}));s=R.unknown(s,'unknown')
+        local waiting=request('waiting',{claim('/one/a')});waiting.generation='later'
+        local result;s,result=R.admit(s,waiting);assert.equals('queued',result.status)
+        local next_generation=request('next',{claim('/two/c')});next_generation.generation='next'
+        s=admitted(s,next_generation)
+        s=admitted(s,request('same-generation',{claim('/three/d')}))
+        assert.equals(1,R.stats(s).unknown);assert.equals(1,R.stats(s).queued)
+        s=release(s,'unknown');local ready;s,ready=R.pump(s);assert.same({'waiting'},ready)
+    end)
+    it('reserves newly freed capacity for older runnable waiters',function()
+        local s=admitted(R.new({running=1}),request('running',{claim('/a')},'a'))
+        local result;s,result=R.admit(s,request('older',{claim('/b')},'b'));assert.equals('queued',result.status)
+        s=release(s,'running')
+        s,result=R.admit(s,request('younger',{claim('/c')},'c'));assert.equals('queued',result.status)
+        local ready;s,ready=R.pump(s);assert.same({'older'},ready)
+        s=release(s,'older');s,ready=R.pump(s);assert.same({'younger'},ready)
+    end)
+    it('bounds pump work for a full queue of maximum-width dependency chains',function()
+        local function wide(n)
+            local claims={}
+            for i=1,30 do claims[#claims+1]=claim('/unique/'..n..'/'..i)end
+            claims[31]=claim('/chain/'..(n-1));claims[32]=claim('/chain/'..n)
+            return request(tostring(n),claims,tostring(n))
+        end
+        local s=admitted(R.new(),wide(0));s=R.unknown(s,'0')
+        for n=1,128 do local result;s,result=R.admit(s,wide(n));assert.equals('queued',result.status)end
+        local old,mask,count=debug.gethook();local calls=0
+        local budget=128*128*32*6 -- queue pairs, linear claim walks, VM call overhead
+        local compiled=jit.status();jit.off();jit.flush()
+        debug.sethook(function()
+            calls=calls+1;if calls==budget+1 then error('queue work exceeded bounded call budget')end
+        end,'c')
+        local ok,next_state,ready=pcall(R.pump,s)
+        debug.sethook(old,mask,count)
+        if compiled then jit.on()end
+        assert.is_true(ok,tostring(next_state));assert.same({},ready)
+        assert.equals(128,R.stats(next_state).queued);assert.is_true(calls>0 and calls<=budget)
+        s=admitted(s,wide(999));assert.equals(2,R.stats(s).running)
+    end)
+    it('distinguishes sibling punctuation from descendant component intervals',function()
+        local s=admitted(R.new(),request('a',{claim('/a','write','subtree')}))
+        s=admitted(s,request('sibling',{claim('/a-else','write'),claim('/a.else','write'),claim('/Aa','write','subtree')},'other'))
+        local result;s,result=R.admit(s,request('child',{claim('/a/child','read')},'child'))
+        assert.equals('queued',result.status)
+        s=admitted(s,request('hash-collision',{claim('/B@/child','write')},'collision'))
+    end)
     it('copies claims and rejects malformed paths, limits, and duplicate identities',function()
         local initial=R.new();local req=request('a',{claim('/a')});local s=admitted(initial,req)
         req.claims[1].path='/elsewhere';assert.equals('/a',R.get(s,'a').claims[1].path)
@@ -99,7 +146,7 @@ describe('pure tool resource admission',function()
                         rand(2)==1 and 'read' or 'write',rand(2)==1 and 'file' or 'subtree')end
                     requests[id]=claims
                     local expected=#active<16 and eligible(id,active) and eligible(id,queue)
-                    local result;s,result=R.admit(s,request(id,claims,id))
+                    local result;s,result=R.admit(s,request(id,claims,'shared'))
                     assert.equals(expected and 'admitted' or 'queued',result.status)
                     if expected then active[#active+1]=id else queue[#queue+1]=id end
                 end

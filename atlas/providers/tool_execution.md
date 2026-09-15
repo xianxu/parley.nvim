@@ -152,3 +152,13 @@ plus `max_records`, `max_result_bytes`, `max_total_result_bytes`, `max_file_byte
 Per-agent result limits may be smaller. Confirmed backup footers count toward the
 result budget; an unrepresentable footer produces a bounded error while the
 independent operation evidence remains inspectable.
+
+### Maximum-queue work check
+
+The resource reducer caches exact component-ordered claim indexes and reuses the
+blocked-prefix proof within one pump. A128-waiter/32-claim chain measured roughly
+644ms before this change and at most13ms in five native samples after it. A
+4000-byte shared component produced a similar13ms result; all-disjoint capacity
+queues stayed below0.1ms. These are diagnostic timings, not latency guarantees.
+A JIT-disabled VM-call regression bounds deterministic pump work; collision tests
+ensure cached ordering never weakens exact path/ancestor conflicts.

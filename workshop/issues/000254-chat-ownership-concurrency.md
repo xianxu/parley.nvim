@@ -1223,3 +1223,13 @@ measurement exposed a644ms queue scan and is being optimized with deterministic
 work tests; final mapped M6 verification waits for that release. M4 is separately
 fixing CodexBR18/19 and will rerun its complete146-file union. M5 remains verified
 but cannot close before M4. No main merge or whole-issue completion is claimed.
+
+### 2026-09-15 M6 resource-work checkpoint
+
+Resource queue performance fix released: ten tests pass including1800 generated
+shared-owner events, collision/ancestry checks and a deterministic VM-call budget.
+Worst observed chain pump drops644ms→13ms; long components remain~13ms, no caps
+changed. Two-file lint and scoped diffcheck clean. Logs:/tmp/parley254-resource-
+perf-{before,samples,long-samples,disjoint}.log and resource-work-{red,green}.log.
+All M6 runtime work is checkpointed; full140-file canonical verification is ready
+once the ongoing M4 full-run finishes. Public concurrency tests already pass.
