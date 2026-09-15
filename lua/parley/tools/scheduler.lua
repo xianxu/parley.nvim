@@ -153,7 +153,7 @@ function M.new(opts)
             return r.op,accepted.status
         end
         if accepted.status~='accepted'then return nil,accepted.status end
-        serial=serial+1;local op={};local r={op=op,id='operation:'..serial,key=accepted.key,scope=scope,definition=def,capability_ref=scope.id..':'..spec.name,callbacks=callbacks or {},bytes=0,version=0}
+        serial=serial+1;local op={};local r={op=op,id='operation:'..serial,key=accepted.key,scope=scope,document=scope.document,claims=plain(spec.claims),name=spec.name,definition=def,capability_ref=scope.id..':'..spec.name,callbacks=callbacks or {},bytes=0,version=0}
         local admission;resources,admission=R.admit(resources,{id=r.id,document=scope.document,generation=scope.id,claims=spec.claims})
         if admission.status~='admitted' and admission.status~='queued'then transition(r,{type='reject'});ledger=O.forget(ledger,r.key);return nil,admission.status end
         records[op]=r;by_key[r.key]=r;by_id[r.id]=r;scope.count=scope.count+1
@@ -196,7 +196,7 @@ function M.new(opts)
         end end
         arm()
     end
-    function service:snapshot(op)local r=records[op];if not r then return nil end;return {effect=r.effect,certainty=r.known and 'known' or 'unknown',physical_resolved=r.physical==true,result=result_copy(r.result or {})}end
+    function service:snapshot(op)local r=records[op];if not r then return nil end;return {id=r.id,name=r.name,document=r.document,logical_generation=r.scope.logical,claims=plain(r.claims),evidence=plain(r.evidence or {}),effect=r.effect,certainty=r.known and 'known' or 'unknown',physical_resolved=r.physical==true,result=result_copy(r.result or {})}end
     function service:stats()
         local stats=R.stats(resources);stats.records=O.stats(ledger).records;stats.result_bytes=retained;stats.generations=scope_count;stats.polling=0
         for _,r in pairs(records)do if r.poll then stats.polling=stats.polling+1 end end;return stats

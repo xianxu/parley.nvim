@@ -265,7 +265,24 @@ local function normalize(call,page,opts,result,evidence)
         footer='\npre-image: '..evidence.backup_path
         if result.content:sub(-#footer)==footer then result.content=result.content:sub(1,-#footer-1)end
     end
-    if opts.max_bytes then result.content=M.truncate(result.content,opts.max_bytes)end
+    local budget=opts.max_bytes
+    if footer and budget and #footer>budget then
+        result.content=('Confirmed backup path exceeds result limit'):sub(1,budget)
+        result.is_error=true;result.truncated=true;return result
+    end
+    if budget then
+        budget=budget-(footer and #footer or 0)
+        if #result.content>budget then
+            local marker=string.format('\n... [truncated: %d bytes omitted]',#result.content)
+            local keep=math.max(0,budget-#marker)
+            for _=1,3 do
+                marker=string.format('\n... [truncated: %d bytes omitted]',#result.content-keep)
+                keep=math.max(0,budget-#marker)
+            end
+            result.content=#marker<=budget and result.content:sub(1,keep)..marker or result.content:sub(1,budget)
+            result.truncated=true
+        end
+    end
     if footer then result.content=result.content..footer end
     return result
 end

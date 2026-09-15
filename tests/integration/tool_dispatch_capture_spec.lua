@@ -104,10 +104,16 @@ describe('captured async tool dispatch',function()
         assert.equals('one\ntwo\nthree',result.content)
     end)
     it('preserves only positively confirmed pre-image evidence when capping writes',function()
-        local prepared=assert(Dispatch.prepare(capture(definition('tool','write'),{max_bytes=4}),call()))
-        local result={content='long successful write output'}
+        local prepared=assert(Dispatch.prepare(capture(definition('tool','write'),{max_bytes=256}),call()))
+        local result={content=string.rep('write output ',100)}
         local normalized=Dispatch.normalize(prepared.token,result,{backup_confirmed=true,backup_path=root..'/backup'})
         assert.truthy(normalized.content:find('\npre-image: '..root..'/backup',1,true))
+        assert.is_true(#normalized.content<=256)
         assert.is_nil(Dispatch.normalize(prepared.token,result,{backup_path=root..'/backup'}).content:find('pre-image:',1,true))
+    end)    it('refuses an unrepresentable confirmed footer within the total result limit',function()
+        local prepared=assert(Dispatch.prepare(capture(definition('tool','write'),{max_bytes=4}),call()))
+        local result=Dispatch.normalize(prepared.token,{content='done'},{backup_confirmed=true,backup_path=root..'/backup'})
+        assert.is_true(result.is_error);assert.is_true(result.truncated);assert.is_true(#result.content<=4)
     end)
+
 end)
