@@ -306,9 +306,16 @@ end
 -- cmd.Stop
 --------------------------------------------------------------------------------
 
--- Stop is scoped to the current chat's captured sessions. Child operations
--- retain their positive-resolution barrier after cancellation is requested.
+-- Stop selects one captured generation; StopDocument explicitly selects all.
+-- Child operations retain their positive-resolution barrier after cancellation.
 M.cmd_stop = function()
+    if original_free_cursor_value ~= nil then
+        _parley.config.chat_free_cursor = original_free_cursor_value
+        original_free_cursor_value = nil
+    end
+    return M.stop_at_cursor(vim.api.nvim_get_current_buf(), vim.api.nvim_win_get_cursor(0)[1] - 1)
+end
+M.cmd_stop_document = function()
     if original_free_cursor_value ~= nil then
         _parley.config.chat_free_cursor = original_free_cursor_value
         original_free_cursor_value = nil
@@ -1308,22 +1315,56 @@ end
 -- Active response membership is keyed by the captured buffer. A session owns
 -- its document grants and effects; membership is only for explicit Stop/UI.
 local responses = {}
+local response_order = 0
 function M.response_snapshot(session)
     return require('parley.response_session').snapshot(session)
+end
+local function cancel_entry(entry)
+    if entry.topic then require('parley.response_topic').cancel(entry.topic, 'operator stopped response') end
+    if entry.session then
+        require('parley.response_session').cancel(entry.session, 'operator stopped response')
+        return 1
+    end
+    return 0
 end
 function M.cancel_responses(buf)
     local group = responses[buf]
     if not group then return 0 end
     local copy = {}; for entry in pairs(group) do copy[#copy + 1] = entry end
     local count = 0
-    for _, entry in ipairs(copy) do
-        if entry.topic then require('parley.response_topic').cancel(entry.topic, 'operator stopped response') end
-        if entry.session then
-            require('parley.response_session').cancel(entry.session, 'operator stopped response')
-            count = count + 1
+    for _, entry in ipairs(copy) do count = count + cancel_entry(entry) end
+    return count
+end
+function M.stop_at_cursor(buf, row)
+    local D = require('parley.document')
+    local doc, group = D.get(buf), responses[buf]
+    if not doc or not group then return 0 end
+    local epoch = D.snapshot(doc).epoch
+    local exchange = D.exchange(doc, row)
+    local choices = {}
+    for entry in pairs(group) do
+        if entry.session and entry.doc == doc and entry.epoch == epoch then
+            local snapshot = M.response_snapshot(entry.session)
+            local generation = snapshot.generation
+            if exchange.status == 'ready' and generation and generation.exchange == exchange.identity then
+                return cancel_entry(entry)
+            end
+            choices[#choices + 1] = {entry = entry, label = entry.label,
+                generation = generation and generation.generation}
         end
     end
-    return count
+    if #choices == 0 then return 0 end
+    table.sort(choices, function(a,b) return a.entry.order < b.entry.order end)
+    local admitted = {}; for _, choice in ipairs(choices) do admitted[choice] = true end
+    vim.ui.select(choices, {prompt = 'Stop response generation:', format_item = function(choice)
+        return choice.label .. ' [generation ' .. tostring(choice.generation or 'preparing') .. ']'
+    end}, function(choice)
+        if not choice or not admitted[choice] then return end
+        if D.get(buf) ~= doc or D.snapshot(doc).epoch ~= epoch
+            or responses[buf] ~= group or not group[choice.entry] then return end
+        cancel_entry(choice.entry)
+    end)
+    return 0
 end
 
 local function start_scoped_response(frame)
@@ -1369,7 +1410,9 @@ local function start_scoped_response(frame)
     exchange.answer = nil
     local doc = D.get(buf) or D.attach(buf, {patterns = require('parley.highlight_structure').patterns(config)})
     local group = responses[buf] or {}; responses[buf] = group
-    local entry = {}; group[entry] = true
+    response_order = response_order + 1
+    local entry = {doc = doc, epoch = D.snapshot(doc).epoch, order = response_order,
+        label = (frame.lines[question.line_start] or 'Response'):sub(1, 256)}; group[entry] = true
     local latest, messages, final_payload, topic_source, topic_parent, failure_notice
     local message_lead = 0
     local topic_attempted, main_finished, topic_finished = false, false, true
@@ -1454,8 +1497,15 @@ local function start_scoped_response(frame)
             if self.resolved then done() else self.cancel_done = done end
             if self.remote then self.remote:cancel() end
         end
+        local function logical_failure(reason)
+            if operation.cancelled or operation.failed then return end
+            operation.failed = true
+            cb.failed(reason)
+            local message = tostring(reason):match('^[^\n]+') or 'unknown preparation failure'
+            pcall(vim.notify, 'Response not started: ' .. message, vim.log.levels.WARN)
+        end
         local function fail(reason)
-            if not operation.cancelled then cb.failed(reason) end
+            logical_failure(reason)
             resolve()
         end
         local function build(remote, remote_error)
@@ -1475,7 +1525,8 @@ local function start_scoped_response(frame)
                     messages, info.model, info.provider, info.tools)
                 local assets = require('parley.assets')
                 if assets.has_image(final_payload) and assets.payload_size(final_payload) > assets.MAX_REQUEST_BYTES then
-                    error('request with images exceeds the request byte limit')
+                    error(string.format('request refused: image payload exceeds the %d-byte limit',
+                        assets.MAX_REQUEST_BYTES), 0)
                 end
                 cb.prepared({buf = buf, provider = info.provider, model = info.model,
                     messages = messages, payload = final_payload, response_profile = {
@@ -1504,9 +1555,7 @@ local function start_scoped_response(frame)
             local ok, remote = pcall(M.resolve_remote_references, {parsed_chat = parsed, config = config,
                 chat_file = frame.file_name, exchange_idx = index,
                 cancelled = function()return operation.cancelled or ctx.cancelled()end,
-                on_failure = function(reason)
-                    if not operation.cancelled then cb.failed(reason) end
-                end}, build)
+                on_failure = logical_failure}, build)
             if not ok then fail(remote)
             else
                 operation.remote = remote

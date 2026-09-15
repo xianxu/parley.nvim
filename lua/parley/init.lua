@@ -1579,9 +1579,9 @@ M._get_chat_remote_reference_cache = function(f) return chat_respond.get_chat_re
 M._format_remote_reference_error_content = function(u, e) return chat_respond.format_remote_reference_error_content(u, e) end
 M._format_missing_remote_reference_cache_content = function(u) return chat_respond.format_missing_remote_reference_cache_content(u) end
 
--- stop receiving responses for all processes and clean the handles
----@param signal number | nil # signal to send to the process
+-- Stop one captured response generation, or explicitly stop this document.
 M.cmd.Stop = function(signal) chat_respond.cmd_stop(signal) end
+M.cmd.StopDocument = function() chat_respond.cmd_stop_document() end
 
 --------------------------------------------------------------------------------
 -- Keybinding help (driven by keybinding_registry)

@@ -2221,7 +2221,7 @@ describe("attachments (#231): both builders, one budget", function()
         -- Drives the real send path: a chat file on disk, the dispatcher's
         -- prepare_payload stubbed to hand back an image payload over a lowered
         -- limit, and query stubbed to record whether anything was posted.
-        it("refuses to post an image payload over the request limit; the shell is torn down as on any pre-start abort", function()
+        it("refuses an oversized image request before changing its captured source", function()
             vim.fn.mkdir(chat_dir, "p")
             local file = chat_dir .. "/" .. TS .. "_guard.md"
             vim.fn.writefile(vim.split("# topic: Guard\n- file: test.md\n---\n\n💬: look\n![](" .. rel("a.png") .. ")\n", "\n"), file)
@@ -2239,9 +2239,14 @@ describe("attachments (#231): both builders, one budget", function()
             parley.dispatcher.query = function() posted = posted + 1 end
             vim.notify = function(msg) notices[#notices + 1] = tostring(msg) end
 
+            local before = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
             with_limits({ MAX_REQUEST_BYTES = 200 }, function()
-                parley.chat_respond({ range = 0 })
-                vim.wait(500, function() return #notices > 0 end, 10)
+                local session = parley.chat_respond({ range = 0 })
+                assert.is_not_nil(session)
+                assert.is_true(vim.wait(2000, function()
+                    return require('parley.chat_respond').response_snapshot(session).status == 'terminal'
+                end, 10), 'preparation failure must settle')
+                assert.equals('prepare_failed', require('parley.chat_respond').response_snapshot(session).generation.outcome)
             end)
             parley.dispatcher.prepare_payload, parley.dispatcher.query, vim.notify = saved_prepare, saved_query, saved_notify
 
@@ -2251,11 +2256,8 @@ describe("attachments (#231): both builders, one budget", function()
                 if n:find("request refused", 1, true) and n:find("200-byte limit", 1, true) then refused = true end
             end
             assert.is_true(refused, "expected a refusal notice, got: " .. vim.inspect(notices))
-            -- The dispatcher's own pre-start abort leaves exactly this: the
-            -- empty stream placeholder (and its margin) collapsed, the agent
-            -- header line kept. Same teardown, same residue.
-            local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-            assert.matches("^🤖:", lines[#lines], "placeholder must be collapsed; got:\n" .. table.concat(lines, "\n"))
+            assert.same(before, vim.api.nvim_buf_get_lines(buf, 0, -1, false),
+                'request refusal must precede answer preparation')
             pcall(vim.api.nvim_buf_delete, buf, { force = true })
         end)
     end)

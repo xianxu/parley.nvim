@@ -290,11 +290,11 @@ Each M-row below is a real `sdlc milestone-close` boundary, with its own fresh-c
 
 **Files:** create `lua/parley/generation.lua`, `generation_runner.lua`, `tests/unit/generation_spec.lua`, `tests/integration/generation_sequences_spec.lua`; modify `lua/parley/chat_respond.lua`, `dispatcher.lua`, `tool_loop.lua`, `chat_pending.lua`, `chat_lease.lua`, `chat_history.lua`, `init.lua`, `highlighter.lua`, `exchange_clipboard.lua`, `skills/review/init.lua`; extend `tests/integration/create_handler_spec.lua`, `chat_ownership_spec.lua`, `chat_pending_spec.lua`, `tests/unit/chat_history_spec.lua`; add `tests/arch/document_ownership_spec.lua`; update `atlas/chat/lifecycle.md`, `atlas/chat/response_progress.md`, user help/README where behavior changes, `atlas/traceability.yaml`.
 
-- [ ] Extract generation transitions/runner, acquire before provider readiness/reference preparation, and freeze input dependencies. Stale preparation callbacks cannot act on a new buffer/generation. Keep presentation reducer subordinate to this lifecycle.
-- [ ] Convert dispatcher stream assembly to position-free output intents; route text/tool blocks/topic/header/completion/failure cleanup through document operations. Reserve a tool round as all call blocks followed by ordered result slots; assign stable child operation/block IDs before dispatch. Support concurrent disjoint generations and delegated child-slot writes through the production coordinator using controllable async producers. M4 does not claim built-in tool effects run concurrently yet; their production async execution/resource/outcome boundary is M6. Delete naked index/range authority and tool-loop live-model registry after caller migration.
-- [ ] Sweep all chat mutation entry points: response/regeneration, tool append/cancel repair, auto-topic, reference repair, definition/drill-in transforms, marker insertion, cut/paste/prune/branch/move/delete. Explicit user operations get validated document transactions; out-of-band edits are still observed as external. Scratch buffers are explicitly classified outside this boundary.
-- [ ] Enforce `editor.can_join_undo` and mutation receipts through the real editor-history strategy below.
-- [ ] Drive `generation_runner.dispatch` through the deterministic scheduling strategy below, then repeat via actual asynchronous builtin dispatch at M6.
+- [x] Extract generation transitions/runner, acquire before provider readiness/reference preparation, and freeze input dependencies. Stale preparation callbacks cannot act on a new buffer/generation. Keep presentation reducer subordinate to this lifecycle.
+- [x] Convert dispatcher stream assembly to position-free output intents; route text/tool blocks/topic/header/completion/failure cleanup through document operations. Reserve a tool round as all call blocks followed by ordered result slots; assign stable child operation/block IDs before dispatch. Support concurrent disjoint generations and delegated child-slot writes through the production coordinator using controllable async producers. M4 does not claim built-in tool effects run concurrently yet; their production async execution/resource/outcome boundary is M6. Delete naked index/range authority and tool-loop live-model registry after caller migration.
+- [x] Sweep all chat mutation entry points: response/regeneration, tool append/cancel repair, auto-topic, reference repair, definition/drill-in transforms, marker insertion, cut/paste/prune/branch/move/delete. Explicit user operations get validated document transactions; out-of-band edits are still observed as external. Scratch buffers are explicitly classified outside this boundary.
+- [x] Enforce `editor.can_join_undo` and mutation receipts through the real editor-history strategy below.
+- [x] Drive `generation_runner.dispatch` through the deterministic scheduling strategy below, then repeat via actual asynchronous builtin dispatch at M6.
 - [ ] Remove obsolete pending controls only when their safety purpose is covered; document that editing active output cancels writing. Run mapped lifecycle/ownership/highlights/exchange/provider-tool suites, `make perf`, update atlas/traceability, commit, close M4.
 
 ### M5 — Batch selection and recoverable replacement
@@ -1009,3 +1009,74 @@ interruption 2 and existing public response compatibility 23; architecture 6.
 Each targeted regression passed after its observed failure. The ownership
 performance mapping now passes all 3 cases at 100/1000/5000 rows. Full performance
 report and the combined mapped validation remain in progress; M4 is not closed.
+
+### 2026-09-15 — M4 combined renderer integration and validation checkpoint
+
+Integrated the M3 review fixes into a separate checkout while the feature branch's
+fifth boundary review remained pinned. Editor/coordinator M4 receipt handling
+already includes the M3 native-frame guards; keep that superset. Fold cleanup
+uses the M3 reentrant ownership fixes. Diagnostic publication combines those
+fences with M4 completion callbacks, retiring old state before any callback may
+create replacement work. Preserve both milestones' revision history and lessons.
+
+The final plan audit corrected Stop to select the captured generation under the
+cursor, otherwise a document-local identity picker. StopDocument explicitly
+cancels all generations in the chat. Picker callbacks validate the original
+document epoch and entry membership; changed focus or retired generations cannot
+redirect cancellation. Four native regressions plus six scoped-response cases pass.
+
+The complete M4 staging performance report passed 30 scenarios with 20 samples
+each. At 5000 rows, median/p95 milliseconds were: ordinary edit 10.08/11.62,
+Enter/join 22.62/24.78, stream+human 54.87/61.47, redraw 0.66/1.41, and fold
+maintenance 1.41/1.76. Streaming visited 18 structural rows and made zero full
+reads; broad repair remained expensive at 4522/4801 ms cumulative convergence.
+The legacy BR10 stream fixture used a different writer, so its timing is not an
+identical workload comparison. This report predates the combined renderer merge;
+combined mapped tests remain required. Full issue performance validation follows
+again at M6. No timing thresholds were loosened.
+
+### 2026-09-15 — M5 implementation seam preparation
+
+Read-only inspection identified the next required revision seam. Existing sequence
+text certificates retain scalar aggregates and handle strings, reject edit/undo
+ABA through monotonic stamps, and do not retain detached trees. They are the
+candidate substrate for batch question/context evidence. User transaction guards
+are limited to 64 and intentionally invalidate closed-boundary contact; they must
+not be expanded into an unbounded batch membership registry.
+
+Before batch integration, prove a narrow regional text-certificate mode that
+ignores outside neighbors while validating inside endpoints and current semantic
+bounds. Preserve existing certificate behavior for other consumers. Also prove
+that an exact owned newline insertion at the old question EOL can retain its
+unchanged source row/text stamp while inserting the suffix; ambiguous/external
+receipts cannot request this exemption. A proposed Document capture_revision /
+validate_revision seam binds epoch, exchange identity, question/context bounds,
+and text proof. Tests must cover predecessor regeneration, external boundary
+edits, edit/undo ABA, semantic-boundary changes, >64 selected questions, and token
+retention across detach. This is design preparation, not implemented evidence.
+
+Batch admission will replace recursive ordinal/cursor retargeting with fixed
+membership and an active-leg token. All terminal/rejected outcomes must reach its
+controller, completed progress survives later failures, and explicit resume
+revalidates remaining input. Recovery publication remains a prerequisite of the
+shared single-response preparation path, so single and batch replacements receive
+the same protection. No M5 scope is dropped or marked complete by this note.
+
+### 2026-09-15 — M4 mapped verification and request-refusal correction
+
+The combined tree passes all 131 unique files selected by chat/document,
+chat/lifecycle, chat/ownership, chat/exchange_model, ui/highlights, and
+providers/tool_use: 1624 tests, zero failures/errors. The missing ownership map
+was added explicitly instead of treating an empty mapping as success. Full lint
+passes across 556 Lua files. The attachment send-guard test exposed a missing
+preparation failure notice; preparation now reports logical failure once while
+retaining its independent IO completion barrier. An oversized image request
+reports its byte limit and leaves the captured buffer unchanged before dispatch.
+The real build-message suite passes all 84 cases, and remote lifetime tests still
+pass after that correction. Logs are summarized in
+/tmp/parley254-m4-mapped-verification.txt.
+
+M4 implementation tasks are checked; the final combined performance run and SDLC
+boundary review remain outstanding. The main feature checkout is still pinned
+for the M3 ledger-disposition review. No milestone or issue is marked closed by
+this checkpoint, and no merge to main is authorized before operator live testing.

@@ -21,7 +21,8 @@ its feature pages, and the three tutorials without reading personal files.
 - [Chat Memory](chat/memory.md): Context windows and optional summarization.
 - [Memory Preferences](chat/memory_prefs.md): Opt-in preference profiles from past conversations.
 - [Chat Parsing](chat/parsing.md)
-- [Incremental Document Structure](chat/document.md): Bounded structural repair core under integration.
+- [Incremental Document Structure](chat/document.md): Shared index and bounded structural repair.
+- [Chat Write Ownership](chat/ownership.md): Captured sources, scoped write grants, and cancellation evidence.
 - [Exchange Model](chat/exchange_model.md)
 - [Inline Branch Links](chat/inline_branch_links.md): Create a sub-chat and follow a standalone or inline branch.
 - [Drill-In Markers](chat/drill_in.md)

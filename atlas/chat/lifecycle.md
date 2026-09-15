@@ -211,13 +211,15 @@ Recovery of a deleted chat requires your own backup or version-control copy.
 
 ## Stopping and correcting a response
 
-`:ParleyStop` (`<C-g>x`) stops running responses. Normal/Insert `<M-CR>` on a
+`:ParleyStop` (`<C-g>x`) stops a selected response generation. Normal/Insert `<M-CR>` on a
 previous answered exchange replaces that answer; visual `<M-CR>` instead defines
 the selected term. Ready drill-in comments can turn resubmission into a follow-up
 that preserves the original answer; see [Drill-In Markers](drill_in.md).
 Undo and redo use native Neovim history. Editing an active answer revokes its
 writer; edits to a disjoint question can proceed while that answer streams.
-`:ParleyStop` acts on response owners captured for the current chat. Save a separate
+`:ParleyStop` stops the generation under the cursor. Outside an active generation,
+it offers the current chat's captured generations in a picker.
+`:ParleyStopDocument` cancels all generations in the current chat. Save a separate
 copy or use version control when you need durable recovery beyond editor history.
 
 ## Implementation and checks

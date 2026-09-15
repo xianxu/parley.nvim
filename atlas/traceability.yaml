@@ -185,6 +185,7 @@ atlas:
       - tests/integration/response_completion_spec.lua
       - tests/integration/response_topic_spec.lua
       - tests/integration/chat_scoped_response_spec.lua
+      - tests/integration/chat_stop_generation_spec.lua
       - tests/integration/document_owned_frame_spec.lua
       - tests/integration/document_append_extent_spec.lua
       - tests/integration/document_structural_locality_spec.lua
@@ -273,6 +274,31 @@ atlas:
       - tests/arch/single_resolver_spec.lua
       - tests/integration/chat_respond_spec.lua
 
+  chat/ownership:
+    code:
+      - lua/parley/document/state.lua
+      - lua/parley/document/editor.lua
+      - lua/parley/document/user_edits.lua
+      - lua/parley/document/replacement.lua
+      - lua/parley/generation.lua
+      - lua/parley/generation_runner.lua
+      - lua/parley/response_session.lua
+      - lua/parley/response_submission.lua
+      - lua/parley/response_provider.lua
+      - lua/parley/response_tools.lua
+    tests:
+      - tests/unit/document_state_spec.lua
+      - tests/unit/document_write_plan_spec.lua
+      - tests/unit/document_coordinator_spec.lua
+      - tests/unit/document_user_edits_spec.lua
+      - tests/integration/document_user_guards_spec.lua
+      - tests/integration/document_edit_spec.lua
+      - tests/integration/document_native_history_spec.lua
+      - tests/integration/generation_sequences_spec.lua
+      - tests/integration/response_session_spec.lua
+      - tests/integration/chat_scoped_response_spec.lua
+      - tests/integration/chat_stop_generation_spec.lua
+      - tests/arch/document_ownership_spec.lua
   chat/document:
     code:
       - lua/parley/line_reader.lua
