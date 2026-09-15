@@ -295,7 +295,7 @@ Each M-row below is a real `sdlc milestone-close` boundary, with its own fresh-c
 - [x] Sweep all chat mutation entry points: response/regeneration, tool append/cancel repair, auto-topic, reference repair, definition/drill-in transforms, marker insertion, cut/paste/prune/branch/move/delete. Explicit user operations get validated document transactions; out-of-band edits are still observed as external. Scratch buffers are explicitly classified outside this boundary.
 - [x] Enforce `editor.can_join_undo` and mutation receipts through the real editor-history strategy below.
 - [x] Drive `generation_runner.dispatch` through the deterministic scheduling strategy below, then repeat via actual asynchronous builtin dispatch at M6.
-- [ ] Remove obsolete pending controls only when their safety purpose is covered; document that editing active output cancels writing. Run mapped lifecycle/ownership/highlights/exchange/provider-tool suites, `make perf`, update atlas/traceability, commit, close M4.
+- [x] Remove obsolete pending controls only when their safety purpose is covered; document that editing active output cancels writing. Run mapped lifecycle/ownership/highlights/exchange/provider-tool suites, `make perf`, update atlas/traceability, commit, close M4.
 
 ### M5 — Batch selection and recoverable replacement
 
@@ -1101,3 +1101,26 @@ M4 implementation tasks are checked; the final combined performance run and SDLC
 boundary review remain outstanding. The main feature checkout is still pinned
 for the M3 ledger-disposition review. No milestone or issue is marked closed by
 this checkpoint, and no merge to main is authorized before operator live testing.
+
+### 2026-09-15 — M4 final boundary evidence
+
+M3 closed at506d2c34; its final suspended-fold fix is integrated at0eb73979.
+All M4 added specs were swept against traceability:13 ownership regressions were
+missing and are now registered. Final unique verification covers146 files and
+1700 tests, zero latest failures/errors/incomplete files. Final-head document
+verification is31files/285tests and ownership25files/211tests; unchanged mappings
+retain their earlier evidence. Full lint558files is clean.
+
+The final mapped document invocation stopped without a complete perf_document
+footer. Its isolated retry passed5tests in31.87seconds under the unchanged50second
+deadline; the remaining15 unrun mapped files then passed198tests. No hard-counter
+regression reproduced and no test limit changed. The original run remains recorded
+as interrupted/failed, with cause unconfirmed; it is not presented as a passing
+command. Consolidated per-file evidence: /tmp/parley254-m4-final-verification.txt.
+
+Integrated make perf passed30scenarios x20samples. Stream/human interleave at5000
+rows used17structuralrows and zero full reads (68.80/114.28ms median/p95). Broad
+repair took11.01/13.02seconds with counters unchanged from staging; reviewer/CPU
+overlap limits timing attribution. This remains an expensive documented exception.
+M4 now enters its mandatory Codex review; M5/M6 stay isolated until their preceding
+boundaries close. No merge to main is authorized before operator live testing.
