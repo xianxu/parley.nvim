@@ -109,6 +109,9 @@ function M.step(worker,input,budget)
     end
     -- Every request has its own frame: a disjoint insertion may have moved the
     -- span since the previous fragment, without changing its relative offsets.
+    if job.request and (job.request.row~=rank.row+job.offset or job.request.anchor_byte~=rank.byte) then
+        job.request=nil
+    end
     if not job.request then
         next_id=next_id+1
         job.request={request_id=next_id,row=rank.row+job.offset,col=job.col,

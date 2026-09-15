@@ -1,12 +1,33 @@
--- Conservative origin-to-witness dependencies. Stable handles are the only
--- position authority; the injected rank adapter resolves them in the live root.
+-- Channel-partitioned conservative dependencies. Stable handles remain the
+-- position authority; no suffix coordinate sweep follows an edit.
 local M = {}
 local Index = {}
 Index.__index = Index
-
+local CHANNELS = require("parley.document.grammar").CHANNELS
+local allowed = {}
+for _, name in ipairs(CHANNELS) do allowed[name] = true end
 local BUDGET = { status = "budget" }
 local function height(node) return node and node.height or 0 end
 local function count(node) return node and node.count or 0 end
+
+local function selected(channels, legacy)
+    local out, seen = {}, {}
+    if legacy then out[1], seen["*"] = "*", true end
+    if channels == nil then
+        if not legacy then return { "*" } end
+        for _, name in ipairs(CHANNELS) do out[#out + 1] = name end
+    else
+        for key, value in pairs(channels) do
+            local name = type(key) == "number" and value or key
+            if type(key) == "number" or value then
+                assert(allowed[name], "unknown dependency channel: " .. tostring(name))
+                seen[name] = true
+            end
+        end
+        for _, name in ipairs(CHANNELS) do if seen[name] then out[#out + 1] = name end end
+    end
+    return out
+end
 
 local function operation(index, opts, fn)
     local limit = opts and opts.budget or 512
@@ -31,147 +52,143 @@ local function operation(index, opts, fn)
     context.adapter = index.rank
     local success, result = pcall(fn, context)
     if not success then
-        if type(result) ~= "table" or (result.status ~= "budget" and result.status ~= "stale") then
-            error(result, 0)
-        end
+        if type(result) ~= "table" or (result.status ~= "budget" and result.status ~= "stale") then error(result, 0) end
         result = { status = result.status, handle = result.handle }
-    else
-        result.status = "ok"
-    end
+    else result.status = "ok" end
     result.work = { dependency_nodes_visited = visited }
     return result
 end
 
--- Each rebuilt node inspects two child summaries; rotations inspect their
--- pivots too. These visits count even when a candidate root is not published.
-local function make(ctx, origin, last, left, right)
-    ctx:visit(left)
-    ctx:visit(right)
-    local farthest = last
-    if left and ctx:rank(left.farthest) > ctx:rank(farthest) then farthest = left.farthest end
-    if right and ctx:rank(right.farthest) > ctx:rank(farthest) then farthest = right.farthest end
-    return {
-        origin = origin, last = last, farthest = farthest, left = left, right = right,
-        height = 1 + math.max(height(left), height(right)), count = 1 + count(left) + count(right),
-    }
+local function make(ctx, origin, first, last, left, right)
+    ctx:visit(left); ctx:visit(right)
+    local farthest, nearest = last, first
+    if left then
+        if ctx:rank(left.farthest) > ctx:rank(farthest) then farthest = left.farthest end
+        if ctx:rank(left.nearest) < ctx:rank(nearest) then nearest = left.nearest end
+    end
+    if right then
+        if ctx:rank(right.farthest) > ctx:rank(farthest) then farthest = right.farthest end
+        if ctx:rank(right.nearest) < ctx:rank(nearest) then nearest = right.nearest end
+    end
+    return { origin = origin, first = first, last = last, farthest = farthest, nearest = nearest,
+        left = left, right = right, height = 1 + math.max(height(left), height(right)),
+        count = 1 + count(left) + count(right) }
 end
-
 local function rotate_left(ctx, node)
-    local pivot = node.right
-    ctx:visit(pivot)
-    local left = make(ctx, node.origin, node.last, node.left, pivot.left)
-    return make(ctx, pivot.origin, pivot.last, left, pivot.right)
+    local pivot = node.right; ctx:visit(pivot)
+    local left = make(ctx, node.origin, node.first, node.last, node.left, pivot.left)
+    return make(ctx, pivot.origin, pivot.first, pivot.last, left, pivot.right)
 end
-
 local function rotate_right(ctx, node)
-    local pivot = node.left
-    ctx:visit(pivot)
-    local right = make(ctx, node.origin, node.last, pivot.right, node.right)
-    return make(ctx, pivot.origin, pivot.last, pivot.left, right)
+    local pivot = node.left; ctx:visit(pivot)
+    local right = make(ctx, node.origin, node.first, node.last, pivot.right, node.right)
+    return make(ctx, pivot.origin, pivot.first, pivot.last, pivot.left, right)
 end
-
-local function balance(ctx, origin, last, left, right)
-    local node = make(ctx, origin, last, left, right)
+local function balance(ctx, origin, first, last, left, right)
+    local node = make(ctx, origin, first, last, left, right)
     if height(left) > height(right) + 1 then
         if height(left.right) > height(left.left) then
-            node = make(ctx, origin, last, rotate_left(ctx, left), right)
+            node = make(ctx, origin, first, last, rotate_left(ctx, left), right)
         end
         return rotate_right(ctx, node)
     elseif height(right) > height(left) + 1 then
         if height(right.left) > height(right.right) then
-            node = make(ctx, origin, last, left, rotate_right(ctx, right))
+            node = make(ctx, origin, first, last, left, rotate_right(ctx, right))
         end
         return rotate_left(ctx, node)
     end
     return node
 end
-
-local function insert(ctx, node, origin, last, position)
-    if not node then
-        -- Allocating a leaf is work even in an empty index.
-        ctx:visit(true)
-        return make(ctx, origin, last)
-    end
+local function insert(ctx, node, origin, first, last, position)
+    if not node then ctx:visit(true); return make(ctx, origin, first, last) end
     ctx:visit(node)
     local current = ctx:rank(node.origin)
     if position < current then
-        return balance(ctx, node.origin, node.last, insert(ctx, node.left, origin, last, position), node.right)
+        return balance(ctx, node.origin, node.first, node.last,
+            insert(ctx, node.left, origin, first, last, position), node.right)
     elseif position > current then
-        return balance(ctx, node.origin, node.last, node.left, insert(ctx, node.right, origin, last, position))
+        return balance(ctx, node.origin, node.first, node.last, node.left,
+            insert(ctx, node.right, origin, first, last, position))
     end
-    -- Coverage with the same start is a single interval. Keep its widest end.
-    if ctx:rank(last) <= ctx:rank(node.last) then return node end
-    return make(ctx, node.origin, last, node.left, node.right)
+    -- Separate channel roots keep unrelated predicates apart. Duplicate origins
+    -- within one channel widen coverage conservatively, including any gap.
+    if ctx:rank(first) >= ctx:rank(node.first) then first = node.first end
+    if ctx:rank(last) <= ctx:rank(node.last) then last = node.last end
+    if first == node.first and last == node.last then return node end
+    return make(ctx, node.origin, first, last, node.left, node.right)
 end
-
--- Join supports arbitrary height differences after a whole suffix detaches.
-local function join(ctx, left, origin, last, right)
+local function join(ctx, left, origin, first, last, right)
     if height(left) > height(right) + 1 then
         ctx:visit(left)
-        return balance(ctx, left.origin, left.last, left.left, join(ctx, left.right, origin, last, right))
+        return balance(ctx, left.origin, left.first, left.last, left.left,
+            join(ctx, left.right, origin, first, last, right))
     elseif height(right) > height(left) + 1 then
         ctx:visit(right)
-        return balance(ctx, right.origin, right.last, join(ctx, left, origin, last, right.left), right.right)
+        return balance(ctx, right.origin, right.first, right.last,
+            join(ctx, left, origin, first, last, right.left), right.right)
     end
-    return make(ctx, origin, last, left, right)
+    return make(ctx, origin, first, last, left, right)
 end
-
 local function prefix(ctx, node, position)
     if not node then return nil end
     ctx:visit(node)
     if ctx:rank(node.origin) >= position then return prefix(ctx, node.left, position) end
-    return join(ctx, node.left, node.origin, node.last, prefix(ctx, node.right, position))
+    return join(ctx, node.left, node.origin, node.first, node.last, prefix(ctx, node.right, position))
 end
-
 local function earliest(ctx, node, first, last)
     if not node then return nil end
     ctx:visit(node)
-    if ctx:rank(node.farthest) < first then return nil end
+    if ctx:rank(node.farthest) < first or ctx:rank(node.nearest) > last then return nil end
     local position = ctx:rank(node.origin)
     if position > last then return earliest(ctx, node.left, first, last) end
-    -- Every origin in the left subtree is already within the upper bound.
-    -- A subtree whose maximum end reaches first therefore contains a match.
     local hit = earliest(ctx, node.left, first, last)
     if hit then return hit end
-    if ctx:rank(node.last) >= first then return node.origin end
+    if ctx:rank(node.first) <= last and ctx:rank(node.last) >= first then return node.origin end
     return earliest(ctx, node.right, first, last)
 end
-
 function M.new(adapter)
     assert(type(adapter) == "table" and type(adapter.rank) == "function", "rank adapter required")
-    return setmetatable({ rank = adapter.rank }, Index)
+    return setmetatable({ rank = adapter.rank, roots = {} }, Index)
 end
-
---- Add inclusive coverage. Equal origin coordinates coalesce to the widest end.
---- Candidate roots are immutable until success, including on budget exhaustion.
 function Index:add(origin, last, opts)
+    opts = opts or {}
     return operation(self, opts, function(ctx)
-        local first = ctx:rank(origin)
-        assert(first <= ctx:rank(last), "dependency end precedes origin")
-        local root = insert(ctx, self.root, origin, last, first)
-        self.root = root
+        local position, first = ctx:rank(origin), opts.first or origin
+        assert(position <= ctx:rank(first) and ctx:rank(first) <= ctx:rank(last), "unordered dependency bounds")
+        local roots = {}
+        for key, root in pairs(self.roots) do roots[key] = root end
+        for _, channel in ipairs(selected(opts.channels, false)) do
+            roots[channel] = insert(ctx, roots[channel], origin, first, last, position)
+        end
+        self.roots = roots
         return {}
     end)
 end
-
---- Retire every origin at/after this live handle without visiting its subtree.
---- Call before the text splice; retained endpoint membership must remain valid.
+--- Retire all suffix records atomically across the fixed channel forest.
 function Index:remove_from(origin, opts)
     return operation(self, opts, function(ctx)
-        local root = prefix(ctx, self.root, ctx:rank(origin))
-        local removed = count(self.root) - count(root)
-        self.root = root
+        local roots, removed, position = {}, 0, ctx:rank(origin)
+        for _, channel in ipairs(selected(nil, true)) do
+            local root = prefix(ctx, self.roots[channel], position)
+            roots[channel] = root
+            removed = removed + count(self.roots[channel]) - count(root)
+        end
+        self.roots = roots
         return { removed = removed }
     end)
 end
-
---- Query an inclusive numeric range in PRE-splice coordinates. Point insertions
---- and EOF boundaries intentionally overlap certificates ending at that point.
+--- Aligned trigger/origin intervals retain the ordinary logarithmic descent.
+--- Arbitrary nonmonotonic triggers can exhaust the explicit node budget; no
+--- universal logarithmic bound is claimed for that more general case.
 function Index:restart_origin(first, last, opts)
     assert(type(first) == "number" and type(last) == "number" and first <= last, "ordered edit range required")
     return operation(self, opts, function(ctx)
-        return { origin = earliest(ctx, self.root, first, last) }
+        local origin
+        for _, channel in ipairs(selected(opts and opts.channels, true)) do
+            local hit = earliest(ctx, self.roots[channel], first, last)
+            if hit and (not origin or ctx:rank(hit) < ctx:rank(origin)) then origin = hit end
+        end
+        return { origin = origin }
     end)
 end
-
 return M

@@ -36,13 +36,51 @@ local function same(s,a,b,summary)
     for k in pairs(b) do if a[k]==nil then return false end end
     return true
 end
+-- Fixed-channel aggregates certify only the lexical predicates a query used.
+local function channel_set(s,values)
+    local out={}
+    assert(type(values)=="table","channels must be a list or set")
+    local size=0
+    for k,v in pairs(values) do
+        count(s,"channel_values_visited")
+        local name=type(k)=="number" and v or k
+        local enabled=type(k)=="number" or v==true
+        assert(type(name)=="string" and s.channel_names[name],"unregistered fact channel")
+        if enabled and not out[name] then size=size+1; out[name]=true end
+        assert(size<=64,"channel registry exceeds bound")
+    end
+    return out
+end
+local function membership(s,metadata,opaque)
+    if opaque or not s.channels then return {} end
+    return channel_set(s,s.channels(copy(s,metadata)))
+end
+local function channel_add(s,target,source)
+    for name,value in pairs(source or {}) do
+        count(s,"channel_values_visited"); count(s,"channel_values_copied",3)
+        local old=target[name]
+        target[name]={count=(old and old.count or 0)+value.count,
+            max_stamp=math.max(old and old.max_stamp or 0,value.max_stamp)}
+    end
+end
+local function entry_channels(s,set,stamp)
+    local out={}
+    for name in pairs(set or {}) do
+        count(s,"channel_values_visited"); count(s,"channel_values_copied",3)
+        out[name]={count=1,max_stamp=stamp}
+    end
+    return out
+end
+local function combine_channels(s,a,b)
+    local out={}; channel_add(s,out,a); channel_add(s,out,b); return out
+end
 local function height(n) return n and n.height or 0 end
 local function root(n) if n then n.parent = nil end; return n end
 
 local function leaf(s, entries)
     if #entries == 0 then return nil end
     count(s, "nodes_created"); count(s, "leaves_created")
-    local n = { entries = entries, height = 1, rows = 0, bytes = 0, max_stamp = 0, max_syntax_stamp = 0, summary = s.empty }
+    local n = { entries = entries, height = 1, rows = 0, bytes = 0, max_stamp = 0, max_syntax_stamp = 0, channels = {}, opaque_rows = 0, opaque_max_stamp = 0, summary = s.empty }
     for _, e in ipairs(entries) do
         count(s, "entries_copied")
         e.leaf, e.local_row, e.local_byte = n, n.rows, n.bytes
@@ -50,6 +88,9 @@ local function leaf(s, entries)
         n.max_stamp = math.max(n.max_stamp, e.stamp)
         n.max_syntax_stamp = math.max(n.max_syntax_stamp, e.syntax_stamp)
         n.opaque = n.opaque or e.opaque
+        n.opaque_rows=n.opaque_rows+(e.opaque and e.rows or 0)
+        n.opaque_max_stamp=math.max(n.opaque_max_stamp,e.opaque and e.syntax_stamp or 0)
+        channel_add(s,n.channels,e.channels)
         n.summary = combine(s, n.summary, e.summary)
     end
     return n
@@ -61,7 +102,9 @@ local function branch(s, a, b, staged)
     local n = { left = a, right = b, height = math.max(a.height,b.height)+1,
         rows = a.rows+b.rows, bytes = a.bytes+b.bytes, max_stamp = math.max(a.max_stamp,b.max_stamp),
         max_syntax_stamp = math.max(a.max_syntax_stamp,b.max_syntax_stamp),
-        opaque = a.opaque or b.opaque, summary = combine(s,a.summary,b.summary) }
+        opaque = a.opaque or b.opaque,
+        opaque_rows=a.opaque_rows+b.opaque_rows,opaque_max_stamp=math.max(a.opaque_max_stamp,b.opaque_max_stamp),
+        channels=combine_channels(s,a.channels,b.channels), summary = combine(s,a.summary,b.summary) }
     if not staged then a.parent, b.parent = n, n end
     return n
 end
@@ -97,8 +140,18 @@ local function entry(s, value, stamp)
     local e = { rows=value.rows, bytes=value.bytes, opaque=value.opaque == true,
         metadata=copy(s,value.metadata), stamp=stamp, syntax_stamp=stamp, handle=s.prefix..s.next_handle }
     e.summary = s.summarize and not e.opaque and copy(s,s.summarize(copy(s,e.metadata)),true) or s.empty
+    e.channel_set=membership(s,e.metadata,e.opaque)
+    e.channels=entry_channels(s,e.channel_set,stamp)
     s.handles[e.handle] = e
     return e
+end
+-- Keep recursive workers at module scope. A per-operation recursive closure
+-- can become a LuaJIT trace constant and retain its captured detached tree.
+local function assemble(s,leaves,first,last)
+    if first > last then return nil end
+    if first == last then return leaves[first] end
+    local mid = math.floor((first+last)/2)
+    return branch(s,assemble(s,leaves,first,mid),assemble(s,leaves,mid+1,last))
 end
 local function build(s, values, stamp)
     local leaves, pending = {}, {}
@@ -107,13 +160,7 @@ local function build(s, values, stamp)
         if #pending == LEAF_SIZE then leaves[#leaves+1] = leaf(s,pending); pending={} end
     end
     if #pending > 0 then leaves[#leaves+1] = leaf(s,pending) end
-    local function assemble(first,last)
-        if first > last then return nil end
-        if first == last then return leaves[first] end
-        local mid = math.floor((first+last)/2)
-        return branch(s,assemble(first,mid),assemble(mid+1,last))
-    end
-    return assemble(1,#leaves)
+    return assemble(s,leaves,1,#leaves)
 end
 
 function M.new(values, opts)
@@ -123,7 +170,15 @@ function M.new(values, opts)
     local prefix="sequence:"..next_sequence..":"
     local seq, s = {}, { work={}, handles=setmetatable({}, {__mode="v"}), stamp=1,prefix=prefix,next_handle=0,
         summarize=opts.summarize, combine=opts.combine, eof=prefix.."eof", certificates=setmetatable({}, {__mode="k"}),
-        cursors=setmetatable({}, {__mode="k"}) }
+        cursors=setmetatable({}, {__mode="k"}),bof=prefix.."bof",channels=opts.channels,channel_names={} }
+    assert((opts.channels==nil)==(opts.channel_names==nil),"channel classifier and fixed registry are paired")
+    local channel_count=0
+    for k,v in pairs(opts.channel_names or {}) do
+        local name=type(k)=="number" and v or k
+        assert(type(name)=="string","channel names must be strings")
+        if not s.channel_names[name] then s.channel_names[name]=true; channel_count=channel_count+1 end
+        assert(channel_count<=64,"channel registry exceeds bound")
+    end
     states[seq] = s
     s.empty = copy(s,opts.empty_summary,true)
     s.root = root(build(s,values or {},s.stamp))
@@ -134,11 +189,12 @@ function M.size(seq)
     return { rows=n and n.rows or 0, bytes=n and n.bytes or 0 }
 end
 function M.eof(seq) return state(seq).eof end
+function M.bof(seq) return state(seq).bof end
 function M.stats(seq, reset)
     local s, out = state(seq), {}
     for _, key in ipairs({"nodes_visited","entries_visited","entries_copied","nodes_created","leaves_created",
         "detached_subtrees","query_results","summary_values_copied","metadata_values_copied",
-        "summary_values_compared","metadata_values_compared"}) do
+        "summary_values_compared","metadata_values_compared","channel_values_visited","channel_values_copied"}) do
         out[key] = s.work[key] or 0
     end
     if reset then s.work = {} end
@@ -184,6 +240,7 @@ function M.at(seq,row)
 end
 function M.rank(seq,handle)
     local s=state(seq)
+    if handle==s.bof then return {row=0,byte=0,rows=0,bytes=0} end
     if handle==s.eof then local z=M.size(seq); return {row=z.rows,byte=z.bytes,rows=0,bytes=0} end
     local e=s.handles[handle]
     if not e then return nil end
@@ -203,23 +260,24 @@ local function check_range(s,first,last)
     assert(type(first)=="number" and type(last)=="number" and first%1==0 and last%1==0
         and first>=0 and last>=first and last<=(s.root and s.root.rows or 0), "invalid row range")
 end
+local function query_walk(ctx,n,r,b)
+    local s,out,limit,first,last=ctx.s,ctx.out,ctx.limit,ctx.first,ctx.last
+    if not n or #out>=limit or r>=last or r+n.rows<=first then return end
+    count(s,"nodes_visited")
+    if n.entries then
+        for _,e in ipairs(n.entries) do
+            count(s,"entries_visited")
+            if r>=last or #out>=limit then break end
+            if r+e.rows>first then out[#out+1]=snapshot(s,e,r,b,math.max(first,r),math.min(last,r+e.rows)) end
+            r,b=r+e.rows,b+e.bytes
+        end
+    else query_walk(ctx,n.left,r,b); query_walk(ctx,n.right,r+n.left.rows,b+n.left.bytes) end
+end
 function M.query(seq,first,last,opts)
     local s,out=state(seq),{}
     check_range(s,first,last)
     local limit=opts and opts.limit or math.huge
-    local function walk(n,r,b)
-        if not n or #out>=limit or r>=last or r+n.rows<=first then return end
-        count(s,"nodes_visited")
-        if n.entries then
-            for _,e in ipairs(n.entries) do
-                count(s,"entries_visited")
-                if r>=last or #out>=limit then break end
-                if r+e.rows>first then out[#out+1]=snapshot(s,e,r,b,math.max(first,r),math.min(last,r+e.rows)) end
-                r,b=r+e.rows,b+e.bytes
-            end
-        else walk(n.left,r,b); walk(n.right,r+n.left.rows,b+n.left.bytes) end
-    end
-    if first<last then walk(s.root,0,0) end
+    if first<last then query_walk({s=s,out=out,limit=limit,first=first,last=last},s.root,0,0) end
     return out
 end
 local function boundary_byte(s,row,hint)
@@ -285,13 +343,47 @@ local function same_syntax_token(s,a,b)
     for k in pairs(b) do if not transient[k] and a[k]==nil then return false end end
     return true
 end
+local function update_rebuild(ctx,n)
+    local s,affected,prepared,staged,stamp,projection=ctx.s,ctx.affected,ctx.prepared,ctx.staged,ctx.stamp,ctx.projection
+    if not affected[n] then return n end
+    count(s,"nodes_visited")
+    local out
+    if n.entries then
+        local entries={}
+        for i,e in ipairs(n.entries) do
+            local replacement=prepared[e.handle]
+            entries[i]={rows=e.rows,bytes=e.bytes,opaque=e.opaque,handle=e.handle,
+                metadata=e.metadata,summary=e.summary,channel_set=e.channel_set,channels=e.channels,
+                stamp=replacement and not projection and stamp or e.stamp,
+                syntax_stamp=replacement and not projection and not replacement.same_syntax and stamp or e.syntax_stamp}
+            if replacement then
+                entries[i].metadata,entries[i].summary=replacement.metadata,replacement.summary
+                entries[i].bytes=replacement.bytes
+                entries[i].channel_set=replacement.channel_set
+                entries[i].channels=entry_channels(s,replacement.channel_set,entries[i].syntax_stamp)
+            end
+        end
+        out=leaf(s,entries)
+    else out=branch(s,update_rebuild(ctx,n.left),update_rebuild(ctx,n.right),true) end
+    staged[out]=true
+    return out
+end
+local function update_install(ctx,n,parent)
+    local s,staged=ctx.s,ctx.staged
+    n.parent=parent
+    if not staged[n] then return end
+    count(s,"nodes_visited")
+    if n.entries then
+        for _,e in ipairs(n.entries) do count(s,"entries_visited"); s.handles[e.handle]=e end
+    else update_install(ctx,n.left,n); update_install(ctx,n.right,n) end
+end
 local function update_many(seq,updates,projection,text_update)
     local s=state(seq)
     assert(type(updates)=="table" and #updates<=256,"metadata batch exceeds 256 entries")
     local prepared,affected,staged={},{},{}
     for _,update in ipairs(updates) do
         local handle=update.handle
-        if not M.rank(seq,handle) or handle==s.eof then return false,"detached or foreign handle" end
+        if not M.rank(seq,handle) or handle==s.eof or handle==s.bof then return false,"detached or foreign handle" end
         if prepared[handle] then return false,"duplicate handle" end
         local value=copy(s,update.metadata)
         local e=s.handles[handle]
@@ -304,13 +396,16 @@ local function update_many(seq,updates,projection,text_update)
         end
         prepared[handle]={metadata=value,summary=s.summarize and not e.opaque
             and copy(s,s.summarize(copy(s,value)),true) or s.empty,bytes=text_update and update.bytes or e.bytes}
+        prepared[handle].channel_set=membership(s,value,e.opaque)
         if text_update then
             prepared[handle].same_syntax=e.metadata and same_syntax_token(s,e.metadata.token,value.token)
-                and same(s,e.summary,prepared[handle].summary,true) or false
+                and same(s,e.summary,prepared[handle].summary,true)
+                and same(s,e.channel_set,prepared[handle].channel_set,true) or false
         end
         if projection and (not e.metadata or not value or not e.metadata.token or not value.token
             or not same(s,e.metadata.token,value.token,false)
-            or not same(s,e.summary,prepared[handle].summary,true)) then
+            or not same(s,e.summary,prepared[handle].summary,true)
+            or not same(s,e.channel_set,prepared[handle].channel_set,true)) then
             return false,"projection changes lexical token or indexed summary"
         end
         local n=e.leaf
@@ -320,38 +415,9 @@ local function update_many(seq,updates,projection,text_update)
     end
     if #updates==0 then return true end
     local stamp=s.stamp+(projection and 0 or 1)
-    local function rebuild(n)
-        if not affected[n] then return n end
-        count(s,"nodes_visited")
-        local out
-        if n.entries then
-            local entries={}
-            for i,e in ipairs(n.entries) do
-                local replacement=prepared[e.handle]
-                entries[i]={rows=e.rows,bytes=e.bytes,opaque=e.opaque,handle=e.handle,
-                    metadata=e.metadata,summary=e.summary,
-                    stamp=replacement and not projection and stamp or e.stamp,
-                    syntax_stamp=replacement and not projection and not replacement.same_syntax and stamp or e.syntax_stamp}
-                if replacement then
-                    entries[i].metadata,entries[i].summary=replacement.metadata,replacement.summary
-                    entries[i].bytes=replacement.bytes
-                end
-            end
-            out=leaf(s,entries)
-        else out=branch(s,rebuild(n.left),rebuild(n.right),true) end
-        staged[out]=true
-        return out
-    end
-    local replacement=rebuild(s.root)
-    local function install(n,parent)
-        n.parent=parent
-        if not staged[n] then return end
-        count(s,"nodes_visited")
-        if n.entries then
-            for _,e in ipairs(n.entries) do count(s,"entries_visited"); s.handles[e.handle]=e end
-        else install(n.left,n); install(n.right,n) end
-    end
-    install(replacement,nil)
+    local context={s=s,affected=affected,prepared=prepared,staged=staged,stamp=stamp,projection=projection}
+    local replacement=update_rebuild(context,s.root)
+    update_install(context,replacement,nil)
     s.root,s.stamp=replacement,stamp
     if text_update then return true,{same_syntax_proven=prepared[updates[1].handle].same_syntax} end
     return true
@@ -373,38 +439,40 @@ end
 
 -- Aggregate a range without enumerating covered entries. Partial opaque bytes
 -- are unknowable and therefore cannot certify a range until materialized.
+local function aggregate_add(ctx,value)
+    local s,result,include_summary=ctx.s,ctx.result,ctx.include_summary
+    result.rows=result.rows+value.rows; result.bytes=result.bytes+value.bytes
+    result.max_stamp=math.max(result.max_stamp,value.max_stamp or value.stamp)
+    result.max_syntax_stamp=math.max(result.max_syntax_stamp,value.max_syntax_stamp or value.syntax_stamp)
+    if include_summary then
+        result.summary=combine(s,result.summary,value.summary)
+        result.opaque=result.opaque or value.opaque==true
+    end
+end
+local function aggregate_walk(ctx,n,r)
+    local s,first,last=ctx.s,ctx.first,ctx.last
+    if not n or r>=last or r+n.rows<=first then return true end
+    count(s,"nodes_visited")
+    if first<=r and r+n.rows<=last then
+        aggregate_add(ctx,n); return true
+    end
+    if n.entries then
+        for _,e in ipairs(n.entries) do
+            count(s,"entries_visited")
+            if r<last and r+e.rows>first then
+                if r<first or r+e.rows>last then return false end
+                aggregate_add(ctx,e)
+            end
+            r=r+e.rows
+        end
+        return true
+    end
+    return aggregate_walk(ctx,n.left,r) and aggregate_walk(ctx,n.right,r+n.left.rows)
+end
 local function aggregate(s,first,last,include_summary)
     local result={rows=0,bytes=0,max_stamp=0,max_syntax_stamp=0}
     if include_summary then result.summary=s.empty; result.opaque=false end
-    local function add(value)
-        result.rows=result.rows+value.rows; result.bytes=result.bytes+value.bytes
-        result.max_stamp=math.max(result.max_stamp,value.max_stamp or value.stamp)
-        result.max_syntax_stamp=math.max(result.max_syntax_stamp,value.max_syntax_stamp or value.syntax_stamp)
-        if include_summary then
-            result.summary=combine(s,result.summary,value.summary)
-            result.opaque=result.opaque or value.opaque==true
-        end
-    end
-    local function walk(n,r)
-        if not n or r>=last or r+n.rows<=first then return true end
-        count(s,"nodes_visited")
-        if first<=r and r+n.rows<=last then
-            add(n); return true
-        end
-        if n.entries then
-            for _,e in ipairs(n.entries) do
-                count(s,"entries_visited")
-                if r<last and r+e.rows>first then
-                    if r<first or r+e.rows>last then return false end
-                    add(e)
-                end
-                r=r+e.rows
-            end
-            return true
-        end
-        return walk(n.left,r) and walk(n.right,r+n.left.rows)
-    end
-    if not walk(s.root,0) then return nil end
+    if not aggregate_walk({s=s,result=result,include_summary=include_summary,first=first,last=last},s.root,0) then return nil end
     return result
 end
 function M.summary(seq,first,last)
@@ -433,13 +501,84 @@ function M.range_certificate(seq,first,last,opts)
     local token={}; s.certificates[token]=c
     return token
 end
+-- Selected channel totals over dynamic row bounds; opaque portions never
+-- supply a negative fact merely because their lexical metadata is absent.
+local function channel_include(ctx,value,opaque_rows,opaque_stamp)
+    local s,out,selected=ctx.s,ctx.out,ctx.selected
+    for name in pairs(selected) do
+        count(s,"channel_values_visited")
+        local v=value[name]
+        if v then
+            local dest=out.channels[name]
+            dest.count=dest.count+v.count; dest.max_stamp=math.max(dest.max_stamp,v.max_stamp)
+            count(s,"channel_values_copied",2)
+        end
+    end
+    out.opaque_rows=out.opaque_rows+opaque_rows
+    out.opaque_max_stamp=math.max(out.opaque_max_stamp,opaque_stamp)
+end
+local function channel_walk(ctx,n,row)
+    local s,first,last=ctx.s,ctx.first,ctx.last
+    if not n or row>=last or row+n.rows<=first then return end
+    count(s,"nodes_visited")
+    if first<=row and row+n.rows<=last then
+        channel_include(ctx,n.channels,n.opaque_rows,n.opaque_max_stamp)
+    elseif n.entries then
+        for _,e in ipairs(n.entries) do
+            count(s,"entries_visited")
+            if row>=last then break end
+            if row+e.rows>first then
+                channel_include(ctx,e.channels,e.opaque and math.min(last,row+e.rows)-math.max(first,row) or 0,
+                    e.opaque and e.syntax_stamp or 0)
+            end
+            row=row+e.rows
+        end
+    else channel_walk(ctx,n.left,row); channel_walk(ctx,n.right,row+n.left.rows) end
+end
+local function channel_aggregate(s,first,last,selected)
+    local out={channels={},opaque_rows=0,opaque_max_stamp=0}
+    for name in pairs(selected) do out.channels[name]={count=0,max_stamp=0} end
+    channel_walk({s=s,out=out,selected=selected,first=first,last=last},s.root,0)
+    return out
+end
+function M.channel_summary(seq,first,last,channels)
+    local s=state(seq); check_range(s,first,last)
+    return channel_aggregate(s,first,last,channel_set(s,channels))
+end
+local function fact_bounds(seq,c)
+    local a,z=M.rank(seq,c.first),M.rank(seq,c.last)
+    if not a or not z then return nil,"detached fact endpoint" end
+    local last=z.row+(c.end_inclusive and z.rows or 0)
+    if a.row>last then return nil,"reversed fact endpoints" end
+    return {first_row=a.row,last_row=last}
+end
+function M.fact_certificate(seq,opts)
+    local s=state(seq)
+    assert(type(opts)=="table" and opts.first and opts.last,"fact requires stable endpoint handles")
+    local c={kind="fact",first=opts.first,last=opts.last,end_inclusive=opts.end_inclusive==true,
+        channels=channel_set(s,opts.channels),allow_opaque=opts.allow_opaque==true}
+    local bounds,err=fact_bounds(seq,c); if not bounds then return nil,err end
+    c.totals=channel_aggregate(s,bounds.first_row,bounds.last_row,c.channels)
+    if c.totals.opaque_rows>0 and not c.allow_opaque then return nil,"opaque fact range" end
+    local token={}; s.certificates[token]=c; return token
+end
+local function validate_fact(seq,c)
+    local s=state(seq)
+    local bounds,err=fact_bounds(seq,c); if not bounds then return false,err end
+    local totals=channel_aggregate(s,bounds.first_row,bounds.last_row,c.channels)
+    if not same(s,c.totals,totals,true) then return false,"changed fact channel" end
+    if totals.opaque_rows>0 and not c.allow_opaque then return false,"opaque fact range" end
+    bounds.opaque_rows=totals.opaque_rows
+    return true,bounds
+end
 function M.validate_certificate(seq,token,opts)
     local kind=opts and opts.kind or "text"
-    assert(kind=="text" or kind=="syntax","unknown certificate kind")
+    assert(kind=="text" or kind=="syntax" or kind=="fact","unknown certificate kind")
     local s=state(seq)
     local c=s.certificates[token]
     if not c then return false,"foreign certificate" end
     if c.kind~=kind then return false,"certificate kind does not authorize this read" end
+    if kind=="fact" then return validate_fact(seq,c) end
     local a,z=M.rank(seq,c.first),M.rank(seq,c.last)
     if not a or not z then return false,"detached endpoint" end
     local first,last=a.row+c.first_offset,z.row+c.last_offset
@@ -459,10 +598,44 @@ end
 
 -- Generic summaries are conservative pruning hints. A false-positive summary
 -- costs budget; an opaque entry always interrupts a first-match proof.
+local function find_walk(ctx,n,r,b)
+    local s,first,last,reverse,opts,work=ctx.s,ctx.first,ctx.last,ctx.reverse,ctx.opts,ctx.work
+    local node_limit,reserve_nodes,entry_limit,reserve_entries=ctx.node_limit,ctx.reserve_nodes,ctx.entry_limit,ctx.reserve_entries
+    if not n or r>=last or r+n.rows<=first or ctx.result then return end
+    if work.nodes_visited>=node_limit-reserve_nodes then ctx.resume=reverse and math.min(last,r+n.rows) or math.max(first,r); ctx.result={status="budget"}; return end
+    work.nodes_visited=work.nodes_visited+1; count(s,"nodes_visited")
+    if not n.opaque and opts.may_match and not opts.may_match(copy(s,n.summary,true)) then return end
+    if n.entries then
+        local index=reverse and #n.entries or 1
+        while index>=1 and index<=#n.entries do
+            local e=n.entries[index]
+            local er,eb=r+e.local_row,b+e.local_byte
+            if work.entries_visited>=entry_limit-reserve_entries then
+                ctx.resume=reverse and math.min(last,er+e.rows) or math.max(first,er)
+                ctx.result={status="budget"}; return
+            end
+            work.entries_visited=work.entries_visited+1; count(s,"entries_visited")
+            if er<last and er+e.rows>first then
+                if e.opaque or not opts.matches or opts.matches(copy(s,e.metadata)) then
+                    ctx.result={status=e.opaque and "opaque" or "found",span=snapshot(s,e,er,eb,math.max(first,er),math.min(last,er+e.rows))}; return
+                end
+            end
+            index=index+(reverse and -1 or 1)
+        end
+    elseif reverse then find_walk(ctx,n.right,r+n.left.rows,b+n.left.bytes); find_walk(ctx,n.left,r,b)
+    else find_walk(ctx,n.left,r,b); find_walk(ctx,n.right,r+n.left.rows,b+n.left.bytes) end
+end
+local function find_finish(seq,initial,work,result)
+    local total=M.stats(seq)
+    for key in pairs(work) do work[key]=(total[key] or 0)-(initial[key] or 0) end
+    result.work=work
+    return result
+end
 function M.find(seq,first,last,opts)
     local s=state(seq)
     opts=opts or {}
-    local work={nodes_visited=0,entries_visited=0,summary_values_copied=0,metadata_values_copied=0}
+    local work={nodes_visited=0,entries_visited=0,summary_values_copied=0,metadata_values_copied=0,
+        channel_values_visited=0,channel_values_copied=0}
     local initial=M.stats(seq)
     local node_limit,entry_limit=opts.max_nodes or 512,opts.max_entries or 1024
     assert(node_limit>0 and entry_limit>0 and node_limit<math.huge and entry_limit<math.huge,
@@ -475,59 +648,31 @@ function M.find(seq,first,last,opts)
     if node_limit<=reserve_nodes or entry_limit<=reserve_entries then
         return {status="budget",cursor=opts.cursor,required={max_nodes=reserve_nodes+1,max_entries=reserve_entries+1},work=work}
     end
-    local function finish(result)
-        local total=M.stats(seq)
-        for key in pairs(work) do work[key]=(total[key] or 0)-(initial[key] or 0) end
-        result.work=work
-        return result
-    end
     local certificate_kind=opts.certificate_kind or "text"
-    assert(certificate_kind=="text" or certificate_kind=="syntax","unknown find certificate kind")
+    assert(certificate_kind=="text" or certificate_kind=="syntax" or certificate_kind=="fact","unknown find certificate kind")
     local reverse=opts.reverse==true
     local range_first,range_last=first,last
     local cert
     if opts.cursor then
         local cursor=s.cursors[opts.cursor]
-        if not cursor then return finish({status="stale"}) end
+        if not cursor then return find_finish(seq,initial,work,{status="stale"}) end
         local valid,range=M.validate_certificate(seq,cursor.certificate,{kind=certificate_kind})
-        if not valid then return finish({status="stale"}) end
+        if not valid then return find_finish(seq,initial,work,{status="stale"}) end
         range_first,range_last=range.first_row+cursor.first_offset,range.last_row-cursor.last_offset
         local next_pos=M.rank(seq,cursor.next)
-        if not next_pos then return finish({status="stale"}) end
+        if not next_pos and certificate_kind~="fact" then return find_finish(seq,initial,work,{status="stale"}) end
         first,last=range_first,range_last
         reverse=cursor.reverse
-        if reverse then last=next_pos.row+cursor.offset else first=next_pos.row+cursor.offset end
+        if next_pos then
+            if reverse then last=next_pos.row+cursor.offset else first=next_pos.row+cursor.offset end
+        end
         cert=cursor.certificate
     end
     check_range(s,first,last)
-    local result,resume
-    local function walk(n,r,b)
-        if not n or r>=last or r+n.rows<=first or result then return end
-        if work.nodes_visited>=node_limit-reserve_nodes then resume=reverse and math.min(last,r+n.rows) or math.max(first,r); result={status="budget"}; return end
-        work.nodes_visited=work.nodes_visited+1; count(s,"nodes_visited")
-        if not n.opaque and opts.may_match and not opts.may_match(copy(s,n.summary,true)) then return end
-        if n.entries then
-            local index=reverse and #n.entries or 1
-            while index>=1 and index<=#n.entries do
-                local e=n.entries[index]
-                local er,eb=r+e.local_row,b+e.local_byte
-                if work.entries_visited>=entry_limit-reserve_entries then
-                    resume=reverse and math.min(last,er+e.rows) or math.max(first,er)
-                    result={status="budget"}; return
-                end
-                work.entries_visited=work.entries_visited+1; count(s,"entries_visited")
-                if er<last and er+e.rows>first then
-                    if e.opaque or not opts.matches or opts.matches(copy(s,e.metadata)) then
-                        result={status=e.opaque and "opaque" or "found",span=snapshot(s,e,er,eb,math.max(first,er),math.min(last,er+e.rows))}; return
-                    end
-                end
-                index=index+(reverse and -1 or 1)
-            end
-        elseif reverse then walk(n.right,r+n.left.rows,b+n.left.bytes); walk(n.left,r,b)
-        else walk(n.left,r,b); walk(n.right,r+n.left.rows,b+n.left.bytes) end
-    end
-    walk(s.root,0,0)
-    result=result or {status="not_found"}
+    local context={s=s,first=first,last=last,reverse=reverse,opts=opts,work=work,
+        node_limit=node_limit,reserve_nodes=reserve_nodes,entry_limit=entry_limit,reserve_entries=reserve_entries}
+    find_walk(context,s.root,0,0)
+    local result,resume=context.result or {status="not_found"},context.resume
     if result.status=="budget" then
         local first_offset,last_offset=0,0
         if opts.cursor then
@@ -541,7 +686,17 @@ function M.find(seq,first,last,opts)
             local cover_first=a and ar or range_first
             local cover_last=z and zr+z.rows or range_last
             first_offset,last_offset=range_first-cover_first,cover_last-range_last
-            cert=M.range_certificate(seq,cover_first,cover_last,{kind=certificate_kind})
+            if certificate_kind=="fact" then
+                assert(type(opts.fact)=="table","fact search requires stable bounds and channels")
+                local spec={first=opts.fact.first,last=opts.fact.last,end_inclusive=opts.fact.end_inclusive,
+                    channels=opts.fact.channels,allow_opaque=true}
+                cert=M.fact_certificate(seq,spec)
+                if cert then
+                    local bounds=assert(fact_bounds(seq,spec))
+                    assert(range_first>=bounds.first_row and range_last<=bounds.last_row,"search exceeds fact scope")
+                    first_offset,last_offset=range_first-bounds.first_row,bounds.last_row-range_last
+                end
+            else cert=M.range_certificate(seq,cover_first,cover_last,{kind=certificate_kind}) end
         end
         local e,r=locate(s,reverse and resume-1 or resume)
         if cert and e then
@@ -551,7 +706,7 @@ function M.find(seq,first,last,opts)
             result.cursor=token
         end
     end
-    return finish(result)
+    return find_finish(seq,initial,work,result)
 end
 
 return M

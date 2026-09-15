@@ -6,9 +6,10 @@ local G = require("parley.document.grammar")
 local D = require("parley.document.dependencies")
 local F = require("parley.document.facts")
 local L = require("parley.document.lexer")
+local Semantic = require("parley.document.semantic")
 local harness = require("tests.perf.harness")
 local typing = require("tests.perf.chat_typing")
-local PHASES = { "typed_row", "sequence_splice", "bulk_paste_delete", "dependency_eof", "fact_footer", "long_line" }
+local PHASES = { "typed_row", "sequence_splice", "bulk_paste_delete", "dependency_eof", "fact_footer", "long_line", "fragment_enter_join" }
 
 local function value(line)
     local _, token = G.lex_step(G.lex_start(), line, true, { bytes = #line })
@@ -21,7 +22,7 @@ local function work(stats, extra)
     out.index_nodes_visited = stats.nodes_visited
     out.index_entries_visited = stats.entries_visited
     out.metadata_values_copied = stats.metadata_values_copied
-    out.summary_values_copied = stats.summary_values_copied
+    out.summary_values_copied = stats.summary_values_copied + (stats.channel_values_copied or 0)
     out.structure_entries_copied = stats.entries_copied
     for key, amount in pairs(extra or {}) do out[key] = out[key] + amount end
     return out
@@ -34,10 +35,12 @@ function M.measure(n, phase)
     local middle, long_bytes = math.floor(n / 2), n * 16
     if phase == "fact_footer" then
         values[1], values[2], values[n] = value("body"), value("---"), value("[^1]: note")
+    elseif phase == "fragment_enter_join" then
+        for i = 1, n do values[i] = value(i == 1 and "💬: question" or "body") end
     elseif phase == "long_line" then
         values[middle + 1] = { rows = 1, bytes = long_bytes + 1, opaque = true }
     end
-    local seq = S.new(values, { summarize = function(metadata)
+    local seq = S.new(values, { channel_names = G.CHANNELS, channels = function(metadata) return G.channels(metadata and metadata.token) end, summarize = function(metadata)
         return metadata and metadata.token and G.summary(metadata.token) or G.empty_summary()
     end, combine = G.combine, empty_summary = G.empty_summary() })
     local spans = S.query(seq, 0, n)
@@ -56,6 +59,23 @@ function M.measure(n, phase)
         end })
         for _, span in ipairs(spans) do assert(dependency:add(span.handle, S.eof(seq)).status == "ok") end
     end
+    local semantic, suffix, enter_values, join_values
+    if phase == "fragment_enter_join" then
+        semantic = Semantic.new(seq)
+        local settled = false
+        -- Bootstrap is finite and outside the timed update window. Each slice
+        -- has explicit row/navigation budgets, including global fact discovery.
+        for _ = 1, n do
+            local result = Semantic.step(semantic, { rows = 256, nodes = 32768, entries = 32768 })
+            assert(result.work.rows_processed <= 256)
+            assert(result.work.nodes_visited <= 32768 and result.work.entries_visited <= 32768)
+            assert(result.status ~= "opaque", "confirmed fixture demanded lexical materialization")
+            if result.status == "idle" then settled = true; break end
+        end
+        assert(settled, "semantic benchmark fixture did not settle")
+        suffix = S.at(seq, middle + 1)
+        enter_values, join_values = { value("body first"), value("body second") }, { value("joined body") }
+    end
     S.stats(seq, true)
     local started = vim.uv.hrtime()
     local extra, verify = {}, function() end
@@ -67,6 +87,32 @@ function M.measure(n, phase)
             assert(accepted and evidence.same_syntax_proven and valid)
             assert(not S.validate_certificate(seq, text_proof))
             assert(S.size(seq).rows == n and S.size(seq).bytes == n * 2 + 1)
+        end
+    elseif phase == "fragment_enter_join" then
+        local snapshots, statuses = {}, {}
+        extra.dependency_nodes_visited, extra.structure_rows_processed = 0, 0
+        for i, edit in ipairs({ { last = middle + 1, values = enter_values },
+            { last = middle + 2, values = join_values } }) do
+            local evidence = Semantic.before_fragment(semantic, middle, edit.last, edit.values,
+                { rows = 256, bytes = 65536, nodes = 65536, entries = 65536 })
+            S.splice(seq, middle, edit.last, edit.values)
+            local result = Semantic.after_fragment(semantic, evidence, middle, middle + #edit.values)
+            statuses[i] = { result.status, Semantic.step(semantic).status }
+            snapshots[i] = S.at(seq, middle + #edit.values)
+            -- Seq.stats already includes navigation from semantic preparation,
+            -- splice, projection, and these bounded checks. Add only counters
+            -- owned by the semantic/dependency layer; never add result node work.
+            extra.dependency_nodes_visited = extra.dependency_nodes_visited
+                + evidence.work.dependency_nodes_visited + result.work.dependency_nodes_visited
+            extra.structure_rows_processed = extra.structure_rows_processed + result.work.rows_processed
+        end
+        verify = function()
+            for i = 1, 2 do
+                assert(statuses[i][1] == "reused" and statuses[i][2] == "idle")
+                assert(snapshots[i].handle == suffix.handle)
+                assert(vim.deep_equal(snapshots[i].metadata, suffix.metadata))
+            end
+            assert(S.size(seq).rows == n)
         end
     elseif phase == "sequence_splice" then
         S.splice(seq, middle, middle, { value("") })

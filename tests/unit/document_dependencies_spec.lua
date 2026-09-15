@@ -190,4 +190,52 @@ describe("document dependency index", function()
         assert.is_true(rank_work.entries_visited <= 4096)
     end)
 
+    it("uses one fixed grammar channel registry", function()
+        local grammar = require("parley.document.grammar")
+        assert.is_table(grammar.CHANNELS)
+        local channels = grammar.channels({ kind = "text", blank = false })
+        assert.is_true(channels.row)
+        assert.is_true(channels.nonblank)
+        assert.is_nil(channels.divider)
+    end)
+
+    it("filters predicate channels and keeps nonaligned triggers local", function()
+        local index, h = coordinates(30)
+        ok(index:add(h[1], h[30], { channels = { footnote = true } }))
+        ok(index:add(h[1], h[30], { first = h[25], channels = { nonblank = true, divider = true } }))
+        assert.is_nil(ok(index:restart_origin(10, 10, { channels = { nonblank = true } })).origin)
+        assert.equals(h[1], ok(index:restart_origin(27, 27, { channels = { nonblank = true } })).origin)
+        assert.equals(h[1], ok(index:restart_origin(10, 10, { channels = { footnote = true } })).origin)
+        assert.is_nil(ok(index:restart_origin(10, 10, { channels = {} })).origin)
+        assert.equals(h[1], ok(index:restart_origin(10, 10)).origin)
+        ok(index:add(h[5], h[15])) -- legacy unfiltered dependencies remain conservative
+        assert.equals(h[5], ok(index:restart_origin(10, 10, { channels = {} })).origin)
+    end)
+
+    it("coalesces trigger ranges conservatively without mixing channel roots", function()
+        local index, h = coordinates(30)
+        ok(index:add(h[1], h[15], { first = h[10], channels = { "nonblank" } }))
+        ok(index:add(h[1], h[25], { first = h[20], channels = { "nonblank" } }))
+        assert.equals(h[1], ok(index:restart_origin(17, 17, { channels = { "nonblank" } })).origin)
+        assert.is_nil(ok(index:restart_origin(17, 17, { channels = { "footnote" } })).origin)
+        ok(index:remove_from(h[1]))
+        assert.is_nil(ok(index:restart_origin(17, 17)).origin)
+    end)
+
+    it("bounds adversarial nonmonotonic trigger searches with an explicit refusal", function()
+        local index, h = coordinates(4000)
+        -- Alternating intervals lie wholly before or after the query. Their
+        -- aggregate bounds overlap it, so exact search may exhaust its budget.
+        for i = 1, 1000 do
+            local first = i % 2 == 0 and h[2001] or h[3001]
+            local last = i % 2 == 0 and h[2002] or h[3002]
+            ok(index:add(h[i], last, { first = first, channels = { "nonblank" } }))
+        end
+        local result = index:restart_origin(2500, 2500, { channels = { "nonblank" }, budget = 32 })
+        assert.equals("budget", result.status)
+        assert.equals(32, result.work.dependency_nodes_visited)
+        assert.is_nil(ok(index:restart_origin(2500, 2500,
+            { channels = { "nonblank" }, budget = 5000 })).origin)
+    end)
+
 end)

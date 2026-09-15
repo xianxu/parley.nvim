@@ -1,12 +1,27 @@
--- Pure indexed lookahead. A cursor retains one proof for the entire compound
--- query, so resuming a later subquery never forgets its earlier evidence.
+-- Pure indexed lookahead. Completed component proofs retain earlier evidence
+-- while a bounded selective cursor searches the next component.
 local M = {}
 local S = require("parley.document.sequence")
 local G = require("parley.document.grammar")
 local cursors = setmetatable({}, { __mode = "k" })
--- Facts depend on complete lexical descriptors, not payload bytes. These
+-- Facts depend on selected lexical predicates, not payload bytes. These
 -- explicit proofs must never be accepted as ordinary text/publication proofs.
-local SYNTAX = { kind = "syntax" }
+local FACT = { kind = "fact" }
+local CHANNELS = {
+    header_probe = { "row" }, header_find = { "divider" }, footer_find = { "footnote" },
+    footer_previous = { "nonblank", "divider" }, tool_open = { "row" }, preface = { "row" },
+    tool_find = { "bare_close", "structural" }, ordinary = { "bare_close" },
+    reasoning = { "reasoning_end", "structural" },
+}
+function M.validate(seq, certificate)
+    if not certificate or not certificate.parts then return false end
+    for _, part in ipairs(certificate.parts) do
+        if not S.validate_certificate(seq, part.range, FACT) then return false end
+    end
+    return true
+end
+M.validate_certificate = M.validate
+function M.dependencies(certificate) return certificate.parts end
 
 local function copy(value)
     local out = {}
@@ -37,15 +52,6 @@ function M.resolve(seq, token_handle, need, opts)
         return finish({ status = "budget", cursor = opts.cursor,
             required = { budget_nodes = reserve.nodes * 3 + 1, budget_entries = reserve.entries * 3 + 1 } })
     end
-    local function opaque_boundary(first, last)
-        -- Range proofs fail at partial endpoint spans. Demand that unknown
-        -- endpoint, never an already-confirmed origin that cannot make progress.
-        local a = S.at(seq, first)
-        if a and a.opaque and first > a.start_row then return first end
-        local z = last > first and S.at(seq, last - 1) or a
-        if z and z.opaque and last < z.end_row then return last - 1 end
-        error("uncertifiable range has no partial opaque endpoint")
-    end
     local state
     if opts.cursor then
         local saved = cursors[opts.cursor]
@@ -53,8 +59,9 @@ function M.resolve(seq, token_handle, need, opts)
             or saved.width ~= need.width or saved.scope_end ~= (need.scope and need.scope["end"]) then
             return finish({ status = "stale" })
         end
-        if not S.validate_certificate(seq, saved.proof, SYNTAX) then return finish({ status = "stale" }) end
+        if not M.validate(seq, { parts = saved.parts }) then return finish({ status = "stale" }) end
         state = copy(saved)
+        state.parts = copy(saved.parts)
     else
         state = { seq = seq, origin = token_handle, kind = need.kind, width = need.width,
             scope_end = need.scope and need.scope["end"] }
@@ -67,33 +74,45 @@ function M.resolve(seq, token_handle, need, opts)
     local global = need.kind == "header" or need.kind == "footer"
     local first = global and 0 or origin.row
     if origin.row > limit.row then return finish({ status = "stale" }) end
-    if not state.proof then
-        local proof_last = math.min(total, limit.row + (boundary ~= S.eof(seq) and 1 or 0))
-        state.proof = S.range_certificate(seq, first, proof_last, SYNTAX)
-        if not state.proof then return finish({ status = "opaque", row = opaque_boundary(first, proof_last) }) end
+    if not state.parts then
+        state.parts = {}
         state.phase = ({ header = "header_probe", footer = "footer_find", tool_body = "tool_open",
             section_tool_body = "tool_open", ordinary_close = "ordinary", section_ordinary_close = "ordinary",
             reasoning = "reasoning", preface = "preface" })[need.kind]
         assert(state.phase, "unknown indexed fact kind: " .. tostring(need.kind))
-        state.cert_origin = global and (S.at(seq, 0) or {}).handle or token_handle
-        state.cert_origin = state.cert_origin or S.eof(seq)
+        state.cert_origin = global and S.bof(seq) or token_handle
+    end
+    local function add_part(a, z, channels)
+        local range = S.fact_certificate(seq, { first = a, last = z, end_inclusive = true, channels = channels })
+        if not range then
+            local endpoint = S.rank(seq, z)
+            local at = endpoint and S.at(seq, endpoint.row)
+            if at and at.opaque then return finish({ status = "opaque", row = endpoint.row }) end
+            local begin = S.rank(seq, a)
+            return finish({ status = "opaque", row = begin and begin.row or first })
+        end
+        state.parts[#state.parts + 1] = { origin = state.cert_origin, first = a, last = z,
+            channels = channels, range = range }
+    end
+    if not global and #state.parts == 0 then
+        local failed = add_part(token_handle, token_handle, { "row" })
+        if failed then return failed end
     end
     local function pause(required)
         local token = {}
         cursors[token] = state
         return finish({ status = "budget", cursor = token, required = required })
     end
-    local function complete(value, last_handle, last_row)
-        local range = S.range_certificate(seq, first, math.min(total, last_row + 1), SYNTAX)
-        if not range then
-            return finish({ status = "opaque", row = opaque_boundary(first, math.min(total, last_row + 1)) })
-        end
+    local function complete(value, last_handle)
+        local a = state.cert_origin
+        if state.phase == "footer_previous" then a = state.previous or S.bof(seq) end
+        local failed = add_part(a, last_handle, CHANNELS[state.phase])
+        if failed then return failed end
         return finish({ status = "ready", fact = { value = value,
-            certificate = { origin = state.cert_origin, last = last_handle, range = range } } })
+            certificate = { origin = state.cert_origin, last = last_handle,
+                range = state.parts[#state.parts].range, parts = state.parts } } })
     end
-    local function negative()
-        return complete(false, boundary, limit.row)
-    end
+    local function negative() return complete(false, boundary) end
     while true do
         local from, to, reverse, selectors
         local phase = state.phase
@@ -128,7 +147,9 @@ function M.resolve(seq, token_handle, need, opts)
         end
         local result = S.find(seq, from, to, {
             max_nodes = remaining_nodes, max_entries = remaining_entries,
-            cursor = state.query_cursor, reverse = reverse, certificate_kind = "syntax",
+            cursor = state.query_cursor, reverse = reverse, certificate_kind = "fact",
+            fact = { first = state.cert_origin, last = phase == "footer_previous" and state.footnote or boundary,
+                end_inclusive = true, channels = CHANNELS[phase] },
             may_match = selectors and function(summary)
                 for _, item in ipairs(selectors) do if G.may_contain(summary, item) then return true end end
                 return false
@@ -150,6 +171,8 @@ function M.resolve(seq, token_handle, need, opts)
         if span and not token then return finish({ status = "opaque", row = span.start_row }) end
         if phase == "header_probe" then
             if not span then return negative() end
+            local failed = add_part(S.bof(seq), span.handle, { "row" })
+            if failed then return failed end
             state.header_from = token.divider and 1 or 0
             state.phase = "header_find"
         elseif phase == "header_find" then
@@ -157,17 +180,22 @@ function M.resolve(seq, token_handle, need, opts)
             return complete({ finish = span.handle }, span.handle, span.start_row)
         elseif phase == "footer_find" then
             if not span then return negative() end
+            local failed = add_part(S.bof(seq), span.handle, CHANNELS.footer_find)
+            if failed then return failed end
             state.footnote = span.handle
             state.phase = "footer_previous"
         elseif phase == "footer_previous" then
             local footnote = S.rank(seq, state.footnote)
             if not footnote then return finish({ status = "stale" }) end
+            state.previous = span and span.handle
             return complete({ start = state.footnote,
                 content_start = token and token.divider and span.handle or state.footnote },
                 state.footnote, footnote.row)
         elseif phase == "tool_open" then
             if not span then return negative() end
             if not token.ordinary_open_width then return complete(false, span.handle, span.start_row) end
+            local failed = add_part(token_handle, span.handle, { "row" })
+            if failed then return failed end
             state.opener, state.tool_width = span.handle, token.ordinary_open_width
             state.phase = "tool_find"
         elseif phase == "tool_find" then

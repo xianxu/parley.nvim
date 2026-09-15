@@ -10,7 +10,7 @@ M.lex_step = lexical.lex_step
 M.lexer_retained_bytes = lexical.lexer_retained_bytes
 
 function M.summary(t)
-    local flags={}
+    local flags={row=true}
     flags[t.kind]=true
     flags.nonblank=not t.blank or nil
     flags.structural=lexical.is_structural_kind(t.kind) or nil
@@ -19,6 +19,18 @@ function M.summary(t)
     flags.ordinary_open=t.ordinary_open_width~=nil or nil
     flags.bare_close=t.bare_close_width~=nil or nil
     return {flags=flags,close_min=t.bare_close_width,close_max=t.bare_close_width}
+end
+
+-- Fixed predicate inventory shared by indexed summaries, selective fact
+-- certificates, and dependency invalidation. No consumer restates predicates.
+M.CHANNELS = { 'row', 'divider', 'footnote', 'nonblank', 'bare_close',
+    'structural', 'reasoning_end', 'ordinary_open', 'user' }
+function M.channels(t)
+    local out = {}
+    if not t then return out end
+    local flags = M.summary(t).flags
+    for _, name in ipairs(M.CHANNELS) do if flags[name] then out[name] = true end end
+    return out
 end
 
 function M.select(t,selector)

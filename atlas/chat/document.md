@@ -31,6 +31,22 @@ confirmed rendering, while always retiring old text evidence. Syntax evidence
 requires an explicit validation mode and cannot authorize a payload write.
 Changes whose classification is still unknown follow bounded conservative repair.
 
+Lookahead facts use a third, explicit evidence kind: fixed predicate channels
+count matching tokens and retain their greatest syntax revision. Inserting an
+ordinary body row therefore leaves “no footer” evidence valid. Adjacency uses a
+row channel; preface/tool relationships cannot survive an inserted intervening
+row. Compound footer facts separate the document-wide footnote search from the
+local previous-nonblank lookup.
+
+Classified Enter/join fragments transfer complete global and answer-section
+checkpoints over only the changed rows. Matching output checkpoints and relevant
+facts permit reuse of the untouched suffix. Changed reasoning termination,
+adjacency, markers, or uncertain inputs take the conservative repair path.
+
+Sequence traversal workers are module-level functions with explicit state.
+This prevents LuaJIT traces from retaining operation-local closures over detached
+trees; an isolated-process regression verifies reclamation with JIT enabled.
+
 ## Grammar scopes
 
 Rendering, document fence scanning, preface containment, and answer sections have

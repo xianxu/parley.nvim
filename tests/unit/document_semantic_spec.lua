@@ -8,8 +8,15 @@ local function span(line)
 end
 local function sequence(lines)
     local entries={}; for i,line in ipairs(lines) do entries[i]=span(line) end
-    return S.new(entries,{empty_summary=G.empty_summary(),
+    return S.new(entries,{empty_summary=G.empty_summary(),channel_names=G.CHANNELS,
+        channels=G.channels and function(m) return G.channels(m.token) end or nil,
         summarize=function(m) return G.summary(m.token) end,combine=G.combine})
+end
+local function fragment(seq,worker,first,last,lines)
+    local added={}; for i,line in ipairs(lines) do added[i]=span(line) end
+    local evidence=Semantic.before_fragment(worker,first,last,added,{rows=256,bytes=65536,nodes=65536,entries=65536})
+    S.splice(seq,first,last,added)
+    return Semantic.after_fragment(worker,evidence,first,first+#added)
 end
 local function settle(worker,budget)
     for _=1,500 do
@@ -70,7 +77,7 @@ describe('document semantic worker',function()
         settle(worker)
         local evidence=Semantic.before_splice(worker,2,3)
         assert.is_true(evidence.work.dependency_nodes_visited>0)
-        -- Text-backed negative header/footer facts conservatively restart at0.
+        -- Unclassified range edits conservatively query every fact channel.
         assert.equals(0,evidence.restart_row)
         S.splice(seq,2,3,{span('🧠: reasoning')})
         Semantic.after_splice(worker,evidence,2,3)
@@ -191,6 +198,142 @@ describe('document semantic worker',function()
                 assert.has_error(function() Semantic.step(worker,{[key]=value}) end)
                 assert.equals(0,S.stats(seq).nodes_visited)
             end
+        end
+    end)
+
+    it('exposes the confirmed frontier without copying row metadata',function()
+        local seq=sequence({'💬: q','🤖: a','body','💬: next','draft'})
+        local worker=Semantic.new(seq)
+        assert.equals(0,Semantic.confirmed_frontier(worker))
+        Semantic.step(worker,{rows=3})
+        assert.equals(3,Semantic.confirmed_frontier(worker))
+        assert.is_false(S.at(seq,2).metadata.confirmed)
+        Semantic.step(worker,{rows=1})
+        assert.equals(4,Semantic.confirmed_frontier(worker))
+        Semantic.step(worker,{rows=1})
+        assert.equals(4,Semantic.confirmed_frontier(worker))
+        assert.is_true(S.at(seq,2).metadata.confirmed)
+        settle(worker)
+        S.stats(seq,true)
+        assert.equals(5,Semantic.confirmed_frontier(worker))
+        assert.equals(0,S.stats(seq).metadata_values_copied)
+        assert.equals('reused',fragment(seq,worker,4,5,{'draft first','draft second'}).status)
+        assert.equals(6,Semantic.confirmed_frontier(worker))
+        local evidence=Semantic.before_splice(worker,2,3)
+        S.splice(seq,2,3,{span('🧠: changed')})
+        Semantic.after_splice(worker,evidence,2,3)
+        assert.equals(evidence.restart_row,Semantic.confirmed_frontier(worker))
+    end)
+
+    it('reuses confirmed question and answer suffixes after Enter and Backspace',function()
+        for _,lines in ipairs({{'💬: q','question body','question tail'},
+            {'💬: q','🤖: a','answer body','answer tail'}}) do
+            local seq=sequence(lines)
+            local worker=Semantic.new(seq); settle(worker)
+            local row=#lines-2
+            local suffix=S.at(seq,row+1).handle
+            local old=S.at(seq,row).handle
+            local source=S.range_certificate(seq,row,row+1)
+            assert.equals('reused',fragment(seq,worker,row,row+1,{'body first','body second'}).status)
+            assert.is_nil(S.rank(seq,old))
+            assert.is_false(S.validate_certificate(seq,source))
+            assert.equals(row+2,S.rank(seq,suffix).row)
+            assert.is_true(Semantic.is_confirmed(worker,suffix))
+            assert.equals('reused',fragment(seq,worker,row,row+2,{'joined body'}).status)
+            assert.equals(row+1,S.rank(seq,suffix).row)
+            assert.equals('idle',Semantic.step(worker).status)
+        end
+    end)
+
+    it('compares full reasoning checkpoints and honors immediate adjacency',function()
+        local seq=sequence({'💬: q','🤖: a','🧠: reason','body','tail'})
+        local worker=Semantic.new(seq); settle(worker)
+        assert.is_not_equal('reused',fragment(seq,worker,4,4,{''}).status)
+        settle(worker)
+        assert.equals('text',S.at(seq,5).metadata.semantic.section_kind)
+        seq=sequence({'💬: q','🤖: a','🧠: reason','body','tail','🧠:[END]'})
+        worker=Semantic.new(seq); settle(worker)
+        assert.equals('reused',fragment(seq,worker,4,4,{''}).status)
+        assert.equals('thinking',S.at(seq,5).metadata.semantic.section_kind)
+        seq=sequence({'💬: q','🤖: a','🔧: tool','plain','tail'})
+        worker=Semantic.new(seq); settle(worker)
+        assert.is_not_equal('reused',fragment(seq,worker,3,3,{''}).status)
+        settle(worker)
+    end)
+
+    it('supports question drafting at EOF while refusing marker and oversized changes',function()
+        local seq=sequence({'💬: q','body'})
+        local worker=Semantic.new(seq); settle(worker)
+        assert.equals('reused',fragment(seq,worker,2,2,{'more'}).status)
+        assert.is_true(Semantic.is_confirmed(worker,S.at(seq,2).handle))
+        assert.is_not_equal('reused',fragment(seq,worker,1,2,{'---'}).status)
+        settle(worker)
+        local oversized={span(string.rep('x',65537))}
+        local evidence=Semantic.before_fragment(worker,1,2,oversized)
+        assert.equals('fallback',evidence.status)
+    end)
+
+    it('adds a first plain body row after a surviving question or answer marker at EOF',function()
+        for _,lines in ipairs({{'💬: q'},{'💬: q','🤖: a'}}) do
+            local seq=sequence(lines)
+            local worker=Semantic.new(seq); settle(worker)
+            local marker=S.at(seq,#lines-1).handle
+            assert.equals('reused',fragment(seq,worker,#lines,#lines,{'new body'}).status)
+            assert.equals(marker,S.at(seq,#lines-1).handle)
+            assert.is_true(Semantic.is_confirmed(worker,S.at(seq,#lines).handle))
+            if #lines==2 then assert.equals('text',S.at(seq,#lines).metadata.semantic.section_kind) end
+        end
+    end)
+
+    it('keeps an active answer scope progressing across a question-body newline',function()
+        local lines={'💬: q','draft','🤖: a'}
+        for _=1,30 do lines[#lines+1]='body' end
+        lines[#lines+1]='💬: next'
+        local seq=sequence(lines)
+        local worker=Semantic.new(seq)
+        local expected
+        for _=1,100 do
+            local result=Semantic.step(worker,{rows=1})
+            if result.deltas[1] and result.deltas[1].kind=='section' then
+                expected=S.at(seq,S.rank(seq,result.deltas[1].handle).row+1).handle; break
+            end
+        end
+        assert.is_not_nil(expected)
+        assert.equals('reused',fragment(seq,worker,1,2,{'draft first','draft second'}).status)
+        local result=Semantic.step(worker,{rows=1})
+        assert.equals('section',result.deltas[1].kind)
+        assert.equals(expected,result.deltas[1].handle)
+        settle(worker)
+    end)
+
+    it('bounds Enter and Backspace independently of document row count',function()
+        for _,size in ipairs({100,1000,10000,50000}) do
+            local lines={'💬: q'}
+            for i=2,size do lines[i]='body' end
+            local seq=sequence(lines)
+            local worker=Semantic.new(seq)
+            local settled=false
+            for _=1,size do
+                if Semantic.step(worker,{rows=256}).status=='idle' then settled=true; break end
+            end
+            assert.is_true(settled)
+            local row=math.floor(size/2)
+            local suffix=S.at(seq,row+1)
+            S.stats(seq,true)
+            assert.equals('reused',fragment(seq,worker,row,row+1,{'first','second'}).status)
+            local work=S.stats(seq)
+            assert.is_true(work.nodes_visited<512,'nodes at '..size..': '..work.nodes_visited)
+            assert.is_true(work.entries_copied<1024)
+            assert.is_true(work.entries_visited<2048)
+            assert.equals(suffix.handle,S.at(seq,row+2).handle)
+            assert.same(suffix.metadata,S.at(seq,row+2).metadata)
+            S.stats(seq,true)
+            assert.equals('reused',fragment(seq,worker,row,row+2,{'joined'}).status)
+            work=S.stats(seq)
+            assert.is_true(work.nodes_visited<512)
+            assert.is_true(work.entries_copied<1024)
+            assert.is_true(work.entries_visited<2048)
+            assert.equals('idle',Semantic.step(worker).status)
         end
     end)
 end)

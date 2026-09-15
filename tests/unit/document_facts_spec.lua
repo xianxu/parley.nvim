@@ -8,7 +8,7 @@ local function fixture(lines, opaque)
         local _, token = G.lex_step(G.lex_start(), line, true, { bytes = #line })
         values[i] = { rows = 1, bytes = #line + 1, metadata = { token = token }, opaque = i == opaque }
     end
-    local seq = S.new(values, { summarize = function(meta) return G.summary(meta.token) end,
+    local seq = S.new(values, { channel_names = G.CHANNELS, channels = function(meta) return G.channels(meta and meta.token) end, summarize = function(meta) return G.summary(meta.token) end,
         combine = G.combine, empty_summary = G.empty_summary() })
     local handles = {}
     for i, span in ipairs(S.query(seq, 0, #lines)) do handles[i] = span.handle end
@@ -18,7 +18,7 @@ end
 local function ready(seq, handle, need, opts)
     local result = F.resolve(seq, handle, need, opts)
     assert.equals("ready", result.status)
-    assert.is_true(S.validate_certificate(seq, result.fact.certificate.range, { kind = "syntax" }))
+    assert.is_true(F.validate(seq, result.fact.certificate))
     return result.fact
 end
 
@@ -27,6 +27,62 @@ describe("indexed grammar facts", function()
         local loaded, module = pcall(require, "parley.document.facts")
         assert.is_true(loaded, tostring(module))
         F = module
+    end)
+
+    it("preserves split body rows outside footer trigger components", function()
+        local seq, h = fixture({ "topic", "---", "body", "more", "---", "", "[^1]: note" })
+        local header = ready(seq, h[1], { kind = "header" })
+        local footer = ready(seq, h[1], { kind = "footer" })
+        local _, token = G.lex_step(G.lex_start(), "new body", true, { bytes = 8 })
+        S.splice(seq, 3, 3, { { rows = 1, bytes = 9, metadata = { token = token } } })
+        assert.is_true(F.validate(seq, header.certificate))
+        assert.is_true(F.validate(seq, footer.certificate))
+        assert.equals(2, #F.dependencies(footer.certificate))
+        assert.equals(h[5], footer.certificate.parts[2].first)
+        local D = require("parley.document.dependencies")
+        local index = D.new({ rank = function(handle)
+            local rank = S.rank(seq, handle)
+            return rank and rank.row
+        end })
+        for _, fact in ipairs({ header, footer }) do
+            for _, part in ipairs(F.dependencies(fact.certificate)) do
+                assert.equals("ok", index:add(part.origin, part.last,
+                    { first = part.first, channels = part.channels }).status)
+            end
+        end
+        assert.is_nil(index:restart_origin(3, 3, { channels = { row = true, nonblank = true } }).origin)
+        assert.equals(S.bof(seq), index:restart_origin(5, 5, { channels = { divider = true } }).origin)
+    end)
+
+    it("invalidates local adjacency when a blank row is inserted", function()
+        local seq, h = fixture({ "@@tag@@", "💬: next", "🔧: read", "```lua", "body", "```" })
+        local preface = ready(seq, h[1], { kind = "preface" })
+        local tool = ready(seq, h[3], { kind = "tool_body" })
+        local _, token = G.lex_step(G.lex_start(), "", true, { bytes = 0 })
+        S.splice(seq, 3, 3, { { rows = 1, bytes = 1, metadata = { token = token } } })
+        assert.is_false(F.validate(seq, tool.certificate))
+        assert.is_true(F.validate(seq, preface.certificate))
+        S.splice(seq, 1, 1, { { rows = 1, bytes = 1, metadata = { token = token } } })
+        assert.is_false(F.validate(seq, preface.certificate))
+    end)
+
+    it("preserves closer proofs across irrelevant Enter and rejects equal-count replacements", function()
+        for _, closer in ipairs({ "```", "body" }) do
+            local seq, h = fixture({ "```lua", "body", closer })
+            local fact = ready(seq, h[1], { kind = "ordinary_close", width = 3 })
+            local _, body = G.lex_step(G.lex_start(), "more", true, { bytes = 4 })
+            S.splice(seq, 1, 1, { { rows = 1, bytes = 5, metadata = { token = body } } })
+            assert.is_true(F.validate(seq, fact.certificate))
+            local _, close = G.lex_step(G.lex_start(), "```", true, { bytes = 3 })
+            S.splice(seq, 2, 3, { { rows = 1, bytes = 4, metadata = { token = close } } })
+            assert.is_false(F.validate(seq, fact.certificate))
+        end
+        local seq, h = fixture({ "```lua", "````", "```" })
+        local fact = ready(seq, h[1], { kind = "ordinary_close", width = 3 })
+        local metadata = S.at(seq, 1).metadata
+        metadata.token.bare_close_width = 3
+        S.update(seq, h[2], metadata)
+        assert.is_false(F.validate(seq, fact.certificate))
     end)
 
     it("matches header and footer source oracles", function()
@@ -116,7 +172,7 @@ describe("indexed grammar facts", function()
         assert.equals("ready", result.status)
         assert.is_false(result.fact.value)
         assert.equals(h[11], result.fact.certificate.origin)
-        assert.is_true(S.validate_certificate(seq, result.fact.certificate.range, { kind = "syntax" }))
+        assert.is_true(F.validate(seq, result.fact.certificate))
     end)
 
     it("finishes a false-positive summary search within each slice budget", function()
@@ -146,9 +202,9 @@ describe("indexed grammar facts", function()
         -- The unchanged adjacent handle is enough to preserve a closed search;
         -- changing text after its closer does not invalidate its interior proof.
         S.update(seq, h[4], metadata)
-        assert.is_true(S.validate_certificate(seq, fact.certificate.range, { kind = "syntax" }))
+        assert.is_true(F.validate(seq, fact.certificate))
         S.splice(seq, 1, 2, { { rows = 1, bytes = 4, opaque = true } })
-        assert.is_false(S.validate_certificate(seq, fact.certificate.range, { kind = "syntax" }))
+        assert.is_false(F.validate(seq, fact.certificate))
     end)
 
     it("uses summaries for a fifty-thousand-row footer across a blank gap", function()
@@ -199,12 +255,12 @@ describe("indexed grammar facts", function()
         local metadata = S.at(seq, 1).metadata
         metadata.semantic = { role = "answer" }
         assert.is_true(S.project_many(seq, { { handle = h[2], metadata = metadata } }))
-        assert.is_true(S.validate_certificate(seq, fact.certificate.range, { kind = "syntax" }))
-        metadata.token.kind = "user"
+        assert.is_true(F.validate(seq, fact.certificate))
+        metadata.token.bare_close_width = 3
         assert.is_false(S.project_many(seq, { { handle = h[2], metadata = metadata } }))
-        assert.is_true(S.validate_certificate(seq, fact.certificate.range, { kind = "syntax" }))
+        assert.is_true(F.validate(seq, fact.certificate))
         assert.is_true(S.update(seq, h[2], metadata))
-        assert.is_false(S.validate_certificate(seq, fact.certificate.range, { kind = "syntax" }))
+        assert.is_false(F.validate(seq, fact.certificate))
     end)
 
     it("demands row zero for initially opaque global facts", function()
@@ -218,7 +274,7 @@ describe("indexed grammar facts", function()
         end
     end)
 
-    it("issues explicit syntax proofs that survive payload resizing only", function()
+    it("issues explicit selective proofs that reject relevant lexical changes", function()
         local seq, h = fixture({ "```lua", "body", "```" })
         local fact = ready(seq, h[1], { kind = "ordinary_close", width = 3 })
         local text_proof = S.range_certificate(seq, 0, 3)
@@ -228,13 +284,13 @@ describe("indexed grammar facts", function()
         local accepted, proof = S.update_text(seq, h[2], { bytes = 41, metadata = metadata })
         assert.is_true(accepted)
         assert.is_true(proof.same_syntax_proven)
-        assert.is_true(S.validate_certificate(seq, fact.certificate.range, { kind = "syntax" }))
+        assert.is_true(F.validate(seq, fact.certificate))
         assert.is_false(S.validate_certificate(seq, text_proof))
-        metadata.token.kind = "user"
+        metadata.token.bare_close_width = 3
         accepted, proof = S.update_text(seq, h[2], { bytes = 41, metadata = metadata })
         assert.is_true(accepted)
         assert.is_false(proof.same_syntax_proven)
-        assert.is_false(S.validate_certificate(seq, fact.certificate.range, { kind = "syntax" }))
+        assert.is_false(F.validate(seq, fact.certificate))
     end)
 
     it("keeps both compound and subquery proofs across token-equivalent payload edits", function()

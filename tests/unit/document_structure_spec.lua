@@ -236,3 +236,84 @@ describe("ordinary body edit repair", function()
         assert.equals("question", structure.query(doc, 3, 4)[1].metadata.semantic.role)
     end)
 end)
+
+describe("bounded classified fragment replacement", function()
+    it("reuses confirmed suffix after Enter and join while retiring old text evidence", function()
+        local lines = { "💬: q", "🤖: a", "first second", "tail", "💬: next", "draft" }
+        local doc = opaque_document(lines)
+        settle(doc, lines, { bytes = 32, rows = 2 })
+        assert.equals("function", type(structure.replace_fragment))
+        local suffix = structure.query(doc, 3, 6)
+        local old_text = structure.capture(doc, 2, 3)
+        local result = structure.replace_fragment(doc, 2, 3, {
+            { rows = 1, bytes = 6, metadata = { token = classified("first") } },
+            { rows = 1, bytes = 7, metadata = { token = classified("second") } },
+        }, { rows = 4, bytes = 64 })
+        assert.is_true(result.reused_suffix)
+        assert.equals("idle", structure.repair_step(doc).status)
+        local after = structure.query(doc, 4, 7)
+        for i = 1, 3 do
+            assert.equals(suffix[i].handle, after[i].handle)
+            assert.is_true(after[i].metadata.confirmed)
+        end
+        assert.equals("stale", structure.publish(doc, old_text, { span("first second") }).status)
+        result = structure.replace_fragment(doc, 2, 4, {
+            { rows = 1, bytes = 13, metadata = { token = classified("first second") } },
+        }, { rows = 4, bytes = 64 })
+        assert.is_true(result.reused_suffix)
+        assert.equals(suffix[1].handle, structure.query(doc, 3, 4)[1].handle)
+    end)
+
+    it("does not reuse a suffix when an inserted blank ends implicit reasoning", function()
+        local lines = { "💬: q", "🤖: a", "🧠: thought", "continued", "tail" }
+        local doc = opaque_document(lines)
+        settle(doc, lines, { bytes = 32, rows = 2 })
+        assert.equals("function", type(structure.replace_fragment))
+        local result = structure.replace_fragment(doc, 3, 3, {
+            { rows = 1, bytes = 1, metadata = { token = classified("") } },
+        }, { rows = 4, bytes = 64 })
+        assert.is_false(result.reused_suffix)
+        table.insert(lines, 4, "")
+        settle(doc, lines, { bytes = 32, rows = 2 })
+        assert.equals("text", structure.query(doc, 4, 5)[1].metadata.semantic.section_kind)
+    end)
+end)
+
+describe("repair read lifetime", function()
+    it("rejects a pending byte response after reload and repairs the new epoch", function()
+        local lines = { "💬: first", "body" }
+        local doc = opaque_document(lines)
+        local request
+        for _ = 1, 100 do
+            local result = structure.repair_step(doc, nil, { bytes = 4, rows = 1 })
+            if result.status == "read" then request = result.request; break end
+        end
+        assert.is_table(request)
+        local changed = { "💬: other", "tail" }
+        local bytes = #changed[1] + #changed[2] + 2
+        structure.reload(doc, { { rows = 2, bytes = bytes, opaque = true } })
+        local result = structure.repair_step(doc, { request_id = request.request_id,
+            bytes = lines[1]:sub(1, 4), eol = false, start_byte = 0 }, { bytes = 4, rows = 1 })
+        assert.equals("stale", result.status)
+        settle(doc, changed, { bytes = 4, rows = 1 })
+        assert.is_true(structure.query(doc, 0, 1)[1].metadata.semantic.exchange_start)
+    end)
+end)
+
+describe("viewport query work", function()
+    it("checks certainty once for a visible range without resolving each row again", function()
+        local lines = { "💬: question" }
+        for i = 2, 300 do lines[i] = "body" end
+        local doc = opaque_document(lines)
+        settle(doc, lines, { bytes = 64, rows = 8 })
+        assert.equals("function", type(structure.stats))
+        structure.stats(doc, true)
+        local rows = structure.query(doc, 128, 160)
+        local work = structure.stats(doc)
+        assert.equals(32, #rows)
+        for _, row in ipairs(rows) do assert.is_true(row.metadata.confirmed) end
+        -- Materialized leaves may contain one row: allow their binary traversal
+        -- plus boundary paths, but no second per-row rank/metadata lookup.
+        assert.is_true(work.nodes_visited <= 2 * #rows + 32, "viewport query visited " .. work.nodes_visited .. " nodes")
+    end)
+end)

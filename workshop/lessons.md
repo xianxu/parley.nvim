@@ -2470,3 +2470,17 @@ download.
 - A deferred operational contract needs a named remaining milestone, implementation
   task, observable outcome, and deterministic tests; prose saying “later scheduler”
   is not delivery traceability (ARCH-CONSTRAINTS).
+
+
+## 2026-09-15 (#254 structural-core verification)
+
+- A tree detached in Lua can remain reachable through JIT trace constants that
+  retain an operation-local recursive closure and its captured leaf array.
+  Measure reclamation with JIT enabled in a fresh process; move traversal workers
+  to module scope with explicit state rather than disabling JIT to pass the test.
+- Separate payload authority from structural evidence, and narrow lookahead
+  evidence to the predicates queried. Otherwise Enter invalidates a global
+  negative-footer fact even though the inserted row cannot introduce a footer.
+- A delayed read request contains coordinates from a particular observation.
+  Refresh an unread request after a disjoint edit moves its source; retain the
+  old frame only for a response already read under that frame.

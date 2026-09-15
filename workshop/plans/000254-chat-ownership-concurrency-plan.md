@@ -264,12 +264,12 @@ Each M-row below is a real `sdlc milestone-close` boundary, with its own fresh-c
 
 **Files:** create `lua/parley/document/sequence.lua`, `grammar.lua`, `structure.lua`, `tests/unit/document_sequence_spec.lua`, `document_grammar_spec.lua`, `document_structure_spec.lua`; modify `lua/parley/highlight_structure.lua`, `fence.lua`, `answer_structure.lua`, `chat_parser.lua`, `line_reader.lua`; add `tests/fixtures/document_edits.lua`; update `atlas/chat/parsing.md`, `atlas/traceability.yaml`.
 
-- [ ] Implement `sequence.splice`, `sequence.rank`, and `sequence.query` against their reference-model and work-count contracts below.
-- [ ] Extract pure grammar ownership with complete checkpoint state and backward/negative lookahead dependencies; preserve existing distinct fence rules, reasoning, annotations, prefaces, headerless chats, and footer/draft behavior.
-- [ ] Implement `structure.repair_step` returning continuation/deltas and `structure.publish` validating local provenance, using the differential/golden strategy below.
-- [ ] Implement `grammar.restart_origin` and dependency-certificate validation; drive their adversarial sequence strategy before integrating the scheduler.
-- [ ] Gate the structural functions against the declared workload envelope through the shared instrumented harness.
-- [ ] Run mapped parsing/highlights/exchange suites plus new mapped document suite; update atlas/traceability, commit, close M2. The new core must be usable in isolation; live authority migration follows M3.
+- [x] Implement `sequence.splice`, `sequence.rank`, and `sequence.query` against their reference-model and work-count contracts below.
+- [x] Extract pure grammar ownership with complete checkpoint state and backward/negative lookahead dependencies; preserve existing distinct fence rules, reasoning, annotations, prefaces, headerless chats, and footer/draft behavior.
+- [x] Implement `structure.repair_step` returning continuation/deltas and `structure.publish` validating local provenance, using the differential/golden strategy below.
+- [x] Implement `grammar.restart_origin` and dependency-certificate validation; drive their adversarial sequence strategy before integrating the scheduler.
+- [x] Gate the structural functions against the declared workload envelope through the shared instrumented harness.
+- [x] Run mapped parsing/highlights/exchange suites plus new mapped document suite; update atlas/traceability, commit, close M2. The new core must be usable in isolation; live authority migration follows M3.
 
 ### M3 — Own document edits and migrate live structure consumers
 
@@ -496,3 +496,35 @@ relevant facts remain valid. Text evidence always expires and inserted rows rece
 fresh identities. Unknown/oversized fragments and semantic changes retain the
 conservative sliced path. This refines the existing complete-checkpoint convergence
 contract; it adds no external concurrency or persistence scope (ARCH-PURPOSE).
+
+### 2026-09-15 — M2 allocation and read-lifetime findings
+
+Reason: allocation and interleaving probes exposed costs not visible in leaf
+visit counts. Delta: replace all operation-local sequence traversal closures with
+module-level workers carrying explicit state. Under hot LuaJIT, the original
+50,000-row deletion retained approximately 90 MB through a captured leaf array;
+the fixed probe retains 2.2–2.4 MB without disabling/flushing JIT. A fresh-process
+regression defends this lifecycle (ARCH-FUNERAL). Forced GC time remains separate
+from foreground detach work; no constant-time reclamation claim is made.
+
+Refresh unread byte requests when a disjoint edit moves their source, while
+validating an already-read response against its original frame and local source
+evidence. Query semantic certainty once per viewport range rather than repeating
+rank and deep-copy work per row. Real Neovim reader tests cover bounded UTF-8
+chunks and its final empty-row separator convention.
+
+### 2026-09-15 — M2 verification before boundary review
+
+The complete document mapping passes 127 tests, including fresh-process JIT
+reclamation, selective facts, bounded fragment transfer through 50,000 rows,
+viewport work, and real-Neovim bounded reads. Existing parsing (239), highlights
+(108), and exchange-model (281) mappings pass after shared lexical extraction.
+Scoped lint and whitespace checks are clean.
+
+The schema-3 direct-core report has 28 scenarios (one warmup, three measured
+samples per scenario). At 50,000 rows, Enter plus join processes three semantic
+rows, visits 358 index nodes and two dependency nodes, and copies 175 leaf
+entries; median 3.020 ms and observed p95 3.387 ms. Setup/materialization is outside
+that window. Across 100/1,000/10,000/50,000 rows the semantic work stays three rows.
+These are isolated core measurements, not the M3 attached-editor acceptance.
+M2 implementation tasks are verified; its review boundary is pending.

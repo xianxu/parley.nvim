@@ -409,4 +409,150 @@ describe("document sequence", function()
         assert.is_false(S.validate_certificate(seq,cert,{kind='syntax'}))
     end)
 
+    it("keeps selective fact proofs across irrelevant row insertion and deletion",function()
+        local function span(kind) return {rows=1,bytes=2,metadata={token={kind=kind}}} end
+        local seq=S.new({span('text'),span('text'),span('user')},{channel_names={'user'},
+            channels=function(m) return m.token.kind=='user' and {'user'} or {} end})
+        local witness=S.at(seq,2).handle
+        local cert=S.fact_certificate(seq,{first=S.bof(seq),last=witness,end_inclusive=true,channels={'user'}})
+        S.splice(seq,0,1,{span('text'),span('text')})
+        assert.equals(0,S.rank(seq,S.bof(seq)).row)
+        assert.is_true(S.validate_certificate(seq,cert,{kind='fact'}))
+        S.splice(seq,0,2,{})
+        assert.is_true(S.validate_certificate(seq,cert,{kind='fact'}))
+        assert.is_false(S.validate_certificate(seq,cert))
+        local valid,range=S.validate_certificate(seq,cert,{kind='fact'})
+        assert.is_true(valid); assert.equals(0,range.first_row); assert.equals(2,range.last_row)
+    end)
+    it("rejects equal-count matching replacement without hashes",function()
+        local function span(kind) return {rows=1,bytes=2,metadata={token={kind=kind}}} end
+        local seq=S.new({span('text'),span('user'),span('text')},{channel_names={'user'},
+            channels=function(m) return m.token.kind=='user' and {user=true} or {} end})
+        local cert=S.fact_certificate(seq,{first=S.bof(seq),last=S.eof(seq),channels={'user'}})
+        S.splice(seq,1,2,{span('user')})
+        assert.is_false(S.validate_certificate(seq,cert,{kind='fact'}))
+    end)
+    it("does not treat unread spans as ready negative facts",function()
+        local seq=S.new({{rows=100,bytes=200,opaque=true}},{channel_names={'user'},channels=function() return {} end})
+        assert.is_nil(S.fact_certificate(seq,{first=S.bof(seq),last=S.eof(seq),channels={'user'}}))
+        local cursorproof=S.fact_certificate(seq,{first=S.bof(seq),last=S.eof(seq),channels={'user'},allow_opaque=true})
+        assert.is_true(S.validate_certificate(seq,cursorproof,{kind='fact'}))
+        S.splice(seq,0,1,{{rows=1,bytes=2,metadata={token={kind='text'}}}},{start_byte=0,end_byte=2})
+        assert.is_false(S.validate_certificate(seq,cursorproof,{kind='fact'}))
+    end)
+
+    it("resumes selective searches when an irrelevant cursor row is deleted",function()
+        local values={}
+        for i=1,2000 do values[i]={rows=1,bytes=2,metadata={token={kind=i==2000 and 'user' or 'text'}}} end
+        local seq=S.new(values,{channel_names={'user'},channels=function(m) return m.token.kind=='user' and {'user'} or {} end})
+        local opts={certificate_kind='fact',fact={first=S.bof(seq),last=S.eof(seq),channels={'user'}},
+            matches=function(m) return m.token.kind=='user' end}
+        local result=S.find(seq,0,2000,opts)
+        assert.equals('budget',result.status)
+        -- Remove every potential early cursor row without touching the witness.
+        S.splice(seq,0,1000,{})
+        opts.cursor=result.cursor
+        for _=1,20 do
+            result=S.find(seq,0,1000,opts)
+            if result.status~='budget' then break end
+            opts.cursor=result.cursor
+        end
+        assert.equals('found',result.status)
+        assert.equals(999,result.span.start_row)
+    end)
+    it("bounds selective validation and accounts for channel copies at scale",function()
+        for _,n in ipairs({1000,10000,50000}) do
+            local values={}
+            for i=1,n do values[i]={rows=1,bytes=2,metadata={token={kind=i==n and 'user' or 'text'}}} end
+            local seq=S.new(values,{channel_names={'user','row'},channels=function(m)
+                return {row=true,user=m.token.kind=='user'} end})
+            local cert=S.fact_certificate(seq,{first=S.bof(seq),last=S.eof(seq),channels={'user'}})
+            S.splice(seq,1,2,{})
+            S.stats(seq,true)
+            assert.is_true(S.validate_certificate(seq,cert,{kind='fact'}))
+            local work=S.stats(seq)
+            assert.is_true(work.nodes_visited<10)
+            assert.is_true(work.entries_visited<10)
+            assert.is_true(work.channel_values_visited<=2)
+        end
+    end)
+
+    it("keeps fact channel caches correct through text updates and rejects projection drift",function()
+        local seq=S.new({{rows=1,bytes=2,metadata={token={kind='text'},marker=false}}},{
+            channel_names={'user'},channels=function(m) return {user=m.marker==true} end})
+        local h=S.at(seq,0).handle
+        local proof=S.fact_certificate(seq,{first=S.bof(seq),last=S.eof(seq),channels={'user'}})
+        assert.is_false(S.project_many(seq,{{handle=h,metadata={token={kind='text'},marker=true}}}))
+        assert.is_true(S.validate_certificate(seq,proof,{kind='fact'}))
+        local ok,result=S.update_text(seq,h,{bytes=5,metadata={token={kind='text'},marker=true}})
+        assert.is_true(ok); assert.is_false(result.same_syntax_proven)
+        assert.is_false(S.validate_certificate(seq,proof,{kind='fact'}))
+        local totals=S.channel_summary(seq,0,1,{'user'})
+        assert.equals(1,totals.channels.user.count)
+        totals.channels.user.count=999
+        assert.equals(1,S.channel_summary(seq,0,1,{'user'}).channels.user.count)
+        assert.has_error(function() S.channel_summary(seq,0,1,{'typo'}) end)
+        assert.is_false(S.update_text(seq,S.bof(seq),{bytes=5,metadata={token={kind='text'}}}))
+    end)
+    it("resumes opaque selective scans within complete navigation budgets",function()
+        local seq=S.new(rows(1500),{channel_names={'user'},channels=function() return {} end})
+        S.splice(seq,1500,1500,{{rows=100,bytes=200,opaque=true}})
+        local opts={certificate_kind='fact',fact={first=S.bof(seq),last=S.eof(seq),channels={'user'}},
+            matches=function() return false end,max_nodes=512,max_entries=1024}
+        local result
+        for _=1,20 do
+            S.stats(seq,true)
+            result=S.find(seq,0,1550,opts)
+            local actual=S.stats(seq)
+            assert.equals(actual.nodes_visited,result.work.nodes_visited)
+            assert.equals(actual.channel_values_visited,result.work.channel_values_visited)
+            assert.is_true(actual.nodes_visited<=512)
+            assert.is_true(actual.entries_visited<=1024)
+            if result.status~='budget' then break end
+            assert.is_not_nil(result.cursor); opts.cursor=result.cursor
+        end
+        assert.equals('opaque',result.status)
+        assert.equals(1500,result.span.start_row)
+    end)
+
+    it("reclaims detached document storage with active JIT traces and retained certificates",function()
+        -- Run a fresh LuaJIT VM: earlier Plenary assertions alter hot traces and
+        -- can hide the retention defect. Do not flush traces before measuring.
+        local source=[=[
+            jit.opt.start('hotloop=1','hotexit=1')
+            local S=require('parley.document.sequence')
+            local G=require('parley.document.grammar')
+            collectgarbage('collect')
+            local baseline=collectgarbage('count')
+            local _,token=G.lex_step(G.lex_start(),'ordinary body',true,{bytes=64})
+            local values={}
+            for i=1,50000 do values[i]={rows=1,bytes=14,metadata={token=token}} end
+            local seq=S.new(values,{summarize=function(m) return G.summary(m.token) end,
+                combine=G.combine,empty_summary=G.empty_summary(),channel_names=G.CHANNELS,
+                channels=function(m) return G.channels(m.token) end})
+            values=nil
+            local certificate=S.range_certificate(seq,0,50000)
+            collectgarbage('collect')
+            local attached=collectgarbage('count')
+            S.splice(seq,0,50000,{{rows=1,bytes=1,opaque=true}})
+            collectgarbage('collect'); collectgarbage('collect')
+            print(vim.json.encode({retained=collectgarbage('count')-baseline,
+                allocated=attached-baseline,valid=S.validate_certificate(seq,certificate)}))
+        ]=]
+        local path=vim.fn.tempname()..'.lua'
+        vim.fn.writefile(vim.split(source,'\n',{plain=true}),path)
+        local output=vim.fn.system({vim.v.progpath,'--headless','--noplugin','-u','NONE','-i','NONE',
+            '--cmd','set rtp^='..vim.fn.fnameescape(vim.fn.getcwd()),
+            '-c','luafile '..vim.fn.fnameescape(path),'-c','qa!'})
+        local status=vim.v.shell_error
+        vim.fn.delete(path)
+        assert.equals(0,status,output)
+        local result=vim.json.decode(output)
+        assert.is_false(result.valid)
+        -- A pinned tree keeps tens of MiB; allocator/JIT bookkeeping may keep
+        -- a few MiB. The coarse ratio avoids platform-sensitive byte equality.
+        assert.is_true(result.retained<result.allocated*0.3+2048,
+            'detached tree retained '..math.floor(result.retained)..' KiB')
+    end)
+
 end)

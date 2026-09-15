@@ -589,6 +589,18 @@ workers have separate file owners; root composes and verifies integration.
 A bounded production line-reader chunk seam also passes real-Neovim tests for
 100KB UTF-8 lines, the final empty row, and rejected unbounded requests.
 
+### 2026-09-15 — M2 ready for boundary review
+
+Completed selective fact channels, compound footer triggers, bounded Enter/join
+transfer, and viewport certainty queries. Document mapping: 127 passed, zero
+failures/errors. Parsing 239, highlights 108, exchange model 281 remain green;
+scoped lint/diff checks pass. Hot-JIT deletion regression reduces retained memory
+from roughly 90 MB to 2.2–2.4 MB without disabling/flushing JIT. The 50k Enter+join
+benchmark processes three semantic rows with 358 index visits, two dependency
+visits, and 175 leaf copies; median 3.020 ms across three measured samples.
+The pure core is ready for mandatory review; live authority/rendering migration
+remains M3, with the end-of-issue operator live-test handoff unchanged.
+
 ## Revisions
 
 ### 2026-09-14 — Incremental rendering is part of the core contract

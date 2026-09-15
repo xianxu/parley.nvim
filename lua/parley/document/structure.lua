@@ -12,6 +12,10 @@ end
 local function new_sequence(spans)
     return sequence.new(spans, {
         empty_summary = grammar.empty_summary(),
+        channel_names = grammar.CHANNELS,
+        channels = function(metadata)
+            return metadata and metadata.token and grammar.channels(metadata.token) or {}
+        end,
         summarize = function(metadata)
             return metadata and metadata.token and grammar.summary(metadata.token) or grammar.empty_summary()
         end,
@@ -29,14 +33,18 @@ function M.size(document)
     return sequence.size(state(document).index)
 end
 
+function M.stats(document, reset)
+    return sequence.stats(state(document).index, reset)
+end
+
 function M.query(document, first, last, opts)
     local current = state(document)
     local rows = sequence.query(current.index, first, last, opts)
     if current.semantic then
-        local semantic = require("parley.document.semantic")
+        local frontier = require("parley.document.semantic").confirmed_frontier(current.semantic)
         for _, row in ipairs(rows) do
             if row.metadata then
-                row.metadata.confirmed = semantic.is_confirmed(current.semantic, row.handle)
+                row.metadata.confirmed = row.end_row <= frontier and row.metadata.confirmed == true
                 if not row.metadata.confirmed then
                     row.metadata.semantic, row.metadata.render_before = nil, nil
                 end
@@ -77,6 +85,22 @@ function M.replace_row(document, row, token, bytes)
     assert(ok, result)
     assert(result.same_syntax_proven == equivalent, "lexical equivalence disagrees with indexed proof")
     if evidence then semantic.after_splice(current.semantic, evidence, row, row + 1) end
+    return result
+end
+
+function M.replace_fragment(document, first, last, spans, budget)
+    local current = state(document)
+    local semantic = require("parley.document.semantic")
+    current.semantic = current.semantic or semantic.new(current.index)
+    local initial = sequence.stats(current.index)
+    local evidence = semantic.before_fragment(current.semantic, first, last, spans, budget)
+    sequence.splice(current.index, first, last, spans)
+    local added = 0
+    for _, span in ipairs(spans) do added = added + span.rows end
+    local result = semantic.after_fragment(current.semantic, evidence, first, first + added)
+    result.reused_suffix = result.status == "reused"
+    result.work = result.work or {}
+    for key, value in pairs(sequence.stats(current.index)) do result.work[key] = value - (initial[key] or 0) end
     return result
 end
 
