@@ -301,10 +301,10 @@ Each M-row below is a real `sdlc milestone-close` boundary, with its own fresh-c
 
 **Files:** create `lua/parley/batch.lua`, `answer_recovery.lua`, `tests/unit/batch_spec.lua`, `tests/integration/answer_recovery_spec.lua`, `batch_respond_spec.lua`; modify `lua/parley/chat_respond.lua`, `generation_runner.lua`, `init.lua`, `keybinding_registry.lua`; update `atlas/chat/lifecycle.md`, `atlas/index.md`, user help, `atlas/traceability.yaml`.
 
-- [ ] Implement `answer_recovery.publish`, `resolve`, `restore`, and `cleanup` against the fault/recovery strategies below. Make snapshot confirmation a precondition of destructive answer replacement.
-- [ ] Replace recursive ordinal batching with fixed IDs/revisions and explicit progress. Single and batch calls use the same generation runner, never current-buffer/window or global cursor configuration as authority.
-- [ ] Validate `batch.transition` and `batch.validate_next` against the fixed-membership/revision strategies below.
-- [ ] Run mapped batch/recovery/lifecycle suites and production sequence integration, update atlas/help, commit, close M5.
+- [x] Implement `answer_recovery.publish`, `resolve`, `restore`, and `cleanup` against the fault/recovery strategies below. Make snapshot confirmation a precondition of destructive answer replacement.
+- [x] Replace recursive ordinal batching with fixed IDs/revisions and explicit progress. Single and batch calls use the same generation runner, never current-buffer/window or global cursor configuration as authority.
+- [x] Validate `batch.transition` and `batch.validate_next` against the fixed-membership/revision strategies below.
+- [x] Run mapped batch/recovery/lifecycle suites and production sequence integration, update atlas/help, commit, close M5.
 
 ### M6 — Tool outcomes and final enforcement
 
@@ -1347,3 +1347,39 @@ confounder, not a demonstrated explanation. Timing remains report-only and no
 with controlled provider text, not builtin process/IO overlap. Native concurrent
 tool heartbeat tests provide separate evidence. Exact report and analysis:
 `/tmp/parley254-m6-final-perf.json`, `...-final-perf-summary.md`.
+
+### 2026-09-15 — M6 Codex rework: effect authority and truthful completion
+
+Reason: Codex reproduced BR25–28 despite passing scoped tests. Delta: correct
+four complete classes before the next boundary, with controlled failing probes.
+
+- **Execution authority (BR25):** a canonical string at admission is insufficient
+  after parent replacement. Bind captured roots/resources to filesystem identity;
+  cover queued start and every asynchronous boundary that can redirect a path.
+  Enumerate read/stat/open, existing/new writes, pre-image publication, backup
+  destinations, parent creation and subprocess traversal. Checks must reject
+  redirected authority without presenting a check/use race as atomic confinement.
+  The shared filesystem/dispatch seam owns the evidence and its release; native
+  ancestor replacement plus stateful delayed callbacks establish conformance.
+- **Editor completion (BR26):** all three mutation tools (write, edit, proposal)
+  share file-to-buffer reconciliation after positive disk completion. Unchanged
+  open buffers refresh; intervening human edits survive and receive an explicit
+  reconciliation result. Capture identity/revision before the asynchronous effect
+  and revalidate on completion, including renamed, reloaded and detached buffers.
+- **Lossy results (BR27):** every consumer must retain positive evidence that
+  output is incomplete. Sweep per-result and aggregate scheduler caps, backend
+  paging/capture, normalization, transcript serialization, provider continuation,
+  and skill results. Zero remaining capacity cannot produce an apparently complete
+  empty success. Bound metadata/notice costs explicitly and preserve effect truth
+  separately from the completeness of its printable output.
+- **Shared transforms (BR28):** extract pure edit/insert and numbered-read policy
+  consumed by both async and compatibility adapters. Keep IO and editor refresh
+  in thin shared integration seams, with direct pure tests and native adapter
+  conformance. No second independent transformation implementation survives.
+
+These are corrections to committed M6 scope, not deferred extensions. Register
+all new regression specs in their owning traceability mappings, rerun affected
+families and lint, and return to Codex review. ARCH-SECURE/ORDER govern changing
+identity; ARCH-PURPOSE/CONSTRAINTS govern complete bounded evidence; ARCH-DRY/PURE
+require common transformation policy; ARCH-MOCK/FUNERAL require shared stateful
+seams and explicit retirement of any new handles or captured editor evidence.

@@ -473,6 +473,36 @@ rounds:
           round: 18
       boundary: M5
       blocked: false
+    - "n": 19
+      timestamp: "2026-09-15T12:34:37-07:00"
+      agent: codex
+      findings:
+        - id: BR-25
+          severity: Critical
+          title: Deferred tool execution can follow a replaced ancestor outside captured roots
+          detail: 'lua/parley/tools/dispatcher.lua:431 and lua/parley/tools/filesystem.lua:157: a native production-producer probe replaced an admitted path''s parent with an outside symlink before scheduled execution; read_file successfully returned OUTSIDE_SECRET. Enforce identity-bound authority at execution and sweep filesystem reads/writes, backup destinations, directory creation, and subprocess traversal with controlled replacement tests. ARCH-SECURE, ARCH-ORDER.'
+          family: resource-authority-at-effect
+          round: 19
+        - id: BR-26
+          severity: Critical
+          title: Async file writers report success while open buffers retain old contents
+          detail: lua/parley/tools/async_builtin.lua:109 omits the editor refresh retained in write_file.lua:63, edit_file.lua:175, and propose_edits.lua:84. Native controls confirmed all three handlers refresh an unmodified autoread buffer, while all three async paths leave old text after successful disk writes. Restore shared ownership-safe refresh/reconciliation and test concurrent human edits. ARCH-PURPOSE, ARCH-ORDER.
+          family: file-editor-completion-consistency
+          round: 19
+        - id: BR-27
+          severity: Critical
+          title: Scheduler-truncated results reach serialized output without a truncation notice
+          detail: lua/parley/tools/scheduler.lua:63 cuts content and sets truncated; dispatcher.lua:245 does not mark already-truncated content, and response_tools.lua:84 drops the flag. A 600000-byte native read produced a successful 524288-byte result with no serialized notice. This is the 12th finding in family semantic-publication-evidence. State and enforce the rule across every lossy stage and consumer, including aggregate-cap exhaustion, rather than patching only this instance. ARCH-PURPOSE, ARCH-CONSTRAINTS.
+          family: semantic-publication-evidence
+          round: 19
+        - id: BR-28
+          severity: Important
+          title: Async and compatibility handlers independently implement file transformations
+          detail: lua/parley/tools/async_builtin.lua:23 duplicates insertion/replacement policy from builtin/edit_file.lua:78; async_builtin.lua:89 duplicates numbered-read formatting from builtin/read_file.lua:54. Extract shared pure transformation and formatting functions consumed by both adapters, with direct tests. ARCH-DRY, ARCH-PURE.
+          family: shared-transformation-policy
+          round: 19
+      boundary: M6
+      blocked: true
 ---
 
 # Gate ledger — 000254-chat-ownership-concurrency#254 (boundary-review)
@@ -688,6 +718,23 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - BR-22 — addressed — Store scanning distinguishes unavailable association evidence from absence and blocks unsafe original publication. Corruption, restart, and failed-quarantine regression cases pass.
 - BR-23 — addressed — Adapter release invokes host retirement, removes registry membership, and cancels pending settlement. Detach and retained-snapshot lifetime regression cases pass.
 
+## Round 19 — 2026-09-15T12:34:37-07:00 (codex) — BLOCKED
+
+### Raised
+
+- **BR-25** [Critical] `resource-authority-at-effect` Deferred tool execution can follow a replaced ancestor outside captured roots
+  lua/parley/tools/dispatcher.lua:431 and lua/parley/tools/filesystem.lua:157: a native production-producer probe replaced an admitted path's parent with an outside symlink before scheduled execution; read_file successfully returned OUTSIDE_SECRET. Enforce identity-bound authority at execution and sweep filesystem reads/writes, backup destinations, directory creation, and subprocess traversal with controlled replacement tests. ARCH-SECURE, ARCH-ORDER.
+- **BR-26** [Critical] `file-editor-completion-consistency` Async file writers report success while open buffers retain old contents
+  lua/parley/tools/async_builtin.lua:109 omits the editor refresh retained in write_file.lua:63, edit_file.lua:175, and propose_edits.lua:84. Native controls confirmed all three handlers refresh an unmodified autoread buffer, while all three async paths leave old text after successful disk writes. Restore shared ownership-safe refresh/reconciliation and test concurrent human edits. ARCH-PURPOSE, ARCH-ORDER.
+- **BR-27** [Critical] `semantic-publication-evidence` Scheduler-truncated results reach serialized output without a truncation notice
+  lua/parley/tools/scheduler.lua:63 cuts content and sets truncated; dispatcher.lua:245 does not mark already-truncated content, and response_tools.lua:84 drops the flag. A 600000-byte native read produced a successful 524288-byte result with no serialized notice. This is the 12th finding in family semantic-publication-evidence. State and enforce the rule across every lossy stage and consumer, including aggregate-cap exhaustion, rather than patching only this instance. ARCH-PURPOSE, ARCH-CONSTRAINTS.
+- **BR-28** [Important] `shared-transformation-policy` Async and compatibility handlers independently implement file transformations
+  lua/parley/tools/async_builtin.lua:23 duplicates insertion/replacement policy from builtin/edit_file.lua:78; async_builtin.lua:89 duplicates numbered-read formatting from builtin/read_file.lua:54. Extract shared pure transformation and formatting functions consumed by both adapters, with direct tests. ARCH-DRY, ARCH-PURE.
+
 ## Open findings
 
 - **BR-13** [Important] `deferred-contract-traceability` BR-11 regressions are missing from the documented verification mapping
+- **BR-25** [Critical] `resource-authority-at-effect` Deferred tool execution can follow a replaced ancestor outside captured roots
+- **BR-26** [Critical] `file-editor-completion-consistency` Async file writers report success while open buffers retain old contents
+- **BR-27** [Critical] `semantic-publication-evidence` Scheduler-truncated results reach serialized output without a truncation notice
+- **BR-28** [Important] `shared-transformation-policy` Async and compatibility handlers independently implement file transformations
