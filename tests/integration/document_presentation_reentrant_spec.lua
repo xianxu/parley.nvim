@@ -83,4 +83,79 @@ describe('native presentation publication ownership',function()
         assert.equals(0,result.entered);assert.is_true(result.attempted)
         assert.is_false(result.changed);assert.equals('visible',result.line)
     end)
+    it('restores disabled folds and the view after an inert edit supersedes a slice',function()
+        local result=exec([[
+            local D=require('parley.document');local F=require('parley.tool_folds')
+            local buf=vim.api.nvim_get_current_buf()
+            vim.api.nvim_buf_set_lines(buf,0,-1,false,{'💬: q','🤖: a','🧠: think','body','🧠:[END]','plain'})
+            local doc=D.attach(buf,{schedule=false});D.drain(doc,1000);F.setup(buf)
+            vim.wo.foldenable=false
+            vim.api.nvim_win_set_cursor(0,{6,2});local view=vim.fn.winsaveview()
+            local edited=false
+            vim.api.nvim_create_autocmd('OptionSet',{pattern='foldenable',callback=function()
+                if not edited then edited=true;vim.api.nvim_buf_set_text(buf,5,0,5,1,{'p'})end
+            end})
+            F.flush(buf);F.flush(buf)
+            local result={edited=edited,enabled=vim.wo.foldenable,view=vim.fn.winsaveview(),before=view}
+            vim.wo.foldenable=true;result.level=vim.fn.foldlevel(3);return result
+        ]])
+        assert.is_true(result.edited);assert.is_false(result.enabled)
+        assert.same(result.before,result.view);assert.equals(1,result.level)
+    end)
+    it('retries window configuration after an inert callback edit instead of reporting an empty plan complete',function()
+        local result=exec([[
+            local D=require('parley.document');local F=require('parley.tool_folds')
+            local buf=vim.api.nvim_get_current_buf()
+            vim.api.nvim_buf_set_lines(buf,0,-1,false,{'💬: q','🤖: a','🧠: think','body','🧠:[END]','plain'})
+            local doc=D.attach(buf,{schedule=false});D.drain(doc,1000);F.setup(buf)
+            local edited=false
+            vim.api.nvim_create_autocmd('OptionSet',{pattern='foldminlines',callback=function()
+                if not edited then edited=true;vim.api.nvim_buf_set_text(buf,5,0,5,1,{'p'})end
+            end})
+            local first,second=F.flush(buf),F.flush(buf)
+            return {edited=edited,first=first,second=second,level=vim.fn.foldlevel(3)}
+        ]])
+        assert.is_true(result.edited);assert.equals('idle',result.second);assert.equals(1,result.level)
+    end)
+
+    it('restores operator state when native uncertainty clearing is superseded',function()
+        local result=exec([[
+            local D=require('parley.document');local F=require('parley.tool_folds')
+            local buf=vim.api.nvim_get_current_buf()
+            vim.api.nvim_buf_set_lines(buf,0,-1,false,{'💬: q','🤖: a','🧠: think','body','🧠:[END]','plain'})
+            local doc=D.attach(buf,{schedule=false});D.drain(doc,1000);F.setup(buf);F.flush(buf)
+            vim.wo.foldenable=false;vim.api.nvim_win_set_cursor(0,{6,2});local before=vim.fn.winsaveview()
+            vim.api.nvim_buf_set_text(buf,0,0,0,#'💬: q',{'🤖: q'})
+            local edited=false
+            vim.api.nvim_create_autocmd('OptionSet',{pattern='foldenable',callback=function()
+                if not edited then edited=true;vim.api.nvim_buf_set_text(buf,5,0,5,1,{'p'})end
+            end})
+            F.flush(buf,10)
+            return {edited=edited,enabled=vim.wo.foldenable,before=before,view=vim.fn.winsaveview()}
+        ]])
+        assert.is_true(result.edited);assert.is_false(result.enabled);assert.same(result.before,result.view)
+    end)
+    it('schedules surviving windows when setup loses one window during configuration',function()
+        local result=exec([[
+            local D=require('parley.document');local F=require('parley.tool_folds')
+            local buf=vim.api.nvim_get_current_buf()
+            vim.api.nvim_buf_set_lines(buf,0,-1,false,{'💬: q','🤖: a','🧠: think','body','🧠:[END]'})
+            vim.cmd('vsplit')
+            local first=vim.fn.win_findbuf(buf)[1]
+            local other=vim.fn.win_findbuf(buf)[2]
+            local scratch=vim.api.nvim_create_buf(false,true)
+            local doc=D.attach(buf,{schedule=false});D.drain(doc,1000)
+            local switched=false
+            vim.api.nvim_create_autocmd('OptionSet',{pattern='foldminlines',callback=function()
+                if not switched then switched=true;vim.api.nvim_win_set_buf(first,scratch)end
+            end})
+            F.setup(buf)
+            local ready=vim.wait(1500,function()
+                return vim.api.nvim_win_call(other,function()return vim.fn.foldlevel(3)==1 end)
+            end,1)
+            return {switched=switched,ready=ready}
+        ]])
+        assert.is_true(result.switched);assert.is_true(result.ready)
+    end)
+
 end)

@@ -823,3 +823,20 @@ Native regressions cover publication edits at both diagnostic-set boundaries,
 reload, detach, recursive publication, replacement refresh during clear, and fold
 restoration edits. Work accounting records effects actually performed, including
 partial publication interrupted by callbacks (ARCH-ORDER, ARCH-PURPOSE).
+
+### 2026-09-15 — Fold cleanup and aborted configuration (BR-11/BR-12)
+
+Reason: fourth review found that returning stale work could leave temporary fold
+preferences/view changed, or treat a partially built empty window list as complete.
+Delta: separate captured-window cleanup from publication ownership. Build window
+plans locally, publish only after successful configuration, discard only expected
+jobs, and restore every captured window even when cleanup reenters or one window
+fails. Done phases cannot re-enter creation, and setup interruption schedules
+surviving windows. Four new native controls fail on the prior implementation;
+eight reentrancy tests plus 35 existing fold/batch/retention/join cases pass.
+
+The review returned FIX-THEN-SHIP, but the ledger left BR-11/BR-12 open and
+explicitly refused milestone finalization. The binary's next-action instruction
+requires a further review to dispose those open findings; extend the per-boundary
+round budget to five for that disposal rather than waive the ledger. This extra
+review is required by the refused transition, not a second discretionary review.

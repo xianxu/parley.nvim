@@ -160,3 +160,12 @@ buffer variable for the native fold walk. The native walk stops if a callback
 replaces its job without changing text. Detach removes that scalar. The native
 redraw test confirms that view-only window calls emit no entry callbacks and
 buffer edits are rejected by redraw textlock.
+
+### Superseded native fold work
+
+Fold publication checks captured document/job ownership after callback-capable
+operations. Temporary editor state has a separate cleanup obligation: stale
+slices restore the captured window's view and fold preference even after losing
+publication authority. A configure pass publishes its window list only when
+complete; interruption discards that expected job and leaves repair dirty.
+Discarding a job releases every captured window without erasing a newer job.

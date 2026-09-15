@@ -380,3 +380,114 @@ The revised M3 inventory matches the delivered module boundaries. Atlas updates 
 ## 7. Plan revision recommendations
 
 Add a `## Revisions` entry defining **publication ownership across reentrant effects**: enumerate the four semantic consumers, identify callback-capable effects, and require captured-job validation before subsequent effects or completion commits. Include native sequences for edit, reload, and detach during diagnostic publication.
+
+---
+
+## Re-review — 2026-09-15T07:59:45-07:00 (FIX-THEN-SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 254 — Harden chat ownership and concurrency |
+| repo | 000254-chat-ownership-concurrency |
+| issue file | workshop/issues/000254-chat-ownership-concurrency.md |
+| boundary | milestone M3 |
+| milestone | M3 |
+| window | 2afd7de993dc028c6132df4687695e83dcbb8fe0..d349c02e70b5c18e2ee2d689bdd9a82616a9600a |
+| command | sdlc milestone-close --issue 254 --milestone M3 |
+| reviewer | claude |
+| timestamp | 2026-09-15T07:59:45-07:00 |
+| verdict | FIX-THEN-SHIP |
+
+## Review
+
+```verdict
+verdict: FIX-THEN-SHIP
+confidence: medium
+```
+
+BR-10 is addressed with real regression evidence: the diagnostic publisher now captures its job and re-checks ownership after every callback-capable effect, and the same rule was swept into folds, outline, and highlights. Reverting only the BR-10 production files in a scratch archive of the head turns 7 of 9 diagnostic-reentrancy cases and 3 of 4 native fold-reentrancy cases red, so the fix is reachable. The full chat/document mapping (29 files), ui/highlights, and ui/outline all pass at head, and the checkout is clean. Two gaps remain, both introduced by the BR-10 fix's new supersession exits in the native fold path and both reproduced in a scratch Neovim: a superseded slice skips restoring the operator's `foldenable`, and an aborted window configuration leaves a truncated plan that the next slice reports as idle with no folds created. Both are narrow (they need an operator OptionSet autocmd that synchronously edits the buffer) and cheap to fix, so they do not block the gate.
+
+## 1. Strengths
+
+- `lua/parley/diagnostic_refresh.lua:119-149` implements the class rule cleanly: one `current(s,job)` predicate, checked after materialization, after each `vim.diagnostic.set`, and before the single commit of `s.job=nil;s.dirty=false`. The clear path (`:236-244`) also yields to a replacement refresh started inside its own DiagnosticChanged callback.
+- `tests/integration/diagnostic_reentrancy_spec.lua` asserts independent invariants (zero diagnostics after drain reports idle, replacement refresh survives clear, recursive step reports busy, reload fences the old publisher) rather than restating the implementation. Confirmed red without the fix.
+- `tests/integration/document_presentation_reentrant_spec.lua:66-85` proves the highlighter's textlock assumption natively instead of asserting it in prose.
+- Plan revision "Publication ownership across reentrant effects (BR-10)" enumerates all four consumers with their callback boundary and completion rule, and `atlas/chat/document.md` gained a matching "Reentrant consumer effects" section. The BR-7 inventory table still matches the pinned diff (exchange_model and chat_parser comment-only, fold_projection and buffer_edit untouched, exchange_anchors deleted).
+- The issue log discloses the post-BR-10 benchmark and the broad-repair timing anomaly honestly, including the controlled JIT comparison, rather than claiming a latency guarantee.
+
+## 2. Critical findings
+
+None.
+
+## 3. Important findings
+
+**I1. Superseded fold slices skip restoring the operator's `foldenable` and window view** — `lua/parley/tool_folds.lua:387-390` and `:116-121`. ARCH-ORDER, ARCH-FUNERAL lens on captured state. Inside the `nvim_win_call`, the slice sets `vim.wo.foldenable=true`, then on the way out checks `current()` *before* restoring `foldenable` and calling `winrestview`. If an OptionSet callback edits the buffer (tick changes), the slice bails with the operator's setting still forced on. The discarded plan is then rebuilt, and `apply` captures `enabled` from the now-leaked value, so the preference is permanently flipped. The same ordering exists in `clear_folds_in_span` after `nvim_exec2`. Native reproduction: operator sets `foldenable=false`, an OptionSet(foldenable) autocmd performs an inert edit during `apply_folds`; after flush `foldenable` reads `true` (control without the edit reads `false`). This contradicts the code's own comment ("Restore both even if the walk fails") and the atlas contract that cancellation restores operator fold preferences. Sibling site: the `break` in `discard_plan`/`discard_uncertainty` (`:230-234`, `:295-298`) abandons still-suspended windows on the >50k-row path, leaving `foldenable=false` and letting the next plan capture it as the operator's preference.
+
+  **This is the 2nd finding in family `scope-owned-callback-cleanup`.** Earlier rounds fixed instances. Do not fix only this line. Rule: state a slice alters on the operator's behalf (window options, view) is that slice's own cleanup and must be restored on every exit path, superseded or not; only *job output* effects (fold creation, diagnostic publication, dirty-state commit) are gated on ownership. Sweep: `apply` win_call tail, `clear_folds_in_span` tail, both discard loops, `release_window` callers. Add a native regression: operator `foldenable=false`, callback edit during a slice, assert the preference survives.
+
+**I2. An aborted window configuration leaves a truncated plan that the next slice reports as complete** — `lua/parley/tool_folds.lua:315-325`. ARCH-ORDER. `apply` assigns `plan.windows={}` and then loops over windows calling `configure(win,current)`; when `current()` fails because of a tick change alone (an inert edit in an OptionSet callback, which neither marks nor discards the plan), it returns `'more'` with a partially built or empty `plan.windows`. The next step revalidates the certificate (still valid after an equal-byte inert edit), finds no window at `plan.window`, returns `'idle'`, and `M.step:416` clears `s.first/s.last`. No fold is ever created and nothing reschedules until the next semantic edit. Native reproduction: OptionSet(foldminlines) autocmd performs an inert same-length edit on the apply-phase configure; `flush` returns `idle` twice with `foldlevel(3)==0` (control gives `1`), and a further inert edit does not recover it.
+
+  **This is the 6th finding in family `semantic-publication-evidence`.** Earlier rounds fixed instances. Do not fix only this site. Rule: when a slice learns it is superseded, its exit must either discard the job or leave it resumable from the same point; completion may be claimed only from evidence gathered under the captured tick and ownership, never from state the abort itself produced. Enumerate every `if not current() then return ... end` exit in `tool_folds.lua` and classify it: `apply:319` (truncated windows, this finding), `apply:398` (window stays `done`, re-enters the create branch and emits a duplicate `reconcile` notification), `clear_uncertainty:273/279/284` (resumes from the same window, acceptable), `M.setup:571` (returns without `schedule`, see Minor). Fix the class by building the window list locally and committing it only when every configure succeeded, or by discarding the plan on any configure abort. Add a native regression asserting folds exist after an inert edit inside the apply-phase OptionSet.
+
+## 4. Minor findings
+
+- ARCH-DRY: the six identical VimL ownership guard lines in `clear_folds_in_span` (`:69-92`) should be one `s:live()` function; the three identical `current` closures passed to `configure` (`:520`, `:526`, `:569`) and the near-identical `discard_plan`/`discard_uncertainty` loops should share a helper.
+- `lua/parley/tool_folds.lua:568-571`: `M.setup` returns before `schedule(buf,s)` if a window becomes invalid mid-configure, so remaining windows get no folds until the next event.
+- `lua/parley/document/init.lua:16-18`: `notify` iterates `pairs(s.subscribers)` while a callback may `Document.subscribe`; inserting a new key during `next` traversal is undefined in Lua. Snapshot the callbacks before iterating.
+- Test placement: `deferred_work_spec`, `document_coordinator_spec`, `document_write_plan_spec`, `document_identity_spec`, `diagnostic_refresh_spec`, and `outline_spec` live in `tests/unit/` but drive real buffers or timers. They test INTEGRATION entities correctly; they just contradict the plan's "unit = no Neovim or IO" convention.
+- `b:parley_fold_generation` is a shared buffer variable any plugin can overwrite; the code fails closed (walk stops), which is the right direction, but a non-numeric value silently halts all fold maintenance for that buffer.
+
+## 5. Test coverage notes
+
+| Run | Result |
+|---|---|
+| `make test-spec SPEC=chat/document` | 29 files, no failures |
+| `make test-spec SPEC=ui/highlights` | pass |
+| `make test-spec SPEC=ui/outline` | pass |
+| BR-10 revert in scratch archive: `diagnostic_reentrancy_spec` | 7 of 9 fail |
+| BR-10 revert in scratch archive: `document_presentation_reentrant_spec` | 3 of 4 fail |
+| `git diff --check` on the range | clean |
+
+Not independently rerun: full suite, `make perf`. The issue log records a 30-scenario benchmark on `b62c2b59` and discloses the broad-repair timing question. No existing test covers the I1 or I2 exits; both were found by scratch native probes.
+
+## 6. Architectural notes
+
+| Principle | Result |
+|---|---|
+| ARCH-DRY | Flag (Minor): guard and closure duplication in `tool_folds.lua`. |
+| ARCH-PURE | Pass: `state.lua` and `projection.lua` unit tests use no IO; ownership predicates are small closures over IO state. |
+| ARCH-PURPOSE | Pass with I1/I2: the BR-10 rule was swept across all four consumers; the two remaining gaps are in the sweep's own exit paths, not unswept consumers. |
+| ARCH-MOCK | Pass: `fake_document_editor.lua` is a stateful double behind the driver seam, with native conformance tests alongside. |
+| ARCH-CONSTRAINTS | Pass: bounds unchanged; benchmark on the fix commit exists. The native walk now evaluates six guards per fold group; `normal!` commands inside a script cannot fire autocmds, so most of those checks are cost without coverage. |
+| ARCH-SECURE | Pass: the VimL command is built from numeric arguments only; buffer-variable tampering fails closed. |
+| ARCH-ORDER | Flag: I1 and I2 are supersession exit paths that leave state neither restored nor resumable. |
+| ARCH-FUNERAL | Pass: generation scalar removed on detach, timers closed, per-window caches cleared on WinClosed. |
+
+For M4: the generation writer will add another effect owner to this pattern. Consider a single `slice(owner, body, finally)` helper in `tool_folds`/`diagnostic_refresh` that runs `finally` unconditionally and gates only `body`'s commits, so the next consumer cannot repeat I1.
+
+## 7. Plan revision recommendations
+
+Add a "## Revisions" entry, "Supersession exit paths", stating: (1) operator state altered by a slice is restored on every exit, superseded or not; (2) a superseded slice discards its job or leaves it resumable, and completion is never derived from abort-produced state; (3) the enumerated abort sites in `tool_folds.lua` and their classification; (4) native regressions for operator `foldenable` survival and folds-after-inert-edit-in-configure.
+
+```findings
+dispose:
+  - id: BR-10
+    disposition: addressed
+    note: |
+      diagnostic_refresh.lua captures the job and rechecks current() after materialization, each diagnostic set, and before the single dirty commit; clear yields to a replacement refresh. Reverting only the fix files in a scratch archive fails 7 of 9 diagnostic and 3 of 4 fold reentrancy regressions.
+findings:
+  - id: new
+    severity: Important
+    family: scope-owned-callback-cleanup
+    title: |
+      Superseded fold slices skip restoring operator foldenable and window view
+    detail: |
+      lua/parley/tool_folds.lua:387-390 and :116-121 check current() before restoring foldenable and winrestview, so a callback edit during a slice leaves foldenable forced on; the rebuilt plan then captures the leaked value as the operator preference. Native reproduction: foldenable=false plus an inert edit in an OptionSet(foldenable) autocmd yields foldenable=true after flush (control stays false). This is the 2nd finding in family scope-owned-callback-cleanup: restore slice-altered operator state on every exit path and gate only job-output effects on ownership; sweep apply, clear_folds_in_span, and both discard loops, which also abandon suspended windows on the >50k-row path.
+  - id: new
+    severity: Important
+    family: semantic-publication-evidence
+    title: |
+      Aborted window configuration leaves a truncated plan that reports idle with no folds
+    detail: |
+      lua/parley/tool_folds.lua:315-325 assigns plan.windows={} then returns 'more' when configure(win,current) fails on a tick-only change; the next slice finds no window, returns 'idle', and M.step:416 clears s.first. Native reproduction: an inert same-length edit inside an OptionSet(foldminlines) autocmd during the apply-phase configure leaves foldlevel(3)==0 across repeated flushes (control gives 1). This is the 6th finding in family semantic-publication-evidence: a superseded slice must discard its job or leave it resumable, and completion may only be claimed from evidence gathered under the captured ownership. Enumerate every current() exit in tool_folds.lua (apply:319, apply:398, clear_uncertainty:273/279/284, setup:571) and fix the class, not the site.
+```

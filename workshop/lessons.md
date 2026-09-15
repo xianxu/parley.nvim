@@ -2540,3 +2540,14 @@ download.
   edit or retire the source synchronously. Recheck captured job ownership after
   every callback-capable effect, including cleanup/restoration, before subsequent
   effects or dirty-state completion. Test replacement work started inside cleanup.
+
+## 2026-09-15 (#254 M3 superseded fold cleanup)
+
+- Publication authority and cleanup obligations have different lifetimes. Losing
+  a generation or tick check stops publication, but does not excuse restoring
+  temporary fold options and the captured window view. Retire job pointers first,
+  then clean every captured window even if one cleanup callback edits or throws.
+- Build a resumable job's window list locally and publish it only after all
+  callback-capable configuration succeeds. A partially constructed empty list
+  must never be interpreted as completed work. Test both changed-text and
+  tick-only callback interruption, plus loss of one window during setup.
