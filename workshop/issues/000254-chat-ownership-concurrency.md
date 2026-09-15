@@ -1297,3 +1297,14 @@ retirement follows adapter release; cleanup errors are visible. Released adapter
 inspection retains its store by an existing explicit API test, while association
 payload is dropped. Full576-file lint clean. Final mapped M5 union is running
 before the next Codex review; no milestone completion is claimed yet.
+
+### 2026-09-15 M5 rework full verification complete
+
+Final92-spec union passes1103 tests, zero failures/errors/incomplete footers;
+every process exit0 and per-case counts match. Source SHA256 is unchanged before
+and after, and tested a701f505 has the same runtime/tests asbfd749e4. All10 added
+M5 specs are covered. Four current mappings plus the mutation architecture check
+provide89 specs; three prior-inventory Document extras bring the total to92.
+Full576-file lint clean. Exact evidence:/tmp/parley254-m5-rework-verification.txt,
+combined-results.json and the two full stdout/SPEC_EXIT logs. No deadline was
+increased. BR20–24 now return to mandatory Codex review. Main remains unmerged.
