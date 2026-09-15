@@ -485,6 +485,31 @@ until that live-testing approval arrives. Normal local milestone reviews and
 fixes remain authorized. Context checkpoints preserve progress and do not require
 another operator message to resume.
 
+### 2026-09-14 — M1 verification and scaling baseline complete
+
+Mapped lifecycle: 530 tests; exchange-model: 281; response-progress: 345, all zero
+failures/errors. The broader progress suite exposed an obsolete busy-predicate
+stub; replaced it with an actual competing private admission through the process
+fake and verified launch rejection clears pending presentation. New ownership
+performance specs plus existing typing specs: 17 pass; scoped lint clean.
+
+`make perf TEST_ENV_ROOT=/tmp/parley-254-metrics-env
+PERF_OUTPUT=/tmp/parley-254-m1-ownership-perf.json` passes, Darwin/Neovim 0.11.7,
+20 measured samples per phase/size. At 100/1000/5000 rows, fold maintenance resolves
+12/125/625 anchors (p95 0.355/1.567/4.662 ms); stream plus actual typed-ahead keyboard
+input resolves 24/250/1250 anchors and copies 1068/10068/50068 entries (p95
+8.042/7.210/15.768 ms). Each phase visits one outer fold and issues five native
+fold operations. Inclusive stream samples also capture scheduled convergence:
+the 1000-row maximum includes five full reads, 5080 requested lines, and 3027
+processed rows. These are baseline costs to eliminate, not boundedness claims.
+Ordinary Enter/join remains 402/4002/20002 copied slots. Fixtures preserve human
+text and exercise actual fold maintenance/response handlers with controlled
+provider delivery; concurrent builtin tools remain M6 scope.
+
+M1 implementation and required baseline coverage are ready for the automatic
+milestone review. No M2 implementation edits have begun; read-only API preparation
+covered balanced sequence spans, resumable lexical facts, and local provenance.
+
 ## Revisions
 
 ### 2026-09-14 — Incremental rendering is part of the core contract
