@@ -8,7 +8,7 @@
 
 **Tech Stack:** Lua, Neovim 0.11 buffer callbacks/extmarks, libuv, Plenary, existing LineReader/performance harness.
 
-**Status:** Design proposal for operator approval; no implementation or estimate yet. Issue: `workshop/issues/000254-chat-ownership-concurrency.md`.
+**Status:** Operator-approved; plan-quality accepted and implementation underway. The operator will live-test before merge. Issue: `workshop/issues/000254-chat-ownership-concurrency.md`.
 
 ---
 
@@ -254,11 +254,11 @@ Each M-row below is a real `sdlc milestone-close` boundary, with its own fresh-c
 
 **Files:** modify `lua/parley/tasker.lua`, `lua/parley/chat_respond.lua`; create `lua/parley/attempt.lua`, `tests/unit/attempt_spec.lua`, `tests/helpers/fake_process.lua`, `tests/integration/chat_ownership_spec.lua`; extend `tests/unit/tasker_unit_spec.lua`, `tests/integration/tasker_run_spec.lua`, `tests/integration/chat_respond_spec.lua`, `tests/perf/chat_typing.lua`, `tests/perf/harness.lua`; update `atlas/chat/lifecycle.md`, `atlas/traceability.yaml`.
 
-- [ ] Promote the audit to durable regression specs for `chat_respond.respond` and tasker, using the function strategies below; no dependency on old `/tmp` artifacts.
-- [ ] Extract attempt transitions; route tasker ownership/probe/stop/cleanup decisions through them and existing `_uv` seam. Introduce generation/attempt correlation for the current caller without claiming the new document architecture exists yet.
-- [ ] Contain completion suffix deletion and global cancellation through current lease-guarded narrow operations. Treat these as migration prerequisites with tests, not the final ownership proof.
-- [ ] Capture baseline work/timing for representative typing, newline, structural edit, fold maintenance, and concurrent stream. Extend counters for nodes/dependencies/anchors/folds and record environment and scaling summary in issue Log.
-- [ ] Run mapped lifecycle and exchange suites, update atlas/traceability, commit, then close M1 with actual command/results evidence. No concurrency-enabled claim at this boundary.
+- [x] Promote the audit to durable regression specs for `chat_respond.respond` and tasker, using the function strategies below; no dependency on old `/tmp` artifacts.
+- [x] Extract attempt transitions; route tasker ownership/probe/stop/cleanup decisions through them and existing `_uv` seam. Introduce generation/attempt correlation for the current caller without claiming the new document architecture exists yet.
+- [x] Contain completion suffix deletion and global cancellation through current lease-guarded narrow operations. Treat these as migration prerequisites with tests, not the final ownership proof.
+- [x] Capture baseline work/timing for representative typing, newline, structural edit, fold maintenance, and concurrent stream. Extend counters for nodes/dependencies/anchors/folds and record environment and scaling summary in issue Log.
+- [x] Run mapped lifecycle and exchange suites, update atlas/traceability, commit, then close M1 with actual command/results evidence. No concurrency-enabled claim at this boundary.
 
 ### M2 — Build the incremental structural core
 
@@ -420,3 +420,19 @@ Reason: the SDLC judge required named risky functions and concise strategy lines
 rather than prose case inventories. Delta: compressed test instructions across
 all six milestones and added the function-to-strategy table with independent
 oracles/work guards. Behavioral contracts and scope are unchanged.
+
+### 2026-09-14 — Implementation and final handoff authorization
+
+Reason: plan-quality accepted and the operator explicitly requested uninterrupted
+implementation through #254. Delta: update current status; execute all approved
+milestone gates without further confirmation, prepare final branch/PR for operator
+live testing, and defer merge until that testing is approved. This refines the
+final M6 publication instruction; it does not reduce implementation or review scope.
+
+### 2026-09-14 — M1 implementation and verification evidence
+
+Reason: containment regressions, process lifecycle, performance coverage and
+mapped verification now pass. Delta: record M1 task completion pending its
+automatic milestone verdict; issue M1 boundary remains owned by sdlc. Added
+production-path fold/stream baseline fixtures and migrated the progress admission
+fixture to the private owner gate. No future milestone is marked complete.

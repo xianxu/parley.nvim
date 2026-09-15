@@ -175,6 +175,7 @@ atlas:
       - tests/unit/chat_history_spec.lua
       - tests/unit/highlight_structure_spec.lua
       - tests/integration/perf_chat_typing_spec.lua
+      - tests/integration/perf_ownership_spec.lua
       - tests/integration/diagnostic_refresh_spec.lua
       - tests/integration/highlighting_spec.lua
       - tests/integration/highlight_typing_spec.lua

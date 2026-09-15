@@ -2455,3 +2455,10 @@ download.
   not make it concurrent or keep typing responsive.
 - Native editor operations have costs outside Lua counters. Measure broad fold
   clearing and state its affected-range cost instead of claiming constant work.
+
+## 2026-09-14 (#254 M1 integration)
+
+- When admission moves from a public busy predicate to private owner state, tests
+  must seed a competing admission through the actual transport seam. Mocking the
+  old predicate can silently turn a launch-rejection test into a network request.
+  Exercise pending cleanup with a stateful process fixture (ARCH-MOCK).

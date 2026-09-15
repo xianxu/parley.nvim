@@ -70,7 +70,9 @@ describe("chat progress real curl process", function()
     local original_notify
     local original_pending_start
     local original_get_secret
-    local original_is_busy
+    local original_run
+    local original_runtime
+    local fake_runtime_state
     local original_spawn
     local notices
     local activity_count
@@ -81,7 +83,9 @@ describe("chat progress real curl process", function()
         original_notify = vim.notify
         original_pending_start = require("parley.chat_pending").start
         original_get_secret = parley.vault.get_secret
-        original_is_busy = parley.tasker.is_busy
+        original_run = parley.tasker.run
+        original_runtime = parley.tasker._uv
+        fake_runtime_state = nil
         original_spawn = (vim.uv or vim.loop).spawn
         require("parley.chat_pending").start = function(opts)
             local session = original_pending_start(opts)
@@ -103,7 +107,12 @@ describe("chat progress real curl process", function()
         vim.notify = original_notify
         require("parley.chat_pending").start = original_pending_start
         parley.vault.get_secret = original_get_secret
-        parley.tasker.is_busy = original_is_busy
+        parley.tasker.run = original_run
+        if fake_runtime_state then
+            for _, process in pairs(fake_runtime_state.processes) do process:finish() end
+            assert.is_true(vim.wait(500, function() return #parley.tasker._handles == 0 end, 5))
+        end
+        parley.tasker._uv = original_runtime
         uv.spawn = original_spawn
         require("parley.chat_pending").cancel_all("test teardown")
         parley.tasker.stop()
@@ -215,8 +224,20 @@ describe("chat progress real curl process", function()
     end)
 
     it("cleans one real chat session when task launch is rejected as busy", function()
-        parley.tasker.is_busy = function() return true end
-        assert_prestart_cleanup("buffer is busy")
+        local runtime
+        runtime, fake_runtime_state = require("tests.helpers.fake_process").new()
+        parley.tasker._uv = runtime
+        parley.tasker.run = function(buf, command, args, callback, stdout, stderr, reject, opts)
+            parley.tasker.run = original_run
+            -- Seed actual private admission under the captured key. A boolean
+            -- is_busy stub cannot represent the owner-specific launch gate.
+            original_run(buf, "fixture-blocker", {}, nil, nil, nil, nil, {
+                admission_key = opts.admission_key, generation_id = "existing-owner",
+            })
+            return original_run(buf, command, args, callback, stdout, stderr, reject, opts)
+        end
+        assert_prestart_cleanup("owner is busy")
+        assert.equals(1, fake_runtime_state.spawn_calls, "rejected request must not spawn")
     end)
 
     it("cleans one real chat session when curl spawn is rejected", function()

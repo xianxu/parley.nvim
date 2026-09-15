@@ -113,6 +113,13 @@ commands). Node counters are reserved for the incremental core; zero does not
 mean existing array copies are free. Generated reports are ignored
 artifacts; durable baseline/optimized summaries belong in the issue log.
 
+The `fold_maintenance` and `stream_human_interleave` phases add many-exchange
+ownership baselines. The latter interleaves real keyboard input with the production
+response handler under controlled provider delivery, and verifies typed-ahead text
+survives. Its inclusive timing/work includes scheduled editor convergence. These
+phases record current scaling costs; they do not certify bounded ownership work
+or concurrent tool execution.
+
 Elapsed timings are report-only and never fail CI. Scenario validity and
 structural bounds are correctness gates: the measured insert event must not
 perform a full-buffer read; decoration reads stay within the viewport/context

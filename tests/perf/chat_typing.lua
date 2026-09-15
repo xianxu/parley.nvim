@@ -157,6 +157,12 @@ local function ensure_setup()
     require("parley").setup({
         chat_dir = setup_root .. "/chats",
         state_dir = setup_root .. "/state",
+        default_agent = "PerfFixture",
+        agents = {
+            { name = "Choose a model", disable = true },
+            { name = "PerfFixture", provider = "anthropic", model = { model = "fixture" },
+                system_prompt = "Benchmark fixture." },
+        },
         providers = {},
         api_keys = {},
         chat_spell = { enable = false, typeahead = true, min_word = 4, max_suggest = 9 },
@@ -164,9 +170,9 @@ local function ensure_setup()
     return setup_root
 end
 
-function M.open_fixture(n)
+function M.open_fixture(n, builder)
     local root = ensure_setup()
-    local lines, target = M.build_fixture(n)
+    local lines, target = (builder or M.build_fixture)(n)
     local path = string.format("%s/chats/2026-07-12-perf-%d.md", root, n)
     vim.fn.writefile(lines, path)
     vim.cmd("edit " .. vim.fn.fnameescape(path))
@@ -425,7 +431,10 @@ function M.start(opts)
             end
             scenario:close()
             active_scenario = nil
-            guarded(next_size)
+            require("tests.perf.ownership").add_baselines(report, n, warmups, iterations, function(ownership_error)
+                if ownership_error then return fatal(ownership_error) end
+                guarded(next_size)
+            end)
         end
         safe_edit_done = function(...)
             local args = { n = select("#", ...), ... }
