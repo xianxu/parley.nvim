@@ -983,6 +983,34 @@ review after earlier Codex agent usage exhaustion. Actual-time attribution remai
 N/A: the measured window mixes #192/#254 and cannot reliably attribute this work;
 only that measurement gate is waived, without entering invented hours.
 
+
+### 2026-09-15 — Fourth review and production response migration
+
+Fourth M3 review window `2afd7de9..d349c02e` disposes BR-10, returns
+FIX-THEN-SHIP, and raises BR-11/BR-12 for superseded fold restoration and truncated
+window-configuration plans. The ledger refuses milestone finalization while these
+are open. Native class fixes are in progress; M3 is not closed and no gate was
+waived. The exact review evidence remains in the M3 review and close-gate sidecars.
+
+M4 now replaces the old public respond writer in its isolated staging checkout.
+Six public-command cases pass: disjoint generations, human next-draft edits,
+overlap refusal, preceding-stream edits during next-question admission, source
+deletion during remote preparation, scoped Stop, and automatic topic integration
+(the disjoint test combines the first two behaviors). Session/ordered-tool/topic
+and completion adapters have native/fake integration coverage. Input-prefix edits
+mark frozen input stale instead of rejecting disjoint output admission. Completion
+now carries its real operation identity. Native history is observed directly;
+old pending confirmation and global Stop repair are removed.
+
+Migrating older tests and the production benchmark exposed remaining integration
+issues: an unobserved native tick advance can deny the first owned append after
+preparation; next-prompt insertion can extend the finishing grant across the new
+exchange and revoke it; old parser answer ranges can include trailing footnotes;
+provider failure notification can precede committed admitted bytes. Regression
+assertions remain in place. Editor frame proof and finite released insertion fixes
+are underway; captured footer exclusion and terminal failure-notice ordering have
+been implemented and are being rechecked. This is WIP, not an M4 completion claim.
+
 ## Revisions
 
 ### 2026-09-14 — Incremental rendering is part of the core contract
