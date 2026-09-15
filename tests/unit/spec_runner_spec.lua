@@ -1,0 +1,11 @@
+local Runner=require('tests.helpers.spec_runner')
+describe('scoped test timeouts',function()
+    it('extends only the real large native fold conformance file',function()
+        local path='tests/integration/document_fold_batches_spec.lua'
+        assert.same({timeout=180000,sequential=true},Runner.options(path))
+        assert.same(Runner.options(path),Runner.options(vim.fn.fnamemodify(path,':p')))
+        assert.is_nil(Runner.options('tests/integration/document_folds_spec.lua'))
+        assert.is_nil(Runner.options('tests/unit/document_fold_batches_spec.lua'))
+        assert.is_nil(Runner.options('/another/repository/tests/integration/document_fold_batches_spec.lua'))
+    end)
+end)

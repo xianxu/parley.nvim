@@ -6,6 +6,9 @@ local function fixture(groups,rows)
     for i=1,groups do
         for _,line in ipairs({'🧠: thought '..i,'body','🧠:[END]','plain'}) do lines[#lines+1]=line end
     end
+    -- Keep the large native-fold span real without parsing unrelated padding
+    -- twice as both global answer text and answer-section text.
+    if rows and #lines<rows then lines[#lines+1]='💬: next question' end
     while #lines<(rows or 0) do lines[#lines+1]='plain' end
     local buf=vim.api.nvim_create_buf(false,true)
     vim.api.nvim_set_current_buf(buf);vim.api.nvim_buf_set_lines(buf,0,-1,false,lines)

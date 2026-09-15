@@ -30,3 +30,8 @@ let $PARLEY_TEST_MODE = '1'
 " dead local port so a spec that forgets cliproxy._set_releases_url fails fast
 " instead of reaching the network; plenary's child nvims inherit this.
 let $PARLEY_CLIPROXY_RELEASES_URL = 'http://127.0.0.1:9/router-for-me/CLIProxyAPI/releases'
+
+" Preserve ordinary per-file deadlines; the scoped runner extends only the
+" real >50k-row native fold conformance fixture, including mapped make runs.
+command! -nargs=1 -complete=file PlenaryBustedFile
+      \ lua require('tests.helpers.spec_runner').run([[<args>]])
