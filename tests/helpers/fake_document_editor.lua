@@ -29,7 +29,8 @@ function M.new(lines)
         if fake.after_delivery then local hook=fake.after_delivery; fake.after_delivery=nil; hook(fake) end
         if fake.mutate_then_error then error('after mutation') end
     end
-    fake.driver={line_count=function() return #fake.lines end,offset=offset,text=text,
+    -- This fake delivers each callback synchronously in its mutated text frame.
+    fake.driver={callback_frame=function()return true end,line_count=function() return #fake.lines end,offset=offset,text=text,
         lines=function(_,a,b) local out={}; if b<0 then b=#fake.lines end; for i=a+1,b do out[#out+1]=fake.lines[i] end; return out end,
         set_text=set_text,attach=function(buf,_,callbacks) fake.buf=buf;fake.callbacks=callbacks;return true end,
         detach=function() fake.callbacks.on_detach('detach',fake.buf) end}

@@ -7,6 +7,7 @@ local owners = {}
 local function native()
     return {
         line_count=vim.api.nvim_buf_line_count, offset=vim.api.nvim_buf_get_offset,
+        changedtick=vim.api.nvim_buf_get_changedtick,
         text=vim.api.nvim_buf_get_text, lines=vim.api.nvim_buf_get_lines,
         set_text=vim.api.nvim_buf_set_text, attach=vim.api.nvim_buf_attach,
         undo_state=function(buf)
@@ -38,11 +39,30 @@ function M.new(buf,opts)
     local driver=opts.driver or native()
     local rows=driver.line_count(buf)
     local self=setmetatable({buf=buf,epoch=assert(opts.epoch),driver=driver,
-        on_event=assert(opts.on_event),rows=rows,total=driver.offset(buf,rows)},Editor)
+        on_event=assert(opts.on_event),rows=rows,total=driver.offset(buf,rows),
+        native_frames=opts.driver==nil,expected_tick=driver.changedtick and driver.changedtick(buf)},Editor)
     self.reader=require('parley.line_reader').for_buffer(buf,{delegate=driver})
     return self
 end
 function Editor:chunk(request) return self.reader:chunk(request) end
+-- One acknowledgement after native delivery returns. This is not a repair
+-- pump: intermediate byte/line listeners never reset source admission merely
+-- because their arithmetic extents happen to match the final native buffer.
+function Editor:acknowledge_frame_later()
+    if not self.native_frames or self.dead or self.frame_ack then return end
+    local ticket={epoch=self.epoch};self.frame_ack=ticket
+    vim.schedule(function()
+        if self.frame_ack~=ticket then return end
+        self.frame_ack=nil
+        if self.dead or self.epoch~=ticket.epoch or self.in_callback or self.operation then return end
+        local serial=self.frame_serial
+        local rows=self.driver.line_count(self.buf)
+        local total=self.driver.offset(self.buf,rows)
+        local tick=self.driver.changedtick(self.buf)
+        if serial~=self.frame_serial or rows~=self.rows or total~=self.total then return end
+        self.expected_tick=tick;self.lines_ahead=nil;self.awaiting_lines=nil
+    end)
+end
 function Editor:observe(tick,sr,sc,sb,orows,oc,ob,nrows,nc,nb)
     self.undo_receipt=nil
     -- Grouped undo exposes final native text while emitting intermediate edits.
@@ -54,12 +74,25 @@ function Editor:observe(tick,sr,sc,sb,orows,oc,ob,nrows,nc,nb)
     local inserted=total-self.total+ob
     local new_end=endpoint(sr,sc,nrows,nc,sb+inserted)
     if inserted~=nb then new_end={row=rows,col=0,byte=total} end
-    local event={kind='edit',epoch=self.epoch,tick=tick,first=sb,last=sb+ob,new_bytes=inserted,
+    -- Ordinary native mutations deliver bytes before their on_lines barrier.
+    -- Undo/redo restores lines first, then sends byte events describing earlier
+    -- frames. A prior unmatched line barrier blocks the entire delivery batch;
+    -- tick continuity is an additional conservative check, never size evidence.
+    local source_frame=self.native_frames and not self.lines_ahead and tick==self.expected_tick
+            and self.driver.line_count(self.buf)==rows
+        or not self.native_frames and self.driver.callback_frame
+            and self.driver.callback_frame(self.buf,tick)==true or false
+    if self.native_frames then
+        self.frame_serial=(self.frame_serial or 0)+1
+        self.expected_tick=tick+1;self.awaiting_lines=true
+        if not source_frame then self:acknowledge_frame_later() end
+    end
+    local event={kind='edit',epoch=self.epoch,tick=tick,source_frame=source_frame,first=sb,last=sb+ob,new_bytes=inserted,
         start={row=sr,col=sc,byte=sb},old_end=endpoint(sr,sc,orows,oc,sb+ob),new_end=new_end,
         old_rows=self.rows,new_rows=rows,old_total=self.total,new_total=total}
     self.rows,self.total=rows,total
     local pending=self.pending
-    if pending and not pending.seen and equal_pos(event.start,pending.patch.start)
+    if source_frame and pending and not pending.seen and equal_pos(event.start,pending.patch.start)
         and equal_pos(event.old_end,pending.patch.finish) and equal_pos(new_end,pending.new_end)
         and inserted==#pending.patch.text then
         local actual=table.concat(self.reader:text(sr,sc,new_end.row,new_end.col,{}),'\n')
@@ -92,6 +125,11 @@ function Editor:attach()
     local function lifecycle(kind,tick)
         if self.dead then return true end
         self.undo_receipt=nil
+        if kind=='reload' or kind=='detach' then self.frame_ack=nil end
+        if self.native_frames and (kind=='reload' or kind=='tick') then
+            self.lines_ahead=nil;self.awaiting_lines=nil
+            self.expected_tick=kind=='reload' and self.driver.changedtick(self.buf) or tick
+        end
         if self.operation then self.operation.unexpected=true end
         if kind=='reload' then
             self.rows=self.driver.line_count(self.buf)
@@ -103,6 +141,10 @@ function Editor:attach()
         self.in_callback=true
         local delivered,err=pcall(self.on_event,{kind=kind,epoch=self.epoch,tick=tick,rows=self.rows,total=self.total})
         self.in_callback=false
+        -- LuaJIT weak-key tables do not break a value -> key closure cycle.
+        -- The retired native callbacks may outlive this buffer, but must no
+        -- longer retain the document coordinator through its event sink.
+        if kind=='detach' then self.on_event=nil end
         if not delivered then error(err) end
     end
     self.lifecycle=lifecycle
@@ -110,6 +152,15 @@ function Editor:attach()
         on_bytes=function(_,_,tick,...)
             if self.dead then return true end
             self:observe(tick,...)
+        end,
+        on_lines=function()
+            if self.dead then return true end
+            if self.native_frames then
+                self.frame_serial=(self.frame_serial or 0)+1
+                if self.awaiting_lines then self.awaiting_lines=nil else
+                    self.lines_ahead=true;self:acknowledge_frame_later()
+                end
+            end
         end,
         on_reload=function() return lifecycle('reload') end,
         on_detach=function() return lifecycle('detach') end,

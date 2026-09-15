@@ -41,7 +41,7 @@ describe('shared-index highlighting during typing',function()
         assert.equals('idle',Document.drain(doc, 100000).status)
         assert.same(oracle(0,6),render(0,6))
     end)
-    it('preserves surviving row presentation across an uncertain structural edit',function()
+    it('uses neutral styling when a surviving row loses its role context',function()
         open({'💬: q','body one','body two','body three'})
         local before=render(0,3)
         local old=Document.query(doc,2,3)[1].handle
@@ -50,7 +50,8 @@ describe('shared-index highlighting during typing',function()
         assert.equals(old,surviving.handle)
         assert.is_false(surviving.metadata.confirmed)
         assert.is_nil(surviving.metadata.semantic)
-        assert.same(before[2],render(0,3)[2])
+        assert.is_nil(surviving.metadata.render_before)
+        for _,hl in ipairs(render(0,3)[2] or {}) do assert.is_not.equals('ParleyQuestion',hl.hl_group) end
         assert.equals('idle',Document.drain(doc, 100000).status)
         assert.same(oracle(0,3),render(0,3))
         assert.is_not.same(before[2],render(0,3)[2])
@@ -84,13 +85,31 @@ describe('shared-index highlighting during typing',function()
         assert.is_true(ok,tostring(err))
         assert.same(oracle(0,5),render(0,5))
     end)
-    it('retains draft backgrounds on surviving handles until repair converges',function()
+    it('removes draft backgrounds while their opener is unconfirmed',function()
         open({'# notes','=== draft ===','one','two','=== end ===','after'},'markdown')
-        local before=render(0,5)
         vim.api.nvim_buf_set_text(buf,1,0,1,#'=== draft ===',{'plain'})
-        assert.same(before[3],render(0,5)[3])
+        for _,hl in ipairs(render(0,5)[3] or {}) do assert.is_not.equals('ParleyDraftBlock',hl.hl_group) end
         assert.equals('idle',Document.drain(doc, 100000).status)
         assert.same(oracle(0,5),render(0,5))
+    end)
+    it('does not use invalidated reasoning, tool fence, or footer context',function()
+        for _,fixture in ipairs({
+            {lines={'💬: q','🤖: a','🧠: thought','body','🧠:[END]'},row=2,body=3,group='ParleyThinking'},
+            {lines={'💬: q','🤖: a','🔧: tool','```','body','```'},row=2,body=4,group='ParleyThinking'},
+            {lines={'💬: q','body','---','[^note]: definition','continuation'},row=3,body=4,group='ParleyFootnote'},
+        }) do
+            open(fixture.lines)
+            vim.api.nvim_buf_set_lines(buf,fixture.row,fixture.row+1,false,{'plain'})
+            local metadata=Document.query(doc,fixture.body,fixture.body+1,{presentation=true})[1].metadata
+            assert.is_false(metadata.confirmed)
+            assert.is_nil(metadata.render_before)
+            assert.is_nil(metadata.after)
+            assert.is_nil(metadata.presentation)
+            for _,hl in ipairs(render(0,#fixture.lines-1)[fixture.body] or {}) do
+                assert.is_not.equals(fixture.group,hl.hl_group)
+            end
+            cleanup()
+        end
     end)
     it('reads at most64KiB even when a visible line is enormous',function()
         open({'💬: q',string.rep('x',100000),'tail'})

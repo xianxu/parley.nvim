@@ -83,7 +83,7 @@ local function render_state(structure, row, streaming)
 end
 local function is_footer_row(structure, row, legacy_range)
     local metadata = row_metadata(structure, row)
-    local semantic = metadata and (metadata.semantic or metadata.presentation)
+    local semantic = metadata and metadata.semantic
     return semantic and semantic.footer or legacy_range and row >= legacy_range.start_row
 end
 
@@ -166,7 +166,9 @@ local function compute_chat_highlights(buf, start_line, end_line, reader, struct
         local line_nr = start_line + offset - 1
         if structure.document_rows then
             local before = render_state(structure, line_nr - 1, streaming)
-            if streaming and row_metadata(structure, line_nr - 1) and row_metadata(structure, line_nr - 2) then
+            local current_row = row_metadata(structure, line_nr - 1)
+            local previous_row = row_metadata(structure, line_nr - 2)
+            if streaming and current_row and current_row.confirmed and previous_row and previous_row.confirmed then
                 before.in_reasoning = before.in_reasoning or in_reasoning_block
             end
             in_block, in_code_block, code_fence_len = before.in_question, before.in_code, before.code_fence_len
@@ -431,7 +433,7 @@ local function compute_markdown_highlights(buf, start_line, end_line, reader, st
     if structure.document_rows then
         for row = start_line - 1, end_line - 1 do
             local metadata = row_metadata(structure, row)
-            local semantic = metadata and (metadata.semantic or metadata.presentation)
+            local semantic = metadata and metadata.semantic
             if semantic and (semantic.draft or semantic.draft_end) then
                 blocks[#blocks + 1] = { open_row = row, close_row = row }
             end
@@ -1008,7 +1010,7 @@ function M.rebuild_structure(buf)
             if event.kind == "edit" or event.kind == "reload" or event.kind == "detach" then
                 for win, cache in pairs(decoration_caches) do
                     if cache.bufnr == buf then
-                        local overlaps = event.kind ~= "edit" or event.first_row < cache.end_row
+                        local overlaps = event.kind ~= "edit" or event.semantic_changed or event.first_row < cache.end_row
                             and (event.old_last_row > cache.toprow or event.last_row ~= event.old_last_row)
                         if overlaps then decoration_caches[win] = nil end
                     end
@@ -1063,7 +1065,7 @@ M.setup_buf_handler = function()
             if not _parley._parley_bufs[bufnr] then
                 return false
             end
-            -- The shared index retains presentation only on surviving row handles.
+            -- Semantic presentation requires the shared index's current context proof.
             local document = require("parley.document").get(bufnr)
             if not document then
                 return false

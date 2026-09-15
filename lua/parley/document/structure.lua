@@ -46,17 +46,16 @@ local function frontier(current)
     return current.semantic and require("parley.document.semantic").confirmed_frontier(current.semantic)
         or sequence.size(current.index).rows
 end
-local function visible(current,row,opts,certainty)
+local function visible(current,row,_,certainty)
     if row and row.metadata and current.semantic then
         row.metadata.confirmed = row.end_row <= (certainty or frontier(current)) and row.metadata.confirmed == true
         if not row.metadata.confirmed then
-            if opts and opts.presentation and row.metadata.semantic then
-                local sem=row.metadata.semantic
-                row.metadata.presentation={footer=sem.footer,draft=sem.draft,draft_end=sem.draft_end,
-                    draft_start=sem.draft_start}
-            end
+            -- Row identity proves lexical bytes, not the context that paints
+            -- them. Every consumer uses the same current semantic frontier.
             row.metadata.semantic = nil
-            if not (opts and opts.presentation) then row.metadata.render_before = nil end
+            row.metadata.render_before = nil
+            row.metadata.after = nil
+            row.metadata.presentation = nil
         end
     end
     return row
@@ -106,6 +105,11 @@ function M.lookup(document,handle,opts)
 end
 local function unknown(current)
     return {status="opaque",row=frontier(current),work={nodes_visited=0,entries_visited=0}}
+end
+function M.uncertain_range(document)
+    local current=state(document)
+    local first,last=frontier(current),sequence.size(current.index).rows
+    if first<last then return {first=first,last=last} end
 end
 function M.exchange(document,row,opts)
     local current=state(document)
