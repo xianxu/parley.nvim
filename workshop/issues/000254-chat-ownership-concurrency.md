@@ -1204,3 +1204,22 @@ Final mapped union:91 unique specs,1030 passing tests, no failures/errors/incomp
 files;575-file lint clean. Original nine failures were fixed and superseded by12
 focused reruns, not waived. Evidence:/tmp/parley254-m5-final-verification.txt.
 M4 Codex rework97ac5805 is under review before integration into this M5 candidate.
+
+### 2026-09-15 M6 public execution integration checkpoint
+
+M6 shared producer now captures capabilities and roots, shares process/resource
+claims across chat and skill invocations, and transfers cancelled child ownership
+through an explicit supervisor event. Seven public async tests pass through actual
+provider decoding/default producer, including native read_file+ls heartbeat,
+reverse completion ordering, human draft edits, frozen permissions, Stop/reload,
+retained unknown claims and operator physical-evidence refusal. Forty-one direct
+host regressions pass; prior three real-tool fixture failures were resolved by
+explicit capability capture and awaiting asynchronous IO. Full preflight lint594
+files clean. The remaining synchronous skill dispatcher call is migrated too;
+18 skill invocation tests pass, including held async work during human editing.
+
+All released seam work is committed through176620b7. Resource worst-case callback
+measurement exposed a644ms queue scan and is being optimized with deterministic
+work tests; final mapped M6 verification waits for that release. M4 is separately
+fixing CodexBR18/19 and will rerun its complete146-file union. M5 remains verified
+but cannot close before M4. No main merge or whole-issue completion is claimed.

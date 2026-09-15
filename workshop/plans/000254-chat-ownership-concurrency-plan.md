@@ -1176,3 +1176,32 @@ Numeric file descriptors are not reusable authority after an ambiguous close:
 probe-only reconciliation must never close a descriptor that may now belong to
 another operation. M5 recovery uses the same conservative rule and bounded retained
 owners. No unresolved operation is removed to make an admission counter look clean.
+
+### 2026-09-15 — M6 supervisor integration and bounded defaults
+
+Reason: asynchronous builtins require a shared owner across chat and skill paths,
+including cancelled document lifetimes. Delta: `tools/producer` captures allowed
+functions/configuration, canonical input/claims and frozen roots before effect
+submission, then normalizes only recorded outcomes. `skill_invoke` joins the same
+supervisor rather than retaining a synchronous bypass. Missing-parent writes use
+checked asynchronous directory creation and conservatively claim the write-root
+subtree; numbered backup selection takes the same exclusive claim.
+
+Distinguish local parent retirement from operation terminal state: a cancelled
+child may transfer through the explicit stopping-only `operation_supervised`
+event. Its outcome remains unknown when appropriate, and the supervisor retains
+claims/IO independently of the retired Document. Normal completion cannot request
+this handoff. `ToolOperations` exposes stable IDs and operator effect evidence;
+operator input cannot supply physical cleanup. No effect replay is introduced.
+
+Expose validated lowerable `tool_execution` limits: process16 providers/16tools,
+total32 including utilities, four generations/document, eighttools/document,
+fourtools/generation and16MiB process capture; resource16running/128queued,
+32queued/generation and32claims;128records;512KiB result/16MiB totalresult;
+1MiB file envelope. Existing arguments64KiB/8192nodes/depth32 remain bounded.
+Five-second reconciliation uses50ms doubling to1s, emits one unresolved notice,
+then retires its timer while keeping claims. Disjoint same-document work bypasses
+blocked claims; conflicting and runnable-capacity waiters retain FIFO priority.
+Public tests cover actual provider/Scheduler/native FS+Tasker concurrency, draft
+editing, frozen capabilities, Stop/reload handoff and operator physical-evidence
+refusal (ARCH-ORDER, ARCH-FUNERAL, ARCH-CONSTRAINTS, ARCH-DRY).

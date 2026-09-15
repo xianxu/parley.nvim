@@ -641,6 +641,10 @@ M.setup = function(opts)
 	for k, v in pairs(opts) do
 		M.config[k] = v
 	end
+	local tool_limits = require("parley.tools.producer").configure(M.config.tool_execution)
+	if not tool_limits.ok then
+		error("Invalid tool execution configuration: " .. tostring(tool_limits.reason))
+	end
 
 	-- Bind image conversion to this setup, resetting cached probes and notices.
 	require("parley.image_shrink").configure(M.config.assets)
@@ -1588,6 +1592,7 @@ M._format_missing_remote_reference_cache_content = function(u) return chat_respo
 -- Stop one captured response generation, or explicitly stop this document.
 M.cmd.Stop = function(signal) chat_respond.cmd_stop(signal) end
 M.cmd.StopDocument = function() chat_respond.cmd_stop_document() end
+M.cmd.ToolOperations = function() require("parley.tool_operations").open() end
 M.cmd.ChatResumeBatch = function(params) return chat_respond.resume_batch(params) end
 M.cmd.AnswerRecovery = function()
     local recovery = require('parley.chat_recovery'); recovery.setup(M); return recovery.open()

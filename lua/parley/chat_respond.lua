@@ -2,6 +2,8 @@
 -- Owns: remote reference cache, _build_messages, _resolve_remote_references,
 --       chat_respond, chat_respond_all, resubmit_questions_recursively, cmd.Stop/ChatRespond
 local M = {}
+local installed_root = debug.getinfo(1, "S").source:sub(2):match("^(.*)/lua/parley/chat_respond%.lua$")
+installed_root = installed_root and vim.fn.fnamemodify(installed_root, ":p")
 
 --- Build the user-facing notice for a failed provider request.
 ---
@@ -1545,7 +1547,7 @@ local function start_scoped_response(frame)
                 end
                 cb.prepared({buf = buf, provider = info.provider, model = info.model,
                     messages = messages, payload = final_payload, response_profile = {
-                        agent = info.display_name,
+                        agent = info.display_name, allowed_tools = vim.deepcopy(info.tools or {}),
                         max_iterations = info.max_tool_iterations or config.max_tool_iterations,
                         max_result_bytes = info.tool_result_max_bytes,
                     }}, plan)
@@ -1586,6 +1588,9 @@ local function start_scoped_response(frame)
     local last_cursor = frame.cursor
     local session, reason = Session.start(doc, spec, {buf = buf, agent = info.display_name,
         dispatcher = _parley.dispatcher, tasker = _parley.tasker,
+        state_dir = config.state_dir, page_limit = config.tool_result_page_lines,
+        chat_roots = vim.deepcopy(_parley.get_chat_roots()),
+        help_root = installed_root,
         root_policy = info.root_policy, max_iterations = info.max_tool_iterations or config.max_tool_iterations,
         max_result_bytes = info.tool_result_max_bytes, prepare_input = prepare_input, build_input = payload,
         requesting = capture_topic_parent,

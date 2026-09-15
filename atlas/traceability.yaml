@@ -783,6 +783,9 @@ atlas:
       - lua/parley/tools/operation.lua
       - lua/parley/tools/resources.lua
       - lua/parley/tools/scheduler.lua
+      - lua/parley/tools/producer.lua
+      - lua/parley/tool_operations.lua
+      - lua/parley/recovery_paths.lua
       - lua/parley/tools/dispatcher.lua
       - lua/parley/tools/types.lua
       - lua/parley/tools/async_builtin.lua
@@ -800,6 +803,8 @@ atlas:
       - tests/integration/tasker_supervision_spec.lua
       - tests/integration/async_builtin_spec.lua
       - tests/integration/tool_dispatch_capture_spec.lua
+      - tests/integration/tool_producer_spec.lua
+      - tests/integration/chat_async_tools_spec.lua
 
   providers/tool_use:
     code:

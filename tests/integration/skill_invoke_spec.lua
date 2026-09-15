@@ -311,6 +311,31 @@ describe("skill_invoke.invoke", function()
         assert.is_true(done_result.ok)
         assert.equals("sibling repo root file", done_result.results[1].content:match("sibling repo root file"))
     end)
+    it("keeps asynchronous skill tools supervised while human buffer edits continue", function()
+        local registry=require('parley.tools')
+        local done,legacy= nil,0
+        registry.register({name='skill_async_fixture',description='async fixture',
+            input_schema={type='object',properties={}},
+            handler=function()legacy=legacy+1;return {content='legacy'}end,
+            resources=function()return {}end,
+            execute_async=function(_,_,callback)done=callback;return {cancel=function()end}end})
+        parley.dispatcher.query=function(_,_,_,_,exit)
+            tasker.set_query('async_skill',{raw_response=sse({
+                {type='content_block_start',index=0,content_block={type='tool_use',id='async',name='skill_async_fixture',input={}}},
+                {type='content_block_stop',index=0}})})
+            exit('async_skill')
+        end
+        skill_invoke.invoke(buf,manifest({tools={'skill_async_fixture'},elevated={},force_tool=nil}),{},
+            {no_reload=true,on_done=function(result)done_result=result end})
+        assert.is_true(vim.wait(2000,function()return done~=nil end,1))
+        assert.equals(0,legacy);assert.is_nil(done_result)
+        vim.api.nvim_buf_set_lines(buf,0,-1,false,{'human continued editing'})
+        done({certainty='known',effect='not_applied',physical_resolved=true,result={content='async',is_error=false}})
+        assert.is_true(vim.wait(2000,function()return done_result~=nil end,1))
+        assert.is_true(done_result.ok)
+        assert.same({'human continued editing'},vim.api.nvim_buf_get_lines(buf,0,-1,false))
+    end)
+
 end)
 
 describe("skill_invoke terminal ownership (#182)", function()

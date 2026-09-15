@@ -12,17 +12,6 @@ local function call(value,id)
     assert(type(value.input)=='table','invalid tool input')
     return {id=id,name=value.name,input=copy(value.input)}
 end
-local function default_producer(registry)
-    return {
-        start=function(c,opts,events)
-            local handle={}
-            events.outcome('known',Dispatch.execute_call(c,registry,opts))
-            events.resolved();handle.done=true
-            return handle
-        end,
-        cancel=function(_,resolved)resolved()end,
-    }
-end
 local function parent(doc,ctx)
     local snapshot=D.snapshot(doc)
     local grant=snapshot.grants[ctx.grant]
@@ -79,11 +68,12 @@ local function reserve_step(s,r)
     return false
 end
 local function maybe_resolve(s,r)
-    if r.retired or not r.producer_done or r.writing or not r.outcome or r.outcome=='unknown' then return end
+    if r.retired or not r.producer_done or r.writing then return end
+    if not r.supervised and (not r.outcome or r.outcome=='unknown')then return end
     r.retired=true;s.active[r]=nil
     local resolved=r.cancel_resolved or r.cb.resolved
     r.cb=nil;r.ctx=nil;r.call=nil;r.producer_handle=nil;r.cancel_resolved=nil
-    resolved()
+    resolved(r.supervised and {supervised=true} or nil)
 end
 local function tool_outcome(s,r,outcome,value)
     if r.retired or r.outcome and not (r.outcome=='unknown' and outcome=='known') then return false end
@@ -113,7 +103,15 @@ function M.new(doc,opts)
     local result_limit=opts.max_result_bytes or 102400
     assert(type(result_limit)=='number' and result_limit>=1 and result_limit<=524288 and result_limit%1==0,'invalid tool result limit')
     local s={doc=doc,rounds={},iterations=0,active={},records=setmetatable({},{__mode='k'}),
-        result_limit=result_limit,producer=opts.producer or default_producer(opts.registry or require('parley.tools'))}
+        result_limit=result_limit,producer=opts.producer}
+    if not s.producer then
+        local reason
+        s.producer,reason=require('parley.tools.producer').new({registry=opts.registry,
+            allowed_tools=opts.allowed_tools or {},root_policy=opts.root_policy,state_dir=opts.state_dir,
+            buf=opts.buf,chat_roots=opts.chat_roots,help_root=opts.help_root,
+            page_limit=opts.page_limit,max_result_bytes=result_limit})
+        assert(s.producer,reason)
+    end
     assert(type(s.producer.start)=='function' and type(s.producer.cancel)=='function','tool producer lifecycle required')
     local adapter={}
     function adapter.on_result(ctx,qt,calls,failure)
@@ -121,7 +119,7 @@ function M.new(doc,opts)
         assert(not s.closed and s.iterations<max_iterations,'tool iteration limit')
         local text=qt.response or ''
         assert(type(text)=='string' and #text<=1048576,'tool response text limit')
-        local frozen={text=text,calls={},generation=ctx.generation,epoch=ctx.epoch}
+        local frozen={text=text,calls={},generation=ctx.generation,epoch=ctx.epoch,attempt=ctx.operation}
         local bytes=#text
         for i,c in ipairs(calls)do
             frozen.calls[i]=call(c,c.id)
@@ -160,7 +158,7 @@ function M.new(doc,opts)
         local r={ctx=ctx,done=done,slots=slots,bytes=length,payload=table.concat(blocks),ticket=reserved.ticket,
             ticket_operation=operation,round=ctx.round,appending=true,epoch=ctx.epoch,generation=ctx.generation}
         s.records[handle]=r;s.reservation=r;s.pending=nil;s.iterations=s.iterations+1
-        s.rounds[ctx.round]={calls=calls,text=pending.text}
+        s.rounds[ctx.round]={calls=calls,text=pending.text,attempt=pending.attempt}
         r.work=Deferred.new(function()return reserve_step(s,r)end)
         r.off=D.subscribe(doc,function(event)
             if not r.retired and (event.kind=='reload' or event.kind=='detach')then retire_reservation(s,r)end
@@ -189,7 +187,9 @@ function M.new(doc,opts)
         local events={outcome=function(outcome,value)return tool_outcome(s,r,outcome,value)end,
             resolved=function()r.producer_done=true;maybe_resolve(s,r)end}
         local ok,value=pcall(s.producer.start,copy(c),{root_policy=copy(opts.root_policy),
-            cwd=opts.root_policy and opts.root_policy.write_root,max_bytes=s.result_limit,page_limit=opts.page_limit},events)
+            cwd=opts.root_policy and opts.root_policy.write_root,max_bytes=s.result_limit,page_limit=opts.page_limit,
+            epoch=ctx.epoch,generation=ctx.generation,round=ctx.round,
+            attempt=s.rounds[ctx.round] and s.rounds[ctx.round].attempt,buf=opts.buf},events)
         if not ok then
             if not r.outcome then tool_outcome(s,r,'unknown',{content=tostring(value)})end
             -- A throwing producer may already own an effect. No fabricated
@@ -200,10 +200,13 @@ function M.new(doc,opts)
     function adapter.cancel_operation(ctx,resolved)
         local r=s.records[ctx.handle]
         if not r or r.epoch~=ctx.epoch or r.generation~=ctx.generation or r.operation~=ctx.operation then return false end
-        if r.retired then resolved();return true end
+        if r.retired then resolved(r.supervised and {supervised=true} or nil);return true end
         if r.cancelled then return false end
         r.cancelled=true;r.cancel_resolved=resolved
-        s.producer.cancel(r.producer_handle,function()r.producer_done=true;maybe_resolve(s,r)end)
+        s.producer.cancel(r.producer_handle,function(evidence)
+            if type(evidence)=='table' and evidence.supervised==true then r.supervised=true end
+            r.producer_done=true;maybe_resolve(s,r)
+        end)
         return true
     end
     function adapter.continue_round(ctx,cb)
@@ -229,6 +232,7 @@ function M.new(doc,opts)
     function adapter.step()if s.reservation then return reserve_step(s,s.reservation)end;return false end
     function adapter.close()
         s.closed=true;s.pending=nil;s.rounds={}
+        if s.producer.close then s.producer.close()end
         if s.reservation then retire_reservation(s,s.reservation)end
         return next(s.active)==nil
     end

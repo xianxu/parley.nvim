@@ -26,8 +26,9 @@ records are pruned without accumulating tombstones.
 
 `tools/resources.lua` admits all claims atomically or queues the operation.
 Canonical file/subtree claims support shared reads and exclusive writes; a global
-claim is exclusive. Queued conflicting requests and requests from the same owner
-keep FIFO order. Unrelated owners may proceed around a blocked request.
+claim is exclusive. Queued conflicting requests keep FIFO order, and an older runnable waiter
+gets available capacity first. Disjoint work, including in the same document,
+may proceed around a blocked resource claim.
 Cancellation removes queued work immediately. Running work retains its claims
 until both effect certainty and physical completion are positive.
 
@@ -95,13 +96,14 @@ target-write effects.
 
 ## Bounds and private data
 
-The defaults below are owned by their modules; host configuration may supply
-validated limits where supported.
+The shared producer owns the `tool_execution` setup defaults below. Configuration
+validates finite positive values and permits lowering these ceilings. It refuses
+changes while producer clients, supervisor records or Tasker work remain active.
 
 | Owner | Default bound |
 | --- | --- |
 | Operation/scheduler | 128 retained records; arguments 64KiB, 8192 nodes, depth 32 |
-| Scheduler result retention | 64KiB per result; 1MiB aggregate content; truncation is marked |
+| Scheduler result retention | 512KiB per result; 16MiB aggregate content in the shared producer; truncation is marked |
 | Resource admission | 16 running, 128 queued, 8 running/document, 4 running/generation, 32 queued/generation, 32 claims/call |
 | Filesystem | 1MiB prior plus replacement bytes; chunks at most 64KiB; 32768 IO steps plus bounded cleanup allowance |
 | Builtin transforms | 32768 lines, 128 proposed edits, 8MiB aggregate replacement work; directory depth 128 |
@@ -123,10 +125,30 @@ structured argv and result paging.
 
 ## Implementation and verification
 
-The execution path is `tools/dispatcher` → `tools/scheduler` → captured
+The execution path is `response_tools` or `skill_invoke` → `tools/producer` →
+`tools/dispatcher` → `tools/scheduler` → captured
 `tools/async_builtin` → `tasker` or `tools/filesystem`. Pure operation/resource
 reducers carry identity and admission; stateful process/filesystem fakes exercise
 missing, late, duplicate, cancellation, and uncertain callbacks. Native tests
 check actual libuv filesystem writes and overlapping subprocesses with an editor
 heartbeat. The canonical test list is `providers/tool_execution` in
 `atlas/traceability.yaml`.
+
+### Parent retirement and operator reconciliation
+
+A cancelled response uses the distinct `operation_supervised` transition to hand
+its tool ownership to the process supervisor. This permits local response and
+Document retirement without asserting effect success or physical completion.
+The supervisor severs parent callbacks, retains unknown claims and admits only
+nonconflicting work. Normal child completion cannot request this transition.
+
+`ParleyToolOperations` uses stable process-lifetime operation IDs, captured tool
+names, document/generation scalars, claims and evidence. Operator-confirmed effect
+classification goes through `tools/producer.reconcile`; only backend observations
+can establish physical cleanup. IDs do not alias after idle reconfiguration.
+
+`tool_execution` has `process` and `resources` subtables matching the table above,
+plus `max_records`, `max_result_bytes`, `max_total_result_bytes`, `max_file_bytes`.
+Per-agent result limits may be smaller. Confirmed backup footers count toward the
+result budget; an unrepresentable footer produces a bounded error while the
+independent operation evidence remains inspectable.

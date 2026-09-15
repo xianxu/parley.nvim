@@ -68,3 +68,22 @@ and [code style](STYLE.md).
 
 Parley was adapted from [gp.nvim](https://github.com/Robitx/gp.nvim) and has since
 been extensively redesigned. See [LICENSE](LICENSE).
+
+## Concurrent tools
+
+Builtin tools run asynchronously. Independent resources can proceed together;
+conflicting file operations wait for earlier work. Capabilities, roots and tool
+configuration are captured for the response. Custom tools need an `execute_async`
+implementation to run in this workflow; a synchronous handler alone is refused.
+
+Stop and reload prevent further chat writes, while the process supervisor keeps
+unfinished tool effects and their resource claims. `:ParleyToolOperations` shows
+retained operations and their evidence. After independently inspecting an effect,
+you can record whether it happened, did not happen, or partially happened. This
+never reruns it or invents process/file cleanup; conflicting work remains blocked
+until cleanup is confirmed. Known tool writes preserve a checked pre-image backup.
+
+The `tool_execution` setup table exposes finite process, resource, result and
+file-work limits. Limits may be lowered; changing them while work is retained is
+refused. See [tool execution](atlas/providers/tool_execution.md) for defaults,
+backup behavior and cancellation guarantees.

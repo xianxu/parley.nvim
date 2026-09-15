@@ -1,19 +1,7 @@
--- Tool dispatcher — the DRY safety layer between response_tools and
--- individual handler functions.
---
--- Handlers (lua/parley/tools/builtin/*.lua) are pure. They know
--- nothing about cwd-scope, symlink resolution, truncation, or
--- error wrapping. Every safety concern lives HERE so there's
--- exactly one place to audit and one place to fix.
---
--- SINGLE source for each invariant:
---   - read base + confinement:    resolve_read_path
---   - write-root confinement:     resolve_path_in_cwd
---   - result size cap:            truncate / truncate_preserving_footer (M5)
---   - pcall-guarded handler call: execute_call
---   - dirty-buffer guard:         check_dirty_buffer (M5)
---   - pre-image capture:          ensure_backup (M5)
---   - post-write reload:          _checktime_if_loaded (M5)
+-- Shared tool preparation and presentation policy. Production callers capture
+-- asynchronous definitions and canonical resource claims before Scheduler IO.
+-- execute_call remains an explicit compatibility adapter for legacy handlers;
+-- neither chat responses nor skill invocations dispatch through it.
 
 local M = {}
 
