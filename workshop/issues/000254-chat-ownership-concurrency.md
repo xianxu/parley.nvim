@@ -351,7 +351,7 @@ its own `sdlc milestone-close` after implementation:
 
 - [x] M1 — Durable audit regressions and process-lifecycle containment.
 - [x] M2 — Dependency-aware incremental sequence/grammar/structure core.
-- [ ] M3 — Document ownership and shared highlighting/folding/layout index.
+- [x] M3 — Document ownership and shared highlighting/folding/layout index.
 - [ ] M4 — Scoped concurrent generation/child-slot writes and human editing.
 - [ ] M5 — Fixed batch identities and recoverable answer replacement.
 - [ ] M6 — Asynchronous concurrent tools, resource/outcome enforcement, final verification.
@@ -550,6 +550,7 @@ remains active. Scoped luacheck and whitespace checks pass. BR-1 and BR-2 fixes
 are ready for the required repeated review after REWORK.
 
 ### 2026-09-15 — M1 closed; M2 integration checkpoint
+- 2026-09-15: closed M3 — BR-11 suspended cleanup ownership:50 focused tests across10 files passed, including two native50k suspended apply/uncertainty retirement regressions and scoped test-runner contract;47 existing presentation/fold/batch tests retained. Five changed Lua files lint clean; git diff --check clean. Prior combined M4 mapping131files1624tests and full556lint passed; integrated performance30scenarios x20samples passed hard gates with zero full-buffer stream reads. Broad native repair remains an explicit expensive exception. Actual N/A: mixed issue192/254 session attribution is unreliable; no invented hours. Review with Codex per operator instruction; no verdict guard bypass.; review verdict: FIX-THEN-SHIP
 - 2026-09-15: closed M2 — Document 131 and parsing 239 tests pass; scoped lint and diff clean. BR-3 delayed semantic publication and BR-4 56 fenced tool/section differential cases fixed. Existing 50k Enter+join 3 semantic rows, 358 index visits, 175 leaf copies and JIT retention regression pass. Actual attribution unavailable for this worktree as recorded at M1; no guessed actuals.; review verdict: SHIP
 
 M1 passed the repeated boundary review with SHIP, committed at dc715634.
@@ -1064,6 +1065,52 @@ effects, specifies safe recovery association, and explicitly bounds normal
 rendering work while acknowledging broad native fold-clearing costs.
 
 
+### 2026-09-15 — M3 reviewer transport exhausted; supported fallback
+
+The fifth M3 review invocation ended after about55minutes with the Claude CLI
+message that its usage credits were exhausted. The boundary recorded unknown,
+not a valid review verdict, and left BR-11/BR-12 open. Its generic unknown-verdict
+message requests investigation before rerunning; inspection identifies provider
+quota exhaustion rather than an unresolved product test result. The operator
+already authorized autonomous continuation through issue completion. Use the
+binary's documented --agent codex fallback for the same mandatory fresh-context
+review; do not waive the ledger or accept unknown as approval. Codex is installed
+at /opt/homebrew/bin/codex. Retain --no-actual because the mixed-session active-time
+attribution is unreliable; no numeric actual value is invented.
+
+The feature code remains0257ddad/180dd14c with verified BR-11/BR-12 fixes. M4 is
+separately integrated and checkpointed at43e7e3a7 in /tmp/parley254-integrate,
+passing131unique mapped files/1624tests and556-file lint; its combined fullperf
+is running. An unrelated workshop/parley transcript modification is present in
+this feature worktree and is not part of these issue/review commits.
+
+### 2026-09-15 — Codex reviewer result
+
+Codex reviewed2afd7de9..7507d370, verdict REWORK. BR-12 disposed; BR-11 remains
+open for cancellation inside already-suspended fold slices. Native red reproduced;
+focused cleanup-ownership fix and regression matrix are in progress. Plan revision
+records the corrected ownership rule. Operator requested Codex for every remaining
+review. M4 combined benchmark passed all hard gates; M5 work remains isolated until
+M3/M4 boundaries close.
+
+### 2026-09-15 — BR-11 suspended retirement verification
+
+Retirement now marks preference restoration ownership before callbacks; nested
+apply/uncertainty cleanup still restores captured view but cannot reinstate the
+retired suspension. Restoring disabled operator preference is also explicit when
+retirement interrupts temporarily enabled folds. Both discard paths share this rule.
+50 tests across10 focused files pass:47 existing presentation/fold/batch regressions,
+two native50k suspended-retirement regressions, and scoped harness contract. Five
+changed Lua files lint clean; diff check clean. New native fixtures use the existing
+180-second large-corpus test runner path without changing production work limits.
+Next: Codex M3 boundary review; no closure claimed before its verdict.
+
+Codex M3 FIX-THEN-SHIP follow-through: BR-11 addressed with red-control evidence;
+BR-13's two omitted retirement specs registered in chat/document before close
+commit. Complete new-spec mapping sweep has no missing specs. Codex reran mapped
+document, highlights85, exchange_model264 and outline223 tests plus both native
+retirement regressions. No runtime change was needed after the accepted review.
+
 ### 2026-09-15 — M4 integration verification checkpoint
 
 Production response composition, captured onboarding profiles, per-child remote
@@ -1090,6 +1137,21 @@ Remaining: receive/dispose M3 review, finish combined performance evidence, clos
 M4 through its mandatory review, implement M5 recovery/batch and M6 asynchronous
 builtin/resource supervision. Do not merge to main; operator live testing follows
 the completed issue and precedes merge. No fabricated actual-time value recorded.
+
+### 2026-09-15 — M4 verification ready for Codex boundary
+
+Closed M3 integrated at0eb73979. M4 maps146 unique files/1700 passing tests, including
+final-head document31files/285tests and ownership25files/211tests. All added M4
+specs are registered after correcting13 mapping omissions. Full558-file lint and
+diff checks are clean. Integrated performance30scenarios x20samples passes hard
+gates;5000-row stream touches17 structural rows and zero full reads. Broad native
+repair remains11.01/13.02s median/p95 with unchanged counters and timing interference
+caveat. Original final-document run stopped during perf_document without a footer;
+focused retry5tests passed within unchanged deadline and remaining15files198tests
+passed separately. Per-file evidence in /tmp/parley254-m4-final-verification.txt.
+
+M4 enters mandatory Codex review. M5 recovery/batch and M6 async tool work remain
+staged separately. Actual time N/A due mixed-session attribution, not guessed.
 
 ### 2026-09-15 — M5 isolated implementation checkpoint
 

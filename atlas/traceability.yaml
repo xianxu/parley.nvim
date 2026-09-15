@@ -299,6 +299,20 @@ atlas:
       - tests/integration/chat_scoped_response_spec.lua
       - tests/integration/chat_stop_generation_spec.lua
       - tests/arch/document_ownership_spec.lua
+      - tests/integration/diagnostic_publication_spec.lua
+      - tests/integration/document_header_authority_spec.lua
+      - tests/integration/generation_input_affinity_spec.lua
+      - tests/integration/topic_presentation_spec.lua
+      - tests/integration/user_edit_callers_spec.lua
+      - tests/unit/document_append_spec.lua
+      - tests/unit/document_capacity_spec.lua
+      - tests/unit/document_dependency_affinity_spec.lua
+      - tests/unit/document_replacement_spec.lua
+      - tests/unit/document_successor_guard_spec.lua
+      - tests/unit/document_tail_spec.lua
+      - tests/unit/stream_output_spec.lua
+      - tests/unit/user_buffer_edit_spec.lua
+
   chat/batch:
     code:
       - lua/parley/batch.lua
@@ -367,6 +381,8 @@ atlas:
       - tests/integration/document_fold_batches_spec.lua
       - tests/integration/document_fold_join_spec.lua
       - tests/integration/document_presentation_reentrant_spec.lua
+      - tests/integration/document_fold_retirement_spec.lua
+      - tests/integration/document_fold_uncertainty_retirement_spec.lua
       - tests/integration/document_fold_native_spec.lua
       - tests/integration/document_folds_spec.lua
       - tests/integration/highlighter_document_spec.lua
