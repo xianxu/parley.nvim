@@ -616,6 +616,109 @@ rounds:
           round: 22
       boundary: M6
       blocked: false
+    - "n": 23
+      timestamp: "2026-09-15T14:11:30-07:00"
+      agent: codex
+      dispose:
+        - id: BR-1
+          disposition: addressed
+          round: 23
+        - id: BR-2
+          disposition: addressed
+          round: 23
+        - id: BR-3
+          disposition: addressed
+          round: 23
+        - id: BR-4
+          disposition: addressed
+          round: 23
+        - id: BR-5
+          disposition: addressed
+          round: 23
+        - id: BR-6
+          disposition: addressed
+          round: 23
+        - id: BR-7
+          disposition: addressed
+          round: 23
+        - id: BR-8
+          disposition: addressed
+          round: 23
+        - id: BR-9
+          disposition: addressed
+          round: 23
+        - id: BR-10
+          disposition: addressed
+          round: 23
+        - id: BR-11
+          disposition: addressed
+          round: 23
+        - id: BR-12
+          disposition: addressed
+          round: 23
+        - id: BR-13
+          disposition: addressed
+          note: atlas/traceability.yaml:384–385 registers both fold-retirement regressions. The documented mapping includes both and both tests passed. Removing either entry from a scratch mapping fails the inclusion check; all 108 added specs are registered.
+          round: 23
+        - id: BR-14
+          disposition: addressed
+          round: 23
+        - id: BR-15
+          disposition: addressed
+          round: 23
+        - id: BR-16
+          disposition: addressed
+          round: 23
+        - id: BR-17
+          disposition: addressed
+          round: 23
+        - id: BR-18
+          disposition: addressed
+          round: 23
+        - id: BR-19
+          disposition: addressed
+          round: 23
+        - id: BR-20
+          disposition: addressed
+          round: 23
+        - id: BR-21
+          disposition: addressed
+          round: 23
+        - id: BR-22
+          disposition: addressed
+          round: 23
+        - id: BR-23
+          disposition: addressed
+          round: 23
+        - id: BR-24
+          disposition: addressed
+          round: 23
+        - id: BR-25
+          disposition: addressed
+          round: 23
+        - id: BR-26
+          disposition: addressed
+          round: 23
+        - id: BR-27
+          disposition: addressed
+          round: 23
+        - id: BR-28
+          disposition: addressed
+          round: 23
+        - id: BR-29
+          disposition: addressed
+          round: 23
+        - id: BR-30
+          disposition: addressed
+          round: 23
+        - id: BR-31
+          disposition: addressed
+          round: 23
+        - id: BR-32
+          disposition: addressed
+          note: operation.lua:121 clamps the next tick to the deadline. The regression at tool_operation_spec.lua:164 follows every scheduled tick, reaches 5000 ms, and verifies retained ownership. It passes at HEAD and fails at 5550 ms when only the clamp is removed in memory. Production scheduler polling consumes this deadline.
+          round: 23
+      blocked: false
 ---
 
 # Gate ledger — 000254-chat-ownership-concurrency#254 (boundary-review)
@@ -893,7 +996,43 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-32** [Minor] `reconciliation-deadline-enforcement` Scheduler reconciliation schedules beyond its five-second deadline
   lua/parley/tools/operation.lua:121 does not clamp the next tick to the deadline. Deterministic scheduled ticks reach the diagnostic at 5550 ms instead of 5000 ms. Clamp next to min(deadline, now + delay) and test the complete timer sequence. Ownership remains retained throughout. ARCH-CONSTRAINTS.
 
+## Round 23 — 2026-09-15T14:11:30-07:00 (codex) — passed
+
+### Disposed
+
+- BR-1 — addressed
+- BR-2 — addressed
+- BR-3 — addressed
+- BR-4 — addressed
+- BR-5 — addressed
+- BR-6 — addressed
+- BR-7 — addressed
+- BR-8 — addressed
+- BR-9 — addressed
+- BR-10 — addressed
+- BR-11 — addressed
+- BR-12 — addressed
+- BR-13 — addressed — atlas/traceability.yaml:384–385 registers both fold-retirement regressions. The documented mapping includes both and both tests passed. Removing either entry from a scratch mapping fails the inclusion check; all 108 added specs are registered.
+- BR-14 — addressed
+- BR-15 — addressed
+- BR-16 — addressed
+- BR-17 — addressed
+- BR-18 — addressed
+- BR-19 — addressed
+- BR-20 — addressed
+- BR-21 — addressed
+- BR-22 — addressed
+- BR-23 — addressed
+- BR-24 — addressed
+- BR-25 — addressed
+- BR-26 — addressed
+- BR-27 — addressed
+- BR-28 — addressed
+- BR-29 — addressed
+- BR-30 — addressed
+- BR-31 — addressed
+- BR-32 — addressed — operation.lua:121 clamps the next tick to the deadline. The regression at tool_operation_spec.lua:164 follows every scheduled tick, reaches 5000 ms, and verifies retained ownership. It passes at HEAD and fails at 5550 ms when only the clamp is removed in memory. Production scheduler polling consumes this deadline.
+
 ## Open findings
 
-- **BR-13** [Important] `deferred-contract-traceability` BR-11 regressions are missing from the documented verification mapping
-- **BR-32** [Minor] `reconciliation-deadline-enforcement` Scheduler reconciliation schedules beyond its five-second deadline
+(none — every finding has been disposed)

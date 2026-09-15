@@ -1,12 +1,13 @@
 ---
 id: 000254
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-09-14
-updated: 2026-09-14
+updated: 2026-09-15
 estimate_hours: 33.107
 started: 2026-09-14T22:05:59-07:00
+actual_hours: N/A
 ---
 
 # Harden chat ownership and concurrency
@@ -550,6 +551,7 @@ remains active. Scoped luacheck and whitespace checks pass. BR-1 and BR-2 fixes
 are ready for the required repeated review after REWORK.
 
 ### 2026-09-15 — M1 closed; M2 integration checkpoint
+- 2026-09-15: closed — All six milestones reviewed;149 affected specs/1939 assertions plus deadline correction operation13/scheduler16 pass, combined365-spec evidence5637 assertions. Lint616+worker and scoped correction clean;600 performance samples pass work bounds. BR13 fold regressions are mapped; BR32 timer sequence now diagnoses at5000ms. Operator live testing required before main merge. Actuals N/A: mixed issue192/254 attribution cannot be measured reliably without fabrication.; review verdict: SHIP
 - 2026-09-15: closed M6 — 149 affected specs/1939 assertions pass; combined365-spec evidence5636 assertions; lint616+worker clean;600 benchmark samples pass work bounds. Pure lifecycle owners authorize scheduler execution/release/retirement, filesystem requests/cleanup and skill final reads, with rejection controls and reordered completion tests. Actuals N/A: mixed issue192/254 attribution cannot be measured reliably without fabrication.; review verdict: SHIP
 - 2026-09-15: closed M5 — 92 mapped specs/1103 passes before final save-order correction; final changed lifecycle sweep 167 tests across 9 specs all exit0 zero failed/errors incl exact reviewer repro34; lint clean. Evidence /tmp/parley254-save-join-final.json and /tmp/parley254-m5-rework-verification.txt. Actual N/A because mixed #192/#254 attribution is unreliable.; review verdict: SHIP
 - 2026-09-15: closed M4 — Fresh complete146-spec mapped union1739 finalpassingtests,0 finalfailures/errors/incomplete; lint559clean; allmappedperf under unchangeddeadlines. BR18 exactreviewrepro and117focusedtests pass; BR19 consumedprefix+negativesuffix preparation passes. OriginalintermittentGCfailure explicitlyrecorded: unchanged4/5, interpreterprobe5/5, realcleanupmutation stillfails, final30pass. Evidence/tmp/parley254-m4-rework-verification.txt. M5/M6 remain isolatedlaterboundaries. ActualN/A mixed192/254 attribution unreliable.; review verdict: SHIP
@@ -1553,3 +1555,12 @@ list-tests chat/document` includes both document_fold_retirement_spec.lua and
 document_fold_uncertainty_retirement_spec.lua, and both have passing evidence.
 The M6 focused override adds one assertion to the global365-spec record (5637).
 Live testing remains required before merging main.
+
+### 2026-09-15 Final acceptance — Codex SHIP
+
+Whole-issue review c95231c7..ec59ce9b returned SHIP with no remaining findings.
+Codex independently ran1659 mapped test executions (including overlap) and
+lint616; verified all108 added specs are mapped; mutation controls dispose BR13
+and BR32. All32 review findings are addressed. The issue is codecomplete.
+Feature checkout and draft PR remain available for operator live testing using
+`tests/manual/chat-concurrency.md`; main is not merged.

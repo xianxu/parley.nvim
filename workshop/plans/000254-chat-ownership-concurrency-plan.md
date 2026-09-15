@@ -1520,3 +1520,10 @@ model now clamps each next tick to its deadline. Operation13/scheduler16 tests
 and scoped lint pass. Tasker attempt and skill-source-read owners already clamp
 their deadlines. M6 is closed; whole-issue review and operator live testing are
 the remaining acceptance steps. No main merge is authorized before live testing.
+
+### 2026-09-15 — Whole-issue acceptance
+
+Codex SHIP c95231c7..ec59ce9b: no Critical, Important or Minor findings remain.
+All108 new spec files are mapped; independent mapped verification and mutation
+controls confirm the final corrections. Implementation and automated acceptance
+are complete. The operator's extensive live testing precedes any merge to main.
