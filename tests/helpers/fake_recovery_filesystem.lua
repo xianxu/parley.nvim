@@ -1,16 +1,25 @@
 local M={}
 function M.new()
-    local fs={files={},handles={},faults={},calls={},next_fd=0,short_write=nil}
+    local fs={files={},handles={},faults={},calls={},closed_fds={},next_fd=0,next_inode=0,short_write=nil}
     local function fault(name)
         fs.calls[#fs.calls+1]=name
         local queue=fs.faults[name]
         if queue and #queue>0 then local value=table.remove(queue,1);if value then return tostring(value) end end
     end
     function fs.fail(name,...)fs.faults[name]={...}end
+    local function metadata(f)
+        if not f.ino then fs.next_inode=fs.next_inode+1;f.ino=fs.next_inode end
+        return {type=f.type or 'file',size=#(f.bytes or ''),mode=f.mode or 384,dev=1,ino=f.ino}
+    end
     function fs.stat(path)
         local err=fault('stat');if err then return nil,err end
         local f=fs.files[path];if not f then return nil,'ENOENT' end
-        return {type=f.type or 'file',size=#(f.bytes or ''),mode=f.mode or 384}
+        return metadata(f)
+    end
+    function fs.fstat(fd)
+        local err=fault('fstat');if err then return nil,err end
+        local handle=fs.handles[fd];if not handle then return nil,'EBADF: bad file descriptor','EBADF'end
+        return metadata(handle.file)
     end
     fs.lstat=fs.stat
     function fs.mkdir(path,mode)
@@ -24,7 +33,10 @@ function M.new()
             if fs.files[path]then return nil,'EEXIST'end
             fs.files[path]={bytes='',mode=mode}
         elseif not fs.files[path]then return nil,'ENOENT'end
-        fs.next_fd=fs.next_fd+1;fs.handles[fs.next_fd]={path=path};return fs.next_fd
+        local fd=fs.reuse_fd;fs.reuse_fd=nil
+        if not fd then fs.next_fd=fs.next_fd+1;fd=fs.next_fd end
+        assert(not fs.handles[fd],'cannot reuse an open descriptor')
+        fs.handles[fd]={path=path,file=fs.files[path]};return fd
     end
     function fs.write(fd,bytes,offset)
         local err=fault('write');if err then return nil,err end
@@ -39,7 +51,13 @@ function M.new()
     end
     function fs.fsync(_)local err=fault('fsync');if err then return nil,err end;return true end
     function fs.close(fd)
-        local err=fault('close');if err then return nil,err end
+        fs.closed_fds[#fs.closed_fds+1]=fd
+        local err=fault('close')
+        if err then
+            if fs.close_error_closes then fs.handles[fd]=nil;fs.close_error_closes=nil end
+            return nil,err
+        end
+        if not fs.handles[fd]then return nil,'EBADF: bad file descriptor','EBADF'end
         fs.handles[fd]=nil;return true
     end
     function fs.rename(old,new)

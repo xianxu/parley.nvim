@@ -5,9 +5,13 @@ local MAX_RECORD=16*1024*1024
 local MAX_PROFILE=256*1024*1024
 local states=setmetatable({},{__mode='k'})
 local serial=0
+local pending_owners={}
+local pending_count=0
+local native_runtime={}
+local MAX_PENDING=32
 local function native()
     local uv=vim.uv or vim.loop
-    return {stat=uv.fs_stat,lstat=uv.fs_lstat,mkdir=uv.fs_mkdir,open=uv.fs_open,
+    return {fstat=uv.fs_fstat,stat=uv.fs_stat,lstat=uv.fs_lstat,mkdir=uv.fs_mkdir,open=uv.fs_open,
         write=uv.fs_write,read=uv.fs_read,fsync=uv.fs_fsync,close=uv.fs_close,
         rename=uv.fs_rename,unlink=uv.fs_unlink,list=function(path)
             local scan,err=uv.fs_scandir(path);if not scan then return nil,err end
@@ -51,11 +55,22 @@ local function decode(bytes)
 end
 local function close(s,fd)
     local ok,err=s.fs.close(fd)
-    if not ok then s.pending[fd]=true;return nil,err end
-    s.pending[fd]=nil;return true
+    if not ok then
+        if not s.pending[fd]then s.pending[fd]=true;pending_count=pending_count+1 end
+        pending_owners[s]=s.store[1]
+        return nil,err
+    end
+    return true
+end
+-- An ambiguous close loses ownership of the numeric descriptor. Keep its
+-- owner alive and block new opens in that store until absence is proven.
+local function open_handle(s,path,flags,mode)
+    if next(s.pending)then return nil,'recovery close unresolved'end
+    if pending_count>=MAX_PENDING then return nil,'recovery pending handle capacity exceeded'end
+    return s.fs.open(path,flags,mode)
 end
 local function read(s,path,size)
-    local fd,err=s.fs.open(path,'r',384);if not fd then return nil,err end
+    local fd,err=open_handle(s,path,'r',384);if not fd then return nil,err end
     local chunks,offset={},0
     while offset<size do
         local bytes,why=s.fs.read(fd,math.min(65536,size-offset),offset)
@@ -113,7 +128,7 @@ local function scan(s)
     return true
 end
 local function sync_directory(s)
-    local fd,err=s.fs.open(s.directory,'r',448);if not fd then return nil,err end
+    local fd,err=open_handle(s,s.directory,'r',448);if not fd then return nil,err end
     local synced,why=s.fs.fsync(fd)
     local closed,failure=close(s,fd)
     return synced and closed,why or failure
@@ -127,7 +142,7 @@ local function publish_record(s,record)
     local target=s.directory..'/'..record.id..'.'..record.sequence..'.json'
     if s.fs.lstat(target)then return fail('recovery publication already exists')end
     local temporary=target..'.tmp'
-    local fd,err=s.fs.open(temporary,'wx',384);if not fd then return fail(err)end
+    local fd,err=open_handle(s,temporary,'wx',384);if not fd then return fail(err)end
     local offset=0
     while offset<#bytes do
         local count,failure=s.fs.write(fd,bytes:sub(offset+1,offset+65536),offset)
@@ -153,11 +168,20 @@ local function publish_record(s,record)
 end
 function M.open(opts)
     if type(opts)~='table' or not text(opts.directory)then return nil,'recovery directory required'end
-    local s={directory=opts.directory,fs=opts.fs or native(),pending={},
+    local s={directory=opts.directory,fs=opts.fs or native(),runtime=opts.fs or native_runtime,pending={},
         max_record=opts.max_record_bytes or MAX_RECORD,max_bytes=opts.max_bytes or MAX_PROFILE}
     for _,limit in ipairs({{s.max_record,MAX_RECORD},{s.max_bytes,MAX_PROFILE}})do
         if type(limit[1])~='number' or limit[1]<1 or limit[1]%1~=0 or limit[1]>limit[2]then return nil,'invalid recovery capacity'end
     end
+    for owner in pairs(pending_owners)do
+        if owner.directory==s.directory and owner.runtime==s.runtime then
+            if owner.max_record~=s.max_record or owner.max_bytes~=s.max_bytes then
+                return nil,'unresolved recovery owner has different capacities'
+            end
+            return owner.store[1]
+        end
+    end
+    local store={};s.store=setmetatable({store},{__mode='v'});states[store]=s
     local stat,err=s.fs.lstat(s.directory)
     if not stat then
         if not tostring(err):find('ENOENT',1,true)then return nil,err end
@@ -166,7 +190,7 @@ function M.open(opts)
     end
     if stat.type~='directory' or stat.mode%512~=448 then return nil,'recovery directory must be private (0700)'end
     local ok,why=scan(s);if not ok then return nil,why end
-    local store={};states[store]=s;return store
+    return store
 end
 function M.publish(store,spec)
     local s=state(store)
@@ -242,8 +266,18 @@ function M.cleanup(store,id,evidence)
 end
 function M.reconcile(store)
     local s=state(store);local failure
-    for fd in pairs(s.pending)do local ok,err=close(s,fd);if not ok then failure=err end end
-    local ok,err=scan(s);return failure and fail(failure) or not ok and fail(err) or {ok=true}
+    for fd in pairs(s.pending)do
+        local called,stat,err,code=pcall(s.fs.fstat or function()return nil,'descriptor probe unavailable'end,fd)
+        local absent=called and not stat and (code=='EBADF' or err=='EBADF'
+            or type(err)=='string' and err:match('^EBADF:'))
+        if absent then
+            s.pending[fd]=nil;pending_count=pending_count-1
+        else failure=called and (err or 'recovery close unresolved') or stat end
+    end
+    if not next(s.pending)then pending_owners[s]=nil end
+    local ok,err=scan(s)
+    return failure and fail(failure) or not ok and fail(err)
+        or next(s.pending) and fail('recovery close unresolved') or {ok=true}
 end
 function M.list(store)
     local s=state(store);local ok,err=scan(s);if not ok then return nil,err end
