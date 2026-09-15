@@ -2618,3 +2618,8 @@ download.
 - #254 M6: use native provider JSON in public execution tests, including empty
   objects. Editor-specific representation metadata must cross the strict pure
   boundary deliberately; table literals do not exercise that conversion.
+
+- #254 BR-20/24: test both orders of independent save and settlement events.
+  Capture native write destinations before callbacks can rename a buffer, and
+  cover nested writes and aborted writes without Post. Read-back failures must
+  preserve evidence and remain observable.

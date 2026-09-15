@@ -1369,3 +1369,37 @@ The earlier integrated performance run passed30 scenarios/600 samples, with zero
 full-buffer reads in every scenario. Final performance is rerunning after recovery
 integration because completion behavior changed. Codex is reviewing M5 separately;
 M6 remains staged and cannot close before that boundary. Main remains unmerged.
+### 2026-09-15 M5 recovery corrections verified locally
+
+BR20/21/23/24 implemented atbfd749e4.155 focused tests pass, including all three
+original reviewer save/retry/cleanup reproductions. A follow-up cancellation
+contract probe found early async settlement refusals returned non-cancellable
+results; three red cases now pass, with80 final focused tests. The regional
+settlement proof permits next-draft edits and rejects answer ABA/cancel/reload.
+Bounded context-revision retry metadata preserves original snapshots across
+public single/batch failure or cancellation without retaining grants. Host
+retirement follows adapter release; cleanup errors are visible. Released adapter
+inspection retains its store by an existing explicit API test, while association
+payload is dropped. Full576-file lint clean. Final mapped M5 union is running
+before the next Codex review; no milestone completion is claimed yet.
+
+### 2026-09-15 M5 rework full verification complete
+
+Final92-spec union passes1103 tests, zero failures/errors/incomplete footers;
+every process exit0 and per-case counts match. Source SHA256 is unchanged before
+and after, and tested a701f505 has the same runtime/tests asbfd749e4. All10 added
+M5 specs are covered. Four current mappings plus the mutation architecture check
+provide89 specs; three prior-inventory Document extras bring the total to92.
+Full576-file lint clean. Exact evidence:/tmp/parley254-m5-rework-verification.txt,
+combined-results.json and the two full stdout/SPEC_EXIT logs. No deadline was
+increased. BR20–24 now return to mandatory Codex review. Main remains unmerged.
+
+### 2026-09-15 M5 second Codex review
+
+Codex disposedBR21/22/23 with mutation-backed evidence. BR20 remains open for a
+real save arriving before queued settlement; BR24 remains open for silent saved-
+file stat errors. Existing recovery84, batch92 and lifecycle722 tests passed, but
+two additional reviewer cases failed. The save/settlement ordering join and full
+save-probe error reporting are being corrected together. M5 stays open; no review
+finding is waived. M6 has5481 passing per-file assertions across354 specs after
+explicitly recorded focused corrections; it awaits final M5 integration/review.
