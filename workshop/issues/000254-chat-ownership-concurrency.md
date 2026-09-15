@@ -173,6 +173,39 @@ and `/tmp/parley-fsm-audit/probe.lua`. These are convenience artifacts, not dura
 dependencies: recreate the documented cases as repository tests before changing
 implementation. The chat findings predated concurrent #240 changes.
 
+### Confirmed scope and structural requirements — 2026-09-14
+
+The operator confirmed one Neovim instance: human edits to the live buffer while
+background operations generate into different parts of its exchange structure.
+Reloading the file invalidates current writes. The core must also support
+concurrent tool calls and several disjoint background writers, even where the
+current product executes them sequentially. The typical flow remains typing the
+next question while an answer streams.
+
+The detailed proposal is
+`workshop/plans/000254-chat-ownership-concurrency-plan.md`. It refines earlier
+exchange-wide ownership into delegated exclusive block/insertion-slot grants;
+concurrent tools reserve stable results in declared call order, and each operation
+has scoped cancellation. A parent cannot write over a child slot. External tool
+resource conflicts are distinct from disjoint transcript writes and require
+process-wide admission. Unresolved effects outlive document teardown without
+retaining permission to write into a reloaded/reused buffer.
+
+Human edits are interpreted against pre-edit ranges before semantic repair.
+Partial/whole exchange deletion can leave unresolved fragments; preserve those
+bytes and revoke affected grants rather than infer the user's intent. Identity
+reconciliation must not transfer authority by ordinal, matching text, or undo.
+Native edits are observed rather than prevented by a supposed region-level lock.
+
+Rendering derives from one incremental index. Ordinary word/newline edits must
+avoid document-size arrays, anchor scans, and fold rebuilding; redraw consumes
+only bounded visible/context bytes. Repair tracks forward and backward grammar
+dependencies and can yield while affected regions remain conservatively styled.
+Unrelated concurrent streams must not starve repair. Broad native fold clearing
+has an explicitly measured affected-range cost, separate from the ordinary-edit
+guarantee. The plan records operating limits, recovery policy, and six proposed
+review boundaries for approval before implementation.
+
 ## Done when
 
 - Typing ahead survives streaming, completion, failure, and cancellation without
@@ -197,6 +230,18 @@ implementation. The chat findings predated concurrent #240 changes.
   plus isolated Neovim integration tests (ARCH-MOCK). No production sessions needed.
 
 ## Plan
+
+The durable plan specifies these implementation review boundaries; each requires
+its own `sdlc milestone-close` after implementation:
+
+- [ ] M1 — Durable audit regressions and process-lifecycle containment.
+- [ ] M2 — Dependency-aware incremental sequence/grammar/structure core.
+- [ ] M3 — Document ownership and shared highlighting/folding/layout index.
+- [ ] M4 — Scoped concurrent generation/child-slot writes and human editing.
+- [ ] M5 — Fixed batch identities and recoverable answer replacement.
+- [ ] M6 — Asynchronous concurrent tools, resource/outcome enforcement, final verification.
+
+### Earlier exploration checklist (superseded for execution)
 
 - [ ] At implementation start, claim and enter planning; reconcile current code and
   editing restriction, then author a reviewed durable plan with real review boundaries.
