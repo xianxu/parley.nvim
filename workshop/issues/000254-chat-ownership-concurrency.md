@@ -874,6 +874,22 @@ highlights85, exchange264, lifecycle511), and final lint reports zero warnings
 /errors in 504 files. BR-5/6/8 production fixes, their native regressions and BR-7
 inventory correction are committed. M3 remains pending the mandatory review retry.
 
+### 2026-09-15 — M3 second review and complete consumer evidence sweep
+
+Second review `2afd7de9..976bf963` is REWORK with all prior BR-5/6/7/8 findings
+addressed (including pre-fix red comparisons). New BR-9 rejects outline selection
+that uses a surviving handle without current semantic eligibility. M3 remains
+2/6 closed. The fix checks the exact current outline projection before navigation;
+its native uncertainty/reclassification/deletion/relocation/tree tests are underway.
+
+The same sweep reproduced an additional delayed diagnostic-publication defect:
+a preceding text-to-fence edit left candidate flags unchanged, so a pending job
+published while its context was unconfirmed. Pending jobs now retire on semantic
+changes too. Red observed; the focused diagnostic lifecycle/publication, adapter
+and parser suites pass. The plan records every consumer's eligibility boundary.
+M4 remains isolated; its source guards, capacity tickets, presentation-only pending
+UI, delayed user callers and bounded replacement preparation are not M3 changes.
+
 ## Revisions
 
 ### 2026-09-14 — Incremental rendering is part of the core contract
