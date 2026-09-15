@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-09-12
 updated: 2026-09-14
-estimate_hours:
+estimate_hours: 1.345
 started: 2026-09-14T20:14:11-07:00
 ---
 
@@ -144,3 +144,18 @@ Detailed implementation plan: `workshop/plans/000240-question-tag-ownership-plan
 ### 2026-09-14 — Exchange preface architecture
 
 Operator requested: “extend the exchange structure and add a preface field to capture what's before a question that should be considered part of the question.” This supersedes the draft's virtual context snapshot approach. Parsed exchange.preface holds raw content and source span; live exchange.preface holds a derived size, without changing question block index or double-counting leading rows. Parser assigns the tag to the next exchange, all context builders compose preface+question, and rendering/resubmit retain physical placement. Full details are in the plan's authoritative Revisions section. No code changed.
+
+## Estimate
+
+Derived after the preface plan cleared plan-quality: architecture/consumer sweep baseline1.5h ×0.2 =0.3h design; parser/model/render + outline + context integrations and regression/full-suite/performance verification baseline2h ×0.4 =0.8h implementation; one fresh review, fixes and PR bookkeeping baseline0.5h ×0.4 =0.2h.15% design buffer adds0.045h. No overlap discount: integration and final verification remain serialized even with bounded agent work.
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: lua-neovim design=0.3 impl=0.8
+item: milestone-review design=0 impl=0.2
+design-buffer: 0.15
+total: 1.345
+```
+
+Baseline measured before implementation, synthetic100/1,000/5,000-line transcripts, median of11 after warmup: parse1.05/8.70/44.14ms, outline1.20/9.63/48.59ms. `/tmp/parley240-benchmark.lua` and `/tmp/parley240-baseline.json`; isolated profile and no providers.
