@@ -62,6 +62,7 @@ end
 local HIGHLIGHT_VIEWPORT_MARGIN = 20
 -- Subscriptions carry no structural state; the document owns repair and lifetime.
 local subscriptions = {}
+local decoration_caches = {}
 local function forget_structure(buf)
     local subscription = subscriptions[buf]
     if subscription then subscription.unsubscribe() end
@@ -172,7 +173,10 @@ local function compute_chat_highlights(buf, start_line, end_line, reader, struct
             in_reasoning_block, in_reasoning_explicit_end = before.in_reasoning, before.reasoning_explicit_end
             in_tool_block = before.in_tool
         end
-        local classified = highlight_structure.classify(line, patterns)
+        local metadata = row_metadata(structure, line_nr - 1)
+        local shifted = lines.text_offsets and (lines.text_offsets[line_nr - 1] or 0) > 0
+        local classified = shifted and (metadata and metadata.token or { kind = "text", token = "t" })
+            or highlight_structure.classify(line, patterns)
         -- #218: this used to keep a private copy of the structure's fence
         -- toggle — byte-identical logic, drifting independently, and neither
         -- copy reset at a 💬:/🤖: partition. Both now go through the ONE
@@ -185,7 +189,7 @@ local function compute_chat_highlights(buf, start_line, end_line, reader, struct
             reasoning_explicit_end = in_reasoning_explicit_end, in_tool = in_tool_block,
         }
         highlight_structure.reset_partition(walk, classified.token)
-        highlight_structure.advance(walk, classified.token, classified.fence_len)
+        highlight_structure.advance(walk, classified.token, classified.fence_len or classified.render_fence_width)
         in_code_block, code_fence_len, in_tool_block = walk.in_code, walk.code_fence_len, walk.in_tool
 
         local highlighted_regions = {}
@@ -243,11 +247,10 @@ local function compute_chat_highlights(buf, start_line, end_line, reader, struct
                 in_reasoning_block = true
                 -- The structure owns terminator lookahead. Streaming is only
                 -- a redraw-time overlay for an unfinished reasoning block.
-                local metadata = row_metadata(structure, row)
                 local after = metadata and metadata.after and metadata.after.render
                     or render_state(structure, row + 1, streaming)
                 in_reasoning_explicit_end = streaming or after.reasoning_explicit_end
-            elseif is_summary or line:match("^👂:") then
+            elseif is_summary or not shifted and line:match("^👂:") then
                 table.insert(result[row], { hl_group = "ParleyThinking", col_start = 0, col_end = -1 })
             elseif is_tool_use or is_tool_result then
                 -- Tool block headers — dim (plumbing, not prose)
@@ -283,7 +286,7 @@ local function compute_chat_highlights(buf, start_line, end_line, reader, struct
                 in_block = false
             elseif in_block and not in_code_block then
                 table.insert(result[row], { hl_group = "ParleyQuestion", col_start = 0, col_end = -1 })
-                if line:match("^@@") then
+                if not shifted and line:match("^@@") then
                     local is_tag_at_start = false
                     if #highlighted_regions > 0 and highlighted_regions[1].start == 1 then
                         is_tag_at_start = true
@@ -361,7 +364,8 @@ local function compute_markdown_highlights(buf, start_line, end_line, reader, st
             result[row] = result[row] or {}
             table.insert(result[row], { hl_group = "ParleyFootnote", col_start = 0, col_end = -1 })
         end
-        if line:sub(1, #branch_prefix) == branch_prefix then
+        if (not lines.text_offsets or (lines.text_offsets[row] or 0) == 0)
+            and line:sub(1, #branch_prefix) == branch_prefix then
             result[row] = result[row] or {}
             table.insert(result[row], { hl_group = "ParleyChatReference", col_start = 0, col_end = -1 })
         end
@@ -907,8 +911,24 @@ M.highlight_question_block = function(buf)
     end
 end
 
+local function complete_utf8_prefix(bytes)
+    local first = #bytes
+    while first > 0 and bytes:byte(first) >= 128 and bytes:byte(first) < 192 do first = first - 1 end
+    local lead = bytes:byte(first)
+    local width = lead and (lead >= 240 and 4 or lead >= 224 and 3 or lead >= 192 and 2 or 1) or 1
+    if first > 0 and #bytes - first + 1 < width then return bytes:sub(1, first - 1) end
+    return bytes
+end
+
+local function window_view(win, buf)
+    if vim.api.nvim_win_is_valid(win) and vim.api.nvim_win_get_buf(win) == buf then
+        return vim.api.nvim_win_call(win, vim.fn.winsaveview)
+    end
+    return {}
+end
+
 -- Production compute seam: bounded viewport snapshots and bounded text reads.
-local function compute_window_decorations(_winid, buf, toprow, botrow, reader, structure)
+local function compute_window_decorations(winid, buf, toprow, botrow, reader, structure)
     reader = reader or require("parley.line_reader").for_buffer(buf)
     local buf_type = _parley._parley_bufs[buf]
     structure = structure or require("parley.document").get(buf)
@@ -930,23 +950,41 @@ local function compute_window_decorations(_winid, buf, toprow, botrow, reader, s
     if last_byte - first_byte <= 65536 then
         lines = reader:lines(toprow, end_line, false)
     else
-        lines = {}
-        local remaining = 65536
+        lines = { text_offsets = {}, full_lengths = {} }
+        local per_row = math.floor(65536 / math.max(1, end_line - toprow))
+        local view = window_view(winid, buf)
         for row = toprow, end_line - 1 do
-            if remaining <= 0 then break end
-            local chunk = reader:chunk({ row = row, col = 0, max_bytes = remaining })
-            lines[#lines + 1] = chunk.bytes
-            remaining = remaining - #chunk.bytes - 1
-            if not chunk.eol then break end
+            local length = vim.api.nvim_buf_get_offset(buf, row + 1) - vim.api.nvim_buf_get_offset(buf, row) - 1
+            local column = view.leftcol or 0
+            if row + 1 == view.topline then column = math.max(column, view.skipcol or 0) end
+            local col = 0
+            if column > 0 and length > per_row then
+                -- Native virtual-column conversion finds a UTF-8 byte boundary
+                -- without fetching the preceding long-line text into Lua.
+                col = math.max(0, vim.fn.virtcol2col(winid, row + 1, column + 1) - 1)
+                col = math.min(col, length)
+            end
+            local chunk = reader:chunk({ row = row, col = col, max_bytes = per_row })
+            lines[#lines + 1] = chunk.eol and chunk.bytes or complete_utf8_prefix(chunk.bytes)
+            lines.text_offsets[row], lines.full_lengths[row] = col, length
         end
-        end_line = toprow + #lines
     end
+    local result
     if buf_type == "chat" then
-        return compute_chat_highlights(buf, start_line, end_line, reader, structure, lines)
+        result = compute_chat_highlights(buf, start_line, end_line, reader, structure, lines)
     elseif buf_type == "markdown" then
-        return compute_markdown_highlights(buf, start_line, end_line, reader, structure, lines)
+        result = compute_markdown_highlights(buf, start_line, end_line, reader, structure, lines)
+    else result = {} end
+    for row, offset in pairs(lines.text_offsets or {}) do
+        for _, highlight in ipairs(result[row] or {}) do
+            if highlight.col_end and highlight.col_end >= 0 then
+                highlight.col_start = highlight.col_start + offset
+                highlight.col_end = highlight.col_end + offset
+            end
+        end
+        if result[row] then result[row].line_length = lines.full_lengths[row] end
     end
-    return {}
+    return result, end_line
 end
 
 M._compute_window_decorations = compute_window_decorations
@@ -962,10 +1000,27 @@ function M.rebuild_structure(buf)
         subscriptions[buf] = subscription
         subscription.unsubscribe = Document.subscribe(document, function(event)
             if subscriptions[buf] ~= subscription then return end
+            if event.kind == "edit" or event.kind == "reload" or event.kind == "detach" then
+                for win, cache in pairs(decoration_caches) do
+                    if cache.bufnr == buf then
+                        local overlaps = event.kind ~= "edit" or event.first_row < cache.end_row
+                            and (event.old_last_row > cache.toprow or event.last_row ~= event.old_last_row)
+                        if overlaps then decoration_caches[win] = nil end
+                    end
+                end
+            end
             if event.kind == "detach" then
                 forget_structure(buf)
-            elseif event.kind == "repair" and vim.api.nvim_buf_is_valid(buf) then
-                pcall(vim.api.nvim__redraw, { buf = buf, valid = false })
+            elseif event.kind == "repair" and not subscription.redraw_pending
+                and (event.result.status == "idle" or #(event.result.deltas or {}) > 0) then
+                subscription.redraw_pending = true
+                vim.schedule(function()
+                    if subscriptions[buf] ~= subscription then return end
+                    subscription.redraw_pending = false
+                    if vim.api.nvim_buf_is_valid(buf) then
+                        pcall(vim.api.nvim__redraw, { buf = buf, valid = false })
+                    end
+                end)
             end
         end)
     end
@@ -977,12 +1032,6 @@ function M.clear_structure(buf)
     require("parley.line_reader").clear_buffer(buf)
 end
 
--- Compatibility inspection only: no independently owned structural cache.
-M._structure_cache = function(buf)
-    local document = require("parley.document").get(buf)
-    return document and { structure = document, attached = true }
-end
-
 M.setup_buf_handler = function()
     local interview = require("parley.interview")
     local buffer_lifecycle = require("parley.buffer_lifecycle")
@@ -992,7 +1041,12 @@ M.setup_buf_handler = function()
     -- during Neovim's redraw cycle using ephemeral extmarks, just like
     -- built-in syntax highlighting. Zero flicker, always up-to-date.
     local decor_ns = M.setup_highlights()
-    local _decor_cache = {} -- winid → { bufnr = number, rows = { [row] = { ... } } }
+    decoration_caches = {}
+    local _decor_cache = decoration_caches
+    vim.api.nvim_create_autocmd("WinClosed", {
+        group = gid,
+        callback = function(event) _decor_cache[tonumber(event.match)] = nil end,
+    })
 
     vim.api.nvim_set_decoration_provider(decor_ns, {
         on_buf = function(_, bufnr, _)
@@ -1009,17 +1063,33 @@ M.setup_buf_handler = function()
             if not document then
                 return false
             end
+            local end_row = math.min(botrow + 1 + HIGHLIGHT_VIEWPORT_MARGIN, vim.api.nvim_buf_line_count(bufnr))
+            local view = window_view(winid, bufnr)
+            local cache = _decor_cache[winid]
+            if not cache or cache.bufnr ~= bufnr or cache.document ~= document
+                or cache.toprow ~= toprow or cache.end_row ~= end_row
+                or cache.leftcol ~= view.leftcol or cache.skipcol ~= view.skipcol then
+                cache = { bufnr = bufnr, document = document, rows = {}, toprow = toprow,
+                    end_row = end_row, next_row = toprow, leftcol = view.leftcol, skipcol = view.skipcol }
+                _decor_cache[winid] = cache
+            end
             local line_reader = require("parley.line_reader")
             local reader = line_reader.for_buffer(bufnr)
-            local row_map = line_reader.with_phase(bufnr, "decoration_redraw", function()
-                return compute_window_decorations(
-                    winid, bufnr, toprow, botrow, reader, document)
+            local row_map, next_row = line_reader.with_phase(bufnr, "decoration_redraw", function()
+                return compute_window_decorations(winid, bufnr, cache.next_row, botrow, reader, document)
             end)
-
-            _decor_cache[winid] = {
-                bufnr = bufnr,
-                rows = row_map or {},
-            }
+            for row, highlights in pairs(row_map or {}) do cache.rows[row] = highlights end
+            cache.next_row = next_row < end_row and next_row or toprow
+            if next_row < end_row and not cache.scheduled then
+                cache.scheduled = true
+                vim.schedule(function()
+                    if _decor_cache[winid] ~= cache then return end
+                    cache.scheduled = false
+                    if vim.api.nvim_win_is_valid(winid) then
+                        pcall(vim.api.nvim__redraw, { win = winid, valid = false })
+                    end
+                end)
+            end
         end,
         on_line = function(_, winid, bufnr, row)
             local cache = _decor_cache[winid]

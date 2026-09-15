@@ -12,6 +12,36 @@ end
 describe('document coordinator',function()
     it('provides the coordinator',function() assert.is_true(ok) end)
     if not ok then return end
+    it('accepts explicit bounded drain budgets without changing scheduled defaults',function()
+        local lines={'💬: question',string.rep('x',10000)}
+        for i=3,40 do lines[i]='body' end
+        local d,f=attach(lines)
+        local first=D.repair_step(d)
+        assert.equals('read',first.status)
+        assert.is_true(first.request.max_bytes<=4096)
+        local max_rows=0
+        local unsubscribe=D.subscribe(d,function(event)
+            if event.kind=='repair' then
+                local result=event.result
+                assert.is_true((result.work.rows_processed or 0)<=256)
+                assert.is_true((result.work.bytes_scanned or 0)<=65536)
+                max_rows=math.max(max_rows,result.work.rows_processed or 0)
+                if result.request then assert.is_true(result.request.max_bytes<=65536) end
+            end
+        end)
+        local actual_text=f.driver.text
+        local calls=0
+        f.driver.text=function(buf,sr,sc,er,ec)
+            assert.equals(sr,er)
+            assert.is_true(ec-sc<=65536)
+            calls=calls+1
+            return actual_text(buf,sr,sc,er,ec)
+        end
+        assert.equals('idle',D.drain(d,1000,{rows=256,bytes=65536,nodes=32768,entries=65536}).status)
+        assert.is_true(max_rows>1)
+        assert.is_true(calls>0)
+        unsubscribe();D.detach(d)
+    end)
     it('attaches once, starts opaque, and repairs outside the callback',function()
         local d,f,b=attach({'💬: question','🤖: answer','body'})
         assert.equals(d,D.get(b)); assert.equals(d,D.attach(b))
@@ -30,6 +60,16 @@ describe('document coordinator',function()
         f:edit(0,0,0,#'💬:',{'💬:'})
         assert.is_not_equal(handle,D.query(d,0,1)[1].handle)
         settle(d); D.detach(d)
+    end)
+    it('keeps an untouched endpoint marker through whole-row deletion and insertion',function()
+        local d,f=attach({'💬: first','body','💬: next','draft'}); settle(d)
+        local handle=D.query(d,2,3)[1].handle
+        f:set_lines(0,2,{})
+        assert.equals(handle,D.query(d,0,1)[1].handle)
+        settle(d)
+        f:set_lines(0,0,{'inserted before'})
+        assert.equals(handle,D.query(d,1,2)[1].handle)
+        settle(d);D.detach(d)
     end)
     it('handles edits inside huge opaque spans and canonical whole-buffer deletion',function()
         local lines={}; for i=1,500 do lines[i]='row' end
@@ -72,11 +112,17 @@ describe('document coordinator',function()
             {entity=rows[1].handle,marker_revision=1,revision=1,first=0,last=rows[2].end_byte-1,confirmed=true},
             {entity=rows[3].handle,marker_revision=1,revision=1,first=rows[3].start_byte,last=rows[4].end_byte-1,confirmed=true}}})
         assert.is_true(acquired.ok)
-        local plan={epoch=D.snapshot(d).epoch,generation=gen,entity=rows[1].handle,grant=acquired.grants[1],
+        local plan={epoch=D.snapshot(d).epoch,generation=gen,entity=rows[1].handle,grant=acquired.grants[1],revision=1,
             patches={{start={row=1,col=1,byte=rows[2].start_byte+1},
                 finish={row=1,col=2,byte=rows[2].start_byte+2},expected_old='n',text='XX'}}}
         assert.equals('applied',D.apply(d,plan).status)
         assert.equals('oXXe',f.lines[2])
+        plan.patches[1].expected_old='X';plan.patches[1].text='X'
+        assert.equals('stale',D.apply(d,plan).status)
+        assert.equals('oXXe',f.lines[2])
+        plan.revision=2
+        assert.equals('applied',D.apply(d,plan).status)
+
         assert.equals('valid',D.snapshot(d).grants[acquired.grants[2]].status)
         D.detach(d)
     end)

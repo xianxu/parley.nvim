@@ -32,6 +32,7 @@ describe("diagnostic refresh lifecycle", function()
             "[^asin]: Amazon Standard Identification Number.",
         })
         lifecycle.setup(buf)
+        diagnostic_refresh.drain(buf,10000)
     end)
 
     after_each(function()
@@ -50,15 +51,16 @@ describe("diagnostic refresh lifecycle", function()
     end)
 
     for _, case in ipairs({
-        { event = "InsertLeave", name = "refreshes synchronously on InsertLeave" },
-        { event = "TextChanged", name = "refreshes synchronously on TextChanged" },
-        { event = "BufWritePost", name = "refreshes synchronously on BufWritePost" },
+        { event = "InsertLeave", name = "converges through scheduled repair after InsertLeave" },
+        { event = "TextChanged", name = "converges through scheduled repair after TextChanged" },
+        { event = "BufWritePost", name = "converges through scheduled repair after BufWritePost" },
         { event = "BufEnter", name = "hydrates on BufEnter" },
         { event = "WinEnter", name = "hydrates on WinEnter" },
     }) do
         it(case.name, function()
             vim.api.nvim_buf_set_lines(buf, 0, 1, false, { "time and reference removed" })
             vim.api.nvim_exec_autocmds(case.event, { buffer = buf })
+            diagnostic_refresh.drain(buf,10000)
             assert.equals(0, #vim.diagnostic.get(buf, { namespace = timezone.diag_namespace() }))
             assert.equals(0, #footnotes(buf))
         end)
@@ -91,6 +93,7 @@ describe("diagnostic refresh lifecycle", function()
             })
             vim.diagnostic.set(ns, buf, existing)
             vim.api.nvim_exec_autocmds(case.event, { buffer = buf })
+            diagnostic_refresh.drain(buf,10000)
             assert.equals(0, #vim.diagnostic.get(buf, { namespace = timezone.diag_namespace() }))
             local remaining = vim.diagnostic.get(buf, { namespace = ns })
             assert.equals(1, #remaining)

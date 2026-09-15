@@ -16,7 +16,7 @@ local function fixture(n)
 end
 
 local function feed(keys)
-    vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes(keys, true, false, true), "t", false)
+    vim.api.nvim_input(keys)
 end
 
 function M.measure(n, done)
@@ -35,7 +35,7 @@ function M.measure(n, done)
         scenario:close()
         done(sample, err)
     end
-    local deadline = vim.uv.hrtime() + 5000000000
+    local deadline
     local function guarded(fn)
         local ok, err = xpcall(fn, debug.traceback)
         if not ok then finish(nil, err) end
@@ -44,7 +44,9 @@ function M.measure(n, done)
         if finished then return end
         guarded(function()
             if predicate() then return fn() end
-            if vim.uv.hrtime() >= deadline then return finish(nil, "ownership timeout: " .. label) end
+            if vim.uv.hrtime() >= deadline then
+                return finish(nil, "ownership timeout: " .. (type(label)=="function" and label() or label))
+            end
             vim.defer_fn(function() poll(predicate, label, fn) end, 1)
         end)
     end
@@ -56,12 +58,14 @@ function M.measure(n, done)
             parser.parse_chat(lines, parser.find_header_end(lines), require("parley.config")))
         local folds = require("parley.tool_folds")
         folds.apply_folds(buf, vim.api.nvim_get_current_win())
+        assert(folds.flush(buf,math.max(10000,n)) == "idle", "initial fold projection did not settle")
         local k = #model.exchanges - 1
         local thinking_row
         for b, block in ipairs(model.exchanges[k].blocks) do
             if block.kind == "thinking" then thinking_row = model:block_start(k, b) break end
         end
         assert(thinking_row, "fixture has no historical thinking block")
+        assert(vim.fn.foldlevel(thinking_row + 1) > 0, "fixture has no native thinking fold")
         local counter = typing.new_counter()
         token = reader.set_observer(buf, function(e) counter:observe(e) end)
         local started = vim.uv.hrtime()
@@ -77,8 +81,7 @@ function M.measure(n, done)
         }
         reader.clear_observer(buf, token)
         token = nil
-        assert(sample.fold_preserved and sample.fold_work.fold_groups_visited > 0,
-            "fold sample did not maintain a real fold")
+        assert(sample.fold_preserved, "body update did not retain the existing native fold")
         local parley = require("parley")
         local dispatch = parley.dispatcher.query
         local handler
@@ -99,6 +102,9 @@ function M.measure(n, done)
             local count = vim.api.nvim_buf_line_count(buf)
             return table.concat(vim.api.nvim_buf_get_lines(buf, math.max(0, count - 12), count, false), "\n")
         end
+        -- Fixture parsing, native fold hydration and response setup are outside
+        -- the keyboard sample and must not consume its completion deadline.
+        deadline = vim.uv.hrtime() + 5000000000
         poll(function() return text():find("🧠: stream first", 1, true) end, "first stream delivery", function()
             -- Flush setup's queued escape before entering the timed keyboard path.
             vim.api.nvim_feedkeys("", "x", false)
@@ -109,9 +115,11 @@ function M.measure(n, done)
             vim.api.nvim_create_autocmd("TextChangedI", { group = group, buffer = buf,
                 callback = function() sample.text_changed_i = sample.text_changed_i + 1 end })
             started = vim.uv.hrtime()
+            deadline = started + 5000000000
             feed("Go<CR>💬: human typed ahead")
             poll(function() return text():find("💬: human typed ahead", 1, true)
-                and sample.text_changed_i > 0 end, "human typed ahead", function()
+                and sample.text_changed_i > 0 end, function() return "human typed ahead mode="
+                    ..vim.api.nvim_get_mode().mode.." events="..sample.text_changed_i.." tail="..text() end, function()
                 sample.insert_mode = vim.api.nvim_get_mode().mode:sub(1, 1) == "i"
                 sample.deliveries = sample.deliveries + 1
                 handler(qid, "stream second")

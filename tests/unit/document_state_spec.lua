@@ -12,7 +12,7 @@ local function acquire(doc, gen, regions, parent)
 end
 local function resolve(doc, gen, grant, p, first, last)
     return State.resolve(doc, {epoch=State.snapshot(doc).epoch, generation=gen, grant=grant,
-        entity=p.entity, first=first, last=last}, p)
+        entity=p.entity, revision=p.revision, first=first, last=last}, p)
 end
 
 describe('document authority state', function()
@@ -46,13 +46,31 @@ describe('document authority state', function()
         end
     end)
 
+    it('rejects stale plan revisions after owned writes or disjoint relocation', function()
+        local d=State.new(); local g=generation(d)
+        local id=acquire(d,g,{proof('a',10,30)}).grants[1]
+        State.transition(d,{kind='observed_edit',first=0,last=0,new_bytes=2})
+        local current=State.snapshot(d).grants[id]
+        assert.equals(2,current.revision)
+        local p=proof('a',12,32);p.revision=2
+        assert.equals('revision',State.resolve(d,{epoch=State.snapshot(d).epoch,
+            generation=g,grant=id,entity='a',revision=1,first=20,last=21},p).reason)
+        assert.is_true(resolve(d,g,id,p,20,21).ok)
+        State.transition(d,{kind='observed_edit',first=20,last=21,new_bytes=1,owner_grant=id})
+        local newer=proof('a',12,32);newer.revision=3
+        assert.equals('revision',State.resolve(d,{epoch=State.snapshot(d).epoch,
+            generation=g,grant=id,entity='a',revision=2,first=20,last=21},newer).reason)
+        assert.equals('valid',State.snapshot(d).grants[id].status)
+    end)
+
     it('moves disjoint writers and only exempts the matched owner', function()
         local d=State.new(); local g=generation(d)
         local ids=acquire(d,g,{proof('a',10,20),proof('b',30,40)}).grants
         State.transition(d,{kind='observed_edit',first=15,last=15,new_bytes=2,owner_grant=ids[1],revision=2})
         local a=proof('a',10,22); a.revision=2
         assert.is_true(resolve(d,g,ids[1],a).ok)
-        assert.is_true(resolve(d,g,ids[2],proof('b',32,42)).ok)
+        local b=proof('b',32,42); b.revision=2
+        assert.is_true(resolve(d,g,ids[2],b).ok)
         State.transition(d,{kind='observed_edit',first=35,last=35,new_bytes=1,owner_grant=ids[1]})
         assert.equals('revoked',State.snapshot(d).grants[ids[2]].status)
     end)
@@ -105,7 +123,10 @@ describe('document authority state', function()
             local d=State.new(); local g=generation(d); local parent=acquire(d,g,{proof('a',0,30)}).grants[1]
             local child=acquire(d,g,{proof('child',10,20)},parent).grants[1]
             State.transition(d,{kind='observed_edit',first=at,last=at,new_bytes=2,owner_grant=child})
-            for p=10,22 do assert.is_false(resolve(d,g,parent,proof('a',0,32),p,p).ok) end
+            local parent_proof=proof('a',0,32);parent_proof.revision=2
+            for p=10,22 do
+                assert.equals('outside grant',resolve(d,g,parent,parent_proof,p,p).reason)
+            end
             local cp=proof('child',10,22); cp.revision=2
             assert.is_true(resolve(d,g,child,cp,10,22).ok)
         end

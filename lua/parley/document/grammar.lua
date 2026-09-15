@@ -59,11 +59,12 @@ end
 M.combine = M.merge_summary
 function M.empty_summary() return {flags={}} end
 function M.same_token(a,b)
+    local derived={bytes=true,provenance=true,row=true,diagnostic_utc_candidate=true,diagnostic_reference_candidate=true}
     for k,v in pairs(a) do
-        if k~='bytes' and k~='provenance' and k~='row' and b[k]~=v then return false end
+        if not derived[k] and b[k]~=v then return false end
     end
     for k,v in pairs(b) do
-        if k~='bytes' and k~='provenance' and k~='row' and a[k]~=v then return false end
+        if not derived[k] and a[k]~=v then return false end
     end
     return true
 end

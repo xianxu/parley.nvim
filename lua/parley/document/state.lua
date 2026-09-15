@@ -78,6 +78,7 @@ function M.resolve(doc,request,current)
         return reject('ownership')
     end
     if g.status~='valid' then return reject(g.status) end
+    if request.revision~=g.revision then return reject('revision') end
     local result={ok=true,effects={}}
     if not identity(g,current) then revoke(s,g,result,'identity'); result.ok=false; result.reason='identity'; return result end
     if current.confirmed~=true then suspend(g,result,'uncertain'); result.ok=false; result.reason='uncertain'; return result end
@@ -178,8 +179,13 @@ function M.transition(doc,event)
             end
         end
         for _,g in pairs(s.grants) do
+            local first,last=g.first,g.last
             move(g,event); for _,slot in ipairs(g.slots) do move(slot,event) end
-            if g==owner and g.status~='revoked' then g.revision=event.revision or g.revision+1 end
+            -- Plans contain absolute byte coordinates. A disjoint edit moving
+            -- this grant invalidates old plans without revoking the writer.
+            if g.status~='revoked' and (g==owner or first~=g.first or last~=g.last) then
+                g.revision=math.max(g.revision+1,g==owner and event.revision or 0)
+            end
         end
         for _,gen in pairs(s.generations) do
             for _,dep in ipairs(gen.dependencies) do

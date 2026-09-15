@@ -32,6 +32,8 @@ function M.summary(metadata)
         nonblank=not token.blank,
         outline_chat=outline_chat,
         outline=outline_chat or outside and token.heading_level~=nil or false,
+        diagnostic_definition=token.footnote or false,
+        diagnostic_content=token.diagnostic_utc_candidate or token.diagnostic_reference_candidate or false,
     }
 end
 function M.find(seq,first,last,kind,opts)

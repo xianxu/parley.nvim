@@ -52,7 +52,13 @@ end
 local function flat_items(lines)
     local buf = vim.api.nvim_create_buf(false, true)
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-    local items = outline._build_picker_items(buf, cfg, { is_chat = true })
+    local document=require('parley.document')
+    document.drain(document.attach(buf,{schedule=false}),1000)
+    local items, cursor = {}, nil
+    repeat
+        local page, result = outline._build_picker_items(buf, cfg, { is_chat = true, cursor=cursor })
+        vim.list_extend(items,page); cursor=result and result.cursor
+    until not cursor
     vim.api.nvim_buf_delete(buf, { force = true })
     return items
 end

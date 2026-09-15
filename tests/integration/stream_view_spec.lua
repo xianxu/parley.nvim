@@ -13,29 +13,26 @@ describe("stream fold maintenance preserves each window view", function()
         exec([[
             folds = require("parley.tool_folds")
             function fixture(thinking, wrapped)
-                model = require("parley.exchange_model").new(1)
-                model:add_exchange(1)
-                model:add_block(1, "agent_header", 1)
                 local lines = { "header", "", "💬: q", "", "🤖: a", "" }
                 if thinking then
-                    model:add_block(1, "thinking", 3)
                     vim.list_extend(lines, { "🧠: first", "thinking", "more thinking", "" })
                 end
-                model:add_block(1, "text", 200)
                 for n = 1, 200 do lines[#lines + 1] = "text " .. n end
                 if wrapped then lines[170] = string.rep("word ", 400) end
                 buf = vim.api.nvim_create_buf(false, true)
                 vim.api.nvim_set_current_buf(buf)
                 vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-                folds._model_provider = function() return model end
+                document = require("parley.document").attach(buf, { schedule = false })
+                assert(require("parley.document").drain(document, 100000).status == "idle")
                 windows = { vim.api.nvim_get_current_win() }
                 vim.cmd("vsplit")
                 windows[2] = vim.api.nvim_get_current_win()
+                folds.setup(buf)
+                assert(folds.flush(buf) == "idle")
                 for i, win in ipairs(windows) do
                     vim.wo[win].foldmethod = "manual"
                     vim.wo[win].scrolloff = 0
                     vim.wo[win].smoothscroll = true
-                    folds.reconcile_exchange(buf, win, model, 1)
                     vim.api.nvim_win_call(win, function()
                         if wrapped and i == 1 then
                             vim.fn.winrestview({ lnum = 170, col = 800, topline = 170, skipcol = 500 })
@@ -57,7 +54,8 @@ describe("stream fold maintenance preserves each window view", function()
             end
             function append()
                 vim.api.nvim_buf_set_lines(buf, -1, -1, false, { "new token" })
-                model:grow_block(1, #model.exchanges[1].blocks, 1)
+                assert(require("parley.document").drain(document, 100000).status == "idle")
+                assert(folds.flush(buf) == "idle")
             end
         ]])
     end)
@@ -73,7 +71,7 @@ describe("stream fold maintenance preserves each window view", function()
         it("retains two independent views with " .. (thinking and "a thinking fold" or "no folds"), function()
             exec("fixture(...)", thinking)
             local before = exec("return views()")
-            exec("folds.with_exchange_update(buf, model, 1, append)")
+            exec("folds.with_exchange_update(buf, nil, nil, append)")
             assert.same(before, exec("return views()"))
             if thinking then
                 assert.equals(7, exec("return vim.api.nvim_win_call(windows[1], function() return vim.fn.foldclosed(7) end)"))
@@ -85,7 +83,7 @@ describe("stream fold maintenance preserves each window view", function()
         exec("fixture(true)")
         local before = exec("return views()")
         exec([[
-            folds.with_exchange_update(buf, model, 1, function()
+            folds.with_exchange_update(buf, nil, nil, function()
                 append()
                 vim.api.nvim_win_call(windows[2], function()
                     vim.api.nvim_win_set_cursor(windows[2], { vim.api.nvim_buf_line_count(buf), 0 })
@@ -104,7 +102,7 @@ describe("stream fold maintenance preserves each window view", function()
         exec("fixture(true)")
         local before = exec("return views()")
         local result = exec([[
-            local ok, err = pcall(folds.with_exchange_update, buf, model, 1, function()
+            local ok, err = pcall(folds.with_exchange_update, buf, nil, nil, function()
                 append()
                 error("synthetic stream mutation failure")
             end)
@@ -126,7 +124,7 @@ describe("stream fold maintenance preserves each window view", function()
                 vim.api.nvim_win_set_cursor(0, { 3, 0 })
                 error("synthetic fold walk failure")
             end
-            local ok, err = pcall(folds.prepare_exchange_update, buf, model, 1)
+            local ok, err = pcall(function() folds.apply_folds(buf); folds.flush(buf) end)
             vim.api.nvim_exec2 = original
             local win = windows[1]
             return { ok = ok, err = err, enabled = vim.wo[win].foldenable }
@@ -141,7 +139,7 @@ describe("stream fold maintenance preserves each window view", function()
         exec("fixture(false, true)")
         local before = exec("return views()")
         assert.is_true(before[1].skipcol > 0)
-        exec("folds.with_exchange_update(buf, model, 1, append)")
+        exec("folds.with_exchange_update(buf, nil, nil, append)")
         assert.same(before, exec("return views()"))
     end)
 end)

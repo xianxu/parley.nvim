@@ -307,6 +307,11 @@ end
 
 local function scan(c,ch)
     c.bytes=c.bytes+1
+    c.diagnostic_tail=((c.diagnostic_tail or '')..ch):sub(-20)
+    if c.diagnostic_tail:sub(-2)=='[^' then c.diagnostic_reference_candidate=true end
+    if #c.diagnostic_tail==20 and c.diagnostic_tail:match('^%d%d%d%d%-%d%d%-%d%dT%d%d:%d%d:%d%dZ$') then
+        c.diagnostic_utc_candidate=true
+    end
     if #c.raw<c.cap then c.raw=c.raw..ch end
     c.tail=(c.tail..ch):sub(-4)
     if c.ordinary_run and ch=='`' then c.ordinary_ticks=c.ordinary_ticks+1
@@ -338,7 +343,8 @@ end
 local function finish(c)
     local t={bytes=c.bytes,blank=c.leading,divider=c.last_nonspace==3 and c.trimmed:sub(1,3)=='---',
         preface_tag=c.bytes>=5 and c.raw:sub(1,2)=='@@' and c.tail:sub(-2)=='@@',
-        footnote=c.footnote==5}
+        footnote=c.footnote==5,diagnostic_utc_candidate=c.diagnostic_utc_candidate,
+        diagnostic_reference_candidate=c.diagnostic_reference_candidate}
     -- Outline's existing dialect accepts column-zero levels one through three
     -- followed by a literal space. The retained prefix is enough even for a
     -- multi-megabyte heading; no payload or new unbounded scanner is needed.
@@ -383,6 +389,6 @@ function M.lex_step(cursor, bytes, eof, budget)
     return cursor,token,{bytes_scanned=limit}
 end
 
-function M.lexer_retained_bytes(c) return #c.raw+#c.trimmed+#c.tail+#(c.last_tail or '') end
+function M.lexer_retained_bytes(c) return #c.raw+#c.trimmed+#c.tail+#(c.last_tail or '')+#(c.diagnostic_tail or '') end
 
 return M

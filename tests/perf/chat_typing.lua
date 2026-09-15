@@ -111,38 +111,50 @@ function M.assert_hard_gates(report)
     for _, scenario in ipairs(report.scenarios or {}) do
         indexed[scenario.phase .. ":" .. scenario.line_count] = scenario.work
         if scenario.phase == "edit_total" or scenario.phase == "decoration_redraw"
-            or scenario.phase == "structure_splice" then
+            or scenario.phase == "structure_splice" or scenario.phase == "enter_join_total" then
             assert(scenario.work.full_buffer_reads == 0,
                 scenario.phase .. " must perform zero full-buffer reads")
         end
         if scenario.phase == "edit_total" then
             assert(scenario.work.structure_rows_processed == 1,
                 "edit_total must process exactly one structure row")
-            -- #227: a fingerprint-identical edit shares the structure's arrays.
-            assert(scenario.work.structure_entries_copied == 0,
-                "edit_total must copy no structure entries")
+            assert(scenario.work.structure_entries_copied > 0 and scenario.work.structure_entries_copied <= 256,
+                "edit_total exceeds bounded structure copies")
+            assert(scenario.work.index_nodes_visited > 0 and scenario.work.index_nodes_visited <= 4096,
+                "edit_total exceeds bounded index navigation")
+        end
+        if scenario.phase == "enter_join_total" then
+            assert(scenario.work.structure_entries_copied>0 and scenario.work.structure_entries_copied<=2048,
+                "enter_join_total exceeds bounded structure copies")
+            assert(scenario.work.index_nodes_visited>0 and scenario.work.index_nodes_visited<=8192,
+                "enter_join_total exceeds bounded index navigation")
+            assert(scenario.work.structure_rows_processed<=8,"enter_join_total exceeds bounded classification")
         end
         if scenario.phase == "structure_splice" then
-            -- #227: an Enter and the join that undoes it each splice two
-            -- n-slot arrays — the one O(n) cost a line-count keystroke may pay:
-            -- 2(n+1) + 2n. Exact, both ways: more is a rebuild or extra copy on
-            -- the keystroke path; less means the copy went unreported again.
-            assert(scenario.work.structure_entries_copied == 4 * scenario.line_count + 2,
-                "structure_splice must report exactly the two-array copy of each splice")
+            assert(scenario.work.structure_entries_copied > 0 and scenario.work.structure_entries_copied <= 2048,
+                "structure_splice must report bounded nonzero structure copies")
+            assert(scenario.work.index_nodes_visited > 0 and scenario.work.index_nodes_visited <= 4096,
+                "structure_splice exceeds bounded index navigation")
         end
     end
-    for _, phase in ipairs({ "edit_total", "decoration_redraw", "structure_splice" }) do
+    for _, phase in ipairs({ "edit_total", "decoration_redraw", "structure_splice", "enter_join_total" }) do
         for _, line_count in ipairs({ 1000, 5000 }) do
             assert(indexed[phase .. ":" .. line_count],
                 string.format("hard gates requires %s at %d lines", phase, line_count))
         end
         local one = indexed[phase .. ":1000"]
         local five = indexed[phase .. ":5000"]
-        assert(one.lines_requested == five.lines_requested,
-            phase .. " lines_requested must match at 1000 and 5000 lines")
+        if phase == "enter_join_total" then
+            -- Two native input turns can coalesce redraws differently. Each
+            -- turn remains viewport bounded at either document size.
+            assert(one.lines_requested <= 512 and five.lines_requested <= 512,
+                "enter_join_total exceeds bounded viewport reads")
+        else
+            assert(one.lines_requested == five.lines_requested,
+                phase .. " lines_requested must match at 1000 and 5000 lines")
+        end
     end
-    -- The splice classifies and walks only the rows it touches; its copy may
-    -- scale with the document, its row work may not.
+    -- Both classifications and leaf copies remain local to the touched rows.
     assert(indexed["structure_splice:1000"].structure_rows_processed
         == indexed["structure_splice:5000"].structure_rows_processed,
         "structure_splice structure_rows_processed must match at 1000 and 5000 lines")
@@ -181,9 +193,13 @@ function M.open_fixture(n, builder)
     local buf = vim.api.nvim_get_current_buf()
     assert(vim.wait(1000, function() return require("parley")._parley_bufs[buf] == "chat" end, 1),
         "production chat handlers did not attach: " .. tostring(require("parley").not_chat(buf, path)))
+    local document = require("parley.document").get(buf) or require("parley.highlighter").rebuild_structure(buf)
+    local settled = require("parley.document").drain(document, math.max(10000,n*8),
+        {rows=256,bytes=65536,nodes=32768,entries=65536})
+    assert(settled.status == "idle", "document fixture did not settle: " .. vim.inspect(settled))
     vim.api.nvim_win_set_cursor(0, { target, #lines[target] })
     local scenario = {
-        buf = buf, path = path, line_count = n, target_line = target, original_line = lines[target],
+        buf = buf, document = document, path = path, line_count = n, target_line = target, original_line = lines[target],
     }
     function scenario:close()
         if vim.api.nvim_buf_is_valid(self.buf) then
@@ -194,8 +210,8 @@ function M.open_fixture(n, builder)
     return scenario
 end
 
-local function feed(keys, mode)
-    vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes(keys, true, false, true), mode or "xt", false)
+local function feed(keys)
+    vim.api.nvim_input(keys)
 end
 
 function M.measure_edit_sample(scenario, opts, done)
@@ -247,12 +263,13 @@ function M.measure_edit_sample(scenario, opts, done)
             end)
             local token = line_reader.set_observer(buf, observer)
             local started = vim.uv.hrtime()
-            feed("X", "t")
+            local expected_events = opts.enter_join and 2 or 1
+            local function await_edit()
             poll(function()
-                return vim.api.nvim_buf_get_changedtick(buf) ~= initial_tick and text_changed_i == 1
+                return vim.api.nvim_buf_get_changedtick(buf) ~= initial_tick and text_changed_i == expected_events
                     and vim.api.nvim_get_mode().mode:sub(1, 1) == "i"
             end, function() return string.format(
-                "changedtick + exactly one TextChangedI while in insert mode (tick=%d, event=%d, mode=%s)",
+                "changedtick + expected TextChangedI while in insert mode (tick=%d, event=%d, mode=%s)",
                 vim.api.nvim_buf_get_changedtick(buf) - initial_tick, text_changed_i, vim.api.nvim_get_mode().mode)
             end, function()
                 vim.cmd("redraw!")
@@ -267,10 +284,12 @@ function M.measure_edit_sample(scenario, opts, done)
                     local leave_group = vim.api.nvim_create_augroup("ParleyPerfLeave_" .. buf, { clear = true })
                     vim.api.nvim_create_autocmd("InsertLeave", { group = leave_group, buffer = buf, once = true,
                         callback = function() insert_leave = true end })
-                    feed("<Esc>", "t")
+                    feed("<Esc>")
                     poll(function()
                         return insert_leave and vim.api.nvim_get_mode().mode:sub(1, 1) ~= "i"
-                    end, "normal mode + InsertLeave convergence", function()
+                    end, function() return "normal mode + InsertLeave convergence mode="
+                        .. vim.api.nvim_get_mode().mode .. " leave=" .. tostring(insert_leave)
+                        .. " sample_ms=" .. tostring(observed.elapsed_ms) end, function()
                         vim.api.nvim_del_augroup_by_id(leave_group)
                         vim.api.nvim_buf_set_lines(buf, scenario.target_line - 1, scenario.target_line, false,
                             { scenario.original_line })
@@ -278,25 +297,50 @@ function M.measure_edit_sample(scenario, opts, done)
                     end)
                 end)
             end)
+            end
+            if opts.enter_join then
+                feed("<CR>", "t")
+                poll(function() return text_changed_i == 1 end, "Enter TextChangedI", function()
+                    feed("<BS>", "t")
+                    await_edit()
+                end)
+            else feed("X", "t"); await_edit() end
         end)
     end)
 end
 
-function M.run_probe(output)
-    local scenario = M.open_fixture(100)
-    M.measure_edit_sample(scenario, { timeout_ms = 1000, capture_events = true }, function(sample, err)
+function M.run_probe(output, opts)
+    opts = opts or {}
+    local scenario = M.open_fixture(opts.line_count or 100)
+    M.measure_edit_sample(scenario, { timeout_ms = 3000, capture_events = true, enter_join = opts.enter_join }, function(sample, err)
         if not sample then
             vim.fn.writefile({ tostring(err) }, output)
             vim.cmd("cquit 1")
             return
         end
         sample.attached = require("parley")._parley_bufs[scenario.buf] == "chat"
+        sample.final_line_count = vim.api.nvim_buf_line_count(scenario.buf)
         sample.restored = scenario.original_line == vim.api.nvim_buf_get_lines(scenario.buf,
             scenario.target_line - 1, scenario.target_line, false)[1]
         scenario:close()
         M.write_report(output, vim.json.encode(sample))
         vim.cmd("qa!")
     end)
+end
+
+local function measure_ui_splices(scenario,warmups,iterations,done)
+    local times,works,index={},{},0
+    local function sample_done(sample,err)
+        if not sample then return done(nil,err) end
+        index=index+1
+        local measured=M.measured_index(index,warmups)
+        if measured then times[measured],works[measured]=sample.elapsed_ms,sample.work end
+        if index<warmups+iterations then
+            return M.measure_edit_sample(scenario,{enter_join=true,timeout_ms=3000},sample_done)
+        end
+        done({times=times,work=M.max_work(works)})
+    end
+    M.measure_edit_sample(scenario,{enter_join=true,timeout_ms=3000},sample_done)
 end
 
 local function measure_isolated(scenario, phase, fn)
@@ -311,34 +355,56 @@ local function measure_isolated(scenario, phase, fn)
     return elapsed, counter:snapshot()
 end
 
-local function isolated_phases(scenario)
+function M.isolated_phases(scenario)
     local buf = scenario.buf
     local reader = require("parley.line_reader").for_buffer(buf)
+    local Document = require("parley.document")
     return {
-        timezone_refresh = function() require("parley.timezone_diagnostics").refresh_buffer(buf, { reader = reader }) end,
-        footnote_refresh = function() require("parley.skill_render").refresh_footnote_diagnostics(buf, { reader = reader }) end,
+        timezone_refresh = function()
+            require("parley.timezone_diagnostics").refresh_buffer(buf, { reader = reader })
+            assert(require("parley.diagnostic_refresh").drain(buf, scenario.line_count * 8).status == "idle",
+                "timezone diagnostics did not converge")
+        end,
+        footnote_refresh = function()
+            require("parley.skill_render").refresh_footnote_diagnostics(buf, { reader = reader })
+            assert(require("parley.diagnostic_refresh").drain(buf, scenario.line_count * 8).status == "idle",
+                "footnote diagnostics did not converge")
+        end,
         decoration_redraw = function()
             local win = vim.api.nvim_get_current_win()
             local top = math.max(0, scenario.target_line - 20)
             local highlighter = require("parley.highlighter")
-            local cache = highlighter._structure_cache(buf)
-            assert(cache and cache.structure, "decoration structure cache has no structure")
-            highlighter._compute_window_decorations(win, buf, top, top + 40, reader, cache.structure)
+            highlighter._compute_window_decorations(win, buf, top, top + 40, reader, scenario.document)
         end,
         spell_typeahead = function() require("parley.spell").suggest({ reader = reader }) end,
         -- #227: an Enter at the end of the target row and the join that undoes
         -- it, through the real buffer attachment — the per-keystroke cost of a
         -- line-count edit, with its copy visible to the gates.
         structure_splice = function()
+            local suffix = Document.query(scenario.document,scenario.target_line,scenario.target_line+1)[1]
             local row0 = scenario.target_line - 1
             vim.api.nvim_buf_set_lines(buf, row0, row0 + 1, false, { scenario.original_line, "" })
+            local entered = Document.repair_step(scenario.document)
+            assert(entered.status == "idle", "Enter did not retain confirmed suffix: " .. vim.inspect(entered))
+            local after_enter = Document.lookup(scenario.document,suffix.handle)
+            assert(after_enter and after_enter.metadata.confirmed and vim.deep_equal(after_enter.metadata,suffix.metadata),
+                "Enter changed the untouched suffix metadata")
             vim.api.nvim_buf_set_lines(buf, row0, row0 + 2, false, { scenario.original_line })
+            assert(Document.repair_step(scenario.document).status == "idle", "join did not retain confirmed suffix")
+            local after_join = Document.lookup(scenario.document,suffix.handle)
+            assert(after_join and after_join.start_row == suffix.start_row
+                and vim.deep_equal(after_join.metadata,suffix.metadata))
         end,
-        -- #227: the one rebuild a burst of approximate edits costs.
-        structure_rebuild = function()
-            local highlighter = require("parley.highlighter")
-            highlighter._structure_cache(buf).dirty = true
-            assert(highlighter.rebuild_structure(buf))
+        -- An explicit structural change exercises bounded repair to completion;
+        -- normal body edits never force a global dirty-cache rebuild.
+        structure_repair = function()
+            local row0 = scenario.target_line - 1
+            vim.api.nvim_buf_set_lines(buf, row0, row0 + 1, false, { "💬: temporary repair boundary" })
+            assert(Document.drain(scenario.document, scenario.line_count * 8,
+                {rows=256,bytes=65536,nodes=32768,entries=65536}).status == "idle")
+            vim.api.nvim_buf_set_lines(buf, row0, row0 + 1, false, { scenario.original_line })
+            assert(Document.drain(scenario.document, scenario.line_count * 8,
+                {rows=256,bytes=65536,nodes=32768,entries=65536}).status == "idle")
         end,
     }
 end
@@ -421,19 +487,25 @@ function M.start(opts)
                 return measure_edit(scenario, nil, safe_edit_done)
             end
             M.add_result(report, "edit_total", "inclusive", n, samples, M.max_work(work))
-            for phase, fn in pairs(isolated_phases(scenario)) do
-                for _ = 1, warmups do measure_isolated(scenario, phase, fn) end
-                local phase_samples, phase_work = {}, {}
-                for index = 1, iterations do
-                    phase_samples[index], phase_work[index] = measure_isolated(scenario, phase, fn)
-                end
-                M.add_result(report, phase, "isolated", n, phase_samples, M.max_work(phase_work))
-            end
-            scenario:close()
-            active_scenario = nil
-            require("tests.perf.ownership").add_baselines(report, n, warmups, iterations, function(ownership_error)
-                if ownership_error then return fatal(ownership_error) end
-                guarded(next_size)
+            measure_ui_splices(scenario,warmups,iterations,function(splices,splice_error)
+                if not splices then return fatal(splice_error) end
+                guarded(function()
+                    M.add_result(report,"enter_join_total","inclusive",n,splices.times,splices.work)
+                    for phase, fn in pairs(M.isolated_phases(scenario)) do
+                        for _ = 1, warmups do measure_isolated(scenario, phase, fn) end
+                        local phase_samples, phase_work = {}, {}
+                        for index = 1, iterations do
+                            phase_samples[index], phase_work[index] = measure_isolated(scenario, phase, fn)
+                        end
+                        M.add_result(report, phase, "isolated", n, phase_samples, M.max_work(phase_work))
+                    end
+                    scenario:close()
+                    active_scenario = nil
+                    require("tests.perf.ownership").add_baselines(report, n, warmups, iterations, function(ownership_error)
+                        if ownership_error then return fatal(ownership_error) end
+                        guarded(next_size)
+                    end)
+                end)
             end)
         end
         safe_edit_done = function(...)

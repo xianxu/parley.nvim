@@ -251,20 +251,31 @@ function M.at(seq,row)
     local e,r,b=locate(s,row)
     if e then return snapshot(s,e,r,b),row-r end
 end
-function M.rank(seq,handle)
+function M.rank(seq,handle,budget)
+    local nodes,entries=math.huge,math.huge
+    if budget then
+        nodes,entries=budget.nodes or math.huge,budget.entries or math.huge
+        for _,value in pairs(budget) do
+            assert(type(value)=="number" and value>=0 and value<math.huge and value%1==0,"invalid rank budget")
+        end
+    end
     local s=state(seq)
     if handle==s.bof then return {row=0,byte=0,rows=0,bytes=0} end
     if handle==s.eof then local z=M.size(seq); return {row=z.rows,byte=z.bytes,rows=0,bytes=0} end
     local e=s.handles[handle]
     if not e then return nil end
     local n,row,byte=e.leaf,e.local_row,e.local_byte
+    if entries<1 then return nil,"budget" end
     count(s,"entries_visited")
     while n.parent do
+        if nodes<1 then return nil,"budget" end
+        nodes=nodes-1
         count(s,"nodes_visited")
         local p=n.parent
         if p.right==n then row,byte=row+p.left.rows,byte+p.left.bytes end
         n=p
     end
+    if nodes<1 then return nil,"budget" end
     count(s,"nodes_visited")
     if n~=s.root then return nil end
     return {row=row,byte=byte,rows=e.rows,bytes=e.bytes}
@@ -349,7 +360,7 @@ end
 -- Staged nodes do not change live parent links, even if a summary callback fails.
 local function same_syntax_token(s,a,b)
     if type(a)~="table" or type(b)~="table" then return false end
-    local transient={bytes=true,row=true,provenance=true}
+    local transient={bytes=true,row=true,provenance=true,diagnostic_utc_candidate=true,diagnostic_reference_candidate=true}
     for k,v in pairs(a) do
         if not transient[k] and not same(s,v,b[k],false) then return false end
     end

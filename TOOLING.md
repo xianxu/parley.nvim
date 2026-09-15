@@ -82,7 +82,7 @@ checkout) or a distinct `TEST_ENV_ROOT` for concurrent suites.
 5,000 lines, performs 5 warmups and 20 measured samples, and reports the real
 insert-event/redraw interval plus isolated timezone, footnote, decoration,
 spell, structure-splice (an Enter and its join, through the real buffer
-attachment), and structure-rebuild phases. Inclusive `edit_total` overlaps the
+attachment), and structure-repair phases. Inclusive `edit_total` overlaps the
 isolated measurements; do not add or subtract the isolated phase timings as if
 they decomposed it.
 
@@ -97,7 +97,7 @@ directory) with:
 make perf PERF_OUTPUT=/path/to/parley-chat-typing.json
 ```
 
-The JSON envelope has `schema_version: 3`, `generated_at`,
+The JSON envelope has `schema_version: 4`, `generated_at`,
 `timing_unit: "milliseconds"`, `environment` (`os`, `nvim`, and the measured
 git `commit`), and `scenarios`. Every scenario records `name`, `phase`,
 `attribution` (`inclusive` or `isolated`), `line_count`, `iteration_count`,
@@ -111,7 +111,10 @@ as `tests/perf/harness.lua`'s `WORK_FIELDS`). Schema 2 adds `bytes_read`
 fold deletion targets), and `native_fold_ops` (`zj`, `zD`, and fold creation
 commands). Schema 3 adds `index_entries_visited`, `metadata_values_copied`,
 and `summary_values_copied`, so bounded leaf counts cannot hide nested metadata
-work. The direct document-core benchmark populates these from actual index
+work. Schema 4 adds `diagnostic_bytes_processed`, `diagnostic_matches_processed`,
+`native_diagnostic_sets`, `native_diagnostic_entries`, and
+`diagnostic_message_bytes`. Message bytes measure UTF-8 diagnostic message
+assembly/publication, not total Lua object memory. The direct document-core benchmark populates these from actual index
 statistics; zero on a legacy path does not mean its array copies are free.
 Generated reports are ignored
 artifacts; durable baseline/optimized summaries belong in the issue log.
@@ -124,27 +127,19 @@ phases record current scaling costs; they do not certify bounded ownership work
 or concurrent tool execution.
 
 Elapsed timings are report-only and never fail CI. Scenario validity and
-structural bounds are correctness gates: the measured insert event must not
-perform a full-buffer read; decoration reads stay within the viewport/context
-allowances; matched 1,000/5,000-line viewports request identical work;
-ordinary prose edits process the same bounded structure rows and copy nothing;
-and an Enter-and-join splice reads no full buffer, does the same row work at
-both sizes, and reports exactly its two-array copy (`4n + 2` slots). Timezone and
-managed-footnote diagnostics deliberately remain stale during `TextChangedI`,
-then converge synchronously on `InsertLeave`, normal `TextChanged`,
-`BufWritePost`, `BufEnter`, `WinEnter`, and stream-leg finalization. Structural
-marker edits never suppress decorations: they leave the structure approximate
-and still rendering, and it is rebuilt 250 ms after the burst or at the next
-convergence event. Redraw itself consumes only the buffer-owned bounded
-structure snapshot and visible/context rows.
+structural bounds are correctness gates: measured insertion must not read the
+whole buffer; decoration pages stay within 256 rows and 64 KiB; ordinary body
+edits and Enter/join use bounded local index work instead of copying row arrays.
+The inclusive `enter_join_total` phase drives real Insert-mode Enter and Backspace
+plus redraw. `structure_splice` isolates their attachment work after setup and
+confirmation. Initial document hydration is outside the measured interval.
 
-Under the test harness that scheduled rebuild never fires on its own:
-`tests/minimal_init.vim` exports `$PARLEY_TEST_MODE`, and a spec that wants the
-real clock opts in with `highlighter._set_repair_deferral(nil, ms)` or fires a
-repair by hand (`tests/helpers/decoration.lua` `manual_deferrals`). It is an
-environment variable, not `g:parley_test_mode`, because `PlenaryBustedFile`
-runs each spec in a child nvim that inherits the environment but not this
-init's `g:` variables.
+The shared document coordinator repairs uncertain structure in scheduled slices.
+Tests can use `Document.repair_step` or `Document.drain` with explicit budgets;
+production scheduling retains its own small slice. Native fold operations and
+diagnostic publication are counted separately from indexed queries because their
+cost can scale with the affected output. The diagnostic parser consumes bounded
+chunks, while publishing many diagnostics necessarily visits their output entries.
 
 For an optional manual comparison, repeat ordinary typing with
 `:MarkdownPreview` enabled. The automated report intentionally excludes that

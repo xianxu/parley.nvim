@@ -9,7 +9,6 @@ local function native()
         line_count=vim.api.nvim_buf_line_count, offset=vim.api.nvim_buf_get_offset,
         text=vim.api.nvim_buf_get_text, lines=vim.api.nvim_buf_get_lines,
         set_text=vim.api.nvim_buf_set_text, attach=vim.api.nvim_buf_attach,
-        detach=vim.api.nvim_buf_detach,
         undo_state=function(buf)
             return {sequence=vim.api.nvim_buf_call(buf,vim.fn.changenr),tick=vim.api.nvim_buf_get_changedtick(buf)}
         end,
@@ -87,25 +86,33 @@ function Editor:observe(tick,sr,sc,sb,orows,oc,ob,nrows,nc,nb)
     return event
 end
 function Editor:attach()
-    assert(not self.attached and not owners[self.buf],'document editor already attached')
+    assert(not self.dead and not self.attached and not owners[self.buf],'document editor already attached or retired')
     owners[self.buf]=self
     local function lifecycle(kind,tick)
+        if self.dead then return true end
         self.undo_receipt=nil
         if self.operation then self.operation.unexpected=true end
         if kind=='reload' then
             self.rows=self.driver.line_count(self.buf)
             self.total=self.driver.offset(self.buf,self.rows)
-        elseif kind=='detach' then self.dead=true; owners[self.buf]=nil end
+        elseif kind=='detach' then
+            self.dead=true; self.attached=false
+            if owners[self.buf]==self then owners[self.buf]=nil end
+        end
         self.in_callback=true
         local delivered,err=pcall(self.on_event,{kind=kind,epoch=self.epoch,tick=tick,rows=self.rows,total=self.total})
         self.in_callback=false
         if not delivered then error(err) end
     end
+    self.lifecycle=lifecycle
     local ok=self.driver.attach(self.buf,false,{
-        on_bytes=function(_,_,tick,...) if not self.dead then self:observe(tick,...) end end,
-        on_reload=function() lifecycle('reload') end,
-        on_detach=function() lifecycle('detach') end,
-        on_changedtick=function(_,_,tick) lifecycle('tick',tick) end,
+        on_bytes=function(_,_,tick,...)
+            if self.dead then return true end
+            self:observe(tick,...)
+        end,
+        on_reload=function() return lifecycle('reload') end,
+        on_detach=function() return lifecycle('detach') end,
+        on_changedtick=function(_,_,tick) return lifecycle('tick',tick) end,
     })
     if not ok then owners[self.buf]=nil; return false end
     self.attached=true
@@ -118,7 +125,12 @@ function Editor:set_epoch(epoch)
     if self.operation then self.operation.unexpected=true end
 end
 function Editor:detach()
-    if self.attached and not self.dead then self.driver.detach(self.buf) end
+    if not self.attached or self.dead then return false end
+    -- nvim_buf_detach is RPC-only. Retire authority synchronously; native Lua
+    -- callbacks unregister themselves by returning true on their next event.
+    self.lifecycle('detach')
+    if self.driver.detach then self.driver.detach(self.buf) end
+    return true
 end
 -- A sequence number alone is insufficient: undo/redo may revisit it. Every
 -- observed edit/lifecycle transition clears this private receipt first.
@@ -154,18 +166,21 @@ function Editor:apply(plan,validate)
             if old~=patch.expected_old then status='stale'; break end
             local lines=split(patch.text)
             if self.driver.undo_break and self.driver.undo_join then
+                operation.undo_open=true
                 if self:can_join_undo(plan) then self.driver.undo_join(self.buf)
                 else self.driver.undo_break(self.buf) end
                 if operation.unexpected or operation.revoked then status='interrupted'; break end
             end
             self.pending={patch=patch,new_end=endpoint(a.row,a.col,#lines-1,#lines[#lines],a.byte+#patch.text),
                 owner={epoch=plan.epoch,generation=plan.generation,operation=plan.operation,grant=plan.grant,entity=plan.entity,patch=i}}
+            operation.undo_open=self.driver.undo_break~=nil
             self.driver.set_text(self.buf,a.row,a.col,b.row,b.col,lines)
             local seen=self.pending and self.pending.seen
             self.pending=nil
             if operation.unexpected or not seen then status='interrupted'; break end
             if operation.revoked then status='stale'; break end
             if self.driver.undo_break then self.driver.undo_break(self.buf) end
+            operation.undo_open=false
             if operation.unexpected or operation.revoked then status='interrupted'; break end
             if self.driver.undo_state then
                 local undo=self.driver.undo_state(self.buf)
@@ -176,11 +191,12 @@ function Editor:apply(plan,validate)
     end)
     -- Close even a partial or mutate-then-error write so the next caller cannot
     -- accidentally inherit its native undo block.
-    if self.driver.undo_break then
+    if operation.undo_open and self.driver.undo_break then
         local closed,close_error=pcall(self.driver.undo_break,self.buf)
         if not closed and ok then ok,err=false,close_error end
     end
-    if not ok or status~='applied' or operation.unexpected or operation.revoked then self.undo_receipt=nil end
+    if ok and status=='applied' and (operation.unexpected or operation.revoked) then status='interrupted' end
+    if not ok or status~='applied' then self.undo_receipt=nil end
     self.pending,self.operation=nil,nil
     return {status=ok and status or 'error',receipts=operation.receipts,error=not ok and tostring(err) or nil}
 end

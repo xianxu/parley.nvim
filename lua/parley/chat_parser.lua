@@ -559,9 +559,9 @@ local fence = require("parley.fence")
 	-- opener that never closes reclassifies every later marker and the rest of
 	-- the chat forks no exchanges at all. That is reachable without a malformed
 	-- file: an answer quoting a 📎: line in ordinary prose starts a tool block
-	-- whose body never closes. Exchange starts feed exchange_anchors identity,
-	-- which drives a destructive fold clear, so degrading open-endedly here is
-	-- not acceptable.
+	-- whose body never closes. Materialized exchange boundaries must remain
+	-- consistent with the live document grammar; open-ended suppression would
+	-- silently hide later questions.
 	-- #200: one depth-aware pass decides both which rows are inside a tool body
 	-- and which tool markers are structural. Depth is the requirement: a 📎:
 	-- written inside an ordinary fenced block is not a marker, and treating it

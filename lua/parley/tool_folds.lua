@@ -179,6 +179,13 @@ function M.step(buf)
     if not plan then
         local first=math.min(s.first,math.max(0,size-1))
         local last=math.min(math.max(first,s.last-1),math.max(0,size-1))
+        local earliest=Document.next_exchange(s.doc,0,size)
+        if earliest.status=='opaque' or earliest.status=='budget' then return 'pending' end
+        local owned=earliest.span and earliest.span.start_row or s.owned_first
+        if owned==nil then s.first,s.last=nil,nil;return 'idle' end
+        s.owned_first=math.min(s.owned_first or owned,owned)
+        first=math.max(first,s.owned_first)
+        if last<first then s.first,s.last=nil,nil;return 'idle' end
         local a=Document.exchange(s.doc,first)
         local z=Document.exchange(s.doc,last)
         if a.status=='opaque' or z.status=='opaque' then return 'pending' end
@@ -218,8 +225,13 @@ local function ensure(buf)
     local s={doc=doc,windows={}};buffers[buf]=s
     s.unsubscribe=Document.subscribe(doc,function(event)
         if event.kind=='detach' then buffers[buf]=nil;return end
-        if event.kind=='reload' then mark(s,0,Document.size(doc).rows)
+        if event.kind=='reload' then s.owned_first=nil;mark(s,0,Document.size(doc).rows)
         elseif event.kind=='edit' then
+            if s.owned_first then
+                if event.old_last_row<=s.owned_first then
+                    s.owned_first=s.owned_first+event.last_row-event.old_last_row
+                elseif event.first_row<=s.owned_first then s.owned_first=event.first_row end
+            end
             -- Native coordinates of queued work move with every edit, even
             -- one that needs no structural repair of its own.
             if s.first then

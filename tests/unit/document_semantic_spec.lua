@@ -373,4 +373,30 @@ describe('document semantic worker',function()
             assert.equals('idle',Semantic.step(worker).status)
         end
     end)
+    it('settles five thousand ownership rows without repeated zero-progress dependency budgets',function()
+        local lines={'# topic: ownership perf','- file: perf.md','---',''}
+        while #lines+10<=5000 do
+            for _,line in ipairs({'💬: historical question','','🤖: [PerfFixture]','',
+                '🧠: historical thought','detail','','historical answer'}) do lines[#lines+1]=line end
+        end
+        while #lines<4998 do lines[#lines+1]='historical padding' end
+        lines[#lines+1]=''; lines[#lines+1]='💬: stream here'
+        local seq=sequence(lines)
+        local worker=Semantic.new(seq)
+        local zero=0
+        for _=1,1500 do
+            local result=Semantic.step(worker,{rows=256,nodes=32768,entries=65536})
+            assert.is_true(result.work.nodes_visited<=32768)
+            assert.is_true(result.work.entries_visited<=65536)
+            assert.is_true(result.work.dependency_nodes_visited<=512)
+            if result.status=='idle' then
+                assert.is_true(Semantic.is_confirmed(worker,S.at(seq,4999).handle))
+                return
+            end
+            if result.status=='budget' and result.work.rows_processed==0 then zero=zero+1 else zero=0 end
+            assert.is_true(zero<3,'repeated zero-progress dependency budget: '..vim.inspect(result))
+        end
+        error('ownership semantic fixture did not settle')
+    end)
+
 end)

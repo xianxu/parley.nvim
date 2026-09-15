@@ -52,8 +52,8 @@ describe("arch: buffer mutation boundary", function()
         arch.assert_pattern_scoping({
             pattern = "nvim_buf_set_text",
             scope = "lua/parley/**/*.lua",
-            allow_only_in = { "lua/parley/buffer_edit.lua" },
-            rationale = "#90: nvim_buf_set_text must only be used via buffer_edit.lua",
+            allow_only_in = { "lua/parley/buffer_edit.lua", "lua/parley/document/editor.lua" },
+            rationale = "#254: document/editor owns observed grant writes; buffer_edit remains the migration boundary",
         })
     end)
 end)
@@ -104,5 +104,25 @@ describe("arch: canonical repository identity has one normalizer", function()
         end
         assert.equals(1, occurrences,
             "ARCH-DRY: persisted repo identity and transient-root filtering must share resolve_dir_key")
+    end)
+end)
+
+
+describe("arch: shared live document projection", function()
+    it("rendering does not rederive positional ownership", function()
+        for _, pattern in ipairs({ "parley.exchange_model", "parley.exchange_anchors",
+            "parse_chat", "nvim_buf_get_lines" }) do
+            arch.assert_pattern_scoping({ pattern = pattern,
+                scope = { "lua/parley/tool_folds.lua" }, allow_only_in = {},
+                rationale = "#254: folds consume certified shared-index projections" })
+        end
+    end)
+    it("highlighter has no independent structural observer or full rebuild", function()
+        for _, pattern in ipairs({ "highlight_structure.build", "highlight_structure.replace",
+            "on_lines =", "repair_timer" }) do
+            arch.assert_pattern_scoping({ pattern = pattern,
+                scope = { "lua/parley/highlighter.lua" }, allow_only_in = {},
+                rationale = "#254: document owns structural observation and repair" })
+        end
     end)
 end)

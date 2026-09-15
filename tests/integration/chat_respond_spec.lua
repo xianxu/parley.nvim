@@ -2223,6 +2223,11 @@ local function open_simple_chat(topic, path, extra_header)
         local captured_handler
         local qid = "qid_stream_bounded_reconcile"
         local observations = {}
+        local runtime = pending_runtime()
+        require("parley.chat_pending").start = function(opts)
+            opts.clock, opts.scheduler = runtime.clock, runtime.scheduler
+            return canonical_pending_start(opts)
+        end
         local respond_module = require("parley.chat_respond")
         local parser = require("parley.chat_parser")
         local original_parse_chat = parser.parse_chat
@@ -2234,7 +2239,11 @@ local function open_simple_chat(topic, path, extra_header)
 
         local ok, err = pcall(function()
             parley.chat_respond({ range = 0 })
-            vim.wait(50, function() return false end, 5)
+            runtime:drain()
+            local document = require("parley.document")
+            assert.equals("idle", document.drain(document.get(buf), 10000, {
+                rows = 256, bytes = 65536, nodes = 32768, entries = 65536,
+            }).status)
             parser.parse_chat = function()
                 error("streaming must not parse the whole document")
             end
@@ -2242,10 +2251,11 @@ local function open_simple_chat(topic, path, extra_header)
                 observations[#observations + 1] = event
             end
             captured_handler(qid, "🧠: first\n")
+            runtime:drain()
+            assert.is_true(vim.wait(1000, function() return #observations == 1 end, 5))
             captured_handler(qid, "second")
-            assert.is_true(vim.wait(200, function()
-                return #observations == 2
-            end, 10))
+            runtime:drain()
+            assert.is_true(vim.wait(1000, function() return #observations == 2 end, 5))
         end)
         parser.parse_chat = original_parse_chat
         respond_module._stream_reconcile_observer = nil

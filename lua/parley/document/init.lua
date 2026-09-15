@@ -79,16 +79,25 @@ local function preserve(s,old,token,event)
     -- marker identity. Insertion at the prefix boundary remains conservative.
     return prefix~=nil and event.start.row==old.start_row and event.start.col>#prefix
 end
+local function accumulate_repair(work,result)
+    for _,key in ipairs({'dependency_nodes_visited','rows_processed'}) do
+        work[key]=work[key]+(result and result.work and result.work[key] or 0)
+    end
+    return result
+end
 local function observe_edit(doc,s,event)
     local before=Structure.stats(s.structure)
     local classified_rows,classified_bytes=0,0
+    local repair_work={dependency_nodes_visited=0,rows_processed=0}
     effects(s,State.transition(s.authority,{kind='observed_edit',epoch=event.epoch,
         first=event.first,last=event.last,new_bytes=event.new_bytes,
         owner_grant=event.owner and event.owner.grant}))
     s.input=nil
     local first=math.min(event.start.row,event.old_rows)
-    local last=math.min(event.old_rows,event.old_end.row+1)
+    local whole_rows=event.start.col==0 and event.old_end.col==0 and event.new_end.col==0
+    local last=math.min(event.old_rows,event.old_end.row+(whole_rows and 0 or 1))
     local a=first<event.old_rows and Structure.at(s.structure,first) or nil
+    if a and a.opaque then last=math.max(last,a.end_row) end
     local z=last>first and Structure.at(s.structure,last-1) or nil
     if a then first=a.start_row end
     if z then last=z.end_row end
@@ -98,6 +107,7 @@ local function observe_edit(doc,s,event)
     local bytes=last_byte-first_byte+event.new_bytes-(event.last-event.first)
     local newlast=first+added
     local reused=false
+    local diagnostic_changed=true
     if added<=256 and last-first<=256 and bytes<=65536 and not (a and a.opaque) and not (z and z.opaque) then
         local lines=s.editor.reader:lines(first,newlast,false)
         local spans={}; local actual=0
@@ -106,31 +116,38 @@ local function observe_edit(doc,s,event)
             spans[i]={rows=1,bytes=#line+1,metadata={token=token}}; actual=actual+#line+1
         end
         classified_rows,classified_bytes=#spans,actual
+        if actual==bytes and #spans==1 and last-first==1 and a and a.metadata then
+            local old,new=a.metadata.token,spans[1].metadata.token
+            diagnostic_changed=not old or old.footnote or old.diagnostic_utc_candidate
+                or old.diagnostic_reference_candidate or new.footnote or new.diagnostic_utc_candidate
+                or new.diagnostic_reference_candidate or false
+        end
         -- Native undo can expose final text during an intermediate callback.
         -- Keep that callback's exact arithmetic extent opaque until delivery ends.
         if actual~=bytes or #spans~=added then
-            Structure.splice(s.structure,first,last,opaque(added,bytes))
-        elseif spans[1] and a and preserve(s,a,spans[1].metadata.token,event) then
-            Structure.replace_row(s.structure,first,spans[1].metadata.token,spans[1].bytes)
+            accumulate_repair(repair_work,Structure.splice(s.structure,first,last,opaque(added,bytes)))
+        elseif last>first and spans[1] and a and preserve(s,a,spans[1].metadata.token,event) then
+            accumulate_repair(repair_work,Structure.replace_row(s.structure,first,spans[1].metadata.token,spans[1].bytes))
             if last-first==1 and #spans==1 then reused=true
             else
                 local tail={}; for i=2,#spans do tail[#tail+1]=spans[i] end
-                reused=Structure.replace_fragment(s.structure,first+1,last,tail,
-                    {rows=256,bytes=65536,nodes=65536,entries=65536}).reused_suffix
+                reused=accumulate_repair(repair_work,Structure.replace_fragment(s.structure,first+1,last,tail,
+                    {rows=256,bytes=65536,nodes=65536,entries=65536})).reused_suffix
             end
         else
-            reused=Structure.replace_fragment(s.structure,first,last,spans,
-                {rows=256,bytes=65536,nodes=65536,entries=65536}).reused_suffix
+            reused=accumulate_repair(repair_work,Structure.replace_fragment(s.structure,first,last,spans,
+                {rows=256,bytes=65536,nodes=65536,entries=65536})).reused_suffix
         end
-    else Structure.splice(s.structure,first,last,opaque(added,bytes)) end
+    else accumulate_repair(repair_work,Structure.splice(s.structure,first,last,opaque(added,bytes))) end
     if not reused then s.idle=false end
     reconcile(s)
     local work=Structure.stats(s.structure)
     for key,value in pairs(work) do work[key]=value-(before[key] or 0) end
-    work.rows_processed,work.bytes_scanned=classified_rows,classified_bytes
+    work.rows_processed,work.bytes_scanned=classified_rows+repair_work.rows_processed,classified_bytes
+    work.dependency_nodes_visited=repair_work.dependency_nodes_visited
     record(s,work)
     notify(s,{kind='edit',first_row=first,last_row=newlast,old_last_row=last,
-        reused_suffix=reused,semantic_changed=not reused})
+        reused_suffix=reused,semantic_changed=not reused,diagnostic_changed=diagnostic_changed})
     schedule(doc)
 end
 local function observe(doc,event)
@@ -178,11 +195,18 @@ end
 function M.exchange(doc,row,opts)
     local s=state(doc); return s.dead and {status='detached'} or measured_query(s,Structure.exchange,row,opts)
 end
+function M.next_exchange(doc,first,last,opts)
+    local s=state(doc); return s.dead and {status='detached'} or measured_query(s,Structure.next_exchange,first,last,opts)
+end
 function M.folds(doc,first,last,opts)
     local s=state(doc); return s.dead and {status='detached'} or measured_query(s,Structure.folds,first,last,opts)
 end
 function M.outline(doc,first,last,opts)
     local s=state(doc); return s.dead and {status='detached'} or measured_query(s,Structure.outline,first,last,opts)
+end
+function M.diagnostic_candidates(doc,first,last,opts)
+    local s=state(doc)
+    return s.dead and {status='detached'} or measured_query(s,Structure.diagnostic_candidates,first,last,opts)
 end
 function M.validate_projection(doc,certificate)
     local s=state(doc); if s.dead then return false,'detached' end
@@ -212,11 +236,13 @@ function M.transition(doc,event)
     end
     return effects(s,State.transition(s.authority,event))
 end
-function M.repair_step(doc)
+function M.repair_step(doc,budget)
     local s=state(doc); if s.dead then return {status='detached'} end
     local before=Structure.stats(s.structure)
     local input=s.input and s.editor:chunk(s.input) or nil; s.input=nil
-    local result=Structure.repair_step(s.structure,input,{bytes=4096,rows=1,nodes=32768,entries=32768})
+    local limits={bytes=4096,rows=1,nodes=32768,entries=32768}
+    for key,value in pairs(budget or {}) do limits[key]=value end
+    local result=Structure.repair_step(s.structure,input,limits)
     if result.status=='read' then s.input=result.request end
     if result.status=='idle' then s.idle=true end
     reconcile(s,true)
@@ -225,23 +251,29 @@ function M.repair_step(doc)
     notify(s,{kind='repair',result=result})
     return result
 end
-function M.drain(doc,limit)
+function M.drain(doc,limit,budget)
     local result
     for _=1,limit or 10000 do
-        result=M.repair_step(doc)
+        result=M.repair_step(doc,budget)
         if result.status=='idle' or result.status=='detached' then return result end
     end
     return result
 end
 function M.apply(doc,plan)
     local s=state(doc)
+    local expected=plan.revision
     return s.editor:apply(plan,function(_,patch,phase,event)
         local grant=State.snapshot(s.authority).grants[plan.grant]
         if not grant then return false end
         local current=proof(s,grant)
         if not current then return false end
+        if phase=='after' then
+            if not event.owner or event.owner.grant~=plan.grant then return false end
+            expected=type(expected)=='number' and expected+1 or nil
+        end
         return effects(s,State.resolve(s.authority,{epoch=plan.epoch,generation=plan.generation,
-            grant=plan.grant,entity=plan.entity,first=phase=='before' and patch.start.byte or event.first,
+            grant=plan.grant,entity=plan.entity,revision=expected,
+            first=phase=='before' and patch.start.byte or event.first,
             last=phase=='before' and patch.finish.byte or event.first+event.new_bytes},current))
     end)
 end

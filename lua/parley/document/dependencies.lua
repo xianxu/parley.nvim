@@ -42,7 +42,11 @@ local function operation(index, opts, fn)
     function context:rank(handle)
         local value = ranks[handle]
         if value == nil then
-            value = self.adapter(handle)
+            local admitted=opts and opts.before_rank and opts.before_rank(handle)
+            if opts and opts.before_rank and not admitted then error(BUDGET, 0) end
+            local reason
+            value,reason = self.adapter(handle,type(admitted)=="table" and admitted or nil)
+            if reason=="budget" then error(BUDGET,0) end
             if value == nil then error({ status = "stale", handle = handle }, 0) end
             assert(type(value) == "number" and value == value, "rank must return a number or nil")
             ranks[handle] = value

@@ -1,8 +1,10 @@
 # Incremental Document Structure
 
 The structural core under `lua/parley/document/` indexes metadata over externally
-owned text. It is being integrated under #254; the live buffer adapters still use
-the [existing parser and exchange model](parsing.md) during the M2 boundary.
+owned text. The buffer coordinator owns the live index used by highlighting, folds, outline,
+and diagnostic candidate queries. Explicit materialization still uses the
+[parser and exchange model](parsing.md). Generation write migration is the next
+#254 milestone; its existing response model is not rendering authority.
 
 ## Ownership and data flow
 
@@ -15,6 +17,10 @@ the [existing parser and exchange model](parsing.md) during the M2 boundary.
 | `dependencies` | Earliest affected lookahead origin without enumerating a deleted suffix. |
 | `semantic` | Scheduled semantic transitions, scoped answer sections, confirmed-region tracking. |
 | `structure` | Document lifetime, publication, edit invalidation, and repair orchestration. |
+| `projection` | Derived index summaries for exchange boundaries, folds, outline, and diagnostics. |
+| `state` | Pure generation/grant transitions, dependency staleness, and write-plan revisions. |
+| `editor` | One native buffer attachment, normalized edit events, exact mutation receipts, and undo ownership. |
+| `init` | Per-buffer coordinator, immediate authority invalidation, bounded repair, and subscriptions. |
 
 The index retains no transcript payload. An unread region occupies one aggregate
 span. Readers supply bounded byte slices; long lines retain bounded lexer state.
@@ -67,3 +73,40 @@ fact resolver, dependency index, and repair integration tests. Seeded flat-model
 comparisons defend sequence positions and byte totals; independent legacy and
 golden fixtures defend malformed transcript behavior. Work counters cover tree
 navigation and copied metadata as well as scanned bytes.
+
+## Human edits and write authority
+
+`on_bytes` records what Neovim actually changed, including intermediate logical
+coordinates during grouped undo. A bounded changed fragment can transfer its
+semantic checkpoint immediately; unknown or broad edits become opaque spans and
+repair in scheduled slices. Deleting marker bytes retires their identity even
+when the replacement text is identical. Surviving markers move with the index.
+
+A generation receives grants over confirmed byte ranges. Child tool slots exclude
+the parent from their ranges. Editing granted output revokes overlapping writers;
+editing an input dependency marks the captured input stale. Disjoint edits can
+move a grant without cancelling its writer, but retire plans with old revisions.
+Reload replaces the epoch and invalidates every old grant and callback.
+
+A write plan names its epoch, generation, entity, grant, and revision. The editor
+checks exact expected text and authority before each patch, then compares the
+observed native event with the intended patch. Unexpected nested edits stop the
+remaining patches; completed patches remain explicit receipts. Undo joins require
+an exact preceding receipt from the same writer and unchanged native undo state.
+
+## Live consumers
+
+Highlighters query at most 256 rows and 64 KiB per viewport page. Tall windows
+advance through pages; horizontal and smooth-scroll windows read byte slices of
+long rows. Local edits discard intersecting presentation pages. Uncertain regions
+retain conservative presentation while semantic confirmation catches up.
+
+Fold queries return at most eight ranges per page. Native fold replacement waits
+for a complete, confirmed, still-valid projection. Ordinary body edits let Neovim
+move existing folds without rebuilding them. Structural changes rebuild affected
+fold groups while preserving each window's view, open state, and fold enablement.
+Native application costs scale with affected fold groups and are counted separately.
+
+Outline candidates and diagnostic candidates come from index summaries. Picker
+labels use bounded text slices and selection resolves the current stable handle.
+The index never stores a second transcript or a full row-position array.

@@ -262,6 +262,9 @@ describe("outline picker item building", function()
     local function make_buf(lines)
         local bufnr = vim.api.nvim_create_buf(false, true)
         vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, lines)
+        local document=require('parley.document')
+        document.drain(document.attach(bufnr,{schedule=false,
+            patterns=require('parley.highlight_structure').patterns(config)}),1000)
         return bufnr
     end
 
@@ -751,6 +754,9 @@ describe("outline containment honours configured prefixes (#218)", function()
             "local x = 1",
             "U: second question",
         })
+        local document=require('parley.document')
+        document.drain(document.attach(bufnr,{schedule=false,
+            patterns=require('parley.highlight_structure').patterns(custom)}),1000)
         local items = outline._build_picker_items(bufnr, custom, { is_chat = true })
         local found = false
         for _, it in ipairs(items) do

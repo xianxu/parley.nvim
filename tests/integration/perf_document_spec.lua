@@ -23,7 +23,7 @@ describe("document core performance report", function()
 
     it("reports every core workload at all four structural scales", function()
         local report = benchmark.run({ iterations = 1, warmups = 0 })
-        assert.equals(3, report.schema_version)
+        assert.equals(4, report.schema_version)
         assert.equals(28, #report.scenarios)
         local found = {}
         for _, scenario in ipairs(report.scenarios) do

@@ -81,6 +81,9 @@ local default = M._new({
         end,
         clear = function(buf)
             require("parley.highlighter").clear_structure(buf)
+            local document = require("parley.document")
+            local current = document.get(buf)
+            if current then document.detach(current) end
         end,
     },
     create_autocmd = function(events, callback)

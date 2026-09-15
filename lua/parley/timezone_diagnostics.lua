@@ -100,6 +100,7 @@ function M.build_diagnostics(lines, opts)
             end
 
             local token = line:sub(start_col, end_col)
+            if opts.on_match then opts.on_match() end
             local epoch = parse_utc_token(token)
             if epoch then
                 local local_time = format_local_time(to_local(epoch))
@@ -121,6 +122,18 @@ function M.build_diagnostics(lines, opts)
     return diagnostics
 end
 
+-- The only cross-chunk lexical state is the possible 19-byte token prefix.
+function M.scan_chunk(bytes, offset, carry, opts)
+    carry=carry or ''
+    local joined=carry..bytes
+    local records={}
+    for _,d in ipairs(M.build_diagnostics({joined},opts)) do
+        d.col=d.col+offset-#carry;d.end_col=d.end_col+offset-#carry
+        if d.end_col>offset then records[#records+1]=d end
+    end
+    return records,joined:sub(-19)
+end
+
 --- The namespace for Parley timezone diagnostics.
 --- @return integer
 function M.diag_namespace()
@@ -128,26 +141,15 @@ function M.diag_namespace()
     return diag_ns_id
 end
 
-local function real_local_time(epoch)
-    return os.date("*t", epoch)
-end
-
 --- Refresh timezone diagnostics for a buffer.
 --- @param buf integer
 --- @param opts table|nil  optional { to_local = function(epoch) -> osdate table }
-function M.refresh_buffer(buf, opts)
+function M.refresh_buffer(buf,opts)
+    return require('parley.diagnostic_refresh').refresh(buf,opts)
+end
+
+function M.publish(buf,diagnostics)
     ensure_namespace()
-    if not vim.api.nvim_buf_is_valid(buf) then
-        return
-    end
-
-    opts = opts or {}
-    local reader = opts.reader or require("parley.line_reader").for_buffer(buf)
-    local lines = reader:lines(0, -1, false)
-    local diagnostics = M.build_diagnostics(lines, {
-        to_local = opts.to_local or real_local_time,
-    })
-
     local nvim_diagnostics = {}
     for _, diagnostic in ipairs(diagnostics) do
         table.insert(nvim_diagnostics, {
@@ -167,6 +169,8 @@ function M.refresh_buffer(buf, opts)
     end
 
     vim.diagnostic.set(diag_ns_id, buf, nvim_diagnostics)
+    local bytes=0;for _,record in ipairs(nvim_diagnostics) do bytes=bytes+#record.message end
+    return {entries=#nvim_diagnostics,message_bytes=bytes}
 end
 
 --- Clear timezone diagnostics for a buffer.

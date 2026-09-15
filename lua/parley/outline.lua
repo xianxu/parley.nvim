@@ -6,17 +6,15 @@ local M = {}
 local highlight_structure = require("parley.highlight_structure")
 local question_tags = require("parley.question_tags")
 
--- Code-block memo for a buffer. Delegates to highlight_structure so the fence
--- grammar and the #218 partition containment have ONE definition — outline used
--- to carry three independent copies of this loop, and the close review found the
--- bug still live in the one that had been missed.
---
--- `config` is REQUIRED: patterns() without it uses default prefixes, which
--- silently disables containment for anyone who set chat_user_prefix.
-local function build_code_block_memo(bufnr, config)
-  local all_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-  return highlight_structure.code_block_memo(
-    all_lines, highlight_structure.patterns(config), true)
+local Document = require("parley.document")
+local Reader = require("parley.line_reader")
+local cursors = setmetatable({}, {__mode="k"})
+local function document(buf,config)
+  return Document.get(buf) or Document.attach(buf,{patterns=highlight_structure.patterns(config)})
+end
+local function label(buf,row)
+  local result=Reader.for_buffer(buf):chunk({row=row,col=0,max_bytes=4096})
+  return result.bytes .. (result.eol and "" or "…"),result.eol
 end
 
 local function is_in_code_block(_bufnr, line_number, memo)
@@ -70,36 +68,23 @@ M._is_in_code_block = is_in_code_block
 M._is_outline_item = is_outline_item
 
 local function find_nearest_outline_line(target_buf, lnum, config)
-  local line_count = vim.api.nvim_buf_line_count(target_buf)
-  local safe_lnum = math.min(lnum, line_count)
-  local all_lines = vim.api.nvim_buf_get_lines(target_buf, 0, -1, false)
-  local code_block_memo = build_code_block_memo(target_buf, config)
-  local is_valid_line = is_outline_item(target_buf, safe_lnum, config, code_block_memo, all_lines)
-
-  if is_valid_line then
-    return safe_lnum
+  local doc=document(target_buf,config)
+  local count=Document.size(doc).rows
+  local safe=math.max(1,math.min(lnum,count))
+  local first,last=math.max(0,safe-6),math.min(count,safe+5)
+  local best,distance=safe,6
+  for _=1,11 do
+    local found=Document.outline(doc,first,last,{budget_nodes=2048,budget_entries=4096})
+    if found.status~="found" then break end
+    local row=found.span.start_row+1
+    local delta=math.abs(row-safe)
+    if delta<distance then best,distance=row,delta end
+    first=found.span.end_row
+    if first>=last then break end
   end
-
-  for offset = 1, 5 do
-    local previous_lnum = safe_lnum - offset
-    if previous_lnum > 0 then
-      local previous_is_item = is_outline_item(target_buf, previous_lnum, config, code_block_memo, all_lines)
-      if previous_is_item then
-        return previous_lnum
-      end
-    end
-
-    local next_lnum = safe_lnum + offset
-    if next_lnum <= line_count then
-      local next_is_item = is_outline_item(target_buf, next_lnum, config, code_block_memo, all_lines)
-      if next_is_item then
-        return next_lnum
-      end
-    end
-  end
-
-  return safe_lnum
+  return best
 end
+M._nearest_outline_line=find_nearest_outline_line
 
 local function focus_buffer_line(target_buf, target_name, preferred_windows, lnum)
   for _, win in ipairs(preferred_windows or {}) do
@@ -151,7 +136,12 @@ local function jump_to_outline_location(selection, config)
     return false
   end
 
-  local safe_lnum = find_nearest_outline_line(target_buf, selection.lnum or 1, config)
+  local live=selection.identity and Document.lookup(document(target_buf,config),selection.identity)
+  if selection.identity and not live then
+    vim.notify("Outline item no longer exists",vim.log.levels.WARN)
+    return false
+  end
+  local safe_lnum = live and live.start_row+1 or find_nearest_outline_line(target_buf, selection.lnum or 1, config)
   local focused = focus_buffer_line(target_buf, target_name, selection.windows, safe_lnum)
   if not focused then
     vim.notify("Could not navigate to outline selection", vim.log.levels.WARN)
@@ -176,32 +166,94 @@ end
 
 M._jump_to_outline_location = jump_to_outline_location
 
--- Build the list of picker items from a buffer. Exposed for testing.
--- Returns items in document order: { display: string, value: { lnum: number } }
+-- One page visits at most eight candidates and reads at most 4 KiB per label.
+-- The cursor retains only progress and a possible trailing empty question.
 function M._build_picker_items(bufnr, config, opts)
-  local all_lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-  local code_block_memo = build_code_block_memo(bufnr, config)
-  local items = {}
-  for i = 1, #all_lines do
-    local is_item, item_type, formatted_line = is_outline_item(bufnr, i, config, code_block_memo, all_lines, opts)
-    if is_item then
-      table.insert(items, { display = formatted_line, value = { lnum = i }, type = item_type })
-    end
+  opts=opts or {}
+  local doc=document(bufnr,config)
+  local tick=vim.api.nvim_buf_get_changedtick(bufnr)
+  local saved=opts.cursor and cursors[opts.cursor]
+  if opts.cursor and (not saved or saved.doc~=doc or saved.tick~=tick) then
+    return {},{status="stale"}
   end
-  items = question_tags.apply_outline(items, all_lines, config)
-  -- Drop trailing empty question (the placeholder prompt for the user to continue)
-  if #items > 0 then
-    local last = items[#items]
-    if last.type == "question" then
-      local line = all_lines[last.value.lnum] or ""
-      local after_prefix = line:sub(#config.chat_user_prefix + 1)
-      if after_prefix:match("^%s*$") then
-        table.remove(items)
+  local state=saved or {doc=doc,tick=tick,next=0,last=Document.size(doc).rows}
+  local items={}
+  local function pause(status)
+    local key={};cursors[key]=state
+    return items,{status=status,cursor=key}
+  end
+  for _=1,8 do
+    if #items+(state.pending and 2 or 1)>8 then return pause("more") end
+    if state.next>=state.last then return items,{status="ready"} end
+    local found=Document.outline(doc,state.next,state.last,{is_chat=opts.is_chat,
+      cursor=state.query,budget_nodes=2048,budget_entries=4096})
+    state.query=found.status=="budget" and found.cursor or nil
+    if found.status=="not_found" then return items,{status="ready"} end
+    if found.status~="found" then return pause(found.status) end
+    local row=found.span
+    state.next=row.end_row
+    local metadata=row.metadata or {}
+    local token,sem=metadata.token or {},metadata.semantic or {}
+    local text,complete=label(bufnr,row.start_row)
+    local item={value={lnum=row.start_row+1,identity=row.handle}}
+    local tag=token.preface_tag and question_tags.parse_tag(text)
+    if token.kind=="user" then
+      item.type="question";item.display="  "..text
+      if sem.preface_origin then
+        local preface=Document.lookup(doc,sem.preface_origin)
+        if preface then
+          local content=label(bufnr,preface.start_row)
+          local attached=question_tags.parse_tag(content) or content:sub(3)
+          if attached=="_" then item=nil
+          else item.display="  "..attached;item.value.tag_lnum=preface.start_row+1 end
+        end
       end
+    elseif token.preface_tag then
+      if sem.preface or tag=="_" then item=nil
+      else item.type="annotation";item.display="  → "..(tag or text:sub(3)) end
+    elseif token.kind=="branch" then item.type="branch";item.display="🌿 "..text
+    elseif token.heading_level and token.heading_level<=3 then
+      item.type="heading";item.display=string.rep("  ",token.heading_level)..text
+    else item=nil end
+    if item then
+      if state.pending then items[#items+1]=state.pending;state.pending=nil end
+      local empty=item.type=="question" and complete and text:sub(#config.chat_user_prefix+1):match("^%s*$")
+      if empty then state.pending=item else items[#items+1]=item end
     end
   end
-  return items
+  return pause("more")
 end
+
+local function load_live_items(buf,config,opts,done)
+  local items,cursor={},nil
+  local unsubscribe
+  local scheduled,stopped=false,false
+  local doc=document(buf,config)
+  local function stop()
+    stopped=true
+    if unsubscribe then unsubscribe() end
+  end
+  local function step()
+    scheduled=false
+    if stopped then return end
+    if not vim.api.nvim_buf_is_valid(buf) or not vim.api.nvim_buf_is_loaded(buf)
+      or Document.get(buf)~=doc then stop();return end
+    local page,result=M._build_picker_items(buf,config,{is_chat=opts.is_chat,cursor=cursor})
+    if result.status=="stale" then items,cursor={},nil
+    else vim.list_extend(items,page);cursor=result.cursor end
+    if result.status=="ready" then
+      stop()
+      done(items);return
+    end
+    if result.status~="opaque" then scheduled=true;vim.schedule(step) end
+  end
+  unsubscribe=Document.subscribe(doc,function(event)
+    if event.kind=="detach" then stop()
+    elseif not stopped and not scheduled then scheduled=true;vim.schedule(step) end
+  end)
+  step()
+end
+M._load_live_items=load_live_items
 
 --------------------------------------------------------------------------------
 -- Tree-aware outline: recursively build outline items across 🌿: linked files
@@ -388,7 +440,7 @@ function M.question_picker(config)
 
   if not is_chat then
     -- Non-chat: use flat outline (include markdown headings)
-    local items = M._build_picker_items(current_bufnr, config, { is_chat = false })
+    load_live_items(current_bufnr, config, { is_chat = false }, function(items)
     local keybindings_key = require("parley.keybinding_registry").keys_for("help", parley.config)
     float_picker.open({
       title = "Outline",
@@ -402,6 +454,7 @@ function M.question_picker(config)
           name = buf_name,
           windows = target_windows,
           lnum = item.value.lnum,
+          identity = item.value.identity,
         }, config)
       end,
       mappings = {
@@ -415,6 +468,7 @@ function M.question_picker(config)
         },
       },
     })
+    end)
     return
   end
 
@@ -427,7 +481,14 @@ function M.question_picker(config)
   local function open_tree_picker(sel_index)
     local items = M._build_tree_outline_items(root, config, expanded_set)
     if #items == 0 then
-      items = M._build_picker_items(current_bufnr, config, { is_chat = true })
+      load_live_items(current_bufnr,config,{is_chat=true},function(live_items)
+        require("parley.float_picker").open({title="Outline",items=live_items,anchor="top",
+          on_select=function(item)
+            jump_to_outline_location({bufnr=current_bufnr,name=buf_name,windows=target_windows,
+              lnum=item.value.lnum,identity=item.value.identity},config)
+          end})
+      end)
+      return
     end
 
     local keybindings_key = require("parley.keybinding_registry").keys_for("help", parley.config)

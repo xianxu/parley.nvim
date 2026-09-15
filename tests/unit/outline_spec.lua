@@ -1,4 +1,87 @@
 local outline = require("parley.outline")
+local Document=require('parley.document')
+local function settle(buf) Document.drain(Document.attach(buf,{schedule=false}),1000) end
+
+describe('Indexed live outline',function()
+    it('returns bounded pages and follows surviving selection identity',function()
+        local b=vim.api.nvim_create_buf(false,true); vim.api.nvim_set_current_buf(b)
+        local lines={}; for i=1,25 do lines[i]='💬: q'..i end
+        vim.api.nvim_buf_set_lines(b,0,-1,false,lines); settle(b)
+        local page,result=outline._build_picker_items(b,{chat_user_prefix='💬:'},{is_chat=true})
+        assert.is_true(#page<=8); assert.equals('more',result.status)
+        assert.is_not_nil(page[1].value.identity)
+        local chosen=page[2].value
+        vim.api.nvim_buf_set_lines(b,0,0,false,{'new'}); settle(b)
+        local success,row=outline._jump_to_outline_location({bufnr=b,name='',lnum=chosen.lnum,
+            identity=chosen.identity,windows={vim.api.nvim_get_current_win()}},{chat_user_prefix='💬:'})
+        assert.is_true(success); assert.equals(3,row)
+        vim.api.nvim_buf_delete(b,{force=true})
+    end)
+    it('returns pending without materializing an unread buffer',function()
+        local b=vim.api.nvim_create_buf(false,true)
+        vim.api.nvim_buf_set_lines(b,0,-1,false,{'💬: q'})
+        Document.attach(b,{schedule=false})
+        local items,result=outline._build_picker_items(b,{chat_user_prefix='💬:'},{is_chat=true})
+        assert.same({},items); assert.equals('opaque',result.status)
+        vim.api.nvim_buf_delete(b,{force=true})
+    end)
+    it('caps label reads, pages all candidates, and rejects stale cursors',function()
+        local b=vim.api.nvim_create_buf(false,true)
+        local lines={};for i=1,20 do lines[i]='💬: '..string.rep('x',10000)..i end
+        vim.api.nvim_buf_set_lines(b,0,-1,false,lines); settle(b)
+        local reader=require('parley.line_reader');local read_bytes=0;local largest=0;local full=false
+        local observer=reader.set_observer(b,function(e)
+            read_bytes=read_bytes+(e.bytes_read or 0);largest=math.max(largest,e.bytes_read or 0)
+            full=full or e.full_buffer
+        end)
+        local cursor,first_cursor,count=nil,nil,0
+        repeat
+            local page,result=outline._build_picker_items(b,{chat_user_prefix='💬:'},{is_chat=true,cursor=cursor})
+            assert.is_true(#page<=8);count=count+#page;cursor=result.cursor;first_cursor=first_cursor or cursor
+        until not cursor
+        assert.equals(20,count); assert.is_true(largest<=4096); assert.equals(20*4096,read_bytes)
+        assert.is_false(full)
+        reader.clear_observer(b,observer)
+        vim.api.nvim_buf_set_text(b,0,10,0,10,{'x'})
+        local _,stale=outline._build_picker_items(b,{chat_user_prefix='💬:'},{is_chat=true,cursor=first_cursor})
+        assert.equals('stale',stale.status)
+        vim.api.nvim_buf_delete(b,{force=true})
+    end)
+    it('loads pending live pages asynchronously and refuses a deleted selection',function()
+        local b=vim.api.nvim_create_buf(false,true);vim.api.nvim_set_current_buf(b)
+        vim.api.nvim_buf_set_lines(b,0,-1,false,{'💬: q','body'})
+        local loaded
+        outline._load_live_items(b,{chat_user_prefix='💬:'},{is_chat=true},function(items) loaded=items end)
+        assert.is_true(vim.wait(2000,function()return loaded~=nil end,5))
+        assert.equals(1,#loaded)
+        local chosen=loaded[1].value
+        vim.api.nvim_buf_set_lines(b,0,1,false,{'plain'})
+        local success=outline._jump_to_outline_location({bufnr=b,name='',identity=chosen.identity,
+            lnum=chosen.lnum},{chat_user_prefix='💬:'})
+        assert.is_false(success)
+        vim.api.nvim_buf_delete(b,{force=true})
+    end)
+    it('cancels queued loading when an unloaded buffer remains valid',function()
+        local b=vim.api.nvim_create_buf(false,true)
+        vim.api.nvim_buf_set_lines(b,0,-1,false,{'💬: q'})
+        local doc=Document.attach(b,{schedule=false})
+        local scheduled={};local original=vim.schedule
+        vim.schedule=function(fn)scheduled[#scheduled+1]=fn end
+        local completed=false
+        local success,err=pcall(function()
+            outline._load_live_items(b,{chat_user_prefix='💬:'},{is_chat=true},function()completed=true end)
+            Document.repair_step(doc)
+            assert.is_true(#scheduled>0)
+            vim.api.nvim_buf_delete(b,{unload=true,force=true})
+            assert.is_true(vim.api.nvim_buf_is_valid(b));assert.is_false(vim.api.nvim_buf_is_loaded(b))
+            for _,fn in ipairs(scheduled) do fn() end
+            assert.is_nil(Document.get(b));assert.is_false(completed)
+        end)
+        vim.schedule=original
+        vim.api.nvim_buf_delete(b,{force=true})
+        assert.is_true(success,err)
+    end)
+end)
 
 describe("Outline navigation", function()
     local original_notify
@@ -23,6 +106,7 @@ describe("Outline navigation", function()
             "## Section",
         })
 
+        settle(bufnr)
         local ok, jumped_lnum = outline._jump_to_outline_location({
             bufnr = bufnr,
             name = vim.api.nvim_buf_get_name(bufnr),
@@ -48,6 +132,7 @@ describe("Outline navigation", function()
             "More text",
         })
 
+        settle(bufnr)
         local ok, jumped_lnum = outline._jump_to_outline_location({
             bufnr = bufnr,
             name = vim.api.nvim_buf_get_name(bufnr),

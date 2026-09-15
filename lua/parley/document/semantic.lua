@@ -17,7 +17,10 @@ local function finite_budget(value,name)
     return value
 end
 local function dependencies(seq)
-    return D.new({rank=function(handle) local p=S.rank(seq,handle); return p and p.row end})
+    return D.new({rank=function(handle,budget)
+        local p,reason=S.rank(seq,handle,budget)
+        return p and p.row,reason
+    end})
 end
 local function position(w,job)
     local p=job.next and S.rank(w.seq,job.next)
@@ -129,10 +132,19 @@ function M.step(worker,opts)
                 -- never publishes a row lacking its required certificate.
                 for _,certificate in ipairs(result.dependencies) do
                     for _,part in ipairs(F.dependencies(certificate)) do
-                        local now=work()
-                        local dep_budget=math.min(128,math.floor((node_limit-now.nodes_visited-reserve.nodes*4)/(reserve.nodes*3)))
+                        local dep_budget=512-dep_visits
                         if dep_budget<1 then return budget() end
-                        local added=w.deps:add(part.origin,part.last,{first=part.first,channels=part.channels,budget=dep_budget})
+                        local added=w.deps:add(part.origin,part.last,{first=part.first,channels=part.channels,
+                            budget=dep_budget,before_rank=function()
+                                local current=work()
+                                -- Reserve the remaining row publication work,
+                                -- then admit each uncached adapter rank using
+                                -- actual navigation already consumed this slice.
+                                local nodes=node_limit-current.nodes_visited-reserve.nodes*4
+                                local entries=entry_limit-current.entries_visited-reserve.entries*4
+                                if nodes<=0 or entries<=0 then return false end
+                                return {nodes=nodes,entries=entries}
+                            end})
                         dep_visits=dep_visits+added.work.dependency_nodes_visited
                         if added.status~='ok' then return budget() end
                     end
@@ -249,7 +261,8 @@ function M.after_splice(worker,token,first,newlast)
 end
 
 local PLAIN_FIELDS={kind=true,token=true,bytes=true,blank=true,divider=true,preface_tag=true,
-    footnote=true,draft_open=true,draft_end=true,provenance=true,row=true}
+    footnote=true,draft_open=true,draft_end=true,provenance=true,row=true,
+    diagnostic_utc_candidate=true,diagnostic_reference_candidate=true}
 local function plain_token(token)
     if type(token)~='table' or (token.kind~='text' and token.kind~='blank') then return false end
     if token.token~=(token.kind=='blank' and '_' or 't') or token.blank~=(token.kind=='blank') then return false end

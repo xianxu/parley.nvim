@@ -279,7 +279,9 @@ describe("decoration provider cache", function()
         local line_reader = require("parley.line_reader")
         assert.is_truthy(rebuild_ready(buf))
         local events = {}
-        line_reader.set_observer(buf, function(event) events[#events + 1] = event end)
+        line_reader.set_observer(buf, function(event)
+                if event.operation ~= "work" then events[#events + 1] = event end
+            end)
         provider.on_win(nil, win, buf, 0, 0)
         local reads_after_compute = #events
         provider.on_line(nil, win, buf, 0)
@@ -309,7 +311,9 @@ describe("decoration provider cache", function()
         local line_reader = require("parley.line_reader")
         assert.is_truthy(rebuild_ready(buf))
         local events = {}
-        line_reader.set_observer(buf, function(event) events[#events + 1] = event end)
+        line_reader.set_observer(buf, function(event)
+                if event.operation ~= "work" then events[#events + 1] = event end
+            end)
         local ok, err = pcall(provider.on_win, nil, win, buf, 2, 2)
 
         assert.is_true(ok, err)
@@ -516,7 +520,9 @@ describe("decoration provider cache", function()
 
             local events = {}
             local reader = require("parley.line_reader")
-            reader.set_observer(buf, function(event) events[#events + 1] = event end)
+            reader.set_observer(buf, function(event)
+                if event.operation ~= "work" then events[#events + 1] = event end
+            end)
             provider.on_win(nil, win, buf, 500, 509)
             assert.equals(1, #events)
             local top, bottom, total = 500, 509, line_count
@@ -537,7 +543,7 @@ describe("decoration provider cache", function()
             end
             assert.is_true(total_rows <= 256)
             assert.equals(0, full_reads)
-            assert.is_true(require("parley.highlighter")._structure_cache(buf).attached)
+            assert.is_truthy(require("parley.document").get(buf))
             return { requested = 30, structure_rows = total_rows }
         end
 
@@ -555,7 +561,9 @@ describe("decoration provider cache", function()
         vim.api.nvim_win_set_buf(win, buf)
         assert.is_truthy(rebuild_ready(buf))
         local events = {}
-        require("parley.line_reader").set_observer(buf, function(event) events[#events + 1] = event end)
+        require("parley.line_reader").set_observer(buf, function(event)
+            if event.operation ~= "work" then events[#events + 1] = event end
+        end)
         provider.on_win(nil, win, buf, 0, 9)
         provider.on_win(nil, win, buf, 100, 109)
         assert.equals(2, #events)
@@ -595,7 +603,7 @@ describe("decoration provider cache", function()
         tasker.is_busy = original
         -- No mutation or rebuild is needed: busy is a redraw-time overlay.
         assert.is_nil(thinking[3])
-        assert.is_true(require("parley.highlighter")._structure_cache(buf).attached)
+        assert.is_truthy(require("parley.document").get(buf))
     end)
 
 end)
@@ -632,6 +640,7 @@ describe("timezone diagnostics", function()
                 }
             end,
         })
+        require("parley.diagnostic_refresh").drain(buf,10000)
 
         local diagnostics = vim.diagnostic.get(buf, { namespace = tz.diag_namespace() })
         assert.equals(1, #diagnostics)
@@ -653,6 +662,7 @@ describe("timezone diagnostics", function()
                 error("no timestamps remain")
             end,
         })
+        require("parley.diagnostic_refresh").drain(buf,10000)
 
         assert.equals(0, #vim.diagnostic.get(buf, { namespace = tz.diag_namespace() }))
     end)
@@ -708,6 +718,7 @@ describe("markdown footnote diagnostics", function()
         })
 
         skill_render.refresh_footnote_diagnostics(buf)
+        require("parley.diagnostic_refresh").drain(buf,10000)
 
         local diagnostics = vim.diagnostic.get(buf, { namespace = skill_render.diag_namespace() })
         assert.equals(1, #diagnostics)
@@ -729,6 +740,7 @@ describe("markdown footnote diagnostics", function()
         })
 
         skill_render.refresh_footnote_diagnostics(buf)
+        require("parley.diagnostic_refresh").drain(buf,10000)
 
         local hl_ns = vim.api.nvim_get_namespaces().parley_footnote_hl
         local marks = vim.api.nvim_buf_get_extmarks(buf, hl_ns, 0, -1, { details = true })
@@ -750,6 +762,7 @@ describe("markdown footnote diagnostics", function()
         })
 
         skill_render.refresh_footnote_diagnostics(buf)
+        require("parley.diagnostic_refresh").drain(buf,10000)
 
         local hl_ns = vim.api.nvim_get_namespaces().parley_footnote_hl
         local marks = vim.api.nvim_buf_get_extmarks(buf, hl_ns, 0, -1, { details = true })
@@ -771,6 +784,7 @@ describe("markdown footnote diagnostics", function()
         })
 
         skill_render.refresh_footnote_diagnostics(buf)
+        require("parley.diagnostic_refresh").drain(buf,10000)
 
         local hl_ns = vim.api.nvim_get_namespaces().parley_footnote_hl
         local marks = vim.api.nvim_buf_get_extmarks(buf, hl_ns, 0, -1, { details = true })
@@ -1001,10 +1015,10 @@ describe("production first-entry convergence", function()
             vim.api.nvim_exec_autocmds("BufEnter", { buffer = buf })
 
             assert.equals(case.name, parley._parley_bufs[buf])
-            local cache = require("parley.highlighter")._structure_cache(buf)
-            assert.is_truthy(cache)
-            assert.is_true(cache.attached)
+            local document = require("parley.document").get(buf)
+            assert.is_truthy(document)
             local timezone = require("parley.timezone_diagnostics")
+            require("parley.diagnostic_refresh").drain(buf,10000)
             assert.equals(1, #vim.diagnostic.get(buf, { namespace = timezone.diag_namespace() }))
         end)
     end
@@ -1025,9 +1039,8 @@ describe("production first-entry convergence", function()
         vim.wait(20, function() return false end, 1)
 
         assert.equals("chat", parley._parley_bufs[buf])
-        local cache = require("parley.highlighter")._structure_cache(buf)
-        assert.is_truthy(cache)
-        assert.is_true(cache.attached)
+        local document = require("parley.document").get(buf)
+        assert.is_truthy(document)
         pcall(vim.fn.delete, source)
         pcall(vim.fn.delete, chat_path)
     end)

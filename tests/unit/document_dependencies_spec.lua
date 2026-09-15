@@ -238,4 +238,35 @@ describe("document dependency index", function()
             { channels = { "nonblank" }, budget = 5000 })).origin)
     end)
 
+    it("guards uncached adapter ranks and rolls back a refused multi-channel mutation", function()
+        local index, h, _, _, calls = coordinates(20)
+        ok(index:add(h[1], h[2], {channels={"divider", "footnote"}}))
+        local before, guarded = calls(), 0
+        local result = index:add(h[5], h[10], {channels={"divider", "footnote"},
+            before_rank=function()
+                guarded=guarded+1
+                return guarded<=3
+            end})
+        assert.equals("budget", result.status)
+        assert.equals(3, calls()-before)
+        assert.equals(4, guarded)
+        assert.is_nil(ok(index:restart_origin(8,8,{channels={"divider"}})).origin)
+        assert.is_nil(ok(index:restart_origin(8,8,{channels={"footnote"}})).origin)
+        ok(index:add(h[5],h[10],{channels={"divider","footnote"}}))
+        assert.equals(h[5],ok(index:restart_origin(8,8)).origin)
+    end)
+
+    it("forwards admitted rank limits and preserves adapter budget refusal", function()
+        local calls=0
+        local index=dependencies.new({rank=function(_,limits)
+            calls=calls+1
+            assert.same({nodes=2,entries=1},limits)
+            return nil,"budget"
+        end})
+        local result=index:add({}, {}, {before_rank=function() return {nodes=2,entries=1} end})
+        assert.equals("budget",result.status)
+        assert.equals(1,calls)
+        assert.is_nil(ok(index:restart_origin(0,1)).origin)
+    end)
+
 end)

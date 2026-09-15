@@ -90,6 +90,15 @@ function M.exchange(document,row,opts)
     end
     return result
 end
+function M.next_exchange(document,first,last,opts)
+    local current=state(document)
+    if first>=frontier(current) then return unknown(current) end
+    local result=projection.find(current.index,first,math.min(last,frontier(current)),"exchange",opts)
+    if result.status=="not_found" and last>frontier(current) then
+        local refused=unknown(current);refused.work=result.work;return refused
+    end
+    return result
+end
 function M.folds(document,first,last,opts)
     local current=state(document)
     if last>frontier(current) then return unknown(current) end
@@ -111,6 +120,17 @@ function M.validate_projection(document,certificate)
     if not valid then return false,bounds end
     if bounds.last_row>frontier(current) then return false,"unconfirmed projection" end
     return true,bounds
+end
+
+function M.diagnostic_candidates(document,first,last,opts)
+    local current=state(document)
+    if first>=frontier(current) then return unknown(current) end
+    local result=projection.find(current.index,first,math.min(last,frontier(current)),
+        opts and opts.definitions and "diagnostic_definition" or "diagnostic_content",opts)
+    if result.status=="not_found" and last>frontier(current) then
+        local refused=unknown(current);refused.work=result.work;return refused
+    end
+    return result
 end
 
 -- Prove byte authority against a confirmed semantic marker and its next
@@ -165,6 +185,7 @@ function M.splice(document, first, last, spans, opts)
         for _, span in ipairs(spans) do added = added + span.rows end
         require("parley.document.semantic").after_splice(current.semantic, evidence, first, first + added)
     end
+    return {work={dependency_nodes_visited=evidence and evidence.work.dependency_nodes_visited or 0}}
 end
 
 -- Observe a classified single-row text replacement. Callers must obtain token
@@ -184,6 +205,7 @@ function M.replace_row(document, row, token, bytes)
     assert(ok, result)
     assert(result.same_syntax_proven == equivalent, "lexical equivalence disagrees with indexed proof")
     if evidence then semantic.after_splice(current.semantic, evidence, row, row + 1) end
+    result.work={dependency_nodes_visited=evidence and evidence.work.dependency_nodes_visited or 0}
     return result
 end
 
@@ -199,6 +221,8 @@ function M.replace_fragment(document, first, last, spans, budget)
     local result = semantic.after_fragment(current.semantic, evidence, first, first + added)
     result.reused_suffix = result.status == "reused"
     result.work = result.work or {}
+    result.work.dependency_nodes_visited=(result.work.dependency_nodes_visited or 0)
+        +(evidence.work and evidence.work.dependency_nodes_visited or 0)
     for key, value in pairs(sequence.stats(current.index)) do result.work[key] = value - (initial[key] or 0) end
     return result
 end
