@@ -1484,3 +1484,17 @@ mandatory private exclusion; BR30 autoread skill source refresh invalidates the
 skill's own proof. Plan revisions cover identity through publication/cleanup,
 non-overridable per-target exclusion policy, and one skill source-completion owner.
 M6 remains open; all three correction classes are underway before another review.
+
+### 2026-09-15 M6 final correction checkpoint
+
+BR25 binds created leaf identity through backup publication, exact-byte readback,
+and the native truncate boundary; 59 focused assertions pass. BR29 uses one pure
+mandatory traversal policy after per-root planning and all caller options; native
+23, pure policy7 and scope8 tests pass, including broad globs, literal glob
+characters and multiple roots. BR30 gives the skill sole source-refresh ownership
+and a bounded authorized final read. Missing callbacks end logical completion at
+five seconds, release UI/edit authority, and retain physical admission until
+positive cleanup; skill37 and review19 tests pass, including callback collection.
+The combined affected-spec run follows this checkpoint; M6 remains open pending
+Codex review. ARCH-DRY shaped the shared traversal policy and source-completion
+owner; independent effect and physical lifetimes remain explicit.
