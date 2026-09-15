@@ -1137,3 +1137,15 @@ stale annotations survive completion, clear on new generation/reload, and are
 bounded to 256 per buffer. Add public focus-change, refusal and fresh-answer
 checks; sweep README for Stop, StopDocument, active-output editing, reload, native
 history, pending results and stale continuation (ARCH-PURPOSE, ARCH-ORDER).
+
+### 2026-09-15 — Pre-admission dependency affinity (BR-17)
+
+Reason: the same next-draft edit behaved differently before and after generation
+admission. Delta: one consumed-input region builder now defines both the waiting
+target's native source proof and the admitted runner's byte dependencies. Only
+invalidated consumed-input provenance establishes stale evidence; unrelated suffix
+edits and semantic repair alone do not. Restored/undone input remains stale.
+Protected question/output provenance still cancels unsafe target admission.
+A separate bounded input guard is released on every retirement/refusal path.
+Public tests compare pre/post-admission suffix and consumed-prefix edits, native
+undo and an independent later writer (ARCH-DRY, ARCH-ORDER, ARCH-PURPOSE).

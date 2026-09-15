@@ -295,6 +295,31 @@ rounds:
           round: 12
       boundary: M4
       blocked: true
+    - "n": 13
+      timestamp: "2026-09-15T10:55:58-07:00"
+      agent: codex
+      dispose:
+        - id: BR-14
+          disposition: addressed
+          note: response_tools.lua:156 reserves inert text; lines 92–99 serialize only known outcomes. Regression tests cover pending, cancellation, reload, unknown/rejected outcomes, sibling completion, and provider projection. Restoring the previous implementation in scratch reproduces parsed content="(pending)", is_error=false.
+          round: 13
+        - id: BR-15
+          disposition: addressed
+          note: Public ChatResumeResponse now reaches identity-validated resume_original; stale annotations survive completion. Native public-workflow tests cover continuation, focus changes, revoked output, detach, and fresh-answer clearing. Restoring the previous runner in scratch makes four regression tests fail.
+          round: 13
+        - id: BR-16
+          disposition: addressed
+          note: README.md:64–87 documents Stop/StopDocument, active-output edits, deletion/reload, native history, pending results, and stale continuation. The pinned additions match init.lua:1583–1585, chat_history.lua:6–8, and the response adapters.
+          round: 13
+      findings:
+        - id: BR-17
+          severity: Critical
+          title: Later-draft edits before admission falsely stale and pause an earlier response
+          detail: 'response_target.lua:99–101 sets input_stale=true for every document edit, regardless of captured input dependencies. A scratch public-workflow regression submits the first question, immediately edits the later draft, then completes a tool round: the earlier generation becomes paused with stale_input=true and never issues its second request. This contradicts plan line 145. This is the 8th finding in family semantic-publication-evidence: do not patch only this site; enforce dependency-backed stale evidence across waiting-target admission, active generation, presentation, and continuation (ARCH-PURPOSE, ARCH-SECURE, ARCH-ORDER).'
+          family: semantic-publication-evidence
+          round: 13
+      boundary: M4
+      blocked: true
 ---
 
 # Gate ledger — 000254-chat-ownership-concurrency#254 (boundary-review)
@@ -435,9 +460,20 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-16** [Important] `deferred-contract-traceability` README omits the new StopDocument command and changed Stop contract
   lua/parley/init.lua:1583–1584 introduces the user-facing command and selection behavior without any README change in the pinned range. This is the 4th finding in family deferred-contract-traceability. Do not repair only this command: enumerate all changed user-facing behavior, including active-output editing and native history, and complete the README gate for that inventory (ARCH-PURPOSE). Prose inspection is sufficient validation for this documentation correction.
 
+## Round 13 — 2026-09-15T10:55:58-07:00 (codex) — BLOCKED
+
+### Disposed
+
+- BR-14 — addressed — response_tools.lua:156 reserves inert text; lines 92–99 serialize only known outcomes. Regression tests cover pending, cancellation, reload, unknown/rejected outcomes, sibling completion, and provider projection. Restoring the previous implementation in scratch reproduces parsed content="(pending)", is_error=false.
+- BR-15 — addressed — Public ChatResumeResponse now reaches identity-validated resume_original; stale annotations survive completion. Native public-workflow tests cover continuation, focus changes, revoked output, detach, and fresh-answer clearing. Restoring the previous runner in scratch makes four regression tests fail.
+- BR-16 — addressed — README.md:64–87 documents Stop/StopDocument, active-output edits, deletion/reload, native history, pending results, and stale continuation. The pinned additions match init.lua:1583–1585, chat_history.lua:6–8, and the response adapters.
+
+### Raised
+
+- **BR-17** [Critical] `semantic-publication-evidence` Later-draft edits before admission falsely stale and pause an earlier response
+  response_target.lua:99–101 sets input_stale=true for every document edit, regardless of captured input dependencies. A scratch public-workflow regression submits the first question, immediately edits the later draft, then completes a tool round: the earlier generation becomes paused with stale_input=true and never issues its second request. This contradicts plan line 145. This is the 8th finding in family semantic-publication-evidence: do not patch only this site; enforce dependency-backed stale evidence across waiting-target admission, active generation, presentation, and continuation (ARCH-PURPOSE, ARCH-SECURE, ARCH-ORDER).
+
 ## Open findings
 
 - **BR-13** [Important] `deferred-contract-traceability` BR-11 regressions are missing from the documented verification mapping
-- **BR-14** [Critical] `semantic-publication-evidence` Pending tool reservations parse as completed non-error results
-- **BR-15** [Critical] `lifecycle-state-observability` Stale input can silently strand a response in paused state
-- **BR-16** [Important] `deferred-contract-traceability` README omits the new StopDocument command and changed Stop contract
+- **BR-17** [Critical] `semantic-publication-evidence` Later-draft edits before admission falsely stale and pause an earlier response

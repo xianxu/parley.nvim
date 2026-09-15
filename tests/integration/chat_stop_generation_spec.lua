@@ -159,4 +159,40 @@ describe('generation scoped Stop commands',function()
         choose(items[1]);assert.equals(1,#calls)
     end)
 
+    local function tool_round(call)
+        parley.tasker.get_query(call.id).raw_response='data: '..vim.json.encode({choices={{delta={
+            tool_calls={{index=0,id='affinity-call',type='function',
+                ['function']={name='unknown_fixture_tool',arguments='{}'}}}}}}})..'\n\n'
+        call.complete(call.id)
+    end
+    for _,timing in ipairs({'before','after'})do
+        it('preserves earlier continuation for a later draft edit '..timing..' admission',function()
+            local a=submit('first')
+            if timing=='after'then wait(function()return #calls==1 end)end
+            local last=vim.api.nvim_buf_line_count(buf)-1
+            vim.api.nvim_buf_set_text(buf,last,5,last,5,{' typed ahead'})
+            wait(function()return #calls==1 end);tool_round(calls[1])
+            wait(function()return #calls==2 or Respond.response_snapshot(a).generation.phase=='paused'end)
+            assert.equals(2,#calls);assert.is_false(Respond.response_snapshot(a).generation.stale_input)
+        end)
+        it('preserves input edit evidence after restoring prior bytes '..timing..' admission',function()
+            local a=submit('second')
+            if timing=='after'then wait(function()return #calls==1 end)end
+            vim.api.nvim_buf_set_text(buf,4,#'💬: ',4,#'💬: f',{'F'})
+            vim.api.nvim_buf_set_text(buf,4,#'💬: ',4,#'💬: F',{'f'})
+            wait(function()return #calls==1 end);tool_round(calls[1])
+            wait(function()return Respond.response_snapshot(a).generation.phase=='paused'end)
+            assert.equals(1,#calls);assert.is_true(Respond.response_snapshot(a).generation.stale_input)
+        end)
+    end
+
+    it('keeps an earlier target independent from a later active writer',function()
+        local b=submit('second');wait(function()return #calls==1 end)
+        local a=submit('first');calls[1].output(calls[1].id,'later writer output')
+        wait(function()return #calls==2 end)
+        tool_round(calls[2]);wait(function()return #calls==3 or Respond.response_snapshot(a).generation.phase=='paused'end)
+        assert.equals(3,#calls);assert.is_false(Respond.response_snapshot(a).generation.stale_input)
+        assert.equals('running',Respond.response_snapshot(b).status)
+    end)
+
 end)

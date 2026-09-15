@@ -101,3 +101,105 @@ findings:
     detail: |
       lua/parley/init.lua:1583–1584 introduces the user-facing command and selection behavior without any README change in the pinned range. This is the 4th finding in family deferred-contract-traceability. Do not repair only this command: enumerate all changed user-facing behavior, including active-output editing and native history, and complete the README gate for that inventory (ARCH-PURPOSE). Prose inspection is sufficient validation for this documentation correction.
 ```
+
+---
+
+## Re-review — 2026-09-15T10:55:58-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 254 — Harden chat ownership and concurrency |
+| repo | 000254-chat-ownership-concurrency |
+| issue file | workshop/issues/000254-chat-ownership-concurrency.md |
+| boundary | milestone M4 |
+| milestone | M4 |
+| window | 506d2c344fd177cba7f9afaee6fe89980a675425..97ac580524fc75c250c6ef90e5a3b34d834410cd |
+| command | sdlc milestone-close --issue 254 --milestone M4 |
+| reviewer | codex |
+| timestamp | 2026-09-15T10:55:58-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+The three prior findings are addressed with code, documentation, and regression evidence. One additional correctness bug blocks M4: typing a later draft before response admission falsely marks the earlier answer stale and pauses its tool continuation. The repository was left unchanged.
+
+```findings
+dispose:
+  - id: BR-14
+    disposition: addressed
+    note: |
+      response_tools.lua:156 reserves inert text; lines 92–99 serialize only known outcomes. Regression tests cover pending, cancellation, reload, unknown/rejected outcomes, sibling completion, and provider projection. Restoring the previous implementation in scratch reproduces parsed content="(pending)", is_error=false.
+  - id: BR-15
+    disposition: addressed
+    note: |
+      Public ChatResumeResponse now reaches identity-validated resume_original; stale annotations survive completion. Native public-workflow tests cover continuation, focus changes, revoked output, detach, and fresh-answer clearing. Restoring the previous runner in scratch makes four regression tests fail.
+  - id: BR-16
+    disposition: addressed
+    note: |
+      README.md:64–87 documents Stop/StopDocument, active-output edits, deletion/reload, native history, pending results, and stale continuation. The pinned additions match init.lua:1583–1585, chat_history.lua:6–8, and the response adapters.
+findings:
+  - id: new
+    severity: Critical
+    family: semantic-publication-evidence
+    title: |
+      Later-draft edits before admission falsely stale and pause an earlier response
+    detail: |
+      response_target.lua:99–101 sets input_stale=true for every document edit, regardless of captured input dependencies. A scratch public-workflow regression submits the first question, immediately edits the later draft, then completes a tool round: the earlier generation becomes paused with stale_input=true and never issues its second request. This contradicts plan line 145. This is the 8th finding in family semantic-publication-evidence: do not patch only this site; enforce dependency-backed stale evidence across waiting-target admission, active generation, presentation, and continuation (ARCH-PURPOSE, ARCH-SECURE, ARCH-ORDER).
+```
+
+## 1. Strengths
+
+- Generation decisions use private pure state; architecture tests prohibit editor/IO dependencies and positional asynchronous writes.
+- Tool reservation tests exercise the real parser and provider projections, establishing that pending text cannot become successful result evidence.
+- Public resume tests validate captured identity across focus changes and reject revoked output authority.
+- README and atlas updates cover the new commands and ownership behavior.
+
+## 2. Critical findings
+
+**False stale evidence during admission** — [response_target.lua:100](/Users/xianxu/workspace/worktree/parley.nvim/000254-chat-ownership-concurrency/lua/parley/response_target.lua:100).
+
+The edit listener unconditionally sets `input_stale`. That value enters the generation reducer and triggers the continuation pause, even when only a later question changed.
+
+Fix the underlying rule: stale evidence must follow captured input dependencies throughout admission and execution. Sweep question/context edits, later-draft edits, disjoint writer output, structural uncertainty, and edit/undo sequences. Share dependency classification where possible.
+
+The [scratch reproduction](/tmp/parley254-suffix-pause-repro.txt) records `phase="paused"`, `stale_input=true`, and one provider request where two were expected.
+
+## 3. Important findings
+
+None additional.
+
+## 4. Minor findings
+
+None.
+
+## 5. Test coverage notes
+
+- Ownership mapping: **25 files passed**.
+- Lifecycle mapping: **58 files, 690 tests passed**.
+- Scratch rollback controls established regression sensitivity for BR-14 and BR-15.
+- The new native public-workflow regression fails on pinned HEAD; the eight existing tests in that file pass.
+- Full performance benchmarking was not rerun. Mapped lifecycle performance tests passed.
+
+## 6. Architectural notes
+
+| Principle | Result |
+|---|---|
+| ARCH-DRY | **Pass:** shared document authority replaces legacy lease/tool registries. |
+| ARCH-PURE | **Pass:** generation decisions remain independent of IO; adapters execute effects. |
+| ARCH-PURPOSE | **Flag:** pre-admission typing violates the promised later-question independence. |
+| ARCH-MOCK | **Pass for M4:** controllable editor/provider/process seams and native conformance tests exercise production boundaries. |
+| ARCH-CONSTRAINTS | **Pass for inspected scope:** bounded queues, grants, payloads, and mapped workload tests; no new latency guarantee inferred. |
+| ARCH-SECURE | **Flag:** an unrelated edit is promoted into unsupported stale-input evidence. |
+| ARCH-ORDER | **Flag:** admission timing changes whether the same later-draft edit pauses continuation. |
+| ARCH-FUNERAL | **Pass:** inspected cursors, subscriptions, pending handles, and annotations have retirement paths or explicit bounds. |
+
+The milestone-applicable core entities exist; future M5/M6 entities were not treated as missing M4 deliverables.
+
+## 7. Plan revision recommendations
+
+Add **“Pre-admission dependency affinity”** under `## Revisions`: specify one stale-evidence rule spanning target capture through generation completion, enumerate relevant edit classes, and require equivalent public-workflow outcomes for edits immediately before and after admission.

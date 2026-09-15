@@ -1168,3 +1168,14 @@ Full lint559 files clean. Changed-code/docs diff check clean; the unrelated user
 transcript has pre-existing trailing whitespace and is excluded from our check.
 Next: rerun the M4 boundary with --agent codex. M5 remains isolated and verified;
 M6 asynchronous execution work continues separately.
+
+### 2026-09-15 M4 BR-17 corrected
+
+Second Codex review disposedBR14–16 and reproduced unsupported stale evidence
+from later-draft edits while target admission waited. response_target now uses a
+separate native input guard built from the same regions as runner dependencies.
+43 tests pass across target unit/native, submission and public workflows; five
+changed files lint clean, scoped diff check clean. Baseline public reproduction
+failed only the pre-admission suffix case; fixed pre/post cases pass, including
+ABA/nativeundo and disjoint writer checks. No Document helper change required.
+Evidence:/tmp/parley254-br17-public-red.log and matching br17 focused logs.

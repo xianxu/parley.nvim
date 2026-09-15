@@ -46,4 +46,23 @@ describe('asynchronous native response target resolution',function()
         local retained=0;for _ in pairs(weak)do retained=retained+1 end
         assert.equals(0,retained);assert.equals(0,calls)
     end)
+    it('retains consumed prefix edit evidence through native undo before admission',function()
+        local buf=vim.api.nvim_create_buf(false,true);buffers[#buffers+1]=buf
+        vim.api.nvim_set_current_buf(buf)
+        vim.api.nvim_buf_set_lines(buf,0,-1,false,{'prefix','💬: question','body','🤖: answer','text'})
+        local doc=D.attach(buf,{schedule=false})
+        local ready
+        local target=assert(Target.start(doc,{operation='undo-prefix',schedule=false,input_prefix=true,
+            question={first={row=1,col=0},last={row=2,col=4}},
+            output={first={row=2,col=4},last={row=4,col=4}}},{ready=function(value)ready=value end}))
+        vim.api.nvim_win_set_cursor(0,{1,0})
+        local function keys(value)vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes(value,true,false,true),'nx',false)end
+        vim.cmd('let &l:undolevels = &l:undolevels')
+        keys('iX<Esc>');keys('u')
+        assert.equals('prefix',vim.api.nvim_buf_get_lines(buf,0,1,false)[1])
+        assert.is_true(Target.snapshot(target).input_stale)
+        for _=1,100 do if Target.step(target).status~='waiting'then break end end
+        assert.equals('ready',Target.snapshot(target).status);assert.is_true(ready.input_stale)
+    end)
+
 end)

@@ -2590,3 +2590,7 @@ download.
   changes and revoked authority; an internal resume test is insufficient.
 - #254 BR-16: sweep the full changed command/behavior inventory into README before
   a boundary, including native-edit consequences and cancellation scope.
+
+- #254 BR-17: dependency semantics must survive admission boundaries. Compare
+  identical human edits immediately before and after admission; a generic edit
+  event proves neither changed consumed input nor stale provider evidence.
