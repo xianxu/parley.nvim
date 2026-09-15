@@ -74,7 +74,7 @@ end
 -- Called before State observes an edit. Only the editor's exact matched owner
 -- can name the operation currently armed by this private cursor.
 function M.observe(s,event)
-    local matched
+    local matched,final_receipt
     for token in pairs(s.replacements or {}) do
         local c=cursors[token]
         if c and c.status=='more' then
@@ -83,10 +83,12 @@ function M.observe(s,event)
                 and event.owner.grant==c.grant and event.first==p.first and event.last==p.last
                 and event.new_bytes==p.new_bytes then
                 c.received=true;matched=c.witness
+                final_receipt=c.remaining==event.last-event.first
+                    and c.accepted+event.new_bytes==#c.payload
             else c.external_event=event;c.was_active=c.active;c.active=false;c.paused=true end
         end
     end
-    return matched
+    return matched,final_receipt
 end
 function M.after_observe(s,event,reused)
     for token in pairs(s.replacements or {}) do
@@ -185,6 +187,10 @@ function M.step(s,token,proof)
     if c.received then
         removed=#old;accepted=#text;c.removed=c.removed+removed;c.remaining=c.remaining-removed;c.accepted=c.accepted+accepted
     end
+    -- A native edit subscriber may cancel/reload during the final receipt.
+    -- Count that proven mutation once, then respect its retired lifetime before
+    -- touching released guards or payload state.
+    if c.status~='more' then return result(c.status,removed,accepted) end
     g=State.snapshot(s.authority).grants[c.grant]
     if response.status~='applied' or c.paused or not g or g.status=='revoked' then
         stop(c,response.status=='error' and 'error' or 'stale')

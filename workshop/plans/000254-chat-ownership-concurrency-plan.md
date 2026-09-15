@@ -747,3 +747,27 @@ edits or ignore revocation merely because a generation is finalizing
 (ARCH-PURPOSE, ARCH-DRY). Preserve the red public/benchmark tests until these fixes
 are verified. M4 remains isolated and incomplete pending compatibility sweep,
 full mapping/performance, atlas and its boundary review.
+
+### 2026-09-15 — M4 native streaming locality and cancellation receipts
+
+Reason: the production response benchmark exposed global repair on a known short
+answer header and on newline appends; a final-receipt callback could cancel and
+release cursor state before its caller resumed. Delta: preserve the append source
+row extent, restrict dependency lookup to proven old/new lexical channels, and
+classify only a private exact final replacement receipt whose complete affected
+rows fit 4096 bytes. Opaque/large/intermediate writes remain deferred. Charge
+uncached dependency ranks against actual remaining index work, retaining fixed
+node/entry limits and the 128-visit cap per dependency operation. Return an already
+retired cursor after recording its exact receipt, without accessing released state.
+These changes preserve ARCH-CONSTRAINTS and ARCH-FUNERAL rather than increasing
+the benchmark timeout or weakening uncertainty handling.
+
+Verification: 128 focused tests across 11 files pass, including independent budget
+counters, atomic dependency-removal refusal, native final-callback cancellation,
+semantic differential cases, and long UTF-8 replacement read caps. A single
+5000-row production interleave sample completes in 57.6 ms, repairs 18 rows, and
+performs zero full-buffer reads under the unchanged five-second setup deadline.
+This is focused evidence; the full mapped lifecycle/performance report and M4
+boundary review remain outstanding. M3's fifth ledger-disposition review runs
+against the separate feature checkout; these changes remain staged in the M4
+worktree until that boundary closes.

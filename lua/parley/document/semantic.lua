@@ -238,9 +238,18 @@ function M.before_splice(worker,first,last,opts)
         return token
     end
     if nodes<=reserve.nodes*8 or entries<=reserve.entries*8 then return evidence(0,G.initial(),true) end
-    local dep_budget=math.min(128,math.floor((nodes-reserve.nodes*8)/(reserve.nodes*6)))
-    if dep_budget<1 then return evidence(0,G.initial(),true) end
-    local query=w.deps:restart_origin(first,last,{budget=dep_budget})
+    -- Charge each uncached rank against actual remaining index work instead
+    -- of multiplying every dependency visit by several worst-case ranks. The
+    -- fixed dependency cap and reserved checkpoint work remain independent.
+    local dep_budget=128
+    local function before_rank()
+        local work=S.stats(w.seq)
+        local left_nodes=nodes-(work.nodes_visited-initial.nodes_visited)-reserve.nodes*8
+        local left_entries=entries-(work.entries_visited-initial.entries_visited)-reserve.entries*8
+        if left_nodes<=0 or left_entries<=0 then return false end
+        return {nodes=left_nodes,entries=left_entries}
+    end
+    local query=w.deps:restart_origin(first,last,{channels=opts.channels,budget=dep_budget,before_rank=before_rank})
     dep_visits=dep_visits+query.work.dependency_nodes_visited
     if query.status~='ok' then return evidence(0,G.initial(),true) end
     local affected=query.origin and S.rank(w.seq,query.origin)
@@ -254,7 +263,8 @@ function M.before_splice(worker,first,last,opts)
     local checkpoint=preceding and preceding.metadata and preceding.metadata.after or G.initial()
     if restart>0 and not (preceding and preceding.metadata and preceding.metadata.after) then restart=0; checkpoint=G.initial() end
     local origin=S.at(w.seq,restart)
-    local removed=w.deps:remove_from(origin and origin.handle or S.eof(w.seq),{budget=dep_budget})
+    local removed=w.deps:remove_from(origin and origin.handle or S.eof(w.seq),
+        {budget=dep_budget,before_rank=before_rank})
     dep_visits=dep_visits+removed.work.dependency_nodes_visited
     if removed.status~='ok' then return evidence(0,G.initial(),true) end
     return evidence(restart,checkpoint,false)
@@ -315,10 +325,11 @@ function M.before_fragment(worker,first,last,new_spans,opts)
     local entries=finite_budget(opts.entries or 65536,'entries')
     local initial=S.stats(w.seq)
     local visits=0
+    local fallback_channels
     local function fallback()
         local used=fragment_work(w.seq,initial)
         local normal=M.before_splice(worker,first,last,{nodes=math.max(0,nodes-used.nodes_visited),
-            entries=math.max(0,entries-used.entries_visited)})
+            entries=math.max(0,entries-used.entries_visited),channels=fallback_channels})
         local token={status='fallback'}
         fragment_store[token]={worker=worker,normal=normal}
         token.work=fragment_work(w.seq,initial,0,visits+(normal.work.dependency_nodes_visited or 0))
@@ -329,9 +340,11 @@ function M.before_fragment(worker,first,last,new_spans,opts)
         or last-first>rows or #new_spans>rows then return fallback() end
     local new_tokens,total_bytes={},0
     local changed={row=true}
+    local all_plain=true
     for i,span in ipairs(new_spans) do
-        if span.rows~=1 or span.opaque or not span.metadata or not plain_token(span.metadata.token)
+        if span.rows~=1 or span.opaque or not span.metadata or type(span.metadata.token)~='table'
             or type(span.bytes)~='number' or span.bytes<0 or span.bytes%1~=0 then return fallback() end
+        if not plain_token(span.metadata.token) then all_plain=false end
         total_bytes=total_bytes+span.bytes
         if total_bytes>bytes then return fallback() end
         new_tokens[i]={token=copy(span.metadata.token),bytes=span.bytes}
@@ -341,12 +354,22 @@ function M.before_fragment(worker,first,last,new_spans,opts)
     if last>frontier then return fallback() end
     local old=S.query(w.seq,first,last,{limit=257})
     local removed={}
+    local old_rows=0
     for _,span in ipairs(old) do
         if span.rows~=1 or span.opaque or not span.metadata or not span.metadata.confirmed
-            or not plain_token(span.metadata.token) then return fallback() end
+            or type(span.metadata.token)~='table' then return fallback() end
+        if not plain_token(span.metadata.token) then all_plain=false end
+        old_rows=old_rows+span.rows
         removed[span.handle]=true
         for channel in pairs(G.channels(span.metadata.token)) do changed[channel]=true end
     end
+    if old_rows~=last-first then return fallback() end
+    -- Exact bounded descriptors, captured before the splice, identify every
+    -- predicate this edit can change. Structural tokens still require ordinary
+    -- semantic repair, but cannot invalidate an unrelated negative footer fact.
+    -- Missing/opaque evidence above deliberately retains the all-channel path.
+    fallback_channels=changed
+    if not all_plain then return fallback() end
     local left=first>0 and S.at(w.seq,first-1) or nil
     local right=S.at(w.seq,last)
     local incoming=old[1] and old[1].metadata or (right and right.metadata)

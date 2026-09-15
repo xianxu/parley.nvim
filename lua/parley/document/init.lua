@@ -93,7 +93,7 @@ local function accumulate_repair(work,result)
     return result
 end
 local function observe_edit(doc,s,event)
-    local successor=Replacement.observe(s,event)
+    local successor,final_receipt=Replacement.observe(s,event)
     Reader.record_work(s.buf,{operation='source_guard_edit',source_guards_visited=User.observe(s.editor,event)})
     local before=Structure.stats(s.structure)
     local classified_rows,classified_bytes=0,0
@@ -108,7 +108,9 @@ local function observe_edit(doc,s,event)
     Append.prune(s.append,State.snapshot(s.authority).grants)
     local appended=Append.observe(s.append,s.structure,event)
     local first=math.min(event.start.row,event.old_rows)
-    local whole_rows=event.start.col==0 and event.old_end.col==0 and event.new_end.col==0
+    -- Prepared append spans include the surviving source tail row, even when
+    -- a newline appended to an empty row looks like a whole-row insertion.
+    local whole_rows=not appended and event.start.col==0 and event.old_end.col==0 and event.new_end.col==0
     local last=math.min(event.old_rows,event.old_end.row+(whole_rows and 0 or 1))
     local a=first<event.old_rows and Structure.at(s.structure,first) or nil
     if a and a.opaque then last=math.max(last,a.end_row) end
@@ -122,7 +124,10 @@ local function observe_edit(doc,s,event)
     local newlast=first+added
     local reused=false
     local diagnostic_changed=true
-    if not successor and event.source_frame==true and (appended or (added<=256 and last-first<=256 and bytes<=65536
+    -- Only the private cursor's final exact receipt may publish known small
+    -- rows. Earlier/large slices stay opaque to avoid rereading a growing row.
+    local classify_successor=successor and final_receipt and bytes<=4096
+    if (not successor or classify_successor) and event.source_frame==true and (appended or (added<=256 and last-first<=256 and bytes<=65536
         and not (a and a.opaque) and not (z and z.opaque))) then
         local lines=not appended and s.editor.reader:lines(first,newlast,false) or {}
         local spans=appended and appended.spans or {}; local actual=0
