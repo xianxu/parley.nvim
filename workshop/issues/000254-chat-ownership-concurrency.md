@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-09-14
 updated: 2026-09-14
-estimate_hours:
+estimate_hours: 33.107
 started: 2026-09-14T22:05:59-07:00
 ---
 
@@ -228,6 +228,121 @@ review boundaries for approval before implementation.
 - Atlas documents vocabulary, owner boundaries, transitions, and operating limits;
   tests use stateful editor/transport/filesystem doubles through production seams
   plus isolated Neovim integration tests (ARCH-MOCK). No production sessions needed.
+
+## Estimate
+
+*Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against `baseline-v3.1.md`. Method A only.*
+
+Derived after plan-quality accepted PQ-1. The calibration is marked stale by
+`sdlc estimate-source`, so these are provisional focused ship-hours, not a promise.
+The decomposition below counts independent focused features/integration concerns,
+plus six atlas updates and seven actual review boundaries; it does not assign a
+single feature primitive to the whole refactor.
+
+The accepted detailed plan applies the v2.1 design discount of 0.2 and design
+buffer of 0.15. Each block impl value is the selected v2 value times v3.1's 0.40,
+applied once. Familiarity is 1.5: Lua/Neovim is established here, but the combined
+incremental dependency/ownership model is novel and bounded by the approved design.
+
+Library check: reuse the existing classifier, fence/reducer, presentation,
+LineReader, libuv, parser and fold seams. No new runtime is required. A current
+dependency does not supply the provenance-aware incremental sequence/coordinator;
+those concerns keep their full primitive base design before the spec discount.
+No speculative library design halving or cross-repo overhead is applied.
+
+| Item order / concern | Primitive | v2 design | v2 impl |
+|---|---|---:|---:|
+| 1. M1 attempt model | lua-neovim | 2 | 1 |
+| 2. M1 response containment | lua-neovim | 1 | 1 |
+| 3. M1 process supervision | api-integration | 2 | 1.5 |
+| 4. M2 indexed sequence | lua-neovim | 3 | 1.5 |
+| 5. M2 shared grammar | lua-neovim | 3 | 1.5 |
+| 6. M2 incremental repair | lua-neovim | 3 | 1.5 |
+| 7. M3 document state | lua-neovim | 2 | 1.5 |
+| 8. M3 editor adapter | lua-neovim | 2 | 1.5 |
+| 9. M3 highlighting migration | lua-neovim | 2 | 1 |
+| 10. M3 fold migration | lua-neovim | 3 | 1.5 |
+| 11. M3 structural consumer sweep | cross-cutting-refactor | 1 | 0.5 |
+| 12. M4 generation reducer | lua-neovim | 2 | 1 |
+| 13. M4 runner integration | api-integration | 2 | 1.5 |
+| 14. M4 child-slot projection | lua-neovim | 2 | 1 |
+| 15. M4 undo isolation | lua-neovim | 2 | 1 |
+| 16. M4 mutation consumer sweep | cross-cutting-refactor | 1 | 0.5 |
+| 17. M5 batch reducer | lua-neovim | 2 | 1 |
+| 18. M5 recovery store | api-integration | 2 | 1.5 |
+| 19. M5 recovery UI | lua-neovim | 1 | 0.5 |
+| 20. M6 operation ledger | lua-neovim | 2 | 1 |
+| 21. M6 resource admission | lua-neovim | 2 | 1.5 |
+| 22. M6 asynchronous scheduler | api-integration | 2 | 1.5 |
+| 23. M6 checked filesystem | api-integration | 2 | 1.5 |
+| 24. M6 command-tool migration | api-integration | 2 | 1.5 |
+| 25. M6 filesystem-tool migration | api-integration | 2 | 1.5 |
+| 26. M6 editor-tool migration | lua-neovim | 1 | 0.5 |
+| 27. M6 wire projection | cross-cutting-refactor | 0.6 | 0.5 |
+| 28. M1 atlas/traceability | atlas-docs | 0.1 | 0.1 |
+| 29. M2 atlas/traceability | atlas-docs | 0.1 | 0.1 |
+| 30. M3 atlas/traceability | atlas-docs | 0.1 | 0.1 |
+| 31. M4 atlas/traceability | atlas-docs | 0.1 | 0.1 |
+| 32. M5 atlas/traceability | atlas-docs | 0.1 | 0.1 |
+| 33. M6 atlas/traceability | atlas-docs | 0.1 | 0.1 |
+| 34. M1 boundary review | milestone-review | 0.1 | 0.4 |
+| 35. M2 boundary review | milestone-review | 0.1 | 0.4 |
+| 36. M3 boundary review | milestone-review | 0.1 | 0.4 |
+| 37. M4 boundary review | milestone-review | 0.1 | 0.4 |
+| 38. M5 boundary review | milestone-review | 0.1 | 0.4 |
+| 39. M6 boundary review | milestone-review | 0.1 | 0.4 |
+| 40. issue-close boundary review | milestone-review | 0.1 | 0.4 |
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.5
+item: lua-neovim design=0.400 impl=0.400
+item: lua-neovim design=0.200 impl=0.400
+item: api-integration design=0.400 impl=0.600
+item: lua-neovim design=0.600 impl=0.600
+item: lua-neovim design=0.600 impl=0.600
+item: lua-neovim design=0.600 impl=0.600
+item: lua-neovim design=0.400 impl=0.600
+item: lua-neovim design=0.400 impl=0.600
+item: lua-neovim design=0.400 impl=0.400
+item: lua-neovim design=0.600 impl=0.600
+item: cross-cutting-refactor design=0.200 impl=0.200
+item: lua-neovim design=0.400 impl=0.400
+item: api-integration design=0.400 impl=0.600
+item: lua-neovim design=0.400 impl=0.400
+item: lua-neovim design=0.400 impl=0.400
+item: cross-cutting-refactor design=0.200 impl=0.200
+item: lua-neovim design=0.400 impl=0.400
+item: api-integration design=0.400 impl=0.600
+item: lua-neovim design=0.200 impl=0.200
+item: lua-neovim design=0.400 impl=0.400
+item: lua-neovim design=0.400 impl=0.600
+item: api-integration design=0.400 impl=0.600
+item: api-integration design=0.400 impl=0.600
+item: api-integration design=0.400 impl=0.600
+item: api-integration design=0.400 impl=0.600
+item: lua-neovim design=0.200 impl=0.200
+item: cross-cutting-refactor design=0.120 impl=0.200
+item: atlas-docs design=0.020 impl=0.040
+item: atlas-docs design=0.020 impl=0.040
+item: atlas-docs design=0.020 impl=0.040
+item: atlas-docs design=0.020 impl=0.040
+item: atlas-docs design=0.020 impl=0.040
+item: atlas-docs design=0.020 impl=0.040
+item: milestone-review design=0.020 impl=0.160
+item: milestone-review design=0.020 impl=0.160
+item: milestone-review design=0.020 impl=0.160
+item: milestone-review design=0.020 impl=0.160
+item: milestone-review design=0.020 impl=0.160
+item: milestone-review design=0.020 impl=0.160
+item: milestone-review design=0.020 impl=0.160
+design-buffer: 0.15
+total: 33.107
+```
+
+Design subtotal 10.580; buffered design 12.167. Already-scaled
+implementation subtotal 13.960; familiarity-adjusted implementation 20.940.
+Total = 33.107 focused ship-hours.
 
 ## Plan
 
