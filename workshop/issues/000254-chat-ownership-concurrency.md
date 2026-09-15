@@ -1403,3 +1403,13 @@ two additional reviewer cases failed. The save/settlement ordering join and full
 save-probe error reporting are being corrected together. M5 stays open; no review
 finding is waived. M6 has5481 passing per-file assertions across354 specs after
 explicitly recorded focused corrections; it awaits final M5 integration/review.
+
+### 2026-09-15 M6 final performance and save-order integration
+
+Merged final M5 save-order correction a941955e into7eed7910; affected integration
+verification is running. Final make perf exited0, 30 scenarios/600 samples pass
+all work gates with zero full reads. Ordinary5000-row edit median7.87ms and
+Enter18.14ms; broad repair median3.85s and streaming p9576.43ms remain limitations,
+with regressions versus the preceding run preserved in the plan. Full report
+`/tmp/parley254-m6-final-perf.json`; analysis `...-final-perf-summary.md`.
+M5 Codex re-review is running separately; M6 remains open and main unmerged.
