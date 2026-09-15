@@ -1062,3 +1062,23 @@ the superseded exploration checklist to prose so it cannot act as duplicate
 completion gates. Reviewed design now separates document lifetime from outstanding
 effects, specifies safe recovery association, and explicitly bounds normal
 rendering work while acknowledging broad native fold-clearing costs.
+
+
+### 2026-09-15 — M3 reviewer transport exhausted; supported fallback
+
+The fifth M3 review invocation ended after about55minutes with the Claude CLI
+message that its usage credits were exhausted. The boundary recorded unknown,
+not a valid review verdict, and left BR-11/BR-12 open. Its generic unknown-verdict
+message requests investigation before rerunning; inspection identifies provider
+quota exhaustion rather than an unresolved product test result. The operator
+already authorized autonomous continuation through issue completion. Use the
+binary's documented --agent codex fallback for the same mandatory fresh-context
+review; do not waive the ledger or accept unknown as approval. Codex is installed
+at /opt/homebrew/bin/codex. Retain --no-actual because the mixed-session active-time
+attribution is unreliable; no numeric actual value is invented.
+
+The feature code remains0257ddad/180dd14c with verified BR-11/BR-12 fixes. M4 is
+separately integrated and checkpointed at43e7e3a7 in /tmp/parley254-integrate,
+passing131unique mapped files/1624tests and556-file lint; its combined fullperf
+is running. An unrelated workshop/parley transcript modification is present in
+this feature worktree and is not part of these issue/review commits.
