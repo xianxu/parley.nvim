@@ -1111,3 +1111,16 @@ next. Document question/context revision proofs are independently in progress.
 Batch membership is fixed; only positive leg completion advances progress; opaque
 proofs defer and unknown effects cannot be replayed by resume. Recovery host/UI
 integration and atomic Document restore proof remain outstanding.
+
+### 2026-09-15 — M5 staged implementation checkpoint
+
+M3 closed506d2c34; verified M4 now on feature head ae2e12ec and under Codex review
+(log /tmp/parley254-m4-gate-codex.log). M5 stays in /tmp/parley254-m5-stage.
+Batch7files/87tests and publicresponse27tests pass, including frozen request
+membership and real registered resume! command. Recovery store/adapter/UI/privacy
+focused suites pass; ambiguous close reconciliation is being strengthened before
+final mapped recovery run. Tool-side recovery-path exclusion belongs to the M6
+common admission/traversal migration and remains mandatory before issue completion.
+M6 pure operation/resource contracts committed82a5fb12; async filesystem and
+Tasker supervision work proceeds in /tmp/parley254-m6-stage. No main merge or final
+completion is claimed. Operator live testing follows all six completed boundaries.
