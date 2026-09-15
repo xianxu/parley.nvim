@@ -1426,3 +1426,29 @@ from9.27ms. No low-latency guarantee or isolated causal attribution is claimed.
 Report `/tmp/parley254-m6-rework-final-perf.json`; independently parsed analysis
 `...-rework-final-perf-summary.md`. Combined146-spec correction verification and
 these measurements now accompany the second Codex M6 review.
+
+### 2026-09-15 — M6 second review: leaf evidence and completion ownership
+
+Reason: Codex disposed BR26/27/28, retained BR25 for replaced backup temporary
+leaves, and raised BR29/30. Delta: retain fd-derived pre-image identity after close,
+bind it to publication/cleanup, verify the published backup's exact bytes and
+identity, and revalidate before target truncation. Ordinary-file and symlink
+substitutions at temporary, published backup and cleanup stages must refuse
+rather than delete or certify the replacement. Created directory identities join
+the same bounded evidence chain; ambiguous artifacts remain visible obligations.
+
+A shared pure traversal policy owns mandatory private exclusions. Apply it after
+per-target expansion and optional user filters, using literal-safe patterns for
+rg/grep/find and exact ack directory exclusion. Broad globs, types, hidden/ignore
+flags, multi-root calls, metacharacter directory names and recursion cannot widen
+private access. Recursive ls still refuses overlapping private storage. The rule
+is independent of optional filtering and lives in one policy module.
+
+The skill host is the sole source-buffer completion owner. Its captured context
+defers only that buffer's intermediate tool refresh; independently open buffers
+still receive guarded committed-byte refresh. Original source proof is never
+recaptured or forgiven. Final source IO must use captured identity and an owned
+checked read (or a trusted bounded committed-byte receipt), not a fresh pathname
+guess. Cover autoread on/off, no_reload, before/after-completion human edits/ABA,
+reload/cancel and ancestor replacement during completion. ARCH-SECURE/ORDER,
+ARCH-DRY and ARCH-PURPOSE govern these full-class corrections.

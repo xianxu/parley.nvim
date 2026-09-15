@@ -503,6 +503,41 @@ rounds:
           round: 19
       boundary: M6
       blocked: true
+    - "n": 20
+      timestamp: "2026-09-15T13:14:33-07:00"
+      agent: codex
+      dispose:
+        - id: BR-25
+          disposition: not-addressed
+          note: Ancestor replacement tests pass, but lua/parley/tools/path_authority.lua:135 and lua/parley/tools/filesystem.lua:368 publish an unverified temporary leaf. A native replacement before fs_link produced effect=applied and backup_confirmed=true while the overwritten target's backup read OUTSIDE_SECRET. Preserve pre-image identity through publication and cleanup. ARCH-SECURE, ARCH-ORDER.
+          round: 20
+        - id: BR-26
+          disposition: addressed
+          note: All three async writers now share captured, ownership-safe refresh with compatibility handlers. The current refresh suite passes; restoring the pre-fix async module in a scratch copy causes 12 failures, including stale-buffer and missing-reconciliation assertions. A distinct skill-consumer regression is reported below.
+          round: 20
+        - id: BR-27
+          disposition: addressed
+          note: Shared result evidence preserves visible incompleteness through native large reads, aggregate exhaustion, normalization, serialization, and skill delivery. Restoring pre-fix publication modules in a scratch copy makes all four integration evidence tests fail.
+          round: 20
+        - id: BR-28
+          disposition: addressed
+          note: Async and compatibility adapters consume tools/file_transform.lua for edits and numbered reads; proposals reuse skill_edits.compute_edits. Direct pure tests cover literal replacement, insertion, limits, proposals, and numbering, and pass in the mapped suite.
+          round: 20
+      findings:
+        - id: BR-29
+          severity: Critical
+          title: Model-supplied search globs override private recovery exclusions
+          detail: 'lua/parley/tools/async_builtin.lua:91 inserts the mandatory negative rg glob before user filters. A native producer control excludes recovery bytes, but glob="**/*" returns PRIVATE_SECRET from state/answer-recovery/secret with is_error=false. This is the 2nd finding in this family: do not fix only this instance; enforce non-overridable exclusions across every traversal adapter, optional filter, and target expansion. ARCH-SECURE, ARCH-PURPOSE.'
+          family: resource-authority-at-effect
+          round: 20
+        - id: BR-30
+          severity: Critical
+          title: Skill completion treats its own successful buffer refresh as a human conflict
+          detail: 'lua/parley/tools/file_refresh.lua:56 applies the tool refresh, then lua/parley/skill_invoke.lua:391 rejects its older source proof and returns ok=false with a live-text-changed warning. Enabling autoread in the existing skill fixture turns two successful proposal tests red without human edits. This is the 2nd finding in this family: establish one reconciliation owner and propagate authorized completion evidence across all consumers, retaining human-edit refusal tests. ARCH-DRY, ARCH-ORDER, ARCH-PURPOSE.'
+          family: file-editor-completion-consistency
+          round: 20
+      boundary: M6
+      blocked: true
 ---
 
 # Gate ledger — 000254-chat-ownership-concurrency#254 (boundary-review)
@@ -731,10 +766,25 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-28** [Important] `shared-transformation-policy` Async and compatibility handlers independently implement file transformations
   lua/parley/tools/async_builtin.lua:23 duplicates insertion/replacement policy from builtin/edit_file.lua:78; async_builtin.lua:89 duplicates numbered-read formatting from builtin/read_file.lua:54. Extract shared pure transformation and formatting functions consumed by both adapters, with direct tests. ARCH-DRY, ARCH-PURE.
 
+## Round 20 — 2026-09-15T13:14:33-07:00 (codex) — BLOCKED
+
+### Disposed
+
+- BR-25 — not-addressed — Ancestor replacement tests pass, but lua/parley/tools/path_authority.lua:135 and lua/parley/tools/filesystem.lua:368 publish an unverified temporary leaf. A native replacement before fs_link produced effect=applied and backup_confirmed=true while the overwritten target's backup read OUTSIDE_SECRET. Preserve pre-image identity through publication and cleanup. ARCH-SECURE, ARCH-ORDER.
+- BR-26 — addressed — All three async writers now share captured, ownership-safe refresh with compatibility handlers. The current refresh suite passes; restoring the pre-fix async module in a scratch copy causes 12 failures, including stale-buffer and missing-reconciliation assertions. A distinct skill-consumer regression is reported below.
+- BR-27 — addressed — Shared result evidence preserves visible incompleteness through native large reads, aggregate exhaustion, normalization, serialization, and skill delivery. Restoring pre-fix publication modules in a scratch copy makes all four integration evidence tests fail.
+- BR-28 — addressed — Async and compatibility adapters consume tools/file_transform.lua for edits and numbered reads; proposals reuse skill_edits.compute_edits. Direct pure tests cover literal replacement, insertion, limits, proposals, and numbering, and pass in the mapped suite.
+
+### Raised
+
+- **BR-29** [Critical] `resource-authority-at-effect` Model-supplied search globs override private recovery exclusions
+  lua/parley/tools/async_builtin.lua:91 inserts the mandatory negative rg glob before user filters. A native producer control excludes recovery bytes, but glob="**/*" returns PRIVATE_SECRET from state/answer-recovery/secret with is_error=false. This is the 2nd finding in this family: do not fix only this instance; enforce non-overridable exclusions across every traversal adapter, optional filter, and target expansion. ARCH-SECURE, ARCH-PURPOSE.
+- **BR-30** [Critical] `file-editor-completion-consistency` Skill completion treats its own successful buffer refresh as a human conflict
+  lua/parley/tools/file_refresh.lua:56 applies the tool refresh, then lua/parley/skill_invoke.lua:391 rejects its older source proof and returns ok=false with a live-text-changed warning. Enabling autoread in the existing skill fixture turns two successful proposal tests red without human edits. This is the 2nd finding in this family: establish one reconciliation owner and propagate authorized completion evidence across all consumers, retaining human-edit refusal tests. ARCH-DRY, ARCH-ORDER, ARCH-PURPOSE.
+
 ## Open findings
 
 - **BR-13** [Important] `deferred-contract-traceability` BR-11 regressions are missing from the documented verification mapping
 - **BR-25** [Critical] `resource-authority-at-effect` Deferred tool execution can follow a replaced ancestor outside captured roots
-- **BR-26** [Critical] `file-editor-completion-consistency` Async file writers report success while open buffers retain old contents
-- **BR-27** [Critical] `semantic-publication-evidence` Scheduler-truncated results reach serialized output without a truncation notice
-- **BR-28** [Important] `shared-transformation-policy` Async and compatibility handlers independently implement file transformations
+- **BR-29** [Critical] `resource-authority-at-effect` Model-supplied search globs override private recovery exclusions
+- **BR-30** [Critical] `file-editor-completion-consistency` Skill completion treats its own successful buffer refresh as a human conflict
