@@ -1564,3 +1564,9 @@ lint616; verified all108 added specs are mapped; mutation controls dispose BR13
 and BR32. All32 review findings are addressed. The issue is codecomplete.
 Feature checkout and draft PR remain available for operator live testing using
 `tests/manual/chat-concurrency.md`; main is not merged.
+
+### 2026-09-15 Operator live verification
+
+The operator verified #254 in live use and explicitly approved merging to main.
+Follow-up #255 tracks using previous completed answers when capturing context
+while an earlier exchange is refreshing; it remains separate work.
