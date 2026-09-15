@@ -913,6 +913,25 @@ The third M3 review uses this committed consumer class sweep. M4 remains isolate
 and incomplete: submission-to-runner admission, annotation-preserving replacement,
 scoped readiness and provider adapters are being integrated, with no main merge.
 
+### 2026-09-15 — M3 third review: reentrant effect ownership
+
+The third boundary review (`2afd7de9..654687dd`) confirms BR-9 addressed but
+raises BR-10: DiagnosticChanged can invalidate a publication synchronously, then
+the returning old job clears the newer dirty flag. The feature remains 2/6 closed.
+A native class sweep reproduces both diagnostic effects, detach, recursive step,
+and replacement refresh during clear. Nine diagnostic reentrancy tests now pass,
+including real reload, injected-reader failure and converter reentry. Publication
+checks captured job identity after callback-capable effects, preserves newer
+invalidation, and accounts only effects actually performed. Reentrant step reports
+busy instead of publishing the same job recursively.
+
+The same sweep reproduces a fold OptionSet callback editing the source during
+restoration, after which the old job erased new dirty work. Its native fix/test
+is in progress. M4 continues in its isolated checkout; no gate was bypassed and
+no M3 completion is claimed. The next review must include both fixes and the
+cross-consumer callback-boundary contract, even though the default three-round
+review budget has been used.
+
 ## Revisions
 
 ### 2026-09-14 — Incremental rendering is part of the core contract
