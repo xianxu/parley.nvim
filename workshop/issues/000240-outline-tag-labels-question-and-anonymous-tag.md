@@ -159,3 +159,9 @@ total: 1.345
 ```
 
 Baseline measured before implementation, synthetic100/1,000/5,000-line transcripts, median of11 after warmup: parse1.05/8.70/44.14ms, outline1.20/9.63/48.59ms. `/tmp/parley240-benchmark.lua` and `/tmp/parley240-baseline.json`; isolated profile and no providers.
+
+### 2026-09-14 — Implementation checkpoint
+
+Implemented exchange preface ownership through parser, live model, rendering, context, outline and cursor lookup. Bounded workers are finished. Focused suites passed: parser70, section7, build_messages84, ancestors9, respond integration73; model/render/tool regressions also passed. Regeneration regressions reproduce deletion with the original parser and pass with preface ownership. Cursor on a preface now resolves to its following exchange, including when the preceding question is unanswered. Full-suite and boundary review remain.
+
+Synthetic median performance at5,000 lines: parse45.44ms (+1.30ms), outline51.16ms (+2.58ms), within the planned20ms incremental budget. Unrelated defaults and workshop chat edits are preserved outside this issue.
