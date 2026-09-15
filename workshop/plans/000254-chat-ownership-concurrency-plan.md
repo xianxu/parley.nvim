@@ -295,7 +295,7 @@ Each M-row below is a real `sdlc milestone-close` boundary, with its own fresh-c
 - [x] Sweep all chat mutation entry points: response/regeneration, tool append/cancel repair, auto-topic, reference repair, definition/drill-in transforms, marker insertion, cut/paste/prune/branch/move/delete. Explicit user operations get validated document transactions; out-of-band edits are still observed as external. Scratch buffers are explicitly classified outside this boundary.
 - [x] Enforce `editor.can_join_undo` and mutation receipts through the real editor-history strategy below.
 - [x] Drive `generation_runner.dispatch` through the deterministic scheduling strategy below, then repeat via actual asynchronous builtin dispatch at M6.
-- [ ] Remove obsolete pending controls only when their safety purpose is covered; document that editing active output cancels writing. Run mapped lifecycle/ownership/highlights/exchange/provider-tool suites, `make perf`, update atlas/traceability, commit, close M4.
+- [x] Remove obsolete pending controls only when their safety purpose is covered; document that editing active output cancels writing. Run mapped lifecycle/ownership/highlights/exchange/provider-tool suites, `make perf`, update atlas/traceability, commit, close M4.
 
 ### M5 — Batch selection and recoverable replacement
 
@@ -841,6 +841,27 @@ requires a further review to dispose those open findings; extend the per-boundar
 round budget to five for that disposal rather than waive the ledger. This extra
 review is required by the refused transition, not a second discretionary review.
 
+### 2026-09-15 — Codex M3 review: suspended cleanup ownership
+
+The Codex boundary review disposed BR-12 but retained BR-11. The preceding cleanup
+claim was incomplete: cancellation inside an already-suspended native fold slice
+could restore its temporary disabled value after retirement restored the operator
+preference. Retirement must transfer preference-restoration ownership before any
+callbacks; returning nested cleanup must not overwrite that completed transfer.
+The fix covers apply, uncertainty clearing, and both discard paths, with native
+suspended-slice tests for enabled/disabled operator preferences and preserved view.
+ARCH-ORDER and ARCH-FUNERAL govern this ordering. All remaining boundary reviews
+use Codex per the operator's explicit instruction. No gate is waived.
+
+### 2026-09-15 — M3 final regression mapping sweep
+
+Codex disposed BR-11 and returned FIX-THEN-SHIP with one verification mapping
+omission (BR-13). The complete newly-added regression sweep found exactly the two
+native retirement specs missing. Both are now registered under chat/document;
+mapping output was checked against the added-spec inventory. No runtime changes
+follow the reviewed cleanup fix. The close commit includes this correction and
+the gate's M3 closure metadata; no redundant boundary review is required.
+
 ### 2026-09-15 — M4 finite replacement successor authority
 
 Repeatedly repairing a shrinking opaque row between bounded deletion patches would
@@ -1080,3 +1101,78 @@ M4 implementation tasks are checked; the final combined performance run and SDLC
 boundary review remain outstanding. The main feature checkout is still pinned
 for the M3 ledger-disposition review. No milestone or issue is marked closed by
 this checkpoint, and no merge to main is authorized before operator live testing.
+
+### 2026-09-15 — M4 final boundary evidence
+
+M3 closed at506d2c34; its final suspended-fold fix is integrated at0eb73979.
+All M4 added specs were swept against traceability:13 ownership regressions were
+missing and are now registered. Final unique verification covers146 files and
+1700 tests, zero latest failures/errors/incomplete files. Final-head document
+verification is31files/285tests and ownership25files/211tests; unchanged mappings
+retain their earlier evidence. Full lint558files is clean.
+
+The final mapped document invocation stopped without a complete perf_document
+footer. Its isolated retry passed5tests in31.87seconds under the unchanged50second
+deadline; the remaining15 unrun mapped files then passed198tests. No hard-counter
+regression reproduced and no test limit changed. The original run remains recorded
+as interrupted/failed, with cause unconfirmed; it is not presented as a passing
+command. Consolidated per-file evidence: /tmp/parley254-m4-final-verification.txt.
+
+Integrated make perf passed30scenarios x20samples. Stream/human interleave at5000
+rows used17structuralrows and zero full reads (68.80/114.28ms median/p95). Broad
+repair took11.01/13.02seconds with counters unchanged from staging; reviewer/CPU
+overlap limits timing attribution. This remains an expensive documented exception.
+M4 now enters its mandatory Codex review; M5/M6 stay isolated until their preceding
+boundaries close. No merge to main is authorized before operator live testing.
+
+### 2026-09-15 — M5 fixed input membership and completion evidence
+
+Native public regression showed a newly inserted question could enter a later
+batch request despite fixed response selection. The batch now restricts both
+remote-reference preparation and provider messages to its captured exchange set;
+write geometry still comes from the full current document. Inserted questions stay
+in the buffer but do not become new context for the already-captured batch.
+
+A successful generation callback must capture context evidence immediately, or
+freeze the edit serial while structural repair completes. A later human edit
+cannot become silently accepted completion evidence. A positive success advances
+completed progress even when context evidence is unavailable; the batch pauses
+and requires explicit adoption before continuing. Reload/detach retires obsolete
+registry membership while Session retains physical effect cleanup.
+
+Per-query bounds alone do not bound batch callbacks. Batch proof validation is
+being split into at most eight Document queries per scheduled turn, with a shared
+edit serial fencing staged evidence. Repeated concurrent edits pause validation
+instead of spinning. Large explicit resume acknowledges queued validation and
+keeps the batch paused until the complete proof is accepted.
+
+Recovery core22 and Document adapter13 tests pass. Public response25 tests pass
+including unavailable recovery publication preserving the original answer and
+starting no provider IO. Recovery UI/save association and bounded batch validation
+are still in progress; M5 is not closed. M6 implementation may stage independently
+but must integrate only after M5 review. M6 inventory corrects the old file list:
+tool_loop is already removed; response_tools owns production child dispatch, and
+argv is a pure helper rather than an executable builtin.
+
+### 2026-09-15 — M5 recovery integration and M6 handoff
+
+M5 batch mapping now passes7files/87tests. Public response27tests include captured
+request membership, registered bang-resume edit adoption, refused snapshot
+publication, and deletion cleanup only after confirmed chat removal. Recovery
+store22, adapter13, UI/save/deletion17 and path-exclusion4 tests have passed in
+focused runs; the store is receiving an additional ambiguous-descriptor-close
+regression before final mapped verification. Current changed runtime lint is clean.
+
+Recovery files are excluded from explicit attachment reads and directory expansion,
+including canonical/symlink aliases. The existing synchronous tool read/traversal
+path bypasses the helper; M6's common tool admission and traversal migration must
+apply the shared recovery_paths policy before content IO. This remaining tool
+enforcement is not claimed by M5 and must pass before the issue reaches live testing.
+
+M6 pure operation/resources prerequisites are staged at82a5fb12 in
+/tmp/parley254-m6-stage:14tests including4200generated events/steps pass. Checked
+asynchronous filesystem and process-supervision seams are in progress separately.
+Numeric file descriptors are not reusable authority after an ambiguous close:
+probe-only reconciliation must never close a descriptor that may now belong to
+another operation. M5 recovery uses the same conservative rule and bounded retained
+owners. No unresolved operation is removed to make an admission counter look clean.

@@ -7,6 +7,8 @@ end
 local extended={
     [absolute('tests/integration/document_fold_batches_spec.lua')]=true,
     [absolute('tests/unit/document_semantic_spec.lua')]=true,
+    [absolute('tests/integration/document_fold_retirement_spec.lua')]=true,
+    [absolute('tests/integration/document_fold_uncertainty_retirement_spec.lua')]=true,
 }
 function M.options(path)
     if extended[absolute(path)] then return {timeout=180000,sequential=true} end
