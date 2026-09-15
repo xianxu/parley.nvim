@@ -118,7 +118,7 @@ describe("define: skill_invoke read-only seams (#161)", function()
         parley.dispatcher.query = orig_query
         assembly.resolve_agent = orig_resolve
         pcall(function() require("parley.progress").stop() end)
-        vim.fn.delete(tmpdir, "rf")
+        require("tests.helpers.fixture_directory").remove(tmpdir)
     end)
 
     local function define_manifest()
@@ -260,7 +260,7 @@ describe("define: transcript agent reaches the cascade (#215)", function()
         assembly.resolve_agent = orig_resolve
         parley.set_chat_dirs(saved_dirs, false)
         pcall(function() require("parley.progress").stop() end)
-        vim.fn.delete(tmpdir, "rf")
+        require("tests.helpers.fixture_directory").remove(tmpdir)
     end)
 
     -- current_agent is passed as a THUNK (#215 BR-3: tiers 1-4 must not pay for
@@ -429,7 +429,7 @@ describe("define_visual + render_definition (#161)", function()
         assembly.resolve_agent = orig_resolve
         pcall(function() require("parley.progress").stop() end)
         if vim.api.nvim_buf_is_valid(buf) then vim.api.nvim_buf_delete(buf,{force=true}) end
-        vim.fn.delete(tmpdir, "rf")
+        require("tests.helpers.fixture_directory").remove(tmpdir)
     end)
 
     local hl_ns = vim.api.nvim_create_namespace("parley_skill_hl")

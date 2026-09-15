@@ -10,18 +10,7 @@ local parley = require("parley")
 local tasker = require("parley.tasker")
 local assembly = require("parley.skill_assembly")
 
--- Retire editor ownership before deleting fixture files. Hidden buffers otherwise
--- survive into later edit commands, which can emit E211 for removed artifacts.
-local function remove_fixture_dir(dir)
-    local prefix = vim.fn.resolve(vim.fn.fnamemodify(dir, ":p")):gsub("/$", "") .. "/"
-    for _, candidate in ipairs(vim.api.nvim_list_bufs()) do
-        local name = vim.fn.resolve(vim.api.nvim_buf_get_name(candidate))
-        if name:sub(1, #prefix) == prefix then
-            vim.api.nvim_buf_delete(candidate, { force = true })
-        end
-    end
-    vim.fn.delete(dir, "rf")
-end
+local remove_fixture_dir = require("tests.helpers.fixture_directory").remove
 
 -- SSE builder (same shape as tests/unit/anthropic_tool_decode_spec.lua).
 local function sse(events)
