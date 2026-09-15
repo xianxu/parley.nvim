@@ -645,6 +645,36 @@ report, broad mapped suites, atlas update and mandatory M3 review. Writer-model
 retirement/per-chunk answer reduction move explicitly with M4 scoped-write routing;
 no claim of completed generation concurrency before that milestone.
 
+### 2026-09-15 — M3 integrated rendering and write-plan checkpoint
+
+Integrated shared viewport paging, certified native folds, outline candidates,
+bounded diagnostic parsing/publication, logical editor detach, grouped-undo
+normalization, and revision-checked multi-patch writes. Deleted the exchange-anchor
+array and migrated identity tests to document handles. Adversarial write plans
+pass10 cases including independent seeded text oracles, delegated slots, nested
+human edits, stale replay, and mutate-then-error receipts (ARCH-ORDER).
+
+Integrated document mapping passes217 tests; highlights mapping passes84; changed
+Lua lint is clean across46 files. Response mapping exposed a timing-dependent
+stream observer test during initial index hydration; it now uses controlled
+pending scheduling, explicit hydration, and separate native writer deliveries
+(the rerun is in progress). Full mapped lifecycle/exchange and final performance
+report remain pending, as does mandatory M3 review. No M3 completion claim.
+
+Large-chat bootstrap exposed over-reserved dependency rank work: a5000-row index
+could return a budget refusal forever under the default budget. Actual bounded
+rank admission now progresses with a512-visit dependency cap; an adaptive retry
+budget regression is being added separately. Standalone5000-row ownership sample
+passes: native fold maintenance1.48ms with0native operations; stream+human32.14ms,
+2deliveries, typed-ahead text preserved, and0whole-buffer reads. Timings are
+report-only. The full report still must verify preceding-phase interactions.
+
+Performance report schema4 counts bounded diagnostic bytes/matches and native
+publication entries/message bytes separately. Atlas now names document authority
+and clearly retains legacy generation-only model/reducer retirement in M4. The
+operator's end-of-issue live testing and no-merge-before-approval instruction
+remain in force.
+
 ## Revisions
 
 ### 2026-09-14 — Incremental rendering is part of the core contract
