@@ -48,10 +48,10 @@ M.OPENAI_FIXTURES = {
     "mixed-text-and-tools",
 }
 
--- Compare captured wire payloads without depending on the installed ripgrep
--- version. Keep normalization at comparison time: the regenerator
+-- Compare captured wire payloads without depending on local command version
+-- probes, which asynchronous builtins no longer run. Normalize at comparison time: the regenerator
 -- can retain the real wire description, and older captures remain comparable.
--- Restrict this to the two tools that advertise the detected backend version;
+-- Restrict this to the dedicated backend metadata of grep/history, ls, and find;
 -- message text, schemas, other tools, and substantive descriptions still count.
 function M.normalize_payload(payload)
     local normalized = vim.deepcopy(payload)
@@ -59,7 +59,15 @@ function M.normalize_payload(payload)
         local definition = tool.type == "function" and tool["function"] or tool
         if definition.name == "grep" or definition.name == "chat_history_search" then
             definition.description = definition.description:gsub(
-                "%(ripgrep %d+%.%d+%.%d+%)", "(ripgrep <version>)"
+                "%(ripgrep %d+%.%d+%.%d+%)", "(ripgrep)"
+            )
+        elseif definition.name == "ls" or definition.name == "find" then
+            -- %b() includes nested metadata such as BSD ls (macOS); anchoring
+            -- the dedicated leading sentence leaves substantive prose intact.
+            local prefix = definition.name == "ls" and "List directory contents using the system ls command "
+                or "Search for files and directories using the system find command "
+            definition.description = definition.description:gsub(
+                "^(" .. prefix .. ")%b()(%.)", "%1(" .. definition.name .. ")%2", 1
             )
         end
     end
