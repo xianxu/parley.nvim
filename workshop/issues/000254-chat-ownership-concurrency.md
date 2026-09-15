@@ -349,7 +349,7 @@ Total = 33.107 focused ship-hours.
 The durable plan specifies these implementation review boundaries; each requires
 its own `sdlc milestone-close` after implementation:
 
-- [ ] M1 — Durable audit regressions and process-lifecycle containment.
+- [x] M1 — Durable audit regressions and process-lifecycle containment.
 - [ ] M2 — Dependency-aware incremental sequence/grammar/structure core.
 - [ ] M3 — Document ownership and shared highlighting/folding/layout index.
 - [ ] M4 — Scoped concurrent generation/child-slot writes and human editing.
@@ -374,6 +374,7 @@ its own `sdlc milestone-close` after implementation:
 ## Log
 
 ### 2026-09-14 — Claimed; structural design in progress
+- 2026-09-14: closed M1 — BR-1 topic/header/buffer cancellation, delayed scratch cleanup and retry ownership covered; lifecycle 536 and response-progress 345 pass, exchange-model 281 previously passed; focused ownership 5 plus dispatcher3 pass; scoped lint/diff clean; baseline perf passed. BR-2 explicitly assigned M6. Actual N/A: worktree transcript attribution unavailable/inconsistent; no estimated actual supplied.; review verdict: SHIP
 
 Claimed with `sdlc claim --issue 254`, then entered `sdlc start-plan`. The operator
 authorized substantial design and planning before implementation. Current design

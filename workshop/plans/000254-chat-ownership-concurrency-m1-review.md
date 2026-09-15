@@ -95,3 +95,91 @@ findings:
     detail: |
       The plan at line 242 promises bounded reconciliation and visible unresolved status, while tasker.lua:130 implements no polling and its reconciliation function has no production caller. The issue log defers this work without an explicit remaining milestone task; add a Revisions entry and assign implementation, admission bounds, diagnostics, and deterministic verification (ARCH-CONSTRAINTS).
 ```
+
+---
+
+## Re-review — 2026-09-14T23:46:39-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 254 — Harden chat ownership and concurrency |
+| repo | 000254-chat-ownership-concurrency |
+| issue file | workshop/issues/000254-chat-ownership-concurrency.md |
+| boundary | milestone M1 |
+| milestone | M1 |
+| window | c95231c73563ced097b95abce5ed938634519b96..2ab8f40e302d9d316ac9b32016f405f2ed3d6d37 |
+| command | sdlc milestone-close --issue 254 --milestone M1 |
+| reviewer | codex |
+| timestamp | 2026-09-14T23:46:39-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: medium
+```
+
+The pinned range satisfies the M1 containment scope. Both prior findings are addressed, including regression evidence that fails when topic ownership propagation is removed. No new blocking findings emerged. Confidence is limited by sandbox restrictions preventing the broader response-progress suite’s local server fixtures from starting.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      chat_respond.lua:2127 propagates response ownership into automatic topics; dispatcher.lua:881 preserves it across retries. Removing topic ownership in a scratch copy makes both deletion regressions fail at chat_ownership_spec.lua:157. The pinned tests verify unrelated-owner preservation and retention until exit/drain.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      The pinned plan adds an explicit M6 task at line 310 covering bounded reconciliation, admission limits, diagnostics, timer cleanup, and deterministic verification. Its Revisions entry at lines 443–451 accurately distinguishes tasker.lua:130's current retention-only behavior from future supervision.
+```
+
+## 1. Strengths
+
+- Private attempt/admission records prevent public query payloads or handle snapshots from falsely retiring outstanding work (`lua/parley/tasker.lua:17`).
+- Completion requires exit and both stream terminations; tests exercise reordered evidence, uncertain probes, failed signals, and retry admission (`tests/unit/attempt_spec.lua:4`).
+- Completion preserves typed-ahead questions and unmarked human text, with production-response regressions (`tests/integration/chat_ownership_spec.lua:73`).
+- Performance instrumentation measures actual anchor/fold work and clearly documents baseline scaling costs.
+
+## 2. Critical findings
+
+None.
+
+## 3. Important findings
+
+None.
+
+## 4. Minor findings
+
+None.
+
+## 5. Test coverage notes
+
+Independent verification:
+
+- `chat/lifecycle`: **536 passed**.
+- `chat/exchange_model`: **281 passed**.
+- Scoped lint: **12 files, zero warnings/errors**.
+- Pinned diff whitespace check passed.
+- BR-1 mutation check: **both topic cancellation regressions failed as expected** without ownership propagation.
+
+The additional `chat/response_progress` run stopped after **32 passes and four fixture-startup failures**. Loopback binding independently returned `EPERM`; those live-server cases remain unverified here. Repository files remain unchanged.
+
+## 6. Architectural notes
+
+| Principle | Result |
+|---|---|
+| **ARCH-DRY** | Pass: shared attempt transitions, scoped cancellation helper, and centralized performance fields. |
+| **ARCH-PURE** | Pass: the M1 attempt core has no IO or mocks; tasker owns process effects. |
+| **ARCH-PURPOSE** | Pass for M1: containment and baseline evidence delivered; later concurrency work remains explicitly assigned. |
+| **ARCH-MOCK** | Pass structurally: production and stateful fake share `_uv`; real subprocess tests complement controlled schedules. Live-server validation has the limitation above. |
+| **ARCH-CONSTRAINTS** | Pass for M1: measured costs are identified as baselines; bounded reconciliation/admission is explicitly assigned to M6. |
+| **ARCH-SECURE** | Pass: mutable public payloads cannot forge lifecycle evidence; reviewed tests use isolated stores. |
+| **ARCH-ORDER** | Pass: private lifecycle changes use the reducer; tests control completion ordering and verify independent invariants. |
+| **ARCH-FUNERAL** | Pass for M1: topic scratch buffers and process resources have tested termination paths; unresolved supervision remains an explicit M6 obligation. |
+
+The M1 core-concept entries match their files and classifications. Atlas and traceability updates cover the new internal surface. No new user command, flag, keybinding, or configuration key requires a README update.
+
+## 7. Plan revision recommendations
+
+None beyond the verified BR-2 revision already present.
