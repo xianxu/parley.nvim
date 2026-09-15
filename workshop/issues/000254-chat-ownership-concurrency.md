@@ -845,6 +845,35 @@ Full performance proof is still running on production commit `ebd0585b`. Its
 run overlaps the short focused response verification and small M4 unit probes;
 report-only timing will disclose that load rather than claim a pristine host.
 
+### 2026-09-15 — Final M3 review-fix performance evidence
+
+`make perf PERF_OUTPUT=/tmp/parley254-m3-reviewed-perf.json` completed with all
+30 schema-4 scenarios, five warmups and 20 samples on `ebd0585b` (Darwin, Neovim
+0.11.7). Subsequent feature changes are test/docs only. At 5,000 rows:
+
+| Phase | Median / p95 ms | Structural rows / copied entries | Full-buffer reads |
+|---|---:|---:|---:|
+| Ordinary typing | 7.836 / 10.001 | 1 / 1 | 0 |
+| Enter + Backspace | 18.147 / 24.543 | 5 / 6 | 0 |
+| Viewport redraw | 0.537 / 1.108 | 0 / 0 | 0 |
+| Ordinary fold maintenance | 1.222 / 1.427 | 1 / 1 | 0 |
+| Legacy stream + human input | 30.017 / 32.883 | 20 / 22 | 0 |
+| Explicit broad repair | 3403.101 / 3498.989 | 18,987 / 18,987 | 0 |
+
+Ordinary Enter/join performs zero native fold operations. The legacy streamed
+interleave now honestly clears uncertain semantic folds: 126 outer groups /
+252 native operations at 5,000 rows, across bounded consumer batches. That
+affected-output work is not a constant-work claim, and the stream p95 does not
+meet the 8 ms aspiration. M4 owns removal of growing stream-row replacement and
+its materialized live-model reconciliation. Broad structural repair is incremental
+and yields to input; its aggregate time still scales with affected structure.
+The report overlaps short response/spec and M4 unit probes; timing is report-only.
+
+All four required mapped suites have passing file coverage (document263,
+highlights85, exchange264, lifecycle511), and final lint reports zero warnings
+/errors in 504 files. BR-5/6/8 production fixes, their native regressions and BR-7
+inventory correction are committed. M3 remains pending the mandatory review retry.
+
 ## Revisions
 
 ### 2026-09-14 — Incremental rendering is part of the core contract
