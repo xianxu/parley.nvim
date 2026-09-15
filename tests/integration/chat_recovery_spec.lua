@@ -72,7 +72,7 @@ describe('chat recovery commands and lifecycle',function()
         assert.equals(0,#C.list(buf))
     end)
     it('keeps the original across a runtime retry',function()
-        local job=start();local first=C.publish(job,ctx);replace()
+        local job=start();local first=C.publish(job,ctx);replace();C.finish(job,'provider_failed')
         local retry=start();local result=C.publish(retry,ctx)
         assert.equals(first.id,result.id)
         assert.equals('\n🤖: old\nold',C.inspect_record(result.id).bytes)
@@ -243,5 +243,114 @@ describe('chat recovery commands and lifecycle',function()
         deny=false;assert.is_true(C.deleted(path).ok)
         assert.is_nil(uv.fs_stat(snapshot))
     end)
+    it('review: reports save cleanup IO failures',function()
+        local uv=vim.uv or vim.loop
+        old_unlink=uv.fs_unlink
+        uv.fs_unlink=function(path)
+            if path:match('%.json$')then return nil,'EACCES: recovery retained'end
+            return old_unlink(path)
+        end
+        local job=start();assert.is_true(C.publish(job,ctx).ok)
+        replace();assert.is_true(C.settle(job,ctx).ok)
+        vim.fn.writefile(vim.api.nvim_buf_get_lines(buf,0,-1,false),vim.api.nvim_buf_get_name(buf))
+        local notices=0;local original_notify=vim.notify
+        vim.notify=function()notices=notices+1 end
+        C.saved(buf)
+        C.saved(buf)
+        vim.notify=original_notify
+        assert.equals(1,notices,'save cleanup EACCES is surfaced once per job/error')
+    end)
+    it('review: retires chat registry association on document detach',function()
+        local job=start();assert.is_true(C.publish(job,ctx).ok)
+        D.detach(doc)
+        assert.equals('released',C.snapshot(job).status)
+        local registry
+        for index=1,20 do
+            local name,value=debug.getupvalue(C.release,index)
+            if not name then break end
+            if name=='entries'then registry=value end
+        end
+        assert.is_not_nil(registry)
+        assert.is_nil(registry[job],'retired recovery must not retain its document in the host registry')
+    end)
+
+    for _,event in ipairs({'edit','cancel','detach','reload'})do
+        it('retires pending settlement on '..event,function()
+            local job=start();assert.is_true(C.publish(job,ctx).ok);replace()
+            local result
+            local handle=C.settle(job,ctx,function(value)result=value end)
+            if event=='edit'then
+                vim.api.nvim_buf_set_text(buf,4,0,4,0,{'human '})
+            elseif event=='cancel'then handle:cancel()
+            elseif event=='detach'then D.detach(doc)
+            else
+                vim.fn.writefile(vim.api.nvim_buf_get_lines(buf,0,-1,false),vim.api.nvim_buf_get_name(buf))
+                vim.api.nvim_buf_call(buf,function()vim.cmd('edit!')end)
+            end
+            assert.is_true(vim.wait(2000,function()return result~=nil end,1))
+            assert.is_false(result.ok)
+            assert.equals(1,#C.list(buf))
+        end)
+    end
+    it('refuses failed-attempt retry association after human edit undo',function()
+        local job=start();local original=C.publish(job,ctx);replace();C.finish(job,'provider_failed')
+        vim.api.nvim_buf_set_text(buf,4,0,4,0,{'human '})
+        vim.api.nvim_buf_set_text(buf,4,0,4,6,{})
+        D.drain(doc,10000)
+        local lines=vim.api.nvim_buf_get_lines(buf,0,-1,false)
+        local retry=C.start(doc,{buf=buf,path=vim.api.nvim_buf_get_name(buf),
+            root=require('parley.neighborhood').policy_for_buf(buf).write_root,
+            lines=lines,parsed=parley.parse_chat(lines,2),index=1,entity=ctx.entity,
+            region={first={row=2,col=#'💬: question'},last={row=4,col=11}}})
+        assert.is_nil(retry)
+        assert.equals('\n🤖: old\nold',C.inspect_record(original.id).bytes)
+    end)
+
+    it('retains failed-attempt association across editing the next draft',function()
+        local job=start();local first=C.publish(job,ctx);replace();C.finish(job,'provider_failed')
+        vim.api.nvim_buf_set_text(buf,7,0,7,5,{'a new draft'})
+        D.drain(doc,10000)
+        local retry=start();local result=C.publish(retry,ctx)
+        assert.is_true(result.ok);assert.equals(first.id,result.id)
+        assert.equals('\n🤖: old\nold',C.inspect_record(result.id).bytes)
+    end)
+
+    it('retires host association when successful completion cannot settle edited output',function()
+        local job=start();assert.is_true(C.publish(job,ctx).ok);replace()
+        local result
+        C.settle(job,ctx,function(value)result=value;C.finish(job,'success')end)
+        vim.api.nvim_buf_set_text(buf,4,0,4,0,{'human '})
+        assert.is_true(vim.wait(2000,function()return result~=nil end,1))
+        assert.is_false(result.ok);assert.equals('released',C.snapshot(job).status)
+        assert.equals(1,#C.list(buf))
+    end)
+
+    it('settles while a human edits the disjoint next draft',function()
+        local job=start();assert.is_true(C.publish(job,ctx).ok);replace()
+        local result
+        C.settle(job,ctx,function(value)result=value end)
+        vim.api.nvim_buf_set_text(buf,7,0,7,5,{'a new draft'})
+        assert.is_true(vim.wait(2000,function()return result~=nil end,1))
+        assert.is_true(result.ok)
+    end)
+
+    for _,reason in ipairs({'released','invalid-grant','invalid-context'})do
+        it('returns cancelable finalization after inline '..reason..' refusal',function()
+            local job=start();assert.is_true(C.publish(job,ctx).ok)
+            local context=vim.deepcopy(ctx)
+            if reason=='released'then C.release(job)
+            elseif reason=='invalid-grant'then context.grant='missing'
+            else context=nil end
+            local calls,acks=0,0
+            local handle=C.settle(job,context,function(result)
+                calls=calls+1;assert.is_false(result.ok)
+            end)
+            assert.equals(1,calls)
+            handle:cancel(function()acks=acks+1 end)
+            handle:cancel(function()acks=acks+1 end)
+            assert.equals(1,calls);assert.equals(2,acks)
+            assert.equals(0,D.user_guard_stats(doc).live)
+        end)
+    end
 
 end)
