@@ -2248,6 +2248,13 @@ local function open_simple_chat(topic, path, extra_header)
             assert.equals("idle", document.drain(document.get(buf), 10000, {
                 rows = 256, bytes = 65536, nodes = 32768, entries = 65536,
             }).status)
+            -- The fake runtime drains presentation events, not native redraws
+            -- queued by the explicit index bootstrap. Cross that native queue
+            -- boundary before measuring either provider chunk's delivery.
+            local setup_ready = false
+            vim.schedule(function() setup_ready = true end)
+            vim.wait(1000, function() return setup_ready end, 5)
+            assert.is_true(setup_ready, "native bootstrap queue did not yield")
             parser.parse_chat = function()
                 error("streaming must not parse the whole document")
             end

@@ -2522,3 +2522,8 @@ download.
 - At a review boundary, compare the full concept/function inventory with the
   actual diff. Distinguish reused policy, documentation-only changes and explicitly
   deferred consumers; proposed function names are not implementation evidence.
+
+- A controlled presentation scheduler does not drain Neovim's native redraw queue.
+  After explicit index bootstrap, cross an observable native scheduling barrier
+  before measuring stream delivery; a timed wait can expire while its queued
+  callback actually succeeds. Keep work bounds and delivery assertions intact.

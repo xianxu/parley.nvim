@@ -746,3 +746,26 @@ Delta: supersede the temporary M4 staging pause for the bounded source-guard tas
 only. Staging commits `6cf67e52` and `b6723424` preserve M4 preparation and its M3
 review-base merge; 83 focused staging cases pass. The M3 milestone remains open,
 and no M4 code enters the feature branch until its review fixes have cleared.
+
+### 2026-09-15 — Reserve tool-round grant capacity before yielding
+
+Reason: reserving ordered tool placeholders takes bounded writes across event
+turns, while another generation may acquire grants in between. A free-slot count
+is not a reservation. Delta: retain the document's 16-live-grant limit and the
+runner's requirement that every declared child receives its grant before dispatch.
+Reserve capacity for the whole round before its first output mutation.
+
+The pure ownership state adds generation/round-scoped capacity tickets. Admission
+counts live non-revoked grants plus outstanding reserved capacity. Ordinary
+proof-checked acquisition atomically consumes its matching ticket only on success;
+a ticket never authorizes text or bypasses entity validation. Tickets release
+unused capacity on reservation failure/cancellation and generation retirement,
+reload or detach. Ticket count is bounded by the same 16-slot budget. Production
+rounds exceeding available capacity are refused before placeholder writes or tool
+effects, even though the protocol reducer can represent 32 declared calls.
+
+Once admitted, reservation writes still report exact partial progress if a human
+edit or native failure interrupts them; no rollback or synthetic success hides
+those bytes. Tests interleave competing admission during yielded reservation,
+failed acquisition, foreign tickets and retirement (ARCH-ORDER, ARCH-CONSTRAINTS,
+ARCH-PURPOSE). This is M4 staging work and does not enter the M3 review window.
