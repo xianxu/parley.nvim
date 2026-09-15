@@ -352,7 +352,7 @@ its own `sdlc milestone-close` after implementation:
 - [x] M1 — Durable audit regressions and process-lifecycle containment.
 - [x] M2 — Dependency-aware incremental sequence/grammar/structure core.
 - [x] M3 — Document ownership and shared highlighting/folding/layout index.
-- [ ] M4 — Scoped concurrent generation/child-slot writes and human editing.
+- [x] M4 — Scoped concurrent generation/child-slot writes and human editing.
 - [ ] M5 — Fixed batch identities and recoverable answer replacement.
 - [ ] M6 — Asynchronous concurrent tools, resource/outcome enforcement, final verification.
 
@@ -550,6 +550,7 @@ remains active. Scoped luacheck and whitespace checks pass. BR-1 and BR-2 fixes
 are ready for the required repeated review after REWORK.
 
 ### 2026-09-15 — M1 closed; M2 integration checkpoint
+- 2026-09-15: closed M4 — Fresh complete146-spec mapped union1739 finalpassingtests,0 finalfailures/errors/incomplete; lint559clean; allmappedperf under unchangeddeadlines. BR18 exactreviewrepro and117focusedtests pass; BR19 consumedprefix+negativesuffix preparation passes. OriginalintermittentGCfailure explicitlyrecorded: unchanged4/5, interpreterprobe5/5, realcleanupmutation stillfails, final30pass. Evidence/tmp/parley254-m4-rework-verification.txt. M5/M6 remain isolatedlaterboundaries. ActualN/A mixed192/254 attribution unreliable.; review verdict: SHIP
 - 2026-09-15: closed M3 — BR-11 suspended cleanup ownership:50 focused tests across10 files passed, including two native50k suspended apply/uncertainty retirement regressions and scoped test-runner contract;47 existing presentation/fold/batch tests retained. Five changed Lua files lint clean; git diff --check clean. Prior combined M4 mapping131files1624tests and full556lint passed; integrated performance30scenarios x20samples passed hard gates with zero full-buffer stream reads. Broad native repair remains an explicit expensive exception. Actual N/A: mixed issue192/254 session attribution is unreliable; no invented hours. Review with Codex per operator instruction; no verdict guard bypass.; review verdict: FIX-THEN-SHIP
 - 2026-09-15: closed M2 — Document 131 and parsing 239 tests pass; scoped lint and diff clean. BR-3 delayed semantic publication and BR-4 56 fenced tool/section differential cases fixed. Existing 50k Enter+join 3 semantic rows, 358 index visits, 175 leaf copies and JIT retention regression pass. Actual attribution unavailable for this worktree as recorded at M1; no guessed actuals.; review verdict: SHIP
 

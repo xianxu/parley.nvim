@@ -319,3 +319,102 @@ Add `## Revisions` entries recording:
 
 - Retirement as a join of outcome, physical completion, and publication completion, reevaluated after every contributing event regardless of cancellation.
 - The stale-input regression inventory correction and fresh mapped verification results before claiming M4 closure.
+
+---
+
+## Re-review — 2026-09-15T11:32:05-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 254 — Harden chat ownership and concurrency |
+| repo | 000254-chat-ownership-concurrency |
+| issue file | workshop/issues/000254-chat-ownership-concurrency.md |
+| boundary | milestone M4 |
+| milestone | M4 |
+| window | 506d2c344fd177cba7f9afaee6fe89980a675425..dd5a5a47130accdefc7a2e8a240234d2828e4a4d |
+| command | sdlc milestone-close --issue 254 --milestone M4 |
+| reviewer | codex |
+| timestamp | 2026-09-15T11:32:05-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: medium
+```
+
+BR-18 and BR-19 are addressed with meaningful regression evidence. The reviewed M4 ownership paths, cancellation cleanup, consumed-input tracking, and documentation match the milestone’s scope. No new blocking defect was confirmed. Confidence is limited by sandbox restrictions preventing HTTP integration verification; this is M4 clearance, not issue-close clearance.
+
+```findings
+dispose:
+  - id: BR-18
+    disposition: addressed
+    note: |
+      response_tools.lua:98–104 reserves publication before callbacks and reevaluates retirement after outcome updates. All 35 tool tests pass; restoring the pre-fix implementation in a scratch copy produces nine failures.
+  - id: BR-19
+    disposition: addressed
+    note: |
+      generation_input_affinity_spec.lua:39–65 separately tests consumed-prefix staleness and excluded-suffix freshness through preparation. All three tests pass; disabling runner stale-evidence propagation makes the consumed-prefix regression fail.
+  - id: BR-14
+    disposition: addressed
+    note: |
+      Pending reservations remain inert text. Passing response_tools regressions verify that cancellation, reload, unknown outcomes, and reparsing cannot turn reservations into successful tool results.
+  - id: BR-15
+    disposition: addressed
+    note: |
+      The public resume command selects stale paused responses and validates captured identity through resume_original. The changed chat_stop_generation regression suite passes.
+  - id: BR-16
+    disposition: addressed
+    note: |
+      README.md documents cursor-scoped ParleyStop, its picker, and ParleyStopDocument; chat_respond.cmd_stop and cmd_stop_document implement those respective scopes.
+  - id: BR-17
+    disposition: addressed
+    note: |
+      response_target.lua derives waiting guards and admitted dependencies from input_regions. Passing target, submission, and native affinity tests preserve freshness for excluded suffix edits.
+```
+
+## 1. Strengths
+
+- **Retirement regression coverage is effective.** Tests exercise reordered cleanup, cancellation/detach, duplicate callbacks, and reentrant publication—not just the originally reported sequence.
+- **Input provenance survives admission.** The native affinity regression verifies both the runner’s stale state and the preparation callback’s frozen input.
+- **Ownership boundaries are enforced.** Architecture tests prohibit positional streaming, asynchronous native buffer writes, and restoration of legacy lease/tool-loop authorities.
+- **Documentation accompanies the surface.** README and atlas describe scoped Stop, resume, pending tool slots, and ownership behavior.
+
+## 2. Critical findings
+
+None newly identified.
+
+## 3. Important findings
+
+None newly identified.
+
+## 4. Minor findings
+
+None.
+
+## 5. Test coverage notes
+
+- Ran the required pinned stat and name-status commands before patch inspection.
+- **56 of 57 changed spec files passed.** The remaining HTTP tool-loop spec could not start its fake server; an independent loopback bind returned `Operation not permitted`.
+- A branch-topic test encountered shared scratch-directory initialization contention; its isolated retry passed all six tests.
+- Mutation checks confirmed **nine failures without BR-18’s fix** and **one failure without stale-input propagation**.
+- The broader suite was not green. Besides restricted-environment integrations, its core-table fitness test fails on a mismatch already present at Base: the guard expects individual exported symbols, while the plan tables enumerate architectural entities.
+- No fresh performance measurement or unrestricted full-suite clearance is claimed.
+
+## 6. Architectural notes
+
+| Principle | Assessment |
+|---|---|
+| **ARCH-DRY** | **Pass:** document authority and position-free dispatch replace competing legacy writers. |
+| **ARCH-PURE** | **Pass:** generation decisions reside in the pure reducer; adapters execute effects. |
+| **ARCH-PURPOSE** | **Pass:** both open findings address their underlying rules and sibling orderings. M5/M6 work remains explicitly assigned. |
+| **ARCH-MOCK** | **Pass for inspected M4 seams:** stateful doubles control editor, producer, and transport events. HTTP conformance remains environment-blocked. |
+| **ARCH-CONSTRAINTS** | **Pass for inspected bounds:** admission, staging, result sizes, and tool rounds have explicit limits. |
+| **ARCH-SECURE** | **Pass:** identity and outcome validation precede publication; scratch tests remain isolated. |
+| **ARCH-ORDER** | **Pass:** production generation transitions use the model; cancellation and late-evidence orderings have executable coverage. |
+| **ARCH-FUNERAL** | **Pass:** retirement releases callbacks, payloads, subscriptions, and deferred work after required evidence arrives. |
+
+## 7. Plan revision recommendations
+
+None required for this round. The BR-18/19 revision accurately describes the verified corrections.
