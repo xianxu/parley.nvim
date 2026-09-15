@@ -633,6 +633,18 @@ Outline, undo hardening and performance migration remain staged agent tasks.
 Legacy layout/anchor consumers and old fold regression harness migration remain
 before the M3 boundary; no M3 completion claim. M2 closed SHIP at `2afd7de9`.
 
+### 2026-09-15 — M3 integration findings and remaining work
+
+Checkpoint `d88ad5de` passes the expanded document mapping (192 tests). Staging
+adds native logical detach, whole-row endpoint identity preservation, mandatory
+write-plan revisions (state15/coordinator15 tests), scoped undo18, bounded outline
+12+15+54 tests, and migrated fold/identity/UI coverage. Header manual-fold repair
+passes15 fold regressions. Pending: bounded diagnostics discovered in the live
+consumer audit, tall/long-line viewport progress, final attached performance
+report, broad mapped suites, atlas update and mandatory M3 review. Writer-model
+retirement/per-chunk answer reduction move explicitly with M4 scoped-write routing;
+no claim of completed generation concurrency before that milestone.
+
 ## Revisions
 
 ### 2026-09-14 — Incremental rendering is part of the core contract
