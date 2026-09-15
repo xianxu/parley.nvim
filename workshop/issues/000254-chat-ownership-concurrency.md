@@ -1137,3 +1137,18 @@ Remaining: receive/dispose M3 review, finish combined performance evidence, clos
 M4 through its mandatory review, implement M5 recovery/batch and M6 asynchronous
 builtin/resource supervision. Do not merge to main; operator live testing follows
 the completed issue and precedes merge. No fabricated actual-time value recorded.
+
+### 2026-09-15 — M4 verification ready for Codex boundary
+
+Closed M3 integrated at0eb73979. M4 maps146 unique files/1700 passing tests, including
+final-head document31files/285tests and ownership25files/211tests. All added M4
+specs are registered after correcting13 mapping omissions. Full558-file lint and
+diff checks are clean. Integrated performance30scenarios x20samples passes hard
+gates;5000-row stream touches17 structural rows and zero full reads. Broad native
+repair remains11.01/13.02s median/p95 with unchanged counters and timing interference
+caveat. Original final-document run stopped during perf_document without a footer;
+focused retry5tests passed within unchanged deadline and remaining15files198tests
+passed separately. Per-file evidence in /tmp/parley254-m4-final-verification.txt.
+
+M4 enters mandatory Codex review. M5 recovery/batch and M6 async tool work remain
+staged separately. Actual time N/A due mixed-session attribution, not guessed.
