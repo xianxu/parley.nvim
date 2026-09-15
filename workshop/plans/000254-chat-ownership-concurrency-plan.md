@@ -1238,3 +1238,16 @@ unpublished temporary files remain capacity evidence. Publication and cleanup
 failures use a common visible reporting rule across settlement, save, discard and
 confirmed deletion. Retained physical bytes never disappear merely because an
 error was reported (ARCH-SECURE, ARCH-ORDER, ARCH-FUNERAL, ARCH-PURPOSE).
+
+### 2026-09-15 — Join save and settlement evidence in either order
+
+Reason: Codex confirmed BR21/22/23 but retained BR20/24. A real save arriving while
+settlement was queued was forgotten, and saved-file stat errors were silent.
+Delta: retain bounded per-job evidence that a save happened, with its captured
+path and epoch, and reevaluate cleanup when either save or settlement arrives.
+The join requires fresh saved-file read-back and the unchanged regional settlement
+proof; it cannot infer a save from generation completion. Edits, cancellation,
+reload, detach and path changes must not redirect old cleanup authority. Every
+failed stat/read/cleanup stage uses the same visible reporting rule and keeps
+physical bytes accounted. Tests cover both event orders and interrupted joins
+through single and batch execution (ARCH-ORDER, ARCH-FUNERAL, ARCH-PURPOSE).
