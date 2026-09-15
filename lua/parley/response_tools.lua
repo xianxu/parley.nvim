@@ -53,7 +53,7 @@ local function reserve_step(s,r)
         if not p or p.col~=0 then retire_reservation(s,r);return false end
         local row=D.query(s.doc,p.row,p.row+1)[1]
         if not row or not row.metadata or not row.metadata.confirmed then return true end
-        if not row.metadata.token or row.metadata.token.kind~='tool_result' then retire_reservation(s,r);return false end
+        if not row.metadata.token or row.metadata.token.kind~='text' then retire_reservation(s,r);return false end
         regions[i]={entity=r.ctx.entity,first=first,last=last,revision=1,marker_revision=1,confirmed=true}
         markers[i]=row.handle
     end
@@ -84,10 +84,15 @@ local function tool_outcome(s,r,outcome,value)
         result={id=r.call.id,name=r.call.name,content=Dispatch.truncate(value.content,s.result_limit),is_error=value.is_error==true}
     else result={id=r.call.id,name=r.call.name,content=type(value)=='table' and tostring(value.content or '') or '',is_error=true}end
     r.outcome=outcome
+    -- Reserve publication before invoking outcome observers: they may report
+    -- physical cleanup or cancel reentrantly. Neither can retire this record
+    -- while a known result still needs its publication decision.
+    r.writing=outcome=='known' and not r.cancelled
     r.cb.outcome(outcome,result)
-    if r.cancelled or outcome~='known' then return true end
+    if r.cancelled or outcome~='known' then
+        r.writing=false;maybe_resolve(s,r);return true
+    end
     local text=Serialize.render_result(result)
-    r.writing=true
     local admitted=r.ctx.replace(text,function()
         r.writing=false;maybe_resolve(s,r)
     end)
@@ -145,10 +150,12 @@ function M.new(doc,opts)
             assert(#rendered<=65536,'tool argument limit')
             append('\n\n'..rendered)
         end
-        for i,c in ipairs(calls)do
+        for i in ipairs(calls)do
             append('\n\n')
             local first=length
-            append(Serialize.render_result({id=c.id,name=c.name,content='(pending)'}))
+            -- Reservation text is inert: result Markdown is evidence and may
+            -- only be published after a producer reports a known outcome.
+            append('(Tool result pending)')
             slots[i]={first=first,last=length}
         end
         append('\n\n');assert(length<=1048576,'tool round output limit')

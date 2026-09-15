@@ -33,6 +33,15 @@ local function dispatch(s,event)
     for _,effect in ipairs(result.effects) do
         if effect.type=='release_blob' then release(s,effect.blob_ref) else enqueue(s,effect) end
     end
+    if result.accepted and s.adapters.changed then
+        local current=G.snapshot(s.machine)
+        local key=current.phase..':'..tostring(current.stale_input)
+        if key~=s.presentation_key then
+            s.presentation_key=key
+            local ok,err=pcall(s.adapters.changed,current)
+            if not ok then s.presentation_failure=tostring(err):sub(1,4096)end
+        end
+    end
     return result
 end
 local function sync(s)
@@ -505,6 +514,27 @@ function M.resume(r,policy_ref)
     local result=dispatch(s,{type='resume_validated',policy_ref=policy_ref})
     if result.accepted then s.stale_policy=policy_ref;if s.schedule then s.work:request() end end
     return result
+end
+-- Explicit public policy: retain the original input and recorded tool results.
+-- A captured decision cannot migrate to a later round, generation, or document.
+function M.resume_original(r,identity)
+    local s=state(r);sync(s)
+    local current=G.snapshot(s.machine)
+    if type(identity)~='table' or s.detached or current.phase~='paused' or not current.stale_input
+        or not s.pending or s.pending.type~='continue_round' then
+        return {accepted=false,reason='no stale continuation ready'}
+    end
+    for _,key in ipairs({'epoch','generation','round','input_ref'})do
+        if current[key]~=identity[key] then return {accepted=false,reason='response changed'}end
+    end
+    for _,status in pairs(s.grants)do
+        if status~='valid' then return {accepted=false,reason='output ownership changed'}end
+    end
+    local target=D.lookup(s.doc,s.entity)
+    if not target or target.opaque or not target.metadata or not target.metadata.confirmed then
+        return {accepted=false,reason='target unavailable'}
+    end
+    return M.resume(r,'operator:original-input')
 end
 function M.drain(r,limit)
     local s=state(r);local result

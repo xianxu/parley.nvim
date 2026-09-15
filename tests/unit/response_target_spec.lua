@@ -28,7 +28,7 @@ describe('response target admission before IO',function()
         local doc,fake=fixture();local ready
         local target=assert(T.start(doc,spec(),{ready=function(value)ready=value end}))
         assert.is_nil(ready);assert.equals('waiting',T.snapshot(target).status)
-        assert.equals(2,D.user_guard_stats(doc).live)
+        assert.equals(3,D.user_guard_stats(doc).live)
         local reads=0;local original=fake.driver.text
         fake.driver.text=function(...)reads=reads+1;return original(...)end
         local result=settle(target)
@@ -52,16 +52,17 @@ describe('response target admission before IO',function()
         local result
         for _=1,200 do
             local before=reads;result=T.step(target);assert.is_true(reads-before<=1)
+            assert.is_false(result.input_stale,'structural repair alone is not input edit evidence')
             if result.status~='waiting'then break end
         end
         assert.equals('ready',result.status);assert.is_true(reads>20)
     end)
-    it('relocates a fixed selection after disjoint edits and marks frozen input conservatively stale',function()
+    it('relocates a fixed selection without staling excluded prefix edits',function()
         local doc,fake=fixture();local ready
         local target=assert(T.start(doc,spec(),{ready=function(value)ready=value end}))
         fake:set_lines(0,0,{'prefix'})
         assert.equals('ready',settle(target).status)
-        assert.equals(2,ready.question_row);assert.is_true(ready.input_stale)
+        assert.equals(2,ready.question_row);assert.is_false(ready.input_stale)
         assert.equals(#'prefix'+1+5+#'💬: question'+1+4,ready.first)
         assert.equals(#'prefix'+1+5,ready.dependencies[1].first)
     end)
@@ -106,4 +107,23 @@ describe('response target admission before IO',function()
         assert.equals('cancelled',T.snapshot(target).status)
         T.cancel(target);T.step(target);assert.equals(1,cancelled)
     end)
+    it('tracks included prefix evidence while deferring structural repair',function()
+        local doc,fake=fixture();local value=spec();value.input_prefix=true
+        local ready;local target=assert(T.start(doc,value,{ready=function(v)ready=v end}))
+        fake:edit(0,0,0,4,{'LEAD'});fake:edit(0,0,0,4,{'lead'})
+        assert.is_true(T.snapshot(target).input_stale)
+        assert.equals('waiting',T.snapshot(target).status)
+        assert.equals('ready',settle(target).status);assert.is_true(ready.input_stale)
+        assert.equals(0,ready.dependencies[1].first);assert.equals(0,D.user_guard_stats(doc).live)
+    end)
+    it('releases target guards if dependency capture exceeds bounded capacity',function()
+        local doc=fixture();local occupied={}
+        for i=1,62 do occupied[i]=assert(D.capture_user(doc,{operation='occupy'..i,
+            regions={{first={row=6,col=0},last={row=6,col=1}}}}))end
+        assert.equals(62,D.user_guard_stats(doc).live)
+        local target,reason=T.start(doc,spec(),{})
+        assert.is_nil(target);assert.equals('capacity',reason);assert.equals(62,D.user_guard_stats(doc).live)
+        for _,guard in ipairs(occupied)do D.cancel_user(doc,guard)end
+    end)
+
 end)

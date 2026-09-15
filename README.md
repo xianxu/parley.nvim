@@ -69,6 +69,31 @@ and [code style](STYLE.md).
 Parley was adapted from [gp.nvim](https://github.com/Robitx/gp.nvim) and has since
 been extensively redesigned. See [LICENSE](LICENSE).
 
+## Editing while an answer is generated
+
+You can write the next question while one or more answers stream elsewhere in
+this chat. Editing generated output preserves your edit and stops that region's
+writer. Deleting an exchange invalidates its writers; reloading the file
+invalidates all active writes. Undo and redo remain native Neovim edits and can
+also revoke a writer; undo does not restart a cancelled request.
+
+Changing earlier input leaves an in-flight request on its original input. A
+visible **input changed** note stays with the answer for this editor session.
+A tool continuation pauses rather than silently combining edited input with
+previous results. Use `:ParleyChatResumeResponse` to select and confirm continuing
+with the **original input and confirmed tool results**, or stop and generate a
+new answer. Edited output cannot regain its old write permission through resume.
+The stale note clears when a fresh response starts or the file is reloaded.
+
+- `:ParleyStop` cancels the response under the cursor. If none is selected, it
+  offers the active responses in this chat. Cancelling the picker changes nothing.
+- `:ParleyStopDocument` cancels all responses in the current chat.
+- Tool slots show `(Tool result pending)` until a confirmed result replaces them.
+  Pending text is not a successful tool result. Already started effects may still
+  need to finish cleanup after Stop; stopping does not undo an external effect.
+
+These controls apply to concurrent work in one Neovim instance.
+
 ## Concurrent tools
 
 Builtin tools run asynchronously. Independent resources can proceed together;

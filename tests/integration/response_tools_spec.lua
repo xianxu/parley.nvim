@@ -23,7 +23,13 @@ local function setup(options)
     local hooks={prepare=function(ctx,cb)cb.prepared(ctx.input);cb.resolved()end,
         request=function(ctx,cb)requests[#requests+1]={ctx=ctx,cb=cb};return {}end,
         finalize=function(_,done)done('applied')end,terminal=adapter.close,
-        reserve_round=adapter.reserve_round,start_child=adapter.start_child,continue_round=adapter.continue_round,
+        reserve_round=adapter.reserve_round,start_child=function(ctx,cb)
+            if options.on_outcome then
+                local outcome=cb.outcome
+                cb.outcome=function(kind,value)local accepted=outcome(kind,value);options.on_outcome(kind);return accepted end
+            end
+            return adapter.start_child(ctx,cb)
+        end,continue_round=adapter.continue_round,
         cancel_operation=adapter.cancel_operation,cancel_reservation=adapter.cancel_reservation}
     local marker=D.query(doc,0,1)[1];local body=D.query(doc,2,3)[1]
     local runner=assert(Runner.start(doc,{entity=marker.handle,first=marker.end_byte-1,last=body.end_byte-1,
@@ -66,14 +72,68 @@ describe('production concurrent tool round composition',function()
         for _,doc in ipairs(docs)do D.detach(doc)end
         docs,runners,fixtures={},{},{}
     end)
+    local function projected(f)
+        local parsed=require('parley.chat_parser').parse_chat(f.editor.lines,0,{
+            chat_user_prefix='💬:',chat_branch_prefix='🌿:',chat_assistant_prefix={'🤖:','[{{agent}}]'},
+            chat_tool_use_prefix='🔧:',chat_tool_result_prefix='📎:',chat_memory={enable=false}})
+        local blocks=parsed.exchanges[1].answer.content_blocks
+        local results={}
+        for _,block in ipairs(blocks)do if block.type=='tool_result'then results[block.id]=block end end
+        local wire={}
+        local messages=require('parley.chat_respond')._emit_content_blocks_as_messages(blocks)
+        for _,message in ipairs(messages)do
+            for _,block in ipairs(message.content)do
+                if block.type=='tool_result'then wire[block.tool_use_id]=block end
+            end
+        end
+        local openai={}
+        for _,message in ipairs(require('parley.tools.wire_openai').translate_messages(messages))do
+            if message.role=='tool'then openai[message.tool_call_id]=message.content end
+        end
+        return results,wire,openai
+    end
+    for _,stop in ipairs({'pending','cancel','reload','unknown','rejected'})do
+        it('never publishes completed results from '..stop..' reservations',function()
+            local f=setup();f.round(calls)
+            assert.equals(2,#f.producer.started,'reservations must admit both producers')
+            if stop=='unknown' or stop=='rejected'then
+                f.producer.started[1].events.outcome(stop,{content='no confirmed result'})
+                f.producer.started[1].events.resolved();f.drain()
+            elseif stop=='cancel'then Runner.cancel(f.runner);f.drain()
+            elseif stop=='reload'then f.editor:reload(f.editor.lines);f.drain()end
+            local results,wire,openai=projected(f)
+            assert.same({},results,'only positive tool outcomes may serialize result blocks')
+            for _,c in ipairs(calls)do
+                assert.is_true(wire[c.id].is_error,'missing results must remain missing on provider projection')
+                assert.is_nil(wire[c.id].content:find('(pending)',1,true))
+                assert.is_truthy(openai[c.id]:find(wire[c.id].content,1,true))
+            end
+            assert.equals(1,#f.requests,'reservation alone cannot admit provider continuation')
+            if stop=='unknown'then
+                f.producer.started[1].events.outcome('known',{content='later confirmation'});f.drain()
+            end
+        end)
+    end
+    it('publishes only confirmed sibling outcomes when a live transcript is reparsed',function()
+        local f=setup();f.round(calls)
+        local first,second=unpack(f.producer.started)
+        second.events.outcome('known',{content='confirmed second'});second.events.resolved();f.drain()
+        local results,wire=projected(f)
+        assert.is_nil(results.a);assert.equals('confirmed second',results.b.content)
+        assert.is_true(wire.a.is_error);assert.is_false(wire.b.is_error)
+        first.events.outcome('known',{content='confirmed first'});first.events.resolved();f.drain()
+        results,wire=projected(f)
+        assert.equals('confirmed first',results.a.content);assert.equals('confirmed second',results.b.content)
+        assert.is_false(wire.a.is_error);assert.is_false(wire.b.is_error)
+    end)
     it('declares all call blocks and result grants before any producer starts',function()
         local f=setup();f.round(calls)
         assert.equals(2,#f.producer.started)
         local text=table.concat(f.editor.lines,'\n')
         local a=text:find('🔧: read_file id=a',1,true)
         local b=text:find('🔧: read_file id=b',1,true)
-        local ra=text:find('📎: read_file id=a',1,true)
-        local rb=text:find('📎: read_file id=b',1,true)
+        local ra=text:find('(Tool result pending)',1,true)
+        local rb=text:find('(Tool result pending)',ra+1,true)
         assert.is_true(a<b and b<ra and ra<rb)
         assert.equals('executing_tools',Runner.snapshot(f.runner).phase)
     end)
@@ -124,7 +184,7 @@ describe('production concurrent tool round composition',function()
         local f=setup();f.round(calls)
         local first,second=unpack(f.producer.started)
         local row
-        for i,line in ipairs(f.editor.lines)do if line:find('📎: read_file id=a',1,true)then row=i-1;break end end
+        for i,line in ipairs(f.editor.lines)do if line:find('(Tool result pending)',1,true)then row=i-1;break end end
         assert.is_not_nil(row)
         f.editor:edit(row,0,row,0,{'human '});f.drain()
         assert.equals(1,#f.producer.cancelled)
@@ -132,7 +192,7 @@ describe('production concurrent tool round composition',function()
         f.producer.cancelled[1].resolved()
         second.events.outcome('known',{content='sibling result'});second.events.resolved();f.drain()
         local text=table.concat(f.editor.lines,'\n')
-        assert.is_not_nil(text:find('human 📎: read_file id=a',1,true))
+        assert.is_not_nil(text:find('human (Tool result pending)',1,true))
         assert.is_not_nil(text:find('sibling result',1,true))
         assert.equals(1,#f.requests)
         assert.is_false(first.events.outcome('known',{content='late output'}))
@@ -184,6 +244,72 @@ describe('production concurrent tool round composition',function()
         assert.truthy(text:find('````',1,true));assert.truthy(text:find('```lua',1,true))
         assert.equals(2,#f.requests)
         assert.truthy(f.requests[2].ctx.input.messages[3].content[1].content:find('local x = 1',1,true))
+    end)
+
+    local orders={
+        {'physical','stop','ack','known'},{'physical','stop','known','ack'},
+        {'stop','physical','ack','known'},{'stop','physical','known','ack'},
+        {'stop','ack','physical','known'},{'stop','ack','known','physical'},
+        {'stop','known','physical','ack'},{'stop','known','ack','physical'},
+    }
+    for _,mode in ipairs({'cancel','detach'})do for _,order in ipairs(orders)do
+        it('joins late outcome and cleanup after '..mode..': '..table.concat(order,','),function()
+            local f=setup();f.round({calls[1]});local op=f.producer.started[1]
+            op.events.outcome('unknown',{content='awaiting confirmation'});f.drain()
+            local before=table.concat(f.editor.lines,'\n')
+            for _,event in ipairs(order)do
+                if event=='physical'then op.events.resolved();op.events.resolved()
+                elseif event=='stop'then
+                    if mode=='detach'then D.detach(f.doc)else Runner.cancel(f.runner)end
+                elseif event=='ack'then
+                    assert.equals(1,#f.producer.cancelled)
+                    f.producer.cancelled[1].resolved();f.producer.cancelled[1].resolved()
+                else
+                    assert.is_true(op.events.outcome('known',{content='confirmed after cancellation'}))
+                    assert.is_false(op.events.outcome('known',{content='duplicate'}))
+                end
+                f.drain()
+                if event~='known' and op.events.outcome('unknown',{})then error('duplicate unknown accepted')end
+            end
+            assert.equals(0,Runner.snapshot(f.runner).outstanding_operations)
+            assert.equals('terminal',Runner.snapshot(f.runner).phase)
+            assert.is_true(f.adapter.close())
+            assert.equals(before,table.concat(f.editor.lines,'\n'));assert.equals(1,#f.requests)
+        end)
+    end end
+    it('reserves publication before a reentrant physical-resolution callback',function()
+        local f
+        f=setup({on_outcome=function(kind)
+            if kind=='known'then f.producer.started[1].events.resolved()end
+        end})
+        f.round({calls[1]});local op=f.producer.started[1]
+        assert.is_true(op.events.outcome('known',{content='published before retirement'}));f.drain()
+        assert.truthy(table.concat(f.editor.lines,'\n'):find('published before retirement',1,true))
+        assert.equals(2,#f.requests)
+        f.requests[2].cb.complete();f.requests[2].cb.resolved();f.drain()
+        assert.equals('terminal',Runner.snapshot(f.runner).phase)
+    end)
+
+    for _,outcome in ipairs({'rejected','cancelled_before_effect'})do
+        it('joins early physical cleanup with later '..outcome,function()
+            local f=setup();f.round({calls[1]});local op=f.producer.started[1]
+            op.events.resolved();op.events.resolved()
+            assert.is_true(op.events.outcome(outcome,{content='not executed'}));f.drain()
+            assert.equals(0,Runner.snapshot(f.runner).outstanding_operations)
+            assert.equals(1,#f.requests)
+            Runner.cancel(f.runner);f.drain();assert.equals('terminal',Runner.snapshot(f.runner).phase)
+        end)
+    end
+    it('waits for the publication decision when cancellation overtakes a known result',function()
+        local f=setup();f.round({calls[1]});local op=f.producer.started[1]
+        local before=table.concat(f.editor.lines,'\n')
+        op.events.outcome('known',{content='must not publish after cancellation'})
+        op.events.resolved();Runner.cancel(f.runner);f.drain()
+        for _,cancel in ipairs(f.producer.cancelled)do cancel.resolved()end
+        f.drain()
+        assert.equals('terminal',Runner.snapshot(f.runner).phase)
+        assert.equals(0,Runner.snapshot(f.runner).outstanding_operations)
+        assert.equals(before,table.concat(f.editor.lines,'\n'));assert.is_true(f.adapter.close())
     end)
 
 end)

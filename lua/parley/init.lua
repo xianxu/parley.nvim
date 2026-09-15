@@ -1592,6 +1592,9 @@ M._format_missing_remote_reference_cache_content = function(u) return chat_respo
 -- Stop one captured response generation, or explicitly stop this document.
 M.cmd.Stop = function(signal) chat_respond.cmd_stop(signal) end
 M.cmd.StopDocument = function() chat_respond.cmd_stop_document() end
+M.cmd.ChatResumeResponse = function() chat_respond.cmd_resume_response() end
+
+
 M.cmd.ToolOperations = function() require("parley.tool_operations").open() end
 M.cmd.ChatResumeBatch = function(params) return chat_respond.resume_batch(params) end
 M.cmd.AnswerRecovery = function()

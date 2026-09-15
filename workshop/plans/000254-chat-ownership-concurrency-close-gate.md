@@ -271,6 +271,120 @@ rounds:
           round: 11
       boundary: M3
       blocked: false
+    - "n": 12
+      timestamp: "2026-09-15T10:23:31-07:00"
+      agent: codex
+      findings:
+        - id: BR-14
+          severity: Critical
+          title: Pending tool reservations parse as completed non-error results
+          detail: 'lua/parley/response_tools.lua:153 serializes an ordinary result before execution; a scratch production-fixture regression returned content="(pending)" and is_error=false. This is the 7th finding in family semantic-publication-evidence. Earlier rounds fixed instances: state and enforce the rule that only confirmed outcomes publish result evidence, sweeping reservation, cancellation, persistence, parsing, and provider projection (ARCH-PURPOSE, ARCH-SECURE, ARCH-ORDER). Plan lines 150–155 explicitly prohibit this representation.'
+          family: semantic-publication-evidence
+          round: 12
+        - id: BR-15
+          severity: Critical
+          title: Stale input can silently strand a response in paused state
+          detail: lua/parley/generation_runner.lua:317 pauses stale-input continuation until an explicit resume policy arrives, but production callers do not invoke the session resume API or publish stale/paused state; response_session.lua:52 wires only ordinary pending presentation. Expose the state and an identity-validated continuation decision, retain the promised stale indication on completed answers, and test through the public response workflow (ARCH-PURPOSE, ARCH-ORDER).
+          family: lifecycle-state-observability
+          round: 12
+        - id: BR-16
+          severity: Important
+          title: README omits the new StopDocument command and changed Stop contract
+          detail: 'lua/parley/init.lua:1583–1584 introduces the user-facing command and selection behavior without any README change in the pinned range. This is the 4th finding in family deferred-contract-traceability. Do not repair only this command: enumerate all changed user-facing behavior, including active-output editing and native history, and complete the README gate for that inventory (ARCH-PURPOSE). Prose inspection is sufficient validation for this documentation correction.'
+          family: deferred-contract-traceability
+          round: 12
+      boundary: M4
+      blocked: true
+    - "n": 13
+      timestamp: "2026-09-15T10:55:58-07:00"
+      agent: codex
+      dispose:
+        - id: BR-14
+          disposition: addressed
+          note: response_tools.lua:156 reserves inert text; lines 92–99 serialize only known outcomes. Regression tests cover pending, cancellation, reload, unknown/rejected outcomes, sibling completion, and provider projection. Restoring the previous implementation in scratch reproduces parsed content="(pending)", is_error=false.
+          round: 13
+        - id: BR-15
+          disposition: addressed
+          note: Public ChatResumeResponse now reaches identity-validated resume_original; stale annotations survive completion. Native public-workflow tests cover continuation, focus changes, revoked output, detach, and fresh-answer clearing. Restoring the previous runner in scratch makes four regression tests fail.
+          round: 13
+        - id: BR-16
+          disposition: addressed
+          note: README.md:64–87 documents Stop/StopDocument, active-output edits, deletion/reload, native history, pending results, and stale continuation. The pinned additions match init.lua:1583–1585, chat_history.lua:6–8, and the response adapters.
+          round: 13
+      findings:
+        - id: BR-17
+          severity: Critical
+          title: Later-draft edits before admission falsely stale and pause an earlier response
+          detail: 'response_target.lua:99–101 sets input_stale=true for every document edit, regardless of captured input dependencies. A scratch public-workflow regression submits the first question, immediately edits the later draft, then completes a tool round: the earlier generation becomes paused with stale_input=true and never issues its second request. This contradicts plan line 145. This is the 8th finding in family semantic-publication-evidence: do not patch only this site; enforce dependency-backed stale evidence across waiting-target admission, active generation, presentation, and continuation (ARCH-PURPOSE, ARCH-SECURE, ARCH-ORDER).'
+          family: semantic-publication-evidence
+          round: 13
+      boundary: M4
+      blocked: true
+    - "n": 14
+      timestamp: "2026-09-15T11:10:58-07:00"
+      agent: codex
+      dispose:
+        - id: BR-17
+          disposition: addressed
+          note: response_target.lua shares consumed-input selection between waiting guards and admitted dependencies. Public pre/post-admission regressions pass; restoring the pre-fix target implementation makes chat_stop_generation_spec.lua:176 fail because continuation never starts.
+          round: 14
+        - id: BR-14
+          disposition: addressed
+          note: response_tools.lua reserves inert pending text and serializes confirmed results. Passing response_tools_spec.lua cases cover pending, cancellation, reload, unknown/rejected outcomes, and confirmed sibling publication.
+          round: 14
+        - id: BR-15
+          disposition: addressed
+          note: Public chat_stop_generation_spec.lua tests verify stale presentation, explicit original-input continuation across focus changes, and refusal after ownership changes or detach.
+          round: 14
+        - id: BR-16
+          disposition: addressed
+          note: README.md's added editing section documents Stop selection, StopDocument, stale continuation, and native history; the command implementation and passing public command tests support these descriptions.
+          round: 14
+      findings:
+        - id: BR-18
+          severity: Critical
+          title: Cancelled tools remain outstanding when positive outcome evidence arrives after cleanup acknowledgment
+          detail: 'lua/parley/response_tools.lua:98 returns without maybe_resolve after cancellation. Reproduced sequence: unknown outcome, producer resolved, cancellation, cancellation resolved, then known outcome; the generation remains stopping with one outstanding operation despite complete evidence. This is the 3rd finding in family scope-owned-callback-cleanup. Do NOT fix only this instance: enforce the rule that every update to outcome, physical completion, or publication completion reevaluates retirement; cancellation suppresses publication, not retirement. Sweep their orderings, duplicates, and teardown paths (ARCH-ORDER, ARCH-FUNERAL, ARCH-PURPOSE).'
+          family: scope-owned-callback-cleanup
+          round: 14
+        - id: BR-19
+          severity: Important
+          title: Existing affinity regression still requires an unrelated suffix edit to stale input
+          detail: 'tests/integration/generation_input_affinity_spec.lua:39–56 appends a later question and asserts input_stale=true; the pinned Head fails at line 45. This is the 9th finding in family semantic-publication-evidence. Do NOT merely flip this assertion: apply the consumed-dependency rule across the stale-input test inventory, use an actual consumed-prefix edit to test stale evidence propagation into preparation, and retain a separate negative suffix case (ARCH-PURPOSE).'
+          family: semantic-publication-evidence
+          round: 14
+      boundary: M4
+      blocked: true
+    - "n": 15
+      timestamp: "2026-09-15T11:32:05-07:00"
+      agent: codex
+      dispose:
+        - id: BR-18
+          disposition: addressed
+          note: response_tools.lua:98–104 reserves publication before callbacks and reevaluates retirement after outcome updates. All 35 tool tests pass; restoring the pre-fix implementation in a scratch copy produces nine failures.
+          round: 15
+        - id: BR-19
+          disposition: addressed
+          note: generation_input_affinity_spec.lua:39–65 separately tests consumed-prefix staleness and excluded-suffix freshness through preparation. All three tests pass; disabling runner stale-evidence propagation makes the consumed-prefix regression fail.
+          round: 15
+        - id: BR-14
+          disposition: addressed
+          note: Pending reservations remain inert text. Passing response_tools regressions verify that cancellation, reload, unknown outcomes, and reparsing cannot turn reservations into successful tool results.
+          round: 15
+        - id: BR-15
+          disposition: addressed
+          note: The public resume command selects stale paused responses and validates captured identity through resume_original. The changed chat_stop_generation regression suite passes.
+          round: 15
+        - id: BR-16
+          disposition: addressed
+          note: README.md documents cursor-scoped ParleyStop, its picker, and ParleyStopDocument; chat_respond.cmd_stop and cmd_stop_document implement those respective scopes.
+          round: 15
+        - id: BR-17
+          disposition: addressed
+          note: response_target.lua derives waiting guards and admitted dependencies from input_regions. Passing target, submission, and native affinity tests preserve freshness for excluded suffix edits.
+          round: 15
+      boundary: M4
+      blocked: false
 ---
 
 # Gate ledger — 000254-chat-ownership-concurrency#254 (boundary-review)
@@ -399,6 +513,57 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 
 - **BR-13** [Important] `deferred-contract-traceability` BR-11 regressions are missing from the documented verification mapping
   atlas/traceability.yaml:280-285 omits document_fold_retirement_spec.lua and document_fold_uncertainty_retirement_spec.lua. scripts/spec_test_map.sh list-tests chat/document consequently excludes both, contrary to the plan's verification contract at :377. This is the 3rd finding in family deferred-contract-traceability. Apply the rule that every new boundary regression must be registered in its documented suite: the complete added-spec sweep found exactly these two omissions. Register both and verify the mapping includes them.
+
+## Round 12 — 2026-09-15T10:23:31-07:00 (codex) — BLOCKED
+
+### Raised
+
+- **BR-14** [Critical] `semantic-publication-evidence` Pending tool reservations parse as completed non-error results
+  lua/parley/response_tools.lua:153 serializes an ordinary result before execution; a scratch production-fixture regression returned content="(pending)" and is_error=false. This is the 7th finding in family semantic-publication-evidence. Earlier rounds fixed instances: state and enforce the rule that only confirmed outcomes publish result evidence, sweeping reservation, cancellation, persistence, parsing, and provider projection (ARCH-PURPOSE, ARCH-SECURE, ARCH-ORDER). Plan lines 150–155 explicitly prohibit this representation.
+- **BR-15** [Critical] `lifecycle-state-observability` Stale input can silently strand a response in paused state
+  lua/parley/generation_runner.lua:317 pauses stale-input continuation until an explicit resume policy arrives, but production callers do not invoke the session resume API or publish stale/paused state; response_session.lua:52 wires only ordinary pending presentation. Expose the state and an identity-validated continuation decision, retain the promised stale indication on completed answers, and test through the public response workflow (ARCH-PURPOSE, ARCH-ORDER).
+- **BR-16** [Important] `deferred-contract-traceability` README omits the new StopDocument command and changed Stop contract
+  lua/parley/init.lua:1583–1584 introduces the user-facing command and selection behavior without any README change in the pinned range. This is the 4th finding in family deferred-contract-traceability. Do not repair only this command: enumerate all changed user-facing behavior, including active-output editing and native history, and complete the README gate for that inventory (ARCH-PURPOSE). Prose inspection is sufficient validation for this documentation correction.
+
+## Round 13 — 2026-09-15T10:55:58-07:00 (codex) — BLOCKED
+
+### Disposed
+
+- BR-14 — addressed — response_tools.lua:156 reserves inert text; lines 92–99 serialize only known outcomes. Regression tests cover pending, cancellation, reload, unknown/rejected outcomes, sibling completion, and provider projection. Restoring the previous implementation in scratch reproduces parsed content="(pending)", is_error=false.
+- BR-15 — addressed — Public ChatResumeResponse now reaches identity-validated resume_original; stale annotations survive completion. Native public-workflow tests cover continuation, focus changes, revoked output, detach, and fresh-answer clearing. Restoring the previous runner in scratch makes four regression tests fail.
+- BR-16 — addressed — README.md:64–87 documents Stop/StopDocument, active-output edits, deletion/reload, native history, pending results, and stale continuation. The pinned additions match init.lua:1583–1585, chat_history.lua:6–8, and the response adapters.
+
+### Raised
+
+- **BR-17** [Critical] `semantic-publication-evidence` Later-draft edits before admission falsely stale and pause an earlier response
+  response_target.lua:99–101 sets input_stale=true for every document edit, regardless of captured input dependencies. A scratch public-workflow regression submits the first question, immediately edits the later draft, then completes a tool round: the earlier generation becomes paused with stale_input=true and never issues its second request. This contradicts plan line 145. This is the 8th finding in family semantic-publication-evidence: do not patch only this site; enforce dependency-backed stale evidence across waiting-target admission, active generation, presentation, and continuation (ARCH-PURPOSE, ARCH-SECURE, ARCH-ORDER).
+
+## Round 14 — 2026-09-15T11:10:58-07:00 (codex) — BLOCKED
+
+### Disposed
+
+- BR-17 — addressed — response_target.lua shares consumed-input selection between waiting guards and admitted dependencies. Public pre/post-admission regressions pass; restoring the pre-fix target implementation makes chat_stop_generation_spec.lua:176 fail because continuation never starts.
+- BR-14 — addressed — response_tools.lua reserves inert pending text and serializes confirmed results. Passing response_tools_spec.lua cases cover pending, cancellation, reload, unknown/rejected outcomes, and confirmed sibling publication.
+- BR-15 — addressed — Public chat_stop_generation_spec.lua tests verify stale presentation, explicit original-input continuation across focus changes, and refusal after ownership changes or detach.
+- BR-16 — addressed — README.md's added editing section documents Stop selection, StopDocument, stale continuation, and native history; the command implementation and passing public command tests support these descriptions.
+
+### Raised
+
+- **BR-18** [Critical] `scope-owned-callback-cleanup` Cancelled tools remain outstanding when positive outcome evidence arrives after cleanup acknowledgment
+  lua/parley/response_tools.lua:98 returns without maybe_resolve after cancellation. Reproduced sequence: unknown outcome, producer resolved, cancellation, cancellation resolved, then known outcome; the generation remains stopping with one outstanding operation despite complete evidence. This is the 3rd finding in family scope-owned-callback-cleanup. Do NOT fix only this instance: enforce the rule that every update to outcome, physical completion, or publication completion reevaluates retirement; cancellation suppresses publication, not retirement. Sweep their orderings, duplicates, and teardown paths (ARCH-ORDER, ARCH-FUNERAL, ARCH-PURPOSE).
+- **BR-19** [Important] `semantic-publication-evidence` Existing affinity regression still requires an unrelated suffix edit to stale input
+  tests/integration/generation_input_affinity_spec.lua:39–56 appends a later question and asserts input_stale=true; the pinned Head fails at line 45. This is the 9th finding in family semantic-publication-evidence. Do NOT merely flip this assertion: apply the consumed-dependency rule across the stale-input test inventory, use an actual consumed-prefix edit to test stale evidence propagation into preparation, and retain a separate negative suffix case (ARCH-PURPOSE).
+
+## Round 15 — 2026-09-15T11:32:05-07:00 (codex) — passed
+
+### Disposed
+
+- BR-18 — addressed — response_tools.lua:98–104 reserves publication before callbacks and reevaluates retirement after outcome updates. All 35 tool tests pass; restoring the pre-fix implementation in a scratch copy produces nine failures.
+- BR-19 — addressed — generation_input_affinity_spec.lua:39–65 separately tests consumed-prefix staleness and excluded-suffix freshness through preparation. All three tests pass; disabling runner stale-evidence propagation makes the consumed-prefix regression fail.
+- BR-14 — addressed — Pending reservations remain inert text. Passing response_tools regressions verify that cancellation, reload, unknown outcomes, and reparsing cannot turn reservations into successful tool results.
+- BR-15 — addressed — The public resume command selects stale paused responses and validates captured identity through resume_original. The changed chat_stop_generation regression suite passes.
+- BR-16 — addressed — README.md documents cursor-scoped ParleyStop, its picker, and ParleyStopDocument; chat_respond.cmd_stop and cmd_stop_document implement those respective scopes.
+- BR-17 — addressed — response_target.lua derives waiting guards and admitted dependencies from input_regions. Passing target, submission, and native affinity tests preserve freshness for excluded suffix edits.
 
 ## Open findings
 

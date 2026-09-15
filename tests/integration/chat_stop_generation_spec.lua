@@ -88,4 +88,112 @@ describe('generation scoped Stop commands',function()
         wait(function()return Respond.response_snapshot(a).status=='terminal' and Respond.response_snapshot(b).status=='terminal'end)
         assert.equals(0,count)
     end)
+    it('marks an answer stale after its input changes and retains the indication on completion',function()
+        local a=submit('first');wait(function()return #calls==1 end)
+        vim.api.nvim_buf_set_text(buf,4,#'💬: ',4,#'💬: f',{'F'})
+        wait(function()return Respond.response_snapshot(a).generation.stale_input end)
+        local ns=vim.api.nvim_create_namespace('parley_response_status')
+        wait(function()return #vim.api.nvim_buf_get_extmarks(buf,ns,0,-1,{})>0 end)
+        calls[1].output(calls[1].id,'answer');calls[1].complete(calls[1].id)
+        wait(function()return Respond.response_snapshot(a).status=='terminal'end)
+        local marks=vim.api.nvim_buf_get_extmarks(buf,ns,0,-1,{details=true})
+        assert.equals('success',Respond.response_snapshot(a).generation.outcome)
+        assert.equals(1,#marks)
+        assert.truthy(marks[1][4].virt_text[1][1]:find('input changed',1,true))
+        local b=submit('First');wait(function()return #calls==2 end)
+        assert.equals(0,#vim.api.nvim_buf_get_extmarks(buf,ns,0,-1,{}))
+        Respond.cancel_responses(buf);wait(function()return Respond.response_snapshot(b).status=='terminal'end)
+    end)
+
+    local function paused_response()
+        local a=submit('first');wait(function()return #calls==1 end)
+        vim.api.nvim_buf_set_text(buf,4,#'💬: ',4,#'💬: f',{'F'})
+        parley.tasker.get_query(calls[1].id).raw_response='data: '..vim.json.encode({choices={{delta={
+            tool_calls={{index=0,id='test-call',type='function',
+                ['function']={name='unknown_fixture_tool',arguments='{}'}}}}}}})..'\n\n'
+        calls[1].complete(calls[1].id)
+        local settled=vim.wait(5000,function()return Respond.response_snapshot(a).generation.phase=='paused'end,1)
+        assert.is_true(settled,vim.inspect(Respond.response_snapshot(a)))
+        return a
+    end
+    it('continues a captured paused response with original input after focus changes',function()
+        local a=paused_response()
+        local old_select=vim.ui.select;local items,choose
+        vim.ui.select=function(values,_,callback)items,choose=values,callback end
+        parley.cmd.ChatResumeResponse();vim.ui.select=old_select
+        assert.equals(1,#items)
+        choose(nil);assert.equals(1,#calls)
+        local other=vim.api.nvim_create_buf(true,false);vim.api.nvim_set_current_buf(other)
+        choose(items[1]);wait(function()return #calls==2 end)
+        assert.equals(buf,calls[2].buf)
+        local encoded=vim.json.encode(calls[2].payload)
+        assert.falsy(encoded:find('First',1,true))
+        assert.truthy(encoded:find('first',1,true))
+        calls[2].output(calls[2].id,'continued');calls[2].complete(calls[2].id)
+        wait(function()return Respond.response_snapshot(a).status=='terminal'end)
+        assert.is_true(Respond.response_snapshot(a).generation.stale_input)
+        choose(items[1]);assert.equals(2,#calls)
+        vim.api.nvim_set_current_buf(buf);vim.api.nvim_buf_delete(other,{force=true})
+    end)
+    it('rejects a captured continuation after output ownership changes',function()
+        local a=paused_response()
+        local old_select=vim.ui.select;local items,choose
+        vim.ui.select=function(values,_,callback)items,choose=values,callback end
+        parley.cmd.ChatResumeResponse();vim.ui.select=old_select
+        local lines=vim.api.nvim_buf_get_lines(buf,0,-1,false)
+        for row,line in ipairs(lines)do if line:find('📎:',1,true) then
+            vim.api.nvim_buf_set_text(buf,row-1,0,row-1,0,{'human '});break end end
+        choose(items[1]);vim.wait(50,function()return false end,1)
+        assert.equals(1,#calls)
+        assert.is_true(Respond.response_snapshot(a).generation.stale_input)
+    end)
+
+    it('retires stale presentation and rejects a captured decision when the document detaches',function()
+        paused_response()
+        local old_select=vim.ui.select;local items,choose
+        vim.ui.select=function(values,_,callback)items,choose=values,callback end
+        parley.cmd.ChatResumeResponse();vim.ui.select=old_select
+        local ns=vim.api.nvim_create_namespace('parley_response_status')
+        assert.equals(1,#vim.api.nvim_buf_get_extmarks(buf,ns,0,-1,{}))
+        D.detach(D.get(buf))
+        assert.equals(0,#vim.api.nvim_buf_get_extmarks(buf,ns,0,-1,{}))
+        choose(items[1]);assert.equals(1,#calls)
+    end)
+
+    local function tool_round(call)
+        parley.tasker.get_query(call.id).raw_response='data: '..vim.json.encode({choices={{delta={
+            tool_calls={{index=0,id='affinity-call',type='function',
+                ['function']={name='unknown_fixture_tool',arguments='{}'}}}}}}})..'\n\n'
+        call.complete(call.id)
+    end
+    for _,timing in ipairs({'before','after'})do
+        it('preserves earlier continuation for a later draft edit '..timing..' admission',function()
+            local a=submit('first')
+            if timing=='after'then wait(function()return #calls==1 end)end
+            local last=vim.api.nvim_buf_line_count(buf)-1
+            vim.api.nvim_buf_set_text(buf,last,5,last,5,{' typed ahead'})
+            wait(function()return #calls==1 end);tool_round(calls[1])
+            wait(function()return #calls==2 or Respond.response_snapshot(a).generation.phase=='paused'end)
+            assert.equals(2,#calls);assert.is_false(Respond.response_snapshot(a).generation.stale_input)
+        end)
+        it('preserves input edit evidence after restoring prior bytes '..timing..' admission',function()
+            local a=submit('second')
+            if timing=='after'then wait(function()return #calls==1 end)end
+            vim.api.nvim_buf_set_text(buf,4,#'💬: ',4,#'💬: f',{'F'})
+            vim.api.nvim_buf_set_text(buf,4,#'💬: ',4,#'💬: F',{'f'})
+            wait(function()return #calls==1 end);tool_round(calls[1])
+            wait(function()return Respond.response_snapshot(a).generation.phase=='paused'end)
+            assert.equals(1,#calls);assert.is_true(Respond.response_snapshot(a).generation.stale_input)
+        end)
+    end
+
+    it('keeps an earlier target independent from a later active writer',function()
+        local b=submit('second');wait(function()return #calls==1 end)
+        local a=submit('first');calls[1].output(calls[1].id,'later writer output')
+        wait(function()return #calls==2 end)
+        tool_round(calls[2]);wait(function()return #calls==3 or Respond.response_snapshot(a).generation.phase=='paused'end)
+        assert.equals(3,#calls);assert.is_false(Respond.response_snapshot(a).generation.stale_input)
+        assert.equals('running',Respond.response_snapshot(b).status)
+    end)
+
 end)
