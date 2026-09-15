@@ -1530,3 +1530,13 @@ transition controls prove adapters cannot launch, consume, release or retire
 contrary to model decisions. New pure modules/tests are mapped. Final149-spec
 verification follows; fourth M6 Codex review retains Important severity with
 round cap5 rather than allowing automatic demotion.
+
+### 2026-09-15 BR31 combined verification
+
+At runtime49805234/docHEAD731b08df,149/149 affected specs pass1939 assertions,
+zero failures/errors/incomplete and make exit0. Full lint616 files plus worker1
+clean; source hashes stable. Global365 unique specs record5636 passing assertions
+with original-run and focused-override provenance retained. Reports:
+`/tmp/parley254-m6-rework3-final-verification.txt` and
+`/tmp/parley254-m6-complete-latest-verification.txt`. Entering fourth Codex M6
+review with round cap5 to retain Important findings as blocking. Runtime frozen.
