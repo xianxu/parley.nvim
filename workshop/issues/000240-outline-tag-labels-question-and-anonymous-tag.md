@@ -140,3 +140,7 @@ Reason: operator asked that an adjacent tag prefix the following question's AI c
 Use one pure association rule for outline labels and context ownership. Preserve attached tags when the preceding answer is regenerated; a tag belongs to the next question even if its physical line lies in the prior answer span. File-shaped markers keep existing file-reference semantics when projected into a question. Fenced lookalikes are excluded using the existing fence grammar and live prefixes.
 
 Detailed implementation plan: `workshop/plans/000240-question-tag-ownership-plan.md`. Work is claimed; no production changes yet.
+
+### 2026-09-14 — Exchange preface architecture
+
+Operator requested: “extend the exchange structure and add a preface field to capture what's before a question that should be considered part of the question.” This supersedes the draft's virtual context snapshot approach. Parsed exchange.preface holds raw content and source span; live exchange.preface holds a derived size, without changing question block index or double-counting leading rows. Parser assigns the tag to the next exchange, all context builders compose preface+question, and rendering/resubmit retain physical placement. Full details are in the plan's authoritative Revisions section. No code changed.
