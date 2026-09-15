@@ -307,6 +307,7 @@ Each M-row below is a real `sdlc milestone-close` boundary, with its own fresh-c
 **Files:** create `lua/parley/tools/operation.lua`, `filesystem.lua`, `resources.lua`, `scheduler.lua`, `tests/unit/tool_operation_spec.lua`, `tool_resources_spec.lua`, `tests/helpers/fake_tool_filesystem.lua`, `tests/integration/tool_effect_sequences_spec.lua`, `concurrent_tools_spec.lua`; modify `lua/parley/tools/dispatcher.lua`, `backup.lua`, `wire_anthropic.lua`, `wire_openai.lua`, `types.lua`, all twelve registered files under `lua/parley/tools/builtin/`, `lua/parley/tool_loop.lua`, `generation_runner.lua`, `defaults.lua`; extend `tests/unit/tools_dispatcher_spec.lua`, `tools_builtin_propose_edits_spec.lua`, `tests/integration/openai_tool_loop_spec.lua`, `tests/arch/document_ownership_spec.lua`; update `atlas/providers/tool_use.md`, `atlas/providers/architecture.md`, `atlas/traceability.yaml`, `workshop/lessons.md` for actual review findings.
 
 - [ ] Add callback-based tool dispatch, explicit cancellation handles, async builtin IO/commands, and a fair scheduler backed by pure resource admission. Preserve provider declaration indexes and normalize ordered call/result slots. Replace global cwd switching with explicit paths/cwd. Use the scheduler conformance strategy below to establish real overlap and responsiveness.
+- [ ] Implement process-scoped `tasker.reconcile_step` scheduling for cancelled/missing/unknown attempts: capped backoff for at most five seconds, then a visible unresolved diagnostic with no busy polling. Keep exit/drain and resource admission reserved until positive resolution; teardown/reload cannot erase this state. Enforce the declared process/document/generation admission caps before launches and release reconciliation timers on resolution or the diagnostic transition. Use an injected clock and the stateful process seam to verify bounded retries, delayed exit/drain, failed signals, detached documents, cap refusal, disjoint progress, and no retained polling timer after the deadline.
 - [ ] Enforce the generation's selected capability snapshot, concurrent round join, resource admission, and scoped tool-call ledger before effect execution. Verify `operation.transition` and `dispatcher.execute_async` using their authority/effect strategies below.
 - [ ] Route backup/open/write/flush/close through checked filesystem outcomes; exercise stateful partial failures across each write/edit/proposal consumer. Do not report success before checked completion or repeat an unknown effect automatically.
 - [ ] Sweep lifetime/authority bypasses and add architecture enforcement, including direct transcript API calls through command strings and mutable tables returned from public APIs. Verify all production callers use the final boundaries.
@@ -355,6 +356,8 @@ living in executable specs. Behavioral policies remain in Chunk 1.
 | M5 `answer_recovery.resolve` | Mutated persisted association evidence; only a unique exact target resolves, otherwise inspection/explicit selection remains available. |
 | M5 `answer_recovery.restore` | Concurrent edit/failure schedules; fresh target evidence prevents restoration over human changes. |
 | M5 `answer_recovery.cleanup` | Generated save/retention/failure histories; needed snapshots remain recoverable and caps account for failed deletion. |
+| M6 `tasker.reconcile_step` | Deterministic clock/process schedules; bounded probes and timers, visible unresolved evidence, retained admission, and independent progress after cancellation/detach. |
+| M6 `tasker.run` admission | Generated cross-document owner launches at each configured limit; count admitted attempts/effects and prove unresolved records cannot be evicted to admit more work. |
 | M6 `operation.transition` | Capability/call/effect event sequences; independently assert no unauthorized effect, replay of uncertainty, or fabricated success. |
 | M6 `resources.admit` | Random overlapping multi-resource claims; serial reference proves exclusivity, atomic admission, and fair bounded queues. |
 | M6 `resources.release` | Unknown/resolved effect histories; only confirmed resolution frees conflicting claims. |
@@ -436,3 +439,13 @@ mapped verification now pass. Delta: record M1 task completion pending its
 automatic milestone verdict; issue M1 boundary remains owned by sdlc. Added
 production-path fold/stream baseline fixtures and migrated the progress admission
 fixture to the private owner gate. No future milestone is marked complete.
+
+### 2026-09-14 — M1 review BR-2: assign deferred supervision to M6
+
+Reason: M1 deliberately retains unresolved attempts without a polling scheduler,
+but the remaining checklist did not explicitly own delivery of the promised
+reconciliation policy. Delta: M6 now explicitly implements process-scoped bounded
+reconciliation, visible unresolved diagnostics, global/document/generation
+admission enforcement, timer cleanup, and deterministic clock/process tests. The
+five-second operating envelope remains unchanged. M1 supplies safe retention; M6
+supplies bounded operational supervision (ARCH-CONSTRAINTS, ARCH-FUNERAL).

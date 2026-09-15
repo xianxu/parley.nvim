@@ -149,7 +149,9 @@ observations do not prove completion. Unresolved attempts retain admission;
 explicit reconciliation records evidence without guessing that work has ended.
 Admission releases before the terminal callback so retries can launch safely.
 
-Response lease invalidation stops its generation's transport owner. Completion
+Response lease invalidation stops its generation's transport owner, including
+automatic topic generation and provider recovery retries. Topic lifetime checks
+run even when no topic line can be animated. Completion
 preserves subsequent human text, including an unfinished question with no marker.
 These are containment measures: current chat pending state and history controls
 still precede the regional coordinator and concurrent tool scheduler planned for

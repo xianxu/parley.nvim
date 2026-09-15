@@ -2462,3 +2462,11 @@ download.
   must seed a competing admission through the actual transport seam. Mocking the
   old predicate can silently turn a launch-rejection test into a network request.
   Exercise pending cleanup with a stateful process fixture (ARCH-MOCK).
+
+- Cancellation scope must reach every child launch, including automatic topic
+  generation and provider retries. Enumerate launch paths when replacing global
+  stop; fixtures with prefilled topics miss this branch. Lifetime validation must
+  run even when a spinner has no drawable target (ARCH-ORDER, ARCH-PURPOSE).
+- A deferred operational contract needs a named remaining milestone, implementation
+  task, observable outcome, and deterministic tests; prose saying “later scheduler”
+  is not delivery traceability (ARCH-CONSTRAINTS).

@@ -23,10 +23,12 @@ end
 
 describe("chat ownership containment", function()
     local old_query, old_stop, old_stop_owner, buffers, calls
+    local old_runtime, process_state
     local sequence = 0
 
     before_each(function()
         buffers, calls = {}, {}
+        old_runtime, process_state = parley.tasker._uv, nil
         old_query, old_stop, old_stop_owner = parley.dispatcher.query, parley.tasker.stop, parley.tasker.stop_owner
         parley.dispatcher.query = function(buf, _, _, handler, completion, _, _, _, _, _, opts)
             local id = "ownership-" .. tostring(#calls + 1)
@@ -47,16 +49,21 @@ describe("chat ownership containment", function()
 
     after_each(function()
         pending.cancel_all("fixture cleanup")
+        if process_state then
+            for _, process in pairs(process_state.processes) do process:finish() end
+            settle(function() return #parley.tasker._handles == 0 end)
+        end
+        parley.tasker._uv = old_runtime
         parley.dispatcher.query, parley.tasker.stop, parley.tasker.stop_owner = old_query, old_stop, old_stop_owner
         for _, buf in ipairs(buffers) do
             if vim.api.nvim_buf_is_valid(buf) then vim.api.nvim_buf_delete(buf, { force = true }) end
         end
     end)
 
-    local function start()
+    local function start(topic)
         sequence = sequence + 1
         local file = root .. ("/2026-09-14.12-00-%02d.001_fixture.md"):format(sequence)
-        vim.fn.writefile({ "# topic: Ownership fixture", "- file: fixture.md", "---", "", "💬: First question", "" }, file)
+        vim.fn.writefile({ "# topic: " .. (topic or "Ownership fixture"), "- file: fixture.md", "---", "", "💬: First question", "" }, file)
         vim.cmd("edit " .. vim.fn.fnameescape(file))
         local buf = vim.api.nvim_get_current_buf()
         buffers[#buffers + 1] = buf
@@ -105,4 +112,56 @@ describe("chat ownership containment", function()
         b.handler(b.id, " survives")
         settle(function() return text(second):find(" survives", 1, true) ~= nil end)
     end)
+
+    for _, invalidation in ipairs({ "answer header", "buffer" }) do
+    it("cancels automatic topic after deleting its " .. invalidation .. " and preserves another owner", function()
+        local runtime
+        runtime, process_state = require("tests.helpers.fake_process").new()
+        parley.tasker._uv = runtime
+        parley.tasker.stop_owner = old_stop_owner
+        parley.dispatcher.query = function(buf, _, _, handler, completion, _, _, _, _, _, opts)
+            local id = "topic-ownership-" .. tostring(#calls + 1)
+            calls[#calls + 1] = { buf = buf, id = id, handler = handler, complete = completion }
+            parley.tasker.set_query(id, { buf = buf, response = "Generated answer" })
+            local run_opts = vim.tbl_extend("force", {}, opts or {}, { query_id = id })
+            parley.tasker.run(buf, "fixture", {}, function() completion(id) end,
+                nil, nil, nil, run_opts)
+        end
+        local first = start("?")
+        local existing_buffers = {}
+        for _, buf in ipairs(vim.api.nvim_list_bufs()) do existing_buffers[buf] = true end
+        process_state.processes[4242]:finish()
+        settle(function() return process_state.spawn_calls == 2 end)
+        local topic_buffer
+        for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+            if not existing_buffers[buf] then
+                assert.is_nil(topic_buffer, "one scratch buffer belongs to the topic request")
+                topic_buffer = buf
+            end
+        end
+        assert.is_not_nil(topic_buffer)
+        local second = start()
+        if invalidation == "buffer" then
+            vim.api.nvim_buf_delete(first, { force = true })
+        else
+            for row, line in ipairs(vim.api.nvim_buf_get_lines(first, 0, -1, false)) do
+                if line:find("🤖:", 1, true) then
+                    vim.api.nvim_buf_set_lines(first, row - 1, row, false, {})
+                    break
+                end
+            end
+        end
+        -- The topic timer must observe parent lifetime even without a visible
+        -- spinner target; no further response chunks are required.
+        vim.wait(300, function() return #process_state.signals > 0 end, 5)
+        assert.same({ { pid = 4243, signal = 15 } }, process_state.signals)
+        assert.is_true(parley.tasker.is_busy(second, true))
+        assert.equals(2, #parley.tasker._handles,
+            "signaling must retain the topic and unrelated attempt until exit/drain")
+        assert.is_true(vim.api.nvim_buf_is_valid(topic_buffer))
+        process_state.processes[4243]:finish()
+        settle(function() return not vim.api.nvim_buf_is_valid(topic_buffer) end)
+        assert.is_true(parley.tasker.is_busy(second, true))
+    end)
+    end
 end)

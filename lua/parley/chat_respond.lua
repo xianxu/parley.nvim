@@ -1109,6 +1109,7 @@ end
 --                  (nil, reason) on terminal failure
 -- @param spinner   table|nil optional {buf, find_line} — buf is the buffer to animate,
 --                  find_line() returns 0-indexed line number of the topic line (or nil to skip)
+-- @param transport_opts table|nil parent generation/admission for automatic topics
 --- Pure: drop the first `lead` messages from a built messages array, returning
 --- just the current-file conversation turns. `lead` = (# system-prompt messages)
 --- + (# ancestor messages). The system prompt is 1 message normally, but 2 for
@@ -1125,7 +1126,7 @@ function M._conversation_after_lead(messages, lead)
     return out
 end
 
-M.generate_topic = function(messages, provider, model, callback, spinner)
+M.generate_topic = function(messages, provider, model, callback, spinner, transport_opts)
     -- Build a clean copy: strip whitespace, drop empty messages and cache_control.
     -- Messages carrying content-block arrays (Anthropic tool-use shape, M2
     -- Task 2.6 of #81) are flattened to a plain-text excerpt for topic
@@ -1166,6 +1167,14 @@ M.generate_topic = function(messages, provider, model, callback, spinner)
     if spinner and spinner.buf and spinner.find_line then
         spinner_timer = vim.uv.new_timer()
         spinner_timer:start(0, 120, vim.schedule_wrap(function()
+            -- Validate parent lifetime even when the topic line disappeared or
+            -- is not eligible for animation. The guard also cancels its owned
+            -- transport; a missing spinner target must not bypass that work.
+            if spinner.before_write and not spinner.before_write() then
+                stop_and_close_timer(spinner_timer)
+                spinner_timer = nil
+                return
+            end
             if not vim.api.nvim_buf_is_valid(spinner.buf) then
                 stop_and_close_timer(spinner_timer)
                 spinner_timer = nil
@@ -1173,11 +1182,6 @@ M.generate_topic = function(messages, provider, model, callback, spinner)
             end
             local line_nr = spinner.find_line()
             if line_nr then
-                if spinner.before_write and not spinner.before_write() then
-                    stop_and_close_timer(spinner_timer)
-                    spinner_timer = nil
-                    return
-                end
                 local text = "topic: " .. spinner_frames[spinner_idx] .. " generating..."
                 -- Issue #80: same undo-pollution fix as the agent-response
                 -- spinner. Each frame joins the previous undo block.
@@ -1230,7 +1234,10 @@ M.generate_topic = function(messages, provider, model, callback, spinner)
         end),
         nil,
         nil,
-        on_abort
+        on_abort,
+        nil,
+        nil,
+        transport_opts
     )
 end
 
@@ -2120,7 +2127,7 @@ M.respond = function(params, callback, override_free_cursor, force, live_model, 
                             return lease_valid()
                         end, after_write = function()
                             lease_commit()
-                        end })
+                        end }, { generation_id = transport_owner, admission_key = transport_owner })
                     end
 
                     -- Place cursor appropriately
