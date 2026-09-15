@@ -1,19 +1,7 @@
--- Tool dispatcher — the DRY safety layer between response_tools and
--- individual handler functions.
---
--- Handlers (lua/parley/tools/builtin/*.lua) are pure. They know
--- nothing about cwd-scope, symlink resolution, truncation, or
--- error wrapping. Every safety concern lives HERE so there's
--- exactly one place to audit and one place to fix.
---
--- SINGLE source for each invariant:
---   - read base + confinement:    resolve_read_path
---   - write-root confinement:     resolve_path_in_cwd
---   - result size cap:            truncate / truncate_preserving_footer (M5)
---   - pcall-guarded handler call: execute_call
---   - dirty-buffer guard:         check_dirty_buffer (M5)
---   - pre-image capture:          ensure_backup (M5)
---   - post-write reload:          _checktime_if_loaded (M5)
+-- Shared tool preparation and presentation policy. Production callers capture
+-- asynchronous definitions and canonical resource claims before Scheduler IO.
+-- execute_call remains an explicit compatibility adapter for legacy handlers;
+-- neither chat responses nor skill invocations dispatch through it.
 
 local M = {}
 
@@ -27,6 +15,27 @@ local types = require("parley.tools.types")
 -- absolute (`/x`), home-relative (`~/x`, `~` expanded), or relative to cwd
 -- (`../`, `sub/dir`). Returns the realpath, the normalized path if it does not
 -- resolve, or nil for an invalid root. (#140)
+-- Missing nested leaves inherit the identity of their nearest existing
+-- ancestor. A dangling symlink or non-ENOENT lookup failure is not absence.
+function M.canonical_path(path)
+    if type(path)~='string' or path=='' or #path>4096 or path:find('%z')then return nil end
+    local current=vim.fs.normalize(path)
+    if current:sub(1,1)~='/'then return nil end
+    local suffix={}
+    while true do
+        local real=vim.loop.fs_realpath(current)
+        if real then
+            for i=#suffix,1,-1 do real=real:gsub('/+$','')..'/'..suffix[i]end
+            return real
+        end
+        local stat,err,code=vim.loop.fs_lstat(current)
+        if stat or not (code=='ENOENT' or tostring(err):match('^ENOENT'))then return nil end
+        local parent=vim.fs.dirname(current)
+        if not parent or parent==current then return nil end
+        suffix[#suffix+1]=vim.fs.basename(current);current=parent
+    end
+end
+
 local function resolve_root(root, cwd)
     if type(root) ~= "string" or root == "" then
         return nil
@@ -36,7 +45,7 @@ local function resolve_root(root, cwd)
     end
     local abs = root:sub(1, 1) == "/" and vim.fs.normalize(root)
         or vim.fs.normalize(cwd .. "/" .. root)
-    return vim.loop.fs_realpath(abs) or abs
+    return M.canonical_path(abs)
 end
 
 --- Resolve a possibly-relative path against cwd, normalize, resolve
@@ -78,22 +87,14 @@ function M.resolve_path_in_cwd(path, cwd, allowed_roots)
         joined = vim.fs.normalize(cwd .. "/" .. path)
     end
 
-    -- Resolve symlinks for the PATH we care about. If the path
-    -- doesn't exist (new file creation), fall back to realpath-ing
-    -- the parent directory and appending the basename.
-    local real_path = vim.loop.fs_realpath(joined)
-    if not real_path then
-        local parent = vim.fs.dirname(joined)
-        local real_parent = vim.loop.fs_realpath(parent)
-        if not real_parent then
-            return nil, "cannot resolve parent directory: " .. parent
-        end
-        real_path = real_parent .. "/" .. vim.fs.basename(joined)
-    end
+    -- Resolve existing symlink ancestors before admitting missing descendants.
+    local real_path = M.canonical_path(joined)
+    if not real_path then return nil, "cannot resolve path: " .. path end
 
     -- Resolve the cwd too so the comparison is between two canonical
     -- absolute paths (handles symlinked /tmp → /private/tmp on macOS).
-    local real_cwd = vim.loop.fs_realpath(cwd) or vim.fs.normalize(cwd)
+    local real_cwd = M.canonical_path(cwd)
+    if not real_cwd then return nil,"invalid working directory" end
 
     -- Allowed base dirs: cwd, plus any configured read roots (#140). A path is
     -- inside a base iff it equals the base OR starts with base + "/". String
@@ -107,7 +108,7 @@ function M.resolve_path_in_cwd(path, cwd, allowed_roots)
     end
 
     for _, base in ipairs(bases) do
-        if real_path == base or real_path:sub(1, #base + 1) == base .. "/" then
+        if real_path == base or base == "/" or real_path:sub(1, #base + 1) == base .. "/" then
             return real_path
         end
     end
@@ -205,6 +206,75 @@ end
 -- Handler invocation
 --------------------------------------------------------------------------------
 
+local function inside(base,path)return base=='/' or path==base or path:sub(1,#base+1)==base..'/'end
+local function prepare_input(call,def,policy,opts)
+    local input=vim.deepcopy(call.input or {})
+    if policy then
+        if def.default_path and input.path==nil and input.file_path==nil and input.paths==nil then input.path=def.default_path end
+        local function resolve(path)
+            local abs,err
+            if def.kind=='write'then abs,err=M.resolve_path_in_cwd(path,policy.write_root)
+            else abs,err=M.resolve_read_path(path,policy.write_root,policy.read_roots or {})end
+            if not abs then return nil,err end
+            if opts.private_directory and inside(opts.private_directory,abs)then return nil,'private answer recovery path is not a tool resource'end
+            return abs
+        end
+        for _,key in ipairs({'path','file_path'})do
+            if input[key]~=nil then
+                local abs,err=resolve(input[key]);if not abs then return nil,err end;input[key]=abs
+            end
+        end
+        if input.paths~=nil then
+            if type(input.paths)~='table'then return nil,'paths must be an array of strings'end
+            local count=0;for k in pairs(input.paths)do
+                count=count+1;if type(k)~='number' or k<1 or k%1~=0 or count>32 then return nil,'invalid paths'end
+            end
+            local paths={}
+            for i=1,count do local abs,err=resolve(input.paths[i]);if not abs then return nil,err end;paths[i]=abs end
+            input.paths=paths
+        end
+    end
+    local page
+    if types.is_pageable(def)then
+        page={offset=tonumber(input.offset) or 1,limit=math.min(tonumber(input.limit) or opts.page_limit or M.PAGE_DEFAULT_LIMIT,M.PAGE_MAX_LIMIT)}
+        if page.offset~=page.offset or page.limit~=page.limit or math.abs(page.offset)==math.huge or math.abs(page.limit)==math.huge then return nil,'invalid page'end
+        input.offset=nil;input.limit=nil
+    end
+    return input,page
+end
+local function normalize(call,page,opts,result,evidence)
+    if type(result)~='table' or type(result.content)~='string' then
+        result={content='handler returned invalid result',is_error=true}
+    else result=vim.deepcopy(result)end
+    result.id=call.id;result.name=call.name
+    if page and not result.is_error then result.content=M.page_lines(result.content,page.offset,page.limit)end
+    local footer
+    if evidence and evidence.backup_confirmed==true and type(evidence.backup_path)=='string' then
+        footer='\npre-image: '..evidence.backup_path
+        if result.content:sub(-#footer)==footer then result.content=result.content:sub(1,-#footer-1)end
+    end
+    local budget=opts.max_bytes
+    if footer and budget and #footer>budget then
+        result.content=('Confirmed backup path exceeds result limit'):sub(1,budget)
+        result.is_error=true;result.truncated=true;return result
+    end
+    if budget then
+        budget=budget-(footer and #footer or 0)
+        if #result.content>budget then
+            local marker=string.format('\n... [truncated: %d bytes omitted]',#result.content)
+            local keep=math.max(0,budget-#marker)
+            for _=1,3 do
+                marker=string.format('\n... [truncated: %d bytes omitted]',#result.content-keep)
+                keep=math.max(0,budget-#marker)
+            end
+            result.content=#marker<=budget and result.content:sub(1,keep)..marker or result.content:sub(1,budget)
+            result.truncated=true
+        end
+    end
+    if footer then result.content=result.content..footer end
+    return result
+end
+
 --- Execute a ToolCall against the registered handler, with:
 ---   - registry lookup (is_error on unknown name)
 ---   - pcall around handler (is_error on raise)
@@ -237,103 +307,14 @@ function M.execute_call(call, tools_registry, opts)
         }
     end
 
-    -- SHARED PRELUDE: cwd-scope check for any tool whose input has a
-    -- `path` string field. Read tools additionally honor configured
-    -- `tool_read_roots` (#140); write tools stay cwd-confined.
-    -- (M5 adds write-specific additional guards on top of this.)
-    --
-    -- `opts.cwd` is optional — the response adapter passes it explicitly so
-    -- the dispatcher does not need to know about vim.fn.getcwd() from
-    -- pure test contexts. When absent, the check is skipped (caller
-    -- accepts responsibility).
-    -- Resolve path fields: tools may use `path` or `file_path`.
-    -- Check both so the cwd-scope guard applies uniformly.
-    local function roots_for_def()
-        -- #140: read tools may also reach any configured `tool_read_roots`;
-        -- write tools get nil → cwd-only. Gate on `~= "write"` (the canonical
-        -- read-tool predicate `@readonly` uses): `kind` defaults to read when
-        -- absent, so `== "read"` would wrongly confine an absent-kind tool.
-        return (def.kind ~= "write") and (policy and policy.read_roots or {}) or nil
-    end
-
-    local path_fields = { "path", "file_path" }
-    if policy and call.input and def.default_path and call.input.path == nil
-        and call.input.file_path == nil and call.input.paths == nil then
-        call.input.path = def.default_path
-    end
-    for _, field in ipairs(path_fields) do
-        if policy and call.input and type(call.input[field]) == "string" then
-            local roots = roots_for_def()
-            local abs, scope_err
-            if def.kind ~= "write" then
-                abs, scope_err = M.resolve_read_path(call.input[field], policy.write_root, roots)
-            else
-                abs, scope_err = M.resolve_path_in_cwd(call.input[field], policy.write_root)
-            end
-            if not abs then
-                return {
-                    id = call.id,
-                    name = call.name,
-                    content = scope_err,
-                    is_error = true,
-                }
-            end
-            call.input[field] = abs
-        end
-    end
-    if policy and call.input and type(call.input.paths) == "table" then
-        local roots = roots_for_def()
-        local resolved = {}
-        for i, path in ipairs(call.input.paths) do
-            if type(path) ~= "string" then
-                return {
-                    id = call.id,
-                    name = call.name,
-                    content = "paths must be an array of strings",
-                    is_error = true,
-                }
-            end
-            local abs, scope_err
-            if def.kind ~= "write" then
-                abs, scope_err = M.resolve_read_path(path, policy.write_root, roots)
-            else
-                abs, scope_err = M.resolve_path_in_cwd(path, policy.write_root)
-            end
-            if not abs then
-                return {
-                    id = call.id,
-                    name = call.name,
-                    content = scope_err,
-                    is_error = true,
-                }
-            end
-            resolved[i] = abs
-        end
-        call.input.paths = resolved
-    end
-
-    -- #139: horizontal output pager. For tools that don't self-paginate, take
-    -- offset/limit out of the input (the handler never sees them) and apply them
-    -- to the handler's OUTPUT below. read_file self_paginates → it pages natively.
-    local page = nil
-    if types.is_pageable(def) then -- #139: non-write, non-self-paginating only
-        local default_limit = opts.page_limit or M.PAGE_DEFAULT_LIMIT
-        local in_limit = tonumber((call.input or {}).limit) or default_limit
-        page = {
-            offset = tonumber((call.input or {}).offset) or 1,
-            limit = math.min(in_limit, M.PAGE_MAX_LIMIT),
-        }
-        if call.input then
-            call.input.offset = nil
-            call.input.limit = nil
-        end
-    end
+    local input,page=prepare_input(call,def,policy,opts)
+    if not input then return {id=call.id,name=call.name,content=page,is_error=true}end
 
     -- HANDLER invocation, pcall-guarded. A raising handler becomes an
     -- error ToolResult rather than propagating the error up to the
     -- tool loop (which would leave an orphan 🔧: block and break the
     -- cancel-cleanup invariant).
-    local ok, result = pcall(def.handler, call.input or {}, { root_policy = policy })
+    local ok, result = pcall(def.handler, input, { root_policy = policy })
     if not ok then
         return {
             id = call.id,
@@ -351,23 +332,138 @@ function M.execute_call(call, tools_registry, opts)
         }
     end
 
-    -- Stamp id and name so downstream serializers don't need to look
-    -- back at the originating call. Handlers MAY omit these fields
-    -- (see types.lua ToolResult contract note).
-    result.id = call.id
-    result.name = call.name
+    return normalize(call,page,opts,result)
+end
 
-    -- #139: window the output (pager) for non-self-paginating tools, then byte-cap
-    -- as the backstop for pathological single lines. M5 will branch here on
-    -- def.kind == "write" to use truncate_preserving_footer for write_file.
-    if page and not result.is_error then
-        result.content = (M.page_lines(result.content or "", page.offset, page.limit))
+-- Capabilities and preparation receipts are private. Public copies carry no
+-- authority to replace a captured definition or normalization policy.
+local profiles=setmetatable({},{__mode='k'})
+local preparations=setmetatable({},{__mode='k'})
+function M.capture(definitions,opts)
+    if type(definitions)~='table' or type(opts)~='table' or type(opts.root_policy)~='table'then return nil,'captured root policy required'end
+    local policy=vim.deepcopy(opts.root_policy)
+    policy.write_root=M.canonical_path(policy.write_root)
+    if not policy.write_root then return nil,'invalid write root'end
+    local roots={}
+    for _,root in ipairs(policy.read_roots or {})do
+        local canonical=resolve_root(root,policy.write_root);if not canonical then return nil,'invalid read root'end
+        roots[#roots+1]=canonical
     end
-    if opts.max_bytes then
-        result.content = M.truncate(result.content or "", opts.max_bytes)
+    policy.read_roots=roots
+    local context={root_policy=policy,cwd=policy.write_root}
+    for _,key in ipairs({'buf','chat_roots','help_root','help_catalog','max_file_bytes','max_bytes'})do
+        context[key]=vim.deepcopy(opts[key])
     end
-
-    return result
+    local private=opts.private_directory or opts.state_dir and require('parley.recovery_paths').directory(opts.state_dir)
+    if private then context.private_directory=M.canonical_path(private);if not context.private_directory then return nil,'invalid private directory'end end
+    if context.help_root then context.help_root=M.canonical_path(context.help_root);if not context.help_root then return nil,'invalid help root'end end
+    if context.chat_roots then
+        local filtered={}
+        for _,entry in ipairs(context.chat_roots)do
+            local path=type(entry)=='table' and entry.dir or entry
+            local resolved=M.resolve_path_in_cwd(path,policy.write_root,policy.read_roots)
+            if resolved and not (context.private_directory and inside(context.private_directory,resolved))then
+                if type(entry)=='table'then entry.dir=resolved;filtered[#filtered+1]=entry else filtered[#filtered+1]=resolved end
+            end
+        end
+        context.chat_roots=filtered
+    end
+    local options={max_bytes=opts.max_bytes,page_limit=opts.page_limit,private_directory=context.private_directory}
+    for _,key in ipairs({'max_bytes','page_limit'})do
+        local value=options[key]
+        if value~=nil and (type(value)~='number' or value<1 or value>=math.huge or value%1~=0)then return nil,'invalid '..key end
+    end
+    local defs={};local count=0
+    for _,def in pairs(definitions)do
+        count=count+1
+        if count>128 then return nil,'too many tool capabilities'end
+        local valid,why=types.validate_definition(def);if not valid then return nil,why end
+        if type(def.execute_async)~='function'then return nil,'tool lacks asynchronous execution: '..def.name end
+        if defs[def.name]then return nil,'duplicate tool capability'end
+        defs[def.name]=vim.deepcopy(def)
+    end
+    local profile={};profiles[profile]={definitions=defs,context=context,options=options};return profile
+end
+function M.context(profile)return vim.deepcopy(assert(profiles[profile],'invalid captured tool profile').context)end
+function M.capabilities(profile)
+    local p=assert(profiles[profile],'invalid captured tool profile');local out={}
+    for name,def in pairs(p.definitions)do out[name]={execute_async=def.execute_async,config=vim.deepcopy(def.config or {})}end
+    return out
+end
+-- JSON's native empty-object marker is wire representation, not executable
+-- authority. Remove only that exact marker before entering the plain ledger;
+-- arbitrary metatables, cycles, and non-JSON values remain inadmissible.
+local Operation=require('parley.tools.operation')
+local empty_object_mt=getmetatable(vim.empty_dict())
+local function plain_json_input(value)
+    local ledger=Operation.new();local nodes,active=0,{}
+    local function visit(v,depth)
+        nodes=nodes+1
+        if nodes>ledger.limits.max_argument_nodes or depth>32 then error('input limit',0)end
+        if rawequal(v,vim.NIL)then error('unsupported JSON null in tool input',0)end
+        if type(v)~='table'then return v end
+        local mt=getmetatable(v)
+        if active[v] or mt~=nil and (mt~=empty_object_mt or next(v)~=nil)then error('invalid input',0)end
+        active[v]=true;local out={}
+        for k,item in next,v do
+            if type(k)~='string' and type(k)~='number'then error('invalid key',0)end
+            out[visit(k,depth+1)]=visit(item,depth+1)
+        end
+        active[v]=nil;return out
+    end
+    local ok,plain=pcall(visit,value,0)
+    if not ok then
+        return nil,plain=='unsupported JSON null in tool input' and plain or 'invalid tool input'
+    end
+    -- Keep finite values, byte/node limits and allowed key validation owned by
+    -- the operation ledger. This disposable validation record grants no IO.
+    local _,result=Operation.accept(ledger,{generation='json',attempt='json',round='json',
+        call_id='json',name='json',capability_ref='json',input=plain})
+    if result.status~='accepted'then return nil,'invalid tool input'end
+    return plain
+end
+function M.prepare(profile,call)
+    local p=profiles[profile];if not p then return nil,'invalid captured tool profile'end
+    local valid,why=types.validate_call(call);if not valid then return nil,why end
+    local def=p.definitions[call.name];if not def then return nil,'tool not in captured capabilities'end
+    local plain,input_error=plain_json_input(call.input)
+    if not plain then return nil,input_error end
+    local input,page=prepare_input({id=call.id,name=call.name,input=plain},def,p.context.root_policy,p.options)
+    if not input then return nil,page end
+    local claims={{scope='global',mode='write'}}
+    if def.resources then
+        local resource_context=vim.deepcopy(p.context);resource_context.config=vim.deepcopy(def.config or {})
+        local ok,value=pcall(def.resources,vim.deepcopy(input),resource_context)
+        if not ok or type(value)~='table'then return nil,'invalid tool resource declaration'end
+        claims={};local count=0
+        for k in pairs(value)do
+            count=count+1;if type(k)~='number' or k<1 or k%1~=0 or count>32 then return nil,'invalid tool resource claims'end
+        end
+        for i=1,count do
+            local claim=value[i]
+            if type(claim)~='table' or (claim.mode~='read' and claim.mode~='write')then return nil,'invalid resource mode'end
+            if claim.scope=='global' then
+                if claim.mode~='write' or claim.path~=nil then return nil,'invalid global claim'end
+                claims[i]={scope='global',mode='write'}
+            else
+                if claim.scope~='file' and claim.scope~='subtree'then return nil,'invalid resource scope'end
+                local roots=claim.mode=='read' and p.context.root_policy.read_roots or nil
+                local path,err=M.resolve_path_in_cwd(claim.path,p.context.cwd,roots)
+                if not path and claim.mode=='read' and def.name=='parley_help' and p.context.help_root then
+                    path,err=M.resolve_path_in_cwd(claim.path,p.context.help_root)
+                end
+                if not path then return nil,err end
+                if p.context.private_directory and inside(p.context.private_directory,path)then return nil,'private answer recovery resource'end
+                claims[i]={scope=claim.scope,mode=claim.mode,path=path}
+            end
+        end
+    end
+    local token={};preparations[token]={call={id=call.id,name=call.name},page=page,options=p.options}
+    return {input=input,claims=claims,token=token}
+end
+function M.normalize(token,result,evidence)
+    local p=assert(preparations[token],'invalid tool preparation receipt')
+    return normalize(p.call,p.page,p.options,result,evidence)
 end
 
 return M

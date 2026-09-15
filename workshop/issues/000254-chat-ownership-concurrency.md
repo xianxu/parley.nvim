@@ -1233,6 +1233,15 @@ Batch membership is fixed; only positive leg completion advances progress; opaqu
 proofs defer and unknown effects cannot be replayed by resume. Recovery host/UI
 integration and atomic Document restore proof remain outstanding.
 
+### 2026-09-15 — Isolated M6 pure prerequisites
+
+M6 operation/resource contracts staged in /tmp/parley254-m6-stage, independent of
+M5 host integration.14 tests pass including2400 generated operation events and
+1800 resource steps; four files lint clean. Process exit/EOF never substitutes
+for explicit known external-effect evidence when releasing quarantined claims.
+Next isolated work: checked asynchronous filesystem operations and fault model.
+This checkpoint does not integrate or close M6; M4/M5 reviews precede it.
+
 ### 2026-09-15 — M5 staged implementation checkpoint
 
 M3 closed506d2c34; verified M4 now on feature head ae2e12ec and under Codex review
@@ -1285,6 +1294,82 @@ clean. The recovery preview now uses the established mutation helper at92d7b5da;
 remaining lifecycle fixes and another Codex boundary review. M6 verification
 continues separately; its final integration will include the completed M5 fixes.
 
+### 2026-09-15 M6 public execution integration checkpoint
+
+M6 shared producer now captures capabilities and roots, shares process/resource
+claims across chat and skill invocations, and transfers cancelled child ownership
+through an explicit supervisor event. Seven public async tests pass through actual
+provider decoding/default producer, including native read_file+ls heartbeat,
+reverse completion ordering, human draft edits, frozen permissions, Stop/reload,
+retained unknown claims and operator physical-evidence refusal. Forty-one direct
+host regressions pass; prior three real-tool fixture failures were resolved by
+explicit capability capture and awaiting asynchronous IO. Full preflight lint594
+files clean. The remaining synchronous skill dispatcher call is migrated too;
+18 skill invocation tests pass, including held async work during human editing.
+
+All released seam work is committed through176620b7. Resource worst-case callback
+measurement exposed a644ms queue scan and is being optimized with deterministic
+work tests; final mapped M6 verification waits for that release. M4 is separately
+fixing CodexBR18/19 and will rerun its complete146-file union. M5 remains verified
+but cannot close before M4. No main merge or whole-issue completion is claimed.
+
+### 2026-09-15 M6 resource-work checkpoint
+
+Resource queue performance fix released: ten tests pass including1800 generated
+shared-owner events, collision/ancestry checks and a deterministic VM-call budget.
+Worst observed chain pump drops644ms→13ms; long components remain~13ms, no caps
+changed. Two-file lint and scoped diffcheck clean. Logs:/tmp/parley254-resource-
+perf-{before,samples,long-samples,disjoint}.log and resource-work-{red,green}.log.
+All M6 runtime work is checkpointed; full140-file canonical verification is ready
+once the ongoing M4 full-run finishes. Public concurrency tests already pass.
+
+### 2026-09-15 M6 full-run findings and merged verification
+
+Initial140-file run completed with1706 passes and14 assertion failures, not a
+passing result. OpenAI direct-session fixtures now capture advertised read_file
+capabilities. Golden comparisons normalize only obsolete ls/find/ripgrep startup
+version metadata;24 tests pass without regenerating payloads. Skill fixtures now
+retire canonical-path buffers before deleting files:18 tests pass without E211.
+
+Onboarding exposed a product bug: native decoded {} carries Neovim metadata,
+which the pure operation ledger correctly refused. Captured dispatch now removes
+only that exact empty-object marker recursively before strict ledger validation;
+arbitrary metatables/cycles stay invalid and JSON null receives an explicit
+refusal rather than being dropped.81 focused tests and the public9-test onboarding
+suite pass, including positive execution and exact bounded result assertions.
+The earlier onboarding-green claim was incorrect and its failing log is retained.
+
+M6 now merges all M4 corrections and the verified M5 foundation at78a2f735;
+941a53ff adds the JSON correction. Fresh full mapped verification and integrated
+performance are running. M5 is under Codex review on feature cebb38eb. Neither
+M5 nor M6 is closed, and main remains unmerged for operator live testing.
+
+### 2026-09-15 M6 complete-suite corrections and final integration
+
+Canonical make test launched354 specs. Initial collection had353 complete footers
+with5438 passes/two failures, plus an incomplete packaging spec after12 passes and
+one failure. All three failures now have verified focused corrections: public
+abort retirement5, starter readiness16, packaged guest17. The abort fixture had
+prior error-message redraw consuming its wait; redraw isolation preserves the
+original timeout and tests actual terminal failure, released grants and question
+preservation. Guest model selection uses the real registration path; isolated cwd
+and module-relative fixture paths prevent repo chat creation. Confinement17 plus
+download6/update40 tests pass. Generated disposable chats were preserved under
+/tmp/parley254-generated-chat-evidence rather than deleted or committed.
+
+Shared temporary-directory cleanup retires native buffers first; definition37
+and skill18 pass without E211. The full make test document performance spec also
+passes under its unchanged60-second deadline; the earlier mapped-run incomplete
+result remains recorded, not silently erased. M5 recovery rework is integrated
+atde1db79a and171 tests across10 affected specs pass. Final lint596 files clean;
+source/test/atlas/README diff check clean. Per-file final evidence is being combined
+with original failures retained; this is a complete run plus focused corrections,
+not a claim that the original invocation exited successfully.
+
+The earlier integrated performance run passed30 scenarios/600 samples, with zero
+full-buffer reads in every scenario. Final performance is rerunning after recovery
+integration because completion behavior changed. Codex is reviewing M5 separately;
+M6 remains staged and cannot close before that boundary. Main remains unmerged.
 ### 2026-09-15 M5 recovery corrections verified locally
 
 BR20/21/23/24 implemented atbfd749e4.155 focused tests pass, including all three
@@ -1321,3 +1406,25 @@ finding is waived. M6 has5481 passing per-file assertions across354 specs after
 explicitly recorded focused corrections; it awaits final M5 integration/review.
 
 - 2026-09-15 M5 BR20/24 final correction: confirmed-save/settlement join now works in either order; bounded native Pre/Post destination observations distinguish alternate writes and nested slug renames without stranding later saves after aborted writes. Saved-file stat/read failures remain visible. Final focused validation: 167 tests across 9 specs, every exit 0 and zero failed/errors; exact reviewer reproduction 34 passes. Manifest `/tmp/parley254-save-join-final.json`; lint and scoped diff clean. Earlier complete M5 mapped validation remains 92 specs/1103 passes; changed adapter/public lifecycle families rerun above. Preparing Codex re-review; M5 remains open.
+### 2026-09-15 M6 final performance and save-order integration
+
+Merged final M5 save-order correction a941955e into7eed7910; affected integration
+verification is running. Final make perf exited0, 30 scenarios/600 samples pass
+all work gates with zero full reads. Ordinary5000-row edit median7.87ms and
+Enter18.14ms; broad repair median3.85s and streaming p9576.43ms remain limitations,
+with regressions versus the preceding run preserved in the plan. Full report
+`/tmp/parley254-m6-final-perf.json`; analysis `...-final-perf-summary.md`.
+M5 Codex re-review is running separately; M6 remains open and main unmerged.
+
+### 2026-09-15 M6 final review admission
+
+M5 closed4e8088ec after Codex SHIP, disposing all BR20–24; reviewer ran222 tests
+and mutation controls for save ordering/reporting. M6 integrated into feature
+with append-only issue/plan histories preserved. Latest complete repository
+inventory is354 specs/5499 passing assertions, with explicit per-file exits and
+source hashes; original complete-run failures and their focused corrections
+remain recorded. Final affected savejoin integration passes189 tests/10 specs;
+full596-file lint clean. Evidence: `/tmp/parley254-m6-complete-latest-verification.txt`
+and `/tmp/parley254-m6-savejoin-verification.txt`. Final performance passes all30
+work scenarios/600samples; timing limits are recorded above. Entering Codex M6
+boundary review; no main merge before operator live testing.

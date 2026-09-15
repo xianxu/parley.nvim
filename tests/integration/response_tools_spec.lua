@@ -16,6 +16,7 @@ local function setup(options)
     function producer.cancel(op,resolved)producer.cancelled[#producer.cancelled+1]={op=op,resolved=resolved}end
     local requests={}
     local adapter=Tools.new(doc,{producer=not options.actual and producer or nil,root_policy=options.root_policy,
+        buf=serial,allowed_tools=options.actual and {'read_file','write_file'} or {},
         max_iterations=options.max_iterations,schedule=false,build_input=function(previous,messages)
         previous.messages=messages;previous.payload={model='fixture',messages=messages};return previous
     end})
@@ -44,7 +45,11 @@ local function setup(options)
         local req=requests[#requests]
         adapter.on_result(req.ctx,{response='tool text'},calls)
         local declared={};for i,c in ipairs(calls)do declared[i]={call_id=c.id,arguments=c}end
+        local expected=#requests+1
         assert.is_true(req.cb.round(declared));req.cb.resolved();drain()
+        if options.actual then assert.is_true(vim.wait(5000,function()
+            drain();return #requests>=expected
+        end,1),'asynchronous real tool round did not settle')end
     end
     local fixture={doc=doc,editor=editor,producer=producer,requests=requests,runner=runner,adapter=adapter,drain=drain,round=round}
     fixtures[#fixtures+1]=fixture

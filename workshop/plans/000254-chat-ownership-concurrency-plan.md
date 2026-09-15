@@ -1239,6 +1239,85 @@ failures use a common visible reporting rule across settlement, save, discard an
 confirmed deletion. Retained physical bytes never disappear merely because an
 error was reported (ARCH-SECURE, ARCH-ORDER, ARCH-FUNERAL, ARCH-PURPOSE).
 
+### 2026-09-15 — M6 supervisor integration and bounded defaults
+
+Reason: asynchronous builtins require a shared owner across chat and skill paths,
+including cancelled document lifetimes. Delta: `tools/producer` captures allowed
+functions/configuration, canonical input/claims and frozen roots before effect
+submission, then normalizes only recorded outcomes. `skill_invoke` joins the same
+supervisor rather than retaining a synchronous bypass. Missing-parent writes use
+checked asynchronous directory creation and conservatively claim the write-root
+subtree; numbered backup selection takes the same exclusive claim.
+
+Distinguish local parent retirement from operation terminal state: a cancelled
+child may transfer through the explicit stopping-only `operation_supervised`
+event. Its outcome remains unknown when appropriate, and the supervisor retains
+claims/IO independently of the retired Document. Normal completion cannot request
+this handoff. `ToolOperations` exposes stable IDs and operator effect evidence;
+operator input cannot supply physical cleanup. No effect replay is introduced.
+
+Expose validated lowerable `tool_execution` limits: process16 providers/16tools,
+total32 including utilities, four generations/document, eighttools/document,
+fourtools/generation and16MiB process capture; resource16running/128queued,
+32queued/generation and32claims;128records;512KiB result/16MiB totalresult;
+1MiB file envelope. Existing arguments64KiB/8192nodes/depth32 remain bounded.
+Five-second reconciliation uses50ms doubling to1s, emits one unresolved notice,
+then retires its timer while keeping claims. Disjoint same-document work bypasses
+blocked claims; conflicting and runnable-capacity waiters retain FIFO priority.
+Public tests cover actual provider/Scheduler/native FS+Tasker concurrency, draft
+editing, frozen capabilities, Stop/reload handoff and operator physical-evidence
+refusal (ARCH-ORDER, ARCH-FUNERAL, ARCH-CONSTRAINTS, ARCH-DRY).
+
+### 2026-09-15 — Bound resource queue callback work
+
+Reason: worst-case128queued/32claims caused a644ms synchronous pump despite finite
+admission counts. Delta: cache exact component-ordered claim intersections and
+reuse the already-blocked prefix proof during one pump. Preserve FIFO conflicts,
+runnable capacity priority and disjoint same-document bypass. Five native samples
+measure max~13ms for both ordinary and4000-byte component chains; all-disjoint
+capacity queues are below0.1ms. No limits changed. A deterministic JIT-disabled
+VM-call budget fails the previous implementation; exact hash-collision/ancestry
+oracles defend correctness (ARCH-CONSTRAINTS, ARCH-PURPOSE).
+
+### 2026-09-15 — M6 native JSON admission and full verification corrections
+
+Reason: the public default producer path rejected valid zero-argument JSON calls,
+while stale direct-session and golden fixtures obscured the production failure.
+Delta: normalize only native empty-object metadata at captured dispatch, then use
+the unchanged pure ledger validation. Preserve arguments and reject unsupported
+null explicitly. Advertised capabilities are required in direct-session fixtures;
+golden normalization covers only removed startup backend-version metadata.
+Retire fixture editor buffers before deleting canonical temporary paths.
+M6 also integrates M4 truthful pending publication, retirement joins and explicit
+stale-input continuation. Run the fresh merged inventory and whole performance
+report before Codex M6 review (ARCH-PURE, ARCH-PURPOSE, ARCH-MOCK, ARCH-FUNERAL).
+
+### 2026-09-15 — Final M6 implementation inventory
+
+Reason: the initial file/API list predates removal of tool_loop and the captured
+producer seam. This inventory supersedes the proposed M6 names above; it does
+not add another runtime abstraction (ARCH-DRY, ARCH-PURE).
+
+| Entity | Kind | Location | Final status and boundary |
+| --- | --- | --- | --- |
+| Operation outcome ledger | PURE | `lua/parley/tools/operation.lua` | New; `accept`, `transition`, `forget` govern scoped identity and outcome evidence |
+| Resource admission | PURE | `lua/parley/tools/resources.lua` | New; atomic claims, conflict ordering and bounded admission |
+| Shared execution scheduler | INTEGRATION | `lua/parley/tools/scheduler.lua` | New; executes captured backends and joins effect/physical evidence |
+| Generation producer | INTEGRATION | `lua/parley/tools/producer.lua` | New; captures capabilities, supervises cancelled work, bounds shared configuration |
+| Captured dispatch | INTEGRATION | `lua/parley/tools/dispatcher.lua` | Modified; `capture`, `prepare`, `normalize`; legacy synchronous API retained only for compatibility |
+| Checked filesystem | INTEGRATION | `lua/parley/tools/filesystem.lua` | New; `stat`, `read`, `write_checked`, `ensure_dir` with stateful failure model |
+| Builtin asynchronous execution | INTEGRATION | `lua/parley/tools/async_builtin.lua` | New; ten mandatory builtins plus optional ack use checked filesystem or Tasker |
+| Process supervision | INTEGRATION | `lua/parley/tasker.lua` | Modified; finite admission, bounded capture, positive exit/drain retirement and reconciliation |
+| Provider wire ordering | PURE | `lua/parley/tools/wire_anthropic.lua`, `wire_openai.lua` | Modified; declaration indexes and fragmented arguments determine order |
+| Operator reconciliation | INTEGRATION | `lua/parley/tool_operations.lua` | New; captured stable operation selection and explicit effect evidence |
+| Chat/skill composition | INTEGRATION | `lua/parley/response_tools.lua`, `skill_invoke.lua` | Modified; both use the shared producer, with scoped cancellation and ordered round joins |
+
+`tool_loop.lua` was already deleted before M6; `argv.lua` is a pure helper rather
+than an executable builtin. Checked backups live inside `filesystem.write_checked`,
+not a parallel backup adapter. The dispatcher preparation receipt replaces the
+proposed `dispatcher.execute_async` entry point. Configuration lives in the
+producer defaults and `config.tool_execution`. The user-facing commands, limits
+and operation evidence are documented in `atlas/providers/tool_execution.md`.
 ### 2026-09-15 — Join save and settlement evidence in either order
 
 Reason: Codex confirmed BR21/22/23 but retained BR20/24. A real save arriving while
@@ -1251,3 +1330,20 @@ reload, detach and path changes must not redirect old cleanup authority. Every
 failed stat/read/cleanup stage uses the same visible reporting rule and keeps
 physical bytes accounted. Tests cover both event orders and interrupted joins
 through single and batch execution (ARCH-ORDER, ARCH-FUNERAL, ARCH-PURPOSE).
+
+### 2026-09-15 — Final integrated M6 performance evidence
+
+Reason: recovery settlement changes required measuring the integrated execution
+path again. Delta: final report at fb342a12 passes all 30 hard-gated scenarios,
+20 samples each, with zero full-buffer reads. At 5000 rows ordinary edit visits
+one row (7.87 ms median), Enter/join five (18.14 ms), redraw requests61 lines
+(0.57 ms), stable fold maintenance one row (1.12 ms). All27 non-stream work
+counters equal the previous report. Stream adds one row and leaf copy; median
+45.15 ms and p95 76.43 ms versus43.91/48.54. Broad repair remains document-scale:
+3852.90 ms median versus2562.85 with unchanged18975 cumulative row visits.
+These observed timing regressions are retained; CPU overlap is a possible
+confounder, not a demonstrated explanation. Timing remains report-only and no
+8 ms streaming claim is made. The benchmark uses production scoped responses
+with controlled provider text, not builtin process/IO overlap. Native concurrent
+tool heartbeat tests provide separate evidence. Exact report and analysis:
+`/tmp/parley254-m6-final-perf.json`, `...-final-perf-summary.md`.

@@ -14,7 +14,7 @@
 
 local skill_edits = require("parley.skill_edits")
 
-return {
+local definition = {
     name = "propose_edits",
     kind = "write",
     needs_backup = true,
@@ -93,3 +93,5 @@ return {
         }
     end,
 }
+
+return require("parley.tools.async_builtin").bind(definition)

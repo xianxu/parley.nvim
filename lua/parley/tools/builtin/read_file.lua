@@ -7,7 +7,7 @@
 -- Parameter names match Claude Code conventions (file_path, offset,
 -- limit) so Claude uses them naturally.
 
-return {
+local definition = {
     name = "read_file",
     kind = "read",
     self_paginates = true, -- #139: native offset/limit IS the output pager
@@ -76,3 +76,5 @@ return {
         }
     end,
 }
+
+return require("parley.tools.async_builtin").bind(definition)

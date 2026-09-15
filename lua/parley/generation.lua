@@ -170,12 +170,18 @@ end
 function M.snapshot(handle)
     local s=get(handle);local bytes,items=staged(s)
     local retained=0;for _ in pairs(s.operations) do retained=retained+1 end
+    local supervised={}
+    if s.phase=='stopping' or s.phase=='terminal'then
+        for _,child in ipairs(s.round and s.round.children or {})do
+            if child.supervised then supervised[child.operation]={outcome=child.outcome,result_ref=child.result_ref}end
+        end
+    end
     return {epoch=s.epoch,generation=s.generation,exchange=s.exchange,grant=s.grant,phase=s.phase,
         grant_status=s.grant_status,input_ref=s.input_ref,input_seed_ref=s.input_seed_ref,
         dependencies_ref=s.dependencies_ref,capabilities_ref=s.capabilities_ref,stale_input=s.stale_input or false,
         staged_bytes=bytes,staged_items=items,accepted_bytes=s.accepted_bytes,committed_bytes=s.committed_bytes,
         discarded_bytes=s.discarded_bytes,outstanding_operations=outstanding(s),retained_operations=retained,outcome=s.outcome,
-        round=s.round and s.round.id,attempt=s.attempt}
+        round=s.round and s.round.id,attempt=s.attempt,supervised_children=supervised}
 end
 function M.transition(handle,event)
     local old=get(handle)
@@ -320,7 +326,7 @@ function M.transition(handle,event)
         if round and event.round==round.id then for _,child in ipairs(round.children) do
             if child.operation==event.operation then found=child end
         end end
-        if not found or not found.started or (found.outcome and not (found.outcome=='unknown' and event.outcome=='known'))
+        if not found or not found.started or found.supervised or (found.outcome and not (found.outcome=='unknown' and event.outcome=='known'))
             or not ref(event.result_ref)
             or (event.outcome~='known' and event.outcome~='unknown' and event.outcome~='rejected' and event.outcome~='cancelled_before_effect') then return reject('child') end
         found.outcome=event.outcome;found.result_ref=event.result_ref
@@ -337,10 +343,14 @@ function M.transition(handle,event)
     elseif kind=='resume_validated' then
         if s.phase~='paused' or s.grant_status~='valid' or not ref(event.policy_ref) then return reject('resume') end
         s.phase=s.resume_phase;s.resume_phase=nil
-    elseif kind=='operation_resolved' then
+    elseif kind=='operation_resolved' or kind=='operation_supervised' then
+        local supervised=kind=='operation_supervised'
         local op=s.operations[event.operation]
         if not op or op.resolved then return reject('operation') end
-        if op.kind=='child' then
+        -- Transfer is local retirement only: a separate supervisor retains the
+        -- physical operation and unknown effect ledger. It can never join a round.
+        if supervised and (s.phase~='stopping' or op.kind~='child')then return reject('supervision')end
+        if op.kind=='child' and not supervised then
             for _,child in ipairs(s.round.children) do
                 if child.operation==event.operation and (not child.outcome or child.outcome=='unknown') then
                     return reject('unresolved child outcome')
@@ -348,9 +358,13 @@ function M.transition(handle,event)
             end
         end
         op.resolved=true
+        if supervised then op.supervised=true end
         for i,id in ipairs(s.operation_order) do if id==event.operation then table.remove(s.operation_order,i);break end end
         for _,child in ipairs(s.round and s.round.children or {}) do
-            if child.operation==event.operation then child.resolved=true end
+            if child.operation==event.operation then
+                child.resolved=true
+                if supervised then child.supervised=true;child.outcome=child.outcome or 'unknown' end
+            end
         end
     elseif kind=='finalize_result' then
         if not s.finalize_pending or event.finalize~=s.finalize_pending then return reject('finalize') end

@@ -81,7 +81,7 @@ end
 ---     server-side, no client tool_result needed
 ---   - web_search_tool_result / web_fetch_tool_result (server replies)
 ---
---- Returns a flat list of ToolCalls in the order they were streamed.
+--- Returns ToolCalls in declared numeric content-block index order.
 --- Called once after streaming completes by the response provider adapter,
 --- same pattern as `anthropic.parse_usage`.
 ---
@@ -94,18 +94,18 @@ function M.decode_tool_calls_from_stream(raw_response)
 
     -- index -> { id, name, parts = {} }
     local in_flight = {}
-    -- Preserve streaming order of completion.
-    local completed = {}
+    local order = {}
 
     for line in raw_response:gmatch("[^\n]+") do
         -- Only `data:` lines carry JSON payloads.
         if line:sub(1, 6) == "data: " then
             local decoded = sse.safe_json_decode(sse.strip_data_prefix(line))
             if type(decoded) == "table" then
-                local idx = decoded.index or 0
+                local idx = decoded.index
+                local valid_index = type(idx) == "number" and idx >= 0 and idx < math.huge and idx % 1 == 0
                 local t = decoded.type
 
-                if t == "content_block_start" then
+                if valid_index and t == "content_block_start" then
                     local block = decoded.content_block
                     if type(block) == "table" and block.type == "tool_use" then
                         -- Only CLIENT-side tool_use. server_tool_use is
@@ -116,46 +116,49 @@ function M.decode_tool_calls_from_stream(raw_response)
                         -- downstream the moment the name is concatenated.
                         -- Not observed on this wire, but the read is
                         -- identical, so the guard belongs at both.
-                        in_flight[idx] = {
-                            id = sse.str(block.id),
-                            name = sse.str(block.name),
-                            parts = {},
-                        }
+                        local state = in_flight[idx]
+                        if state then
+                            if state.id ~= sse.str(block.id) or state.name ~= sse.str(block.name) then
+                                state.invalid = true
+                            end
+                        else
+                            in_flight[idx] = {id=sse.str(block.id),name=sse.str(block.name),parts={}}
+                            order[#order+1] = idx
+                        end
                     end
 
-                elseif t == "content_block_delta" then
+                elseif valid_index and t == "content_block_delta" then
                     local d = decoded.delta
                     if type(d) == "table" and d.type == "input_json_delta"
                        and type(d.partial_json) == "string" then
                         local state = in_flight[idx]
-                        if state then
+                        if state and not state.stopped then
                             table.insert(state.parts, d.partial_json)
                         end
                     end
 
-                elseif t == "content_block_stop" then
+                elseif valid_index and t == "content_block_stop" then
                     local state = in_flight[idx]
-                    if state then
-                        local full_json = table.concat(state.parts)
-                        local input = {}
-                        if full_json ~= "" then
-                            local ok, parsed = pcall(vim.json.decode, full_json)
-                            if ok and type(parsed) == "table" then
-                                input = parsed
-                            end
-                        end
-                        table.insert(completed, {
-                            id = state.id,
-                            name = state.name,
-                            input = input,
-                        })
-                        in_flight[idx] = nil
-                    end
+                    if state then state.stopped = true end
                 end
             end
         end
     end
 
+    table.sort(order)
+    local completed = {}
+    for _,idx in ipairs(order) do
+        local state = in_flight[idx]
+        if state.stopped and not state.invalid then
+            local input = {}
+            local full_json = table.concat(state.parts)
+            if full_json ~= "" then
+                local ok,parsed = pcall(vim.json.decode,full_json)
+                if ok and type(parsed) == "table" then input = parsed end
+            end
+            completed[#completed+1] = {id=state.id,name=state.name,input=input}
+        end
+    end
     return completed
 end
 

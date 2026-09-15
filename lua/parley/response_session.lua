@@ -35,6 +35,9 @@ function M.start(doc,spec,opts)
     local plan=frozen.preparation
     local s={doc=doc,opts=vim.tbl_extend('force',{},opts),preparations={},active=true}
     opts=s.opts
+    for _,name in ipairs({"root_policy","allowed_tools","chat_roots"})do
+        opts[name]=vim.deepcopy(opts[name])
+    end
     local session={};states[session]=s
     local tools
     local function finish(result,rejected)
@@ -62,6 +65,7 @@ function M.start(doc,spec,opts)
         local profile=input.response_profile
         if profile~=nil and type(profile)~='table'then return false,'invalid response profile'end
         profile=profile or {}
+        if profile.allowed_tools~=nil and type(profile.allowed_tools)~='table'then return false,'invalid tool capabilities'end
         if profile.agent~=nil and (type(profile.agent)~='string' or #profile.agent==0 or #profile.agent>256)then
             return false,'invalid response display name'
         end
@@ -76,7 +80,9 @@ function M.start(doc,spec,opts)
         -- It runs once, before preparation writes or provider admission, after
         -- an explicit onboarding choice has become the frozen request profile.
         local ok,adapter=pcall(Tools.new,doc,{producer=opts.producer,registry=opts.registry,
-            root_policy=opts.root_policy,max_iterations=limit('max_iterations'),
+            root_policy=opts.root_policy,allowed_tools=profile.allowed_tools or opts.allowed_tools or {},
+            buf=opts.buf,state_dir=opts.state_dir,chat_roots=opts.chat_roots,help_root=opts.help_root,page_limit=opts.page_limit,
+            max_iterations=limit('max_iterations'),
             max_result_bytes=limit('max_result_bytes'),build_input=opts.build_input,schedule=frozen.schedule})
         if not ok then return false,tostring(adapter)end
         tools=adapter;s.tools=adapter

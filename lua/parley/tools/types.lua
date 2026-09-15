@@ -15,6 +15,8 @@
 --- @field description string Non-empty human-readable description shown to the LLM.
 --- @field input_schema table JSON-schema-shaped table describing the tool's arguments.
 --- @field handler fun(input: table, context?: table): ToolResult Handler; context carries trusted root_policy, never model input.
+--- @field execute_async fun(input: table, context: table, done: function): table Captured backend; effect and physical resolution are independent.
+--- @field resources fun(input: table, context: table): table[]|nil Atomic resource claims; absent uses exclusive global fallback.
 --- @field kind string|nil "read" or "write" — defaults to "read" when absent.
 --- @field needs_backup boolean|nil True if the tool destroys information
 ---        on disk and the dispatcher must capture a `.parley-backup`
@@ -66,8 +68,11 @@ function M.validate_definition(def)
     if type(def.input_schema) ~= "table" then
         return fail("definition.input_schema must be a table")
     end
-    if type(def.handler) ~= "function" then
-        return fail("definition.handler must be a function")
+    if type(def.handler) ~= "function" and type(def.execute_async) ~= "function" then
+        return fail("definition.handler or definition.execute_async must be a function")
+    end
+    for _,name in ipairs({'execute_async','resources'})do
+        if def[name]~=nil and type(def[name])~='function'then return fail('definition.'..name..' must be a function')end
     end
     -- Optional kind / needs_backup fields are loosely validated when present;
     -- absent is fine (dispatcher defaults kind = "read", needs_backup = false).

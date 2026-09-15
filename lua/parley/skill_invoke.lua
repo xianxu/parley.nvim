@@ -101,7 +101,6 @@ function M.invoke(buf, manifest, args, opts)
 
     local p = parley()
     local llm = require("parley.dispatcher") -- LLM dispatcher: prepare_payload / query
-    local tools_dispatcher = require("parley.tools.dispatcher") -- tool dispatcher: execute_call
     local wire = require("parley.tools.wire") -- per-provider tool protocol (#198)
     local tasker = require("parley.tasker")
     local tools_registry = require("parley.tools")
@@ -134,13 +133,16 @@ function M.invoke(buf, manifest, args, opts)
     -- This exchange's generation; on_exit/on_abort no-op if superseded (#133).
     local gen = (_gen[buf] or 0) + 1
     _gen[buf] = gen
-    local source_capture
+    local source_capture,tool_producer
+    local process_owner="skill:"..tostring(buf)..":"..tostring(gen)
     local finished = false
     local detached_progress = opts.detached_progress ~= false
     local progress_started = false
     local function finish(result, deliver_done)
         if finished then return false end
         finished = true
+        if tool_producer then tool_producer.close();tool_producer=nil end
+        tasker.stop_owner(process_owner)
         require("parley.buffer_edit").cancel_user(source_capture)
         if progress_started then
             pcall(function() require("parley.progress").stop() end)
@@ -319,7 +321,12 @@ function M.invoke(buf, manifest, args, opts)
     local neighborhood = require("parley.neighborhood")
     local root_policy = neighborhood.policy_for_buf(buf)
         or neighborhood.policy_from_roots(vim.fn.fnamemodify(artifact_path, ":h"), nil, {})
-    local cwd = root_policy.write_root
+    local tool_error
+    tool_producer,tool_error=require('parley.tools.producer').new({buf=buf,registry=tools_registry,
+        allowed_tools=inv.tools,root_policy=root_policy,state_dir=p.config.state_dir,
+        page_limit=p.config.tool_result_page_lines,
+        help_root=vim.fn.fnamemodify(debug.getinfo(1,'S').source:sub(2):match('^(.*)/lua/parley/skill_invoke%.lua$'),':p')})
+    if not tool_producer then finish({ok=false,msg=tool_error},true);return end
 
     _in_flight[buf] = true
     -- Detached progress bar: this is a ~30s headless op, so show a running cue
@@ -359,31 +366,20 @@ function M.invoke(buf, manifest, args, opts)
                     local results = {}
                     local applied = 0
                     local errors = {}
-                    for i, call in ipairs(calls) do
-                        if call.name == "propose_edits" then
-                            call.input = call.input or {}
-                            call.input.file_path = artifact_path -- artifact-bound
-                            -- Some models emit `edits` as a JSON STRING rather than an
-                            -- array; coerce it once here so the batch actually applies
-                            -- (and render_propose_edits below gets a table). #133
-                            if type(call.input.edits) == "string" then
-                                local ok, decoded = pcall(vim.json.decode, call.input.edits)
-                                if ok and type(decoded) == "table" then
-                                    call.input.edits = decoded
-                                end
-                            end
-                        end
-                        results[i] = tools_dispatcher.execute_call(call, tools_registry,
-                            { cwd = cwd, root_policy = root_policy,
-                              page_limit = require("parley.config").tool_result_page_lines }) -- #140 #139
-                        if call.name == "propose_edits" then
-                            if results[i].is_error then
-                                table.insert(errors, results[i].content)
-                            else
-                                applied = applied + 1
-                            end
-                        end
+                    assert(#calls<=32,'skill tool call capacity')
+                    local seen={}
+                    for _,call in ipairs(calls)do
+                        assert(require('parley.tools.types').validate_call(call),'invalid skill tool call')
+                        assert(not seen[call.id],'duplicate skill tool call');seen[call.id]=true
                     end
+                    local function finish_tools()
+                        if finished or _gen[buf]~=gen then return end
+                        for i,call in ipairs(calls)do
+                            if call.name=='propose_edits' then
+                                if results[i].is_error then errors[#errors+1]=results[i].content
+                                else applied=applied+1 end
+                            elseif results[i].is_error then errors[#errors+1]=results[i].content end
+                        end
                     if not vim.api.nvim_buf_is_valid(buf) then
                         finish({ ok = false, msg = "buffer invalid" }, false)
                         return
@@ -446,6 +442,46 @@ function M.invoke(buf, manifest, args, opts)
                         new_content = new_content,
                         decorations = decorations,
                     }, true)
+                    end
+                    local remaining=#calls
+                    local uncertain=false
+                    local function joined()
+                        if remaining>0 or finished then return end
+                        if uncertain then
+                            finish({ok=false,msg='tool effect unresolved',calls=calls,results=results},true);return
+                        end
+                        local success=xpcall(finish_tools,function()return nil end)
+                        if not success then finish({ok=false,msg='completion failed'},true)end
+                    end
+                    if remaining==0 then joined();return end
+                    for i, call in ipairs(calls) do
+                        if call.name == "propose_edits" then
+                            call.input = call.input or {}
+                            call.input.file_path = artifact_path -- artifact-bound
+                            -- Some models emit `edits` as a JSON STRING rather than an
+                            -- array; coerce it once here so the batch actually applies
+                            -- (and render_propose_edits below gets a table). #133
+                            if type(call.input.edits) == "string" then
+                                local ok, decoded = pcall(vim.json.decode, call.input.edits)
+                                if ok and type(decoded) == "table" then
+                                    call.input.edits = decoded
+                                end
+                            end
+                        end
+                        local item={}
+                        tool_producer.start(call,{epoch='skill:'..tostring(buf),generation=gen,round='1',attempt=qid},{
+                            outcome=function(kind,result)
+                                if finished then return end
+                                item.kind=kind;results[i]=result
+                            end,
+                            resolved=function()
+                                if finished or item.resolved then return end
+                                item.resolved=true;remaining=remaining-1
+                                if item.kind~='known' then uncertain=true end
+                                joined()
+                            end})
+                        if finished then break end
+                    end
                 end
                 local ok_completion = xpcall(complete, function() return nil end)
                 if not ok_completion then
@@ -468,7 +504,8 @@ function M.invoke(buf, manifest, args, opts)
             if finished or _gen[buf] ~= gen then return end
             p.logger.error("skill " .. tostring(manifest.name) .. " transport error")
             finish({ ok = false, msg = "transport error", error = transport_error }, true)
-        end
+        end,
+        {generation_id=process_owner,logical_generation=process_owner,alive=function()return not finished end}
     )
     if not ok_query then
         p.logger.error("skill " .. tostring(manifest.name) .. " query failed")

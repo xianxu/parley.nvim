@@ -4,17 +4,11 @@
 -- which version is available in the tool description. Claude sees
 -- this and adapts its arguments accordingly.
 
-local version = require("parley.tools.version")
 local argv = require("parley.tools.builtin.argv")
 
 local function detect_grep()
-    if vim.fn.executable("rg") == 1 then
-        local stable = version.stable_command_version(vim.fn.system("rg --version"):match("[^\n]+"), "ripgrep")
-        return "rg", stable
-    elseif vim.fn.executable("grep") == 1 then
-        local stable = version.stable_command_version(vim.fn.system("grep --version 2>&1"):match("[^\n]+"), "grep")
-        return "grep", stable
-    end
+    if vim.fn.executable("rg") == 1 then return "rg", "ripgrep" end
+    if vim.fn.executable("grep") == 1 then return "grep", "grep" end
     return nil, nil
 end
 
@@ -59,7 +53,7 @@ local function build_description()
     end
 end
 
-return {
+local definition = {
     name = "grep",
     kind = "read",
     default_path = ".",
@@ -112,7 +106,7 @@ return {
         },
         required = { "pattern" },
     },
-    handler = function(input)
+    handler = function(input, execution)
         input = input or {}
         local ok_fields, fields_err = argv.reject_unknown_fields(input, ALLOWED_FIELDS)
         if not ok_fields then
@@ -210,8 +204,9 @@ return {
             return { content = path_err, is_error = true, name = "grep" }
         end
 
-        local result = vim.fn.system(cmd)
-        local exit_code = vim.v.shell_error
+        local result, exit_code
+        if execution and execution.run then result, exit_code = execution.run(cmd)
+        else result = vim.fn.system(cmd); exit_code = vim.v.shell_error end
 
         -- rg: 0=matches, 1=no matches, 2+=error
         -- grep: 0=matches, 1=no matches, 2+=error
@@ -239,3 +234,5 @@ return {
         }
     end,
 }
+
+return require("parley.tools.async_builtin").bind(definition)

@@ -379,6 +379,47 @@ describe('generation runner sequences',function()
         fake:output(2,'after tool');Runner.drain(r,100)
         assert.equals('after tool',editor.lines[4])
     end)
+    for _,mode in ipairs({'cancel','detach'})do
+        it('transfers cancelled child cleanup to its supervisor after '..mode,function()
+            local doc,editor=document();local fake=Fake.new();local child_cb,ack
+            local supervisor={owned=true,cancelled=false}
+            fake.adapters.reserve_round=function(ctx,done)
+                local parent=D.snapshot(doc).grants[ctx.grant]
+                local acquired=D.transition(doc,{kind='acquire',generation=ctx.generation,parent=ctx.grant,
+                    regions={{entity=parent.entity,first=parent.last,last=parent.last,
+                        marker_revision=1,revision=1,confirmed=true}}})
+                done(acquired.grants,{})
+            end
+            fake.adapters.start_child=function(_,cb)child_cb=cb;cb.outcome('unknown',{effect='unknown'})end
+            fake.adapters.cancel_operation=function(_,done)
+                supervisor.cancelled=true;ack=done
+            end
+            local runner=start(doc,fake,2);fake:prepare();Runner.drain(runner,100)
+            fake.requests[1].callbacks.round({{call_id='one',arguments={}}})
+            fake.requests[1].callbacks.resolved();Runner.drain(runner,100)
+            assert.equals('paused',Runner.snapshot(runner).phase)
+            assert.is_false(child_cb.resolved({supervised=true}))
+            if mode=='detach'then D.detach(doc)else Runner.cancel(runner)end
+            Runner.drain(runner,100);assert.equals('stopping',Runner.snapshot(runner).phase)
+            assert.is_true(supervisor.cancelled);assert.is_function(ack)
+            assert.is_false(ack(true));assert.is_false(ack({}));assert.is_false(ack({supervised=true,known=true}))
+            assert.is_false(ack(setmetatable({supervised=true},{})))
+            assert.is_false(child_cb.resolved({supervised=true}))
+            assert.is_true(ack({supervised=true}));Runner.drain(runner,100)
+            local final=Runner.snapshot(runner)
+            assert.equals('terminal',final.phase);assert.equals(0,final.retained_blobs)
+            assert.equals(1,vim.tbl_count(final.supervised_children))
+            for _,child in pairs(final.supervised_children)do assert.equals('unknown',child.outcome)end
+            -- Parent retirement does not execute or fabricate the supervisor's cleanup.
+            assert.is_true(supervisor.owned)
+            local before=table.concat(editor.lines,'\n')
+            assert.is_false(ack({supervised=true}));assert.is_false(child_cb.output('late bytes'))
+            assert.is_false(child_cb.outcome('known',{effect='applied'}));assert.is_false(child_cb.resolved())
+            supervisor.owned=false -- independent positive backend cleanup arrives later
+            Runner.drain(runner,100);assert.equals(before,table.concat(editor.lines,'\n'))
+            assert.equals(1,#fake.requests)
+        end)
+    end
 end)
 
 describe('atomic preparation grants',function()

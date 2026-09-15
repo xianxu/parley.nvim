@@ -2,8 +2,17 @@
 local M = {}
 function M.new(opts)
     opts = opts or {}
-    local state = { pipes = {}, processes = {}, spawn_calls = 0, signals = {} }
+    local state = { pipes = {}, processes = {}, spawn_calls = 0, signals = {}, timers = {} }
     local runtime = {}
+    runtime.new_timer = function()
+        local timer={closing=false,starts=0}
+        function timer:start(delay,_,callback)self.delay=delay;self.callback=callback;self.starts=self.starts+1 end
+        function timer:stop()self.callback=nil end
+        function timer:close()self.closing=true;self.callback=nil end
+        function timer:is_closing()return self.closing end
+        function timer:fire()if self.callback then self.callback()end end
+        state.timers[#state.timers+1]=timer;return timer
+    end
     runtime.new_pipe = function()
         if opts.pipe_fail_at == #state.pipes + 1 then error("pipe allocation failed") end
         local pipe = { closing = false, close_calls = 0 }
@@ -21,7 +30,7 @@ function M.new(opts)
         local handle = { closing = false }
         function handle:is_closing() return self.closing end
         function handle:close() self.closing = true end
-        local process = { pid = pid, args = vim.deepcopy(spawn_opts.args), handle = handle, stdout = spawn_opts.stdio[2],
+        local process = { pid = pid, cwd = spawn_opts.cwd, args = vim.deepcopy(spawn_opts.args), handle = handle, stdout = spawn_opts.stdio[2],
             stderr = spawn_opts.stdio[3], on_exit = on_exit, probe = "alive" }
         process.stdout.stream, process.stderr.stream = "stdout", "stderr"
         function process:exit(code, signal)
