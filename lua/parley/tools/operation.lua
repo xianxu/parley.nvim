@@ -102,6 +102,15 @@ function M.transition(s,key,event)
     else return s,{status='invalid_transition'}end
     return changed(s,key,record),result
 end
+function M.forget(s,key)
+    local record=s.records[key]
+    if not record then return s,{status='missing'}end
+    if record.status~='outcome_known' and record.status~='cancelled_before_effect' and record.status~='rejected'then
+        return s,{status='unresolved'}
+    end
+    local next_state=changed(s,key,nil);next_state.count=s.count-1
+    return next_state,{status='forgotten'}
+end
 function M.get(s,key)return copy(s.records[key])end
 function M.stats(s)return {records=s.count}end
 return M

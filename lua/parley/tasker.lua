@@ -17,6 +17,75 @@ M._cache_metrics = { creation = 0, read = 0, input = 0 }
 local records, admissions, queries = {}, {}, {}
 local sequence = 0
 
+local DEFAULT_LIMITS={provider_attempts=16,tool_attempts=16,total_attempts=32,
+    document_generations=4,document_tools=8,generation_tools=4,retained_bytes=16*1024*1024}
+local limits=vim.deepcopy(DEFAULT_LIMITS)
+local retained_bytes=0
+local schedule_reconcile,close_reconcile
+local function clock()return M._clock and M._clock() or uv.hrtime()/1000000 end
+local function integer(value,maximum)return type(value)=='number' and value>=1 and value<=maximum and value%1==0 end
+-- Limits may be lowered for a profile, but cannot exceed the shared hard bounds.
+-- Utility processes consume the total ceiling rather than an uncounted allowance.
+function M.configure_limits(value)
+    if type(value)~='table'then return {ok=false,reason='invalid process limits'}end
+    local next_limits=vim.deepcopy(limits)
+    for name,limit in pairs(value)do
+        if not DEFAULT_LIMITS[name] or not integer(limit,DEFAULT_LIMITS[name])then return {ok=false,reason='invalid process limit: '..tostring(name)}end
+        next_limits[name]=limit
+    end
+    limits=next_limits;return {ok=true}
+end
+function M.stats()
+    local out={active=0,providers=0,tools=0,retained_bytes=retained_bytes,timers=0}
+    for _,record in pairs(records)do
+        out.active=out.active+1
+        if record.state.kind=='provider'then out.providers=out.providers+1 end
+        if record.state.kind=='tool'then out.tools=out.tools+1 end
+        if record.timer then out.timers=out.timers+1 end
+    end
+    return out
+end
+local function capacity(candidate)
+    local total,providers,tools,document_tools,generation_tools=0,0,0,0,0
+    local generations={}
+    for _,record in pairs(records)do
+        local state=record.state;total=total+1
+        if state.kind=='provider'then providers=providers+1 end
+        if state.kind=='tool'then tools=tools+1 end
+        if candidate.buf~=nil and state.buf==candidate.buf then
+            generations[state.logical_generation]=true
+            if state.kind=='tool'then document_tools=document_tools+1
+                if state.logical_generation==candidate.logical_generation then generation_tools=generation_tools+1 end
+            end
+        end
+    end
+    if total>=limits.total_attempts or candidate.kind=='provider' and providers>=limits.provider_attempts
+        or candidate.kind=='tool' and tools>=limits.tool_attempts then return false end
+    if candidate.buf~=nil then
+        if not generations[candidate.logical_generation] and vim.tbl_count(generations)>=limits.document_generations then return false end
+        if candidate.kind=='tool' and (document_tools>=limits.document_tools or generation_tools>=limits.generation_tools)then return false end
+    end
+    return true
+end
+local function collection()return {pieces={},chunks={},piece_bytes=0,bytes=0}end
+local function collect(buffer,data)
+    local offset=1
+    while offset<=#data do
+        local last=math.min(#data,offset+65536-buffer.piece_bytes-1)
+        buffer.pieces[#buffer.pieces+1]=data:sub(offset,last)
+        buffer.piece_bytes=buffer.piece_bytes+last-offset+1;offset=last+1
+        if buffer.piece_bytes==65536 or #buffer.pieces==128 then
+            buffer.chunks[#buffer.chunks+1]=table.concat(buffer.pieces)
+            buffer.pieces={};buffer.piece_bytes=0
+        end
+    end
+    buffer.bytes=buffer.bytes+#data
+end
+local function collected(buffer)
+    if #buffer.pieces>0 then buffer.chunks[#buffer.chunks+1]=table.concat(buffer.pieces)end
+    return table.concat(buffer.chunks)
+end
+
 local function snapshot()
     M._handles = {}
     for _, record in pairs(records) do
@@ -27,6 +96,8 @@ end
 
 -- Test isolation must be explicit; replacing a public snapshot cannot retire work.
 function M._reset()
+    for _,record in pairs(records)do if close_reconcile then close_reconcile(record)end end
+    limits=vim.deepcopy(DEFAULT_LIMITS);retained_bytes=0
     records, admissions, queries = {}, {}, {}
     M._handles, M._queries = {}, {}
 end
@@ -93,6 +164,8 @@ function M.get_active_query_by_buf(buf)
 end
 
 local function retire(record)
+    close_reconcile(record)
+    retained_bytes=math.max(0,retained_bytes-(record.retained or 0));record.retained=0
     local state = record.state
     if admissions[state.admission_key] == state.attempt_id then
         admissions[state.admission_key] = nil
@@ -104,6 +177,47 @@ end
 
 local function event(record, observation)
     record.state = attempt.transition(record.state, observation)
+end
+
+close_reconcile=function(record)
+    local timer=record.timer;record.timer=nil
+    if timer then pcall(function()timer:stop()end);pcall(function()if not timer:is_closing()then timer:close()end end)end
+end
+schedule_reconcile=function(record)
+    if not record.state.reconcile_due or not attempt.is_unresolved(record.state)then close_reconcile(record);return end
+    if not record.timer then
+        if not record.runtime.new_timer then return end
+        local ok,timer=pcall(record.runtime.new_timer)
+        if not ok or not timer then record.state.timer_error=true;return end
+        record.timer=timer
+    end
+    local delay=math.max(1,math.ceil(record.state.reconcile_due-clock()))
+    local ok=pcall(function()record.timer:start(delay,0,function()
+        vim.schedule(function()if records[record.state.attempt_id]==record then M.reconcile_step()end end)
+    end)end)
+    if not ok then record.state.timer_error=true;close_reconcile(record)end
+end
+-- Reconciliation observes liveness only. After five seconds the timer retires,
+-- while the unresolved attempt and its admission slot remain until positive drain.
+function M.reconcile_step(now)
+    now=now or clock()
+    for _,record in pairs(records)do
+        if attempt.is_unresolved(record.state)then
+            local effects;record.state,effects=attempt.transition(record.state,{type='reconcile_tick',now=now})
+            if effects.probe and not record.state.exited and record.state.pid then
+                local ok,result,detail,code=pcall(record.runtime.kill,record.state.pid,0)
+                local observation=ok and result==0 and 'alive' or 'unknown'
+                if ok and (code=='ESRCH' or tostring(detail):find('ESRCH',1,true))then observation='missing'end
+                event(record,{type='observation',observation=observation})
+            end
+            if effects.unresolved then
+                close_reconcile(record)
+                logger.warning('Parley process remains unresolved after cancellation/exit; resource ownership retained')
+                if record.on_unresolved then pcall(record.on_unresolved,vim.deepcopy(record.state))end
+            else schedule_reconcile(record)end
+        else close_reconcile(record)end
+    end
+    snapshot();return M.stats()
 end
 
 function M.is_busy(buf, skip_warning)
@@ -128,7 +242,7 @@ function M.is_busy(buf, skip_warning)
 end
 
 -- Explicit unresolved retention: a probe is diagnostic, never exit/drain evidence.
--- There are no polling timers. A caller may request another reconciliation pass.
+-- Manual probes do not bypass the finite cancellation reconciliation schedule.
 function M.cleanup_stale_handles()
     for _, record in pairs(records) do
         local state = record.state
@@ -153,8 +267,8 @@ local function stop_matching(matches, signal)
         local state = record.state
         if matches(state) and attempt.is_unresolved(state) then
             count = count + 1
+            event(record, { type = 'stop_requested', now=clock() })
             if not state.exited and state.accepted_signal ~= signal then
-                event(record, { type = "stop_requested" })
                 local ok, result, detail, code = pcall(record.runtime.kill, state.pid, signal)
                 local observation = "unknown"
                 if ok and result == 0 then
@@ -167,6 +281,7 @@ local function stop_matching(matches, signal)
                 end
                 event(record, { type = "signal_observation", observation = observation, signal = signal })
             end
+            schedule_reconcile(record)
         end
     end
     snapshot()
@@ -190,6 +305,10 @@ end
 function M.stop_owner(owner, signal)
     if owner == nil then return 0 end
     return scoped_stop(function(state) return state.generation_id == owner end, signal)
+end
+
+function M.stop_attempt(id,signal)
+    return scoped_stop(function(state)return state.attempt_id==id end,signal)
 end
 
 -- Set cache metrics
@@ -230,19 +349,27 @@ end
 ---@param out_reader function | nil # stdout reader function(err, data)
 ---@param err_reader function | nil # stderr reader function(err, data)
 ---@param on_start_error function | nil # scheduled launch rejection callback(message)
+---@param opts table | nil # Captured cwd/kind/owner, bounded collection policy, and unresolved callback.
+-- Provider readers use collect_stdout=false: bounded delivery chunks do not cap the
+-- total answer. Tool/utility output is retained within per-stream and shared caps.
+-- An overflow requests cancellation; only exit plus both EOFs releases ownership.
 M.run = function(buf, cmd, args, callback, out_reader, err_reader, on_start_error, opts)
-    logger.debug("run command: " .. cmd .. " " .. table.concat(args, " "), true)
+    logger.debug("starting owned task process", true)
     local run_uv = M._uv or uv
 
-    opts = opts or {}
+    opts = vim.tbl_extend("force", {}, opts or {})
     sequence = sequence + 1
     local id = opts.attempt_id or ("attempt:" .. sequence)
     local key = opts.admission_key or (buf and ("legacy:" .. buf) or id)
     local record = {
         runtime = run_uv,
+        retained=0,on_unresolved=opts.on_unresolved,
         state = attempt.new({
             attempt_id = id,
             generation_id = opts.generation_id,
+            logical_generation = opts.logical_generation or opts.generation_id or id,
+            kind = opts.kind or 'utility',
+            stdout_bytes=0,stderr_bytes=0,
             query_id = opts.query_id,
             admission_key = key,
             buf = buf,
@@ -262,6 +389,14 @@ M.run = function(buf, cmd, args, callback, out_reader, err_reader, on_start_erro
         reject("task start rejected: owner is busy")
         return nil
     end
+    local stdout_limit,stderr_limit=opts.stdout_limit or 1048576,opts.stderr_limit or 65536
+    if not integer(stdout_limit,16*1024*1024) or not integer(stderr_limit,1048576)
+        or opts.collect_stdout~=nil and type(opts.collect_stdout)~='boolean'
+        or opts.cwd~=nil and (type(opts.cwd)~='string' or opts.cwd=='')
+        or record.state.kind~='provider' and record.state.kind~='tool' and record.state.kind~='utility' then
+        reject('task start rejected: invalid process options');return nil
+    end
+    if not capacity(record.state)then reject('task start rejected: process admission capacity');return nil end
     records[id], admissions[key] = record, id
     snapshot()
 
@@ -277,8 +412,7 @@ M.run = function(buf, cmd, args, callback, out_reader, err_reader, on_start_erro
         reject("task start failed: " .. tostring(pipes_error))
         return nil
     end
-    local stdout_data = ""
-    local stderr_data = ""
+    local stdout_buffer,stderr_buffer=collection(),collection()
     local io_error
 
     local function call_safely(label, fn, ...)
@@ -295,6 +429,8 @@ M.run = function(buf, cmd, args, callback, out_reader, err_reader, on_start_erro
 
     local finish = M.once(function()
         vim.schedule(function()
+            local stdout_data,stderr_data=collected(stdout_buffer),collected(stderr_buffer)
+            stdout_buffer,stderr_buffer=nil,nil
             event(record, { type = "delivered" })
             retire(record)
             call_safely("task terminal", callback,
@@ -306,6 +442,7 @@ M.run = function(buf, cmd, args, callback, out_reader, err_reader, on_start_erro
 
     local function maybe_finish()
         if attempt.can_deliver_terminal(record.state) then
+            close_reconcile(record)
             finish()
         end
     end
@@ -322,6 +459,9 @@ M.run = function(buf, cmd, args, callback, out_reader, err_reader, on_start_erro
         if handle and not handle:is_closing() then
             handle:close()
         end
+        if attempt.is_unresolved(record.state)then
+            event(record,{type='reconcile_requested',now=clock()});schedule_reconcile(record)
+        end
         maybe_finish()
     end
 
@@ -329,6 +469,7 @@ M.run = function(buf, cmd, args, callback, out_reader, err_reader, on_start_erro
     local spawn_ok
     spawn_ok, handle, pid = pcall(run_uv.spawn, cmd, {
         args = args,
+        cwd = opts.cwd,
         stdio = { nil, stdout, stderr },
         hide = true,
         detach = true,
@@ -341,12 +482,29 @@ M.run = function(buf, cmd, args, callback, out_reader, err_reader, on_start_erro
         return
     end
 
-    logger.debug(cmd .. " command started with pid: " .. pid, true)
+    logger.debug("owned task process started with pid: " .. pid, true)
 
     record.handle = handle
     event(record, { type = "spawned", pid = pid })
     if record.state.exited and not handle:is_closing() then handle:close() end
     snapshot()
+
+    local function deliver(stream,buffer,limit,reader,err,data,collecting)
+        if not data or data == '' then call_safely(stream..' reader',reader,err,data);return end
+        local amount=#data
+        if collecting then amount=math.min(amount,limit-buffer.bytes,limits.retained_bytes-retained_bytes)end
+        amount=math.max(0,amount)
+        if collecting and amount>0 then
+            collect(buffer,data:sub(1,amount));record.retained=record.retained+amount;retained_bytes=retained_bytes+amount
+            record.state[stream..'_bytes']=buffer.bytes
+        end
+        for first=1,amount,65536 do call_safely(stream..' reader',reader,err,data:sub(first,math.min(first+65535,amount)))end
+        if amount<#data then
+            io_error=io_error or (stream..' retention limit exceeded')
+            record.state.output_overflow=true
+            pcall(M.stop_attempt,id)
+        end
+    end
 
     local function stdout_callback(err, data)
         if record.state.stdout_eof then return end
@@ -354,10 +512,7 @@ M.run = function(buf, cmd, args, callback, out_reader, err_reader, on_start_erro
             logger.error("Error reading stdout: " .. vim.inspect(err))
             io_error = io_error or ("stdout: " .. tostring(err))
         end
-        if data then
-            stdout_data = stdout_data .. data
-        end
-        call_safely("stdout reader", out_reader, err, data)
+        deliver('stdout',stdout_buffer,stdout_limit,out_reader,err,data,opts.collect_stdout~=false)
         if err then
             call_safely("stdout reader EOF", out_reader, nil, nil)
         end
@@ -374,10 +529,7 @@ M.run = function(buf, cmd, args, callback, out_reader, err_reader, on_start_erro
             logger.error("Error reading stderr: " .. vim.inspect(err))
             io_error = io_error or ("stderr: " .. tostring(err))
         end
-        if data then
-            stderr_data = stderr_data .. data
-        end
-        call_safely("stderr reader", err_reader, err, data)
+        deliver('stderr',stderr_buffer,stderr_limit,err_reader,err,data,true)
         if err then
             call_safely("stderr reader EOF", err_reader, nil, nil)
         end

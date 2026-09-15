@@ -850,7 +850,7 @@ local query = function(buf, provider, payload, handler, on_exit, callback, on_pr
 		end
 	end)
 	if not transport_alive(transport_opts) then start_error("query owner inactive");return end
-	local run_opts = vim.tbl_extend("force", {}, transport_opts or {}, { query_id = qid })
+	local run_opts = vim.tbl_extend("force", {}, transport_opts or {}, { query_id = qid, kind = "provider", collect_stdout = false })
 	tasker.run(buf, "curl", curl_params, terminal, out_reader(), nil, start_error, run_opts)
 end
 

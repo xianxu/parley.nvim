@@ -99,7 +99,7 @@ function M.new(opts)
             function(_,event)if alive(r)then safe(opts.on_progress,r.ctx,event)end end,
             abort,function()if alive(r)then safe(opts.on_activity,r.ctx)end end,
             function(qid,err)completed(r,qid,err)end,
-            {generation_id=r.owner,admission_key=r.owner,attempt_id=r.owner,alive=function()return alive(r)end})
+            {generation_id=r.owner,logical_generation=tostring(ctx.epoch)..':'..tostring(ctx.generation),admission_key=r.owner,attempt_id=r.owner,alive=function()return alive(r)end})
         if not ok then
             r.active=false;failed(r,'provider startup failed')
             if tasker.get_attempt(r.owner)then tasker.stop_owner(r.owner)
