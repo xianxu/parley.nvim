@@ -328,6 +328,39 @@ describe("entity_range header floor", function()
 		local r = entity_range.range(nil, note, 1)
 		assert.equals(1, r.first)
 	end)
+
+	-- The previous case exits at the line-1 shape guard and so never reaches
+	-- the terminator scan. THIS one is title-shaped like a transcript and must
+	-- still not be floored: the terminator has to close a contiguous run of
+	-- header-shaped lines, not just appear somewhere below a matching title.
+	it("does not floor a note whose title happens to look like a header", function()
+		local note = {
+			"# topic: how to cook", -- 1  transcript-shaped title
+			"",                     -- 2
+			"Intro paragraph.",     -- 3  <- not header-shaped: disqualifies
+			"",                     -- 4
+			"## Step one",          -- 5
+			"prep",                 -- 6
+			"",                     -- 7
+			"---",                  -- 8  thematic break, NOT a header end
+			"",                     -- 9
+			"## Step two",          -- 10
+			"cook",                 -- 11
+		}
+		assert.is_nil(require("parley.chat_parser").transcript_header_end(note))
+		for _, row in ipairs({ 1, 3, 5, 10 }) do
+			assert.is_not_nil(entity_range.range(nil, note, row),
+				("row %d must stay editable in a genuine note"):format(row))
+		end
+	end)
+
+	it("still floors a real transcript header", function()
+		local chat_parser = require("parley.chat_parser")
+		assert.equals(3, chat_parser.transcript_header_end(lines))
+		-- front-matter form too
+		assert.equals(4, chat_parser.transcript_header_end(
+			{ "---", "topic: t", "file: t.md", "---", "", "💬: q" }))
+	end)
 end)
 
 describe("entity_range invariants", function()

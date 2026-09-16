@@ -61,28 +61,6 @@ M.find_header_end = function(lines)
 	return nil
 end
 
---- The header end ONLY when the document actually looks like a transcript.
----
---- `find_header_end` returns the first `---` anywhere, which is right for a
---- buffer already known to be a chat but wrong as a shape test: a thematic
---- break in a genuine markdown note would look like a header terminator. This
---- requires the transcript signature first -- front-matter `---` on line 1, or
---- a `# topic:` line -- so a consumer can ask "is there a header here?" of any
---- document, without depending on how the buffer was classified.
---- Pure function.
---- @param lines table|nil
---- @return number|nil  1-based line of the header terminator
-M.transcript_header_end = function(lines)
-	if not lines or #lines == 0 then
-		return nil
-	end
-	local first = trim(lines[1])
-	if first ~= "---" and not first:match("^#%s*topic:") then
-		return nil
-	end
-	return M.find_header_end(lines)
-end
-
 local function parse_header_key_value(line)
 	local content = trim(line)
 	if content == "" or content == "---" then
@@ -95,6 +73,42 @@ local function parse_header_key_value(line)
 	end
 
 	return content:match("^([%w_%.%+]+):%s*(.*)$")
+end
+
+--- The header end ONLY when the document actually looks like a transcript.
+---
+--- `find_header_end` returns the first `---` ANYWHERE, which is right for a
+--- buffer already known to be a chat and wrong as a shape test: in a genuine
+--- note a thematic break would look like a header terminator, and everything
+--- above it would stop being editable.
+---
+--- So the terminator must close a CONTIGUOUS run of header-shaped lines --
+--- `key: value`, `- key: value` or blank, the shape parse_header_key_value
+--- already defines (ARCH-DRY: not a fourth hardcoding of it). A note titled
+--- `# topic: how to cook` with prose and a `---` further down has non-header
+--- lines in between, so it correctly yields nil.
+--- Pure function.
+--- @param lines table|nil
+--- @return number|nil  1-based line of the header terminator
+M.transcript_header_end = function(lines)
+	if not lines or #lines == 0 then
+		return nil
+	end
+	local first = trim(lines[1])
+	local front_matter = first == "---"
+	if not front_matter and not parse_header_key_value(lines[1]) then
+		return nil
+	end
+	for i = (front_matter and 2 or 2), #lines do
+		local content = trim(lines[i])
+		if content == "---" then
+			return i
+		end
+		if content ~= "" and not parse_header_key_value(lines[i]) then
+			return nil
+		end
+	end
+	return nil
 end
 
 local function parse_header_config_value(value)

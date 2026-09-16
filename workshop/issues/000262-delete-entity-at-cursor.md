@@ -327,6 +327,36 @@ at a time (ARCH-PURPOSE).
 
 ## Log
 
+### 2026-09-16 — M1 review round 3: FIX-THEN-SHIP, ledger closed
+
+No Criticals left. Three Importants, two of them landing on my *tests* rather
+than the code:
+
+- **`transcript_header_end` validated line 1 and then scanned for any `---`.**
+  A genuine note titled `# topic: how to cook` with a thematic break at line 8
+  floored rows 1-8 — `dae` silently dead over two real sections. Fails closed,
+  so no data loss, but wrong. The terminator now has to close a **contiguous
+  run of header-shaped lines**, reusing `parse_header_key_value`'s definition
+  rather than adding a fourth hardcoding of the transcript shape.
+- **My test for that property never reached the code it claimed to test** — it
+  used `# My Note`, which exits at the line-1 guard. Replaced with a
+  `# topic:`-titled note that actually reaches the terminator scan.
+- **The parity spec still could not see the axis BR-2 lived on (2nd repeat).**
+  The reviewer proved it by reverting the fix in a scratch tree and watching
+  all 5 parity tests stay green. I reproduced that: my first shape axis
+  (mutilating the header *on disk*) could never reproduce the divergence,
+  because the buffer is then classified markdown before either surface sees
+  it. The real axis is the header edited away **in the buffer, after
+  classification** — the latch still says "chat" while `not_chat` no longer
+  does. Added, and verified red without its fix: `separator-edited-away:
+  surfaces diverge at row 1`.
+
+The rule the reviewer stated, now written into the spec so the next axis is
+added rather than rediscovered: *a parity spec must vary every axis along which
+the two surfaces could disagree, and each axis must be demonstrated red without
+its fix.* Enumeration recorded there: cursor row, classification, document
+shape, fold state, and why in-flight generation is deliberately not an axis.
+
 ### 2026-09-16 — M1 review round 2: REWORK again, class fixed
 
 Round 1's fix was the site, not the class — the exact failure round 1 named,
