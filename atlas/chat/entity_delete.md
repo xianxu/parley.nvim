@@ -39,7 +39,17 @@ the other two kinds unreachable.
 | anything else | that paragraph |
 
 A section or paragraph range is clamped to its enclosing exchange, so it never
-runs into the next question. In a plain markdown buffer there is no exchange
+runs into the next question.
+
+**What counts as a header** is a property of the document, not of how Parley
+classified the buffer — `chat_parser.transcript_header_end` asks the text
+itself. That matters because `not_chat` rejects a buffer for reasons unrelated
+to its shape (filename not timestamped, fewer than five lines, no `topic`
+header), and a transcript saved under an ordinary name is still a transcript
+whose header must not be deleted. The test is deliberately strict: the `---`
+must close a *contiguous run of header-shaped lines*, so a genuine note that
+happens to be titled `# topic: how to cook` and has a thematic break further
+down keeps every one of its sections editable. In a plain markdown buffer there is no exchange
 kind, and the other two work as usual.
 
 - **Section**: from the heading through the line before the next heading of
