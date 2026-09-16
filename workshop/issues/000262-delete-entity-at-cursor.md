@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-09-16
 updated: 2026-09-16
-estimate_hours:
+estimate_hours: 1.98
 started: 2026-09-16T12:23:08-07:00
 ---
 
@@ -28,7 +28,8 @@ Provide a single quick command — **delete entity at cursor** — that deletes
 the entity the cursor is currently inside, with context-aware dispatch:
 
 - **Markdown section:** when the cursor is on a markdown section title
-  (ATX heading `#` … `######`), delete that entire section: from the heading
+  (an ATX heading in the repo's dialect — column-zero, one to three hashes,
+  see Revisions), delete that entire section: from the heading
   line through to (but not including) the next heading of equal or higher
   level (`#` rank ≤ current), or end-of-file. Preserve a single blank line
   between the surrounding content where appropriate. Must handle nested
@@ -172,20 +173,23 @@ initial cut is single-entity at cursor with no extra prompt.
 
 - A cursor on a markdown heading deletes that heading's entire section (through
   next same-or-higher heading / EOF) in one undo step.
-- A cursor inside a blank-line-delimited paragraph deletes that paragraph
-  (equivalence with `dap` verified in tests, but reachable via the new
-  friendly command).
+- A cursor inside a blank-line-delimited paragraph deletes that paragraph.
+  It matches `dap` on plain prose; unlike `dap` it also stops at a heading or
+  a structural marker with no blank line between, which `dap` would swallow.
 - A cursor on or inside a `💬:` question deletes that whole question/answer
   exchange as defined by `chat_parser`, not just the `💬:` line.
 - Precedence is question > heading > paragraph and is covered by tests.
 - The extended range deletes from the *entity* start (not the cursor column)
   through the end of the current exchange, stops at the next `💬:`, and
   degenerates to the whole exchange when invoked on the question line.
-- 📝 summary lines survive a deletion that spans them, in one undo step, while
-  🧠/🔧/📎 lines inside the range are removed with the answer; 🌿 branch links
-  are never silently orphaned.
-- The edge case vs. interior 📝 behavior of the text object and the command is
-  settled, tested, and documented — not left to differ by accident.
+- A 📝 summary at the *edge* of a range survives it, in one undo step, when the
+  question itself survives; an interior 📝, a whole-exchange delete, and
+  🧠/🔧/📎/🌿/🔒 lines all go with the range (see Revisions, 2026-09-16).
+- Both surfaces are byte-identical on a quiescent document, proven by a parity
+  test over every cursor row in a buffer **with closed folds**; the one
+  documented asymmetry is that the programmatic path inherits
+  `buffer_edit.replace_user_lines`' refusal while a response is streaming and
+  the native operator does not.
 - `ae`/`ie` work with every operator (`d`/`y`/`c`/`v` at minimum) from the one
   range function, are buffer-local, and shadow no stock motion users rely on
   in chat buffers.
@@ -200,26 +204,108 @@ initial cut is single-entity at cursor with no extra prompt.
   each entity type, and 📝 preservation (mid-answer, last line of answer, and
   whole-exchange deletion).
 
+## Estimate
+
+Derived via `estimate-logic-v3.1` against `baseline-v3.1.md`, using the
+repo-local calibration named by `sdlc estimate-source` (flagged stale but
+canonical here). Method A only. Design hours carry v2.1's +15% buffer because
+this issue has a thorough plan doc (`workshop/plans/000262-*-plan.md`);
+`impl=` values are written at v3.1's 40% of the v2 primitive table.
+
+Step 2.5 (library availability): Neovim ships no text-object framework, and
+pulling one in for three objects would be heavier than the 30 lines this
+needs — no shortcut to credit. The *repo* shortcuts are real, though, and the
+design hours below are already discounted for them: `exchange_clipboard`
+supplies the exchange range math and `keybinding_registry` supplies the
+keymap surface, so neither is greenfield.
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: issue-spec design=0.10 impl=0.02
+item: lua-neovim design=0.30 impl=0.40
+item: lua-neovim design=0.15 impl=0.35
+item: cross-cutting-refactor design=0.05 impl=0.08
+item: atlas-docs design=0.05 impl=0.08
+item: milestone-review design=0.00 impl=0.30
+design-buffer: 0.15
+total: 1.98
+```
+
+The two `lua-neovim` rows split the pure core (`entity_range` +
+`markdown_heading` + their unit specs) from the surface (text objects,
+commands, registry/config entries, parity + perf checks). The
+`cross-cutting-refactor` row is folding `outline.lua` onto the shared heading
+dialect plus its conformance test; `milestone-review` covers both M1 and M2
+boundaries.
+
 ## Plan
 
-- [ ] Define entity detection precedence and range computation (reuse
-  `chat_parser.find_exchange_at_line`/exchange spans and a heading-level
-  scan for markdown sections), shared by `range_at_cursor()` and
-  `range_to_exchange_end()`.
-- [ ] Settle the structural-marker policy (📝 preserved, 🧠/🔧/📎 with the
-  answer, 🌿 decided) and the dangling-summary open question above.
-- [ ] Implement `range_at_cursor()` plus the buffer-local `ae`/`ie` text
-  object (`o`/`x` modes, single undo group, blank-line cleanup).
-- [ ] Add the `aE` object for the extended range, with non-contiguous deletion
-  that skips preserved markers in a single undo step.
-- [ ] Bind convenience hotkeys to `dae` / `daE` and add the
-  `:ParleyDeleteEntity` / `:ParleyDeleteToEnd` commands, all delegating to
-  the same two range functions.
-- [ ] Add unit tests for range computation and integration tests for buffer
-  mutation (section, paragraph, question, precedence, undo, and each
-  operator).
-- [ ] Document the binding in help and atlas; verify no collision with
-  existing `chat_delete` flows.
+- [ ] M1 — the pure range core: one `entity_range.range(parsed, lines, row,
+  opts)` owning precedence, bounds, trailing-blank and 📝 policy, over a
+  single shared heading dialect (`markdown_heading`) that `outline.lua` folds
+  onto and the document tokenizer is pinned against. Unit-tested with no
+  mocks.
+- [ ] M2 — the surface: `ae`/`ie`/`aE` registered as `o`/`x` maps through the
+  keybinding registry, their hotkey and `:Parley*` twins, a parity test over
+  every cursor row in a folded buffer, the perf measurement, traceability
+  routing, and the atlas/README keys.
+
+## Revisions
+
+### 2026-09-16 — precedence is a line-class rule, not containment
+
+- **Reason:** the Spec as written says a cursor anywhere inside an answer is
+  “inside the question”. Every line of a chat buffer is inside some exchange,
+  so read literally that makes the section and paragraph cases unreachable in
+  chat buffers — and it contradicts the operator's own requirement that the
+  extended range start at *paragraph* level inside an answer.
+- **Delta:** precedence now dispatches on what the cursor line **is**, not on
+  what contains it — `💬:` line (or its `@@tag@@` preface) → whole exchange;
+  ATX heading line → that section; anything else → that paragraph. The
+  containment reading survives as clamping only: a section or paragraph range
+  never crosses its enclosing exchange's bounds. Settled while writing
+  `workshop/plans/000262-delete-entity-at-cursor-plan.md`.
+
+### 2026-09-16 — marker policy, heading dialect, and `dap` equivalence
+
+Three further deviations from the Spec as first written, settled together
+while the plan cleared its quality gate. Recorded as a class rather than one
+at a time (ARCH-PURPOSE).
+
+- **Reason (marker policy):** the Spec asked for a design-time ruling on 🌿 and
+  defaulted the dangling-summary question to “preserve uniformly”; the operator
+  ruled otherwise on 2026-09-16. It also mandated a *non-contiguous* delete
+  around an interior 📝, with the divergence between the two surfaces
+  documented rather than removed.
+- **Delta:** 📝 is preserved only as an **edge trim**, and only when the
+  question survives; interior 📝 and whole-exchange deletes take it.
+  🧠/🔧/📎/🌿/🔒 are ordinary content. This removes the non-contiguous
+  path entirely, which is what lets the text object and the command be
+  byte-identical — a stock `d` over a text object cannot skip an interior
+  line, so keeping the Spec's rule would have meant two surfaces that differ
+  on the same keystroke.
+- **Known tension, accepted deliberately:** `lua/parley/annotation.lua` and
+  `buffer_edit.delete_answer` exist to carry 🌿/🔒 *through* a programmatic
+  range delete (#214 BR-75/BR-79), and this ruling does not extend that
+  protection to the new operator. The cases differ in kind: `delete_answer`
+  destroys an answer the user did not ask to destroy, whereas `dae` is the
+  user deleting a range they selected, with the register and `u` intact. If
+  that reading is wrong, the fix is to reuse `annotation.lua` here rather than
+  to write a second preservation path.
+- **Reason (heading dialect):** the Spec says ATX `#` … `######`.
+- **Delta:** the repo's one dialect is column-zero, one to three hashes
+  (`document/lexical.lua:352`, `outline.lua`), and this feature consumes it
+  rather than introducing a fourth. `#### Four` is body text and a cursor on
+  it takes the paragraph. Widening to six levels is a separate change that
+  moves outline and the tokenizer together.
+- **Reason (`dap` equivalence):** Done-when asked for `dap` equivalence in
+  tests.
+- **Delta:** equivalence holds on plain prose only. The paragraph walk
+  additionally stops at a heading and at a structural marker (`💬 🤖 📝 🧠
+  🔧 📎 🌿 🔒`) even with no blank line between — `dap` would swallow a
+  heading directly above its body, and in a transcript it would swallow the
+  `💬:` line itself. Strict `dap` parity would be a bug here.
 
 ## Log
 
