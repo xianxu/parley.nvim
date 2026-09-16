@@ -5,6 +5,7 @@ local M = {}
 
 local highlight_structure = require("parley.highlight_structure")
 local question_tags = require("parley.question_tags")
+local markdown_heading = require("parley.markdown_heading")
 
 local Document = require("parley.document")
 local Reader = require("parley.line_reader")
@@ -50,12 +51,12 @@ local function is_outline_item(bufnr, line_number, config, code_block_memo, all_
     return true, "branch", "🌿 " .. line
   -- Match markdown headings — only for non-chat markdown files
   elseif not opts.is_chat then
-    if line:match("^### ") then
-      return true, "heading", "      " .. line
-    elseif line:match("^## ") then
-      return true, "heading", "    " .. line
-    elseif line:match("^# ") then
-      return true, "heading", "  " .. line
+    -- The dialect itself lives in markdown_heading (ARCH-DRY) -- this used to
+    -- be a third copy of it. The indent ladder is unchanged: 2/4/6 spaces for
+    -- levels 1/2/3, which is exactly two spaces per level.
+    local level = markdown_heading.level(line)
+    if level then
+      return true, "heading", ("  "):rep(level) .. line
     end
   end
 
