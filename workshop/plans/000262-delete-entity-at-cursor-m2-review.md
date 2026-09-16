@@ -506,3 +506,152 @@ findings:
     detail: |
       3rd finding in family unreachable-guard. tests/unit/entity_range_spec.lua:486 initializes body[10] to `delim:gsub("%S+$", ""):gsub("^%s*", "") ~= "" and "```" or delim`, which :488 discards. THE RULE covering BR-5 (section_range's dead floor parameter), BR-16 (a ternary whose two branches are both 2) and this - no line in the diff may have zero consumers; a value that nothing reads is either a missing call site or dead code, and review should resolve which before the boundary. Here it is dead code: delete the computed initializer and build body[10] once.
 ```
+
+---
+
+## Re-review — 2026-09-16T16:35:13-07:00 (FIX-THEN-SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 262 — Delete entity at cursor — markdown section, paragraph, or chat question |
+| repo | parley.nvim |
+| issue file | workshop/issues/000262-delete-entity-at-cursor.md |
+| boundary | milestone M2 |
+| milestone | M2 |
+| window | f53af775adab1355c5b1ba31e08017be9cebd83f..4eca1d7d7b64afe374f9096ee235b21301a2cf8e |
+| command | sdlc milestone-close --issue 262 --milestone M2 |
+| reviewer | claude |
+| timestamp | 2026-09-16T16:35:13-07:00 |
+| verdict | FIX-THEN-SHIP |
+
+## Review
+
+```verdict
+verdict: FIX-THEN-SHIP
+confidence: high
+```
+
+The round's Critical is genuinely gone: I ran `make test-spec SPEC=chat/entity_delete` four consecutive times and got exit 0 with a real busted summary every time — parity 11/11 including `separator-edited-away` and the header test, plus 45/15/1/4 green across the rest of the mapped set — so BR-29's "watched it pass over a runner that exits 1" is fixed with the right evidence (the exit status itself). The BR-30 code fix is also real: scratch-reverted at `4eca1d7d`, the new spec goes red 44/1, and all three of BR-30's measured cases now return the correct range. What holds SHIP back is the same shape as the last three rounds — the diff fixed the three sites BR-30 named and did not ship the class-level guard BR-30 specified. I wrote that guard myself (the odd-fence invariant over a fenced corpus, every row × {scope, inner}) and it fails 8 times on the `to_end` axis: `daE` with the cursor inside a code block deletes the closing fence, strands the opener, and renders the next question and everything after it as code — BR-21's exact corruption through a path the wall never guarded. The atlas sentence reaffirmed in this very window ("a range never spans one") is therefore false, and `Done when` line 189 says the opposite, so the code and two contracts disagree on a corrupting case.
+
+## 1. Strengths
+
+- **`lua/parley/entity_range.lua:102,111,285` is argued and proven, not asserted.** I reverted the three gated heading reads in a scratch worktree at `4eca1d7d`: `entity_range code fences a heading inside a fence does not terminate the section above it` goes red (44 pass / 1 fail, exit 1). Re-reverting `:65` to `fence.open_len` reds `walls every fence flavour the in-block test recognises` instead. Two independent regression tests, each pinned to its own fix.
+- **BR-30's three measured cases are measurably gone.** `## Section` over a fenced sample now returns `section 8..14` (was `8..10`, ending on the opener); plain-markdown `# Top` returns `1..8` (was `1..4`); the `to_end` backward scan returns `2..8` (was `8..9`).
+- **`tests/unit/entity_range_spec.lua:479-481` pins the invariant, not the implementation.** It asserts `lexical.is_fence_delim(delim, true)` is non-nil *first*, then asserts the wall — so the test says "what the memo sees, the wall walls" rather than restating `is_wall`'s body. That is the right shape for a DRY-agreement test.
+- **The parity-spec fix targets the actual mechanism.** One `parley.setup()` plus `nvim_buf_delete` per iteration is the correct read of "~500 buffers and ~500 setups killed the process", and the four determinism runs confirm it rather than assuming it.
+- **`workshop/lessons.md` records the process rule, not just the bug** — "read the exit code, not the Success lines" and "an anomaly you cannot explain is a finding" are the two durable artifacts this round actually earned.
+
+## 2. Critical findings
+
+None.
+
+## 3. Important findings
+
+**`lua/parley/entity_range.lua:279-291` — the `to_end` scope overwrites `found.last` from the exchange bound without re-applying the fence wall, so `daE` inside a code block strands the opening fence.** *(4th in family `range-splits-a-structure`.)*
+
+Measured on a real `parse_chat`, two exchanges, fence at rows 10–13:
+
+```
+daE at row 11 (inside ```lua) -> paragraph 11..15
+buffer after:  ... 8|prose  9|  10|```lua  16|💬: second q  17|  18|🤖: [A]  19|second answer
+```
+
+The `` ```lua `` opener survives with no closer; the second question and everything after it render as code. Undo recovers it, which is why this is Important and not Critical — the same calibration BR-21 and BR-26 were given for the identical damage.
+
+I found this by writing the guard BR-30 asked for. Over four fenced fixtures (chat/backtick, chat/tilde, indented, plain markdown) across every row × `{entity, to_end}` × `{inner, outer}`, the invariant "a returned range contains an even number of `is_fence_delim` lines" fails **8 times, all on `to_end`**, and zero times on `entity`.
+
+**This is the 4th finding in family `range-splits-a-structure`. Do not fix this instance.** The four instances broke four *different* producers — `is_wall` had no fence test (BR-21), `is_wall`'s fence test was a different predicate from the memo's (BR-26), `section_range`'s scans used a different heading predicate from the dispatch (BR-30), and now `to_end` bypasses the wall entirely by assigning `found.last` from `bounds.last`. Guarding producers one at a time is what keeps failing, because the next instance is always a producer nobody enumerated. **THE RULE: guard the RESULT, in one place.** `M.range` has exactly one exit (`:296-299`); give it one post-condition — the returned `[first, last]` may not contain an unmatched `lexical.is_fence_delim` line — and clamp or refuse there. That single check subsumes BR-21, BR-26, BR-30 and this, and it cannot be bypassed by a future fifth producer.
+
+Before implementing it, **resolve the contract conflict this exposes**, because the guard is not implementable as literally stated:
+- `atlas/chat/entity_delete.md:94` says "a range never spans one" — reaffirmed in this window by the new paragraph at `:99-104`.
+- `workshop/issues/000262-delete-entity-at-cursor.md:189` says the extended range deletes "through the end of the current exchange".
+
+Pick one. If `to_end` clamping to the last row before an unmatched fence is right (I think it is — it is what stops the corruption), the atlas stays as written and the invariant holds for every row × scope. If `to_end` is an intentional exception, the atlas must say so explicitly and the invariant must carry that exclusion as a named, commented carve-out — not as an absent test.
+
+## 4. Minor findings
+
+- `tests/integration/entity_delete_parity_spec.lua:98-131` — `fresh()` writes one chat file per iteration into `base_tmp_dir` and nothing removes it; `run()` now releases the buffer but not the file. Measured 2 902 files / 11 MB across 12 per-run directories in the harness scratch after a handful of `make test-spec` runs (that target runs `PREP_TEST_ENV`, never `test-clean-env`, so only a later full `make test` collects it). `vim.fn.delete(path)` in `run()` bounds it (ARCH-FUNERAL).
+
+## 5. Test coverage notes
+
+- Both new unit tests are genuine regressions — independently verified red by scratch-revert, each against its own fix. That is the standard the claimed-fix protocol asks for and it was met.
+- The parity spec is now deterministic across 4/4 runs with a complete summary. All 11 tests execute, including the two shapes that had never run.
+- **The gap is the property test.** `entity_range invariants` (`tests/unit/entity_range_spec.lua:530-558`) already has a fenced entry in `CORPUS` and already sweeps rows × scope × inner, but asserts only bounds and non-inversion. Adding the even-fence assertion to the existing loop is ~4 lines and is what turns four example tests into one rule. It is also the only coverage shape that can see the `to_end` instance above — the parity spec structurally cannot, since both surfaces share the range function and agree on the wrong answer.
+- No fenced fixture in the corpus uses `~~~` or an indented opener; the new flavour test covers the wall but the property sweep does not see those shapes.
+
+## 6. Architectural notes for upcoming work
+
+- **ARCH-DRY — flag (minor, inside the fix).** `:65` correctly collapses onto the one fence predicate. But "the effective heading level at row *i*" is now written three times in three slightly different forms — `:102` and `:111` as `not (in_code and in_code[i]) and heading.level(lines[i]) or nil`, `:285` as `not in_code[i] and heading.level(lines[i])`. Three spellings of one fact, added in one commit, is the same shape that produced BR-26. One `local function heading_at(lines, in_code, i)` is the consolidation, and it is also the mechanical form of BR-30's "classify once".
+- **ARCH-PURE — pass.** `range(parsed, lines, row, opts)` still takes no buffer; 45 unit assertions run against literal line arrays with zero mocks. I ran them. `code_block_memo` is pure over `(lines, patterns)`.
+- **ARCH-PURPOSE — flag.** Fourth consecutive round where the disposition delivered the named site and not the enumerable class. BR-30 spelled the guard out in one sentence; two example tests shipped instead, and the guard it named goes red on first execution. The `family:` slug has now repeated four times — the ledger is reporting that the enumeration was never written.
+- **ARCH-MOCK — N/A, pass.** No external binary or service; Neovim is exercised for real.
+- **ARCH-CONSTRAINTS — pass for the diff.** `is_fence_delim` and `ordinary_open_len` are the same order of cost, on a bounded paragraph walk. BR-23's residual stands: the atlas's 13.6/24.7/97.8 ms are still prose no suite can re-derive.
+- **ARCH-SECURE — pass.** `is_fence_delim` type-guards non-strings before matching; `section_range` tolerates a nil memo; the property sweep over rows `0..#lines+2` covers truncated and hand-edited transcripts. Nothing here reads a credential or a cross-process artifact.
+- **ARCH-ORDER — flag (tests, not production).** `entity_range` carries no state between calls — the memo is rebuilt per invocation, nothing to invalidate. The spec, though, now has two module-level mutables (`shape` at `:78`, `did_setup` at `:86`) read by `fresh()`, and removing the per-test `setup()` means state accumulates across all 11 tests in one process. There is no seam to inject ordering and no way to reproduce a different one: a green run is a sample of size one over whichever order busted happened to pick. Pass the shape through `fresh(s)` and the risk goes away.
+- **ARCH-FUNERAL — flag.** See the Minor finding. Nothing durable is created by production code; the memo dies with its scope.
+
+## 7. Plan revision recommendations
+
+- Append `### 2026-09-16 — M2 boundary review rounds 2–3 (REWORK → fixes applied)` recording every body delta made since `f53af775`: the `fence.open_len` → `lexical.is_fence_delim` unification, the `in_code` threading, the parity-spec teardown, and the Task-13 perf-module strikethrough at `:978-981`. The Revisions section currently ends at "M1 boundary review round 2" while the body has moved four times since (BR-28).
+- Correct `:7` (drop `fence.open_len` from the reused-primitives list — `entity_range` requires `parley.fence` nowhere as of `a3fcf7ea`), `:53` (`ChatPrune` is `init.lua:4271`, `ExchangeCut` is `:4439`), and `:852` (`chat_exchange_cut` is `init.lua:2811-2819`; `:2803` is `chat_search`) — BR-20's three live instances.
+- `:66` — "Five rules, each stated once" now governs a rule set that includes the header floor and the fence wall. Same drift as `entity_range.lua:10`; fix both or renumber both (BR-27).
+- `atlas/chat/entity_delete.md:94` — once the `to_end` contract conflict above is resolved, make that sentence and `Done when:189` agree, and replace "a `# heading` inside a fenced block is content rather than a section" with what `range()` actually returns on it (`nil` — a no-op), adding the row to the Precedence table.
+
+```findings
+dispose:
+  - id: BR-20
+    disposition: not-addressed
+    note: |
+      File-set half holds. Three file:line instances still live - plan.md:7 lists fence.open_len as a reused primitive though a3fcf7ea removed its only call (entity_range requires parley.fence nowhere); plan.md:53 says ChatPrune init.lua:4255 (actual 4271) and ExchangeCut init.lua:4423 (actual 4439); plan.md:852 cites init.lua:2803-2812 as chat_exchange_cut when 2803 is chat_search and chat_exchange_cut is 2811. 4th round open, no mechanical check shipped.
+  - id: BR-22
+    disposition: not-addressed
+    note: |
+      Empty-window symptom is gone (f53af775..4eca1d7d is 8 files), but base is the previous ROUND's base, not the parent of M2's own first commit - so M2's actual deliverable (e007f6c5, 49064ec4, cb17a0a6) has still never appeared in any reviewed range. Prevalence 5 of 8 rounds. Fix belongs in the sdlc derivation, not here.
+  - id: BR-23
+    disposition: not-addressed
+    note: |
+      tests/perf holds chat_typing/document/harness/ownership; nothing under tests/perf or tests/arch references entity_range. atlas/chat/entity_delete.md:105-116 still states 13.6/24.7/97.8 ms alongside its own admission that no spec guards them.
+  - id: BR-24
+    disposition: not-addressed
+    note: |
+      entity_delete_parity_spec.lua:78 still declares `local shape = SHAPES[1]` at module scope with each it() assigning it and fresh() reading it - and this round ADDED a second module-level mutable, `did_setup` at :86, also read by fresh(). Correct only because busted runs the bodies sequentially; there is still no seam to run them in any other order.
+  - id: BR-25
+    disposition: not-addressed
+    note: |
+      keybinding_registry.lua:483/493/503 unchanged - "(dae/yae/cae)", "(die/yie/cie)", then "(daE)" alone.
+  - id: BR-27
+    disposition: not-addressed
+    note: |
+      atlas/chat/entity_delete.md:94-95 is verbatim unchanged; re-measured, range() returns nil on a `# x` inside a fence (neither section nor content) and the Precedence table still has no row for it. entity_range.lua:10 still opens "Five rules, each stated once" over six, and plan.md:66 carries the identical "Five rules" claim over a set that now includes the header floor and the fence wall - the same drift in a third document.
+  - id: BR-28
+    disposition: not-addressed
+    note: |
+      plan.md moved again in this window (:978-981, the perf-module strikethrough at 4eca1d7d) and the Revisions section still ends at "M1 boundary review round 2". Four body deltas since f53af775 are now unrecorded.
+  - id: BR-29
+    disposition: addressed
+    note: |
+      Measured 4 consecutive `make test-spec SPEC=chat/entity_delete` runs - exit 0 every time, parity 11/11 with a real busted summary, all five SHAPES including separator-edited-away plus the header test executed, full mapped set 45/15/11/1/4 green. Withdrawing the sub-claim about base_tmp_dir's "/claude/" segment - it is an established repo convention in 34 test files, under the harness TMPDIR that test-clean-env wipes, not an agent-sandbox artifact.
+  - id: BR-30
+    disposition: not-addressed
+    note: |
+      Instances fixed and genuinely pinned - scratch-revert at 4eca1d7d reds the new spec 44/1, and all three measured cases now return the correct range (section 8..14, 1..8, to_end 2..8). The CLASS was not swept - the odd-fence invariant the finding specified was not shipped, and running it now fails 8 times (see the new to_end finding); :58's heading read is still ungated (a `# x` in a fence is a no-op that splits a code sample into two paragraphs, benign but the fourth spelling of the same classification); and the fix itself writes "the effective heading level at row i" three different ways at :102, :111 and :285.
+  - id: BR-31
+    disposition: not-addressed
+    note: |
+      entity_range_spec.lua:490 still computes a body[10] initializer that :492 immediately discards. Plus a new instance of the same rule inside the fix under review - section_range's `in_code and` nil-guards at :102 and :111 have zero reachable call sites (both callers, :256 and :286, pass the always-built memo), while :285 reads in_code[i] with no guard at all. A guard and its absence over one fact, three lines apart. 4th in family.
+findings:
+  - id: new
+    severity: Important
+    family: range-splits-a-structure
+    title: |
+      the to_end scope overwrites found.last from the exchange bound without re-applying the fence wall, so daE inside a code block strands the opening fence
+    detail: |
+      4th finding in family range-splits-a-structure. entity_range.lua:279-291 assigns found.last = bounds.last (or the enclosing section's end) with no fence check, bypassing is_wall entirely. Measured on a real parse_chat with two exchanges and a fence at rows 10-13 - range(p, L, 11, {scope="to_end"}) returns paragraph 11..15, and deleting it leaves ```lua at row 10 with no closer, so the second question and everything after it render as code. BR-21's exact corruption, undo-recoverable, hence Important rather than Critical - the same calibration BR-21 and BR-26 were given. Found by writing the guard BR-30 specified - over four fenced fixtures (chat backtick, chat tilde, indented, plain markdown) x every row x {entity,to_end} x {inner,outer}, the even-fence invariant fails 8 times, all on to_end, zero on entity. DO NOT patch to_end. The four instances broke four different producers (no fence test, wrong fence predicate, wrong heading predicate, and now bypassing the wall outright), so guarding producers one at a time is what keeps failing. THE RULE - guard the RESULT in one place - M.range has exactly one exit at :296-299; give it one post-condition, that the returned [first,last] may not contain an unmatched lexical.is_fence_delim line, and clamp or refuse there. That subsumes BR-21, BR-26, BR-30 and this. First resolve the contract conflict it exposes - atlas/chat/entity_delete.md:94 says "a range never spans one" (reaffirmed in this window at :99-104) while issue :189 says the extended range runs "through the end of the current exchange". Pick one; if to_end is an intentional exception it must be a named carve-out in both the atlas and the invariant, not an absent test.
+  - id: new
+    severity: Minor
+    family: artifact-without-removal-path
+    title: |
+      the parity spec writes one chat file per iteration with no removal path - run() now releases the buffer but not the file
+    detail: |
+      ARCH-FUNERAL. entity_delete_parity_spec.lua:98-131 - fresh() writes a chat file into base_tmp_dir on every call and nothing deletes it; the teardown added this round frees the buffer only. make test-spec runs PREP_TEST_ENV but never test-clean-env, so the residue is collected only by a later full make test. Measured after a handful of runs - 2 902 files / 11 MB across 12 per-run directories under the harness scratch root. One vim.fn.delete(path) in run() bounds it.
+```

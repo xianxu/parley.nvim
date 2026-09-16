@@ -328,6 +328,7 @@ at a time (ARCH-PURPOSE).
 ## Log
 
 ### 2026-09-16 — M2 review round 2: a Critical in my own test
+- 2026-09-16: closed M2 — M2 surface + four rounds of review fixes. Every suite below verified by capturing nvim exit status, not by reading Success lines (BR-29: the parity spec had been aborting at exit 1 partway through while printing successes, and was wrongly reported as passing in an earlier close). entity_range 45/45 exit 0; entity_textobj 15/15 exit 0; parity 11/11 exit 0 and COMPLETE across five document-shape axes x two objects; outline 20/20 exit 0; single_source_sweeps 21/21 exit 0; keybindings 75/75; keybinding_agreement 33/33 with o inside both guards; starter_config 7/7 incl. the bare-gf negative. Fence handling uses lexical.is_fence_delim, the same predicate code_block_memo uses, and in_code now gates every heading read -- dispatch, the section forward scan, and the to_end backward walk (BR-26, BR-30); each verified RED with its fix reverted. BR-20 closed mechanically: every changed lua/ and tests/ path is named in the plan and every file:line it names resolves. BR-22 root-caused and fixed: Review-Verdict trailers in mid-stream fix commits were being read as boundary markers, so each fix silently started a new window; the last commit carries no trailer.; review verdict: FIX-THEN-SHIP
 
 **BR-29 (Critical): the parity spec was aborting, and I reported it as
 passing.** nvim exited 1 partway through the sweep, having printed Success

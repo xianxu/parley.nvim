@@ -482,14 +482,15 @@ describe("entity_range code fences", function()
 		for _, delim in ipairs({ "```", "~~~", "  ```", "   ~~~~", "````json" }) do
 			assert.is_not_nil(lexical.is_fence_delim(delim, true),
 				("memo must see %q"):format(delim))
+			-- the closer matches the opener's character, bare
+			local closer = delim:match("~") and "~~~" or "```"
 			local body = {
 				"# topic: t", "- file: t.md", "---", "",
 				"💬: q", "", "🤖: [A]",
 				delim,        -- 8
 				"payload",    -- 9
-				delim:gsub("%S+$", ""):gsub("^%s*", "") ~= "" and "```" or delim, -- 10
+				closer,       -- 10
 			}
-			body[10] = delim:match("~") and "~~~" or "```"
 			local p2 = parse(body)
 			assert.is_nil(entity_range.range(p2, body, 8),
 				("fence %q must be a wall"):format(delim))

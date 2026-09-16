@@ -1110,3 +1110,29 @@ round-1 review named, repeated.
   reproduce it (the document permits concurrent user regions) and staging a
   live generation is heavier than the claim needs. The document's own refusal
   logic stays `document_user_guards_spec`'s.
+
+### 2026-09-16 — M2 boundary review (four rounds)
+
+The plan body was edited repeatedly during the M2 review without recording the
+deltas; this entry is that record.
+
+- **Code fences became a first-class wall.** The paragraph walk stopped at
+  blanks, headings and structural markers but not fences, so `dae` on an opener
+  left a bare closer and the rest of the transcript rendered as code. Resolved
+  Task 7 Step 3's open question in the process: a heading inside a fence is
+  content, matching `outline.lua:32`.
+- **One fence predicate.** The first cut used `fence.open_len` for the wall and
+  `code_block_memo` for the in-block test; they recognise different fences, so
+  `~~~` still broke. Both now use `lexical.is_fence_delim`.
+- **`in_code` gates every heading read**, not just the dispatch — the forward
+  scan in `section_range` and the `to_end` backward walk were still reading raw
+  `heading.level`.
+- **The parity spec was aborting**, not passing: nvim exited 1 partway through
+  while printing Success lines for completed tests, and an earlier close
+  recorded it as 11/11. It leaked ~500 buffers with a `parley.setup()` each.
+  Setup runs once, each iteration releases its buffer, and results are read from
+  the captured exit status.
+- **Integration-points table** gained `starter_config.lua` + its spec, the only
+  change affecting packaged-app users; stale `ExchangeCut` line refs corrected
+  to `:4439`/`:4529`; the dropped `tests/perf/entity_range.lua` no longer named
+  as a file to create.
