@@ -134,6 +134,35 @@ describe("entity text objects", function()
 			"para one must survive: vae should reset the anchor to the entity")
 	end)
 
+	-- #262: the packaged app runs default_keymaps=false and re-enables only the
+	-- <C-g>/<M-> families, so "it works in the plugin" does not imply "it works
+	-- in the app". This drives the APP's own option builder, not the shipped
+	-- defaults, and asserts the objects are really mapped on a prepped buffer.
+	it("installs the text objects under the packaged app profile", function()
+		local roots = { data = base_tmp_dir .. "/app/data", state = base_tmp_dir .. "/app/state" }
+		parley.setup(require("parley.starter_config").options(roots))
+		seq = seq + 1
+		local dir = parley.config.chat_dir
+		vim.fn.mkdir(dir, "p")
+		local path = dir .. "/2026-03-01-app-" .. seq .. ".md"
+		vim.fn.writefile(FIXTURE, path)
+		vim.cmd("silent edit! " .. vim.fn.fnameescape(path))
+		local buf = vim.api.nvim_get_current_buf()
+		parley.prep_chat(buf, path)
+
+		local function mapped(mode, lhs)
+			for _, m in ipairs(vim.api.nvim_buf_get_keymap(buf, mode)) do
+				if m.lhs == lhs then return true end
+			end
+			return false
+		end
+
+		assert.is_true(mapped("o", "ae"), "dae must work in the app, not just the plugin")
+		assert.is_true(mapped("o", "ie"))
+		assert.is_true(mapped("o", "aE"))
+		assert.is_true(mapped("x", "ae"))
+	end)
+
 	it("respects a closed fold instead of snapping to its first line", function()
 		local buf = prepped(FIXTURE)
 		vim.wo.foldmethod = "manual"

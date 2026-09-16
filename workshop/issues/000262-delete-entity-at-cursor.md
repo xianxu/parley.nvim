@@ -320,6 +320,32 @@ at a time (ARCH-PURPOSE).
 
 ## Log
 
+### 2026-09-16 — packaged app parity
+
+Operator verified the plugin working and asked for the packaged app too. There
+was a real gap: `starter_config.options` sets `default_keymaps = false` and
+re-enables only entries whose key is in the `<C-g>`/`<M->` families (or whose
+scope is a finder). The two hotkeys passed that filter; **all three text
+objects were silently dropped**, so the app would have shipped `<C-g>k` with no
+`dae`/`yae`/`cae`.
+
+Fixed by carving out operator-pending/visual-only entries rather than widening
+the filter. The filter exists so the app does not take ordinary editing keys
+away from users who are not Vim experts; a text object fires only after an
+operator or inside a selection, so it cannot claim a bare key and the policy's
+intent does not reach it. A negative test pins that the carve-out did not
+widen anything: `resolve_ref_gf` (a bare `gf`, normal mode, same scope) is
+still excluded.
+
+Verified by driving the **app's own option builder**, not the shipped defaults:
+`ae`/`ie`/`aE` are really present in `o` and `x` on a prepped chat buffer under
+`starter_config.options`.
+
+Suite state unchanged otherwise. `parley_harness_golden_spec` still fails
+11/11 here and on the branch base (pre-existing).
+`document_dependencies_spec`, `perf_document_spec` and `perf_ownership_spec`
+fail only under the 8-way parallel make target and pass serially.
+
 ### 2026-09-16 — M1 + M2 landed, ready for smoke test
 
 Branch `000262-delete-entity-at-cursor` (in place). Built:
