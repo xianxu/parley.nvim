@@ -252,12 +252,12 @@ pollutes the calibration ledger the gate exists to protect.
 
 ## Plan
 
-- [ ] M1 — the pure range core: one `entity_range.range(parsed, lines, row,
+- [x] M1 — the pure range core: one `entity_range.range(parsed, lines, row,
   opts)` owning precedence, bounds, trailing-blank and 📝 policy, over a
   single shared heading dialect (`markdown_heading`) that `outline.lua` folds
   onto and the document tokenizer is pinned against. Unit-tested with no
   mocks.
-- [ ] M2 — the surface: `ae`/`ie`/`aE` registered as `o`/`x` maps through the
+- [x] M2 — the surface: `ae`/`ie`/`aE` registered as `o`/`x` maps through the
   keybinding registry, their hotkey and `:Parley*` twins, a parity test over
   every cursor row in a folded buffer, the perf measurement, traceability
   routing, and the atlas/README keys.

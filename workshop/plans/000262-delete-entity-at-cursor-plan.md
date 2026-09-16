@@ -989,27 +989,14 @@ Cover `dae`/`ParleyDeleteEntity`, `daE`/`ParleyDeleteToEnd`, and the `vae`-then-
 
 - [ ] **Step 2: Run it and watch it pass.** A failure here is exactly the divergence the two-surface design exists to prevent; do not loosen the assertion.
 
-- [ ] **Step 3: Write the perf measurement** following the repo's convention: `tests/perf/*.lua` are **reporting modules** driven by `tests/perf/harness.lua`, not busted specs, and `TOOLING.md` describes `make perf` as report-only. An asserting wall-clock gate inside `make test` would be a new kind of thing and flaky on a loaded machine — don't add one.
-
-```lua
-local harness = require("tests.perf.harness")
-local chat_typing = require("tests.perf.chat_typing")
-
-function M.start()
-    local lines = chat_typing.build_fixture(5000)
-    local parser = require("parley.chat_parser")
-    local entity_range = require("parley.entity_range")
-    local samples = harness.measure(function()
-        local parsed = parser.parse_chat(lines, parser.find_header_end(lines))
-        entity_range.range(parsed, lines, 2500)
-    end, 100)
-    -- render via harness.new_report / add_scenario / render_table
-end
-```
-
-- [ ] **Step 4: Add it to the `perf` target** (`Makefile.parley`, ~line 198 — the target today runs only `tests.perf.chat_typing`). Run `make perf`, read the table.
-
-- [ ] **Step 5: Record the measured number** in the issue `## Log` against the 16 ms budget. A miss means **stop and report**: moving to `document.exchange(doc,row)` is a design change for the operator, not a silent widening.
+**Perf module: dropped, measured instead (operator call, 2026-09-16).** The
+question was whether a whole-buffer re-parse per invocation is affordable.
+Measured rather than argued: 13.6 ms on the largest real transcript on this
+machine (2 497 lines), 24.7 ms at 5 000, 97.8 ms at 20 000. Comfortable at
+ordinary sizes, linear beyond them. A standing perf module and a `make perf`
+target were not worth carrying for that; the numbers and the
+`document.exchange(doc, row)` escape hatch are recorded in
+`atlas/chat/entity_delete.md` instead.
 
 - [ ] **Step 6: Commit**
 
