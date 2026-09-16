@@ -470,6 +470,62 @@ M.entries = {
 		buffer_local = true,
 	},
 	{
+		-- #262 delete-entity family. The three text objects are the
+		-- implementation; the two <C-g> hotkeys are shortcuts to the common
+		-- case, and both route through the same entity_range function.
+		-- parley_buffer scope so one entry covers chat AND markdown.
+		id = "entity_object_outer",
+		config_key = "chat_shortcut_entity_object_outer",
+		default_key = "ae",
+		default_modes = { "o", "x" },
+		scope = "parley_buffer",
+		desc = "Parley: entity text object",
+		help_desc = "Text object: entity at cursor (dae/yae/cae)",
+		buffer_local = true,
+	},
+	{
+		id = "entity_object_inner",
+		config_key = "chat_shortcut_entity_object_inner",
+		default_key = "ie",
+		default_modes = { "o", "x" },
+		scope = "parley_buffer",
+		desc = "Parley: inner entity text object",
+		help_desc = "Text object: inner entity (die/yie/cie)",
+		buffer_local = true,
+	},
+	{
+		id = "entity_object_to_end",
+		config_key = "chat_shortcut_entity_object_to_end",
+		default_key = "aE",
+		default_modes = { "o", "x" },
+		scope = "parley_buffer",
+		desc = "Parley: entity-to-end text object",
+		help_desc = "Text object: entity through end of question (daE)",
+		buffer_local = true,
+	},
+	{
+		-- <C-g>e is NOT available: <C-g>em / <C-g>eh are export-markdown and
+		-- export-html, so binding <C-g>e would delay them.
+		id = "entity_delete",
+		config_key = "chat_shortcut_entity_delete",
+		default_key = "<C-g>k",
+		default_modes = { "n" },
+		scope = "parley_buffer",
+		desc = "Parley: delete entity at cursor",
+		help_desc = "Delete entity at cursor",
+		buffer_local = true,
+	},
+	{
+		id = "entity_delete_to_end",
+		config_key = "chat_shortcut_entity_delete_to_end",
+		default_key = "<C-g>K",
+		default_modes = { "n" },
+		scope = "parley_buffer",
+		desc = "Parley: delete to end of question",
+		help_desc = "Delete entity through end of question",
+		buffer_local = true,
+	},
+	{
 		id = "outline",
 		config_key = "chat_shortcut_outline",
 		default_key = { "<C-g>t", "<M-t>" },

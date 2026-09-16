@@ -36,11 +36,11 @@ Four places where this plan departs from the issue as first written. **All four 
 
 ### Pure entities
 
-| Name | Lives in | Status |
-|------|----------|--------|
-| `markdown_heading` | `lua/parley/markdown_heading.lua` | new |
-| `entity_range` | `lua/parley/entity_range.lua` | new |
-| `outline` heading dialect | `lua/parley/outline.lua:52-60` | modified |
+| Name | Exports | Lives in | Status |
+|------|---------|----------|--------|
+| `markdown_heading` | `level` | `lua/parley/markdown_heading.lua` | new |
+| `entity_range` | `range` | `lua/parley/entity_range.lua` | new |
+| `outline` heading dialect | — | `lua/parley/outline.lua:52-60` | modified |
 
 - **markdown_heading** — `level(line) -> number|nil`, the repo's one ATX dialect. Tests in `tests/unit/markdown_heading_spec.lua`, no mocks.
   - **Relationships:** 1:N — one dialect, consumed by `entity_range` and `outline`, and pinned against `document/lexical.lua` by conformance test.
@@ -71,13 +71,13 @@ Five rules, each stated once. Where an earlier draft of this plan said the same 
 
 ### Integration points
 
-| Name | Lives in | Status | Wraps |
-|------|----------|--------|-------|
-| `entity_textobj.select` | `lua/parley/entity_textobj.lua` | new | Neovim visual-mode selection + fold state |
-| `M.cmd.DeleteEntity` / `M.cmd.DeleteToEnd` | `lua/parley/init.lua` | new | `buffer_edit.replace_user_lines` |
-| registry entries `entity_*` | `lua/parley/keybinding_registry.lua` + `lua/parley/config.lua` | modified | keymap installation |
-| agreement-spec mode set | `tests/integration/keybinding_agreement_spec.lua:38` | modified | keymap leak/ghost guards |
-| traceability routing | `atlas/traceability.yaml` | modified | the added-spec sweep |
+| Name | Exports | Lives in | Status | Wraps |
+|------|---------|----------|--------|-------|
+| `entity_textobj` | `select`, `parsed_for` | `lua/parley/entity_textobj.lua` | new | Neovim visual-mode selection + fold state |
+| `M.cmd.DeleteEntity` / `M.cmd.DeleteToEnd` | — | `lua/parley/init.lua` | new | `buffer_edit.replace_user_lines` |
+| registry entries `entity_*` | — | `lua/parley/keybinding_registry.lua` + `lua/parley/config.lua` | modified | keymap installation |
+| agreement-spec mode set | — | `tests/integration/keybinding_agreement_spec.lua:38` | modified | keymap leak/ghost guards |
+| traceability routing | — | `atlas/traceability.yaml` | modified | the added-spec sweep |
 
 - **entity_textobj.select(scope, inner)** — reads cursor + lines, calls `entity_range.range`, selects it linewise. Two pieces of editor state make this more than a one-liner, both verified by execution and both invisible to a naive test — see Task 10.
   - **Injected into:** nothing; it is the leaf. `entity_range` receives `lines` and `row`, so all dispatch is unit-testable without a buffer.

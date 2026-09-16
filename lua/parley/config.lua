@@ -382,6 +382,13 @@ local config = {
 	-- replaces the whole list (it does not merge), so a single-key override here
 	-- silently drops <M-t>.
 	chat_shortcut_outline = { modes = { "n", "i" }, shortcut = { "<C-g>t", "<M-t>" } },
+	-- #262 delete-entity family. The text objects are operator-pending +
+	-- visual only: they are ranges, not actions, so n/i would be meaningless.
+	chat_shortcut_entity_object_outer = { modes = { "o", "x" }, shortcut = "ae" },
+	chat_shortcut_entity_object_inner = { modes = { "o", "x" }, shortcut = "ie" },
+	chat_shortcut_entity_object_to_end = { modes = { "o", "x" }, shortcut = "aE" },
+	chat_shortcut_entity_delete = { modes = { "n" }, shortcut = "<C-g>k" },
+	chat_shortcut_entity_delete_to_end = { modes = { "n" }, shortcut = "<C-g>K" },
 	-- #160: smart `gf` — resolve an ariadne artifact ref under the cursor (via
 	-- `sdlc resolve`), else native go-to-file. Transparent (native gf preserved on
 	-- plain paths); remap here to disable.

@@ -2775,6 +2775,14 @@ M.prep_chat = function(buf, file_name)
 			resolve_ref_project = M.cmd.ResolveRefProject,
 			copy_fence = M.cmd.CopyCodeFence,
 			outline = M.cmd.Outline,
+			-- #262: the text objects select a range and let the native
+			-- operator act; the hotkeys are the discoverable shortcut to the
+			-- common case. All five route through entity_range.
+			entity_object_outer = function() require("parley.entity_textobj").select("entity", false) end,
+			entity_object_inner = function() require("parley.entity_textobj").select("entity", true) end,
+			entity_object_to_end = function() require("parley.entity_textobj").select("to_end", false) end,
+			entity_delete = M.cmd.DeleteEntity,
+			entity_delete_to_end = M.cmd.DeleteToEnd,
 			-- All three modes come from branch_inserters; the dispatch used to
 			-- re-implement i and v, which left `.i` dead and made the visual path
 			-- <Esc> twice (#214 BR-4).
@@ -2975,6 +2983,14 @@ M.setup_markdown_keymaps = function(buf)
 			resolve_ref_project = M.cmd.ResolveRefProject,
 			copy_fence = M.cmd.CopyCodeFence,
 			outline = M.cmd.Outline,
+			-- #262: the text objects select a range and let the native
+			-- operator act; the hotkeys are the discoverable shortcut to the
+			-- common case. All five route through entity_range.
+			entity_object_outer = function() require("parley.entity_textobj").select("entity", false) end,
+			entity_object_inner = function() require("parley.entity_textobj").select("entity", true) end,
+			entity_object_to_end = function() require("parley.entity_textobj").select("to_end", false) end,
+			entity_delete = M.cmd.DeleteEntity,
+			entity_delete_to_end = M.cmd.DeleteToEnd,
 			-- The whole dispatch table, as the chat path does (#214 BR-4). This
 			-- rebuilt n/i/v inline, which left `branch_inserters(...).i` dead at
 			-- zero call sites and re-derived a mapping the constructor already
@@ -4500,6 +4516,51 @@ M.cmd.ExchangeCut = function(opts)
 end
 
 --- Paste previously cut exchanges after the exchange at cursor.
+--- #262 Delete the entity at the cursor (markdown section, paragraph, or chat
+--- exchange). The discoverable twin of the `ae` text object: same
+--- entity_range call, so `dae` and this produce identical buffers on a
+--- quiescent document (tests/integration/entity_delete_parity_spec.lua).
+---
+--- Mutating through buffer_edit rather than nvim_buf_set_lines is what gives
+--- the document its provenance token -- and what makes this refuse, rather
+--- than corrupt the transcript, when a response is streaming into the
+--- exchange. The native operator path has no such refusal; that asymmetry is
+--- deliberate and documented (ARCH-ORDER).
+local function delete_entity_range(scope)
+	local buf = vim.api.nvim_get_current_buf()
+	local file_name = vim.api.nvim_buf_get_name(buf)
+	local reason = M.not_chat(buf, file_name)
+	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+	local parsed_chat = nil
+	if not reason then
+		local header_end = M.chat_parser.find_header_end(lines)
+		if header_end then
+			parsed_chat = M.parse_chat(lines, header_end)
+		end
+	end
+
+	local cursor_line = vim.api.nvim_win_get_cursor(0)[1]
+	local range = require("parley.entity_range").range(parsed_chat, lines, cursor_line, {
+		scope = scope,
+		config = M.config,
+	})
+	if not range then
+		M.logger.warning("DeleteEntity: no entity at cursor")
+		return
+	end
+
+	require("parley.buffer_edit").replace_user_lines(buf, range.first - 1, range.last, false, {})
+	M.logger.info(("Deleted %s (%d line(s))"):format(range.kind, range.last - range.first + 1))
+end
+
+M.cmd.DeleteEntity = function()
+	delete_entity_range("entity")
+end
+
+M.cmd.DeleteToEnd = function()
+	delete_entity_range("to_end")
+end
+
 M.cmd.ExchangePaste = function()
 	if not _exchange_clipboard or #_exchange_clipboard == 0 then
 		M.logger.warning("ExchangePaste: clipboard is empty — cut an exchange first")
