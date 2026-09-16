@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-09-16
 updated: 2026-09-16
-estimate_hours: 1.98
+estimate_hours: 2.57
 started: 2026-09-16T12:23:08-07:00
 ---
 
@@ -222,22 +222,33 @@ keymap surface, so neither is greenfield.
 ```estimate
 model: estimate-logic-v3.1
 familiarity: 1.0
-item: issue-spec design=0.10 impl=0.02
+item: issue-spec design=0.10 impl=0.05
 item: lua-neovim design=0.30 impl=0.40
 item: lua-neovim design=0.15 impl=0.35
+item: lua-neovim design=0.10 impl=0.45
 item: cross-cutting-refactor design=0.05 impl=0.08
 item: atlas-docs design=0.05 impl=0.08
 item: milestone-review design=0.00 impl=0.30
 design-buffer: 0.15
-total: 1.98
+total: 2.57
 ```
 
-The two `lua-neovim` rows split the pure core (`entity_range` +
-`markdown_heading` + their unit specs) from the surface (text objects,
-commands, registry/config entries, parity + perf checks). The
-`cross-cutting-refactor` row is folding `outline.lua` onto the shared heading
-dialect plus its conformance test; `milestone-review` covers both M1 and M2
+Three `lua-neovim` rows: the pure core (`markdown_heading` + `entity_range`,
+which owns five distinct rules), the surface (text objects, commands,
+registry/config entries), and the test surface — six new spec files plus the
+text-object/fold/visual-mode interaction that Task 10 itself calls invisible
+to a naive test. `cross-cutting-refactor` is folding `outline.lua` onto the
+shared dialect plus its conformance test; `milestone-review` covers both
 boundaries.
+
+**Revised upward from 1.98 after the estimate-quality judge (2026-09-16).**
+The first cut carried six spec files inside two implementation rows and
+budgeted 25% less implementation than parley#208, whose 189-line plan measured
+1.81 h actual against this one's 1054 lines and 15 tasks. The judge also noted
+the `issue-spec` impl of 0.02 sat below the model's own 0.04–0.12 floor at
+v3.1 scale. Raised rather than defended: the comparable actuals in this repo
+are #208 1.81, #227 3.35, #206 3.49, and a knowingly-low estimate is what
+pollutes the calibration ledger the gate exists to protect.
 
 ## Plan
 
