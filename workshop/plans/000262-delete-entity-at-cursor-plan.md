@@ -978,8 +978,7 @@ nvim -n --headless --noplugin -u tests/minimal_init.vim \
 
 **Files:**
 - Test: `tests/integration/entity_delete_parity_spec.lua`
-- Create: `tests/perf/entity_range.lua`
-- Modify: `Makefile.parley` (the `perf` target, ~line 198)
+- ~~Create: `tests/perf/entity_range.lua`~~ — dropped, see the note in Step 3
 
 - [x] **Step 1: Write the parity test — in a buffer with a closed fold.** This is the plan's best guard and, written naively on a flat quiescent buffer, it would have caught none of the three critical findings that review surfaced.
 

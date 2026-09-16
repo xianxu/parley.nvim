@@ -58,7 +58,11 @@ local function is_wall(line, prefixes)
 	if is_blank(line) or heading.level(line) then
 		return true
 	end
-	if require("parley.fence").open_len(line) then
+	-- ONE fence predicate, the same one code_block_memo itself uses. An earlier
+	-- fix used fence.open_len here, which sees only column-zero backticks while
+	-- the memo also sees ~~~ and indented fences -- so the wall and the
+	-- in-block test disagreed and tilde fences still broke.
+	if require("parley.document.lexical").is_fence_delim(line, true) then
 		return true
 	end
 	for _, prefix in ipairs(prefixes) do

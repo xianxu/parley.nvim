@@ -475,6 +475,27 @@ describe("entity_range code fences", function()
 		assert.equals("section", entity_range.range(p2, fenced, 13).kind)
 	end)
 
+	-- BR-26: the wall and code_block_memo must recognise the SAME fences, or a
+	-- flavour the memo sees and the wall does not still reproduces the bug.
+	it("walls every fence flavour the in-block test recognises", function()
+		local lexical = require("parley.document.lexical")
+		for _, delim in ipairs({ "```", "~~~", "  ```", "   ~~~~", "````json" }) do
+			assert.is_not_nil(lexical.is_fence_delim(delim, true),
+				("memo must see %q"):format(delim))
+			local body = {
+				"# topic: t", "- file: t.md", "---", "",
+				"💬: q", "", "🤖: [A]",
+				delim,        -- 8
+				"payload",    -- 9
+				delim:gsub("%S+$", ""):gsub("^%s*", "") ~= "" and "```" or delim, -- 10
+			}
+			body[10] = delim:match("~") and "~~~" or "```"
+			local p2 = parse(body)
+			assert.is_nil(entity_range.range(p2, body, 8),
+				("fence %q must be a wall"):format(delim))
+		end
+	end)
+
 	it("to_end from inside a fence still stops at the exchange bound", function()
 		local r = entity_range.range(parsed, lines, 11, { scope = "to_end" })
 		assert.is_true(r.last <= #lines)

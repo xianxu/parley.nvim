@@ -197,3 +197,141 @@ findings:
       keybinding_registry.lua:483 reads "dae/yae/cae" and :493 "die/yie/cie", but :503 lists only "(daE)".
       Cosmetic inconsistency in the :ParleyKeyBindings output for one family.
 ```
+
+---
+
+## Re-review — 2026-09-16T15:35:51-07:00 (FIX-THEN-SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 262 — Delete entity at cursor — markdown section, paragraph, or chat question |
+| repo | parley.nvim |
+| issue file | workshop/issues/000262-delete-entity-at-cursor.md |
+| boundary | milestone M2 |
+| milestone | M2 |
+| window | f53af775adab1355c5b1ba31e08017be9cebd83f..f53af775adab1355c5b1ba31e08017be9cebd83f |
+| command | sdlc milestone-close --issue 262 --milestone M2 |
+| reviewer | claude |
+| timestamp | 2026-09-16T15:35:51-07:00 |
+| verdict | FIX-THEN-SHIP |
+
+## Review
+
+```verdict
+verdict: FIX-THEN-SHIP
+confidence: high
+```
+
+The M2 fence fix is real work with real evidence: I reverted it in a scratch worktree at `f53af775` and 4 of the 5 new fence cases go red, so BR-21's regression is genuinely pinned, and the suite I ran is green (entity_range 43/43, entity_textobj 15/15, parity 11/11, starter_config 7/7, single_source_sweeps 21/21, keybinding_agreement 33/33, outline 20/20, heading conformance 1/1). What holds SHIP back is that two of the three fixes landed on the site rather than the class the prior round named. The fence wall recognizes only column-zero backtick fences while `code_block_memo` — called eleven lines below it, in the same commit — recognizes `~~~` and indented fences too, so `dae` on a `~~~lua` opener still returns `paragraph 10..12` and still leaves a bare `~~~` closer: BR-21's exact failure, one fence flavor over. And BR-20's "every file:line the plan names must resolve" fixed `:87` and `:938` while `:53` and `:852` still carry three stale refs. The pinned window was empty for the third round running (base == head == `f53af775`, both recipes exit 0 silently), so none of this came from the diff the gate handed me.
+
+## 1. Strengths
+
+- `lua/parley/entity_range.lua:225-231,249` — the fix is argued at the right level. The commit message's reasoning is correct and I confirmed it: `is_wall` alone guards only the paragraph walk, so `dae` on a `# heading` in a code sample would still have built a section crossing the closing fence. Wiring `code_block_memo` into the section branch as well is what makes it a rule instead of a patch, and it aligns with `outline.lua:32`, whose citation resolves.
+- Regression evidence is real, not asserted. Scratch revert at `f53af775` → `entity_range code fences` fails 4/5 (`treats a fence line as a wall`, `keeps a range inside the fence from swallowing the fence`, `treats a heading inside a fence as content`, `to_end from inside a fence`). This is the standard a behavior-changing disposition is supposed to meet.
+- `tests/unit/entity_range_spec.lua:410-481` builds its fixtures through the real `parse_chat`, so the fence cases break if the parser's shape moves — the same discipline the rest of the file already had.
+- ARCH-CONSTRAINTS was not quietly widened by this change. I measured it: `code_block_memo` costs 0.79 ms/call on a 5 000-line buffer against `parse_chat`'s 29.6 ms on this machine — ~2.7% on top of a cost the operator already accepted.
+- `lua/parley/starter_config.lua` + `tests/unit/starter_config_spec.lua` (from `49064ec4`, still the only change in this branch that alters what packaged-app users receive) remains pinned by a negative: `resolve_ref_gf`, a bare normal-mode key in the same scope, is still excluded by the filter.
+
+## 2. Critical findings
+
+None.
+
+## 3. Important findings
+
+**`lua/parley/entity_range.lua:61` vs `:230` — the wall and the memo use two different definitions of "fence", added in the same commit. (2nd in family `range-splits-a-structure`.)**
+
+`is_wall` calls `fence.open_len` = `lexical.ordinary_open_len` (`document/lexical.lua:275`), which matches `^(`+)([^`]*)$` — column-zero backticks only. Eleven lines below, `code_block_memo` builds `in_code` from `lexical.is_fence_delim(line, true)` (`document/lexical.lua:212`), which matches `^%s*(`+)` **and** `^%s*(~+)`. So inside a `~~~` or an indented block the memo says "in code" while the paragraph walk sees no wall. Reproduced on real parsed transcripts:
+
+```
+~~~lua / local a = 1 / (blank) / local b = 2 / ~~~   at rows 10..14
+  range(parsed, lines, 10) -> paragraph 10..12     <- BR-21 verbatim
+  range(parsed, lines, 14) -> paragraph 13..15     <- deletes the closer AND the line after it
+   ```lua  (three-space indent, as inside a list item)
+  range(parsed, lines, 10) -> paragraph 10..12
+```
+
+Both cases leave an unterminated fence and render the rest of the transcript as code — the exact consequence BR-21 named. Same severity reasoning as BR-21 (undo recovers it), so Important, not Critical.
+
+Because this is a repeat, **do not add a tilde branch to `is_wall`**. **The rule:** *`entity_range` must consume ONE fence-delimiter predicate, and it must be the same one `code_block_memo` uses to build `in_code`* — `lexical.is_fence_delim` — so a line the memo counts as a fence is necessarily a wall and the two cannot drift. Concretely: drop the `require("parley.fence").open_len` call and test `lexical.is_fence_delim(line, true)`, which also removes the only `require` sitting inside a per-line loop. The parity spec cannot catch this class (both surfaces share the range function and agree on the wrong answer), so the guard belongs in `entity_range_spec` — parameterize the existing `code fences` block over `{"```", "~~~", "   ```"}` rather than adding a second literal fixture.
+
+## 4. Minor findings
+
+- `atlas/chat/entity_delete.md:94-95` and `lua/parley/entity_range.lua:10` both now say something the code does not do: the atlas claims a `# heading` inside a fence "is content rather than a section" (measured: `range(...)` returns `nil` on it — a no-op, neither section nor content, and the Precedence table gained a row for fence lines but not for this case), and the module docstring still opens "Five rules, each stated once" over six numbered rules with the fence rule not enumerated at all.
+- `workshop/plans/000262-delete-entity-at-cursor-plan.md` was edited for the M2 review (`:7`, `:82`, `:87`, `:797`, `:938`, the struck-through open item) with no `## Revisions` entry recording the deltas, which AGENTS.md §1 requires for an in-stream plan revision. The issue `## Log` carries the narrative, so nothing is lost — but the plan's own history says the last change was M1 round 2.
+
+## 5. Test coverage notes
+
+- The fence block is the right shape and demonstrated red. One assertion in it is weaker than its name: `to_end from inside a fence still stops at the exchange bound` asserts `r.last <= #lines`, which is `M.range`'s own post-condition at `:289` restated and cannot fail for the reason the title gives. It went red without the fix on its *other* assertion (`r.first >= 11`), so it is not dead — but `assert.equals(bounds.last, r.last)` is what the title claims.
+- The parity fixture (`entity_delete_parity_spec.lua:15-42`) carries a ```` ```json ```` block at 15–17 inside the closed fold, so the backtick-fence behavior change is swept across all five shapes. No tilde or indented fence anywhere in the branch's fixtures — which is why the divergence above shipped green.
+- No coverage of `~~~`/indented fences in `entity_range_spec`; see the Important finding.
+
+## 6. Architectural notes for upcoming work
+
+- **ARCH-DRY — flag.** Two fence-delimiter definitions inside one function, introduced together. The repo already paid for this once: `fence.lua:9-14` documents #200, where this exact rule had three independent implementations and `answer_structure` closed on any ≥3-backtick run. `lexical.is_fence_delim` is the incumbent single source; `entity_range` should derive from it.
+- **ARCH-PURE — pass.** `range(parsed, lines, row, opts)` still takes no buffer; `code_block_memo` is pure over `(lines, patterns)`. 43 unit assertions, zero mocks. The boundary has not leaked.
+- **ARCH-PURPOSE — flag.** Three dispositions this round fixed the named site rather than the enumerable class: the fence wall (backticks, not every fence the memo recognizes), the plan's stale refs (`:87`/`:938` fixed, `:53`/`:852` not), and the README (prose repaired, the mechanical check the finding asked for not shipped — nothing new under `tests/arch/`). The README prose is now correct and I am disposing it as such, but the family stays live by hand-maintenance.
+- **ARCH-MOCK — N/A, pass.** No external binary or service; Neovim is exercised for real through `D.attach(buf, {schedule=false})`.
+- **ARCH-CONSTRAINTS — pass, measured.** 0.79 ms added per invocation at 5 000 lines. Worth knowing for later: `in_code` is built unconditionally at `:230`, before dispatch, though only the section branch at `:249` reads it — a `heading.level(lines[row])` guard would make it free on the question and paragraph paths. Not worth a finding at this cost; worth it if the memo ever gets more expensive.
+- **ARCH-SECURE — pass.** The new input path is pure and total over arbitrary lines; `is_blank` short-circuits `nil` before `fence.open_len` sees it, and the malformed-transcript property sweep (`entity_range_spec.lua:482+`, rows `0..#lines+2` over empty/header-only/fenced fixtures) covers hand-edited input.
+- **ARCH-ORDER — pass.** The memo is rebuilt per call, so there is no cache to invalidate and no state carried between events. The one documented surface asymmetry (streaming refusal on the command path only) is unchanged.
+- **ARCH-FUNERAL — pass.** Creates nothing durable; the memo dies with its scope.
+
+## 7. Plan revision recommendations
+
+- Add a `### 2026-09-16 — M2 boundary review (FIX-THEN-SHIP → fixes applied)` entry recording the four deltas already made to the body (the `fence.open_len`/`code_block_memo` reuse now real, `starter_config.lua` added to Integration points, the `ExchangeCut` ref correction, Task 7 Step 3 resolved rather than deferred) plus this round's fence-predicate unification.
+- Correct `:53` (`ChatPrune` is `init.lua:4271`, `ExchangeCut` is `:4439`) and `:852` (the visual-mode idiom is `init.lua:2812-2819`; `:2803` is `chat_search`). Then ship the mechanical form BR-20 asked for, so the fifth round does not find a sixth stale ref.
+- `atlas/chat/entity_delete.md` Limits: replace "a `# heading` inside a fenced block is content rather than a section" with what the code does — `dae` on it is a no-op — and add the row to the Precedence table.
+
+```findings
+dispose:
+  - id: BR-19
+    disposition: addressed
+    note: |
+      README.md:17-24 now covers ae/ie/aE, dae/yae/cae, Ctrl+g k, Ctrl+g K and both :ParleyDelete* commands - all five config_keys and both M.cmd symbols reachable; the enforcing check was NOT shipped, so the family stays hand-maintained (see ARCH-PURPOSE note).
+  - id: BR-20
+    disposition: not-addressed
+    note: |
+      Two of four instances fixed (:87/:938 -> 4439, starter_config added to the table, code_block_memo reuse now real); plan.md:53 still says ChatPrune init.lua:4255 (actual 4271) and ExchangeCut init.lua:4423 (actual 4439), and :852 cites init.lua:2803 as chat_exchange_cut when that line is chat_search.
+  - id: BR-21
+    disposition: addressed
+    note: |
+      Verified red without the fix in a scratch worktree at f53af775 - 4 of 5 new fence cases fail. The backtick instance is fixed with genuine regression evidence; the tilde/indented sibling is raised separately.
+  - id: BR-22
+    disposition: not-addressed
+    note: |
+      Window is base == head == f53af775 - both required recipes exit 0 with no output, for the third round running. A correct prev-boundary..HEAD range (0d0b3801..f53af775) would have been non-empty here, so the derivation is pinning base to HEAD, not just mis-ordering milestones. Prevalence now 4 of 6 rounds on this issue.
+  - id: BR-23
+    disposition: not-addressed
+    note: |
+      No perf spec added; atlas/chat/entity_delete.md still states the numbers and then says nothing guards them. I re-measured independently (parse_chat 29.6 ms, code_block_memo 0.79 ms at 5000 lines) - same shape, still unreproducible by the suite.
+  - id: BR-24
+    disposition: not-addressed
+    note: |
+      entity_delete_parity_spec.lua:78 still declares `local shape = SHAPES[1]` at module scope with each it() assigning it and fresh() reading it.
+  - id: BR-25
+    disposition: not-addressed
+    note: |
+      keybinding_registry.lua:483/493/503 unchanged - "dae/yae/cae", "die/yie/cie", then "(daE)" alone.
+findings:
+  - id: new
+    severity: Important
+    family: range-splits-a-structure
+    title: |
+      the fence wall recognizes only column-zero backticks while code_block_memo recognizes ~~~ and indented fences, so BR-21 still reproduces one fence flavor over
+    detail: |
+      2nd finding in family range-splits-a-structure. entity_range.lua:61 walls on fence.open_len (lexical.ordinary_open_len, pattern ^(`+)([^`]*)$, column zero, backticks only); entity_range.lua:230 builds in_code from code_block_memo, which uses lexical.is_fence_delim(line, true) - ^%s*(`+) plus ^%s*(~+). Two definitions of one fact, added in the same commit. Measured on real parsed transcripts - with rows 10..14 = ~~~lua / local a = 1 / blank / local b = 2 / ~~~, range(parsed, lines, 10) returns paragraph 10..12 and range(parsed, lines, 14) returns paragraph 13..15, so dae leaves a bare ~~~ and the rest of the transcript renders as code; a three-space-indented ``` opener gives the identical 10..12. Same undo-recoverable severity reasoning BR-21 carried. Do NOT add a tilde branch to is_wall. THE RULE - entity_range must consume ONE fence-delimiter predicate, and it must be the one code_block_memo uses (lexical.is_fence_delim), so a line the memo counts as a fence is necessarily a wall; that also removes the only require sitting inside a per-line loop. The parity spec structurally cannot see this axis (both surfaces share the range function and agree on the wrong answer), so the guard goes in entity_range_spec - parameterize the existing code fences block over the three delimiter shapes rather than adding a second fixture. fence.lua:9-14 records that this exact rule already had three independent implementations once (#200).
+  - id: new
+    severity: Minor
+    family: docs-edit-mangles-prose
+    title: |
+      the fence docs describe behavior the code does not have, in both the atlas page and the module docstring
+    detail: |
+      2nd finding in family docs-edit-mangles-prose. atlas/chat/entity_delete.md:94-95 says a "# heading" inside a fenced block "is content rather than a section"; measured, range() returns nil on that row - a no-op, neither section nor content - and the Precedence table gained a row for fence lines but none for this case. entity_range.lua:10 still opens "Five rules, each stated once" over six numbered rules, and the fence rule is not enumerated among them. THE RULE the family points at - a docs edit that accompanies a behavior change must be read back against the behavior, not just inserted; both sites here were written from the intent rather than from what range() returns.
+  - id: new
+    severity: Minor
+    family: plan-table-understates-code
+    title: |
+      the plan body was edited for the M2 review with no "## Revisions" entry recording the deltas
+    detail: |
+      4th finding in family plan-table-understates-code. plan.md:7, :82, :87, :797, :938 and the struck-through open item 3 all changed at f53af775; the plan's Revisions section still ends at "M1 boundary review round 2". AGENTS.md section 1 requires an appended Revisions entry (timestamp, reason, delta) rather than an overwrite. The issue "## Log" carries the narrative so nothing is lost, which is why this is Minor - but the plan's own history now misstates when it last moved, and BR-13 already stated the Revisions/body consistency rule for the opposite direction.
+```
