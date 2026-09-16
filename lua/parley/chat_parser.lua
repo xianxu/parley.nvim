@@ -95,11 +95,33 @@ M.transcript_header_end = function(lines)
 		return nil
 	end
 	local first = trim(lines[1])
-	local front_matter = first == "---"
-	if not front_matter and not parse_header_key_value(lines[1]) then
+
+	-- Front matter: the fence IS the delimiter, so everything between the two
+	-- `---` lines is header whatever its shape. THE RULE this enforces: the
+	-- floor's predicate may never be stricter than the writer it must accept.
+	-- `defaults.chat_template` puts four lines of prose inside the fence, and
+	-- `new_chat` then escapes every `_` for markdown, turning the always-present
+	-- `system_prompt:` key into `system\_prompt:` -- a key-shape rule rejected
+	-- both, which silently removed the floor from every long-template chat.
+	-- Pinned by tests/unit/entity_range_spec.lua's template conformance case.
+	if first == "---" then
+		for i = 2, #lines do
+			if trim(lines[i]) == "---" then
+				return i
+			end
+		end
 		return nil
 	end
-	for i = (front_matter and 2 or 2), #lines do
+
+	-- Legacy un-fenced form. Here there is no opening delimiter, so the shape
+	-- has to carry the signal: the title must be `topic:` specifically (a note
+	-- titled `# Recipe: soup` is not a transcript), and every line up to the
+	-- terminator must be header-shaped or blank -- otherwise a thematic break
+	-- in a genuine note would floor everything above it.
+	if not first:match("^#%s*topic:") then
+		return nil
+	end
+	for i = 2, #lines do
 		local content = trim(lines[i])
 		if content == "---" then
 			return i

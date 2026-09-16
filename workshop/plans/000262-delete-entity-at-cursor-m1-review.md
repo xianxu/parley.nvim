@@ -479,3 +479,165 @@ findings:
       Both required recipes exit 0 with no output. Reviewed the tree at HEAD and 85e116c2..HEAD instead. Worth
       checking before the next boundary - a gate that reviews an empty range passes silently.
 ```
+
+---
+
+## Re-review — 2026-09-16T14:51:59-07:00 (FIX-THEN-SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 262 — Delete entity at cursor — markdown section, paragraph, or chat question |
+| repo | parley.nvim |
+| issue file | workshop/issues/000262-delete-entity-at-cursor.md |
+| boundary | milestone M1 |
+| milestone | M1 |
+| window | aa001961ae1584d248ba39e9dabcb6c5d81bf1f0..9b8a3ce4c805a5ab78f210377609cf023dae260a |
+| command | sdlc milestone-close --issue 262 --milestone M1 |
+| reviewer | claude |
+| timestamp | 2026-09-16T14:51:59-07:00 |
+| verdict | FIX-THEN-SHIP |
+
+## Review
+
+```verdict
+verdict: FIX-THEN-SHIP
+confidence: high
+```
+
+Both round-3 fixes are real and I verified each by revert-and-measure rather than by reading commit prose: reverting the contiguous-run rule in a scratch worktree turns `entity_range_spec` "does not floor a note whose title happens to look like a header" red (1 Fail), and reverting the BR-2 classifier collapse turns the two new `separator-edited-away` parity tests red with exactly the divergence BR-2 named (`surfaces diverge at row 1`). The parity spec now carries the stated RULE and a written axis enumeration, which is the right answer to a 2nd-repeat family. What stops a clean SHIP is that the new strictness went the wrong way for Parley's own artifacts: `transcript_header_end` rejects the header that `defaults.chat_template` writes (four prose lines inside the front matter, plus an escaped `system\_prompt:` key), so a long-template transcript opened markdown-classified has **no floor at all** and `dae` on line 1 takes the header and the first question — the BR-1 failure mode, surviving for a header shape the plugin ships. Four prior findings (BR-5, BR-8, BR-13, BR-14) are untouched by this window and re-dispose as `not-addressed`.
+
+## 1. Strengths
+
+- **`tests/integration/entity_delete_parity_spec.lua:48-62`** — the axis enumeration is written into the spec as a comment with (a)–(e) and an explicit justification for why in-flight generation is *not* an axis. That is the rule, not the instance, and it makes the next axis an addition rather than a rediscovery. Exactly what BR-12 asked for.
+- **`tests/integration/entity_delete_parity_spec.lua:80-85`** — the `edit = 3` shape (header mutilated *in the buffer, after classification*) is the insight the on-disk `drop` shapes could not reach, and the implementor found it themselves: mutilating on disk re-classifies the buffer before either surface sees it. Verified red without its fix.
+- **`lua/parley/chat_parser.lua:64-75, 88`** — reusing `parse_header_key_value` for the shape test instead of adding a fourth `^#%s*topic:` hardcoding. I swept `lua/` for the pattern: the hardcoding BR-10 named is gone from this path (ARCH-DRY).
+- **`tests/unit/entity_range_spec.lua:336-363`** — the replacement fixture is genuinely title-shaped (`# topic: how to cook`), so it reaches the terminator scan rather than exiting at the line-1 guard, and the companion "still floors a real transcript header" pins both the legacy and front-matter positives.
+- **Repo-wide measurement holds.** I ran `transcript_header_end` over all 384 chat-shaped tracked `.md` files: 321 agree with `find_header_end`, and every no-floor case is a `workshop/**/plans/*-gate.md` YAML front-matter artifact — **no real transcript in the tree loses its floor**.
+
+## 2. Critical findings
+
+None.
+
+## 3. Important findings
+
+**I-1 · `lua/parley/chat_parser.lua:93-110` — the new shape test rejects the header Parley's own `defaults.chat_template` writes. This is the 3rd finding in family `guard-gated-on-classification`; do not fix this instance — write the enumeration.**
+
+Measured prevalence 3/3 (BR-1 gated on `not_chat`; BR-2 gated on a diverging latch; this one gated on a key-shape predicate). **The rule:** *the header floor must accept every header shape Parley itself can write. Its predicate is not free to be stricter than the writer.* The enumeration that rule implies, and that no test contains today:
+
+| source | shape | `transcript_header_end` today |
+|---|---|---|
+| `defaults.short_chat_template` (`defaults.lua:89-97`) | front matter, all `key: value` | ✅ 5 |
+| `defaults.chat_template` (`defaults.lua:74-87`) | front matter **+ `{{optional_headers}}` + 4 prose lines** | ❌ **nil** |
+| legacy `# topic:` / `- file:` / `---` | ✅ 3 |
+| front matter written by `init.lua:3922` with any system prompt | `system\_prompt:` after the `_`→`\_` escape at `init.lua:3933` | ❌ **nil** |
+
+Reproduced against the shipped template body:
+
+```
+transcript_header_end(long_template_chat) = nil   find_header_end = 10
+  entity_range.range(nil, lines, 1) -> paragraph 1..11   (of 14 lines)
+```
+
+`dae` on line 1 of such a transcript, opened markdown-classified (`_parley_bufs[buf] ~= "chat"` — the BR-1 scenario), deletes the whole header **and** `💬: hello`. Two independent disqualifiers: `defaults.lua:80-83` are prose inside the front matter, and `system_prompts["default"]` always exists (`config.lua:226-230`) so `{{optional_headers}}` always renders a `system_prompt:` line, which `init.lua:3933`'s blanket `gsub("_", "\\_")` turns into `system\_prompt:` — a key `^([%w_%.%+]+):` cannot match. Fix the rule with a conformance test that renders *every* template in `defaults.lua` through the real renderer and asserts `transcript_header_end ~= nil` for each, so a new template shape fails the suite instead of silently removing the floor. The same enumeration's negative side is also wrong today and belongs in the same test: `{ "# Recipe: soup", "", "---", "", "## Two", "y" }` yields `3`, so rows 1–3 of a genuine note are silently undeletable.
+
+**I-2 (BR-8, re-disposed `not-addressed`) · `README.md:16-20`** — unchanged in this window. Still documents `dae`/`daE`/`yae`/`cae` only; `ie`, `<C-g>k`, `<C-g>K`, `:ParleyDeleteEntity` and `:ParleyDeleteToEnd` are user-typed surface introduced in this issue and appear only in `atlas/ui/keybindings.md:29-33`.
+
+## 4. Minor findings
+
+- **`lua/parley/chat_parser.lua:106`** — `for i = (front_matter and 2 or 2), #lines` is a ternary whose branches are identical. **2nd finding in family `unreachable-guard`** (BR-5 is the 1st and still open). The rule: *a parameter or branch that cannot change the outcome is deleted, not documented.* The enumeration is two sites — this ternary, and `entity_range.lua:86,91-93`'s `floor` parameter, which the row guard at `:214-216` and the floor-anchored back-scan at `:262` already make unreachable, and which the second call site at `:265` omits.
+- **`tests/integration/entity_delete_parity_spec.lua:165-169`** — for the `no-separator` and `separator-edited-away` shapes the header test's else-branch asserts `s.drop == 3 or s.edit == 3`, a tautology over the spec's own `SHAPES` literal. **3rd in family `partial-shape-test`.** The rule: *a branch a test takes must assert something about the code, not about the fixture that selected it.* The true, cheap assertion is available and I confirmed it holds: with no `---`, `parsed_for` returns `"unparsable"` and **both** surfaces leave the buffer byte-identical — assert that instead.
+- **`atlas/chat/entity_delete.md:41-53`** — the new paragraph swallowed the following one; "In a plain markdown buffer there is no exchange kind…" is now glued to the end of a long line instead of standing as its own paragraph.
+- **`atlas/chat/entity_delete.md:37`** — "a transcript header line (at or above the `---`) | nothing" now overstates: after this change that only holds when the `---` closes a contiguous header run.
+- **`workshop/plans/000262-delete-entity-at-cursor-plan.md:1049+`** — round 3 added no `## Revisions` entry at all, though it changed rule 6's predicate.
+
+## 5. Test coverage notes
+
+- Suite green at HEAD: `entity_delete_parity_spec` 11/11, `entity_textobj_spec` 15/15, `entity_range_spec` 36/36, both `markdown_heading` specs.
+- Both claimed fixes carry genuine regression evidence — I reverted each independently in a `git worktree` scratch and watched the named tests go red (1 Fail for the header rule, 2 Fails for the classifier collapse). No claimed fix in this window is unprotected.
+- The gap: there is **no positive-side conformance test** tying `transcript_header_end` to the templates in `defaults.lua`. That is precisely the test that would be red today (I-1), and it is the class of bug this diff shipped.
+
+## 6. Architectural notes
+
+- **ARCH-DRY** — pass on the point BR-10 raised (`parse_header_key_value` is now the single shape definition and the `^#%s*topic:` hardcoding is gone from this path). Minor note: `find_header_end` and `transcript_header_end` now run two near-identical front-matter/legacy terminator walks; one parameterised walk would state the dichotomy once.
+- **ARCH-PURE** — pass. `transcript_header_end` and `entity_range` are pure over line arrays; the new unit tests run with zero mocks and no buffer. The parity spec's IO (real buffers, real folds) is deliberate and belongs at that layer.
+- **ARCH-PURPOSE** — **flag (I-1).** The shadow-sweep over "what counts as a Parley header" enumerates four writers; two of them the new predicate rejects. The fix answered the *instance* BR-10 named (a note with prose above a thematic break) and did not sweep the class (every shape the writer emits).
+- **ARCH-MOCK** — `N/A`, correctly. No external binary or service; Neovim is exercised for real through `Document.attach(buf, { schedule = false })`.
+- **ARCH-CONSTRAINTS** — pass for this window. The missed budget stays recorded with both measurement runs, the operator's basis, the escape hatch, and re-derivation instructions at `atlas/chat/entity_delete.md:99-110`. The new scan is O(header length), not O(file), so it adds nothing to the keystroke path.
+- **ARCH-SECURE** — pass. `transcript_header_end` parses untrusted buffer text and fails closed to `nil` on every malformed shape; no credential, subprocess or fabricated substitution. The one soft spot is that failing closed here means *removing* a protection rather than adding one — which is what I-1 is.
+- **ARCH-ORDER** — pass. The `edit = 3` shape is the real contribution here: it models the state *between* events (classified as chat, then edited into unparsability) rather than a single-shot parse, and both surfaces now read one latch. The documented asymmetry during generation is scoped and justified at `entity_delete_parity_spec.lua:5-8`.
+- **ARCH-FUNERAL** — `N/A`: this window creates nothing durable. The only new artifacts are the two gate-ledger sections appended to existing `workshop/plans/*-review.md` / `*-close-gate.md` files, which are archived with the issue.
+
+## 7. Plan revision recommendations
+
+1. `## Revisions` — **2026-09-16 — M1 review round 3.** Rule 6's floor predicate changed: the terminator must now close a *contiguous run of header-shaped lines* (`parse_header_key_value`'s definition), not just be the first `---` below a transcript-shaped title. Record the consequence the code has and the plan does not: a document whose `---` is gone has *no* floor, and ordinary markdown rules are the contract there.
+2. Apply that same entry to the body (BR-13's rule): **plan line 86** and **line 937** both still say `M.cmd.DeleteEntity` uses "`ExchangeCut`'s preamble (`init.lua:4423-4436`)". The code at `init.lua:4529-4540` uses `entity_textobj.parsed_for`. Round 2's Revisions entry records that delta; the body it contradicts was never edited.
+3. `## Revisions` — record the I-1 enumeration (every `defaults.lua` template must satisfy `transcript_header_end`) as the *rule* the family escalation demands, so the next template addition is covered rather than rediscovered.
+
+```findings
+dispose:
+  - id: BR-2
+    disposition: addressed
+    note: |
+      init.lua:4529-4540 routes both surfaces through entity_textobj.parsed_for; reverting it in a scratch worktree turned the two separator-edited-away parity tests red ("surfaces diverge at row 1").
+  - id: BR-4
+    disposition: addressed
+    note: |
+      SHAPES now has five entries varying document shape on disk and in-buffer; content_for() sizes each sweep correctly.
+  - id: BR-5
+    disposition: not-addressed
+    note: |
+      entity_range.lua is not in this window at all; the floor parameter at :86/:91-93 is still unreachable and the :265 call site still omits it.
+  - id: BR-8
+    disposition: not-addressed
+    note: |
+      README.md unchanged in this window; ie, <C-g>k, <C-g>K and the two :ParleyDelete* commands are still undocumented there.
+  - id: BR-10
+    disposition: addressed
+    note: |
+      The BR-10 fixture now yields nil and rows 1/3/5/10 stay editable; the ^#%s*topic: hardcoding is gone. A sibling gap on the positive side is raised new as I-1.
+  - id: BR-11
+    disposition: addressed
+    note: |
+      The new title-shaped fixture reaches the terminator scan - verified red without the contiguous-run change (1 Fail in a scratch worktree).
+  - id: BR-12
+    disposition: addressed
+    note: |
+      The rule and the (a)-(e) axis enumeration are written into the spec at :48-62, and the new axis was demonstrated red without its fix.
+  - id: BR-13
+    disposition: not-addressed
+    note: |
+      plan.md:86 and :937 still say "ExchangeCut's preamble (init.lua:4423-4436)"; round 3 also added no Revisions entry for the contiguous-run change.
+  - id: BR-14
+    disposition: not-addressed
+    note: |
+      Window is non-empty now, but base aa001961 IS the fix commit for BR-1/BR-2/BR-6/BR-7/BR-9, so its content sits in the base tree and those dispositions again had to be verified from the tree rather than the diff.
+findings:
+  - id: new
+    severity: Important
+    family: guard-gated-on-classification
+    title: |
+      transcript_header_end rejects the header defaults.chat_template writes, so a long-template transcript has no floor at all
+    detail: |
+      3rd finding in this family (prevalence 3/3), so do NOT fix the instance - state the rule and write its enumeration. THE RULE - the header floor must accept every header shape Parley itself can write; its predicate may not be stricter than its writer. Measured - transcript_header_end(long_template_chat) = nil, and entity_range.range(nil, lines, 1) then returns paragraph 1..11 of 14, taking the header AND the first question on one dae in a markdown-classified buffer (the BR-1 scenario). Two independent disqualifiers - defaults.lua:80-83 are prose lines inside the front matter, and init.lua:3933's blanket gsub("_", "\\_") turns the always-present system_prompt key (config.lua:226-230) into system\_prompt, which ^([%w_%.%+]+): cannot match. The enumeration - short_chat_template (passes), chat_template (fails), legacy topic/file/--- (passes), any rendered front matter carrying optional_headers (fails). Fix - a conformance test rendering every defaults.lua template through the real renderer and asserting a non-nil terminator, so a new template shape fails the suite instead of silently removing the floor. Its negative side belongs in the same test - transcript_header_end({"\# Recipe: soup", "", "---", "", "\#\# Two", "y"}) returns 3, so rows 1-3 of a genuine note are undeletable.
+  - id: new
+    severity: Minor
+    family: unreachable-guard
+    title: |
+      chat_parser.lua:106 - a ternary whose two branches are both 2
+    detail: |
+      2nd finding in this family (BR-5 is the 1st and still open). THE RULE - a parameter or branch that cannot change the outcome is deleted, not documented. Enumeration - chat_parser.lua:106 `(front_matter and 2 or 2)`, and entity_range.lua:86/:91-93's floor parameter, unreachable because the row guard at :214-216 already returns nil and the only other call site (:265) omits it.
+  - id: new
+    severity: Minor
+    family: partial-shape-test
+    title: |
+      the header-protection test's else-branch asserts a property of its own SHAPES literal, not of the code
+    detail: |
+      3rd in this family. entity_delete_parity_spec.lua:165-169 falls into an else-branch for the two shapes with no `---` and asserts `s.drop == 3 or s.edit == 3` - a tautology over the fixture table. THE RULE - a branch a test takes must assert something about the code, not about the fixture that selected it. The true assertion is available and holds - with no separator parsed_for returns "unparsable" and both surfaces leave the buffer byte-identical.
+  - id: new
+    severity: Minor
+    family: docs-edit-mangles-prose
+    title: |
+      the atlas insert swallowed the following paragraph and left the header table overstated
+    detail: |
+      atlas/chat/entity_delete.md:41-53 - "In a plain markdown buffer there is no exchange kind..." is now glued onto the end of an over-long line instead of standing as its own paragraph. Separately :37 still says a header line is "at or above the ---" without the new contiguous-run qualifier.
+```

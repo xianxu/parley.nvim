@@ -354,6 +354,50 @@ describe("entity_range header floor", function()
 		end
 	end)
 
+	-- THE RULE (3rd finding in this family, so the enumeration is the
+	-- deliverable, not the instance): the header floor's predicate may never be
+	-- stricter than the writer it must accept. Every template Parley can write
+	-- must yield a terminator, rendered through the REAL renderer and through
+	-- new_chat's markdown underscore-escaping -- which is what turned the
+	-- always-present `system_prompt:` key into `system\_prompt:` and silently
+	-- removed the floor from every long-template chat.
+	it("accepts every header shape Parley itself writes", function()
+		local defaults = require("parley.defaults")
+		local render = require("parley.render")
+		local chat_parser = require("parley.chat_parser")
+
+		local substitutions = {
+			["{{filename}}"] = "2026-03-01-probe.md",
+			["{{optional_headers}}"] = "model: claude\nprovider: anthropic\n"
+				.. "system_prompt: You are helpful.\n",
+			["{{user_prefix}}"] = "💬:",
+			["{{respond_shortcut}}"] = "<C-g><C-g>",
+			["{{cmd_prefix}}"] = "Parley",
+			["{{stop_shortcut}}"] = "<C-g>x",
+			["{{delete_shortcut}}"] = "<C-g>d",
+			["{{new_shortcut}}"] = "<C-g>c",
+		}
+
+		for _, name in ipairs({ "chat_template", "short_chat_template" }) do
+			local rendered = render.template(defaults[name], substitutions)
+			rendered = rendered:gsub("_", "\\_")          -- new_chat's markdown escape
+			rendered = rendered:gsub("^%s*(.-)%s*$", "%1") .. "\n"
+			local rendered_lines = vim.split(rendered, "\n")
+			assert.is_not_nil(chat_parser.transcript_header_end(rendered_lines),
+				name .. " must yield a header terminator, or its chats lose the floor")
+			assert.is_nil(entity_range.range(nil, rendered_lines, 1),
+				name .. " line 1 must be floored")
+		end
+	end)
+
+	-- The negative side of the same rule: being permissive inside a fence must
+	-- not make a genuine note's sections undeletable.
+	it("does not floor a note whose title merely contains a colon", function()
+		local note = { "# Recipe: soup", "", "---", "", "## Two", "y" }
+		assert.is_nil(require("parley.chat_parser").transcript_header_end(note))
+		assert.is_not_nil(entity_range.range(nil, note, 1))
+	end)
+
 	it("still floors a real transcript header", function()
 		local chat_parser = require("parley.chat_parser")
 		assert.equals(3, chat_parser.transcript_header_end(lines))

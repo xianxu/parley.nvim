@@ -2649,3 +2649,40 @@ download.
 - #254 BR32: test the complete scheduled backoff sequence, not only a manually
   advanced clock. Clamp every next probe to the declared deadline so an interval
   cannot extend the operating envelope.
+
+- #262 BR-1/BR-10: a guard derived from a CLASSIFICATION is not a guard on the
+  document. The delete-entity header floor read `parsed.header_end`, which is
+  nil whenever `not_chat` rejects a buffer — and it rejects for five reasons
+  unrelated to shape (filename not timestamped, under five lines, no `topic`
+  header). A transcript saved under an ordinary name was therefore unfloored
+  and `dae` on line 1 emptied it. State a predicate over the artifact's own
+  text, not over the label some earlier stage attached to it.
+
+- #262 BR-10: a validation predicate may never be stricter than the writer
+  whose output it must accept. The floor required header lines to be
+  `key: value`, but `defaults.chat_template` puts prose inside the front
+  matter, and `new_chat` escapes every `_` for markdown so the always-present
+  `system_prompt:` key arrives as `system\_prompt:`. Both disqualified a real
+  transcript, silently removing the floor. Where a predicate and a writer must
+  agree, conformance-test the predicate against the REAL writer over every
+  shape it can emit — a new template shape should fail the suite, not disable
+  a guard.
+
+- #262 BR-4/BR-12 (repeated twice): a differential/parity test must vary every
+  axis along which the two sides could disagree, and each axis must be
+  demonstrated RED without its fix. Sweeping only the cursor row let two
+  separate divergences ship green; even the first "document shape" axis was
+  useless because mutilating the header on disk gets the buffer classified
+  before either surface sees it. Write the axis enumeration into the spec as a
+  comment so the next one is added rather than rediscovered, and prove each new
+  axis fails with its fix reverted before believing it.
+
+- #262 round 1: do not blanket-tick plan checkboxes when applying rework. A
+  bulk `- [ ]` → `- [x]` marked a step done whose test did not exist; the
+  boundary review caught it. Tick what you ran.
+
+- #262 BR-11: a test whose fixture exits at an early guard pins half the
+  property it claims. The "thematic break is not a header" case used a title
+  that failed the line-1 check, so it never reached the terminator scan it was
+  written to defend. When a predicate has stages, give each stage a fixture
+  that reaches it.

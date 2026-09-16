@@ -328,6 +328,7 @@ at a time (ARCH-PURPOSE).
 ## Log
 
 ### 2026-09-16 — M1 review round 3: FIX-THEN-SHIP, ledger closed
+- 2026-09-16: closed M1 — M1 core after three review rounds. entity_range 36/36 (floor derived from document shape; contiguous header-run rule so a genuine note titled "# topic:" with a thematic break stays editable); entity_textobj 15/15; parity 11/11 across five axes - cursor row, classification, on-disk header shape, header edited away post-classification, closed folds - with the post-classification axis verified RED without its fix; chat_parser_section_lines 7/7; single_source_sweeps 21/21; outline 20/20, outline_parity 15/15, picker_items 54/54 unchanged.; review verdict: FIX-THEN-SHIP
 
 No Criticals left. Three Importants, two of them landing on my *tests* rather
 than the code:

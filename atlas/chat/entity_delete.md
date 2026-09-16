@@ -34,7 +34,7 @@ the other two kinds unreachable.
 | `💬:` question line, or its `@@tag@@` preface | the whole exchange |
 | an ATX heading line | that section |
 | a structural marker line (`🤖: 📝: 🧠: 🔧: 📎: 🌿: 🔒:`) | nothing — the command is a no-op |
-| a transcript header line (at or above the `---`) | nothing — header metadata is not an entity |
+| a transcript header line (see "What counts as a header") | nothing — header metadata is not an entity |
 | any line, when the chat header will not parse | nothing — both surfaces refuse with a message |
 | anything else | that paragraph |
 
@@ -49,8 +49,13 @@ header), and a transcript saved under an ordinary name is still a transcript
 whose header must not be deleted. The test is deliberately strict: the `---`
 must close a *contiguous run of header-shaped lines*, so a genuine note that
 happens to be titled `# topic: how to cook` and has a thematic break further
-down keeps every one of its sections editable. In a plain markdown buffer there is no exchange
-kind, and the other two work as usual.
+down keeps every one of its sections editable. Inside front matter the fence
+is the delimiter, so anything between the two `---` lines is header whatever
+its shape — which it has to be, because Parley's own long chat template puts
+four lines of prose in there.
+
+In a plain markdown buffer there is no exchange kind, and the other two work as
+usual.
 
 - **Section**: from the heading through the line before the next heading of
   equal or higher rank — `#` outranks `##`, so deeper subsections are carried

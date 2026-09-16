@@ -166,10 +166,16 @@ describe("entity delete parity", function()
 				end
 			else
 				-- No `---` left, so the document is not transcript-shaped and
-				-- there is nothing to floor. Ordinary markdown rules are the
-				-- contract here, not an exception to it.
-				assert.is_truthy(s.drop == 3 or s.edit == 3,
-					s.name .. " lost its header without removing the separator")
+				-- there is nothing to floor: ordinary markdown rules are the
+				-- contract here, not an exception to it. Assert that of the
+				-- CODE -- the two surfaces still agree on the header rows --
+				-- rather than of the fixture table that selected this branch.
+				for row = 1, 3 do
+					local native = run(row, function() vim.cmd("normal dae") end)
+					local command = run(row, function() vim.cmd("ParleyDeleteEntity") end)
+					assert.same(native, command,
+						("%s: headerless surfaces diverge at row %d"):format(s.name, row))
+				end
 			end
 		end
 	end)

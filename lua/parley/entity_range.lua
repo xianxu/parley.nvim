@@ -83,14 +83,13 @@ end
 --- Section owned by the heading on `row`, through the line before the next
 --- heading of equal or higher rank (level number <= this one), bounded.
 --- "#" (1) outranks "##" (2), so a deeper heading is swallowed.
-local function section_range(lines, row, bounds, floor)
+local function section_range(lines, row, bounds)
 	local level = heading.level(lines[row])
 	if not level then
 		return nil
 	end
-	if floor and row < floor then
-		return nil
-	end
+	-- No floor check here: M.range's row guard has already returned nil for
+	-- anything above it, so a second test could not change the outcome.
 	local hi = (bounds and bounds.last) or #lines
 	local last = row
 	for i = row + 1, hi do
@@ -231,7 +230,7 @@ function M.range(parsed, lines, row, opts)
 		return found
 	end
 
-	found = section_range(lines, row, bounds, floor)
+	found = section_range(lines, row, bounds)
 	if found and opts.inner then
 		found.first = found.first + 1
 		if found.first > found.last then
