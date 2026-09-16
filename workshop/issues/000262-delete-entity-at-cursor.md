@@ -320,6 +320,42 @@ at a time (ARCH-PURPOSE).
 
 ## Log
 
+### 2026-09-16 — M1 + M2 landed, ready for smoke test
+
+Branch `000262-delete-entity-at-cursor` (in place). Built:
+
+- `markdown_heading.level` — the ATX dialect, stated once. `outline.lua` folded
+  onto it (its 2/4/6-space indent ladder is exactly `("  "):rep(level)`), and
+  `document/lexical.lua`'s inline byte-scanner is pinned to it by conformance
+  test over a 20-line corpus straddling every edge of the grammar. All 20 agree.
+- `entity_range.range` — 29 unit assertions green, including a property sweep
+  over malformed transcripts (empty buffer, header-only, fenced heading, row
+  past EOF) asserting no inverted or out-of-range result.
+- `entity_textobj.select` + the five registry entries + `:ParleyDeleteEntity` /
+  `:ParleyDeleteToEnd` — 8 integration assertions green on a real prepped chat
+  buffer.
+
+Two hazards found by *running* the mechanism, not by reading it. Both would
+have shipped a feature that passes its specs and misbehaves in the editor:
+
+1. An `x`-mode mapping must leave visual mode before selecting. `V` inside an
+   existing selection moves only the cursor end and keeps the anchor, so `vae`
+   selected from wherever the user started. Stock `vip` resets both ends.
+2. `G` cannot enter a closed fold — it snaps to the fold's first line, silently
+   widening the range. `prep_chat` calls `tool_folds.setup(buf)`, so 🔧:/📎:
+   blocks are closed folds in ordinary use; this was not an edge case.
+
+Test-suite state, stated exactly: `tests/unit/parley_harness_golden_spec.lua`
+fails 11/11 on this branch AND on its base commit — pre-existing, verified in a
+worktree at the base, unrelated to this work. `perf_document_spec` and
+`perf_ownership_spec` fail under the 8-way parallel `make test-integration` and
+pass serially on this branch, matching the repo's known parallel-load
+sensitivity. Everything else is green.
+
+Not yet done: the parity test (Task 13), the perf measurement against the 16 ms
+budget, the atlas/README key documentation (Task 14), and both milestone
+closes.
+
 ### 2026-09-16
 
 Filed from operator request: quick delete for markdown section at cursor,
