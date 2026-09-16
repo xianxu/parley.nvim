@@ -61,6 +61,28 @@ M.find_header_end = function(lines)
 	return nil
 end
 
+--- The header end ONLY when the document actually looks like a transcript.
+---
+--- `find_header_end` returns the first `---` anywhere, which is right for a
+--- buffer already known to be a chat but wrong as a shape test: a thematic
+--- break in a genuine markdown note would look like a header terminator. This
+--- requires the transcript signature first -- front-matter `---` on line 1, or
+--- a `# topic:` line -- so a consumer can ask "is there a header here?" of any
+--- document, without depending on how the buffer was classified.
+--- Pure function.
+--- @param lines table|nil
+--- @return number|nil  1-based line of the header terminator
+M.transcript_header_end = function(lines)
+	if not lines or #lines == 0 then
+		return nil
+	end
+	local first = trim(lines[1])
+	if first ~= "---" and not first:match("^#%s*topic:") then
+		return nil
+	end
+	return M.find_header_end(lines)
+end
+
 local function parse_header_key_value(line)
 	local content = trim(line)
 	if content == "" or content == "---" then

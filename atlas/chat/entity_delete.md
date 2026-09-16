@@ -35,6 +35,7 @@ the other two kinds unreachable.
 | an ATX heading line | that section |
 | a structural marker line (`🤖: 📝: 🧠: 🔧: 📎: 🌿: 🔒:`) | nothing — the command is a no-op |
 | a transcript header line (at or above the `---`) | nothing — header metadata is not an entity |
+| any line, when the chat header will not parse | nothing — both surfaces refuse with a message |
 | anything else | that paragraph |
 
 A section or paragraph range is clamped to its enclosing exchange, so it never
@@ -85,7 +86,10 @@ the native operator and the commands produce identical buffers.
   2 500 lines, where it is comfortably under a frame. It is linear beyond
   that, so if it ever bites the escape hatch is `document.exchange(doc, row)`
   (`lua/parley/document/init.lua`), the incremental index that already serves
-  folds and outline.
+  folds and outline. No perf spec guards these numbers (the operator dropped
+  the standing target), so they go stale silently if `parse_chat` changes —
+  re-derive by timing `parse_chat` + `entity_range.range` over
+  `tests.perf.chat_typing.build_fixture(n)`.
 - **During generation**, the command path inherits
   `buffer_edit.replace_user_lines`' refusal; the native operator does not, and
   is handled as an ordinary user edit.

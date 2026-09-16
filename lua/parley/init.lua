@@ -4528,21 +4528,15 @@ end
 --- deliberate and documented (ARCH-ORDER).
 local function delete_entity_range(scope)
 	local buf = vim.api.nvim_get_current_buf()
-	local file_name = vim.api.nvim_buf_get_name(buf)
-	local reason = M.not_chat(buf, file_name)
 	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-	local parsed_chat = nil
-	if not reason then
-		-- A chat whose header will not parse must REFUSE, not fall through to
-		-- markdown semantics: without a header_end the range loses both its
-		-- header floor and its exchange clamp, and would happily take a range
-		-- across a 💬: boundary.
-		local header_end = M.chat_parser.find_header_end(lines)
-		if not header_end then
-			M.logger.warning("DeleteEntity: chat header is unreadable (is the `---` separator intact?)")
-			return
-		end
-		parsed_chat = M.parse_chat(lines, header_end)
+	-- ONE classifier, shared with the text object. Asking chat-ness twice --
+	-- once via not_chat here and once via the latch there -- gave the two
+	-- surfaces two different answers for the same buffer, which is exactly what
+	-- the parity spec exists to prevent.
+	local parsed_chat, status = require("parley.entity_textobj").parsed_for(buf, lines)
+	if status == "unparsable" then
+		M.logger.warning("DeleteEntity: chat header is unreadable (is the `---` separator intact?)")
+		return
 	end
 
 	local cursor_line = vim.api.nvim_win_get_cursor(0)[1]

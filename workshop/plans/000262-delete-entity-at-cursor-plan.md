@@ -40,7 +40,8 @@ Four places where this plan departs from the issue as first written. **All four 
 |------|---------|----------|--------|
 | `markdown_heading` | `level` | `lua/parley/markdown_heading.lua` | new |
 | `entity_range` | `range` | `lua/parley/entity_range.lua` | new |
-| `outline` heading dialect | — | `lua/parley/outline.lua:52-60` | modified |
+| `outline` heading dialect | — | `lua/parley/outline.lua:52-60` **and `:254`** | modified |
+| `chat_parser` shape test | `transcript_header_end` | `lua/parley/chat_parser.lua` | modified |
 
 - **markdown_heading** — `level(line) -> number|nil`, the repo's one ATX dialect. Tests in `tests/unit/markdown_heading_spec.lua`, no mocks.
   - **Relationships:** 1:N — one dialect, consumed by `entity_range` and `outline`, and pinned against `document/lexical.lua` by conformance test.
@@ -1080,3 +1081,32 @@ the M1 boundary review.
   (`token.heading_level <= 3`) and now reads `<= markdown_heading.MAX_LEVEL`.
   Noted for whoever widens the dialect to six levels: `exporter.lua:539-541`
   maps `^## `/`^### ` independently too, and belongs in that enumeration.
+
+### 2026-09-16 — M1 boundary review round 2 (REWORK → reworked)
+
+Round 1's header floor was the *site*, not the class — the same failure the
+round-1 review named, repeated.
+
+- **The floor was gated on classification (Critical).** It read
+  `parsed.header_end`, and `parsed` is nil whenever `not_chat` rejects the
+  buffer — which it does for five reasons unrelated to document shape (name not
+  timestamped, under five lines, no `topic` header…). A transcript saved under
+  a non-timestamped name is classified markdown, still gets the text object
+  installed, and had no floor: `dae` on line 1 destroyed it. The floor is now
+  derived from the **document's own shape** via a new pure
+  `chat_parser.transcript_header_end(lines)` — a strict sibling of
+  `find_header_end`, which returns the first `---` anywhere and would have
+  floored a thematic break in a genuine note.
+- **The refusal was half-applied (Critical).** The command's unparsable-header
+  guard sat inside `if not reason then`, so it was unreachable exactly when
+  needed, and the two surfaces answered "is this a chat?" differently. Both now
+  go through one classifier (`entity_textobj.parsed_for`).
+- **Parity varied only the cursor row (Important).** It now sweeps both
+  document shapes — chat-classified and markdown-classified — which is where
+  the divergence above lived.
+- **The streaming refusal is tested (Important).** Scoped honestly: it asserts
+  the command *propagates* a refusal and leaves the buffer intact, injected at
+  the `buffer_edit` seam, because holding an overlapping user capture does not
+  reproduce it (the document permits concurrent user regions) and staging a
+  live generation is heavier than the claim needs. The document's own refusal
+  logic stays `document_user_guards_spec`'s.

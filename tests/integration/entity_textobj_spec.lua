@@ -166,6 +166,57 @@ describe("entity text objects", function()
 			"an unparsable chat must refuse, not fall back to unclamped markdown rules")
 	end)
 
+	-- REGRESSION (M1 round 2, Critical): the first fix took the floor from
+	-- `parsed`, which is nil whenever not_chat rejects the buffer -- and it
+	-- rejects for five reasons that have nothing to do with document shape. A
+	-- transcript saved under a non-timestamped name is classified markdown,
+	-- still gets the text object installed, and had no floor.
+	it("floors a transcript that parley classifies as markdown", function()
+		setup()
+		local dir = parley.config.chat_dir
+		vim.fn.mkdir(dir, "p")
+		local path = dir .. "/notes-about-entities.md"   -- no timestamp => markdown
+		vim.fn.writefile(FIXTURE, path)
+		vim.cmd("silent edit! " .. vim.fn.fnameescape(path))
+		local buf = vim.api.nvim_get_current_buf()
+		parley.setup_markdown_keymaps(buf)
+		Document.attach(buf, { schedule = false })
+
+		assert.is_truthy(parley.not_chat(buf, path), "fixture must be markdown-classified")
+		vim.api.nvim_win_set_cursor(0, { 1, 0 })
+		vim.cmd("normal dae")
+		assert.same(FIXTURE, body(buf),
+			"a transcript keeps its header even when classified markdown")
+	end)
+
+	-- ARCH-ORDER: the ONE documented asymmetry between the surfaces. The
+	-- command goes through buffer_edit and inherits its refusal; the native
+	-- operator does not. Driven by withholding the document rather than by
+	-- stubbing the call, so it exercises the real refusal path.
+	it("raises instead of mutating when the document withholds the grant", function()
+		local buf = prepped(FIXTURE)
+		-- SCOPE: this asserts the COMMAND propagates a refusal and leaves the
+		-- buffer intact -- not that the document refuses correctly, which is
+		-- document_user_guards_spec's job and is already covered there.
+		--
+		-- The refusal is injected at the buffer_edit seam because the real
+		-- trigger is an in-flight generation writing the same region, and
+		-- holding an overlapping user capture does not reproduce it (the
+		-- document permits concurrent user regions). A narrower substitution
+		-- than staging a live stream, and it tests the one thing this diff
+		-- owns: that delete_entity_range does not swallow the error.
+		local edit = require("parley.buffer_edit")
+		local real = edit.replace_user_lines
+		edit.replace_user_lines = function() error("User edit refused: generation") end
+
+		vim.api.nvim_win_set_cursor(0, { 8, 0 })   -- "para one"; row 9 is blank
+		local ok = pcall(vim.cmd, "ParleyDeleteEntity")
+		edit.replace_user_lines = real
+
+		assert.is_false(ok, "the command must refuse, not silently corrupt the transcript")
+		assert.same(FIXTURE, body(buf))
+	end)
+
 	it("die and cae work, as Done-when claims for every operator", function()
 		local buf = prepped(FIXTURE)
 		vim.api.nvim_win_set_cursor(0, { 10, 0 })

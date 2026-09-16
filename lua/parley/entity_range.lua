@@ -19,12 +19,15 @@
 --                   the seam clean with no post-pass, which is what lets a
 --                   native `d` and a programmatic delete agree byte-for-byte.
 --   5. 📝 trim    — an EDGE trim only, and only when the question survives.
---   6. Header floor — nothing above the transcript's `---` is an entity.
+--   6. Header floor — nothing at or above the transcript's `---` is an entity.
 --                   `# topic:` is a valid level-1 heading that nothing
 --                   outranks, so without this a section from line 1 runs to
 --                   EOF and `dae` empties the file. The floor is derived from
---                   `parsed.header_end` rather than threaded through opts, so
---                   a caller cannot forget it.
+--                   the DOCUMENT'S OWN SHAPE, never from how the buffer was
+--                   classified: not_chat rejects for five reasons unrelated to
+--                   shape (name not timestamped, under 5 lines, no topic
+--                   header, ...), and a transcript that fails any of them is
+--                   still a transcript whose header must not be deleted.
 local heading = require("parley.markdown_heading")
 
 local M = {}
@@ -202,8 +205,12 @@ function M.range(parsed, lines, row, opts)
 
 	-- Rule 6. Everything at or above the `---` belongs to the header, which is
 	-- metadata, not an entity -- and `# topic:` would otherwise be a level-1
-	-- heading that swallows the whole transcript.
-	local floor = ((parsed and parsed.header_end) or 0) + 1
+	-- heading that swallows the whole transcript. Falling back to the document
+	-- shape (not just `parsed`) is what makes this hold for a transcript the
+	-- buffer classifier did NOT call a chat.
+	local header_end = parsed and parsed.header_end
+		or require("parley.chat_parser").transcript_header_end(lines)
+	local floor = (header_end or 0) + 1
 	if row < floor then
 		return nil
 	end

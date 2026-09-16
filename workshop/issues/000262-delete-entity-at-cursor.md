@@ -327,6 +327,35 @@ at a time (ARCH-PURPOSE).
 
 ## Log
 
+### 2026-09-16 — M1 review round 2: REWORK again, class fixed
+
+Round 1's fix was the site, not the class — the exact failure round 1 named,
+repeated one round later. Two more Criticals:
+
+- **The floor was gated on classification.** It read `parsed.header_end`, and
+  `parsed` is nil whenever `not_chat` rejects the buffer — which it does for
+  five reasons unrelated to document shape (name not timestamped, fewer than
+  five lines, no `topic` header…). A transcript under a non-timestamped name is
+  classified markdown, still gets the text object installed, and had no floor:
+  `dae` on line 1 destroyed it. Now derived from the document's own shape via a
+  new pure `chat_parser.transcript_header_end(lines)`, a strict sibling of
+  `find_header_end` (which returns the first `---` anywhere and would floor a
+  thematic break in a genuine note).
+- **The unparsable-header refusal was half-applied.** The command's guard sat
+  inside `if not reason then`, unreachable exactly when needed, so the two
+  surfaces gave different answers to "is this a chat?". Both now use one
+  classifier.
+
+Plus: parity now sweeps document *shape* as well as cursor row (that second
+axis is where the divergence lived), and the streaming refusal is tested —
+scoped to "the command propagates it and the buffer is intact", injected at the
+`buffer_edit` seam, since an overlapping user capture does not reproduce it and
+a live generation is heavier than the claim needs.
+
+Honest note: I blanket-ticked all 66 plan checkboxes in the round-1 rework,
+including Task 11 Step 4, whose test did not exist. The review caught it. That
+step is now genuinely done.
+
 ### 2026-09-16 — M1 boundary review: REWORK, reworked
 
 Verdict REWORK on a genuine Critical the operator's smoke test could not have

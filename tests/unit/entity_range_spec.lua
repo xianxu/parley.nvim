@@ -307,6 +307,27 @@ describe("entity_range header floor", function()
 		local r = entity_range.range(nil, plain, 1)
 		assert.equals(1, r.first)
 	end)
+
+	-- The CLASS the first fix missed: the floor came from `parsed`, which is
+	-- nil whenever the buffer was not classified a chat -- and not_chat rejects
+	-- for five reasons unrelated to document shape (name not timestamped, under
+	-- 5 lines, no topic header...). A transcript is still a transcript.
+	it("floors an unparsed transcript from its own shape", function()
+		for row = 1, 3 do
+			assert.is_nil(entity_range.range(nil, lines, row),
+				("row %d must be floored even with parsed = nil"):format(row))
+		end
+		local r = entity_range.range(nil, lines, 8)
+		assert.is_true(r.first > 3, "a range below the header must not reach into it")
+	end)
+
+	it("does not floor a thematic break in a genuine markdown note", function()
+		-- `---` here is a horizontal rule, not a transcript header: flooring on
+		-- any `---` would make the section above it undeletable.
+		local note = { "# My Note", "prose", "---", "more prose" }
+		local r = entity_range.range(nil, note, 1)
+		assert.equals(1, r.first)
+	end)
 end)
 
 describe("entity_range invariants", function()

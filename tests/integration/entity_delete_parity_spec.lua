@@ -44,6 +44,18 @@ local FIXTURE = {
 
 local seq = 0
 
+-- Document SHAPE is the second axis. Varying only the cursor row hides any
+-- divergence that comes from classification -- and classification is exactly
+-- where the two surfaces drifted apart (round 2, BR-2): the command asked
+-- not_chat while the object asked the _parley_bufs latch, and they disagreed
+-- for a transcript whose header was mid-edit.
+local SHAPES = {
+	{ name = "chat-classified", file = "2026-03-01-parity-%d.md" },
+	{ name = "markdown-classified", file = "parity-notes-%d.md" },
+}
+
+local shape = SHAPES[1]
+
 local function fresh()
 	seq = seq + 1
 	parley.setup({
@@ -54,7 +66,7 @@ local function fresh()
 	})
 	local dir = parley.config.chat_dir
 	vim.fn.mkdir(dir, "p")
-	local path = dir .. "/2026-03-01-parity-" .. seq .. ".md"
+	local path = dir .. "/" .. shape.file:format(seq)
 	vim.fn.writefile(FIXTURE, path)
 	vim.cmd("silent edit! " .. vim.fn.fnameescape(path))
 	local buf = vim.api.nvim_get_current_buf()
@@ -78,19 +90,35 @@ end
 -- earlier `for row = 4` is exactly why a whole-transcript delete shipped
 -- green, and Done-when claims parity over EVERY cursor row.
 describe("entity delete parity", function()
-	it("dae and :ParleyDeleteEntity agree on every cursor row", function()
-		for row = 1, #FIXTURE do
-			local native = run(row, function() vim.cmd("normal dae") end)
-			local command = run(row, function() vim.cmd("ParleyDeleteEntity") end)
-			assert.same(native, command, ("surfaces diverge at row %d (%q)"):format(row, FIXTURE[row]))
-		end
-	end)
+	for _, s in ipairs(SHAPES) do
+		it(("dae and :ParleyDeleteEntity agree on every row (%s)"):format(s.name), function()
+			shape = s
+			for row = 1, #FIXTURE do
+				local native = run(row, function() vim.cmd("normal dae") end)
+				local command = run(row, function() vim.cmd("ParleyDeleteEntity") end)
+				assert.same(native, command,
+					("%s: surfaces diverge at row %d (%q)"):format(s.name, row, FIXTURE[row]))
+			end
+		end)
 
-	it("daE and :ParleyDeleteToEnd agree on every cursor row", function()
-		for row = 1, #FIXTURE do
-			local native = run(row, function() vim.cmd("normal daE") end)
-			local command = run(row, function() vim.cmd("ParleyDeleteToEnd") end)
-			assert.same(native, command, ("surfaces diverge at row %d (%q)"):format(row, FIXTURE[row]))
+		it(("daE and :ParleyDeleteToEnd agree on every row (%s)"):format(s.name), function()
+			shape = s
+			for row = 1, #FIXTURE do
+				local native = run(row, function() vim.cmd("normal daE") end)
+				local command = run(row, function() vim.cmd("ParleyDeleteToEnd") end)
+				assert.same(native, command,
+					("%s: surfaces diverge at row %d (%q)"):format(s.name, row, FIXTURE[row]))
+			end
+		end)
+	end
+
+	it("never takes the header, in either document shape", function()
+		for _, s in ipairs(SHAPES) do
+			shape = s
+			for row = 1, 3 do
+				assert.same(FIXTURE, run(row, function() vim.cmd("normal dae") end),
+					("%s: row %d is header metadata"):format(s.name, row))
+			end
 		end
 	end)
 end)
