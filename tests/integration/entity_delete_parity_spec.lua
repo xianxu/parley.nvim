@@ -74,9 +74,12 @@ local function run(row, action)
 	return vim.api.nvim_buf_get_lines(buf, 0, -1, false)
 end
 
+-- Rows 1-3 are the transcript header. They are covered deliberately: the
+-- earlier `for row = 4` is exactly why a whole-transcript delete shipped
+-- green, and Done-when claims parity over EVERY cursor row.
 describe("entity delete parity", function()
 	it("dae and :ParleyDeleteEntity agree on every cursor row", function()
-		for row = 4, #FIXTURE do
+		for row = 1, #FIXTURE do
 			local native = run(row, function() vim.cmd("normal dae") end)
 			local command = run(row, function() vim.cmd("ParleyDeleteEntity") end)
 			assert.same(native, command, ("surfaces diverge at row %d (%q)"):format(row, FIXTURE[row]))
@@ -84,7 +87,7 @@ describe("entity delete parity", function()
 	end)
 
 	it("daE and :ParleyDeleteToEnd agree on every cursor row", function()
-		for row = 4, #FIXTURE do
+		for row = 1, #FIXTURE do
 			local native = run(row, function() vim.cmd("normal daE") end)
 			local command = run(row, function() vim.cmd("ParleyDeleteToEnd") end)
 			assert.same(native, command, ("surfaces diverge at row %d (%q)"):format(row, FIXTURE[row]))

@@ -95,7 +95,10 @@ Five rules, each stated once. Where an earlier draft of this plan said the same 
 - **ARCH-PURE** — all dispatch, bounds, blank and 📝 policy are functions over `(parsed, lines, row)`. If a range test ever needs a buffer, the boundary has leaked.
 - **ARCH-PURPOSE** — the purpose is one uniform delete across three kinds and two scopes, reachable by a discoverable key. Shipping only the text object would be the easy subset; both surfaces land in M2 together. The marker policy is ruled on as a *class* (📝/🧠/🔧/📎/🌿/🔒), not one emoji.
 - **ARCH-MOCK** — `N/A`, as above.
-- **ARCH-CONSTRAINTS** — **keystroke/UI-response** path. Budget: one `parse_chat` per invocation, target < 16 ms on a 5 000-line transcript; basis: precedent — `ExchangeCut`/`ChatPrune` already parse the whole buffer per invocation. Exceeded → the escape hatch is `document.exchange(doc,row)` (`document/init.lua:261`). Measured in Task 13; a miss is a finding, not a silent widening. The text object gates on the cheap `M._parley_bufs[buf]` latch rather than `not_chat`.
+- **ARCH-CONSTRAINTS** — **keystroke/UI-response** path. Budget: one `parse_chat` per invocation, target < 16 ms on a 5 000-line transcript; basis: precedent — `ExchangeCut`/`ChatPrune` already parse the whole buffer per invocation. Exceeded → the escape hatch is `document.exchange(doc,row)` (`document/init.lua:261`). Measured in Task 13; a miss is a finding, not a silent widening. **It missed —
+see Revisions, 2026-09-16: 24.7 ms at 5 000 lines (17.0 ms on an independent
+best-of-5 re-measure), accepted by the operator on the basis of real transcript
+sizes rather than silently widened.** The text object gates on the cheap `M._parley_bufs[buf]` latch rather than `not_chat`.
 - **ARCH-SECURE** — `N/A` for secrets. Untrusted input: the transcript is user/model-authored and may be truncated or hand-edited mid-generation. `range` must return `nil` rather than a partial range for malformed input, and never a range with `last < first` or outside `[1, #lines]` — Task 7 property-tests exactly that.
 - **ARCH-ORDER** — `entity_range` holds no state between events because every call re-derives from `(parsed, lines, row)` and returns a value; there is no cache to invalidate. The one unblockable ordering is **an edit landing while a response streams into this exchange**. The programmatic path inherits `buffer_edit.replace_user_lines`' refusal (`buffer_edit.lua:91-94` raises on a refused grant) — the same contract `ExchangeCut` relies on, so no new guard is invented. The native `d` path does **not** inherit it; it is an ordinary user edit handled by `document/user_edits.lua`. **This is the one place the two surfaces differ, it is deliberate, and the parity claim is explicitly scoped to a quiescent document.** Task 11 tests the refusal.
 - **ARCH-FUNERAL** — creates no durable artifact, cache or handle. The only created things are keymaps, ended by the existing buffer-local lifecycle (`M._parley_bufs` cleared on unload, `highlighter.lua:1228`).
@@ -110,7 +113,7 @@ Five rules, each stated once. Where an earlier draft of this plan said the same 
 - Create: `lua/parley/markdown_heading.lua`
 - Test: `tests/unit/markdown_heading_spec.lua`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```lua
 local heading = require("parley.markdown_heading")
@@ -141,7 +144,7 @@ describe("markdown_heading.level", function()
 end)
 ```
 
-- [ ] **Step 2: Run it and watch it fail**
+- [x] **Step 2: Run it and watch it fail**
 
 ```sh
 nvim -n --headless --noplugin -u tests/minimal_init.vim \
@@ -149,7 +152,7 @@ nvim -n --headless --noplugin -u tests/minimal_init.vim \
 ```
 Expected: FAIL — `module 'parley.markdown_heading' not found`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 ```lua
 -- The repo's one ATX-heading dialect: column-zero, one to three hashes,
@@ -179,9 +182,9 @@ end
 return M
 ```
 
-- [ ] **Step 4: Run it and watch it pass** — same command, 4 successes.
+- [x] **Step 4: Run it and watch it pass** — same command, 4 successes.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add lua/parley/markdown_heading.lua tests/unit/markdown_heading_spec.lua
@@ -195,7 +198,7 @@ git commit -m "#262 M1: markdown_heading: state the ATX dialect once"
 
 The enforcement half of ARCH-DRY. **`lexical.token(...)` does not exist** and `M.classify` does not compute `heading_level` — only the internal `finish(c)` does. The public seam is `lex_start`/`lex_step`; this exact call was run against this exact corpus and all 20 lines agree, so the test goes green as written.
 
-- [ ] **Step 1: Write the conformance test**
+- [x] **Step 1: Write the conformance test**
 
 ```lua
 local heading = require("parley.markdown_heading")
@@ -224,7 +227,7 @@ describe("markdown_heading vs document.lexical", function()
 end)
 ```
 
-- [ ] **Step 2: Run it**
+- [x] **Step 2: Run it**
 
 ```sh
 nvim -n --headless --noplugin -u tests/minimal_init.vim \
@@ -232,7 +235,7 @@ nvim -n --headless --noplugin -u tests/minimal_init.vim \
 ```
 Expected: PASS. If the `lex_start`/`lex_step` arity differs from the above, read `lua/parley/document/lexical.lua:298,381,385` and adapt — but do **not** add a new public function to `lexical.lua` and do **not** copy its regex into the test. A genuine disagreement is a real finding: record it in the issue `## Log` and change `markdown_heading` to match the tokenizer, which is the incumbent.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tests/unit/markdown_heading_conformance_spec.lua
@@ -247,7 +250,7 @@ git commit -m "#262 M1: pin the heading dialect against the document tokenizer"
 
 The walk stops at blanks **and** at headings **and** at structural markers. A plain blank-only walk lets a paragraph swallow the heading directly above it — and in a transcript, the `💬:` line itself.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```lua
 local entity_range = require("parley.entity_range")
@@ -309,9 +312,9 @@ describe("entity_range paragraph", function()
 end)
 ```
 
-- [ ] **Step 2: Run it and watch it fail** — module not found.
+- [x] **Step 2: Run it and watch it fail** — module not found.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```lua
 local heading = require("parley.markdown_heading")
@@ -381,9 +384,9 @@ end
 
 `M.range` for now: `paragraph_range` → absorb (outer) or trim (inner) → return.
 
-- [ ] **Step 4: Run it and watch it pass** — 8 successes.
+- [x] **Step 4: Run it and watch it pass** — 8 successes.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add lua/parley/entity_range.lua tests/unit/entity_range_spec.lua
@@ -398,7 +401,7 @@ git commit -m "#262 M1: entity_range: paragraph case with structural stops"
 
 **Rank arithmetic, since it is the easiest thing here to get backwards.** "Equal or higher level" means a *smaller or equal* hash count: `#` (1) outranks `##` (2). A section ends before the next heading whose level number is `<=` its own, and swallows every deeper heading.
 
-- [ ] **Step 1: Add the failing tests**
+- [x] **Step 1: Add the failing tests**
 
 ```lua
 describe("entity_range section", function()
@@ -465,9 +468,9 @@ describe("entity_range section", function()
 end)
 ```
 
-- [ ] **Step 2: Run and watch the new block fail**
+- [x] **Step 2: Run and watch the new block fail**
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```lua
 --- Section owned by the heading on `row`, through the line before the next
@@ -490,9 +493,9 @@ end
 
 Wire ahead of the paragraph fallback. For `inner`: `first = first + 1`, then `trim_trailing_blanks`; return `nil` if `first > last` (heading with no body).
 
-- [ ] **Step 4: Run and watch it pass** — 7 successes.
+- [x] **Step 4: Run and watch it pass** — 7 successes.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add lua/parley/entity_range.lua tests/unit/entity_range_spec.lua
@@ -507,7 +510,7 @@ git commit -m "#262 M1: entity_range: section case"
 
 Build fixtures with the real parser, as `tests/unit/chat_parser_section_lines_spec.lua` does, so the test breaks if the parser's shape moves.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```lua
 local chat_parser = require("parley.chat_parser")
@@ -580,9 +583,9 @@ describe("entity_range question", function()
 end)
 ```
 
-- [ ] **Step 2: Run and watch them fail**
+- [x] **Step 2: Run and watch them fail**
 
-- [ ] **Step 3: Implement the dispatch**
+- [x] **Step 3: Implement the dispatch**
 
 ```lua
 local exchange_clipboard = require("parley.exchange_clipboard")
@@ -616,9 +619,9 @@ end
 
 `M.range`: resolve exchange + bounds → on the question anchor, return the whole span (`inner` → through `question.line_end`) → else `section_range(lines,row,bounds)` → else `paragraph_range(lines,row,bounds,prefixes)`. Every guard returns `nil`, never a partial range.
 
-- [ ] **Step 4: Run and watch them pass** — 6 successes.
+- [x] **Step 4: Run and watch them pass** — 6 successes.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add lua/parley/entity_range.lua tests/unit/entity_range_spec.lua
@@ -631,7 +634,7 @@ git commit -m "#262 M1: entity_range: question case and precedence"
 - Modify: `lua/parley/entity_range.lua`
 - Test: `tests/unit/entity_range_spec.lua`
 
-- [ ] **Step 1: Write the failing tests** — the arithmetic is worked out here; do not re-derive it.
+- [x] **Step 1: Write the failing tests** — the arithmetic is worked out here; do not re-derive it.
 
 ```lua
 describe("entity_range to_end", function()
@@ -705,9 +708,9 @@ describe("entity_range to_end", function()
 end)
 ```
 
-- [ ] **Step 2: Run and watch them fail**
+- [x] **Step 2: Run and watch them fail**
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `scope = "to_end"`: take the entity's `first`, set `last` to the exchange bound (or enclosing section end, else `#lines`), then apply rule 5's summary trim. Order matters — **absorb first, trim second**:
 
@@ -729,16 +732,16 @@ local function summary_trim(range, parsed, idx, lines)
 end
 ```
 
-- [ ] **Step 4: Run and watch them pass** — 6 successes.
+- [x] **Step 4: Run and watch them pass** — 6 successes.
 
-- [ ] **Step 5: Run the whole unit suite**
+- [x] **Step 5: Run the whole unit suite**
 
 ```sh
 make test-unit 2>&1 | tail -20
 ```
 Expected: no new failures.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add lua/parley/entity_range.lua tests/unit/entity_range_spec.lua
@@ -752,7 +755,7 @@ git commit -m "#262 M1: entity_range: to_end scope and the summary edge trim"
 
 The input is hand-edited transcript text, so the invariants matter more than any one case (ARCH-SECURE).
 
-- [ ] **Step 1: Write the property test**
+- [x] **Step 1: Write the property test**
 
 ```lua
 describe("entity_range invariants", function()
@@ -787,11 +790,11 @@ describe("entity_range invariants", function()
 end)
 ```
 
-- [ ] **Step 2: Run it.** Expected: PASS. Any failure is a real defect — fix `entity_range`, never the assertion.
+- [x] **Step 2: Run it.** Expected: PASS. Any failure is a real defect — fix `entity_range`, never the assertion.
 
-- [ ] **Step 3: Decide the fenced-heading case.** `# fenced heading` inside a ``` block currently reads as a section. `outline.lua` guards this with `is_in_code_block`, and `highlight_structure.code_block_memo(lines, patterns, tildes)` is ready to reuse. Either wire the memo into `is_wall`/`section_range` **or** add a test pinning the current behavior and a one-line note in the atlas page. Do not leave it unstated.
+- [x] **Step 3: Decide the fenced-heading case.** `# fenced heading` inside a ``` block currently reads as a section. `outline.lua` guards this with `is_in_code_block`, and `highlight_structure.code_block_memo(lines, patterns, tildes)` is ready to reuse. Either wire the memo into `is_wall`/`section_range` **or** add a test pinning the current behavior and a one-line note in the atlas page. Do not leave it unstated.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ### Task 8: Fold `outline.lua` onto the shared dialect
 
@@ -802,9 +805,9 @@ Not a drop-in: the branch is gated on `not opts.is_chat`, and each level returns
 
 Worth noting while you are here: `outline` deliberately does *not* treat headings as structure in chat buffers, while `entity_range` does. That is the precedence deviation showing up a second time, and it is intended — outline is a navigation projection, the text object is an editing one.
 
-- [ ] **Step 1: Read `outline.lua:45-65`** and write down the current (level → indent) mapping.
-- [ ] **Step 2: Replace the three-branch `if`** with the shared dialect, preserving gate and indents.
-- [ ] **Step 3: Run the outline specs**
+- [x] **Step 1: Read `outline.lua:45-65`** and write down the current (level → indent) mapping.
+- [x] **Step 2: Replace the three-branch `if`** with the shared dialect, preserving gate and indents.
+- [x] **Step 3: Run the outline specs**
 
 ```sh
 ls tests/unit/*outline* tests/integration/*outline* 2>/dev/null
@@ -813,19 +816,19 @@ nvim -n --headless --noplugin -u tests/minimal_init.vim \
 ```
 Expected: PASS, behavior unchanged.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ### Task 9: Close M1
 
-- [ ] **Step 1: Run the full suite**
+- [x] **Step 1: Run the full suite**
 
 ```sh
 make test 2>&1 | tail -30
 ```
 
-- [ ] **Step 2: Update `## Log`** with the range contract as built and anything the conformance test surfaced.
+- [x] **Step 2: Update `## Log`** with the range contract as built and anything the conformance test surfaced.
 
-- [ ] **Step 3: Close the milestone** — this auto-dispatches the mandatory fresh-context review (AGENTS.md §3; do **not** separately run `superpowers-requesting-code-review`).
+- [x] **Step 3: Close the milestone** — this auto-dispatches the mandatory fresh-context review (AGENTS.md §3; do **not** separately run `superpowers-requesting-code-review`).
 
 ```bash
 sdlc milestone-close --issue 262 --milestone M1
@@ -847,11 +850,11 @@ Fix Critical/Important before crossing into M2, then log the `Review-Verdict:` o
 1. **`x`-mode keeps the anchor.** `V` inside an existing visual selection moves only the cursor end, so `vae` with the cursor on line 1 and a range of 2–4 selects **1–4**. Stock `vip` resets both ends; `normal! 2GV4G` does not. Leave visual mode first. The repo already uses this idiom at `init.lua:2803-2812` (`chat_exchange_cut`).
 2. **`G` cannot enter a closed fold.** It snaps to the fold's first line, silently widening the range — verified: range 2–4 with a closed fold over 1–3 deleted **1–4**. This is not hypothetical: `prep_chat` calls `tool_folds.setup(buf)` (`init.lua:2640`), so 🔧/📎 blocks are closed folds in ordinary use. Clear `foldenable` for the selection and restore it.
 
-- [ ] **Step 1: Write the failing test** — real buffer, real keymaps, assert buffer contents after `normal dae` / `normal daE` / `normal die` / `normal vae` + `d`, **and the same set in a buffer with a closed fold**. Use the `prepped_chat()` idiom from `tests/integration/keybinding_agreement_spec.lua:99-126`; `D.attach(buf, {schedule=false})` before any edit.
+- [x] **Step 1: Write the failing test** — real buffer, real keymaps, assert buffer contents after `normal dae` / `normal daE` / `normal die` / `normal vae` + `d`, **and the same set in a buffer with a closed fold**. Use the `prepped_chat()` idiom from `tests/integration/keybinding_agreement_spec.lua:99-126`; `D.attach(buf, {schedule=false})` before any edit.
 
-- [ ] **Step 2: Run and watch it fail**
+- [x] **Step 2: Run and watch it fail**
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```lua
 local M = {}
@@ -890,9 +893,9 @@ return M
 
 `M.parsed_for(buf, lines)` gates on the cheap `_parley_bufs[buf] == "chat"` latch — not `not_chat`, which is documented as sitting on keystroke paths — then `find_header_end` + `parse_chat`, returning `nil` for markdown buffers so the same objects work there with only the section and paragraph kinds.
 
-- [ ] **Step 4: Run and watch it pass**, including the folded and `vae` cases.
+- [x] **Step 4: Run and watch it pass**, including the folded and `vae` cases.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ### Task 11: Commands, registry entries, and the mode-set widening
 
@@ -901,13 +904,13 @@ return M
 - Modify: `lua/parley/keybinding_registry.lua` (`M.entries`)
 - Modify: `lua/parley/config.lua`
 - Modify: `tests/integration/keybinding_agreement_spec.lua:38`
-- Test: `tests/integration/entity_delete_spec.lua`
+- Test: `tests/integration/entity_textobj_spec.lua` (the refusal + surface cases land here)
 
 **Scope: `parley_buffer`, not `chat` + `markdown`.** The registry already has a `parley_buffer` scope (11 entries — `open_file`, `outline`, `resolve_ref_gf`, …) that installs on chat *and* markdown from **one** entry. That is five entries and five config keys, not ten. The `chat_shortcut_delete` / `chat_shortcut_delete_file` split precedent does **not** apply — that split exists because those two do genuinely different things in the two scopes.
 
 **Chords, with the collision check actually done.** `<C-g>e` is rejected: `<C-g>em` and `<C-g>eh` are export-markdown and export-html, so `<C-g>e` is a live prefix and binding it would delay them. Use **`<C-g>k`** (delete entity, "kill") and **`<C-g>K`** (delete to end of question); neither appears in the registry or in `native_overrides`. Text objects are `ae` / `ie` / `aE`, all unclaimed in every scope.
 
-- [ ] **Step 1: Add the five registry entries** with `config.lua` twins whose `modes` match `default_modes` **exactly** (`tests/unit/keybindings_spec.lua:415-445` fails otherwise; `:447-473` requires entries sharing a `config_key` to declare identical defaults).
+- [x] **Step 1: Add the five registry entries** with `config.lua` twins whose `modes` match `default_modes` **exactly** (`tests/unit/keybindings_spec.lua:415-445` fails otherwise; `:447-473` requires entries sharing a `config_key` to declare identical defaults).
 
 ```lua
 {
@@ -923,14 +926,14 @@ return M
 ```
 …and the same shape for `entity_object_inner` (`ie`, `{o,x}`), `entity_object_to_end` (`aE`, `{o,x}`), `entity_delete` (`<C-g>k`, `{n}`), `entity_delete_to_end` (`<C-g>K`, `{n}`).
 
-- [ ] **Step 2: Widen the agreement spec's mode set** — `tests/integration/keybinding_agreement_spec.lua:38`:
+- [x] **Step 2: Widen the agreement spec's mode set** — `tests/integration/keybinding_agreement_spec.lua:38`:
 
 ```lua
 local MODES = { "n", "i", "v", "x", "o" }
 ```
 Without this the new `o` maps sit outside both the leak and ghost guards. Run it: a failure means a mode leaked elsewhere, which is a real finding, not noise to suppress.
 
-- [ ] **Step 3: Add the command handlers.** `ExchangeCut`'s preamble verbatim (`init.lua:4423-4436`), then:
+- [x] **Step 3: Add the command handlers.** `ExchangeCut`'s preamble verbatim (`init.lua:4423-4436`), then:
 
 ```lua
 local r = require("parley.entity_range").range(parsed_chat, lines, cursor_line, opts)
@@ -943,9 +946,9 @@ require("parley.buffer_edit").replace_user_lines(buf, r.first - 1, r.last, false
 
 The index convention is confirmed against `init.lua:1895`: `first` is 0-based, `last` is exclusive, `{}` deletes. Going through `buffer_edit` is a design choice for document provenance and the streaming-refusal contract — note that `init.lua` *is* on `buffer_mutation_spec.lua:41`'s allow-list, so no test will catch a regression to raw `nvim_buf_set_lines` here.
 
-- [ ] **Step 4: Test the refusal path** — a delete attempted while the document withholds the grant must raise (`buffer_edit.lua:91-94`) rather than silently corrupting the transcript (ARCH-ORDER).
+- [x] **Step 4: Test the refusal path** — a delete attempted while the document withholds the grant must raise (`buffer_edit.lua:91-94`) rather than silently corrupting the transcript (ARCH-ORDER).
 
-- [ ] **Step 5: Run the keybinding and arch suites**
+- [x] **Step 5: Run the keybinding and arch suites**
 
 ```sh
 make test-unit 2>&1 | tail -20
@@ -955,7 +958,7 @@ nvim -n --headless --noplugin -u tests/minimal_init.vim \
   -c "PlenaryBustedFile tests/arch/single_source_sweeps_spec.lua" -c "qa!"
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ### Task 12: Route the new specs in `atlas/traceability.yaml`
 
@@ -964,10 +967,10 @@ nvim -n --headless --noplugin -u tests/minimal_init.vim \
 
 `tests/arch/single_source_sweeps_spec.lua:676` ("every spec this branch ADDED is routed somewhere") fails on an `NNNNNN-`-named branch — which `sdlc change-code` creates — when a new `*_spec.lua` is not listed. This plan adds six. Skip this and the arch suite goes red with a message that looks unrelated to your change.
 
-- [ ] **Step 1: List the added specs** — `markdown_heading_spec`, `markdown_heading_conformance_spec`, `entity_range_spec`, `entity_textobj_spec`, `entity_delete_spec`, `entity_delete_parity_spec`.
-- [ ] **Step 2: Add them under a feature key** (new: `chat/entity_delete`), following the file's existing shape.
-- [ ] **Step 3: Run the sweep** and confirm green.
-- [ ] **Step 4: Commit**
+- [x] **Step 1: List the added specs** — `markdown_heading_spec`, `markdown_heading_conformance_spec`, `entity_range_spec`, `entity_textobj_spec`, `entity_delete_parity_spec`. (Five, not six: the planned `entity_delete_spec` was folded into `entity_textobj_spec` rather than split.)
+- [x] **Step 2: Add them under a feature key** (new: `chat/entity_delete`), following the file's existing shape.
+- [x] **Step 3: Run the sweep** and confirm green.
+- [x] **Step 4: Commit**
 
 ### Task 13: Parity and the performance measurement
 
@@ -976,7 +979,7 @@ nvim -n --headless --noplugin -u tests/minimal_init.vim \
 - Create: `tests/perf/entity_range.lua`
 - Modify: `Makefile.parley` (the `perf` target, ~line 198)
 
-- [ ] **Step 1: Write the parity test — in a buffer with a closed fold.** This is the plan's best guard and, written naively on a flat quiescent buffer, it would have caught none of the three critical findings that review surfaced.
+- [x] **Step 1: Write the parity test — in a buffer with a closed fold.** This is the plan's best guard and, written naively on a flat quiescent buffer, it would have caught none of the three critical findings that review surfaced.
 
 ```lua
 for row = header_end + 1, #fixture do
@@ -987,7 +990,7 @@ end
 ```
 Cover `dae`/`ParleyDeleteEntity`, `daE`/`ParleyDeleteToEnd`, and the `vae`-then-`d` path. Scope the claim in a comment: parity holds on a **quiescent** document — the programmatic path inherits the streaming refusal and the native operator does not (ARCH-ORDER).
 
-- [ ] **Step 2: Run it and watch it pass.** A failure here is exactly the divergence the two-surface design exists to prevent; do not loosen the assertion.
+- [x] **Step 2: Run it and watch it pass.** A failure here is exactly the divergence the two-surface design exists to prevent; do not loosen the assertion.
 
 **Perf module: dropped, measured instead (operator call, 2026-09-16).** The
 question was whether a whole-buffer re-parse per invocation is affordable.
@@ -998,7 +1001,7 @@ target were not worth carrying for that; the numbers and the
 `document.exchange(doc, row)` escape hatch are recorded in
 `atlas/chat/entity_delete.md` instead.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ### Task 14: Documentation
 
@@ -1008,23 +1011,23 @@ target were not worth carrying for that; the numbers and the
 
 `workshop/lessons.md:448-453,613` records this doc gate being violated twice — a new key absent from `atlas/ui/keybindings.md` **and** the README is a review finding.
 
-- [ ] **Step 1: Write the atlas page** — the three objects, two hotkeys, the precedence table, the 📝 edge-trim rule, the three-level heading dialect, and the markdown-vs-chat difference (no question kind outside a chat).
-- [ ] **Step 2: State the count behavior** — `2dae` behaves as `dae`; counts are ignored in this cut. Verified. Say it rather than letting the docs imply otherwise.
-- [ ] **Step 3: Grep the README** for the new keys and add them.
-- [ ] **Step 4: Verify `:ParleyKeyBindings` renders the new entries** — it reads the registry, so this checks `help_desc` and scope.
-- [ ] **Step 5: Commit**
+- [x] **Step 1: Write the atlas page** — the three objects, two hotkeys, the precedence table, the 📝 edge-trim rule, the three-level heading dialect, and the markdown-vs-chat difference (no question kind outside a chat).
+- [x] **Step 2: State the count behavior** — `2dae` behaves as `dae`; counts are ignored in this cut. Verified. Say it rather than letting the docs imply otherwise.
+- [x] **Step 3: Grep the README** for the new keys and add them.
+- [x] **Step 4: Verify `:ParleyKeyBindings` renders the new entries** — it reads the registry, so this checks `help_desc` and scope.
+- [x] **Step 5: Commit**
 
 ### Task 15: Close the issue
 
-- [ ] **Step 1: Run everything**
+- [x] **Step 1: Run everything**
 
 ```sh
 make test 2>&1 | tail -30
 ```
 
-- [ ] **Step 2: Manual smoke** in a real chat transcript with tool folds present: `dae` on a 💬: line, on a heading, on a paragraph; `daE` from mid-answer; `vae` from a *different* starting line; `u` restores each in one step; `yae` then `p` round-trips.
+- [x] **Step 2: Manual smoke** in a real chat transcript with tool folds present: `dae` on a 💬: line, on a heading, on a paragraph; `daE` from mid-answer; `vae` from a *different* starting line; `u` restores each in one step; `yae` then `p` round-trips.
 
-- [ ] **Step 3: Close**
+- [x] **Step 3: Close**
 
 ```bash
 sdlc milestone-close --issue 262 --milestone M2
@@ -1039,3 +1042,41 @@ sdlc close --issue 262 --verified '<what you ran and saw>'
 1. **`ie` on a question** is "question without its answer" (Task 5 tests it). Say if you'd rather it mean "the answer without the question".
 2. **Scope** — the objects install in markdown buffers too, via the `parley_buffer` scope, since the issue's Problem names markdown notes. Say if you want chat-only for the first cut.
 3. **Fenced headings** — Task 7 Step 3 decides whether `# heading` inside a fenced block counts as a section. The memo to reuse exists; the call is yours if you have a preference.
+
+---
+
+## Revisions
+
+### 2026-09-16 — M1 boundary review (REWORK → rework applied)
+
+The plan file was written in one pass and then rewritten wholesale after the
+plan-quality gate, so this is its first Revisions entry. Four deltas, all from
+the M1 boundary review.
+
+- **Header floor (Critical).** The Spec's section rule, applied literally, has
+  no floor: `# topic:` is a valid level-1 heading that nothing outranks and
+  there is no exchange above the first one to clamp against, so `dae` on line 1
+  emptied the whole transcript, and `dae` on line 2 removed the `---` after
+  which every later range silently lost its exchange clamp. Added rule 6 — the
+  floor is `parsed.header_end + 1`, **derived from the parse rather than
+  threaded through `opts`** (the review sketched an `opts.header_end`; deriving
+  it means no caller can forget it, which is the same reason rule 1 has one
+  span definition). The issue's `## Spec` and `## Done when` gained the
+  corresponding sentence.
+- **Unparsable-chat degradation (Important).** `parsed_for` collapsed "not a
+  chat" and "a chat that will not parse" into one `nil`, so a mid-edit header
+  silently switched the buffer to unclamped markdown semantics. It now returns
+  a status and both surfaces refuse with a message.
+- **ARCH-CONSTRAINTS budget missed and accepted.** Declared `< 16 ms @ 5 000
+  lines`; measured 24.7 ms (17.0 ms best-of-5 independently). The operator's
+  call was that perf is not a concern for this command, on the basis that the
+  largest real transcript on this machine is 2 497 lines where the cost is
+  13.6 ms / 8.5 ms — under a frame. Recorded as an accepted deviation with the
+  numbers and the `document.exchange` escape hatch in
+  `atlas/chat/entity_delete.md`, rather than quietly restating the budget.
+- **The heading-dialect sweep left a consumer behind (ARCH-DRY).** `outline.lua`
+  has two heading paths; the Core-concepts table named only the line-based one
+  at `:52-60`. The token-based path at `:254` still hand-restated the cap
+  (`token.heading_level <= 3`) and now reads `<= markdown_heading.MAX_LEVEL`.
+  Noted for whoever widens the dialect to six levels: `exporter.lua:539-541`
+  maps `^## `/`^### ` independently too, and belongs in that enumeration.

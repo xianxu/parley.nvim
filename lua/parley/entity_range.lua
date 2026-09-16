@@ -19,6 +19,12 @@
 --                   the seam clean with no post-pass, which is what lets a
 --                   native `d` and a programmatic delete agree byte-for-byte.
 --   5. 📝 trim    — an EDGE trim only, and only when the question survives.
+--   6. Header floor — nothing above the transcript's `---` is an entity.
+--                   `# topic:` is a valid level-1 heading that nothing
+--                   outranks, so without this a section from line 1 runs to
+--                   EOF and `dae` empties the file. The floor is derived from
+--                   `parsed.header_end` rather than threaded through opts, so
+--                   a caller cannot forget it.
 local heading = require("parley.markdown_heading")
 
 local M = {}
@@ -53,9 +59,10 @@ local function is_wall(line, prefixes)
 end
 
 --- Blank/heading/marker-delimited paragraph containing `row`.
---- `bounds` clamps the walk to an enclosing exchange.
-local function paragraph_range(lines, row, bounds, prefixes)
-	local lo = (bounds and bounds.first) or 1
+--- `bounds` clamps the walk to an enclosing exchange; `floor` keeps it out of
+--- the transcript header when there is no exchange to clamp against.
+local function paragraph_range(lines, row, bounds, prefixes, floor)
+	local lo = (bounds and bounds.first) or floor or 1
 	local hi = (bounds and bounds.last) or #lines
 	if row < lo or row > hi or is_wall(lines[row], prefixes) then
 		return nil
@@ -73,9 +80,12 @@ end
 --- Section owned by the heading on `row`, through the line before the next
 --- heading of equal or higher rank (level number <= this one), bounded.
 --- "#" (1) outranks "##" (2), so a deeper heading is swallowed.
-local function section_range(lines, row, bounds)
+local function section_range(lines, row, bounds, floor)
 	local level = heading.level(lines[row])
 	if not level then
+		return nil
+	end
+	if floor and row < floor then
 		return nil
 	end
 	local hi = (bounds and bounds.last) or #lines
@@ -190,6 +200,14 @@ function M.range(parsed, lines, row, opts)
 		return nil
 	end
 
+	-- Rule 6. Everything at or above the `---` belongs to the header, which is
+	-- metadata, not an entity -- and `# topic:` would otherwise be a level-1
+	-- heading that swallows the whole transcript.
+	local floor = ((parsed and parsed.header_end) or 0) + 1
+	if row < floor then
+		return nil
+	end
+
 	local idx, bounds = exchange_at(parsed, lines, row)
 	local found
 
@@ -206,7 +224,7 @@ function M.range(parsed, lines, row, opts)
 		return found
 	end
 
-	found = section_range(lines, row, bounds)
+	found = section_range(lines, row, bounds, floor)
 	if found and opts.inner then
 		found.first = found.first + 1
 		if found.first > found.last then
@@ -216,7 +234,7 @@ function M.range(parsed, lines, row, opts)
 	end
 
 	if not found then
-		found = paragraph_range(lines, row, bounds, structural_prefixes(opts.config))
+		found = paragraph_range(lines, row, bounds, structural_prefixes(opts.config), floor)
 		if not found then
 			return nil
 		end
@@ -234,7 +252,7 @@ function M.range(parsed, lines, row, opts)
 		if not bounds then
 			-- Outside any exchange: the enclosing section's end, else EOF.
 			local section = nil
-			for i = found.first, 1, -1 do
+			for i = found.first, floor, -1 do
 				if heading.level(lines[i]) then
 					section = section_range(lines, i, nil)
 					break
@@ -246,7 +264,7 @@ function M.range(parsed, lines, row, opts)
 
 	summary_trim(found, parsed, idx, lines)
 
-	if found.first > found.last or found.first < 1 or found.last > #lines then
+	if found.first > found.last or found.first < floor or found.last > #lines then
 		return nil
 	end
 	return found

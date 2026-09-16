@@ -33,6 +33,8 @@ the other two kinds unreachable.
 | --- | --- |
 | `💬:` question line, or its `@@tag@@` preface | the whole exchange |
 | an ATX heading line | that section |
+| a structural marker line (`🤖: 📝: 🧠: 🔧: 📎: 🌿: 🔒:`) | nothing — the command is a no-op |
+| a transcript header line (at or above the `---`) | nothing — header metadata is not an entity |
 | anything else | that paragraph |
 
 A section or paragraph range is clamped to its enclosing exchange, so it never
@@ -77,8 +79,11 @@ the native operator and the commands produce identical buffers.
   change that.
 - **Cost is the whole-buffer parse, not the range.** Measured 2026-09-16:
   13.6 ms on a 2 497-line transcript, 24.7 ms at 5 000 lines, 97.8 ms at
-  20 000. Comfortable at ordinary transcript sizes and linear beyond them; if
-  it ever bites, the escape hatch is `document.exchange(doc, row)`
+  20 000 (an independent re-measure, best-of-5, got 8.5 / 17.0 / 72.1 — same
+  shape). The plan's original budget was one frame at 5 000 lines; the
+  operator accepted the miss on the basis that real transcripts here are under
+  2 500 lines, where it is comfortably under a frame. It is linear beyond
+  that, so if it ever bites the escape hatch is `document.exchange(doc, row)`
   (`lua/parley/document/init.lua`), the incremental index that already serves
   folds and outline.
 - **During generation**, the command path inherits
@@ -92,4 +97,5 @@ the native operator and the commands produce identical buffers.
 - `lua/parley/markdown_heading.lua` — the shared ATX dialect.
 - `tests/unit/entity_range_spec.lua`, `tests/unit/markdown_heading_spec.lua`,
   `tests/unit/markdown_heading_conformance_spec.lua`,
-  `tests/integration/entity_textobj_spec.lua`.
+  `tests/integration/entity_textobj_spec.lua`,
+  `tests/integration/entity_delete_parity_spec.lua`.

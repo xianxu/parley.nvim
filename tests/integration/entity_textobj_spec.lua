@@ -134,6 +134,61 @@ describe("entity text objects", function()
 			"para one must survive: vae should reset the anchor to the entity")
 	end)
 
+	-- REGRESSION (M1 boundary review, Critical): `# topic:` is a valid level-1
+	-- heading that nothing outranks, so before the header floor a `dae` on
+	-- line 1 emptied the whole transcript. Parity alone would NOT catch this --
+	-- both surfaces agreed on deleting everything.
+	it("leaves the transcript untouched from the header", function()
+		for row = 1, 3 do
+			local buf = prepped(FIXTURE)
+			vim.api.nvim_win_set_cursor(0, { row, 0 })
+			vim.cmd("normal dae")
+			assert.same(FIXTURE, body(buf),
+				("row %d is header metadata: dae must be a no-op"):format(row))
+			vim.cmd("normal daE")
+			assert.same(FIXTURE, body(buf))
+		end
+	end)
+
+	-- The realistic degradation path: the buffer was a VALID chat when parley
+	-- classified it at BufEnter, and the user then edits the `---` away. The
+	-- latch still says "chat", the parse now fails, and the range would lose
+	-- both its header floor and its exchange clamp. A file that never had a
+	-- header is a different case -- parley classifies it markdown from the
+	-- start, and markdown semantics are then correct.
+	it("refuses rather than degrading when the header is edited away", function()
+		local buf = prepped(FIXTURE)
+		vim.cmd("silent! 3delete _")   -- the user removes the --- separator
+		local broken = body(buf)
+		vim.api.nvim_win_set_cursor(0, { 8, 0 })
+		vim.cmd("normal dae")
+		assert.same(broken, body(buf),
+			"an unparsable chat must refuse, not fall back to unclamped markdown rules")
+	end)
+
+	it("die and cae work, as Done-when claims for every operator", function()
+		local buf = prepped(FIXTURE)
+		vim.api.nvim_win_set_cursor(0, { 10, 0 })
+		vim.cmd("normal die")
+		local after = body(buf)
+		assert.is_not_nil(vim.tbl_filter(function(l) return l == "## a heading" end, after)[1],
+			"inner section keeps the heading")
+		assert.is_nil(vim.tbl_filter(function(l) return l == "under heading" end, after)[1])
+	end)
+
+	it("keeps a summary at the answer edge through daE", function()
+		local with_summary = vim.deepcopy(FIXTURE)
+		table.insert(with_summary, 13, "📝: the summary")
+		table.insert(with_summary, 14, "")
+		local buf = prepped(with_summary)
+		vim.api.nvim_win_set_cursor(0, { 8, 0 })
+		vim.cmd("normal daE")
+		local after = body(buf)
+		assert.is_nil(vim.tbl_filter(function(l) return l == "para one" end, after)[1])
+		assert.is_not_nil(vim.tbl_filter(function(l) return l == "📝: the summary" end, after)[1],
+			"an edge summary survives when the question does")
+	end)
+
 	-- #262: the packaged app runs default_keymaps=false and re-enables only the
 	-- <C-g>/<M-> families, so "it works in the plugin" does not imply "it works
 	-- in the app". This drives the APP's own option builder, not the shipped

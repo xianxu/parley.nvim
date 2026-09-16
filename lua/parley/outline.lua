@@ -251,7 +251,7 @@ function M._build_picker_items(bufnr, config, opts)
       if sem.preface or tag=="_" then item=nil
       else item.type="annotation";item.display="  → "..(tag or text:sub(3)) end
     elseif token.kind=="branch" then item.type="branch";item.display="🌿 "..text
-    elseif token.heading_level and token.heading_level<=3 then
+    elseif token.heading_level and token.heading_level<=markdown_heading.MAX_LEVEL then
       item.type="heading";item.display=string.rep("  ",token.heading_level)..text
     else item=nil end
     if item then

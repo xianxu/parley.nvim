@@ -267,6 +267,48 @@ describe("entity_range to_end", function()
 	end)
 end)
 
+describe("entity_range header floor", function()
+	-- `# topic:` is a valid level-1 heading that nothing outranks, so without a
+	-- floor a section from line 1 runs to EOF and `dae` empties the file.
+	local lines = {
+		"# topic: t",   -- 1
+		"- file: t.md", -- 2
+		"---",          -- 3
+		"",             -- 4
+		"💬: q",        -- 5
+		"",             -- 6
+		"🤖: [A]",      -- 7
+		"body",         -- 8
+	}
+	local parsed = parse(lines)
+
+	it("returns nil for every header row", function()
+		for row = 1, 3 do
+			assert.is_nil(entity_range.range(parsed, lines, row),
+				("row %d is header metadata, not an entity"):format(row))
+			assert.is_nil(entity_range.range(parsed, lines, row, { scope = "to_end" }))
+		end
+	end)
+
+	it("never returns a range that reaches into the header", function()
+		for row = 1, #lines do
+			for _, scope in ipairs({ "entity", "to_end" }) do
+				local r = entity_range.range(parsed, lines, row, { scope = scope })
+				if r then
+					assert.is_true(r.first > parsed.header_end,
+						("row %d/%s escaped into the header"):format(row, scope))
+				end
+			end
+		end
+	end)
+
+	it("still has no floor above line 1 in a plain markdown buffer", function()
+		local plain = { "# A", "body" }
+		local r = entity_range.range(nil, plain, 1)
+		assert.equals(1, r.first)
+	end)
+end)
+
 describe("entity_range invariants", function()
 	local CORPUS = {
 		{}, { "" }, { "   " }, { "# only" }, { "💬: q" },

@@ -49,6 +49,10 @@ the entity the cursor is currently inside, with context-aware dispatch:
   `question.line_end`) so the deletion is structurally correct and does not
   leave orphaned answer text.
 
+Nothing at or above the transcript's `---` separator is an entity: the header
+is metadata, and `# topic:` would otherwise be a level-1 heading that nothing
+outranks, so a section from line 1 would take the whole file.
+
 Precedence when the cursor could match multiple entities: question > section
 title > paragraph. A cursor on a heading line inside a question never happens
 (questions are not headings), but a cursor inside an answer that contains
@@ -179,6 +183,9 @@ initial cut is single-entity at cursor with no extra prompt.
 - A cursor on or inside a `💬:` question deletes that whole question/answer
   exchange as defined by `chat_parser`, not just the `💬:` line.
 - Precedence is question > heading > paragraph and is covered by tests.
+- No range ever starts at or above the header separator, and a chat whose
+  header will not parse refuses rather than silently falling back to unclamped
+  markdown rules.
 - The extended range deletes from the *entity* start (not the cursor column)
   through the end of the current exchange, stops at the next `💬:`, and
   degenerates to the whole exchange when invoked on the question line.
@@ -319,6 +326,44 @@ at a time (ARCH-PURPOSE).
   `💬:` line itself. Strict `dap` parity would be a bug here.
 
 ## Log
+
+### 2026-09-16 — M1 boundary review: REWORK, reworked
+
+Verdict REWORK on a genuine Critical the operator's smoke test could not have
+found, because it lives where nobody puts the cursor: **`dae` on line 1 of a
+transcript emptied the buffer.** `# topic:` is a valid level-1 heading, nothing
+outranks it, and there is no exchange above the first one to clamp against, so
+the section ran to EOF. Line 2 took the `---` with it, after which every later
+range lost its exchange clamp and would cross `💬:` boundaries — the one thing
+the Spec forbids outright. The parity spec looped `for row = 4`, so the only
+three rows where this was reachable were exactly the ones not covered, while
+Done-when claimed parity "over every cursor row".
+
+Fixed as a rule, not a patch: `entity_range` rule 6 floors every range at
+`parsed.header_end + 1`, derived from the parse rather than threaded through
+`opts` so no caller can forget it. Parity now runs `for row = 1`, and a
+separate regression asserts line 1 is a **no-op** — parity alone would not have
+caught it, since both surfaces agreed on deleting everything.
+
+Also addressed from the same review:
+
+- `parsed_for` no longer collapses "not a chat" and "chat that will not parse"
+  into one `nil`; a chat whose header is mid-edit refuses with a message
+  instead of degrading to unclamped markdown semantics.
+- The heading-dialect sweep had left a second `outline.lua` consumer behind
+  (`:254`, the token path, hand-restating `<= 3`); it now reads
+  `markdown_heading.MAX_LEVEL`. `exporter.lua:539-541` maps `##`/`###`
+  independently too — pre-existing, recorded for whoever widens the dialect.
+- ARCH-CONSTRAINTS: the declared `< 16 ms @ 5 000 lines` was missed (24.7 ms;
+  17.0 ms on an independent best-of-5). Recorded as an accepted deviation with
+  the operator's basis, not silently restated.
+- Coverage the review named: `die`/`cae` at the surface, and an end-to-end
+  assertion that an edge 📝 survives `daE`.
+
+Process slip worth recording: commit `e007f6c5` swept unrelated
+`workshop/parley/` transcript churn in with `git add -A`. Those files were
+already dirty at session start; they should have been a separate `side-quest:`
+commit (AGENTS.md §12).
 
 ### 2026-09-16 — packaged app parity
 

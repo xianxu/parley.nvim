@@ -148,6 +148,7 @@ atlas:
       - tests/unit/markdown_heading_conformance_spec.lua
       - tests/integration/entity_textobj_spec.lua
       - tests/integration/entity_delete_parity_spec.lua
+
   chat/lifecycle:
     code:
       - lua/parley/generation.lua
