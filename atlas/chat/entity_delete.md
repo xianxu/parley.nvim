@@ -34,6 +34,7 @@ the other two kinds unreachable.
 | `💬:` question line, or its `@@tag@@` preface | the whole exchange |
 | an ATX heading line | that section |
 | a structural marker line (`🤖: 📝: 🧠: 🔧: 📎: 🌿: 🔒:`) | nothing — the command is a no-op |
+| a code-fence line (```` ``` ````) | nothing — deleting it would strand its partner |
 | a transcript header line (see "What counts as a header") | nothing — header metadata is not an entity |
 | any line, when the chat header will not parse | nothing — both surfaces refuse with a message |
 | anything else | that paragraph |
@@ -90,9 +91,11 @@ the native operator and the commands produce identical buffers.
 ## Limits
 
 - **Counts are ignored.** `2dae` behaves as `dae`.
-- **Fenced headings count as sections.** A `# heading` inside a ``` block is
-  treated as a heading. `highlight_structure.code_block_memo` is the seam to
-  change that.
+- **Code fences are walls.** A fence line is never deleted, a range never spans
+  one, and a `# heading` inside a fenced block is content rather than a section
+  — the same ruling `outline.lua` already makes for navigation. Without this,
+  deleting a paragraph in a code block left an unterminated fence and every
+  following line of the transcript rendered as code.
 - **Cost is the whole-buffer parse, not the range.** Measured 2026-09-16:
   13.6 ms on a 2 497-line transcript, 24.7 ms at 5 000 lines, 97.8 ms at
   20 000 (an independent re-measure, best-of-5, got 8.5 / 17.0 / 72.1 — same

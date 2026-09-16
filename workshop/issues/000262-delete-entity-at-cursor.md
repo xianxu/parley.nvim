@@ -327,6 +327,37 @@ at a time (ARCH-PURPOSE).
 
 ## Log
 
+### 2026-09-16 — M2 review: FIX-THEN-SHIP, fixes applied
+
+One genuine bug and three accuracy findings.
+
+**The paragraph walk had no fence wall.** `dae` on a fence opener took the
+opener plus its first stanza and left a bare closing fence, after which every
+following line of the transcript rendered as code. The issue had already ruled
+that strict `dap` parity is a bug in a transcript and added walls for headings
+and structural markers; a fence is the same class and was simply missed.
+
+Fixed as the class, not the instance: a fence line is now a wall in `is_wall`,
+**and** `highlight_structure.code_block_memo` suppresses `section_range` inside
+a fenced block — because the wall alone only guards the paragraph walk, and
+`dae` on a `# heading` inside a code sample would still have built a section
+crossing the closing fence. That also resolves the fenced-heading question the
+plan had left open as Task 7 Step 3, and it matches the ruling `outline.lua:32`
+already makes for navigation. Verified red without the fix: 3 of the 4 new
+fence cases fail.
+
+Also fixed: the README named only `dae`/`daE`/`yae`/`cae` and omitted `ie`,
+`<C-g>k`, `<C-g>K` and both commands (Task 14 Step 3 was ticked anyway — the
+same blanket-tick habit as round 1); the plan claimed a `code_block_memo` reuse
+that did not exist (it does now), omitted `starter_config.lua` and its spec from
+the Integration-points table though they are the only change affecting packaged
+app users, and carried stale `init.lua:4423-4436` refs for `ExchangeCut`, which
+is at `:4439` with the handler at `:4529`.
+
+BR-22 is a gate artifact, not a defect: the M2 window pinned base == head
+because M1's close commit is HEAD and M2's work landed before it, so the
+milestone sat outside its own reviewed range. The M1 review covered that code.
+
 ### 2026-09-16 — M1 review round 3: FIX-THEN-SHIP, ledger closed
 - 2026-09-16: closed M1 — M1 core after three review rounds. entity_range 36/36 (floor derived from document shape; contiguous header-run rule so a genuine note titled "# topic:" with a thematic break stays editable); entity_textobj 15/15; parity 11/11 across five axes - cursor row, classification, on-disk header shape, header edited away post-classification, closed folds - with the post-classification axis verified RED without its fix; chat_parser_section_lines 7/7; single_source_sweeps 21/21; outline 20/20, outline_parity 15/15, picker_items 54/54 unchanged.; review verdict: FIX-THEN-SHIP
 

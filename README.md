@@ -14,10 +14,14 @@ Connect a provider account and choose a model. Sending a question shares the
 conversation context and included attachments with that provider. Parley can
 consult its installed documentation when you ask how a feature works; Ctrl+g
 then `?` shows shortcuts for your current context and Parley configuration. In a
-transcript, `dae` deletes whatever the cursor is in — a markdown section, a
-paragraph, or a whole question-and-answer exchange — and `daE` deletes from
-there to the end of the answer; `yae` and `cae` yank and change the same
-ranges.
+transcript, `ae` is a text object for whatever the cursor is in — a markdown
+section, a paragraph, or a whole question-and-answer exchange — so `dae`
+deletes it, `yae` yanks it and `cae` changes it. `ie` selects the inner form
+(a section without its heading, a question without its answer), and `aE`
+extends the range through the end of the answer. If you would rather not
+think in text objects, `Ctrl+g k` deletes the entity at the cursor and
+`Ctrl+g K` deletes through the end of the question; the same two actions are
+available as `:ParleyDeleteEntity` and `:ParleyDeleteToEnd`.
 <!-- parley:introduction:end -->
 
 ## Install the app

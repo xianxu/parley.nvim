@@ -4,7 +4,7 @@
 
 **Goal:** One cursor-dispatched range — markdown section, paragraph, or chat exchange — exposed as the `ae`/`ie`/`aE` text objects plus hotkeys and `:Parley*` commands, so `dae` deletes the entity under the cursor and `daE` deletes from it to the end of the question.
 
-**Architecture:** A pure range module (`entity_range.lua`) computes `{kind, first, last}` from an already-parsed chat plus the raw lines; it owns *all* dispatch, precedence, bounds and blank-line policy, and reuses the tested primitives (`exchange_clipboard.get_exchange_line_range`, `question_tags.semantic_start`, `highlight_structure.code_block_memo`) rather than re-deriving them. Two thin surfaces consume it: a text object that turns the range into a linewise visual selection (native `d` then deletes, giving every operator and dot-repeat for free), and `M.cmd` handlers that delete through `buffer_edit.replace_user_lines`. A parity test over every cursor row **in a folded buffer** pins the two surfaces to byte-identical results.
+**Architecture:** A pure range module (`entity_range.lua`) computes `{kind, first, last}` from an already-parsed chat plus the raw lines; it owns *all* dispatch, precedence, bounds and blank-line policy, and reuses the tested primitives (`exchange_clipboard.get_exchange_line_range`, `question_tags.semantic_start`, `fence.open_len`, `highlight_structure.code_block_memo`) rather than re-deriving them. Two thin surfaces consume it: a text object that turns the range into a linewise visual selection (native `d` then deletes, giving every operator and dot-repeat for free), and `M.cmd` handlers that delete through `buffer_edit.replace_user_lines`. A parity test over every cursor row **in a folded buffer** pins the two surfaces to byte-identical results.
 
 **Tech Stack:** Lua 5.1/LuaJIT, Neovim API, plenary.nvim busted specs, the `keybinding_registry` + `config.lua` single-source pair.
 
@@ -79,11 +79,12 @@ Five rules, each stated once. Where an earlier draft of this plan said the same 
 | registry entries `entity_*` | — | `lua/parley/keybinding_registry.lua` + `lua/parley/config.lua` | modified | keymap installation |
 | agreement-spec mode set | — | `tests/integration/keybinding_agreement_spec.lua:38` | modified | keymap leak/ghost guards |
 | traceability routing | — | `atlas/traceability.yaml` | modified | the added-spec sweep |
+| app-profile carve-out | — | `lua/parley/starter_config.lua` + `tests/unit/starter_config_spec.lua` | modified | the packaged app's keymap filter |
 
 - **entity_textobj.select(scope, inner)** — reads cursor + lines, calls `entity_range.range`, selects it linewise. Two pieces of editor state make this more than a one-liner, both verified by execution and both invisible to a naive test — see Task 10.
   - **Injected into:** nothing; it is the leaf. `entity_range` receives `lines` and `row`, so all dispatch is unit-testable without a buffer.
 
-- **M.cmd.DeleteEntity / M.cmd.DeleteToEnd** — the discoverable twins. `ExchangeCut`'s preamble (`init.lua:4423-4436`), then one `buffer_edit.replace_user_lines`.
+- **M.cmd.DeleteEntity / M.cmd.DeleteToEnd** — the discoverable twins. `ExchangeCut`'s preamble (`init.lua:4439`), then one `buffer_edit.replace_user_lines`.
   - **Injected into:** nothing. Both call the same `entity_range.range`, which is what the parity test pins.
 
 **Test surface.** `markdown_heading` and `entity_range` are PURE — unit specs over literal line arrays, zero mocks. The surfaces are integration-tested against a real buffer with `D.attach(buf,{schedule=false})` (`tests/unit/user_buffer_edit_spec.lua:1-15`). ARCH-MOCK is `N/A`: no external binary or service; Neovim is exercised for real.
@@ -793,7 +794,7 @@ end)
 
 - [x] **Step 2: Run it.** Expected: PASS. Any failure is a real defect — fix `entity_range`, never the assertion.
 
-- [x] **Step 3: Decide the fenced-heading case.** `# fenced heading` inside a ``` block currently reads as a section. `outline.lua` guards this with `is_in_code_block`, and `highlight_structure.code_block_memo(lines, patterns, tildes)` is ready to reuse. Either wire the memo into `is_wall`/`section_range` **or** add a test pinning the current behavior and a one-line note in the atlas page. Do not leave it unstated.
+- [x] **Step 3: Decide the fenced-heading case — RESOLVED by wiring the memo** (M2 review BR-21 forced it). A fence line is now a wall in `is_wall`, and `highlight_structure.code_block_memo` suppresses `section_range` inside a fenced block, matching `outline.lua:32`'s existing ruling. Without both, `dae` left an unterminated fence and every following line of the transcript rendered as code.
 
 - [x] **Step 4: Commit**
 
@@ -934,7 +935,7 @@ local MODES = { "n", "i", "v", "x", "o" }
 ```
 Without this the new `o` maps sit outside both the leak and ghost guards. Run it: a failure means a mode leaked elsewhere, which is a real finding, not noise to suppress.
 
-- [x] **Step 3: Add the command handlers.** `ExchangeCut`'s preamble verbatim (`init.lua:4423-4436`), then:
+- [x] **Step 3: Add the command handlers.** `ExchangeCut`'s preamble verbatim (`init.lua:4439`), then:
 
 ```lua
 local r = require("parley.entity_range").range(parsed_chat, lines, cursor_line, opts)
@@ -1042,7 +1043,7 @@ sdlc close --issue 262 --verified '<what you ran and saw>'
 
 1. **`ie` on a question** is "question without its answer" (Task 5 tests it). Say if you'd rather it mean "the answer without the question".
 2. **Scope** — the objects install in markdown buffers too, via the `parley_buffer` scope, since the issue's Problem names markdown notes. Say if you want chat-only for the first cut.
-3. **Fenced headings** — Task 7 Step 3 decides whether `# heading` inside a fenced block counts as a section. The memo to reuse exists; the call is yours if you have a preference.
+3. ~~**Fenced headings**~~ — resolved during the M2 review: a fence is a wall, and a heading inside one is content, not a section.
 
 ---
 

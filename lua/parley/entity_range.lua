@@ -48,9 +48,17 @@ local function is_blank(line)
 	return line == nil or line:match("^%s*$") ~= nil
 end
 
---- A line the paragraph walk must not cross: blank, heading, or structural.
+--- A line the paragraph walk must not cross: blank, heading, structural, or a
+--- CODE FENCE. The fence is the same class of wall as a heading and for the
+--- same reason the issue gave for rejecting strict `dap` parity: without it,
+--- `dae` on a fence opener takes the opener and its first stanza and leaves a
+--- bare closing fence behind, after which every following line of the
+--- transcript renders as code.
 local function is_wall(line, prefixes)
 	if is_blank(line) or heading.level(line) then
+		return true
+	end
+	if require("parley.fence").open_len(line) then
 		return true
 	end
 	for _, prefix in ipairs(prefixes) do
@@ -214,6 +222,14 @@ function M.range(parsed, lines, row, opts)
 		return nil
 	end
 
+	-- A heading INSIDE a fenced block is content, not structure -- the same
+	-- ruling outline.lua:32 already makes. Without this, `dae` on a `# x` in a
+	-- code sample builds a section that runs past the closing fence, which is
+	-- the fence bug again one level up (is_wall only guards the paragraph
+	-- walk). Reuses highlight_structure's memo rather than re-scanning fences.
+	local in_code = require("parley.highlight_structure").code_block_memo(
+		lines, require("parley.document.lexical").patterns(opts.config or require("parley.config")), true)
+
 	local idx, bounds = exchange_at(parsed, lines, row)
 	local found
 
@@ -230,7 +246,7 @@ function M.range(parsed, lines, row, opts)
 		return found
 	end
 
-	found = section_range(lines, row, bounds)
+	found = not in_code[row] and section_range(lines, row, bounds) or nil
 	if found and opts.inner then
 		found.first = found.first + 1
 		if found.first > found.last then

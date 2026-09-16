@@ -407,6 +407,81 @@ describe("entity_range header floor", function()
 	end)
 end)
 
+describe("entity_range code fences", function()
+	-- A fence is a wall for the same reason a heading is: the issue ruled that
+	-- strict `dap` parity is a BUG in a transcript. Without this, dae on a
+	-- fence opener deletes the opener plus its first stanza and leaves a bare
+	-- closing fence, after which the rest of the transcript renders as code.
+	local lines = {
+		"# topic: t",   -- 1
+		"- file: t.md", -- 2
+		"---",          -- 3
+		"",             -- 4
+		"💬: q",        -- 5
+		"",             -- 6
+		"🤖: [A]",      -- 7
+		"prose",        -- 8
+		"",             -- 9
+		"```lua",       -- 10
+		"local a = 1",  -- 11
+		"",             -- 12
+		"local b = 2",  -- 13
+		"```",          -- 14
+		"after",        -- 15
+	}
+	local parsed = parse(lines)
+
+	it("treats a fence line as a wall, not as paragraph content", function()
+		assert.is_nil(entity_range.range(parsed, lines, 10),
+			"the opener is a wall: dae on it must be a no-op")
+		assert.is_nil(entity_range.range(parsed, lines, 14),
+			"the closer is a wall too")
+	end)
+
+	it("keeps a range inside the fence from swallowing the fence", function()
+		local r = entity_range.range(parsed, lines, 11)
+		assert.equals(11, r.first)
+		assert.is_true(r.last < 14, "must not reach the closing fence")
+		assert.is_true(r.first > 10, "must not reach the opening fence")
+	end)
+
+	it("does not let a paragraph above the fence absorb it", function()
+		local r = entity_range.range(parsed, lines, 8)
+		assert.equals(8, r.first)
+		assert.is_true(r.last < 10, "prose must stop before the opener")
+	end)
+
+	it("treats a heading inside a fence as content, not a section", function()
+		-- Same ruling outline.lua:32 makes. Without it, dae on the `# not a
+		-- heading` line builds a section that runs past the closing fence.
+		local fenced = {
+			"# topic: t", "- file: t.md", "---", "",
+			"💬: q",              -- 5
+			"", "🤖: [A]",        -- 6,7
+			"```markdown",        -- 8
+			"# not a heading",    -- 9
+			"body",               -- 10
+			"```",                -- 11
+			"",                   -- 12
+			"## real heading",    -- 13
+			"tail",               -- 14
+		}
+		local p2 = parse(fenced)
+		local r = entity_range.range(p2, fenced, 9)
+		assert.is_true(r == nil or r.kind ~= "section",
+			"a heading inside a fence must not be treated as a section")
+		if r then assert.is_true(r.last < 11, "must not cross the closing fence") end
+		-- the real heading outside the fence still works
+		assert.equals("section", entity_range.range(p2, fenced, 13).kind)
+	end)
+
+	it("to_end from inside a fence still stops at the exchange bound", function()
+		local r = entity_range.range(parsed, lines, 11, { scope = "to_end" })
+		assert.is_true(r.last <= #lines)
+		assert.is_true(r.first >= 11)
+	end)
+end)
+
 describe("entity_range invariants", function()
 	local CORPUS = {
 		{}, { "" }, { "   " }, { "# only" }, { "💬: q" },

@@ -267,6 +267,98 @@ rounds:
           round: 4
       boundary: M1
       blocked: false
+    - "n": 5
+      timestamp: "2026-09-16T15:13:11-07:00"
+      agent: claude
+      findings:
+        - id: BR-19
+          severity: Important
+          title: README still omits ie, <C-g>k, <C-g>K and both :ParleyDelete* commands while plan Task 14 Step 3 is ticked
+          detail: |-
+            2nd finding in this family; BR-8 was also disposed not-addressed at M1 rounds 3 and 4 and the M1 close
+            commit 0d0b3801 does not touch README.md. README.md:13-20 covers dae/daE/yae/cae only, though README
+            already documents peer commands (:ParleyStop, :ParleyToolOperations). Do NOT just add the missing line.
+            THE RULE: every registry entry carrying a config_key and every M.cmd.* a milestone introduces must be
+            reachable from README before that milestone closes. The enumeration is mechanical - registry entries whose
+            config_key appears in the branch diff of lua/parley/config.lua, plus M.cmd. symbols added to init.lua -
+            so ship the check (a spec beside single_source_sweeps_spec.lua, which already owns the identically shaped
+            "every spec this branch ADDED is routed somewhere" sweep), not the paragraph.
+          family: readme-omits-new-surface
+          round: 5
+        - id: BR-20
+          severity: Important
+          title: plan body claims a reuse and a file set the tree does not have - three live instances
+          detail: |-
+            3rd finding in this family (BR-7, BR-13, this). Instances - plan.md:7 says entity_range reuses
+            highlight_structure.code_block_memo and it references it nowhere; the Integration-points table omits
+            lua/parley/starter_config.lua and tests/unit/starter_config_spec.lua, the only change in the branch that
+            alters what packaged-app users receive; and BR-13's instance is untouched, with :86 and :937 still naming
+            "ExchangeCut's preamble (init.lua:4423-4436)" when ExchangeCut is at :4439 and the handler at :4529.
+            BR-13 already stated the rule as an intention and the family repeated, so the enforceable form is
+            mechanical - at the close gate, every path in git diff --name-only branch-point..HEAD over lua/ and tests/
+            must appear in the Core-concepts table, and every file or file:line the plan names must resolve.
+          family: plan-table-understates-code
+          round: 5
+        - id: BR-21
+          severity: Important
+          title: the paragraph walk has no fence wall, so dae inside a code block leaves an unterminated fence
+          detail: |-
+            Reproduced on a real parsed transcript - with lines 10..14 = ```lua / local a = 1 / blank / local b = 2 /
+            ```, range(parsed, lines, 10) returns paragraph 10..12, so dae deletes the opener and its first stanza and
+            leaves a bare closing fence; every following line then renders as code. Undo recovers it and dap behaves
+            the same in plain markdown, hence Important not Critical - but the issue explicitly ruled strict dap parity
+            a bug in a transcript and already added walls for headings and structural markers, and a fence is the same
+            class. Plan Task 7 Step 3 is ticked and required EITHER wiring highlight_structure.code_block_memo into
+            is_wall/section_range OR a test pinning current behavior plus an atlas note; the atlas note covers only
+            heading-in-fence and no test pins either (entity_range_spec.lua:416 asserts only not-inverted/in-range, so
+            it would stay green under any fence behavior). That also makes it the 2nd checkbox-without-artifact.
+          family: range-splits-a-structure
+          round: 5
+        - id: BR-22
+          severity: Important
+          title: the M2 boundary pinned base == head, so the whole milestone sits outside the reviewed range
+          detail: |-
+            2nd finding in this family; BR-14 raised it at M1 round 3 and again at round 4. Both required recipes exit
+            0 with no output at base == head == 0d0b3801, and M2's entire deliverable (e007f6c5, 49064ec4, cb17a0a6)
+            predates that base because M1 and M2 were implemented together and M1 closed last. Measured prevalence -
+            3 of 4 rounds on this issue could not verify from the pinned diff. Do NOT re-derive the window by hand.
+            THE RULE - a boundary's BASE_SHA must be the parent of the milestone's own first commit rather than the
+            previous boundary's tip, and a gate whose computed range is empty must refuse to record a verdict instead
+            of accepting one over zero changes. The current derivation is correct only when milestones close in the
+            order they were implemented, which is not what happened here and will recur.
+          family: empty-review-window
+          round: 5
+        - id: BR-23
+          severity: Minor
+          title: the ARCH-CONSTRAINTS numbers exist only as atlas prose, with no spec guarding them
+          detail: |-
+            2nd in this family. atlas/chat/entity_delete.md states 13.6 / 24.7 / 97.8 ms and then says itself that no
+            perf spec guards them, so they go stale silently when parse_chat changes. The rule - a declared operating
+            envelope gets an executable check or the declaration is deleted; a prose number that the suite cannot
+            re-derive is a claim, not a measurement. The page already records the recipe
+            (tests.perf.chat_typing.build_fixture(n)), so turning that recipe into a spec with a wide assertion is the
+            cheap fix.
+          family: unreproducible-measurement
+          round: 5
+        - id: BR-24
+          severity: Minor
+          title: the parity spec mutates a module-level `shape` upvalue that fresh() reads
+          detail: |-
+            tests/integration/entity_delete_parity_spec.lua:78 declares `shape` at module scope and each it() body
+            assigns it before looping; fresh() reads it. Correct only because busted runs the bodies sequentially.
+            Pass the shape through fresh(s) instead.
+          family: shared-mutable-test-fixture
+          round: 5
+        - id: BR-25
+          severity: Minor
+          title: help_desc strings for the entity family list operators inconsistently
+          detail: |-
+            keybinding_registry.lua:483 reads "dae/yae/cae" and :493 "die/yie/cie", but :503 lists only "(daE)".
+            Cosmetic inconsistency in the :ParleyKeyBindings output for one family.
+          family: inconsistent-error-handling
+          round: 5
+      boundary: M2
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#262 (boundary-review)
@@ -408,6 +500,62 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-18** [Minor] `docs-edit-mangles-prose` the atlas insert swallowed the following paragraph and left the header table overstated
   atlas/chat/entity_delete.md:41-53 - "In a plain markdown buffer there is no exchange kind..." is now glued onto the end of an over-long line instead of standing as its own paragraph. Separately :37 still says a header line is "at or above the ---" without the new contiguous-run qualifier.
 
+## Round 5 — 2026-09-16T15:13:11-07:00 (claude) — BLOCKED
+
+### Raised
+
+- **BR-19** [Important] `readme-omits-new-surface` README still omits ie, <C-g>k, <C-g>K and both :ParleyDelete* commands while plan Task 14 Step 3 is ticked
+  2nd finding in this family; BR-8 was also disposed not-addressed at M1 rounds 3 and 4 and the M1 close
+  commit 0d0b3801 does not touch README.md. README.md:13-20 covers dae/daE/yae/cae only, though README
+  already documents peer commands (:ParleyStop, :ParleyToolOperations). Do NOT just add the missing line.
+  THE RULE: every registry entry carrying a config_key and every M.cmd.* a milestone introduces must be
+  reachable from README before that milestone closes. The enumeration is mechanical - registry entries whose
+  config_key appears in the branch diff of lua/parley/config.lua, plus M.cmd. symbols added to init.lua -
+  so ship the check (a spec beside single_source_sweeps_spec.lua, which already owns the identically shaped
+  "every spec this branch ADDED is routed somewhere" sweep), not the paragraph.
+- **BR-20** [Important] `plan-table-understates-code` plan body claims a reuse and a file set the tree does not have - three live instances
+  3rd finding in this family (BR-7, BR-13, this). Instances - plan.md:7 says entity_range reuses
+  highlight_structure.code_block_memo and it references it nowhere; the Integration-points table omits
+  lua/parley/starter_config.lua and tests/unit/starter_config_spec.lua, the only change in the branch that
+  alters what packaged-app users receive; and BR-13's instance is untouched, with :86 and :937 still naming
+  "ExchangeCut's preamble (init.lua:4423-4436)" when ExchangeCut is at :4439 and the handler at :4529.
+  BR-13 already stated the rule as an intention and the family repeated, so the enforceable form is
+  mechanical - at the close gate, every path in git diff --name-only branch-point..HEAD over lua/ and tests/
+  must appear in the Core-concepts table, and every file or file:line the plan names must resolve.
+- **BR-21** [Important] `range-splits-a-structure` the paragraph walk has no fence wall, so dae inside a code block leaves an unterminated fence
+  Reproduced on a real parsed transcript - with lines 10..14 = ```lua / local a = 1 / blank / local b = 2 /
+  ```, range(parsed, lines, 10) returns paragraph 10..12, so dae deletes the opener and its first stanza and
+  leaves a bare closing fence; every following line then renders as code. Undo recovers it and dap behaves
+  the same in plain markdown, hence Important not Critical - but the issue explicitly ruled strict dap parity
+  a bug in a transcript and already added walls for headings and structural markers, and a fence is the same
+  class. Plan Task 7 Step 3 is ticked and required EITHER wiring highlight_structure.code_block_memo into
+  is_wall/section_range OR a test pinning current behavior plus an atlas note; the atlas note covers only
+  heading-in-fence and no test pins either (entity_range_spec.lua:416 asserts only not-inverted/in-range, so
+  it would stay green under any fence behavior). That also makes it the 2nd checkbox-without-artifact.
+- **BR-22** [Important] `empty-review-window` the M2 boundary pinned base == head, so the whole milestone sits outside the reviewed range
+  2nd finding in this family; BR-14 raised it at M1 round 3 and again at round 4. Both required recipes exit
+  0 with no output at base == head == 0d0b3801, and M2's entire deliverable (e007f6c5, 49064ec4, cb17a0a6)
+  predates that base because M1 and M2 were implemented together and M1 closed last. Measured prevalence -
+  3 of 4 rounds on this issue could not verify from the pinned diff. Do NOT re-derive the window by hand.
+  THE RULE - a boundary's BASE_SHA must be the parent of the milestone's own first commit rather than the
+  previous boundary's tip, and a gate whose computed range is empty must refuse to record a verdict instead
+  of accepting one over zero changes. The current derivation is correct only when milestones close in the
+  order they were implemented, which is not what happened here and will recur.
+- **BR-23** [Minor] `unreproducible-measurement` the ARCH-CONSTRAINTS numbers exist only as atlas prose, with no spec guarding them
+  2nd in this family. atlas/chat/entity_delete.md states 13.6 / 24.7 / 97.8 ms and then says itself that no
+  perf spec guards them, so they go stale silently when parse_chat changes. The rule - a declared operating
+  envelope gets an executable check or the declaration is deleted; a prose number that the suite cannot
+  re-derive is a claim, not a measurement. The page already records the recipe
+  (tests.perf.chat_typing.build_fixture(n)), so turning that recipe into a spec with a wide assertion is the
+  cheap fix.
+- **BR-24** [Minor] `shared-mutable-test-fixture` the parity spec mutates a module-level `shape` upvalue that fresh() reads
+  tests/integration/entity_delete_parity_spec.lua:78 declares `shape` at module scope and each it() body
+  assigns it before looping; fresh() reads it. Correct only because busted runs the bodies sequentially.
+  Pass the shape through fresh(s) instead.
+- **BR-25** [Minor] `inconsistent-error-handling` help_desc strings for the entity family list operators inconsistently
+  keybinding_registry.lua:483 reads "dae/yae/cae" and :493 "die/yie/cie", but :503 lists only "(daE)".
+  Cosmetic inconsistency in the :ParleyKeyBindings output for one family.
+
 ## Open findings
 
 - **BR-5** [Minor] `unreachable-guard` section_range's floor parameter is dead code
@@ -418,3 +566,10 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-16** [Minor] `unreachable-guard` chat_parser.lua:106 - a ternary whose two branches are both 2
 - **BR-17** [Minor] `partial-shape-test` the header-protection test's else-branch asserts a property of its own SHAPES literal, not of the code
 - **BR-18** [Minor] `docs-edit-mangles-prose` the atlas insert swallowed the following paragraph and left the header table overstated
+- **BR-19** [Important] `readme-omits-new-surface` README still omits ie, <C-g>k, <C-g>K and both :ParleyDelete* commands while plan Task 14 Step 3 is ticked
+- **BR-20** [Important] `plan-table-understates-code` plan body claims a reuse and a file set the tree does not have - three live instances
+- **BR-21** [Important] `range-splits-a-structure` the paragraph walk has no fence wall, so dae inside a code block leaves an unterminated fence
+- **BR-22** [Important] `empty-review-window` the M2 boundary pinned base == head, so the whole milestone sits outside the reviewed range
+- **BR-23** [Minor] `unreproducible-measurement` the ARCH-CONSTRAINTS numbers exist only as atlas prose, with no spec guarding them
+- **BR-24** [Minor] `shared-mutable-test-fixture` the parity spec mutates a module-level `shape` upvalue that fresh() reads
+- **BR-25** [Minor] `inconsistent-error-handling` help_desc strings for the entity family list operators inconsistently
