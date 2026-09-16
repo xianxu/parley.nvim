@@ -77,14 +77,26 @@ local SHAPES = {
 
 local shape = SHAPES[1]
 
-local function fresh()
-	seq = seq + 1
+-- setup() ONCE. Calling it per buffer re-registers autocmds and state on every
+-- one of the ~500 buffers this spec opens, and the run died silently at ~240
+-- (nvim exit 1, no traceback, partway through the sweep) while still printing
+-- Success lines for the tests that had completed -- which is exactly how it
+-- looked green while exiting 1.
+local did_setup = false
+local function ensure_setup()
+	if did_setup then return end
 	parley.setup({
 		chat_dir = base_tmp_dir .. "/chat",
 		state_dir = base_tmp_dir .. "/state",
 		providers = {},
 		api_keys = {},
 	})
+	did_setup = true
+end
+
+local function fresh()
+	seq = seq + 1
+	ensure_setup()
 	local dir = parley.config.chat_dir
 	vim.fn.mkdir(dir, "p")
 	local path = dir .. "/" .. shape.file:format(seq)
@@ -121,7 +133,11 @@ local function run(row, action)
 	local buf = fresh()
 	vim.api.nvim_win_set_cursor(0, { row, 0 })
 	action()
-	return vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+	local out = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+	-- Release the buffer: this sweep opens hundreds, and leaking them is what
+	-- killed the run partway through.
+	pcall(vim.api.nvim_buf_delete, buf, { force = true })
+	return out
 end
 
 -- Rows 1-3 are the transcript header. They are covered deliberately: the

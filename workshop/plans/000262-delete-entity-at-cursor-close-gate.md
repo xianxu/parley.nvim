@@ -412,6 +412,63 @@ rounds:
           round: 6
       boundary: M2
       blocked: true
+    - "n": 7
+      timestamp: "2026-09-16T16:04:38-07:00"
+      agent: claude
+      dispose:
+        - id: BR-20
+          disposition: not-addressed
+          note: 'File-set half now holds (all 16 branch lua/tests paths resolve; starter_config row at plan.md:82); file:line half does not - plan.md:53 still says ChatPrune init.lua:4255 (4271) and ExchangeCut init.lua:4423 (4439), :852 cites init.lua:2803 as chat_exchange_cut (that line is chat_search), and this round created a new instance: :7 still lists fence.open_len as a reused primitive after a3fcf7ea removed its only call.'
+          round: 7
+        - id: BR-22
+          disposition: not-addressed
+          note: Empty-range half no longer reproduces (f53af775..8c2e3150 is 6 files), but base is still the previous round's tip, so M2's actual deliverable (e007f6c5, 49064ec4, cb17a0a6) remains outside every M2 window - the parity-spec defect I raise this round lives in cb17a0a6 and has therefore never been in a reviewed range. Prevalence 4 of 7 rounds.
+          round: 7
+        - id: BR-23
+          disposition: not-addressed
+          note: 'No perf spec; atlas:105-116 still carries 13.6/24.7/97.8 ms plus its own admission that nothing guards them. The plan now records the drop as an explicit operator call (Task 13, "Perf module: dropped, measured instead"), so it is a documented residual rather than an oversight - but the declaration is neither guarded nor deleted.'
+          round: 7
+        - id: BR-24
+          disposition: not-addressed
+          note: entity_delete_parity_spec.lua:78 still declares `local shape = SHAPES[1]` at module scope with fresh() reading it; newly relevant because that spec now aborts nondeterministically and module-scope shared state is what makes such an abort hard to localize.
+          round: 7
+        - id: BR-25
+          disposition: not-addressed
+          note: keybinding_registry.lua:483/493/503 unchanged - "dae/yae/cae", "die/yie/cie", then "(daE)" alone.
+          round: 7
+        - id: BR-26
+          disposition: addressed
+          note: 'entity_range.lua:65 now calls lexical.is_fence_delim(line, true), the same predicate and tildes flag code_block_memo uses at :234-235; scratch-reverting that one line turns entity_range_spec red (43 pass / 1 fail), so the regression evidence is real. Residual: the require still sits inside the per-line is_wall loop, which the rule asked to remove.'
+          round: 7
+        - id: BR-27
+          disposition: not-addressed
+          note: atlas:94-95 unchanged - still says a "# heading" inside a fence "is content rather than a section" where range() returns nil; entity_range.lua:10 still opens "Five rules, each stated once" over six rules and still omits the fence rule. The added paragraph at atlas:100-104 is accurate but sits above the two sentences the finding named.
+          round: 7
+        - id: BR-28
+          disposition: not-addressed
+          note: This window edits plan.md:978-981 and the Revisions section still ends at "M1 boundary review round 2"; no entry for the f53af775 edits either.
+          round: 7
+      findings:
+        - id: BR-29
+          severity: Critical
+          title: the parity spec - the milestone's named best guard - exits 1 without completing, while the plan ticks it as passing
+          detail: '2nd finding in family checkbox-without-artifact. tests/integration/entity_delete_parity_spec.lua exits 1 with an EMPTY stderr and no busted summary, aborting after a nondeterministic subset of its 11 tests. Measured 6 of 6 runs - `make test-spec SPEC=chat/entity_delete` stopped after 1, 3 and 6 tests (the third with a fresh TEST_ENV_ROOT), a make-equivalent raw invocation stopped after 6 twice, and a variant limited to `for row = 1, 4` stopped after 4. No crash report in ~/Library/Logs/DiagnosticReports. So the last two SHAPES - including `separator-edited-away`, added by the M1 round-2 rework as "the axis BR-2 actually lived on" - and the `never reaches into a header` test have never executed. RUN_SPEC keys on exit status, so `make test-integration` on this branch lists the file under "Failed integration test files"; plan.md Task 13 Step 2 ("Run it and watch it pass") and Task 15 Step 1 (`make test`) are both ticked. Calibration - this environment has pre-existing failures (async_builtin_spec and parley_harness_golden_spec fail on main too, neither is this branch''s), but entity_range_spec and entity_textobj_spec pass cleanly here with proper summaries. THE RULE - a boundary may not record "watched it pass" for a spec file whose runner exits non-zero; the exit status is the evidence, not the Success lines that precede the abort. Likely cause to start from: run() at :120-125 calls fresh() twice per row and never wipes the buffer, so one process accumulates ~660 buffers, ~660 files and ~660 parley.setup() calls with no teardown. Also note base_tmp_dir at :16 hardcodes a "/claude/" path segment - an agent-sandbox artifact that should not be in a committed spec.'
+          family: checkbox-without-artifact
+          round: 7
+        - id: BR-30
+          severity: Important
+          title: section_range and the to_end backward scan read heading.level with no in-code filter, so a section range ends ON the opening fence
+          detail: '3rd finding in family range-splits-a-structure. Do NOT patch section_range alone. THE RULE - entity_range.range must classify each row ONCE per call and every walk must consume that one classification - blank / heading / fence / marker / text, with in_code[row] demoting a heading to text - so that is_wall, section_range''s forward scan and the to_end backward scan cannot disagree. The enumeration the rule implies, all in lua/parley/entity_range.lua - :58 (heading.level in is_wall), :65 (fence in is_wall), :99 and :108 (heading.level in section_range), :282 (heading.level in the to_end backward scan). Only :253 consults in_code, and only for the cursor row. BR-21 was :58/:65 missing the fence; BR-26 was :65 using a different fence predicate from :234; this is :108 and :282 using a different heading predicate from :253. Measured with real chat_parser.parse_chat - chat buffer `## Section / prose / ```lua / # inner heading / code / ``` / tail` gives range(parsed, lines, 8) -> section 8..10 where row 10 is the ```lua opener, and {inner=true} gives 9..10; plain markdown `# Top / alpha / "" / ```lua / # fake / code / ``` / omega` gives range(nil, lines, 1) -> section 1..4, again ending on the opener. dae there leaves a bare closing fence and the rest of the transcript renders as code - the same corruption and the same undo-recoverable severity BR-21 carried. Separately the to_end backward scan at :282 latches onto an in-fence heading and returned 8..9 where the correct answer was 8..#lines. This contradicts atlas/chat/entity_delete.md:94, which states "A fence line is never deleted, a range never spans one". GUARD at the rule''s level, not per flavour - extend the existing `entity_range invariants` property test over a fenced fixture and assert that no returned range contains an ODD number of is_fence_delim lines, for every row x {scope, inner}; that one invariant catches BR-21, BR-26 and this at once. The parity spec structurally cannot see any of them - both surfaces share the range function and agree on the wrong answer.'
+          family: range-splits-a-structure
+          round: 7
+        - id: BR-31
+          severity: Minor
+          title: dead assignment in the new fence-flavour test - body[10] is computed and then immediately overwritten
+          detail: '3rd finding in family unreachable-guard. tests/unit/entity_range_spec.lua:486 initializes body[10] to `delim:gsub("%S+$", ""):gsub("^%s*", "") ~= "" and "```" or delim`, which :488 discards. THE RULE covering BR-5 (section_range''s dead floor parameter), BR-16 (a ternary whose two branches are both 2) and this - no line in the diff may have zero consumers; a value that nothing reads is either a missing call site or dead code, and review should resolve which before the boundary. Here it is dead code: delete the computed initializer and build body[10] once.'
+          family: unreachable-guard
+          round: 7
+      boundary: M2
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#262 (boundary-review)
@@ -630,6 +687,28 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-28** [Minor] `plan-table-understates-code` the plan body was edited for the M2 review with no "## Revisions" entry recording the deltas
   4th finding in family plan-table-understates-code. plan.md:7, :82, :87, :797, :938 and the struck-through open item 3 all changed at f53af775; the plan's Revisions section still ends at "M1 boundary review round 2". AGENTS.md section 1 requires an appended Revisions entry (timestamp, reason, delta) rather than an overwrite. The issue "## Log" carries the narrative so nothing is lost, which is why this is Minor - but the plan's own history now misstates when it last moved, and BR-13 already stated the Revisions/body consistency rule for the opposite direction.
 
+## Round 7 — 2026-09-16T16:04:38-07:00 (claude) — BLOCKED
+
+### Disposed
+
+- BR-20 — not-addressed — File-set half now holds (all 16 branch lua/tests paths resolve; starter_config row at plan.md:82); file:line half does not - plan.md:53 still says ChatPrune init.lua:4255 (4271) and ExchangeCut init.lua:4423 (4439), :852 cites init.lua:2803 as chat_exchange_cut (that line is chat_search), and this round created a new instance: :7 still lists fence.open_len as a reused primitive after a3fcf7ea removed its only call.
+- BR-22 — not-addressed — Empty-range half no longer reproduces (f53af775..8c2e3150 is 6 files), but base is still the previous round's tip, so M2's actual deliverable (e007f6c5, 49064ec4, cb17a0a6) remains outside every M2 window - the parity-spec defect I raise this round lives in cb17a0a6 and has therefore never been in a reviewed range. Prevalence 4 of 7 rounds.
+- BR-23 — not-addressed — No perf spec; atlas:105-116 still carries 13.6/24.7/97.8 ms plus its own admission that nothing guards them. The plan now records the drop as an explicit operator call (Task 13, "Perf module: dropped, measured instead"), so it is a documented residual rather than an oversight - but the declaration is neither guarded nor deleted.
+- BR-24 — not-addressed — entity_delete_parity_spec.lua:78 still declares `local shape = SHAPES[1]` at module scope with fresh() reading it; newly relevant because that spec now aborts nondeterministically and module-scope shared state is what makes such an abort hard to localize.
+- BR-25 — not-addressed — keybinding_registry.lua:483/493/503 unchanged - "dae/yae/cae", "die/yie/cie", then "(daE)" alone.
+- BR-26 — addressed — entity_range.lua:65 now calls lexical.is_fence_delim(line, true), the same predicate and tildes flag code_block_memo uses at :234-235; scratch-reverting that one line turns entity_range_spec red (43 pass / 1 fail), so the regression evidence is real. Residual: the require still sits inside the per-line is_wall loop, which the rule asked to remove.
+- BR-27 — not-addressed — atlas:94-95 unchanged - still says a "# heading" inside a fence "is content rather than a section" where range() returns nil; entity_range.lua:10 still opens "Five rules, each stated once" over six rules and still omits the fence rule. The added paragraph at atlas:100-104 is accurate but sits above the two sentences the finding named.
+- BR-28 — not-addressed — This window edits plan.md:978-981 and the Revisions section still ends at "M1 boundary review round 2"; no entry for the f53af775 edits either.
+
+### Raised
+
+- **BR-29** [Critical] `checkbox-without-artifact` the parity spec - the milestone's named best guard - exits 1 without completing, while the plan ticks it as passing
+  2nd finding in family checkbox-without-artifact. tests/integration/entity_delete_parity_spec.lua exits 1 with an EMPTY stderr and no busted summary, aborting after a nondeterministic subset of its 11 tests. Measured 6 of 6 runs - `make test-spec SPEC=chat/entity_delete` stopped after 1, 3 and 6 tests (the third with a fresh TEST_ENV_ROOT), a make-equivalent raw invocation stopped after 6 twice, and a variant limited to `for row = 1, 4` stopped after 4. No crash report in ~/Library/Logs/DiagnosticReports. So the last two SHAPES - including `separator-edited-away`, added by the M1 round-2 rework as "the axis BR-2 actually lived on" - and the `never reaches into a header` test have never executed. RUN_SPEC keys on exit status, so `make test-integration` on this branch lists the file under "Failed integration test files"; plan.md Task 13 Step 2 ("Run it and watch it pass") and Task 15 Step 1 (`make test`) are both ticked. Calibration - this environment has pre-existing failures (async_builtin_spec and parley_harness_golden_spec fail on main too, neither is this branch's), but entity_range_spec and entity_textobj_spec pass cleanly here with proper summaries. THE RULE - a boundary may not record "watched it pass" for a spec file whose runner exits non-zero; the exit status is the evidence, not the Success lines that precede the abort. Likely cause to start from: run() at :120-125 calls fresh() twice per row and never wipes the buffer, so one process accumulates ~660 buffers, ~660 files and ~660 parley.setup() calls with no teardown. Also note base_tmp_dir at :16 hardcodes a "/claude/" path segment - an agent-sandbox artifact that should not be in a committed spec.
+- **BR-30** [Important] `range-splits-a-structure` section_range and the to_end backward scan read heading.level with no in-code filter, so a section range ends ON the opening fence
+  3rd finding in family range-splits-a-structure. Do NOT patch section_range alone. THE RULE - entity_range.range must classify each row ONCE per call and every walk must consume that one classification - blank / heading / fence / marker / text, with in_code[row] demoting a heading to text - so that is_wall, section_range's forward scan and the to_end backward scan cannot disagree. The enumeration the rule implies, all in lua/parley/entity_range.lua - :58 (heading.level in is_wall), :65 (fence in is_wall), :99 and :108 (heading.level in section_range), :282 (heading.level in the to_end backward scan). Only :253 consults in_code, and only for the cursor row. BR-21 was :58/:65 missing the fence; BR-26 was :65 using a different fence predicate from :234; this is :108 and :282 using a different heading predicate from :253. Measured with real chat_parser.parse_chat - chat buffer `## Section / prose / ```lua / # inner heading / code / ``` / tail` gives range(parsed, lines, 8) -> section 8..10 where row 10 is the ```lua opener, and {inner=true} gives 9..10; plain markdown `# Top / alpha / "" / ```lua / # fake / code / ``` / omega` gives range(nil, lines, 1) -> section 1..4, again ending on the opener. dae there leaves a bare closing fence and the rest of the transcript renders as code - the same corruption and the same undo-recoverable severity BR-21 carried. Separately the to_end backward scan at :282 latches onto an in-fence heading and returned 8..9 where the correct answer was 8..#lines. This contradicts atlas/chat/entity_delete.md:94, which states "A fence line is never deleted, a range never spans one". GUARD at the rule's level, not per flavour - extend the existing `entity_range invariants` property test over a fenced fixture and assert that no returned range contains an ODD number of is_fence_delim lines, for every row x {scope, inner}; that one invariant catches BR-21, BR-26 and this at once. The parity spec structurally cannot see any of them - both surfaces share the range function and agree on the wrong answer.
+- **BR-31** [Minor] `unreachable-guard` dead assignment in the new fence-flavour test - body[10] is computed and then immediately overwritten
+  3rd finding in family unreachable-guard. tests/unit/entity_range_spec.lua:486 initializes body[10] to `delim:gsub("%S+$", ""):gsub("^%s*", "") ~= "" and "```" or delim`, which :488 discards. THE RULE covering BR-5 (section_range's dead floor parameter), BR-16 (a ternary whose two branches are both 2) and this - no line in the diff may have zero consumers; a value that nothing reads is either a missing call site or dead code, and review should resolve which before the boundary. Here it is dead code: delete the computed initializer and build body[10] once.
+
 ## Open findings
 
 - **BR-5** [Minor] `unreachable-guard` section_range's floor parameter is dead code
@@ -645,6 +724,8 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-23** [Minor] `unreproducible-measurement` the ARCH-CONSTRAINTS numbers exist only as atlas prose, with no spec guarding them
 - **BR-24** [Minor] `shared-mutable-test-fixture` the parity spec mutates a module-level `shape` upvalue that fresh() reads
 - **BR-25** [Minor] `inconsistent-error-handling` help_desc strings for the entity family list operators inconsistently
-- **BR-26** [Important] `range-splits-a-structure` the fence wall recognizes only column-zero backticks while code_block_memo recognizes ~~~ and indented fences, so BR-21 still reproduces one fence flavor over
 - **BR-27** [Minor] `docs-edit-mangles-prose` the fence docs describe behavior the code does not have, in both the atlas page and the module docstring
 - **BR-28** [Minor] `plan-table-understates-code` the plan body was edited for the M2 review with no "## Revisions" entry recording the deltas
+- **BR-29** [Critical] `checkbox-without-artifact` the parity spec - the milestone's named best guard - exits 1 without completing, while the plan ticks it as passing
+- **BR-30** [Important] `range-splits-a-structure` section_range and the to_end backward scan read heading.level with no in-code filter, so a section range ends ON the opening fence
+- **BR-31** [Minor] `unreachable-guard` dead assignment in the new fence-flavour test - body[10] is computed and then immediately overwritten

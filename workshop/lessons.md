@@ -2686,3 +2686,30 @@ download.
   that failed the line-1 check, so it never reached the terminator scan it was
   written to defend. When a predicate has stages, give each stage a fixture
   that reaches it.
+
+- #262 BR-29: read the EXIT CODE, not the Success lines. The parity spec — the
+  milestone's named best guard — was aborting partway through at nvim exit 1,
+  having printed Success for the tests it had finished. Piping to `grep`/`tail`
+  showed only those Success lines, so it read as passing, and it was reported
+  as "11/11" in a close's verified string while it never reached the summary.
+  A partial run looks exactly like a passing run when you only read stdout.
+  Capture the command's own status (`cmd > file; echo $?` — `$?` after a pipe
+  is the *last* stage's status, not the command's).
+
+- #262 BR-29: an anomaly you cannot explain is a finding, not noise. The
+  missing summary line was visible and I explained it away as "output
+  buffering" instead of checking. The explanation was wrong and the guard was
+  broken. When output is truncated, incomplete, or missing where it should be,
+  find the cause before reporting a result that depends on it.
+
+- #262 BR-29: a test that opens many buffers must release them. The sweep
+  created ~500 buffers and called `parley.setup()` for each, and nvim died
+  silently at ~240 with no traceback. Call one-time setup once, and delete the
+  buffer at the end of each iteration.
+
+- #262 BR-30: a filter must gate every read of the thing it filters, not the
+  entry point. `in_code` suppressed the heading DISPATCH but not the heading
+  scans inside `section_range`, so a `# x` in a code sample still terminated
+  the section above it and the range ended on the opening fence. When you add a
+  predicate, grep for every call of the function it guards and gate them all in
+  the same change.

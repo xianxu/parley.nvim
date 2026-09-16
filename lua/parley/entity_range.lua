@@ -95,8 +95,11 @@ end
 --- Section owned by the heading on `row`, through the line before the next
 --- heading of equal or higher rank (level number <= this one), bounded.
 --- "#" (1) outranks "##" (2), so a deeper heading is swallowed.
-local function section_range(lines, row, bounds)
-	local level = heading.level(lines[row])
+--- `in_code[i]` must gate EVERY heading read, not just the dispatch: a `# x`
+--- inside a fenced code sample is not a heading, so it must not terminate a
+--- section either -- otherwise the range ends ON the opening fence.
+local function section_range(lines, row, bounds, in_code)
+	local level = not (in_code and in_code[row]) and heading.level(lines[row]) or nil
 	if not level then
 		return nil
 	end
@@ -105,7 +108,7 @@ local function section_range(lines, row, bounds)
 	local hi = (bounds and bounds.last) or #lines
 	local last = row
 	for i = row + 1, hi do
-		local other = heading.level(lines[i])
+		local other = not (in_code and in_code[i]) and heading.level(lines[i]) or nil
 		if other and other <= level then
 			break
 		end
@@ -250,7 +253,7 @@ function M.range(parsed, lines, row, opts)
 		return found
 	end
 
-	found = not in_code[row] and section_range(lines, row, bounds) or nil
+	found = section_range(lines, row, bounds, in_code)
 	if found and opts.inner then
 		found.first = found.first + 1
 		if found.first > found.last then
@@ -279,8 +282,8 @@ function M.range(parsed, lines, row, opts)
 			-- Outside any exchange: the enclosing section's end, else EOF.
 			local section = nil
 			for i = found.first, floor, -1 do
-				if heading.level(lines[i]) then
-					section = section_range(lines, i, nil)
+				if not in_code[i] and heading.level(lines[i]) then
+					section = section_range(lines, i, nil, in_code)
 					break
 				end
 			end

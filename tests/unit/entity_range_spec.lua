@@ -496,6 +496,30 @@ describe("entity_range code fences", function()
 		end
 	end)
 
+	-- BR-30: gating only the DISPATCH leaves the scans inside section_range
+	-- reading raw heading.level, so a `# x` in a code sample terminates the
+	-- enclosing section early and the range ends ON the opening fence.
+	it("a heading inside a fence does not terminate the section above it", function()
+		local lines2 = {
+			"# topic: t", "- file: t.md", "---", "",
+			"💬: q", "", "🤖: [A]",
+			"## real section",  -- 8
+			"body",             -- 9
+			"",                 -- 10
+			"```md",            -- 11
+			"# fake heading",   -- 12
+			"still code",       -- 13
+			"```",              -- 14
+			"tail of section",  -- 15
+		}
+		local p2 = parse(lines2)
+		local r = entity_range.range(p2, lines2, 8)
+		assert.equals("section", r.kind)
+		assert.equals(8, r.first)
+		assert.is_true(r.last >= 15,
+			("section must span the fenced sample, got last=%d"):format(r.last))
+	end)
+
 	it("to_end from inside a fence still stops at the exchange bound", function()
 		local r = entity_range.range(parsed, lines, 11, { scope = "to_end" })
 		assert.is_true(r.last <= #lines)

@@ -327,6 +327,34 @@ at a time (ARCH-PURPOSE).
 
 ## Log
 
+### 2026-09-16 — M2 review round 2: a Critical in my own test
+
+**BR-29 (Critical): the parity spec was aborting, and I reported it as
+passing.** nvim exited 1 partway through the sweep, having printed Success
+lines for the tests it had completed — so `grep`/`tail` showed only successes
+and it read as green. I had actually *seen* the anomaly (the summary line was
+missing) and written it off as "output buffering" rather than checking. It went
+into a close's verified string as "parity 11/11" while it never reached the
+summary. `$?` after a pipe reports the last stage, not nvim, which is how the
+exit code stayed invisible.
+
+Cause: the spec opened ~500 buffers, calling `parley.setup()` for each and
+never deleting them; nvim died silently at roughly 240. Now setup runs once and
+each iteration releases its buffer. Verified by capturing nvim's own exit
+status: 0, 11/11 complete.
+
+**BR-30 (Important): the in-code filter gated the dispatch, not the scans.**
+`section_range` still read raw `heading.level` in its forward scan and in the
+`to_end` backward scan, so a `# x` inside a fenced code sample terminated the
+real section above it and the range ended ON the opening fence. `in_code` is
+now threaded through every heading read. Verified red without the filter.
+
+That is the third consecutive round where the fix I shipped covered the
+instance and the review found the sibling — classification then document shape,
+backticks then tildes, dispatch then scans. Four lessons added to
+`workshop/lessons.md`, including the two this round earned: read the exit code
+rather than the success lines, and treat an unexplained anomaly as a finding.
+
 ### 2026-09-16 — M2 review: FIX-THEN-SHIP, fixes applied
 
 One genuine bug and three accuracy findings.
