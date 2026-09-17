@@ -54,6 +54,10 @@ The chord is freed by retiring `chat_search`, a one-line `/^💬:\|^🌿:` wrapp
 - **`new_question` keymap callback** — normal- and insert-mode entry points.
   - Normal mode calls the command directly. Insert mode leaves insert first (`stopinsert`) so the buffer write is not folded into the surrounding insert session's undo block, then the command's own `startinsert!` puts the cursor back in insert at the new line. This is the one behavior the plan cannot settle by reading code — Task 4 tests it (single-undo, correct mode) before it is called done.
 
+### Residue (ARCH-FUNERAL)
+
+Creates nothing durable that accumulates. The only bytes this feature writes are question lines **inside a transcript the user already owns and edits by hand** — they live and die with that chat file, and the existing chat-delete path already removes them. It opens no file, spawns no process, writes no cache, log, temp file or request body, and adds no field to any persisted state. The new module and registry entry are code, not a growing artifact family. The one thing it *could* have leaked — the transcript text — never leaves the buffer, because the action neither sends nor serializes anything.
+
 ### Operating envelope (ARCH-CONSTRAINTS)
 
 - **Interaction path:** keystroke / UI response.
@@ -84,7 +88,7 @@ Run:
 ```bash
 grep -rn "chat_search\|chat_shortcut_search" --include="*.lua" --include="*.md" --include="*.txt" . | grep -v workshop/
 ```
-Expected: exactly the three source lines above and nothing under `tests/`, `doc/`, `README.md` or `atlas/`. If anything else appears, it is a consumer this plan did not account for — stop and add it.
+Expected: **exactly four lines**, covering the three sites — `init.lua:2803`, `config.lua:372`, and `keybinding_registry.lua:658` **and** `:659` (the registry entry matches twice, on its `id` and its `config_key`). Nothing under `tests/`, `README.md` or `atlas/`, and this repo has no `doc/` directory. If a fifth line appears, it is a consumer this plan did not account for — stop and add it.
 
 - [ ] **Step 2: Delete the config option**
 
@@ -210,8 +214,17 @@ describe("new_question.plan", function()
         local first_q = parsed.exchanges[1].question.line_start
         local p = nq.plan(parsed, lines, first_q, header_end, PREFIX)
         assert.equals("insert", p.kind)
-        -- It lands inside the transcript, before exchange 2 -- not appended at EOF.
-        assert.is_true(p.row < parsed.exchanges[2].question.line_start)
+        -- It lands inside the transcript, not appended at EOF.
+        --
+        -- `<=`, NOT `<`. Measured: for BODY, p.after = 11, p.row = 12 and
+        -- exchange 2's PRE-insertion line_start is also 12. That is structural,
+        -- not fixture luck -- get_paste_line returns the end of exchange 1,
+        -- which includes its trailing blank, so the new question takes exactly
+        -- the row exchange 2 used to occupy and pushes it down. `<` here fails
+        -- against CORRECT code, and the tempting fix (shrink row by one)
+        -- destroys the blank-line seam this module exists to preserve.
+        assert.is_true(p.row <= parsed.exchanges[2].question.line_start)
+        assert.is_true(p.row > parsed.exchanges[1].question.line_start)
         assert.is_true(vim.tbl_contains(p.lines, PREFIX .. " "))
     end)
 
@@ -246,6 +259,31 @@ describe("new_question.plan", function()
         local p = nq.plan(parsed, lines, parsed.exchanges[1].question.line_start, header_end, PREFIX)
         assert.equals("focus", p.kind)
         assert.is_nil(p.lines)
+    end)
+
+    -- A tab is whitespace, so is_empty_question accepts the line -- but it is
+    -- not the separator the post-condition names, and leaving it would make
+    -- startinsert! produce `💬:\thello`.
+    it("normalizes a tab-separated focused prefix to a space", function()
+        local lines, parsed, header_end = transcript("\n💬:\t\n")
+        local p = nq.plan(parsed, lines, parsed.exchanges[1].question.line_start, header_end, PREFIX)
+        assert.equals("focus", p.kind)
+        assert.same({ PREFIX .. " " }, p.lines)
+    end)
+
+    -- The one path that can legitimately produce two consecutive `💬:` lines.
+    -- Recorded as a DECISION, not an oversight: the rule is about the exchange
+    -- the cursor is IN (the revision's wording), so pressing the chord from an
+    -- answered exchange opens a question after it even when the next exchange
+    -- is already empty. Reaching past the cursor's exchange to adopt a
+    -- neighbour's empty question would make the chord's landing spot depend on
+    -- content the user is not looking at.
+    it("does not adopt the NEXT exchange's empty question", function()
+        local lines, parsed, header_end = transcript(
+            "\n💬: first\n\n🤖: [x]\n\nA1\n\n💬:\n")
+        local p = nq.plan(parsed, lines, parsed.exchanges[1].question.line_start,
+            header_end, PREFIX)
+        assert.equals("insert", p.kind)
     end)
 
     it("opens the first question when the chat has none", function()
@@ -353,10 +391,15 @@ function M.plan(parsed_chat, lines, cursor_line, header_end, user_prefix)
 	if M.is_empty_question(lines, current, user_prefix) then
 		local row = current.question.line_start
 		-- Already `💬: ` or `💬:   ` -- nothing to write, just go there.
-		if lines[row] ~= user_prefix then
+		-- The test is "prefix then a SPACE", not "prefix then anything": a
+		-- `💬:\t` line is whitespace-only to is_empty_question but would leave
+		-- startinsert! producing `💬:\thello`. A tab is not the separator the
+		-- post-condition promises.
+		if lines[row]:sub(#user_prefix + 1, #user_prefix + 1) == " " then
 			return { kind = "focus", row = row }
 		end
-		-- Bare `💬:` -- give it the space the post-condition promises.
+		-- Bare `💬:`, or `💬:` followed by some other whitespace -- normalize to
+		-- the one shape the post-condition names.
 		return { kind = "focus", row = row, lines = { question } }
 	end
 
@@ -378,19 +421,35 @@ return M
 - [ ] **Step 4: Run the spec to verify it passes**
 
 Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/new_question_spec.lua" -c "qa!"`
-Expected: PASS, all cases.
+Expected: PASS, all twelve cases. This was verified empirically during plan review — the literal spec above was run against the literal implementation below in a real headless nvim.
 
-If the "focus" cases fail because the parser does not produce a second exchange for a trailing bare `💬:`, that is a real finding about the parser, not a test bug — read `chat_parser.lua:700-735` before changing either side.
+Do **not** "fix" a failure by shrinking `p.row`. The seam (`build_paste_lines` deciding whether a blank line precedes the new question) is the whole reason this module delegates to `exchange_clipboard`; moving `row` to satisfy an assertion re-encodes that rule in the wrong place. If `row` looks off by one, re-read the `<=` comment in the first test.
+
+The parser side is settled, so it is not a suspect: for a trailing bare `💬:` with no answer, `chat_parser` yields `line_start = line_end` and `answer = nil`, and `line_end` is **never** nil — `finalize_component(#lines)` at `chat_parser.lua:998` always sets it.
 
 - [ ] **Step 5: Lint**
 
 Run: `make lint`
 Expected: clean.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Route the new spec in `atlas/traceability.yaml` — in this commit, not later**
+
+`tests/arch/single_source_sweeps_spec.lua`'s `every spec this branch ADDED is routed somewhere` guard fails on any `NNNNNN-…` branch for an added-or-untracked `*_spec.lua` that no traceability entry names — and it reads the **working tree**, so an unstaged new spec trips it too. Route it in the same commit that creates it, or every later `make test-spec` run in this plan goes red for a reason that has nothing to do with the code under test.
+
+Under `chat/lifecycle`, add to `code:` → `lua/parley/new_question.lua`, and to `tests:` → `tests/unit/new_question_spec.lua`.
+Under `ui/keybindings`, add the same two.
+
+Verify:
+```bash
+nvim -n --headless --noplugin -u tests/minimal_init.vim \
+  -c "PlenaryBustedFile tests/arch/single_source_sweeps_spec.lua" -c "qa!"
+```
+Expected: PASS (`every path it names exists` also checks the new paths are real).
+
+- [ ] **Step 7: Commit**
 
 ```bash
-git add lua/parley/new_question.lua tests/unit/new_question_spec.lua
+git add lua/parley/new_question.lua tests/unit/new_question_spec.lua atlas/traceability.yaml
 git commit -m "#263: where a new question goes, as a value"
 ```
 
@@ -487,9 +546,14 @@ M.cmd.NewQuestion = function()
 		return
 	end
 
+	-- The planner always names a row; a nil here means the clipboard arg was
+	-- empty, which cannot happen, and nvim_win_set_cursor's error would not say
+	-- so. State the invariant where it is cheap to read.
+	assert(plan.row, "new_question.plan returned no row")
 	local row = math.min(plan.row, vim.api.nvim_buf_line_count(buf))
-	local text = vim.api.nvim_buf_get_lines(buf, row - 1, row, false)[1] or ""
-	vim.api.nvim_win_set_cursor(0, { row, #text })
+	-- Column 0 is deliberate: `startinsert!` IS `A`, so it lands at end-of-line
+	-- whatever column we set. Only the ROW matters here.
+	vim.api.nvim_win_set_cursor(0, { row, 0 })
 	vim.cmd("startinsert!")
 end
 ```
@@ -517,10 +581,18 @@ Run:
 ```bash
 make test-spec SPEC=ui/keybindings
 ```
-Expected: PASS. Three existing guards bear on this entry specifically:
-- `<C-g>? can show every bound key` (line 695) — the new entry must appear in the chat help, and the reverse check must find no key bound that help does not show.
-- `no alt key is live twice in the same buffer` (line 935) — `<M-n>` must be unowned elsewhere.
+Expected: PASS. Four existing guards bear on this entry specifically (names are the real `it(…)` strings — `<C-g>? can show every bound key` is the enclosing `describe`, not a test):
+- `every key of every displayed entry appears in its context's help` (line 708) — both chords must show in the chat help.
+- `and the reverse — help shows no key that is not bound` (line 735).
+- `no alt key is live twice in the same buffer` (line 935) — `<M-n>` must be unowned elsewhere. Verified during plan review: `<M-n>` appears nowhere in `lua/` or `tests/`.
 - `each shipped default preserves the entry's registry keys AND modes` (line 415) — `config.lua`'s `shortcut` list must be a superset of the registry's `default_key` list, and its `modes` a subset of `default_modes`. The plan ships both as `{ "<C-g>n", "<M-n>" }` / `{ "n", "i" }` precisely so this passes; if you change one, change both.
+
+**Do not run `make test-spec SPEC=ui/keybindings` yet** — see Task 2 Step 6 and Task 4 Step 5. That spec key fans out to `tests/arch/single_source_sweeps_spec.lua`, whose `every spec this branch ADDED is routed somewhere` guard fails on an issue branch until each new spec is listed in `atlas/traceability.yaml`. Run the keybindings spec file directly here:
+
+```bash
+nvim -n --headless --noplugin -u tests/minimal_init.vim \
+  -c "PlenaryBustedFile tests/unit/keybindings_spec.lua" -c "qa!"
+```
 
 - [ ] **Step 6: Commit**
 
@@ -540,35 +612,80 @@ git commit -m "#263: <C-g>n / <M-n> opens a new question"
 
 - [ ] **Step 1: Write the failing integration spec**
 
-Create `tests/integration/new_question_spec.lua`. Model the harness setup (temp chat dir, `parley.setup`, opening a real chat buffer, feeding keys with `vim.api.nvim_feedkeys` + `nvim_replace_termcodes`) on `tests/integration/entity_textobj_spec.lua`, which drives the #262 chords through the real keymaps. Cases:
+Create `tests/integration/new_question_spec.lua`. Three different files supply the three techniques this spec needs — verified during plan review, because the first draft of this step attributed all three to one file that uses none of them:
+
+1. **Fixture** — `tests/integration/entity_textobj_spec.lua`'s `prepped()`. It writes the transcript to disk and `:edit`s it, which is what gives the buffer real undo history; case 4 below depends on that (a buffer built with `nvim_buf_set_lines` reverts to empty on `u`).
+2. **Invoking the chord** — `tests/integration/user_edit_callers_spec.lua:22-26`, the repo's idiom for firing a registry keymap:
+
+```lua
+local Registry = require("parley.keybinding_registry")
+local function press(id, mode)
+    local key = Registry.key_for(id, parley.config)
+    local mapping = vim.fn.maparg(key, mode or "n", false, true)
+    assert.equals("function", type(mapping.callback))
+    mapping.callback()
+end
+```
+
+   `nvim_feedkeys` is **not** the idiom here and `entity_textobj_spec` does not use it — it drives `vim.cmd("normal dae")` and asserts mapping existence via `nvim_buf_get_keymap`.
+3. **Asserting insert mode** — `vim.fn.mode()` is used by **no test in this repo**, and it will not work: `startinsert!` issued inside a mapping callback does not take effect until control returns to the main loop, so a synchronous `mode()` read in headless plenary sees normal. The precedent is spying on `vim.cmd`, from `tests/integration/open_reference_spec.lua:521-561` — including its hard-won detail:
+
+```lua
+local cmds = {}
+local real_cmd = vim.cmd
+vim.cmd = function(c) table.insert(cmds, tostring(c)) end
+press("new_question")
+-- `startinsert` is scheduled, so the spy has to outlive the callback.
+-- Restoring first is why the first version of that test saw nothing.
+vim.wait(50, function() return false end)
+vim.cmd = real_cmd
+assert.is_truthy(table.concat(cmds, "\n"):match("startinsert"))
+```
+
+Cases:
 
 1. **Normal mode, mid-transcript** — cursor on exchange 1 of a two-exchange chat, press `<C-g>n`. Independent oracle: the count of lines starting with `💬:` goes from 2 to 3, **and** the new one sits between the old first and second (compare line indices, not parser output).
-2. **The new line is typed into correctly** — after the press, `vim.fn.mode()` is `i`, the cursor column is at end-of-line, and the line is exactly `💬: `. Then feed `hello<Esc>` and assert the line is `💬: hello` — the real proof that the trailing space is there.
-3. **Insert mode** — start insert on an answer line, press `<C-g>n`, assert the same post-condition as (2).
-4. **Single undo** — from case (1), press `u` once and assert the buffer is byte-identical to the pre-press snapshot. This is the assertion that judges the `stopinsert`-first decision in Task 3 Step 4; if it fails, the callback is wrong, not the test.
-5. **No duplicate on a second press** — press `<C-g>n` twice with no typing in between; the `💬:` count goes 2 → 3, not 2 → 4.
-6. **Empty chat** — a transcript with a header and nothing else; one press produces exactly one `💬: ` line below the `---`.
-7. **Non-default prefix** — `parley.setup{ chat_user_prefix = ">>" }`, and the inserted line is `>> `.
-8. **Refusal while streaming** — with a pending generation owning the region (reuse the pending-state helper from `tests/integration/chat_pending_spec.lua`), a press must leave the buffer unchanged and log a warning. Assert both: unchanged buffer *and* the warning, so a silent no-op cannot pass.
+2. **The line is `💬: ` and insert was requested** — after the press, the spy from (3) above saw `startinsert`, the cursor's **row** is the planned row, and that line is exactly `💬: `. Do not assert the cursor column: `startinsert!` sets it, and it has not run yet when the callback returns.
+3. **Typing into it produces `💬: hello`** — the real proof the trailing space is there. Because the mode change is scheduled, drive this the way the repo drives post-`startinsert` behavior: after the press, `vim.wait(50, function() return false end)`, then `nvim_buf_set_text` at end-of-line and assert the resulting line. (If you prefer a genuine keystroke, `nvim_feedkeys(..., "x", false)` forces the pending mode change to be processed first — but the buffer-text assertion is the load-bearing one either way.)
+4. **Insert mode entry** — start insert on an answer line, press the insert-mode mapping (`press("new_question", "i")`), assert the same post-condition as (2).
+5. **Single undo** — from case (1), press `u` once and assert the buffer is byte-identical to the pre-press snapshot. This is the assertion that judges the `stopinsert`-first decision in Task 3 Step 4; if it fails, the callback is wrong, not the test. Requires the on-disk fixture from (1) above — a synthesized buffer has no undo history to return to.
+6. **No duplicate on a second press** — press twice with no typing in between; the `💬:` count goes 2 → 3, not 2 → 4.
+7. **Empty chat** — a transcript with a header and nothing else; one press produces exactly one `💬: ` line below the `---`.
+8. **Non-default prefix** — `parley.setup{ chat_user_prefix = ">>" }`, and the inserted line is `>> `.
+9. **Refusal while streaming** — a press must leave the buffer unchanged **and** log a warning; assert both, so a silent no-op cannot pass. Build the guard state directly through `document.capture_user`, following `tests/integration/document_user_guards_spec.lua`. Do **not** plan to "reuse the pending helper" from `tests/integration/chat_pending_spec.lua` — `fake_runtime` (line 2), `fixture` (91) and `start` (96) are file-local `local function`s with no exports, so that would be a copy, not a reuse.
+10. **The next exchange's empty question is not adopted** — cursor in an answered exchange whose *successor* is already an empty question; the press inserts rather than jumping forward. Pins the decision recorded in the unit spec, at the surface the user actually touches.
 
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/integration/new_question_spec.lua" -c "qa!"`
-Expected: the cases that exercise behavior not yet correct fail. Cases 1-3 and 5-7 should already pass from Task 3; **cases 4 and 8 are the ones this task exists to settle.**
+Expected: the cases that exercise behavior not yet correct fail. Cases 1, 6, 7, 8 and 10 should already pass from Task 3. **Cases 2, 3, 4, 5 and 9 are the open set** — every one of them turns on scheduled-`startinsert` timing, undo grouping, or the refusal path, none of which this plan could settle by reading existing code.
 
-- [ ] **Step 3: Fix whatever cases 4 and 8 expose**
+- [ ] **Step 3: Fix whatever the open set exposes**
 
-If case 4 fails, the insert-mode callback is folding the edit into the surrounding undo block — adjust the `i` handler (the likely fix is `vim.cmd("stopinsert")` followed by running the command from `vim.schedule`, at the cost of making the integration spec schedule-aware). If case 8 fails, `replace_user_lines` is not raising where expected — read `buffer_edit.capture_user`'s refusal path rather than adding a guard of your own.
+- **Cases 2-4 (mode/timing):** if the spy sees no `startinsert`, it was restored before the scheduled command ran — the `vim.wait` above is not optional. If it sees `startinsert` but the text lands wrong, the row is wrong, not the mode.
+- **Case 5 (undo):** a failure means the insert-mode callback folded the edit into the surrounding undo block. Adjust the `i` handler; the likely fix is `vim.cmd("stopinsert")` followed by running the command from `vim.schedule`, at the cost of making this spec schedule-aware.
+- **Case 9 (refusal):** if nothing is raised, `replace_user_lines` is not refusing where expected — read `buffer_edit.capture_user`'s refusal path rather than adding a guard of your own.
 
 - [ ] **Step 4: Run the full spec to verify it passes**
 
 Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/integration/new_question_spec.lua" -c "qa!"`
-Expected: PASS, all eight cases.
+Expected: PASS, all ten cases.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Route the new spec in `atlas/traceability.yaml`**
+
+Same reason as Task 2 Step 6 — in the commit that creates it, not in Task 6. Add `tests/integration/new_question_spec.lua` to the `tests:` lists under both `chat/lifecycle` and `ui/keybindings`.
+
+Verify:
+```bash
+nvim -n --headless --noplugin -u tests/minimal_init.vim \
+  -c "PlenaryBustedFile tests/arch/single_source_sweeps_spec.lua" -c "qa!"
+```
+Expected: PASS.
+
+- [ ] **Step 6: Commit**
 
 ```bash
-git add tests/integration/new_question_spec.lua lua/parley/init.lua
+git add tests/integration/new_question_spec.lua lua/parley/init.lua atlas/traceability.yaml
 git commit -m "#263: drive the chord through a real editor"
 ```
 
@@ -583,38 +700,100 @@ The issue's Done-when says the chord must shadow no existing Parley chord, "veri
 Measured before planning: under the wider rule the registry has **0** collisions today, so this generalization lands green rather than opening a cleanup.
 
 **Files:**
-- Modify: `tests/unit/keybindings_spec.lua:878-967` (the `describe` block holding the guard)
+- Modify: `tests/unit/keybindings_spec.lua:878-968` (the `describe("open_file joins the alt family (#214)")` block, which holds `scopes_overlap` at line 922 and the guard at 935)
 
-- [ ] **Step 1: Widen the guard and add prefix shadowing**
+The three loops below share one `owners_by_key` / `collisions` pair. Writing the detection out once per `it` is how a plant ends up proving a *different* guard than the one that ships — which is the same defect the plan flags in Task 4 (an expectation computed with the code under test agrees with itself), and ARCH-DRY.
 
-Replace the `it("no alt key is live twice in the same buffer", …)` body so it walks **every** resolved key, not just alt keys, and add a second `it` for prefix shadowing:
+- [ ] **Step 1: Add the shared helpers, widen the guard, and add prefix shadowing**
+
+Replace the whole `it("no alt key is live twice in the same buffer", …)` — renaming it — and add the helpers and a second `it` beside it. `reg` (line 880), `parley` (879) and `scopes_overlap` (922) are already locals of this `describe`, so all three are in scope:
 
 ```lua
-    -- #263: this was filtered to `^<[Mm]-` and so inspected one family out of
-    -- three. It could not have caught <C-g>n being bound twice, which is the
-    -- collision #263 actually hit. The rule is about a buffer, not a family.
-    it("no key is live twice in the same buffer", function()
-        local owners = {}
-        for _, e in ipairs(reg.entries) do
-            for _, k in ipairs(reg.resolve_keys(e, parley.config) or {}) do
-                owners[k] = owners[k] or {}
-                table.insert(owners[k], e)
+    -- Canonical notation. `tests/integration/keybinding_agreement_spec.lua`
+    -- carries this because "<C-g>" comes back as "<C-G>": without it a user
+    -- override spelled <C-G>n slips past a guard whose entire job is catching
+    -- the NEXT collision.
+    local function canon(lhs)
+        return vim.fn.keytrans(vim.api.nvim_replace_termcodes(lhs, true, true, true))
+    end
+
+    -- Two bindings only fight if they are live in the same buffer AND in the
+    -- same mode. Widening from alt-only to EVERY key pulls in entries the old
+    -- filter never saw: ae/ie/aE are {o,x} only, gf/gP are normal-only. Without
+    -- this, the widened guard grows a false-positive surface.
+    local function modes_overlap(a, b)
+        for _, m in ipairs(a or {}) do
+            for _, n in ipairs(b or {}) do
+                if m == n then return true end
             end
         end
-        local collisions = {}
-        for key, entries in pairs(owners) do
-            for i = 1, #entries do
-                for j = i + 1, #entries do
-                    if scopes_overlap(entries[i].scope, entries[j].scope) then
-                        collisions[#collisions + 1] = ("%s -> %s(%s) + %s(%s)"):format(
-                            key, entries[i].id, entries[i].scope,
-                            entries[j].id, entries[j].scope)
+        return false
+    end
+
+    -- ONE detection, shared by both guards and by the plant that proves them.
+    -- `overrides` maps an entry id to a replacement key list.
+    local function owners_by_key(overrides)
+        local owners = {}
+        for _, e in ipairs(reg.entries) do
+            local keys, modes = reg.resolve_keys(e, parley.config)
+            keys = (overrides or {})[e.id] or keys or {}
+            for _, k in ipairs(keys) do
+                local c = canon(k)
+                owners[c] = owners[c] or {}
+                table.insert(owners[c], { entry = e, modes = modes })
+            end
+        end
+        return owners
+    end
+
+    local function live_together(a, b)
+        return scopes_overlap(a.entry.scope, b.entry.scope) and modes_overlap(a.modes, b.modes)
+    end
+
+    local function collisions(owners)
+        local out = {}
+        for key, owned in pairs(owners) do
+            for i = 1, #owned do
+                for j = i + 1, #owned do
+                    if live_together(owned[i], owned[j]) then
+                        out[#out + 1] = ("%s -> %s(%s) + %s(%s)"):format(key,
+                            owned[i].entry.id, owned[i].entry.scope,
+                            owned[j].entry.id, owned[j].entry.scope)
                     end
                 end
             end
         end
-        table.sort(collisions)
-        assert.same({}, collisions)
+        table.sort(out)
+        return out
+    end
+
+    local function prefix_shadows(owners)
+        local keys = {}
+        for k in pairs(owners) do keys[#keys + 1] = k end
+        local out = {}
+        for _, short in ipairs(keys) do
+            for _, long in ipairs(keys) do
+                if short ~= long and #short < #long and long:sub(1, #short) == short then
+                    for _, a in ipairs(owners[short]) do
+                        for _, b in ipairs(owners[long]) do
+                            if live_together(a, b) then
+                                out[#out + 1] = ("%s(%s) delays %s(%s)"):format(
+                                    short, a.entry.id, long, b.entry.id)
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        table.sort(out)
+        return out
+    end
+
+    -- #263: this was filtered to `^<[Mm]-` and so inspected one family out of
+    -- three. It could not have caught <C-g>n being bound twice, which is the
+    -- collision #263 actually hit. The rule is about a buffer, not a family.
+    it("no key is live twice in the same buffer", function()
+        assert.same({}, collisions(owners_by_key()))
     end)
 
     -- A chord that is a PREFIX of another is not a silent overwrite -- it is a
@@ -622,32 +801,7 @@ Replace the `it("no alt key is live twice in the same buffer", …)` body so it 
     -- 'timeoutlen' on every press. That rule lives today as a comment above
     -- entity_delete in the registry; here it is a test.
     it("no key delays another by being its prefix", function()
-        local owners = {}
-        for _, e in ipairs(reg.entries) do
-            for _, k in ipairs(reg.resolve_keys(e, parley.config) or {}) do
-                owners[k] = owners[k] or {}
-                table.insert(owners[k], e)
-            end
-        end
-        local keys = {}
-        for k in pairs(owners) do keys[#keys + 1] = k end
-        local shadows = {}
-        for _, short in ipairs(keys) do
-            for _, long in ipairs(keys) do
-                if short ~= long and #short < #long and long:sub(1, #short) == short then
-                    for _, a in ipairs(owners[short]) do
-                        for _, b in ipairs(owners[long]) do
-                            if scopes_overlap(a.scope, b.scope) then
-                                shadows[#shadows + 1] = ("%s(%s) delays %s(%s)"):format(
-                                    short, a.id, long, b.id)
-                            end
-                        end
-                    end
-                end
-            end
-        end
-        table.sort(shadows)
-        assert.same({}, shadows)
+        assert.same({}, prefix_shadows(owners_by_key()))
     end)
 ```
 
@@ -656,33 +810,40 @@ Replace the `it("no alt key is live twice in the same buffer", …)` body so it 
 The existing `it("and the disjoint case is genuinely allowed, not accidentally passing", …)` proves `scopes_overlap`. Add one that proves the **widened** scan finds a real `<C-g>` double-bind — otherwise a guard that reports nothing is indistinguishable from a guard that looks at nothing:
 
 ```lua
+    -- Both scopes are `parley_buffer`, so scopes_overlap hits its `a == b`
+    -- branch, and both carry a normal mode, so modes_overlap holds too. The
+    -- plant runs THE SAME collisions() the guard above runs -- not a copy that
+    -- could drift away from it.
     it("and the widened scan really would catch a <C-g> double-bind", function()
-        -- Give an existing entry a chord another entry already owns in an
-        -- overlapping scope, then run the same detection over the result.
-        local keys = { outline = { "<C-g>k" } } -- <C-g>k is entity_delete (parley_buffer)
-        local owners = {}
-        for _, e in ipairs(reg.entries) do
-            for _, k in ipairs(keys[e.id] or reg.resolve_keys(e, parley.config) or {}) do
-                owners[k] = owners[k] or {}
-                table.insert(owners[k], e)
-            end
-        end
-        local found = false
-        for _, entries in pairs(owners) do
-            for i = 1, #entries do
-                for j = i + 1, #entries do
-                    if scopes_overlap(entries[i].scope, entries[j].scope) then found = true end
-                end
-            end
-        end
-        assert.is_true(found, "the widened scan reported nothing on a planted collision")
+        local found = collisions(owners_by_key({ outline = { "<C-g>k" } }))
+        -- Assert the OFFENDER, not merely that something was found: a bare
+        -- `#found > 0` borrows its meaning from the clean-registry test above,
+        -- and would keep passing if an unrelated collision appeared.
+        assert.equals(1, #found, "expected exactly the planted collision, got: "
+            .. table.concat(found, "; "))
+        assert.is_truthy(found[1]:find("outline", 1, true))
+        assert.is_truthy(found[1]:find("entity_delete", 1, true))
+    end)
+
+    -- The prefix guard needs its own plant for the same reason.
+    it("and the prefix scan really would catch a delaying chord", function()
+        -- <C-g>e is UNBOUND precisely because <C-g>em / <C-g>eh exist; binding
+        -- it is the exact mistake the registry comment warns about.
+        local found = prefix_shadows(owners_by_key({ outline = { "<C-g>e" } }))
+        assert.is_true(#found >= 1, "the prefix scan reported nothing on a planted shadow")
+        assert.is_truthy(table.concat(found, "; "):find("outline", 1, true))
     end)
 ```
 
 - [ ] **Step 3: Run the keybinding specs**
 
-Run: `make test-spec SPEC=ui/keybindings`
-Expected: PASS — including the two widened guards on the real registry, and the planted-collision case.
+Run:
+```bash
+make test-spec SPEC=ui/keybindings
+```
+Expected: PASS — including the two widened guards against the real registry and both planted cases. Measured during plan review: the widened rule finds **0** collisions and **0** prefix shadows on today's registry, and stays at 0/0 after this issue's entry, so a red run here is a real finding, not the generalization catching up with debt.
+
+This is the first `make test-spec` in the plan, and it only works because Tasks 2 and 4 routed their specs in `atlas/traceability.yaml` — the spec key fans out to `tests/arch/single_source_sweeps_spec.lua`. If it reports an unrouted spec, that routing step was skipped.
 
 - [ ] **Step 4: Commit**
 
@@ -695,32 +856,74 @@ git commit -m "#263: the shadowing guard covers every chord, not just alt"
 
 ### Task 6: Documentation
 
-The repo has **no** which-key integration; the keybinding registry is the single source and `<C-g>?` help is generated from it, so Task 3's registry entry already published the chord to help. What remains is the atlas.
+The repo has **no** which-key integration; the keybinding registry is the single source and `<C-g>?` help is generated from it, so Task 3's registry entry already published the chord to help. Verified during plan review that atlas really is the whole doc surface: there is no `doc/` directory, `README.md` names no chords, `packaging/tutorials/*.md` mention `<C-g>f` only in prose with no per-chord list, and `lua/parley/help.lua` serves atlas pages rather than an inline key table.
+
+**Everything below leads with `<C-g>n`, not `<M-n>`.** `resolve_keys` returns the config list in order and the help float renders `keys[1]` as primary, so the shipped help says `<C-g>n (also <M-n>)`. Atlas prose that called `<M-n>` the primary would ship a claim the running help disproves.
 
 **Files:**
 - Modify: `atlas/ui/keybindings.md` (`## Common transcript actions`, ~line 15-34)
+- Modify: `atlas/ui/keybindings.md` (`## Resolution`, ~line 96-112 — the alt-leads rule this entry departs from)
+- Modify: `atlas/ui/keybindings.md` (`## Scope Forest`, ~line 43-60 — the new keyspace invariants)
 - Modify: `atlas/chat/lifecycle.md` (a new `## New Question` section, after `## Creation`)
-- Modify: `atlas/traceability.yaml` (`ui/keybindings` and `chat/lifecycle` code+test lists)
 
-- [ ] **Step 1: Add the chord to `atlas/ui/keybindings.md`**
+`atlas/traceability.yaml` is **not** listed: Tasks 2 and 4 already routed their specs there, in the commits that created them.
 
-In `## Common transcript actions`, after the structural-editing paragraph:
+- [ ] **Step 1: Add the chord to `atlas/ui/keybindings.md` § Common transcript actions**
+
+After the structural-editing paragraph:
 
 ```markdown
-`<M-n>` (alias `<C-g>n`) opens a new, empty `💬:` question immediately after the
+`<C-g>n` (also `<M-n>`) opens a new, empty `💬:` question immediately after the
 exchange the cursor is in, and leaves the cursor in insert mode on it. It reads
 `chat_user_prefix`, so an operator override is what gets written. Pressing it on
 an exchange that is already an empty question focuses that question rather than
-adding a second one. This is the end-user path to a question line — the emoji is
-not on the keyboard, and nothing here needs the clipboard.
+adding a second one; pressing it on an answered exchange whose *successor* is
+empty still inserts, because the rule is about the exchange the cursor is in and
+not about content off-screen. This is the end-user path to a question line — the
+emoji is not on the keyboard, and nothing here needs the clipboard.
 ```
 
-- [ ] **Step 2: Add the action to `atlas/chat/lifecycle.md`**
+- [ ] **Step 2: Record the ordering exception in `atlas/ui/keybindings.md` § Resolution**
+
+That section currently states the rule this entry breaks — "the **portable key leads** where portability is the issue, so `branch_ref` shows `<M-i>`" — and enumerates the alt family's members. `<M-n>` joins that family while `<C-g>n` leads, so both passages need the exception. After the alt-family sentence:
+
+```markdown
+`<M-n>` (new question, #263) joins that family, but its entry is the one place
+the portable key does **not** lead: the operator asked for `<C-g>n` by name and
+retired `chat_search` to free it, so `<C-g>n` is the gesture being taught and
+help advertises it first. `outline` (`<C-g>t`, then `<M-t>`) has the same shape.
+A rule page that does not record its own exceptions is the drift #214 removed.
+```
+
+- [ ] **Step 3: Record the keyspace invariants in `atlas/ui/keybindings.md` § Scope Forest**
+
+Task 5 promoted two rules from an alt-only test plus a registry comment into enforced invariants; the section that explains overlap semantics is where they belong. After the scope-forest diagram:
+
+```markdown
+Two invariants over this forest are enforced by `tests/unit/keybindings_spec.lua`
+(#263), not by review:
+
+1. **No key is live twice in the same buffer.** Two entries may share a key when
+   their scopes are disjoint — `<M-CR>` is respond in a chat buffer and the
+   review menu in a markdown one, and `<C-g>d` is chat-delete vs delete-file the
+   same way — because a buffer is never both. What must not happen is two owners
+   whose scopes overlap (one an ancestor of the other, or the same scope) *and*
+   whose modes intersect: both bindings are then live at once and the later
+   registration silently wins.
+2. **No key delays another by being its prefix.** `<C-g>e` is unbound on purpose
+   because `<C-g>em` and `<C-g>eh` exist; binding it would make both wait out
+   `timeoutlen` on every press.
+
+Both guards compare canonicalized notation (`keytrans` ∘ `replace_termcodes`),
+so an override spelled `<C-G>n` cannot slip past them.
+```
+
+- [ ] **Step 4: Add the action to `atlas/chat/lifecycle.md`**
 
 After `## Creation`:
 
 ```markdown
-## New Question (`:ParleyNewQuestion` / `<M-n>` / `<C-g>n`)
+## New Question (`:ParleyNewQuestion` / `<C-g>n` / `<M-n>`)
 
 Opens an empty question after the exchange at the cursor. The insertion point
 and its blank-line seam come from `exchange_clipboard` — the same definition
@@ -733,16 +936,23 @@ Post-condition: the cursor sits at the end of a line that is the configured
 user prefix followed by a space, in insert mode.
 ```
 
-- [ ] **Step 3: Update `atlas/traceability.yaml`**
+- [ ] **Step 5: Verify the docs are wired**
 
-Add `lua/parley/new_question.lua` to the `ui/keybindings` and `chat/lifecycle` `code:` lists, and `tests/unit/new_question_spec.lua` + `tests/integration/new_question_spec.lua` to both `tests:` lists.
+`tests/integration/documentation_spec.lua` is what checks atlas link integrity, and it is routed under **`infra/starter`** (`atlas/traceability.yaml:55`) — *not* under `ui/keybindings` or `chat/lifecycle`. Running those two spec keys would report PASS while never executing the one check this step exists to perform. Run it directly:
 
-- [ ] **Step 4: Verify the docs are wired**
+```bash
+nvim -n --headless --noplugin -u tests/minimal_init.vim \
+  -c "PlenaryBustedFile tests/integration/documentation_spec.lua" -c "qa!"
+```
+Expected: PASS.
 
-Run: `make test-spec SPEC=ui/keybindings && make test-spec SPEC=chat/lifecycle`
-Expected: PASS. `tests/integration/documentation_spec.lua` checks atlas link integrity; a broken reference fails here.
+Then the two feature spec keys, for the code these docs describe:
+```bash
+make test-spec SPEC=ui/keybindings && make test-spec SPEC=chat/lifecycle
+```
+Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add atlas/
@@ -765,13 +975,21 @@ Expected: clean.
 
 - [ ] **Step 3: Drive it by hand, once**
 
-Open a real chat (`<C-g>c`), type a question, respond, put the cursor in the middle of the answer, press `<C-g>n`, type, and respond again. A real press is the only oracle for a keymap (#231 M1 lesson). Record the result in the issue's `## Log`.
+Open a real chat (`<C-g>c`), type a question, respond, put the cursor in the middle of the answer, press `<C-g>n`, type, and respond again. Then press `<C-g>n` from insert mode and press `u` once. A real press is the only oracle for a keymap (#231 M1 lesson). Record what happened in the issue's `## Log`.
 
-- [ ] **Step 4: Close**
+- [ ] **Step 4: Reconcile the issue before closing**
+
+`sdlc close` enforces "the issue's `## Plan` has no unchecked items". Tick every box in `workshop/issues/000263-…md` `## Plan`, and confirm the restated Done-when in `## Revisions` is what the work actually satisfies — the original `## Spec` / `## Done when` bullets are superseded there, not deleted.
+
+Then `sdlc issue sync --issue 263`.
+
+- [ ] **Step 5: Close**
 
 ```bash
-sdlc close --issue 263 --verified '<evidence>'
+sdlc close --issue 263 --verified 'unit 15/15 + integration 10/10 green; make test full suite green; make lint clean; widened shadowing guard 0 collisions / 0 prefix shadows with both plants biting; hand-driven <C-g>n mid-answer inserts a new question after that exchange and lands in insert, second press does not duplicate, single u reverts'
 ```
+
+The `--actual` flag is deliberately absent: omitted, `close` measures and adopts the hours itself (active-time-v3). Never hand-type hours — a guessed value pollutes velocity calibration, which is the whole reason the `## Estimate` block above was derived rather than picked.
 
 ---
 
@@ -780,3 +998,92 @@ sdlc close --issue 263 --verified '<evidence>'
 1. **The insert-mode undo grouping (Task 4, case 4)** is the one behavior this plan asserts without having read it off existing code — no current Parley chord both edits the buffer and returns to insert mode. The plan commits to `stopinsert`-then-edit and names the fallback (`vim.schedule`) if the test says otherwise. It is a test, not an assumption, on purpose.
 2. **The trailing space** (`💬: ` rather than the bare `💬:` the chat template and `chat_respond` write) is a deliberate third convention, and it is what the issue's Done-when asks for. It exists so `startinsert!` at end-of-line produces `💬: text`. The cost is a line with trailing whitespace if the user escapes immediately; the alternative costs a wrong-looking question line every time they do not.
 3. **Retiring `chat_search` is user-visible.** Anyone with `<C-g>n` in muscle memory for "jump to the next question" loses it. It is a one-line `/` wrapper, the operator chose this explicitly over three alternatives, and the replacement is `/💬:`. Worth one line in the release notes if any are being written.
+
+---
+
+## Revisions
+
+### 2026-09-16 — round 1 review disposition
+
+Three fresh-context reviews ran against the first draft: one per chunk, plus
+`sdlc change-code`'s plan-quality gate. Two of the three **executed** the plan's
+literal module and literal unit spec in a real headless nvim rather than reading
+them, which is what caught the blocking item below. Deltas:
+
+**Blocking, from the plan-quality gate (PQ-1)** — the issue's `## Spec` and
+`## Done when` still described the pre-revision cursor-position feature, so the
+close gate would have judged this diff against criteria the design deliberately
+does not satisfy. Fixed in the issue, not here: a restated, authoritative
+Done-when now sits in `## Revisions` with the superseded clauses named.
+
+**Blocking, from the chunk-1 review** — Task 2's first test asserted
+`p.row < exchanges[2].question.line_start`, which **cannot pass**. Measured:
+`p.after = 11`, `p.row = 12`, and exchange 2's pre-insertion `line_start` is
+also 12, because `get_paste_line` returns the end of exchange 1 *including its
+trailing blank*, so the new question takes exactly the row exchange 2 occupied.
+Now `<=`, with the reasoning inline — and the troubleshooting note that pointed
+at the parser (the wrong suspect entirely; `line_end` is never nil, per
+`chat_parser.lua:998`) is replaced with a warning not to "fix" it by shrinking
+`row`, which would destroy the seam the module exists to preserve.
+
+**Task 4 was built on a misattribution** — `entity_textobj_spec.lua` does not
+use `nvim_feedkeys`/`nvim_replace_termcodes` and does not drive the #262 chords
+through real keymaps. The three techniques now cite three real sources:
+`prepped()` there for the on-disk fixture (which is what gives case 5 real undo
+history), `user_edit_callers_spec.lua:22-26` for firing a registry keymap, and
+`open_reference_spec.lua:521-561` for the `vim.cmd` spy. `vim.fn.mode()` was
+dropped outright: it appears in no test in this repo, and `startinsert!` from a
+mapping callback is scheduled, so a synchronous read sees normal mode. The open
+set grew from {4, 8} to {2, 3, 4, 5, 9} accordingly, and case 9's "reuse the
+pending helper" became "follow `document_user_guards_spec`" — those helpers are
+file-local, so it would have been a copy, not a reuse.
+
+**Task 5 wrote its detection loop three times**, including inside the plant
+meant to prove it — the exact defect the plan cites in Task 4 (an expectation
+computed with the code under test agrees with itself), and ARCH-DRY. Now one
+`owners_by_key` / `collisions` / `prefix_shadows` trio shared by both guards and
+both plants. Also added, from review: `modes_overlap` (widening past the alt
+family pulls in `{o,x}`-only text objects and normal-only `gf`/`gP`, which the
+old filter never saw), `canon` via `keytrans` ∘ `replace_termcodes` (so an
+override spelled `<C-G>n` cannot slip past a guard whose job is catching the
+next collision), a second plant for the prefix rule, and assertions naming the
+*offending entries* rather than `found == true`.
+
+**Spec routing was scheduled too late.** `tests/arch/single_source_sweeps_spec.lua`
+fails on a `NNNNNN-…` branch for any added-or-untracked spec no traceability
+entry names — and it reads the working tree. Both new specs are now routed in
+the commit that creates them (Tasks 2 and 4), not in Task 6; Task 3 Step 5's run
+command changed to the spec file directly for the same reason.
+
+**Task 6's stated oracle never ran.** `documentation_spec.lua` is routed under
+`infra/starter`, so neither `SPEC=ui/keybindings` nor `SPEC=chat/lifecycle`
+executes it — the step reported PASS while skipping its only check. Now invoked
+directly. Two doc targets were also missing: `atlas/ui/keybindings.md`
+§ Resolution states the "portable key leads" rule this entry departs from, and
+§ Scope Forest is where the two new keyspace invariants belong.
+
+**Both reviews caught the same prose contradiction** — atlas text called `<M-n>`
+primary while the shipped config makes `<C-g>n` `keys[1]`, which is what help
+renders first. All prose now leads with `<C-g>n`, and the departure from #214's
+convention is recorded rather than silent.
+
+**Task 7 would have hit a close-gate refusal** — nothing ticked the issue's
+`## Plan`. Added as its own step, along with the literal `--verified` evidence
+(the plan's only remaining placeholder) and a note that `--actual` stays absent
+so `close` measures the hours instead of accepting a typed guess.
+
+**ARCH-FUNERAL had no entry** (gate PQ-2). Added as a reasoned exemption rather
+than a bare `N/A`.
+
+Smaller fixes: Task 1's grep returns **four** lines, not three (the registry
+entry matches on both `id` and `config_key`); Task 3 Step 5 named a `describe`
+as though it were an `it`; the dead cursor-column computation in
+`M.cmd.NewQuestion` is gone (`startinsert!` is `A` — only the row matters), with
+an `assert(plan.row)` in its place; `is_empty_question`'s "already spaced" test
+now requires a literal space, since a `💬:\t` line would otherwise yield
+`💬:\thello`; and two unit cases were added — the tab normalization, and the
+recorded decision that a *neighbouring* empty question is not adopted.
+
+**Note on structure:** "Chunk 1" and "Chunk 2" are document organization for the
+review loop, **not** SDLC milestones. There are no `Mx` tags and there is one
+review boundary, at `sdlc close` (AGENTS.md §3).
