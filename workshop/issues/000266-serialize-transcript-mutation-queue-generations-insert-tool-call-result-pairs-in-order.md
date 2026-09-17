@@ -123,8 +123,19 @@ derive from the new one, not restate the old (ARCH-PURPOSE shadow-sweep).
 
 ## Plan
 
-- [ ] Design pending — `sdlc start-plan` then author the durable plan via
-      `superpowers-writing-plans`.
+Durable plan: `workshop/plans/000266-serialize-transcript-mutation-plan.md`
+(six revisions, six fresh-context reviews).
+
+- [ ] M1 — the write turn: pure `WriteTurn`, turn state in the document reducer,
+      the `draining` phase, `'waiting'` refusal at the coordinator's write entry
+      points and in `Replacement.step`, the release/re-request matrix, and the
+      wake. **Ships deliberately over-serialized — see the Log entry below.**
+- [ ] M2 — defer preparation's write until there is output, restoring the Spec's
+      option (b): concurrent provider execution with serialized writes.
+- [ ] M3 — ordered `(call, result)` append; removes capacity tickets, the round
+      reservation lifecycle, and child grants.
+- [ ] M4 — residual exclusion sweep (`exclude`, parent-slot carving, the
+      half-open seam flags, the ancestor walk).
 
 ## Log
 
@@ -324,3 +335,33 @@ often, so that interaction needs care.
   with no interleaving inside an entry and no partial-chunk entries. Document
   order *is* guaranteed within a single generation's tool round, where insertion
   is monotonic at the tail.
+
+### 2026-09-17 — M1 ships over-serialized; option (b) postponed to M2
+
+Planning surfaced a conflict between the turn's acquisition point and the
+operator's option (b). The turn is taken at `start`, i.e. in `preparing`, so a
+second generation's preparation writes (`response_preparation.lua:90,101,108`)
+are turn-blocked. `Preparation` then never retires `'applied'`, `cb.prepared`
+(`response_session.lua:131-133`) never fires, and `generation.lua:103-105` never
+advances `preparing → requesting` — so **the second generation's provider request
+never starts**. That is full queuing (option (a)) where the Spec chose option (b).
+
+**Decision (operator, 2026-09-17): do the right thing rather than satisfy the
+gate.** Two paths were on the table:
+
+- *(i)* exempt preparation writes from the turn, restoring option (b) inside M1.
+  **Rejected** — it leaves a write path outside the invariant and splits a
+  generation's undo run with a foreign gap, and it would have been adopted to
+  make a milestone green rather than because it is right.
+- *(ii)* defer preparation's write until there is output to write, so nothing is
+  exempt. **Chosen**, and **postponed to M2** rather than folded into M1, which
+  already carries the turn, the phase and the release matrix.
+
+M1 therefore ships **stricter** than the target, never looser: writes are
+serialized *and* requests are queued. No transcript can be corrupted by
+over-serialization; the cost is latency until M2 lands.
+
+Test consequence: `tests/integration/chat_scoped_response_spec.lua:47` asserts
+two concurrent provider dispatches. M1 changes it to assert the queued shape with
+a comment naming the plan's "Deliberate over-serialization in M1" section; M2
+Task 2.3 restores the concurrent assertion and deletes that section.
