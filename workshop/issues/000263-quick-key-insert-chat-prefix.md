@@ -300,3 +300,33 @@ the branch point (`bbe05eef`) in a detached worktree:
   "dies silently" class `lessons.md` records for three other specs.
 
 Everything else in `make test-unit` / `make test-integration` passes.
+
+### 2026-09-16 — boundary review round 1 (FIX-THEN-SHIP) disposed
+
+8 findings, 2 blocking. Full disposition in the plan's `## Revisions`; the
+review itself is `workshop/plans/000263-quick-key-insert-chat-prefix-close-review.md`.
+
+- **BR-1** the "one undo step" clause was asserted for the normal-mode press
+  only — the mode where the insert path's `stopinsert` plays no part. The
+  integration spec is now parameterized over both modes, so a clause naming two
+  modes is asserted in both by construction. The reviewer's counterfactual also
+  showed `stopinsert` is *not* what provides the undo scope
+  (`document.apply_user`'s transaction is); the comment no longer claims it.
+- **BR-2** "the one place the portable key does not lead" was false. Measured:
+  the split is even, **3–3** — `<C-g>`-leading are `outline`, `chat_drill_in`,
+  `new_question`; alt-leading are `open_file`, `branch_ref`, `chat_prune`.
+  Corrected in atlas, `config.lua` and the registry comment.
+- **Minors fixed:** `chat_context(what)` extracted and all four commands
+  migrated (the preamble was on its 4th verbatim copy); the refusal test
+  relabelled as the double it is, with the measured evidence for why the two
+  realer routes don't work; stale `--verified` counts corrected; the atlas
+  paragraph that swallowed a pre-existing sentence split back out;
+  header-cursor placement now tested *and* documented.
+- **Deliberately deferred:** the refusal-UX divergence (this command reports,
+  twelve siblings raise) → **#265**, with the real-generation fixture the
+  proper test needs. Unifying 13 call sites' error semantics at this close is a
+  separable extension, not #263's purpose.
+
+Integration spec now 14/14 (was 11/11), unit 14/14, lint 0/0 across 627 files.
+Prune/cut/paste verified after the refactor: `topic_gen_spec` 9/9,
+`branch_child_spec`, `entity_textobj_spec`, `chat_move_spec` all green.
