@@ -13,22 +13,22 @@ The model:
 - **`document/init.lua`** refuses a turnless generated write with a new `'waiting'` status at the five write entry points, plus inside `Replacement.step` — the only place a multi-chunk replacement's generation is knowable.
 - **`response_tools.lua`** replaces placeholder reservation with ordered `(call, result)` appends sequenced by a pure `ToolSequence`.
 
-**Why `'waiting'` and not `busy`.** `busy` already carries three unrelated meanings (`document/init.lua:516` append-in-flight, `document/editor.lua:205` re-entrancy, `replacement.lua:62` concurrent replacement on one grant), and it means *retry now* — `generation_runner.lua:274` returns `true`, `M.step` returns `'more'`, and `Deferred` re-arms at 1 ms, so a turn-blocked writer would hot-spin for the whole time another generation streams. `'waiting'` maps to the existing `return true,'waiting'` (`:269`), which parks the timer so the notify wakes it. ARCH-CONSTRAINTS: this is a keystroke-adjacent path; an unbounded 1 ms spin is not acceptable.
+**Why `'waiting'` and not `busy`.** `busy` already carries three unrelated meanings (`document/init.lua:516` append-in-flight, `document/editor.lua:203` re-entrancy, `replacement.lua:62` concurrent replacement on one grant), and it means *retry now* — `generation_runner.lua:274` returns `true`, `M.step` returns `'more'`, and `Deferred` re-arms at 1 ms, so a turn-blocked writer would hot-spin for the whole time another generation streams. `'waiting'` maps to the existing `return true,'waiting'` (`:269`), which parks the timer so the notify wakes it. ARCH-CONSTRAINTS: this is a keystroke-adjacent path; an unbounded 1 ms spin is not acceptable.
 
 **The complete enumeration of generated writers.** Revisions 1–3 each fixed one path and asserted the rest. Produced by `grep -rn "ctx\.append\|ctx\.replace\|D\.append\|D\.apply\|D\.replace_new\|D\.replace_step\|D\.insert_released_new" lua/` — **re-run this before implementing**; if it returns a row not in this table, the table is stale and must be corrected first.
 
 | Writer | Calls | Gated where | Caller must treat `'waiting'` as retry |
 |---|---|---|---|
-| provider output, tool insertion | `generation_runner.lua:271,305,310` | entry points | `:274` — already returns `true` on the waiting shape |
+| provider output, tool insertion | `generation_runner.lua:271,305,310` | entry points | **`:274` does NOT handle it today.** It guards only `more`/`busy`; `:275-276` maps every other status to `'uncertain'` → `write_result{status='uncertain'}` → `generation.lua:235-238` `stop()`. A `'waiting'` would **kill the generation**. Must gain a `'waiting'` arm returning `true,'waiting'`. |
 | preparation gap | `response_preparation.lua:90,101,108` | entry points | **`:94`** (append statuses), **`:103`** (`replace_new` *reason* set), **`:113`** (`replace_step` statuses) — three sites, not one |
 | completion prefix | `response_completion.lua:63,71` | entry points | **`:66`** (reason set), **`:74`** (statuses) |
-| automatic topic | `response_topic.lua:165` | `M.apply` | **`:168` has no waiting predicate at all** — `retire(s, applied.status=='applied' and 'applied' or 'failed', …)`. Any non-applied status retires it as *failed*. Must gain one. |
-| multi-chunk replacement continuation | `replacement.lua:180` via `Replacement.step` | **inside `Replacement.step`**, using `c.generation` (`replacement.lua:60`) | n/a |
+| automatic topic | `response_topic.lua:165` | `M.apply` | **`:168` has no waiting predicate at all** — `retire(s, applied.status=='applied' and 'applied' or 'failed', …)`. Any non-applied status retires it as *failed*. Must gain one — and a **parking** one: `response_topic.lua:106` is `Deferred.new(function()return M.step(job).status=='more'end)`, the same 1 ms re-arm rejected for `busy`. Topic subscribes at `:107-110`, so a non-`'more'` status parks correctly. |
+| multi-chunk replacement continuation | `replacement.lua:180` via `Replacement.step` | **inside `Replacement.step`**, using `c.generation` (`replacement.lua:60`) | **`generation_runner.lua:315` does NOT handle it.** It guards `more` and `suspended`, then `:317` calls `D.replace_cancel` — destroying the cursor this guard exists to protect. Must gain a `'waiting'` arm **before** `:317`. |
 | **human edits** | `document/init.lua:432` `apply_user` | **exempt by design** | n/a |
 
 `M.replace_step(doc,cursor)` takes an opaque cursor with no generation in scope at the coordinator, which is why the guard for continuing replacements lives one level down. Without it a cursor created while holding the turn keeps writing 4096 bytes at a time (`replacement.lua:155,165,180`) after the turn has moved — the in-flight hole that revisions 2 and 3 each believed they had closed.
 
-**The wake, as one rule.** `notify()` fires only at `document/init.lua:206,223,232,381,402`, never from `M.transition`, and `Deferred` re-arms only while `step` returns `'more'` (`deferred_work.lua:11-24`). Revision 3 scoped a new notify to `request_turn`/`release_turn`, which structurally excludes `finish_generation` — the *most common* release, since it calls `retune`. So: **`M.transition` notifies whenever the turn value differs before and after**, covering `request_turn`, `release_turn`, `finish_generation`, `reload` and `detach` in one place. No per-event list to keep in sync, and no ordering question for an implementer to resolve.
+**The wake, as one rule.** `notify()` fires only at `document/init.lua:206,223,232,381,402`, never from `M.transition`, and `Deferred` re-arms only while `step` returns `'more'` (`deferred_work.lua:11-24`). Revision 3 scoped a new notify to `request_turn`/`release_turn`, which structurally excludes `finish_generation` — the *most common* release, since it calls `retune`. So: **`M.transition` notifies whenever the turn value differs before and after**, covering `request_turn`, `release_turn` and `finish_generation` in one place — no ordering question for an implementer to resolve. `reload`/`detach` are already covered and need nothing: they never reach `M.transition` (`observe` calls `State.transition` directly at `init.lua:219,231`) and are woken by the pre-existing `notify(s,{kind='reload'})`/`{kind='detach'}` at `:223`/`:232`.
 
 
 **Issue:** parley#266 · **Target:** `workshop/targets/transcript-is-the-whole-truth.md` · **Blocks:** parley#261
@@ -128,16 +128,23 @@ for any trigger not paired.
 | grant suspended (`sync`, `generation_runner.lua:55-61`) | released | `grant_resumed` (`:57-59`) — **exists today and must be wired; revision 3 released without re-requesting** |
 | suspended *preparation* grant — `sync` dispatches `grant_suspended` for ids in `preparation_grants` (`:489-491`) but `generation.lua:254-256` rejects it (`event.grant~=s.grant`), while `response_preparation.lua:94,103` retries forever | released | needs a **new observation**; no existing event carries it |
 | head-of-line `'waiting'` that is not the turn — e.g. the `reclaim_tail` `'unconfirmed identity'` retry (`generation_runner.lua:347-352`), which deliberately does not pause | released | next successful step |
-| provider silent — no `cb.output`/`cb.complete`/`cb.failed` | released | next callback of any kind |
+| **queue empty** — `staged(s)==0` (`generation.lua:23-27`) and no pending effect: nothing to write right now | released | next `output`/`manual_*` enqueue |
 | `detach` / `reload` | cleared by `state.lua:353-356` | n/a |
 
-**The provider-silence threshold is the one number this table still owes.**
-`tools/operation.lua:114`'s 5000 ms deadline belongs to the *tool-operation*
-record (consumers `tools/dispatcher.lua:397`, `tools/scheduler.lua:3`) and does
-not model a `request` operation whose adapter never calls back — revision 3
-claimed it could be reused; it cannot. Task 1.6 Step 0 derives it; it is not a
-free parameter and must not be guessed the way the held-output budget was in
-three prior drafts.
+**No timer, and no threshold to derive.** Earlier revisions wanted a
+"provider silent" trigger and a duration to go with it. `staged(s)==0` is the
+exact, free, clockless predicate for the same situation: a generation with
+nothing staged and no pending effect is not writing, whatever the reason —
+silent provider, hung transport, or simply between chunks. `M.step` already
+returns `'waiting'` at that point (`generation_runner.lua:452`). This deletes a
+measurement task, a tunable, and a whole failure mode (*Simplicity First*).
+
+**The cost, stated.** Releasing between chunks means another generation can
+interleave mid-answer, and `can_join_undo` (`editor.lua:192-199`) clears its
+receipt on any foreign write (`:67`), so A's output splits into several undo
+entries. Task 1.9's invariant ("no entry mixes two generations") still holds, but
+the issue Log's stronger phrasing — "one undo entry per generation run" — does
+not. That is recorded in Target reconciliation rather than quietly dropped.
 
 ### ARCH-SECURE
 
@@ -162,7 +169,7 @@ Execution concurrency: `generation.lua:84` fan-out cap of 4, `tools/resources.lu
 **Files:**
 - Create: `lua/parley/document/write_turn.lua`
 - Test: `tests/unit/document_write_turn_spec.lua`
-- Modify: `atlas/traceability.yaml` — spec under `chat/document` `tests:`; `lua/parley/document/write_turn.lua` under `chat/ownership` `code:`, matching the Routing rule
+- Modify: `atlas/traceability.yaml` — route **both** the spec (`tests:`) and `lua/parley/document/write_turn.lua` (`code:`) under `chat/ownership`, so `make test-changed` on the module runs its own spec
 
 - [ ] **Step 1: Route the new spec** in `atlas/traceability.yaml` under `chat/document`. Two-space key, four-space `code:`/`tests:`, six-space `- path`; the awk parser is whitespace-strict.
 
@@ -346,7 +353,7 @@ end)
 ### Task 1.4: refuse a turnless generated write with `'waiting'`
 
 **Files:**
-- Modify: `lua/parley/document/init.lua` — `M.append` `:556`, `M.apply` `:491`, `M.replace_new` `:446`, `M.replace_step` `:482`, `M.insert_released_new` `:459`
+- Modify: `lua/parley/document/init.lua` — `M.append` `:556`, `M.apply` `:491`, `M.replace_new` `:446`, `M.insert_released_new` `:459` (not `M.replace_step` `:482` — its cursor has no generation; that guard lives in `Replacement.step`, below)
 - Modify: `lua/parley/document/replacement.lua` — `Replacement.step` (writes at `:180`, 4096 at a time via `:155,165`), using `c.generation` (`:60`)
 - Modify, per the enumeration table in Architecture — **six caller sites**: `response_preparation.lua:94,103,113`; `response_completion.lua:66,74`; `response_topic.lua:168`
 - Test: `tests/integration/generation_turn_spec.lua` (new), routed under `chat/ownership` in this task
@@ -369,15 +376,21 @@ The `replacement_continuation` case is the one revisions 2 and 3 both missed: st
 - [ ] **Step 3: Implement.** Beside the existing `append_busy` check (`init.lua:516`), factored once:
 
 ```lua
+-- NOTE the field is `s.authority`, not `s.state` — see `init.lua:322` and every
+-- other `State.snapshot(s.authority)` call site.
 local function turn_waiting(s,generation)
-    local turn=s.state and State.snapshot(s.state).turn
-    return turn~=nil and generation~=nil and turn~=generation
+    local turn=State.snapshot(s.authority).turn
+    return generation~=nil and turn~=generation      -- FAIL-CLOSED: see below
 end
--- entry points: intent.generation, plan.generation, or c.generation in Replacement.step
-if turn_waiting(s,generation) then return reject('waiting','write turn held elsewhere') end
 ```
 
-Then add `'waiting'` to all six caller predicates. `generation_runner.lua` maps it to the existing `return true,'waiting'` shape (`:269`) so the timer parks rather than spinning.
+**Fail-closed, deliberately.** `turn~=nil and …` would admit every writer whenever no one holds the turn, which enforces "nobody writes while someone else holds" rather than the Goal's "exactly one generation may mutate at a time." Require the turn to write. Consequences the implementer must handle, both of which a fail-open guard would have hidden:
+- `generation.lua:167` must initialise `s.turn_status='waiting'`, **not** `'held'` — a machine must not emit write effects before it has requested.
+- `response_topic` registers its own generation (`response_topic.lua:141-147`) and finishes it (`:37`); it must now `request_turn` and `release_turn` like any other writer, not rely on a permissive branch.
+
+**Three return conventions, not one.** `M.append` and `M.apply` return a status table → `return reject('waiting','write turn held elsewhere')`. `M.replace_new` (`:446-457`) and `M.insert_released_new` (`:459-481`) return `nil,reason` → `return nil,'waiting'` (which is why `response_preparation.lua:103` and `response_completion.lua:66` are *reason* sets). `Replacement.step` must return `'waiting'` through its `result(...)` path (`replacement.lua:33-40`) **without** calling `stop(c,…)`, or the cursor is permanently dead.
+
+Then add `'waiting'` to all six caller predicates **and** to the two runner sites above.
 
 - [ ] **Step 4: Green.** `make test-spec SPEC=chat/ownership`
 - [ ] **Step 5: Anti-spin assertion.** Add a test that a turn-blocked writer performs a bounded number of `M.step` calls over a fixed wall-clock window — the `busy`-shaped bug is invisible to a correctness assertion and only shows as CPU.
@@ -395,10 +408,12 @@ This is the task the Spec's ARCH-ORDER clause asks for. It is not an optimizatio
   - `provider_complete` with `staged(s)>0` → `phase=='draining'`, **not** `finalizing`.
   - from `draining`: `cancel` → `stopping`; `grant_revoked` → expressible; `input_changed` → marks stale without losing staged bytes. These three are the Spec's "cancellation, revocation and staleness must be expressible".
   - `draining` + drain to `staged(s)==0` → `finalizing`.
+  - **`provider_failed`** (`generation.lua:266-271`) also does `advance(s,'finalizing')` under the comment "Drain valid writes before failure retirement" — the identical complete-but-unwritten situation. It routes through `draining` too; the phase diagram needs that failure edge.
+  - **Paused overlay:** entering `draining` must go through `advance` (`:29-31`) so a paused generation records it in `s.resume_phase`, and the drain-exit must read `phase(s)`, because `pump`'s finalize gate at `:149` reads `s.phase` **directly** — a paused-draining generation would otherwise never finalize.
 - [ ] **Step 2: Run, watch it fail.**
   Run: `make test-spec SPEC=chat/lifecycle`
   Expected: FAIL — `phase` is `requesting`, not `draining`; a `write` effect is emitted while turnless.
-- [ ] **Step 3: Implement.** Add `draining` to the phase set and `s.turn_status='held'` at `:167`. `writable` gains `s.turn_status=='held'`. Add a `turn` event branch setting `s.turn_status` then calling `pump`. Route the completion transition through `draining` when `staged(s)>0`. Keep `staged(s)` (`:23-27`) and the `bytes==0` gates unchanged — with a phase to test against, they now read unambiguously.
+- [ ] **Step 3: Implement.** Add `draining` to the phase set and `s.turn_status='waiting'` at `:167` (fail-closed, per Task 1.4). **Create the `request_turn` and `release_turn` effects here** — emitted from `start` and `resume_validated` (`:343-345`) — and their handlers in `generation_runner.lua`'s `execute`, calling `D.transition(...)`. No earlier task creates them; without this step the turn is never requested and nothing writes. `writable` gains `s.turn_status=='held'`. Add a `turn` event branch setting `s.turn_status` then calling `pump`. Route the completion transition through `draining` when `staged(s)>0`. Keep `staged(s)` (`:23-27`) as is. The `bytes==0` gate at `:149` becomes **unreachable** once completion routes through `draining`, so add the `draining → finalizing` branch rather than leaving dead code; `:123` and `:129` are unaffected.
 - [ ] **Step 4: Green. Step 5: Commit** — `#266 M1: add the draining phase for complete-but-unwritten output`
 
 ### Task 1.6: the turn matrix
@@ -408,24 +423,23 @@ This is the task the Spec's ARCH-ORDER clause asks for. It is not an optimizatio
 
 **ARCH-DRY:** one invariant, one implementation. Put the decision in a pure `WriteTurn.should_release(observation)` beside `WriteTurn.holder`; both the machine and the runner feed it an observation rather than each carrying half the policy.
 
-- [ ] **Step 0: Derive the provider-silence threshold.** This is the one number the ARCH-ORDER matrix still owes. Measure inter-chunk gaps from real streams — instrument `response_provider.lua:85-92` or read timestamps from `stdpath('cache')/parley/query/`. Record the p99 gap and set the threshold above it with stated headroom. **Do not guess**: three prior drafts guessed the held-output budget (4 MiB "operator choice", 1 MiB "derived", 8 MiB "2× observed") and all three were wrong; measuring took one command and settled it.
 - [ ] **Step 1: Write the matrix** — one case per row of the ARCH-ORDER table, asserting **both** that the waiting generation acquires the turn *and* that the releasing generation re-acquires it when its re-request condition fires. A release without a paired re-request is a permanent stall, which is what an earlier draft shipped. Parameterise interleavings rather than using the fixed round-robin at `generation_sequences_spec.lua:48`:
 
 ```lua
 local schedules={{'a','a','b','b'},{'a','b','a','b'},{'b','a','b','a'},{'b','b','a','a'}}
 for _,row in ipairs({'terminal','stop','pause_unknown','pause_revoke','pause_stale',
-    'suspend','suspend_preparation','waiting_head_of_line','provider_silent','detach','reload'}) do
+    'suspend','suspend_preparation','waiting_head_of_line','queue_empty','detach','reload'}) do
   for _,schedule in ipairs(schedules) do
 ```
 
 - [ ] **Step 2: Run.** `make test-spec SPEC=chat/ownership`
-  Expected: FAIL for `suspend` (releases but never re-requests — `grant_resumed` exists at `generation_runner.lua:57-59` and is unwired), `suspend_preparation` (no event carries it), `waiting_head_of_line`, and `provider_silent`.
-- [ ] **Step 3: Implement** `WriteTurn.should_release`, wire `grant_resumed`, add the preparation-suspension observation and the silence threshold.
+  Expected: FAIL for `suspend` (releases but never re-requests — `grant_resumed` exists at `generation_runner.lua:57-59` and is unwired), `suspend_preparation` (no event carries it), `waiting_head_of_line`, and `queue_empty`.
+- [ ] **Step 3: Implement** `WriteTurn.should_release`, wire `grant_resumed`, and add the preparation-suspension observation. **Its mechanism, named:** `sync` dispatches `grant_suspended` for every id in `s.grants`, which includes `preparation_grants` (`generation_runner.lua:55-61,489-491`), but `generation.lua:254-256` rejects it because `event.grant~=s.grant` and no child matches — so add a `preparation` branch there rather than a new event kind.
 - [ ] **Step 4: Green. Step 5: Commit** — `#266 M1: make turn release and re-request symmetric`
 
 ### Task 1.7: held-output budget (ARCH-CONSTRAINTS)
 
-**Files:** none expected — see below. **Test:** `tests/integration/generation_sequences_spec.lua` (routed `chat/ownership`, `atlas/traceability.yaml:314`)
+**Files:** `lua/parley/generation.lua:215` and `lua/parley/generation_runner.lua:157` (the two overflow messages, Step 4); no cap value changes. **Test:** `tests/integration/generation_sequences_spec.lua` (routed `chat/ownership`, `atlas/traceability.yaml:314`)
 
 **Workload class:** streaming, keystroke-adjacent — a held generation buffers while the user keeps typing in the same buffer.
 
@@ -445,7 +459,7 @@ for _,row in ipairs({'terminal','stop','pause_unknown','pause_revoke','pause_sta
 - [ ] **Step 1:** Re-measure against a larger transcript corpus; record p50/p95/p99/max here. Change the number only if the data says so.
 - [ ] **Step 2:** Test with `limits={staged_bytes=8,queued_items=4}` (precedent `generation_sequences_spec.lua:68`): hold the turn elsewhere, exceed it, assert the generation stops **and** that the surfaced message names the exchange holding the turn.
 - [ ] **Step 3: Run, fail.** `make test-spec SPEC=chat/ownership` — the message assertion fails.
-- [ ] **Step 4:** Thread the blocking exchange into both overflow messages. **Step 5:** Test all four generations held at once stay under the process ceiling. **Step 6: Commit** — `#266 M1: name the blocking exchange when held output overflows`
+- [ ] **Step 4:** Thread the blocking exchange into both overflow messages. **Step 5:** Test the ceiling at both scopes. Four held generations on one document is 4 MiB, fine — but `generation_runner.lua:462` admits **16 runners process-wide**, and held generations are new, so the worst case is 16 × 1 MiB = *exactly* the 16 MiB cap at `:75`. Refusal there reaches `:160`/`:101-102` → `issue('staging overflow')` + `cancel`, destroying a generation. Test the multi-document case or state the bound explicitly. **Step 6: Commit** — `#266 M1: name the blocking exchange when held output overflows`
 
 ### Task 1.8: verify every writer in the enumeration
 
@@ -461,7 +475,7 @@ for _,row in ipairs({'terminal','stop','pause_unknown','pause_revoke','pause_sta
 **Files:**
 - Test: `tests/integration/chat_scoped_response_spec.lua:47` (invert), `tests/integration/generation_turn_spec.lua`
 
-**What to assert, and what not to.** Not "undo steps == generation runs": `can_join_undo` keys on `(epoch,generation,grant)` (`editor.lua:196-200`) and a single run legitimately writes through preparation grants (`generation_runner.lua:488-492`) *and* a completion-acquired grant (`response_completion.lua:55-58`), so a run spans several grants and therefore several undo entries. Not "backwards in document position" either — generations write to different answers, so regenerating Q3 then Q1 writes Q3's region first.
+**What to assert, and what not to.** Not "undo steps == generation runs": `can_join_undo` keys on `(epoch,generation,grant)` (`editor.lua:192-199`, identity mismatch at `:197`) and a single run legitimately writes through preparation grants (`generation_runner.lua:488-492`) *and* a completion-acquired grant (`response_completion.lua:55-58`), so a run spans several grants and therefore several undo entries. Not "backwards in document position" either — generations write to different answers, so regenerating Q3 then Q1 writes Q3's region first.
 
 The invariant to assert is the issue's own: **no undo entry mixes two generations, and no entry is a partial chunk.** Within a single tool round, insertion is monotonic at the tail, so document order *is* additionally guaranteed there (assert that in Chunk 2).
 
@@ -485,6 +499,8 @@ The invariant to assert is the issue's own: **no undo entry mixes two generation
 
 ## Chunk 2 — M2: ordered append, and the machinery it replaces
 
+**Precondition, live now:** `scripts/refresh_goldens.lua` and 11 golden payloads are modified in the working tree from `f1818ee1` (#218). Resolve before cutting the branch — Task 2.5 regenerates goldens and expects no message-shape change, which that dirt would mask.
+
 **Boundary correction.** An earlier draft deferred child-grant removal to M3 and had M2 rewrite `response_tools.lua` alone. That is impossible: `round_reserved` requires `#event.grants==#round.children`, each identity-valid, distinct and ≠ parent (`generation.lua:306-315`). A `begin_round` that acquires no child grants yields `done(nil)` → `round_reservation_failed` → `stop(s,effects,'reservation_failed')` (`:304`). Switching to ordered append and removing the reservation lifecycle are **one change** and land together.
 
 ### Task 2.1: `ToolSequence` pure entity
@@ -495,7 +511,7 @@ The invariant to assert is the issue's own: **no undo entry mixes two generation
 - Modify: `atlas/traceability.yaml` — route under `providers/tool_use`
 
 - [ ] **Step 1: Route the spec.**
-- [ ] **Step 2: Failing test** (as drafted previously — `Seq.new/next/outcome/written/complete`, covering: first call offered; a later outcome cannot skip ahead; declared-order drain once the earlier outcome lands; an unresolved outcome is writable evidence, not a stall).
+- [ ] **Step 2: Failing test.** Signatures: `Seq.new(calls) -> seq`, `Seq.next(seq) -> {kind='call'|'result', index=n} | nil`, `Seq.outcome(seq,index,value) -> seq`, `Seq.written(seq,item) -> seq`, `Seq.complete(seq) -> boolean`; all pure and immutable (each returns a new record). Cases: the first call is offered before anything arrives; a later outcome cannot skip ahead while an earlier result is outstanding; the round drains in declared order once the earlier outcome lands; an unresolved outcome is writable evidence, not a stall.
 - [ ] **Step 3: Run, fail.** `make test-spec SPEC=providers/tool_use` → `provides the module` false.
 - [ ] **Step 4: Implement** as a pure immutable record.
 - [ ] **Step 5: Green. Commit** — `#266 M2: add the pure tool insertion sequence`
@@ -534,12 +550,20 @@ The invariant to assert is the issue's own: **no undo entry mixes two generation
 
 **The decision, re-made against the actual code.** Revision 3 chose "append a second `📎:` and make `resolve_pending` prefer the last match." That is not expressible: `pending` holds unique tool_use ids and `resolve_pending(id)` (`chat_respond.lua:636-644`) linear-scans for the one entry, so first-vs-last has no meaning there; the distinction is made by call order over `content_blocks`, and emitting the later block would detach a `tool_result` from the assistant message whose `tool_use` it answers — the Anthropic 400 that `#155`/`#156` exist to prevent (see the comment at `:680-690`).
 
-**Render the unresolved outcome as a marker that is NOT a `📎:` result block.** Then:
+**The marker, specified.** `⏳: <name> id=<id> (no result recorded)` — one line, no fenced body. Verified free: the answer scanner branches on `💬:`/`🤖:` (`chat_parser.lua:698,702,782`), `📝:` (`:855`), `🧠:` (`:882`), reasoning-end (`:872`), `🌿:` (`:669`) and `🔧:`/`📎:` (`:833-852`); `⏳` collides with none. It must also survive the fenced-body demotion at `:639-659`. **Assert both with a parse test** — this byte sequence lands in every user's transcript permanently, so it belongs in the plan, not in the implementer's head.
+
+**Render the unresolved outcome as that marker, not as a `📎:` result block.** Then:
 
 - the transcript records what happened, visibly, in the file — the target's requirement;
 - the `🔧:` stays unmatched, and `chat_respond.lua:604,617-630` **already** synthesizes `"(tool call did not complete — no result recorded)"` with `is_error=true` for exactly that case;
-- a later `known` outcome appends a real `📎:` carrying the id, which matches the still-pending `tool_use` and wins on the wire;
+- a later `known` outcome appends a real `📎:` carrying the id **only while that id is still pending on the wire**; it then matches and wins;
 - **no change to `resolve_pending`, no duplicate block, no 400.**
+
+**The late-arrival boundary, decided.** Once the round continues, the late result must *not* become a `📎:`. Traced: the text/tool_use branch at `chat_respond.lua:694` calls `flush_user()` → `drain_pending_into` emits a synthetic error for the unresolved id and then does `pending = {}` (`:625-630`). A `📎:` appended after that hits `resolve_pending` → `false` → the ORPHAN path (`:685-690`) and is **dropped from the wire while remaining in the file** — precisely the file-says-one-thing / wire-says-another split `transcript-is-the-whole-truth` forbids. So:
+
+> **A tool call's outcome is final once its round continues.** Before continuation, a late `known` appends a real `📎:` and wins. After continuation, it appends a second informational `⏳:` line recording that a result arrived late, and never becomes a tool block.
+
+Both file and wire then agree the call produced no tool result; the `⏳:` line is history, not a result. Test both sides of the boundary explicitly — the after-continuation case is the *expected* one, since Task 2.1 Step 2 makes an unresolved outcome writable evidence rather than a stall.
 
 Constraint: the marker must not parse as a tool block. `chat_parser.lua:833-852` opens a block on `🔧:`/`📎:` at depth 0, so any other prefix is safe — verify with a parse assertion rather than by inspection.
 
@@ -612,7 +636,9 @@ These exist solely to disambiguate excluded seams, but they thread through the s
 
 ## Target reconciliation
 
-`workshop/targets/transcript-is-the-whole-truth.md` says writes "land one at a time, in the order the reader sees them." Task 1.9 narrows that deliberately: **across** generations the guarantee is one-at-a-time and per-generation coherence, not document order, because generations write to different answers and admission order need not match document order. **Within** a tool round, document order does hold (Task 2.2c asserts it). Fold this narrowing into the target when M1 closes, so the target does not drift against the work defending it.
+`workshop/targets/transcript-is-the-whole-truth.md` says writes "land one at a time, in the order the reader sees them." Task 1.9 narrows that deliberately: **across** generations the guarantee is one-at-a-time and per-generation coherence, not document order, because generations write to different answers and admission order need not match document order. **Within** a tool round, document order does hold (Task 2.2c asserts it).
+
+Second narrowing, from the `queue_empty` release rule: because the turn is released whenever a generation has nothing staged, another generation may interleave *between* chunks of an answer, and `Editor:observe` clears the undo receipt on any foreign write (`editor.lua:67`). So the issue Log's phrasing — "one undo entry per generation run" — is **not** guaranteed; what is guaranteed is Task 1.9's invariant, that no entry mixes two generations and none is a partial chunk. Correct the Log when M1 closes rather than leaving the stronger claim standing. Fold this narrowing into the target when M1 closes, so the target does not drift against the work defending it.
 
 ## Verified-correct facts this plan rests on
 
