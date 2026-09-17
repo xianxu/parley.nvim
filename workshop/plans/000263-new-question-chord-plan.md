@@ -20,8 +20,10 @@ The chord is freed by retiring `chat_search`, a one-line `/^💬:\|^🌿:` wrapp
 |------|----------|--------|
 | `plan` | `lua/parley/new_question.lua` | new |
 | `is_empty_question` | `lua/parley/new_question.lua` | new |
-| `exchange_clipboard.get_paste_line` | `lua/parley/exchange_clipboard.lua` | unchanged (reused) |
-| `exchange_clipboard.build_paste_lines` | `lua/parley/exchange_clipboard.lua` | unchanged (reused) |
+| `exchange_index_at` | `lua/parley/exchange_clipboard.lua` | new |
+| `get_paste_line` | `lua/parley/exchange_clipboard.lua` | modified |
+| `build_paste_lines` | `lua/parley/exchange_clipboard.lua` | unchanged (reused) |
+| `chat_context` | `lua/parley/init.lua` | new |
 | `chat_search` registry entry | `lua/parley/keybinding_registry.lua` | deleted |
 | `chat_shortcut_search` option | `lua/parley/config.lua` | deleted |
 | `new_question` registry entry | `lua/parley/keybinding_registry.lua` | new |
@@ -38,6 +40,13 @@ The chord is freed by retiring `chat_search`, a one-line `/^💬:\|^🌿:` wrapp
 - **`is_empty_question(lines, exchange, user_prefix)`** (`new_question.is_empty_question`) — is this exchange an unanswered question with no body?
   - **DRY rationale:** first occurrence of the predicate as a *shared* helper. `outline.lua:259` has the same idea inline for display purposes; that one classifies an outline item, this one classifies a parsed exchange, and merging them would couple the outline's item shape to the parser's. Named and exported so the next caller reuses it rather than re-inlining a third copy.
   - **ARCH-SECURE:** `user_prefix` is operator configuration and is compared with `string.sub`, never interpolated into a Lua pattern. A prefix containing a magic character (`>`, `%`, `.`, `-`) must behave like any other string; `init.lua:3940` records what happened the last time runtime text reached a pattern position (#214 BR-34).
+
+- **`exchange_index_at(parsed_chat, cursor_line, total_lines)`** — the single owner of "which exchange is the cursor in". Added in close round 2, after the boundary gate reported a **second** finding in the `duplicated-command-preamble` family: `new_question` had shipped its own copy of the scan that already lived inside `get_paste_line`. `get_paste_line` now calls it, and so does `new_question.exchange_at`.
+  - **DRY rationale:** the rule the repeat finding produced — *when a block is extracted into a shared helper, every caller consumes every field the helper now owns, and a new derivation of a concept the owning module already computes calls that module instead.*
+  - **Future extensions:** a `{ nearest = true }` option would let `get_paste_line`'s second loop (nearest-exchange-before-cursor) move here too; it is the only remaining scan of the same shape.
+
+- **`chat_context(what)`** (`lua/parley/init.lua`) — the preamble four cursor-driven chat commands share: `not_chat` → `find_header_end` → `parse_chat` → cursor. Logs the reason itself and returns nil. `ChatPrune`, `ExchangeCut`, `ExchangePaste` and `NewQuestion` all consume it, including its `cursor_line`.
+  - **DRY rationale:** it was on its fourth verbatim copy. The first migration left three callers still re-reading the cursor instead of taking `ctx.cursor_line`, which is what turned this into a repeat-family finding — the enumeration has to be swept in the same round the helper lands.
 
 ### Integration points (where pure meets the world)
 
@@ -82,7 +91,7 @@ Creates nothing durable that accumulates. The only bytes this feature writes are
 - Modify: `lua/parley/keybinding_registry.lua:657-666` (delete the `chat_search` entry)
 - Modify: `lua/parley/init.lua:2803-2808` (delete the `chat_search` callback)
 
-- [ ] **Step 1: Confirm the blast radius is exactly those three sites**
+- [x] **Step 1: Confirm the blast radius is exactly those three sites**
 
 Run:
 ```bash
@@ -90,14 +99,14 @@ grep -rn "chat_search\|chat_shortcut_search" --include="*.lua" --include="*.md" 
 ```
 Expected: **exactly four lines**, covering the three sites — `init.lua:2803`, `config.lua:372`, and `keybinding_registry.lua:658` **and** `:659` (the registry entry matches twice, on its `id` and its `config_key`). Nothing under `tests/`, `README.md` or `atlas/`, and this repo has no `doc/` directory. If a fifth line appears, it is a consumer this plan did not account for — stop and add it.
 
-- [ ] **Step 2: Delete the config option**
+- [x] **Step 2: Delete the config option**
 
 Remove `lua/parley/config.lua:372`:
 ```lua
 	chat_shortcut_search = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>n" },
 ```
 
-- [ ] **Step 3: Delete the registry entry**
+- [x] **Step 3: Delete the registry entry**
 
 Remove the whole entry at `lua/parley/keybinding_registry.lua:657-666`:
 ```lua
@@ -113,7 +122,7 @@ Remove the whole entry at `lua/parley/keybinding_registry.lua:657-666`:
 	},
 ```
 
-- [ ] **Step 4: Delete the callback**
+- [x] **Step 4: Delete the callback**
 
 Remove `lua/parley/init.lua:2803-2808`:
 ```lua
@@ -124,12 +133,12 @@ Remove `lua/parley/init.lua:2803-2808`:
 			end,
 ```
 
-- [ ] **Step 5: Run the keybinding specs — they must still pass**
+- [x] **Step 5: Run the keybinding specs — they must still pass**
 
 Run: `make test-spec SPEC=ui/keybindings`
 Expected: PASS. Several specs assert "every registry entry can be disabled / rebound" and "help shows no key that is not bound"; removing an entry cleanly must not disturb them. A failure here means something outside the three sites referenced `chat_search`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add lua/parley/config.lua lua/parley/keybinding_registry.lua lua/parley/init.lua
@@ -148,7 +157,7 @@ git commit -m "#263: retire chat_search, freeing <C-g>n"
 
 **Test strategy for `is_empty_question`.** Its whole job is a boundary: "blank body" must accept `💬:`, `💬: `, `💬:` followed by blank lines, and must reject a question with one word of text and any question that has an answer. Drive it directly with the parsed exchanges from the same fixtures.
 
-- [ ] **Step 1: Write the failing unit spec**
+- [x] **Step 1: Write the failing unit spec**
 
 Create `tests/unit/new_question_spec.lua`:
 
@@ -316,12 +325,12 @@ describe("new_question.plan", function()
 end)
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/new_question_spec.lua" -c "qa!"`
 Expected: FAIL — `module 'parley.new_question' not found`.
 
-- [ ] **Step 3: Write the minimal implementation**
+- [x] **Step 3: Write the minimal implementation**
 
 Create `lua/parley/new_question.lua`:
 
@@ -418,7 +427,7 @@ end
 return M
 ```
 
-- [ ] **Step 4: Run the spec to verify it passes**
+- [x] **Step 4: Run the spec to verify it passes**
 
 Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/unit/new_question_spec.lua" -c "qa!"`
 Expected: PASS, all twelve cases. This was verified empirically during plan review — the literal spec above was run against the literal implementation below in a real headless nvim.
@@ -427,12 +436,12 @@ Do **not** "fix" a failure by shrinking `p.row`. The seam (`build_paste_lines` d
 
 The parser side is settled, so it is not a suspect: for a trailing bare `💬:` with no answer, `chat_parser` yields `line_start = line_end` and `answer = nil`, and `line_end` is **never** nil — `finalize_component(#lines)` at `chat_parser.lua:998` always sets it.
 
-- [ ] **Step 5: Lint**
+- [x] **Step 5: Lint**
 
 Run: `make lint`
 Expected: clean.
 
-- [ ] **Step 6: Route the new spec in `atlas/traceability.yaml` — in this commit, not later**
+- [x] **Step 6: Route the new spec in `atlas/traceability.yaml` — in this commit, not later**
 
 `tests/arch/single_source_sweeps_spec.lua`'s `every spec this branch ADDED is routed somewhere` guard fails on any `NNNNNN-…` branch for an added-or-untracked `*_spec.lua` that no traceability entry names — and it reads the **working tree**, so an unstaged new spec trips it too. Route it in the same commit that creates it, or every later `make test-spec` run in this plan goes red for a reason that has nothing to do with the code under test.
 
@@ -446,7 +455,7 @@ nvim -n --headless --noplugin -u tests/minimal_init.vim \
 ```
 Expected: PASS (`every path it names exists` also checks the new paths are real).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add lua/parley/new_question.lua tests/unit/new_question_spec.lua atlas/traceability.yaml
@@ -462,7 +471,7 @@ git commit -m "#263: where a new question goes, as a value"
 - Modify: `lua/parley/keybinding_registry.lua` (add the `new_question` entry where `chat_search` was)
 - Modify: `lua/parley/config.lua` (add `chat_shortcut_new_question` where `chat_shortcut_search` was)
 
-- [ ] **Step 1: Add the config option**
+- [x] **Step 1: Add the config option**
 
 At `lua/parley/config.lua`, where `chat_shortcut_search` was deleted in Task 1:
 
@@ -482,7 +491,7 @@ At `lua/parley/config.lua`, where `chat_shortcut_search` was deleted in Task 1:
 	chat_shortcut_new_question = { modes = { "n", "i" }, shortcut = { "<C-g>n", "<M-n>" } },
 ```
 
-- [ ] **Step 2: Add the registry entry**
+- [x] **Step 2: Add the registry entry**
 
 At `lua/parley/keybinding_registry.lua`, where the `chat_search` entry was:
 
@@ -499,7 +508,7 @@ At `lua/parley/keybinding_registry.lua`, where the `chat_search` entry was:
 	},
 ```
 
-- [ ] **Step 3: Add the command**
+- [x] **Step 3: Add the command**
 
 At `lua/parley/init.lua`, immediately after `M.cmd.ExchangePaste` (~line 4593):
 
@@ -558,7 +567,7 @@ M.cmd.NewQuestion = function()
 end
 ```
 
-- [ ] **Step 4: Wire the keymap callback**
+- [x] **Step 4: Wire the keymap callback**
 
 At `lua/parley/init.lua`, in the chat `register_buffer` callback table where `chat_search` was (~line 2803):
 
@@ -575,7 +584,7 @@ At `lua/parley/init.lua`, in the chat `register_buffer` callback table where `ch
 			},
 ```
 
-- [ ] **Step 5: Verify the command and chord exist**
+- [x] **Step 5: Verify the command and chord exist**
 
 Run:
 ```bash
@@ -594,7 +603,7 @@ nvim -n --headless --noplugin -u tests/minimal_init.vim \
   -c "PlenaryBustedFile tests/unit/keybindings_spec.lua" -c "qa!"
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add lua/parley/init.lua lua/parley/keybinding_registry.lua lua/parley/config.lua
@@ -610,7 +619,7 @@ git commit -m "#263: <C-g>n / <M-n> opens a new question"
 
 **Test strategy.** The unit spec proves the planner's arithmetic; this spec exists to test what the planner cannot see — the real keymap, the real modes, undo, and the streaming refusal. Its assertions are deliberately **not** derived from the code under test: question lines are counted with a plain `vim.startswith` scan of the buffer, not by re-parsing (the #262 lesson — a guard whose expectation is computed with its own predicates agrees with itself). The riskiest function here is the insert-mode callback, because the undo grouping is the one thing this plan asserts without having been able to read it off existing code.
 
-- [ ] **Step 1: Write the failing integration spec**
+- [x] **Step 1: Write the failing integration spec**
 
 Create `tests/integration/new_question_spec.lua`. Three different files supply the three techniques this spec needs — verified during plan review, because the first draft of this step attributed all three to one file that uses none of them:
 
@@ -655,23 +664,23 @@ Cases:
 9. **Refusal while streaming** — a press must leave the buffer unchanged **and** log a warning; assert both, so a silent no-op cannot pass. Build the guard state directly through `document.capture_user`, following `tests/integration/document_user_guards_spec.lua`. Do **not** plan to "reuse the pending helper" from `tests/integration/chat_pending_spec.lua` — `fake_runtime` (line 2), `fixture` (91) and `start` (96) are file-local `local function`s with no exports, so that would be a copy, not a reuse.
 10. **The next exchange's empty question is not adopted** — cursor in an answered exchange whose *successor* is already an empty question; the press inserts rather than jumping forward. Pins the decision recorded in the unit spec, at the surface the user actually touches.
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/integration/new_question_spec.lua" -c "qa!"`
 Expected: the cases that exercise behavior not yet correct fail. Cases 1, 6, 7, 8 and 10 should already pass from Task 3. **Cases 2, 3, 4, 5 and 9 are the open set** — every one of them turns on scheduled-`startinsert` timing, undo grouping, or the refusal path, none of which this plan could settle by reading existing code.
 
-- [ ] **Step 3: Fix whatever the open set exposes**
+- [x] **Step 3: Fix whatever the open set exposes**
 
 - **Cases 2-4 (mode/timing):** if the spy sees no `startinsert`, it was restored before the scheduled command ran — the `vim.wait` above is not optional. If it sees `startinsert` but the text lands wrong, the row is wrong, not the mode.
 - **Case 5 (undo):** a failure means the insert-mode callback folded the edit into the surrounding undo block. Adjust the `i` handler; the likely fix is `vim.cmd("stopinsert")` followed by running the command from `vim.schedule`, at the cost of making this spec schedule-aware.
 - **Case 9 (refusal):** if nothing is raised, `replace_user_lines` is not refusing where expected — read `buffer_edit.capture_user`'s refusal path rather than adding a guard of your own.
 
-- [ ] **Step 4: Run the full spec to verify it passes**
+- [x] **Step 4: Run the full spec to verify it passes**
 
 Run: `nvim -n --headless --noplugin -u tests/minimal_init.vim -c "PlenaryBustedFile tests/integration/new_question_spec.lua" -c "qa!"`
 Expected: PASS, all ten cases.
 
-- [ ] **Step 5: Route the new spec in `atlas/traceability.yaml`**
+- [x] **Step 5: Route the new spec in `atlas/traceability.yaml`**
 
 Same reason as Task 2 Step 6 — in the commit that creates it, not in Task 6. Add `tests/integration/new_question_spec.lua` to the `tests:` lists under both `chat/lifecycle` and `ui/keybindings`.
 
@@ -682,7 +691,7 @@ nvim -n --headless --noplugin -u tests/minimal_init.vim \
 ```
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add tests/integration/new_question_spec.lua lua/parley/init.lua atlas/traceability.yaml
@@ -704,7 +713,7 @@ Measured before planning: under the wider rule the registry has **0** collisions
 
 The three loops below share one `owners_by_key` / `collisions` pair. Writing the detection out once per `it` is how a plant ends up proving a *different* guard than the one that ships — which is the same defect the plan flags in Task 4 (an expectation computed with the code under test agrees with itself), and ARCH-DRY.
 
-- [ ] **Step 1: Add the shared helpers, widen the guard, and add prefix shadowing**
+- [x] **Step 1: Add the shared helpers, widen the guard, and add prefix shadowing**
 
 Replace the whole `it("no alt key is live twice in the same buffer", …)` — renaming it — and add the helpers and a second `it` beside it. `reg` (line 880), `parley` (879) and `scopes_overlap` (922) are already locals of this `describe`, so all three are in scope:
 
@@ -805,7 +814,7 @@ Replace the whole `it("no alt key is live twice in the same buffer", …)` — r
     end)
 ```
 
-- [ ] **Step 2: Prove the guard bites**
+- [x] **Step 2: Prove the guard bites**
 
 The existing `it("and the disjoint case is genuinely allowed, not accidentally passing", …)` proves `scopes_overlap`. Add one that proves the **widened** scan finds a real `<C-g>` double-bind — otherwise a guard that reports nothing is indistinguishable from a guard that looks at nothing:
 
@@ -835,7 +844,7 @@ The existing `it("and the disjoint case is genuinely allowed, not accidentally p
     end)
 ```
 
-- [ ] **Step 3: Run the keybinding specs**
+- [x] **Step 3: Run the keybinding specs**
 
 Run:
 ```bash
@@ -845,7 +854,7 @@ Expected: PASS — including the two widened guards against the real registry an
 
 This is the first `make test-spec` in the plan, and it only works because Tasks 2 and 4 routed their specs in `atlas/traceability.yaml` — the spec key fans out to `tests/arch/single_source_sweeps_spec.lua`. If it reports an unrouted spec, that routing step was skipped.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add tests/unit/keybindings_spec.lua
@@ -868,7 +877,7 @@ The repo has **no** which-key integration; the keybinding registry is the single
 
 `atlas/traceability.yaml` is **not** listed: Tasks 2 and 4 already routed their specs there, in the commits that created them.
 
-- [ ] **Step 1: Add the chord to `atlas/ui/keybindings.md` § Common transcript actions**
+- [x] **Step 1: Add the chord to `atlas/ui/keybindings.md` § Common transcript actions**
 
 After the structural-editing paragraph:
 
@@ -883,7 +892,7 @@ not about content off-screen. This is the end-user path to a question line — t
 emoji is not on the keyboard, and nothing here needs the clipboard.
 ```
 
-- [ ] **Step 2: Record the ordering exception in `atlas/ui/keybindings.md` § Resolution**
+- [x] **Step 2: Record the ordering exception in `atlas/ui/keybindings.md` § Resolution**
 
 That section currently states the rule this entry breaks — "the **portable key leads** where portability is the issue, so `branch_ref` shows `<M-i>`" — and enumerates the alt family's members. `<M-n>` joins that family while `<C-g>n` leads, so both passages need the exception. After the alt-family sentence:
 
@@ -895,7 +904,7 @@ help advertises it first. `outline` (`<C-g>t`, then `<M-t>`) has the same shape.
 A rule page that does not record its own exceptions is the drift #214 removed.
 ```
 
-- [ ] **Step 3: Record the keyspace invariants in `atlas/ui/keybindings.md` § Scope Forest**
+- [x] **Step 3: Record the keyspace invariants in `atlas/ui/keybindings.md` § Scope Forest**
 
 Task 5 promoted two rules from an alt-only test plus a registry comment into enforced invariants; the section that explains overlap semantics is where they belong. After the scope-forest diagram:
 
@@ -918,7 +927,7 @@ Both guards compare canonicalized notation (`keytrans` ∘ `replace_termcodes`),
 so an override spelled `<C-G>n` cannot slip past them.
 ```
 
-- [ ] **Step 4: Add the action to `atlas/chat/lifecycle.md`**
+- [x] **Step 4: Add the action to `atlas/chat/lifecycle.md`**
 
 After `## Creation`:
 
@@ -936,7 +945,7 @@ Post-condition: the cursor sits at the end of a line that is the configured
 user prefix followed by a space, in insert mode.
 ```
 
-- [ ] **Step 5: Verify the docs are wired**
+- [x] **Step 5: Verify the docs are wired**
 
 `tests/integration/documentation_spec.lua` is what checks atlas link integrity, and it is routed under **`infra/starter`** (`atlas/traceability.yaml:55`) — *not* under `ui/keybindings` or `chat/lifecycle`. Running those two spec keys would report PASS while never executing the one check this step exists to perform. Run it directly:
 
@@ -952,7 +961,7 @@ make test-spec SPEC=ui/keybindings && make test-spec SPEC=chat/lifecycle
 ```
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add atlas/
@@ -963,27 +972,27 @@ git commit -m "#263: atlas: the new-question chord and what it promises"
 
 ### Task 7: Full verification
 
-- [ ] **Step 1: Run the whole suite**
+- [x] **Step 1: Run the whole suite**
 
 Run: `make test`
 Expected: PASS. Watch specifically for `tests/unit/starter_config_spec.lua` and `tests/packaging/starter_probe.lua` — the app profile derives its key set from the registry, so `<C-g>n`/`<M-n>` reach the packaged app for free, but a spec that enumerated the old set would show up here.
 
-- [ ] **Step 2: Lint**
+- [x] **Step 2: Lint**
 
 Run: `make lint`
 Expected: clean.
 
-- [ ] **Step 3: Drive it by hand, once**
+- [x] **Step 3: Drive it by hand, once**
 
 Open a real chat (`<C-g>c`), type a question, respond, put the cursor in the middle of the answer, press `<C-g>n`, type, and respond again. Then press `<C-g>n` from insert mode and press `u` once. A real press is the only oracle for a keymap (#231 M1 lesson). Record what happened in the issue's `## Log`.
 
-- [ ] **Step 4: Reconcile the issue before closing**
+- [x] **Step 4: Reconcile the issue before closing**
 
 `sdlc close` enforces "the issue's `## Plan` has no unchecked items". Tick every box in `workshop/issues/000263-…md` `## Plan`, and confirm the restated Done-when in `## Revisions` is what the work actually satisfies — the original `## Spec` / `## Done when` bullets are superseded there, not deleted.
 
 Then `sdlc issue sync --issue 263`.
 
-- [ ] **Step 5: Close**
+- [x] **Step 5: Close**
 
 ```bash
 sdlc close --issue 263 --verified 'unit 14/14 + integration 14/14 green; make lint 0/0 across 627 files; widened shadowing guard 0 collisions / 0 prefix shadows with both plants biting. NOT "full suite green": parley_harness_golden_spec fails and perf_document_spec is ~50% flaky, BOTH reproduced at the branch point and unrelated to this diff — see the issue Log.'
@@ -1150,3 +1159,57 @@ Lua error. The reviewer notes the new behavior is the better one. Unifying
 thirteen call sites changes error semantics across features this issue does not
 otherwise touch, at close time — a separable extension, not the point of #263.
 Filed as a follow-up issue instead of silently leaving it.
+
+### 2026-09-16 — boundary review round 2: a repeat family, and the rule it forced
+
+Round 2 confirmed BR-1/BR-2 fixed (it re-ran integration 14/14 including the
+insert-mode undo) and raised three new items. One of them is the important one,
+because it is the **second finding in the same family in consecutive rounds**.
+
+**M2 — `duplicated-command-preamble`, 2nd occurrence.** Extracting
+`chat_context` fixed the *site* the round-1 finding named and left the class
+half-swept: three callers went on re-reading the cursor (`init.lua:4320`,
+`:4482`, `:4592`) instead of consuming `ctx.cursor_line`, and `new_question`
+had shipped its own copy of the exchange-scan that already lived inside
+`get_paste_line`. The rule, written down because a family that repeats is the
+ledger reporting the enumeration was never written:
+
+> When a block is extracted into a shared helper, **every caller consumes every
+> field the helper now owns**, and any new derivation of a concept the owning
+> module already computes **calls that module** instead.
+
+Swept in full this round: all three cursor re-readers now take `ctx.cursor_line`,
+and `exchange_clipboard.exchange_index_at` is the single owner of "which
+exchange is the cursor in", consumed by both `get_paste_line` and
+`new_question.exchange_at`. Verified: `exchange_clipboard_spec` 31/31,
+`entity_range_spec` 47/47, `topic_gen_spec` 9/9, `buffer_mutation_spec` 10/10,
+`new_question` unit 14/14 + integration 15/15, lint 0/0.
+
+**M3 — `assert(plan.row)` ran after the buffer write.** An unreachable nil row
+would have left a half-applied edit behind a bare Lua error. Moved above the
+write; it costs nothing there.
+
+**Insert-mode fidelity.** Round 2 measured that `vim.cmd("startinsert")` inside
+a busted `it()` does **not** change `mode()` — it still reports `n`. So the
+`{"n","i"}` parameterization proves the `i` *mapping* is wired, not that the
+command behaves mid-insert with typed text pending. A real case now drives
+`nvim_feedkeys(replace_termcodes("A XYZ" .. key), "x", false)`: it asserts the
+typed text survives, the chord fires, and the chord's write is its **own** undo
+step (one `u` removes the new question, a second removes the typing). Also on
+the record from round 2's counterfactual: one `u` restores identically with and
+without `stopinsert`, even after typed text — `stopinsert` is house-idiom
+consistency, not the undo mechanism.
+
+**I1 — close-time artifacts were not reconciled.** All 40 plan steps are now
+ticked. The rule: close-time artifacts are reconciled against the final run in
+the closing commit — (a) `--verified` built from that run's output, (b) every
+plan checkbox ticked or struck with a reason, (c) issue `## Plan` and durable
+plan in agreement. Noted for the irony: Task 7 Step 4 ("Reconcile the issue
+before closing") was itself the unticked step that would have caught the
+other 39.
+
+**Recorded, not fixed — `ExchangeCut` and `ExchangePaste` have no spec of their
+own.** `grep -rln "ExchangeCut\|ExchangePaste\|ChatPrune" tests/` returns only
+`topic_gen_spec` (prune). Pre-existing, not introduced here, but it is why a
+preamble refactor at a close boundary had to be verified through neighbouring
+specs rather than directly. Belongs with #265's test-fixture work.

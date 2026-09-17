@@ -87,6 +87,11 @@ rounds:
           family: undocumented-branch
           round: 1
       blocked: true
+    - "n": 2
+      timestamp: "2026-09-16T21:38:56-07:00"
+      agent: claude
+      blocked: true
+      protocol_error: no valid findings block
 ---
 
 # Gate ledger — parley.nvim#263 (boundary-review)
@@ -137,6 +142,10 @@ later rounds disposed of them. Generated — edit the gate, not this file.
   With the cursor in the front matter the new question lands above the first exchange
   (verified by hand). That is correct <C-g>V parity, but atlas/chat/lifecycle.md:6 says only
   "after the exchange at the cursor". One clause plus one test case would close it.
+
+## Round 2 — 2026-09-16T21:38:56-07:00 (claude) — BLOCKED
+
+**Protocol error:** no valid findings block — this round contributed no findings.
 
 ## Open findings
 

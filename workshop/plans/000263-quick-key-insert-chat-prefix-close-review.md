@@ -156,3 +156,93 @@ findings:
       (verified by hand). That is correct <C-g>V parity, but atlas/chat/lifecycle.md:6 says only
       "after the exchange at the cursor". One clause plus one test case would close it.
 ```
+
+---
+
+## Re-review — 2026-09-16T21:38:56-07:00 (FIX-THEN-SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 263 — Quick key to insert the chat question prefix at cursor |
+| repo | parley.nvim |
+| issue file | workshop/issues/000263-quick-key-insert-chat-prefix.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | bbe05eef5b576db2cd367cd66e6def5806650111..c9d39d6379f82c9232ea42cb24421899197a9e22 |
+| command | sdlc close --issue 263 |
+| reviewer | claude |
+| timestamp | 2026-09-16T21:38:56-07:00 |
+| verdict | FIX-THEN-SHIP |
+
+## Review
+
+```verdict
+verdict: FIX-THEN-SHIP
+confidence: high
+```
+
+All eight round-1 findings are disposed `addressed`, and I verified each against the code rather than the commit message: the integration spec is now parameterized over `{"n","i"}` with an undo assertion in both (14/14 green, measured); the 3–3 `<C-g>`/alt split is true against the registry (`outline`:531, `new_question`:665, `chat_drill_in`:742 vs `open_file`:428, `branch_ref`:545, `chat_prune` at `config.lua:414`); `chat_context(what)` is extracted and all four commands migrated with prune/cut/paste/textobj specs green; the swallowed atlas sentence is back at `keybindings.md:137`; header-cursor placement is both tested and documented; and the corrected `--verified` string matches what I measured (unit 14/14, integration 14/14, lint 0/0 over 627 files, `parley_harness_golden_spec` 11/11 red and `perf_document_spec` red — both untouched by this diff). I independently re-ran the BR-1 counterfactual with **real** `<M-n>` keystrokes from a genuine insert session after typed text: one `u` restores identically with and without `stopinsert`, so the softened comment at `init.lua:2806-2812` is accurate rather than merely plausible. Every restated Done-when clause is delivered. What blocks a clean SHIP is not behavior — it is that the durable plan is archived in a state that contradicts the work: 40 of 40 checkboxes unticked, against a house convention of 66/66, 34/34, 8/8 on the last four plans that carried them.
+
+## 1. Strengths
+
+- **`lua/parley/new_question.lua:1-89` is a textbook pure core.** It takes `(parsed_chat, lines, cursor_line, header_end, user_prefix)` and returns a value; the unit spec runs with no buffer, no mocks, no IO (verified: 14/14 requiring only `parley.new_question` + `chat_parser`). The insertion point and blank-line seam are delegated to `exchange_clipboard`, so `<C-g>n` and `<C-g>V` cannot drift on spacing. ARCH-PURE and ARCH-DRY both land.
+- **The widened shadowing guard actually bites.** `tests/unit/keybindings_spec.lua:1017-1052` runs the *production* `collisions()`/`prefix_shadows()` from both the clean-registry assertion and the plants, asserts the offender by name rather than `#found > 0`, and canonicalizes through `keytrans ∘ replace_termcodes`. I confirmed the guard would have caught the original `<C-g>n` double-bind (same scope `chat`, overlapping modes). 78/78 green. This is the ARCH-PURPOSE class fix the issue named, not the instance.
+- **Round-1 dispositions consistently answered the class.** BR-1 became a mode parameterization rather than one added case; BR-3 migrated all four preamble copies rather than the new one; BR-2 corrected atlas *and* `config.lua` *and* the registry comment. That is the right reflex.
+- **Edge behavior is robust.** I probed EOF with no trailing blank, a trailing-blank cursor, a missing `---` separator, a branch-only chat, a `🔒:` cursor, an empty question as the last exchange, and a `%d:` pattern-magic prefix. No crash, no corruption, correct refusal on the broken header, and `<C-g>V` parity in every fallback (`ARCH-SECURE`: `user_prefix` is `sub()`-compared, never pattern-interpolated).
+- **`init.lua:4622-4626`** states the `plan.row` invariant as an `assert` with a comment explaining why `nvim_win_set_cursor`'s own error would not say so. Cheap, readable, correct.
+
+## 2. Critical findings
+
+None.
+
+## 3. Important findings
+
+**I1 — `workshop/plans/000263-new-question-chord-plan.md`: the plan archives with 0 of 40 steps ticked.**
+
+> **This is the 2nd finding in family `stale-close-evidence`.** Earlier rounds fixed instances (BR-6, the `--verified` string). Do NOT fix this instance alone — state the rule that covers all of them and fix that.
+
+Measured: 40 `- [ ]`, 0 `- [x]` in the plan; the issue's `## Plan` is 6/6 ticked. House convention on the last four plans carrying checkboxes: `000262` 66/66, `000254` 34/34, `000247` 7/7, `000245` 8/8, all ticked, none unticked. Every one of the 40 steps is in fact delivered (I verified Task 1's retirement by grep, Tasks 2–5 by running their specs, Task 6's four atlas edits by diff, Task 7's suite/lint by re-running). So the plan is archived asserting the opposite of what shipped.
+
+**The rule that covers the family:** *close-time artifacts are reconciled against the run that just happened, in the same commit as the close — not carried forward from when they were written.* The enumeration is small and writable now: (a) the `--verified` string is built from the terminal output of the final run, never from the plan (BR-6's instance); (b) every checkbox in the durable plan is ticked, or struck with a one-line reason if deliberately skipped; (c) the issue `## Plan` and the durable plan agree on what was done. Plan Step 4 at `:980` is literally *"Reconcile the issue before closing"* — it is unticked, and it is the step that would have caught the other 39. Sweeping all three in this round is the fix; ticking the boxes alone is the instance again.
+
+## 4. Minor findings
+
+**M1 — the insert-mode test measurably runs in normal mode.** `tests/integration/new_question_spec.lua:156-183`.
+
+> **This is the 2nd finding in family `acceptance-clause-untested`.** Do NOT fix this instance — state the rule.
+
+`vim.cmd("startinsert")` inside a busted `it()` only takes effect on return to the main loop. I probed it directly: `MODE_AFTER_STARTINSERT=[n]`, `MODE_AFTER_MAPARG=[n]`. So the `"i"` iteration drives the insert-mode *callback* while the editor sits in normal mode — the `stopinsert` inside it is a no-op and there is no insert-session undo block to fold into. The behavior is nonetheless correct: driving real keys (`nvim_feedkeys(replace_termcodes("A XYZ<M-n>"), "x", false)`) from a genuine insert session, one `u` removes exactly the new question and leaves the typed text, with and without `stopinsert`. **The rule:** *a test whose label names a mode or state must establish that state, not just select the code path associated with it — assert the precondition (`assert.equals("i", vim.fn.mode())`) or drive it with `nvim_feedkeys(..., "x", false)`, which is verified to work here.* The enumeration is any spec in this tree that sets up a mode with `vim.cmd` and then calls a callback directly.
+
+**M2 — the `chat_context` extraction is migrated three-quarters of the way, and a second exchange-containment scan was added alongside it.** `lua/parley/init.lua:4308` computes `ctx.cursor_line`, but only `NewQuestion` consumes it; `ChatPrune:4320`, `ExchangeCut:4482` and `ExchangePaste:4592` each re-read `nvim_win_get_cursor(0)[1]`. Separately, `lua/parley/new_question.lua:44-52` (`exchange_at`) re-implements the containment scan at `exchange_clipboard.lua:67-74` (`get_paste_line`'s first loop) — same `get_exchange_line_range` bounds, same `>= first and <= last` test, and `plan()` calls both, so a future change to one definition silently splits the focus branch from the insertion point inside the module whose stated purpose is one definition of exchange extent.
+
+> **This is the 2nd finding in family `duplicated-command-preamble`.** Do NOT fix these two sites alone — state the rule.
+
+**The rule:** *when a block is extracted into a shared helper, every caller consumes every field the helper now owns, and any new derivation of a concept the owning module already computes calls that module.* The enumeration here is three lines (`:4320`, `:4482`, `:4592` → `ctx.cursor_line`) plus one extraction (`exchange_clipboard.exchange_index_at(parsed_chat, cursor_line, total_lines)`, consumed by `get_paste_line` and `new_question.exchange_at`).
+
+**M3 —** `assert(plan.row, …)` at `init.lua:4624` runs *after* the buffer write, so an (unreachable) nil row would leave a half-applied edit plus a bare Lua error. Moving it above the write costs nothing.
+
+## 5. Test coverage notes
+
+- Unit 14/14, integration 14/14, keybindings 78/78, lint 0/0 across 627 files — all re-run from this window, all matching the corrected `--verified` string at plan `:989`.
+- `parley_harness_golden_spec` (11/11 red) and `perf_document_spec` (dies silently mid-run) are the only suite failures; neither touches a file in this diff (`scripts/parley_harness`, `golden_fixture`, the `parser → build_messages → prepare_payload` chain are all outside the changed set), so the pre-existing claim holds.
+- **`ExchangeCut` and `ExchangePaste` have no spec of their own** — `grep -rln "ExchangeCut\|ExchangePaste\|ChatPrune" tests/` returns only `topic_gen_spec.lua` (prune). This diff refactored all three through `chat_context`. The gap is pre-existing, not introduced, and the four neighbouring specs I ran are green — but it is the reason a preamble refactor at a close boundary had to be verified by inference rather than by a test.
+- The streaming-refusal case remains a double at the `buffer_edit` seam. Correctly labelled, correctly justified with the two measured dead ends, and correctly handed to #265 with the `chat_pending_spec` helper problem named.
+
+## 6. Architectural notes
+
+- **ARCH-DRY** — flag, see M2 (two sites). Otherwise strong: the seam arithmetic is genuinely single-sourced.
+- **ARCH-PURE** — pass. Pure planner, thin shell, unit spec with no IO. Exemplary.
+- **ARCH-PURPOSE** — pass. Shadow-sweep run: all nine restated Done-when clauses derive from the source. `chat_search` retirement is complete (4 residual mentions, all historical comments; README carries no `<C-g>` surface at all, so the README gate is N/A). The guard generalization is the class the issue named, not the instance.
+- **ARCH-MOCK** — N/A, correctly declared. No external binary or service; the integration spec drives the real editor.
+- **ARCH-CONSTRAINTS** — pass. One full-buffer read + one `parse_chat` + one range write, on a chord and not on a keystroke path; identical in shape to `ExchangePaste`, which already ships. No new budget.
+- **ARCH-SECURE** — pass. `user_prefix` is operator config compared with `sub()`; verified against a `%d:` prefix end-to-end. Nothing leaves the buffer. Minor residue: `logger.warning("NewQuestion stopped: " .. tostring(err))` surfaces a raw Lua error string — that is #265's surface.
+- **ARCH-ORDER** — pass with the M1 caveat. The planner holds no state; the shell's one interleaving (a response streaming into the target region) is enumerated and routed through `buffer_edit`'s provenance guard, and the second-press case is a deliberate rule rather than an ordering accident. The refusal path is tested through a double, which is honestly labelled.
+- **ARCH-FUNERAL** — pass. Nothing durable is created; the only bytes written live and die with a transcript the user already owns. The two new `workshop/plans/000263-*-{close-gate,close-review}.md` artifacts follow the existing archive-to-`workshop/history/` routine.
+
+## 7. Plan revision recommendations
+
+Add to `workshop/plans/000263-new-question-chord-plan.md` `## Revisions`:
+
+- **`2026-09-16 — close round 2: checklist reconciled`** — tick all 40 steps (or strike with a reason), and record the family rule from I1: close-time artifacts are reconciled against the final run in the closing commit, covering (a) `--verified` built from that run's output, (b) every plan checkbox ticked or struck, (c) issue `## Plan` and durable plan in agreement. Note that Step 4 at `:980` ("Reconcile the issue before closing") was itself the unticked step that would have caught the other 39.
+- **`Task 4 — insert-mode fidelity`** — record that `vim.cmd("startinsert")` inside a busted `it()` does not change `mode()` (measured: `mode()` returns `n`), that the `{"n","i"}` parameterization therefore exercises the `i` *mapping* and not insert *state*, and that `nvim_feedkeys(replace_termcodes("A XYZ<M-n>"), "x", false)` is the verified seam for the real thing. Include the measured result that one `u` restores identically with and without `stopinsert` even after typed text, so the claim is on the record rather than only in the commit body.
+- **`Chunk 1/2 — ARCH-DRY residue`** — record the M2 enumeration (`ctx.cursor_line`'s three stale re-readers; `exchange_at` vs `get_paste_line`'s scan) and the rule, so the next extraction migrates every caller in the same round.

@@ -63,14 +63,31 @@ end
 --- @param header_end number  header separator line
 --- @param total_lines number
 --- @return number  line number to insert after (0-based nvim_buf_set_lines start)
-M.get_paste_line = function(parsed_chat, cursor_line, header_end, total_lines)
-	-- Find the exchange the cursor is on
+--- Index of the exchange whose range contains `cursor_line`, or nil when the
+--- cursor is outside every exchange (in the header, or in trailing space).
+---
+--- The single owner of "which exchange is the cursor in". get_paste_line and
+--- new_question.plan both need it, and new_question first shipped its own copy
+--- of this scan -- the second finding in the same ARCH-DRY family in one
+--- review round (#263 close round 2). The rule that produced this extraction:
+--- a new derivation of a concept the owning module already computes calls that
+--- module instead.
+--- @return number|nil
+M.exchange_index_at = function(parsed_chat, cursor_line, total_lines)
 	for i in ipairs(parsed_chat.exchanges) do
 		local ex_start, ex_end = M.get_exchange_line_range(parsed_chat, i, total_lines)
-
-		if cursor_line >= ex_start and cursor_line <= ex_end then
-			return ex_end
+		if ex_start and cursor_line >= ex_start and cursor_line <= ex_end then
+			return i
 		end
+	end
+	return nil
+end
+
+M.get_paste_line = function(parsed_chat, cursor_line, header_end, total_lines)
+	local at = M.exchange_index_at(parsed_chat, cursor_line, total_lines)
+	if at then
+		local _, ex_end = M.get_exchange_line_range(parsed_chat, at, total_lines)
+		return ex_end
 	end
 
 	-- Cursor is not on any exchange — find nearest exchange before cursor

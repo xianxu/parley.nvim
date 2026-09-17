@@ -330,3 +330,23 @@ review itself is `workshop/plans/000263-quick-key-insert-chat-prefix-close-revie
 Integration spec now 14/14 (was 11/11), unit 14/14, lint 0/0 across 627 files.
 Prune/cut/paste verified after the refactor: `topic_gen_spec` 9/9,
 `branch_child_spec`, `entity_textobj_spec`, `chat_move_spec` all green.
+
+### 2026-09-16 — boundary review round 2
+
+Round 2 confirmed BR-1/BR-2 fixed (re-ran integration 14/14 including the
+insert-mode undo) and raised three items. The one that matters is **M2: the
+second finding in the `duplicated-command-preamble` family in consecutive
+rounds** — extracting `chat_context` had fixed the *site* and half-swept the
+class. Three callers still re-read the cursor instead of `ctx.cursor_line`, and
+`new_question` carried its own copy of the exchange-scan already inside
+`get_paste_line`. Both swept now, with `exchange_clipboard.exchange_index_at`
+as the single owner of "which exchange is the cursor in".
+
+Also: `assert(plan.row)` moved above the buffer write (it guarded nothing
+after it); a real insert-session case added via `nvim_feedkeys` after round 2
+measured that `vim.cmd("startinsert")` in busted does **not** change `mode()`;
+all 40 plan steps ticked.
+
+Integration 15/15, unit 14/14, keybindings 78/78, exchange_clipboard 31/31,
+entity_range 47/47, topic_gen 9/9, buffer_mutation 10/10, sweeps 21/21,
+documentation 4/4, lint 0/0.

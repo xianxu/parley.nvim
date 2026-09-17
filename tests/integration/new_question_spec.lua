@@ -182,6 +182,36 @@ describe("new question chord", function()
 		end)
 	end
 
+	-- REAL insert state, via keystrokes. The parameterized cases above fire the
+	-- `i` MAPPING, but `vim.cmd("startinsert")` inside a busted it() does not
+	-- actually change mode() -- measured: it still reports "n" (#263 close
+	-- round 2). So they prove the mapping is wired, not that the command
+	-- behaves while genuinely mid-insert with typed text pending. This one
+	-- types into an insert session and then fires the chord from inside it.
+	it("fires from a genuine insert session with typed text pending", function()
+		local buf = prepped(FIXTURE)
+		local before = body(buf)
+		local key = Registry.key_for("new_question", parley.config)
+		vim.api.nvim_win_set_cursor(0, { 8, 0 })
+		-- A + text puts us in real insert with an open undo block; then the chord.
+		local keys = vim.api.nvim_replace_termcodes("A XYZ" .. key, true, false, true)
+		vim.api.nvim_feedkeys(keys, "x", false)
+		vim.wait(50, function() return false end)
+		vim.cmd("stopinsert")
+
+		assert.equals(3, question_count(buf), "the chord did not fire from insert")
+		assert.is_truthy(vim.tbl_filter(function(l) return l == "first answer XYZ" end,
+			body(buf))[1], "the typed text was lost")
+
+		-- One undo takes the new question back out; a second takes the typing.
+		-- The point is that the chord's write is its OWN step, not that the
+		-- whole session collapses to one.
+		vim.cmd("silent normal! u")
+		assert.equals(2, question_count(buf), "the chord's write was not its own undo step")
+		vim.cmd("silent normal! u")
+		assert.same(before, body(buf))
+	end)
+
 	it("does not duplicate on a second press", function()
 		local buf = prepped(FIXTURE)
 		vim.api.nvim_win_set_cursor(0, { 8, 0 })

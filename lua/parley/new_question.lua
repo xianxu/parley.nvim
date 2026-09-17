@@ -40,15 +40,12 @@ function M.is_empty_question(lines, exchange, user_prefix)
 end
 
 --- The exchange containing `cursor_line`, or nil when the cursor is outside
---- every exchange (in the header, or in trailing space below the last one).
+--- every exchange. The SCAN belongs to exchange_clipboard, which already had
+--- it inside get_paste_line; re-deriving it here was the second finding in the
+--- same ARCH-DRY family in one review round (#263 close round 2).
 local function exchange_at(parsed_chat, cursor_line, total_lines)
-	for i in ipairs(parsed_chat.exchanges) do
-		local first, last = clipboard.get_exchange_line_range(parsed_chat, i, total_lines)
-		if first and cursor_line >= first and cursor_line <= last then
-			return parsed_chat.exchanges[i]
-		end
-	end
-	return nil
+	local at = clipboard.exchange_index_at(parsed_chat, cursor_line, total_lines)
+	return at and parsed_chat.exchanges[at] or nil
 end
 
 --- @return table plan

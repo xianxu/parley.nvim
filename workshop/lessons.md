@@ -1,5 +1,39 @@
 # Lessons
 
+## 2026-09-16 (#263 close round 2 — a repeat family)
+
+- **Extracting a helper is not done when the duplication stops; it is done when
+  every caller consumes every field the helper now owns.** Round 1 said "this
+  preamble is on its 4th copy". Extracting `chat_context` fixed the site and
+  left three callers still re-reading the cursor instead of taking
+  `ctx.cursor_line` — so the SAME family came back in round 2. The gate's
+  `family:` slug is the tell: a family that repeats across rounds is the ledger
+  reporting that the enumeration was never written. Rule: when you extract, grep
+  for every field the helper now owns and migrate all of them in that round, and
+  check whether the new module re-derives anything the owning module already
+  computes (here `new_question` had its own copy of `get_paste_line`'s scan).
+
+- **`vim.cmd("startinsert")` inside a busted `it()` does not change `mode()`.**
+  Measured: it still reports `n`. So a test that "starts insert" and fires a
+  mapping proves the *mapping* is wired, not that the command behaves mid-insert
+  with pending typed text. The real seam is
+  `nvim_feedkeys(replace_termcodes("A text" .. key), "x", false)`. Rule: when a
+  test's whole point is a MODE, drive it with keystrokes — an editor-state
+  assertion needs editor state, not a command that requests it.
+
+- **Put a precondition assert before the side effect it guards.** `assert(plan.row)`
+  sat after the buffer write, so an unreachable nil would have left a
+  half-applied edit behind a bare Lua error. Free to move, and the only position
+  where the assert actually protects anything.
+
+- **The step that reconciles the checklist is on the checklist.** 40 plan steps
+  shipped unticked because Task 7 Step 4 ("reconcile the issue before closing")
+  was itself one of the unticked ones. Rule: close-time artifacts get reconciled
+  against the final run in the closing commit — `--verified` built from that
+  run's output, every checkbox ticked or struck with a reason, issue `## Plan`
+  and durable plan in agreement.
+
+
 ## 2026-09-16 (#263 close review — FIX-THEN-SHIP, 8 findings)
 
 - **A doc claim about a COUNT is one probe away from being true.** The atlas

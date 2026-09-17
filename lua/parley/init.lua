@@ -4317,7 +4317,7 @@ M.cmd.ChatPrune = function()
 	if not ctx then return end
 	local buf, file_name, lines, header_end, parsed_chat =
 		ctx.buf, ctx.file_name, ctx.lines, ctx.header_end, ctx.parsed_chat
-	local cursor_line = vim.api.nvim_win_get_cursor(0)[1]
+	local cursor_line = ctx.cursor_line
 	local exchange_idx = M.find_exchange_at_line(parsed_chat, cursor_line)
 
 	-- If cursor isn't directly on an exchange, find the nearest one at or after cursor
@@ -4479,7 +4479,7 @@ M.cmd.ExchangeCut = function(opts)
 		local sel_end = vim.fn.line("'>")
 		exchange_indices = exchange_clipboard.get_exchanges_for_range(parsed_chat, sel_start, sel_end, total_lines)
 	else
-		local cursor_line = vim.api.nvim_win_get_cursor(0)[1]
+		local cursor_line = ctx.cursor_line
 		local idx = M.find_exchange_at_line(parsed_chat, cursor_line)
 		if not idx then
 			-- Try nearest exchange at or after cursor
@@ -4589,8 +4589,8 @@ M.cmd.ExchangePaste = function()
 	if not ctx then return end
 	local buf, lines, header_end, parsed_chat =
 		ctx.buf, ctx.lines, ctx.header_end, ctx.parsed_chat
-	local cursor_line = vim.api.nvim_win_get_cursor(0)[1]
-	local paste_after = exchange_clipboard.get_paste_line(parsed_chat, cursor_line, header_end, #lines)
+	local paste_after = exchange_clipboard.get_paste_line(
+		parsed_chat, ctx.cursor_line, header_end, #lines)
 
 	local to_insert = exchange_clipboard.build_paste_lines(lines, paste_after, _exchange_clipboard, #lines)
 	require("parley.buffer_edit").replace_user_lines(buf, paste_after, paste_after, false, to_insert)
@@ -4611,6 +4611,10 @@ M.cmd.NewQuestion = function()
 	local plan = require("parley.new_question").plan(
 		ctx.parsed_chat, ctx.lines, ctx.cursor_line, ctx.header_end, M.config.chat_user_prefix)
 
+	-- BEFORE the write, not after: an (unreachable) nil row would otherwise leave
+	-- a half-applied edit behind a bare Lua error (#263 close round 2, M3).
+	assert(plan.row, "new_question.plan returned no row")
+
 	local edits = require("parley.buffer_edit")
 	local ok, err = true, nil
 	if plan.kind == "insert" then
@@ -4623,10 +4627,6 @@ M.cmd.NewQuestion = function()
 		return
 	end
 
-	-- The planner always names a row; a nil here means the clipboard arg was
-	-- empty, which cannot happen, and nvim_win_set_cursor's error would not say
-	-- so. State the invariant where it is cheap to read.
-	assert(plan.row, "new_question.plan returned no row")
 	local row = math.min(plan.row, vim.api.nvim_buf_line_count(buf))
 	-- Column 0 is deliberate: `startinsert!` IS `A`, so it lands at end-of-line
 	-- whatever column we set. Only the ROW matters here.
