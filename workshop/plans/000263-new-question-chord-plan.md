@@ -23,7 +23,6 @@ The chord is freed by retiring `chat_search`, a one-line `/^💬:\|^🌿:` wrapp
 | `exchange_index_at` | `lua/parley/exchange_clipboard.lua` | new |
 | `get_paste_line` | `lua/parley/exchange_clipboard.lua` | modified |
 | `build_paste_lines` | `lua/parley/exchange_clipboard.lua` | unchanged (reused) |
-| `chat_context` | `lua/parley/init.lua` | new |
 | `chat_search` registry entry | `lua/parley/keybinding_registry.lua` | deleted |
 | `chat_shortcut_search` option | `lua/parley/config.lua` | deleted |
 | `new_question` registry entry | `lua/parley/keybinding_registry.lua` | new |
@@ -45,8 +44,12 @@ The chord is freed by retiring `chat_search`, a one-line `/^💬:\|^🌿:` wrapp
   - **DRY rationale:** the rule the repeat finding produced — *when a block is extracted into a shared helper, every caller consumes every field the helper now owns, and a new derivation of a concept the owning module already computes calls that module instead.*
   - **Future extensions:** a `{ nearest = true }` option would let `get_paste_line`'s second loop (nearest-exchange-before-cursor) move here too; it is the only remaining scan of the same shape.
 
-- **`chat_context(what)`** (`lua/parley/init.lua`) — the preamble four cursor-driven chat commands share: `not_chat` → `find_header_end` → `parse_chat` → cursor. Logs the reason itself and returns nil. `ChatPrune`, `ExchangeCut`, `ExchangePaste` and `NewQuestion` all consume it, including its `cursor_line`.
-  - **DRY rationale:** it was on its fourth verbatim copy. The first migration left three callers still re-reading the cursor instead of taking `ctx.cursor_line`, which is what turned this into a repeat-family finding — the enumeration has to be swept in the same round the helper lands.
+- **`chat_buffer` / `parse` / `resolve`** (`lua/parley/chat_context.lua`) — **integration points, not pure entities.** They read the current buffer and window and call `not_chat`; an earlier draft of this table listed the helper under Pure entities, which was wrong (#263 close round 3, BR-10). They own the `not_chat` → `find_header_end` → `parse_chat` → cursor sequence for the whole codebase.
+  - **Injected into:** nothing — they are the boundary. Each caller supplies its own wording, because the messages genuinely differ: `NewQuestion` names the command, `chat_respond.respond` names the file, and `chat_respond.respond_all` returns `nil, reason` to its caller for the header case.
+  - **Why two phases:** `respond_all` interleaves its own precondition (is a batch already running?) between the chat check and the parse. A single monolithic `resolve` would reorder its messages — a chat with no `---` *and* an active batch would start reporting the header instead of the batch.
+  - **DRY rationale:** the preamble was on its fourth verbatim copy; extracting it *file-locally into `init.lua`* fixed four sites and left two in `chat_respond.lua` unreachable, so the family came back a third time. The rule this settled: **the sequence has one owner reachable from any module**, and `not_chat → find_header_end → parse_chat` is written out nowhere else. Enumerated: 4 in `init.lua`, 2 in `chat_respond.lua`, 1 partial in `exporter.lua:965`, and 1 deliberate exclusion — `delete_entity_range`, which classifies through `entity_textobj.parsed_for` so the text objects and the `:ParleyDelete*` commands cannot disagree.
+
+- **`chat_context(what)`** (`lua/parley/init.lua`) — now only the command-entry *wording* over that owner: a warning naming the command, or the header error. `ChatPrune`, `ExchangeCut`, `ExchangePaste` and `NewQuestion` consume it, including its `cursor_line`.
 
 ### Integration points (where pure meets the world)
 
@@ -54,6 +57,10 @@ The chord is freed by retiring `chat_search`, a one-line `/^💬:\|^🌿:` wrapp
 |------|----------|--------|-------|
 | `M.cmd.NewQuestion` | `lua/parley/init.lua` | new | buffer read/write, cursor, mode |
 | `new_question` keymap callback | `lua/parley/init.lua` (chat `register_buffer` table) | new | Neovim keymap dispatch |
+| `chat_buffer` | `lua/parley/chat_context.lua` | new | current buffer/window, `not_chat` |
+| `parse` | `lua/parley/chat_context.lua` | new | buffer read, cursor read |
+| `resolve` | `lua/parley/chat_context.lua` | new | both phases |
+| `chat_context` | `lua/parley/init.lua` | new | logger (wording only) |
 
 - **`M.cmd.NewQuestion`** — the IO shell. Guards with `M.not_chat`, reads lines, finds the header, parses, reads the cursor, calls `new_question.plan`, applies through `buffer_edit.replace_user_lines`, sets the cursor and calls `startinsert!`. Auto-registers as `:ParleyNewQuestion` via the `for cmd, _ in pairs(M.cmd)` loop at `init.lua:1317`.
   - **Injected into:** nothing — it is the outermost layer. It injects `M.config.chat_user_prefix` *into* the pure planner, which is what keeps an operator override honored without the planner knowing what config is.
@@ -1213,3 +1220,63 @@ own.** `grep -rln "ExchangeCut\|ExchangePaste\|ChatPrune" tests/` returns only
 `topic_gen_spec` (prune). Pre-existing, not introduced here, but it is why a
 preamble refactor at a close boundary had to be verified through neighbouring
 specs rather than directly. Belongs with #265's test-fixture work.
+
+### 2026-09-16 — boundary review round 3 (REWORK): three families, and the rules that end them
+
+8 findings disposed, 4 new, 3 of them repeats. Round 3 is the round where the
+*instances* stopped being the point.
+
+**BR-9 (Critical) — a regression I introduced in round 2.** Hoisting
+`exchange_index_at` in above `get_paste_line` put it *between* `get_paste_line`'s
+`@param` block and its signature, so the doc block now documented the wrong
+function. `tests/arch/superseded_comment_spec.lua` exists for exactly this and
+went red. Fixed by giving the new function its own complete doc block and
+placing it *before* `get_paste_line`'s, not inside it. The lesson is about
+process, not about this file: round 2's verification ran the specs I expected to
+be affected, not the arch suite that guards the kind of edit I had just made
+(moving code). Moving code is a comment-adjacency hazard, and the repo already
+knew it.
+
+**BR-10 (Important) — `chat_context` was in the wrong table.** It was listed
+under **Pure entities** while reading the current buffer, the current window and
+the logger. Moved to Integration points, with the new module's three functions
+listed and the reason each is a boundary and not a core entity.
+
+**`duplicated-command-preamble`, 3rd occurrence — the rule, finally.** Rounds 1
+and 2 each fixed what the finding named. Round 3 measured the real prevalence:
+4 migrated in `init.lua`, **2 unmigrated in `chat_respond.lua`** (`respond`,
+`respond_all`) that a *file-local* helper structurally could not reach, 1 partial
+in `exporter.lua:965`, and 1 deliberate divergence in `delete_entity_range`
+(which classifies through `entity_textobj.parsed_for` so the text objects and
+the `:ParleyDelete*` commands cannot disagree — correctly excluded).
+
+> **Rule:** the `not_chat → find_header_end → parse_chat` sequence has **one
+> owner, reachable from any module** — `lua/parley/chat_context.lua`. It is
+> written out nowhere else. The caller owns the *wording*, because the messages
+> genuinely differ; the owner owns the *sequence*.
+
+`init.lua`'s `chat_context(what)` is now only the command-entry wording over
+that owner. `chat_respond.respond` and `respond_all` consume it too. The module
+is deliberately **two-phase** (`chat_buffer` / `parse`) because `respond_all`
+interleaves its batch precondition between the gates — a single `resolve` would
+have made a header-less chat with an active batch report the wrong one. That
+detail is the reason the first extraction was file-local and the family
+survived: the second copy was not a copy, it was a copy *with an interleave*.
+
+**`doc-claim-contradicts-code`, 2nd occurrence — the rule.** BR-2 corrected a
+wrong count; the rule adopted then was manual ("run a probe before the sentence
+ships"), and manual discipline is what produced the wrong count to begin with.
+`tests/unit/keybindings_spec.lua` now **derives** the lead split from the
+registry and pins both sides, plus a second case that flips one entry's key
+order to prove the derivation reads `keys[1]` (what the help float renders)
+rather than membership. A seventh dual-family pair now fails the suite instead
+of silently making the page wrong.
+
+**Verification.** unit 14/14, integration 15/15, keybindings **80/80**,
+chat_respond 27/27, batch_respond 16/16, batch_lifecycle 10/10, topic_gen 9/9,
+exchange_clipboard 31/31, entity_range 47/47, superseded_comment 9/9,
+buffer_mutation 10/10, single_source_sweeps 21/21, lint 0/0 across **628**
+files. `make test-integration` clean apart from the known parallel-load flakes —
+`branch_child_spec` failed once under 8-way parallelism and passes **62/62 three
+times serially**; `perf_document_spec` is the already-recorded silent-death
+class.

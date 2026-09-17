@@ -55,14 +55,6 @@ M.get_exchanges_for_range = function(parsed_chat, sel_start, sel_end, total_line
 	return result
 end
 
---- Get the line number after which to insert pasted exchanges.
---- Returns the end of the exchange the cursor is on, or (if cursor is before
---- all exchanges) the header_end line, or (if after all) total_lines.
---- @param parsed_chat table
---- @param cursor_line number  1-based cursor line
---- @param header_end number  header separator line
---- @param total_lines number
---- @return number  line number to insert after (0-based nvim_buf_set_lines start)
 --- Index of the exchange whose range contains `cursor_line`, or nil when the
 --- cursor is outside every exchange (in the header, or in trailing space).
 ---
@@ -72,6 +64,9 @@ end
 --- review round (#263 close round 2). The rule that produced this extraction:
 --- a new derivation of a concept the owning module already computes calls that
 --- module instead.
+--- @param parsed_chat table
+--- @param cursor_line number  1-based cursor line
+--- @param total_lines number
 --- @return number|nil
 M.exchange_index_at = function(parsed_chat, cursor_line, total_lines)
 	for i in ipairs(parsed_chat.exchanges) do
@@ -83,6 +78,14 @@ M.exchange_index_at = function(parsed_chat, cursor_line, total_lines)
 	return nil
 end
 
+--- Get the line number after which to insert pasted exchanges.
+--- Returns the end of the exchange the cursor is on, or (if cursor is before
+--- all exchanges) the header_end line, or (if after all) total_lines.
+--- @param parsed_chat table
+--- @param cursor_line number  1-based cursor line
+--- @param header_end number  header separator line
+--- @param total_lines number
+--- @return number  line number to insert after (0-based nvim_buf_set_lines start)
 M.get_paste_line = function(parsed_chat, cursor_line, header_end, total_lines)
 	local at = M.exchange_index_at(parsed_chat, cursor_line, total_lines)
 	if at then

@@ -4275,38 +4275,26 @@ M.check_buffer = function()
 	end
 end
 
---- The preamble every cursor-driven chat command shares: is this a chat, does
---- it have a header, and what does it parse to. Logs the reason itself -- a
---- warning for "not a chat", an error for a broken header -- and returns nil,
---- so a caller is `local ctx = chat_context("X"); if not ctx then return end`.
+--- The command-entry reporting wrapper over parley.chat_context, which owns the
+--- not_chat -> find_header_end -> parse_chat sequence for the whole codebase.
+--- Logs the reason itself -- a warning for "not a chat", an error for a broken
+--- header -- and returns nil, so a caller is
+--- `local ctx = chat_context("X"); if not ctx then return end`.
 ---
---- Extracted at the FOURTH verbatim copy (#263 close review): ChatPrune,
---- ExchangeCut, ExchangePaste and NewQuestion all carried it inline. `what`
---- keeps each command's own wording in the message.
+--- `what` keeps each command's own wording. #263 close rounds 1-3: this began
+--- as a 4th verbatim copy, was extracted here, and then the family repeated
+--- because the sequence still had two more copies in chat_respond.lua that a
+--- file-local helper could not reach. The sequence now lives in its own module;
+--- this is only the wording.
 local function chat_context(what)
-	local buf = vim.api.nvim_get_current_buf()
-	local file_name = vim.api.nvim_buf_get_name(buf)
-	local reason = M.not_chat(buf, file_name)
-	if reason then
+	local ctx, reason, kind = require("parley.chat_context").resolve()
+	if ctx then return ctx end
+	if kind == "not_chat" then
 		M.logger.warning(what .. " is only available in chat files: " .. reason)
-		return nil
-	end
-
-	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-	local header_end = M.chat_parser.find_header_end(lines)
-	if not header_end then
+	else
 		M.logger.error(what .. ": could not find header separator ---")
-		return nil
 	end
-
-	return {
-		buf = buf,
-		file_name = file_name,
-		lines = lines,
-		header_end = header_end,
-		parsed_chat = M.parse_chat(lines, header_end),
-		cursor_line = vim.api.nvim_win_get_cursor(0)[1],
-	}
+	return nil
 end
 
 -- Prune: move cursored exchange + all following into a new child chat file.

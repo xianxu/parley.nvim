@@ -246,3 +246,139 @@ Add to `workshop/plans/000263-new-question-chord-plan.md` `## Revisions`:
 - **`2026-09-16 — close round 2: checklist reconciled`** — tick all 40 steps (or strike with a reason), and record the family rule from I1: close-time artifacts are reconciled against the final run in the closing commit, covering (a) `--verified` built from that run's output, (b) every plan checkbox ticked or struck, (c) issue `## Plan` and durable plan in agreement. Note that Step 4 at `:980` ("Reconcile the issue before closing") was itself the unticked step that would have caught the other 39.
 - **`Task 4 — insert-mode fidelity`** — record that `vim.cmd("startinsert")` inside a busted `it()` does not change `mode()` (measured: `mode()` returns `n`), that the `{"n","i"}` parameterization therefore exercises the `i` *mapping* and not insert *state*, and that `nvim_feedkeys(replace_termcodes("A XYZ<M-n>"), "x", false)` is the verified seam for the real thing. Include the measured result that one `u` restores identically with and without `stopinsert` even after typed text, so the claim is on the record rather than only in the commit body.
 - **`Chunk 1/2 — ARCH-DRY residue`** — record the M2 enumeration (`ctx.cursor_line`'s three stale re-readers; `exchange_at` vs `get_paste_line`'s scan) and the rule, so the next extraction migrates every caller in the same round.
+
+---
+
+## Re-review — 2026-09-16T21:55:37-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 263 — Quick key to insert the chat question prefix at cursor |
+| repo | parley.nvim |
+| issue file | workshop/issues/000263-quick-key-insert-chat-prefix.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | bbe05eef5b576db2cd367cd66e6def5806650111..62c7f2927cebf248284c907cc5f75a11a69f3542 |
+| command | sdlc close --issue 263 |
+| reviewer | claude |
+| timestamp | 2026-09-16T21:55:37-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+This diff delivers the feature well — a genuinely pure planner (`lua/parley/new_question.lua`, 14/14 unit cases with no buffer), a thin IO shell that inherits the streaming refusal from `buffer_edit`, a widened chord-collision guard whose plants call the *production* detection function (78/78), and a 15/15 integration spec that drives real keymaps and a real insert session. All eight round-1 findings were substantively worked. What blocks SHIP is that **this diff turns an existing in-tree guard red and the close evidence says the suite is otherwise green**: `tests/arch/superseded_comment_spec.lua` passes 9/9 at base `bbe05eef` and fails 8/9 at head (measured in a detached worktree), because the round-2 `exchange_index_at` extraction was inserted *between* `get_paste_line`'s doc block and `get_paste_line`. That is the same `prose-continuity` rule BR-7 raised, recurring in code — and the plan's literal `--verified` string is stale for the second consecutive round, so `sdlc close` would record a false suite status. Both fixes are minutes of work; one re-run should clear the gate.
+
+**1. Strengths**
+
+- `lua/parley/new_question.lua:44-48` — the round-2 sweep is real: `exchange_index_at` is now the single owner of "which exchange is the cursor in", consumed by both `get_paste_line` and the planner. `exchange_clipboard_spec` 31/31, `entity_range_spec` 47/47, `topic_gen_spec` 9/9 all green after the refactor (verified in the full suite run).
+- `tests/unit/keybindings_spec.lua:975-1055` — the widened guard is the right shape: one `owners_by_key`/`collisions`/`prefix_shadows` triple shared by the guards *and* by the plants, `modes_overlap` added so `{o,x}` text objects and normal-only `gf`/`gP` don't become false positives, canonicalization via `keytrans ∘ replace_termcodes`, and the plant asserts the offender by name rather than `#found > 0`. Measured 0 collisions / 0 prefix shadows, both plants biting.
+- `tests/integration/new_question_spec.lua:250-277` — the `nvim_feedkeys("A XYZ" .. key)` case, added after measuring that `vim.cmd("startinsert")` in a busted `it()` does not change `mode()`. That measurement is the difference between testing a mapping and testing a mode, and it's recorded in `workshop/lessons.md`.
+- `tests/integration/new_question_spec.lua:96-109` — the question-count oracle is a plain `vim.startswith` scan, never a re-parse, so the expectation cannot agree with the code under test (#262 lesson applied).
+- `lua/parley/init.lua:2805-2812` — the softened `stopinsert` comment now says what the line actually is (house idiom mirroring `branch_ref`'s `i` handler at `init.lua:2598`) instead of crediting it with the undo scope it does not provide. Verified: `branch_ref`'s handler is byte-for-byte that idiom.
+
+**2. Critical findings**
+
+- `lua/parley/exchange_clipboard.lua:58` — `get_paste_line`'s doc block (`@param header_end`, `@return number line number to insert after`) is stranded above `M.exchange_index_at` (line 76); `get_paste_line` itself (line 86) now has no doc at all, and lua-ls reads `exchange_index_at` as taking a `header_end` it does not take and returning two values. **The tree's own arch guard catches this and is red:** `tests/arch/superseded_comment_spec.lua` → *"an annotation block was separated from the function it documents … lua/parley/exchange_clipboard.lua:58 — @param header_end, but the signature is (parsed_chat, cursor_line, total_lines)"*. Measured 9/9 at `bbe05eef`, 8/9 at `62c7f292`. Fix: move lines 58-65 down to sit immediately above line 86. See the family note in §7 — the *rule*, not this site, is the deliverable.
+
+**3. Important findings**
+
+- `workshop/plans/000263-new-question-chord-plan.md:26` — `chat_context` is listed under **"### Pure entities (the conceptual core)"**, but it calls `nvim_get_current_buf`, `nvim_buf_get_name`, `nvim_buf_get_lines`, `nvim_win_get_cursor` and `M.logger.warning/error` (`lua/parley/init.lua:4278-4310`). It cannot be exercised without a real buffer, window and logger — it belongs in the "Integration points" table two sections down, alongside `M.cmd.NewQuestion`. The review protocol nominally calls a PURE/code contradiction Critical; I'm calling it Important because no test was written against the wrong classification, so the harm is confined to the plan misleading downstream work about what is unit-testable. Fix: move the row and add a `## Revisions` line.
+
+**4. Minor findings**
+
+- `lua/parley/chat_respond.lua:1700` (`M.respond`) and `:1917` (`M.respond_all`) still carry the `not_chat` → warning → `find_chat_header_end` → error → `parse_chat` (+ cursor, in `respond_all`) preamble verbatim; `chat_context` is file-local to `init.lua` so they cannot consume it. **3rd finding in family `duplicated-command-preamble`** — see §7.
+- `atlas/ui/keybindings.md:136-145` asserts a measured count ("the split is even… three entries lead with `<C-g>`… three lead with the alt key") with no test pinning it. I verified the claim is currently true (config.lua:384/391/396/414/417/465), but it is still a hand-maintained restatement of the registry — which is exactly what produced BR-2. **2nd finding in family `doc-claim-contradicts-code`** — see §7.
+- `lua/parley/exchange_clipboard.lua:87-90` calls `get_exchange_line_range` twice for the found index (once inside `exchange_index_at`, once after). Harmless on a chord path; noting only because a `{ nearest = true }` option, which the plan already names as the next extension, would remove it.
+
+**5. Test coverage notes**
+
+Measured this session: `tests/unit/new_question_spec.lua` 14/14, `tests/integration/new_question_spec.lua` 15/15, `tests/unit/keybindings_spec.lua` 78/78, `make lint` 0 warnings / 0 errors across 627 files — all as claimed. Full `make test-unit`: only `parley_harness_golden_spec.lua` fails (confirmed pre-existing, unrelated to this diff). Full `make test-integration`: `perf_ownership_spec.lua` fails under the 8-way fan-out and passes 3/3 alone (the known parallel-flake class), and `tests/arch/superseded_comment_spec.lua` fails for the reason in §2. Coverage of the feature itself is good; the gap is that `ExchangeCut`/`ExchangePaste` still have no spec of their own, so the `chat_context` migration was verified only through neighbouring specs — already recorded in the plan and routed to #265.
+
+**6. Architectural notes**
+
+- **ARCH-DRY** — pass on the new code (`exchange_index_at` and `chat_context` both landed, all four `init.lua` callers consume `ctx.cursor_line`, verified by grep); flagged for the two `chat_respond.lua` siblings in §4.
+- **ARCH-PURE** — pass on `new_question.lua` (unit spec needs no buffer and no mocks); flagged for the plan's misclassification of `chat_context` in §3.
+- **ARCH-PURPOSE** — pass. Shadow-sweep run: the registry is the single source and every consumer derives (keymaps via `prep_chat`, `<C-g>?` help via `resolve_keys`, the app profile via `starter_config_spec`, which passes). `chat_search` is fully retired — zero references outside `workshop/` and explanatory comments. The generalized guard is the class fix the issue's Done-when asked for, not the instance.
+- **ARCH-MOCK** — N/A. No external binary or service; the integration spec drives the real editor.
+- **ARCH-CONSTRAINTS** — pass. Chord path, one full-buffer read + one `parse_chat` + one range write, same shape as `<C-g>V` and `<C-g>k`; no per-keystroke cost added.
+- **ARCH-SECURE** — pass. `chat_user_prefix` is operator config, compared via `string.sub`, never interpolated into a Lua pattern; the `%-Q.:` magic-character case is pinned in both the unit and integration specs.
+- **ARCH-ORDER** — pass. The planner carries no state between events; the shell's only interleaving event (a response streaming into the target region) is governed by ignore-with-visible-error and tested. `assert(plan.row)` now precedes the write, so an unreachable nil cannot leave a half-applied edit.
+- **ARCH-FUNERAL** — pass. Creates nothing durable beyond question lines inside a transcript the user already owns; the plan's reasoned exemption is accurate.
+
+**7. Plan revision recommendations**
+
+- **`## Revisions` — `prose-continuity`, 2nd occurrence, and the rule it forces.** BR-7 fixed the atlas sentence; the same rule broke in code one commit later. The rule: *an insertion never lands between a doc/comment block and the symbol it documents — when you add a definition above an existing one, the existing one's block moves with it.* Measured prevalence in this issue: 2 (atlas round 1, `exchange_clipboard.lua:58` now); `config.lua:372-384` and `init.lua:4313` got it right, so the class is 2-of-4 insertion sites. Critically, the **code half of this rule already has a mechanical enforcer** (`tests/arch/superseded_comment_spec.lua`) — the class is closed not by a careful eye but by running the guard, which is the same failure §2 and BR-6 share. The markdown half has no enforcer; note that explicitly rather than relying on discipline.
+- **`## Revisions` — `chat_context` is an integration point, not a pure entity.** Move the row from the Pure entities table to Integration points and say what it wraps (current buffer, cursor, logger).
+- **`## Revisions` — `duplicated-command-preamble`, 3rd occurrence.** The rule that covers all three: *the preamble has exactly one owner; a module that cannot reach the owner is a boundary that gets written down, not a silent exception.* Measured prevalence: 4 sites migrated in `init.lua`, 2 unmigrated in `chat_respond.lua` (`:1700`, `:1917`), 1 partial in `exporter.lua:965`, 1 deliberate divergence in `delete_entity_range` (`init.lua:4547`, uses `entity_textobj.parsed_for` for text-object parity — correctly excluded). Decide once: either lift `chat_context` into a small shared module both consume, or record the init.lua boundary and the parity exception in the plan so a 7th copy doesn't reopen the family.
+- **`## Revisions` — `doc-claim-contradicts-code`, 2nd occurrence.** The rule chosen after BR-2 was manual ("run a script against the source of truth before it ships"); the family's own history says manual discipline is what failed. The class fix is one `keybindings_spec` case that derives the lead split from the registry and fails when a seventh pair is added.
+- **`workshop/plans/000263-new-question-chord-plan.md:998`** — delete the frozen `--verified` literal from the plan entirely rather than correcting it a third time. `lessons.md` already states the rule ("build the `--verified` string from the run you just did, never from the plan"); a stored literal is a hand-maintained restatement that will keep drifting.
+
+```findings
+dispose:
+  - id: BR-1
+    disposition: addressed
+    note: |
+      Integration spec is parameterized over {"n","i"} (both undo cases pass, 15/15 measured), plus a real nvim_feedkeys insert session; init.lua:2805 comment no longer credits stopinsert and cites branch_ref's i handler, which exists at init.lua:2598.
+  - id: BR-2
+    disposition: addressed
+    note: |
+      Verified against config.lua/registry: <C-g>-leading = outline, chat_drill_in, new_question; alt-leading = open_file, branch_ref, chat_prune. The 3-3 claim is now true in atlas, config.lua and the registry comment.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      chat_context(what) at init.lua:4278; ChatPrune, ExchangeCut, ExchangePaste and NewQuestion all consume it including ctx.cursor_line (grep-verified, no nvim_win_get_cursor left in the four).
+  - id: BR-4
+    disposition: addressed
+    note: |
+      Accepted-and-tracked rather than changed: divergence remains in-tree by explicit decision, filed as parley.nvim#265 (issue file exists) with the real-generation fixture the proper test needs.
+  - id: BR-5
+    disposition: addressed
+    note: |
+      Test is relabelled as a double at tests/integration/new_question_spec.lua:282-296 with the measured reasons both realer routes fail, and the plan's Revisions records the substitution.
+  - id: BR-6
+    disposition: not-addressed
+    note: |
+      Corrected to "integration 14/14" but round 2 added a 15th case; measured 15/15. It also still omits the tests/arch/superseded_comment_spec.lua failure this diff introduces, and the issue Log's "everything else in make test-unit / make test-integration passes" is false for the same reason.
+  - id: BR-7
+    disposition: addressed
+    note: |
+      "`<C-g>` is the prefix surface for everything else." is back with the alt-family paragraph at atlas/ui/keybindings.md:135-136. The same rule recurs in code — raised separately below, not re-raised here.
+  - id: BR-8
+    disposition: addressed
+    note: |
+      Integration case "opens above the first exchange when the cursor is in the header" passes, and atlas/chat/lifecycle.md:21-24 names it as get_paste_line's header fallback.
+findings:
+  - id: new
+    severity: Critical
+    family: prose-continuity
+    title: |
+      The exchange_index_at insertion orphaned get_paste_line's doc block, turning tests/arch/superseded_comment_spec.lua red
+    detail: |
+      lua/parley/exchange_clipboard.lua:58 — get_paste_line's @param/@return block now sits above M.exchange_index_at (:76) and get_paste_line (:86) has no doc at all. Measured: the arch spec passes 9/9 at base bbe05eef and fails 8/9 at head 62c7f292, reporting "@param header_end, but the signature is (parsed_chat, cursor_line, total_lines)". This is the 2nd finding in family prose-continuity (BR-7 was the atlas instance). Do not just move this block — state the rule (an insertion never lands between a doc block and the symbol it documents; the added definition carries the displaced block with it) and note that the code half is already mechanically enforced by superseded_comment_spec while the markdown half has no enforcer.
+  - id: new
+    severity: Important
+    family: pure-classification-drift
+    title: |
+      chat_context is listed under the plan's "Pure entities" table but reads the current buffer, window and logger
+    detail: |
+      workshop/plans/000263-new-question-chord-plan.md:26 places chat_context in "### Pure entities (the conceptual core)". lua/parley/init.lua:4278-4310 calls nvim_get_current_buf, nvim_buf_get_name, nvim_buf_get_lines, nvim_win_get_cursor and M.logger.warning/error — it cannot run without a real buffer, window and logger. It belongs in the "Integration points" table with M.cmd.NewQuestion. No test was written against the wrong classification, which is why this is Important rather than Critical; fix the row plus a ## Revisions entry.
+  - id: new
+    severity: Minor
+    family: duplicated-command-preamble
+    title: |
+      chat_respond.M.respond and M.respond_all still carry the preamble verbatim, outside chat_context's reach
+    detail: |
+      3rd finding in family duplicated-command-preamble. lua/parley/chat_respond.lua:1717-1735 (M.respond) and :1918-1930 (M.respond_all) repeat not_chat -> warning, find_chat_header_end -> error, parse_chat (+ cursor in respond_all). chat_context is file-local to init.lua so they cannot consume it. Measured prevalence: 4 migrated in init.lua, 2 unmigrated in chat_respond.lua, 1 partial in exporter.lua:965, 1 deliberate divergence in delete_entity_range (init.lua:4547, entity_textobj parity — correctly excluded). Do not fix these two sites; decide the rule — one owner in a shared module, or a written-down boundary explaining why init.lua's helper stops at init.lua.
+  - id: new
+    severity: Minor
+    family: doc-claim-contradicts-code
+    title: |
+      The corrected 3-3 lead split is still a hand-maintained restatement of the registry with no enforcing test
+    detail: |
+      2nd finding in family doc-claim-contradicts-code. atlas/ui/keybindings.md:136-145 (and the same phrasing in config.lua:372-383 and keybinding_registry.lua:657-663) asserts a count I verified as currently true, but nothing derives it — grep of keybindings_spec.lua and keybinding_agreement_spec.lua finds no case pinning it. The rule adopted after BR-2 was manual ("run a script before it ships"); the family's history is that manual discipline is what failed. The class fix is one spec case deriving the lead split from the registry so a seventh pair fails the suite instead of drifting the page.
+```

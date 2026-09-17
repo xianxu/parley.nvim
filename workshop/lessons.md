@@ -1,5 +1,44 @@
 # Lessons
 
+## 2026-09-16 (#263 close round 3 — three repeat families)
+
+- **Moving code is a comment-adjacency hazard.** Hoisting a new function in
+  above an existing one put it between that function's `@param` block and its
+  signature; the doc then documented the wrong thing, and
+  `tests/arch/superseded_comment_spec.lua` caught it. Rule: after ANY edit that
+  relocates code, run the arch suite — not just the specs for the behavior you
+  think you changed. Verification should be chosen by the KIND of edit, not by
+  the feature it belongs to.
+
+- **A file-local helper cannot end a duplication family that spans files.**
+  Extracting the chat preamble into a `local function` in `init.lua` fixed four
+  sites and left two in another module structurally unable to consume it — so
+  the family came back a third time. Rule: before extracting, measure the
+  prevalence across the whole tree; if instances live in other modules, the
+  owner is a module, not a local.
+
+- **The second copy is often a copy WITH AN INTERLEAVE, and that is the design
+  input.** `respond_all` runs its batch precondition between the chat check and
+  the parse, so a single monolithic `resolve()` would have reordered its
+  user-visible messages. That is why the shared owner is two-phase. Rule: when
+  unifying duplicated sequences, diff the *control flow* between copies, not
+  just the statements — an interleave is a requirement, not an obstacle.
+
+- **"Run a probe before the sentence ships" is not a fix for a doc-drift
+  family.** Manual discipline is what produced the wrong count in the first
+  place. The second occurrence has to become a test that DERIVES the claim from
+  the source. Rule: a doc claim that repeats as a finding gets an enforcing
+  spec, and that spec needs a case proving it reads what the claim is about
+  (here: `keys[1]` ordering, not membership).
+
+- **Separate "the sequence" from "the words".** Four call sites shared a
+  preamble but every one had its own message and two had their own failure
+  semantics (log-and-abort vs `nil, reason` to a caller). Unifying the words
+  would have been a user-visible regression; unifying only the sequence was
+  free. Rule: when duplication resists extraction, check whether you are trying
+  to share two things and only one of them is actually common.
+
+
 ## 2026-09-16 (#263 close round 2 — a repeat family)
 
 - **Extracting a helper is not done when the duplication stops; it is done when

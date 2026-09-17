@@ -350,3 +350,35 @@ all 40 plan steps ticked.
 Integration 15/15, unit 14/14, keybindings 78/78, exchange_clipboard 31/31,
 entity_range 47/47, topic_gen 9/9, buffer_mutation 10/10, sweeps 21/21,
 documentation 4/4, lint 0/0.
+
+### 2026-09-16 — boundary review round 3 (REWORK) disposed
+
+8 disposed, 4 new, 3 repeat families. Round 3 is where instances stopped being
+the point; full disposition in the plan's `## Revisions`.
+
+- **BR-9 (Critical)** — a regression from round 2: hoisting `exchange_index_at`
+  put it between `get_paste_line`'s `@param` block and its signature, so the
+  doc documented the wrong function. `superseded_comment_spec` caught it. Round
+  2's verification ran the specs for the behavior I changed, not the arch suite
+  that guards the *kind* of edit I made.
+- **BR-10** — `chat_context` was listed under the plan's **Pure entities** while
+  reading the buffer, window and logger. It is an integration point; table
+  corrected and the new module's three functions listed.
+- **`duplicated-command-preamble`, 3rd occurrence → rule.** Measured prevalence:
+  4 in `init.lua` (migrated), **2 in `chat_respond.lua`** that a file-local
+  helper could never reach, 1 partial in `exporter.lua`, 1 deliberate exclusion
+  (`delete_entity_range`, which shares `entity_textobj.parsed_for` with the text
+  objects on purpose). The sequence now has **one owner reachable from any
+  module** — `lua/parley/chat_context.lua` — and the caller keeps its own
+  wording. Two-phase, because `respond_all` interleaves its batch check between
+  the gates.
+- **`doc-claim-contradicts-code`, 2nd occurrence → rule.** The 3–3 lead split is
+  no longer hand-maintained prose: `keybindings_spec` derives it from the
+  registry and pins both sides, plus a case that flips one entry's key order to
+  prove the derivation reads `keys[1]` (what help renders) rather than
+  membership.
+
+keybindings **80/80**, chat_respond 27/27, batch_respond 16/16, batch_lifecycle
+10/10, new_question 14 unit + 15 integration, superseded_comment 9/9, lint 0/0
+across 628 files. `branch_child_spec` failed once under 8-way parallelism and
+passes 62/62 three times serially — the known parallel-load class.

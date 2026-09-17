@@ -1047,6 +1047,50 @@ describe("open_file joins the alt family (#214)", function()
     end)
 
     -- The prefix guard needs its own plant for the same reason.
+    -- #263 close round 3, 2nd finding in family `doc-claim-contradicts-code`.
+    -- BR-2 corrected a wrong count in the atlas; the rule adopted then was
+    -- manual ("run a probe before the sentence ships"), and manual discipline
+    -- is exactly what produced the wrong count in the first place. This derives
+    -- the split from the registry, so a seventh dual-family pair fails the
+    -- suite instead of quietly making the page wrong.
+    local function lead_split(config)
+        local cg, alt = {}, {}
+        for _, e in ipairs(reg.entries) do
+            local keys = reg.resolve_keys(e, config) or {}
+            if #keys > 1 then
+                local has_cg, has_alt = false, false
+                for _, k in ipairs(keys) do
+                    if k:lower():match("^<c%-g>") then has_cg = true end
+                    if k:lower():match("^<m%-") then has_alt = true end
+                end
+                if has_cg and has_alt then
+                    local lead = keys[1]:lower():match("^<c%-g>") and cg or alt
+                    lead[#lead + 1] = e.id
+                end
+            end
+        end
+        table.sort(cg); table.sort(alt)
+        return cg, alt
+    end
+
+    it("the documented <C-g>/alt lead split is what the registry actually ships", function()
+        local cg, alt = lead_split(parley.config)
+        -- atlas/ui/keybindings.md "Resolution" and the comment on
+        -- chat_shortcut_new_question in config.lua both name these six.
+        assert.same({ "chat_drill_in", "new_question", "outline" }, cg)
+        assert.same({ "branch_ref", "chat_prune", "open_file" }, alt)
+    end)
+
+    it("and the derivation reads keys[1], which is what help renders", function()
+        -- Proves the split is a claim about ORDER, not about membership: flip
+        -- one entry's list and it must move sides.
+        local flipped = vim.tbl_extend("force", {}, parley.config)
+        flipped.chat_shortcut_outline = { modes = { "n", "i" }, shortcut = { "<M-t>", "<C-g>t" } }
+        local cg, alt = lead_split(flipped)
+        assert.same({ "chat_drill_in", "new_question" }, cg)
+        assert.same({ "branch_ref", "chat_prune", "open_file", "outline" }, alt)
+    end)
+
     it("and the prefix scan really would catch a delaying chord", function()
         -- <C-g>e is UNBOUND precisely because <C-g>em / <C-g>eh exist; binding
         -- it is the exact mistake the registry comment warns about.
