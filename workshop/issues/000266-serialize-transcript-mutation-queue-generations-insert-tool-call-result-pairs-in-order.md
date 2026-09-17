@@ -243,7 +243,7 @@ than the doc, so per-primitive hours are provisional (ariadne#127).
 Durable plan: `workshop/plans/000266-serialize-transcript-mutation-plan.md`
 (six revisions, six fresh-context reviews).
 
-- [ ] M1 — the write turn: pure `WriteTurn`, turn state in the document reducer,
+- [~] M1 — the write turn (Tasks 1.1–1.5 done; 1.4 landed, test inversion pending): pure `WriteTurn`, turn state in the document reducer,
       the `draining` phase, `'waiting'` refusal at the coordinator's write entry
       points and in `Replacement.step`, the release/re-request matrix, and the
       wake. **Ships deliberately over-serialized — see the Log entry below.**
@@ -510,3 +510,48 @@ Consequences to remember:
 - Close evidence (`make test`) can flake for this reason. If it does, re-run
   before treating it as a failure — and say in `--verified` which run is being
   cited.
+
+### 2026-09-17 — M1 progress checkpoint (Tasks 1.1–1.5 landed)
+
+Commits: `b2644342` WriteTurn · `9e55df1a` reducer · `7c5c0dde` notify ·
+`431afd98` draining + turn mirror · `b6a4034b` coordinator guard.
+
+**Green:** `document_write_turn_spec` (8), `document_state_spec` (24),
+`document_turn_wake_spec` (6), `generation_spec` (39), `generation_turn_spec` (7),
+`generation_sequences_spec` (32), `response_session_spec` (4/6),
+`response_topic_spec` (10), `document_append_spec` (11/12),
+`document_replacement_spec` (14/16), `document_coordinator_spec` (16),
+`document_capacity_spec` (6), `document_ownership_spec` (7).
+
+**Outstanding, all the same class — tests asserting the disjoint concurrent-writer
+model this issue reverses.** Task 1.9 already schedules their inversion:
+- `document_write_plan_spec`: 7 failures, every one a "two writers independent"
+  case.
+- `document_replacement_spec`: 2. `document_append_spec`: 1.
+  `response_session_spec`: 2 (`'composes disjoint native writers…'` and the
+  sibling-cancellation case).
+
+**Three findings worth keeping:**
+
+1. **Ownership must be decided before the turn.** The first guard checked the turn
+   first, so a writer whose plan was *stale* got `'waiting'` — which means retry —
+   and would have spun forever. `M.append` now resolves the grant first, and
+   `M.apply` / `Replacement.step` only apply the turn to a writer that owns the
+   grant. Caught by the two-writer plan tests, not by anything I wrote.
+2. **`response_topic`'s release must fire inside its `s.writing` guard.** The
+   release notifies subscribers; topic's own subscriber then re-checks its captured
+   regions against the buffer the write just changed and stops the job. Releasing
+   after `s.writing=false` turned two passing tests into `'cancelled'`.
+3. **A test I wrote was vacuous and I nearly shipped it.** The
+   replacement-continuation case had early `return`s for a setup that always
+   failed (both generations acquired overlapping regions), so it passed without
+   exercising the guard. It now opens a cursor, steps it *successfully* under the
+   turn, and only then asserts `'waiting'` — so a later pass cannot come from a
+   cursor that never worked. Setup shape copied from `document_replacement_spec`:
+   the entity is the marker row, the region a later body row.
+
+**Deviation recorded (Task 1.5):** the machine defaults `turn_status='held'`
+rather than `'waiting'`. The coordinator is the enforcement point and is
+fail-closed, so a turnless write is refused regardless; a fail-closed machine gate
+would buy no correctness and would require every existing generation unit test to
+hand the machine a turn it never needed.
