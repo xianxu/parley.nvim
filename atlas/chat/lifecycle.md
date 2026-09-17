@@ -18,6 +18,11 @@ focuses it instead of creating a second one. An empty question in the *next*
 exchange is not adopted: the rule is about the exchange the cursor is in, so
 the landing spot never depends on content off-screen.
 
+With the cursor in the front matter — above every exchange — the new question
+lands immediately below the `---`, i.e. *above* the first exchange. That is
+`get_paste_line`'s header fallback and therefore the same placement `<C-g>V`
+pastes into from the header.
+
 Post-condition: the cursor sits on a line that is the configured user prefix
 followed by a space, in insert mode — so typing yields `💬: text`, not
 `💬:text`.

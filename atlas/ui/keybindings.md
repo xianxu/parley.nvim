@@ -133,12 +133,19 @@ reject, branch, prune, outline, skill picker (`<M-s>`), paste an image as an
 attachment (`<M-v>`, `paste_image`, #231), and follow-a-link
 (`<M-o>`, #225 — one key for "go to what I'm looking at", falling through to
 smart `gf` when the cursor is not on a parley reference).
-`<M-n>` (new question, #263) joins that family, but its entry is the one place
-the portable key does **not** lead: the operator asked for `<C-g>n` by name and
-retired `chat_search` to free it, so `<C-g>n` is the gesture being taught and
-help advertises it first. `outline` (`<C-g>t`, then `<M-t>`) has the same shape.
-A rule page that does not record its own exceptions is the drift #214 removed. `<C-g>` is
-the prefix surface for everything else. Help takes its keys from
+`<M-n>` (new question, #263) joins that family. `<C-g>` is
+the prefix surface for everything else.
+
+Which of a pair leads is **not** uniform, and the split is even. Measured over
+the registry, three entries lead with `<C-g>` — `outline` (`<C-g>t`/`<M-t>`),
+`chat_drill_in` (`<C-g>q`/`<M-q>`) and `new_question` (`<C-g>n`/`<M-n>`, #263,
+because the operator asked for `<C-g>n` by name and retired `chat_search` to
+free it) — and three lead with the alt key, where portability is the point:
+`open_file` (`<M-o>`/`<C-g>o`), `branch_ref` (`<M-i>`/`<C-g>i`) and
+`chat_prune` (`<M-p>`/`<C-g>b`). `keys[1]` is what the help float advertises, so
+the order in `config.lua` *is* the decision. Read "the portable key leads" as
+the rule for the cases where a terminal cannot be relied on to deliver the
+alt chord, not as a property of every pair. Help takes its keys from
 `resolve_keys` for configured actions: an entry that resolves to nothing is
 **omitted**. Picker reservation/collision checks happen later, so configured
 conflicts are an exception to registration/help agreement (see below). (Before #214

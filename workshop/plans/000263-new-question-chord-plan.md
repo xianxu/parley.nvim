@@ -986,7 +986,7 @@ Then `sdlc issue sync --issue 263`.
 - [ ] **Step 5: Close**
 
 ```bash
-sdlc close --issue 263 --verified 'unit 15/15 + integration 10/10 green; make test full suite green; make lint clean; widened shadowing guard 0 collisions / 0 prefix shadows with both plants biting; hand-driven <C-g>n mid-answer inserts a new question after that exchange and lands in insert, second press does not duplicate, single u reverts'
+sdlc close --issue 263 --verified 'unit 14/14 + integration 14/14 green; make lint 0/0 across 627 files; widened shadowing guard 0 collisions / 0 prefix shadows with both plants biting. NOT "full suite green": parley_harness_golden_spec fails and perf_document_spec is ~50% flaky, BOTH reproduced at the branch point and unrelated to this diff — see the issue Log.'
 ```
 
 The `--actual` flag is deliberately absent: omitted, `close` measures and adopts the hours itself (active-time-v3). Never hand-type hours — a guessed value pollutes velocity calibration, which is the whole reason the `## Estimate` block above was derived rather than picked.
@@ -1087,3 +1087,66 @@ recorded decision that a *neighbouring* empty question is not adopted.
 **Note on structure:** "Chunk 1" and "Chunk 2" are document organization for the
 review loop, **not** SDLC milestones. There are no `Mx` tags and there is one
 review boundary, at `sdlc close` (AGENTS.md §3).
+
+### 2026-09-16 — boundary review disposition (close round 1, FIX-THEN-SHIP)
+
+Eight findings, two blocking. The reviewer re-ran the whole suite and probed
+header-cursor, EOF, closed-fold and two-press-with-typing shapes by hand.
+
+**BR-1 / I1 (Important) — the "one undo step" clause was asserted for the
+normal-mode press only.** The clause names *two* modes; the undo half was
+tested in the mode where the insert path's `stopinsert` plays no part, so the
+mechanism was untested exactly where it was at risk. The integration spec is
+now **parameterized over `{ "n", "i" }`**, so a clause naming two modes is
+asserted in both by construction — that is the class, not just the missing
+case. The reviewer also ran the counterfactual and found an insert mapping
+*without* `stopinsert` restores identically on one `u`: undo scope comes from
+`document.apply_user`'s user transaction, not from the `stopinsert`. The
+comment at `init.lua` no longer claims otherwise; `stopinsert` stays because it
+mirrors `branch_ref`'s `i` handler, and the comment now says that instead.
+
+**BR-2 / I2 (Important) — "the one place the portable key does not lead" was
+false, and the same paragraph disproved it.** Measured over the registry: the
+split is **even, 3–3**. `<C-g>`-leading: `outline`, `chat_drill_in`,
+`new_question`. Alt-leading: `open_file`, `branch_ref`, `chat_prune`. The atlas
+now states the measured split and explains the rule as scoped to cases where a
+terminal cannot be relied on for the alt chord; `config.lua` and the registry
+comment carry the same correction. The original claim was written from memory
+of three entries — the fix was one probe away, which is the lesson.
+
+**Minor — the preamble was on its fourth verbatim copy.** `chat_context(what)`
+now owns `not_chat` → `find_header_end` → `parse_chat` → cursor, and
+`ChatPrune`, `ExchangeCut`, `ExchangePaste` and `NewQuestion` all use it. Each
+command keeps its own message wording through `what`. Verified green:
+`topic_gen_spec` 9/9 (drives prune), `branch_child_spec`, `entity_textobj_spec`,
+`chat_move_spec`, `new_question_spec` 14/14, lint 0/0.
+
+**Minor — the streaming-refusal test stubbed a verdict.** Now labelled as the
+double it is, with the evidence for why the realer options were rejected:
+a second overlapping user capture is **measured to be allowed** (so it produces
+no refusal), and a detached document silently re-attaches because
+`buffer_edit.capture_user` does `document.get(buf) or document.attach(buf)`.
+Driving a real generation needs `chat_pending_spec`'s file-local helpers.
+Tracked as a follow-up rather than copied. The test now claims only what it
+proves: that a refusal is caught and reported rather than raised or swallowed.
+
+**Minor — the plan's literal `--verified` string was stale** ("unit 15/15 +
+integration 10/10 green; make test full suite green"). Corrected to the
+measured 14/14 + 14/14, and the "full suite green" claim replaced with the
+named pre-existing failures.
+
+**Minor — the atlas insertion swallowed a pre-existing sentence.** "`<C-g>` is
+the prefix surface for everything else" is back with the paragraph it belongs
+to.
+
+**Minor — header-cursor placement was neither tested nor documented.** Now
+both: an integration case pins that the question lands above the first
+exchange, and `atlas/chat/lifecycle.md` names it as `get_paste_line`'s header
+fallback and therefore `<C-g>V` parity.
+
+**Not fixed, deliberately — the refusal-UX divergence.** `NewQuestion` pcalls
+`replace_user_lines` and warns; the other twelve call sites let it raise a bare
+Lua error. The reviewer notes the new behavior is the better one. Unifying
+thirteen call sites changes error semantics across features this issue does not
+otherwise touch, at close time — a separable extension, not the point of #263.
+Filed as a follow-up issue instead of silently leaving it.

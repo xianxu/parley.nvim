@@ -1,5 +1,52 @@
 # Lessons
 
+## 2026-09-16 (#263 close review — FIX-THEN-SHIP, 8 findings)
+
+- **A doc claim about a COUNT is one probe away from being true.** The atlas
+  said this entry was "the one place the portable key does not lead", and named
+  a counterexample two lines later. Measured over the registry the split is
+  even, 3–3. The claim was written from memory of three entries on a page whose
+  own next sentence warns about undocumented exceptions. Rule: any sentence
+  asserting "the only", "the first", "always" or a number gets a script run
+  against the source of truth before it ships — especially on a page that is
+  itself the rule.
+
+- **A clause naming two modes must be asserted in both — parameterize, don't
+  add the missing case.** "Works from normal AND insert mode, and is one undo
+  step" had its undo half tested only in normal mode, which is precisely the
+  mode where the insert path's `stopinsert` plays no part. The fix is a loop
+  over the modes so the coupling is structural, not a second hand-written test
+  that the next clause can drift away from again.
+
+- **A comment that credits a mechanism is a testable claim.** `stopinsert` was
+  commented as keeping the edit out of the surrounding insert session's undo
+  block. The reviewer ran the counterfactual: without it, a single `u` still
+  restores byte-identically — undo scope comes from `document.apply_user`'s
+  user transaction. The code was fine; the explanation was fiction. Rule: if a
+  comment says "this line is what makes X work", delete the line and watch X
+  fail before writing it — otherwise say what it really is (here: mirrors the
+  house idiom).
+
+- **When a real seam cannot produce the failure, say so with the evidence.** A
+  refusal test stubbed a verdict. Two realer routes were tried and both
+  *measured* not to work — overlapping user captures are allowed, and a detached
+  document silently re-attaches. Recording those measurements in the test turns
+  "I took a shortcut" into "here is why the shortcut is the honest option", and
+  gives the follow-up issue its starting point.
+
+- **The fourth verbatim copy is the one that gets extracted.** The
+  `not_chat` → `find_header_end` → `parse_chat` preamble was inline in three
+  commands; the new one made four. Extracting `chat_context(what)` and
+  migrating all four is the class fix — adding a fourth copy and noting it for
+  later is how a fifth appears.
+
+- **A plan's literal `--verified` string goes stale like any other cached
+  fact.** It claimed "unit 15/15 + integration 10/10, full suite green" while
+  the truth was 14/14, 14/14, and two pre-existing failures. Close evidence is
+  read by the calibration ledger and by whoever audits the close. Rule: build
+  the `--verified` string from the run you just did, never from the plan.
+
+
 ## 2026-09-16 (#263 plan review — three fresh-context reviews on one plan)
 
 - **A plan that contains literal test code must be RUN, not read.** Two of the

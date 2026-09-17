@@ -657,8 +657,9 @@ M.entries = {
 	{
 		-- #263. <C-g>n is FIRST on purpose: resolve_keys preserves order and the
 		-- help float leads with keys[1], so this is the gesture help teaches.
-		-- See chat_shortcut_new_question in config.lua for why it departs from
-		-- #214's alt-leads rule. It took the chord from chat_search, retired here.
+		-- See chat_shortcut_new_question in config.lua for why: outline and
+		-- chat_drill_in lead the same way, so this is the house's even split, not
+		-- an exception. It took the chord from chat_search, retired here.
 		id = "new_question",
 		config_key = "chat_shortcut_new_question",
 		default_key = { "<C-g>n", "<M-n>" },

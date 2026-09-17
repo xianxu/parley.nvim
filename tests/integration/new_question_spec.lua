@@ -147,28 +147,40 @@ describe("new question chord", function()
 		vim.cmd("stopinsert")
 	end)
 
-	it("works from insert mode", function()
-		local buf = prepped(FIXTURE)
-		vim.api.nvim_win_set_cursor(0, { 8, 0 })
-		vim.cmd("startinsert")
-		local cmds = press("i")
-		assert.is_truthy(cmds:match("startinsert"), "no startinsert from the insert-mode map")
-		assert.equals(3, question_count(buf))
-		local row = vim.api.nvim_win_get_cursor(0)[1]
-		assert.equals("💬: ", body(buf)[row])
-		vim.cmd("stopinsert")
-	end)
+	-- The restated Done-when says "works from normal AND insert mode, and is one
+	-- undo step" -- ONE clause over two modes. The first version asserted the
+	-- undo half for normal only, which is exactly the mode where the insert
+	-- path's `stopinsert` plays no part, so the clause was untested where it was
+	-- actually at risk (#263 close review I1). Parameterising is the fix: a
+	-- clause naming two modes gets asserted in both, by construction.
+	for _, mode in ipairs({ "n", "i" }) do
+		local label = mode == "n" and "normal" or "insert"
 
-	it("is a single undo step", function()
-		local buf = prepped(FIXTURE)
-		local before = body(buf)
-		vim.api.nvim_win_set_cursor(0, { 8, 0 })
-		press()
-		vim.cmd("stopinsert")
-		assert.equals(3, question_count(buf))
-		vim.cmd("silent normal! u")
-		assert.same(before, body(buf))
-	end)
+		it("opens and enters insert from " .. label .. " mode", function()
+			local buf = prepped(FIXTURE)
+			vim.api.nvim_win_set_cursor(0, { 8, 0 })
+			if mode == "i" then vim.cmd("startinsert") end
+			local cmds = press(mode)
+			assert.is_truthy(cmds:match("startinsert"),
+				"no startinsert from the " .. label .. "-mode map")
+			assert.equals(3, question_count(buf))
+			local row = vim.api.nvim_win_get_cursor(0)[1]
+			assert.equals("💬: ", body(buf)[row])
+			vim.cmd("stopinsert")
+		end)
+
+		it("is a single undo step from " .. label .. " mode", function()
+			local buf = prepped(FIXTURE)
+			local before = body(buf)
+			vim.api.nvim_win_set_cursor(0, { 8, 0 })
+			if mode == "i" then vim.cmd("startinsert") end
+			press(mode)
+			vim.cmd("stopinsert")
+			assert.equals(3, question_count(buf))
+			vim.cmd("silent normal! u")
+			assert.same(before, body(buf))
+		end)
+	end
 
 	it("does not duplicate on a second press", function()
 		local buf = prepped(FIXTURE)
@@ -236,15 +248,27 @@ describe("new question chord", function()
 		vim.cmd("stopinsert")
 	end)
 
-	it("refuses visibly while a response owns the region", function()
+	-- A DOUBLE at the buffer_edit seam, and labelled as one. It proves that
+	-- NewQuestion catches a refusal and reports it visibly instead of raising a
+	-- bare Lua error at the user or silently doing nothing. It does NOT prove
+	-- that a live generation produces that refusal (#263 close review, minor).
+	--
+	-- Two realer options were tried and rejected on evidence:
+	--   * a second overlapping user capture -- MEASURED to be allowed, so it
+	--     produces no refusal at all;
+	--   * a detached document -- buffer_edit.capture_user does
+	--     `document.get(buf) or document.attach(buf)`, so it silently re-attaches
+	--     and the edit goes through.
+	-- Driving a real generation needs chat_pending_spec's file-local helpers,
+	-- which are not exported; that is tracked as a follow-up rather than copied
+	-- here. See the plan's ## Revisions.
+	it("catches a refusal and reports it instead of raising or no-op'ing", function()
 		local buf = prepped(FIXTURE)
 		local before = body(buf)
 		local warned = {}
 		local real_warning = parley.logger.warning
 		parley.logger.warning = function(m) table.insert(warned, tostring(m)) end
 
-		-- Take the write grant away from the user: an owned frame is exactly
-		-- what a streaming response holds, and capture_user refuses under it.
 		local edits = require("parley.buffer_edit")
 		local real_capture = edits.capture_user
 		edits.capture_user = function() return nil, "response is streaming" end
@@ -259,5 +283,21 @@ describe("new question chord", function()
 		assert.same(before, body(buf))
 		assert.is_true(#warned > 0, "refusal was silent")
 		assert.is_truthy(table.concat(warned, "\n"):match("NewQuestion stopped"))
+	end)
+
+	-- Verified by hand during the close review: with the cursor in the front
+	-- matter the question lands ABOVE the first exchange. That is correct
+	-- <C-g>V parity (get_paste_line falls back to header_end), and it was
+	-- neither tested nor documented until the review asked.
+	it("opens above the first exchange when the cursor is in the header", function()
+		local buf = prepped(FIXTURE)
+		vim.api.nvim_win_set_cursor(0, { 2, 0 })
+		press()
+		assert.equals(3, question_count(buf))
+		local rows = question_rows(buf)
+		-- the new one is FIRST, above what used to be the opening question
+		assert.is_true(rows[1] < rows[2])
+		assert.equals("💬: ", body(buf)[rows[1]])
+		vim.cmd("stopinsert")
 	end)
 end)

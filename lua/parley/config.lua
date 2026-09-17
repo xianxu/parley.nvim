@@ -373,12 +373,12 @@ local config = {
 	-- new, in both families. It took <C-g>n from chat_search, a next-question
 	-- search wrapper that plain `/` already covers.
 	--
-	-- <C-g>n LEADS, which is deliberate and is the one place this entry departs
-	-- from #214's "the portable alt key leads" rule (branch_ref, prune,
-	-- open_file). The operator asked for <C-g>n by name and chose to retire
-	-- chat_search for it, so <C-g>n is the gesture being taught and help must
-	-- advertise it first; <M-n> rides along as the alt-family twin. `outline`
-	-- ships { "<C-g>t", "<M-t>" } in the same order, so this is not a novel shape.
+	-- <C-g>n LEADS, which is deliberate: the operator asked for <C-g>n by name and
+	-- chose to retire chat_search for it, so <C-g>n is the gesture being taught
+	-- and help must advertise it first (the float renders keys[1]); <M-n> rides
+	-- along as the alt-family twin. This is not an exception -- the split is even.
+	-- <C-g>-leading: outline, chat_drill_in, new_question. Alt-leading, where
+	-- terminal portability is the point: open_file, branch_ref, chat_prune.
 	--
 	-- Overriding `shortcut` REPLACES the list -- name both if you want both.
 	chat_shortcut_new_question = { modes = { "n", "i" }, shortcut = { "<C-g>n", "<M-n>" } },
