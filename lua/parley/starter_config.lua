@@ -22,12 +22,25 @@ function M.options(roots)
     -- Keep editor/global shortcuts in the app key families. Finder controls
     -- live only in their picker buffers, so retain their complete default set.
     local registry = require('parley.keybinding_registry')
+    -- A text object is operator-pending/visual only: it fires after an operator
+    -- or inside a selection, never as a bare key, so it cannot take an ordinary
+    -- editing key away from the user. The family filter below exists to stop
+    -- exactly that, so it does not reach text objects -- without this carve-out
+    -- the app ships <C-g>k but no dae/yae/cae (#262).
+    local function object_only(modes)
+        if not modes or #modes == 0 then return false end
+        for _, mode in ipairs(modes) do
+            if mode ~= 'o' and mode ~= 'x' then return false end
+        end
+        return true
+    end
     for _, entry in ipairs(registry.entries) do
         if entry.config_key then
             local keys, modes = registry.resolve_keys(entry, defaults)
             local selected = {}
             for _, keybinding in ipairs(keys or {}) do
-                if entry.scope:match('_finder$') or keybinding:lower():match('^<c%-g>')
+                if entry.scope:match('_finder$') or object_only(modes)
+                    or keybinding:lower():match('^<c%-g>')
                     or keybinding:lower():match('^<m%-') then
                     selected[#selected + 1] = keybinding
                 end

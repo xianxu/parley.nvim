@@ -137,6 +137,18 @@ atlas:
       - tests/unit/exporter_tree_spec.lua
       - tests/integration/clipboard_live_spec.lua
 
+  chat/entity_delete:
+    code:
+      - lua/parley/entity_range.lua
+      - lua/parley/entity_textobj.lua
+      - lua/parley/markdown_heading.lua
+    tests:
+      - tests/unit/entity_range_spec.lua
+      - tests/unit/markdown_heading_spec.lua
+      - tests/unit/markdown_heading_conformance_spec.lua
+      - tests/integration/entity_textobj_spec.lua
+      - tests/integration/entity_delete_parity_spec.lua
+
   chat/lifecycle:
     code:
       - lua/parley/generation.lua

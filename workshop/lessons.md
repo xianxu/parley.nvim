@@ -2649,3 +2649,113 @@ download.
 - #254 BR32: test the complete scheduled backoff sequence, not only a manually
   advanced clock. Clamp every next probe to the declared deadline so an interval
   cannot extend the operating envelope.
+
+- #262 BR-1/BR-10: a guard derived from a CLASSIFICATION is not a guard on the
+  document. The delete-entity header floor read `parsed.header_end`, which is
+  nil whenever `not_chat` rejects a buffer — and it rejects for five reasons
+  unrelated to shape (filename not timestamped, under five lines, no `topic`
+  header). A transcript saved under an ordinary name was therefore unfloored
+  and `dae` on line 1 emptied it. State a predicate over the artifact's own
+  text, not over the label some earlier stage attached to it.
+
+- #262 BR-10: a validation predicate may never be stricter than the writer
+  whose output it must accept. The floor required header lines to be
+  `key: value`, but `defaults.chat_template` puts prose inside the front
+  matter, and `new_chat` escapes every `_` for markdown so the always-present
+  `system_prompt:` key arrives as `system\_prompt:`. Both disqualified a real
+  transcript, silently removing the floor. Where a predicate and a writer must
+  agree, conformance-test the predicate against the REAL writer over every
+  shape it can emit — a new template shape should fail the suite, not disable
+  a guard.
+
+- #262 BR-4/BR-12 (repeated twice): a differential/parity test must vary every
+  axis along which the two sides could disagree, and each axis must be
+  demonstrated RED without its fix. Sweeping only the cursor row let two
+  separate divergences ship green; even the first "document shape" axis was
+  useless because mutilating the header on disk gets the buffer classified
+  before either surface sees it. Write the axis enumeration into the spec as a
+  comment so the next one is added rather than rediscovered, and prove each new
+  axis fails with its fix reverted before believing it.
+
+- #262 round 1: do not blanket-tick plan checkboxes when applying rework. A
+  bulk `- [ ]` → `- [x]` marked a step done whose test did not exist; the
+  boundary review caught it. Tick what you ran.
+
+- #262 BR-11: a test whose fixture exits at an early guard pins half the
+  property it claims. The "thematic break is not a header" case used a title
+  that failed the line-1 check, so it never reached the terminator scan it was
+  written to defend. When a predicate has stages, give each stage a fixture
+  that reaches it.
+
+- #262 BR-29: read the EXIT CODE, not the Success lines. The parity spec — the
+  milestone's named best guard — was aborting partway through at nvim exit 1,
+  having printed Success for the tests it had finished. Piping to `grep`/`tail`
+  showed only those Success lines, so it read as passing, and it was reported
+  as "11/11" in a close's verified string while it never reached the summary.
+  A partial run looks exactly like a passing run when you only read stdout.
+  Capture the command's own status (`cmd > file; echo $?` — `$?` after a pipe
+  is the *last* stage's status, not the command's).
+
+- #262 BR-29: an anomaly you cannot explain is a finding, not noise. The
+  missing summary line was visible and I explained it away as "output
+  buffering" instead of checking. The explanation was wrong and the guard was
+  broken. When output is truncated, incomplete, or missing where it should be,
+  find the cause before reporting a result that depends on it.
+
+- #262 BR-29: a test that opens many buffers must release them. The sweep
+  created ~500 buffers and called `parley.setup()` for each, and nvim died
+  silently at ~240 with no traceback. Call one-time setup once, and delete the
+  buffer at the end of each iteration.
+
+- #262 BR-30: a filter must gate every read of the thing it filters, not the
+  entry point. `in_code` suppressed the heading DISPATCH but not the heading
+  scans inside `section_range`, so a `# x` in a code sample still terminated
+  the section above it and the range ended on the opening fence. When you add a
+  predicate, grep for every call of the function it guards and gate them all in
+  the same change.
+
+- #262 BR-20 (5 rounds open): cite SYMBOLS, not line numbers, for code that is
+  still moving. Each round's "fix" updated the numbers and the next round's
+  edits invalidated them again — `ChatPrune` moved 4255→4271, `ExchangeCut`
+  4423→4439, and a cited `chat_exchange_cut` range had drifted onto
+  `chat_search` entirely. A file:line that existed was not the same as a
+  file:line that said what the document claimed, and a checker that only
+  verifies the line is in range will pass all of them. Symbol names are
+  greppable and stable; keep line refs only where a specific assertion pins
+  them.
+
+- #262 BR-30/BR-32: when a finding names an invariant, ship the INVARIANT, not
+  the instances. Fences were walled in the paragraph walk, then in the section
+  scans, then the `to_end` path overwrote `last` from the exchange bound and
+  split a fence anyway — three rounds of the same bug because each fix was a
+  wall at one more call site. The guard that ends it is stated over the RESULT:
+  a range may never contain an odd number of fence delimiters, checked once
+  after every path has had its say.
+
+- #262 BR-34: an invariant is only as good as the property it states, and only
+  applies where it runs. The fence guard counted delimiter PARITY, but a range
+  holding one block's closer and the next block's opener has an even count and
+  splits both — the real property is block COVERAGE: a range touching any
+  delimiter must not begin or end part-way into a block. It was also placed
+  after an early `return` for one entity kind, so that path skipped it
+  entirely. When adding a post-condition, put it at the function's single exit
+  and check it catches a case the weaker formulation misses.
+
+- #262 BR-37: a test that computes its expectation with the implementation's
+  own predicate cannot detect a wrong predicate. The fence invariant asked
+  `code_block_memo`/`is_fence_delim` whether the range respected blocks — the
+  same functions the guard used — so when the guard's logic was wrong the two
+  agreed and 46/46 passed. An independent oracle (count ```/~~~ lines in the
+  RESULTING buffer with a plain pattern, after a real `dae` through the real
+  keymaps) failed immediately on the same build: "daE at row 11 left 1 fence
+  lines (odd)". Demonstrated both ways on the same tree. For any guard, write
+  at least one assertion whose expectation is derived WITHOUT the code under
+  test — ideally over observable output rather than an internal range.
+
+- #262 close gate: a guard can be wrong by being too STRICT as well as too
+  loose, and the strict direction is the one tests rarely cover. The fence
+  post-condition pulled a range back whenever it ended inside a block — but
+  `code_block_memo` resets at a 💬:/🤖: partition, so a block the next exchange
+  closes is already whole, and the pull-back silently truncated whole-exchange
+  deletes and stranded answer content. When adding a protective clamp, write
+  the case where the clamp must NOT fire.

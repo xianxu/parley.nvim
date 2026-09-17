@@ -35,7 +35,9 @@ local function canon(lhs)
     return ok and out or lhs
 end
 
-local MODES = { "n", "i", "v", "x" }
+-- #262 added operator-pending text objects (ae/ie/aE); without "o" here
+-- they sit outside BOTH the leak and the ghost guard.
+local MODES = { "n", "i", "v", "x", "o" }
 
 -- Snapshot of every buffer-local mapping, keyed mode+lhs.
 local function keymap_snapshot(buf)

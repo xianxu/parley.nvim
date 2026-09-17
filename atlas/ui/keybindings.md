@@ -23,6 +23,15 @@ follows a file or recognized artifact reference; `<M-o>` also follows Parley
 branch references before falling back to smart `gf`. See [Branching](../chat/inline_branch_links.md)
 and [Drill-In](../chat/drill_in.md) for placement and selection details.
 
+Structural editing uses text objects rather than one-off delete commands:
+`ae`/`ie` select the entity at the cursor (a markdown section, a paragraph, or
+a whole `💬:` exchange) and `aE` extends it through the end of the question, so
+`dae`, `yae`, `cae` and `vae` all compose from one definition. `<C-g>k` and
+`<C-g>K` are the normal-mode shortcuts to the two deletes. These are
+operator-pending/visual maps, which is why the app profile keeps them despite
+its `<C-g>`/`<M-…>` family filter — they cannot claim a bare editing key. See
+[Delete Entity at Cursor](../chat/entity_delete.md).
+
 ## Architecture: Keybinding Registry
 Configurable action keybindings are declared in `lua/parley/keybinding_registry.lua` — a single source of truth. Each entry carries:
 - `id`, `scope`, `desc`, `default_key`, `default_modes`

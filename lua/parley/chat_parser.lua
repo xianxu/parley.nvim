@@ -75,6 +75,64 @@ local function parse_header_key_value(line)
 	return content:match("^([%w_%.%+]+):%s*(.*)$")
 end
 
+--- The header end ONLY when the document actually looks like a transcript.
+---
+--- `find_header_end` returns the first `---` ANYWHERE, which is right for a
+--- buffer already known to be a chat and wrong as a shape test: in a genuine
+--- note a thematic break would look like a header terminator, and everything
+--- above it would stop being editable.
+---
+--- So the terminator must close a CONTIGUOUS run of header-shaped lines --
+--- `key: value`, `- key: value` or blank, the shape parse_header_key_value
+--- already defines (ARCH-DRY: not a fourth hardcoding of it). A note titled
+--- `# topic: how to cook` with prose and a `---` further down has non-header
+--- lines in between, so it correctly yields nil.
+--- Pure function.
+--- @param lines table|nil
+--- @return number|nil  1-based line of the header terminator
+M.transcript_header_end = function(lines)
+	if not lines or #lines == 0 then
+		return nil
+	end
+	local first = trim(lines[1])
+
+	-- Front matter: the fence IS the delimiter, so everything between the two
+	-- `---` lines is header whatever its shape. THE RULE this enforces: the
+	-- floor's predicate may never be stricter than the writer it must accept.
+	-- `defaults.chat_template` puts four lines of prose inside the fence, and
+	-- `new_chat` then escapes every `_` for markdown, turning the always-present
+	-- `system_prompt:` key into `system\_prompt:` -- a key-shape rule rejected
+	-- both, which silently removed the floor from every long-template chat.
+	-- Pinned by tests/unit/entity_range_spec.lua's template conformance case.
+	if first == "---" then
+		for i = 2, #lines do
+			if trim(lines[i]) == "---" then
+				return i
+			end
+		end
+		return nil
+	end
+
+	-- Legacy un-fenced form. Here there is no opening delimiter, so the shape
+	-- has to carry the signal: the title must be `topic:` specifically (a note
+	-- titled `# Recipe: soup` is not a transcript), and every line up to the
+	-- terminator must be header-shaped or blank -- otherwise a thematic break
+	-- in a genuine note would floor everything above it.
+	if not first:match("^#%s*topic:") then
+		return nil
+	end
+	for i = 2, #lines do
+		local content = trim(lines[i])
+		if content == "---" then
+			return i
+		end
+		if content ~= "" and not parse_header_key_value(lines[i]) then
+			return nil
+		end
+	end
+	return nil
+end
+
 local function parse_header_config_value(value)
 	if tonumber(value) ~= nil then
 		return tonumber(value)

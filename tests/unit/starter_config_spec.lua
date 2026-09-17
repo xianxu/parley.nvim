@@ -21,6 +21,30 @@ describe('starter profile options', function()
         assert.same({'claude:opus,sonnet,fable', 'codex:gpt-6,gpt-5', 'gemini'},
             require('parley.config').cliproxy.live_models.providers)
     end)
+    -- #262: the app filter keeps only <C-g>/<M-> families, because the app
+    -- must not claim ordinary editing keys from users who are not Vim experts.
+    -- A TEXT OBJECT is operator-pending/visual only -- it cannot fire as a bare
+    -- key -- so that policy does not reach it, and dropping it would leave the
+    -- app with the delete hotkeys but no dae/yae/cae.
+    it('keeps operator-pending text objects, which cannot claim a bare key', function()
+        local opts = starter.options({ data = '/profile/data', state = '/profile/state' })
+        assert.same({ 'ae' }, opts.chat_shortcut_entity_object_outer.shortcut)
+        assert.same({ 'ie' }, opts.chat_shortcut_entity_object_inner.shortcut)
+        assert.same({ 'aE' }, opts.chat_shortcut_entity_object_to_end.shortcut)
+        assert.same({ 'o', 'x' }, opts.chat_shortcut_entity_object_outer.modes)
+        -- the hotkey twins ride the <C-g> family as usual
+        assert.same({ '<C-g>k' }, opts.chat_shortcut_entity_delete.shortcut)
+        assert.same({ '<C-g>K' }, opts.chat_shortcut_entity_delete_to_end.shortcut)
+    end)
+
+    it('still refuses a bare normal-mode key from a non <C-g>/<M-> family', function()
+        local opts = starter.options({ data = '/profile/data', state = '/profile/state' })
+        -- gf is a parley_buffer normal-mode binding on a bare key: the app must
+        -- keep excluding it, or this fix has widened the policy rather than
+        -- carved out the one case it does not cover.
+        assert.is_nil(opts.chat_shortcut_resolve_ref_gf)
+    end)
+
     it('keeps chat prefix and Alt chords without enabling other shortcut families', function()
         local opts = starter.options({ data = '/profile/data', state = '/profile/state' })
         assert.same({ '<C-g>f' }, opts.global_shortcut_finder.shortcut)

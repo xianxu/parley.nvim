@@ -1,0 +1,26 @@
+local heading = require("parley.markdown_heading")
+
+describe("markdown_heading.level", function()
+    it("returns the level for column-zero ATX headings", function()
+        assert.equals(1, heading.level("# One"))
+        assert.equals(2, heading.level("## Two"))
+        assert.equals(3, heading.level("### Three"))
+    end)
+
+    it("requires a space after the hashes", function()
+        assert.is_nil(heading.level("#NoSpace"))
+        assert.is_nil(heading.level("##"))
+    end)
+
+    it("rejects indented headings and levels past the dialect cap", function()
+        assert.is_nil(heading.level("  # Indented"))
+        assert.is_nil(heading.level("#### Four"))
+    end)
+
+    it("rejects non-headings", function()
+        assert.is_nil(heading.level(""))
+        assert.is_nil(heading.level("plain text"))
+        assert.is_nil(heading.level("💬: a question"))
+        assert.is_nil(heading.level(nil))
+    end)
+end)
