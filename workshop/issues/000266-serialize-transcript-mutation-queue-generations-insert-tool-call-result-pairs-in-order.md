@@ -482,3 +482,31 @@ Test consequence: `tests/integration/chat_scoped_response_spec.lua:47` asserts
 two concurrent provider dispatches. M1 changes it to assert the queued shape with
 a comment naming the plan's "Deliberate over-serialization in M1" section; M2
 Task 2.3 restores the concurrent assertion and deletes that section.
+
+### 2026-09-17 — M1 Task 1.1 done; and a harness flake worth knowing
+
+`WriteTurn` landed pure with 8 passing cases, routed under `chat/document`.
+Added two cases beyond the plan: numeric-not-lexical ordering (guards the
+`'g'..serial` assumption three plan revisions carried before `state.lua:6-7` was
+actually read) and non-mutation of the caller's table.
+
+**Harness flake, pre-existing, not a regression.**
+`tests/integration/document_fold_batches_spec.lua` aborted the whole
+`chat/document` target twice in a row — four tests green, then
+`make: *** [test-spec] Error 1` with no assertion failure and no summary. It
+reproduced on a **clean tree** (changes stashed), so it is not #266's. The
+casualty is its 5th case, `'suspends broad cleanup above fifty thousand rows…'`.
+A third run passed it, and a `make -k` run reported 0 Failed / 0 Errors across
+all 32 files (325 successes) — so it is a **timeout flake on the 50,000-row
+corpus under parallel load**, not a broken test. `tests/helpers/spec_runner.lua:7-14`
+already grants it `timeout=180000, sequential=true` for exactly this reason; the
+default `JOBS=8` still gets it sometimes on this machine.
+
+Consequences to remember:
+- A single flaky spec **aborts the whole target**, so unrelated specs after it in
+  the run never execute — twice this hid whether `document_write_turn_spec` had
+  even run. When verifying one spec inside a large key, use `make -k test-spec
+  SPEC=<key>` so a flake elsewhere cannot mask the result.
+- Close evidence (`make test`) can flake for this reason. If it does, re-run
+  before treating it as a failure — and say in `--verified` which run is being
+  cited.
