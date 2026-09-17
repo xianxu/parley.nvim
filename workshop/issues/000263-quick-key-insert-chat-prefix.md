@@ -1,11 +1,12 @@
 ---
 id: 000263
-status: open
+status: working
 deps: []
 github_issue:
 created: 2026-09-16
 updated: 2026-09-16
 estimate_hours:
+started: 2026-09-16T20:14:01-07:00
 ---
 
 # Quick key to insert the chat question prefix at cursor
