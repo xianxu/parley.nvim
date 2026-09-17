@@ -1,12 +1,13 @@
 ---
 id: 000262
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-09-16
 updated: 2026-09-16
 estimate_hours: 2.57
 started: 2026-09-16T12:23:08-07:00
+actual_hours: 4.84
 ---
 
 # Delete entity at cursor — markdown section, paragraph, or chat question
@@ -328,6 +329,7 @@ at a time (ARCH-PURPOSE).
 ## Log
 
 ### 2026-09-16 — M2 review round 2: a Critical in my own test
+- 2026-09-16: closed — Both milestones closed under boundary review. All suites read from captured nvim exit status: entity_range 46/46 exit 0; entity_textobj 16/16 exit 0; entity_delete_parity 11/11 exit 0 and COMPLETE across five document-shape axes x two objects; markdown_heading 4/4 + dialect conformance 1/1; outline 20/20, outline_parity 15/15, picker_items 54/54 unchanged; keybindings 75/75; keybinding_agreement 33/33 with o inside both guards; starter_config 7/7 incl. the bare-gf negative; single_source_sweeps 21/21. Operator smoke-tested the feature in a real transcript and confirmed it working. BR-37 fixed both halves: confine_to_blocks advanced first onto the block closing delimiter and deleted it, stranding the opener - it now advances past the closer; and the fence guard gained an INDEPENDENT oracle, since the unit invariant computed its expectation with the same code_block_memo/is_fence_delim the guard uses and therefore stayed 46/46 green with the bug reinstated, while the new oracle - counting fence lines in the resulting buffer with a plain pattern after a real dae/daE through the real keymaps - failed at once with daE at row 11 left 1 fence lines (odd). Both demonstrated on the same tree. The fence rule itself is a post-condition over the final range at M.range single exit stating block COVERAGE, not delimiter parity. Known: tests/unit/parley_harness_golden_spec.lua fails 11/11 here AND on the branch base 7d5af5dd, verified in a worktree - pre-existing and unrelated. Three specs fail only under the 8-way parallel make target and pass serially. CALIBRATION CAVEAT: the measured window contains a large operator-requested detour diagnosing a machine-wide memory leak (filed as pair#274); hours adopted as measured per AGENTS.md 5, but a calibration pass should discount that segment.; review verdict: FIX-THEN-SHIP
 - 2026-09-16: closed M2 — M2 surface + four rounds of review fixes. Every suite below verified by capturing nvim exit status, not by reading Success lines (BR-29: the parity spec had been aborting at exit 1 partway through while printing successes, and was wrongly reported as passing in an earlier close). entity_range 45/45 exit 0; entity_textobj 15/15 exit 0; parity 11/11 exit 0 and COMPLETE across five document-shape axes x two objects; outline 20/20 exit 0; single_source_sweeps 21/21 exit 0; keybindings 75/75; keybinding_agreement 33/33 with o inside both guards; starter_config 7/7 incl. the bare-gf negative. Fence handling uses lexical.is_fence_delim, the same predicate code_block_memo uses, and in_code now gates every heading read -- dispatch, the section forward scan, and the to_end backward walk (BR-26, BR-30); each verified RED with its fix reverted. BR-20 closed mechanically: every changed lua/ and tests/ path is named in the plan and every file:line it names resolves. BR-22 root-caused and fixed: Review-Verdict trailers in mid-stream fix commits were being read as boundary markers, so each fix silently started a new window; the last commit carries no trailer.; review verdict: FIX-THEN-SHIP
 
 **BR-29 (Critical): the parity spec was aborting, and I reported it as

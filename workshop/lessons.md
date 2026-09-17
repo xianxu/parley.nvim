@@ -2751,3 +2751,11 @@ download.
   lines (odd)". Demonstrated both ways on the same tree. For any guard, write
   at least one assertion whose expectation is derived WITHOUT the code under
   test — ideally over observable output rather than an internal range.
+
+- #262 close gate: a guard can be wrong by being too STRICT as well as too
+  loose, and the strict direction is the one tests rarely cover. The fence
+  post-condition pulled a range back whenever it ended inside a block — but
+  `code_block_memo` resets at a 💬:/🤖: partition, so a block the next exchange
+  closes is already whole, and the pull-back silently truncated whole-exchange
+  deletes and stranded answer content. When adding a protective clamp, write
+  the case where the clamp must NOT fire.

@@ -196,7 +196,7 @@ end
 --- to_end's overwrite of `last` from the exchange bound long after the wall
 --- has had its say. Three rounds of this bug were three walls at three call
 --- sites; this is the one statement instead.
-local function confine_to_blocks(range, lines, in_code)
+local function confine_to_blocks(range, lines, in_code, patterns)
 	local is_fence = require("parley.document.lexical").is_fence_delim
 	local touches = false
 	for i = range.first, range.last do
@@ -208,10 +208,26 @@ local function confine_to_blocks(range, lines, in_code)
 	if not touches then
 		return range
 	end
-	-- ends part-way into a block: in_code is still true on the last row, so the
-	-- closer lies beyond the range. Pull back to before the block's opener.
-	while range.last >= range.first and in_code[range.last] do
-		range.last = range.last - 1
+	-- Ends part-way into a block ONLY if that block is closed by a fence
+	-- delimiter beyond the range. code_block_memo also resets at a partition
+	-- (💬:/🤖:), so a block the next exchange closes is already whole -- and
+	-- pulling back there truncated a whole-exchange delete and stranded answer
+	-- content instead of protecting anything.
+	local lexical = require("parley.document.lexical")
+	local closed_beyond = false
+	for i = range.last + 1, #lines do
+		if lexical.is_partition(lines[i], patterns) then
+			break
+		end
+		if is_fence(lines[i], true) then
+			closed_beyond = true
+			break
+		end
+	end
+	if closed_beyond then
+		while range.last >= range.first and in_code[range.last] do
+			range.last = range.last - 1
+		end
 	end
 	-- begins part-way into a block: the first row is inside one and is not its
 	-- opener (an opener has in_code true with false on the line before it).
@@ -293,8 +309,9 @@ function M.range(parsed, lines, row, opts)
 	-- code sample builds a section that runs past the closing fence, which is
 	-- the fence bug again one level up (is_wall only guards the paragraph
 	-- walk). Reuses highlight_structure's memo rather than re-scanning fences.
-	local in_code = require("parley.highlight_structure").code_block_memo(
-		lines, require("parley.document.lexical").patterns(opts.config or require("parley.config")), true)
+	local patterns = require("parley.document.lexical").patterns(
+		opts.config or require("parley.config"))
+	local in_code = require("parley.highlight_structure").code_block_memo(lines, patterns, true)
 
 	local idx, bounds = exchange_at(parsed, lines, row)
 	local found
@@ -311,7 +328,7 @@ function M.range(parsed, lines, row, opts)
 		if found.first > found.last then
 			return nil
 		end
-		confine_to_blocks(found, lines, in_code)
+		confine_to_blocks(found, lines, in_code, patterns)
 		return (found.first <= found.last) and found or nil
 	end
 
@@ -354,7 +371,7 @@ function M.range(parsed, lines, row, opts)
 	end
 
 	summary_trim(found, parsed, idx, lines)
-	confine_to_blocks(found, lines, in_code)
+	confine_to_blocks(found, lines, in_code, patterns)
 
 	if found.first > found.last or found.first < floor or found.last > #lines then
 		return nil

@@ -1143,3 +1143,22 @@ deltas; this entry is that record.
   change affecting packaged-app users; stale `ExchangeCut` line refs corrected
   to `:4439`/`:4529`; the dropped `tests/perf/entity_range.lua` no longer named
   as a file to create.
+
+### 2026-09-16 — close-gate rounds (BR-34, BR-37, partition-closed blocks)
+
+- **The fence rule became a post-condition over the final range**, at
+  `M.range`'s single exit, stating block **coverage** rather than delimiter
+  parity — a range holding one block's closer and the next block's opener has
+  even parity and splits both. It had also been placed after the question
+  branch's early return, so whole-exchange ranges skipped it.
+- **`confine_to_blocks` advanced `first` onto the closing delimiter** and
+  deleted it, stranding the opener; it now advances past the closer.
+- **It also over-reached**: `code_block_memo` resets at a 💬:/🤖: partition, so
+  a block the next exchange closes is already whole. Pulling back there
+  truncated a whole-exchange delete and stranded answer content. The pull-back
+  now applies only when a fence delimiter closes the block beyond the range.
+- **The fence guard gained an independent oracle.** The unit invariant computed
+  its expectation from the same `code_block_memo`/`is_fence_delim` the guard
+  uses, so it stayed 46/46 green with the stranded-opener bug reinstated. An
+  integration oracle counting fence lines in the resulting buffer with a plain
+  pattern caught it immediately.

@@ -590,6 +590,29 @@ describe("entity_range invariants", function()
 		end
 	end)
 
+	-- The guard must not over-reach either: code_block_memo resets at a 💬:/🤖:
+	-- partition, so a block the NEXT exchange closes is already whole. Pulling
+	-- back there truncated a whole-exchange delete and stranded answer content.
+	it("does not truncate a delete over a partition-closed block", function()
+		local lines2 = {
+			"# topic: t", "- file: t.md", "---", "",
+			"💬: first",       -- 5
+			"", "🤖: [A]",     -- 6,7
+			"```lua",          -- 8  opener with no closer before the next 💬:
+			"code",            -- 9
+			"",                -- 10
+			"💬: second",      -- 11
+			"", "🤖: [A]",     -- 12,13
+			"second answer",   -- 14
+		}
+		local p2 = parse(lines2)
+		local r = entity_range.range(p2, lines2, 5)
+		assert.equals("question", r.kind)
+		assert.is_true(r.last >= 9,
+			("whole-exchange delete truncated to %d; answer content stranded"):format(r.last))
+		assert.is_true(r.last < 11, "must still stop before the next question")
+	end)
+
 	it("never returns an out-of-range or inverted range", function()
 		for _, lines in ipairs(CORPUS) do
 			local ok, parsed = pcall(parse, lines)

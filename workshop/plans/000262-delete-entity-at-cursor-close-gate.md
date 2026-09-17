@@ -723,6 +723,101 @@ rounds:
           family: docs-edit-mangles-prose
           round: 11
       blocked: true
+    - "n": 12
+      timestamp: "2026-09-16T17:55:03-07:00"
+      agent: claude
+      dispose:
+        - id: BR-13
+          disposition: not-addressed
+          note: plan.md:945 still reads "ExchangeCut's preamble verbatim ()" while delete_entity_range uses entity_textobj.parsed_for; unchanged this round.
+          round: 12
+        - id: BR-23
+          disposition: not-addressed
+          note: tests/perf/ has no entity_range spec; atlas/chat/entity_delete.md:113 still states in its own prose that nothing guards the numbers.
+          round: 12
+        - id: BR-24
+          disposition: not-addressed
+          note: entity_delete_parity_spec.lua:78 still declares module-level `shape`, assigned in each it() body and read by fresh().
+          round: 12
+        - id: BR-25
+          disposition: not-addressed
+          note: keybinding_registry.lua:483/:493/:503 still read "dae/yae/cae", "die/yie/cie", "(daE)".
+          round: 12
+        - id: BR-27
+          disposition: not-addressed
+          note: Measured - range() returns nil on a fenced "# heading" row while atlas:94-96 still calls it content; entity_range.lua:10 still says "Five rules" over six, with a separate "Rule 7" at :186.
+          round: 12
+        - id: BR-34
+          disposition: addressed
+          note: Both halves verified - range(p,L,5) on the stopped-generation fixture now carries zero delimiters, and the coverage check catches the adjacent-block case parity misses; the structural half (private compute, one unavoidable exit) was not adopted, and the new Important is its consequence.
+          round: 12
+        - id: BR-35
+          disposition: not-addressed
+          note: All five passages unchanged; the 1a9cd92c diff shows the fence.open_len -> lexical.is_fence_delim substitution that inverted the :1131 record.
+          round: 12
+        - id: BR-36
+          disposition: not-addressed
+          note: '"cae" still appears in tests/ only inside comments; entity_textobj_spec.lua:220 is still titled for die and cae and runs only die.'
+          round: 12
+        - id: BR-37
+          disposition: addressed
+          note: Reverted the fix in a scratch tree - entity_textobj_spec.lua:288 goes red while the unit invariant stays 46/46 green, and an effect-stated oracle over eight fenced fixtures is clean on the shipped build.
+          round: 12
+        - id: BR-38
+          disposition: not-addressed
+          note: init.lua:4518 still heads delete_entity_range's comment block with ExchangePaste's docstring; ExchangePaste at :4563 still has none.
+          round: 12
+      findings:
+        - id: BR-39
+          severity: Important
+          title: the fence post-condition truncates ranges that completely cover a partition-closed block, so a whole-exchange delete strands answer content
+          detail: |-
+            7th in this family - do NOT patch the question exit. entity_range.lua:213 reads
+            in_code[range.last] as a proxy for "ends part-way into a block", but code_block_memo
+            also closes a block at a partition line, so a range covering a partition-closed block
+            WHOLE reads as part-way-in and is silently shrunk. Measured end-to-end through the real
+            keymaps on a transcript whose answer was cut off mid-code-block: dae on the question line
+            returns 5..9 instead of 5..12 and leaves a bare ```lua orphaned under no question,
+            contradicting Done-when's "deletes that whole question/answer exchange" and the Spec's
+            "does not leave orphaned answer text". Not question-specific - dae on a heading gives
+            section 8..10 instead of 8..12, and daE from the same row gives 8..10, so the "drop the
+            rest of this answer" case fails exactly when a stopped generation produced the document.
+            THE RULE, both halves. (1) State the post-condition over the EFFECT, not over a proxy
+            read from the pre-delete memo: recompute code_block_memo over the surviving lines and
+            require no surviving line's in_code to change, shrinking only when that fails and only
+            by the minimum. That is the oracle BR-37 asked for; entity_range_spec.lua:577-584 still
+            restates confine_to_blocks' own loop conditions, and the new independent oracle at
+            entity_textobj_spec.lua:288 asserts fence-line PARITY - the property febdb67b itself
+            established is too weak - so neither assertion can see this. (2) One unavoidable exit:
+            split the body into a private compute(...) so M.range = compute -> post_condition ->
+            clamp; the call was instead added by hand at the second exit (:314 alongside :357), which
+            is the instance again, and a third kind added later skips it.
+          family: range-splits-a-structure
+          round: 12
+        - id: BR-40
+          severity: Minor
+          title: the close-review round edited the plan body with no "## Revisions" entry recording it
+          detail: |-
+            1a9cd92c added a "Citation policy" block and rewrote a dozen passages across the plan;
+            the last Revisions heading is still "2026-09-16 - M2 boundary review (four rounds)".
+            AGENTS.md: revising a plan artifact mid-stream appends a Revisions entry (timestamp +
+            reason + delta) rather than overwriting. Same rule BR-28 named one boundary earlier.
+          family: plan-edit-unrecorded
+          round: 12
+        - id: BR-41
+          severity: Minor
+          title: tests/unit/tool_resources_spec.lua dies silently mid-run under the parallel runner at HEAD
+          detail: |-
+            make test-unit failed 2 of 4 runs at b4ebed68 with nvim exiting nonzero after the 6th
+            test, no traceback, Success lines already printed - the BR-29 signature. 0 of 3 failures
+            at base 85e116c2; passes in isolation and with JOBS=1. The spec is untouched by this diff,
+            so the likely trigger is the four added unit spec files changing scheduling pressure.
+            Separately, tests/unit/parley_harness_golden_spec.lua fails 11/11 at BOTH base and head -
+            pre-existing and environmental, not this window's - but it means make test exits 2 here,
+            and the close's --verified string should say so rather than claim a green suite.
+          family: silent-spec-abort
+          round: 12
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#262 (boundary-review)
@@ -1053,6 +1148,58 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-38** [Minor] `docs-edit-mangles-prose` M.cmd.ExchangePaste lost its docstring to the inserted delete_entity_range comment block
   4th in this family (BR-18, BR-27, BR-35). init.lua:4518 - "--- Paste previously cut exchanges after the exchange at cursor." now heads delete_entity_range's comment block, and ExchangePaste at :4563 has none. Sweep it with BR-27 and BR-35 as one enumeration under the rule BR-35 already stated; this is the first instance of that rule breaking in lua/ rather than in a plan.
 
+## Round 12 — 2026-09-16T17:55:03-07:00 (claude) — passed
+
+### Disposed
+
+- BR-13 — not-addressed — plan.md:945 still reads "ExchangeCut's preamble verbatim ()" while delete_entity_range uses entity_textobj.parsed_for; unchanged this round.
+- BR-23 — not-addressed — tests/perf/ has no entity_range spec; atlas/chat/entity_delete.md:113 still states in its own prose that nothing guards the numbers.
+- BR-24 — not-addressed — entity_delete_parity_spec.lua:78 still declares module-level `shape`, assigned in each it() body and read by fresh().
+- BR-25 — not-addressed — keybinding_registry.lua:483/:493/:503 still read "dae/yae/cae", "die/yie/cie", "(daE)".
+- BR-27 — not-addressed — Measured - range() returns nil on a fenced "# heading" row while atlas:94-96 still calls it content; entity_range.lua:10 still says "Five rules" over six, with a separate "Rule 7" at :186.
+- BR-34 — addressed — Both halves verified - range(p,L,5) on the stopped-generation fixture now carries zero delimiters, and the coverage check catches the adjacent-block case parity misses; the structural half (private compute, one unavoidable exit) was not adopted, and the new Important is its consequence.
+- BR-35 — not-addressed — All five passages unchanged; the 1a9cd92c diff shows the fence.open_len -> lexical.is_fence_delim substitution that inverted the :1131 record.
+- BR-36 — not-addressed — "cae" still appears in tests/ only inside comments; entity_textobj_spec.lua:220 is still titled for die and cae and runs only die.
+- BR-37 — addressed — Reverted the fix in a scratch tree - entity_textobj_spec.lua:288 goes red while the unit invariant stays 46/46 green, and an effect-stated oracle over eight fenced fixtures is clean on the shipped build.
+- BR-38 — not-addressed — init.lua:4518 still heads delete_entity_range's comment block with ExchangePaste's docstring; ExchangePaste at :4563 still has none.
+
+### Raised
+
+- **BR-39** [Important] `range-splits-a-structure` the fence post-condition truncates ranges that completely cover a partition-closed block, so a whole-exchange delete strands answer content
+  7th in this family - do NOT patch the question exit. entity_range.lua:213 reads
+  in_code[range.last] as a proxy for "ends part-way into a block", but code_block_memo
+  also closes a block at a partition line, so a range covering a partition-closed block
+  WHOLE reads as part-way-in and is silently shrunk. Measured end-to-end through the real
+  keymaps on a transcript whose answer was cut off mid-code-block: dae on the question line
+  returns 5..9 instead of 5..12 and leaves a bare ```lua orphaned under no question,
+  contradicting Done-when's "deletes that whole question/answer exchange" and the Spec's
+  "does not leave orphaned answer text". Not question-specific - dae on a heading gives
+  section 8..10 instead of 8..12, and daE from the same row gives 8..10, so the "drop the
+  rest of this answer" case fails exactly when a stopped generation produced the document.
+  THE RULE, both halves. (1) State the post-condition over the EFFECT, not over a proxy
+  read from the pre-delete memo: recompute code_block_memo over the surviving lines and
+  require no surviving line's in_code to change, shrinking only when that fails and only
+  by the minimum. That is the oracle BR-37 asked for; entity_range_spec.lua:577-584 still
+  restates confine_to_blocks' own loop conditions, and the new independent oracle at
+  entity_textobj_spec.lua:288 asserts fence-line PARITY - the property febdb67b itself
+  established is too weak - so neither assertion can see this. (2) One unavoidable exit:
+  split the body into a private compute(...) so M.range = compute -> post_condition ->
+  clamp; the call was instead added by hand at the second exit (:314 alongside :357), which
+  is the instance again, and a third kind added later skips it.
+- **BR-40** [Minor] `plan-edit-unrecorded` the close-review round edited the plan body with no "## Revisions" entry recording it
+  1a9cd92c added a "Citation policy" block and rewrote a dozen passages across the plan;
+  the last Revisions heading is still "2026-09-16 - M2 boundary review (four rounds)".
+  AGENTS.md: revising a plan artifact mid-stream appends a Revisions entry (timestamp +
+  reason + delta) rather than overwriting. Same rule BR-28 named one boundary earlier.
+- **BR-41** [Minor] `silent-spec-abort` tests/unit/tool_resources_spec.lua dies silently mid-run under the parallel runner at HEAD
+  make test-unit failed 2 of 4 runs at b4ebed68 with nvim exiting nonzero after the 6th
+  test, no traceback, Success lines already printed - the BR-29 signature. 0 of 3 failures
+  at base 85e116c2; passes in isolation and with JOBS=1. The spec is untouched by this diff,
+  so the likely trigger is the four added unit spec files changing scheduling pressure.
+  Separately, tests/unit/parley_harness_golden_spec.lua fails 11/11 at BOTH base and head -
+  pre-existing and environmental, not this window's - but it means make test exits 2 here,
+  and the close's --verified string should say so rather than claim a green suite.
+
 ## Open findings
 
 - **BR-13** [Minor] `plan-table-understates-code` REPEAT (2nd) - plan body still describes the implementation BR-2 removed
@@ -1060,8 +1207,9 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-24** [Minor] `shared-mutable-test-fixture` the parity spec mutates a module-level `shape` upvalue that fresh() reads
 - **BR-25** [Minor] `inconsistent-error-handling` help_desc strings for the entity family list operators inconsistently
 - **BR-27** [Minor] `docs-edit-mangles-prose` the fence docs describe behavior the code does not have, in both the atlas page and the module docstring
-- **BR-34** [Important] `range-splits-a-structure` the fence post-condition is skipped on M.range's question exit, and states parity rather than block coverage
 - **BR-35** [Minor] `docs-edit-mangles-prose` the de-line-numbering pass damaged five plan passages, one of which inverts the record it keeps
 - **BR-36** [Minor] `checkbox-without-artifact` cae is claimed by Done-when and by a test's own name, and is executed nowhere
-- **BR-37** [Important] `range-splits-a-structure` daE inside a code fence deletes the block's closer and strands its opener - the guard's own test asserts the guard's own predicate
 - **BR-38** [Minor] `docs-edit-mangles-prose` M.cmd.ExchangePaste lost its docstring to the inserted delete_entity_range comment block
+- **BR-39** [Important] `range-splits-a-structure` the fence post-condition truncates ranges that completely cover a partition-closed block, so a whole-exchange delete strands answer content
+- **BR-40** [Minor] `plan-edit-unrecorded` the close-review round edited the plan body with no "## Revisions" entry recording it
+- **BR-41** [Minor] `silent-spec-abort` tests/unit/tool_resources_spec.lua dies silently mid-run under the parallel runner at HEAD
