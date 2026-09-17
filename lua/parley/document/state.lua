@@ -76,6 +76,11 @@ end
 
 function M.snapshot(doc) return copy(state(doc)) end
 
+--- The current write-turn holder, or nil. O(1): the coordinator compares this
+--- before and after every transition to decide whether to wake subscribers, and
+--- a full M.snapshot on that path would double an already-expensive copy.
+function M.turn(doc) return state(doc).turn end
+
 function M.resolve(doc,request,current)
     local s=state(doc)
     if type(request)~='table' or not s.attached or request.epoch~=s.epoch then return reject('epoch') end

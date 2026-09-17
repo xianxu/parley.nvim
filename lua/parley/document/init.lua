@@ -321,7 +321,8 @@ function M.transition(doc,event)
     local s=state(doc)
     if s.dead or type(event)~='table' then return effects(s,State.transition(s.authority,event)) end
     if event.kind~='register_generation' and event.kind~='acquire' and event.kind~='revoke'
-        and event.kind~='finish_generation' and event.kind~='reserve_capacity' and event.kind~='release_capacity' then return {ok=false,reason='coordinator-owned event',effects={}} end
+        and event.kind~='finish_generation' and event.kind~='reserve_capacity' and event.kind~='release_capacity'
+        and event.kind~='request_turn' and event.kind~='release_turn' then return {ok=false,reason='coordinator-owned event',effects={}} end
     if event.kind=='acquire' then
         if type(event.regions)~='table' or #event.regions>16 then return {ok=false,reason='grant limit',effects={}} end
         for _,region in ipairs(event.regions or {}) do
@@ -334,9 +335,15 @@ function M.transition(doc,event)
             end
         end
     end
+    local before=State.turn(s.authority)
     local result=effects(s,State.transition(s.authority,event))
     if Replacement.prune(s) then schedule(doc) end
     Append.prune(s.append,State.snapshot(s.authority).grants)
+    -- Compare the value rather than listing event kinds. finish_generation moves
+    -- the turn as often as an explicit release does, and a per-event list drops it
+    -- — leaving a generation parked on a 'waiting' step asleep for good.
+    local after=State.turn(s.authority)
+    if after~=before then notify(s,{kind='turn',turn=after}) end
     return result
 end
 function M.repair_step(doc,budget)

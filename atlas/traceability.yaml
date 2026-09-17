@@ -294,6 +294,7 @@ atlas:
   chat/ownership:
     code:
       - lua/parley/document/state.lua
+      - lua/parley/document/init.lua
       - lua/parley/document/editor.lua
       - lua/parley/document/user_edits.lua
       - lua/parley/document/replacement.lua
@@ -304,6 +305,7 @@ atlas:
       - lua/parley/response_provider.lua
       - lua/parley/response_tools.lua
     tests:
+      - tests/integration/document_turn_wake_spec.lua
       - tests/unit/document_state_spec.lua
       - tests/unit/document_write_plan_spec.lua
       - tests/unit/document_coordinator_spec.lua
