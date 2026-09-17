@@ -1,5 +1,60 @@
 # Lessons
 
+## 2026-09-16 (#263 plan review — three fresh-context reviews on one plan)
+
+- **A plan that contains literal test code must be RUN, not read.** Two of the
+  three reviewers copied this plan's literal module and literal unit spec into
+  the tree and executed them; that is the only reason an assertion that *cannot
+  pass* was caught before implementation. `p.row < next_exchange.line_start` is
+  off by one because `get_paste_line` returns the end of the cursor's exchange
+  *including its trailing blank*, so the inserted row equals the next
+  exchange's pre-insertion `line_start`. Reading the plan agrees with it; only
+  running it disagrees. Rule: if a plan ships executable code, execute it as
+  part of writing the plan — and when a test fails against code you believe is
+  correct, suspect the assertion before "fixing" the code to match.
+
+- **Naming an existing file as the model for a technique is a factual claim —
+  check it.** Task 4 cited `entity_textobj_spec.lua` as the model for driving
+  chords through real keymaps with `nvim_feedkeys`. That file uses neither
+  `nvim_feedkeys` nor `nvim_replace_termcodes` and drives `vim.cmd("normal …")`
+  instead. Three techniques needed three different real sources. Rule: grep the
+  cited file for the cited API before writing "model this on X".
+
+- **A revision that changes WHAT is built must restate the ACCEPTANCE
+  CRITERIA, not just the design.** The reframe from cursor-position to
+  exchange-structural was recorded correctly in `## Revisions`, but `## Spec`
+  and `## Done when` still described the old feature — and `sdlc close` judges
+  the diff against Done-when. Three of five bullets were unsatisfiable by the
+  new design *on purpose*. Rule: a revision names the superseded clauses and
+  restates the contract in the same edit.
+
+- **Widening a guard's domain widens its false-positive surface too.** Moving
+  the chord-collision guard from `<M-…>`-only to every key pulled in entries
+  the old filter never saw: `{o,x}`-only text objects and normal-only `gf`/`gP`.
+  Scope overlap alone stopped being sufficient — two bindings only fight if
+  they are live in the same buffer AND the same mode. Rule: when you widen what
+  a guard inspects, re-derive the conditions under which two inspected things
+  actually conflict.
+
+- **Three copies of a detection loop means the plant proves a different guard
+  than the one that ships.** The first draft wrote the collision scan out in
+  both guards and again inside the test meant to prove them. That is the same
+  defect the plan warns about elsewhere (an expectation computed with the code
+  under test agrees with itself). Rule: a plant-a-failure test calls the
+  production detection function, never a copy of it — and asserts the offender
+  by name, not `found == true`, so it cannot borrow its meaning from a
+  neighbouring test.
+
+- **"Expected: PASS" is a claim about which tests actually run.** Two steps
+  named oracles that never execute: `documentation_spec.lua` is routed under
+  `infra/starter`, so neither `SPEC=ui/keybindings` nor `SPEC=chat/lifecycle`
+  runs it; and new specs must be routed in `atlas/traceability.yaml` in the
+  commit that CREATES them, because `single_source_sweeps_spec` reads the
+  working tree and fails on an issue branch for any unrouted spec. Rule: before
+  writing "Expected: PASS", run `scripts/spec_test_map.sh list-tests <key>` and
+  confirm the oracle you are relying on is in the list.
+
+
 ## 2026-09-13 (#245 integration review)
 
 - When moving an environment probe behind configure, preserve callers that
