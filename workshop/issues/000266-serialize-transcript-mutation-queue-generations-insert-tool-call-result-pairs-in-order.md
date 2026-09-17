@@ -6,7 +6,7 @@ github_issue:
 target: transcript-is-the-whole-truth
 created: 2026-09-17
 updated: 2026-09-17
-estimate_hours: 14.74
+estimate_hours: 10.74
 started: 2026-09-17T11:06:53-07:00
 ---
 
@@ -125,47 +125,72 @@ derive from the new one, not restate the old (ARCH-PURPOSE shadow-sweep).
 
 *Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against `baseline-v3.1.md`. Method A only.*
 
-v3.1 rules applied: design hours taken from the v2 primitive table unchanged;
-`impl=` values written at **40%** of the table's implementation hours; design
-buffer **0.15** rather than 0.30 because a thorough plan doc exists
-(`workshop/plans/000266-serialize-transcript-mutation-plan.md`, six revisions,
-cleared plan-quality at round 2). Familiarity 1.0 — the document subsystem is
-well understood after the #261 audit, but it is intricate enough that no
-discount is warranted.
+**Revised 2026-09-17 after the estimate-quality judge (14.74 → 10.74).** The
+first derivation reconciled arithmetically but mis-allocated: design was 76% of
+the pre-buffer total against a ledger mean of 0.35, and Σdesign 10.1 would have
+been the largest design figure in the ledger's history. Its stated justification
+("six revisions and six reviews, inside the measured window") is measurable, and
+`sdlc actual --issue 266` reads **4.32h** for a window that already contains all
+six revisions and all six reviews — so 11.6h post-buffer implied ~7h of *further*
+design dialogue on a plan carrying a `## Decisions taken, so they are not
+re-opened` section written to prevent exactly that.
 
-Design is weighted to the top of its ranges deliberately: this design took six
-revisions and six fresh-context reviews before clearing, and that time is inside
-the measured window (claimed 2026-09-17, planning began the same day).
+Corrections applied:
+
+1. **v2 Step 3 now applied, not skipped.** The first pass took full top-of-range
+   design *and* v2.1 Step 6's +15% thorough-plan buffer — the credit claimed on
+   the buffer and denied on the hours. Design for plan-resolved primitives is
+   discounted ×0.2; `issue-spec` is not discounted, since its design *is* the
+   spec authoring.
+2. **Design anchored to measurement.** Σdesign 5.2 × 1.15 = 5.98, against 4.32h
+   already spent plus modest in-flight design across four milestones.
+3. **Implementation decomposed.** `lua-neovim` is the table's "single, focused"
+   feature; M1 and M3 are each several. M1 splits into the turn module + reducer,
+   the coordinator guard + six caller predicates, and the `draining` phase +
+   release matrix. M3 splits into `ToolSequence` + ordered pump, the `⏳:` marker
+   + 24-permutation sweep, the reservation/ticket/child-grant removal, and the
+   tool→pending progress edge.
+4. **Atlas counted three times**, matching the three rewrites the plan schedules
+   (`chat/ownership.md` and `providers/architecture.md` in Task 1.10,
+   `providers/tool_use.md` in Task 3.6). These are rewrites, not appends.
+
+Familiarity 1.0 — the document subsystem is well understood after the #261
+audit, but intricate enough that no discount is warranted.
 
 ```estimate
 model: estimate-logic-v3.1
 familiarity: 1.0
 design-buffer: 0.15
 item: issue-spec                design=1.5 impl=0.12
-item: lua-neovim                design=3.0 impl=0.6
-item: cross-cutting-refactor    design=0.6 impl=0.2
+item: lua-neovim                design=0.6 impl=0.6
+item: cross-cutting-refactor    design=0.2 impl=0.2
+item: lua-neovim                design=0.6 impl=0.6
 item: milestone-review          design=0.0 impl=0.2
-item: lua-neovim                design=1.5 impl=0.4
+item: lua-neovim                design=0.4 impl=0.4
 item: milestone-review          design=0.0 impl=0.2
-item: lua-neovim                design=2.0 impl=0.52
-item: cross-cutting-refactor    design=0.8 impl=0.2
+item: lua-neovim                design=0.6 impl=0.6
+item: lua-neovim                design=0.4 impl=0.5
+item: cross-cutting-refactor    design=0.2 impl=0.2
+item: lua-neovim                design=0.2 impl=0.3
 item: milestone-review          design=0.0 impl=0.2
-item: cross-cutting-refactor    design=0.5 impl=0.2
+item: cross-cutting-refactor    design=0.2 impl=0.2
 item: milestone-review          design=0.0 impl=0.2
-item: atlas-docs                design=0.2 impl=0.08
-total: 14.74
+item: atlas-docs                design=0.1 impl=0.08
+item: atlas-docs                design=0.1 impl=0.08
+item: atlas-docs                design=0.1 impl=0.08
+total: 10.74
 ```
 
-Mapping of items to the plan, in order: the issue + spec itself; **M1** the write
-turn (`lua-neovim`) plus its multi-file caller sweep — five coordinator entry
-points, `Replacement.step`, and six waiting predicates (`cross-cutting-refactor`)
-— plus its boundary review; **M2** the preparation-write deferral; **M3** the
-`ToolSequence` and ordered-append pump (`lua-neovim`) plus removal of capacity
-tickets, the round-reservation lifecycle and child grants
-(`cross-cutting-refactor`); **M4** the residual exclusion sweep; and the atlas
-rewrites (`chat/ownership.md`, `providers/tool_use.md`, `providers/architecture.md`).
+Item order: issue + spec; **M1** turn module + reducer, coordinator guard + six
+caller predicates, `draining` phase + release matrix, boundary review; **M2**
+preparation-write deferral, boundary review; **M3** `ToolSequence` + ordered
+pump, `⏳:` marker + interleaving sweep, reservation/ticket/child-grant removal,
+tool→pending progress edge, boundary review; **M4** residual exclusion sweep,
+close review; then three atlas rewrites.
 
-Reconciliation: Σdesign 10.1 × 1.15 = 11.615; Σimpl 3.12 × 1.0 = 3.12; total 14.735 → 14.74.
+Reconciliation: Σdesign 5.2 × 1.15 = 5.98; Σimpl 4.76 × 1.0 = 4.76; total 10.74.
+Design share 52% — still above the ledger mean of 0.35, which is deliberate and
+defensible here: six review rounds are already spent and in-window.
 
 Calibration caveat recorded by `sdlc estimate-source`: the v3.1 ledger is newer
 than the doc, so per-primitive hours are provisional (ariadne#127).
