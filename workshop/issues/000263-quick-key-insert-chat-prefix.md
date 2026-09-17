@@ -61,19 +61,19 @@ Durable design: `workshop/plans/000263-new-question-chord-plan.md`.
 Single-pass atomic work — plain checkboxes, no `Mx`: one review boundary, at
 `sdlc close`.
 
-- [ ] Retire `chat_search`, freeing `<C-g>n` (`config.lua:372`,
+- [x] Retire `chat_search`, freeing `<C-g>n` (`config.lua:372`,
   `keybinding_registry.lua:657-666`, `init.lua:2803-2808`).
-- [ ] `lua/parley/new_question.lua` — the pure planner (`plan` +
+- [x] `lua/parley/new_question.lua` — the pure planner (`plan` +
   `is_empty_question`), reusing `exchange_clipboard`'s exchange-span and
   blank-line-seam arithmetic (ARCH-DRY), with its unit spec.
-- [ ] `M.cmd.NewQuestion` + registry entry + `<C-g>n`/`<M-n>` buffer-local
+- [x] `M.cmd.NewQuestion` + registry entry + `<C-g>n`/`<M-n>` buffer-local
   keymap for normal and insert mode.
-- [ ] Integration spec against real keymaps: both modes, single undo, the
+- [x] Integration spec against real keymaps: both modes, single undo, the
   no-duplicate second press, a non-default prefix, and the refusal while a
   response is streaming.
-- [ ] Generalize the chord-shadowing guard from `<M-…>`-only to every chord
+- [x] Generalize the chord-shadowing guard from `<M-…>`-only to every chord
   plus prefix shadowing (ARCH-PURPOSE — the class the issue names).
-- [ ] Atlas: `ui/keybindings.md`, `chat/lifecycle.md`, `traceability.yaml`.
+- [x] Atlas: `ui/keybindings.md`, `chat/lifecycle.md`, `traceability.yaml`.
   (No which-key integration exists in this repo; the registry is the single
   source and `<C-g>?` help is generated from it.)
 
@@ -253,3 +253,50 @@ contract here rather than overwriting the originals, per AGENTS.md §1.
 - Documented in `<C-g>?` help (via the registry, the single source) and in the
   atlas, including the ordering exception this entry makes to #214's
   "portable key leads" rule.
+
+### 2026-09-16 — implemented
+
+`<C-g>n` / `<M-n>` → `:ParleyNewQuestion`. `chat_search` retired (its blast
+radius really was the four grep lines the plan predicted).
+
+**Design that survived contact.** `lua/parley/new_question.lua` is a pure plan
+value; the whole structural decision is `exchange_clipboard.get_paste_line`
+plus `build_paste_lines`, so `<C-g>n` and `<C-g>V` cannot drift apart on
+spacing (ARCH-DRY). `M.cmd.NewQuestion` is the IO shell and writes through
+`buffer_edit`, which is what gives the streaming refusal for free (ARCH-ORDER).
+
+**The plan's stated risk did not materialize.** Insert-mode undo grouping was
+called out as the one behavior unreadable from existing code, with `vim.schedule`
+named as the fallback. `stopinsert`-then-edit worked first try: a single `u`
+restores the pre-press buffer byte-for-byte. All five "open set" cases passed on
+the first run.
+
+**What actually failed first** was a fixture, not the design: a 4-line
+header-only chat is rejected by `not_chat` (`init.lua:1816`, under 5 lines), so
+the chord was simply never bound in it. Six-line fixture, green.
+
+**Tests.** `tests/unit/new_question_spec.lua` 14/14 (cursor in every branch,
+`%-Q.:` magic-character prefix, tab normalization, the recorded decision that a
+*neighbouring* empty question is not adopted). `tests/integration/new_question_spec.lua`
+11/11 through real keymaps via `Registry.key_for` + `maparg().callback`, with
+`startinsert` asserted through a `vim.cmd` spy that outlives the callback —
+`vim.fn.mode()` cannot work here because `startinsert!` from a mapping callback
+is scheduled. Question counts come from a plain `vim.startswith` scan, never a
+re-parse (#262 lesson).
+
+**Guard generalized (ARCH-PURPOSE).** `keybindings_spec.lua`'s collision guard
+inspected only `<M-…>` keys and so could not have caught this `<C-g>n`
+collision. Now covers every chord plus prefix delay, over canonicalized
+notation, with `modes_overlap` added because widening past the alt family pulls
+in `{o,x}`-only text objects and normal-only `gf`/`gP`. Measured **0 collisions
+/ 0 prefix shadows**; both plant-a-collision proofs bite. 78/78.
+
+**Pre-existing failures on `main`, not from this branch** — both reproduced at
+the branch point (`bbe05eef`) in a detached worktree:
+- `tests/unit/parley_harness_golden_spec.lua` — **11/11 failing at base and on
+  this branch alike** (system-prompt golden payload drift).
+- `tests/integration/perf_document_spec.lua` — flaky ~50% *serially*, dying
+  silently mid-run with no assertion output; 1 of 4 failed at base too. Same
+  "dies silently" class `lessons.md` records for three other specs.
+
+Everything else in `make test-unit` / `make test-integration` passes.
