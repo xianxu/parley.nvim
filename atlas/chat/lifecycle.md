@@ -3,6 +3,25 @@
 ## Creation (`:ParleyChatNew` / `<C-g>c`)
 Creates timestamped `.md` in primary `chat_dir`. Multi-root: all roots scanned for discovery; new chats always in primary. Chats are ordinary Markdown files: save edits with `:write`, and use `:ParleyChatFinder` (`<C-g>f`) to reopen them. The app also ships three stable-name tutorial transcripts.
 
+## New Question (`:ParleyNewQuestion` / `<C-g>n` / `<M-n>`)
+
+Opens an empty question after the exchange at the cursor. The insertion point
+and its blank-line seam come from `exchange_clipboard` — the same definition
+`<C-g>V` pastes against — so a pasted exchange and a new question are spaced
+identically. `lua/parley/new_question.lua` decides the structure as a pure
+plan; `M.cmd.NewQuestion` applies it through `buffer_edit`, which refuses
+visibly while a response is streaming into the region rather than corrupting
+the transcript.
+
+If the cursor's exchange is already an empty unanswered question, the chord
+focuses it instead of creating a second one. An empty question in the *next*
+exchange is not adopted: the rule is about the exchange the cursor is in, so
+the landing spot never depends on content off-screen.
+
+Post-condition: the cursor sits on a line that is the configured user prefix
+followed by a space, in insert mode — so typing yields `💬: text`, not
+`💬:text`.
+
 ## Slug Rename (auto, on save)
 When a chat's `topic:` header changes, the file is auto-renamed to include a slug: `YYYY-MM-DD.HH-MM-SS.mmm_slug-words.md`. The slug is derived from the topic (stop words stripped, kebab-case, max 5 words / 40 chars). The `_` separator ensures unambiguous parsing. See `lua/parley/chat_slug.lua` for the pure slug logic.
 

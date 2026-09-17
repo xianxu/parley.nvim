@@ -18,8 +18,8 @@ The chord is freed by retiring `chat_search`, a one-line `/^💬:\|^🌿:` wrapp
 
 | Name | Lives in | Status |
 |------|----------|--------|
-| `new_question.plan` | `lua/parley/new_question.lua` | new |
-| `new_question.is_empty_question` | `lua/parley/new_question.lua` | new |
+| `plan` | `lua/parley/new_question.lua` | new |
+| `is_empty_question` | `lua/parley/new_question.lua` | new |
 | `exchange_clipboard.get_paste_line` | `lua/parley/exchange_clipboard.lua` | unchanged (reused) |
 | `exchange_clipboard.build_paste_lines` | `lua/parley/exchange_clipboard.lua` | unchanged (reused) |
 | `chat_search` registry entry | `lua/parley/keybinding_registry.lua` | deleted |
@@ -29,13 +29,13 @@ The chord is freed by retiring `chat_search`, a one-line `/^💬:\|^🌿:` wrapp
 
 **Test surface implied by the table.** `lua/parley/new_question.lua` is pure — it takes a parsed chat and a line array, never a buffer, exactly like `entity_range.lua` (#262). Its unit spec (`tests/unit/new_question_spec.lua`) runs with no buffer, no mocks and no IO. The deleted `chat_search` entry has no test of its own to remove; the registry specs that enumerate entries are generic and stay.
 
-- **`new_question.plan(parsed_chat, lines, cursor_line, header_end, user_prefix)`** — decides what the keystroke does, as a value.
+- **`plan(parsed_chat, lines, cursor_line, header_end, user_prefix)`** (`new_question.plan`) — decides what the keystroke does, as a value.
   - Returns `{ kind = "insert", after = N, lines = {…}, row = R }` or `{ kind = "focus", after = nil, lines = {…} | nil, row = R }`. In both cases `row` is the 1-based line that will hold the question, and the **post-condition is the same**: after the shell applies the plan, `lines[row]` equals `user_prefix .. " "` — or the prefix followed by at least one space, if the line already had trailing whitespace.
   - **Relationships:** 1:1 with a keystroke; N:1 with `parsed_chat`. Holds no state (ARCH-ORDER: it is a pure function of its arguments, so there is no state to carry between events).
   - **DRY rationale:** It does not re-derive the exchange span or the blank-line seam — both come from `exchange_clipboard`, the module whose header already declares itself the owner of "an exchange includes its preface, question, and answer … including trailing blank lines". Without this, `<C-g>n` and `<C-g>V` would drift into two different ideas of where an exchange ends.
   - **Future extensions:** the natural axis is *what* gets opened — a `🔒:` local note or a `@@tag@@`-prefaced question. That widens as a `kind` argument feeding the `lines` it builds, not as a second function.
 
-- **`new_question.is_empty_question(lines, exchange, user_prefix)`** — is this exchange an unanswered question with no body?
+- **`is_empty_question(lines, exchange, user_prefix)`** (`new_question.is_empty_question`) — is this exchange an unanswered question with no body?
   - **DRY rationale:** first occurrence of the predicate as a *shared* helper. `outline.lua:259` has the same idea inline for display purposes; that one classifies an outline item, this one classifies a parsed exchange, and merging them would couple the outline's item shape to the parser's. Named and exported so the next caller reuses it rather than re-inlining a third copy.
   - **ARCH-SECURE:** `user_prefix` is operator configuration and is compared with `string.sub`, never interpolated into a Lua pattern. A prefix containing a magic character (`>`, `%`, `.`, `-`) must behave like any other string; `init.lua:3940` records what happened the last time runtime text reached a pattern position (#214 BR-34).
 
