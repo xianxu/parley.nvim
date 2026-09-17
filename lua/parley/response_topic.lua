@@ -161,10 +161,25 @@ function M.step(job)
         if not current or not grant or grant.status=='revoked'then stop(s,'source changed');return M.snapshot(job)end
         if grant.status~='valid'then return {status='more'}end
         local span=current.regions[1]
+        -- #266 M1: take the turn immediately around the write, never at
+        -- registration. Topic issues its own provider request and waits on it;
+        -- holding the turn across that would block every other writer in the
+        -- document for a network round-trip.
+        if D.turn(s.doc)~=s.generation then
+            D.transition(s.doc,{kind='request_turn',generation=s.generation,epoch=s.epoch})
+            -- Park rather than spin: the Deferred predicate is status=='more', and
+            -- the subscriber re-arms this job on the turn notification.
+            if D.turn(s.doc)~=s.generation then return {status='waiting'} end
+        end
         s.writing=true
         local applied=D.apply(s.doc,{epoch=s.epoch,generation=s.generation,grant=s.grant,entity=s.entity,
             revision=grant.revision,operation=s.operation,patches={{start=span.first,finish=span.last,expected_old='?',text=topic}}})
+        -- Release inside the s.writing guard. The release notifies subscribers,
+        -- and this job's own subscriber re-checks its captured regions against a
+        -- buffer this write just changed — waking it mid-sequence stops the job.
+        D.transition(s.doc,{kind='release_turn',generation=s.generation,epoch=s.epoch})
         s.writing=false
+        if applied.status=='waiting' then return {status='waiting'} end
         retire(s,applied.status=='applied' and 'applied' or 'failed',applied.reason or applied.error)
     end
     return M.snapshot(job)

@@ -13,6 +13,8 @@ local function fixture(body)
     local result=D.transition(doc,{kind='acquire',generation=gen,regions={{entity=rows[1].handle,
         first=rows[3].start_byte,last=rows[3].end_byte-1,revision=1,marker_revision=1,confirmed=true}}})
     assert.is_true(result.ok,result.reason)
+    -- #266 M1: write authority now includes the document's write turn.
+    assert.is_true(D.transition(doc,{kind='request_turn',generation=gen}).ok)
     return doc,fake,{epoch=D.snapshot(doc).epoch,generation=gen,grant=result.grants[1],entity=rows[1].handle,
         revision=1,operation='replacement',bytes='new answer'}
 end

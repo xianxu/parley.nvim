@@ -274,6 +274,7 @@ local function write(s,effect)
             grant=effect.grant,revision=grant.revision,bytes=attempted})
     end
     if result.status=='more' or result.status=='busy' then return true end
+    if result.status=='waiting' then return true,'waiting' end
     local status=result.status=='applied' and 'applied' or result.status=='suspended' and 'suspended'
         or result.status=='stale' and 'revoked' or 'uncertain'
     if effect.type=='write' then
@@ -315,7 +316,7 @@ local function replace(s,effect)
     effect.removed=(effect.removed or 0)+(result.removed_bytes or 0)
     written(s,effect,result)
     if result.status=='more' then return true end
-    if result.status=='suspended' then return true,'waiting' end
+    if result.status=='suspended' or result.status=='waiting' then return true,'waiting' end
     if effect.cursor then D.replace_cancel(s.doc,effect.cursor);effect.cursor=nil end
     release(s,effect.blob_ref)
     effect.done({status=result.status,accepted_bytes=effect.accepted,removed_bytes=effect.removed,

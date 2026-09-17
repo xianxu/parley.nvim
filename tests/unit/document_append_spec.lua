@@ -15,6 +15,8 @@ local function fixture(body)
         marker_revision=1,revision=1,first=D.query(doc,2,3)[1].start_byte,last=D.size(doc).bytes-1,confirmed=true}}})
     assert.is_true(acquired.ok)
     local grant=acquired.grants[1]
+    -- #266 M1: write authority now includes the document's write turn.
+    assert.is_true(D.transition(doc,{kind='request_turn',generation=generation}).ok)
     local function intent(bytes)
         return {epoch=D.snapshot(doc).epoch,generation=generation,grant=grant,entity=entity,
             revision=D.snapshot(doc).grants[grant].revision,operation='stream',bytes=bytes}

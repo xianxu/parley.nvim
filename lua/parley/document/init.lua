@@ -23,6 +23,12 @@ local function effects(s,result)
     if s.on_effect then for _,effect in ipairs(result.effects or {}) do s.on_effect(effect) end end
     return result
 end
+--- #266 M1: refuse a generated write that does not hold the document's write
+--- turn. Returns true when the caller must wait. Fail-closed on purpose: an
+--- unheld turn refuses every generation rather than admitting all of them.
+local function turn_waiting(s,generation)
+    return generation~=nil and State.turn(s.authority)~=generation
+end
 local function proof(s,grant)
     local result=Structure.authority_range(s.structure,grant.entity,grant.first,grant.last)
     if result.status=='stale' or result.status=='refused' then return nil end
@@ -252,6 +258,8 @@ function M.query(doc,first,last,opts)
     local s=state(doc); return s.dead and {} or measured_query(s,Structure.query,first,last,opts)
 end
 function M.snapshot(doc) return State.snapshot(state(doc).authority) end
+--- Current write-turn holder, without the cost of a full snapshot copy.
+function M.turn(doc) return State.turn(state(doc).authority) end
 function M.stats(doc,reset)
     local s=state(doc); return s.dead and {} or Structure.stats(s.structure,reset)
 end
@@ -453,6 +461,7 @@ end
 function M.replace_new(doc,intent)
     local s=state(doc)
     if s.dead or type(intent)~='table' then return nil,'detached' end
+    if turn_waiting(s,intent.generation) then return nil,'waiting' end
     local grant=State.snapshot(s.authority).grants[intent.grant]
     if not grant then return nil,'grant' end
     local entity=Structure.lookup(s.structure,grant.entity)
@@ -467,6 +476,7 @@ function M.insert_released_new(doc,intent)
     local s=state(doc)
     if s.dead or type(intent)~='table' or type(intent.bytes)~='string' or #intent.bytes>4096
         or type(intent.point)~='number' or intent.point%1~=0 then return nil,'invalid released insertion' end
+    if turn_waiting(s,intent.generation) then return nil,'waiting' end
     local _,newlines=intent.bytes:gsub('\n','')
     if newlines>255 then return nil,'row slice limit'end
     local grant=State.snapshot(s.authority).grants[intent.grant]
@@ -497,6 +507,10 @@ function M.replace_cancel(doc,cursor)
 end
 function M.apply(doc,plan)
     local s=state(doc)
+    local owned=State.snapshot(s.authority).grants[plan.grant]
+    if owned and owned.generation==plan.generation and turn_waiting(s,plan.generation) then
+        return {status='waiting',reason='write turn held elsewhere'}
+    end
     local expected=plan.revision
     return s.editor:apply(plan,function(_,patch,phase,event)
         local grant=State.snapshot(s.authority).grants[plan.grant]
@@ -532,6 +546,9 @@ local function append(doc,intent)
     local snapshot=State.snapshot(s.authority)
     local grant=snapshot.grants[intent.grant]
     if not grant then return reject('stale','grant') end
+    -- Ownership first, then the turn: 'waiting' means "you could write, but not
+    -- now", so it must never stand in for a write that can never succeed.
+    if turn_waiting(s,intent.generation) then return reject('waiting','write turn held elsewhere') end
     for _,other in pairs(snapshot.grants) do
         if other.parent==grant.id and other.status~='revoked' then return reject('refused','delegated parent') end
     end
