@@ -2740,3 +2740,14 @@ download.
   after an early `return` for one entity kind, so that path skipped it
   entirely. When adding a post-condition, put it at the function's single exit
   and check it catches a case the weaker formulation misses.
+
+- #262 BR-37: a test that computes its expectation with the implementation's
+  own predicate cannot detect a wrong predicate. The fence invariant asked
+  `code_block_memo`/`is_fence_delim` whether the range respected blocks — the
+  same functions the guard used — so when the guard's logic was wrong the two
+  agreed and 46/46 passed. An independent oracle (count ```/~~~ lines in the
+  RESULTING buffer with a plain pattern, after a real `dae` through the real
+  keymaps) failed immediately on the same build: "daE at row 11 left 1 fence
+  lines (odd)". Demonstrated both ways on the same tree. For any guard, write
+  at least one assertion whose expectation is derived WITHOUT the code under
+  test — ideally over observable output rather than an internal range.

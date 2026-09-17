@@ -215,9 +215,19 @@ local function confine_to_blocks(range, lines, in_code)
 	end
 	-- begins part-way into a block: the first row is inside one and is not its
 	-- opener (an opener has in_code true with false on the line before it).
-	while range.first <= range.last
-		and in_code[range.first] and in_code[range.first - 1] do
-		range.first = range.first + 1
+	-- Advance past that block's CLOSING delimiter -- walking only while the row
+	-- is in_code stops ON the closer, which then gets deleted and strands the
+	-- opener above the range (BR-37).
+	if range.first <= range.last
+		and in_code[range.first] and in_code[range.first - 1] then
+		local closer = nil
+		for i = range.first, range.last do
+			if is_fence(lines[i], true) then
+				closer = i
+				break
+			end
+		end
+		range.first = closer and (closer + 1) or (range.last + 1)
 	end
 	return range
 end

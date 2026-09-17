@@ -240,6 +240,59 @@ describe("entity text objects", function()
 			"an edge summary survives when the question does")
 	end)
 
+	-- BR-37: an INDEPENDENT oracle. The unit invariant checks the range with the
+	-- same code_block_memo/is_fence_delim the guard itself uses, so a wrong
+	-- predicate agrees with itself and passes. This counts fence lines in the
+	-- RESULTING BUFFER with a plain pattern that shares nothing with the
+	-- implementation, and asserts the transcript still has balanced fences
+	-- after a real dae/daE through the real keymaps.
+	it("never strands a fence, counted independently of the implementation", function()
+		local FENCED = {
+			"# topic: entity",   -- 1
+			"- file: entity.md", -- 2
+			"---",               -- 3
+			"",                  -- 4
+			"💬: q",             -- 5
+			"",                  -- 6
+			"🤖: [A]",           -- 7
+			"prose",             -- 8
+			"",                  -- 9
+			"```lua",            -- 10
+			"local a = 1",       -- 11
+			"",                  -- 12
+			"local b = 2",       -- 13
+			"```",               -- 14
+			"",                  -- 15
+			"~~~",               -- 16
+			"tilde body",        -- 17
+			"~~~",               -- 18
+			"tail",              -- 19
+		}
+		-- deliberately NOT lexical.is_fence_delim: an oracle that shares the
+		-- implementation's predicate cannot detect a wrong predicate.
+		local function fence_lines(buf_lines)
+			local n = 0
+			for _, l in ipairs(buf_lines) do
+				if l:match("^%s*```") or l:match("^%s*~~~") then n = n + 1 end
+			end
+			return n
+		end
+		assert.equals(4, fence_lines(FENCED))
+
+		for _, keys in ipairs({ "dae", "daE" }) do
+			for row = 4, #FENCED do
+				local buf = prepped(FENCED)
+				vim.api.nvim_win_set_cursor(0, { row, 0 })
+				vim.cmd("normal " .. keys)
+				local after = body(buf)
+				assert.equals(0, fence_lines(after) % 2,
+					("%s at row %d left %d fence lines (odd) -- a block is stranded")
+						:format(keys, row, fence_lines(after)))
+				pcall(vim.api.nvim_buf_delete, buf, { force = true })
+			end
+		end
+	end)
+
 	-- #262: the packaged app runs default_keymaps=false and re-enables only the
 	-- <C-g>/<M-> families, so "it works in the plugin" does not imply "it works
 	-- in the app". This drives the APP's own option builder, not the shipped
