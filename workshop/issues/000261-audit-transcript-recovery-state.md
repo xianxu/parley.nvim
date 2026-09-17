@@ -1,8 +1,9 @@
 ---
 id: 000261
 status: working
-deps: []
+deps: [parley#266]
 github_issue:
+target: transcript-is-the-whole-truth
 created: 2026-09-15
 updated: 2026-09-17
 estimate_hours:
@@ -250,3 +251,69 @@ substitute/drop what the model receives (`chat_parser.lua:515`,
 resubmitted context at any model-authored `[^1]:` line (`define.lua:167-169`);
 `highlighter.lua:753-773,858-894` rewrites `🌿:` topics in the buffer on open and
 `chat_parser.lua:673` doesn't strip the appended `⚠️`, so it leaks into exports.
+
+## Revisions
+
+### 2026-09-17 — scope and direction settled after the audit
+
+**Reason.** The audit (see `## Log`) answered the inventory question, and the
+operator rejected the framing the original Spec implied. The Spec's third bucket
+("external/recovery state that needs an explicit durable artifact and clear
+reconciliation rule") assumed a durable artifact was warranted. The operator's
+position: *"what external store? there shouldn't be external store to begin with
+and is the purpose of this audit."* That bucket is withdrawn.
+
+**Delta.**
+
+1. **The answer-recovery subsystem is deleted, not reconciled.** Its entire
+   purpose was verified to be recording the previous answer's text before
+   regeneration overwrites it (`response_recovery.lua:72-73`, payload is
+   `read(s,s.original)` stored as both `bytes` and `replacement.bytes`), and every
+   reader is `list`/`inspect`/`resolve`/`restore`/`cleanup`, reachable only from
+   the recovery picker. No internal consumer exists — `generation_runner.resume_original`
+   (`:520`) works purely from `s.pending` / `current.input_ref` / `s.grants` and
+   never touches the store. Removing it: `answer_recovery.lua` (312),
+   `chat_recovery.lua` (553), `response_recovery.lua` (170), `recovery_paths.lua`
+   (31), five spec files plus `tests/helpers/fake_recovery_filesystem.lua`,
+   `:ParleyAnswerRecovery` / `:ParleyAnswerRestore`, the `helper.lua:15` privacy
+   predicate, and the `tools/dispatcher.lua:353` carve-out whose only job is
+   hiding the store from tools.
+
+2. **Replacement is in-session memory, not disk.** Operator decision: keep
+   replaced answers in memory for the life of the nvim session, available across
+   buffers so navigating away and back still offers them. Dies with the process.
+   Quitting mid-generation leaves a partial answer in the transcript on next open,
+   and that is an **accepted outcome, not a defect**. ARCH-FUNERAL: in-memory,
+   process-scoped, needs a declared size bound and eviction rule, and — critically
+   — it is advisory. It may never gate a submission; its absence degrades an
+   affordance and nothing else.
+
+3. **`undofile` is optional, not load-bearing.** Verified empirically that it
+   recovers a replaced answer across processes (a fresh nvim opened the file and
+   `u` restored the pre-regeneration text) and that an unwritable undodir does not
+   block editing or saving. It satisfies the operator's second principle — prefer
+   base vim mechanisms over our own — but with (2) in place nothing depends on it,
+   so it is a separable nicety rather than part of this issue's spine.
+
+4. **Serialized mutation split to parley#266, and this issue now depends on it.**
+   The operator's point: undo is only a usable fallback if the history is linear.
+   Concurrent generations and out-of-order tool-slot fills make it a tree the user
+   cannot reason about. Deleting a targeted restore before the history is
+   comprehensible would trade one confusing recovery story for another, so #266
+   lands first or alongside.
+
+5. **Target extracted.** `workshop/targets/transcript-is-the-whole-truth.md` now
+   holds the invariant both issues serve; this issue references it via `target:`.
+
+**Unchanged.** The runtime-leak class (process globals in `generation_runner.lua:8`,
+`tasker.records`, `chat_respond.responses`, `skill_invoke._in_flight`) and the
+refusal-message class (six silent returns, opaque authority tokens) stay in
+scope here — they are the other two ways state outside the transcript can block
+or confuse work on it.
+
+**Deferred to a new issue.** Round-trip provenance — the stock template recording
+no model/provider/system prompt, `init.lua:3939` writing a `system\_prompt:`
+header its own parser rejects, `(timestamp, dir)` sidecar cross-contamination on
+copy, and the absence of any external-change detection. Same target, different
+axis: that is about handing the file to someone else and getting the same
+answers, not about being blocked.
