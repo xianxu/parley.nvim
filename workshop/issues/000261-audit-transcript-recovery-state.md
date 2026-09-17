@@ -82,3 +82,171 @@ Filed from an operator report after the recent generation refactor. Editing the
 transcript during generation left a question unable to submit and showing an
 error; the desired invariant is that quitting and reopening the transcript
 reconstructs a healthy state from durable transcript/recovery data.
+
+### 2026-09-17 — audit complete (plan step 1 + 2)
+
+Four parallel fresh-context audits (durable on-disk state, runtime state
+lifetime, refusal inventory, hand-edit round-trip), each finding verified
+against the code before being recorded here.
+
+**Headline: exactly one subsystem is authoritative over the chat file.**
+No in-memory registry is keyed by absolute file path; `D.attach`
+(`document/init.lua:236-246`) rebuilds structure from `opaque(rows,total)` with
+zero grants and zero generations, and reload revokes everything
+(`document/state.lua:353-356`). Nothing else is persisted — no lock file, no
+generation journal, no transport PID file. The #254 architecture is sound; the
+violations are at its edges.
+
+#### Classification (Spec's three buckets)
+
+**(c) External/durable state that is authoritative over the transcript — the violation**
+
+`chat_respond.lua:1564-1576` makes a successful write to
+`{state_dir}/answer-recovery/` a hard precondition for regenerating an answer.
+There is no fallback branch:
+
+```lua
+if replacing_answer then
+  if not recovery then ... error('Answer recovery unavailable: '..tostring(why), 0) end
+  local published = Recovery.publish(recovery, ctx)
+  if not published.ok then error('Answer recovery unavailable: '..tostring(published.reason), 0) end
+end
+```
+
+*The #261 mechanism, confirmed.* `Store.resolve` (`answer_recovery.lua:250`)
+requires the answer currently in the buffer to be byte-identical to the record:
+
+```lua
+and record.replacement.bytes==candidate.replacement.bytes then matches[#matches+1]=candidate end
+```
+
+Regenerate → record holds the **original** answer. Edit the transcript
+mid-stream → grant revoked, runner stops, but partial new output is already
+committed (`generation.lua:45-49` discards only the unwritten queue).
+`Recovery.finish` on a non-success outcome deliberately keeps the record
+(`chat_recovery.lua:271-306`). Retry → the in-memory retry cache is invalidated
+by the edit (`chat_recovery.lua:134-136`) → falls through to on-disk matching →
+record says *original*, buffer holds *partial* → refused at
+`chat_recovery.lua:152` with `retained recovery requires inspection or explicit
+restore`. **Quit and reopen does not clear it**: the epoch resets and grants are
+wiped, but the record is on disk and re-enters through the same branch. This is
+precisely the "did not reliably recover that way" report.
+
+*Blast radius is profile-wide, not per-chat.* `answer_recovery.lua:214` checks
+the global flag before the per-key one:
+
+```lua
+if s.unknown_association then return fail('recovery association unavailable; inspect quarantined snapshots') end
+if s.blocked_keys[spec.key] then return fail('original recovery snapshot unavailable') end
+```
+
+`unknown_association` is set (`:119`) whenever a quarantined record has no
+readable sibling of the same id — so one unreadable file blocks answer
+regeneration in **every chat in the profile**. "Unreadable" is stricter than
+corrupt: `:95` requires mode exactly `0600`, `:196` requires the directory
+exactly `0700`, `:91-92` fails the whole scan on a symlink or subdirectory. So
+`rsync` without `-p`, a restored backup, a cloud-sync folder, or `cp -r` under a
+different umask silently poisons the store. Capacity is the same shape: 16 MiB
+per record / 256 MiB per profile (`:4-5`, `:142-143`), counting `.quarantine`
+and orphaned `.tmp`, with **no age-based GC** (ARCH-FUNERAL: the reader has a
+cap, the writer has no bound — a cliff, not a bound).
+
+The escape hatch cannot reach any of it: `M.list` returns only decodable records
+(`:300-303`), so `:ParleyAnswerRecovery` reports "no recovery snapshots for this
+chat" while every regeneration refuses; `discard_snapshot` → `Store.cleanup` →
+`M.inspect` → nil → `'snapshot unavailable'` (`:230, :266`). No `:Parley*` purge
+command exists. No message names the directory.
+
+**(b) Disposable runtime state that is NOT invalidated on reload — second class**
+
+Process-global scalars, cleared by nothing (`generation_runner.lua:8`):
+`local serial,active,staged_total=0,0,0`. `active` is incremented at `:493` and
+decremented **only** by the `terminal` effect (`:437`); 16 leaked runners →
+`'process generation limit'` (`:462`) blocks submission in every chat until
+Neovim restarts. `staged_total` is a global 16 MiB staging budget (`:75`) with
+the same leak shape. `answer_recovery.pending_owners` (`:69`, a strong ref) is
+the same pattern and its only reconciler (`:277`) is unreachable from any
+command. ARCH-ORDER: extent is not lexically bounded — a spawned runner can
+outlive every scope that could collect it.
+
+Buffer-number-keyed registries outside the `on_detach` trunk (`editor.lua:171`),
+where **buffer numbers are reused after `:bd`**, so close+reopen inherits the
+block: `tasker.records/admissions` (zero registered autocmds — both `autocmd`
+hits are `doautocmd User`; retains unresolved records *by design* at `:213-216`,
+"resource ownership retained", and keys capacity on `state.buf==candidate.buf`
+at `:55`, so a hung transport pins `is_busy(buf)` forever);
+`chat_respond.responses` (`:1305`, cleared only by `release()` at `:1468`);
+`skill_invoke._in_flight/_terminals` (`:23-30`).
+
+Compounding: chat buffers have **no `bufhidden=wipe`**, so navigating to another
+chat unloads nothing. Only `:bd`/`:bw`/`:e!` reset anything — the likely reason
+the operator's quit-and-reopen attempt appeared not to work.
+
+**(a) Durable state that correctly derives from, or never blocks, the transcript**
+
+`state.json` (`last_chat`, self-heals), `file_access.json` (self-prunes),
+`remote_reference_cache.json` (re-fetches on miss — but path-keyed and never
+migrated on rename, so it silently orphans), query transport files
+(`dispatcher.lua:672-674`, pruned >200→100), raw logs and the review journal
+(both `pcall`/WARN only), per-chat asset folders (reads are pure text; a missing
+folder degrades to a visible inline `[attachment … could not be read: ENOENT]`
+and **never** blocks submission — the model the recovery store should follow).
+
+#### Refusal inventory — authority classification
+
+Every refusal reachable from `ChatRespond` / `ChatRespondAll` /
+`ChatResumeBatch` / `ChatResumeResponse` was classified **T** (transcript-derived
+— acceptable), **R** (runtime, clears on reload), or **X** (external durable).
+All X-class refusals surface as `Response not started: Answer recovery
+unavailable: <reason>` and fire only when the targeted exchange already has an
+answer (`replacing_answer`, `chat_respond.lua:1404`) — so a fresh question never
+touches the store, but *retrying a failed or cancelled response does*, because
+that left answer text behind.
+
+Two cross-cutting defects found alongside:
+
+- **Six refusals are completely silent.** `chat_respond.lua:1400, 1929, 1932,
+  1937, 1941, 1951` return `nil, reason`; the command wrappers discard it
+  (`init.lua:1155, 4169, 1321`). The operator presses submit and *nothing
+  happens*, with no message — worse than an opaque error.
+- **Opaque authority tokens are surfaced verbatim** — `Response not started:
+  overlap` / `capacity` / `unconfirmed entity` / `stale` / `target limit`
+  (`chat_respond.lua:1673`). These do clear on reload, but nothing says so, so
+  they read as permanent. `chat_respond.lua:1630` is the counter-example that
+  names its exact recovery commands and is the model to follow.
+
+#### Round-trip: the transcript is not sufficient to reproduce a chat
+
+Separate from blocking, and in scope for "WYSIWYG":
+
+- **Under stock config the file records no model, provider or system prompt.**
+  `config.lua:300` selects `short_chat_template`, which (`defaults.lua:89-97`)
+  has no `{{optional_headers}}` placeholder, so the values computed at
+  `init.lua:3929` are substituted into nothing. Behavior comes from
+  `_state.agent` in `state.json`; `_state.web_search` silently swaps the model
+  (`providers.lua:329-331`); the on-screen badge shows `_state.agent`, not the
+  header (`highlighter.lua:556-567`).
+- **When the long template is configured, `new_chat` writes a header its own
+  parser cannot read.** `init.lua:3939` runs `template:gsub("_","\\_")` over the
+  rendered template; `chat_parser.lua:70` requires `[%w_%.%+]+`, which excludes
+  backslash. Verified: `system\_prompt:` parses to `nil`. The operator sees a
+  pinned prompt in the file that is not in effect. (`get_default_template` at
+  `init.lua:5236-5287` does *not* escape — three creators, three behaviors.)
+- **Copying a chat cross-contaminates three sidecars keyed on
+  `(timestamp, dir)`**: deleting the copy `remove_tree`s the shared asset folder
+  and destroys the original's images (`assets.lua:1249-1260`); the original's
+  recovery snapshots are listed in, restorable into, and can hard-refuse
+  regeneration in the copy (`chat_recovery.lua:146-148`).
+- **No external-change detection at all** — `checktime`/`FileChangedShell`
+  appear only in `tools/file_refresh.lua`; `buffer_lifecycle.lua:5` registers
+  none. Combined with `noswapfile` (`init.lua:1754`) and a 1 s debounced
+  `silent! write` (`:1760-1788`), a `git checkout` under a live buffer leaves
+  only Neovim core's mtime guard, surfacing as a modal prompt from a background
+  timer.
+
+Lower-ranked, recorded for the sweep: hand-edited `🔧:`/`📎:` tool ids silently
+substitute/drop what the model receives (`chat_parser.lua:515`,
+`chat_respond.lua:636-644`); `strip_definition_footnote_footer` truncates
+resubmitted context at any model-authored `[^1]:` line (`define.lua:167-169`);
+`highlighter.lua:753-773,858-894` rewrites `🌿:` topics in the buffer on open and
+`chat_parser.lua:673` doesn't strip the appended `⚠️`, so it leaks into exports.
