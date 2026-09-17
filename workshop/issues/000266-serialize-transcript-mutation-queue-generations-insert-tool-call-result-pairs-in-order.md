@@ -6,7 +6,7 @@ github_issue:
 target: transcript-is-the-whole-truth
 created: 2026-09-17
 updated: 2026-09-17
-estimate_hours: 10.74
+estimate_hours: 13.17
 started: 2026-09-17T11:06:53-07:00
 ---
 
@@ -125,7 +125,31 @@ derive from the new one, not restate the old (ARCH-PURPOSE shadow-sweep).
 
 *Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against `baseline-v3.1.md`. Method A only.*
 
-**Revised 2026-09-17 after the estimate-quality judge (14.74 → 10.74).** The
+**Revised twice on 2026-09-17 by the estimate-quality judge: 14.74 → 10.74 → 13.17.**
+Pass 2 corrected an inflated design share; pass 3 corrected the over-correction on
+the implementation side. Pass-3 changes: `item:` lines added for Task 1.7
+(held-output budget — a Spec-gated deliverable with six steps including a p50/p95/p99
+re-measure) and Task 1.9 (undo coherence — net-new test authoring, since undo
+ordering is unasserted anywhere in the tree today); M1's visibility work
+(Task 1.6 Step 4) itemized for symmetry with M3's progress edge, which was already
+counted; M3's removal split into its two actual tasks (3.2a tickets, 3.2b
+reservation lifecycle) rather than one row; M4's sweep reslugged
+`cross-cutting-refactor` → `lua-neovim`, because `cross-cutting-refactor`'s
+40%-scaled impl range is 0.08–0.2 and cannot carry Chunk 4, and because removing
+`open_first`/`open_last` from `overlaps`/`contains`/`writable` is semantic rather
+than a mechanical rename; atlas design discounted ×0.2 to 0.04 (Task 1.10 names
+the exact pages *and* which not to touch — the textbook Step 3 case); and a fifth
+`milestone-review` for M4's own `milestone-close`, which the `Mx` tag commits to
+ahead of the issue close.
+
+**Judge's unit caveat, recorded:** v3.1's 0.40 impl scale was fit on rows where
+within-session fan-out compressed wall-clock below a sequential sum. This plan is
+near the worst case for that discount — strict TDD red→green per step, `make test`
+gated between removals, and an explicit ordering constraint forbidding
+parallelization in M4. Expect impl to land high rather than low (`baseline-v3.1.md`
+open question #3).
+
+**Original pass-2 rationale (14.74 → 10.74).** The
 first derivation reconciled arithmetically but mis-allocated: design was 76% of
 the pre-buffer total against a ledger mean of 0.35, and Σdesign 10.1 would have
 been the largest design figure in the ledger's history. Its stated justification
@@ -161,36 +185,44 @@ audit, but intricate enough that no discount is warranted.
 model: estimate-logic-v3.1
 familiarity: 1.0
 design-buffer: 0.15
-item: issue-spec                design=1.5 impl=0.12
-item: lua-neovim                design=0.6 impl=0.6
-item: cross-cutting-refactor    design=0.2 impl=0.2
-item: lua-neovim                design=0.6 impl=0.6
-item: milestone-review          design=0.0 impl=0.2
-item: lua-neovim                design=0.4 impl=0.4
-item: milestone-review          design=0.0 impl=0.2
-item: lua-neovim                design=0.6 impl=0.6
-item: lua-neovim                design=0.4 impl=0.5
-item: cross-cutting-refactor    design=0.2 impl=0.2
-item: lua-neovim                design=0.2 impl=0.3
-item: milestone-review          design=0.0 impl=0.2
-item: cross-cutting-refactor    design=0.2 impl=0.2
-item: milestone-review          design=0.0 impl=0.2
-item: atlas-docs                design=0.1 impl=0.08
-item: atlas-docs                design=0.1 impl=0.08
-item: atlas-docs                design=0.1 impl=0.08
-total: 10.74
+item: issue-spec                design=1.5  impl=0.12
+item: lua-neovim                design=0.6  impl=0.6
+item: cross-cutting-refactor    design=0.2  impl=0.2
+item: lua-neovim                design=0.6  impl=0.6
+item: lua-neovim                design=0.2  impl=0.3
+item: lua-neovim                design=0.2  impl=0.3
+item: lua-neovim                design=0.2  impl=0.3
+item: milestone-review          design=0.0  impl=0.2
+item: lua-neovim                design=0.4  impl=0.4
+item: milestone-review          design=0.0  impl=0.2
+item: lua-neovim                design=0.6  impl=0.6
+item: lua-neovim                design=0.4  impl=0.5
+item: cross-cutting-refactor    design=0.15 impl=0.2
+item: cross-cutting-refactor    design=0.15 impl=0.2
+item: lua-neovim                design=0.2  impl=0.3
+item: milestone-review          design=0.0  impl=0.2
+item: lua-neovim                design=0.4  impl=0.5
+item: milestone-review          design=0.0  impl=0.2
+item: milestone-review          design=0.0  impl=0.2
+item: atlas-docs                design=0.04 impl=0.08
+item: atlas-docs                design=0.04 impl=0.08
+item: atlas-docs                design=0.04 impl=0.08
+total: 13.17
 ```
 
-Item order: issue + spec; **M1** turn module + reducer, coordinator guard + six
-caller predicates, `draining` phase + release matrix, boundary review; **M2**
-preparation-write deferral, boundary review; **M3** `ToolSequence` + ordered
-pump, `⏳:` marker + interleaving sweep, reservation/ticket/child-grant removal,
-tool→pending progress edge, boundary review; **M4** residual exclusion sweep,
-close review; then three atlas rewrites.
+Item order — **M1**: turn module + reducer; coordinator guard + six caller
+predicates; `draining` phase + release matrix; held-output budget (Task 1.7);
+undo coherence (Task 1.9); blocking-exchange visibility (Task 1.6 Step 4);
+boundary review. **M2**: preparation-write deferral; boundary review. **M3**:
+`ToolSequence` + ordered pump; `⏳:` marker + 24-permutation sweep; capacity-ticket
+removal (3.2a); reservation-lifecycle removal (3.2b); tool→pending progress edge;
+boundary review. **M4**: residual exclusion sweep; its `milestone-close`; the
+issue close. Then three atlas rewrites.
 
-Reconciliation: Σdesign 5.2 × 1.15 = 5.98; Σimpl 4.76 × 1.0 = 4.76; total 10.74.
-Design share 52% — still above the ledger mean of 0.35, which is deliberate and
-defensible here: six review rounds are already spent and in-window.
+Reconciliation: Σdesign 5.92 × 1.15 = 6.808; Σimpl 6.36 × 1.0 = 6.36; total 13.168 → 13.17.
+Design share 48%, against a ledger mean of 0.35 — still above, deliberately: six
+review rounds are already spent and in-window (`sdlc actual` reads 4.32h).
+
 
 Calibration caveat recorded by `sdlc estimate-source`: the v3.1 ledger is newer
 than the doc, so per-primitive hours are provisional (ariadne#127).
