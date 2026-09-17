@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-09-16
 updated: 2026-09-16
-estimate_hours: 2.8
+estimate_hours: 2.04
 started: 2026-09-16T20:14:01-07:00
 ---
 
@@ -82,49 +82,76 @@ Single-pass atomic work — plain checkboxes, no `Mx`: one review boundary, at
 ```estimate
 model: estimate-logic-v3.1
 familiarity: 1.0
-item: lua-neovim              design=1.2  impl=0.40
-item: cross-cutting-refactor  design=0.2  impl=0.10
-item: smaller-go-module       design=0.15 impl=0.14
-item: atlas-docs              design=0.1  impl=0.06
-item: milestone-review        design=0.05 impl=0.14
-design-buffer: 0.15
-total: 2.8
+item: lua-neovim              design=0.45 impl=0.60
+item: cross-cutting-refactor  design=0.05 impl=0.10
+item: smaller-go-module       design=0.10 impl=0.18
+item: atlas-docs              design=0.05 impl=0.07
+item: milestone-review        design=0.05 impl=0.18
+design-buffer: 0.30
+total: 2.04
 ```
 
 *Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against
 `baseline-v3.1.md`. Method A only.*
 
-Derivation notes:
+### Revision — 2026-09-16, after the estimate-quality check
 
-- **`lua-neovim`** (v2 design 1–3, impl 0.5–1.5) — the feature proper: the pure
-  planner, the command, the keymap and the integration spec. Design taken at
-  1.2, near the low end: the chord audit and the structural semantics were
-  settled in one session against a registry that is already a single source.
-  Impl 1.0 → **0.40** at v3.1's 40% implementation scale.
+The first pass totalled **2.8** with 1.955h (70%) in the design column. That was
+wrong in a way that was **observable at the time**, and the fix moves hours from
+design into implementation rather than trimming the total much (2.8 → 2.04).
+
+- **Design was budgeted for a phase that was already over.** `sdlc actual
+  --issue 263` reported **0.65h** at the moment of estimating, with the plan
+  written, three reviews disposed and the plan gate cleared. Budgeting another
+  ~1.3h of design against that is implausible. The first pass reasoned correctly
+  that the measurement window *charges* design (which is why the ×0.2 Step-3
+  discount stays declined) but never asked *how much design was left* — and that
+  was one command away. Design subtotal is now **0.70**, i.e. roughly what has
+  been spent plus a small residue for decisions still open during implementation
+  (chiefly the insert-mode undo grouping).
+- **v2.1 binds Step 3 and Step 6; the first pass split them.** §Step 6 says
+  plainly: if Step 3 was ×1.0, *keep the v2 +30%*. The +15% rate is the reward
+  for having *taken* the ×0.2 discount, and taking both the undiscounted design
+  and the discounted buffer is picking the favorable half of each rule. Buffer
+  is now **0.30**.
+- **Implementation was light.** `lua-neovim impl` carried four plan tasks —
+  planner, command, keymap, and a ten-case integration spec — on a table-mid
+  value. It now sits at **0.60**, the top of the v2 range (1.5) at v3.1's 40%
+  scale. `smaller-go-module impl` moves 0.14 → **0.18**: the widened guard is
+  not only "a second axis on an existing loop", it adds key canonicalization
+  (`keytrans` ∘ `replace_termcodes`) and two plant-a-collision proofs.
+- **Calibration context.** The two nearest ledger rows on this surface both
+  under-estimated: `parley.nvim#262` (same registry/`exchange_clipboard`
+  surface, closed yesterday) est 2.57 vs actual 4.84 — ratio 0.53 — and
+  `parley.nvim#240` at 0.66. Every `impl=` above is therefore at or near the top
+  of its legal v3.1 range rather than at table-mid.
+- **This row is a clean calibration point.** Single-session, sequential, no
+  subagent fan-out, so the within-session parallelism gap between a v3.1
+  estimate and `sdlc actual` does not apply — estimate and actual are directly
+  comparable here.
+
+Derivation notes (carried forward, corrected):
+
+- **`lua-neovim`** (v2 design 1–3, impl 0.5–1.5) — the feature proper. Design
+  0.45 rather than 1.2: the chord audit, the structural semantics and the
+  1089-line plan are already written and measured.
 - **`cross-cutting-refactor`** (0.2–1 / 0.2–0.5) — retiring `chat_search`.
-  Low end: measured, the blast radius is exactly three sites and no test, doc
-  or README references it.
-- **`smaller-go-module`** (0–0.3 / 0.2–0.5) — "mirror or extend" is literally
-  what widening the shadowing guard is: the detection loop already exists and
-  gains a second axis. Impl slightly above mid (0.35 → **0.14**) because the
-  plant-a-collision proof is the part that takes the thinking.
-- **`atlas-docs`** (0.05–0.2 / 0.05–0.2) — two atlas sections plus
-  traceability.
-- **`milestone-review`** (0–0.2 / 0.2–0.5) — one boundary, at close. Design
-  0.05: single-pass work needs no review design.
-- **Step 2.5 (library availability):** N/A. No novel stack and nothing external
-  to shim — the work is plugin-internal Lua against APIs already in use.
-- **Step 3 (spec-quality):** the ×0.2 design discount was **not** applied. It
-  credits a spec for design already front-loaded, but `sdlc actual` measures
-  from the claim commit and so counts this session's brainstorm, chord audit
-  and plan authoring as real hours. Discounting design the actual will still
-  charge for would bias the row low and pollute the calibration.
-- **Step 6 (buffer):** +15%, the thorough-plan-doc rate — a 780-line plan that
-  carries the literal module, the registry entry and the command body.
-- **Step 5 (familiarity):** left at 1.0 rather than credited down. The
-  keybinding registry and `exchange_clipboard` are familiar (#262 closed in the
-  same surface yesterday), but the insert-mode undo-grouping question is
-  genuinely unexplored, and that is where impl risk actually sits.
+  Low end, and confirmed generous: the blast radius is four grep lines across
+  three sites, with nothing outside `workshop/` referencing it.
+- **`smaller-go-module`** (0–0.3 / 0.2–0.5) — "mirror or extend" fits the
+  widened shadowing guard: the detection loop and `scopes_overlap` exist.
+- **`atlas-docs`** (0.05–0.2 / 0.05–0.2) — four atlas edits across two files.
+- **`milestone-review`** (0–0.2 / 0.2–0.5) — one boundary, at close.
+- **Step 2.5 (library availability):** N/A. No novel stack, nothing external to
+  shim — plugin-internal Lua against APIs already in use.
+- **Step 3 (spec-quality):** ×1.0. The discount credits a spec for design
+  front-loaded *outside* the measured window; here `sdlc actual` runs from the
+  claim commit and charges the design directly, so discounting it would bias the
+  row low. Paired with the +30% buffer, per §Step 6.
+- **Step 5 (familiarity):** 1.0, not credited down. The registry and
+  `exchange_clipboard` are familiar (#262), but insert-mode undo grouping is
+  genuinely unexplored — no existing Parley chord both edits the buffer and
+  returns to insert — and that is where the impl risk sits.
 
 ## Log
 

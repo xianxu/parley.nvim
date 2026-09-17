@@ -38,6 +38,20 @@ rounds:
           family: arch-lens-unaddressed
           round: 1
       blocked: true
+    - "n": 2
+      timestamp: "2026-09-16T20:41:56-07:00"
+      agent: claude
+      dispose:
+        - id: PQ-1
+          disposition: addressed
+          note: Restated authoritative Done-when added in the issue's Revisions, with the three superseded clauses named.
+          round: 2
+        - id: PQ-2
+          disposition: addressed
+          note: Plan now has a reasoned ARCH-FUNERAL Residue section, not a bare N/A.
+          round: 2
+      blocked: false
+content_hash: d0c6155f32844b1e6d7d62e1cf41188cf8b6a414272dca071c73e2dcfb2302e7
 ---
 
 # Gate ledger — parley.nvim#263 (plan-quality)
@@ -70,7 +84,13 @@ later rounds disposed of them. Generated — edit the gate, not this file.
   are question lines inside a transcript the user owns and edits, and the
   module and registry entry are code, not a growing artifact family.
 
+## Round 2 — 2026-09-16T20:41:56-07:00 (claude) — passed
+
+### Disposed
+
+- PQ-1 — addressed — Restated authoritative Done-when added in the issue's Revisions, with the three superseded clauses named.
+- PQ-2 — addressed — Plan now has a reasoned ARCH-FUNERAL Residue section, not a bare N/A.
+
 ## Open findings
 
-- **PQ-1** [Important] `stale-acceptance-criteria` Spec and Done-when still describe the pre-revision cursor-position feature the plan no longer builds
-- **PQ-2** [Minor] `arch-lens-unaddressed` ARCH-FUNERAL has no entry, not even a reasoned N/A
+(none — every finding has been disposed)

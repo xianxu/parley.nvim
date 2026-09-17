@@ -369,7 +369,19 @@ local config = {
 	chat_shortcut_toggle_web_search = { modes = { "n" }, shortcut = "<C-g>w" },
 	chat_shortcut_system_prompt = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>P" },
 	chat_shortcut_follow_cursor = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>l" },
-	chat_shortcut_search = { modes = { "n", "i", "v", "x" }, shortcut = "<C-g>n" },
+	-- #263: open a new, empty question after the exchange at the cursor. `n` for
+	-- new, in both families. It took <C-g>n from chat_search, a next-question
+	-- search wrapper that plain `/` already covers.
+	--
+	-- <C-g>n LEADS, which is deliberate and is the one place this entry departs
+	-- from #214's "the portable alt key leads" rule (branch_ref, prune,
+	-- open_file). The operator asked for <C-g>n by name and chose to retire
+	-- chat_search for it, so <C-g>n is the gesture being taught and help must
+	-- advertise it first; <M-n> rides along as the alt-family twin. `outline`
+	-- ships { "<C-g>t", "<M-t>" } in the same order, so this is not a novel shape.
+	--
+	-- Overriding `shortcut` REPLACES the list -- name both if you want both.
+	chat_shortcut_new_question = { modes = { "n", "i" }, shortcut = { "<C-g>n", "<M-n>" } },
 	-- Follow a link under the cursor: a 🌿: reference to a sub-chat, an inline
 	-- [🌿:…](file), an @@path@@ reference, a src: link — and anything else falls
 	-- through to `gf` (#225), so one key means "go to the thing under my

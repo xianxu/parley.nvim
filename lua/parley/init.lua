@@ -2800,11 +2800,16 @@ M.prep_chat = function(buf, file_name)
 			chat_agent = M.cmd.NextAgent,
 			chat_system_prompt = M.cmd.NextSystemPrompt,
 			chat_follow_cursor = M.cmd.ToggleFollowCursor,
-			chat_search = function()
-				local user_prefix = M.config.chat_user_prefix
-				local branch_prefix = M.config.chat_branch_prefix
-				vim.cmd("/^" .. vim.pesc(user_prefix) .. "\\|^" .. vim.pesc(branch_prefix))
-			end,
+			new_question = {
+				n = M.cmd.NewQuestion,
+				-- Leave insert BEFORE writing, so the buffer edit is its own undo
+				-- step rather than being folded into the surrounding insert
+				-- session; NewQuestion's own startinsert! puts us back.
+				i = function()
+					vim.cmd("stopinsert")
+					M.cmd.NewQuestion()
+				end,
+			},
 			chat_prune = M.cmd.ChatPrune,
 			chat_export_markdown = M.cmd.ExportMarkdown,
 			chat_export_html = M.cmd.ExportHTML,
@@ -4589,6 +4594,57 @@ M.cmd.ExchangePaste = function()
 	local to_insert = exchange_clipboard.build_paste_lines(lines, paste_after, _exchange_clipboard, #lines)
 	require("parley.buffer_edit").replace_user_lines(buf, paste_after, paste_after, false, to_insert)
 	M.logger.info("Pasted " .. #_exchange_clipboard .. " lines after line " .. paste_after)
+end
+
+--- #263 Open a new, empty question after the exchange at the cursor. The
+--- end-user path to a question line: no clipboard, no emoji picker.
+---
+--- The structure decision is a pure plan (parley.new_question); this is the IO
+--- shell. Writing through buffer_edit rather than nvim_buf_set_lines is what
+--- gives the edit its provenance token -- and what makes this REFUSE, loudly,
+--- rather than corrupt a transcript a response is streaming into (ARCH-ORDER).
+M.cmd.NewQuestion = function()
+	local buf = vim.api.nvim_get_current_buf()
+	local file_name = vim.api.nvim_buf_get_name(buf)
+	local reason = M.not_chat(buf, file_name)
+	if reason then
+		M.logger.warning("NewQuestion is only available in chat files: " .. reason)
+		return
+	end
+
+	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+	local header_end = M.chat_parser.find_header_end(lines)
+	if not header_end then
+		M.logger.error("NewQuestion: could not find header separator ---")
+		return
+	end
+
+	local parsed_chat = M.parse_chat(lines, header_end)
+	local cursor_line = vim.api.nvim_win_get_cursor(0)[1]
+	local plan = require("parley.new_question").plan(
+		parsed_chat, lines, cursor_line, header_end, M.config.chat_user_prefix)
+
+	local edits = require("parley.buffer_edit")
+	local ok, err = true, nil
+	if plan.kind == "insert" then
+		ok, err = pcall(edits.replace_user_lines, buf, plan.after, plan.after, false, plan.lines)
+	elseif plan.lines then
+		ok, err = pcall(edits.replace_user_lines, buf, plan.row - 1, plan.row, false, plan.lines)
+	end
+	if not ok then
+		M.logger.warning("NewQuestion stopped: " .. tostring(err))
+		return
+	end
+
+	-- The planner always names a row; a nil here means the clipboard arg was
+	-- empty, which cannot happen, and nvim_win_set_cursor's error would not say
+	-- so. State the invariant where it is cheap to read.
+	assert(plan.row, "new_question.plan returned no row")
+	local row = math.min(plan.row, vim.api.nvim_buf_line_count(buf))
+	-- Column 0 is deliberate: `startinsert!` IS `A`, so it lands at end-of-line
+	-- whatever column we set. Only the ROW matters here.
+	vim.api.nvim_win_set_cursor(0, { row, 0 })
+	vim.cmd("startinsert!")
 end
 
 -- Command for navigating questions and headers in chat documents
