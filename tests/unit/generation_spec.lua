@@ -122,8 +122,12 @@ describe('pure generation lifecycle',function()
         local s,a=requesting();local r;s,r=output(s,a,1,5)
         local write=effect(r,'write')
         s,r=send(s,{type='provider_complete',attempt=a})
-        assert.equals('finalizing',G.snapshot(s).phase);assert.is_nil(effect(r,'finalize'))
+        -- #266 M1: this window now has a name. Complete-but-unwritten is `draining`,
+        -- not `finalizing` with a non-empty queue — which is what let one bytes==0
+        -- test stand for both "my writes landed" and "I may proceed".
+        assert.equals('draining',G.snapshot(s).phase);assert.is_nil(effect(r,'finalize'))
         s,r=send(s,{type='write_result',write=write.id,committed_bytes=5,status='applied'})
+        assert.equals('finalizing',G.snapshot(s).phase)
         local final=effect(r,'finalize');assert.is_table(final)
         s=send(s,{type='finalize_result',finalize=final.id,status='applied'})
         assert.equals('finalizing',G.snapshot(s).phase)
@@ -528,4 +532,73 @@ describe('pure generation lifecycle',function()
         assert.equals('terminal',G.snapshot(s).phase)
     end)
 
+    -- #266 M1: the write turn and the draining phase.
+    it('holds output while another generation holds the write turn',function()
+        local s,a=requesting()
+        local r
+        s,r=send(s,{type='turn',status='waiting'})
+        s,r=output(s,a,1,4)
+        assert.is_nil(effect(r,'write'),'must not write without the turn')
+        s,r=send(s,{type='turn',status='held'})
+        assert.is_not_nil(effect(r,'write'),'writes as soon as the turn arrives')
+    end)
+
+    it('requests the turn on start and releases it when it pauses',function()
+        local s,r=send(G.new(spec()),{type='start'})
+        assert.is_not_nil(effect(r,'request_turn'),'start must request the turn')
+        s,r=send(s,{type='pause'})
+        assert.is_not_nil(effect(r,'release_turn'),'a pause must not hold the turn')
+    end)
+
+    it('re-requests the turn when a paused generation resumes',function()
+        local s=send(G.new(spec()),{type='start'})
+        local r
+        s,r=send(s,{type='pause'})
+        s,r=send(s,{type='resume_validated',policy_ref='operator:test'})
+        assert.is_not_nil(effect(r,'request_turn'),'resume must re-request the turn')
+    end)
+
+    -- The state the Spec names: complete but not yet written. Without it, the
+    -- bytes==0 gates cannot tell a held generation from a streaming one.
+    it('enters draining when the provider completes with output still staged',function()
+        local s,a=requesting()
+        s=send(s,{type='turn',status='waiting'})
+        s=output(s,a,1,4)
+        s=send(s,{type='provider_complete',attempt=a})
+        assert.equals('draining',G.snapshot(s).phase)
+        assert.is_true(G.snapshot(s).staged_bytes>0)
+    end)
+
+    it('leaves draining for finalizing once the staged output lands',function()
+        local s,a=requesting()
+        s=send(s,{type='turn',status='waiting'})
+        s=output(s,a,1,4)
+        s=send(s,{type='provider_complete',attempt=a})
+        assert.equals('draining',G.snapshot(s).phase)
+        local r
+        s,r=send(s,{type='turn',status='held'})
+        local w=effect(r,'write')
+        s,r=send(s,{type='write_result',write=w.id,attempted_bytes=4,committed_bytes=4,status='applied'})
+        assert.equals('finalizing',G.snapshot(s).phase)
+    end)
+
+    it('goes straight to finalizing when nothing is staged',function()
+        local s,a=requesting()
+        s=send(s,{type='provider_complete',attempt=a})
+        assert.equals('finalizing',G.snapshot(s).phase)
+    end)
+
+    -- Cancellation, revocation and staleness must be expressible from draining —
+    -- that is why it is a phase and not a boolean.
+    it('expresses cancellation and revocation from draining',function()
+        for _,ev in ipairs({{type='cancel'},{type='grant_revoked',grant='grant'}}) do
+            local s,a=requesting()
+            s=send(s,{type='turn',status='waiting'})
+            s=output(s,a,1,4)
+            s=send(s,{type='provider_complete',attempt=a})
+            assert.equals('draining',G.snapshot(s).phase)
+            s=send(s,ev)
+            assert.equals('stopping',G.snapshot(s).phase,ev.type..' must be expressible from draining')
+        end
+    end)
 end)

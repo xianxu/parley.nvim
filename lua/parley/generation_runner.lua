@@ -60,6 +60,8 @@ local function sync(s)
             dispatch(s,{type=status=='valid' and 'grant_resumed' or 'grant_'..status,grant=grant})
         end
     end
+    local turn=doc.turn==s.generation and 'held' or 'waiting'
+    if turn~=s.turn_status then s.turn_status=turn; dispatch(s,{type='turn',status=turn}) end
     local generation=doc.generations[s.generation]
     if generation and generation.stale then dispatch(s,{type='input_changed',dependencies_ref=s.dependencies_ref}) end
 end
@@ -356,6 +358,8 @@ local function execute(s,effect)
         start_operation(s,effect)
     elseif effect.type=='write'  or effect.type=='manual_append' then return write(s,effect)
     elseif effect.type=='manual_replace' then return replace(s,effect)
+    elseif effect.type=='request_turn' or effect.type=='release_turn' then
+        if not s.detached then D.transition(s.doc,{kind=effect.type,generation=s.generation,epoch=s.epoch}) end
     elseif effect.type=='revoke' then
         if not s.detached then D.transition(s.doc,{kind='revoke',grant=effect.grant}) end
     elseif effect.type=='cancel_operation' then

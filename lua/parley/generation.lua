@@ -31,15 +31,32 @@ local function advance(s,value)
 end
 local function writable(s,grant)
     if s.grant_status=='revoked' or s.phase=='stopping' or s.phase=='terminal' then return false end
+    -- #266 M1: only the turn holder may stage a write. This is an optimization,
+    -- not the enforcement point — the coordinator refuses a turnless write with
+    -- 'waiting' regardless. Keeping it here stops a queued generation emitting
+    -- write effects that would only park.
+    if s.turn_status~='held' then return false end
     if grant==s.grant then return s.grant_status=='valid' and s.phase~='paused' end
     for _,child in ipairs(s.round and s.round.children or {}) do
         if child.grant==grant then return child.grant_status=='valid' end
     end
     return false
 end
+--- Desire for the write turn. Tracked so a release is not emitted by a
+--- generation that never asked, and a request is not emitted twice.
+local function request_turn(s,effects)
+    if s.turn_wanted then return end
+    s.turn_wanted=true; emit(s,effects,'request_turn',{})
+end
+local function release_turn(s,effects)
+    if not s.turn_wanted then return end
+    s.turn_wanted=false; emit(s,effects,'release_turn',{})
+end
+
 local function stop(s,effects,outcome)
     if s.phase=='stopping' then return end
     s.phase='stopping';s.outcome=outcome;s.grant_status='revoked'
+    release_turn(s,effects)
     emit(s,effects,'revoke',{grant=s.grant})
     if s.round and s.round.reservation_pending then emit(s,effects,'cancel_reservation',{round=s.round.id}) end
     for _,item in ipairs(s.queue) do
@@ -57,7 +74,7 @@ end
 local function revoke_child(s,effects,child)
     child.grant_status='revoked'
     if not child.started then child.resolved=true;child.outcome='cancelled_before_effect' end
-    if s.phase~='paused' and s.phase~='stopping' then s.resume_phase=s.phase;s.phase='paused' end
+    if s.phase~='paused' and s.phase~='stopping' then s.resume_phase=s.phase;s.phase='paused';release_turn(s,effects) end
     emit(s,effects,'revoke',{grant=child.grant})
     local op=s.operations[child.operation]
     if op and not op.resolved then emit(s,effects,'cancel_operation',{operation=child.operation}) end
@@ -146,6 +163,7 @@ local function pump(s,effects)
             end
         end
     end
+    if phase(s)=='draining' and bytes==0 and not s.provider_failed then advance(s,'finalizing') end
     if s.phase=='finalizing' and bytes==0 and s.grant_status=='valid' then
         if not s.finalize_pending and not s.finalized then
             s.finalize_pending=emit(s,effects,'finalize',{grant=s.grant,exchange=s.exchange}).id
@@ -164,7 +182,7 @@ function M.new(spec)
     assert(integer(items) and items>0 and items<=256,'invalid staged item limit')
     return wrap({epoch=spec.epoch,generation=spec.generation,exchange=spec.exchange,grant=spec.grant,
         input_seed_ref=spec.input_seed_ref,dependencies_ref=spec.dependencies_ref,capabilities_ref=spec.capabilities_ref,
-        phase='preparing',grant_status='valid',serial=0,operations={},operation_order={},queue={},
+        phase='preparing',grant_status='valid',turn_status='held',serial=0,operations={},operation_order={},queue={},
         accepted_bytes=0,committed_bytes=0,discarded_bytes=0,limits={staged_bytes=bytes,queued_items=items}})
 end
 function M.snapshot(handle)
@@ -193,7 +211,11 @@ function M.transition(handle,event)
     if kind=='start' then
         if s.started or s.phase~='preparing' then return reject('duplicate') end
         s.started=true
+        request_turn(s,effects)
         s.preparation=operation(s,effects,'prepare',{input_seed_ref=s.input_seed_ref,dependencies_ref=s.dependencies_ref})
+    elseif kind=='turn' then
+        if event.status~='held' and event.status~='waiting' then return reject('turn status') end
+        s.turn_status=event.status
     elseif kind=='prepared' then
         if phase(s)~='preparing' or event.preparation~=s.preparation or not s.operations[event.preparation]
             or s.input_ref or not ref(event.input_ref) then return reject('preparation') end
@@ -268,11 +290,11 @@ function M.transition(handle,event)
         if phase(s)~='requesting' or event.attempt~=s.attempt or not attempt or attempt.complete then return reject('attempt') end
         -- Transport failure ends admission, not already admitted output. Drain
         -- valid writes before failure retirement; human revocation still wins.
-        attempt.complete=true;s.provider_failed=true;advance(s,'finalizing')
+        attempt.complete=true;s.provider_failed=true;advance(s,staged(s)>0 and 'draining' or 'finalizing')
     elseif kind=='provider_complete' then
         local attempt=s.operations[event.attempt]
         if phase(s)~='requesting' or event.attempt~=s.attempt or not attempt or attempt.complete then return reject('attempt') end
-        attempt.complete=true;advance(s,'finalizing')
+        attempt.complete=true;advance(s,staged(s)>0 and 'draining' or 'finalizing')
     elseif kind=='round_declared' then
         local attempt=s.operations[event.attempt]
         if phase(s)~='requesting' or event.attempt~=s.attempt or not attempt or attempt.complete then return reject('attempt') end
@@ -331,7 +353,7 @@ function M.transition(handle,event)
             or (event.outcome~='known' and event.outcome~='unknown' and event.outcome~='rejected' and event.outcome~='cancelled_before_effect') then return reject('child') end
         found.outcome=event.outcome;found.result_ref=event.result_ref
         if s.operations[event.operation] then s.operations[event.operation].complete=true end
-        if event.outcome~='known' and s.phase~='stopping' and s.phase~='paused' then s.resume_phase=s.phase;s.phase='paused' end
+        if event.outcome~='known' and s.phase~='stopping' and s.phase~='paused' then s.resume_phase=s.phase;s.phase='paused';release_turn(s,effects) end
     elseif kind=='round_prepared' then
         if (s.phase~='executing_tools' and s.phase~='paused') or not s.round or event.round~=s.round.id
             or not s.round.join_pending or s.round.prepared_input_ref or not ref(event.input_ref)
@@ -339,10 +361,10 @@ function M.transition(handle,event)
         s.round.prepared_input_ref=event.input_ref
     elseif kind=='pause' then
         if s.phase=='stopping' or s.phase=='paused' then return reject('phase') end
-        s.resume_phase=s.phase;s.phase='paused'
+        s.resume_phase=s.phase;s.phase='paused';release_turn(s,effects)
     elseif kind=='resume_validated' then
         if s.phase~='paused' or s.grant_status~='valid' or not ref(event.policy_ref) then return reject('resume') end
-        s.phase=s.resume_phase;s.resume_phase=nil
+        s.phase=s.resume_phase;s.resume_phase=nil;request_turn(s,effects)
     elseif kind=='operation_resolved' or kind=='operation_supervised' then
         local supervised=kind=='operation_supervised'
         local op=s.operations[event.operation]
