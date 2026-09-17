@@ -542,7 +542,7 @@ describe("entity_range invariants", function()
 	-- an odd number of fence delimiters has split a fenced block, whatever path
 	-- produced it. Stated over the RESULT, so it covers to_end's overwrite of
 	-- `last` from the exchange bound as well as the paragraph wall.
-	it("never returns a range that splits a fenced block", function()
+	it("never returns a range that covers only part of a fenced block", function()
 		local lexical = require("parley.document.lexical")
 		local FENCED = {
 			{ "# topic: t", "- file: t.md", "---", "", "💬: q", "", "🤖: [A]",
@@ -553,6 +553,10 @@ describe("entity_range invariants", function()
 			  "  ```md", "# fake", "body", "  ```", "", "after" },
 			{ "# topic: t", "- file: t.md", "---", "", "💬: q", "", "🤖: [A]",
 			  "```", "only", "```" },
+			-- even delimiter count, wrong coverage: a range from inside block A
+			-- to inside block B holds A's closer and B's opener -- parity 2.
+			{ "# topic: t", "- file: t.md", "---", "", "💬: q", "", "🤖: [A]",
+			  "```", "a1", "```", "mid", "```", "b1", "```", "tail" },
 		}
 		for fi, lines in ipairs(FENCED) do
 			local parsed = parse(lines)
@@ -562,13 +566,23 @@ describe("entity_range invariants", function()
 						local r = entity_range.range(parsed, lines, row,
 							{ scope = scope, inner = inner })
 						if r then
-							local n = 0
+							-- BLOCK COVERAGE, not parity: a range holding one
+							-- block's closer and the next block's opener has an
+							-- even count and splits both.
+							local memo = require("parley.highlight_structure").code_block_memo(
+								lines, lexical.patterns(require("parley.config")), true)
+							local touches = false
 							for i = r.first, r.last do
-								if lexical.is_fence_delim(lines[i], true) then n = n + 1 end
+								if lexical.is_fence_delim(lines[i], true) then touches = true end
 							end
-							assert.equals(0, n % 2,
-								("fixture %d row %d scope=%s inner=%s split a fence (%d delims in %d..%d)")
-									:format(fi, row, scope, tostring(inner), n, r.first, r.last))
+							if touches then
+								assert.is_false(memo[r.last] or false,
+									("fixture %d row %d %s inner=%s ends part-way into a block (%d..%d)")
+										:format(fi, row, scope, tostring(inner), r.first, r.last))
+								assert.is_false((memo[r.first] and memo[r.first - 1]) or false,
+									("fixture %d row %d %s inner=%s begins part-way into a block (%d..%d)")
+										:format(fi, row, scope, tostring(inner), r.first, r.last))
+							end
 						end
 					end
 				end

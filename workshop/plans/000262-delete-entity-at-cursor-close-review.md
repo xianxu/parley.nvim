@@ -152,3 +152,133 @@ dispose:
     note: |
       entity_delete_parity_spec.lua:108-110 still writes a chat file per fresh() call; run() at :135-139 deletes the buffer only.
 ```
+
+---
+
+## Re-review — 2026-09-16T17:23:21-07:00 (REWORK)
+
+| field | value |
+|-------|-------|
+| issue | 262 — Delete entity at cursor — markdown section, paragraph, or chat question |
+| repo | parley.nvim |
+| issue file | workshop/issues/000262-delete-entity-at-cursor.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | 85e116c2da14c941735c7d7e67bb023aaff3aa00..1a9cd92cdbac04eb4c623c02b3c92e8a33c398c9 |
+| command | sdlc close --issue 262 |
+| reviewer | claude |
+| timestamp | 2026-09-16T17:23:21-07:00 |
+| verdict | REWORK |
+
+## Review
+
+```verdict
+verdict: REWORK
+confidence: high
+```
+
+BR-30 and BR-32 — the two Important findings that blocked the last round — are genuinely fixed with real regression evidence: `heading_level_at` (`lua/parley/entity_range.lua:104`) is now the one heading classification that the dispatch, the section forward scan and the `to_end` backward scan all consume, and `balance_fences` (`:192`) is a result-level post-condition that I scratch-reverted and watched go red (45 pass / 1 fail, exactly `entity_range invariants never returns a range that splits a fenced block`). BR-31 and BR-33 are closed with measurement (parity-spec residue: 489 files / 1.9 MB per run → 1 file / 4 KB), and BR-20's mechanical half now holds — all 16 changed `lua/`+`tests/` paths appear in the plan and **zero** `lua/*.lua:NNN` refs survive. What blocks SHIP is that the post-condition's own comment claims it is "checked once, after every path has had its say", and `M.range` has **two** exits, not one: the `question` branch returns at `:284`, twelve lines above the guard. Measured on a real `parse_chat` — a transcript whose answer was cut off mid-code-block (opener in exchange 1, closer in exchange 2, which is what a stopped generation produces) — `range(p, L, 5)` returns `question 5..10` carrying **one** fence delimiter, and `dae` on the `💬:` line leaves a bare ` ```lua ` opener so every following line renders as code. That is BR-21's exact corruption, on its fifth round, at the last gate. Test suite is otherwise clean for this diff: `make test-spec SPEC=chat/entity_delete` is 77/77; the two suite failures I saw (`document_dependencies_spec`, `perf_document_spec`) both pass in isolation and are 8-way-parallel flakes, and `parley_harness_golden_spec` fails 11/11 **at the base commit too** (golden drift from `baa2b77e`, an ancestor of base) — neither is this diff's.
+
+## 1. Strengths
+
+- **The classification collapse is the right consolidation.** `heading_level_at` (`entity_range.lua:104-109`) replaced three spellings of "effective heading level at row *i*", two of them behind an unreachable nil-guard. Measured: BR-30's plain-markdown case (`# Top / alpha / "" / ```lua / # fake / code / ``` / omega`) now returns `section 1..8` where it returned `1..4`, and the chat form is pinned at `entity_range_spec.lua:503-522`.
+- **The guard is stated over the result and verified red.** `balance_fences` + the property test at `entity_range_spec.lua:545-577` (4 fixtures × every row × {entity,to_end} × {inner,outer}) is the class-level artifact two rounds asked for, not another wall at another call site. Reverting the call reds exactly that test and nothing else.
+- **BR-32's measured instance is really gone.** `range(p, L, 11, {scope="to_end"})` on the two-exchange fixture with a fence at 10-13 returns `11..12`, not `11..15`; the opener survives.
+- **Citation policy is enforced, not just declared.** I checked every `file:line` the plan names: all resolve, and no `lua/` line refs remain at all (`plan.md:9-15` states the policy; `lessons.md` records the why).
+- **The app carve-out is scoped and negatively pinned.** `starter_config.lua`'s `object_only` plus `starter_config_spec.lua`'s "still refuses a bare normal-mode key" is the right shape for a filter relaxation.
+
+## 2. Critical findings
+
+None.
+
+## 3. Important findings
+
+- **`lua/parley/entity_range.lua:284` — the fence post-condition is skipped on the `question` exit, and is stated as delimiter *parity* rather than block *coverage*.** **This is the 5th finding in family `range-splits-a-structure`.** Do not patch the question branch. THE RULE, in two parts, both structural:
+  1. **The post-condition must be unavoidable.** BR-32's spec said "`M.range` has exactly one exit"; that premise was false, so the guard landed on one of two. Split the body into a private `compute(...)` and make `M.range` = `compute` → `balance_fences` → final clamp, so no `return` can reach a caller without passing it. Measured instance: fixture `# topic: t / - file: t.md / --- / "" / 💬: q one / "" / 🤖: [A] / ```lua / a = 1 / "" / 💬: q two / "" / 🤖: [A] / ``` / tail prose` — `range(p,L,5)` → `question 5..10`, one fence delimiter; after `dae` the buffer is `… / 💬: q two / "" / 🤖: [A] / ``` / tail prose`, i.e. an unterminated opener. `range(p,L,11)` → `question 11..15`, same class, mirrored.
+  2. **Parity is a weaker predicate than the invariant the atlas states.** `atlas/chat/entity_delete.md:94` says "a range never spans one"; the shipped check only forbids an *odd* delimiter count. Measured: fixture `… 🤖: [A] / ``` / x / ``` / "" / ~~~ / y / ~~~ / z`, `range(p,L,9,{scope="to_end"})` → `9..13`, two delimiters, passes the invariant, and deletes the closer of block A and the opener of block B. Under Parley's own `code_block_memo` (a flat toggle that ignores delimiter char and width) the result reconciles, which is why this half is lower-consequence — but the check should be expressed over the `in_code` memo `M.range` already computes at `:268` ("no fenced block partially covered") rather than re-scanning delimiters and counting them. Extend the property corpus with one fixture whose fence is unbalanced *within* an exchange span; the current four cannot see either half.
+
+## 4. Minor findings
+
+- **`lua/parley/entity_range.lua:10` / `atlas/chat/entity_delete.md:94-95` — docs describe behavior the code does not have (BR-27, still open, now worse).** `:10` opens "Five rules, each stated once" over six numbered rules, and this round added a "Rule 7" at `:186`. The atlas still says an in-fence `# heading` "is content rather than a section" — measured, `range()` returns `nil` there (neither) — and now also says "a fence line is never deleted, a range never spans one", which the `9..13` range above falsifies.
+- **`workshop/plans/000262-…-plan.md` — the de-line-numbering pass damaged five passages.** **This is the 3rd finding in family `docs-edit-mangles-prose`.** THE RULE: a mechanical substitution over prose must be read back as prose, not diffed as tokens. The enumeration: `:945` "`ExchangeCut`'s preamble verbatim ()" (empty parens); `:956` "allow-list's allow-list"; `:860` "`prep_chat` calls `tool_folds.setup(buf)` (`prep_chat`)"; `:107` "`document.exchange(doc,row)` (`document.exchange`)"; `:804` "`outline.lua`'s in-code guard's existing ruling". The fifth is a factual inversion, not a typo: `:1131` now reads "The first cut used `lexical.is_fence_delim` for the wall and `code_block_memo` for the in-block test; they recognise different fences" — the first cut used `fence.open_len`, and as rewritten the Revisions entry says the bug and its fix are the same predicate, erasing the record BR-26 exists to keep.
+- **`tests/integration/entity_textobj_spec.lua:220` — `cae` is claimed and never executed.** **This is the 3rd finding in family `checkbox-without-artifact`.** THE RULE: a test whose name enumerates behaviors must exercise each one; an enumeration in a Done-when bullet becomes a loop or one assertion per item, never prose in a title. Done-when says `d`/`y`/`c`/`v` "at minimum"; `dae`/`yae`/`vae`/`die` are all driven, and `c` appears nowhere in `tests/` — the test named "die and cae work, as Done-when claims for every operator" runs only `die`. `cae` over a linewise object leaves insert mode open, which is exactly the kind of thing the other three tests exist to catch.
+
+## 5. Test coverage notes
+
+The mapped set is green and exits 0: parity 11/11, textobj 15/15, entity_range 46/46, conformance 1/1, heading 4/4. The new property test is the right artifact and I confirmed it red under scratch revert. Its blind spot is the one the new Important names — every FENCED fixture is fence-balanced within a single exchange span and chat-classified, so neither the question exit nor an unbalanced-within-exchange document is reachable from it (BR-32 asked for a plain-markdown fixture among the four; all four are chat-shaped, though the plain-markdown regression is covered separately at `:503-522` and I verified it independently). BR-24 remains: `entity_delete_parity_spec.lua:78` declares `shape` at module scope, each `it()` assigns it, and `fresh()` reads it — correct only because busted runs bodies sequentially. I re-measured the ARCH-CONSTRAINTS figures with the atlas's own recipe: 12.8 / 25.5 / 101.7 ms against the published 13.6 / 24.7 / 97.8, so the numbers are accurate *today* despite two whole-buffer passes (`code_block_memo`, `balance_fences`) landing after they were taken — BR-23's risk is silent future drift, exactly as it was stated, and nothing in `tests/perf` or `tests/arch` references `entity_range`.
+
+## 6. Architectural notes for upcoming work
+
+ARCH-DRY: **pass**, with one observation — `M.range` builds `in_code` at `:268`, which already encodes the fenced-block structure, and `balance_fences` then re-derives fence positions by rescanning with the same predicate. One derivation, two consumers, is the shape the Important above asks for. ARCH-PURE: **pass** — `entity_range` is a value function over `(parsed, lines, row, opts)`; 46 unit cases run with no buffer and no mocks. ARCH-PURPOSE: **pass** — shadow-sweep of the "one ATX dialect" claim: `entity_range` derives, `outline` derives on both its line-based and token-based paths, `document/lexical` keeps its hot scanner and is *enforced* by `markdown_heading_conformance_spec`, not merely documented. `exporter.lua:537-541` still hand-maps `^# `/`^## `/`^### `, but that is a level→CSS-class rendering table rather than a heading test, and the plan names it explicitly as the next consumer if the dialect widens. ARCH-MOCK: **N/A** (no external binary or service); the one substitution, `buffer_edit.replace_user_lines` at `entity_textobj_spec.lua:208`, is an internal seam with its scope argued in place. ARCH-CONSTRAINTS: **pass with the standing miss** — 25.5 ms against a 16 ms budget at 5 000 lines, a documented and operator-accepted miss, with `document.exchange` named as the escape hatch. ARCH-SECURE: **pass** — the transcript is the untrusted input, `transcript_header_end` and `M.range` both type- and bound-guard, the malformed corpus is property-tested, and tests write only under the harness `TMPDIR`. ARCH-ORDER: **pass** — the module carries no state between events; the one latch that does (`_parley_bufs` vs. a buffer edited after classification) is the `separator-edited-away` axis and is refused rather than degraded. ARCH-FUNERAL: **pass** — production code creates only buffer-local keymaps; the test residue is now one directory + a 4 KB `state.json` per run, collected by `test-clean-env`.
+
+## 7. Plan revision recommendations
+
+- A `## Revisions` entry recording that the de-line-numbering pass of `1a9cd92c` corrupted five passages, listing them, and correcting `:1131` back to "the first cut used `fence.open_len`" — the entry currently reads as though the bug and its fix were the same predicate.
+- Apply the `:1110` Revisions delta ("both surfaces go through one classifier, `entity_textobj.parsed_for`") to the body it contradicts: `:98` and `:945` still say `DeleteEntity` is "`ExchangeCut`'s preamble". That is BR-13's stated rule — a Revisions entry must be applied to the body in the same edit — on its second miss.
+- A `## Revisions` entry recording that the fence contract was resolved in favour of the invariant over "`to_end` runs through the end of the exchange", since `daE` inside a fenced block now stops inside it. The issue's Done-when still states the unqualified form.
+
+```findings
+dispose:
+  - id: BR-13
+    disposition: not-addressed
+    note: |
+      Line numbers were stripped; the false claim was not. plan.md:98 and :945 still say DeleteEntity is "ExchangeCut's preamble" (":945" now reads "verbatim ()"), while init.lua's delete_entity_range calls entity_textobj.parsed_for and the plan's own Revisions at :1110 says so.
+  - id: BR-20
+    disposition: addressed
+    note: |
+      Both halves of the stated mechanical rule verified: all 16 changed lua/+tests/ paths appear in the plan, every file:line the plan names resolves, and zero lua/*.lua:NNN refs remain. plan:7 now names lexical.is_fence_delim + code_block_memo, both genuinely required by entity_range. Its BR-13 instance is disposed separately.
+  - id: BR-23
+    disposition: not-addressed
+    note: |
+      Atlas untouched this round; no tests/perf or tests/arch file references entity_range. I re-derived via the page's own recipe: 12.8/25.5/101.7 ms vs the published 13.6/24.7/97.8, so the numbers are accurate today and the exposure is silent future drift, as stated.
+  - id: BR-24
+    disposition: not-addressed
+    note: |
+      entity_delete_parity_spec.lua:78 still declares `shape` at module scope, each it() assigns it, fresh() reads it.
+  - id: BR-25
+    disposition: not-addressed
+    note: |
+      keybinding_registry.lua:483/:493/:503 unchanged - "(dae/yae/cae)", "(die/yie/cie)", "(daE)".
+  - id: BR-27
+    disposition: not-addressed
+    note: |
+      atlas:94-95 unchanged and measured still wrong (range() returns nil on an in-fence heading, no Precedence row for it); entity_range.lua:10 still says "Five rules" and this round added a "Rule 7" at :186, so the header is now two short. atlas:94's "a range never spans one" is additionally falsified - see the new Important.
+  - id: BR-30
+    disposition: addressed
+    note: |
+      heading_level_at (entity_range.lua:104) is the one classification consumed by the dispatch, the section forward scan and the to_end backward scan. Measured: BR-30's plain-markdown case now returns section 1..8 (was 1..4); chat form pinned at entity_range_spec.lua:503-522.
+  - id: BR-31
+    disposition: addressed
+    note: |
+      420d046a: `local closer = delim:match("~") and "~~~" or "```"` computed once with one consumer; the discarded initializer is gone.
+  - id: BR-32
+    disposition: addressed
+    note: |
+      balance_fences (entity_range.lua:192) runs at :326; range(p,L,11,{scope="to_end"}) now returns 11..12, not 11..15. Class guard at entity_range_spec.lua:545-577, verified red in a scratch copy with the call commented out (45 pass / 1 fail, exactly that test). Residual coverage of a second exit is raised as a new finding rather than a reversal.
+  - id: BR-33
+    disposition: addressed
+    note: |
+      run() now deletes the file as well as the buffer. Measured per-run residue under the harness scratch root dropped from 489 files / 1.9 MB to 1 file (state/state.json) / 4 KB.
+findings:
+  - id: new
+    severity: Important
+    family: range-splits-a-structure
+    title: |
+      the fence post-condition is skipped on M.range's question exit, and states parity rather than block coverage
+    detail: |
+      5th in this family - do NOT patch the question branch. THE RULE, both halves structural. (1) The post-condition must be UNAVOIDABLE. BR-32's spec asserted "M.range has exactly one exit"; there are two, and the guard landed on one. entity_range.lua:284 returns the question range twelve lines above balance_fences at :326. Split the body into a private compute(...) so M.range = compute -> balance_fences -> clamp and no return can bypass it. Measured on a real parse_chat over a transcript whose answer was cut off mid-code-block (opener in exchange 1, closer in exchange 2 - what a stopped generation produces): range(p,L,5) returns question 5..10 carrying ONE fence delimiter, and dae on the question line leaves a bare ```lua opener so every following line renders as code. range(p,L,11) is the mirror image. This is BR-21's corruption, undo-recoverable, hence Important on the same calibration BR-21/BR-26/BR-32 were given. (2) Parity is weaker than the stated invariant. atlas/chat/entity_delete.md:94 says "a range never spans one"; the check only forbids an ODD count. Measured, fixture with adjacent backtick and tilde blocks: range(p,L,9,{scope="to_end"}) returns 9..13, two delimiters, passes, and deletes block A's closer plus block B's opener. Express the check over the in_code memo M.range already builds at :268 - "no fenced block partially covered" - instead of rescanning and counting delimiters. This half is lower-consequence because Parley's own code_block_memo is a flat toggle that ignores delimiter char and width, so the post-delete document reconciles internally while a CommonMark renderer would not. The property corpus at entity_range_spec.lua:547-556 cannot see either half: all four fixtures are chat-classified and fence-balanced within a single exchange span. Add one whose fence is unbalanced within an exchange.
+  - id: new
+    severity: Minor
+    family: docs-edit-mangles-prose
+    title: |
+      the de-line-numbering pass damaged five plan passages, one of which inverts the record it keeps
+    detail: |
+      3rd in this family. THE RULE - a mechanical substitution over prose must be read back AS PROSE, not diffed as tokens; BR-27 stated the same rule for docs accompanying a behavior change and it repeated on a pure-prose edit, so the enforceable form is that the author reads the changed paragraphs end-to-end before committing. The enumeration, all in workshop/plans/000262-delete-entity-at-cursor-plan.md - :945 "ExchangeCut's preamble verbatim ()" (empty parens where the ref was); :956 "buffer_mutation_spec.lua's allow-list's allow-list"; :860 "prep_chat calls tool_folds.setup(buf) (prep_chat)"; :107 "document.exchange(doc,row) (document.exchange)"; :804 "outline.lua's in-code guard's existing ruling". The fifth is a factual inversion rather than a typo - :1131 now reads "The first cut used lexical.is_fence_delim for the wall and code_block_memo for the in-block test; they recognise different fences", but the first cut used fence.open_len, so as rewritten the Revisions entry says the bug and its fix were the same predicate, erasing exactly the record BR-26 exists to keep.
+  - id: new
+    severity: Minor
+    family: checkbox-without-artifact
+    title: |
+      cae is claimed by Done-when and by a test's own name, and is executed nowhere
+    detail: |
+      3rd in this family. THE RULE - a claim of coverage must name the artifact that would go red without it; an enumeration in a Done-when bullet becomes a loop or one assertion per item, never prose in a test title. Done-when says ae/ie work "with every operator (d/y/c/v at minimum)". Measured - dae, daE, yae, vae and die are all driven in tests/integration/entity_textobj_spec.lua, and the string "cae" appears in tests/ only inside two comments; the test at :220 is titled "die and cae work, as Done-when claims for every operator" and runs only die. cae over a linewise object leaves insert mode open, which is precisely the class of editor-state surprise the vae and closed-fold tests exist to catch.
+```

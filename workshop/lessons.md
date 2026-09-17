@@ -2731,3 +2731,12 @@ download.
   wall at one more call site. The guard that ends it is stated over the RESULT:
   a range may never contain an odd number of fence delimiters, checked once
   after every path has had its say.
+
+- #262 BR-34: an invariant is only as good as the property it states, and only
+  applies where it runs. The fence guard counted delimiter PARITY, but a range
+  holding one block's closer and the next block's opener has an even count and
+  splits both — the real property is block COVERAGE: a range touching any
+  delimiter must not begin or end part-way into a block. It was also placed
+  after an early `return` for one entity kind, so that path skipped it
+  entirely. When adding a post-condition, put it at the function's single exit
+  and check it catches a case the weaker formulation misses.

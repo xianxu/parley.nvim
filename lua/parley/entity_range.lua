@@ -183,23 +183,41 @@ local function on_question_line(parsed, idx, row)
 	return row >= start and row <= ex.question.line_end
 end
 
---- Rule 7. A range may never contain an ODD number of fence delimiters --
---- that is precisely what "splits a fenced block" means, and it is the one
---- statement that covers every path: the paragraph wall, the section scans and
---- the `to_end` extension, which overwrites `last` from the exchange bound
---- long after the wall has had its say. Stated as an invariant over the final
---- range rather than as a wall each caller must remember.
-local function balance_fences(range, lines)
+--- Rule 7 -- the fence post-condition, stated as BLOCK COVERAGE rather than
+--- delimiter parity. Parity is the wrong property: a range holding one block's
+--- closer and the next block's opener has an even count and splits both. The
+--- real rule is that a range which touches any fence delimiter must contain
+--- whole blocks -- it may not begin part-way into a block, nor end part-way
+--- into one. A range entirely INSIDE a block (a paragraph in a code sample)
+--- touches no delimiter and is fine.
+---
+--- Checked over the FINAL range at M.range's single exit, so it covers every
+--- path -- the paragraph wall, the section scans, the question span, and
+--- to_end's overwrite of `last` from the exchange bound long after the wall
+--- has had its say. Three rounds of this bug were three walls at three call
+--- sites; this is the one statement instead.
+local function confine_to_blocks(range, lines, in_code)
 	local is_fence = require("parley.document.lexical").is_fence_delim
-	local count, last_fence = 0, nil
+	local touches = false
 	for i = range.first, range.last do
 		if is_fence(lines[i], true) then
-			count = count + 1
-			last_fence = i
+			touches = true
+			break
 		end
 	end
-	if count % 2 == 1 and last_fence then
-		range.last = last_fence - 1
+	if not touches then
+		return range
+	end
+	-- ends part-way into a block: in_code is still true on the last row, so the
+	-- closer lies beyond the range. Pull back to before the block's opener.
+	while range.last >= range.first and in_code[range.last] do
+		range.last = range.last - 1
+	end
+	-- begins part-way into a block: the first row is inside one and is not its
+	-- opener (an opener has in_code true with false on the line before it).
+	while range.first <= range.last
+		and in_code[range.first] and in_code[range.first - 1] do
+		range.first = range.first + 1
 	end
 	return range
 end
@@ -277,11 +295,14 @@ function M.range(parsed, lines, row, opts)
 			found.last = parsed.exchanges[idx].question.line_end
 		end
 		-- A question range already spans to the next exchange; absorbing or
-		-- trimming would either overrun it or eat its own trailing blank.
+		-- trimming would either overrun it or eat its own trailing blank. It
+		-- still takes the fence post-condition below -- an exchange bound can
+		-- fall inside an unterminated block.
 		if found.first > found.last then
 			return nil
 		end
-		return found
+		confine_to_blocks(found, lines, in_code)
+		return (found.first <= found.last) and found or nil
 	end
 
 	found = section_range(lines, row, bounds, in_code)
@@ -323,7 +344,7 @@ function M.range(parsed, lines, row, opts)
 	end
 
 	summary_trim(found, parsed, idx, lines)
-	balance_fences(found, lines)
+	confine_to_blocks(found, lines, in_code)
 
 	if found.first > found.last or found.first < floor or found.last > #lines then
 		return nil
