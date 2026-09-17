@@ -1714,27 +1714,20 @@ M.respond = function(params, callback, override_free_cursor)
     -- go to normal mode
     vim.cmd("stopinsert")
 
-    -- get all lines
-    local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-
-    -- check if file looks like a chat file
-    local file_name = vim.api.nvim_buf_get_name(buf)
-    local reason = _parley.not_chat(buf, file_name)
-    if reason then
-        _parley.logger.warning("File " .. vim.inspect(file_name) .. " does not look like a chat file: " .. vim.inspect(reason))
+    -- The shared not_chat -> header -> parse sequence (parley.chat_context owns
+    -- it; the wording stays here, #263 close round 3).
+    local ctx, ctx_reason, ctx_kind = require("parley.chat_context").resolve({ buf = buf, win = win })
+    if not ctx then
+        if ctx_kind == "not_chat" then
+            _parley.logger.warning("File " .. vim.inspect(vim.api.nvim_buf_get_name(buf))
+                .. " does not look like a chat file: " .. vim.inspect(ctx_reason))
+        else
+            _parley.logger.error("Error while parsing headers: --- not found. Check your chat template.")
+        end
         return
     end
-
-    -- Find header section end
-    local header_end = find_chat_header_end(lines)
-
-    if header_end == nil then
-        _parley.logger.error("Error while parsing headers: --- not found. Check your chat template.")
-        return
-    end
-
-    -- Parse chat into structured representation
-    local parsed_chat = _parley.parse_chat(lines, header_end)
+    local file_name = ctx.file_name
+    local lines, header_end, parsed_chat = ctx.lines, ctx.header_end, ctx.parsed_chat
     _parley.logger.debug("chat_respond: parsed chat: " .. vim.inspect(parsed_chat))
 
     -- Determine which part of the chat to process based on cursor position
@@ -1918,16 +1911,18 @@ M.respond_all = function()
     local D, Batch = require('parley.document'), require('parley.batch_response')
     local buf, win = vim.api.nvim_get_current_buf(), vim.api.nvim_get_current_win()
     local cursor = vim.api.nvim_win_get_cursor(win)
-    local file_name = vim.api.nvim_buf_get_name(buf)
-    local reason = _parley.not_chat(buf, file_name)
-    if reason then _parley.logger.warning('Batch not started: ' .. tostring(reason)); return end
+    -- Two phases on purpose: the batch precondition sits BETWEEN the chat check
+    -- and the parse, so a single resolve() would report a missing header where
+    -- this reports an active batch (parley.chat_context, #263 close round 3).
+    local Ctx = require('parley.chat_context')
+    local handle, reason = Ctx.chat_buffer({ buf = buf, win = win })
+    if not handle then _parley.logger.warning('Batch not started: ' .. tostring(reason)); return end
     if batches[buf] and Batch.snapshot(batches[buf]).phase ~= 'completed' then
         _parley.logger.warning('A batch is already active or paused in this chat'); return
     end
-    local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-    local header_end = find_chat_header_end(lines)
-    if not header_end then return nil, 'chat header unavailable' end
-    local parsed = _parley.parse_chat(lines, header_end)
+    local ctx = Ctx.parse(handle)
+    if not ctx then return nil, 'chat header unavailable' end
+    local file_name, parsed = handle.file_name, ctx.parsed_chat
     local doc = D.get(buf) or D.attach(buf, {patterns = require('parley.highlight_structure').patterns(_parley.config)})
     if D.drain(doc, 10000).status ~= 'idle' then return nil, 'document structure unavailable' end
     local selection = {}

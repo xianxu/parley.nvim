@@ -2800,11 +2800,20 @@ M.prep_chat = function(buf, file_name)
 			chat_agent = M.cmd.NextAgent,
 			chat_system_prompt = M.cmd.NextSystemPrompt,
 			chat_follow_cursor = M.cmd.ToggleFollowCursor,
-			chat_search = function()
-				local user_prefix = M.config.chat_user_prefix
-				local branch_prefix = M.config.chat_branch_prefix
-				vim.cmd("/^" .. vim.pesc(user_prefix) .. "\\|^" .. vim.pesc(branch_prefix))
-			end,
+			new_question = {
+				n = M.cmd.NewQuestion,
+				-- Mirrors branch_ref's `i` handler (see branch_inserters above):
+				-- leave insert, act, and let the command's own startinsert! put us
+				-- back. Undo scope does NOT depend on this -- document.apply_user's
+				-- user transaction owns it, and the insert-mode undo spec passes with
+				-- or without the stopinsert (measured, #263 close review I1). Kept
+				-- for consistency with the house idiom, not for a mechanism it does
+				-- not actually provide.
+				i = function()
+					vim.cmd("stopinsert")
+					M.cmd.NewQuestion()
+				end,
+			},
 			chat_prune = M.cmd.ChatPrune,
 			chat_export_markdown = M.cmd.ExportMarkdown,
 			chat_export_html = M.cmd.ExportHTML,
@@ -4266,27 +4275,37 @@ M.check_buffer = function()
 	end
 end
 
+--- The command-entry reporting wrapper over parley.chat_context, which owns the
+--- not_chat -> find_header_end -> parse_chat sequence for the whole codebase.
+--- Logs the reason itself -- a warning for "not a chat", an error for a broken
+--- header -- and returns nil, so a caller is
+--- `local ctx = chat_context("X"); if not ctx then return end`.
+---
+--- `what` keeps each command's own wording. #263 close rounds 1-3: this began
+--- as a 4th verbatim copy, was extracted here, and then the family repeated
+--- because the sequence still had two more copies in chat_respond.lua that a
+--- file-local helper could not reach. The sequence now lives in its own module;
+--- this is only the wording.
+local function chat_context(what)
+	local ctx, reason, kind = require("parley.chat_context").resolve()
+	if ctx then return ctx end
+	if kind == "not_chat" then
+		M.logger.warning(what .. " is only available in chat files: " .. reason)
+	else
+		M.logger.error(what .. ": could not find header separator ---")
+	end
+	return nil
+end
+
 -- Prune: move cursored exchange + all following into a new child chat file.
 -- Replaces pruned content in parent with a 🌿: branch reference.
 M.cmd.ChatPrune = function()
     if require('parley.llm_readiness').defer(M, M.cmd.ChatPrune) then return end
-	local buf = vim.api.nvim_get_current_buf()
-	local file_name = vim.api.nvim_buf_get_name(buf)
-	local reason = M.not_chat(buf, file_name)
-	if reason then
-		M.logger.warning("Prune is only available in chat files: " .. reason)
-		return
-	end
-
-	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-	local header_end = M.chat_parser.find_header_end(lines)
-	if not header_end then
-		M.logger.error("Prune: could not find header separator ---")
-		return
-	end
-
-	local parsed_chat = M.parse_chat(lines, header_end)
-	local cursor_line = vim.api.nvim_win_get_cursor(0)[1]
+	local ctx = chat_context("Prune")
+	if not ctx then return end
+	local buf, file_name, lines, header_end, parsed_chat =
+		ctx.buf, ctx.file_name, ctx.lines, ctx.header_end, ctx.parsed_chat
+	local cursor_line = ctx.cursor_line
 	local exchange_idx = M.find_exchange_at_line(parsed_chat, cursor_line)
 
 	-- If cursor isn't directly on an exchange, find the nearest one at or after cursor
@@ -4437,22 +4456,9 @@ local _exchange_clipboard = nil
 --- Cut exchange(s) at cursor (normal) or overlapping visual selection (visual).
 --- @param opts table|nil  { visual = bool }
 M.cmd.ExchangeCut = function(opts)
-	local buf = vim.api.nvim_get_current_buf()
-	local file_name = vim.api.nvim_buf_get_name(buf)
-	local reason = M.not_chat(buf, file_name)
-	if reason then
-		M.logger.warning("ExchangeCut is only available in chat files: " .. reason)
-		return
-	end
-
-	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-	local header_end = M.chat_parser.find_header_end(lines)
-	if not header_end then
-		M.logger.error("ExchangeCut: could not find header separator ---")
-		return
-	end
-
-	local parsed_chat = M.parse_chat(lines, header_end)
+	local ctx = chat_context("ExchangeCut")
+	if not ctx then return end
+	local buf, lines, parsed_chat = ctx.buf, ctx.lines, ctx.parsed_chat
 	local total_lines = #lines
 	local exchange_indices
 
@@ -4461,7 +4467,7 @@ M.cmd.ExchangeCut = function(opts)
 		local sel_end = vim.fn.line("'>")
 		exchange_indices = exchange_clipboard.get_exchanges_for_range(parsed_chat, sel_start, sel_end, total_lines)
 	else
-		local cursor_line = vim.api.nvim_win_get_cursor(0)[1]
+		local cursor_line = ctx.cursor_line
 		local idx = M.find_exchange_at_line(parsed_chat, cursor_line)
 		if not idx then
 			-- Try nearest exchange at or after cursor
@@ -4567,28 +4573,53 @@ M.cmd.ExchangePaste = function()
 		return
 	end
 
-	local buf = vim.api.nvim_get_current_buf()
-	local file_name = vim.api.nvim_buf_get_name(buf)
-	local reason = M.not_chat(buf, file_name)
-	if reason then
-		M.logger.warning("ExchangePaste is only available in chat files: " .. reason)
-		return
-	end
-
-	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-	local header_end = M.chat_parser.find_header_end(lines)
-	if not header_end then
-		M.logger.error("ExchangePaste: could not find header separator ---")
-		return
-	end
-
-	local parsed_chat = M.parse_chat(lines, header_end)
-	local cursor_line = vim.api.nvim_win_get_cursor(0)[1]
-	local paste_after = exchange_clipboard.get_paste_line(parsed_chat, cursor_line, header_end, #lines)
+	local ctx = chat_context("ExchangePaste")
+	if not ctx then return end
+	local buf, lines, header_end, parsed_chat =
+		ctx.buf, ctx.lines, ctx.header_end, ctx.parsed_chat
+	local paste_after = exchange_clipboard.get_paste_line(
+		parsed_chat, ctx.cursor_line, header_end, #lines)
 
 	local to_insert = exchange_clipboard.build_paste_lines(lines, paste_after, _exchange_clipboard, #lines)
 	require("parley.buffer_edit").replace_user_lines(buf, paste_after, paste_after, false, to_insert)
 	M.logger.info("Pasted " .. #_exchange_clipboard .. " lines after line " .. paste_after)
+end
+
+--- #263 Open a new, empty question after the exchange at the cursor. The
+--- end-user path to a question line: no clipboard, no emoji picker.
+---
+--- The structure decision is a pure plan (parley.new_question); this is the IO
+--- shell. Writing through buffer_edit rather than nvim_buf_set_lines is what
+--- gives the edit its provenance token -- and what makes this REFUSE, loudly,
+--- rather than corrupt a transcript a response is streaming into (ARCH-ORDER).
+M.cmd.NewQuestion = function()
+	local ctx = chat_context("NewQuestion")
+	if not ctx then return end
+	local buf = ctx.buf
+	local plan = require("parley.new_question").plan(
+		ctx.parsed_chat, ctx.lines, ctx.cursor_line, ctx.header_end, M.config.chat_user_prefix)
+
+	-- BEFORE the write, not after: an (unreachable) nil row would otherwise leave
+	-- a half-applied edit behind a bare Lua error (#263 close round 2, M3).
+	assert(plan.row, "new_question.plan returned no row")
+
+	local edits = require("parley.buffer_edit")
+	local ok, err = true, nil
+	if plan.kind == "insert" then
+		ok, err = pcall(edits.replace_user_lines, buf, plan.after, plan.after, false, plan.lines)
+	elseif plan.lines then
+		ok, err = pcall(edits.replace_user_lines, buf, plan.row - 1, plan.row, false, plan.lines)
+	end
+	if not ok then
+		M.logger.warning("NewQuestion stopped: " .. tostring(err))
+		return
+	end
+
+	local row = math.min(plan.row, vim.api.nvim_buf_line_count(buf))
+	-- Column 0 is deliberate: `startinsert!` IS `A`, so it lands at end-of-line
+	-- whatever column we set. Only the ROW matters here.
+	vim.api.nvim_win_set_cursor(0, { row, 0 })
+	vim.cmd("startinsert!")
 end
 
 -- Command for navigating questions and headers in chat documents

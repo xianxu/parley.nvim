@@ -1,5 +1,208 @@
 # Lessons
 
+## 2026-09-16 (#263 close round 4 — prose is not enforcement)
+
+- **A rule written in a module header does not stop the fifth copy.** Round 3
+  ended a three-round duplication family by writing the rule into
+  `chat_context.lua`'s header comment. Round 4's finding was that nothing
+  enforces it. The family only actually ends when the rule is a test — here, an
+  arch guard that fails any file running the sequence outside the owner, with
+  declared exclusions carrying their reasons *in the test*. Rule: when a review
+  asks you to "state the rule", the deliverable is the assertion, not the
+  paragraph.
+
+- **When you extract a helper whose SHAPE is the design decision, assert the
+  shape.** `chat_context` is two-phase for one reason: a caller interleaves a
+  precondition between the phases. Nothing tested that phase 1 skips the parse,
+  so a later refactor could collapse it and the only symptom would be one
+  caller reporting the wrong error in a rare state. Rule: the invariant that
+  justifies an unusual shape needs its own test, or the shape will not survive
+  its first tidy-up.
+
+- **An estimate that is 2× low twice on the same surface is not a primitive-mix
+  problem.** #263 est 2.04 / actual 4.31 (0.5×); #262 on the same registry
+  surface was 0.53. Both budgeted ONE `milestone-review`. #263 took four
+  boundary rounds. Rule: on this repo, work touching a shared registry or a
+  cross-module seam budgets the review tail as a multiple of `milestone-review`,
+  not a single unit — the tail, not the feature, is what the estimate keeps
+  missing.
+
+
+## 2026-09-16 (#263 close round 3 — three repeat families)
+
+- **Moving code is a comment-adjacency hazard.** Hoisting a new function in
+  above an existing one put it between that function's `@param` block and its
+  signature; the doc then documented the wrong thing, and
+  `tests/arch/superseded_comment_spec.lua` caught it. Rule: after ANY edit that
+  relocates code, run the arch suite — not just the specs for the behavior you
+  think you changed. Verification should be chosen by the KIND of edit, not by
+  the feature it belongs to.
+
+- **A file-local helper cannot end a duplication family that spans files.**
+  Extracting the chat preamble into a `local function` in `init.lua` fixed four
+  sites and left two in another module structurally unable to consume it — so
+  the family came back a third time. Rule: before extracting, measure the
+  prevalence across the whole tree; if instances live in other modules, the
+  owner is a module, not a local.
+
+- **The second copy is often a copy WITH AN INTERLEAVE, and that is the design
+  input.** `respond_all` runs its batch precondition between the chat check and
+  the parse, so a single monolithic `resolve()` would have reordered its
+  user-visible messages. That is why the shared owner is two-phase. Rule: when
+  unifying duplicated sequences, diff the *control flow* between copies, not
+  just the statements — an interleave is a requirement, not an obstacle.
+
+- **"Run a probe before the sentence ships" is not a fix for a doc-drift
+  family.** Manual discipline is what produced the wrong count in the first
+  place. The second occurrence has to become a test that DERIVES the claim from
+  the source. Rule: a doc claim that repeats as a finding gets an enforcing
+  spec, and that spec needs a case proving it reads what the claim is about
+  (here: `keys[1]` ordering, not membership).
+
+- **Separate "the sequence" from "the words".** Four call sites shared a
+  preamble but every one had its own message and two had their own failure
+  semantics (log-and-abort vs `nil, reason` to a caller). Unifying the words
+  would have been a user-visible regression; unifying only the sequence was
+  free. Rule: when duplication resists extraction, check whether you are trying
+  to share two things and only one of them is actually common.
+
+
+## 2026-09-16 (#263 close round 2 — a repeat family)
+
+- **Extracting a helper is not done when the duplication stops; it is done when
+  every caller consumes every field the helper now owns.** Round 1 said "this
+  preamble is on its 4th copy". Extracting `chat_context` fixed the site and
+  left three callers still re-reading the cursor instead of taking
+  `ctx.cursor_line` — so the SAME family came back in round 2. The gate's
+  `family:` slug is the tell: a family that repeats across rounds is the ledger
+  reporting that the enumeration was never written. Rule: when you extract, grep
+  for every field the helper now owns and migrate all of them in that round, and
+  check whether the new module re-derives anything the owning module already
+  computes (here `new_question` had its own copy of `get_paste_line`'s scan).
+
+- **`vim.cmd("startinsert")` inside a busted `it()` does not change `mode()`.**
+  Measured: it still reports `n`. So a test that "starts insert" and fires a
+  mapping proves the *mapping* is wired, not that the command behaves mid-insert
+  with pending typed text. The real seam is
+  `nvim_feedkeys(replace_termcodes("A text" .. key), "x", false)`. Rule: when a
+  test's whole point is a MODE, drive it with keystrokes — an editor-state
+  assertion needs editor state, not a command that requests it.
+
+- **Put a precondition assert before the side effect it guards.** `assert(plan.row)`
+  sat after the buffer write, so an unreachable nil would have left a
+  half-applied edit behind a bare Lua error. Free to move, and the only position
+  where the assert actually protects anything.
+
+- **The step that reconciles the checklist is on the checklist.** 40 plan steps
+  shipped unticked because Task 7 Step 4 ("reconcile the issue before closing")
+  was itself one of the unticked ones. Rule: close-time artifacts get reconciled
+  against the final run in the closing commit — `--verified` built from that
+  run's output, every checkbox ticked or struck with a reason, issue `## Plan`
+  and durable plan in agreement.
+
+
+## 2026-09-16 (#263 close review — FIX-THEN-SHIP, 8 findings)
+
+- **A doc claim about a COUNT is one probe away from being true.** The atlas
+  said this entry was "the one place the portable key does not lead", and named
+  a counterexample two lines later. Measured over the registry the split is
+  even, 3–3. The claim was written from memory of three entries on a page whose
+  own next sentence warns about undocumented exceptions. Rule: any sentence
+  asserting "the only", "the first", "always" or a number gets a script run
+  against the source of truth before it ships — especially on a page that is
+  itself the rule.
+
+- **A clause naming two modes must be asserted in both — parameterize, don't
+  add the missing case.** "Works from normal AND insert mode, and is one undo
+  step" had its undo half tested only in normal mode, which is precisely the
+  mode where the insert path's `stopinsert` plays no part. The fix is a loop
+  over the modes so the coupling is structural, not a second hand-written test
+  that the next clause can drift away from again.
+
+- **A comment that credits a mechanism is a testable claim.** `stopinsert` was
+  commented as keeping the edit out of the surrounding insert session's undo
+  block. The reviewer ran the counterfactual: without it, a single `u` still
+  restores byte-identically — undo scope comes from `document.apply_user`'s
+  user transaction. The code was fine; the explanation was fiction. Rule: if a
+  comment says "this line is what makes X work", delete the line and watch X
+  fail before writing it — otherwise say what it really is (here: mirrors the
+  house idiom).
+
+- **When a real seam cannot produce the failure, say so with the evidence.** A
+  refusal test stubbed a verdict. Two realer routes were tried and both
+  *measured* not to work — overlapping user captures are allowed, and a detached
+  document silently re-attaches. Recording those measurements in the test turns
+  "I took a shortcut" into "here is why the shortcut is the honest option", and
+  gives the follow-up issue its starting point.
+
+- **The fourth verbatim copy is the one that gets extracted.** The
+  `not_chat` → `find_header_end` → `parse_chat` preamble was inline in three
+  commands; the new one made four. Extracting `chat_context(what)` and
+  migrating all four is the class fix — adding a fourth copy and noting it for
+  later is how a fifth appears.
+
+- **A plan's literal `--verified` string goes stale like any other cached
+  fact.** It claimed "unit 15/15 + integration 10/10, full suite green" while
+  the truth was 14/14, 14/14, and two pre-existing failures. Close evidence is
+  read by the calibration ledger and by whoever audits the close. Rule: build
+  the `--verified` string from the run you just did, never from the plan.
+
+
+## 2026-09-16 (#263 plan review — three fresh-context reviews on one plan)
+
+- **A plan that contains literal test code must be RUN, not read.** Two of the
+  three reviewers copied this plan's literal module and literal unit spec into
+  the tree and executed them; that is the only reason an assertion that *cannot
+  pass* was caught before implementation. `p.row < next_exchange.line_start` is
+  off by one because `get_paste_line` returns the end of the cursor's exchange
+  *including its trailing blank*, so the inserted row equals the next
+  exchange's pre-insertion `line_start`. Reading the plan agrees with it; only
+  running it disagrees. Rule: if a plan ships executable code, execute it as
+  part of writing the plan — and when a test fails against code you believe is
+  correct, suspect the assertion before "fixing" the code to match.
+
+- **Naming an existing file as the model for a technique is a factual claim —
+  check it.** Task 4 cited `entity_textobj_spec.lua` as the model for driving
+  chords through real keymaps with `nvim_feedkeys`. That file uses neither
+  `nvim_feedkeys` nor `nvim_replace_termcodes` and drives `vim.cmd("normal …")`
+  instead. Three techniques needed three different real sources. Rule: grep the
+  cited file for the cited API before writing "model this on X".
+
+- **A revision that changes WHAT is built must restate the ACCEPTANCE
+  CRITERIA, not just the design.** The reframe from cursor-position to
+  exchange-structural was recorded correctly in `## Revisions`, but `## Spec`
+  and `## Done when` still described the old feature — and `sdlc close` judges
+  the diff against Done-when. Three of five bullets were unsatisfiable by the
+  new design *on purpose*. Rule: a revision names the superseded clauses and
+  restates the contract in the same edit.
+
+- **Widening a guard's domain widens its false-positive surface too.** Moving
+  the chord-collision guard from `<M-…>`-only to every key pulled in entries
+  the old filter never saw: `{o,x}`-only text objects and normal-only `gf`/`gP`.
+  Scope overlap alone stopped being sufficient — two bindings only fight if
+  they are live in the same buffer AND the same mode. Rule: when you widen what
+  a guard inspects, re-derive the conditions under which two inspected things
+  actually conflict.
+
+- **Three copies of a detection loop means the plant proves a different guard
+  than the one that ships.** The first draft wrote the collision scan out in
+  both guards and again inside the test meant to prove them. That is the same
+  defect the plan warns about elsewhere (an expectation computed with the code
+  under test agrees with itself). Rule: a plant-a-failure test calls the
+  production detection function, never a copy of it — and asserts the offender
+  by name, not `found == true`, so it cannot borrow its meaning from a
+  neighbouring test.
+
+- **"Expected: PASS" is a claim about which tests actually run.** Two steps
+  named oracles that never execute: `documentation_spec.lua` is routed under
+  `infra/starter`, so neither `SPEC=ui/keybindings` nor `SPEC=chat/lifecycle`
+  runs it; and new specs must be routed in `atlas/traceability.yaml` in the
+  commit that CREATES them, because `single_source_sweeps_spec` reads the
+  working tree and fails on an issue branch for any unrouted spec. Rule: before
+  writing "Expected: PASS", run `scripts/spec_test_map.sh list-tests <key>` and
+  confirm the oracle you are relying on is in the list.
+
+
 ## 2026-09-13 (#245 integration review)
 
 - When moving an environment probe behind configure, preserve callers that

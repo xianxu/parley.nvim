@@ -655,13 +655,18 @@ M.entries = {
 		buffer_local = true,
 	},
 	{
-		id = "chat_search",
-		config_key = "chat_shortcut_search",
-		default_key = "<C-g>n",
-		default_modes = { "n", "i", "v", "x" },
+		-- #263. <C-g>n is FIRST on purpose: resolve_keys preserves order and the
+		-- help float leads with keys[1], so this is the gesture help teaches.
+		-- See chat_shortcut_new_question in config.lua for why: outline and
+		-- chat_drill_in lead the same way, so this is the house's even split, not
+		-- an exception. It took the chord from chat_search, retired here.
+		id = "new_question",
+		config_key = "chat_shortcut_new_question",
+		default_key = { "<C-g>n", "<M-n>" },
+		default_modes = { "n", "i" },
 		scope = "chat",
-		desc = "Parley prompt Search Chat Sections",
-		help_desc = "Search chat sections",
+		desc = "Parley new question",
+		help_desc = "New question after this exchange",
 		buffer_local = true,
 	},
 	{

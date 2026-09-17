@@ -932,30 +932,171 @@ describe("open_file joins the alt family (#214)", function()
         return is_ancestor(a, b) or is_ancestor(b, a)
     end
 
-    it("no alt key is live twice in the same buffer", function()
-        local owners = {}
-        for _, e in ipairs(reg.entries) do
-            for _, k in ipairs(reg.resolve_keys(e, parley.config) or {}) do
-                if k:match("^<[Mm]%-") then
-                    owners[k] = owners[k] or {}
-                    table.insert(owners[k], e)
-                end
+    -- Canonical notation. tests/integration/keybinding_agreement_spec.lua
+    -- carries this because "<C-g>" comes back as "<C-G>": without it a user
+    -- override spelled <C-G>n slips past a guard whose entire job is catching
+    -- the NEXT collision.
+    local function canon(lhs)
+        return vim.fn.keytrans(vim.api.nvim_replace_termcodes(lhs, true, true, true))
+    end
+
+    -- Two bindings only fight if they are live in the same buffer AND in the
+    -- same mode. Widening from alt-only to EVERY key pulls in entries the old
+    -- filter never saw: ae/ie/aE are {o,x} only, gf/gP are normal-only. Without
+    -- this, the widened guard grows a false-positive surface.
+    local function modes_overlap(a, b)
+        for _, m in ipairs(a or {}) do
+            for _, n in ipairs(b or {}) do
+                if m == n then return true end
             end
         end
-        local collisions = {}
-        for key, entries in pairs(owners) do
-            for i = 1, #entries do
-                for j = i + 1, #entries do
-                    if scopes_overlap(entries[i].scope, entries[j].scope) then
-                        collisions[#collisions + 1] = ("%s -> %s(%s) + %s(%s)"):format(
-                            key, entries[i].id, entries[i].scope,
-                            entries[j].id, entries[j].scope)
+        return false
+    end
+
+    -- ONE detection, shared by both guards and by the plants that prove them.
+    -- Writing the loop out per `it` is how a plant ends up proving a DIFFERENT
+    -- guard than the one that ships (ARCH-DRY).
+    -- `overrides` maps an entry id to a replacement key list.
+    local function owners_by_key(overrides)
+        local owners = {}
+        for _, e in ipairs(reg.entries) do
+            local keys, modes = reg.resolve_keys(e, parley.config)
+            keys = (overrides or {})[e.id] or keys or {}
+            for _, k in ipairs(keys) do
+                local c = canon(k)
+                owners[c] = owners[c] or {}
+                table.insert(owners[c], { entry = e, modes = modes })
+            end
+        end
+        return owners
+    end
+
+    local function live_together(a, b)
+        return scopes_overlap(a.entry.scope, b.entry.scope) and modes_overlap(a.modes, b.modes)
+    end
+
+    local function collisions(owners)
+        local out = {}
+        for key, owned in pairs(owners) do
+            for i = 1, #owned do
+                for j = i + 1, #owned do
+                    if live_together(owned[i], owned[j]) then
+                        out[#out + 1] = ("%s -> %s(%s) + %s(%s)"):format(key,
+                            owned[i].entry.id, owned[i].entry.scope,
+                            owned[j].entry.id, owned[j].entry.scope)
                     end
                 end
             end
         end
-        table.sort(collisions)
-        assert.same({}, collisions)
+        table.sort(out)
+        return out
+    end
+
+    local function prefix_shadows(owners)
+        local keys = {}
+        for k in pairs(owners) do keys[#keys + 1] = k end
+        local out = {}
+        for _, short in ipairs(keys) do
+            for _, long in ipairs(keys) do
+                if short ~= long and #short < #long and long:sub(1, #short) == short then
+                    for _, a in ipairs(owners[short]) do
+                        for _, b in ipairs(owners[long]) do
+                            if live_together(a, b) then
+                                out[#out + 1] = ("%s(%s) delays %s(%s)"):format(
+                                    short, a.entry.id, long, b.entry.id)
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        table.sort(out)
+        return out
+    end
+
+    -- #263: this was filtered to `^<[Mm]-` and so inspected one family out of
+    -- three. It could not have caught <C-g>n being bound twice -- which is the
+    -- collision #263 actually hit, and the reason chat_search had to be
+    -- retired before the chord could be reused. The rule is about a buffer,
+    -- not a family.
+    it("no key is live twice in the same buffer", function()
+        assert.same({}, collisions(owners_by_key()))
+    end)
+
+    -- A chord that is a PREFIX of another is not a silent overwrite -- it is a
+    -- timeout. Binding <C-g>e would make <C-g>em and <C-g>eh wait out
+    -- 'timeoutlen' on every press. That rule lived only as a comment above
+    -- entity_delete in the registry; here it is a test.
+    it("no key delays another by being its prefix", function()
+        assert.same({}, prefix_shadows(owners_by_key()))
+    end)
+
+    -- Both scopes are `parley_buffer`, so scopes_overlap hits its `a == b`
+    -- branch, and both carry a normal mode, so modes_overlap holds too. The
+    -- plant runs THE SAME collisions() the guard above runs -- not a copy that
+    -- could drift away from it.
+    it("and the widened scan really would catch a <C-g> double-bind", function()
+        local found = collisions(owners_by_key({ outline = { "<C-g>k" } }))
+        -- Assert the OFFENDER, not merely that something was found: a bare
+        -- `#found > 0` borrows its meaning from the clean-registry test above,
+        -- and would keep passing if an unrelated collision appeared.
+        assert.equals(1, #found, "expected exactly the planted collision, got: "
+            .. table.concat(found, "; "))
+        assert.is_truthy(found[1]:find("outline", 1, true))
+        assert.is_truthy(found[1]:find("entity_delete", 1, true))
+    end)
+
+    -- The prefix guard needs its own plant for the same reason.
+    -- #263 close round 3, 2nd finding in family `doc-claim-contradicts-code`.
+    -- BR-2 corrected a wrong count in the atlas; the rule adopted then was
+    -- manual ("run a probe before the sentence ships"), and manual discipline
+    -- is exactly what produced the wrong count in the first place. This derives
+    -- the split from the registry, so a seventh dual-family pair fails the
+    -- suite instead of quietly making the page wrong.
+    local function lead_split(config)
+        local cg, alt = {}, {}
+        for _, e in ipairs(reg.entries) do
+            local keys = reg.resolve_keys(e, config) or {}
+            if #keys > 1 then
+                local has_cg, has_alt = false, false
+                for _, k in ipairs(keys) do
+                    if k:lower():match("^<c%-g>") then has_cg = true end
+                    if k:lower():match("^<m%-") then has_alt = true end
+                end
+                if has_cg and has_alt then
+                    local lead = keys[1]:lower():match("^<c%-g>") and cg or alt
+                    lead[#lead + 1] = e.id
+                end
+            end
+        end
+        table.sort(cg); table.sort(alt)
+        return cg, alt
+    end
+
+    it("the documented <C-g>/alt lead split is what the registry actually ships", function()
+        local cg, alt = lead_split(parley.config)
+        -- atlas/ui/keybindings.md "Resolution" and the comment on
+        -- chat_shortcut_new_question in config.lua both name these six.
+        assert.same({ "chat_drill_in", "new_question", "outline" }, cg)
+        assert.same({ "branch_ref", "chat_prune", "open_file" }, alt)
+    end)
+
+    it("and the derivation reads keys[1], which is what help renders", function()
+        -- Proves the split is a claim about ORDER, not about membership: flip
+        -- one entry's list and it must move sides.
+        local flipped = vim.tbl_extend("force", {}, parley.config)
+        flipped.chat_shortcut_outline = { modes = { "n", "i" }, shortcut = { "<M-t>", "<C-g>t" } }
+        local cg, alt = lead_split(flipped)
+        assert.same({ "chat_drill_in", "new_question" }, cg)
+        assert.same({ "branch_ref", "chat_prune", "open_file", "outline" }, alt)
+    end)
+
+    it("and the prefix scan really would catch a delaying chord", function()
+        -- <C-g>e is UNBOUND precisely because <C-g>em / <C-g>eh exist; binding
+        -- it is the exact mistake the registry comment warns about.
+        local found = prefix_shadows(owners_by_key({ outline = { "<C-g>e" } }))
+        assert.is_true(#found >= 1, "the prefix scan reported nothing on a planted shadow")
+        assert.is_truthy(table.concat(found, "; "):find("outline", 1, true))
     end)
 
     it("and the disjoint case is genuinely allowed, not accidentally passing", function()

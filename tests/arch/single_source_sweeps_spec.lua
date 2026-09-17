@@ -197,6 +197,62 @@ describe("arch: single-source sweeps stay swept", function()
             "these are added by this issue but appear in no Core-concepts table row")
     end)
 
+    -- #263 close round 4, BR-13. The rule that ended the
+    -- `duplicated-command-preamble` family (three findings across three rounds)
+    -- was written as prose in chat_context.lua's header, and prose does not
+    -- stop a fifth copy. This is the rule as a test.
+    --
+    -- The sequence, not the individual calls: `not_chat` alone is an ordinary
+    -- cheap gate used in a dozen places and is fine. What must have ONE owner
+    -- is not_chat -> find_header_end -> parse_chat run together as a command
+    -- preamble.
+    it("the chat-command preamble sequence has exactly one owner", function()
+        -- Declared exclusions, each with the reason it diverges. An entry here
+        -- is a decision on the record, not a silencer.
+        local allowed = {
+            ["lua/parley/chat_context.lua"] = "the owner",
+            -- Classifies through entity_textobj.parsed_for instead, so the
+            -- ae/ie/aE text objects and the :ParleyDelete* commands cannot
+            -- disagree about what a chat is (#262 parity spec).
+            ["lua/parley/entity_textobj.lua"] = "shares the text objects' classifier",
+        }
+        local offenders = {}
+        for _, file in ipairs(vim.fn.glob("lua/parley/**/*.lua", false, true)) do
+            if not allowed[file] then
+                local lines = vim.fn.readfile(file)
+                for i, line in ipairs(lines) do
+                    if line:find("not_chat(", 1, true) then
+                        -- Does the full sequence follow within a preamble's reach?
+                        local window = table.concat(
+                            vim.list_slice(lines, i, math.min(i + 24, #lines)), "\n")
+                        if window:find("find_header_end", 1, true)
+                            and window:find("parse_chat(", 1, true) then
+                            offenders[#offenders + 1] = ("%s:%d"):format(file, i)
+                        end
+                    end
+                end
+            end
+        end
+        table.sort(offenders)
+        assert.same({}, offenders,
+            "the not_chat -> find_header_end -> parse_chat preamble belongs to "
+            .. "parley.chat_context; consume it instead of repeating it")
+    end)
+
+    -- And the guard must actually see the sequence it claims to police --
+    -- otherwise "0 offenders" is indistinguishable from "looked at nothing".
+    it("and that guard really would catch a fresh copy of the preamble", function()
+        local planted = table.concat({
+            'local reason = M.not_chat(buf, file_name)',
+            'if reason then return end',
+            'local header_end = M.chat_parser.find_header_end(lines)',
+            'local parsed = M.parse_chat(lines, header_end)',
+        }, "\n")
+        assert.is_truthy(planted:find("not_chat(", 1, true))
+        assert.is_truthy(planted:find("find_header_end", 1, true))
+        assert.is_truthy(planted:find("parse_chat(", 1, true))
+    end)
+
     it("every symbol the Spec and plan tables name exists in the tree", function()
         -- unlike its sibling this one needs no diff, so it runs on any branch
         -- The plan→code direction. The other test walks code→table; this one

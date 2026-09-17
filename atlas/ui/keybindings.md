@@ -32,6 +32,17 @@ operator-pending/visual maps, which is why the app profile keeps them despite
 its `<C-g>`/`<M-…>` family filter — they cannot claim a bare editing key. See
 [Delete Entity at Cursor](../chat/entity_delete.md).
 
+`<C-g>n` (also `<M-n>`) opens a new, empty `💬:` question immediately after the
+exchange the cursor is in, and leaves the cursor in insert mode on it. It reads
+`chat_user_prefix`, so an operator override is what gets written. Pressing it on
+an exchange that is already an empty question focuses that question rather than
+adding a second one; pressing it on an answered exchange whose *successor* is
+empty still inserts, because the rule is about the exchange the cursor is in and
+not about content off-screen. This is the end-user path to a question line — the
+emoji is not on the keyboard, and nothing here needs the clipboard. It took
+`<C-g>n` from `chat_search`, a next-question search retired in #263 because plain
+`/` already covers it.
+
 ## Architecture: Keybinding Registry
 Configurable action keybindings are declared in `lua/parley/keybinding_registry.lua` — a single source of truth. Each entry carries:
 - `id`, `scope`, `desc`, `default_key`, `default_modes`
@@ -57,6 +68,26 @@ chat_finder / note_finder / issue_finder  — standalone (only their own keys sh
 ```
 
 Buffer context is auto-detected (`detect_buffer_context`): vision YAML, issue dir, note dir, repo marker (`.parley`), chat file, or other.
+
+Two invariants over this forest are enforced by `tests/unit/keybindings_spec.lua`
+(#263), not by review:
+
+1. **No key is live twice in the same buffer.** Two entries may share a key when
+   their scopes are disjoint — `<M-CR>` is respond in a chat buffer and the
+   review menu in a markdown one, and `<C-g>d` is chat-delete vs delete-file the
+   same way — because a buffer is never both. What must not happen is two owners
+   whose scopes overlap (one an ancestor of the other, or the same scope) *and*
+   whose modes intersect: both bindings are then live at once and the later
+   registration silently wins. The guard was alt-only until #263, which is why
+   `<C-g>n` could be claimed twice without anything noticing.
+2. **No key delays another by being its prefix.** `<C-g>e` is unbound on purpose
+   because `<C-g>em` and `<C-g>eh` exist; binding it would make both wait out
+   `timeoutlen` on every press.
+
+Both guards compare canonicalized notation (`keytrans` ∘ `replace_termcodes`),
+so an override spelled `<C-G>n` cannot slip past them, and each has a
+plant-a-collision test so a guard that reports nothing is distinguishable from a
+guard that looks at nothing.
 
 ## Resolution
 `resolve_keys` (`keybinding_registry.lua`) picks ONE source — it never merges.
@@ -101,8 +132,20 @@ The alt family means "act on this transcript": quote, respond/define, accept,
 reject, branch, prune, outline, skill picker (`<M-s>`), paste an image as an
 attachment (`<M-v>`, `paste_image`, #231), and follow-a-link
 (`<M-o>`, #225 — one key for "go to what I'm looking at", falling through to
-smart `gf` when the cursor is not on a parley reference). `<C-g>` is
-the prefix surface for everything else. Help takes its keys from
+smart `gf` when the cursor is not on a parley reference).
+`<M-n>` (new question, #263) joins that family. `<C-g>` is
+the prefix surface for everything else.
+
+Which of a pair leads is **not** uniform, and the split is even. Measured over
+the registry, three entries lead with `<C-g>` — `outline` (`<C-g>t`/`<M-t>`),
+`chat_drill_in` (`<C-g>q`/`<M-q>`) and `new_question` (`<C-g>n`/`<M-n>`, #263,
+because the operator asked for `<C-g>n` by name and retired `chat_search` to
+free it) — and three lead with the alt key, where portability is the point:
+`open_file` (`<M-o>`/`<C-g>o`), `branch_ref` (`<M-i>`/`<C-g>i`) and
+`chat_prune` (`<M-p>`/`<C-g>b`). `keys[1]` is what the help float advertises, so
+the order in `config.lua` *is* the decision. Read "the portable key leads" as
+the rule for the cases where a terminal cannot be relied on to deliver the
+alt chord, not as a property of every pair. Help takes its keys from
 `resolve_keys` for configured actions: an entry that resolves to nothing is
 **omitted**. Picker reservation/collision checks happen later, so configured
 conflicts are an exception to registration/help agreement (see below). (Before #214
