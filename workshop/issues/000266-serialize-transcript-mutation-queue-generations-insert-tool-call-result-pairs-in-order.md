@@ -224,6 +224,17 @@ Design share 48%, against a ledger mean of 0.35 — still above, deliberately: s
 review rounds are already spent and in-window (`sdlc actual` reads 4.32h).
 
 
+**Read 13.17 as a floor, not a midpoint.** The estimate-quality judge's closing
+position across three passes: v3.1's 0.40 impl scale was fit on work with
+within-session fan-out, and this plan has almost none available — strict TDD
+red→green per step, `make test` gated between removals, and M4's explicit
+"remove only after Task 4.1 is green" ordering constraint. Two rows also still
+bundle more than one task (`ToolSequence` + ordered pump is Tasks 3.1 + 3.2c;
+M4's sweep is Tasks 4.1 + 4.2 + 4.3). Both point the same way. At close, compare
+actuals against this expectation rather than treating an overrun as a planning
+miss — it is the scale that is under test here (`baseline-v3.1.md` open
+question #3, ariadne#127).
+
 Calibration caveat recorded by `sdlc estimate-source`: the v3.1 ledger is newer
 than the doc, so per-primitive hours are provisional (ariadne#127).
 
