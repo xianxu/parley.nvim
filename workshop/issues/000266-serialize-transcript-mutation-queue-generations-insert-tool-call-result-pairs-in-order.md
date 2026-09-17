@@ -303,9 +303,24 @@ often, so that interaction needs care.
 
 ## Open decisions
 
-- **Resubmit wire shape.** After M2 the saved transcript is interleaved, so a
-  later resubmit builds four messages per two-call round instead of two —
-  parallel tool calls re-presented to the provider as sequential turns. Accept,
-  or preserve batching by teaching the wire builder to coalesce adjacent
-  `(call,result)` pairs of the same round back into one assistant/user pair?
-  Coalescing needs round identity in the transcript, which today is not written.
+- ~~**Resubmit wire shape.**~~ **RESOLVED 2026-09-17 — accept the four-message
+  shape.** A resubmitted interleaved transcript presents parallel tool calls as
+  sequential turns. Accepted because (a) it is already a tested, supported path
+  (`tests/unit/build_messages_spec.lua:1189-1192` pins it as correct), (b) a wire
+  that faithfully reflects the file is the point of
+  [[transcript-is-the-whole-truth]] — coalescing would rewrite the file's meaning
+  on the way out, and (c) the alternative requires writing **round identity into
+  the transcript**, which is exactly the hidden coupling the target exists to
+  prevent. Cost accepted: a resubmit no longer records that the model issued the
+  calls in one parallel turn.
+
+- **Undo ordering claim in `## Done when` is overstated — corrected during
+  planning.** Generations write to *different regions* (different answers), so
+  serializing by admission order does not make successive undo steps monotonic in
+  document position: regenerating Q3 then Q1 writes Q3's region first, so undo
+  removes Q1's text before Q3's. What serialization actually guarantees, and what
+  the tests must assert, is that **each undo step removes exactly one coherent
+  unit** — one generation's contiguous contribution, or one `(call,result)` pair —
+  with no interleaving inside an entry and no partial-chunk entries. Document
+  order *is* guaranteed within a single generation's tool round, where insertion
+  is monotonic at the tail.
