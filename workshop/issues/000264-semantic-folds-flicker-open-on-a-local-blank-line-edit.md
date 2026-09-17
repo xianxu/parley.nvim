@@ -133,7 +133,39 @@ why the symptom reads as "the summary two lines above":
 - deleting the blank line directly *above* the question starter
 - editing a body line above the summary
 
-Repro scripts: `scratchpad/repro3.lua` (shapes), `repro4.lua` (scale),
-`repro5.lua` (blank matrix). To be promoted into
-`tests/integration/` next to `document_fold_uncertainty_retirement_spec.lua`,
-which covers only the 50k-row suspended path and does not assert continuity.
+Minimal repro harness (run with
+`nvim --clean --headless -u NONE -l <file>` from the repo root). The load-bearing
+part is polling `foldclosed()` *between* `F.step` calls — the existing oracle in
+`tests/integration/tool_folds_spec.lua` only checks the settled state, which is
+why this was never caught:
+
+```lua
+vim.opt.rtp:append(vim.fn.getcwd())
+local D=require('parley.document')
+local F=require('parley.tool_folds')
+local lines={'💬: first question','🤖: first answer','some body text here',
+  'more body text','📝: a reasonably long summary line for the exchange','','','💬: ',''}
+local SUM=5                       -- 1-indexed row of the 📝: line
+local buf=vim.api.nvim_get_current_buf()
+vim.api.nvim_buf_set_lines(buf,0,-1,false,lines)
+vim.wo.foldmethod='manual'; vim.wo.foldenable=true
+local doc=D.attach(buf,{schedule=false})
+assert(D.drain(doc,100000).status=='idle')
+F.setup(buf); assert(F.flush(buf)=='idle')
+assert(vim.fn.foldclosed(SUM)==SUM,'summary should start folded')
+vim.api.nvim_buf_set_lines(buf,5,6,false,{})    -- delete ONE of the two blanks
+print('uncertain='..vim.inspect(D.uncertain_range(doc)))
+local opened=false
+for _=1,300 do
+  local status=F.step(buf)
+  if vim.fn.foldclosed(SUM)==-1 then opened=true end   -- continuity assertion
+  if status=='idle' then break end
+  if status=='pending' then D.drain(doc,100000) end
+end
+print('OPENED DURING REPAIR: '..tostring(opened))      -- true today; must be false
+vim.cmd('qa!')
+```
+
+To be promoted into `tests/integration/` next to
+`document_fold_uncertainty_retirement_spec.lua`, which covers only the 50k-row
+suspended path and asserts nothing about continuity.
