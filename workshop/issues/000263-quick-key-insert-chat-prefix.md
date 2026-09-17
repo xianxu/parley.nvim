@@ -175,3 +175,54 @@ current exchange."*
    (`<C-g>e` would delay `<C-g>em`/`<C-g>eh`), so the verification is a test
    rather than a manual audit. Measured: the registry has **0** collisions
    today under that wider rule, so the generalization lands green.
+
+### 2026-09-16 — restated acceptance contract (plan-gate PQ-1)
+
+**Reason:** the reframe above changed what gets built but left `## Spec` and
+`## Done when` describing the pre-revision, cursor-position feature. Three of
+the five original Done-when bullets are unsatisfiable by the structural design
+on purpose — and `sdlc close` judges the diff against Done-when. Restating the
+contract here rather than overwriting the originals, per AGENTS.md §1.
+
+**Superseded.** These clauses of `## Spec` and `## Done when` no longer apply:
+
+- *"On an empty line or at column 0, insert at line start. Otherwise insert at
+  the cursor position."* — the cursor **column never participates**. The
+  exchange boundary alone decides where the question goes.
+- *"Pressing the quick key in a chat buffer inserts `💬: ` at the cursor."* —
+  it inserts after the exchange the cursor is in.
+- *"Focused tests cover insertion on an empty line, mid-line, an
+  already-prefixed line…"* — there is no mid-line case and no column-0 case.
+  The branches are `insert` and `focus`, and the axis the tests walk is *where
+  the cursor's exchange is*, not where in a line the cursor sits.
+
+**Done when (restated, authoritative):**
+
+- Pressing `<C-g>n` (or `<M-n>`) in a chat buffer opens a new, empty question
+  immediately **after the exchange the cursor is in** — not at the cursor
+  column, not at end of file — and leaves the cursor in insert mode on it. No
+  clipboard, no emoji picker.
+- The new question's line is the configured `chat_user_prefix` followed by a
+  space, so typing produces `💬: text` rather than `💬:text`. This holds for an
+  overridden prefix, including one containing Lua-pattern magic characters.
+- Its blank-line spacing is decided by `exchange_clipboard`, the same source
+  `<C-g>V` pastes against — a pasted exchange and a new question are spaced
+  identically.
+- If the cursor's exchange is **already** an empty unanswered question, the
+  chord focuses it instead of creating a second one. (An empty question in the
+  *next* exchange is not adopted — the rule is about the exchange the cursor is
+  in, so the landing spot never depends on off-screen content.)
+- Works from normal **and** insert mode, and is one undo step: a single `u`
+  after one press restores the buffer exactly.
+- While a response is streaming into the target region, the chord **refuses
+  visibly** — buffer unchanged plus a warning — rather than corrupting the
+  transcript or silently doing nothing.
+- The chord shadows no existing Parley chord, and that is **enforced by a
+  test**: the shadowing guard covers every chord in the registry (not only the
+  `<M-…>` family, which is why the original `<C-g>n` collision went unnoticed)
+  and also catches prefix delay, over canonicalized key notation.
+- `chat_search` is retired — config option, registry entry and callback all
+  gone, with nothing else in the tree referencing it.
+- Documented in `<C-g>?` help (via the registry, the single source) and in the
+  atlas, including the ordering exception this entry makes to #214's
+  "portable key leads" rule.
