@@ -78,3 +78,38 @@ repo write was sandbox-blocked; migrated here. The same need exists in
 in `pair` rather than widening this one. The operator's transcription of the
 product name ("arle") matched no repo on disk; read as the end-user-facing
 chat surface, which is Parley.
+
+## Revisions
+
+### 2026-09-16 — reframed from "insert prefix at cursor" to "new question after the exchange"
+
+**Reason:** operator direction on picking the work up: *"I think we can use
+`<C-g>n` if not conflicting, and it should create an empty question behind the
+current exchange."*
+
+**Delta:**
+
+1. **Semantics.** The action is no longer "insert `💬: ` at the cursor
+   position". It is **structural**: find the exchange the cursor is in, and
+   open a new empty question *after* it. Cursor column no longer participates;
+   the exchange boundary decides the insertion point. The old spec's
+   already-prefixed rule survives in structural form — if the target exchange
+   is already an empty unanswered question, focus it instead of creating a
+   second one.
+2. **Chord.** `<C-g>n` **was** taken: `chat_shortcut_search`
+   (`keybinding_registry.lua:658`), a one-line wrapper over
+   `/^💬:\|^🌿:`. Operator chose (of four options offered) to **retire
+   `chat_search` and hand `<C-g>n` to the new action**, with `<M-n>` as the
+   alt-family twin per the #217 convention. Plain `/` with the marker pattern
+   remains available for what `chat_search` did.
+3. **which-key.** The repo has no which-key integration; the keybinding
+   registry is the single source and help is generated from it. "Document in
+   which-key" reduces to one registry entry.
+4. **Scope addition (ARCH-PURPOSE).** The Done-when asks the chord to "shadow
+   no existing Parley chord (verified against the keybinding registry)". The
+   existing guard (`keybindings_spec.lua:935`) only inspects `<M-…>` keys — it
+   could not have caught this `<C-g>n` collision, which is the class the issue
+   names. Generalize it to the whole chord space, including prefix shadowing
+   (`<C-g>e` would delay `<C-g>em`/`<C-g>eh`), so the verification is a test
+   rather than a manual audit. Measured: the registry has **0** collisions
+   today under that wider rule, so the generalization lands green.
