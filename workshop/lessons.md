@@ -2713,3 +2713,21 @@ download.
   the section above it and the range ended on the opening fence. When you add a
   predicate, grep for every call of the function it guards and gate them all in
   the same change.
+
+- #262 BR-20 (5 rounds open): cite SYMBOLS, not line numbers, for code that is
+  still moving. Each round's "fix" updated the numbers and the next round's
+  edits invalidated them again — `ChatPrune` moved 4255→4271, `ExchangeCut`
+  4423→4439, and a cited `chat_exchange_cut` range had drifted onto
+  `chat_search` entirely. A file:line that existed was not the same as a
+  file:line that said what the document claimed, and a checker that only
+  verifies the line is in range will pass all of them. Symbol names are
+  greppable and stable; keep line refs only where a specific assertion pins
+  them.
+
+- #262 BR-30/BR-32: when a finding names an invariant, ship the INVARIANT, not
+  the instances. Fences were walled in the paragraph walk, then in the section
+  scans, then the `to_end` path overwrote `last` from the exchange bound and
+  split a fence anyway — three rounds of the same bug because each fix was a
+  wall at one more call site. The guard that ends it is stated over the RESULT:
+  a range may never contain an odd number of fence delimiters, checked once
+  after every path has had its say.

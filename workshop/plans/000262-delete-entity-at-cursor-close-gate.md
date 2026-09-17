@@ -528,6 +528,87 @@ rounds:
           round: 8
       boundary: M2
       blocked: false
+    - "n": 9
+      timestamp: "2026-09-16T17:04:38-07:00"
+      agent: claude
+      dispose:
+        - id: BR-5
+          disposition: addressed
+          note: section_range is now (lines, row, bounds, in_code) - the floor parameter is gone, and :106-107 documents why a second floor test could not change the outcome.
+          round: 9
+        - id: BR-8
+          disposition: addressed
+          note: README.md:16-25 now names ae, ie, aE, dae/yae/cae, Ctrl+g k, Ctrl+g K and both :ParleyDelete* commands.
+          round: 9
+        - id: BR-13
+          disposition: not-addressed
+          note: Line refs corrected to 4439, but plan.md:87 and :938 still say DeleteEntity is "ExchangeCut's preamble (verbatim)"; init.lua:4529-4540 uses entity_textobj.parsed_for, not ExchangeCut's not_chat preamble.
+          round: 9
+        - id: BR-14
+          disposition: addressed
+          note: This gate's base 85e116c2 is merge-base(main,HEAD); stat and name-status both return 31 files, so the window is real.
+          round: 9
+        - id: BR-15
+          disposition: addressed
+          note: 'Front-matter branch at chat_parser.lua:108-115 plus a conformance test rendering both defaults templates through the real renderer and new_chat''s underscore escape; scratch-reverting the branch reds entity_range_spec 43/2 on "chat_template must yield a header terminator". Negative side (# Recipe: soup) asserted too.'
+          round: 9
+        - id: BR-16
+          disposition: addressed
+          note: No occurrence of "and 2 or 2" remains anywhere under lua/ or tests/.
+          round: 9
+        - id: BR-17
+          disposition: addressed
+          note: entity_delete_parity_spec.lua:186-195 - the no-header branch now asserts that the two surfaces agree on rows 1-3, a property of the code rather than of the SHAPES literal.
+          round: 9
+        - id: BR-18
+          disposition: addressed
+          note: '"In a plain markdown buffer there is no exchange kind..." stands as its own paragraph again, and the header table row now points at the "What counts as a header" paragraph, which states the contiguous-run qualifier in full.'
+          round: 9
+        - id: BR-20
+          disposition: not-addressed
+          note: File-set half holds (all 16 changed lua/ and tests/ paths appear in the plan). File:line half does not - plan.md:7 still lists fence.open_len though entity_range requires parley.fence nowhere; :53 says ChatPrune 4255 (actual 4271) and ExchangeCut 4423 (actual 4439); :852 cites init.lua:2803-2812 as chat_exchange_cut when 2803 is chat_search and chat_exchange_cut is 2811-2821. 5th round open.
+          round: 9
+        - id: BR-22
+          disposition: addressed
+          note: The close gate's base is the true branch point, so M2's deliverable (e007f6c5, 49064ec4, cb17a0a6) appears in a reviewed range for the first time. The milestone-boundary derivation fix lives in sdlc, outside this repo's tree.
+          round: 9
+        - id: BR-23
+          disposition: not-addressed
+          note: Nothing under tests/perf or tests/arch references entity_range; atlas/chat/entity_delete.md:105-116 still states 13.6/24.7/97.8 ms alongside its own admission that no spec guards them.
+          round: 9
+        - id: BR-24
+          disposition: not-addressed
+          note: entity_delete_parity_spec.lua:80 (shape) and :86 (did_setup) are both module-scope mutables that fresh() reads; still no seam to run the it() bodies in any other order.
+          round: 9
+        - id: BR-25
+          disposition: not-addressed
+          note: keybinding_registry.lua:483/:493/:503 verbatim unchanged - "(dae/yae/cae)", "(die/yie/cie)", then "(daE)" alone.
+          round: 9
+        - id: BR-27
+          disposition: not-addressed
+          note: atlas:94-95 verbatim unchanged; re-measured, range() returns nil on a `# x` inside a fence (neither section nor content) and the Precedence table still has no row for it. entity_range.lua:10 and plan.md:66 both still say "Five rules" over six. The same passage's "a range never spans one" is now measurably false via to_end - see BR-32.
+          round: 9
+        - id: BR-28
+          disposition: addressed
+          note: 420d046a appends "### 2026-09-16 - M2 boundary review (four rounds)" to plan.md:1113-1138, recording the fence wall, the single fence predicate, the in_code threading, the parity-spec abort and the Integration-points/line-ref deltas.
+          round: 9
+        - id: BR-30
+          disposition: not-addressed
+          note: Instances remain fixed and pinned, but the class guard the finding specified was never shipped - I wrote the odd-fence invariant and it fails 10 times over four fenced fixtures, all on to_end. Separately the fix still spells "the effective heading level at row i" three ways at :102, :111 and :285, two of them behind an `in_code and` nil-guard no call site can reach (:256 and :286 both pass the always-built memo).
+          round: 9
+        - id: BR-31
+          disposition: not-addressed
+          note: The named dead assignment in entity_range_spec is fixed at 420d046a, but the sibling instances the round-8 disposition named inside the fix survive - the unreachable `in_code and` nil-guards at entity_range.lua:102/:111 against the unguarded read at :285. Instance fixed, class not swept; 5th in family.
+          round: 9
+        - id: BR-32
+          disposition: not-addressed
+          note: Reproduced on a real parse_chat - range(p, L, 11, {scope="to_end"}) returns paragraph 11..15 with the closing fence at row 13 inside the range and the opener at row 10 outside it. entity_range.lua:279-291 still assigns found.last from bounds.last with no fence check, and the single exit at :296-299 still has no post-condition. Odd-fence invariant fails 10 times across chat-backtick, chat-tilde, indented and plain-markdown fixtures, all on to_end, zero on entity.
+          round: 9
+        - id: BR-33
+          disposition: not-addressed
+          note: entity_delete_parity_spec.lua:108-110 still writes a chat file per fresh() call; run() at :135-139 deletes the buffer only.
+          round: 9
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#262 (boundary-review)
@@ -790,23 +871,38 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-33** [Minor] `artifact-without-removal-path` the parity spec writes one chat file per iteration with no removal path - run() now releases the buffer but not the file
   ARCH-FUNERAL. entity_delete_parity_spec.lua:98-131 - fresh() writes a chat file into base_tmp_dir on every call and nothing deletes it; the teardown added this round frees the buffer only. make test-spec runs PREP_TEST_ENV but never test-clean-env, so the residue is collected only by a later full make test. Measured after a handful of runs - 2 902 files / 11 MB across 12 per-run directories under the harness scratch root. One vim.fn.delete(path) in run() bounds it.
 
+## Round 9 — 2026-09-16T17:04:38-07:00 (claude) — BLOCKED
+
+### Disposed
+
+- BR-5 — addressed — section_range is now (lines, row, bounds, in_code) - the floor parameter is gone, and :106-107 documents why a second floor test could not change the outcome.
+- BR-8 — addressed — README.md:16-25 now names ae, ie, aE, dae/yae/cae, Ctrl+g k, Ctrl+g K and both :ParleyDelete* commands.
+- BR-13 — not-addressed — Line refs corrected to 4439, but plan.md:87 and :938 still say DeleteEntity is "ExchangeCut's preamble (verbatim)"; init.lua:4529-4540 uses entity_textobj.parsed_for, not ExchangeCut's not_chat preamble.
+- BR-14 — addressed — This gate's base 85e116c2 is merge-base(main,HEAD); stat and name-status both return 31 files, so the window is real.
+- BR-15 — addressed — Front-matter branch at chat_parser.lua:108-115 plus a conformance test rendering both defaults templates through the real renderer and new_chat's underscore escape; scratch-reverting the branch reds entity_range_spec 43/2 on "chat_template must yield a header terminator". Negative side (# Recipe: soup) asserted too.
+- BR-16 — addressed — No occurrence of "and 2 or 2" remains anywhere under lua/ or tests/.
+- BR-17 — addressed — entity_delete_parity_spec.lua:186-195 - the no-header branch now asserts that the two surfaces agree on rows 1-3, a property of the code rather than of the SHAPES literal.
+- BR-18 — addressed — "In a plain markdown buffer there is no exchange kind..." stands as its own paragraph again, and the header table row now points at the "What counts as a header" paragraph, which states the contiguous-run qualifier in full.
+- BR-20 — not-addressed — File-set half holds (all 16 changed lua/ and tests/ paths appear in the plan). File:line half does not - plan.md:7 still lists fence.open_len though entity_range requires parley.fence nowhere; :53 says ChatPrune 4255 (actual 4271) and ExchangeCut 4423 (actual 4439); :852 cites init.lua:2803-2812 as chat_exchange_cut when 2803 is chat_search and chat_exchange_cut is 2811-2821. 5th round open.
+- BR-22 — addressed — The close gate's base is the true branch point, so M2's deliverable (e007f6c5, 49064ec4, cb17a0a6) appears in a reviewed range for the first time. The milestone-boundary derivation fix lives in sdlc, outside this repo's tree.
+- BR-23 — not-addressed — Nothing under tests/perf or tests/arch references entity_range; atlas/chat/entity_delete.md:105-116 still states 13.6/24.7/97.8 ms alongside its own admission that no spec guards them.
+- BR-24 — not-addressed — entity_delete_parity_spec.lua:80 (shape) and :86 (did_setup) are both module-scope mutables that fresh() reads; still no seam to run the it() bodies in any other order.
+- BR-25 — not-addressed — keybinding_registry.lua:483/:493/:503 verbatim unchanged - "(dae/yae/cae)", "(die/yie/cie)", then "(daE)" alone.
+- BR-27 — not-addressed — atlas:94-95 verbatim unchanged; re-measured, range() returns nil on a `# x` inside a fence (neither section nor content) and the Precedence table still has no row for it. entity_range.lua:10 and plan.md:66 both still say "Five rules" over six. The same passage's "a range never spans one" is now measurably false via to_end - see BR-32.
+- BR-28 — addressed — 420d046a appends "### 2026-09-16 - M2 boundary review (four rounds)" to plan.md:1113-1138, recording the fence wall, the single fence predicate, the in_code threading, the parity-spec abort and the Integration-points/line-ref deltas.
+- BR-30 — not-addressed — Instances remain fixed and pinned, but the class guard the finding specified was never shipped - I wrote the odd-fence invariant and it fails 10 times over four fenced fixtures, all on to_end. Separately the fix still spells "the effective heading level at row i" three ways at :102, :111 and :285, two of them behind an `in_code and` nil-guard no call site can reach (:256 and :286 both pass the always-built memo).
+- BR-31 — not-addressed — The named dead assignment in entity_range_spec is fixed at 420d046a, but the sibling instances the round-8 disposition named inside the fix survive - the unreachable `in_code and` nil-guards at entity_range.lua:102/:111 against the unguarded read at :285. Instance fixed, class not swept; 5th in family.
+- BR-32 — not-addressed — Reproduced on a real parse_chat - range(p, L, 11, {scope="to_end"}) returns paragraph 11..15 with the closing fence at row 13 inside the range and the opener at row 10 outside it. entity_range.lua:279-291 still assigns found.last from bounds.last with no fence check, and the single exit at :296-299 still has no post-condition. Odd-fence invariant fails 10 times across chat-backtick, chat-tilde, indented and plain-markdown fixtures, all on to_end, zero on entity.
+- BR-33 — not-addressed — entity_delete_parity_spec.lua:108-110 still writes a chat file per fresh() call; run() at :135-139 deletes the buffer only.
+
 ## Open findings
 
-- **BR-5** [Minor] `unreachable-guard` section_range's floor parameter is dead code
-- **BR-8** [Minor] `readme-omits-new-surface` README documents dae/daE/yae/cae but not ie, <C-g>k or <C-g>K
 - **BR-13** [Minor] `plan-table-understates-code` REPEAT (2nd) - plan body still describes the implementation BR-2 removed
-- **BR-14** [Minor] `empty-review-window` the gate pinned base == head, so the machine-read review window contained zero changes
-- **BR-15** [Important] `guard-gated-on-classification` transcript_header_end rejects the header defaults.chat_template writes, so a long-template transcript has no floor at all
-- **BR-16** [Minor] `unreachable-guard` chat_parser.lua:106 - a ternary whose two branches are both 2
-- **BR-17** [Minor] `partial-shape-test` the header-protection test's else-branch asserts a property of its own SHAPES literal, not of the code
-- **BR-18** [Minor] `docs-edit-mangles-prose` the atlas insert swallowed the following paragraph and left the header table overstated
 - **BR-20** [Important] `plan-table-understates-code` plan body claims a reuse and a file set the tree does not have - three live instances
-- **BR-22** [Important] `empty-review-window` the M2 boundary pinned base == head, so the whole milestone sits outside the reviewed range
 - **BR-23** [Minor] `unreproducible-measurement` the ARCH-CONSTRAINTS numbers exist only as atlas prose, with no spec guarding them
 - **BR-24** [Minor] `shared-mutable-test-fixture` the parity spec mutates a module-level `shape` upvalue that fresh() reads
 - **BR-25** [Minor] `inconsistent-error-handling` help_desc strings for the entity family list operators inconsistently
 - **BR-27** [Minor] `docs-edit-mangles-prose` the fence docs describe behavior the code does not have, in both the atlas page and the module docstring
-- **BR-28** [Minor] `plan-table-understates-code` the plan body was edited for the M2 review with no "## Revisions" entry recording the deltas
 - **BR-30** [Important] `range-splits-a-structure` section_range and the to_end backward scan read heading.level with no in-code filter, so a section range ends ON the opening fence
 - **BR-31** [Minor] `unreachable-guard` dead assignment in the new fence-flavour test - body[10] is computed and then immediately overwritten
 - **BR-32** [Important] `range-splits-a-structure` the to_end scope overwrites found.last from the exchange bound without re-applying the fence wall, so daE inside a code block strands the opening fence

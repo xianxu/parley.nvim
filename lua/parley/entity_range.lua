@@ -98,8 +98,18 @@ end
 --- `in_code[i]` must gate EVERY heading read, not just the dispatch: a `# x`
 --- inside a fenced code sample is not a heading, so it must not terminate a
 --- section either -- otherwise the range ends ON the opening fence.
+--- The effective heading level at `row`: nil inside a fenced block, because a
+--- `# x` in a code sample is content. Stated ONCE -- it was spelled three
+--- different ways, two of them behind a nil-guard no caller could reach.
+local function heading_level_at(lines, row, in_code)
+	if in_code[row] then
+		return nil
+	end
+	return heading.level(lines[row])
+end
+
 local function section_range(lines, row, bounds, in_code)
-	local level = not (in_code and in_code[row]) and heading.level(lines[row]) or nil
+	local level = heading_level_at(lines, row, in_code)
 	if not level then
 		return nil
 	end
@@ -108,7 +118,7 @@ local function section_range(lines, row, bounds, in_code)
 	local hi = (bounds and bounds.last) or #lines
 	local last = row
 	for i = row + 1, hi do
-		local other = not (in_code and in_code[i]) and heading.level(lines[i]) or nil
+		local other = heading_level_at(lines, i, in_code)
 		if other and other <= level then
 			break
 		end
@@ -171,6 +181,27 @@ local function on_question_line(parsed, idx, row)
 	end
 	local start = require("parley.question_tags").semantic_start(ex)
 	return row >= start and row <= ex.question.line_end
+end
+
+--- Rule 7. A range may never contain an ODD number of fence delimiters --
+--- that is precisely what "splits a fenced block" means, and it is the one
+--- statement that covers every path: the paragraph wall, the section scans and
+--- the `to_end` extension, which overwrites `last` from the exchange bound
+--- long after the wall has had its say. Stated as an invariant over the final
+--- range rather than as a wall each caller must remember.
+local function balance_fences(range, lines)
+	local is_fence = require("parley.document.lexical").is_fence_delim
+	local count, last_fence = 0, nil
+	for i = range.first, range.last do
+		if is_fence(lines[i], true) then
+			count = count + 1
+			last_fence = i
+		end
+	end
+	if count % 2 == 1 and last_fence then
+		range.last = last_fence - 1
+	end
+	return range
 end
 
 --- Rule 5. Runs AFTER absorption, never before.
@@ -282,7 +313,7 @@ function M.range(parsed, lines, row, opts)
 			-- Outside any exchange: the enclosing section's end, else EOF.
 			local section = nil
 			for i = found.first, floor, -1 do
-				if not in_code[i] and heading.level(lines[i]) then
+				if heading_level_at(lines, i, in_code) then
 					section = section_range(lines, i, nil, in_code)
 					break
 				end
@@ -292,6 +323,7 @@ function M.range(parsed, lines, row, opts)
 	end
 
 	summary_trim(found, parsed, idx, lines)
+	balance_fences(found, lines)
 
 	if found.first > found.last or found.first < floor or found.last > #lines then
 		return nil

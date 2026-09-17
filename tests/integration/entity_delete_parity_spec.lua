@@ -134,9 +134,11 @@ local function run(row, action)
 	vim.api.nvim_win_set_cursor(0, { row, 0 })
 	action()
 	local out = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-	-- Release the buffer: this sweep opens hundreds, and leaking them is what
-	-- killed the run partway through.
+	-- Release BOTH the buffer and the file behind it: this sweep opens hundreds
+	-- of each, and leaking buffers is what killed the run partway through.
+	local path = vim.api.nvim_buf_get_name(buf)
 	pcall(vim.api.nvim_buf_delete, buf, { force = true })
+	if path ~= "" then pcall(vim.fn.delete, path) end
 	return out
 end
 

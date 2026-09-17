@@ -538,6 +538,44 @@ describe("entity_range invariants", function()
 		{ "#### deep", "body" },
 	}
 
+	-- THE CLASS GUARD the review asked for (BR-30/BR-32): a range that contains
+	-- an odd number of fence delimiters has split a fenced block, whatever path
+	-- produced it. Stated over the RESULT, so it covers to_end's overwrite of
+	-- `last` from the exchange bound as well as the paragraph wall.
+	it("never returns a range that splits a fenced block", function()
+		local lexical = require("parley.document.lexical")
+		local FENCED = {
+			{ "# topic: t", "- file: t.md", "---", "", "💬: q", "", "🤖: [A]",
+			  "prose", "", "```lua", "a", "", "b", "```", "tail" },
+			{ "# topic: t", "- file: t.md", "---", "", "💬: q", "", "🤖: [A]",
+			  "```", "x", "```", "", "~~~", "y", "~~~", "z" },
+			{ "# topic: t", "- file: t.md", "---", "", "💬: q", "", "🤖: [A]",
+			  "  ```md", "# fake", "body", "  ```", "", "after" },
+			{ "# topic: t", "- file: t.md", "---", "", "💬: q", "", "🤖: [A]",
+			  "```", "only", "```" },
+		}
+		for fi, lines in ipairs(FENCED) do
+			local parsed = parse(lines)
+			for row = 1, #lines do
+				for _, scope in ipairs({ "entity", "to_end" }) do
+					for _, inner in ipairs({ false, true }) do
+						local r = entity_range.range(parsed, lines, row,
+							{ scope = scope, inner = inner })
+						if r then
+							local n = 0
+							for i = r.first, r.last do
+								if lexical.is_fence_delim(lines[i], true) then n = n + 1 end
+							end
+							assert.equals(0, n % 2,
+								("fixture %d row %d scope=%s inner=%s split a fence (%d delims in %d..%d)")
+									:format(fi, row, scope, tostring(inner), n, r.first, r.last))
+						end
+					end
+				end
+			end
+		end
+	end)
+
 	it("never returns an out-of-range or inverted range", function()
 		for _, lines in ipairs(CORPUS) do
 			local ok, parsed = pcall(parse, lines)
