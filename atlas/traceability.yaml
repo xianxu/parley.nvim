@@ -152,6 +152,7 @@ atlas:
   chat/lifecycle:
     code:
       - lua/parley/new_question.lua
+      - lua/parley/chat_context.lua
       - lua/parley/generation.lua
       - lua/parley/generation_runner.lua
       - lua/parley/response_target.lua
@@ -186,6 +187,7 @@ atlas:
     tests:
       - tests/unit/new_question_spec.lua
       - tests/integration/new_question_spec.lua
+      - tests/unit/chat_context_spec.lua
       - tests/unit/response_preparation_spec.lua
       - tests/unit/response_target_spec.lua
       - tests/integration/response_target_spec.lua
@@ -1077,6 +1079,7 @@ atlas:
   ui/keybindings:
     code:
       - lua/parley/new_question.lua
+      - lua/parley/chat_context.lua
       - lua/parley/init.lua
       - lua/parley/config.lua
       - lua/parley/keybinding_registry.lua

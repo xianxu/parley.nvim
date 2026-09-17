@@ -1,5 +1,33 @@
 # Lessons
 
+## 2026-09-16 (#263 close round 4 — prose is not enforcement)
+
+- **A rule written in a module header does not stop the fifth copy.** Round 3
+  ended a three-round duplication family by writing the rule into
+  `chat_context.lua`'s header comment. Round 4's finding was that nothing
+  enforces it. The family only actually ends when the rule is a test — here, an
+  arch guard that fails any file running the sequence outside the owner, with
+  declared exclusions carrying their reasons *in the test*. Rule: when a review
+  asks you to "state the rule", the deliverable is the assertion, not the
+  paragraph.
+
+- **When you extract a helper whose SHAPE is the design decision, assert the
+  shape.** `chat_context` is two-phase for one reason: a caller interleaves a
+  precondition between the phases. Nothing tested that phase 1 skips the parse,
+  so a later refactor could collapse it and the only symptom would be one
+  caller reporting the wrong error in a rare state. Rule: the invariant that
+  justifies an unusual shape needs its own test, or the shape will not survive
+  its first tidy-up.
+
+- **An estimate that is 2× low twice on the same surface is not a primitive-mix
+  problem.** #263 est 2.04 / actual 4.31 (0.5×); #262 on the same registry
+  surface was 0.53. Both budgeted ONE `milestone-review`. #263 took four
+  boundary rounds. Rule: on this repo, work touching a shared registry or a
+  cross-module seam budgets the review tail as a multiple of `milestone-review`,
+  not a single unit — the tail, not the feature, is what the estimate keeps
+  missing.
+
+
 ## 2026-09-16 (#263 close round 3 — three repeat families)
 
 - **Moving code is a comment-adjacency hazard.** Hoisting a new function in

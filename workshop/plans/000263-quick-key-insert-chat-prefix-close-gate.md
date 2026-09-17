@@ -154,6 +154,62 @@ rounds:
           family: doc-claim-contradicts-code
           round: 3
       blocked: true
+    - "n": 4
+      timestamp: "2026-09-16T22:22:40-07:00"
+      agent: claude
+      dispose:
+        - id: BR-6
+          disposition: not-addressed
+          note: 'Round 1 corrected 15/15->14/14; rounds 2-3 then drifted it again. plan:1005 says "integration 14/14 ... 627 files"; measured at head: integration 15/15, lint 628 files, keybindings 80/80. 2nd in family stale-close-evidence, so the fix is the class: the plan should not carry a literal count at all (lessons.md:158-164 already says build --verified from the closing run) -- delete the literal, keep the rule.'
+          round: 4
+        - id: BR-9
+          disposition: addressed
+          note: 'Verified: exchange_index_at carries its own complete @param/@return block placed before get_paste_line''s; tests/arch/superseded_comment_spec.lua runs 9/9 at head (was 8/9 at 62c7f292). Rule written at lessons.md:6-12. Gap noted only: the lesson states the verification rule ("run the arch suite after any edit that relocates code") but not the structural rule the finding asked for, and does not record that the markdown half of prose-continuity has no enforcer.'
+          round: 4
+        - id: BR-10
+          disposition: addressed
+          note: chat_buffer/parse/resolve moved to the "Integration points" table (plan:74-80) with chat_context.lua listed and each function's boundary named; the Pure-entities bullet at plan:63 records the correction inline and the round-3 Revisions entry names BR-10.
+          round: 4
+        - id: BR-11
+          disposition: addressed
+          note: 'Rule chosen and applied: one owner in a shared module (lua/parley/chat_context.lua), two-phase because respond_all interleaves its batch precondition. Both chat_respond sites migrated with wording and message ordering preserved verbatim (diffed against base); chat_respond 27/27, batch_respond 16/16, batch_lifecycle 10/10. Swept tree-wide: exactly one file now contains the not_chat/find_header_end/parse_chat co-occurrence. See new finding on enforcement.'
+          round: 4
+        - id: BR-12
+          disposition: addressed
+          note: keybindings_spec.lua:1055-1092 derives the split from the registry and pins both sides, plus a case that flips one entry's key order to prove the derivation reads keys[1] rather than membership; keybindings 80/80. keybinding_registry.lua:1264 confirms help renders keys[1].
+          round: 4
+      findings:
+        - id: BR-13
+          severity: Important
+          title: The rule that ends this family is prose in a module header; nothing stops a fifth copy
+          detail: '4th finding in this family. The sweep is genuinely complete -- I measured it, exactly one file in lua/ contains not_chat( with find_header_end(/parse_chat( within 25 lines. But "it is written out nowhere else" (chat_context.lua:22-24, plan:1245) is a sentence, and the same round rejected manual discipline as a remedy for doc-claim-contradicts-code. Do not fix another instance: add one case to tests/arch/single_source_sweeps_spec.lua asserting the match set is exactly {lua/parley/chat_context.lua}, with exporter.lua (partial) and delete_entity_range (entity_textobj.parsed_for) as the recorded exclusions. I confirmed such a sweep lands green today. ARCH-DRY, ARCH-PURPOSE.'
+          family: duplicated-command-preamble
+          round: 4
+        - id: BR-14
+          severity: Important
+          title: lua/parley/chat_context.lua has no atlas entry and no traceability row
+          detail: The same diff routed lua/parley/new_question.lua into atlas/traceability.yaml under both chat/lifecycle and ui/keybindings and documented it in atlas/chat/lifecycle.md. chat_context.lua -- now depended on by four init.lua commands and two chat_respond.lua entry points, with a stated two-phase contract and a new repo-wide convention -- appears in no atlas file and no traceability list (grep -rln chat_context atlas/ tests/ is empty). AGENTS.md section 8. The existing sweep only enforces routing for added specs, so nothing caught it.
+          family: new-surface-not-in-atlas
+          round: 4
+        - id: BR-15
+          severity: Important
+          title: No test enters any error branch of the six migrated call sites, and the invariant justifying the two-phase split is unasserted
+          detail: '2nd finding in this family. grep for "does not look like a chat file", "chat header unavailable", "Batch not started", "could not find header separator" across tests/ returns nothing -- yet those branches are exactly what round 3 rewrote. chat_context.lua:11-16 states a specific guarantee (a header-less chat with an active batch must report the batch, not the header) that no fixture enters. Do not add the one missing case: the rule is that a clause stated as a guarantee gets an assertion or gets deleted, and this round''s enumeration is (a) that ordering invariant, (b) not_chat and no_header for each of the six callers, (c) resolve''s `kind` discriminator, which is the only thing keeping init.lua''s chat_context(what) from logging a warning where it should log an error. A tests/unit/chat_context_spec.lua covers (a) and (c) directly.'
+          family: acceptance-clause-untested
+          round: 4
+        - id: BR-16
+          severity: Minor
+          title: Two absolute claims introduced by this diff after the lesson that bans unchecked absolutes
+          detail: '3rd finding in this family. State the rule, do not patch the sentence: an absolute claim is a grep-checkable assertion and must be scoped or enforced (lessons.md:112-119, written in this same diff). Enumeration: (a) exchange_clipboard.lua:61 "The single owner of ''which exchange is the cursor in''" -- parley.find_exchange_at_line (init.lua:4125) and chat_parser.find_exchange_at_line (chat_parser.lua:277) both answer it with different boundary conventions and are consumed by ChatPrune, ExchangeCut, chat_respond.respond and entity_range; the claim is true only within exchange_clipboard. (b) plan:71 still states that stopinsert keeps the write out of the surrounding insert session''s undo block -- the mechanism the same document retracts at :1117-1122 on measured evidence and that init.lua:2806-2812 no longer claims.'
+          family: doc-claim-contradicts-code
+          round: 4
+        - id: BR-17
+          severity: Minor
+          title: chat_context.parse reads the cursor from handle.win without checking it displays handle.buf
+          detail: lua/parley/chat_context.lua:44-56 pairs lines from handle.buf with nvim_win_get_cursor(handle.win). Every caller today passes the current buffer/window pair so it is unreachable, but this is now the shared entry point for six call sites and the next caller may pass a buf without its window.
+          family: shared-entrypoint-unchecked-pairing
+          round: 4
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#263 (boundary-review)
@@ -233,10 +289,34 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-12** [Minor] `doc-claim-contradicts-code` The corrected 3-3 lead split is still a hand-maintained restatement of the registry with no enforcing test
   2nd finding in family doc-claim-contradicts-code. atlas/ui/keybindings.md:136-145 (and the same phrasing in config.lua:372-383 and keybinding_registry.lua:657-663) asserts a count I verified as currently true, but nothing derives it — grep of keybindings_spec.lua and keybinding_agreement_spec.lua finds no case pinning it. The rule adopted after BR-2 was manual ("run a script before it ships"); the family's history is that manual discipline is what failed. The class fix is one spec case deriving the lead split from the registry so a seventh pair fails the suite instead of drifting the page.
 
+## Round 4 — 2026-09-16T22:22:40-07:00 (claude) — passed
+
+### Disposed
+
+- BR-6 — not-addressed — Round 1 corrected 15/15->14/14; rounds 2-3 then drifted it again. plan:1005 says "integration 14/14 ... 627 files"; measured at head: integration 15/15, lint 628 files, keybindings 80/80. 2nd in family stale-close-evidence, so the fix is the class: the plan should not carry a literal count at all (lessons.md:158-164 already says build --verified from the closing run) -- delete the literal, keep the rule.
+- BR-9 — addressed — Verified: exchange_index_at carries its own complete @param/@return block placed before get_paste_line's; tests/arch/superseded_comment_spec.lua runs 9/9 at head (was 8/9 at 62c7f292). Rule written at lessons.md:6-12. Gap noted only: the lesson states the verification rule ("run the arch suite after any edit that relocates code") but not the structural rule the finding asked for, and does not record that the markdown half of prose-continuity has no enforcer.
+- BR-10 — addressed — chat_buffer/parse/resolve moved to the "Integration points" table (plan:74-80) with chat_context.lua listed and each function's boundary named; the Pure-entities bullet at plan:63 records the correction inline and the round-3 Revisions entry names BR-10.
+- BR-11 — addressed — Rule chosen and applied: one owner in a shared module (lua/parley/chat_context.lua), two-phase because respond_all interleaves its batch precondition. Both chat_respond sites migrated with wording and message ordering preserved verbatim (diffed against base); chat_respond 27/27, batch_respond 16/16, batch_lifecycle 10/10. Swept tree-wide: exactly one file now contains the not_chat/find_header_end/parse_chat co-occurrence. See new finding on enforcement.
+- BR-12 — addressed — keybindings_spec.lua:1055-1092 derives the split from the registry and pins both sides, plus a case that flips one entry's key order to prove the derivation reads keys[1] rather than membership; keybindings 80/80. keybinding_registry.lua:1264 confirms help renders keys[1].
+
+### Raised
+
+- **BR-13** [Important] `duplicated-command-preamble` The rule that ends this family is prose in a module header; nothing stops a fifth copy
+  4th finding in this family. The sweep is genuinely complete -- I measured it, exactly one file in lua/ contains not_chat( with find_header_end(/parse_chat( within 25 lines. But "it is written out nowhere else" (chat_context.lua:22-24, plan:1245) is a sentence, and the same round rejected manual discipline as a remedy for doc-claim-contradicts-code. Do not fix another instance: add one case to tests/arch/single_source_sweeps_spec.lua asserting the match set is exactly {lua/parley/chat_context.lua}, with exporter.lua (partial) and delete_entity_range (entity_textobj.parsed_for) as the recorded exclusions. I confirmed such a sweep lands green today. ARCH-DRY, ARCH-PURPOSE.
+- **BR-14** [Important] `new-surface-not-in-atlas` lua/parley/chat_context.lua has no atlas entry and no traceability row
+  The same diff routed lua/parley/new_question.lua into atlas/traceability.yaml under both chat/lifecycle and ui/keybindings and documented it in atlas/chat/lifecycle.md. chat_context.lua -- now depended on by four init.lua commands and two chat_respond.lua entry points, with a stated two-phase contract and a new repo-wide convention -- appears in no atlas file and no traceability list (grep -rln chat_context atlas/ tests/ is empty). AGENTS.md section 8. The existing sweep only enforces routing for added specs, so nothing caught it.
+- **BR-15** [Important] `acceptance-clause-untested` No test enters any error branch of the six migrated call sites, and the invariant justifying the two-phase split is unasserted
+  2nd finding in this family. grep for "does not look like a chat file", "chat header unavailable", "Batch not started", "could not find header separator" across tests/ returns nothing -- yet those branches are exactly what round 3 rewrote. chat_context.lua:11-16 states a specific guarantee (a header-less chat with an active batch must report the batch, not the header) that no fixture enters. Do not add the one missing case: the rule is that a clause stated as a guarantee gets an assertion or gets deleted, and this round's enumeration is (a) that ordering invariant, (b) not_chat and no_header for each of the six callers, (c) resolve's `kind` discriminator, which is the only thing keeping init.lua's chat_context(what) from logging a warning where it should log an error. A tests/unit/chat_context_spec.lua covers (a) and (c) directly.
+- **BR-16** [Minor] `doc-claim-contradicts-code` Two absolute claims introduced by this diff after the lesson that bans unchecked absolutes
+  3rd finding in this family. State the rule, do not patch the sentence: an absolute claim is a grep-checkable assertion and must be scoped or enforced (lessons.md:112-119, written in this same diff). Enumeration: (a) exchange_clipboard.lua:61 "The single owner of 'which exchange is the cursor in'" -- parley.find_exchange_at_line (init.lua:4125) and chat_parser.find_exchange_at_line (chat_parser.lua:277) both answer it with different boundary conventions and are consumed by ChatPrune, ExchangeCut, chat_respond.respond and entity_range; the claim is true only within exchange_clipboard. (b) plan:71 still states that stopinsert keeps the write out of the surrounding insert session's undo block -- the mechanism the same document retracts at :1117-1122 on measured evidence and that init.lua:2806-2812 no longer claims.
+- **BR-17** [Minor] `shared-entrypoint-unchecked-pairing` chat_context.parse reads the cursor from handle.win without checking it displays handle.buf
+  lua/parley/chat_context.lua:44-56 pairs lines from handle.buf with nvim_win_get_cursor(handle.win). Every caller today passes the current buffer/window pair so it is unreachable, but this is now the shared entry point for six call sites and the next caller may pass a buf without its window.
+
 ## Open findings
 
 - **BR-6** [Minor] `stale-close-evidence` The plan's literal --verified string states counts and a suite status that are not true
-- **BR-9** [Critical] `prose-continuity` The exchange_index_at insertion orphaned get_paste_line's doc block, turning tests/arch/superseded_comment_spec.lua red
-- **BR-10** [Important] `pure-classification-drift` chat_context is listed under the plan's "Pure entities" table but reads the current buffer, window and logger
-- **BR-11** [Minor] `duplicated-command-preamble` chat_respond.M.respond and M.respond_all still carry the preamble verbatim, outside chat_context's reach
-- **BR-12** [Minor] `doc-claim-contradicts-code` The corrected 3-3 lead split is still a hand-maintained restatement of the registry with no enforcing test
+- **BR-13** [Important] `duplicated-command-preamble` The rule that ends this family is prose in a module header; nothing stops a fifth copy
+- **BR-14** [Important] `new-surface-not-in-atlas` lua/parley/chat_context.lua has no atlas entry and no traceability row
+- **BR-15** [Important] `acceptance-clause-untested` No test enters any error branch of the six migrated call sites, and the invariant justifying the two-phase split is unasserted
+- **BR-16** [Minor] `doc-claim-contradicts-code` Two absolute claims introduced by this diff after the lesson that bans unchecked absolutes
+- **BR-17** [Minor] `shared-entrypoint-unchecked-pairing` chat_context.parse reads the cursor from handle.win without checking it displays handle.buf

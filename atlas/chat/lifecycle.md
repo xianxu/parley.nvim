@@ -27,6 +27,30 @@ Post-condition: the cursor sits on a line that is the configured user prefix
 followed by a space, in insert mode — so typing yields `💬: text`, not
 `💬:text`.
 
+## Command preamble (`lua/parley/chat_context.lua`)
+
+Every chat entry point runs the same three gates before it can act: is this
+buffer a chat (`not_chat`), where does its header end (`find_header_end`), and
+what does the body parse to (`parse_chat`). That sequence has **one owner**, and
+`tests/arch/single_source_sweeps_spec.lua` fails a fourth copy of it.
+
+The owner holds the *sequence*; each caller holds the *wording*, because the
+messages genuinely differ — `NewQuestion` names the command, `respond` names the
+file, and `respond_all` returns `nil, reason` to its caller for the header case.
+
+It is **two-phase** (`chat_buffer` then `parse`) rather than one `resolve`,
+because `respond_all` interleaves its own precondition — is a batch already
+running? — between the chat check and the parse. Collapsing the phases would
+make a chat with no `---` *and* an active batch report the header instead of the
+batch. `tests/unit/chat_context_spec.lua` asserts that phase 1 does not parse,
+so a later refactor cannot quietly merge them.
+
+Consumers: `ChatPrune`, `ExchangeCut`, `ExchangePaste`, `NewQuestion` (via
+`init.lua`'s wording wrapper), and `chat_respond`'s `respond` / `respond_all`.
+One deliberate non-consumer: `delete_entity_range`, which classifies through
+`entity_textobj.parsed_for` so the `ae`/`ie`/`aE` text objects and the
+`:ParleyDelete*` commands cannot disagree about what a chat is.
+
 ## Slug Rename (auto, on save)
 When a chat's `topic:` header changes, the file is auto-renamed to include a slug: `YYYY-MM-DD.HH-MM-SS.mmm_slug-words.md`. The slug is derived from the topic (stop words stripped, kebab-case, max 5 words / 40 chars). The `_` separator ensures unambiguous parsing. See `lua/parley/chat_slug.lua` for the pure slug logic.
 

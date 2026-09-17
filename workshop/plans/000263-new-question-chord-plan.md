@@ -1280,3 +1280,50 @@ files. `make test-integration` clean apart from the known parallel-load flakes �
 `branch_child_spec` failed once under 8-way parallelism and passes **62/62 three
 times serially**; `perf_document_spec` is the already-recorded silent-death
 class.
+
+### 2026-09-16 — close round 4: FIX-THEN-SHIP, and the rules become tests
+
+The gate passed (round cap reached; three Important findings recorded
+non-blocking). Under #174 they are fixed *before* the close commit, bundled into
+it, and the boundary is **not** re-reviewed.
+
+All three say the same thing in different places: **round 3 wrote rules as
+prose, and prose is not enforcement.**
+
+- **BR-13 — the rule that ends `duplicated-command-preamble` lived in a module
+  header.** Now `tests/arch/single_source_sweeps_spec.lua` fails any file that
+  runs `not_chat → find_header_end → parse_chat` within a preamble's reach,
+  outside the owner. Two declared exclusions carry their reasons in the test:
+  `chat_context.lua` (the owner) and `entity_textobj.lua` (shares the text
+  objects' classifier so `dae` and `:ParleyDeleteEntity` cannot disagree). A
+  companion case proves the detector sees the sequence it polices, so "0
+  offenders" is distinguishable from "looked at nothing". `exporter.lua` is not
+  excluded because it no longer matches — it is a genuine partial (no
+  `parse_chat`, and it `print()`s as well as logging).
+- **BR-15 — no test entered an error branch of the six migrated call sites, and
+  the invariant justifying the two-phase split was unasserted.**
+  `tests/unit/chat_context_spec.lua` covers both refusals, both `kind` values,
+  the full field set callers consume, and — the load-bearing one — that
+  **phase 1 does not parse**. That is the invariant the whole two-phase design
+  exists for; without it a later refactor collapses the phases and
+  `respond_all` silently starts reporting a missing header where it should
+  report an active batch, with no user-facing test noticing.
+- **BR-14 — `chat_context.lua` had no atlas entry and no traceability row.**
+  Both added; `atlas/chat/lifecycle.md` now carries a "Command preamble"
+  section naming the owner, the two-phase reason, the consumers and the one
+  deliberate non-consumer.
+
+Verification: `single_source_sweeps` 23/23, `chat_context_spec` 5/5,
+`documentation_spec` 4/4, lint 0/0 across **629** files.
+
+### Estimate outcome
+
+est **2.04** / actual **4.31** — ratio **0.5×**, a 2× under-estimate, and the
+same ratio `parley.nvim#262` posted (0.53) on the same surface. The round-2
+estimate revision already moved hours from design into implementation on the
+strength of those neighbours and still landed 2× low. The signal for the next
+calibration is not the primitive mix but the **review-round tail**: the plan
+budgeted one `milestone-review` at 0.18 impl, and the boundary actually took
+four rounds. On this repo, an issue that touches a shared registry or a
+cross-module seam should budget the review tail as a multiple, not a single
+round.

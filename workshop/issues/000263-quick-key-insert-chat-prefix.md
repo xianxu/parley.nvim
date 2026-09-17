@@ -1,12 +1,13 @@
 ---
 id: 000263
-status: working
+status: codecomplete
 deps: []
 github_issue:
 created: 2026-09-16
 updated: 2026-09-16
 estimate_hours: 2.04
 started: 2026-09-16T20:14:01-07:00
+actual_hours: 4.31
 ---
 
 # Quick key to insert the chat question prefix at cursor
@@ -156,6 +157,7 @@ Derivation notes (carried forward, corrected):
 ## Log
 
 ### 2026-09-16
+- 2026-09-16: closed — Round 3 fixes. BR-9 (Critical, a round-2 regression): exchange_index_at had been hoisted between get_paste_line{}s @param block and its signature; reordered so each function owns its doc, superseded_comment_spec 9/9 green. BR-10: chat_context reads buffer/window/logger so it moved from the plan{}s Pure entities to Integration points. duplicated-command-preamble (3rd occurrence) answered with a RULE not a patch: measured prevalence 4 init.lua + 2 chat_respond.lua + 1 partial exporter.lua + 1 deliberate exclusion (delete_entity_range shares entity_textobj.parsed_for with the text objects on purpose); lua/parley/chat_context.lua now owns the not_chat->find_header_end->parse_chat sequence tree-wide, two-phase because respond_all interleaves its batch precondition between the gates, with each caller keeping its own wording since messages and failure semantics differ. doc-claim-contradicts-code (2nd occurrence) answered with a derivation test: keybindings_spec now derives the 3-3 lead split from the registry and pins both sides, plus a flip case proving it reads keys[1] rather than membership. Verified: keybindings 80/80, new_question 14 unit + 15 integration, chat_respond 27/27, batch_respond 16/16, batch_lifecycle 10/10, topic_gen 9/9, exchange_clipboard 31/31, entity_range 47/47, superseded_comment 9/9, buffer_mutation 10/10, single_source_sweeps 21/21, documentation 4/4, make lint 0/0 across 628 files. branch_child_spec failed once under 8-way parallel make and passes 62/62 three times serially (known parallel-load class); perf_document_spec same known class; parley_harness_golden_spec 11/11 red at branch point bbe05eef and here alike, pre-existing.; review verdict: FIX-THEN-SHIP
 
 Filed from operator: "quick command to insert `💬:` — while I just have a
 clipboard shortcut, as an end user facing [the product] needs to provide

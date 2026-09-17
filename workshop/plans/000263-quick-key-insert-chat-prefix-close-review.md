@@ -382,3 +382,143 @@ findings:
     detail: |
       2nd finding in family doc-claim-contradicts-code. atlas/ui/keybindings.md:136-145 (and the same phrasing in config.lua:372-383 and keybinding_registry.lua:657-663) asserts a count I verified as currently true, but nothing derives it — grep of keybindings_spec.lua and keybinding_agreement_spec.lua finds no case pinning it. The rule adopted after BR-2 was manual ("run a script before it ships"); the family's history is that manual discipline is what failed. The class fix is one spec case deriving the lead split from the registry so a seventh pair fails the suite instead of drifting the page.
 ```
+
+---
+
+## Re-review — 2026-09-16T22:22:40-07:00 (FIX-THEN-SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 263 — Quick key to insert the chat question prefix at cursor |
+| repo | parley.nvim |
+| issue file | workshop/issues/000263-quick-key-insert-chat-prefix.md |
+| boundary | whole-issue close |
+| milestone | — |
+| window | bbe05eef5b576db2cd367cd66e6def5806650111..859d2c7893c8e069c3f5c17679714c72c9103e22 |
+| command | sdlc close --issue 263 |
+| reviewer | claude |
+| timestamp | 2026-09-16T22:22:40-07:00 |
+| verdict | FIX-THEN-SHIP |
+
+## Review
+
+```verdict
+verdict: FIX-THEN-SHIP
+confidence: high
+```
+
+Round 3's blocking regression is genuinely gone: `tests/arch/superseded_comment_spec.lua` is **9/9** at head (I ran it), `exchange_index_at` now carries its own complete `@param`/`@return` block *before* `get_paste_line`'s rather than inside it, and the two class fixes the round promised both landed — `lua/parley/chat_context.lua` is now the one owner of the `not_chat → find_header_end → parse_chat` sequence reachable from any module (I swept the tree: exactly one file matches that co-occurrence, and `chat_respond.respond`/`respond_all` really do consume it with their wording and their interleave preserved), and the 3–3 lead split is derived from the registry by `keybindings_spec` with a plant proving the derivation reads `keys[1]`. Measured myself: unit 14/14, integration 15/15, keybindings **80/80**, superseded_comment 9/9, chat_respond 27/27, batch_respond 16/16, batch_lifecycle 10/10, lint 0/0 across **628** files; the only unit failure in the full suite is the pre-existing `parley_harness_golden_spec` (11 fails, `build_payload` path this diff does not touch), and the only integration failure is `perf_ownership_spec` dying silently under 8-way parallelism — it passes 3/3 serially, twice. Nothing here is a correctness bug. What holds it back from SHIP: the new shared module is invisible to `atlas/` and `atlas/traceability.yaml`, the rule that finally ended the `duplicated-command-preamble` family is prose with no enforcer (the family's 4th appearance, and the round-3 remedy for the *other* repeating family was explicitly "a repeating claim gets an enforcing spec"), no test touches any error branch of the 6 refactored call sites, and the plan's literal `--verified` string has gone stale again.
+
+## 1. Strengths
+
+- **`lua/parley/new_question.lua` is genuinely pure.** The unit spec runs with no buffer, no window, no mocks — it builds `lines`/`parsed_chat` straight from `chat_parser` and reads the plan back as a value (`tests/unit/new_question_spec.lua:24`). The "apply the plan to a copy and read `row` back" case (`:75-88`) checks the post-condition against resulting text rather than the planner's own arithmetic. ARCH-PURE passes cleanly.
+- **The off-by-one trap is documented in the assertion itself.** `tests/unit/new_question_spec.lua:60-71` explains why `p.row <= exchanges[2].question.line_start` is `<=` and not `<`, and why "fixing" it destroys the blank-line seam. That comment is worth more than the assertion.
+- **The two-phase split of `chat_context` is the right call and the reason is written down.** `lua/parley/chat_context.lua:11-16` names the exact interleave (`respond_all`'s batch precondition between the gates) that a monolithic `resolve` would have reordered. I diffed the migrated control flow against base — the message ordering is preserved verbatim at all six sites.
+- **The widened shadowing guard shares one detection function with its plants.** `owners_by_key`/`collisions`/`prefix_shadows` are called by both the guards and both plant tests (`tests/unit/keybindings_spec.lua:1006-1012, 1033-1041`), and the collision plant asserts the offender by name rather than `#found > 0`. This is the ARCH-MOCK/ARCH-DRY failure mode the plan review warned about, avoided.
+- **The EOF-append path is correct even though nothing tests it.** I probed it in a scratch spec: cursor on the last line of the last exchange routes through `buffer_edit.replace_user_lines`'s `first == count` special branch (which prepends `"\n"` and anchors at end-of-buffer), and `plan.row` still lands on the question line; a second press focuses rather than duplicating. Confirmed-good ground.
+
+## 2. Critical findings
+
+None.
+
+## 3. Important findings
+
+**I1 — the rule that ends `duplicated-command-preamble` is prose only; nothing stops a fifth copy.** (`lua/parley/chat_context.lua:18-24`, `workshop/plans/000263-new-question-chord-plan.md:1245`) — **This is the 4th finding in family `duplicated-command-preamble`.** Rounds 1–3 each fixed what the finding named: round 1 extracted a file-local helper (4 sites), round 2 swept the fields it owned, round 3 promoted it to a module and migrated the 2 remaining sites. The sweep is now genuinely complete — I measured it, and exactly one file in `lua/` contains `not_chat(` with `find_header_end(`/`parse_chat(` inside the next 25 lines. But the *rule* ("it is written out nowhere else") is a sentence in a module header, and the same round explicitly rejected manual discipline as a remedy for the other repeating family: *"the rule adopted then was manual ('run a probe before the sentence ships'), and manual discipline is exactly what produced the wrong count in the first place"* (`tests/unit/keybindings_spec.lua:1046-1051`). Apply that standard here. Fix: one case in `tests/arch/single_source_sweeps_spec.lua`, in the genre that file already uses — `git ls-files 'lua/**/*.lua'`, scan for the co-occurrence window, assert the match set is exactly `{lua/parley/chat_context.lua}`, with `lua/parley/exporter.lua` (partial: `not_chat` + read, no header/parse) and `delete_entity_range` (routes through `entity_textobj.parsed_for`) named as the recorded exclusions. I verified such a sweep lands **green** today, so it is a cheap write, not a new rework. Cites ARCH-DRY, ARCH-PURPOSE (a hand-maintained restatement of the model is a deferred consumer).
+
+**I2 — `lua/parley/chat_context.lua` is a new cross-module surface with no atlas entry and no traceability row.** The same diff added `lua/parley/new_question.lua` to `atlas/traceability.yaml` under *both* `chat/lifecycle` and `ui/keybindings` (`atlas/traceability.yaml:154, 1079`), and added its tests. `chat_context.lua` — now depended on by four `init.lua` commands and two `chat_respond.lua` entry points, with a stated two-phase contract — appears in no atlas file and in no traceability list (`grep -rln chat_context atlas/ tests/` returns nothing). Per AGENTS.md §8 this is new architectural surface and new terminology ("the chat-entry sequence has one owner"). Fix: a short section in `atlas/chat/lifecycle.md` (or a new `atlas/chat/entry_sequence.md` linked from `atlas/index.md`) naming the owner, the two phases, why the caller keeps the wording, and the recorded exclusions; plus `lua/parley/chat_context.lua` under the `code:` list of whichever doc covers it. The existing sweep only enforces routing for *added specs*, so nothing caught this.
+
+**I3 — no test exercises any error branch of the six migrated call sites, and the invariant that justifies the two-phase shape is unasserted.** `grep -rn "does not look like a chat file\|chat header unavailable\|Batch not started\|could not find header separator" tests/` returns nothing. The round-3 refactor rewrote exactly those branches in `chat_respond.respond` (`lua/parley/chat_respond.lua:1717-1729`) and `respond_all` (`:1914-1925`), and `chat_context.lua:11-16` states a specific guarantee — *"a chat with no `---` AND an active batch would start reporting the header instead of the batch"* — that no fixture enters. **This is the 2nd finding in family `acceptance-clause-untested`.** Do not fix the one site: the rule is that a clause stated as a guarantee (a Done-when bullet, a module-header invariant, a comment saying "otherwise X would happen") gets an assertion or gets deleted, and the enumeration for this round is (a) that message-ordering invariant, (b) `not_chat` and `no_header` for each of the six callers, (c) `resolve`'s `kind` discriminator, which is the only thing keeping `init.lua`'s `chat_context(what)` from logging a warning where it should log an error. A `tests/unit/chat_context_spec.lua` driving `chat_buffer`/`parse`/`resolve` against a non-chat buffer and a header-less chat covers (a)+(c) directly and is the natural home for the enumeration. BR-1's fix set the precedent by parameterizing rather than adding the missing case — same move here.
+
+## 4. Minor findings
+
+- **M1 — `lua/parley/exchange_clipboard.lua:61` claims "The single owner of 'which exchange is the cursor in'"; two other live functions answer it.** **This is the 3rd finding in family `doc-claim-contradicts-code`.** Do not edit this one sentence. The rule, which BR-2's own lesson already states (`workshop/lessons.md:112-119` — *"any sentence asserting 'the only', 'the first', 'always' or a number gets a script run against the source of truth before it ships"*), is that an absolute claim is a grep-checkable assertion and must be either scoped or enforced. Enumeration for this round, both introduced by this diff after that lesson was written: (a) `exchange_clipboard.lua:61` — `parley.find_exchange_at_line` (`init.lua:4125`, semantic-start..margin, component-aware, consumed by `ChatPrune`, `ExchangeCut`, `chat_respond.respond`) and `chat_parser.find_exchange_at_line` (`chat_parser.lua:277`, semantic-start..`answer.line_end`, consumed by `entity_range`) both answer the same English question with different boundaries, so the claim is true only *within* `exchange_clipboard`; scope the sentence or say why three boundary conventions are correct. (b) `workshop/plans/000263-new-question-chord-plan.md:71` still reads *"Insert mode leaves insert first (`stopinsert`) so the buffer write is not folded into the surrounding insert session's undo block"* — the mechanism the same document retracts at `:1117-1122` on measured evidence, and which `init.lua:2806-2812` no longer claims. A reader of the plan body hits the retracted version first.
+- **M2 — `chat_context.parse` trusts that `handle.win` displays `handle.buf`.** It reads `nvim_win_get_cursor(handle.win)` against lines from `handle.buf` with no check that they correspond. Unreachable today (every caller passes the current pair), but the module is now the shared entry point and the next caller may not.
+- **M3 — removing `chat_shortcut_search` is silent for an operator who set it.** No deprecation path; `config.lua:17` ("options might get deprecated") makes this house practice, and `atlas/ui/keybindings.md:41-43` documents the retirement, so this is a note rather than a gap — but the stale key is ignored without a warning while `<C-g>n` quietly changes meaning.
+- **M4 — the flaky-spec note in the issue Log names the wrong member of the class.** The Log/plan name `perf_document_spec`; in my full run `perf_document_spec` passed and `perf_ownership_spec` died silently instead (3/3 serially, twice). Same "silent death under parallel load" class, different file — worth saying "the perf specs" rather than naming one.
+
+## 5. Test coverage notes
+
+- The integration spec's 15 cases walk every plan branch that matters and use an independent oracle (`vim.startswith` scan, never a re-parse) — that discipline is the right one and it holds throughout.
+- Not covered, and correct anyway (I verified by probe): cursor inside the **last** exchange, which is the only path through `replace_user_lines`'s `first == count` branch. One case pressing the chord at `{13, 0}` on the existing `FIXTURE` would pin it; the fixture is already there.
+- Not covered: the `focus` branch takes **no** write and therefore no `capture_user`, so it performs no streaming-refusal check. Benign today (an empty unanswered question cannot be a generation target), but the ARCH-ORDER claim in `atlas/chat/lifecycle.md` ("refuses visibly while a response is streaming into the region") is only true of the `insert` branch and the normalizing half of `focus`.
+- The refusal test is still a stub of `buffer_edit.capture_user`, correctly labelled as a double with the measured reasons the two realer routes fail — disposed in round 1, left as-is, and `#265` carries the real fixture.
+
+## 6. Architectural notes
+
+Worked through each marker on the diff:
+
+- **ARCH-DRY** — *flag*, see I1. The consolidation itself is done and measured; the enforcement is not. Secondary note: three live "which exchange is at this line" functions with three boundary conventions (M1a) is a real long-term hazard even though each is individually justified — worth one atlas paragraph naming the three and when to reach for which, more than worth another extraction.
+- **ARCH-PURE** — pass. `new_question.lua` takes `(parsed_chat, lines, cursor_line, header_end, user_prefix)` and returns a value; its spec runs with no IO. `M.cmd.NewQuestion` is a thin shell: resolve context, plan, apply, place cursor. `chat_context` is correctly classified as a boundary after BR-10.
+- **ARCH-PURPOSE** — pass on the feature, *flag* on the rule. The shadow-sweep is complete: I enumerated every consumer of the sequence and each derives from `chat_context`. What remains hand-maintained is the *rule about the sweep*, which is I1.
+- **ARCH-MOCK** — N/A and correctly argued. No external binary or service; the integration spec drives a real prepped buffer from a real on-disk file rather than a double, and the one stub is labelled as such with evidence.
+- **ARCH-CONSTRAINTS** — pass. Keystroke path; one buffer read + one `parse_chat` + one range write per press, the same shape as `ExchangePaste` on the same chord surface. Nothing lands on the per-keystroke path. The plan's envelope section states this with the right basis.
+- **ARCH-SECURE** — pass, and well-handled. `user_prefix` is operator config and reaches only `string.sub`/equality, never a pattern position; `tests/unit/new_question_spec.lua:141` pins a `%-Q.:` prefix. The `#214 BR-34` cross-reference in the module header is the right pointer.
+- **ARCH-ORDER** — pass with the M1b/coverage caveats. The command carries no state between events; the ordering guarantee it *does* make (refuse rather than corrupt mid-stream) comes from `buffer_edit`'s provenance capture, and `assert(plan.row)` now sits above the write where it can actually prevent a half-applied edit. The one real ordering statement in the tree — `chat_context`'s message-interleave invariant — is untested (I3).
+- **ARCH-FUNERAL** — pass. Nothing durable is created; the plan's Residue section argues it rather than writing a bare `N/A`, which is the right form.
+
+## 7. Plan revision recommendations
+
+The plan is otherwise in agreement with the code (all 40 steps ticked; every Core-concepts row verified present at its stated path with its stated kind). Two entries needed:
+
+1. **`## Revisions` — close round 4, the `--verified` string.** Record that `:1005` was stale a second time and what replaces it. Better: delete the literal string from the plan entirely and replace it with "build `--verified` from the closing run", which is the rule `workshop/lessons.md:158-164` already adopted. The plan keeping a literal count is the artifact that keeps violating it.
+2. **`## Revisions` — close round 4, the retracted `stopinsert` mechanism.** `:71` still states the undo-block rationale that `:1117-1122` retracts. Either correct `:71` in place with a `(superseded — see Revisions)` marker (the form used for the BR-10 table fix at `:63`) or strike it.
+
+```findings
+dispose:
+  - id: BR-6
+    disposition: not-addressed
+    note: |
+      Round 1 corrected 15/15->14/14; rounds 2-3 then drifted it again. plan:1005 says "integration 14/14 ... 627 files"; measured at head: integration 15/15, lint 628 files, keybindings 80/80. 2nd in family stale-close-evidence, so the fix is the class: the plan should not carry a literal count at all (lessons.md:158-164 already says build --verified from the closing run) -- delete the literal, keep the rule.
+  - id: BR-9
+    disposition: addressed
+    note: |
+      Verified: exchange_index_at carries its own complete @param/@return block placed before get_paste_line's; tests/arch/superseded_comment_spec.lua runs 9/9 at head (was 8/9 at 62c7f292). Rule written at lessons.md:6-12. Gap noted only: the lesson states the verification rule ("run the arch suite after any edit that relocates code") but not the structural rule the finding asked for, and does not record that the markdown half of prose-continuity has no enforcer.
+  - id: BR-10
+    disposition: addressed
+    note: |
+      chat_buffer/parse/resolve moved to the "Integration points" table (plan:74-80) with chat_context.lua listed and each function's boundary named; the Pure-entities bullet at plan:63 records the correction inline and the round-3 Revisions entry names BR-10.
+  - id: BR-11
+    disposition: addressed
+    note: |
+      Rule chosen and applied: one owner in a shared module (lua/parley/chat_context.lua), two-phase because respond_all interleaves its batch precondition. Both chat_respond sites migrated with wording and message ordering preserved verbatim (diffed against base); chat_respond 27/27, batch_respond 16/16, batch_lifecycle 10/10. Swept tree-wide: exactly one file now contains the not_chat/find_header_end/parse_chat co-occurrence. See new finding on enforcement.
+  - id: BR-12
+    disposition: addressed
+    note: |
+      keybindings_spec.lua:1055-1092 derives the split from the registry and pins both sides, plus a case that flips one entry's key order to prove the derivation reads keys[1] rather than membership; keybindings 80/80. keybinding_registry.lua:1264 confirms help renders keys[1].
+findings:
+  - id: new
+    severity: Important
+    family: duplicated-command-preamble
+    title: |
+      The rule that ends this family is prose in a module header; nothing stops a fifth copy
+    detail: |
+      4th finding in this family. The sweep is genuinely complete -- I measured it, exactly one file in lua/ contains not_chat( with find_header_end(/parse_chat( within 25 lines. But "it is written out nowhere else" (chat_context.lua:22-24, plan:1245) is a sentence, and the same round rejected manual discipline as a remedy for doc-claim-contradicts-code. Do not fix another instance: add one case to tests/arch/single_source_sweeps_spec.lua asserting the match set is exactly {lua/parley/chat_context.lua}, with exporter.lua (partial) and delete_entity_range (entity_textobj.parsed_for) as the recorded exclusions. I confirmed such a sweep lands green today. ARCH-DRY, ARCH-PURPOSE.
+  - id: new
+    severity: Important
+    family: new-surface-not-in-atlas
+    title: |
+      lua/parley/chat_context.lua has no atlas entry and no traceability row
+    detail: |
+      The same diff routed lua/parley/new_question.lua into atlas/traceability.yaml under both chat/lifecycle and ui/keybindings and documented it in atlas/chat/lifecycle.md. chat_context.lua -- now depended on by four init.lua commands and two chat_respond.lua entry points, with a stated two-phase contract and a new repo-wide convention -- appears in no atlas file and no traceability list (grep -rln chat_context atlas/ tests/ is empty). AGENTS.md section 8. The existing sweep only enforces routing for added specs, so nothing caught it.
+  - id: new
+    severity: Important
+    family: acceptance-clause-untested
+    title: |
+      No test enters any error branch of the six migrated call sites, and the invariant justifying the two-phase split is unasserted
+    detail: |
+      2nd finding in this family. grep for "does not look like a chat file", "chat header unavailable", "Batch not started", "could not find header separator" across tests/ returns nothing -- yet those branches are exactly what round 3 rewrote. chat_context.lua:11-16 states a specific guarantee (a header-less chat with an active batch must report the batch, not the header) that no fixture enters. Do not add the one missing case: the rule is that a clause stated as a guarantee gets an assertion or gets deleted, and this round's enumeration is (a) that ordering invariant, (b) not_chat and no_header for each of the six callers, (c) resolve's `kind` discriminator, which is the only thing keeping init.lua's chat_context(what) from logging a warning where it should log an error. A tests/unit/chat_context_spec.lua covers (a) and (c) directly.
+  - id: new
+    severity: Minor
+    family: doc-claim-contradicts-code
+    title: |
+      Two absolute claims introduced by this diff after the lesson that bans unchecked absolutes
+    detail: |
+      3rd finding in this family. State the rule, do not patch the sentence: an absolute claim is a grep-checkable assertion and must be scoped or enforced (lessons.md:112-119, written in this same diff). Enumeration: (a) exchange_clipboard.lua:61 "The single owner of 'which exchange is the cursor in'" -- parley.find_exchange_at_line (init.lua:4125) and chat_parser.find_exchange_at_line (chat_parser.lua:277) both answer it with different boundary conventions and are consumed by ChatPrune, ExchangeCut, chat_respond.respond and entity_range; the claim is true only within exchange_clipboard. (b) plan:71 still states that stopinsert keeps the write out of the surrounding insert session's undo block -- the mechanism the same document retracts at :1117-1122 on measured evidence and that init.lua:2806-2812 no longer claims.
+  - id: new
+    severity: Minor
+    family: shared-entrypoint-unchecked-pairing
+    title: |
+      chat_context.parse reads the cursor from handle.win without checking it displays handle.buf
+    detail: |
+      lua/parley/chat_context.lua:44-56 pairs lines from handle.buf with nvim_win_get_cursor(handle.win). Every caller today passes the current buffer/window pair so it is unreachable, but this is now the shared entry point for six call sites and the next caller may pass a buf without its window.
+```
