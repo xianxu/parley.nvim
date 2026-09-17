@@ -137,3 +137,175 @@ document-ordered. Sequencing is this issue first or alongside, never after.
 
 Operator framing: "this presents a linear history user understands, while
 allowing concurrent scheduling of things to happen."
+
+### 2026-09-17 — mechanical digests (design inputs)
+
+Three fresh-context digests: generation write path, tool round insertion, test
+harness. Findings that change the design, all verified against the tree.
+
+#### The target format already works end-to-end
+
+`tests/fixtures/transcripts/two-round-tool-use.md:11-26` is **already** laid out
+`🔧 A / 📎 A / 🔧 B / 📎 B`. `chat_parser.lua:833-852` imposes **no pairing, no
+adjacency and no id-matching** between a call block and a result block — each
+marker at depth 0 simply closes the previous block. `tests/unit/chat_parser_tools_spec.lua:194`
+asserts the interleaved layout parses to
+`{"text","tool_use","tool_result","tool_use","tool_result","text"}`. So M2 is not
+introducing a new transcript shape; it is making the writer emit the shape the
+reader and the goldens already accept. Large de-risk.
+
+#### But interleaving changes the RESUBMIT wire shape (open decision)
+
+The ordering invariant lives in the wire builder, not the parser:
+`chat_respond.lua:636-651` flushes the assistant message on the **first** matched
+`tool_result`. So `call₁ result₁ call₂ result₂` builds **four** messages
+(assistant[tool_use a] / user[result a] / assistant[tool_use b] / user[result b])
+where today's batched layout builds two. `tests/unit/build_messages_spec.lua:1189-1192`
+already pins that:
+`{"system","user","assistant","user","assistant","user","assistant","user"}`.
+
+The **live** round is unaffected — `response_tools.lua:220-239 continue_round`
+rebuilds from the frozen `s.rounds[ctx.round]` record and always batches all
+`tool_use` blocks into one assistant message (`:230`) and all results into one
+user message (`:231`). Only a later re-parse/resubmit of the saved transcript sees
+the interleaved shape. Consequence: after M2, reopening a chat and resubmitting
+presents parallel tool calls to the provider as sequential turns rather than one
+parallel turn. Needs an operator decision — see `## Open decisions`.
+
+#### M1 — the real obstacle is a conflated predicate
+
+Holding output needs **no new buffer**: `generation.lua:107-116 pump` only
+dequeues items whose grant passes `writable`, so a generation without the turn
+already accumulates in `s.queue`. But:
+
+- `stage()` refusal **destroys the generation**. `generation_runner.lua:160` on
+  refusal does `issue(s,'staging overflow')` + `dispatch{type='cancel'}`, which
+  reaches `response_provider.lua:88-90` and kills the provider process. There is
+  no third behavior at the bound, so the 1 MiB per-generation cap
+  (`generation.lua:163`, `generation_runner.lua:464`) and the cancel-on-refusal
+  must both be superseded for a queued writer, not inherited.
+- **`staged(s)==0` means both "my writes drained" and, implicitly, "I may write."**
+  It gates round continuation (`generation.lua:123`, `:129`) and finalize (`:149`).
+  A held generation has `bytes>0` forever and never advances. Teaching those three
+  sites the difference between "queue non-empty because mid-stream" and "queue
+  non-empty because it is not my turn" is the central task of M1; a naive
+  implementation deadlocks here.
+- `suspended` cannot be reused as the "not my turn" signal: it means structural
+  uncertainty (`state.lua:328,338`) and `reconcile` (`:329-340`) flips it back to
+  `valid` on the next confirmed proof.
+- The generation slot is freed at **terminal**, not at provider-complete —
+  `generation_runner.lua:436` is the only `finish_generation` caller.
+
+Seam candidates: (A) `document/state.lua` reducer + `M.resolve` — single
+chokepoint for all authority, `gid` is already monotone by admission so the queue
+key is free; cost is that `reject(reason)` strings are read as control flow in
+three places (`generation_runner.lua:275-276`, `document/init.lua:535-536`,
+`generation.lua:227-230`) that would misread a new `'waiting'` as revocation.
+(B) `generation.lua:32-39 writable` + a turn flag; needs the turn to ride in
+`D.snapshot`, which today exposes only
+`{epoch,attached,generations,grants,capacity_tickets,max_dependencies}`.
+(C) `generation_runner.lua:259 write()` declining — cheapest (~3 lines, `M.step`
+already supports `'waiting'`) but holds the *effect* not the output, so the 1 MiB
+cap still bites and `s.inflight` stays occupied, reproducing the same deadlock.
+
+#### Coarse undo falls out for free
+
+`document/editor.lua:194-202 can_join_undo` already requires `plan.generation`
+**and** `plan.grant` to match the previous receipt. Two concurrent generations
+invalidate each other's receipt on every write (identity mismatch at `:199`, plus
+`:67` on each other's observed edit), so **today every 4096-byte chunk is its own
+undo entry**. Serializing writes makes `can_join_undo` succeed for runs of the
+same generation with **no change to that function** — undo becomes one entry per
+generation run, not merely ordered. This is a larger UX win than linearity itself.
+
+#### Paths that bypass the runner and still need the turn
+
+- `response_topic.lua:141-147` registers a **second generation** on the same
+  document from inside an already-running response (`chat_respond.lua:1657`,
+  finalize adapter) and writes via `D.apply` at `:165-166`, bypassing
+  `generation_runner` entirely.
+- `response_preparation.lua:90,101,108` and `response_completion.lua:63,71` write
+  as `manual_append`/`manual_replace` (`generation_runner.lua:357-358`).
+- `apply_user` (`document/init.lua:432`) is the human path and is **correctly not
+  subject to the turn**; the guarantee is ordering *between generations*, not
+  absolute.
+
+#### M2 — what becomes dead
+
+Serialized append-only insertion removes the need for child grants entirely (each
+write is an append at the parent grant's tail — no sub-regions, no exclusion).
+Unreachable afterwards: the whole capacity-ticket subsystem
+(`state.lua:170-180,199-212,253-256`; only consumers are `response_tools.lua:164,23`),
+`exclude` (`state.lua:147-159`, sole call site `:239`), the parent-slot carving and
+`'parent slot limit'` (`:237-241,252`), the `open_first`/`open_last` half-open
+handling in `overlaps`/`contains`/`writable` (`:32-45`), `'outside parent'`/`'parent'`
+rejections (`:226-236`), the ancestor walk + `g.tail_lost` (`:291-311`),
+`'delegated parent'` (`:99-101`, `init.lua:528-529`), `'active child'` in
+`reclaim_tail` (`:265-268`), `response_tools.lua:21-26,36-68,154-161,183-187,240`,
+`generation.lua:54-72,131-134,289-316`, `generation_runner.lua:329-354,382-389,404-434`.
+
+Already dead with **zero readers** in `lua/` or `tests/`: `receipt.markers`
+(`response_tools.lua:66`), `children[i].call_block` and `children[i].result_slot`
+(`generation.lua:293`).
+
+Execution concurrency is independent of insertion and stays: fan-out cap 4
+(`generation.lua:84`), scheduler admission `running<16 / per_document<8 /
+per_generation<4` (`tools/resources.lua:82-90`) with real path-scoped claims
+(`tools/async_builtin.lua:248-267`).
+
+#### Unresolved calls today: the round stalls, nothing synthesizes a result
+
+No timeout produces a result. A producer that never calls `outcome` leaves the
+machine in `executing_tools`; the only reaction is a diagnostic notice after a
+5000 ms deadline (`tools/operation.lua:112-122` → `tools/producer.lua:50-56`,
+`vim.notify(... WARN)`). `outcome='unknown'` pauses the generation
+(`generation.lua:332-334`) and requires a later `'known'` plus an explicit
+`Runner.resume`. At batch level `batch.lua:91-94` latches `s.unknown` and `:99`
+refuses resume **permanently**. Buffer fallback exists only on a later build:
+an unmatched `🔧:` becomes `"(tool call did not complete — no result recorded)"`
+(`chat_respond.lua:604,617-630`).
+
+#### Presentation is confirmed extmark-only
+
+`grep` for `nvim_buf_set_lines|nvim_buf_set_text|D.append` over `chat_pending.lua`,
+`response_status.lua`, `chat_presentation.lua` → zero hits. The channel for tool
+progress is `session:progress(event)` (`chat_pending.lua:160-165`), which already
+accepts an `event.tool` key (`chat_presentation.lua:58`). **There is no tool →
+pending edge today** (`response_session.lua:100-101` feeds only provider stream
+progress), so M2 must add it. Caveat: `session:written(row,col)`
+(`chat_pending.lua:166-171`) is called from `response_session.lua:180-183` on every
+write receipt and tears the progress line down — serialized insertion writes more
+often, so that interaction needs care.
+
+#### Harness facts that constrain the plan
+
+- Branch **must** be named `000266-<slug>`: `tests/arch/single_source_sweeps_spec.lua:713`
+  only enforces "every spec this branch added is routed in `atlas/traceability.yaml`"
+  when the branch matches `^%d%d%d%d%d%d%-`; otherwise it passes as `pending`.
+- **Never run a spec bare.** `workshop/lessons.md:1280` — a raw
+  `nvim --headless -c PlenaryBustedFile` overwrote the operator's real
+  `~/.local/share/nvim/parley/cliproxy/config.yaml`. `make` owns the sandbox.
+  `make test-spec SPEC=chat/ownership` takes an **atlas key**, not a path.
+- `--verified` evidence must be a full `make test` (lint runs first);
+  `workshop/lessons.md:792` records a close where green specs masked a red lint.
+- Fully synchronous pump for ARCH-ORDER coverage:
+  `D.repair_step(doc); Runner.step(runner); adapter.step()` in a bounded loop
+  (`tests/integration/response_tools_spec.lua:7-57`). An 8-order × 2-mode
+  cartesian sweep already exists at `:261` to copy for the unresolved-call matrix.
+- Undo ordering is **unasserted anywhere today** — only final content. The tool is
+  `vim.fn.changenr()` via `nvim_buf_call` (`document/editor.lua:13`). Since
+  `can_join_undo` behavior changes, add a seed to the randomized oracle
+  `tests/integration/document_native_history_spec.lua` (seeds `{1,17,254,4099}`)
+  rather than writing a bespoke spec.
+- Tests to invert, not delete: `response_tools_spec.lua:141` (`assert.is_true(a<b and b<ra and ra<rb)`)
+  and `chat_scoped_response_spec.lua:47` ("runs two disjoint answers while the
+  next question is edited").
+
+## Open decisions
+
+- **Resubmit wire shape.** After M2 the saved transcript is interleaved, so a
+  later resubmit builds four messages per two-call round instead of two —
+  parallel tool calls re-presented to the provider as sequential turns. Accept,
+  or preserve batching by teaching the wire builder to coalesce adjacent
+  `(call,result)` pairs of the same round back into one assistant/user pair?
+  Coalescing needs round identity in the transcript, which today is not written.
