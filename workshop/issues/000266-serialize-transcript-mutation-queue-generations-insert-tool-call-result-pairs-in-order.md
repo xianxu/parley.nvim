@@ -1,12 +1,13 @@
 ---
 id: 000266
-status: open
+status: working
 deps: []
 github_issue:
 target: transcript-is-the-whole-truth
 created: 2026-09-17
 updated: 2026-09-17
 estimate_hours:
+started: 2026-09-17T11:06:53-07:00
 ---
 
 # Serialize transcript mutation: queue generations, insert tool call/result pairs in order
