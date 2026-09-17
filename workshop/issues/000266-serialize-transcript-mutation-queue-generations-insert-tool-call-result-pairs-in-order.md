@@ -6,7 +6,7 @@ github_issue:
 target: transcript-is-the-whole-truth
 created: 2026-09-17
 updated: 2026-09-17
-estimate_hours:
+estimate_hours: 14.74
 started: 2026-09-17T11:06:53-07:00
 ---
 
@@ -120,6 +120,55 @@ derive from the new one, not restate the old (ARCH-PURPOSE shadow-sweep).
 - `atlas/chat/ownership.md` and `atlas/providers/tool_use.md` describe the
   serialized model; no page still promises disjoint concurrent answer writes.
 - No regression in batch sequencing, cancellation, or reload/detach retirement.
+
+## Estimate
+
+*Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against `baseline-v3.1.md`. Method A only.*
+
+v3.1 rules applied: design hours taken from the v2 primitive table unchanged;
+`impl=` values written at **40%** of the table's implementation hours; design
+buffer **0.15** rather than 0.30 because a thorough plan doc exists
+(`workshop/plans/000266-serialize-transcript-mutation-plan.md`, six revisions,
+cleared plan-quality at round 2). Familiarity 1.0 — the document subsystem is
+well understood after the #261 audit, but it is intricate enough that no
+discount is warranted.
+
+Design is weighted to the top of its ranges deliberately: this design took six
+revisions and six fresh-context reviews before clearing, and that time is inside
+the measured window (claimed 2026-09-17, planning began the same day).
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+design-buffer: 0.15
+item: issue-spec                design=1.5 impl=0.12
+item: lua-neovim                design=3.0 impl=0.6
+item: cross-cutting-refactor    design=0.6 impl=0.2
+item: milestone-review          design=0.0 impl=0.2
+item: lua-neovim                design=1.5 impl=0.4
+item: milestone-review          design=0.0 impl=0.2
+item: lua-neovim                design=2.0 impl=0.52
+item: cross-cutting-refactor    design=0.8 impl=0.2
+item: milestone-review          design=0.0 impl=0.2
+item: cross-cutting-refactor    design=0.5 impl=0.2
+item: milestone-review          design=0.0 impl=0.2
+item: atlas-docs                design=0.2 impl=0.08
+total: 14.74
+```
+
+Mapping of items to the plan, in order: the issue + spec itself; **M1** the write
+turn (`lua-neovim`) plus its multi-file caller sweep — five coordinator entry
+points, `Replacement.step`, and six waiting predicates (`cross-cutting-refactor`)
+— plus its boundary review; **M2** the preparation-write deferral; **M3** the
+`ToolSequence` and ordered-append pump (`lua-neovim`) plus removal of capacity
+tickets, the round-reservation lifecycle and child grants
+(`cross-cutting-refactor`); **M4** the residual exclusion sweep; and the atlas
+rewrites (`chat/ownership.md`, `providers/tool_use.md`, `providers/architecture.md`).
+
+Reconciliation: Σdesign 10.1 × 1.15 = 11.615; Σimpl 3.12 × 1.0 = 3.12; total 14.735 → 14.74.
+
+Calibration caveat recorded by `sdlc estimate-source`: the v3.1 ledger is newer
+than the doc, so per-primitive hours are provisional (ariadne#127).
 
 ## Plan
 
