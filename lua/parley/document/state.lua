@@ -1,7 +1,12 @@
 -- Bounded authority only. The coordinator supplies live sequence identity proofs;
 -- this module neither owns document text nor treats coordinates as identity.
 local M = {}
+local WriteTurn = require('parley.document.write_turn')
 local states = setmetatable({}, {__mode='k'})
+-- Who WANTS the write turn (#266 M1). Kept beside `states` rather than inside a
+-- document's state because `copy` below asserts `getmetatable(v)==nil` on every
+-- nested table — a weak set in the state would make every M.snapshot throw.
+local turn_wanted = setmetatable({}, {__mode='k'})
 local successors=setmetatable({},{__mode="k"})
 local serial = 0
 local function id() serial=serial+1; return serial end
@@ -165,6 +170,22 @@ local function move(p,edit)
         return edit.first+(right and edit.new_bytes or 0)
     end
     p.first=endpoint(p.first,p.open_first); p.last=endpoint(p.last,not p.open_last)
+end
+
+local function wants(s)
+    local w=turn_wanted[s]
+    if not w then w={}; turn_wanted[s]=w end
+    return w
+end
+--- Recompute the holder. `drop` (optional) is a generation giving the turn up or
+--- going away; offering `current=nil` for it is what lets a release hand over,
+--- since WriteTurn.holder otherwise keeps an eligible incumbent.
+local function retune(s,drop)
+    local w=wants(s)
+    if drop~=nil then w[drop]=nil end
+    local eligibility={}
+    for gid in pairs(s.generations) do eligibility[gid]={eligible=w[gid]==true} end
+    s.turn=WriteTurn.holder(eligibility, s.turn~=drop and s.turn or nil)
 end
 
 local function capacity_used(s)
@@ -350,10 +371,19 @@ function M.transition(doc,event)
         for tid,ticket in pairs(s.capacity_tickets) do
             if ticket.generation==event.generation then s.capacity_tickets[tid]=nil end
         end
+        retune(s,event.generation); result.turn=s.turn
+    elseif kind=='request_turn' then
+        if not s.generations[event.generation] then return reject('generation') end
+        wants(s)[event.generation]=true
+        retune(s); result.turn=s.turn
+    elseif kind=='release_turn' then
+        if not s.generations[event.generation] then return reject('generation') end
+        retune(s,event.generation); result.turn=s.turn
     elseif kind=='reload' or kind=='detach' then
         if event.next_epoch~=nil and (not scalar(event.next_epoch) or event.next_epoch==s.epoch) then return reject('invalid epoch') end
         for _,g in pairs(s.grants) do revoke(s,g,result,kind) end
         s.grants={}; s.generations={}; s.capacity_tickets={}; s.epoch=event.next_epoch or id(); s.attached=kind~='detach'; result.epoch=s.epoch
+        s.turn=nil; turn_wanted[s]=nil
     else return reject('unknown event') end
     return result
 end
