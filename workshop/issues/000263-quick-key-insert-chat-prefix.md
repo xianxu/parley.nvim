@@ -5,7 +5,7 @@ deps: []
 github_issue:
 created: 2026-09-16
 updated: 2026-09-16
-estimate_hours:
+estimate_hours: 2.8
 started: 2026-09-16T20:14:01-07:00
 ---
 
@@ -56,13 +56,75 @@ cursor:
 
 ## Plan
 
-- [ ] Pick the chord (audit existing `<C-g>` and `<leader>` bindings in the
-  registry) and implement insertion from `config.chat_user_prefix`.
-- [ ] Register the keymap buffer-locally for chat buffers (normal + insert),
-  group as one undo step, handle the already-prefixed case.
-- [ ] Add unit/integration tests for insertion positions, prefix override and
-  mode handling.
-- [ ] Document in help, which-key and atlas.
+Durable design: `workshop/plans/000263-new-question-chord-plan.md`.
+
+Single-pass atomic work — plain checkboxes, no `Mx`: one review boundary, at
+`sdlc close`.
+
+- [ ] Retire `chat_search`, freeing `<C-g>n` (`config.lua:372`,
+  `keybinding_registry.lua:657-666`, `init.lua:2803-2808`).
+- [ ] `lua/parley/new_question.lua` — the pure planner (`plan` +
+  `is_empty_question`), reusing `exchange_clipboard`'s exchange-span and
+  blank-line-seam arithmetic (ARCH-DRY), with its unit spec.
+- [ ] `M.cmd.NewQuestion` + registry entry + `<C-g>n`/`<M-n>` buffer-local
+  keymap for normal and insert mode.
+- [ ] Integration spec against real keymaps: both modes, single undo, the
+  no-duplicate second press, a non-default prefix, and the refusal while a
+  response is streaming.
+- [ ] Generalize the chord-shadowing guard from `<M-…>`-only to every chord
+  plus prefix shadowing (ARCH-PURPOSE — the class the issue names).
+- [ ] Atlas: `ui/keybindings.md`, `chat/lifecycle.md`, `traceability.yaml`.
+  (No which-key integration exists in this repo; the registry is the single
+  source and `<C-g>?` help is generated from it.)
+
+## Estimate
+
+```estimate
+model: estimate-logic-v3.1
+familiarity: 1.0
+item: lua-neovim              design=1.2  impl=0.40
+item: cross-cutting-refactor  design=0.2  impl=0.10
+item: smaller-go-module       design=0.15 impl=0.14
+item: atlas-docs              design=0.1  impl=0.06
+item: milestone-review        design=0.05 impl=0.14
+design-buffer: 0.15
+total: 2.8
+```
+
+*Produced via `brain/data/life/42shots/velocity/estimate-logic-v3.1.md` against
+`baseline-v3.1.md`. Method A only.*
+
+Derivation notes:
+
+- **`lua-neovim`** (v2 design 1–3, impl 0.5–1.5) — the feature proper: the pure
+  planner, the command, the keymap and the integration spec. Design taken at
+  1.2, near the low end: the chord audit and the structural semantics were
+  settled in one session against a registry that is already a single source.
+  Impl 1.0 → **0.40** at v3.1's 40% implementation scale.
+- **`cross-cutting-refactor`** (0.2–1 / 0.2–0.5) — retiring `chat_search`.
+  Low end: measured, the blast radius is exactly three sites and no test, doc
+  or README references it.
+- **`smaller-go-module`** (0–0.3 / 0.2–0.5) — "mirror or extend" is literally
+  what widening the shadowing guard is: the detection loop already exists and
+  gains a second axis. Impl slightly above mid (0.35 → **0.14**) because the
+  plant-a-collision proof is the part that takes the thinking.
+- **`atlas-docs`** (0.05–0.2 / 0.05–0.2) — two atlas sections plus
+  traceability.
+- **`milestone-review`** (0–0.2 / 0.2–0.5) — one boundary, at close. Design
+  0.05: single-pass work needs no review design.
+- **Step 2.5 (library availability):** N/A. No novel stack and nothing external
+  to shim — the work is plugin-internal Lua against APIs already in use.
+- **Step 3 (spec-quality):** the ×0.2 design discount was **not** applied. It
+  credits a spec for design already front-loaded, but `sdlc actual` measures
+  from the claim commit and so counts this session's brainstorm, chord audit
+  and plan authoring as real hours. Discounting design the actual will still
+  charge for would bias the row low and pollute the calibration.
+- **Step 6 (buffer):** +15%, the thorough-plan-doc rate — a 780-line plan that
+  carries the literal module, the registry entry and the command body.
+- **Step 5 (familiarity):** left at 1.0 rather than credited down. The
+  keybinding registry and `exchange_clipboard` are familiar (#262 closed in the
+  same surface yesterday), but the insert-mode undo-grouping question is
+  genuinely unexplored, and that is where impl risk actually sits.
 
 ## Log
 
