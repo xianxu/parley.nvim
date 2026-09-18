@@ -131,3 +131,98 @@ findings:
     detail: |
       tools(s) counts outcomes, but continuation also needs cleanup, so a round stuck on cleanup reads as finished yet never continues. M1 said a stall must be visible, not mysterious; consider a distinct note for waiting on cleanup.
 ```
+
+---
+
+## Re-review — 2026-09-18T10:47:42-07:00 (SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 266 — Serialize transcript mutation: queue generations, insert tool call/result pairs in order |
+| repo | parley.nvim |
+| issue file | workshop/issues/000266-serialize-transcript-mutation-queue-generations-insert-tool-call-result-pairs-in-order.md |
+| boundary | milestone M2 |
+| milestone | M2 |
+| window | f6ebfd8399a5c188b7f0814cae3ad7e8e65c0ece..274f82e890fe714d761abb36da0c31e48477b3c3 |
+| command | sdlc milestone-close --issue 266 --milestone M2 |
+| reviewer | claude |
+| timestamp | 2026-09-18T10:47:42-07:00 |
+| verdict | SHIP |
+
+## Review
+
+```verdict
+verdict: SHIP
+confidence: high
+```
+
+Round 5 fixes the three open Important findings at the level of their class, and each fix has evidence. I checked BR-11 by reverting its fix in a scratch copy of HEAD, `git archive 274f82e8`. With `resources.lua` and `scheduler.lua` put back to `c2207117`, the new end-to-end test `chat_async_tools_spec` "refuses a same-answer retry…" fails ("public async response did not advance"). With the fix it passes.
+
+At HEAD these specs are all green: `tool_resources_spec` (11), `tool_scheduler_spec` (18), `generation_spec` (61), `chat_presentation_spec` (12), `tools_sequence_spec` (9), `chat_async_tools_spec` (9), `generation_turn_spec` (36), `response_tools_spec` (81) and `generation_sequences_spec` (32). `chat_stop_generation_spec` and `response_session_spec` reported 0 failed and 0 errors. luacheck reports 0 warnings and 0 errors on the eight changed modules.
+
+The undo rule now sits on the atlas page, and two new tests drive tool rounds through undo. A grep of atlas, README, `lua/` and the plan finds no leftover superseded wording. Nothing blocks the boundary. One Minor remains open from before: BR-12 needs the operator's acknowledgment, which is due at issue close, not at this milestone. One new Minor is raised below.
+
+**1. Strengths**
+- **`quarantined` reuses `available` instead of copying it.** It takes an `ignore` predicate (`tools/resources.lua:84-111`), so the rule "blocked by nothing but my own unknowns" is one extra call, not a second overlap or capacity check. A cheap O(records) pre-check keeps the pump path light (ARCH-DRY, ARCH-CONSTRAINTS).
+- **The refusal uses the ledger's own transition.** It goes through the ledger's `reject` (queued→rejected) and the existing `settle` (`scheduler.lua:100-107`), so the refused call ends up known, physically done and forgettable. No side path skips the effect ledger (ARCH-ORDER). I traced the nested pump call (`refuse` → `settle` → `pump`) and found no double-handling: `R.pump` has already dropped each refused id from the queue before it is refused.
+- **The unknown-record count stays bounded.** Unknown records count against `per_generation`, and the capacity case is quarantined too. So one answer can hold at most 4 unknown records. Before M2 the pause gave the same bound; the ledger does not grow faster now that answers keep going (ARCH-FUNERAL).
+- **The undo rule is on the page it governs** (`atlas/chat/ownership.md:54-58`). The two new tests drive the events that split a step: an edit while tools run (`generation_turn_spec`), and two generations each running a two-call round with results arriving out of order.
+- **The sequence sweep is strong.** 24 permutations × cancel/detach in `response_tools_spec` drive the real transition function with controlled ordering, and check the invariant ("an in-order prefix; nothing lands after the stop") independently.
+
+**2. Critical findings**
+None.
+
+**3. Important findings**
+None.
+
+**4. Minor findings**
+- **A tool queued behind another answer's unknown effect looks like it is running.** It shows "Running tools: 0 of 1 finished" and holds the write turn indefinitely; the refusal text also names the wrong cause in the capacity case. Details in the findings block.
+- **The model-facing refusal text never says how to reconcile.** It says "stop and reconcile it" but not `:ParleyToolOperations`. Folded into the finding above.
+- **Weak content assertion in the BR-11 end-to-end test.** Its `'outcome is unknown'` check is already satisfied by the first call's own error text. Liveness is still proved by `#held==1` and `id=retry error=true`. Asserting `'Refused without running'` would pin the refusal itself.
+
+**5. Test coverage notes**
+- BR-11 is covered at three levels: the resource reducer (admission, pump, "also blocked by something else waits", capacity), the scheduler (admission path and pump path, with the injected `flush` controlling order), and end to end. The end-to-end test goes red without the fix; I checked.
+- BR-9's tests act as guards for the atlas claims rather than tests of a fix, which is correct here: no behavior changed, the claim was narrowed.
+- The randomized oracle in `tool_resources_spec` never creates unknown records, so it never exercises refusal. That is acceptable because the dedicated cases cover it.
+
+**6. Architectural notes for upcoming work**
+- **ARCH-DRY:** pass. **ARCH-PURE:** pass; resources and the machine stay pure, and the scheduler and presentation are thin layers. **ARCH-MOCK:** pass; stateful fakes sit behind the producer and runner boundaries. **ARCH-SECURE:** pass; the change adds no untrusted input and the refusal text is static. **ARCH-FUNERAL:** pass; refused records are dropped from resources at once and forgotten when their generation closes.
+- **ARCH-PURPOSE:** pass. The BR-11 lesson enumerates what an unknown outcome holds (claims, per-generation, per-document and running capacity), and the fix covers all of it for the same answer. Other answers still wait, as #254 designed; the new Minor covers how that wait is presented.
+- **ARCH-CONSTRAINTS:** pass. `pump()` now runs after every outcome, but the queue is at most 128 and records are bounded, so it stays cheap.
+- **ARCH-ORDER:** pass. One carry-over: `present()` still builds a full machine snapshot before comparing its key on every accepted dispatch, and M2 made the snapshot walk the round's tools. The per-event state copy costs the same order, so I am not raising it, but M3 could key presentation on cheap fields first.
+- **M3's residual sweep should take in `reclaim_tail`'s dead reasons.** `'active child'` and `tail_lost` (`state.lua:281,285`) have no remaining source now that no caller passes `parent=`. So the `reclaim_tail` pause at `generation_runner.lua:442` can only fire for `'overlap'` or `'ownership'`.
+
+**7. Plan revision recommendations**
+- Add `tools/resources.lua` and `tools/scheduler.lua` as *(M2)* "modified" rows in Core concepts. The round-5 revision describes `quarantined`, the `'quarantined'` admission status and the extra `refused` value `M.pump` now returns, but the table omits both modules, so readers of the table cannot see this surface.
+
+```findings
+dispose:
+  - id: BR-9
+    disposition: addressed
+    note: |
+      ownership.md:47-58 moves the tool-round claim under the conditional bullet and states the rule on the page; generation_turn_spec adds an edit-during-round test and a two-generation multi-call-round never-mix test, both green at HEAD.
+  - id: BR-10
+    disposition: addressed
+    note: |
+      tool_use.md:185 and :195-205, architecture.md:46, tool_execution.md:5, serialize.lua:6 and plan Core concepts :83,:86,:113 corrected; grep over atlas, README, lua and plan finds no residual prevents-continuation, slot or begin_round wording.
+  - id: BR-11
+    disposition: addressed
+    note: |
+      resources.lua quarantined refuses own-generation self-blocked requests at admit and pump; scheduler refuses via ledger reject and pumps after every outcome. Scratch revert of both files to c2207117 makes the new chat_async_tools_spec case fail; green with the fix.
+  - id: BR-12
+    disposition: not-addressed
+    note: |
+      Still awaiting operator acknowledgment; correctly deferred to issue close and logged in the issue. Non-blocking at this milestone.
+  - id: BR-13
+    disposition: addressed
+    note: |
+      tools snapshot counts settled apart from finished; tools_message says it is waiting on cleanup once every outcome is in; the present key includes settled. Pinned by chat_presentation_spec and generation_spec.
+findings:
+  - id: new
+    severity: Minor
+    family: stall-visibility
+    title: |
+      A tool queued behind another answer's unknown effect reads "Running tools: 0 of 1 finished" while holding the write turn indefinitely
+    detail: |
+      This is the 2nd finding in family stall-visibility, so the rule is stated rather than just this instance. Rule: every indefinite wait a generation can sit in must be named in presentation with what it waits on and what ends it. Enumeration: turn wait (named, with :ParleyStop), tool running (counted), cleanup wait (named, from BR-13), stale-input pause (named, with ChatResumeResponse), and resource-queued behind another generation's unknown effect (NOT named). In that last case the waiting generation holds the document's write turn, so every later answer shows "Waiting for the answer to line N (running tools)" until someone runs :ParleyToolOperations or stops it. The only hint is one WARN five seconds after the original unknown outcome. Before M2 the originating answer paused visibly; now it completes, and the stall surfaces in a different answer. In the same family, the model-facing refusal (scheduler.lua:103-105) blames "the same resource" even when own unknowns only fill per-generation capacity, and does not name the reconcile command. Fix sketch: pass the resource admission status (queued) through to the tools snapshot, show a note naming the held resource and :ParleyToolOperations, and word the refusal by its actual cause.
+```

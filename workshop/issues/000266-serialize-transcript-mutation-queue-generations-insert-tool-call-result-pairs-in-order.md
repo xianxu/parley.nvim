@@ -258,7 +258,7 @@ Durable plan: `workshop/plans/000266-serialize-transcript-mutation-plan.md`
       - [x] held-output budget message; writer-enumeration verification
       - [x] undo coherence assertion
       - [x] atlas rewrite + `milestone-close`
-- [ ] M2 — ordered `(call, result)` append; removes capacity tickets, the round
+- [x] M2 — ordered `(call, result)` append; removes capacity tickets, the round
       reservation lifecycle, and child grants.
       - [x] tool execution no longer waits on a reservation write: re-assert it
             across generations (two generations' tools run concurrently while
@@ -285,6 +285,8 @@ Durable plan: `workshop/plans/000266-serialize-transcript-mutation-plan.md`
 
 ## Log
 
+
+- 2026-09-18: closed M2 — at 274f82e: lint 0 warnings/0 errors (634 files); unit 213/213 PASS; integration 163/163 PASS (make test-unit / test-integration JOBS=4, run as separate phases so a #267 abort cannot hide integration). Review round 5 fixes: BR-11 same-generation self-quarantine refused with a readable error (resource, scheduler and chat-level tests; chat test fails without the fix), BR-9 undo rule on the atlas page plus two tool-round undo tests, BR-10 claim sweep by wording. Goldens regenerate to key-order churn only. Actual measured by sdlc active-time since the M1 close commit (2.72 h).; review verdict: SHIP
 ### 2026-09-17
 - 2026-09-17: closed M1 — make test JOBS=4: lint 0 warnings/0 errors, 375/376 spec files PASS; document_fold_batches_spec (known 50k-row load flake, issue Log) aborted with no failing assertion and passes alone 5/5. Review round 3: BR-5 undo grouping stated once in atlas/chat/ownership.md derived from Editor:can_join_undo, target defends only "no undo step mixes generations" and points there, mid-write-edit split pinned by test; all 12 stale milestone labels reconciled. sdlc built from ariadne committed HEAD 9ca1d6c (peer working tree mid-edit).; review verdict: FIX-THEN-SHIP
 

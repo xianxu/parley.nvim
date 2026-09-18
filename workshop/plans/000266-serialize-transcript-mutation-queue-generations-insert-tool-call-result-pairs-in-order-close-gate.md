@@ -148,6 +148,40 @@ rounds:
       boundary: M2
       recipe: milestone-review
       blocked: true
+    - "n": 7
+      timestamp: "2026-09-18T10:47:42-07:00"
+      agent: claude
+      dispose:
+        - id: BR-9
+          disposition: addressed
+          note: ownership.md:47-58 moves the tool-round claim under the conditional bullet and states the rule on the page; generation_turn_spec adds an edit-during-round test and a two-generation multi-call-round never-mix test, both green at HEAD.
+          round: 7
+        - id: BR-10
+          disposition: addressed
+          note: tool_use.md:185 and :195-205, architecture.md:46, tool_execution.md:5, serialize.lua:6 and plan Core concepts :83,:86,:113 corrected; grep over atlas, README, lua and plan finds no residual prevents-continuation, slot or begin_round wording.
+          round: 7
+        - id: BR-11
+          disposition: addressed
+          note: resources.lua quarantined refuses own-generation self-blocked requests at admit and pump; scheduler refuses via ledger reject and pumps after every outcome. Scratch revert of both files to c2207117 makes the new chat_async_tools_spec case fail; green with the fix.
+          round: 7
+        - id: BR-12
+          disposition: not-addressed
+          note: Still awaiting operator acknowledgment; correctly deferred to issue close and logged in the issue. Non-blocking at this milestone.
+          round: 7
+        - id: BR-13
+          disposition: addressed
+          note: tools snapshot counts settled apart from finished; tools_message says it is waiting on cleanup once every outcome is in; the present key includes settled. Pinned by chat_presentation_spec and generation_spec.
+          round: 7
+      findings:
+        - id: BR-14
+          severity: Minor
+          title: 'A tool queued behind another answer''s unknown effect reads "Running tools: 0 of 1 finished" while holding the write turn indefinitely'
+          detail: 'This is the 2nd finding in family stall-visibility, so the rule is stated rather than just this instance. Rule: every indefinite wait a generation can sit in must be named in presentation with what it waits on and what ends it. Enumeration: turn wait (named, with :ParleyStop), tool running (counted), cleanup wait (named, from BR-13), stale-input pause (named, with ChatResumeResponse), and resource-queued behind another generation''s unknown effect (NOT named). In that last case the waiting generation holds the document''s write turn, so every later answer shows "Waiting for the answer to line N (running tools)" until someone runs :ParleyToolOperations or stops it. The only hint is one WARN five seconds after the original unknown outcome. Before M2 the originating answer paused visibly; now it completes, and the stall surfaces in a different answer. In the same family, the model-facing refusal (scheduler.lua:103-105) blames "the same resource" even when own unknowns only fill per-generation capacity, and does not name the reconcile command. Fix sketch: pass the resource admission status (queued) through to the tools snapshot, show a note naming the held resource and :ParleyToolOperations, and word the refusal by its actual cause.'
+          family: stall-visibility
+          round: 7
+      boundary: M2
+      recipe: milestone-review
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#266 (boundary-review)
@@ -226,12 +260,24 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-13** [Minor] `stall-visibility` "Running tools: N of N finished" also shows while the round waits on a tool's cleanup or on writes held behind a call that never reports
   tools(s) counts outcomes, but continuation also needs cleanup, so a round stuck on cleanup reads as finished yet never continues. M1 said a stall must be visible, not mysterious; consider a distinct note for waiting on cleanup.
 
+## Round 7 — 2026-09-18T10:47:42-07:00 (claude) — passed
+
+### Disposed
+
+- BR-9 — addressed — ownership.md:47-58 moves the tool-round claim under the conditional bullet and states the rule on the page; generation_turn_spec adds an edit-during-round test and a two-generation multi-call-round never-mix test, both green at HEAD.
+- BR-10 — addressed — tool_use.md:185 and :195-205, architecture.md:46, tool_execution.md:5, serialize.lua:6 and plan Core concepts :83,:86,:113 corrected; grep over atlas, README, lua and plan finds no residual prevents-continuation, slot or begin_round wording.
+- BR-11 — addressed — resources.lua quarantined refuses own-generation self-blocked requests at admit and pump; scheduler refuses via ledger reject and pumps after every outcome. Scratch revert of both files to c2207117 makes the new chat_async_tools_spec case fail; green with the fix.
+- BR-12 — not-addressed — Still awaiting operator acknowledgment; correctly deferred to issue close and logged in the issue. Non-blocking at this milestone.
+- BR-13 — addressed — tools snapshot counts settled apart from finished; tools_message says it is waiting on cleanup once every outcome is in; the present key includes settled. Pinned by chat_presentation_spec and generation_spec.
+
+### Raised
+
+- **BR-14** [Minor] `stall-visibility` A tool queued behind another answer's unknown effect reads "Running tools: 0 of 1 finished" while holding the write turn indefinitely
+  This is the 2nd finding in family stall-visibility, so the rule is stated rather than just this instance. Rule: every indefinite wait a generation can sit in must be named in presentation with what it waits on and what ends it. Enumeration: turn wait (named, with :ParleyStop), tool running (counted), cleanup wait (named, from BR-13), stale-input pause (named, with ChatResumeResponse), and resource-queued behind another generation's unknown effect (NOT named). In that last case the waiting generation holds the document's write turn, so every later answer shows "Waiting for the answer to line N (running tools)" until someone runs :ParleyToolOperations or stops it. The only hint is one WARN five seconds after the original unknown outcome. Before M2 the originating answer paused visibly; now it completes, and the stall surfaces in a different answer. In the same family, the model-facing refusal (scheduler.lua:103-105) blames "the same resource" even when own unknowns only fill per-generation capacity, and does not name the reconcile command. Fix sketch: pass the resource admission status (queued) through to the tools snapshot, show a note naming the held resource and :ParleyToolOperations, and word the refusal by its actual cause.
+
 ## Open findings
 
 - **BR-7** [Minor] `invariant-statement-omits-exception` Plan Target reconciliation and README still state turn/undo grouping without the pause and intervening-edit exceptions
 - **BR-8** [Minor] `table-row-milestone-scope` Plan Task 1.6 Step 4 still uses the milestone numbering from before the merge
-- **BR-9** [Important] `invariant-statement-omits-exception` Undo-grouping bullet "Undo never strands a pair apart from the text" is unconditional and falsified by an edit while tools run
-- **BR-10** [Important] `behavior-change-sweep-by-claim` Atlas still says an unknown outcome prevents continuation, including on the rewritten tool_use.md
-- **BR-11** [Important] `unconfirmed-outcome-permitted-actions` Continuing past an unknown outcome lets a same-path retry queue forever behind the unknown call's held claims
 - **BR-12** [Minor] `target-narrowing-unratified` Target revision now accepts that Stop drops tool pairs whose tools already ran; logged as still to raise with the operator
-- **BR-13** [Minor] `stall-visibility` "Running tools: N of N finished" also shows while the round waits on a tool's cleanup or on writes held behind a call that never reports
+- **BR-14** [Minor] `stall-visibility` A tool queued behind another answer's unknown effect reads "Running tools: 0 of 1 finished" while holding the write turn indefinitely
