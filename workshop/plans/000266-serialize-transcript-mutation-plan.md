@@ -776,8 +776,8 @@ These exist solely to disambiguate excluded seams, but they thread through the s
 ### Task 4.4: close
 
 - [x] Final atlas sweep — no page may still describe reserved slots, child grants or capacity tickets.
-- [ ] `make test` → exit 0, full output captured as close evidence (lint runs first; `workshop/lessons.md:792` records a close where green specs masked a red lint).
-- [ ] `sdlc close --issue 266 --verified '<full make test output summary>'`
+- [x] `make test` → exit 0, full output captured as close evidence (lint runs first; `workshop/lessons.md:792` records a close where green specs masked a red lint).
+- [x] `sdlc close --issue 266 --verified '<full make test output summary>'`
 
 ---
 
