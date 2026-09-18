@@ -299,8 +299,7 @@ Durable plan: `workshop/plans/000266-serialize-transcript-mutation-plan.md`
       - [x] half-open seam flags removed
       - [x] a grant is one range: its slot list collapsed into it
       - [x] removal guard (Task 4.3's test step) in `tests/arch/document_ownership_spec.lua`
-      - [x] atlas + manual-checklist sweep
-      - [ ] `milestone-close`
+      - [x] atlas + manual-checklist sweep; `milestone-close`
 
 ## Log
 
