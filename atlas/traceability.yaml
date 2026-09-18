@@ -863,6 +863,7 @@ atlas:
       - lua/parley/tools/init.lua
       - lua/parley/tools/dispatcher.lua
       - lua/parley/tools/serialize.lua
+      - lua/parley/tools/sequence.lua
       - lua/parley/fence.lua
       - lua/parley/tools/types.lua
       - lua/parley/tools/builtin/argv.lua
@@ -899,6 +900,7 @@ atlas:
       - tests/unit/tools_registry_spec.lua
       - tests/unit/tools_dispatcher_spec.lua
       - tests/unit/tools_serialize_spec.lua
+      - tests/unit/tools_sequence_spec.lua
       - tests/unit/tools_types_spec.lua
       - tests/unit/tools_builtin_read_file_spec.lua
       - tests/unit/tools_builtin_registered_spec.lua
