@@ -277,4 +277,22 @@ describe('finite replacement authority',function()
         State.transition(d,{kind='request_turn',generation=a})
         assert.has_no.errors(function()State.snapshot(d)end)
     end)
+
+    -- M1 review I5: one O(1) predicate for every generated write entry point.
+    -- 'waiting' means "you own this and could write, just not now"; a writer that
+    -- does not own the grant must fall through to the ownership checks instead.
+    it('waits for the turn only when the writer owns the grant and another holds the turn', function()
+        local d=State.new()
+        local a,b=generation(d),generation(d)
+        local ga=acquire(d,a,{proof('a',10,20)}).grants[1]
+        local gb=acquire(d,b,{proof('b',30,40)}).grants[1]
+        assert.is_false(State.waits_for_turn(d,b,gb),'nobody holds the turn')
+        State.transition(d,{kind='request_turn',generation=a})
+        assert.is_false(State.waits_for_turn(d,a,ga),'the holder never waits')
+        assert.is_true(State.waits_for_turn(d,b,gb),'an owner behind the holder waits')
+        assert.is_false(State.waits_for_turn(d,b,ga),'a non-owner is an ownership failure, not a wait')
+        assert.is_false(State.waits_for_turn(d,b,'missing'))
+        assert.is_false(State.waits_for_turn(d,nil,gb),'a human write is never subject to the turn')
+    end)
 end)
+

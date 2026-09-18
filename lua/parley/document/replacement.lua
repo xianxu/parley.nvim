@@ -142,10 +142,7 @@ function M.step(s,token,proof)
     if not g or g.status=='revoked' then stop(c,'stale');return result('stale') end
     -- #266 M1: a continuation must still hold the turn. Park without stop() — the
     -- cursor is resumable, and stopping it here would be permanent.
-    local turn=State.turn(s.authority)
-    if c.generation~=nil and turn~=nil and g.generation==c.generation and turn~=c.generation then
-        return result('waiting')
-    end
+    if State.waits_for_turn(s.authority,c.generation,c.grant) then return result('waiting') end
     if c.paused then
         local current=proof(g)
         if not current or not current.confirmed then return result('suspended') end

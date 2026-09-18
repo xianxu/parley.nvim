@@ -81,6 +81,28 @@ function M.snapshot(doc) return copy(state(doc)) end
 --- a full M.snapshot on that path would double an already-expensive copy.
 function M.turn(doc) return state(doc).turn end
 
+--- True when `generation` owns `grant` but another generation holds the write
+--- turn (#266): the writer could write, just not now, so its caller parks with
+--- 'waiting'. A writer that does not own the grant gets false and falls through
+--- to the ownership checks — 'waiting' means retry, so it must never stand in for
+--- a write that can never succeed. O(1): every generated write chunk asks.
+---
+--- The serialization invariant is enforced JOINTLY, not by this predicate alone:
+---   (a) every generated writer requests the turn before it writes (the
+---       machine's `start`/`resume_validated`, and response_topic around its one
+---       write) — tests/unit/generation_spec.lua pins it;
+---   (b) this refuses any owner that is not the holder.
+--- Given (a), the turn is held whenever a generation is live, so a second writer
+--- is always refused, and an unheld turn means nothing is writing. Refusing every
+--- writer in that state (fail-closed) bought nothing and broke ~96 document-layer
+--- tests that write without caring about turns.
+function M.waits_for_turn(doc,generation,grant)
+    local s=state(doc)
+    if generation==nil or s.turn==nil or s.turn==generation then return false end
+    local g=s.grants[grant]
+    return g~=nil and g.generation==generation
+end
+
 function M.resolve(doc,request,current)
     local s=state(doc)
     if type(request)~='table' or not s.attached or request.epoch~=s.epoch then return reject('epoch') end
