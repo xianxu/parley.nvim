@@ -260,24 +260,24 @@ Durable plan: `workshop/plans/000266-serialize-transcript-mutation-plan.md`
       - [x] atlas rewrite + `milestone-close`
 - [ ] M2 — ordered `(call, result)` append; removes capacity tickets, the round
       reservation lifecycle, and child grants.
-      - [ ] tool execution no longer waits on a reservation write: re-assert it
+      - [x] tool execution no longer waits on a reservation write: re-assert it
             across generations (two generations' tools run concurrently while
             their writes stay serialized), and restore the cross-generation cases
             M1 restated — `chat_stop_generation_spec` "keeps an earlier target
             independent…" (b as a concurrent transport) and `chat_async_tools_spec`
             "scopes Stop…" (disjoint path in a second generation)
-      - [ ] revert `atlas/providers/tool_execution.md`'s "first waits for the
+      - [x] revert `atlas/providers/tool_execution.md`'s "first waits for the
             write turn" sentence once `begin_round` writes nothing
-      - [ ] decide undo grouping for appended `(call, result)` pairs — sharing the
+      - [x] decide undo grouping for appended `(call, result)` pairs — sharing the
             answer's generation and grant, they join its undo step unless broken
             deliberately — and record it in `atlas/chat/ownership.md` "Undo
             grouping" only *(decided 2026-09-18: join the answer)*
-      - [ ] `ToolSequence` pure entity; the machine emits ordered `insert_tool`
+      - [x] `ToolSequence` pure entity; the machine emits ordered `insert_tool`
             effects; reservation lifecycle, child grants and `cancel_child` removed
-      - [ ] a failed tool call writes an error result and the round continues —
+      - [x] a failed tool call writes an error result and the round continues —
             no pause (operator, 2026-09-18; supersedes Task 3.3's `⏳:` marker)
-      - [ ] capacity tickets removed from the document layer
-      - [ ] tool progress shown in presentation while pairs are held
+      - [x] capacity tickets removed from the document layer
+      - [x] tool progress shown in presentation while pairs are held
       - [ ] goldens/e2e unchanged in message shape; atlas `tool_use.md` rewritten;
             `milestone-close`
 - [ ] M3 — residual exclusion sweep (`exclude`, parent-slot carving, the
@@ -809,3 +809,50 @@ not touched. (By then it compiled again, still mid-edit.)
 - **The machine sequences insertion, not the adapter** — only the machine sees
   the staged pre-round text, the turn, the gap and stop. Rationale and delta in
   the plan's `## Revisions` (2026-09-18).
+
+### 2026-09-18 — M2 landed: ordered append, reservations removed, failed calls continue
+
+Commits: `709b5fc8` ToolSequence · `ab76e5e9` ordered append (machine, runner,
+adapter, session, progress, restored cross-generation cases) · `7cba532b`
+capacity tickets · `ce7fbddf` lint · `ab5247f2` atlas + target.
+
+**What `document_capacity_spec` was defending, deleted with the tickets:** a
+tool round reserved its N child-grant slots *before yielding*, so another
+generation could not spend the document's 16-grant budget between the
+placeholder write and the asynchronous child-grant acquisition. Ordered append
+has no child grants and holds nothing across a yield; `acquire` still refuses
+past 16 live grants.
+
+**Tests removed with the contract they pinned** (not erosion): the reservation
+tests in `generation_spec` (`round_reserved` ordering, `cancel_child`, child-slot
+revocation, cancelled-reservation acknowledgement) and `generation_sequences_spec`
+("cancels a live reservation by handle…"); `response_tools_spec` "refuses
+insufficient capacity…" and "cancels only the edited child…". Each has a
+successor asserting the new contract — e.g. an edit inside a running round now
+revokes the whole answer, since its blocks have no grants of their own.
+
+**Two harness findings worth keeping:**
+
+1. **"The tool started" no longer implies "the document is repaired."** Before
+   M2 a tool could not start until its reservation was written *and confirmed*,
+   so tests that pressed Stop right after a tool started got a settled index for
+   free. Now a tool starts before any write, and `stop_at_cursor` falls back to
+   the picker when the exchange under the cursor is not `ready` — which aborts a
+   headless run with no summary. `chat_async_tools_spec` gained a `stop(question)`
+   helper that waits for an idle repair first.
+2. **A generation must not capture its input while an exchange above it is still
+   being written.** An unknown outcome is now written the moment it arrives, so a
+   question submitted right after it captured the answer above as it was *before*
+   the error block, went stale, and paused at continuation. The restored
+   cross-generation case waits for that block, and places its disjoint generation
+   *above* the conflicting one so neither's writes touch the other's input.
+
+**A consequence to raise with the operator, recorded in the target's revision:**
+execution now precedes the record. A tool whose pair is held — behind an earlier
+call still running, or behind another generation's turn — has already run, and
+Stop drops pairs not yet written. The transcript never claims an effect that did
+not happen, but it can omit one that did.
+
+**Flake, not this change:** `tool_resources_spec` aborted under `make test JOBS=4`
+with no failing assertion; module and spec are identical to `main`; passes 3/3
+alone. Same class as the `document_fold_batches_spec` abort recorded above.

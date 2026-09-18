@@ -578,38 +578,38 @@ waiting, `:88-115` the write steps, `:145-149` subscriber);
 - Test: `tests/unit/tools_sequence_spec.lua`
 - Modify: `atlas/traceability.yaml` — route under `providers/tool_use`
 
-- [ ] **Step 1: Route the spec.**
-- [ ] **Step 2: Failing test.** Signatures: `Seq.new(calls) -> seq`, `Seq.next(seq) -> {kind='call'|'result', index=n} | nil`, `Seq.outcome(seq,index,value) -> seq`, `Seq.written(seq,item) -> seq`, `Seq.complete(seq) -> boolean`; all pure and immutable (each returns a new record). Cases: the first call is offered before anything arrives; a later outcome cannot skip ahead while an earlier result is outstanding; the round drains in declared order once the earlier outcome lands; an unresolved outcome is writable evidence, not a stall.
-- [ ] **Step 3: Run, fail.** `make test-spec SPEC=providers/tool_use` → `provides the module` false.
-- [ ] **Step 4: Implement** as a pure immutable record.
-- [ ] **Step 5: Green. Commit** — `#266 M2: add the pure tool insertion sequence`
+- [x] **Step 1: Route the spec.**
+- [x] **Step 2: Failing test.** *(As built: `Seq.new(count)` — the machine has the count, not the calls; `Seq.outcome(seq,index)` takes no value, since any outcome is writable; `Seq.final(seq,index)` added for "an outcome is final once written".)* Signatures: `Seq.new(calls) -> seq`, `Seq.next(seq) -> {kind='call'|'result', index=n} | nil`, `Seq.outcome(seq,index,value) -> seq`, `Seq.written(seq,item) -> seq`, `Seq.complete(seq) -> boolean`; all pure and immutable (each returns a new record). Cases: the first call is offered before anything arrives; a later outcome cannot skip ahead while an earlier result is outstanding; the round drains in declared order once the earlier outcome lands; an unresolved outcome is writable evidence, not a stall.
+- [x] **Step 3: Run, fail.** `make test-spec SPEC=providers/tool_use` → `provides the module` false.
+- [x] **Step 4: Implement** as a pure immutable record.
+- [x] **Step 5: Green. Commit** — `#266 M2: add the pure tool insertion sequence`
 
 ### Task 3.2a: remove capacity tickets from the document layer
 
 **Files:** `lua/parley/document/state.lua:170-180,199-212,253-256`; `lua/parley/document/init.lua:312-319`
 **Delete:** `tests/unit/document_capacity_spec.lua` **and** its entry at `atlas/traceability.yaml:325` — `single_source_sweeps_spec.lua:723` fails on a named path that no longer exists.
 
-- [ ] Confirm no callers remain: `grep -rn "reserve_capacity\|release_capacity" lua/ tests/`. Record in `## Log` which invariant `document_capacity_spec.lua` was defending, so a later reader can tell deliberate removal from erosion.
-- [ ] `make test` → exit 0. Commit `#266 M2: remove capacity tickets`.
+- [x] Confirm no callers remain: `grep -rn "reserve_capacity\|release_capacity" lua/ tests/`. Record in `## Log` which invariant `document_capacity_spec.lua` was defending, so a later reader can tell deliberate removal from erosion.
+- [x] `make test` → exit 0. Commit `#266 M2: remove capacity tickets`. *(Recorded in the issue Log: the tickets held a round's child-grant slots across the yield between the placeholder write and child-grant acquisition.)*
 
 ### Task 3.2b: remove the round-reservation lifecycle from the machine and runner
 
 **Files:** `lua/parley/generation.lua:131-134` (`reserve_round` emission), `:289-316` (`round_reservation_failed`/`round_reserved`), `:54-72` (`child_by_grant`/`revoke_child`), the child branch of `writable` `:32-39`, `write_result` `:234-249`; `lua/parley/generation_runner.lua:98` (**the `effect.type~='reserve_round'` liveness exemption in `mutation` — silently breaks if the effect is renamed**), `:329-354`, `:382-389`, `:404-434`; `lua/parley/response_session.lua:174`
 **Test:** `tests/unit/generation_spec.lua` — the reservation tests at `:155-176`, `:292-304`, `:366-371` are removed with the contract they pin.
 
-- [ ] Red/green per removal. `make test-spec SPEC=chat/lifecycle` between each.
-- [ ] Commit `#266 M2: remove round reservation from the generation lifecycle`.
+- [x] Red/green per removal. *(Landed as one change with Task 3.2c, as the Boundary correction above predicted — the machine's tests went red on `insert_tool` first.)*
+- [x] Commit — folded into `#266 M2: append tool call and result pairs in declared order`.
 
 ### Task 3.2c: the ordered-append pump
 
 **Files:** `lua/parley/response_tools.lua` — rewrite `:137-182` as `begin_round`; delete `:21-26`, `:36-68`, `:154-161`, `:183-187`; rewrite `tool_outcome` `:77-102` to append
 **Test:** `tests/integration/response_tools_spec.lua`
 
-- [ ] **Step 1: Invert the pinning test** at `:141` → `'writes each call block immediately before its own result'`: assert `ca<ra and ra<cb and cb<rb`, no `(Tool result pending)` anywhere, both producers started (execution stays concurrent). Within one round insertion is monotonic at the tail, so **document order is guaranteed here** — assert it, since Task 1.9 deliberately does not claim it across generations.
-- [ ] **Step 2: Add a bounded-step variant.** `f.drain()` runs to quiescence (`:37-42`) and cannot exercise "call 2's block written while result 1's multi-chunk write is mid-flight" (4096-byte slices, `generation_runner.lua:265`). Add `step(n)`.
-- [ ] **Step 3: Run, fail.** `make test-spec SPEC=providers/tool_use`
-- [ ] **Step 4: Implement.** `begin_round` freezes `s.rounds[ctx.round]`, builds a `ToolSequence`, writes nothing, takes no ticket. A pump appends `Serialize.render_call` / `render_result` at the parent grant tail via `ctx.append`, one item per `adapter.step()`, driven by `Seq.next`. **Collector for the frozen round record (ARCH-FUNERAL):** `s.rounds[ctx.round]` is cleared twice over: per-round on the normal path at `response_tools.lua:237`, and wholesale by `adapter.close()` (`:241-242`, `s.rounds={}`), which production reaches via `response_session.lua:46` (`if tools then tools.close() end`) — **not** via the `terminal` hook, which is `finish(result,false)` at `:189`; only the test harness wires `terminal=adapter.close` — `retire_reservation` was only ever the collector for the *reservation*, not the round record. Assert it in Task 3.2c's test rather than assuming.
-- [ ] **Step 5: Green. Commit** — `#266 M2: append tool call and result pairs in declared order`
+- [x] **Step 1: Invert the pinning test** at `:141` → `'writes each call block immediately before its own result'`: assert `ca<ra and ra<cb and cb<rb`, no `(Tool result pending)` anywhere, both producers started (execution stays concurrent). Within one round insertion is monotonic at the tail, so **document order is guaranteed here** — assert it, since Task 1.9 deliberately does not claim it across generations.
+- [x] **Step 2: Add a bounded-step variant.** `f.drain()` runs to quiescence (`:37-42`) and cannot exercise "call 2's block written while result 1's multi-chunk write is mid-flight" (4096-byte slices, `generation_runner.lua:265`). Add `step(n)`.
+- [x] **Step 3: Run, fail.** `make test-spec SPEC=providers/tool_use`
+- [x] **Step 4: Implement.** *(Superseded mechanism — see `## Revisions` 2026-09-18: the machine sequences and emits `insert_tool`; no `begin_round`, no adapter pump.)* `begin_round` freezes `s.rounds[ctx.round]`, builds a `ToolSequence`, writes nothing, takes no ticket. A pump appends `Serialize.render_call` / `render_result` at the parent grant tail via `ctx.append`, one item per `adapter.step()`, driven by `Seq.next`. **Collector for the frozen round record (ARCH-FUNERAL):** `s.rounds[ctx.round]` is cleared twice over: per-round on the normal path at `response_tools.lua:237`, and wholesale by `adapter.close()` (`:241-242`, `s.rounds={}`), which production reaches via `response_session.lua:46` (`if tools then tools.close() end`) — **not** via the `terminal` hook, which is `finish(result,false)` at `:189`; only the test harness wires `terminal=adapter.close` — `retire_reservation` was only ever the collector for the *reservation*, not the round record. Assert it in Task 3.2c's test rather than assuming.
+- [x] **Step 5: Green. Commit** — `#266 M2: append tool call and result pairs in declared order`
 
 ### Task 3.3: unresolved outcomes become transcript text
 
@@ -635,12 +635,19 @@ Both file and wire then agree the call produced no tool result; the `⏳:` line 
 
 Constraint: the marker must not parse as a tool block. `chat_parser.lua:833-852` opens a block on `🔧:`/`📎:` at depth 0, so any other prefix is safe — verify with a parse assertion rather than by inspection.
 
-- [ ] **Step 1:** Sweep the interleavings of `{outcome₁, outcome₂, cancel, resolve}` — **24 permutations**, not the 8 at `response_tools_spec.lua:261` (a different 4-tuple). If a subset is used, state which and why.
-- [ ] **Step 2: Run, fail.** `make test-spec SPEC=providers/tool_use`
-- [ ] **Step 3:** Implement the unresolved rendering.
-- [ ] **Step 4: Green**, plus `make test-spec SPEC=chat/exchange_model` — assert the unresolved marker does **not** become a `tool_result` block and that the synthesized dangling text appears instead.
-- [ ] **Step 5: Batch-facing check (Done-when).** `batch.lua:91-94` latches `s.unknown` and `:99` refuses resume permanently on this outcome. Assert a batch survives an unresolved tool call now that it is recorded in the transcript. Run: `make test-spec SPEC=chat/batch`.
-- [ ] **Step 6: Commit** — `#266 M2: record an unresolved tool outcome in the transcript`
+- [x] **Step 1:** *(Done as a 24-permutation × {cancel, detach} sweep of {outcome₁, outcome₂, stop, cleanup}, asserting an in-order prefix and nothing written after the stop.)* Sweep the interleavings of `{outcome₁, outcome₂, cancel, resolve}` — **24 permutations**, not the 8 at `response_tools_spec.lua:261` (a different 4-tuple). If a subset is used, state which and why.
+- [x] ~~**Step 2–4:** the `⏳:` unresolved rendering and its parse assertions.~~
+  **Superseded by operator decision (2026-09-18, see `## Revisions`):** a failed
+  call is written as an ordinary `📎: … error=true` result and the round
+  continues, so there is no marker and no new grammar. Covered instead by
+  `generation_spec` ("writes a … outcome as its result and continues without
+  pausing", ×3 outcomes) and `response_tools_spec` ("writes a … outcome as an
+  error result and continues the round", asserting the continuation carries the
+  same content the transcript shows).
+- [x] ~~**Step 5: Batch-facing check.**~~ Premise withdrawn: `batch.lua`'s
+  `s.unknown` latches a *generation* outcome that is missing, not a tool's. With no
+  pause, a leg whose tool failed simply continues; `batch_lifecycle_spec` stays green.
+- [x] **Step 6: Commit** — folded into `#266 M2: append tool call and result pairs in declared order`.
 
 ### Task 3.4: keep concurrency visible
 
@@ -651,21 +658,21 @@ There is no tool → pending edge today. Add one so both tools read as in flight
 
 **Correction to draft 1:** the progress line is *not* torn down by these writes — `response_session.lua:181` calls `s.pending:written` only for `receipt.kind=='output'`, and manual appends are `'append'`/`'replace'` (`generation_runner.lua:250`). No mitigation needed.
 
-- [ ] **Step 1:** Failing test — two tools running, one written, assert both appear in flight.
-- [ ] **Step 2: Run, fail.** `make test-spec SPEC=chat/response_progress`
-- [ ] **Step 3:** Add the `session:progress{tool=…}` edge (`chat_pending.lua:160-165`; `chat_presentation.lua:58` already accepts `event.tool`).
-- [ ] **Step 4: Green. Step 5: Commit** — `#266 M2: show concurrent tool progress in presentation`
+- [x] **Step 1:** Failing test *(in `response_session_spec`, which drives the real pending extmark)* — two tools running, one written, assert both appear in flight.
+- [x] **Step 2: Run, fail.** `make test-spec SPEC=chat/response_progress`
+- [x] **Step 3:** *(As built: the machine snapshot carries `tools={total,finished}`, the runner re-presents when it changes, and the session renders `chat_presentation.tools_message` — a waiting note still takes precedence.)* Add the `session:progress{tool=…}` edge (`chat_pending.lua:160-165`; `chat_presentation.lua:58` already accepts `event.tool`).
+- [x] **Step 4: Green. Step 5: Commit** — folded into the ordered-append commit.
 ### Task 3.5: end-to-end and wire shape
 
 **Precondition: a clean working tree.** `scripts/refresh_goldens.lua` and 11 golden payloads are currently modified from `f1818ee1` (#218). Resolve that before this task or a real regression will be indistinguishable from pre-existing churn.
 
-- [ ] `chat_async_tools_spec.lua:123` and `openai_tool_loop_spec.lua:167` should pass unchanged — both already assert declaration order on real buffer text.
-- [ ] Regenerate goldens. Expect **no message-shape change**: `response_tools.lua:224-234` batches the live round regardless of buffer layout, and `tests/fixtures/transcripts/two-round-tool-use.md:11-26` is already interleaved with `build_messages_spec.lua:1189-1192` pinning the four-message shape. Any diff beyond key-order churn is a red flag.
-- [ ] Commit.
+- [x] `chat_async_tools_spec.lua:123` and `openai_tool_loop_spec.lua:167` should pass unchanged *(both do; `chat_async_tools_spec`'s cross-generation case was restored instead — see the issue Log)* — both already assert declaration order on real buffer text.
+- [x] Regenerate goldens. *(Regenerated under the sandboxed test env: all 11 payloads decode identical to HEAD with sorted keys — key-order churn only, so none is committed.)* Expect **no message-shape change**: `response_tools.lua:224-234` batches the live round regardless of buffer layout, and `tests/fixtures/transcripts/two-round-tool-use.md:11-26` is already interleaved with `build_messages_spec.lua:1189-1192` pinning the four-message shape. Any diff beyond key-order churn is a red flag.
+- [x] Commit — nothing to commit; see above.
 
 ### Task 3.6: atlas + milestone close
 
-- [ ] Rewrite `atlas/providers/tool_use.md` (ordered child slots and reserved result slots are gone); record the accepted four-message resubmit shape.
+- [x] Rewrite `atlas/providers/tool_use.md` (ordered child slots and reserved result slots are gone); record the accepted four-message resubmit shape.
 - [ ] `make test` → exit 0. `sdlc milestone-close --issue 266 --milestone M2`
 
 ---

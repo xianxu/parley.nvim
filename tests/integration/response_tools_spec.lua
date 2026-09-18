@@ -163,6 +163,7 @@ describe('production concurrent tool round composition',function()
 
     it('writes each call block immediately before its own result',function()
         local f=setup();f.round(calls)
+        local round=Runner.snapshot(f.runner).round
         assert.equals(2,#f.producer.started,'execution stays concurrent')
         local first,second=unpack(f.producer.started)
         second.events.outcome('known',{content='second'});second.events.resolved();f.drain()
@@ -173,6 +174,12 @@ describe('production concurrent tool round composition',function()
         assert.truthy(text(f):find('\ntext\n\n🔧: read_file id=a',1,true),'a blank line after the answer text')
         assert.truthy(text(f):find('```\n\n📎: read_file id=a',1,true),'a blank line between blocks')
         assert.equals(2,#f.requests)
+        -- ARCH-FUNERAL: continuing the round collects its frozen record, so a
+        -- block can no longer be rendered from it.
+        assert.has_error(function()
+            f.adapter.insert_tool({round=round,index=1,kind='call',call_id='a',
+                epoch=D.snapshot(f.doc).epoch,generation=Runner.snapshot(f.runner).generation},function()end)
+        end,'missing frozen tool response')
     end)
 
     -- Task 3.2c Step 2: one result larger than a 4 KiB slice is written over
