@@ -41,7 +41,10 @@ describe("grep tool", function()
     it("defaults missing path to cwd", function()
         local r = handler({ pattern = "Architecture" })
         assert.is_false(r.is_error)
-        assert.falsy(r.content:match("missing"))
+        -- Match the handler's own error text, not the bare word: this searches
+        -- the whole repo, so any prose line with "Architecture" and "missing"
+        -- (a plan, an issue) would otherwise fail it.
+        assert.falsy(r.content:match("missing or invalid required field"))
     end)
 
     it("rejects shell metacharacters in flags", function()
