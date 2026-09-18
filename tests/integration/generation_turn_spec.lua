@@ -150,3 +150,132 @@ describe('write turn enforcement',function()
         assert.is_not_nil(table.concat(fake.lines,'\n'):find('typed ',1,true))
     end)
 end)
+
+-- #266 Task 1.6: the turn matrix on real runners. Every release row must hand the
+-- turn to the waiter, whatever order the two runners happen to be stepped in.
+-- Pause rows (unknown outcome, revoked child, stale continuation) need a tool
+-- round; they are pinned in generation_spec and end to end in
+-- chat_async_tools_spec / chat_stop_generation_spec. A transient suspension is
+-- deliberately NOT a release row (operator decision) — generation_spec pins that.
+local Runner=require('parley.generation_runner')
+local FakeRunner=require('tests.helpers.fake_generation_runner')
+describe('write turn matrix',function()
+    local runners,fakes={},{}
+    after_each(function()
+        -- A stopped runner retires only once its fake acknowledges cancellation;
+        -- without this, runners leak toward the 16-runner process limit.
+        for _,r in ipairs(runners) do pcall(Runner.cancel,r) end
+        for _=1,3 do
+            for _,fake in ipairs(fakes) do
+                for _,c in ipairs(fake.cancellations) do if not c.done then c.done=true;pcall(c.resolved) end end
+            end
+            for _,r in ipairs(runners) do pcall(Runner.drain,r,100) end
+        end
+        for _,doc in ipairs(docs) do pcall(D.detach,doc) end
+        docs,runners,fakes={},{},{}
+    end)
+    local function pair(opts)
+        serial=serial+1
+        local editor=Fake.new({'💬: q','draft','🤖: first','','💬: q2','🤖: second',''})
+        local doc=D.attach(serial,{driver=editor.driver,schedule=opts and opts.schedule or false});docs[#docs+1]=doc
+        assert.equals('idle',D.drain(doc,1000).status)
+        local function start(row,fake)
+            local marker=D.query(doc,row,row+1)[1];local body=D.query(doc,row+1,row+2)[1]
+            local r=assert(Runner.start(doc,{entity=marker.handle,first=marker.start_byte,last=body.end_byte-1,
+                input={message='frozen'},dependencies={{first=0,last=4}},capabilities={'read'},
+                schedule=opts and opts.schedule or false},fake.adapters))
+            runners[#runners+1]=r
+            if not (opts and opts.schedule) then Runner.drain(r,100) end
+            return r
+        end
+        local fa,fb=FakeRunner.new(),FakeRunner.new()
+        fakes[#fakes+1]=fa;fakes[#fakes+1]=fb
+        if opts and opts.changed then fa.adapters.changed=opts.changed.a;fb.adapters.changed=opts.changed.b end
+        local a=start(2,fa);local b=start(5,fb)
+        return doc,editor,{a=a,b=b},{a=fa,b=fb}
+    end
+    local schedules={{'a','a','b','b'},{'a','b','a','b'},{'b','a','b','a'},{'b','b','a','a'}}
+    local function pump(r,schedule)
+        for _=1,60 do for _,name in ipairs(schedule) do Runner.drain(r[name],3) end end
+    end
+    local function text(editor)return table.concat(editor.lines,'\n')end
+
+    for _,schedule in ipairs(schedules) do
+        local order=table.concat(schedule)
+        it('terminal hands the turn to the waiter, which then writes everything it held ('..order..')',function()
+            local doc,editor,r,f=pair()
+            f.a:prepare();f.b:prepare();pump(r,schedule)
+            assert.equals(Runner.snapshot(r.a).generation,D.turn(doc),'the first admitted holds the turn')
+            f.b:output(1,'beta');f.b:complete(1)
+            f.a:output(1,'alpha');pump(r,schedule)
+            assert.is_nil(text(editor):find('beta',1,true),'the waiter writes nothing while the holder lives')
+            assert.equals('draining',Runner.snapshot(r.b).phase,'complete but not yet written')
+            f.a:complete(1);pump(r,schedule)
+            assert.equals('success',Runner.snapshot(r.a).outcome)
+            assert.equals('success',Runner.snapshot(r.b).outcome)
+            assert.truthy(text(editor):find('alpha',1,true));assert.truthy(text(editor):find('beta',1,true))
+            assert.is_nil(D.turn(doc),'nobody holds a turn nobody wants')
+        end)
+        it('stop hands the turn over before the stopped generation retires ('..order..')',function()
+            local doc,editor,r,f=pair()
+            f.a:prepare();f.b:prepare();pump(r,schedule)
+            f.b:output(1,'beta');f.b:complete(1);pump(r,schedule)
+            Runner.cancel(r.a);pump(r,schedule)
+            assert.equals('stopping',Runner.snapshot(r.a).phase,'its request is still owned')
+            assert.equals('success',Runner.snapshot(r.b).outcome,'the waiter finished while the stopped one had not')
+            assert.is_nil(D.turn(doc))
+            assert.truthy(text(editor):find('beta',1,true))
+        end)
+        for _,event in ipairs({'detach','reload'}) do
+            it(event..' clears the turn and stops both generations ('..order..')',function()
+                local doc,editor,r,f=pair()
+                f.a:prepare();f.b:prepare();pump(r,schedule)
+                f.b:output(1,'beta');pump(r,schedule)
+                if event=='detach' then D.detach(doc) else editor:reload({'💬: replacement'}) end
+                pump(r,schedule)
+                for _,name in ipairs({'a','b'}) do
+                    local phase=Runner.snapshot(r[name]).phase
+                    assert.is_true(phase=='stopping' or phase=='terminal',name..' '..phase)
+                end
+                if event=='reload' then assert.is_nil(D.turn(doc)) end
+                assert.is_nil(text(editor):find('beta',1,true))
+            end)
+        end
+    end
+
+    -- Task 1.6 Step 3b. Only a self-scheduling runner can show a missing wake:
+    -- Runner.drain calls sync on every step, so a hand-pumped harness would wake
+    -- the waiter whether or not anyone notified it.
+    it('wakes a queued generation without hand-stepping when the holder finishes',function()
+        local _,editor,r,f=pair({schedule=true})
+        assert.is_true(vim.wait(2000,function()return #f.a.preparations==1 and #f.b.preparations==1 end,5))
+        f.a:prepare();f.b:prepare()
+        assert.is_true(vim.wait(2000,function()return #f.a.requests==1 and #f.b.requests==1 end,5),
+            'both requests start at once')
+        f.b:output(1,'beta');f.b:complete(1)
+        assert.is_true(vim.wait(2000,function()return Runner.snapshot(r.b).phase=='draining' end,5))
+        f.a:output(1,'alpha');f.a:complete(1)
+        assert.is_true(vim.wait(2000,function()return Runner.snapshot(r.b).phase=='terminal' end,5),
+            'the waiter must wake on its own once the holder retires')
+        assert.equals('success',Runner.snapshot(r.b).outcome)
+        assert.truthy(table.concat(editor.lines,'\n'):find('beta',1,true))
+    end)
+
+    -- Task 1.6 Step 4. A held generation reports which answer holds the turn and
+    -- what it is doing; presentation renders it (response_session_spec).
+    it('reports the holder and its activity to a waiting generation, and clears it on handover',function()
+        local seen={a={},b={}}
+        local changed={a=function(v)seen.a[#seen.a+1]=v end,b=function(v)seen.b[#seen.b+1]=v end}
+        local doc,_,r,f=pair({changed=changed})
+        f.a:prepare();f.b:prepare();pump(r,schedules[1])
+        local last=seen.b[#seen.b]
+        assert.is_not_nil(last and last.blocked,'the waiter must learn it is blocked')
+        assert.equals(Runner.snapshot(r.a).generation,last.blocked.generation)
+        assert.equals(Runner.snapshot(r.a).exchange,last.blocked.entity)
+        assert.equals('requesting',last.blocked.phase)
+        for _,v in ipairs(seen.a) do assert.is_nil(v.blocked,'the holder is never blocked') end
+        f.a:output(1,'alpha');f.a:complete(1);pump(r,schedules[1])
+        assert.is_nil(seen.b[#seen.b].blocked,'the note must clear once the turn arrives')
+        assert.is_nil(D.turn(doc)==Runner.snapshot(r.a).generation or nil)
+    end)
+end)

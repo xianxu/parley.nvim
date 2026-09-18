@@ -564,6 +564,38 @@ describe('pure generation lifecycle',function()
         assert.is_true(order.revoke<order.release_turn,'revoke must precede release_turn')
     end)
 
+    -- #266 (operator decision, 2026-09-17): a transient suspension keeps the turn.
+    -- Suspension is routine — any edit the structure cannot classify at once —
+    -- and releasing would queue the holder behind the next generation for that
+    -- generation's whole lifetime, splitting one answer's history around another.
+    it('holds the turn through a grant suspension and resumes without re-requesting',function()
+        local s,a=requesting()
+        local r
+        s,r=send(s,{type='grant_suspended',grant='grant'})
+        assert.is_nil(effect(r,'release_turn'),'a suspension must not yield the turn')
+        s,r=output(s,a,1,4)
+        assert.is_nil(effect(r,'write'),'nothing is written while suspended')
+        s,r=send(s,{type='grant_resumed',grant='grant'})
+        assert.is_nil(effect(r,'request_turn'),'it never gave the turn up')
+        assert.is_not_nil(effect(r,'write'),'writing resumes on the proof')
+    end)
+
+    it('yields the turn when a child outcome is unknown or a child grant is revoked, and asks again on resume',function()
+        for _,case in ipairs({'unknown','revoked'}) do
+            local s,a=requesting();local r
+            s,r=send(s,{type='round_declared',attempt=a,calls={{index=1,call_id='c',arguments_ref='args'}}})
+            local round=effect(r,'reserve_round');local child=round.children[1].operation
+            s=send(s,{type='round_reserved',round=round.round,grants={'child-grant'},receipt_ref='r'})
+            if case=='unknown' then
+                s,r=send(s,{type='child_outcome',round=round.round,operation=child,outcome='unknown',result_ref='u'})
+            else s,r=send(s,{type='grant_revoked',grant='child-grant'}) end
+            assert.equals('paused',G.snapshot(s).phase,case)
+            assert.is_not_nil(effect(r,'release_turn'),case..' must yield the turn')
+            s,r=send(s,{type='resume_validated',policy_ref='operator:test'})
+            assert.is_not_nil(effect(r,'request_turn'),case..': resume must ask for it back')
+        end
+    end)
+
     it('re-requests the turn when a paused generation resumes',function()
         local s=send(G.new(spec()),{type='start'})
         local r
