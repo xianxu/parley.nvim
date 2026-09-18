@@ -768,3 +768,18 @@ missing their *(M2)* tag) are fixed too. Correction to my Task 1.6 entry above:
 "holding keeps each generation's writes one run" holds only while the turn is
 held uninterrupted.
 
+Round 3 **FIX-THEN-SHIP**, one blocking, both families repeating ("fix rules, not
+instances"): round 2's own restatement overclaimed ("no partial slice …
+unconditionally" — a human edit mid-write splits a run). Undo grouping is now
+stated once, in `atlas/chat/ownership.md`, derived from `Editor:can_join_undo`;
+the target defends only "no undo step mixes generations" and points there; a test
+pins the mid-write-edit split. All 12 stale milestone labels in the plan
+reconciled after the M1/M2 merge.
+
+`sdlc` note: the peer `ariadne` working tree currently fails to compile
+(uncommitted #231 work, `sizing.go: "regexp" imported and not used`), and the
+`sdlc` shell function rebuilds from it. The boundary was re-run with a binary
+built from ariadne's committed `HEAD` (`9ca1d6c`, via `git archive`) so the gate
+did not depend on another session's in-flight edits; the peer's working tree was
+not touched. (By then it compiled again, still mid-edit.)
+
