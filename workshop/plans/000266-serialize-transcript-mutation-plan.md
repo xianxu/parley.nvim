@@ -215,7 +215,7 @@ first's terminal — and M2 restores the concurrent assertion. Change it in Task
 1.9 Step 5 with a comment naming this section, so the M1 form is visibly a
 way-station and not the intended end state.
 
-## Chunk 1 — M1: the write turn
+## Chunk 1 — M1 (part 1 of one boundary): the write turn
 
 **Routing rule for every task below.** `make test-spec SPEC=<key>` runs only files listed under that key in `atlas/traceability.yaml` (`Makefile.parley:113-129` → `scripts/spec_test_map.sh list-tests`). A new spec that is not routed is silently **not run**, so a "watch it fail" step would print green. Every task that creates a spec routes it in the *same* task, before the red step. Existing keys, verified: `tests/unit/generation_spec.lua` → `chat/lifecycle` (`atlas/traceability.yaml:194`); `tests/unit/document_state_spec.lua` → `chat/ownership` (`:307`, key at `:294`) **and** `chat/document` (`:391`); `tests/integration/response_tools_spec.lua` → `chat/lifecycle` (`:201`) and `providers/tool_use` (`:878`); `tests/integration/generation_sequences_spec.lua` → `chat/ownership` (`:314`); `tests/unit/document_capacity_spec.lua` → `chat/ownership` (`:325`). Also route `lua/parley/document/init.lua` and `lua/parley/document/write_turn.lua` under `chat/ownership` `code:`, since `make test-changed` keys off those lists.
 
@@ -541,7 +541,7 @@ The invariant to assert is the issue's own: **no undo entry mixes two generation
 
 ---
 
-## Chunk 2 — M2: defer preparation's write until there is output
+## Chunk 2 — M1 (part 2 of the same boundary): defer preparation's write until there is output
 
 Restores the Spec's option (b) — concurrent provider execution with serialized
 writes — by removing the reason preparation must write before the request.
@@ -583,9 +583,9 @@ waiting, `:88-115` the write steps, `:145-149` subscriber);
 - [ ] Re-invert `tests/integration/chat_scoped_response_spec.lua:47` to its original concurrent form (`wait(function()return #calls==2 end)`), removing the M1 way-station comment.
 - [ ] Assert the full Spec shape end to end: two provider requests in flight, writes strictly serialized, second answer applied whole after the first terminates.
 - [ ] Remove the "Deliberate over-serialization in M1" section from this plan and correct the issue `## Log` entry that records the postponement.
-- [ ] `make test` → exit 0. `sdlc milestone-close --issue 266 --milestone M2`
+- [ ] `make test` → exit 0. `sdlc milestone-close --issue 266 --milestone M1` (covers both chunks).
 
-## Chunk 3 — M3: ordered append, and the machinery it replaces
+## Chunk 3 — M2: ordered append, and the machinery it replaces
 
 **Precondition, live now:** `scripts/refresh_goldens.lua` and 11 golden payloads are modified in the working tree from `f1818ee1` (#218). Resolve before cutting the branch — Task 3.5 regenerates goldens and expects no message-shape change, which that dirt would mask.
 
@@ -690,7 +690,7 @@ There is no tool → pending edge today. Add one so both tools read as in flight
 
 ---
 
-## Chunk 4 — M4: the residual exclusion sweep
+## Chunk 4 — M3: the residual exclusion sweep
 
 What remains after **M3** (Task 3.2b) removes child grants: the geometry that only existed to carve them out of a parent.
 

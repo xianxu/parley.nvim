@@ -38,6 +38,32 @@ rounds:
           family: waiter-visibility-envelope
           round: 1
       blocked: true
+    - "n": 2
+      timestamp: "2026-09-17T15:18:55-07:00"
+      agent: claude
+      dispose:
+        - id: PQ-1
+          disposition: addressed
+          note: Task 1.3 Step 3 now notifies on the turn value (snapshot-before vs result.turn-after), and Task 1.2 Step 3 sets result.turn on request_turn, release_turn and finish_generation.
+          round: 2
+        - id: PQ-2
+          disposition: addressed
+          note: Task 1.3 Step 1 asserts the notification instead; the end-to-end wake moved to Task 1.6 Step 3b, and Task 1.9 Step 2 is labelled an expected PASS.
+          round: 2
+        - id: PQ-3
+          disposition: addressed
+          note: Chunk 4 header reads "after M3 (Task 3.2b)" and Task 4.2 now says "Remove only after Task 4.1 is green".
+          round: 2
+        - id: PQ-4
+          disposition: not-addressed
+          note: The "Verified-correct facts" half was compressed, but Tasks 1.1 and 1.2 still carry 21- and 42-line inline test bodies.
+          round: 2
+        - id: PQ-5
+          disposition: addressed
+          note: Task 1.6 Step 4 names the preparing-parked waiter as M1's normal case and states the operator-mediated latency bound.
+          round: 2
+      blocked: false
+content_hash: 97c5a0907e448a948da92dbaeca45656ac34261ba00a6386425953cd0a9b0a44
 ---
 
 # Gate ledger — parley.nvim#266 (plan-quality)
@@ -60,10 +86,16 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **PQ-5** [Minor] `waiter-visibility-envelope` M1's accepted latency cost has no stated bound, and its common waiter is a generation parked in preparing with no provider stream
   Under M1's deliberate over-serialization a second question's provider request does not start until the first generation reaches terminal — unbounded when the holder is in a tool chain (Task 1.6 Step 4 names three indefinite stalls). Task 1.6 Step 4's visibility mitigation is written for the turn-blocked writer; state explicitly that it covers a generation blocked on its preparation write in preparing, since under M1 that is the normal case rather than an edge, and give the accepted latency a bound or say why none applies.
 
+## Round 2 — 2026-09-17T15:18:55-07:00 (claude) — passed
+
+### Disposed
+
+- PQ-1 — addressed — Task 1.3 Step 3 now notifies on the turn value (snapshot-before vs result.turn-after), and Task 1.2 Step 3 sets result.turn on request_turn, release_turn and finish_generation.
+- PQ-2 — addressed — Task 1.3 Step 1 asserts the notification instead; the end-to-end wake moved to Task 1.6 Step 3b, and Task 1.9 Step 2 is labelled an expected PASS.
+- PQ-3 — addressed — Chunk 4 header reads "after M3 (Task 3.2b)" and Task 4.2 now says "Remove only after Task 4.1 is green".
+- PQ-4 — not-addressed — The "Verified-correct facts" half was compressed, but Tasks 1.1 and 1.2 still carry 21- and 42-line inline test bodies.
+- PQ-5 — addressed — Task 1.6 Step 4 names the preparing-parked waiter as M1's normal case and states the operator-mediated latency bound.
+
 ## Open findings
 
-- **PQ-1** [Important] `wake-on-turn-movement` Task 1.3 Step 3 scopes the turn notify to request_turn/release_turn, the exact exclusion the Architecture section says must not happen
-- **PQ-2** [Important] `vacuous-red-step` Task 1.3's wake test cannot be red where it is scheduled — nothing refuses a turnless write until 1.4/1.5
-- **PQ-3** [Minor] `stale-milestone-refs` Chunk 4 carries pre-renumbering references: "after M2 removes child grants" and Task 4.2's "after 3.1 is green"
 - **PQ-4** [Minor] `plan-compression` Inline full test and implementation bodies plus a bare line-range inventory restate the diff
-- **PQ-5** [Minor] `waiter-visibility-envelope` M1's accepted latency cost has no stated bound, and its common waiter is a generation parked in preparing with no provider stream
