@@ -7,8 +7,8 @@ end
 local function proof(entity, first, last)
     return {entity=entity, marker_revision=1, revision=1, first=first, last=last, confirmed=true}
 end
-local function acquire(doc, gen, regions, parent)
-    return State.transition(doc, {kind='acquire', generation=gen, regions=regions, parent=parent})
+local function acquire(doc, gen, regions)
+    return State.transition(doc, {kind='acquire', generation=gen, regions=regions})
 end
 local function resolve(doc, gen, grant, p, first, last)
     return State.resolve(doc, {epoch=State.snapshot(doc).epoch, generation=gen, grant=grant,
@@ -95,15 +95,13 @@ describe('document authority state', function()
         assert.is_true(resolve(d,g,id,proof('a',10,20)).ok)
     end)
 
-    it('excludes delegated child text and boundary slots from the parent', function()
-        local d=State.new(); local g=generation(d); local parent=acquire(d,g,{proof('a',0,30)}).grants[1]
-        local child=acquire(d,g,{proof('child',10,20)},parent).grants[1]
-        assert.is_true(resolve(d,g,parent,proof('a',0,30),0,5).ok)
-        assert.is_false(resolve(d,g,parent,proof('a',0,30),10,10).ok)
-        assert.is_false(resolve(d,g,parent,proof('a',0,30),5,25).ok)
-        assert.is_true(resolve(d,g,child,proof('child',10,20),10,10).ok)
-        State.transition(d,{kind='revoke',grant=child})
-        assert.is_false(resolve(d,g,parent,proof('a',0,30),10,10).ok)
+    -- #266 M4: a tool round writes through the answer's own grant, so no grant is
+    -- ever carved out of another. Naming a `parent` no longer delegates a slot.
+    it('never nests grants: a region inside a live grant is refused, even for its own generation', function()
+        local d=State.new(); local g=generation(d); local outer=acquire(d,g,{proof('a',0,30)}).grants[1]
+        local nested=State.transition(d,{kind='acquire',generation=g,parent=outer,regions={proof('child',10,20)}})
+        assert.is_false(nested.ok); assert.equals('overlap',nested.reason)
+        assert.is_true(resolve(d,g,outer,proof('a',0,30),5,25).ok)
     end)
 
     it('bounds admission and frees finished registrations without ID resurrection', function()
@@ -116,20 +114,6 @@ describe('document authority state', function()
         local fresh=generation(d); local id=acquire(d,fresh,{proof('e1',10,11)}).grants[1]
         assert.is_not_equal(ids[1],id)
         assert.is_false(resolve(d,gens[1],ids[1],proof('e1',10,11)).ok)
-    end)
-
-    it('keeps child insertion boundaries excluded after authorized growth', function()
-        for _,at in ipairs({10,20}) do
-            local d=State.new(); local g=generation(d); local parent=acquire(d,g,{proof('a',0,30)}).grants[1]
-            local child=acquire(d,g,{proof('child',10,20)},parent).grants[1]
-            State.transition(d,{kind='observed_edit',first=at,last=at,new_bytes=2,owner_grant=child})
-            local parent_proof=proof('a',0,32);parent_proof.revision=2
-            for p=10,22 do
-                assert.equals('outside grant',resolve(d,g,parent,parent_proof,p,p).reason)
-            end
-            local cp=proof('child',10,22); cp.revision=2
-            assert.is_true(resolve(d,g,child,cp,10,22).ok)
-        end
     end)
 
     it('rejects oversized or malformed evidence without partial registration', function()

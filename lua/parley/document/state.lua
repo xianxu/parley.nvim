@@ -52,10 +52,9 @@ local function effect(result,kind,object,reason)
     local e={kind=kind,reason=reason}; e[kind=='stale' and 'generation' or 'grant']=object
     result.effects[#result.effects+1]=e
 end
-local function revoke(s,g,result,reason)
+local function revoke(g,result,reason)
     if g.status=='revoked' then return end
     g.status='revoked'; g.reason=reason; effect(result,'revoked',g.id,reason)
-    for _,child in pairs(s.grants) do if child.parent==g.id then revoke(s,child,result,reason) end end
 end
 local function suspend(g,result,reason)
     if g.status=='valid' then g.status='suspended'; g.reason=reason; effect(result,'suspended',g.id,reason) end
@@ -113,7 +112,7 @@ function M.resolve(doc,request,current)
     if g.status~='valid' then return reject(g.status) end
     if request.revision~=g.revision then return reject('revision') end
     local result={ok=true,effects={}}
-    if not identity(g,current) then revoke(s,g,result,'identity'); result.ok=false; result.reason='identity'; return result end
+    if not identity(g,current) then revoke(g,result,'identity'); result.ok=false; result.reason='identity'; return result end
     if current.confirmed~=true then suspend(g,result,'uncertain'); result.ok=false; result.reason='uncertain'; return result end
     if request.first~=nil or request.last~=nil then
         if not range(request) or not writable(g,request) then return reject('outside grant') end
@@ -128,9 +127,6 @@ function M.successor_new(doc,request,current)
     local resolved=M.resolve(doc,request,current)
     if not resolved.ok then return nil,resolved.reason end
     local s=state(doc);local g=s.grants[request.grant]
-    for _,other in pairs(s.grants) do
-        if other.parent==g.id and other.status~='revoked' then return nil,'delegated parent' end
-    end
     local token={};successors[token]={doc=doc,epoch=s.epoch,grant=g.id,generation=g.generation,
         entity=g.entity,revision=g.revision}
     return token
@@ -176,19 +172,6 @@ function M.successor_current(doc,token)
     return copy(g)
 end
 local function count(t) local n=0; for _ in pairs(t) do n=n+1 end; return n end
-local function exclude(slots,child)
-    local out={}
-    for _,slot in ipairs(slots) do
-        if not overlaps(slot,child) then out[#out+1]=slot
-        else
-            if slot.first<child.first then out[#out+1]={first=slot.first,last=child.first,
-                open_first=slot.open_first,open_last=true} end
-            if child.last<slot.last then out[#out+1]={first=child.last,last=slot.last,
-                open_first=true,open_last=slot.open_last} end
-        end
-    end
-    return out
-end
 local function move(p,edit)
     local delta=edit.new_bytes-(edit.last-edit.first)
     local function endpoint(x,right)
@@ -245,21 +228,13 @@ function M.transition(doc,event)
         for k,p in pairs(regions) do
             if not integer(k) or k<1 or k>#regions or not proof(p) then return reject('invalid region') end
         end
-        local parent=event.parent and s.grants[event.parent]
-        if event.parent and (not parent or parent.status~='valid' or parent.generation~=event.generation) then return reject('parent') end
         for i,p in ipairs(regions) do
-            if parent and not writable(parent,p) then return reject('outside parent') end
             for j=1,i-1 do if overlaps(p,regions[j]) then return reject('overlap') end end
             for _,g in pairs(s.grants) do
-                if g.status~='revoked' and g~=parent then
+                if g.status~='revoked' then
                     for _,slot in ipairs(g.slots) do if overlaps(p,slot) then return reject('overlap') end end
                 end
             end
-        end
-        local slots=parent and parent.slots
-        if slots then
-            for _,p in ipairs(regions) do slots=exclude(slots,p) end
-            if #slots>17 then return reject('parent slot limit') end
         end
         -- Revoked IDs are never reused; missing authority fails closed without a
         -- growing tombstone registry. Keep their effects in the caller's event log.
@@ -268,10 +243,9 @@ function M.transition(doc,event)
         for _,p in ipairs(regions) do
             local gid=id(); s.grants[gid]={id=gid,generation=event.generation,entity=p.entity,
                 marker_revision=p.marker_revision,revision=p.revision,first=p.first,last=p.last,
-                slots={{first=p.first,last=p.last}},status='valid',parent=event.parent}
+                slots={{first=p.first,last=p.last}},status='valid'}
             result.grants[#result.grants+1]=gid
         end
-        if parent then parent.slots=slots end
     elseif kind=='reclaim_tail' then
         if event.epoch~=s.epoch then return reject('epoch') end
         local g=s.grants[event.grant]
@@ -302,7 +276,7 @@ function M.transition(doc,event)
         for _,g in pairs(s.grants) do
             if g.status~='revoked' then
                 for _,slot in ipairs(g.slots) do
-                    if overlaps(slot,event) and g~=owner then revoke(s,g,result,'output edit'); break end
+                    if overlaps(slot,event) and g~=owner then revoke(g,result,'output edit'); break end
                 end
             end
         end
@@ -349,7 +323,7 @@ function M.transition(doc,event)
         for gid,g in pairs(s.grants) do
             local p=event.proofs[gid]
             if p and g.status~='revoked' then
-                if not identity(g,p) then revoke(s,g,result,'identity')
+                if not identity(g,p) then revoke(g,result,'identity')
                 elseif p.confirmed==true then
                     if g.status=='suspended' then effect(result,'resumed',g.id,'confirmed identity') end
                     g.status='valid'; g.reason=nil
@@ -358,11 +332,11 @@ function M.transition(doc,event)
         end
     elseif kind=='revoke' then
         local g=s.grants[event.grant]; if not g then return reject('grant') end
-        revoke(s,g,result,'explicit revoke')
+        revoke(g,result,'explicit revoke')
     elseif kind=='finish_generation' then
         if not s.generations[event.generation] then return reject('generation') end
         for gid,g in pairs(s.grants) do
-            if g.generation==event.generation then revoke(s,g,result,'generation finished'); s.grants[gid]=nil end
+            if g.generation==event.generation then revoke(g,result,'generation finished'); s.grants[gid]=nil end
         end
         s.generations[event.generation]=nil
         retune(s,event.generation); result.turn=s.turn
@@ -375,7 +349,7 @@ function M.transition(doc,event)
         retune(s,event.generation); result.turn=s.turn
     elseif kind=='reload' or kind=='detach' then
         if event.next_epoch~=nil and (not scalar(event.next_epoch) or event.next_epoch==s.epoch) then return reject('invalid epoch') end
-        for _,g in pairs(s.grants) do revoke(s,g,result,kind) end
+        for _,g in pairs(s.grants) do revoke(g,result,kind) end
         s.grants={}; s.generations={}; s.epoch=event.next_epoch or id(); s.attached=kind~='detach'; result.epoch=s.epoch
         s.turn=nil; turn_wanted[s]=nil
     else return reject('unknown event') end

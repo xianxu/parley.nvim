@@ -38,10 +38,10 @@ local function attach(lines,native)
     end
     fixtures[#fixtures+1]=c;settle(c);return c
 end
-local function acquire(c,row,last_row,generation,parent)
+local function acquire(c,row,last_row,generation)
     local indexed=D.query(c.doc,row,last_row+1)
     generation=generation or D.transition(c.doc,{kind='register_generation'}).generation
-    local result=D.transition(c.doc,{kind='acquire',generation=generation,parent=parent,
+    local result=D.transition(c.doc,{kind='acquire',generation=generation,
         regions={{entity=indexed[1].handle,marker_revision=1,revision=1,first=indexed[1].start_byte,
             last=indexed[#indexed].end_byte-1,confirmed=true}}})
     assert.is_true(result.ok,result.reason)
@@ -140,22 +140,6 @@ describe('adversarial document write plans',function()
         assert.equals('revoked',D.snapshot(c.doc).grants[a.grant].status)
         apply(c,plan(c,a,{patch(c.expected,2,1,1,'NO')}),'stale')
         apply(c,plan(c,b,{patch(c.expected,5,1,1,'B')}))
-    end)
-    it('keeps delegated tool slots excluded from their parent before and after child growth',function()
-        local c=attach({'💬: q','🤖: a','head','📎: tool','```','same','```','tail','💬: next','draft'})
-        local parent=acquire(c,1,7)
-        local indexed=D.query(c.doc,3,7)
-        local child_result=D.transition(c.doc,{kind='acquire',generation=parent.generation,parent=parent.grant,
-            regions={{entity=parent.entity,marker_revision=1,revision=1,first=indexed[1].start_byte,
-                last=indexed[#indexed].end_byte-1,confirmed=true}}})
-        assert.is_true(child_result.ok,child_result.reason)
-        local child={generation=parent.generation,entity=parent.entity,grant=child_result.grants[1]}
-        apply(c,plan(c,parent,{patch(c.expected,5,0,0,'forbidden')}),'stale')
-        apply(c,plan(c,child,{patch(c.expected,5,4,0,' child')}))
-        apply(c,plan(c,parent,{patch(c.expected,2,4,0,' parent')}))
-        D.transition(c.doc,{kind='revoke',grant=child.grant})
-        apply(c,plan(c,parent,{patch(c.expected,5,0,0,'still forbidden')}),'stale')
-        assert.equals('valid',D.snapshot(c.doc).grants[parent.grant].status)
     end)
     it('rejects old plans after native undo and fake reload even when bytes return',function()
         local c,a=writers(true)

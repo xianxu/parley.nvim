@@ -529,9 +529,6 @@ local function append(doc,intent)
     local grant=snapshot.grants[intent.grant]
     if not grant then return reject('stale','grant') end
     if State.waits_for_turn(s.authority,intent.generation,intent.grant) then return reject('waiting','write turn held elsewhere') end
-    for _,other in pairs(snapshot.grants) do
-        if other.parent==grant.id and other.status~='revoked' then return reject('refused','delegated parent') end
-    end
     local current=proof(s,grant)
     if not current then return reject('stale','identity') end
     local resolved=effects(s,State.resolve(s.authority,{epoch=intent.epoch,generation=intent.generation,
