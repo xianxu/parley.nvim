@@ -44,40 +44,24 @@ describe('production response session composition',function()
     local function start(doc,value,opts,sessions)
         local s=assert(Session.start(doc,value,opts));sessions[#sessions+1]=s;return s
     end
-    -- #266 M1 way-station. M1 takes the write turn in `preparing`, so a second
-    -- generation's preparation is turn-blocked and its provider request never
-    -- starts — full queuing, where the Spec chose concurrent execution with
-    -- serialized writes. See "Deliberate over-serialization in M1" in
-    -- workshop/plans/000266-serialize-transcript-mutation-plan.md. M2 Task 2.3
-    -- restores the concurrent assertion below.
-    it('queues the second writer and preserves the next human draft',function()
+    it('composes disjoint native writers and preserves the next human draft',function()
         local function opts()return {buf=buf,agent='fixture',build_input=function(previous)return previous end,
             prepare_input=function(_,cb)cb.prepared(input(buf));cb.resolved();return {}end}end
         local a=start(doc,spec(0),opts(),sessions);local b=start(doc,spec(3),opts(),sessions)
-        pump(a);pump(b)
-        assert.equals(1,processes.spawn_calls,'M1 queues the second request behind the turn holder')
+        pump(a);pump(b);assert.equals(2,processes.spawn_calls)
         local lines=vim.api.nvim_buf_get_lines(buf,0,-1,false)
         vim.api.nvim_buf_set_text(buf,#lines-1,5,#lines-1,5,{' human'})
-        local function finish_all()
-            for _,p in pairs(processes.processes)do
-                if not p.finished_by_spec then
-                    p.finished_by_spec=true
-                    p:emit('stdout','data: {"choices":[{"delta":{"content":"answer"..'..'tostring(p.pid or 0)'..'}}]}\n\n')
-                    status(p);p:finish()
-                end
-            end
-            vim.wait(100,function()return #Tasker._handles==0 end,1);pump(a);pump(b)
+        for pid,p in pairs(processes.processes)do
+            p:emit('stdout','data: {"choices":[{"delta":{"content":"answer'..pid..'"}}]}\n\n')
+            status(p);p:finish()
         end
-        finish_all()
+        vim.wait(100,function()return #Tasker._handles==0 end,1);pump(a);pump(b)
         assert.equals('success',Session.snapshot(a).generation.outcome)
-        -- a has terminated, so the turn moves and b's request finally starts.
-        pump(b);finish_all()
         assert.equals('success',Session.snapshot(b).generation.outcome)
-        assert.equals(2,processes.spawn_calls,'the queued request runs once the turn moves')
         local text=table.concat(vim.api.nvim_buf_get_lines(buf,0,-1,false),'\n')
-        assert.truthy(text:find('draft human',1,true),'the human draft must survive both writers')
+        assert.truthy(text:find('answer4242',1,true));assert.truthy(text:find('answer4243',1,true))
+        assert.truthy(text:find('draft human',1,true))
     end)
-
     it('waits for positive preparation cleanup and ignores late prepared input after cancel',function()
         local callbacks,cancel_done
         local s=start(doc,spec(0),{buf=buf,agent='fixture',build_input=function(previous)return previous end,
@@ -90,31 +74,75 @@ describe('production response session composition',function()
         cancel_done();pump(s);assert.equals('terminal',Session.snapshot(s).status)
         callbacks.resolved();pump(s);assert.equals(0,processes.spawn_calls)
     end)
-    -- #266 M1 way-station: the sibling's request cannot be in flight while the
-    -- first holds the turn, so the sibling is driven after the first terminates.
-    -- M2 Task 2.3 restores the concurrent form.
     it('routes provider cancellation to one process and waits for its pipe cleanup',function()
         local function opts()return {buf=buf,agent='fixture',build_input=function(previous)return previous end,
             prepare_input=function(_,cb)cb.prepared(input(buf));cb.resolved();return {}end}end
         local a=start(doc,spec(0),opts(),sessions);local b=start(doc,spec(3),opts(),sessions)
-        pump(a);pump(b)
-        assert.equals(1,processes.spawn_calls,'M1 queues the sibling behind the turn holder')
-        local first=processes.processes[4242];assert.is_not_nil(first)
-        Session.cancel(a);pump(a)
+        pump(a);pump(b);Session.cancel(a);pump(a)
+        assert.equals(1,#processes.signals);assert.equals(4242,processes.signals[1].pid)
         assert.equals('stopping',Session.snapshot(a).generation.phase)
-        status(first);first:exit();first:emit('stdout',nil);first:emit('stderr',nil)
-        vim.wait(200,function()return #Tasker._handles==0 end,1);pump(a)
+        local first=processes.processes[4242];status(first);first:exit()
+        pump(a);assert.equals('stopping',Session.snapshot(a).generation.phase)
+        first:emit('stdout',nil);first:emit('stderr',nil)
+        vim.wait(100,function()return #Tasker._handles==1 end,1);pump(a)
         assert.equals('terminal',Session.snapshot(a).status)
-        -- The turn moves, so the sibling's request now starts and is unaffected by
-        -- the cancellation routed to the first process.
-        for _=1,20 do pump(b); if processes.spawn_calls>1 then break end end
-        assert.equals(2,processes.spawn_calls,'the sibling must run once the turn moves')
-        local second=processes.processes[4243];assert.is_not_nil(second)
+        local second=processes.processes[4243]
         second:emit('stdout','data: {"choices":[{"delta":{"content":"sibling"}}]}\n\n')
-        status(second);second:finish();vim.wait(200,function()return #Tasker._handles==0 end,1);pump(b)
+        status(second);second:finish();vim.wait(100,function()return #Tasker._handles==0 end,1);pump(b)
         assert.equals('success',Session.snapshot(b).generation.outcome)
     end)
-
+    -- #266: preparation reports its input without writing, so the request starts
+    -- at once; the gap is written immediately before the first write.
+    local function lone_opts()
+        return {buf=buf,agent='fixture',build_input=function(previous)return previous end,
+            prepare_input=function(_,cb)cb.prepared(input(buf));cb.resolved();return {}end}
+    end
+    local function lines()return vim.api.nvim_buf_get_lines(buf,0,-1,false)end
+    it('starts the request before the gap and lands the gap once, immediately before the first output',function()
+        local before=lines()
+        local s=start(doc,spec(0),lone_opts(),sessions);pump(s)
+        assert.equals(1,processes.spawn_calls,'the request must not wait for the gap')
+        assert.same(before,lines(),'the old answer stays until something replaces it')
+        local p=processes.processes[4242]
+        p:emit('stdout','data: {"choices":[{"delta":{"content":"fresh"}}]}\n\n');status(p);p:finish()
+        vim.wait(100,function()return #Tasker._handles==0 end,1);pump(s)
+        assert.equals('success',Session.snapshot(s).generation.outcome)
+        local text=table.concat(lines(),'\n')
+        local _,headers=text:gsub('🤖: fixture','')
+        assert.equals(1,headers,'the gap lands exactly once')
+        assert.truthy(text:find('🤖: fixture%s+fresh'),'the gap sits immediately before the output: '..text)
+        local _,olds=text:gsub('🤖: old','')
+        assert.equals(1,olds,'the replaced answer is gone; only the other exchange keeps its old answer')
+    end)
+    it('leaves the transcript untouched when cancelled before any output',function()
+        local before=lines()
+        local s=start(doc,spec(0),lone_opts(),sessions);pump(s)
+        assert.equals(1,processes.spawn_calls)
+        Session.cancel(s);pump(s)
+        local p=processes.processes[4242];status(p);p:exit();p:emit('stdout',nil);p:emit('stderr',nil)
+        vim.wait(200,function()return #Tasker._handles==0 end,1);pump(s)
+        assert.equals('terminal',Session.snapshot(s).status)
+        assert.same(before,lines(),'a response with nothing to say must not touch the transcript')
+    end)
+    it('holds a second answer, gap included, until the first answer finishes',function()
+        local a=start(doc,spec(0),lone_opts(),sessions);local b=start(doc,spec(3),lone_opts(),sessions)
+        pump(a);pump(b)
+        assert.equals(2,processes.spawn_calls,'both requests run concurrently')
+        local pa,pb=processes.processes[4242],processes.processes[4243]
+        pa:emit('stdout','data: {"choices":[{"delta":{"content":"alpha"}}]}\n\n')
+        pb:emit('stdout','data: {"choices":[{"delta":{"content":"beta"}}]}\n\n');status(pb);pb:finish()
+        vim.wait(100,function()return #Tasker._handles==1 end,1);pump(b);pump(a);pump(b)
+        local held=lines()
+        assert.truthy(table.concat(held,'\n'):find('alpha',1,true),'the holder writes')
+        assert.is_nil(table.concat(held,'\n'):find('beta',1,true),'the second answer is held')
+        assert.same({'💬: q','🤖: old','text'},{held[#held-4],held[#held-3],held[#held-2]},
+            'its gap is held too: the old second answer is still in place')
+        status(pa);pa:finish();vim.wait(100,function()return #Tasker._handles==0 end,1);pump(a);pump(b)
+        assert.equals('success',Session.snapshot(a).generation.outcome)
+        assert.equals('success',Session.snapshot(b).generation.outcome)
+        local text=table.concat(lines(),'\n')
+        assert.truthy(text:find('alpha',1,true));assert.truthy(text:find('🤖: fixture%s+beta'),text)
+    end)
     it('composes a tool round and rebuilds the provider from frozen ordered results',function()
         local events,continued
         local producer={start=function(_,_,cb)events=cb;return {}end,

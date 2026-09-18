@@ -1474,6 +1474,9 @@ local function start_scoped_response(frame)
         messages, final_payload = next_messages, request.payload
         return request
     end
+    -- Runs at finalize, not at request start: since #266 the answer header is
+    -- written with the generation's first write, so a request-time capture would
+    -- find no header (or, when regenerating, the old answer's header).
     local function capture_topic_parent(ctx)
         if not topic_source or topic_parent or topic_attempted then return end
         local marker = D.lookup(doc, ctx.entity)
@@ -1638,7 +1641,6 @@ local function start_scoped_response(frame)
         help_root = installed_root,
         root_policy = info.root_policy, max_iterations = info.max_tool_iterations or config.max_tool_iterations,
         max_result_bytes = info.tool_result_max_bytes, prepare_input = prepare_input, build_input = payload,
-        requesting = capture_topic_parent,
         changed = function(value)
             require('parley.response_status').update(buf,doc,value)
             if value.phase=='paused' then
@@ -1669,6 +1671,7 @@ local function start_scoped_response(frame)
             pcall(vim.api.nvim_win_set_cursor, frame.win, last_cursor)
         end,
         finalize = function(ctx, done)
+            capture_topic_parent(ctx)
             start_topic()
             local completion,settlement
             local cancelled=false

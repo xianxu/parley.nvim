@@ -305,6 +305,7 @@ atlas:
       - lua/parley/response_provider.lua
       - lua/parley/response_tools.lua
     tests:
+      - tests/integration/generation_turn_spec.lua
       - tests/integration/document_turn_wake_spec.lua
       - tests/unit/document_state_spec.lua
       - tests/unit/document_write_plan_spec.lua

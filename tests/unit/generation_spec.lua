@@ -615,4 +615,102 @@ describe('pure generation lifecycle',function()
             assert.equals('stopping',G.snapshot(s).phase,ev.type..' must be expressible from draining')
         end
     end)
+
+    -- #266: the preparation gap is deferred to the generation's first write, so
+    -- the provider request never waits on the turn (the Spec's option (b)) and a
+    -- response cancelled before its first byte leaves the transcript untouched.
+    local function deferred(limits)
+        local s,r=send(G.new(spec(limits)),{type='start'})
+        local prep=effect(r,'prepare').operation
+        s,r=send(s,{type='prepared',preparation=prep,input_ref='input',gap=true})
+        return s,effect(r,'request'),prep,r
+    end
+    local function all(results,kind)
+        for _,r in ipairs(results) do if effect(r,kind) then return true end end
+        return false
+    end
+
+    it('starts the request as soon as input is prepared, before the gap is written',function()
+        local s,request,_,r=deferred()
+        assert.is_not_nil(request,'the request must not wait for the gap')
+        assert.equals('requesting',G.snapshot(s).phase)
+        assert.equals('deferred',G.snapshot(s).gap)
+        assert.is_nil(effect(r,'write_gap'),'nothing to write yet')
+    end)
+
+    it('writes the gap immediately before the first output, and the output only after it lands',function()
+        local s,request=deferred()
+        local r
+        s,r=output(s,request.operation,1,4)
+        assert.is_not_nil(effect(r,'write_gap'),'first output must bring the gap')
+        assert.is_nil(effect(r,'write'),'output must not outrun its gap')
+        assert.equals('writing',G.snapshot(s).gap)
+        s,r=output(s,request.operation,2,4)
+        assert.is_nil(effect(r,'write_gap'),'the gap is written exactly once')
+        assert.is_nil(effect(r,'write'),'still not before the gap lands')
+        s,r=send(s,{type='gap_result',status='applied'})
+        assert.equals('none',G.snapshot(s).gap)
+        assert.is_not_nil(effect(r,'write'),'output follows the gap')
+    end)
+
+    it('holds the gap while another generation holds the turn',function()
+        local s,request=deferred()
+        local r
+        s=send(s,{type='turn',status='waiting'})
+        s,r=output(s,request.operation,1,4)
+        assert.is_nil(effect(r,'write_gap'),'no gap without the turn')
+        s,r=send(s,{type='turn',status='held'})
+        assert.is_not_nil(effect(r,'write_gap'),'the gap lands once the turn arrives')
+        assert.is_nil(effect(r,'write'))
+    end)
+
+    it('never writes the gap when cancelled before any output',function()
+        local s,request,prep=deferred()
+        local results={}
+        local r
+        s,r=send(s,{type='cancel'});results[#results+1]=r
+        s,r=send(s,{type='operation_resolved',operation=request.operation});results[#results+1]=r
+        s,r=send(s,{type='operation_resolved',operation=prep});results[#results+1]=r
+        assert.equals('terminal',G.snapshot(s).phase)
+        assert.is_false(all(results,'write_gap'),'a response with nothing to say must not touch the transcript')
+    end)
+
+    it('writes the gap before a tool round reserves its slots',function()
+        local s,request=deferred()
+        local r
+        s,r=send(s,{type='round_declared',attempt=request.operation,
+            calls={{index=1,call_id='c1',arguments_ref='args1'}}})
+        assert.is_not_nil(effect(r,'write_gap'))
+        assert.is_nil(effect(r,'reserve_round'),'call blocks must not outrun the gap')
+        s,r=send(s,{type='gap_result',status='applied'})
+        assert.is_not_nil(effect(r,'reserve_round'))
+    end)
+
+    it('writes the gap before finalizing an answer that produced no output',function()
+        local s,request=deferred()
+        local r
+        s,r=send(s,{type='provider_complete',attempt=request.operation})
+        assert.equals('finalizing',G.snapshot(s).phase)
+        assert.is_not_nil(effect(r,'write_gap'))
+        assert.is_nil(effect(r,'finalize'),'finalize must not outrun the gap')
+        s,r=send(s,{type='gap_result',status='applied'})
+        assert.is_not_nil(effect(r,'finalize'))
+    end)
+
+    it('stops when the gap cannot be written',function()
+        local s,request=deferred()
+        s=output(s,request.operation,1,4)
+        s=send(s,{type='gap_result',status='failed'})
+        assert.equals('stopping',G.snapshot(s).phase)
+        assert.equals('prepare_failed',G.snapshot(s).outcome)
+    end)
+
+    it('rejects a gap result that was never asked for',function()
+        local s=deferred()
+        local _,r=send(s,{type='gap_result',status='applied'})
+        assert.is_false(r.accepted)
+        local plain=requesting()
+        _,r=send(plain,{type='gap_result',status='applied'})
+        assert.is_false(r.accepted)
+    end)
 end)

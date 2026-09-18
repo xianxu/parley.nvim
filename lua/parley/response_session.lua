@@ -127,16 +127,24 @@ function M.start(doc,spec,opts)
             if not profiled then failed(profile_error);return false end
             r.input=vim.deepcopy(input)
             local prepared_ctx=vim.tbl_extend('force',{},ctx,{input=r.input})
-            local op,reason=Preparation.start(doc,prepared_ctx,{
-                prepared=function(value)
-                    if r.cancelled or ctx.cancelled()then return false end
-                    return cb.prepared(value)
-                end,
-                failed=failed,
-                resolved=function()r.local_done=true;resolve()end,
-            },replacement,{schedule=frozen.schedule})
-            if not op then failed(reason);return false end
-            r.op=op
+            -- #266: the input goes to the runner now, so the provider request
+            -- starts without waiting on the write turn. The gap is handed over as
+            -- a writer the machine calls immediately before this generation's
+            -- first write — never, if it is cancelled first. This operation stays
+            -- unresolved until Preparation retires, so cancellation reaches the
+            -- writer through the ordinary cancel_operation path.
+            local function write_gap(done)
+                if r.retired or r.cancelled or ctx.cancelled()then return done('cancelled')end
+                local op,reason=Preparation.start(doc,prepared_ctx,{
+                    prepared=function()return done('applied')end,
+                    failed=failed,
+                    resolved=function()r.local_done=true;resolve()end,
+                },replacement,{schedule=frozen.schedule})
+                if not op then failed(reason);return end
+                r.op=op
+            end
+            local ok,accepted=pcall(cb.prepared,r.input,write_gap)
+            if not ok or accepted==false then failed(ok and 'prepared callback refused' or tostring(accepted));return false end
             return true
         end
         function callbacks.failed(reason)failed(reason)end
@@ -168,7 +176,6 @@ function M.start(doc,spec,opts)
     end
     local hooks={prepare=prepare,request=wrap('provider',function(ctx,cb)
             presentation(ctx)
-            safe(opts.requesting,ctx)
             return provider.request(ctx,cb)
         end),
         reserve_round=tool_adapter('reserve_round'),cancel_reservation=tool_adapter('cancel_reservation'),

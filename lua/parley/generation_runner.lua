@@ -137,11 +137,18 @@ local function callbacks(s,effect,after_writes)
         if result.accepted then s.operations[operation]=nil end
         return result.accepted
     end
-    function cb.prepared(input)
+    --- `gap` (prepare only, optional): a writer for bytes the preparation has not
+    --- written yet. Reporting input without them lets the request start at once;
+    --- the machine calls the writer back through `write_gap` immediately before
+    --- this generation's first write (#266).
+    function cb.prepared(input,gap)
         if prepared or not alive(s,operation) then return false end
+        if gap~=nil and (effect.type~='prepare' or type(gap)~='function') then return false,'invalid gap writer' end
         if effect.type=='prepare' then
+            -- Without a deferred gap, preparation must have retired its extra
+            -- grants already. With one, they stay live until the gap lands.
             local grants=D.snapshot(s.doc).grants
-            for _,gid in ipairs(s.preparation_grants) do
+            for _,gid in ipairs(gap and {} or s.preparation_grants) do
                 if grants[gid] and grants[gid].status~='revoked' then return false,'live preparation grant' end
             end
             for _,gid in ipairs(s.preparation_grants) do s.grants[gid]=nil end
@@ -150,9 +157,10 @@ local function callbacks(s,effect,after_writes)
         local ref=blob(s,input,false)
         after_writes(function(failed)
             if failed then release(s,ref);dispatch(s,{type='prepare_failed',preparation=operation});return end
+            s.gap_writer=gap
             local result=dispatch(s,{type=effect.type=='continue_round' and 'round_prepared' or 'prepared',
-                preparation=operation,round=effect.round,input_ref=ref})
-            if not result.accepted then release(s,ref) end
+                preparation=operation,round=effect.round,input_ref=ref,gap=gap and true or nil})
+            if not result.accepted then release(s,ref);s.gap_writer=nil end
         end)
         return true
     end
@@ -359,6 +367,16 @@ local function execute(s,effect)
         start_operation(s,effect)
     elseif effect.type=='write'  or effect.type=='manual_append' then return write(s,effect)
     elseif effect.type=='manual_replace' then return replace(s,effect)
+    elseif effect.type=='write_gap' then
+        local writer,settled=s.gap_writer,false
+        s.gap_writer=nil
+        local function done(status)
+            if settled or s.terminal then return false end;settled=true
+            return dispatch(s,{type='gap_result',status=status=='applied' and 'applied' or 'failed'}).accepted
+        end
+        if s.detached or not writer or G.snapshot(s.machine).phase=='stopping' then done('failed');return false end
+        local ok,err=pcall(writer,done)
+        if not ok then issue(s,err);done('failed') end
     elseif effect.type=='request_turn' or effect.type=='release_turn' then
         if not s.detached then D.transition(s.doc,{kind=effect.type,generation=s.generation,epoch=s.epoch}) end
     elseif effect.type=='revoke' then
@@ -442,7 +460,7 @@ local function execute(s,effect)
         s.terminal=true;s.written=nil;s.off();s.work:close();active=active-1
         for ref in pairs(s.blobs) do release(s,ref) end
         local terminal=s.adapters.terminal
-        s.queue={};s.pending=nil;s.seed=nil;s.capabilities=nil;s.adapters={}
+        s.queue={};s.pending=nil;s.seed=nil;s.capabilities=nil;s.adapters={};s.gap_writer=nil
         s.operations={};s.doc=nil;s.grants={};s.preparation_grants={};s.detached=true;s.off=nil
         if terminal then pcall(terminal,G.snapshot(s.machine)) end
     end

@@ -29,13 +29,29 @@ local function phase(s) return s.phase=='paused' and s.resume_phase or s.phase e
 local function advance(s,value)
     if s.phase=='paused' then s.resume_phase=value else s.phase=value end
 end
+--- #266: may this generation emit a write-producing effect (an output `write`,
+--- `reserve_round` or `finalize`) now? One predicate for all three, so none of
+--- them can outrun the other two's preconditions:
+---   * the turn — an optimization, not the enforcement point: the coordinator
+---     refuses a turnless write with 'waiting' regardless, but gating here stops a
+---     queued generation emitting effects that would only park;
+---   * the deferred preparation gap — it must land before anything else this
+---     generation writes, or a call block or output lands inside the old answer's
+---     region ahead of the replacement that clears it.
+local function may_write(s)
+    return s.turn_status=='held' and s.gap=='none'
+end
+--- Is one of the three write-producing emissions due? This is what pulls a
+--- deferred gap in: the gap is written immediately before the generation's first
+--- write, whatever kind that write turns out to be.
+local function write_due(s,bytes)
+    if #s.queue>0 then return true end
+    if s.phase=='executing_tools' then return s.round~=nil and not s.round.reserved and bytes==0 end
+    return s.phase=='finalizing' and bytes==0 and not s.finalized
+end
 local function writable(s,grant)
     if s.grant_status=='revoked' or s.phase=='stopping' or s.phase=='terminal' then return false end
-    -- #266 M1: only the turn holder may stage a write. This is an optimization,
-    -- not the enforcement point — the coordinator refuses a turnless write with
-    -- 'waiting' regardless. Keeping it here stops a queued generation emitting
-    -- write effects that would only park.
-    if s.turn_status~='held' then return false end
+    if not may_write(s) then return false end
     if grant==s.grant then return s.grant_status=='valid' and s.phase~='paused' end
     for _,child in ipairs(s.round and s.round.children or {}) do
         if child.grant==grant then return child.grant_status=='valid' end
@@ -125,6 +141,10 @@ local function pump(s,effects)
         s.phase='requesting'
         s.attempt=operation(s,effects,'request',{input_ref=s.input_ref,capabilities_ref=s.capabilities_ref})
     end
+    if s.gap=='deferred' and s.turn_status=='held' and s.grant_status=='valid' and s.phase~='paused'
+        and write_due(s,staged(s)) then
+        s.gap='writing';emit(s,effects,'write_gap',{grant=s.grant})
+    end
     if not s.inflight then
         for i,item in ipairs(s.queue) do
             if writable(s,item.grant) then
@@ -150,8 +170,10 @@ local function pump(s,effects)
     if s.round and s.phase=='executing_tools' and bytes==0 and s.grant_status=='valid' then
         local round=s.round
         if not round.reserved and not round.reservation_pending then
-            round.reservation_pending=true
-            emit(s,effects,'reserve_round',{round=round.id,children=copy(round.children),grant=s.grant})
+            if may_write(s) then
+                round.reservation_pending=true
+                emit(s,effects,'reserve_round',{round=round.id,children=copy(round.children),grant=s.grant})
+            end
         elseif round.reserved then
             start_children(s,effects)
             local complete=outstanding(s)==0
@@ -170,7 +192,7 @@ local function pump(s,effects)
     if phase(s)=='draining' and bytes==0 and not s.provider_failed then advance(s,'finalizing') end
     if s.phase=='finalizing' and bytes==0 and s.grant_status=='valid' then
         if not s.finalize_pending and not s.finalized then
-            s.finalize_pending=emit(s,effects,'finalize',{grant=s.grant,exchange=s.exchange}).id
+            if may_write(s) then s.finalize_pending=emit(s,effects,'finalize',{grant=s.grant,exchange=s.exchange}).id end
         elseif s.finalized and outstanding(s)==0 then
             s.phase='terminal';s.outcome='success'
             emit(s,effects,'terminal',{outcome='success',committed_bytes=s.committed_bytes,discarded_bytes=s.discarded_bytes})
@@ -186,7 +208,7 @@ function M.new(spec)
     assert(integer(items) and items>0 and items<=256,'invalid staged item limit')
     return wrap({epoch=spec.epoch,generation=spec.generation,exchange=spec.exchange,grant=spec.grant,
         input_seed_ref=spec.input_seed_ref,dependencies_ref=spec.dependencies_ref,capabilities_ref=spec.capabilities_ref,
-        phase='preparing',grant_status='valid',turn_status='held',serial=0,operations={},operation_order={},queue={},
+        phase='preparing',grant_status='valid',turn_status='held',gap='none',serial=0,operations={},operation_order={},queue={},
         accepted_bytes=0,committed_bytes=0,discarded_bytes=0,limits={staged_bytes=bytes,queued_items=items}})
 end
 function M.snapshot(handle)
@@ -203,7 +225,7 @@ function M.snapshot(handle)
         dependencies_ref=s.dependencies_ref,capabilities_ref=s.capabilities_ref,stale_input=s.stale_input or false,
         staged_bytes=bytes,staged_items=items,accepted_bytes=s.accepted_bytes,committed_bytes=s.committed_bytes,
         discarded_bytes=s.discarded_bytes,outstanding_operations=outstanding(s),retained_operations=retained,outcome=s.outcome,
-        round=s.round and s.round.id,attempt=s.attempt,supervised_children=supervised}
+        round=s.round and s.round.id,attempt=s.attempt,supervised_children=supervised,gap=s.gap}
 end
 function M.transition(handle,event)
     local old=get(handle)
@@ -222,8 +244,16 @@ function M.transition(handle,event)
         s.turn_status=event.status
     elseif kind=='prepared' then
         if phase(s)~='preparing' or event.preparation~=s.preparation or not s.operations[event.preparation]
-            or s.input_ref or not ref(event.input_ref) then return reject('preparation') end
+            or s.input_ref or not ref(event.input_ref) or (event.gap~=nil and event.gap~=true) then return reject('preparation') end
         s.input_ref=event.input_ref
+        -- #266: a preparation may report its input before writing its gap, so the
+        -- request starts without waiting on the turn; the gap then lands just
+        -- before this generation's first write.
+        if event.gap then s.gap='deferred' end
+    elseif kind=='gap_result' then
+        if s.gap~='writing' or (event.status~='applied' and event.status~='failed') then return reject('gap') end
+        s.gap='none'
+        if event.status=='failed' then stop(s,effects,'prepare_failed') end
     elseif kind=='prepare_failed' then
         local current=event.preparation==s.preparation or s.round and event.preparation==s.round.preparation
         local owner=s.operations[event.preparation]
