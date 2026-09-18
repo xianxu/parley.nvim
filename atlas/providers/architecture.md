@@ -31,8 +31,10 @@ buffer; sibling generations run concurrently but write one at a time under the
 document's write turn (see [write ownership](../chat/ownership.md)).
 
 `response_provider` freezes decoded tool declarations from a successful response.
-`response_tools` reserves ordered result slots before starting children, then
-builds the next request from captured messages and settled results. It does not
+`response_tools` runs a round's tools as soon as it is declared, renders the
+call and result blocks the generation machine writes one at a time in declared
+order (`tools/sequence.lua`), then builds the next request from captured messages
+and settled results. It does not
 reparse the live buffer or recursively submit a new chat. See the
 [tool loop model](tool_use.md#loop-model) for limits and producer outcomes.
 

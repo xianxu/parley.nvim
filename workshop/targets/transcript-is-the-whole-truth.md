@@ -170,3 +170,28 @@ intervenes*, and exactly which events intervene — is stated once, in
 derived from `Editor:can_join_undo`. parley#261, which leans on these guarantees,
 should cite that section, not this target's revisions.
 
+
+### 2026-09-18 — tool rounds land in order; a failed call no longer pauses (parley#266 M2)
+
+**Reason.** M2 shipped ordered `(call, result)` insertion, and the operator
+decided a failed tool call should not pause: it is written as an error result so
+the model can try another way.
+
+**Delta.**
+
+- **Delivered:** within one generation's tool round, document order holds —
+  every block is appended at the answer's tail, each call immediately before its
+  own result. `tests/integration/response_tools_spec.lua` pins it on real text,
+  including a sweep of every interleaving of two outcomes, a stop and cleanup.
+- **The pause causes listed in the round-2 revision shrink to one:** stale input
+  at a continuation. An unknown tool outcome is written as an error result and
+  the round goes on; "revoked tool output" no longer exists apart from the
+  answer, since a round's blocks have no grants of their own — an edit inside
+  them revokes the answer.
+- **A gap this target now tolerates, stated so it is not mistaken for a
+  guarantee:** execution precedes the record. A tool whose pair is held — behind
+  an earlier call still running, or behind another generation's turn — has
+  already run but is not yet in the file, and Stop drops pairs not yet written,
+  like any held output. Before M2 a call block was always written before its tool
+  started. The transcript still never *claims* an effect that did not happen; it
+  can omit one that did, if the generation is stopped first.

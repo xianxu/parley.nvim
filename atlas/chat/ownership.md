@@ -20,9 +20,12 @@ written immediately before its first write of any kind, so a response cancelled
 before its first byte leaves the transcript unchanged and a regenerated answer
 stays visible until something replaces it.
 
-Each tool round reserves ordered result slots before starting effects. An edit
-intersecting owned output revokes the affected writer; reload invalidates all
-grants from the former document epoch. Earlier context edits mark captured input
+A tool round starts its tools at once and appends their blocks in declared
+order, each call immediately before its own result, through the answer's own
+grant (#266 M2); a failed call is written as an error result and the round goes
+on. An edit intersecting owned output revokes the affected writer — inside a tool
+round that is the whole answer, since its blocks have no grants of their own;
+reload invalidates all grants from the former document epoch. Earlier context edits mark captured input
 stale without redirecting output.
 
 **Undo grouping** — this page is the one statement of it; the
@@ -41,6 +44,10 @@ grant match the last write's receipt and native undo has not moved since.
   another generation's write breaks the match — which serialization allows only
   once the turn has moved, e.g. after a pause. Different grants — say an answer's
   main grant, then its completion prompt's — are always different steps.
+- **Tool rounds are not broken out** (operator decision, #266 M2): a round's call
+  and result blocks are ordinary writes through the answer's grant, so they join
+  the answer's undo step exactly like its text. Undo never strands a pair apart
+  from the text that refers to it.
 
 Explicit user commands use captured source transactions. Each native mutation
 returns an exact receipt, and interrupted commands preserve intervening human
@@ -52,12 +59,11 @@ alone does not prove an effect stopped. Stop selects one generation, while
 StopDocument explicitly selects every generation in the current chat.
 
 See [response progress](response_progress.md) for the presentation lifecycle and
-[tool use](../providers/tool_use.md) for ordered child slots and effect outcomes.
+[tool use](../providers/tool_use.md) for ordered (call, result) insertion and effect outcomes.
 
 `ChatResumeResponse` captures the selected session, epoch, round and input identity
 before its confirmation picker. `generation_runner.resume_original` validates
 those identities, a ready continuation and every live grant before accepting the
-explicit original-input policy. Unknown child outcomes and revoked output do not
-qualify. `response_status` keeps at most 256 display-only stale annotations per
+explicit original-input policy. Revoked output does not qualify. `response_status` keeps at most 256 display-only stale annotations per
 buffer, using indexed identity lookup and moving extmarks; reload/detach clears
 them. No source scan is part of status rendering.

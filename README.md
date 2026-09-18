@@ -68,9 +68,11 @@ The stale note clears when a fresh response starts or the file is reloaded.
 - `:ParleyStop` cancels the response under the cursor. If none is selected, it
   offers the active responses in this chat. Cancelling the picker changes nothing.
 - `:ParleyStopDocument` cancels all responses in the current chat.
-- Tool slots show `(Tool result pending)` until a confirmed result replaces them.
-  Pending text is not a successful tool result. Already started effects may still
-  need to finish cleanup after Stop; stopping does not undo an external effect.
+- A tool round's tools run at once, but each call is written immediately before
+  its own result, in the order the model asked for them; the status line counts
+  the tools still running. A failed call is written as an error result and the
+  answer goes on. Already started effects may still need to finish cleanup after
+  Stop; stopping does not undo an external effect.
 
 These controls apply to concurrent work in one Neovim instance.
 

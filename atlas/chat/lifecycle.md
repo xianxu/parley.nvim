@@ -168,10 +168,11 @@ write authenticates an exact receipt; saving can advance Neovim's tick without
 an edit callback, so owned writes capture a fresh native frame immediately before
 mutation instead of treating tick continuity as ownership.
 
-`response_tools` reserves the whole round before effects: all call blocks,
-then result slots in declaration order. Child results may finish out of order.
-Only positive outcome and physical-completion evidence allow continuation; an
-unknown outcome stays unresolved and cannot be replayed automatically. The M4
+A tool round's tools start at once; results may finish out of order, but the
+blocks land in declared order, each call immediately before its own result
+(#266 M2). Continuation needs every block written and every tool physically
+cleaned up. A failed call — including an unknown outcome — is written as an
+error result and the round continues; it is never replayed automatically. The M4
 coordinator supports injected asynchronous producers; actual asynchronous builtin
 tool execution and process resource scheduling remain #254 M6 work.
 

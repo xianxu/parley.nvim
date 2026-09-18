@@ -32,8 +32,13 @@ A generation held behind the write turn replaces its spinner with *Waiting for
 the answer to line N (streaming | running tools | preparing | finishing);
 :ParleyStop there stops it*. The runner recomputes the holder and its phase on
 every sync, so on every holder write, and the line returns to a working status
-when the turn arrives. Tool result slots have independent child
-grants. Neither process exit alone nor successful signaling proves cleanup:
+when the turn arrives.
+
+A round's tools run at once but their blocks land one at a time, in declared
+order (#266 M2), so the transcript can lag them. While the round runs, the status
+line counts them — *Running tools: 1 of 2 finished* — from the generation's
+snapshot, re-presented whenever the count changes; a waiting note takes
+precedence. Neither process exit alone nor successful signaling proves cleanup:
 transport ownership persists until exit and both pipes settle.
 
 A provider failure lets already-admitted valid bytes drain, then reports the
