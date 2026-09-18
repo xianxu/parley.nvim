@@ -1064,3 +1064,14 @@ twice (once at JOBS=4). Measured, not argued: under 16-way stress it fails 8/64
 at the M3 close `e48362ab` and 2/64 at M4, so it predates M4 (its modules never
 load `document/state.lua` either). Each aborted file passed alone. Recorded on
 parley#267, whose signature it shares.
+
+**The 50 s aborts are a whole process running slow, not a wait.** At the M4 close
+`response_tools_spec` hit Plenary's 50 s limit once in a full run and once alone.
+It does so on pre-#266 `main` too (2/40 under 8-way stress; M3 1/24, M4 7/64), so
+it is not this issue's. Instrumenting every case, with start/end times written
+unbuffered because Plenary buffers its own output, shows a slow run is uniformly
+7–8× slower in every case, including ones #266 never touched ("widens reads…"
+0.24 s → 1.66 s). No single wait runs to a timeout. A 7 s spec slowed that much
+crosses 50 s. That fits M3's "bimodal" `perf_ownership_spec` and the earlier
+`fold_retirement`/`perf_document` SIGTERMs. It does not fit
+`document_dependencies_spec`, which exits 1 after about a second.
