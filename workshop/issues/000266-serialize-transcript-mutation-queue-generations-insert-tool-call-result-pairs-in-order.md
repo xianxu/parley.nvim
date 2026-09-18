@@ -254,7 +254,7 @@ Durable plan: `workshop/plans/000266-serialize-transcript-mutation-plan.md`
       - [x] `draining` phase and `turn_status` mirror
       - [x] `'waiting'` refusal at the coordinator and in `Replacement.step`
       - [x] defer preparation's write until there is output (restores option (b))
-      - [ ] release/re-request matrix + end-to-end wake
+      - [x] release/re-request matrix + end-to-end wake + waiter visibility
       - [ ] held-output budget message; writer-enumeration verification
       - [ ] undo coherence assertion
       - [ ] atlas rewrite + `milestone-close`
@@ -688,4 +688,27 @@ and the over-serialization section of the plan is marked resolved.
 Commits: `4e117512` revoke before release · `bb620943` regeneration waits for
 proof · `8cbd6973` the deferral · `cc9d9439` two specs restated ·
 `01749159` side-quest: `refresh_goldens` writes normalized payloads.
+
+### 2026-09-17 — Task 1.6: suspension holds the turn; matrix, wake, visibility
+
+**Operator decision:** a holder whose grant is transiently suspended keeps the
+turn. Asked as "which gives the clearest linear history?": suspension is routine
+(any edit the structure cannot classify at once), and releasing would queue the
+holder behind the next generation's whole lifetime — `A… | edit | B | …A`.
+Holding keeps each generation's writes one run; a long suspension is a fourth
+visible stall shape. This drops the plan's `suspend`, `suspend_preparation` and
+`waiting_head_of_line` rows and the `WriteTurn.should_release` abstraction
+(it would have had one caller).
+
+Everything that releases the turn was already implemented; the matrix
+(`generation_turn_spec`: terminal/stop/detach/reload × 4 interleavings) and the
+self-scheduled wake passed on first run and would fail without the turn
+machinery. The waiter now shows "Waiting for the answer to line N (streaming |
+running tools | preparing | finishing); :ParleyStop there stops it" on its
+pending extmark (`78b521ea`, `076b8828`).
+
+Measured while checking for overhead: `perf_ownership_spec` runs 30–41 s alone
+on both `HEAD` and the working tree (run-to-run variance, no regression), so its
+and `document_fold_retirement_spec`'s timeouts under `make test`'s parallel load
+are the same pre-existing load flake as `perf_document_spec`.
 
