@@ -271,7 +271,15 @@ Durable plan: `workshop/plans/000266-serialize-transcript-mutation-plan.md`
       - [ ] decide undo grouping for appended `(call, result)` pairs — sharing the
             answer's generation and grant, they join its undo step unless broken
             deliberately — and record it in `atlas/chat/ownership.md` "Undo
-            grouping" only
+            grouping" only *(decided 2026-09-18: join the answer)*
+      - [ ] `ToolSequence` pure entity; the machine emits ordered `insert_tool`
+            effects; reservation lifecycle, child grants and `cancel_child` removed
+      - [ ] a failed tool call writes an error result and the round continues —
+            no pause (operator, 2026-09-18; supersedes Task 3.3's `⏳:` marker)
+      - [ ] capacity tickets removed from the document layer
+      - [ ] tool progress shown in presentation while pairs are held
+      - [ ] goldens/e2e unchanged in message shape; atlas `tool_use.md` rewritten;
+            `milestone-close`
 - [ ] M3 — residual exclusion sweep (`exclude`, parent-slot carving, the
       half-open seam flags, the ancestor walk).
 
@@ -788,3 +796,16 @@ built from ariadne's committed `HEAD` (`9ca1d6c`, via `git archive`) so the gate
 did not depend on another session's in-flight edits; the peer's working tree was
 not touched. (By then it compiled again, still mid-edit.)
 
+
+### 2026-09-18 — M2 starts: two operator decisions, one mechanism change
+
+- **A failed tool call does not pause** (operator): "failed tool call shouldn't
+  pause, but rather print error message, so model can pick another way to call
+  the tool." `unknown`, `rejected` and `cancelled_before_effect` are written as an
+  ordinary `📎: … error=true` result and the round continues. This replaces Task
+  3.3's `⏳:` marker — the marker only existed because the round could not
+  continue past an unresolved call.
+- **Tool pairs join the answer's undo step** (operator) — no deliberate break.
+- **The machine sequences insertion, not the adapter** — only the machine sees
+  the staged pre-round text, the turn, the gap and stop. Rationale and delta in
+  the plan's `## Revisions` (2026-09-18).
