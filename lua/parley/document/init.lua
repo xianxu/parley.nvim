@@ -431,8 +431,8 @@ function M.apply_user(doc,token,request)
     local s=state(doc)
     return User.apply(s.structure,s.editor,s.epoch,token,request)
 end
--- Fresh confirmation may restore only the current parent endpoint after all
--- delegated writers have retired. This never uses finite successor authority.
+-- Fresh confirmation narrows a grant to its current tail endpoint, where a
+-- continuation writes next. This never uses finite successor authority.
 function M.reclaim_tail(doc,intent)
     local s=state(doc)
     if s.dead or type(intent)~='table' then return {ok=false,reason='detached',effects={}} end

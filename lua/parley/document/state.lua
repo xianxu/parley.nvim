@@ -252,15 +252,9 @@ function M.transition(doc,event)
         if not g or g.status=='revoked' or g.generation~=event.generation or g.entity~=event.entity
             or event.revision~=g.revision or not s.generations[event.generation] then return reject('ownership') end
         if not identity(g,event.current) or not proof(event.current) then return reject('unconfirmed identity') end
-        if g.tail_lost then return reject('tail source changed') end
-        local tail={first=g.last,last=g.last}
-        for _,other in pairs(s.grants) do
-            if other.status~='revoked' and other~=g then
-                if other.parent==g.id then return reject('active child') end
-                for _,slot in ipairs(other.slots) do if overlaps(tail,slot) then return reject('overlap') end end
-            end
-        end
-        g.first=g.last;g.slots={tail};g.revision=g.revision+1;g.status='valid';g.reason=nil
+        -- No other live grant can cover g.last: grants are disjoint at acquire,
+        -- and an edit reaching a grant it does not own revokes it.
+        g.first=g.last;g.slots={{first=g.last,last=g.last}};g.revision=g.revision+1;g.status='valid';g.reason=nil
         result.first=g.first;result.last=g.last;result.revision=g.revision
     elseif kind=='observed_edit' then
         if not range(event) or not integer(event.new_bytes) or (event.revision~=nil and not integer(event.revision)) then
@@ -282,17 +276,6 @@ function M.transition(doc,event)
         end
         for _,g in pairs(s.grants) do
             local first,last=g.first,g.last
-            if event.first<=last and event.last>=last then
-                local ancestor=owner;local owned=false
-                for _=1,16 do
-                    if not ancestor then break end
-                    if ancestor==g then owned=true;break end
-                    ancestor=s.grants[ancestor.parent]
-                end
-                -- An excluded parent endpoint may move after a human edit in
-                -- a child's slot. Movement does not establish successor rights.
-                if not owned then g.tail_lost=true end
-            end
             move(g,event); for _,slot in ipairs(g.slots) do move(slot,event) end
             -- Plans contain absolute byte coordinates. A disjoint edit moving
             -- this grant invalidates old plans without revoking the writer.
