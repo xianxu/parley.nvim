@@ -56,8 +56,12 @@ end
 local function stop(s,effects,outcome)
     if s.phase=='stopping' then return end
     s.phase='stopping';s.outcome=outcome;s.grant_status='revoked'
-    release_turn(s,effects)
+    -- Revoke before yielding the turn. The runner executes one effect per step,
+    -- and the machine can report `terminal` in this same transition, so an effect
+    -- queued ahead of the revoke keeps the region held while the phase already
+    -- says it is free — an immediate regenerate is then refused as 'overlap'.
     emit(s,effects,'revoke',{grant=s.grant})
+    release_turn(s,effects)
     if s.round and s.round.reservation_pending then emit(s,effects,'cancel_reservation',{round=s.round.id}) end
     for _,item in ipairs(s.queue) do
         s.discarded_bytes=s.discarded_bytes+item.bytes

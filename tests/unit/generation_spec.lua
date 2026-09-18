@@ -550,6 +550,20 @@ describe('pure generation lifecycle',function()
         assert.is_not_nil(effect(r,'release_turn'),'a pause must not hold the turn')
     end)
 
+    -- The runner executes one effect per step and the machine may already report
+    -- `terminal`; a release queued ahead of the revoke left the region held while
+    -- the phase said it was free, so an immediate regenerate was refused 'overlap'
+    -- (batch_lifecycle_spec's single retry cases).
+    it('revokes its grant before yielding the turn when it stops',function()
+        local s,a=requesting()
+        s=send(s,{type='operation_resolved',operation=a})
+        local _,r=send(s,{type='cancel'})
+        local order={}
+        for i,e in ipairs(r.effects) do order[e.type]=order[e.type] or i end
+        assert.is_not_nil(order.revoke);assert.is_not_nil(order.release_turn)
+        assert.is_true(order.revoke<order.release_turn,'revoke must precede release_turn')
+    end)
+
     it('re-requests the turn when a paused generation resumes',function()
         local s=send(G.new(spec()),{type='start'})
         local r
