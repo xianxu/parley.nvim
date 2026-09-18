@@ -1529,6 +1529,7 @@ local function start_scoped_response(frame)
             self.cancelled = true
             if self.resolved then done() else self.cancel_done = done end
             if self.remote then self.remote:cancel() end
+            if self.unproved then self.unproved(); self.unproved = nil; resolve() end
         end
         local function logical_failure(reason)
             if operation.cancelled or operation.failed then return end
@@ -1544,6 +1545,20 @@ local function start_scoped_response(frame)
         local function build(remote, remote_error)
             if operation.cancelled or ctx.cancelled() then resolve(); return end
             if remote_error then fail(remote_error); return end
+            -- #266: another generation's first write (its preparation gap) can
+            -- leave this grant suspended until repair re-proves it, and the
+            -- recovery snapshot below reads the live answer. A suspended grant is
+            -- still ours, so wait for the proof instead of failing on it.
+            local grant = D.snapshot(doc).grants[ctx.grant]
+            if replacing_answer and grant and grant.status == 'suspended' then
+                operation.unproved = D.subscribe(doc, function()
+                    local current = D.snapshot(doc).grants[ctx.grant]
+                    if not operation.unproved or current and current.status == 'suspended' then return end
+                    operation.unproved(); operation.unproved = nil
+                    vim.schedule(function() build(remote, remote_error) end)
+                end)
+                return
+            end
             local ok, err = xpcall(function()
                 messages, message_lead = M.build_messages({parsed_chat = input_parsed, start_index = frame.start_index,
                     end_index = frame.end_index, exchange_idx = input_index, agent = agent, config = config,
