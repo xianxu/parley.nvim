@@ -555,3 +555,39 @@ rather than `'waiting'`. The coordinator is the enforcement point and is
 fail-closed, so a turnless write is refused regardless; a fail-closed machine gate
 would buy no correctness and would require every existing generation unit test to
 hand the machine a turn it never needed.
+
+### 2026-09-17 — fail-closed reversed, and a sequencing problem with the M1 way-station
+
+**Fail-closed was reversed on measurement (`99db5af2`).** Refusing every writer
+when nobody holds the turn broke **96** document-layer tests that legitimately
+exercise writes without caring about turns. The invariant is now enforced
+jointly: (a) every generated writer requests the turn before writing —
+`generation.lua:214` (start), `:367` (resume), `response_topic.lua:169`, pinned by
+`generation_spec` — and (b) the coordinator refuses anyone who is not the holder.
+Given (a), the turn is always held while any generation is live, so a second
+writer is always refused; an unheld turn means nothing is writing. That took the
+sweep from 96 failures to 9.
+
+**Remaining failures — all one class, all "two concurrent generations":**
+- `chat_scoped_response_spec` (2): `'runs two disjoint answers…'`,
+  `'admits the next captured question while a preceding answer continues streaming'`
+- `chat_stop_generation_spec` (4): all four scoped-Stop cases
+- `batch_lifecycle_spec` (2)
+- `chat_async_tools_spec` (1)
+
+They fail only because M1 takes the turn in `preparing`, so the second
+generation's provider request never starts (the documented over-serialization).
+
+**Sequencing problem worth deciding before grinding through them.** The plan has
+M1 rewrite these to the queued shape and M2 rewrite them back — two rounds of
+churn on nine tests. Worse, `chat_stop_generation_spec` exists to verify Stop
+targets one generation among several *concurrent transports*; a way-station
+version would have only one transport and would verify materially less. The same
+applies to `chat_async_tools_spec`, whose point is overlapping tool processes.
+
+**Proposal: do M2 before finishing M1's test inversions.** M2 (defer
+preparation's write until there is output) restores concurrent request start, so
+these nine tests keep asserting what they were written to assert and are never
+rewritten at all. M1's mechanism is already complete and green on its own specs;
+what is outstanding is only the consequence M2 removes. Nothing in M2 depends on
+the inversions — it depends on M1's turn, which has landed.
