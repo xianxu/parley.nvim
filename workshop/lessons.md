@@ -3133,3 +3133,14 @@ download.
   claims must have a consumer a test actually enters: round 1's outcome-kind
   rendering was credited as part of the fix, but no test (and no code path)
   reached it, so it was deleted rather than kept as dead insurance.
+
+- #266 M4: `tests/manual/` is a page a reader meets the claim on. Three milestones
+  of superseded-claim sweeps covered atlas, README, code comments and user-visible
+  strings, and #254's live-test checklist still told the operator to expect
+  concurrent answer writes, "pending slots" and a Stop that drops the round —
+  the exact behaviors a live tester would check. Include `tests/manual/` and
+  `docs/` in every superseded-claim grep.
+- #266 M4: after removing the mechanism that made a structure plural, check what
+  the structure degenerates to. With carving gone, every grant's slot list was
+  provably its own range repeated — a second copy of one fact that the plan's
+  line-by-line removal list would have left in place.

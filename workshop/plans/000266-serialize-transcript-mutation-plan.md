@@ -677,7 +677,7 @@ There is no tool → pending edge today. Add one so both tools read as in flight
 ### Task 3.6: atlas + milestone close
 
 - [x] Rewrite `atlas/providers/tool_use.md` (ordered child slots and reserved result slots are gone); record the accepted four-message resubmit shape.
-- [ ] `make test` → exit 0. `sdlc milestone-close --issue 266 --milestone M2`
+- [x] `make test` → exit 0. `sdlc milestone-close --issue 266 --milestone M2`
 
 ---
 
@@ -758,7 +758,7 @@ What remains after **M2** (Task 3.2b) removes child grants: the geometry that on
 **Files:** `lua/parley/document/state.lua` — `exclude` `:147-159`, carving `:237-241,252`, `'outside parent'`/`'parent'` `:226-236`, ancestor walk + `tail_lost` `:291-311`, `'delegated parent'` `:99-101`, `'active child'` `:265-268`; `lua/parley/document/init.lua:528-529`
 **Tests:** `tests/unit/document_state_spec.lua:98-133`, `tests/unit/document_write_plan_spec.lua:144-159`, `tests/unit/document_append_spec.lua:100`
 
-- [ ] One concern per commit, `make test` between each. Each removal deletes the tests that pinned it — record in `## Log` which invariant each deleted test was defending, so a later reader can tell deliberate removal from erosion.
+- [x] One concern per commit, `make test` between each. Each removal deletes the tests that pinned it — record in `## Log` which invariant each deleted test was defending, so a later reader can tell deliberate removal from erosion.
 
 ### Task 4.2: remove the half-open flags — LAST
 
@@ -766,16 +766,16 @@ What remains after **M2** (Task 3.2b) removes child grants: the geometry that on
 
 These exist solely to disambiguate excluded seams, but they thread through the same helpers M1's turn logic uses. Remove only after **Task 4.1** is green, and run the full suite immediately.
 
-- [ ] `make test` → exit 0. Commit `#266 M4: drop half-open seam handling with the last child grant`.
+- [x] `make test` → exit 0. Commit `#266 M4: drop half-open seam handling with the last child grant`.
 
 ### Task 4.3: residual lifecycle cleanup
 
-- [ ] Delete the fields with **zero readers** confirmed during the audit: `receipt.markers` (`response_tools.lua:66`), `children[i].call_block` and `children[i].result_slot` (`generation.lua:293`).
-- [ ] **Add a test step** — this task had none in an earlier draft. Assert `grep -rn` finds no remaining reference to the removed symbols, and that `make test` is green.
+- [x] Delete the fields with **zero readers** confirmed during the audit: `receipt.markers` (`response_tools.lua:66`), `children[i].call_block` and `children[i].result_slot` (`generation.lua:293`).
+- [x] **Add a test step** — this task had none in an earlier draft. Assert `grep -rn` finds no remaining reference to the removed symbols, and that `make test` is green.
 
 ### Task 4.4: close
 
-- [ ] Final atlas sweep — no page may still describe reserved slots, child grants or capacity tickets.
+- [x] Final atlas sweep — no page may still describe reserved slots, child grants or capacity tickets.
 - [ ] `make test` → exit 0, full output captured as close evidence (lint runs first; `workshop/lessons.md:792` records a close where green specs masked a red lint).
 - [ ] `sdlc close --issue 266 --verified '<full make test output summary>'`
 
@@ -1273,3 +1273,24 @@ Review sidecar: `workshop/plans/000266-…-m3-review.md`.
   paraphrasing it — the rule's scope now includes user-facing pages.
 - **The "queued in the scheduler" row is tested as transcript text**
   (`response_tools_spec`), not only at the producer seam.
+
+### 2026-09-18 — M4: one step beyond Chunk 4, and one already done
+
+- **Added: a grant is one range.** Once `exclude` and the half-open flags were
+  gone, every writer of a grant's `slots` (acquire, `reclaim_tail`,
+  `successor_finish`, `move`) kept it equal to `{{first=g.first,last=g.last}}` — a
+  second copy of the range (ARCH-DRY; the Spec's "a serialized append that still
+  carries the slot bookkeeping is the easy subset", ARCH-PURPOSE). The list is
+  collapsed into the grant, and `'patch range required'` — which could no longer
+  fail — goes with it. Own commit, after Task 4.2.
+- **Also removed, beyond Task 4.1's line list:** `reclaim_tail`'s overlap scan of
+  the tail and the revoke cascade to children. Both only mattered for nested
+  grants; why the scan is dead is recorded in the issue Log (M4 entry).
+- **Task 4.3's fields were already gone** — M2 deleted them with child grants.
+  Its test step became a permanent guard in `tests/arch/document_ownership_spec.lua`
+  ("does not restore nested grants…"), counterfactual-checked.
+- **Task 4.4's sweep reached a page no earlier task named:**
+  `tests/manual/chat-concurrency.md` (#254's live-test checklist) still described
+  concurrent answer writes, "pending slots" and a Stop that drops the round. It
+  now points at the atlas statements instead of paraphrasing them.
+

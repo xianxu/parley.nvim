@@ -292,6 +292,15 @@ Durable plan: `workshop/plans/000266-serialize-transcript-mutation-plan.md`
       - [x] atlas + target revision; `milestone-close`
 - [ ] M4 — residual exclusion sweep (`exclude`, parent-slot carving, the
       half-open seam flags, the ancestor walk).
+      - [x] grants never nest: parent delegation, `exclude`, the revoke cascade
+            and both `'delegated parent'` refusals removed
+      - [x] a grant's tail is its own: ancestor walk, `tail_lost`, and
+            `reclaim_tail`'s child/overlap checks removed
+      - [x] half-open seam flags removed
+      - [x] a grant is one range: its slot list collapsed into it
+      - [x] removal guard (Task 4.3's test step) in `tests/arch/document_ownership_spec.lua`
+      - [x] atlas + manual-checklist sweep
+      - [ ] `milestone-close`
 
 ## Log
 
@@ -981,3 +990,76 @@ README points at `tool_use.md` "Stop during a tool round" instead of restating
 it; the "queued in the scheduler" row tested as transcript text. Final run: unit
 213/213; integration 162/163 — `highlighting_spec` (identical to `main`) aborted
 under JOBS=4 with no assertion and passes 3/3 alone.
+
+### 2026-09-18 — M4: the residual exclusion sweep
+
+Nothing in production has passed `parent` to `acquire` since M2 removed child
+grants, so every branch below was reachable only from four unit specs.
+
+**Removed, one concern per commit (ARCH-PURPOSE — the geometry that only existed
+to carve a child out of a parent):**
+
+1. **Delegation** — `acquire`'s `parent` (the `'parent'`, `'outside parent'`,
+   `'parent slot limit'` refusals and `exclude`), the revoke cascade to children,
+   and both `'delegated parent'` refusals (`successor_new`, `document.append`).
+2. **Tail geometry** — the ancestor walk and `tail_lost` in `observed_edit`, and
+   in `reclaim_tail` the `'tail source changed'`/`'active child'` refusals and
+   the overlap scan of the tail.
+3. **Half-open seams** — `open_first`/`open_last` in `overlaps`/`contains`/`move`.
+4. **Slot lists** — with no carving a grant's `slots` was provably always
+   `{{first=g.first,last=g.last}}` (acquire, `reclaim_tail`, `successor_finish`
+   and `move` all kept them equal), a second copy of one fact (ARCH-DRY). A grant
+   is now its one range; `'patch range required'` (a whole-grant request needing a
+   single slot that contained it) could no longer fail and went with it.
+
+**Why the tail checks are dead, not merely unused** (recorded so a later reader
+does not restore them "defensively"): grants are pairwise disjoint at `acquire`,
+and `observed_edit` preserves that — an owned edit lies inside its owner, so it
+cannot reach another grant, and any non-owner edit touching a grant revokes it.
+So (a) an edit touching `g.last` either is `g`'s own or revokes `g`, which is what
+`tail_lost` used to record for a parent whose tail sat in a child's hole; and
+(b) no other live grant can cover `g.last`, which is what the overlap scan in
+`reclaim_tail` checked.
+
+**Tests removed with the contract they pinned (not erosion):**
+
+- `document_state_spec` "excludes delegated child text and boundary slots from
+  the parent" and "keeps child insertion boundaries excluded after authorized
+  growth" — a parent could not write inside a delegated child's slot, at its
+  seams, or after the child grew or retired. Successor: "never nests grants" —
+  a region inside a live grant is refused as overlap, even for its own
+  generation and even when the event names a parent (red before the removal).
+- `document_write_plan_spec` "keeps delegated tool slots excluded from their
+  parent before and after child growth" — the same invariant through real write
+  plans.
+- `document_tail_spec` "rejects another generation occupying the retired
+  endpoint" — a parent's delegated tail could be taken by another generation
+  before reclaim. Unreachable: see (b) above.
+
+**Rewritten, same invariant:** `document_tail_spec`'s other cases (fresh
+zero-width tail; a human insertion at the tail — now asserting the revocation
+that replaced `tail_lost`; an owned insertion followed); `document_append_spec`
+"keeps a tail cursor through … an owned insertion immediately before its grant"
+— an Append-cursor property, now driven by two disjoint grants of one generation.
+
+**Task 4.3 was already done by M2:** `receipt.markers`, `children[i].call_block`
+and `children[i].result_slot` have no occurrence in `lua/`. `round.children` and
+the `start_child` effect remain — they are a round's tool calls, not grants.
+
+**Commits:** `4da5fef1` delegation · `9bc0191f` tail geometry · `65fbd688`
+half-open flags · `92b5a54c` slot list · `bb3ee0bf` removal guard.
+
+**Sweep beyond the atlas:** `tests/manual/chat-concurrency.md` (#254's live-test
+checklist) still promised concurrent answer writes, "pending slots" and a Stop
+that drops the round; it now points at `ownership.md` and `tool_use.md`.
+`atlas/chat/document.md` states the geometry that remains: one closed, disjoint
+range per grant, and a continuation's tail reclaim.
+
+**Harness, not this change:** every full run lost one or two files to a silent
+abort under the 8-way fan-out — `document_fold_retirement_spec` (SIGTERM, twice),
+`perf_document_spec`, `perf_ownership_spec`, `document_append_extent_spec`
+(all recorded at M2/M3), and one new name, `document_dependencies_spec`, which
+died without a summary in its 50k-origin case and fails 1/16 under 16-way
+stress. Its module graph (`dependencies` → `grammar` → `lexical`, plus
+`sequence`) never loads `document/state.lua`, so no M4 change can reach it.
+Each aborted file passed alone. Same family as parley#267.

@@ -87,7 +87,10 @@ repair in scheduled slices. Deleting marker bytes retires their identity even
 when the replacement text is identical. Surviving markers move with the index.
 
 A generation receives grants over confirmed byte ranges; a tool round appends its
-blocks through the answer's own grant, with none of its own (#266 M2). Editing
+blocks through the answer's own grant, with none of its own (#266 M2). A grant is
+one closed range, disjoint from every other live grant and never carved out of
+one (#266 M4), so an insertion at its boundary is inside it. A continuation first
+narrows its answer's grant to the tail (`reclaim_tail`). Editing
 granted output revokes overlapping writers;
 editing an input dependency marks the captured input stale. Disjoint edits can
 move a grant without cancelling its writer, but retire plans with old revisions.
