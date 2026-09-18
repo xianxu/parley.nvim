@@ -436,10 +436,10 @@ local function execute(s,effect)
             if phase~='stopping' and phase~='terminal' and not effect.reclaimed then
                 -- This effect exists only after every declared tool's blocks are
                 -- written and its effect ownership positively resolved.
-                local parent=not s.detached and D.snapshot(s.doc).grants[s.grant]
-                if not parent then dispatch(s,{type='cancel'});return true end
+                local answer=not s.detached and D.snapshot(s.doc).grants[s.grant]
+                if not answer then dispatch(s,{type='cancel'});return true end
                 local reclaimed=D.reclaim_tail(s.doc,{epoch=s.epoch,generation=s.generation,
-                    grant=s.grant,entity=parent.entity,revision=parent.revision})
+                    grant=s.grant,entity=answer.entity,revision=answer.revision})
                 if not reclaimed.ok then
                     if reclaimed.reason~='unconfirmed identity' then
                         issue(s,reclaimed.reason);dispatch(s,{type='pause'})

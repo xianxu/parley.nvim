@@ -2,6 +2,7 @@
 -- computed from chosen actions, never from receipts or the grant reducer.
 local D=require('parley.document')
 local Fake=require('tests.helpers.fake_document_editor')
+local Grants=require('tests.helpers.grants')
 local nextbuf=98000
 local fixtures={}
 local function serialized(lines) return table.concat(lines,'\n')..'\n' end
@@ -181,9 +182,14 @@ describe('adversarial document write plans',function()
         local function random(n) seed=(seed*48271)%2147483647;return seed%n end
         local saved={}
         for i=1,36 do
-            local choice=random(4)
+            local choice=random(5)
             if choice==0 then human(c,7,#rows(c.expected)[8],0,'h')
             elseif choice==1 and #saved>0 then apply(c,saved[random(#saved)+1],'stale')
+            elseif choice==4 then
+                -- A continuation narrows its grant to the tail; later writes land there.
+                local w=random(2)==0 and a or b;local g=D.snapshot(c.doc).grants[w.grant]
+                assert.is_true(D.reclaim_tail(c.doc,{epoch=D.snapshot(c.doc).epoch,generation=w.generation,
+                    grant=w.grant,entity=w.entity,revision=g.revision}).ok)
             else
                 local writer,row=a,2
                 if choice==3 then writer,row=b,5 end
@@ -192,6 +198,7 @@ describe('adversarial document write plans',function()
             end
             assert.equals('valid',D.snapshot(c.doc).grants[a.grant].status)
             assert.equals('valid',D.snapshot(c.doc).grants[b.grant].status)
+            Grants.assert_disjoint(D.snapshot(c.doc).grants)
             check(c)
         end
     end)

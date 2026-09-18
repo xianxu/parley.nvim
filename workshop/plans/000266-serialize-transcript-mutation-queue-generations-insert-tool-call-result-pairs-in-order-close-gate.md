@@ -265,6 +265,56 @@ rounds:
       boundary: M3
       recipe: milestone-review
       blocked: false
+    - "n": 10
+      timestamp: "2026-09-18T14:54:00-07:00"
+      agent: claude
+      dispose:
+        - id: BR-1
+          disposition: withdrawn
+          note: Already withdrawn in round 3 and not re-raised; nothing in this window revives it.
+          round: 10
+      findings:
+        - id: BR-23
+          severity: Minor
+          title: Plan Core concepts still says state.lua's `writable`/`resolve` are unchanged, which M4 falsified
+          detail: |-
+            This is the 3rd finding in family `behavior-change-sweep-by-claim`. Do NOT fix only this instance.
+            The rule exists already (lessons.md:3102-3106, BR-10): sweep the superseded CLAIM across atlas,
+            README, code comments AND the plan's own Core concepts. M4's new lesson (lessons.md:3137-3142)
+            restates the same rule with a different scope — it adds `tests/manual/` and `docs/` but drops the
+            plan's Core concepts, and the dropped item is exactly what leaked. Fix at the rule: state the sweep
+            scope ONCE as one enumerated list (atlas/, README.md, docs/, tests/manual/, code comments,
+            user-visible strings, and the plan outside `## Revisions`), and derive the grep terms mechanically
+            from the identifiers the diff removes (`git diff BASE..HEAD | grep '^-'`) rather than from memory.
+            Measured at HEAD: plan :88 "`writable`/`resolve` are **not** changed, deliberately" — state.lua's
+            `writable` is deleted and `resolve` lost `result.slots` and the `'patch range required'` rejection;
+            1 live residual, atlas/README/lua/tests-manual all clean under that grep. Lesser site of the same
+            class, an identifier rather than a claim: generation_runner.lua:439 still calls the answer's own
+            grant `parent`. Plan fix is a `## Revisions` entry, not an overwrite.
+          family: behavior-change-sweep-by-claim
+          round: 10
+        - id: BR-24
+          severity: Minor
+          title: Disjointness — the invariant that replaced reclaim_tail's overlap scan — is asserted at no seam that composes events
+          detail: |-
+            This is the 2nd finding in family `composed-claim-tested-at-one-seam`, so the rule, not the instance.
+            Rule: when a runtime guard is deleted because an invariant makes it dead, that invariant becomes the
+            guard, and it is tested by driving SEQUENCES of the production transitions and asserting it after
+            every step — not by testing each transition's local contract. state.lua:243-244 and
+            atlas/chat/document.md:91-93 now assert "no other live grant can cover g.last" / "disjoint from every
+            other live grant"; it composes acquire's overlap refusal, observed_edit's revocation, `move`'s
+            endpoint mapping, `successor_finish` and `reclaim_tail`. Tests cover only the acquire seam
+            (document_state_spec:33) and single-edit revocations (:38-47). I verified by case analysis that the
+            invariant holds at HEAD, so nothing is broken — but a future change to `move` or to owner selection
+            would now silently let reclaim_tail narrow onto a tail another grant covers, where the deleted scan
+            failed closed. Cheap fix: assert pairwise disjointness of live grants after each step of the existing
+            seeded interleaving loop (document_write_plan_spec:178), and add reclaim_tail/successor_finish and
+            owned boundary insertions to that event mix.
+          family: composed-claim-tested-at-one-seam
+          round: 10
+      boundary: M4
+      recipe: milestone-review
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#266 (boundary-review)
@@ -392,6 +442,43 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-22** [Minor] `composed-claim-tested-at-one-seam` The "queued in the scheduler, never run" row is asserted only at the producer seam, never as transcript text
   tool_use.md:203 states a composed-system outcome - a tool the scheduler never started is written into the transcript as "Tool cancelled before execution". The only test is tool_producer_spec "settles a cancelled tool that never started by its own outcome", which asserts the producer callback, not the rendered block; no spec drives that case through response_tools into the buffer. This is the exact case BR-15 named as its second instance, so the fix's end-to-end effect rests on my reading of the composition rather than on an oracle. Rule - a row of a behavior table that states composed-system output needs a test at the composition, not only at the seam whose contract changed. Cheapest fix: in response_tools_spec, a fake producer whose cancel delivers a known "cancelled before execution" outcome instead of the supervisor handoff, asserting the written result text.
 
+## Round 10 — 2026-09-18T14:54:00-07:00 (claude) — passed
+
+### Disposed
+
+- BR-1 — withdrawn — Already withdrawn in round 3 and not re-raised; nothing in this window revives it.
+
+### Raised
+
+- **BR-23** [Minor] `behavior-change-sweep-by-claim` Plan Core concepts still says state.lua's `writable`/`resolve` are unchanged, which M4 falsified
+  This is the 3rd finding in family `behavior-change-sweep-by-claim`. Do NOT fix only this instance.
+  The rule exists already (lessons.md:3102-3106, BR-10): sweep the superseded CLAIM across atlas,
+  README, code comments AND the plan's own Core concepts. M4's new lesson (lessons.md:3137-3142)
+  restates the same rule with a different scope — it adds `tests/manual/` and `docs/` but drops the
+  plan's Core concepts, and the dropped item is exactly what leaked. Fix at the rule: state the sweep
+  scope ONCE as one enumerated list (atlas/, README.md, docs/, tests/manual/, code comments,
+  user-visible strings, and the plan outside `## Revisions`), and derive the grep terms mechanically
+  from the identifiers the diff removes (`git diff BASE..HEAD | grep '^-'`) rather than from memory.
+  Measured at HEAD: plan :88 "`writable`/`resolve` are **not** changed, deliberately" — state.lua's
+  `writable` is deleted and `resolve` lost `result.slots` and the `'patch range required'` rejection;
+  1 live residual, atlas/README/lua/tests-manual all clean under that grep. Lesser site of the same
+  class, an identifier rather than a claim: generation_runner.lua:439 still calls the answer's own
+  grant `parent`. Plan fix is a `## Revisions` entry, not an overwrite.
+- **BR-24** [Minor] `composed-claim-tested-at-one-seam` Disjointness — the invariant that replaced reclaim_tail's overlap scan — is asserted at no seam that composes events
+  This is the 2nd finding in family `composed-claim-tested-at-one-seam`, so the rule, not the instance.
+  Rule: when a runtime guard is deleted because an invariant makes it dead, that invariant becomes the
+  guard, and it is tested by driving SEQUENCES of the production transitions and asserting it after
+  every step — not by testing each transition's local contract. state.lua:243-244 and
+  atlas/chat/document.md:91-93 now assert "no other live grant can cover g.last" / "disjoint from every
+  other live grant"; it composes acquire's overlap refusal, observed_edit's revocation, `move`'s
+  endpoint mapping, `successor_finish` and `reclaim_tail`. Tests cover only the acquire seam
+  (document_state_spec:33) and single-edit revocations (:38-47). I verified by case analysis that the
+  invariant holds at HEAD, so nothing is broken — but a future change to `move` or to owner selection
+  would now silently let reclaim_tail narrow onto a tail another grant covers, where the deleted scan
+  failed closed. Cheap fix: assert pairwise disjointness of live grants after each step of the existing
+  seeded interleaving loop (document_write_plan_spec:178), and add reclaim_tail/successor_finish and
+  owned boundary insertions to that event mix.
+
 ## Open findings
 
 - **BR-7** [Minor] `invariant-statement-omits-exception` Plan Target reconciliation and README still state turn/undo grouping without the pause and intervening-edit exceptions
@@ -401,3 +488,5 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-20** [Minor] `fix-without-reachable-consumer` The insert_tool `outcome` field and settled()'s third parameter have no reachable consumer, and the second caller was not updated
 - **BR-21** [Minor] `invariant-statement-omits-exception` README restates what a Stop writes instead of pointing at the single statement created this round
 - **BR-22** [Minor] `composed-claim-tested-at-one-seam` The "queued in the scheduler, never run" row is asserted only at the producer seam, never as transcript text
+- **BR-23** [Minor] `behavior-change-sweep-by-claim` Plan Core concepts still says state.lua's `writable`/`resolve` are unchanged, which M4 falsified
+- **BR-24** [Minor] `composed-claim-tested-at-one-seam` Disjointness — the invariant that replaced reclaim_tail's overlap scan — is asserted at no seam that composes events

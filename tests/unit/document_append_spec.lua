@@ -17,9 +17,10 @@ local function fixture(body)
     local grant=acquired.grants[1]
     -- #266 M1: write authority now includes the document's write turn.
     assert.is_true(D.transition(doc,{kind='request_turn',generation=generation}).ok)
-    local function intent(bytes)
-        return {epoch=D.snapshot(doc).epoch,generation=generation,grant=grant,entity=entity,
-            revision=D.snapshot(doc).grants[grant].revision,operation='stream',bytes=bytes}
+    local function intent(bytes,target)
+        target=target or grant
+        return {epoch=D.snapshot(doc).epoch,generation=generation,grant=target,entity=entity,
+            revision=D.snapshot(doc).grants[target].revision,operation='stream',bytes=bytes}
     end
     return doc,fake,intent,grant
 end
@@ -103,10 +104,7 @@ describe('owned bounded append',function()
             {entity=marker.handle,marker_revision=1,revision=1,first=marker.end_byte+1,last=D.size(doc).bytes-1,confirmed=true}}})
         assert.is_true(acquired.ok,acquired.reason)
         local neighbor,leaf=acquired.grants[1],acquired.grants[2]
-        local function leaf_intent(bytes)
-            return {epoch=D.snapshot(doc).epoch,generation=generation,grant=leaf,entity=marker.handle,
-                revision=D.snapshot(doc).grants[leaf].revision,operation='stream',bytes=bytes}
-        end
+        local function leaf_intent(bytes)return intent(bytes,leaf)end
         assert.equals('more',D.append(doc,leaf_intent('x')).status)
         assert.equals(1,D.append(doc,leaf_intent('x')).accepted_bytes)
         fake:edit(1,0,1,1,{'D'})

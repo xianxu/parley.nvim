@@ -241,7 +241,8 @@ function M.transition(doc,event)
             or event.revision~=g.revision or not s.generations[event.generation] then return reject('ownership') end
         if not identity(g,event.current) or not proof(event.current) then return reject('unconfirmed identity') end
         -- No other live grant can cover g.last: grants are disjoint at acquire,
-        -- and an edit reaching a grant it does not own revokes it.
+        -- and an edit reaching a grant it does not own revokes it. That invariant
+        -- is this path's guard; document_state_spec drives it over seeded sequences.
         g.first=g.last;g.revision=g.revision+1;g.status='valid';g.reason=nil
         result.first=g.first;result.last=g.last;result.revision=g.revision
     elseif kind=='observed_edit' then

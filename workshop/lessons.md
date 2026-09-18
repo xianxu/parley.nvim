@@ -3102,8 +3102,8 @@ download.
 - #266 M2 review BR-10: when a behavior changes, sweep for the old CLAIM, not
   the pages the plan listed. The plan named `tool_use.md`, and that page was
   rewritten — yet a paragraph lower on the same page still said "an unknown
-  outcome prevents continuation". Grep the superseded sentence's key phrases
-  across atlas, README, code comments and the plan's own Core concepts.
+  outcome prevents continuation". Scope and method: "The superseded-claim
+  sweep" (#266 M4 review) below — the one statement of both.
 
 - #266 M2 review BR-11: relaxing one safety rule can strand another that was
   designed around it. "An unknown outcome pauses" was what kept the resource
@@ -3128,19 +3128,39 @@ download.
 
 - #266 M3 review round 2: a rule's scope is every place a reader meets the claim.
   The "state it once, point to it" rule was applied to the atlas and the target,
-  and README — the one page a user reads — still paraphrased the same guarantee.
-  Sweep README and user-visible strings with the atlas. And a mechanism a fix
+  and README — the one page a user reads — still paraphrased the same guarantee
+  (scope now stated once: "The superseded-claim sweep" below). And a mechanism a fix
   claims must have a consumer a test actually enters: round 1's outcome-kind
   rendering was credited as part of the fix, but no test (and no code path)
   reached it, so it was deleted rather than kept as dead insurance.
 
-- #266 M4: `tests/manual/` is a page a reader meets the claim on. Three milestones
-  of superseded-claim sweeps covered atlas, README, code comments and user-visible
-  strings, and #254's live-test checklist still told the operator to expect
-  concurrent answer writes, "pending slots" and a Stop that drops the round —
-  the exact behaviors a live tester would check. Include `tests/manual/` and
-  `docs/` in every superseded-claim grep.
+- **The superseded-claim sweep** (#266 M4 review; 3rd in
+  `behavior-change-sweep-by-claim` — the one statement of scope and method; the
+  BR-10 and M3 round-2 entries above point here). Each earlier entry restated the
+  scope from memory and each dropped a different place: M4's own first draft of
+  this lesson added `tests/manual/` and lost the plan's Core concepts, and the
+  plan's "`writable`/`resolve` are not changed" was exactly what leaked.
+  1. **Terms come from the diff, not from memory:** every identifier and quoted
+     string on a removed line — `git diff BASE..HEAD | grep '^-'` — plus the key
+     phrases of any superseded sentence.
+  2. **Scope, all of it, every time:** `atlas/`, `README.md`, `docs/`,
+     `tests/manual/`, code comments and identifiers (a variable still named for a
+     removed concept counts), user-visible strings, `workshop/targets/`, and the
+     plan outside `## Revisions`.
+  3. Classify every hit — same concept / different concept that shares the word
+     / historical record — and write the query into the response so the next
+     reader can re-run it.
 - #266 M4: after removing the mechanism that made a structure plural, check what
   the structure degenerates to. With carving gone, every grant's slot list was
   provably its own range repeated — a second copy of one fact that the plan's
   line-by-line removal list would have left in place.
+- #266 M4 review (2nd in `composed-claim-tested-at-one-seam`): when a runtime
+  guard is deleted because an invariant makes it dead, the invariant BECOMES the
+  guard, and a per-transition test does not cover it. `reclaim_tail`'s overlap
+  scan went because live grants are pairwise disjoint, a fact that holds only
+  through acquire, owned and human edits, `move`, `reclaim_tail` and
+  `successor_finish` together. Test such an invariant by driving seeded
+  sequences of the real transitions, asserting it after every step. Then mutate
+  each transition that maintains it and watch the test fail. The first draft
+  caught only three of four mutations: its generator never packed grants close
+  enough for one edit to span two.

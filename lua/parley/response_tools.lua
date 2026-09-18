@@ -12,7 +12,7 @@ local function call(value,id)
     assert(type(value.input)=='table','invalid tool input')
     return {id=id,name=value.name,input=copy(value.input)}
 end
-local function parent(doc,ctx)
+local function answer_grant(doc,ctx)
     local snapshot=D.snapshot(doc)
     local grant=snapshot.grants[ctx.grant]
     if snapshot.epoch~=ctx.epoch or not snapshot.attached or not grant or grant.status=='revoked'
@@ -150,7 +150,7 @@ function M.new(doc,opts)
     function adapter.start_child(ctx,cb)
         local c=call(ctx.arguments,ctx.call_id)
         declared(round_of(ctx),c)
-        local grant=parent(doc,ctx)
+        local grant=answer_grant(doc,ctx)
         if not grant then
             cb.outcome('cancelled_before_effect',{id=c.id,name=c.name,content=failure_text('cancelled_before_effect'),is_error=true})
             cb.resolved();return {}

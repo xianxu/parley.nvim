@@ -104,6 +104,55 @@ describe('document authority state', function()
         assert.is_true(resolve(d,g,outer,proof('a',0,30),5,25).ok)
     end)
 
+    -- #266 M4: reclaim_tail no longer scans for another grant on the tail; it
+    -- relies on live grants staying disjoint. That is a property of the composed
+    -- transitions, so drive seeded sequences of them and check it after each one.
+    it('keeps live grants pairwise disjoint across seeded transition sequences', function()
+        local Grants=require('tests.helpers.grants')
+        for run=1,40 do
+            local seed=run*7919
+            local function random(n) seed=(seed*48271)%2147483647; return seed%n end
+            local d=State.new(); local gens={generation(d),generation(d)}; local entity=0
+            local function current(g) local p=vim.deepcopy(g); p.confirmed=true; return p end
+            for _=1,80 do
+                local live=Grants.assert_disjoint(State.snapshot(d).grants)
+                local g=#live>0 and live[random(#live)+1] or nil
+                local choice=random(9)
+                if choice<=1 or not g then
+                    -- Half pack a new grant right after a live one, so edits can span two.
+                    local first=g and random(2)==0 and g.last+1+random(3) or random(200); entity=entity+1
+                    acquire(d,gens[random(#gens)+1],{proof('e'..entity,first,first+random(20))})
+                elseif choice==2 then
+                    -- An owned edit inside its grant, boundaries included; a quarter
+                    -- spill past it, which must cost the owner its exemption.
+                    local first=g.first+random(g.last-g.first+1)
+                    local reach=random(4)==0 and 12 or g.last-first+1
+                    State.transition(d,{kind='observed_edit',first=first,last=first+random(reach),
+                        new_bytes=random(6),owner_grant=g.id})
+                elseif choice==3 then
+                    -- A human edit; half straddle a live grant's tail.
+                    local first=random(2)==0 and math.max(0,g.last-random(4)) or random(230)
+                    State.transition(d,{kind='observed_edit',first=first,last=first+random(12),new_bytes=random(6)})
+                elseif choice==4 then
+                    State.transition(d,{kind='reclaim_tail',epoch=State.snapshot(d).epoch,generation=g.generation,
+                        grant=g.id,entity=g.entity,revision=g.revision,current=current(g)})
+                elseif choice==5 then
+                    local token=State.successor_new(d,{epoch=State.snapshot(d).epoch,generation=g.generation,
+                        grant=g.id,entity=g.entity,revision=g.revision},current(g))
+                    if token then State.successor_finish(d,token,g.first+random(g.last-g.first+1)) end
+                elseif choice==6 then
+                    State.transition(d,{kind='uncertain',first=g.first,last=g.last})
+                elseif choice==7 then
+                    State.transition(d,{kind='revoke',grant=g.id})
+                else
+                    local i=random(#gens)+1
+                    State.transition(d,{kind='finish_generation',generation=gens[i]}); gens[i]=generation(d)
+                end
+            end
+            Grants.assert_disjoint(State.snapshot(d).grants)
+        end
+    end)
+
     it('bounds admission and frees finished registrations without ID resurrection', function()
         local d=State.new(); local gens={}; for i=1,4 do gens[i]=generation(d) end
         assert.is_false(State.transition(d,{kind='register_generation'}).ok)

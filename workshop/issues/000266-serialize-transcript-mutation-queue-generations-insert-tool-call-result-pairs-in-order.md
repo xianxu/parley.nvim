@@ -290,7 +290,7 @@ Durable plan: `workshop/plans/000266-serialize-transcript-mutation-plan.md`
       - [x] a stopped generation that does not hold the turn keeps its place and
             flushes when the turn arrives; a second Stop drops the rest
       - [x] atlas + target revision; `milestone-close`
-- [ ] M4 — residual exclusion sweep (`exclude`, parent-slot carving, the
+- [x] M4 — residual exclusion sweep (`exclude`, parent-slot carving, the
       half-open seam flags, the ancestor walk).
       - [x] grants never nest: parent delegation, `exclude`, the revoke cascade
             and both `'delegated parent'` refusals removed
@@ -305,6 +305,8 @@ Durable plan: `workshop/plans/000266-serialize-transcript-mutation-plan.md`
 
 
 
+
+- 2026-09-18: closed M4 — code at bb3ee0bf (later commits docs/log only): lint 0 warnings/0 errors (634 files); unit 213/213 PASS (make test-unit JOBS=4); integration 162/163 (make test-integration JOBS=4), the abort perf_document_spec at Plenary 50 s limit, passes alone; the prior integration run's two aborts (response_tools_spec, highlight_typing_spec) pass in this one. make test between every removal: 374-375/376, only recorded load aborts, each passing alone. Nesting refused as overlap (test red before the removal); arch guard counterfactual-checked with probes in state.lua and response_tools.lua. Aborts investigated: the 50 s ones are a uniformly 7-8x slow process, also on pre-#266 main; document_dependencies_spec predates M4 (8/64 at M3 vs 2/64 under stress), noted on #267. Actual: sdlc active-time since the M3 close e48362ab (repo+brain transcripts, --include-assistant) = 2.33 h, incl. 38.5 min post-M3-close activity and one overlapping segment.; review verdict: FIX-THEN-SHIP
 - 2026-09-18: closed M3 — at b6cfcd97: lint 0 warnings/0 errors (634 files); unit 213/213 PASS; integration 163/163 PASS (phases run separately, JOBS=4). Round-1 fixes: BR-15 flush results from settlement evidence (tests at machine, tool-round and producer levels; producer test fails without the fix), flush guarantees stated once in tool_use.md from every stop() reachable from flushing, one wait-note composer requiring an escape (walked by a unit test), tool-operations strings, plan phase line. Tool-round fixture drains to quiescence (38 s to 9 s). Actual measured by sdlc active-time since the M2 close (1.40 h).; review verdict: FIX-THEN-SHIP
 - 2026-09-18: closed M2 — at 274f82e: lint 0 warnings/0 errors (634 files); unit 213/213 PASS; integration 163/163 PASS (make test-unit / test-integration JOBS=4, run as separate phases so a #267 abort cannot hide integration). Review round 5 fixes: BR-11 same-generation self-quarantine refused with a readable error (resource, scheduler and chat-level tests; chat test fails without the fix), BR-9 undo rule on the atlas page plus two tool-round undo tests, BR-10 claim sweep by wording. Goldens regenerate to key-order churn only. Actual measured by sdlc active-time since the M1 close commit (2.72 h).; review verdict: SHIP
 ### 2026-09-17
@@ -1074,3 +1076,14 @@ unbuffered because Plenary buffers its own output, shows a slow run is uniformly
 crosses 50 s. That fits M3's "bimodal" `perf_ownership_spec` and the earlier
 `fold_retirement`/`perf_document` SIGTERMs. It does not fit
 `document_dependencies_spec`, which exits 1 after about a second.
+
+### 2026-09-18 — M4 boundary review round 1: FIX-THEN-SHIP, no blocking; four Minors fixed
+
+Response in the plan's `## Revisions` (M4 round 1). In short: the plan's Core
+concepts claim about `writable`/`resolve` struck with a pointer; the last two
+identifiers naming the answer's grant `parent` renamed (one the reviewer named,
+one found by the same sweep); the superseded-claim sweep stated once in
+`workshop/lessons.md`, with terms taken from the diff; live-grant disjointness —
+the invariant `reclaim_tail` now relies on — driven by a seeded fuzz over every
+grant transition and by the coordinator-level loop, with five mutation runs, all
+caught; the append fixture's `intent` takes a grant.

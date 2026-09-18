@@ -85,7 +85,7 @@ code→table direction finds them.*
   - **Tests:** `tests/unit/tools_sequence_spec.lua`, no IO.
   - **ARCH-FUNERAL:** creates nothing durable. The sequence record lives on ~~the adapter's round state~~ the machine's round (`s.round.seq`) and dies with it; Task 2.2 must name the collector for the frozen `s.rounds[ctx.round]` record it keeps, since `retire_reservation` (`response_tools.lua:36-68,183-187`) — today's collector — is deleted.
 
-- **DocumentState** (modified) — gains `s.turn` plus `request_turn` / `release_turn` events; `M.snapshot` exposes `turn`. `writable`/`resolve` are **not** changed, deliberately: `M.resolve`'s `reject(reason)` strings are consumed as control flow at `generation_runner.lua:275-276`, `document/init.lua:535-536` and `generation.lua:227-230`, and a new reason there would be misread as revocation.
+- **DocumentState** (modified) — gains `s.turn` plus `request_turn` / `release_turn` events; `M.snapshot` exposes `turn`. ~~`writable`/`resolve` are **not** changed, deliberately~~ `M.resolve` gains no reason string for the turn, deliberately *(M4 later deleted `writable` and narrowed `resolve` — see `## Revisions` 2026-09-18, M4 review)*: `M.resolve`'s `reject(reason)` strings are consumed as control flow at `generation_runner.lua:275-276`, `document/init.lua:535-536` and `generation.lua:227-230`, and a new reason there would be misread as revocation.
 
 - **GenerationMachine** (modified) — gains the **`draining`** phase and `s.turn_status`. `writable` (`:32-39`) requires `s.turn_status=='held'`. The release/re-request matrix below replaces the trigger list of earlier revisions.
   - **Relationships:** 1:1 with a runner; N:1 with a document.
@@ -1293,4 +1293,40 @@ Review sidecar: `workshop/plans/000266-…-m3-review.md`.
   `tests/manual/chat-concurrency.md` (#254's live-test checklist) still described
   concurrent answer writes, "pending slots" and a Stop that drops the round. It
   now points at the atlas statements instead of paraphrasing them.
+
+### 2026-09-18 — M4 boundary review round 1 (FIX-THEN-SHIP, no blocking): the response
+
+Review sidecar: `workshop/plans/000266-…-m4-review.md`.
+
+- **Minor, `behavior-change-sweep-by-claim` (3rd) — fixed at the rule.** Core
+  concepts' DocumentState bullet said "`writable`/`resolve` are **not** changed";
+  M1 left them alone, M4 deleted `writable` and narrowed `resolve` (no slot list,
+  no `'patch range required'`), adding no reason string, so the original
+  rationale stands. Struck in place with a pointer here. Two identifiers still
+  named the answer's own grant `parent`: `generation_runner.lua` (continuation
+  reclaim) and `response_tools.lua`'s `parent()` helper, which the reviewer did
+  not name, found by the same sweep. Renamed `answer`/`answer_grant`. The rule:
+  `workshop/lessons.md` "The superseded-claim sweep" now states scope and
+  method once, with terms taken from the diff's removed lines. The query, re-runnable:
+  `git diff e48362ab..HEAD -- lua/ | grep '^-'` for terms, then the scope list
+  there. Classified hits: every remaining code/atlas hit is a different concept
+  (drill-in's half-open edits, the generation machine's own `writable(s)`,
+  keybinding carve-outs); plan hits outside `## Revisions` are removal
+  instructions or ticked task records.
+- **Minor, `composed-claim-tested-at-one-seam` (2nd) — the invariant is the
+  guard now.** `document_state_spec` "keeps live grants pairwise disjoint across
+  seeded transition sequences" drives 40 seeded runs of 80 steps over acquire
+  (half packed next to a live grant), owned edits (boundaries included, a
+  quarter spilling past the grant), human edits (half straddling a tail),
+  `reclaim_tail`, `successor_finish`, suspension, revocation and generation
+  turnover, asserting disjointness (`tests/helpers/grants.lua`) after each step.
+  Mutation runs, each restored: non-owner edits revoking nothing; `move`
+  swapping endpoint sides; acquire skipping its overlap check; touching ranges
+  not overlapping; an owner kept past its grant with same-generation grants
+  spared. The fuzz fails on all five (its first draft missed the first — too
+  sparse for one edit to span two grants). The coordinator-level seeded loop
+  (`document_write_plan_spec`) gains `reclaim_tail` in its mix (reached, checked)
+  and the same assertion.
+- **Minor, ARCH-DRY** — `document_append_spec`'s fixture `intent` takes a grant,
+  so the leaf case no longer copies its shape.
 
