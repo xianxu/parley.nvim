@@ -243,7 +243,7 @@ than the doc, so per-primitive hours are provisional (ariadne#127).
 Durable plan: `workshop/plans/000266-serialize-transcript-mutation-plan.md`
 (six revisions, six fresh-context reviews).
 
-- [~] M1 — the write turn **and** the preparation-write deferral. One boundary,
+- [ ] M1 — the write turn **and** the preparation-write deferral. One boundary,
       not two: the turn alone leaves nine end-to-end tests red purely because a
       second generation's request never starts, and the deferral is what removes
       that. A milestone that cannot go green on its own is not a review boundary
