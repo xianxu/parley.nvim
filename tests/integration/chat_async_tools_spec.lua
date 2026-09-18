@@ -177,18 +177,23 @@ describe('public asynchronous chat tools',function()
         assert.is_true(held[1].cancelled);assert.is_false(held[2].cancelled)
         assert.is_true(Producer.stats().records>=2)
         known(held[2],'SIBLING_RESULT');finish(second,3)
+        -- #266: the disjoint call shares a round with the conflicting one. Across
+        -- generations it could not run here — the conflicting generation holds the
+        -- write turn for its lifetime, so a second generation cannot even write its
+        -- call block. Within one round the path-scoped admission this test defends
+        -- is unchanged: the disjoint path runs while the conflicting path waits on
+        -- the stopped generation's unresolved claim.
         local conflicting=submit('third');wait(function()return #providers()==4 end)
-        tool_round(providers()[4],{{id='conflict',name='held_fixture',input={file_path=root..'/one/a'}}})
-        vim.wait(30,function()return false end,1);assert.equals(2,#held)
-        local disjoint=submit('next');wait(function()return #providers()==5 end)
-        tool_round(providers()[5],{{id='disjoint',name='held_fixture',input={file_path=root..'/two/c'}}})
+        tool_round(providers()[4],{{id='conflict',name='held_fixture',input={file_path=root..'/one/a'}},
+            {id='disjoint',name='held_fixture',input={file_path=root..'/two/c'}}})
         wait(function()return #held==3 end)
         assert.equals(root..'/two/c',held[3].path)
-        known(held[3],'DISJOINT_RESULT');finish(disjoint,6)
+        vim.wait(30,function()return false end,1);assert.equals(3,#held)
+        known(held[3],'DISJOINT_RESULT')
         assert.equals('running',Respond.response_snapshot(conflicting).status)
         known(held[1],'LATE_FIRST_RESULT')
         wait(function()return #held==4 end);assert.equals(root..'/one/a',held[4].path)
-        known(held[4],'CONFLICT_RESOLVED');finish(conflicting,7)
+        known(held[4],'CONFLICT_RESOLVED');finish(conflicting,5)
         assert.is_nil(buffer_text(buf):find('LATE_FIRST_RESULT',1,true))
     end)
     it('hands reloaded parents to supervision and ignores later backend document callbacks',function()
