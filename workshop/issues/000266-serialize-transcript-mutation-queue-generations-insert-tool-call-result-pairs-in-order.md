@@ -255,8 +255,8 @@ Durable plan: `workshop/plans/000266-serialize-transcript-mutation-plan.md`
       - [x] `'waiting'` refusal at the coordinator and in `Replacement.step`
       - [x] defer preparation's write until there is output (restores option (b))
       - [x] release/re-request matrix + end-to-end wake + waiter visibility
-      - [ ] held-output budget message; writer-enumeration verification
-      - [ ] undo coherence assertion
+      - [x] held-output budget message; writer-enumeration verification
+      - [x] undo coherence assertion
       - [ ] atlas rewrite + `milestone-close`
 - [ ] M2 — ordered `(call, result)` append; removes capacity tickets, the round
       reservation lifecycle, and child grants.
@@ -711,4 +711,34 @@ Measured while checking for overhead: `perf_ownership_spec` runs 30–41 s alone
 on both `HEAD` and the working tree (run-to-run variance, no regression), so its
 and `document_fold_retirement_spec`'s timeouts under `make test`'s parallel load
 are the same pre-existing load flake as `perf_document_spec`.
+
+### 2026-09-17 — Tasks 1.7–1.10: held budget, writers, undo, atlas
+
+**Task 1.7 found a real gap.** Output arrives one SSE delta per `cb.output`, and
+each was one machine queue item; a held generation hit the 256-item cap after a
+few hundred deltas — a paragraph — far below the 1 MiB byte budget, and the
+machine's per-transition state copy made a long held queue O(n) per event.
+Consecutive output of one operation now extends the last queued item, so held
+output is one item bounded by bytes. Re-measured over 359 answers in the sibling
+repos (p50 573 B, p95 16.5 KB, p99 36.4 KB, max 116.7 KB): budget unchanged.
+Both overflow sites now end as `overflow` with a reason naming the answer the
+generation waited behind, shown by `chat_respond` (`e0f4fa79`).
+
+**Task 1.8:** enumeration grep matches the table; the extra `D.apply_user` hits are
+the recovery restore (human path). Added refusal tests for `replace_new`,
+`insert_released_new`, `apply`, and the topic waiting then writing (`3c239a79`).
+
+**Task 1.9:** one undo step per generation run on a real buffer, never mixed,
+never a partial slice (`ec7a9370`). Its first version was vacuous (batched steps
+hid interleaving); it now alternates single steps and fails without the turn.
+Correction to the "Coarse undo falls out for free" digest above: the guarantee is
+one undo entry per **(generation, grant)** run — a run through preparation grants,
+the main grant and a completion grant is several entries, none mixing generations.
+
+**Task 1.10:** atlas rewritten (`chat/ownership`, `chat/lifecycle`,
+`chat/response_progress`, `chat/document`, `providers/architecture`,
+`providers/tool_use`, `providers/tool_execution`); the target gains a Revision
+making "in the order the reader sees them" precise; the plan's Core-concepts
+rows now name module files so the arch table sweep passes; Chunk 1's checklist
+reconciled (three steps struck as superseded, with reasons). Five lessons added.
 
