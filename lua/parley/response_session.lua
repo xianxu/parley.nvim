@@ -205,7 +205,7 @@ function M.start(doc,spec,opts)
             local note
             if value.blocked then note=Presentation.waiting_message(value.blocked.line,value.blocked.phase)
             elseif value.tools and value.phase=='executing_tools' then
-                note=Presentation.tools_message(value.tools.finished,value.tools.total)
+                note=Presentation.tools_message(value.tools)
             end
             if s.pending and note~=s.note then s.note=note;s.pending:progress({message=note or 'Working...'})end
             safe(opts.changed,value)

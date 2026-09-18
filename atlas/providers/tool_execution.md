@@ -2,7 +2,7 @@
 
 Tool execution has two independent outcomes: what happened to the requested
 resource, and whether the process or filesystem operation has finished cleanup.
-The response owns each tool's transcript slot; the execution service owns its
+The response owns each tool's call and result blocks; the execution service owns its
 resource claims and outstanding physical work. See [Tool Use](tool_use.md) for
 the chat loop and [Chat Write Ownership](../chat/ownership.md) for buffer grants.
 
@@ -33,6 +33,14 @@ gets available capacity first. Disjoint work may proceed around a blocked
 resource claim, in the same round or another generation's: a tool starts as soon
 as its round is declared, whatever the document's write turn, and only its
 call and result blocks wait for it (#266).
+A request blocked by nothing but its **own generation's** unknown effects — their
+claims, or the per-generation capacity they occupy — is refused without running
+instead of queued (`resources.lua` `quarantined`, checked at admission and at
+every pump, and pumped after every outcome, since a call turning unknown frees
+nothing). Its answer continues past a failed call and holds the document's write
+turn, so waiting would wait on itself for good; the error result names why, so
+the model can try another way (#266 M2). Another generation's request still
+waits for the reconciliation.
 Cancellation removes queued work immediately. Running work retains its claims
 until both effect certainty and physical completion are positive.
 

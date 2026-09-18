@@ -80,10 +80,10 @@ code→table direction finds them.*
 
 - **ToolSequence** — pure: given declared calls in order and a map of arrived outcomes, return what may be written next (`{kind='call', index=i}`, `{kind='result', index=i}`, or `nil`), plus whether the round is complete.
   - **Relationships:** 1:1 with a tool round; 1:N with calls.
-  - **DRY rationale:** Removes the placeholder/slot bookkeeping in `response_tools.lua:154-161` and centralizes "what is writable now" so the adapter is a thin pump.
+  - **DRY rationale:** Removes the placeholder/slot bookkeeping in `response_tools.lua:154-161` and centralizes "what is writable now" ~~so the adapter is a thin pump~~ *(as built — `## Revisions` 2026-09-18: the generation machine holds the sequence and emits `insert_tool`; the adapter only renders)*.
   - **Future extensions:** A policy field selecting strict order vs. first-ready-wins, if serialization is ever relaxed per-round.
   - **Tests:** `tests/unit/tools_sequence_spec.lua`, no IO.
-  - **ARCH-FUNERAL:** creates nothing durable. The sequence record lives on the adapter's round state and dies with it; Task 2.2 must name the collector for the frozen `s.rounds[ctx.round]` record it keeps, since `retire_reservation` (`response_tools.lua:36-68,183-187`) — today's collector — is deleted.
+  - **ARCH-FUNERAL:** creates nothing durable. The sequence record lives on ~~the adapter's round state~~ the machine's round (`s.round.seq`) and dies with it; Task 2.2 must name the collector for the frozen `s.rounds[ctx.round]` record it keeps, since `retire_reservation` (`response_tools.lua:36-68,183-187`) — today's collector — is deleted.
 
 - **DocumentState** (modified) — gains `s.turn` plus `request_turn` / `release_turn` events; `M.snapshot` exposes `turn`. `writable`/`resolve` are **not** changed, deliberately: `M.resolve`'s `reject(reason)` strings are consumed as control flow at `generation_runner.lua:275-276`, `document/init.lua:535-536` and `generation.lua:227-230`, and a new reason there would be misread as revocation.
 
@@ -110,7 +110,7 @@ code→table direction finds them.*
 - **GenerationRunner** — `sync(s)` (`:47-65`) already polls `D.snapshot(s.doc).grants`; it also reads `snapshot.turn` and dispatches a `turn` event into the machine. `execute` gains handlers for the two new effects.
   - **Injected into:** `GenerationMachine`, via the existing dispatch path.
 
-- **ToolAdapter** — `reserve_round` becomes `begin_round` (declare calls, write nothing); a pump driven by `ToolSequence` appends each block via `ctx.append`.
+- **ToolAdapter** — ~~`reserve_round` becomes `begin_round` (declare calls, write nothing); a pump driven by `ToolSequence` appends each block via `ctx.append`.~~ *(Superseded, `## Revisions` 2026-09-18.)* `reserve_round` is removed; the adapter freezes its round lazily and renders the one block each `insert_tool` effect asks for via `ctx.append`.
   - **Injected into:** the generation machine through the existing `hooks` table (`response_session.lua:174`).
 
 - **TopicGeneration** — registers a second generation and writes via `D.apply` (`response_topic.lua:141-147,165-166`), bypassing `generation_runner` entirely. It must take the turn like any other writer.
@@ -1101,3 +1101,47 @@ correction found while tracing Chunk 3 against the code.
 - A hung call (no outcome ever) blocks only the *writes* behind it; those tools
   still run and their outcomes are held. Stop drops held pairs like held output.
   Presentation reports the round's progress (Task 3.4), so the block is visible.
+
+### 2026-09-18 — M2 boundary review round 5 (FIX-THEN-SHIP): the response
+
+Review sidecar: `workshop/plans/000266-…-m2-review.md`. Each Important finding
+fixed at its class, each with a test.
+
+- **BR-9 (Important), `invariant-statement-omits-exception`, 4th in the family —
+  fixed by a rule on the page itself.** The M2 undo bullet ("undo never strands a
+  pair apart from the text that refers to it") was unconditional, and a human
+  edit while the tools run falsifies it. `atlas/chat/ownership.md` "Undo
+  grouping" now carries the rule: only the unconditional bullet (no step mixes
+  generations) may be stated without a condition; every other grouping claim
+  goes under the conditional one, names the event that splits it, and ships with
+  a test driving that event. The tool-round claim moved there, naming the edit.
+  Tests (`generation_turn_spec`): an edit during a round leaves the call block one
+  step before its result; two generations each running a two-call round, outcomes
+  out of order, never share an undo step.
+- **BR-10 (Important), `behavior-change-sweep-by-claim` — swept by wording, not
+  by page list.** `grep` over `atlas/`, README, `lua/` comments and this plan's
+  Core concepts for the superseded claims ("prevents continuation", "known
+  results", "transcript slot", "result slots", `begin_round`/pump, "adapter's
+  round state"). Fixed: `tool_use.md` (two passages), `architecture.md`,
+  `tool_execution.md`, `tools/serialize.lua`, and Core concepts (struck with
+  pointers here). The target's older Revision keeps its wording — it is history,
+  superseded by the M2 Revision.
+- **BR-11 (Important), a real liveness bug the no-pause decision created — fixed
+  in the resource service.** A call with an unknown outcome keeps its claims
+  until reconciled (#254, unchanged); the round now continues past it, so the
+  model's natural retry on the same path queued behind its own quarantine
+  forever while its answer held the write turn. `tools/resources.lua` gains one
+  predicate, `quarantined`: a request blocked by nothing but its **own
+  generation's** unknown records (claims or per-generation capacity) is refused
+  at admission and at every pump, and the scheduler now pumps after every
+  outcome, since a call turning unknown frees nothing. The scheduler refuses it
+  through one path with an error the model can read. **Another generation still
+  waits** for the reconciliation, as #254 designed and `chat_async_tools_spec`
+  asserts. Tests: `tool_resources_spec` (admission, pump, "blocked by something
+  else too waits", capacity), `tool_scheduler_spec` (both paths),
+  `chat_async_tools_spec` end to end (fails without the fix — checked).
+- **Minors.** The tool note now says *waiting for N to clean up* once every
+  outcome is in but cleanup is not (the snapshot counts `settled` apart from
+  `finished`); an `insert_tool` executed while detached reports `revoked`. The
+  target narrowing (Stop drops pairs whose tools already ran) is raised with the
+  operator for acknowledgment before the issue closes.

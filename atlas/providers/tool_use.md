@@ -182,7 +182,8 @@ adapters receive operation handles, not authority to write arbitrary positions.
    ([response progress](../chat/response_progress.md)), and `:ParleyStop` drops
    pairs not yet written, like any held output.
 5. After the round is settled, `response_tools` builds continuation messages from
-   the frozen previous request, assistant text, calls, and known results. The same
+   the frozen previous request, assistant text, calls, and each call's recorded
+   result — the error result of a failed call included. The same
    Session admits the next provider operation; it neither recursively calls
    `respond` nor rebuilds the request from the mutable transcript.
 
@@ -194,9 +195,14 @@ metadata cannot raise these captured limits.
 Logical cancellation and physical cleanup are separate. Stopping or invalidating
 an answer prevents further admission immediately, but its operation remains
 unresolved until the producer reports cleanup. A throwing producer may already
-have caused an effect: an `unknown` outcome prevents continuation and is not
-converted into a successful or cancelled result. A later known outcome and
-positive cleanup can settle it; a cancellation request alone cannot.
+have caused an effect, so an `unknown` outcome is never converted into a
+successful or cancelled result: it is written as an error result saying the
+effect may or may not have happened, and the round continues once the tool is
+cleaned up. Its resources stay quarantined until reconciled, so a later call in
+the same answer that needs them is refused with an error the model can read,
+while another answer's call waits for the reconciliation
+([tool execution](tool_execution.md)). A cancellation request alone settles
+nothing.
 
 Builtin definitions expose asynchronous execution and resource declarations.
 The captured dispatcher profile, process-scoped scheduler, checked filesystem

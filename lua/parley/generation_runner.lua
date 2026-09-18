@@ -49,7 +49,7 @@ local function present(s)
     local b=s.blocked;current.blocked=b and copy(b)
     local t=current.tools
     local key=current.phase..':'..tostring(current.stale_input)..blocked_key(b)
-        ..(t and ':'..t.finished..'/'..t.total or '')
+        ..(t and ':'..t.finished..'/'..t.settled..'/'..t.total or '')
     if key~=s.presentation_key then
         s.presentation_key=key
         local ok,err=pcall(s.adapters.changed,current)
@@ -508,7 +508,9 @@ local function execute(s,effect)
             if settled or s.terminal then return end;settled=true
             dispatch(s,{type='inserted',insert=effect.id,status=status})
         end
-        if s.detached or G.phase(s.machine)=='stopping' or not s.adapters.insert_tool then settle('failed');return false end
+        if s.detached or G.phase(s.machine)=='stopping' or not s.adapters.insert_tool then
+            settle(s.detached and 'revoked' or 'failed');return false
+        end
         local ctx,after_writes=context(s,effect)
         ctx.index=effect.index;ctx.kind=effect.kind
         local result=effect.result_ref and s.blobs[effect.result_ref]

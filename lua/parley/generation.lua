@@ -202,14 +202,18 @@ end
 --- O(1) phase, for per-sync callers that need nothing else: M.snapshot builds
 --- a fresh table and walks the operations.
 function M.phase(handle) return get(handle).phase end
---- The round's tools for presentation (#266 M2): how many are declared and how
---- many have an outcome. The transcript shows only blocks that have landed, so
---- this is where tools still running stay visible.
+--- The round's tools for presentation (#266 M2): how many are declared, how many
+--- have an outcome, and how many are cleaned up — the round continues only once
+--- every one is. The transcript shows only blocks that have landed, so this is
+--- where a tool still running, or still cleaning up, stays visible.
 local function tools(s)
     if not s.round then return nil end
-    local finished=0
-    for _,child in ipairs(s.round.children) do if child.outcome then finished=finished+1 end end
-    return {total=#s.round.children,finished=finished}
+    local finished,settled=0,0
+    for _,child in ipairs(s.round.children) do
+        if child.outcome then finished=finished+1 end
+        if child.resolved then settled=settled+1 end
+    end
+    return {total=#s.round.children,finished=finished,settled=settled}
 end
 function M.snapshot(handle)
     local s=get(handle);local bytes,items=staged(s)

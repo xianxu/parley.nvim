@@ -552,5 +552,93 @@ describe('undo coherence under the write turn',function()
         assert.is_true(#seen>=2,'the edit must split the run into more than one step: '..vim.inspect(seen))
         D.detach(doc);vim.api.nvim_buf_delete(buf,{force=true})
     end)
+
+    -- #266 M2 review BR-9: tool blocks join the answer's undo step only while
+    -- nothing intervenes. A human edit while the tools run — the usual case —
+    -- splits the round where it lands: the call block sits one step before its
+    -- own result. Pinned so the atlas cannot claim otherwise again.
+    local function tool_fake(name)
+        local fake=FakeRunner.new();fake.tools={}
+        fake.adapters.insert_tool=function(ctx,done)
+            if not ctx.append('['..name..':'..ctx.kind..ctx.index..']',function(res)done(res.status)end)then done('failed')end
+        end
+        fake.adapters.start_child=function(_,cb)fake.tools[#fake.tools+1]=cb;return {} end
+        fake.adapters.continue_round=function(ctx,cb)cb.prepared(ctx.input);cb.resolved() end
+        return fake
+    end
+    local function lines_of(buf)return table.concat(vim.api.nvim_buf_get_lines(buf,0,-1,false),'\n')end
+    it('splits a tool round\'s undo where a human edit lands while its tools run',function()
+        local buf=vim.api.nvim_create_buf(false,true)
+        vim.api.nvim_buf_set_lines(buf,0,-1,false,{'💬: q','draft','🤖: first','','💬: q2','🤖: second',''})
+        local doc=D.attach(buf,{schedule=false})
+        assert.equals('idle',D.drain(doc,1000).status)
+        local marker=D.query(doc,2,3)[1];local body=D.query(doc,3,4)[1]
+        local fake=tool_fake('a')
+        local r=assert(Runner.start(doc,{entity=marker.handle,first=marker.start_byte,last=body.end_byte-1,
+            input={message='frozen'},dependencies={{first=0,last=4}},capabilities={'read'},schedule=false},fake.adapters))
+        Runner.drain(r,100);fake:prepare();Runner.drain(r,100)
+        fake:output(1,'TEXT');Runner.drain(r,100)
+        local cb=fake.requests[1].callbacks;cb.round({{call_id='one',arguments={}}});cb.resolved();Runner.drain(r,100)
+        assert.truthy(lines_of(buf):find('TEXT[a:call1]',1,true),lines_of(buf))
+        vim.api.nvim_buf_set_text(buf,1,5,1,5,{'!'})  -- the human types while the tool runs
+        D.drain(doc,1000)
+        fake.tools[1].outcome('known','result');fake.tools[1].resolved();Runner.drain(r,1000)
+        fake:complete(2);Runner.drain(r,1000)
+        assert.equals('success',Runner.snapshot(r).outcome)
+        assert.truthy(lines_of(buf):find('[a:call1][a:result1]',1,true),lines_of(buf))
+        vim.api.nvim_buf_call(buf,function()vim.cmd('silent undo')end)
+        local text=lines_of(buf)
+        assert.is_nil(text:find('[a:result1]',1,true),'the result is the newest step')
+        assert.truthy(text:find('TEXT[a:call1]',1,true),'its call block is in an earlier step: '..text)
+        D.detach(doc);vim.api.nvim_buf_delete(buf,{force=true})
+    end)
+
+    -- The unconditional half, with tool rounds: two generations each run a
+    -- two-call round, outcomes out of order, the second held behind the first.
+    -- Walking undo all the way back, no step removes text of both.
+    it('never mixes two generations\' tool rounds in one undo step',function()
+        local buf=vim.api.nvim_create_buf(false,true)
+        vim.api.nvim_buf_set_lines(buf,0,-1,false,{'💬: q','draft','🤖: first','','💬: q2','🤖: second',''})
+        local doc=D.attach(buf,{schedule=false})
+        assert.equals('idle',D.drain(doc,1000).status)
+        local fakes,runners={},{}
+        for _,item in ipairs({{'a',2},{'b',5}}) do
+            local name,row=item[1],item[2]
+            local marker=D.query(doc,row,row+1)[1];local body=D.query(doc,row+1,row+2)[1]
+            fakes[name]=tool_fake(name)
+            runners[name]=assert(Runner.start(doc,{entity=marker.handle,first=marker.start_byte,last=body.end_byte-1,
+                input={message='frozen'},dependencies={{first=0,last=4}},capabilities={'read'},schedule=false},fakes[name].adapters))
+            Runner.drain(runners[name],100)
+        end
+        local function pump()for _=1,600 do Runner.drain(runners.a,1);Runner.drain(runners.b,1) end end
+        fakes.a:prepare();fakes.b:prepare();pump()
+        fakes.a:output(1,string.rep('X',3000));fakes.b:output(1,string.rep('Y',3000));pump()
+        for _,name in ipairs({'a','b'}) do
+            local cb=fakes[name].requests[1].callbacks
+            cb.round({{call_id='one',arguments={}},{call_id='two',arguments={}}});cb.resolved()
+        end
+        pump()
+        for _,name in ipairs({'a','b'}) do
+            for i=2,1,-1 do local t=fakes[name].tools[i];t.outcome('known','r');t.resolved() end
+        end
+        pump();fakes.a:complete(2);pump();fakes.b:complete(2);pump()
+        assert.equals('success',Runner.snapshot(runners.a).outcome)
+        assert.equals('success',Runner.snapshot(runners.b).outcome)
+        local function owned()
+            local text=lines_of(buf)
+            return select(2,text:gsub('X',''))+select(2,text:gsub('%[a:','')),
+                select(2,text:gsub('Y',''))+select(2,text:gsub('%[b:',''))
+        end
+        local a,b=owned();assert.equals(3004,a);assert.equals(3004,b)
+        for _=1,50 do
+            if a==0 and b==0 then break end
+            vim.api.nvim_buf_call(buf,function()vim.cmd('silent undo')end)
+            local na,nb=owned()
+            assert.is_false(na~=a and nb~=b,'one undo step removed text of both generations')
+            a,b=na,nb
+        end
+        assert.equals(0,a);assert.equals(0,b)
+        D.detach(doc);vim.api.nvim_buf_delete(buf,{force=true})
+    end)
 end)
 

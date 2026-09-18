@@ -107,8 +107,9 @@ describe("progress_message", function()
     end)
     -- #266 M2: a round's blocks land one at a time, so the tools still running
     -- are counted here rather than seen in the transcript.
-    it('counts a round\'s tools as they finish',function()
-        assert.equals('Running tools: 1 of 3 finished',presentation.tools_message(1,3))
+    it('counts a round\'s tools as they finish, then names a wait on cleanup',function()
+        assert.equals('Running tools: 1 of 3 finished',presentation.tools_message({total=3,finished=1,settled=1}))
+        assert.equals('Tools finished; waiting for 2 to clean up',presentation.tools_message({total=3,finished=3,settled=1}))
     end)
     it('says why a response stopped at its staging budget, naming the answer it waited behind',function()
         local held=presentation.overflow_message(7)

@@ -44,10 +44,18 @@ grant match the last write's receipt and native undo has not moved since.
   another generation's write breaks the match — which serialization allows only
   once the turn has moved, e.g. after a pause. Different grants — say an answer's
   main grant, then its completion prompt's — are always different steps.
-- **Tool rounds are not broken out** (operator decision, #266 M2): a round's call
-  and result blocks are ordinary writes through the answer's grant, so they join
-  the answer's undo step exactly like its text. Undo never strands a pair apart
-  from the text that refers to it.
+  - *Tool rounds* (operator decision, #266 M2) get no deliberate break: a round's
+    call and result blocks are ordinary writes through the answer's grant, so
+    they join its step like its text — under this same condition. A human edit
+    while the tools run (the usual case: the next question is being typed) splits
+    the round where it lands, so a call block can sit one undo step before its
+    own result. Each piece is still one generation's.
+
+Only the unconditional bullet may be stated without a condition. Any other claim
+about grouping belongs under the conditional one, names the event that splits it,
+and ships with a test that drives that event
+(`tests/integration/generation_turn_spec.lua`: a human edit between two slices of
+one write, and one while a tool round runs).
 
 Explicit user commands use captured source transactions. Each native mutation
 returns an exact receipt, and interrupted commands preserve intervening human

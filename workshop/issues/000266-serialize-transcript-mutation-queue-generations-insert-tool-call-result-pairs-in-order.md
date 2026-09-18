@@ -869,3 +869,18 @@ the last 51.7 minutes to the #267 side-quest commit, the latest commit before th
 measurement; that stretch was M2's own close verification, so the whole window
 is M2's increment. The 07:39–09:10 gap is idle time, spent waiting on the
 operator's design answer.
+
+### 2026-09-18 — M2 boundary review round 5: FIX-THEN-SHIP, three Important fixed
+
+Response in the plan's `## Revisions` (round 5). In short: BR-9 undo claim made
+conditional, with the rule written on the atlas page itself and two tests driving
+tool rounds through undo; BR-10 superseded claims swept by wording across atlas,
+code comments and the plan; BR-11 a same-generation retry blocked only by its own
+quarantined claim is now refused with a readable error instead of queuing
+forever (another generation still waits), tested at the resource, scheduler and
+chat levels. Minors: a cleanup-wait note, and `revoked` for a detached insert.
+
+**For the operator (review Minor, before the issue closes):** the target now
+records that execution precedes the record — Stop drops `(call, result)` pairs
+whose tools already ran but had not been written. Acknowledge, or ask for Stop to
+flush them.

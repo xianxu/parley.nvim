@@ -37,7 +37,9 @@ when the turn arrives.
 A round's tools run at once but their blocks land one at a time, in declared
 order (#266 M2), so the transcript can lag them. While the round runs, the status
 line counts them — *Running tools: 1 of 2 finished* — from the generation's
-snapshot, re-presented whenever the count changes; a waiting note takes
+snapshot, re-presented whenever a count changes. Once every outcome is in but a
+tool has not cleaned up, it says so — *Tools finished; waiting for 1 to clean
+up* — since the round continues only after cleanup. A waiting note takes
 precedence. Neither process exit alone nor successful signaling proves cleanup:
 transport ownership persists until exit and both pipes settle.
 

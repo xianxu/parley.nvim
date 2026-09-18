@@ -235,6 +235,16 @@ describe('pure generation lifecycle',function()
         end
     end)
 
+    it('reports a round\'s tools for presentation, cleanup counted apart from outcome',function()
+        local s,a=requesting()
+        local _,children,round;s,_,children,round=declare(s,a,2)
+        assert.same({total=2,finished=0,settled=0},G.snapshot(s).tools)
+        s=send(s,{type='child_outcome',round=round,operation=children[1],outcome='known',result_ref='r1'})
+        assert.same({total=2,finished=1,settled=0},G.snapshot(s).tools,'an outcome is not cleanup')
+        s=send(s,{type='operation_resolved',operation=children[1]})
+        assert.same({total=2,finished=1,settled=1},G.snapshot(s).tools)
+    end)
+
     it('refuses output from a tool, which has no place of its own to write',function()
         local s,a=requesting()
         local _,children;s,_,children=declare(s,a,1)

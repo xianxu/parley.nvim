@@ -26,6 +26,31 @@ describe('captured tool scheduler',function()
         done[1](outcome('known',true));flush();assert.equals(2,starts)
         assert.equals(1,service:stats().records)
     end)
+    -- #266 M2: a generation continues past a call whose outcome is unknown, and
+    -- that call keeps its claims until reconciled. A call of the SAME generation
+    -- blocked by nothing else would wait on itself for good, so it is refused
+    -- without running, with a result the model can read. Another generation waits.
+    it('refuses a call blocked only by its own generation\'s unknown effect',function()
+        service:execute(gen,spec(),{});done[1](outcome('unknown',true,'unknown'));flush()
+        local kind,result,resolved
+        local callbacks={outcome=function(k,r)kind,result=k,r end,resolved=function()resolved=true end}
+        assert.is_not_nil(service:execute(gen,spec('retry'),callbacks));flush()
+        assert.equals(1,starts,'never started')
+        assert.equals('known',kind);assert.is_true(result.is_error);assert.is_true(resolved)
+        assert.truthy(result.content:find('outcome is unknown',1,true),result.content)
+        local g=service:generation({document='doc',logical_generation='h',capabilities={tool={execute_async=function(_,_,cb)starts=starts+1;done[starts]=cb end}}})
+        service:execute(g,spec('other'),{});flush()
+        assert.equals(1,starts,'another generation waits for the reconciliation')
+    end)
+    it('refuses a queued call once its own generation\'s blocker turns unknown',function()
+        local kind,result
+        service:execute(gen,spec('first','/p'),{})
+        service:execute(gen,spec('second','/p'),{outcome=function(k,r)kind,result=k,r end})
+        flush();assert.equals(1,starts);assert.is_nil(kind)
+        done[1](outcome('unknown',true,'unknown'));flush()
+        assert.equals(1,starts,'never started');assert.equals('known',kind);assert.is_true(result.is_error)
+        assert.equals(0,service:stats().queued)
+    end)
     it('cancels queued work immediately but waits on running cancellation',function()
         local resolved=0;local a=service:execute(gen,spec(),{resolved=function()resolved=resolved+1 end})
         local b=service:execute(gen,spec('b'),{resolved=function()resolved=resolved+1 end})

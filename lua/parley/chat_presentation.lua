@@ -55,9 +55,14 @@ function M.waiting_message(line,phase)
     return 'Waiting for '..holder(line)..' ('..(waiting_reasons[phase] or 'writing')..'); :ParleyStop there stops it'
 end
 -- #266 M2: a round's tools run at once but their blocks land one at a time, in
--- declared order, so the transcript can lag them. This is what shows they run.
-function M.tools_message(finished,total)
-    return 'Running tools: '..finished..' of '..total..' finished'
+-- declared order, so the transcript can lag them. This is what shows they run —
+-- and, once every outcome is in, that the round is waiting on cleanup rather
+-- than finished (`tools` is the generation snapshot's {total, finished, settled}).
+function M.tools_message(tools)
+    if tools.finished>=tools.total and tools.settled<tools.total then
+        return 'Tools finished; waiting for '..(tools.total-tools.settled)..' to clean up'
+    end
+    return 'Running tools: '..tools.finished..' of '..tools.total..' finished'
 end
 -- An overflow stops the response on purpose: dropping bytes would lose provider
 -- output. `line` is set when it overflowed while held behind another answer.

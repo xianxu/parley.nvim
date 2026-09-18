@@ -43,7 +43,9 @@ has its own Tasker owner, and stopping one owner does not stop sibling responses
 Process exit alone is not completion: process and pipe cleanup, or an explicit
 startup abort, provide the evidence that releases the operation. A zero-match
 stop can still mean asynchronous readiness is pending. Tool producers likewise
-must report positive cleanup; an unknown effect prevents continuation.
+must report positive cleanup before their round continues. An unknown effect is
+written as an error result and the round goes on, while its resources stay
+quarantined until reconciled (see [tool execution](tool_execution.md)).
 
 Automatic topic generation uses a separate header grant and captured parent
 marker guards. It collects output without buffer writes, then replaces the

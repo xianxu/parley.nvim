@@ -79,19 +79,35 @@ local function request(value,limits)
     return {id=value.id,document=value.document,generation=value.generation,claims=claims,status='queued',
         all=all,writes=writes,global=global}
 end
-local function capacity(s,record)
+-- `ignore` (optional) leaves some held records out of the count — how
+-- `quarantined` asks whether a request is blocked by anything else.
+local function capacity(s,record,ignore)
     local running,document,generation=0,0,0
-    for _,r in pairs(s.records)do if r.status~='queued'then
+    for _,r in pairs(s.records)do if r.status~='queued' and not (ignore and ignore(r))then
         running=running+1
         if r.document==record.document then document=document+1 end
         if r.generation==record.generation then generation=generation+1 end
     end end
     return running<s.limits.running and document<s.limits.per_document and generation<s.limits.per_generation
 end
-local function available(s,record)
-    if not capacity(s,record)then return false end
-    for _,r in pairs(s.records)do if r.status~='queued' and overlaps(record,r)then return false end end
+local function available(s,record,ignore)
+    if not capacity(s,record,ignore)then return false end
+    for _,r in pairs(s.records)do if r.status~='queued' and not (ignore and ignore(r)) and overlaps(record,r)then return false end end
     return true
+end
+--- #266 M2: is `record` blocked by nothing but its own generation's unknown
+--- effects? A record whose outcome is unknown keeps its claims (and its capacity)
+--- until reconciled, and a generation now continues past such a call, so a
+--- request of the same generation blocked only by it would wait on itself for
+--- good — holding the document's write turn. It is refused instead. Another
+--- generation's request still waits for the reconciliation, as before.
+local function quarantined(s,record)
+    local function own_unknown(r)return r.status=='unknown' and r.generation==record.generation end
+    -- O(records) first: pump asks this of every blocked waiter, and almost none
+    -- has an unknown effect of its own.
+    local any=false
+    for _,r in pairs(s.records)do if own_unknown(r)then any=true;break end end
+    return any and not available(s,record) and available(s,record,own_unknown)
 end
 local function eligible(s,record,older,blocked_prefix)
     if not available(s,record)then return false end
@@ -128,6 +144,7 @@ function M.admit(s,value)
     local record=request(value,s.limits);if not record then return s,{status='invalid'}end
     if s.records[record.id]then return s,{status='duplicate'}end
     local ready=eligible(s,record,s.queue)
+    if not ready and quarantined(s,record)then return s,{status='quarantined'}end
     if not ready then
         local queued=0;for _,id in ipairs(s.queue)do if s.records[id].generation==record.generation then queued=queued+1 end end
         if #s.queue>=s.limits.queued or queued>=s.limits.queued_per_generation then return s,{status='capacity'}end
@@ -136,17 +153,21 @@ function M.admit(s,value)
     if ready then record.status='admitted' else next_state.queue[#next_state.queue+1]=record.id end
     return next_state,{status=record.status,id=record.id}
 end
+--- Returns the next state, the ids admitted, and the ids refused because only
+--- their own generation's unknown effects block them (removed, as by cancel).
 function M.pump(s)
-    local next_state=changed(s);next_state.queue={};local admitted={}
+    local next_state=changed(s);next_state.queue={};local admitted,refused={},{}
     for _,id in ipairs(s.queue)do
         local record=next_state.records[id]
         -- Earlier retained waiters were already blocked in this pump. Adding
         -- running claims cannot make them runnable, so reuse that proof.
         if eligible(next_state,record,next_state.queue,true)then
             record=copy(record);record.status='admitted';next_state.records[id]=record;admitted[#admitted+1]=id
+        elseif quarantined(next_state,record)then
+            next_state.records[id]=nil;refused[#refused+1]=id
         else next_state.queue[#next_state.queue+1]=id end
     end
-    return next_state,admitted
+    return next_state,admitted,refused
 end
 function M.unknown(s,id)
     local record=s.records[id]

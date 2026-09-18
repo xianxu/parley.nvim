@@ -3090,3 +3090,24 @@ download.
   a change makes a write land sooner or later than before (an unknown outcome now
   written at once instead of pausing), re-check every test that submits right
   after that write — it may now be racing it.
+
+- #266 M2 review (4th in `invariant-statement-omits-exception`): a rule stated
+  in a review response dies with the response. Three rounds of M1 fixed undo
+  claims one sentence at a time, and M2 added a fresh unconditional sentence to
+  the very page that had been corrected. The fix that holds puts the rule ON the
+  page that invites the claim ("only this bullet is unconditional; anything else
+  names its splitting event and ships a test driving it"), where the next author
+  reads it before writing.
+
+- #266 M2 review BR-10: when a behavior changes, sweep for the old CLAIM, not
+  the pages the plan listed. The plan named `tool_use.md`, and that page was
+  rewritten — yet a paragraph lower on the same page still said "an unknown
+  outcome prevents continuation". Grep the superseded sentence's key phrases
+  across atlas, README, code comments and the plan's own Core concepts.
+
+- #266 M2 review BR-11: relaxing one safety rule can strand another that was
+  designed around it. "An unknown outcome pauses" was what kept the resource
+  quarantine (claims held until reconciled) from ever blocking its own
+  generation; removing the pause turned a retry into a self-deadlock. When a
+  change lets work continue past uncertainty, list every mechanism that holds
+  something for that uncertainty and ask who can now wait on it.
