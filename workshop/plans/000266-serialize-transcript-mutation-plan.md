@@ -138,7 +138,7 @@ for any trigger not paired.
 | Observation | turn_status | Re-request on |
 |---|---|---|
 | `start`, `resume_validated` (`:343-345`) | → `held` (requested) | — |
-| *(M1 consequence: taking the turn in `preparing` queues the next generation's provider request too — see "Deliberate over-serialization in M1")* | — | — |
+| *(taking the turn in `preparing` no longer queues the next generation's request: preparation writes nothing until the generation's first write — Chunk 2)* | — | — |
 | *(no release while merely idle between chunks — see below)* | — | — |
 | `terminal` (`:98`, `:154`) | released | never (generation is gone) |
 | `stop` / `phase=='stopping'` (`:40-53`) | released | never |
@@ -182,38 +182,14 @@ Execution concurrency: `generation.lua:84` fan-out cap of 4, `tools/resources.lu
 
 ---
 
-## Deliberate over-serialization in M1, resolved in M2
+## Deliberate over-serialization in M1 — resolved
 
-**Operator decision, 2026-09-17: do the right thing in M2 rather than a
-workaround in M1.**
-
-The turn is acquired at `start`, i.e. in `preparing`. Preparation writes
-(`response_preparation.lua:90,101,108`) are therefore turn-blocked for a second
-generation, so `Preparation` never retires `'applied'`, `cb.prepared`
-(`response_session.lua:131-133`) never fires, and `generation.lua:103-105` never
-advances `preparing → requesting`. **A second generation's provider request does
-not start until the first completes.**
-
-That is **full queuing** — option (a) — where the Spec chose option (b)
-("a second generation's provider request *starts* while the first is still
-streaming"). It is a deliberate, temporary over-serialization: *stricter* than
-the target, never looser, so no transcript can be corrupted by it. The cost is
-latency, not correctness.
-
-**Rejected:** exempting preparation writes from the turn to restore option (b) in
-M1. It would satisfy the gate while leaving a write path outside the invariant
-and splitting a generation's undo run with a foreign gap — a workaround adopted
-to make a milestone green, which is the wrong reason to shape a design.
-
-**M2 resolves it properly** by deferring preparation's write until there is
-output to write, so nothing is exempt and the invariant stays exact.
-
-**Consequence for M1's tests:** `tests/integration/chat_scoped_response_spec.lua:47`
-asserts two concurrent provider dispatches (`wait(function()return #calls==2 end)`).
-Under M1 it must assert the queued shape — one dispatch, the second following the
-first's terminal — and M2 restores the concurrent assertion. Change it in Task
-1.9 Step 5 with a comment naming this section, so the M1 form is visibly a
-way-station and not the intended end state.
+Resolved by Chunk 2 (2026-09-17). Until then the turn, taken in `preparing`,
+blocked a second generation's preparation write and so its provider request —
+full queuing where the Spec chose option (b). Preparation now reports its input
+without writing and the gap lands immediately before the generation's first
+write, so requests run concurrently again and nothing is exempt from the turn.
+Mechanism in `## Revisions`.
 
 ## Chunk 1 — M1 (part 1 of one boundary): the write turn
 
@@ -564,25 +540,25 @@ waiting, `:88-115` the write steps, `:145-149` subscriber);
 `lua/parley/response_session.lua:129-134` (`cb.prepared` wiring)
 **Test:** `tests/integration/response_preparation_spec.lua`, routed under `chat/ownership`
 
-- [ ] **Step 1:** Failing test — a generation whose preparation is turn-blocked still reports `prepared` and still reaches `requesting`.
-- [ ] **Step 2: Run, fail.** `make test-spec SPEC=chat/ownership`
-- [ ] **Step 3:** Implement the split. The region reservation (grant acquisition) stays where it is; only the byte-writing defers.
-- [ ] **Step 4: Green. Step 5: Commit** — `#266 M2: report prepared without writing`
+- [x] **Step 1:** Failing test — a generation whose preparation is turn-blocked still reports `prepared` and still reaches `requesting`.
+- [x] **Step 2: Run, fail.** `make test-spec SPEC=chat/ownership`
+- [x] **Step 3:** Implement the split. The region reservation (grant acquisition) stays where it is; only the byte-writing defers.
+- [x] **Step 4: Green. Step 5: Commit** — `#266 M2: report prepared without writing`
 
 ### Task 2.2: land the deferred gap with the first output
 
 **Files:** `lua/parley/generation.lua` (`pump` `:94-157`), `lua/parley/generation_runner.lua` (`write()` `:259-290`)
 **Test:** `tests/integration/generation_turn_spec.lua`
 
-- [ ] **Step 1:** Failing test — the gap bytes appear exactly once, immediately before the first output bytes, under the same turn, and are absent if the generation is cancelled before any output.
-- [ ] **Step 2: Run, fail.**
-- [ ] **Step 3:** Implement. **Step 4: Green. Step 5: Commit** — `#266 M2: write the preparation gap with the first output`
+- [x] **Step 1:** Failing test — the gap bytes appear exactly once, immediately before the first output bytes, under the same turn, and are absent if the generation is cancelled before any output.
+- [x] **Step 2: Run, fail.**
+- [x] **Step 3:** Implement. **Step 4: Green. Step 5: Commit** — `#266 M2: write the preparation gap with the first output`
 
 ### Task 2.3: restore the concurrency assertions
 
-- [ ] Re-invert `tests/integration/chat_scoped_response_spec.lua:47` to its original concurrent form (`wait(function()return #calls==2 end)`), removing the M1 way-station comment.
-- [ ] Assert the full Spec shape end to end: two provider requests in flight, writes strictly serialized, second answer applied whole after the first terminates.
-- [ ] Remove the "Deliberate over-serialization in M1" section from this plan and correct the issue `## Log` entry that records the postponement.
+- [x] ~~Re-invert `tests/integration/chat_scoped_response_spec.lua:47`~~ — never inverted (the operator moved the inversions to this chunk); it passes in its original concurrent form. The two `response_session_spec` way-stations M1 did write are restored byte-for-byte to `main`.
+- [x] Assert the full Spec shape end to end: two provider requests in flight, writes strictly serialized, second answer applied whole after the first terminates.
+- [x] Remove the "Deliberate over-serialization in M1" section from this plan and correct the issue `## Log` entry that records the postponement.
 - [ ] `make test` → exit 0. `sdlc milestone-close --issue 266 --milestone M1` (covers both chunks).
 
 ## Chunk 3 — M2: ordered append, and the machinery it replaces
@@ -763,3 +739,88 @@ Recorded so they are not re-derived, and so a later reader can tell which claims
 - **The no-wire-change prediction for Task 3.5 is well-founded** — `response_tools.lua:224-234` batches the live round; the fixtures are already interleaved.
 - **Line references throughout this plan were spot-checked against the tree** across six review rounds; the ones that were wrong are listed in the bullet below rather than left for the implementer to trip over. Verify before editing rather than trusting any of them — the tree moves.
 - **Corrected from an earlier draft:** generation ids are bare integers, not `'g'..n` (`state.lua:6-7`); `M.new` is at `:64` and `M.snapshot` at `:72`, and `D.snapshot` (`init.lua:254`) is a bare passthrough needing no change; the branch-name guard is `single_source_sweeps_spec.lua:732-743` (regex at `:737`), not `:713`.
+
+## Revisions
+
+### 2026-09-17 — Chunk 2 mechanism: the machine owns the deferred gap
+
+**Reason.** Chunk 2 named the behaviour ("defer the bytes until the first output
+arrives") but not who decides *when*. Tracing it showed three things the chunk
+did not anticipate:
+
+1. **"First output" is too narrow.** A generation's first write is not always
+   output. A tool round with no preceding text writes call blocks first
+   (`reserve_round`), and an answer that produced nothing still writes through
+   `finalize`. All three must land after the gap, or a call block lands inside
+   the old answer's region before the replacement that clears it.
+2. **Only the machine can see all three.** Output staging, round reservation and
+   finalize are all decided in `generation.lua`'s `pump`. A trigger living in
+   `response_preparation` or `response_session` would have to reconstruct that
+   decision from outside.
+3. **`capture_topic_parent` reads the header at request time**
+   (`chat_respond.lua`, via the session's `requesting` hook). With the request
+   now starting before the header exists, it must move to `finalize`, where the
+   gap has always landed.
+
+**Delta.**
+
+- `generation.lua` gains `s.gap`, enumerated rather than boolean (ARCH-ORDER):
+  `'none'` → `'deferred'` (a `prepared{gap=true}` event) → `'writing'` (the
+  `write_gap` effect is out) → `'none'` (`gap_result{status='applied'}`). A
+  failed gap stops the generation as `prepare_failed`. A generation stopped
+  while `'deferred'` never writes its gap.
+- One predicate, `may_write(s)` = turn held **and** no gap outstanding, gates all
+  three write-producing emissions (output `write`, `reserve_round`, `finalize`).
+  `write_gap` is emitted exactly when one of them is due and the turn is held.
+- `generation_runner.lua`: `cb.prepared(input, gap)` accepts an optional gap
+  writer from a `prepare` operation; the runner executes `write_gap` by calling
+  it and dispatching `gap_result`. The "live preparation grant" check applies
+  only when no gap is deferred — with one, those grants are meant to be live.
+- `response_session.lua`: `callbacks.prepared` reports the input to the runner
+  immediately and passes a writer that starts `Preparation` on demand. The
+  prepare operation stays unresolved until `Preparation` retires, so the
+  machine's existing `outstanding(s)` accounting covers the writer's lifetime and
+  `cancel_operation` reaches it with no new plumbing.
+- `chat_respond.lua`: topic-parent capture moves from the `requesting` hook to
+  `finalize`; the session's `requesting` hook then has no caller and is removed
+  (ARCH-PURPOSE).
+
+**Consequences worth stating.**
+
+- Task 1.4 Step 5's anti-spin concern largely dissolves for preparation: it no
+  longer starts until its generation holds the turn, so the common case — B's
+  preparation waiting through A's whole stream — no longer exists. The residual
+  parks (`suspended`, a pause mid-gap) are pre-existing and rare.
+- Regenerating an answer no longer deletes the old one at submit. It survives
+  until replacement bytes exist, so a request that fails before its first byte
+  leaves the old answer in place — directly useful to parley#261.
+- For a lone generation the answer header now appears with the first output
+  rather than at submit. The pending spinner (extmark-only) covers the gap.
+- Task 1.6 Step 4's "normal waiter" changes shape: it is no longer a generation
+  parked in `preparing` with no stream, but one whose request is running and
+  whose output (or declared tool round) is staged behind the holder. The
+  visibility message must describe that case.
+
+**Where the tests landed (deviation from Tasks 2.1/2.2's file list).** The
+machine cases are in `tests/unit/generation_spec.lua` (request before gap; gap
+immediately before the first output, round reservation and finalize; held while
+turnless; never written after a pre-output cancel; failure stops). The composed
+cases are in `tests/integration/response_session_spec.lua`, which already drives
+the real `Preparation` — a separate `response_preparation_spec` would have needed
+its own session harness to say the same thing.
+
+**Two specs restated, not inverted-and-restored** (`chat_stop_generation_spec`
+"keeps an earlier target independent…", `chat_async_tools_spec` "scopes Stop…").
+Both needed a second generation to *write* a tool round's call block while the
+first held the turn, which the lifetime-held turn forbids regardless of this
+chunk. Each keeps the property it is named for. **M2 obligation:** once tool
+execution no longer needs a reservation write, re-add a cross-generation
+execution assertion (two generations' tools running concurrently while their
+writes stay serialized) — the async case now proves path-scoped admission within
+one round only.
+
+**Also found while restoring the nine:** `stop()` queued `release_turn` ahead of
+`revoke`, so for one runner step a `terminal` machine still held its region and
+an immediate regenerate was refused `'overlap'` (`batch_lifecycle_spec`, green on
+`main`). Revoke now precedes release; pinned in `generation_spec`.
+
