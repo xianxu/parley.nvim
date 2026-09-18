@@ -140,6 +140,26 @@ describe('write turn enforcement',function()
             'a continuation must not outlive its turn')
     end)
 
+    -- Task 1.8: every generated entry point, not just append. Replacement opens
+    -- (preparation), released insertions (completion's next prompt) and planned
+    -- applies (the automatic topic) each refuse a non-holder with 'waiting'.
+    it('refuses a replacement, a released insertion and a planned apply from a non-holder',function()
+        local doc,_,admit,_,rg=fixture()
+        local a=admit(rg.a[1],rg.a[2]);local b,gb=admit(rg.b[1],rg.b[2])
+        assert.is_not_nil(gb)
+        D.transition(doc,{kind='request_turn',generation=a})
+        local snap=D.snapshot(doc);local grant=snap.grants[gb]
+        local base={epoch=snap.epoch,generation=b,grant=gb,entity=grant.entity,revision=grant.revision,
+            operation='writer',bytes='x'}
+        local cursor,reason=D.replace_new(doc,base)
+        assert.is_nil(cursor);assert.equals('waiting',reason,'replace_new')
+        cursor,reason=D.insert_released_new(doc,vim.tbl_extend('force',base,{point=grant.first}))
+        assert.is_nil(cursor);assert.equals('waiting',reason,'insert_released_new')
+        local applied=D.apply(doc,{epoch=snap.epoch,generation=b,grant=gb,entity=grant.entity,
+            revision=grant.revision,operation='writer',patches={{start=grant.first,finish=grant.first,text='x'}}})
+        assert.equals('waiting',applied.status,'apply')
+    end)
+
     -- Humans are never blocked. apply_user is deliberately outside the guard.
     it('never blocks a human edit',function()
         local doc,fake,admit=fixture()

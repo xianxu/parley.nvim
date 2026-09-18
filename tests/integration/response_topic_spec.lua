@@ -58,6 +58,23 @@ describe('independent automatic topic ownership',function()
         assert.equals('💬: next human',vim.api.nvim_buf_get_lines(buf,8,9,false)[1])
         assert.equals(0,D.user_guard_stats(doc).live)
     end)
+    -- #266: an automatic topic is a generation too. It takes the write turn only
+    -- around its one write, so behind another holder it waits — it never fails.
+    it('waits behind another generation holding the write turn, then writes',function()
+        local holder=D.transition(doc,{kind='register_generation'}).generation
+        D.transition(doc,{kind='request_turn',generation=holder})
+        local job=start(doc,spec(),jobs);pump(job)
+        local p=processes.processes[4242];assert.is_not_nil(p)
+        emit(p,'Held topic');status(p);p:finish()
+        vim.wait(100,function()return #Tasker._handles==0 end,1);pump(job)
+        assert.equals('# topic: ?',vim.api.nvim_buf_get_lines(buf,0,1,false)[1],'no write without the turn')
+        local waiting=Topic.snapshot(job).status
+        assert.is_true(waiting~='failed' and waiting~='applied',waiting)
+        D.transition(doc,{kind='finish_generation',generation=holder});pump(job)
+        assert.equals('# topic: Held topic',vim.api.nvim_buf_get_lines(buf,0,1,false)[1])
+        assert.equals('applied',Topic.snapshot(job).status)
+        assert.is_nil(D.turn(doc),'the topic gives the turn back after its write')
+    end)
     it('cancels when the captured answer header is deleted and waits for cleanup',function()
         local job=start(doc,spec(),jobs);pump(job)
         vim.api.nvim_buf_set_lines(buf,5,6,false,{})
