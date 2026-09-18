@@ -196,11 +196,10 @@ Logical cancellation and physical cleanup are separate. Stopping or invalidating
 an answer prevents further admission immediately, but its operation remains
 unresolved until the producer reports cleanup. A throwing producer may already
 have caused an effect, so an `unknown` outcome is never converted into a
-successful or cancelled result: it is written as an error result saying the
-effect may or may not have happened, and the round continues once the tool is
-cleaned up. Its resources stay quarantined until reconciled, so a later call in
-the same answer that needs them is refused with an error the model can read,
-while another answer's call waits for the reconciliation
+successful or cancelled result: a crashed tool is a plain failure (#266 M3,
+operator decision), written as an error result saying it may have partly taken
+effect, and the round continues once the tool's process has ended. By then it
+holds nothing, so a retry — in this answer or another — simply runs
 ([tool execution](tool_execution.md)). A cancellation request alone settles
 nothing.
 

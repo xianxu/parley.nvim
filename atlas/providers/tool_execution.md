@@ -33,16 +33,12 @@ gets available capacity first. Disjoint work may proceed around a blocked
 resource claim, in the same round or another generation's: a tool starts as soon
 as its round is declared, whatever the document's write turn, and only its
 call and result blocks wait for it (#266).
-A request blocked by nothing but its **own generation's** unknown effects — their
-claims, or the per-generation capacity they occupy — is refused without running
-instead of queued (`resources.lua` `quarantined`, checked at admission and at
-every pump, and pumped after every outcome, since a call turning unknown frees
-nothing). Its answer continues past a failed call and holds the document's write
-turn, so waiting would wait on itself for good; the error result names why, so
-the model can try another way (#266 M2). Another generation's request still
-waits for the reconciliation.
+A tool whose process has ended holds nothing, whatever its outcome: a crashed
+tool is a plain failure (#266 M3, operator decision), released when its process
+ends, and a retry — in its own answer or another — simply runs. While its process
+runs it keeps its claims, since that is an effect in progress.
 Cancellation removes queued work immediately. Running work retains its claims
-until both effect certainty and physical completion are positive.
+until its process has physically ended; its effect need not be known.
 
 Builtin claim declarations live in `tools/async_builtin.lua`: reads use file or
 subtree claims; edits claim the parent subtree for target and numbered backup;
@@ -55,15 +51,14 @@ and private-path checks belong to the dispatcher, not the pure overlap service.
 | Observation | Effect handling | Physical handling |
 | --- | --- | --- |
 | Known applied, not applied, or partial | Record and reuse the known result | Release only after explicit cleanup evidence |
-| Unknown effect | Retain the operation and resource claims | A drained process alone does not determine the external effect |
+| Unknown effect | Report a failure the model reads ("may have partly taken effect"); never replayed | Claims released once the process has ended — a crashed tool holds nothing (#266 M3) |
 | Cancellation request | Stop further admission; request owned cancellation | Wait for original callbacks and cleanup |
 | Formatter failure | Preserve previously recorded effect evidence | Does not manufacture or revoke cleanup evidence |
 
 Backend observations carry `certainty`, `effect`, `physical_resolved`, `result`,
 and evidence. The scheduler records known effects before normalization, paging,
-or callback delivery. A positive physical barrier can resolve the document's
-child operation while an unknown external effect remains quarantined in the
-process-scoped resource service. Callback delivery and new execution return to
+or callback delivery. A positive physical barrier resolves the document's child
+operation and releases its claims, whatever the effect's certainty (#266 M3). Callback delivery and new execution return to
 Neovim's main loop.
 
 Scheduler and Tasker reconciliation probe at 50ms initially, double the interval
@@ -167,8 +162,8 @@ heartbeat. The canonical test list is `providers/tool_execution` in
 A cancelled response uses the distinct `operation_supervised` transition to hand
 its tool ownership to the process supervisor. This permits local response and
 Document retirement without asserting effect success or physical completion.
-The supervisor severs parent callbacks, retains unknown claims and admits only
-nonconflicting work. Normal child completion cannot request this transition.
+The supervisor severs parent callbacks, retains the claims of tools whose
+processes still run, and admits only nonconflicting work. Normal child completion cannot request this transition.
 
 `ParleyToolOperations` uses stable process-lifetime operation IDs, captured tool
 names, document/generation scalars, claims and evidence. Operator-confirmed effect

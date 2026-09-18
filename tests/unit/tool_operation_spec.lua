@@ -154,6 +154,16 @@ describe('tool operation lifecycle permissions',function()
         s=event(s,key,'delivery_end');s,permission=O.forget(s,key)
         assert.equals('forgotten',permission.status)
     end)
+    -- #266 M3 (operator): a crashed tool is a plain failure. Once its process has
+    -- ended, an unknown effect holds nothing; while it runs, it holds its claims.
+    it('releases an unknown effect once its process has ended, and not before',function()
+        local s,key=executing();local permission
+        s=event(s,key,'outcome',{effect='unknown',evidence_ref='e'})
+        local same,held=event(s,key,'release');assert.is_nil(held.release_claims);assert.same(s,same)
+        s=event(s,key,'physical',{evidence_ref='backend'})
+        s,permission=event(s,key,'release');assert.is_true(permission.release_claims)
+        s=event(s,key,'owner_closed');s,permission=O.forget(s,key);assert.equals('forgotten',permission.status)
+    end)
     it('cancellation before execution authorizes known no-effect release without a backend',function()
         local s,key=accept();local permission
         s,permission=event(s,key,'cancel');assert.is_true(permission.cancelled_before_effect)

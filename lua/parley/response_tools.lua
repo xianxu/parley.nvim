@@ -23,7 +23,7 @@ end
 -- another way (#266 M2, operator decision): the round never pauses on one.
 -- Each names what is and is not known about the effect.
 local failures={
-    unknown='The tool call failed and its outcome is unknown: it may or may not have taken effect.',
+    unknown='The tool call failed: it ended without reporting a result, so it may have partly taken effect.',
     rejected='The tool call was rejected before it ran.',
     cancelled_before_effect='The tool call was cancelled before it ran.',
 }

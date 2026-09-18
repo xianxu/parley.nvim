@@ -39,46 +39,20 @@ describe('pure tool resource admission',function()
     it('enforces owner and process bounds without evicting uncertainty',function()
         local s=R.new({running=2,queued=2,per_document=1,per_generation=1,queued_per_generation=1})
         s=admitted(s,request('a',{claim('/a')}));s=R.unknown(s,'a')
-        -- Another generation in the same document waits on a's uncertainty;
-        -- a's own generation is refused instead (see the next case).
-        local function sibling(id,path)return {id=id,claims={claim(path)},document='d',generation='h'}end
-        local result;s,result=R.admit(s,sibling('b','/b'));assert.equals('queued',result.status)
-        local unchanged,full=R.admit(s,sibling('c','/c'));assert.equals('capacity',full.status);assert.same(s,unchanged)
-        unchanged,full=R.admit(s,request('own',{claim('/own')}));assert.equals('quarantined',full.status);assert.same(s,unchanged)
+        local result;s,result=R.admit(s,request('b',{claim('/b')}));assert.equals('queued',result.status)
+        local unchanged,full=R.admit(s,request('c',{claim('/c')}));assert.equals('capacity',full.status);assert.same(s,unchanged)
         s=admitted(s,request('d',{claim('/d')},'other'))
         s,result=R.admit(s,request('e',{claim('/e')},'third'));assert.equals('queued',result.status)
         unchanged,full=R.admit(s,request('f',{claim('/f')},'fourth'));assert.equals('capacity',full.status);assert.same(s,unchanged)
         assert.same({running=2,queued=2,unknown=1},R.stats(s))
         s=R.cancel(s,'b');s=release(s,'d');local ready;s,ready=R.pump(s);assert.same({'e'},ready)
     end)
-    -- #266 M2: a generation continues past a call whose outcome is unknown, and
-    -- that call keeps its claims until reconciled. A request of the SAME
-    -- generation blocked by nothing else would wait on itself for good (holding
-    -- the document's write turn), so it is refused; another generation still
-    -- waits for the reconciliation.
-    it('refuses a request only its own generation\'s unknown effect blocks, and nothing else',function()
+    -- #266 M3: the scheduler releases a crashed tool once its process has ended,
+    -- naming that as the evidence; anything short of evidence still refuses.
+    it('releases an unknown record on evidence that its process ended',function()
         local s=admitted(R.new(),request('a',{claim('/a')}));s=R.unknown(s,'a')
-        local unchanged,result=R.admit(s,request('retry',{claim('/a')}))
-        assert.equals('quarantined',result.status);assert.same(s,unchanged)
-        local other=request('other',{claim('/a')});other.generation='later'
-        s,result=R.admit(s,other);assert.equals('queued',result.status)
-        -- Queued behind a running call that then ends unknown: refused at pump.
-        local t=admitted(R.new(),request('running',{claim('/p')}))
-        t,result=R.admit(t,request('behind',{claim('/p')}));assert.equals('queued',result.status)
-        t=R.unknown(t,'running')
-        local ready,refused;t,ready,refused=R.pump(t)
-        assert.same({},ready);assert.same({'behind'},refused)
-        assert.equals(0,R.stats(t).queued);assert.is_nil(R.get(t,'behind'))
-        -- Also blocked by another generation's running work: it waits for that,
-        -- and is refused only once its own uncertainty is all that is left.
-        local u=admitted(R.new(),request('mine',{claim('/q')}));u=R.unknown(u,'mine')
-        local busy=request('busy',{claim('/r')});busy.generation='other';u=admitted(u,busy)
-        u,result=R.admit(u,request('both',{claim('/q'),claim('/r')}));assert.equals('queued',result.status)
-        u,ready,refused=R.pump(u);assert.same({},ready);assert.same({},refused)
-        u=release(u,'busy');u,ready,refused=R.pump(u);assert.same({},ready);assert.same({'both'},refused)
-        -- Capacity counts too: own unknowns filling per_generation refuse the next.
-        local v=admitted(R.new({per_generation=1}),request('full',{claim('/x')}));v=R.unknown(v,'full')
-        unchanged,result=R.admit(v,request('next',{claim('/y')}));assert.equals('quarantined',result.status)
+        local same,refused=R.release(s,'a',{effect='ended'});assert.equals('unresolved',refused.status);assert.same(s,same)
+        local _,released=R.release(s,'a',{effect='ended',evidence_ref='exited'});assert.equals('released',released.status)
     end)
     it('lets disjoint work in the same document and generation bypass an unknown conflict',function()
         local s=admitted(R.new(),request('unknown',{claim('/one/a')}));s=R.unknown(s,'unknown')

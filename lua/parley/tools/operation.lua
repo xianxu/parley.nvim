@@ -100,8 +100,11 @@ function M.transition(s,key,event)
     elseif kind=='physical' and record.started and not record.physical then
         if not ref(event.evidence_ref)then return s,{status='invalid'}end
         record.physical=true
+    -- #266 M3 (operator): a crashed tool is a plain failure, so an unknown effect
+    -- is released too — but only once its process has physically ended. While it
+    -- runs it holds its claims: that is an effect in progress, not a quarantine.
     elseif kind=='release' and not record.released and record.physical
-        and (status=='outcome_known' or status=='cancelled_before_effect' or status=='rejected')then
+        and (status=='outcome_known' or status=='outcome_unknown' or status=='cancelled_before_effect' or status=='rejected')then
         record.released=true;record.poll=nil;result.release_claims=true
     elseif kind=='owner_closed' and not record.owner_closed then
         record.owner_closed=true

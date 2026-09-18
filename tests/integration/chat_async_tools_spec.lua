@@ -214,24 +214,23 @@ describe('public asynchronous chat tools',function()
         assert.is_not_nil(buffer_text(buf):find('DISJOINT_RESULT',1,true))
         assert.is_nil(buffer_text(buf):find('LATE_FIRST_RESULT',1,true))
     end)
-    -- #266 M2 review BR-11: the round continues past an unknown outcome, and the
-    -- unknown call keeps its claims until reconciled. The model is told to try
-    -- another way; a retry on the same path must come back as an error it can
-    -- read, never wait on its own quarantine while holding the write turn.
-    it('refuses a same-answer retry on a path an unknown call still holds',function()
+    -- #266 M3 (operator): a crashed tool is a plain failure. Its answer gets an
+    -- error result and goes on, and once the tool's process has ended it holds
+    -- nothing — so the model's natural retry on the same path simply runs.
+    it('runs a same-answer retry on a path whose earlier call crashed',function()
         register_held()
         local session=submit('first');wait(function()return #providers()==1 end)
         tool_round(providers()[1],{{id='try',name='held_fixture',input={file_path=root..'/one/a'}}})
         wait(function()return #held==1 end)
-        held[1].done({certainty='unknown',effect='unknown',physical_resolved=true,result={content='uncertain'}})
+        held[1].done({certainty='unknown',effect='unknown',physical_resolved=true,result={content='process crashed'}})
         wait(function()return #providers()==2 end)
         tool_round(providers()[2],{{id='retry',name='held_fixture',input={file_path=root..'/one/a'}}})
-        finish(session,3)
-        assert.equals(1,#held,'the retry never ran')
+        wait(function()return #held==2 end)
+        known(held[2],'RETRY_WROTE_IT');finish(session,3)
         local content=buffer_text(buf)
         assert.truthy(content:find('id=try error=true',1,true))
-        assert.truthy(content:find('id=retry error=true',1,true))
-        assert.truthy(content:find('outcome is unknown',1,true),content)
+        assert.truthy(content:find('partly taken effect',1,true),content)
+        assert.truthy(content:find('RETRY_WROTE_IT',1,true))
     end)
     it('hands reloaded parents to supervision and ignores later backend document callbacks',function()
         register_held();vim.cmd('silent write')

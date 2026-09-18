@@ -78,32 +78,17 @@ function M.new(opts)
     end
     local function settle(r)
         if transition(r,{type='release'}).release_claims then
-            -- A call refused before admission, or by pump, holds no record here.
-            local held=R.get(resources,r.id)
-            if held then
-                local permission
-                if held.status=='queued'then resources,permission=R.cancel(resources,r.id)
-                else resources,permission=R.release(resources,r.id,{effect='known',evidence_ref=r.id})end
-                assert(permission.status=='released' or permission.status=='cancelled','resource release rejected')
+            local permission
+            if R.get(resources,r.id).status=='queued'then resources,permission=R.cancel(resources,r.id)
+            else
+                -- A crashed tool (#266 M3) is released on its process ending.
+                resources,permission=R.release(resources,r.id,
+                    {effect=lifecycle(r).known and 'known' or 'ended',evidence_ref=r.id})
             end
+            assert(permission.status=='released' or permission.status=='cancelled','resource release rejected')
+            pump()
         end
-        -- After every outcome, not only a release: a call turning unknown frees
-        -- nothing, but can leave a waiter of its own generation blocked by nothing
-        -- else, and pump is where that waiter is refused (#266 M2).
-        pump()
         dispatch(r);arm()
-    end
-    -- #266 M2: a call blocked only by its own generation's unknown effects is
-    -- refused without running (resources.lua `quarantined`). The generation
-    -- continues past a failed call, so waiting would wait on itself for good; the
-    -- result tells the model why, so it can try another way.
-    local function refuse(r)
-        if transition(r,{type='reject'}).status~='accepted'then return end
-        r.effect='not_applied';r.version=r.version+1
-        set_result(r,{content='Refused without running: an earlier call in this answer used the same resource'
-            ..' and its outcome is unknown, so the resource stays held until that outcome is reconciled.'
-            ..' Use a different path, or stop and reconcile it.',is_error=true})
-        settle(r)
     end
     local function polling(r)transition(r,{type='poll',now=now()})end
     observe=function(r,value,operator)
@@ -152,9 +137,8 @@ function M.new(opts)
         if records[r.op] and lifecycle(r).cancelled and not lifecycle(r).physical and r.backend and r.backend.cancel then pcall(r.backend.cancel,r.backend)end
     end
     pump=function()
-        local admitted,refused;resources,admitted,refused=R.pump(resources)
+        local admitted;resources,admitted=R.pump(resources)
         for _,id in ipairs(admitted)do local r=by_id[id];if r then start(r)end end
-        for _,id in ipairs(refused)do local r=by_id[id];if r then refuse(r)end end
     end
     arm=function()
         if timer_cancel then timer_cancel();timer_cancel=nil end
@@ -189,12 +173,12 @@ function M.new(opts)
         if accepted.status~='accepted'then return nil,accepted.status end
         serial=serial+1;local op={};local r={op=op,id='operation:'..serial,key=accepted.key,scope=scope,document=scope.document,authority=spec.authority,claims=plain(spec.claims),name=spec.name,definition=def,capability_ref=scope.id..':'..spec.name,callbacks=callbacks or {},bytes=0,version=0}
         local admission;resources,admission=R.admit(resources,{id=r.id,document=scope.document,generation=scope.id,claims=spec.claims})
-        if admission.status~='admitted' and admission.status~='queued' and admission.status~='quarantined'then
+        if admission.status~='admitted' and admission.status~='queued'then
             transition(r,{type='reject'});transition(r,{type='release'});transition(r,{type='owner_closed'})
             ledger=O.forget(ledger,r.key);return nil,admission.status
         end
         records[op]=r;by_key[r.key]=r;by_id[r.id]=r;scope.count=scope.count+1
-        if admission.status=='admitted'then start(r)elseif admission.status=='quarantined'then refuse(r)end
+        if admission.status=='admitted'then start(r)end
         return op,admission.status
     end
     function service:cancel(op)

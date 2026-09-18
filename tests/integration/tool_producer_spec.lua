@@ -57,12 +57,20 @@ describe('supervised tool producer adapter',function()
         done[2](outcome(true));flush();assert.same({'b'},results)
         done[1](outcome(true));flush();assert.same({'b'},results)
     end)
-    it('severs closed generation callbacks while preserving unknown quarantine',function()
+    -- #266 M3: only a tool whose process still runs keeps its claims past close;
+    -- one that ended (even with an unknown outcome) is a plain failure and holds
+    -- nothing.
+    it('severs closed generation callbacks while a still-running unknown keeps its claims',function()
         local callbacks=0
         producer.start(call(),ctx(),{outcome=function()callbacks=callbacks+1 end})
-        done[1]({certainty='unknown',effect='unknown',physical_resolved=true,result={content='uncertain'}});flush()
+        done[1]({certainty='unknown',effect='unknown',physical_resolved=false,result={content='uncertain'}});flush()
         assert.equals(1,callbacks);producer.close();assert.equals(1,service:stats().records)
         done[1](outcome(true));flush();assert.equals(1,callbacks);assert.equals(0,service:stats().records)
+    end)
+    it('retires a crashed tool at close once its process has ended',function()
+        producer.start(call(),ctx(),{outcome=function()end})
+        done[1]({certainty='unknown',effect='unknown',physical_resolved=true,result={content='crashed'}});flush()
+        producer.close();assert.equals(0,service:stats().records)
     end)
     it('delivers later known evidence after physical completion of an unknown outcome',function()
         local kinds,resolved={},0
