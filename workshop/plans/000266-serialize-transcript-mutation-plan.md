@@ -516,8 +516,8 @@ The invariant to assert is the issue's own: **no undo entry mixes two generation
 
 - [x] Rewrite `atlas/chat/ownership.md:8-9` — "Disjoint generations may write separate answers" is now false. Also `atlas/providers/architecture.md:29`. **Not** `atlas/chat/lifecycle.md:267` or `atlas/chat/inline_branch_links.md:76` — both describe *human* edits, which stay legal under `apply_user`; and not `atlas/chat/response_progress.md:56`, which is a test-file description. Only pages asserting concurrent *generated* writes change.
 - [x] Confirm every spec added in Chunk 1 is routed and every new `lua/` file is in the right `code:` list.
-- [ ] `make test` → exit 0 (lint runs first).
-- [ ] `sdlc milestone-close --issue 266 --milestone M1`
+- [x] `make test` → exit 0 (lint runs first). `make test JOBS=4`: lint 0/0, 376/376 spec files; two `JOBS=8` runs each lost one file to the known parallel-load abort, each passing alone.
+- [x] `sdlc milestone-close --issue 266 --milestone M1`
 
 ---
 
@@ -563,7 +563,7 @@ waiting, `:88-115` the write steps, `:145-149` subscriber);
 - [x] ~~Re-invert `tests/integration/chat_scoped_response_spec.lua:47`~~ — never inverted (the operator moved the inversions to this chunk); it passes in its original concurrent form. The two `response_session_spec` way-stations M1 did write are restored byte-for-byte to `main`.
 - [x] Assert the full Spec shape end to end: two provider requests in flight, writes strictly serialized, second answer applied whole after the first terminates.
 - [x] Remove the "Deliberate over-serialization in M1" section from this plan and correct the issue `## Log` entry that records the postponement.
-- [ ] `make test` → exit 0. `sdlc milestone-close --issue 266 --milestone M1` (covers both chunks).
+- [x] `make test` → exit 0. `sdlc milestone-close --issue 266 --milestone M1` (covers both chunks).
 
 ## Chunk 3 — M2: ordered append, and the machinery it replaces
 
