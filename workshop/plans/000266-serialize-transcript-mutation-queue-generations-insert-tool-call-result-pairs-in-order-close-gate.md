@@ -84,6 +84,33 @@ rounds:
           round: 4
       boundary: M1
       blocked: true
+    - "n": 5
+      timestamp: "2026-09-17T21:02:59-07:00"
+      agent: claude
+      dispose:
+        - id: BR-5
+          disposition: addressed
+          note: Target :120 and :145-146 struck; round-3 Revision defends only "no undo step mixes two generations" and points to atlas/chat/ownership.md:28-43, verified against editor.lua:194-202 and clears :67/:132/:179/:268; plan :717-718 struck; exception pinned at generation_turn_spec.lua:509. Sibling sentences at plan :709-715 and README :50-52 raised separately.
+          round: 5
+        - id: BR-6
+          disposition: addressed
+          note: Plan :510, :669, :675, :690 and eight more references now match M1 = Chunks 1-2, M2 = Chunk 3, M3 = Chunk 4. Two stale referents at :459/:461 are raised separately.
+          round: 5
+      findings:
+        - id: BR-7
+          severity: Minor
+          title: Plan Target reconciliation and README still state turn/undo grouping without the pause and intervening-edit exceptions
+          detail: '3rd finding in this family. Rule: turn handover and undo grouping are each stated once, in atlas/chat/ownership.md; every other live (non-Revisions) sentence states only an unconditional property ("answers are written one at a time", "no undo step mixes two answers") or names the exceptions or points there. Enforce with one grep over workshop/plans, workshop/targets, atlas and README for undo (entry|step), contiguous, one run, partial (slice|chunk), per (generation, grant), lifetime and finishes; each hit must be unconditional, a pointer, or struck. Measured at HEAD: about 20 hits, 3 live residuals. Plan :709-711 says lifetime-held means contiguous (a pause yields the turn). Plan :714-715 says "the guarantee is one undo entry per (generation, grant) run" (only while nothing intervenes). README :50-52 says a later answer appears "once the earlier one finishes" (a pause hands the turn over first; the README''s next paragraph documents that pause).'
+          family: invariant-statement-omits-exception
+          round: 5
+        - id: BR-8
+          severity: Minor
+          title: Plan Task 1.6 Step 4 still uses the milestone numbering from before the merge
+          detail: '3rd finding in this family. Plan :461 says "it is why M2 exists", meaning the preparation deferral, now Chunk 2 of M1; the current M2 (ordered append) does not bound that latency. Plan :459 says "Under M1 the normal waiter is a generation parked in preparing", which describes the M1 before the merge. Rule: when plan prose refers to a milestone''s content, name the chunk or task (those ids stay stable); M-labels renumber. After a renumbering, check what each M[0-9] hit refers to, not only its spelling. Measured: about 40 M-hits outside Revisions, 2 with stale referents.'
+          family: table-row-milestone-scope
+          round: 5
+      boundary: M1
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#266 (boundary-review)
@@ -133,7 +160,21 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-6** [Minor] `table-row-milestone-scope` Plan milestone references are stale after the M1/M2 merge renumbered them
   2nd finding in this family. Plan :669 closes Chunk 3 (now M2) with --milestone M3; :675 says "after M3 (Task 3.2b)" but means M2; :690 commits as "#266 M4:" for Chunk 4 (now M3); :510 says "M2-M4". Rule: every milestone reference in the plan must match the issue's current Plan tags. After a renumbering, grep M[0-9] across the whole plan and reconcile each hit; leave the Estimate section's historical item order as written.
 
+## Round 5 — 2026-09-17T21:02:59-07:00 (claude) — passed
+
+### Disposed
+
+- BR-5 — addressed — Target :120 and :145-146 struck; round-3 Revision defends only "no undo step mixes two generations" and points to atlas/chat/ownership.md:28-43, verified against editor.lua:194-202 and clears :67/:132/:179/:268; plan :717-718 struck; exception pinned at generation_turn_spec.lua:509. Sibling sentences at plan :709-715 and README :50-52 raised separately.
+- BR-6 — addressed — Plan :510, :669, :675, :690 and eight more references now match M1 = Chunks 1-2, M2 = Chunk 3, M3 = Chunk 4. Two stale referents at :459/:461 are raised separately.
+
+### Raised
+
+- **BR-7** [Minor] `invariant-statement-omits-exception` Plan Target reconciliation and README still state turn/undo grouping without the pause and intervening-edit exceptions
+  3rd finding in this family. Rule: turn handover and undo grouping are each stated once, in atlas/chat/ownership.md; every other live (non-Revisions) sentence states only an unconditional property ("answers are written one at a time", "no undo step mixes two answers") or names the exceptions or points there. Enforce with one grep over workshop/plans, workshop/targets, atlas and README for undo (entry|step), contiguous, one run, partial (slice|chunk), per (generation, grant), lifetime and finishes; each hit must be unconditional, a pointer, or struck. Measured at HEAD: about 20 hits, 3 live residuals. Plan :709-711 says lifetime-held means contiguous (a pause yields the turn). Plan :714-715 says "the guarantee is one undo entry per (generation, grant) run" (only while nothing intervenes). README :50-52 says a later answer appears "once the earlier one finishes" (a pause hands the turn over first; the README's next paragraph documents that pause).
+- **BR-8** [Minor] `table-row-milestone-scope` Plan Task 1.6 Step 4 still uses the milestone numbering from before the merge
+  3rd finding in this family. Plan :461 says "it is why M2 exists", meaning the preparation deferral, now Chunk 2 of M1; the current M2 (ordered append) does not bound that latency. Plan :459 says "Under M1 the normal waiter is a generation parked in preparing", which describes the M1 before the merge. Rule: when plan prose refers to a milestone's content, name the chunk or task (those ids stay stable); M-labels renumber. After a renumbering, check what each M[0-9] hit refers to, not only its spelling. Measured: about 40 M-hits outside Revisions, 2 with stale referents.
+
 ## Open findings
 
-- **BR-5** [Important] `invariant-statement-omits-exception` Target says no undo step is a partial slice "unconditionally"; a human edit between 4 KiB slices splits one write
-- **BR-6** [Minor] `table-row-milestone-scope` Plan milestone references are stale after the M1/M2 merge renumbered them
+- **BR-7** [Minor] `invariant-statement-omits-exception` Plan Target reconciliation and README still state turn/undo grouping without the pause and intervening-edit exceptions
+- **BR-8** [Minor] `table-row-milestone-scope` Plan Task 1.6 Step 4 still uses the milestone numbering from before the merge

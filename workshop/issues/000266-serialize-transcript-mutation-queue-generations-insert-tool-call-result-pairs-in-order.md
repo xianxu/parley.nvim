@@ -243,7 +243,7 @@ than the doc, so per-primitive hours are provisional (ariadne#127).
 Durable plan: `workshop/plans/000266-serialize-transcript-mutation-plan.md`
 (six revisions, six fresh-context reviews).
 
-- [ ] M1 — the write turn **and** the preparation-write deferral. One boundary,
+- [x] M1 — the write turn **and** the preparation-write deferral. One boundary,
       not two: the turn alone leaves nine end-to-end tests red purely because a
       second generation's request never starts, and the deferral is what removes
       that. A milestone that cannot go green on its own is not a review boundary
@@ -268,12 +268,17 @@ Durable plan: `workshop/plans/000266-serialize-transcript-mutation-plan.md`
             "scopes Stop…" (disjoint path in a second generation)
       - [ ] revert `atlas/providers/tool_execution.md`'s "first waits for the
             write turn" sentence once `begin_round` writes nothing
+      - [ ] decide undo grouping for appended `(call, result)` pairs — sharing the
+            answer's generation and grant, they join its undo step unless broken
+            deliberately — and record it in `atlas/chat/ownership.md` "Undo
+            grouping" only
 - [ ] M3 — residual exclusion sweep (`exclude`, parent-slot carving, the
       half-open seam flags, the ancestor walk).
 
 ## Log
 
 ### 2026-09-17
+- 2026-09-17: closed M1 — make test JOBS=4: lint 0 warnings/0 errors, 375/376 spec files PASS; document_fold_batches_spec (known 50k-row load flake, issue Log) aborted with no failing assertion and passes alone 5/5. Review round 3: BR-5 undo grouping stated once in atlas/chat/ownership.md derived from Editor:can_join_undo, target defends only "no undo step mixes generations" and points there, mid-write-edit split pinned by test; all 12 stale milestone labels reconciled. sdlc built from ariadne committed HEAD 9ca1d6c (peer working tree mid-edit).; review verdict: FIX-THEN-SHIP
 
 Split out of parley#261 during its planning. #261 (delete the external answer
 recovery store, rely on in-session memory) depends on this: removing a targeted

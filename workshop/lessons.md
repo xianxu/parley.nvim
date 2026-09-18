@@ -1,5 +1,16 @@
 # Lessons
 
+## 2026-09-17 (#266 M1 closed at review round 4)
+
+- **A rule about prose is enforced by a query, kept next to the rule.** Two doc
+  families recurred for four rounds because each round fixed the sentences a
+  reviewer quoted. What closed them was a grep that lists every candidate
+  sentence, with each hit classified (unconditional / names its exceptions /
+  points to the single statement / struck), and, for milestone labels, a check of
+  what each `M[0-9]` *refers to*, not how it is spelled. Rule: when you fix a doc
+  family, write the query into the response (plan Revisions) so the next reader
+  can re-run it, and prefer stable ids (chunk, task) over labels that renumber.
+
 ## 2026-09-17 (#266 M1 review round 3 — a rule restated in prose drifts)
 
 - **State a code-derived rule once, next to a pointer to the code, and link to it

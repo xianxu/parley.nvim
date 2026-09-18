@@ -76,7 +76,7 @@ code→table direction finds them.*
   - **DRY rationale:** First occurrence of a pattern that recurs — M2's tool sequencing is the same "ordered set, one may act" shape, but over calls rather than generations. Kept separate because the eligibility predicates genuinely differ; `ToolSequence` does not reuse this.
   - **Future extensions:** Priority other than admission order (e.g. the focused exchange first) widens the eligibility predicate without changing callers.
   - **Tests:** `tests/unit/document_write_turn_spec.lua`, no IO.
-  - **ARCH-FUNERAL:** creates nothing durable. `s.turn` and `s.turn_wanted` are in-memory reducer fields collected by `finish_generation` and by the shared `reload`/`detach` branch (`state.lua:353-356`); they die with the document.
+  - **ARCH-FUNERAL:** creates nothing durable. `s.turn` is an in-memory reducer field; the wanted set lives in `state.lua`'s module-level weak map `turn_wanted` beside the state (a weak table inside the state would make `copy` assert). Both are collected by `finish_generation`, `release_turn` and the shared `reload`/`detach` branch, and die with the document.
 
 - **ToolSequence** — pure: given declared calls in order and a map of arrived outcomes, return what may be written next (`{kind='call', index=i}`, `{kind='result', index=i}`, or `nil`), plus whether the round is complete.
   - **Relationships:** 1:1 with a tool round; 1:N with calls.
@@ -186,7 +186,7 @@ Execution concurrency: `generation.lua:84` fan-out cap of 4, `tools/resources.lu
 
 ---
 
-## Deliberate over-serialization in M1 — resolved
+## Deliberate over-serialization in Chunk 1 — resolved by Chunk 2
 
 Resolved by Chunk 2 (2026-09-17). Until then the turn, taken in `preparing`,
 blocked a second generation's preparation write and so its provider request —
@@ -456,9 +456,9 @@ for _,row in ipairs({'terminal','stop','pause_unknown','pause_revoke','pause_sta
   Expected: FAIL for `suspend` (releases but never re-requests — `grant_resumed` exists at `generation_runner.lua:57-59` and is unwired), `suspend_preparation` (no event carries it), and `waiting_head_of_line` (its release is parked behind `s.pending`, per Task 1.5's synchronous-release note).
 - [x] ~~**Step 3: Implement** `WriteTurn.should_release`, wire `grant_resumed`, and add the preparation-suspension observation. **Its mechanism, named:** `sync` dispatches `grant_suspended` for every id in `s.grants`, which includes `preparation_grants` (`generation_runner.lua:55-61,489-491`), but `generation.lua:254-256` rejects it because `event.grant~=s.grant` and no child matches — so add a `preparation` branch there rather than a new event kind.~~ — superseded — operator decision: a transient suspension holds the turn, which removes the rows this step wires and leaves `should_release` one caller (Revisions, 2026-09-17)
 - [x] **Step 3b: End-to-end wake.** Two runners on one document, `schedule=true`, b queued with output staged; complete a and assert b drains **without being hand-stepped** (`vim.wait(2000, …)`). This is the assertion Task 1.3 could not make; here the refusal (1.4) and the request (1.5) both exist, so a missing wake is a genuine hang.
-- [x] **Step 4: Make the wait visible (operator-required mitigation).** A generation whose writes are held must say so, or a hung provider looks like a frozen editor. Route it through the presentation layer, which is extmark-only and never becomes Markdown: `chat_pending`'s `session:progress(event)` (`chat_pending.lua:160-165`) already accumulates per `detail_key` in `chat_presentation.lua:49-77`. Show the blocking exchange, not just "waiting" — and say *why* it is blocked, covering the three stall shapes above. **Under M1 the normal waiter is a generation parked in `preparing` with no provider stream of its own** (see "Deliberate over-serialization in M1"), not a turn-blocked writer mid-answer, so the message must read sensibly for a generation that has produced nothing yet.
+- [x] **Step 4: Make the wait visible (operator-required mitigation).** A generation whose writes are held must say so, or a hung provider looks like a frozen editor. Route it through the presentation layer, which is extmark-only and never becomes Markdown: `chat_pending`'s `session:progress(event)` (`chat_pending.lua:160-165`) already accumulates per `detail_key` in `chat_presentation.lua:49-77`. Show the blocking exchange, not just "waiting" — and say *why* it is blocked, covering the three stall shapes above. ~~**Under M1 the normal waiter is a generation parked in `preparing`**~~ — true of Chunk 1 alone; after Chunk 2's deferral the normal waiter has its request running and its output (or a declared round) staged behind the holder (Revisions, Task 1.6). The message must still read sensibly for a generation that has produced nothing yet.
 
-**Latency envelope (ARCH-CONSTRAINTS).** M1's accepted cost has no upper bound: the holder may sit in a tool chain indefinitely, and three stall shapes have no timeout at all. The bound is therefore *operator-mediated* — `:ParleyStop` — which is only acceptable because the wait is visible. That is the whole justification for this step being required rather than optional, and it is why M2 exists. The waiting runner learns the exchange from `D.snapshot(doc)`: `turn` is a generation id, and the exchange is `snapshot.grants[*].entity` for the grant owned by that generation. Test that the message names it and that it clears when the turn arrives.
+**Latency envelope (ARCH-CONSTRAINTS).** M1's accepted cost has no upper bound: the holder may sit in a tool chain indefinitely, and three stall shapes have no timeout at all. The bound is therefore *operator-mediated* — `:ParleyStop` — which is only acceptable because the wait is visible. That is the whole justification for this step being required rather than optional, and it is why Chunk 2 (the preparation deferral) exists. The waiting runner learns the exchange from `D.snapshot(doc)`: `turn` is a generation id, and the exchange is `snapshot.grants[*].entity` for the grant owned by that generation. Test that the message names it and that it clears when the turn arrives.
 - [x] **Step 5: Green. Step 6: Commit** — `#266 M1: make turn release and re-request symmetric`
 
 ### Task 1.7: held-output budget (ARCH-CONSTRAINTS)
@@ -562,7 +562,7 @@ waiting, `:88-115` the write steps, `:145-149` subscriber);
 
 - [x] ~~Re-invert `tests/integration/chat_scoped_response_spec.lua:47`~~ — never inverted (the operator moved the inversions to this chunk); it passes in its original concurrent form. The two `response_session_spec` way-stations M1 did write are restored byte-for-byte to `main`.
 - [x] Assert the full Spec shape end to end: two provider requests in flight, writes strictly serialized, second answer applied whole after the first terminates.
-- [x] Remove the "Deliberate over-serialization in M1" section from this plan and correct the issue `## Log` entry that records the postponement.
+- [x] Mark the "Deliberate over-serialization in Chunk 1" section resolved (kept, retitled, for traceability) and correct the issue `## Log` entry that records the postponement.
 - [x] `make test` → exit 0. `sdlc milestone-close --issue 266 --milestone M1` (covers both chunks).
 
 ## Chunk 3 — M2: ordered append, and the machinery it replaces
@@ -706,23 +706,20 @@ These exist solely to disambiguate excluded seams, but they thread through the s
 
 `workshop/targets/transcript-is-the-whole-truth.md` says writes "land one at a time, in the order the reader sees them." Task 1.9 narrows that deliberately: **across** generations the guarantee is one-at-a-time and per-generation coherence, not document order, because generations write to different answers and admission order need not match document order. **Within** a tool round, document order does hold (Task 3.2c asserts it).
 
-On undo granularity: holding the turn for a generation's lifetime makes its
-output contiguous in write order, so `can_join_undo` (`editor.lua:192-199`)
-succeeds across a run instead of being defeated per chunk. But it keys on
-`(epoch, generation, **grant**)`, and one run legitimately writes through
-preparation grants (`generation_runner.lua:488-492`), the main grant, and a
-completion-acquired grant (`response_completion.lua:55-58`). So the guarantee is
-**one undo entry per (generation, grant) run** — not per generation, as the issue
-Log currently says. That is still a large improvement over today's one entry per
-4096-byte chunk, and Task 1.9's invariant (no entry mixes two generations
-~~, none is a partial chunk) holds unconditionally~~ — *only the first clause is
-unconditional; grouping is stated once, in `atlas/chat/ownership.md` "Undo
-grouping", see Revisions round 3*). Correct the Log's phrasing when M1
-closes. Fold this narrowing into the target when M1 closes, so the target does not drift against the work defending it.
+On undo granularity: ~~holding the turn for a generation's lifetime makes its
+output contiguous … So the guarantee is one undo entry per (generation, grant)
+run~~ — struck at the M1 close: that is conditional on nothing intervening, and
+a pause yields the turn. Undo grouping is stated once, in `atlas/chat/ownership.md`
+"Undo grouping", derived from `can_join_undo`; this plan points there rather than
+restating it. The unconditional property, which Task 1.9 asserts, is that no undo
+entry mixes two generations. *Done at the M1 close:* the issue Log's phrasing is
+corrected (its "Tasks 1.7–1.10" entry) and the narrowing is folded into the target
+as Revisions, so the target does not drift against the work defending it.
 
 ## Decisions taken, so they are not re-opened
 
-- **Turn held for the generation's lifetime**, not released when idle between
+- **Turn held for the generation's lifetime** — until terminal, stop, a pause,
+  detach or reload (the release rows above) — not released when idle between
   chunks (operator, 2026-09-17). A `staged(s)==0` release was proposed during
   review and rejected: it fires between essentially every SSE chunk and would
   restore per-chunk interleaving, trading the Spec's headline guarantee for a
@@ -1016,4 +1013,27 @@ The gate reported both families repeating, so each response is a rule.
   pause: the stale-input edit that causes the pause would split the run by
   itself. What it pins is the unconditional half, with the turn moving
   mid-answer.
+
+### 2026-09-17 — M1 closed (review round 4, FIX-THEN-SHIP): residuals and an M2 note
+
+- **N1, 3rd in `invariant-statement-omits-exception` — rule enforced by a query.**
+  `grep -n -i -E "undo (entry|entries|step)|contiguous|one run|partial (slice|chunk|4)|per \(generation, grant\)|lifetime|once the earlier|finishes"`
+  over this plan, the target, `atlas/chat`, `atlas/providers` and README. Every
+  live (non-Revisions) hit is now unconditional, names its exceptions, points to
+  `atlas/chat/ownership.md` "Undo grouping", or is struck. The three residuals it
+  found: this plan's Target reconciliation (struck, pointer), the Decisions entry
+  "turn held for the generation's lifetime" (now names the release rows), and
+  README's "once the earlier one finishes" ("finishes or pauses").
+- **N2, 3rd in `table-row-milestone-scope` — referents, not spellings.** Every
+  `M[0-9]` outside `## Revisions` was checked for what it *refers to*. Three
+  referred to the pre-merge M1 (Chunk 1 alone): the over-serialization section's
+  title, Task 1.6 Step 4's "under M1 the normal waiter", and "why M2 exists".
+  They now name chunks, which do not renumber.
+- **Forward note for M2 (reviewer).** Once `(call, result)` pairs append at the
+  parent grant's tail they share the answer's generation *and* grant, so
+  `can_join_undo` merges them into the surrounding answer text's undo step
+  whenever nothing intervenes. The issue's Open decisions expect one undo step
+  per pair — that needs a deliberate undo break per pair. Decide it in M2 and
+  record the result in `atlas/chat/ownership.md` "Undo grouping" (the single
+  statement), not anywhere else; tracked on the issue's M2 checklist.
 

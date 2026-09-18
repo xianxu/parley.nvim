@@ -339,3 +339,112 @@ findings:
     detail: |
       2nd finding in this family. Plan :669 closes Chunk 3 (now M2) with --milestone M3; :675 says "after M3 (Task 3.2b)" but means M2; :690 commits as "#266 M4:" for Chunk 4 (now M3); :510 says "M2-M4". Rule: every milestone reference in the plan must match the issue's current Plan tags. After a renumbering, grep M[0-9] across the whole plan and reconcile each hit; leave the Estimate section's historical item order as written.
 ```
+
+---
+
+## Re-review — 2026-09-17T21:02:59-07:00 (FIX-THEN-SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 266 — Serialize transcript mutation: queue generations, insert tool call/result pairs in order |
+| repo | parley.nvim |
+| issue file | workshop/issues/000266-serialize-transcript-mutation-queue-generations-insert-tool-call-result-pairs-in-order.md |
+| boundary | milestone M1 |
+| milestone | M1 |
+| window | 0f6ee4d4d50869803bc41664548dd1bbdeabea69..9d65fea9c1ff8de840dff4d0cde9bbdf378b9abc |
+| command | sdlc milestone-close --issue 266 --milestone M1 |
+| reviewer | claude |
+| timestamp | 2026-09-17T21:02:59-07:00 |
+| verdict | FIX-THEN-SHIP |
+
+## Review
+
+```verdict
+verdict: FIX-THEN-SHIP
+confidence: high
+```
+
+Both open findings are fixed at every site they named. The undo-grouping rule now has one statement, in `atlas/chat/ownership.md:28-43`, and it matches the code. I checked it against `Editor:can_join_undo` (`editor.lua:194-202`) and each place the undo receipt is cleared (`:67`, `:132`, `:179`, `:268`), and it is accurate. The target now defends only the property that holds unconditionally, and a new test pins the exception. Twelve stale milestone labels in the plan were reconciled. Each finding has one leftover in the same class, and both are Minor. Two plan sentences and one README clause still state turn or undo grouping without their exceptions. One plan sentence still uses the old milestone numbering. All of these are cheap to fix, and none blocks. The tests I ran are green (details in section 5); I did not run a full `make test`.
+
+## 1. Strengths
+- **One statement, derived from the predicate.** The undo-grouping section in `atlas/chat/ownership.md:28-43` names every event that splits a run, and I confirmed each one in `editor.lua`. The target's round-3 Revision (`transcript-is-the-whole-truth.md:157-171`) defends only "no undo step mixes two generations" and points to the atlas. It tells parley#261 to cite the atlas, not the target. That stops the paraphrase drift that produced BR-2 and BR-5.
+- **The exception has a test.** `generation_turn_spec.lua:509` writes 9000 bytes on a real buffer with a disjoint human edit between slices, then asserts that undo comes back in at least two pieces. The pause-then-resume test's comment (`:446-450`) no longer claims more than the test proves.
+- **Earlier text was struck, not rewritten.** Revisions in the target and plan follow the append-don't-overwrite rule, so the history stays auditable.
+- **Every writer handles `'waiting'`.** A grep of every generated-writer call site in `lua/` shows each one does: `response_preparation.lua:90,101,108`, `response_completion.lua:63,71`, `generation_runner.lua:365,400,405`, and `response_topic.lua:175`, which takes the turn around its single synchronous apply.
+
+## 2. Critical findings
+None.
+
+## 3. Important findings
+None.
+
+## 4. Minor findings
+- **N1 (new, `invariant-statement-omits-exception`, 3rd in family).** Three live sentences outside the atlas still state grouping without the exceptions:
+  - `plan:709-711` says that holding the turn for a generation's lifetime makes its output contiguous. A pause yields the turn.
+  - `plan:714-715` says "So the guarantee is **one undo entry per (generation, grant) run**". That holds only while nothing intervenes.
+  - `README.md:50-52` says a later answer "appears in full once the earlier one finishes". A pause hands the turn over first. The README's next paragraph documents that pause, and `generation_turn_spec` tests the handover.
+  - The rule and its measured prevalence are in the findings block.
+- **N2 (new, `table-row-milestone-scope`, 3rd in family).**
+  - `plan:461` says "…and it is why M2 exists". That meant the preparation deferral, which is now Chunk 2 of M1. The current M2 (ordered append) does not bound this latency.
+  - `plan:459` says "Under M1 the normal waiter is a generation parked in `preparing`". That describes the M1 before the merge; it is false for the merged M1.
+- `plan:565` ticks "Remove the 'Deliberate over-serialization in M1' section", but the section is still at `:189`, retitled "— resolved". Reword the item to "marked resolved".
+- The plan's WriteTurn ARCH-FUNERAL bullet (`:79`) calls `s.turn_wanted` a reducer field. It is actually the module-level weak map at `state.lua:9`. The lifetime is the same; only the location is misstated.
+
+## 5. Test coverage notes
+- **`chat/ownership`:** 27 files, 0 failed, 0 errors. `generation_turn_spec` ran 34 cases, including the three undo-coherence cases.
+- **`chat/lifecycle`:** 61 files, all green.
+- **`providers/tool_use`:** 32 files, all green.
+- **`chat/document`:**
+  - The first run stopped after 8 files with no assertion failure. That matches the `document_fold_batches_spec` load flake recorded in the issue Log.
+  - The rerun passed: 32 files, exit 0.
+- **Arch sweeps:** `infra/packaging` and `infra/test_harness` are green.
+- **Lint:** 0 warnings, 0 errors across 633 files.
+- **BR-5 was a prose fix.** The new test pins the behavior the corrected atlas describes. If receipt clearing at `:67` were removed, the native undo-sequence check in `can_join_undo` would still split the run. So the test pins the documented outcome, not one particular mechanism, which is the right thing to pin.
+
+## 6. Architectural notes
+
+| Principle | Result | Notes |
+|---|---|---|
+| ARCH-DRY | pass | One `State.waits_for_turn` covers all five entry points. `may_write` is the single gate in the machine. `blocked_key` has one source. Both host messages live in `chat_presentation`. |
+| ARCH-PURE | pass | `WriteTurn` is pure. The reducer and machine are unit-tested without IO. The runner is the IO shell. |
+| ARCH-PURPOSE | flag (N1, N2) | The named sites were fixed. Siblings of the same class remain in live plan and README text. |
+| ARCH-MOCK | pass | No new external dependency. Turn tests use FakeRunner adapters against the real coordinator on real buffers. |
+| ARCH-CONSTRAINTS | pass | Budget is 1 MiB per generation and 16 MiB process-wide, based on measured answer sizes, and the overflow path is tested. One note, not raised as a finding: `contents()` can re-join a held item it is still extending, once per 4 KiB slice. The worst case is bounded by the 1 MiB budget, and the measured p99 is 36 KB. |
+| ARCH-SECURE | pass | N/A holds: the change only reorders in-process writes, with no new untrusted input and no credentials. |
+| ARCH-ORDER | pass | The turn is explicit reducer state; the release matrix covers 4 interleavings with controllable stepping; control-effect order is pinned at the runner. |
+| ARCH-FUNERAL | pass | Nothing durable. The `turn_wanted` weak map is cleared by finish, release, reload and detach. Blob parts are released with their blobs. |
+
+**Forward note for M2:** once `(call, result)` pairs append at the parent grant's tail, they share one generation and one grant. `can_join_undo` will then merge them into the surrounding answer text's undo step whenever nothing intervenes. The issue's Open decisions expect one undo step per `(call, result)` pair. Getting that needs a deliberate undo break per pair, and the change belongs in the atlas's "Undo grouping" section, not in a restatement elsewhere.
+
+## 7. Plan revision recommendations
+- **Target reconciliation (`:709-721`):** strike the "lifetime → contiguous" and "the guarantee is one undo entry per (generation, grant) run" sentences, and point to the atlas "Undo grouping" section instead.
+- **Task 1.6 Step 4 (`:459`, `:461`):** strike the "Under M1…" sentence, and change "why M2 exists" to name Chunk 2, the preparation deferral.
+- **Task 2.3 (`:565`):** change "Remove the section" to "Mark the section resolved".
+- **Add a Revision for M2:** record the undo-grouping consequence of appending pairs at the parent grant tail (see the forward note above), and say where it will be decided.
+
+```findings
+dispose:
+  - id: BR-5
+    disposition: addressed
+    note: |
+      Target :120 and :145-146 struck; round-3 Revision defends only "no undo step mixes two generations" and points to atlas/chat/ownership.md:28-43, verified against editor.lua:194-202 and clears :67/:132/:179/:268; plan :717-718 struck; exception pinned at generation_turn_spec.lua:509. Sibling sentences at plan :709-715 and README :50-52 raised separately.
+  - id: BR-6
+    disposition: addressed
+    note: |
+      Plan :510, :669, :675, :690 and eight more references now match M1 = Chunks 1-2, M2 = Chunk 3, M3 = Chunk 4. Two stale referents at :459/:461 are raised separately.
+findings:
+  - id: new
+    severity: Minor
+    family: invariant-statement-omits-exception
+    title: |
+      Plan Target reconciliation and README still state turn/undo grouping without the pause and intervening-edit exceptions
+    detail: |
+      3rd finding in this family. Rule: turn handover and undo grouping are each stated once, in atlas/chat/ownership.md; every other live (non-Revisions) sentence states only an unconditional property ("answers are written one at a time", "no undo step mixes two answers") or names the exceptions or points there. Enforce with one grep over workshop/plans, workshop/targets, atlas and README for undo (entry|step), contiguous, one run, partial (slice|chunk), per (generation, grant), lifetime and finishes; each hit must be unconditional, a pointer, or struck. Measured at HEAD: about 20 hits, 3 live residuals. Plan :709-711 says lifetime-held means contiguous (a pause yields the turn). Plan :714-715 says "the guarantee is one undo entry per (generation, grant) run" (only while nothing intervenes). README :50-52 says a later answer appears "once the earlier one finishes" (a pause hands the turn over first; the README's next paragraph documents that pause).
+  - id: new
+    severity: Minor
+    family: table-row-milestone-scope
+    title: |
+      Plan Task 1.6 Step 4 still uses the milestone numbering from before the merge
+    detail: |
+      3rd finding in this family. Plan :461 says "it is why M2 exists", meaning the preparation deferral, now Chunk 2 of M1; the current M2 (ordered append) does not bound that latency. Plan :459 says "Under M1 the normal waiter is a generation parked in preparing", which describes the M1 before the merge. Rule: when plan prose refers to a milestone's content, name the chunk or task (those ids stay stable); M-labels renumber. After a renumbering, check what each M[0-9] hit refers to, not only its spelling. Measured: about 40 M-hits outside Revisions, 2 with stale referents.
+```

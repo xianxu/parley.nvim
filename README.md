@@ -49,9 +49,9 @@ and settings. Existing Neovim users can use the
 You can write the next question while one or more answers stream elsewhere in
 this chat. Their requests run at the same time, but answers are written one at a
 time: a later answer waits, showing which answer it is waiting for, then appears
-in full once the earlier one finishes — so an undo step never mixes two answers.
-An answer's header appears with its first output; regenerating keeps the old
-answer visible until the new one starts arriving. Editing generated output
+in full once the earlier one finishes or pauses — so an undo step never mixes two
+answers. An answer's header appears with its first output; regenerating keeps the
+old answer visible until the new one starts arriving. Editing generated output
 preserves your edit and stops that region's writer. Deleting an exchange
 invalidates its writers; reloading the file invalidates all active writes. Undo
 and redo remain native Neovim edits and can also revoke a writer; undo does not
