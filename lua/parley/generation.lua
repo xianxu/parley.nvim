@@ -265,14 +265,26 @@ function M.transition(handle,event)
             or s.phase=='stopping' then return reject('operation') end
         if not integer(event.seq) or event.seq~=owner.next_seq or not integer(event.bytes)
             or (event.bytes>0 and not ref(event.blob_ref)) then return reject('output') end
+        -- #266: `extend` grows the LAST queued item, which must be this operation's
+        -- and carry this blob. A held generation receives one event per SSE
+        -- delta; extending keeps it one item bounded by bytes (and keeps the queue
+        -- every transition copies short). An item already in flight is not in the
+        -- queue, so it can never grow under a write that has been issued.
+        local tail=event.extend and s.queue[#s.queue]
+        if event.extend and not (tail and tail.operation==event.operation and tail.blob_ref==event.blob_ref) then
+            return reject('extend')
+        end
         owner.next_seq=owner.next_seq+1
         if event.bytes>0 then
             local bytes,items=staged(s)
-            if bytes+event.bytes>s.limits.staged_bytes or items>=s.limits.queued_items then stop(s,effects,'overflow')
+            if bytes+event.bytes>s.limits.staged_bytes or not tail and items>=s.limits.queued_items then stop(s,effects,'overflow')
             else
                 s.accepted_bytes=s.accepted_bytes+event.bytes
-                s.queue[#s.queue+1]={operation=event.operation,grant=owner.grant or s.grant,
-                    blob_ref=event.blob_ref,bytes=event.bytes,offset=0,seq=event.seq}
+                if tail then tail.bytes=tail.bytes+event.bytes
+                else
+                    s.queue[#s.queue+1]={operation=event.operation,grant=owner.grant or s.grant,
+                        blob_ref=event.blob_ref,bytes=event.bytes,offset=0,seq=event.seq}
+                end
             end
         end
     elseif kind=='write_result' then
@@ -428,7 +440,10 @@ function M.transition(handle,event)
         if event.status=='applied' then s.finalized=true else stop(s,effects,'finalize_failed') end
     elseif kind=='cancel' then
         if s.phase=='stopping' then return reject('duplicate') end
-        stop(s,effects,'cancelled')
+        if event.reason~=nil and event.reason~='overflow' then return reject('cancel reason') end
+        -- The runner's byte check refuses before admission and cancels; the
+        -- machine's own check stops. Both are an overflow, not a user's Stop.
+        stop(s,effects,event.reason=='overflow' and 'overflow' or 'cancelled')
     else return reject('event') end
     pump(s,effects)
     return wrap(s),{accepted=true,admitted_bytes=s.accepted_bytes-old.accepted_bytes,effects=copy(effects)}

@@ -648,6 +648,59 @@ describe('pure generation lifecycle',function()
         end
     end)
 
+    -- #266 Task 1.7: a held generation receives one output event per SSE delta.
+    -- Consecutive output of one operation extends the last queued item, so what
+    -- is held is bounded by bytes, not chunk count — and the queue each transition
+    -- copies stays one item long.
+    it('extends the last queued item of the same operation instead of queueing another',function()
+        local s,a=requesting()
+        local r
+        s=send(s,{type='turn',status='waiting'})
+        s,r=output(s,a,1,4)
+        for seq=2,300 do
+            s,r=send(s,{type='output',operation=a,seq=seq,blob_ref='blob1',bytes=4,extend=true})
+            assert.is_true(r.accepted,'extension '..seq)
+        end
+        assert.equals(1,G.snapshot(s).staged_items);assert.equals(1200,G.snapshot(s).staged_bytes)
+        s,r=send(s,{type='turn',status='held'})
+        local w=effect(r,'write');assert.equals('blob1',w.blob_ref);assert.equals(1200,w.bytes)
+    end)
+    it('refuses to extend an item that is being written or belongs to something else',function()
+        local s,a=requesting()
+        local r
+        s,r=output(s,a,1,4)
+        assert.is_not_nil(effect(r,'write'),'the only item is now in flight')
+        local _,refused=send(s,{type='output',operation=a,seq=2,blob_ref='blob1',bytes=4,extend=true})
+        assert.is_false(refused.accepted,'an in-flight item cannot grow')
+        s=send(s,{type='turn',status='waiting'})
+        s=output(s,a,2,4)
+        _,refused=send(s,{type='output',operation=a,seq=3,blob_ref='other',bytes=4,extend=true})
+        assert.is_false(refused.accepted,'only the queued blob may grow')
+    end)
+    it('bounds a held answer by its bytes',function()
+        -- queued_items=1: only extension can admit the second delta at all, so
+        -- the overflow below can only come from the byte budget.
+        local s,a=requesting({staged_bytes=16,queued_items=1})
+        s=send(s,{type='turn',status='waiting'})
+        s=output(s,a,1,8)
+        s=send(s,{type='output',operation=a,seq=2,blob_ref='blob1',bytes=8,extend=true})
+        assert.equals('requesting',G.snapshot(s).phase,'within budget')
+        s=send(s,{type='output',operation=a,seq=3,blob_ref='blob1',bytes=1,extend=true})
+        assert.equals('overflow',G.snapshot(s).outcome,'one byte past the budget')
+    end)
+
+    -- Both overflow sites — the runner's byte check before admission and the
+    -- machine's own — must end the same way, so a caller can tell an overflow
+    -- from a user's Stop.
+    it('records a cancellation for overflow as an overflow',function()
+        local s=requesting()
+        s=send(s,{type='cancel',reason='overflow'})
+        assert.equals('overflow',G.snapshot(s).outcome)
+        local t=requesting()
+        t=send(t,{type='cancel'})
+        assert.equals('cancelled',G.snapshot(t).outcome)
+    end)
+
     -- #266: the preparation gap is deferred to the generation's first write, so
     -- the provider request never waits on the turn (the Spec's option (b)) and a
     -- response cancelled before its first byte leaves the transcript untouched.

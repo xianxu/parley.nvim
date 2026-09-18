@@ -22,6 +22,17 @@ local function blob(s,value,staged)
     if staged then s.staged=s.staged+#value;staged_total=staged_total+#value end
     return ref
 end
+--- Grow a staged blob (#266). Parts are joined only when the blob is read, so a
+--- long run of held deltas costs one concatenation rather than one per delta.
+local function append(s,ref,bytes)
+    local b=s.blobs[ref]
+    b.parts=b.parts or {};b.parts[#b.parts+1]=bytes
+    b.bytes=b.bytes+#bytes;s.staged=s.staged+#bytes;staged_total=staged_total+#bytes
+end
+local function contents(b)
+    if b.parts then b.value=b.value..table.concat(b.parts);b.parts=nil end
+    return b.value
+end
 local function enqueue(s,effect)
     s.queue[#s.queue+1]=effect
     if s.schedule then s.work:request() end
@@ -101,6 +112,20 @@ end
 local function issue(s,reason)
     s.failure=tostring(reason):sub(1,4096)
 end
+--- Why staged bytes overflowed. A generation held behind the write turn names the
+--- answer it waited for (#266): without that, an overflow while queued reads as
+--- a runaway response. The budget itself is unchanged — 1 MiB per generation,
+--- 16 MiB process-wide — and 16 runners x 1 MiB is exactly the process cap, so
+--- the per-generation limit always binds first.
+local function overflow_reason(s)
+    local b=s.blocked
+    local marker=b and b.entity and s.doc and D.lookup(s.doc,b.entity)
+    return 'staging overflow'..(marker and not marker.opaque
+        and ' while waiting for the answer to line '..(marker.start_row+1) or '')
+end
+local function overflowed(s)
+    issue(s,overflow_reason(s));dispatch(s,{type='cancel',reason='overflow'})
+end
 local function stage(s,bytes)
     return type(bytes)=='string' and #bytes<=s.limit-s.staged and #bytes<=16777216-staged_total
 end
@@ -129,7 +154,7 @@ local function context(s,effect)
             return false,'stale operation'
         end
         if type(done)~='function' or not stage(s,bytes) or s.manual_items>=s.queue_limit then
-            issue(s,'staging overflow');dispatch(s,{type='cancel'});return false,'staging overflow'
+            overflowed(s);return false,'staging overflow'
         end
         local ref=blob(s,bytes,true);pending=pending+1;s.manual_items=s.manual_items+1
         enqueue(s,{type=kind,operation=effect.operation or effect.id,grant=grant,
@@ -195,12 +220,29 @@ local function callbacks(s,effect,after_writes)
     function cb.output(bytes,seq)
         if not alive(s,operation) then return false end
         local op=s.operations[operation]
-        if not stage(s,bytes) then issue(s,'staging overflow');dispatch(s,{type='cancel'});return false end
+        if not stage(s,bytes) then overflowed(s);return false end
         seq=seq or op.next_seq
+        -- Grow the item this operation queued last, if the machine still holds it
+        -- queued (#266): output arrives one delta at a time, and a generation held
+        -- behind the turn would otherwise queue one item per delta.
+        -- The machine's own budget can refuse too (its item cap spans operations);
+        -- that is the same overflow and gets the same reason.
+        local function refused(result)
+            if result.accepted and result.admitted_bytes==0 and #bytes>0
+                and G.snapshot(s.machine).outcome=='overflow' and not s.failure then issue(s,overflow_reason(s)) end
+        end
+        if op.tail and s.blobs[op.tail] and #bytes>0 then
+            local result=dispatch(s,{type='output',operation=operation,seq=seq,blob_ref=op.tail,bytes=#bytes,extend=true})
+            if result.accepted then
+                if result.admitted_bytes>0 then append(s,op.tail,bytes) else refused(result) end
+                op.next_seq=seq+1
+                return true
+            end
+        end
         local ref=blob(s,bytes,true)
         local result=dispatch(s,{type='output',operation=operation,seq=seq,blob_ref=ref,bytes=#bytes})
-        if not result.accepted or result.admitted_bytes==0 then release(s,ref)
-        else op.next_seq=seq+1 end
+        if not result.accepted or result.admitted_bytes==0 then release(s,ref);refused(result)
+        else op.next_seq=seq+1;op.tail=ref end
         return result.accepted
     end
     function cb.complete()
@@ -210,7 +252,10 @@ local function callbacks(s,effect,after_writes)
     function cb.failed(reason)
         if not s.operations[operation] or s.terminal then return false end
         if effect.type=='start_child' then return cb.outcome('unknown',{error=tostring(reason):sub(1,4096)}) end
-        issue(s,reason or 'adapter failed')
+        -- A failure reported after the generation is already stopping is an echo of
+        -- the stop (the transport aborts because we refused its bytes), not a
+        -- cause: keep the reason that stopped it.
+        if G.snapshot(s.machine).phase~='stopping' then issue(s,reason or 'adapter failed') end
         return dispatch(s,{type=(effect.type=='prepare' or effect.type=='continue_round') and 'prepare_failed' or 'provider_failed',
             preparation=operation,attempt=operation}).accepted
     end
@@ -300,7 +345,7 @@ local function write(s,effect)
     local generation=G.snapshot(s.machine)
     local grant=not s.detached and D.snapshot(s.doc).grants[effect.grant]
     if grant then effect.entity=grant.entity end
-    local attempted=slice(value.value,effect.offset+1,math.min(4096,effect.bytes))
+    local attempted=slice(contents(value),effect.offset+1,math.min(4096,effect.bytes))
     local result
     if not grant or grant.status=='revoked' or generation.phase=='stopping' then
         result={status='stale',accepted_bytes=0}
@@ -343,7 +388,7 @@ local function replace(s,effect)
             local reason
             effect.cursor,reason=D.replace_new(s.doc,{epoch=s.epoch,generation=s.generation,
                 operation=effect.operation,grant=effect.grant,entity=grant.entity,revision=grant.revision,
-                bytes=value.value,first_offset=effect.options.first_offset,retain_prefix=effect.options.retain_prefix})
+                bytes=contents(value),first_offset=effect.options.first_offset,retain_prefix=effect.options.retain_prefix})
             if not effect.cursor then result={status='refused',reason=reason,accepted_bytes=0,removed_bytes=0} end
         end
         if effect.cursor then result=D.replace_step(s.doc,effect.cursor) end
@@ -490,7 +535,10 @@ local function execute(s,effect)
         local terminal=s.adapters.terminal
         s.queue={};s.pending=nil;s.seed=nil;s.capabilities=nil;s.adapters={};s.gap_writer=nil
         s.operations={};s.doc=nil;s.grants={};s.preparation_grants={};s.detached=true;s.off=nil
-        if terminal then pcall(terminal,G.snapshot(s.machine)) end
+        -- The failure reason travels with the terminal snapshot, so a host can say
+        -- why a response stopped (an overflow names the answer it waited for).
+        local final=G.snapshot(s.machine);final.failure=s.failure
+        if terminal then pcall(terminal,final) end
     end
     return false
 end

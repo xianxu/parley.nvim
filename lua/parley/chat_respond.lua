@@ -1702,6 +1702,11 @@ local function start_scoped_response(frame)
                 require('parley.buffer_lifecycle').finalize_mutated_api_leg(buf, true)
             end
             if failure_notice then vim.notify(failure_notice, vim.log.levels.WARN); failure_notice = nil end
+            -- #266: an overflow stops a response on purpose (dropping bytes would
+            -- lose provider output); say so, naming the answer it waited behind.
+            if result.outcome == 'overflow' then
+                vim.notify('Response stopped: ' .. (result.failure or 'staging overflow'), vim.log.levels.WARN)
+            end
             if recovery then require('parley.chat_recovery').finish(recovery, result.outcome) end
             if frame.terminal then frame.terminal(result) end
             if result.outcome == 'success' then

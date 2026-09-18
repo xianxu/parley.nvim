@@ -179,10 +179,10 @@ describe('write turn matrix',function()
         local editor=Fake.new({'💬: q','draft','🤖: first','','💬: q2','🤖: second',''})
         local doc=D.attach(serial,{driver=editor.driver,schedule=opts and opts.schedule or false});docs[#docs+1]=doc
         assert.equals('idle',D.drain(doc,1000).status)
-        local function start(row,fake)
+        local function start(row,fake,limits)
             local marker=D.query(doc,row,row+1)[1];local body=D.query(doc,row+1,row+2)[1]
             local r=assert(Runner.start(doc,{entity=marker.handle,first=marker.start_byte,last=body.end_byte-1,
-                input={message='frozen'},dependencies={{first=0,last=4}},capabilities={'read'},
+                input={message='frozen'},dependencies={{first=0,last=4}},capabilities={'read'},limits=limits,
                 schedule=opts and opts.schedule or false},fake.adapters))
             runners[#runners+1]=r
             if not (opts and opts.schedule) then Runner.drain(r,100) end
@@ -191,7 +191,7 @@ describe('write turn matrix',function()
         local fa,fb=FakeRunner.new(),FakeRunner.new()
         fakes[#fakes+1]=fa;fakes[#fakes+1]=fb
         if opts and opts.changed then fa.adapters.changed=opts.changed.a;fb.adapters.changed=opts.changed.b end
-        local a=start(2,fa);local b=start(5,fb)
+        local a=start(2,fa);local b=start(5,fb,opts and opts.limits)
         return doc,editor,{a=a,b=b},{a=fa,b=fb}
     end
     local schedules={{'a','a','b','b'},{'a','b','a','b'},{'b','a','b','a'},{'b','b','a','a'}}
@@ -242,6 +242,41 @@ describe('write turn matrix',function()
             end)
         end
     end
+
+    -- #266 Task 1.7. Providers deliver one SSE delta per output callback, so a
+    -- generation held behind the turn receives hundreds of tiny chunks. The held
+    -- answer must be bounded by BYTES (the 1 MiB budget), not by how many chunks
+    -- it arrived in — the 256-item cap would otherwise stop it after a paragraph,
+    -- and every machine transition copies the whole queue.
+    it('holds a long answer by its bytes, not by how many chunks it arrived in',function()
+        local _,editor,r,f=pair()
+        f.a:prepare();f.b:prepare();pump(r,schedules[1])
+        for _=1,600 do assert.is_true(f.b:output(1,'x'),'a held delta must be admitted') end
+        f.b:complete(1);pump(r,schedules[1])
+        assert.equals('draining',Runner.snapshot(r.b).phase,tostring(Runner.snapshot(r.b).outcome))
+        assert.is_true(Runner.snapshot(r.b).staged_items<=2,'held deltas must coalesce: '..Runner.snapshot(r.b).staged_items)
+        f.a:output(1,'alpha');f.a:complete(1);pump(r,schedules[1])
+        assert.equals('success',Runner.snapshot(r.b).outcome)
+        assert.truthy(table.concat(editor.lines,'\n'):find(string.rep('x',600),1,true))
+    end)
+
+    -- Task 1.7 Steps 2-4. The budget is unchanged (1 MiB per generation; see the
+    -- plan's measurement), and so is the behaviour at it: the generation stops,
+    -- since returning true while dropping bytes would silently lose provider
+    -- output. What changes is that the reason names the answer it was held behind
+    -- — otherwise an overflow while queued looks like a runaway response.
+    it('stops a held generation at its byte budget and names the answer it waited for',function()
+        local doc,_,r,f=pair({limits={staged_bytes=8,queued_items=4}})
+        f.a:prepare();f.b:prepare();pump(r,schedules[1])
+        local holder_line=D.lookup(doc,Runner.snapshot(r.a).exchange).start_row+1
+        assert.is_true(f.b:output(1,'12345'))
+        assert.is_false(f.b:output(1,'67890'),'the ninth byte is past the budget')
+        pump(r,schedules[1])
+        local snap=Runner.snapshot(r.b)
+        assert.equals('overflow',snap.outcome)
+        assert.truthy(snap.failure:find('line '..holder_line,1,true),snap.failure)
+        assert.equals('requesting',Runner.snapshot(r.a).phase,'the holder is untouched')
+    end)
 
     -- Task 1.6 Step 3b. Only a self-scheduling runner can show a missing wake:
     -- Runner.drain calls sync on every step, so a hand-pumped harness would wake
