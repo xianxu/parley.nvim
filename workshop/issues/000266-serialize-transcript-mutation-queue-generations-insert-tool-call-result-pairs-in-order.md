@@ -253,7 +253,7 @@ Durable plan: `workshop/plans/000266-serialize-transcript-mutation-plan.md`
       - [x] coordinator passthrough + notify-on-turn-change
       - [x] `draining` phase and `turn_status` mirror
       - [x] `'waiting'` refusal at the coordinator and in `Replacement.step`
-      - [ ] defer preparation's write until there is output (restores option (b))
+      - [x] defer preparation's write until there is output (restores option (b))
       - [ ] release/re-request matrix + end-to-end wake
       - [ ] held-output budget message; writer-enumeration verification
       - [ ] undo coherence assertion
@@ -615,3 +615,77 @@ This also protects coverage rather than only saving churn: `chat_stop_generation
 verifies Stop targeting one generation among several **concurrent transports**,
 and `chat_async_tools_spec` verifies overlapping tool processes. Way-station
 versions of those would assert materially less while M2 was pending.
+
+### 2026-09-17 — preparation deferral landed (Chunk 2); option (b) restored
+
+The machine now owns a deferred gap (`generation.lua` `s.gap`: `none` →
+`deferred` → `writing` → `none`). `prepared{gap=true}` starts the request at
+once; `write_gap` is emitted immediately before the generation's first write of
+**any** kind — output, round reservation or finalize — and only while it holds
+the turn. One predicate, `may_write`, gates all three. The session hands the
+runner a writer that starts `Preparation` on demand; the prepare operation stays
+unresolved until it retires, so cancellation needs no new plumbing. Mechanism
+recorded in the plan's `## Revisions`.
+
+Visible consequences: a regenerate no longer deletes the old answer at submit
+(it survives until replacement bytes exist, so a request failing before its
+first byte leaves it intact — useful to parley#261); a cancel before any output
+leaves the transcript byte-identical; the answer header appears with the first
+output rather than at submit.
+
+**The nine concurrency failures did not all share the cause the plan assumed.**
+Deferral fixed four outright. The other five, traced one at a time:
+
+1. **`batch_lifecycle_spec` single retry ×2 — an effect-order regression from M1
+   itself.** `stop()` emitted `release_turn` *before* `revoke`. The runner executes
+   one effect per step and the machine can report `terminal` in the same
+   transition, so an immediate regenerate saw the old grant still live and was
+   refused `'overlap'`. Confirmed against a `main` worktree (10/10 there). Fixed by
+   revoking first; pinned by `generation_spec` "revokes its grant before yielding
+   the turn when it stops".
+2. **`chat_scoped_response_spec:75`, `chat_stop_generation_spec:190` — a
+   regeneration's recovery snapshot hit a transiently suspended grant.** Another
+   generation's first write (its gap, a structural replacement) now lands while a
+   regeneration is still building, leaving its grant `suspended` ("structural
+   uncertainty") until repair re-proves it. `chat_recovery`'s `admitted()`
+   requires `valid`, so the regeneration failed for good. A suspended grant is
+   still owned, so `chat_respond`'s build now waits for the `repair`
+   notification instead of failing (scoped to `replacing_answer`, the only path
+   that reads the live answer). Those two specs are the regression tests.
+3. **`chat_stop_generation_spec:190` (again) and `chat_async_tools_spec:166` —
+   they assert the concurrency this issue reverses.** Both need a second
+   generation to *write* (a tool round's call block) while the first still holds
+   the turn, which the lifetime-held turn (operator decision) forbids. Restated,
+   not deleted:
+   - the stop case now completes b before asserting a continues, and keeps its
+     named invariant — b's writes below a never make a's input stale;
+   - the async case moves "a disjoint path runs while a conflicting path waits"
+     into **one** round (one conflicting call, one disjoint call). That is the
+     path-scoped admission property itself, without cross-generation writes, so
+     it holds in M1 and after M2. **M2 must re-add a cross-generation execution
+     assertion** once tool execution no longer needs a reservation write.
+
+Also moved: `capture_topic_parent` from the session's `requesting` hook to
+`finalize` — at request time there is no header yet (or, when regenerating, the
+*old* one). The hook then had no caller and was removed. Three header/geometry
+timing assertions updated to check what they are named for
+(`chat_onboarding_capture_spec` ×2, `chat_respond_spec:229`).
+
+Side-quest `cb4960d9`: `tools_builtin_grep_spec` asserted a repo-wide grep never
+contains the bare word "missing"; this plan's own line 7 tripped it.
+
+**Pre-existing, not this change:** `perf_document_spec` times out at Plenary's
+50 s default on this machine at `HEAD` without these changes too (50.19 s);
+`document_semantic_spec` flakes under parallel load and passes alone.
+
+Task 1.4 Step 5's anti-spin concern largely dissolves: preparation no longer
+starts until its generation holds the turn, so B's preparation no longer waits
+through A's whole stream.
+
+Supersedes the "M1 ships over-serialized" entry above: option (b) is restored
+and the over-serialization section of the plan is marked resolved.
+
+Commits: `4e117512` revoke before release · `bb620943` regeneration waits for
+proof · `8cbd6973` the deferral · `cc9d9439` two specs restated ·
+`01749159` side-quest: `refresh_goldens` writes normalized payloads.
+
