@@ -507,7 +507,7 @@ The invariant to assert is the issue's own: **no undo entry mixes two generation
 - [x] **Step 2: Run.** `make test-spec SPEC=chat/ownership`
   **Expected: PASS.** This is a *characterization* test, not a TDD red step — by Task 1.9 the serialization from 1.4–1.6 has landed, so undo coherence should already hold and writing a test that fails here would mean writing a test for behavior we just removed. Say so rather than scheduling a red that cannot occur (the vacuous-red-step class, same as Task 1.3's).
   If it *does* fail, the receipt invalidation at `editor.lua:67` is the suspect — a foreign write between two of a generation's chunks.
-- [x] **Step 3:** No production change expected. If Step 2 passed, the value is regression protection for M2–M3.
+- [x] **Step 3:** No production change expected. If Step 2 passed, the value is regression protection for M2–M4.
 - [x] **Step 4: Green.** Do **not** add a seed to `document_native_history_spec.lua` — that spec drives only human edits, undo and redo (`:51-78`) and never runs a generation, so a new seed would not exercise the writer path of `can_join_undo`.
 - [x] ~~**Step 5:** Invert `chat_scoped_response_spec.lua:47` — rename to `'serializes two answers while the next question is edited'`, keep the reverse-order delivery, assert the second answer commits nothing until the first terminates, and keep the existing draft-preservation assertion.~~ — superseded — never inverted; Chunk 2 restored option (b) and the original concurrent test passes
 - [x] **Step 6: Commit** — `#266 M1: assert undo entries never mix generations`
@@ -569,7 +569,7 @@ waiting, `:88-115` the write steps, `:145-149` subscriber);
 
 **Precondition, live now:** `scripts/refresh_goldens.lua` and 11 golden payloads are modified in the working tree from `f1818ee1` (#218). Resolve before cutting the branch — Task 3.5 regenerates goldens and expects no message-shape change, which that dirt would mask.
 
-**Boundary correction.** An earlier draft deferred child-grant removal to M3 and had M2 rewrite `response_tools.lua` alone. That is impossible: `round_reserved` requires `#event.grants==#round.children`, each identity-valid, distinct and ≠ parent (`generation.lua:306-315`). A `begin_round` that acquires no child grants yields `done(nil)` → `round_reservation_failed` → `stop(s,effects,'reservation_failed')` (`:304`). Switching to ordered append and removing the reservation lifecycle are **one change** and land together.
+**Boundary correction.** An earlier draft deferred child-grant removal to the residual sweep (now M4) and had M2 rewrite `response_tools.lua` alone. That is impossible: `round_reserved` requires `#event.grants==#round.children`, each identity-valid, distinct and ≠ parent (`generation.lua:306-315`). A `begin_round` that acquires no child grants yields `done(nil)` → `round_reservation_failed` → `stop(s,effects,'reservation_failed')` (`:304`). Switching to ordered append and removing the reservation lifecycle are **one change** and land together.
 
 ### Task 3.1: `ToolSequence` pure entity
 
@@ -677,7 +677,75 @@ There is no tool → pending edge today. Add one so both tools read as in flight
 
 ---
 
-## Chunk 4 — M3: the residual exclusion sweep
+## Chunk 3b — M3: Stop writes the tool round out; a crashed tool is a plain failure
+
+Operator decisions of 2026-09-18 (issue `## Log`). Two independent parts.
+
+### Task 3b.1: a tool whose process has ended holds nothing
+
+**Files:** `lua/parley/tools/operation.lua` (the `release` transition),
+`lua/parley/tools/resources.lua` (`release` evidence; remove `quarantined` and
+its `admit`/`pump` arms), `lua/parley/tools/scheduler.lua` (release evidence;
+remove `refuse` and the pump-after-every-outcome), `lua/parley/response_tools.lua`
+(the `unknown` wording).
+**Tests:** `tool_operation_spec`, `tool_resources_spec`, `tool_scheduler_spec`,
+`chat_async_tools_spec`.
+
+- [ ] **Step 1: Failing tests.** An `unknown` outcome with physical completion
+  releases its claims: a same-generation retry and another generation's call on
+  the same path both run. An `unknown` outcome *without* physical completion still
+  holds its claims (a process still running is a real effect in progress). The
+  round-5 refusal tests are replaced by these, not kept beside them.
+- [ ] **Step 2: Implement.** `release` is permitted for `outcome_unknown` once
+  physical. Resource release evidence names *why* (`known` or `ended`). Remove the
+  self-quarantine refusal (ARCH-PURPOSE: it guarded a lock that no longer outlives
+  its process — a round continues only after every tool has ended).
+- [ ] **Step 3:** the model-facing text for `unknown` says the call failed and may
+  have partly taken effect — no reconciliation to wait for.
+
+### Task 3b.2: `flushing` — Stop during a tool round writes the round out
+
+**Files:** `lua/parley/generation.lua` (phase, `cancel` arm, pump arm, supervision
+guard), `lua/parley/tools/sequence.lua` (`waiting`), `lua/parley/generation_runner.lua`
+(no tool starts while flushing), `lua/parley/response_tools.lua` (cancelled text),
+`lua/parley/chat_presentation.lua` + `lua/parley/response_session.lua` (note).
+**Tests:** `tools_sequence_spec`, `generation_spec`, `response_tools_spec`
+(rewrite the stop cases and the 24-permutation sweep's after-stop invariant),
+`response_session_spec`.
+
+ARCH-ORDER — the phase, enumerated: `executing_tools` + user `cancel` with the
+round not fully written and the grant not revoked → **`flushing`**. In it: every
+running tool gets `cancel_operation`; no tool starts; staged pre-round text and
+the round's blocks keep writing under the same gates as before (turn, gap, grant);
+when the walk reaches a result whose tool has no outcome, that tool is recorded
+as cancelled by the user (while running / before it ran) and the walk moves on;
+an outcome that arrives before the walk reaches it is written as is. When every
+block is written → `stop('cancelled')` → `stopping` → `terminal` as today. From
+`flushing`: a second `cancel` → `stopping` (the rest is dropped); revocation →
+`stopping`; an `overflow` cancel → `stopping`. Every other phase's Stop is
+unchanged. The turn is **not** released on entering `flushing` (decision (a)).
+
+- [ ] **Step 1:** `Seq.waiting(seq)` — the index of the result the walk is
+  blocked on, or nil. Pure, tested.
+- [ ] **Step 2: Failing machine tests** for every arrow above, plus: a finished
+  outcome arriving mid-flush is written as is; supervision during `flushing` is
+  accepted and writes "cancelled by user while running"; a flush waiting for the
+  turn holds its place and writes when the turn arrives.
+- [ ] **Step 3: Implement.** **Step 4:** integration — Stop mid-round leaves every
+  pair in the transcript, in order, finished results real and the rest cancelled.
+- [ ] **Step 5:** presentation — a flushing generation behind another answer says
+  so ("Stopped — writing its tool results after the answer to line N").
+
+### Task 3b.3: atlas, target, close
+
+- [ ] `atlas/providers/tool_use.md`, `tool_execution.md`, `chat/ownership.md`,
+  `chat/response_progress.md`; the target's Revision replaces the "Stop drops
+  pairs" gap with the flush. Sweep by the superseded claims' wording.
+- [ ] `make test` (phases run separately) → `sdlc milestone-close --issue 266 --milestone M3`.
+
+---
+
+## Chunk 4 — M4: the residual exclusion sweep
 
 What remains after **M2** (Task 3.2b) removes child grants: the geometry that only existed to carve them out of a parent.
 
@@ -694,7 +762,7 @@ What remains after **M2** (Task 3.2b) removes child grants: the geometry that on
 
 These exist solely to disambiguate excluded seams, but they thread through the same helpers M1's turn logic uses. Remove only after **Task 4.1** is green, and run the full suite immediately.
 
-- [ ] `make test` → exit 0. Commit `#266 M3: drop half-open seam handling with the last child grant`.
+- [ ] `make test` → exit 0. Commit `#266 M4: drop half-open seam handling with the last child grant`.
 
 ### Task 4.3: residual lifecycle cleanup
 
@@ -1145,3 +1213,12 @@ fixed at its class, each with a test.
   `finished`); an `insert_tool` executed while detached reports `revoked`. The
   target narrowing (Stop drops pairs whose tools already ran) is raised with the
   operator for acknowledgment before the issue closes.
+
+### 2026-09-18 — M3 added: Stop flushes the round; a crashed tool is a failure
+
+**Reason.** Two operator decisions after the M2 close (issue `## Log`): Stop
+during a tool round must write the round out rather than drop the pairs of tools
+that already ran; and a crashed tool is a plain failure, not a lock someone must
+confirm. Both are new behavior, so they get their own boundary (Chunk 3b, **M3**);
+the residual exclusion sweep becomes **M4**. Every milestone label outside
+`## Revisions` was checked by referent and updated (lines naming the sweep).
