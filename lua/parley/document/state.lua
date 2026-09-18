@@ -34,16 +34,10 @@ local function range(p) return type(p)=='table' and integer(p.first) and integer
 local function proof(p)
     return range(p) and scalar(p.entity) and scalar(p.marker_revision) and integer(p.revision) and p.confirmed==true
 end
-local function overlaps(a,b)
-    if a.last<b.first or b.last<a.first then return false end
-    if a.last==b.first and (a.open_last or b.open_first) then return false end
-    if b.last==a.first and (b.open_last or a.open_first) then return false end
-    return true
-end
-local function contains(a,b)
-    return a.first<=b.first and b.last<=a.last and
-        not (a.open_first and a.first==b.first) and not (a.open_last and a.last==b.last)
-end
+-- Closed ranges: touching at an endpoint overlaps, so an insertion at a
+-- grant's boundary is inside it.
+local function overlaps(a,b) return not (a.last<b.first or b.last<a.first) end
+local function contains(a,b) return a.first<=b.first and b.last<=a.last end
 local function writable(grant, wanted)
     for _,slot in ipairs(grant.slots) do if contains(slot,wanted) then return true end end
     return false
@@ -179,7 +173,7 @@ local function move(p,edit)
         if x>edit.last then return x+delta end
         return edit.first+(right and edit.new_bytes or 0)
     end
-    p.first=endpoint(p.first,p.open_first); p.last=endpoint(p.last,not p.open_last)
+    p.first=endpoint(p.first,false); p.last=endpoint(p.last,true)
 end
 
 local function wants(s)
