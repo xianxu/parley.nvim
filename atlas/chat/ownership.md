@@ -9,12 +9,8 @@ Generations run concurrently but write one at a time (#266). Requests stream
 and tools execute in parallel; mutation is serialized by a per-document **write
 turn** (`document/write_turn.lua`, held in the reducer), granted in admission
 order and held for the holder's whole lifetime. It passes on terminal, stop,
-pause, detach and reload — not on a transient grant suspension. So no undo step
-ever mixes two generations, and a generation's writes stay contiguous for as long
-as it holds the turn uninterrupted; a pause yields the turn, and its resumed
-writes start a new run. Undo groups per (generation, grant) run, so one answer
-written through several grants (say its main grant, then its completion prompt's)
-is several undo steps — each still from that answer alone. A queued
+pause, detach and reload — not on a transient grant suspension. A pause yields
+the turn, so a resumed generation's writes start a new run. A queued
 generation's output is held (one coalesced item, bounded by the 1 MiB staging
 budget) and applied whole once the turn arrives; meanwhile its pending line names
 the answer it is waiting for. Human edits are never subject to the turn.
@@ -28,6 +24,23 @@ Each tool round reserves ordered result slots before starting effects. An edit
 intersecting owned output revokes the affected writer; reload invalidates all
 grants from the former document epoch. Earlier context edits mark captured input
 stale without redirecting output.
+
+**Undo grouping** — this page is the one statement of it; the
+[target](../../workshop/targets/transcript-is-the-whole-truth.md) and plans point
+here. It derives from `Editor:can_join_undo` (`document/editor.lua`), which joins
+a generated write into the previous undo step only when its epoch, generation and
+grant match the last write's receipt and native undo has not moved since.
+
+- **Unconditional:** no undo step ever mixes two generations — a join requires
+  the previous write's generation, so a step can never span two.
+- **Conditional — while nothing intervenes:** a generation's consecutive writes
+  through one grant form one undo step, with no partial 4 KiB slice. Whatever
+  intervenes splits the run there, each piece still from that generation alone:
+  any observed edit (human typing, undo, redo) or buffer lifecycle event (reload,
+  detach, a changedtick-only update, an epoch change) clears the receipt; a write that did not fully apply clears it; and
+  another generation's write breaks the match — which serialization allows only
+  once the turn has moved, e.g. after a pause. Different grants — say an answer's
+  main grant, then its completion prompt's — are always different steps.
 
 Explicit user commands use captured source transactions. Each native mutation
 returns an exact receipt, and interrupted commands preserve intervening human

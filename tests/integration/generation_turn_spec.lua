@@ -388,8 +388,11 @@ describe('write turn matrix',function()
 end)
 
 -- #266 Task 1.9: undo coherence on a real buffer. Characterization, not red-first:
--- by now serialization has landed, and the invariant is the issue's own — no undo
--- entry mixes two generations, and none is a 4 KiB slice of a larger write.
+-- by now serialization has landed. What these tests pin is stated once, in
+-- atlas/chat/ownership.md "Undo grouping": unconditionally, no undo step mixes
+-- two generations; while nothing intervenes, a run is one step with no partial
+-- 4 KiB slice. The first case has nothing intervening; the last two pin what
+-- happens when something does.
 -- (Not "undo walks backwards in document position": generations write different
 -- answers, so admission order need not match document order.)
 describe('undo coherence under the write turn',function()
@@ -440,9 +443,11 @@ describe('undo coherence under the write turn',function()
         D.detach(doc);vim.api.nvim_buf_delete(buf,{force=true})
     end)
 
-    -- M1 review round 2 (BR-2): a pause yields the turn, so a resumed generation's
-    -- writes start a NEW run with the waiter's between them. What must still hold
-    -- is that no undo step mixes two generations.
+    -- M1 review round 2 (BR-2): a pause yields the turn, and the waiter writes
+    -- while the holder is paused. The holder's text then leaves undo in two runs
+    -- around the waiter's — though the stale-input edit that caused the pause
+    -- would split it by itself. What this pins is the unconditional half: no
+    -- undo step mixes two generations, even with the turn moving mid-answer.
     it('keeps undo steps single-generation when a paused holder resumes after a waiter wrote',function()
         local buf=vim.api.nvim_create_buf(false,true)
         vim.api.nvim_buf_set_lines(buf,0,-1,false,{'💬: q','draft','🤖: first','','💬: q2','🤖: second',''})
@@ -494,7 +499,39 @@ describe('undo coherence under the write turn',function()
             x,y=nx,ny
         end
         assert.equals(0,x);assert.equals(0,y)
-        assert.same({3000,0},seen,'a\'s text leaves in two runs, around b\'s: '..vim.inspect(seen))
+        assert.same({3000,0},seen,'a\'s text leaves in two pieces: '..vim.inspect(seen))
+        D.detach(doc);vim.api.nvim_buf_delete(buf,{force=true})
+    end)
+
+    -- M1 review round 3 (BR-5): the conditional half, pinned from the other side.
+    -- A human edit between two 4 KiB slices clears the undo receipt, so one
+    -- generation's single write leaves undo in pieces — each still its own.
+    it('splits one write into several undo steps when a human edit lands mid-write',function()
+        local buf=vim.api.nvim_create_buf(false,true)
+        vim.api.nvim_buf_set_lines(buf,0,-1,false,{'💬: q','draft','🤖: first','','💬: q2','🤖: second',''})
+        local doc=D.attach(buf,{schedule=false})
+        assert.equals('idle',D.drain(doc,1000).status)
+        local marker=D.query(doc,2,3)[1];local body=D.query(doc,3,4)[1]
+        local fake=FakeRunner.new()
+        local r=assert(Runner.start(doc,{entity=marker.handle,first=marker.start_byte,last=body.end_byte-1,
+            input={message='frozen'},dependencies={{first=0,last=4}},capabilities={'read'},schedule=false},fake.adapters))
+        Runner.drain(r,100);fake:prepare();Runner.drain(r,100)
+        fake:output(1,string.rep('X',9000))
+        local function xs()return select(2,table.concat(vim.api.nvim_buf_get_lines(buf,0,-1,false),'\n'):gsub('X',''))end
+        for _=1,20 do if xs()>0 then break end;Runner.drain(r,1) end
+        assert.is_true(xs()>0 and xs()<9000,'stopped after the first slice: '..xs())
+        vim.api.nvim_buf_set_text(buf,1,5,1,5,{'!'})  -- a disjoint human edit on the draft row
+        D.drain(doc,1000);fake:complete(1);Runner.drain(r,1000)
+        assert.equals('success',Runner.snapshot(r).outcome);assert.equals(9000,xs())
+        local seen={}
+        for _=1,20 do
+            if xs()==0 then break end
+            local before=xs()
+            vim.api.nvim_buf_call(buf,function()vim.cmd('silent undo')end)
+            if xs()~=before then seen[#seen+1]=xs() end
+        end
+        assert.equals(0,xs())
+        assert.is_true(#seen>=2,'the edit must split the run into more than one step: '..vim.inspect(seen))
         D.detach(doc);vim.api.nvim_buf_delete(buf,{force=true})
     end)
 end)

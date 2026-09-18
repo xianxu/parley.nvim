@@ -116,8 +116,8 @@ one asked for and which would re-introduce interleaving.
 
 - **Across generations:** one writer at a time, and each generation's writes form
   ~~**one contiguous run** — so each undo step removes exactly one generation's
-  coherent contribution~~ *(overstated; corrected in the next revision)*, never a
-  mix and never a partial 4 KiB slice. A holder keeps the write turn for its
+  coherent contribution~~ *(overstated; corrected in the next revisions)*, never a
+  mix ~~and never a partial 4 KiB slice~~. A holder keeps the write turn for its
   lifetime, including through a transient grant suspension ~~precisely so its
   run is never split around another's~~.
 - **Within one generation's tool round:** document order does hold — insertion is
@@ -142,13 +142,31 @@ completion grant is already several undo steps.
 
 **Delta — the invariant, stated the way the code behaves:**
 
-- **No undo step ever mixes two generations**, and none is a partial slice of a
-  larger write. This holds unconditionally.
+- **No undo step ever mixes two generations**~~, and none is a partial slice of a
+  larger write. This holds unconditionally~~ *(the slice clause is conditional —
+  see the next revision)*.
 - A generation's writes are **contiguous for as long as it holds the turn
   uninterrupted** — a transient grant suspension does not interrupt it. A pause
   does: the resumed writes start a new run.
-- Undo entries are per **(generation, grant)** run.
+- ~~Undo entries are per **(generation, grant)** run.~~ *(only while nothing
+  intervenes — see the next revision)*
 
 `atlas/chat/ownership.md` says the same; `tests/integration/generation_turn_spec.lua`
 pins both the uninterrupted case and the pause-then-resume case.
+
+### 2026-09-17 — undo grouping has one statement, in the atlas (parley#266 M1 review round 3)
+
+**Reason.** Both earlier revisions restated undo grouping here, and each
+restatement dropped an exception — the second said "no partial slice …
+unconditionally", which a human edit between two 4 KiB slices falsifies.
+Restating a code-derived rule in prose is how it drifts, so this target stops
+doing it.
+
+**Delta.** The target defends one undo property, and it is unconditional:
+**no undo step ever mixes two generations.** How writes group into undo steps —
+one step per (generation, grant) run with no partial slice, *while nothing
+intervenes*, and exactly which events intervene — is stated once, in
+[`atlas/chat/ownership.md`](../../atlas/chat/ownership.md) ("Undo grouping"),
+derived from `Editor:can_join_undo`. parley#261, which leans on these guarantees,
+should cite that section, not this target's revisions.
 
