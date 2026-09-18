@@ -1059,7 +1059,8 @@ range per grant, and a continuation's tail reclaim.
 abort under the 8-way fan-out — `document_fold_retirement_spec` (SIGTERM, twice),
 `perf_document_spec`, `perf_ownership_spec`, `document_append_extent_spec`
 (all recorded at M2/M3), and one new name, `document_dependencies_spec`, which
-died without a summary in its 50k-origin case and fails 1/16 under 16-way
-stress. Its module graph (`dependencies` → `grammar` → `lexical`, plus
-`sequence`) never loads `document/state.lua`, so no M4 change can reach it.
-Each aborted file passed alone. Same family as parley#267.
+dies with exit 1 and no assertion in its 50k-origin case and lost the unit phase
+twice (once at JOBS=4). Measured, not argued: under 16-way stress it fails 8/64
+at the M3 close `e48362ab` and 2/64 at M4, so it predates M4 (its modules never
+load `document/state.lua` either). Each aborted file passed alone. Recorded on
+parley#267, whose signature it shares.

@@ -52,3 +52,15 @@ identical to `main`, and the same stress fails 2/16 at #266's M1 close commit
 - A copy containing *only* that case passed 16/16, so preceding cases' state
   (garbage, timers) plausibly matters — a GC finalizer or a scheduled callback
   running with the JIT off and the hook installed is the next thing to test.
+
+### 2026-09-18 — a second spec with the same signature
+
+Seen while closing parley#266 M4: `tests/unit/document_dependencies_spec.lua`
+dies with exit 1 and no assertion, always partway through its "bounds dependency
+and actual sequence navigation at fifty thousand origins" case. Alone it passes
+in ~1 s. Under 16 concurrent runs it fails 8/64 at #266's M3 close `e48362ab` and
+2/64 at M4 `3ff5ea46`, so it predates M4, and its module graph (`dependencies`,
+`grammar`, `lexical`, `sequence`) shares nothing with `tools/resources`. It lost
+the unit phase of two full `make test` runs, once at JOBS=4. A cause in
+the harness or runtime, not in either module, now looks more likely than one
+specific to the call-hook case.
