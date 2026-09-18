@@ -727,6 +727,13 @@ closes. Fold this narrowing into the target when M1 closes, so the target does n
   between a machine's `release_turn` emission and the runner executing it would
   have its `request_turn` erased by the later `retune`, stranding a generation in
   `draining` forever. Holding for the lifetime deletes the row and the race.
+- **A transient grant suspension keeps the turn** (operator, 2026-09-17),
+  reversing the turn-matrix `suspend` row. Suspension is routine — any edit the
+  structure cannot classify at once — and with "an eligible incumbent keeps the
+  turn", a holder that released for a millisecond would wait behind the next
+  generation's whole lifetime, splitting its answer's history around another's.
+  Holding keeps each generation's writes one contiguous run. Accepted cost: a
+  long suspension is a fourth visible stall shape, escaped by `:ParleyStop`.
 - **Four-message resubmit wire shape** accepted (see the issue's `## Open decisions`).
 - **Held-output budget stays at 1 MiB**, basis measured — largest answer block
   observed 116,703 B, so ~9× headroom.
@@ -823,4 +830,33 @@ one round only.
 `revoke`, so for one runner step a `terminal` machine still held its region and
 an immediate regenerate was refused `'overlap'` (`batch_lifecycle_spec`, green on
 `main`). Revoke now precedes release; pinned in `generation_spec`.
+
+### 2026-09-17 — Task 1.6: suspension holds the turn; the matrix shrinks
+
+**Reason.** Operator decision, asked as "which gives the clearest linear
+history?" — see `## Decisions taken`. The `suspend` row released on
+`grant_suspended`; read against the reducer, suspension is transient and
+common, and releasing would produce `A… | edit | B | …A` histories.
+
+**Delta.**
+
+- Turn-matrix rows removed: `suspend`, `suspend_preparation`,
+  `waiting_head_of_line`. The last two were the same shape — a holder briefly
+  unable to write — and hold for the same reason. What releases the turn is now:
+  terminal, stop, the three pause causes, detach, reload. All were already
+  implemented by Tasks 1.2–1.5; Task 1.6 adds the tests that hold them to it.
+- `WriteTurn.should_release` is **not** created. With no runner-side release
+  policy left, every release decision lives in `generation.lua`'s stop/pause
+  paths and the reducer's terminal/detach/reload — a pure function with one
+  caller would be an abstraction without a second consumer (ARCH-PURPOSE).
+- Tests: `generation_spec` pins hold-through-suspension and the pause releases
+  (both were already true, so they are characterization, not red-first);
+  `generation_turn_spec` runs terminal / stop / detach / reload across four
+  step interleavings on real runners, plus Step 3b's self-scheduled wake.
+- Step 4 visibility: the runner reports `blocked = {generation, entity, phase}`
+  of the holder to its `changed` adapter, recomputed on every sync (so on every
+  holder write); `chat_presentation.waiting_message` owns the wording;
+  `response_session` renders it on the pending extmark and restores "Working…"
+  when the turn arrives. The holder's phase names why it blocks (preparing,
+  streaming, running tools, finishing) — the stall shapes.
 
