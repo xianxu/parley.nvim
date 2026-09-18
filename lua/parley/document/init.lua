@@ -24,10 +24,21 @@ local function effects(s,result)
     return result
 end
 --- #266 M1: refuse a generated write that does not hold the document's write
---- turn. Returns true when the caller must wait. Fail-closed on purpose: an
---- unheld turn refuses every generation rather than admitting all of them.
+--- turn. Returns true when the caller must wait.
+---
+--- The serialization invariant is enforced JOINTLY, not by this guard alone:
+---   (a) every generated writer requests the turn before it writes —
+---       generation.lua:214 (start), :367 (resume), response_topic.lua:169 —
+---       which tests/unit/generation_spec.lua pins;
+---   (b) this guard refuses anyone who is not the holder.
+--- Given (a), the turn is always held by someone while any generation is live, so
+--- a second writer is always refused. An unheld turn therefore means no generation
+--- is writing at all, and refusing everyone in that state buys nothing while
+--- costing ~96 document-layer tests that legitimately exercise writes without
+--- caring about turns.
 local function turn_waiting(s,generation)
-    return generation~=nil and State.turn(s.authority)~=generation
+    local turn=State.turn(s.authority)
+    return generation~=nil and turn~=nil and turn~=generation
 end
 local function proof(s,grant)
     local result=Structure.authority_range(s.structure,grant.entity,grant.first,grant.last)

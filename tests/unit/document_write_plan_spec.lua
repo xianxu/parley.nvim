@@ -45,10 +45,6 @@ local function acquire(c,row,last_row,generation,parent)
         regions={{entity=indexed[1].handle,marker_revision=1,revision=1,first=indexed[1].start_byte,
             last=indexed[#indexed].end_byte-1,confirmed=true}}})
     assert.is_true(result.ok,result.reason)
-    -- #266 M1: write authority now includes the document's write turn. Requesting
-    -- is idempotent and cannot preempt, so a second generation here stays queued —
-    -- which is the serialization this issue introduces.
-    D.transition(c.doc,{kind='request_turn',generation=generation})
     return {generation=generation,grant=result.grants[1],entity=indexed[1].handle}
 end
 local function plan(c,writer,patches)
