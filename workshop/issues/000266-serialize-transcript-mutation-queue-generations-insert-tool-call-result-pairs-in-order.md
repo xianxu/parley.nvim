@@ -886,3 +886,17 @@ chat levels. Minors: a cleanup-wait note, and `revoked` for a detached insert.
 records that execution precedes the record — Stop drops `(call, result)` pairs
 whose tools already ran but had not been written. Acknowledge, or ask for Stop to
 flush them.
+
+### 2026-09-18 — operator decision: Stop flushes the tool round, it does not drop it
+
+Replaces the target narrowing recorded at the M2 close (review BR-12). Operator:
+"when we issue stop while tool call is happening, we stop all ongoing tool calls,
+and write out tool call results one by one serialized. error is an acceptable
+result of tool call, as agent can retry later."
+
+Behavior to build: on Stop during a tool round, cancel every running tool, then
+walk the round in declared order and write each `(call, result)` pair — a tool
+that already finished gets its real result; one that had not gets an error
+result ("cancelled by user"). The round is written in full, then the generation
+ends; no continuation request. Scheduled after M2; open design point: a stopped
+generation that does not hold the write turn (see the reply of this date).
