@@ -325,7 +325,6 @@ atlas:
       - tests/integration/topic_presentation_spec.lua
       - tests/integration/user_edit_callers_spec.lua
       - tests/unit/document_append_spec.lua
-      - tests/unit/document_capacity_spec.lua
       - tests/unit/document_dependency_affinity_spec.lua
       - tests/unit/document_replacement_spec.lua
       - tests/unit/document_successor_guard_spec.lua

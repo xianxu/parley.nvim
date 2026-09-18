@@ -73,13 +73,13 @@ describe('arch: captured document ownership',function()
                 '#254: pending UI owns extmarks and timers; its visibility cannot admit, delay or perform a content write')
         end
         for _,method in ipairs({'append','apply','apply_user','replace_new','replace_step',
-            'insert_released_new','reserve_capacity','acquire'})do
+            'insert_released_new','acquire'})do
             forbid(scope,'[%.:]'..method..'%s*%(',
                 '#254: presentation may observe document lifetime, but cannot mint grants or mutate content',true)
         end
         -- Presentation has its own pure transition function. Guard document
         -- ownership commands, rather than banning every state transition.
-        for _,event in ipairs({'register_generation','acquire','revoke','finish_generation','reserve_capacity'})do
+        for _,event in ipairs({'register_generation','acquire','revoke','finish_generation'})do
             forbid(scope,"kind%s*=%s*['\"]"..event.."['\"]",
                 '#254: pending UI cannot create or cancel document authority',true)
         end

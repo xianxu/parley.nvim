@@ -309,22 +309,11 @@ function M.subscribe(doc,callback)
     local key={}; s.subscribers[key]=callback
     return function() s.subscribers[key]=nil end
 end
--- Capacity reserves bounded grant slots only; acquisition still validates
--- confirmed document regions through the ordinary authority path below.
-function M.reserve_capacity(doc,intent)
-    return M.transition(doc,{kind='reserve_capacity',epoch=intent.epoch,generation=intent.generation,
-        operation=intent.operation,count=intent.count})
-end
-function M.release_capacity(doc,intent)
-    return M.transition(doc,{kind='release_capacity',epoch=intent.epoch,generation=intent.generation,
-        operation=intent.operation,ticket=intent.ticket})
-end
 function M.transition(doc,event)
     local s=state(doc)
     if s.dead or type(event)~='table' then return effects(s,State.transition(s.authority,event)) end
     if event.kind~='register_generation' and event.kind~='acquire' and event.kind~='revoke'
-        and event.kind~='finish_generation' and event.kind~='reserve_capacity' and event.kind~='release_capacity'
-        and event.kind~='request_turn' and event.kind~='release_turn' then return {ok=false,reason='coordinator-owned event',effects={}} end
+        and event.kind~='finish_generation' and event.kind~='request_turn' and event.kind~='release_turn' then return {ok=false,reason='coordinator-owned event',effects={}} end
     if event.kind=='acquire' then
         if type(event.regions)~='table' or #event.regions>16 then return {ok=false,reason='grant limit',effects={}} end
         for _,region in ipairs(event.regions or {}) do

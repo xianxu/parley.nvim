@@ -60,11 +60,11 @@ So: **`M.transition` notifies whenever the turn value differs before and after**
 | Name | Lives in | Status |
 |------|----------|--------|
 | `write_turn` — WriteTurn: `holder` | `lua/parley/document/write_turn.lua` | new |
-| `sequence` — ToolSequence *(M2)* | `lua/parley/tools/sequence.lua` | new |
+| `sequence` — ToolSequence *(M2)*: `new`, `next`, `outcome`, `written`, `final`, `complete` | `lua/parley/tools/sequence.lua` | new |
 | `state` — DocumentState: the `turn`, `waits_for_turn` | `lua/parley/document/state.lua` | modified |
 | `generation` — GenerationMachine: an O(1) `phase` | `lua/parley/generation.lua` | modified |
 | `init` — DocumentCoordinatorStatus: `turn`, the `'waiting'` status | `lua/parley/document/init.lua` | modified |
-| `chat_presentation` — the waiting note and overflow report: `waiting_message`, `overflow_message` | `lua/parley/chat_presentation.lua` | modified |
+| `chat_presentation` — the waiting note, overflow report and tool count: `waiting_message`, `overflow_message`, `tools_message` | `lua/parley/chat_presentation.lua` | modified |
 
 *Name cells lead with the module file, which the arch table sweep
 (`tests/arch/single_source_sweeps_spec.lua`) resolves; the concept name follows,
@@ -1037,3 +1037,60 @@ The gate reported both families repeating, so each response is a rule.
   record the result in `atlas/chat/ownership.md` "Undo grouping" (the single
   statement), not anywhere else; tracked on the issue's M2 checklist.
 
+
+### 2026-09-18 — M2 mechanism: the machine sequences insertion; a failed call does not pause
+
+**Reason.** Two operator decisions at the start of M2, and one mechanism
+correction found while tracing Chunk 3 against the code.
+
+1. **A failed tool call does not pause (operator).** Asked what an unresolved
+   outcome (`unknown`, `rejected`, `cancelled_before_effect`) should do under
+   ordered append: "failed tool call shouldn't pause, but rather print error
+   message, so model can pick another way to call the tool." This supersedes
+   Task 3.3's `⏳:` marker entirely. The marker was designed to record an outcome
+   *without* a result block because the round could not continue past it; once
+   the round does continue, the honest record is an ordinary error result —
+   `📎: <name> id=<id> error=true` with a body saying what happened — which the
+   parser already reads as `tool_result` and the wire already sends. File and wire
+   agree by construction, `resolve_pending` is untouched, and there is no new
+   transcript grammar. Task 3.3's premise about batch (`batch.lua` latching
+   `s.unknown`) was also off: that flag is a *generation* outcome missing, not a
+   tool's; with no pause, a leg whose tool failed simply continues.
+   *Consequence:* an outcome is final once its result is written. An `unknown`
+   upgraded to `known` before its slot is reached is written as `known`; after,
+   the upgrade is refused. A child resolves on physical completion whatever its
+   outcome, so the machine no longer rejects resolving an `unknown` child.
+2. **Tool pairs join the answer's undo step (operator).** No deliberate break:
+   pairs are ordinary writes through the answer's grant, so the existing
+   `can_join_undo` rule covers them. Recorded in `atlas/chat/ownership.md`
+   "Undo grouping" only.
+3. **The machine, not the adapter, sequences insertion** (deviation from Tasks
+   3.2c's "a pump … one item per `adapter.step()`"). An adapter-side pump cannot
+   see the gates a round's writes must respect: the pre-round text still staged
+   in the machine (a call block appended while text is queued would land ahead of
+   it), the turn, the deferred gap, and stop. Chunk 2's revision reached the same
+   conclusion for the gap ("only the machine can see all three"). So the machine
+   holds a pure `ToolSequence` on its round and emits one `insert_tool` effect at a
+   time — gated by `may_write`, staged bytes and the grant, exactly like output —
+   and the adapter only renders: `insert_tool(ctx, done)` appends the call block
+   (from its frozen round) or the result (the blob the machine recorded, so the
+   transcript and the continuation carry the same bytes).
+
+**Delta.**
+
+- Tool execution never waits on a write: `start_children` runs as soon as a round
+  is declared, whatever the turn or staged text. Fan-out stays 4.
+- Removed rather than renamed: `reserve_round`/`round_reserved`/
+  `round_reservation_failed`, `cancel_reservation`, child grants
+  (`child_by_grant`, the child branch of `writable`), `revoke_child`, and
+  `cancel_child` (no production dispatcher). A child can no longer emit output.
+- `begin_round` is **not** introduced: the adapter freezes its round lazily on the
+  first round-scoped call (`start_child` or `insert_tool`), so the machine gains no
+  effect that writes nothing.
+- The runner's liveness exemption in `mutation` becomes a set of effects that are
+  not operations (`finalize`, `insert_tool`), so a rename cannot silently drop it.
+- Layout is the old final layout reordered: the first call block is preceded by
+  a blank line and every item is followed by one — `text⏎⏎🔧a⏎⏎📎a⏎⏎🔧b⏎⏎📎b⏎⏎`.
+- A hung call (no outcome ever) blocks only the *writes* behind it; those tools
+  still run and their outcomes are held. Stop drops held pairs like held output.
+  Presentation reports the round's progress (Task 3.4), so the block is visible.

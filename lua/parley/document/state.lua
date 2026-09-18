@@ -70,7 +70,7 @@ function M.new(opts)
     opts=opts or {}; assert(opts.epoch==nil or scalar(opts.epoch),'invalid epoch')
     local limit=opts.max_dependencies or 256
     assert(integer(limit) and limit<=256,'invalid dependency limit')
-    local doc={}; states[doc]={epoch=opts.epoch or id(),attached=true,generations={},grants={},capacity_tickets={},max_dependencies=limit}
+    local doc={}; states[doc]={epoch=opts.epoch or id(),attached=true,generations={},grants={},max_dependencies=limit}
     return doc
 end
 
@@ -215,16 +215,10 @@ local function retune(s,drop)
     s.turn=WriteTurn.holder(eligibility, s.turn~=drop and s.turn or nil)
 end
 
-local function capacity_used(s)
+local function live_grants(s)
     local used=0
     for _,g in pairs(s.grants) do if g.status~='revoked' then used=used+1 end end
-    for _,ticket in pairs(s.capacity_tickets) do used=used+ticket.remaining end
     return used
-end
-local function ticket_for(s,event,key)
-    local ticket=s.capacity_tickets[event[key]]
-    if not ticket or ticket.generation~=event.generation or ticket.operation~=event.operation then return nil end
-    return ticket
 end
 
 function M.transition(doc,event)
@@ -244,30 +238,10 @@ function M.transition(doc,event)
         local captured={}; for i,p in ipairs(deps) do captured[i]={first=p.first,last=p.last} end
         local gid=id(); s.generations[gid]={id=gid,input_snapshot=input,dependencies=captured,stale=event.input_stale==true}
         result.generation=gid
-    elseif kind=='reserve_capacity' then
-        if not s.generations[event.generation] then return reject('generation') end
-        if not scalar(event.operation) or event.operation=='' then return reject('operation') end
-        if not integer(event.count) or event.count<1 or event.count>16 then return reject('grant limit') end
-        for _,ticket in pairs(s.capacity_tickets) do
-            if ticket.generation==event.generation and ticket.operation==event.operation then return reject('duplicate reservation') end
-        end
-        if capacity_used(s)+event.count>16 then return reject('grant limit') end
-        local ticket=id()
-        s.capacity_tickets[ticket]={id=ticket,generation=event.generation,operation=event.operation,remaining=event.count}
-        result.ticket=ticket
-    elseif kind=='release_capacity' then
-        local ticket=ticket_for(s,event,'ticket')
-        if not ticket then return reject('capacity identity') end
-        s.capacity_tickets[ticket.id]=nil
     elseif kind=='acquire' then
         if not s.generations[event.generation] then return reject('generation') end
         local regions=event.regions
-        local ticket=event.capacity~=nil and ticket_for(s,event,'capacity') or nil
-        if event.capacity~=nil and not ticket then return reject('capacity identity') end
-        if type(regions)~='table' or #regions==0 or #regions>16 then return reject('grant limit') end
-        if ticket then
-            if #regions>ticket.remaining then return reject('grant limit') end
-        elseif #regions+capacity_used(s)>16 then return reject('grant limit') end
+        if type(regions)~='table' or #regions==0 or #regions+live_grants(s)>16 then return reject('grant limit') end
         for k,p in pairs(regions) do
             if not integer(k) or k<1 or k>#regions or not proof(p) then return reject('invalid region') end
         end
@@ -298,10 +272,6 @@ function M.transition(doc,event)
             result.grants[#result.grants+1]=gid
         end
         if parent then parent.slots=slots end
-        if ticket then
-            ticket.remaining=ticket.remaining-#regions
-            if ticket.remaining==0 then s.capacity_tickets[ticket.id]=nil end
-        end
     elseif kind=='reclaim_tail' then
         if event.epoch~=s.epoch then return reject('epoch') end
         local g=s.grants[event.grant]
@@ -395,9 +365,6 @@ function M.transition(doc,event)
             if g.generation==event.generation then revoke(s,g,result,'generation finished'); s.grants[gid]=nil end
         end
         s.generations[event.generation]=nil
-        for tid,ticket in pairs(s.capacity_tickets) do
-            if ticket.generation==event.generation then s.capacity_tickets[tid]=nil end
-        end
         retune(s,event.generation); result.turn=s.turn
     elseif kind=='request_turn' then
         if not s.generations[event.generation] then return reject('generation') end
@@ -409,7 +376,7 @@ function M.transition(doc,event)
     elseif kind=='reload' or kind=='detach' then
         if event.next_epoch~=nil and (not scalar(event.next_epoch) or event.next_epoch==s.epoch) then return reject('invalid epoch') end
         for _,g in pairs(s.grants) do revoke(s,g,result,kind) end
-        s.grants={}; s.generations={}; s.capacity_tickets={}; s.epoch=event.next_epoch or id(); s.attached=kind~='detach'; result.epoch=s.epoch
+        s.grants={}; s.generations={}; s.epoch=event.next_epoch or id(); s.attached=kind~='detach'; result.epoch=s.epoch
         s.turn=nil; turn_wanted[s]=nil
     else return reject('unknown event') end
     return result
