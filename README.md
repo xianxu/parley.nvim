@@ -47,10 +47,15 @@ and settings. Existing Neovim users can use the
 ## Editing while an answer is generated
 
 You can write the next question while one or more answers stream elsewhere in
-this chat. Editing generated output preserves your edit and stops that region's
-writer. Deleting an exchange invalidates its writers; reloading the file
-invalidates all active writes. Undo and redo remain native Neovim edits and can
-also revoke a writer; undo does not restart a cancelled request.
+this chat. Their requests run at the same time, but answers are written one at a
+time: a later answer waits, showing which answer it is waiting for, then appears
+in full once the earlier one finishes — so an undo step never mixes two answers.
+An answer's header appears with its first output; regenerating keeps the old
+answer visible until the new one starts arriving. Editing generated output
+preserves your edit and stops that region's writer. Deleting an exchange
+invalidates its writers; reloading the file invalidates all active writes. Undo
+and redo remain native Neovim edits and can also revoke a writer; undo does not
+restart a cancelled request.
 
 Changing earlier input leaves an in-flight request on its original input. A
 visible **input changed** note stays with the answer for this editor session.

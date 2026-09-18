@@ -288,7 +288,7 @@ block still starts a turn.
 - **Unknown tools**: return friendly error "Tool 'X' is not available on this client"
 - **Malformed blocks**: `build_messages_from_model` degrades to text (no Anthropic rejection)
 - **Buffer diagnostic**: `:lua require('parley').check_buffer()` validates invariants
-- **Transcript drift**: Document grants and captured source guards fence answer, tool, progress, and topic callbacks. Editing a protected region or deleting its marker invalidates that work; disjoint draft edits and sibling generations can continue. Reload invalidates active writes.
+- **Transcript drift**: Document grants and captured source guards fence answer, tool, progress, and topic callbacks. Editing a protected region or deleting its marker invalidates that work; disjoint draft edits leave it valid, and so does a sibling generation's work (which writes only when it holds the write turn — see [write ownership](../chat/ownership.md)). Reload invalidates active writes.
 
 ## Visual Treatment
 
