@@ -221,3 +221,121 @@ findings:
     detail: |
       Plan lines 103 and 105 are marked modified with append-only insertion and the tool-to-pending edge, neither of which exists at M1. The sequence row already uses the (M2) tag for this situation.
 ```
+
+---
+
+## Re-review — 2026-09-17T20:30:15-07:00 (FIX-THEN-SHIP)
+
+| field | value |
+|-------|-------|
+| issue | 266 — Serialize transcript mutation: queue generations, insert tool call/result pairs in order |
+| repo | parley.nvim |
+| issue file | workshop/issues/000266-serialize-transcript-mutation-queue-generations-insert-tool-call-result-pairs-in-order.md |
+| boundary | milestone M1 |
+| milestone | M1 |
+| window | 0f6ee4d4d50869803bc41664548dd1bbdeabea69..12594edc129d62ddca79af208358ce8c65bd8174 |
+| command | sdlc milestone-close --issue 266 --milestone M1 |
+| reviewer | claude |
+| timestamp | 2026-09-17T20:30:15-07:00 |
+| verdict | FIX-THEN-SHIP |
+
+## Review
+
+```verdict
+verdict: FIX-THEN-SHIP
+confidence: high
+```
+
+All three open findings are fixed as stated. The pause and per-grant exceptions now appear wherever the contiguity claim was made. The runner's per-sync path checks the cheap conditions before any copy. The two plan rows carry their *(M2)* tag. I re-ran `chat/ownership`: 27 files, 278 cases, 0 failed, 0 errors. One cheap thing is left, and it is the same kind of problem as BR-2. While restating the invariant, the fix added a new claim that is also too strong. The target now says no undo step "is a partial slice of a larger write. This holds unconditionally." That is false in the README's main use case: typing the next question while an answer streams. I confirmed this with a scratch spec on a real buffer. One generation writes 9,000 bytes, and a disjoint human edit lands between its first and second 4 KiB slices. Undo then removes 4,904 bytes and leaves a 4,096-byte partial slice. The cause is that `Editor:observe` clears `undo_receipt` on every observed edit (`document/editor.lua:67`). The fix is prose-only.
+
+## 1. Strengths
+- **`generation_runner.lua:72-74`**: `blocker` now checks `turn_status` and `doc.turn` before reading anything else, and reads phases through the new O(1) `G.phase` (`generation.lua:218`). The turn holder, which is the common case, returns after two field reads.
+- **`generation_runner.lua:43-45, 116-117`**: `blocked_key` is pulled out once and used by both `present` and `sync`, so the dedup key and the change test cannot drift apart (ARCH-DRY). Behavior is unchanged: `present` was already deduplicated by key, and machine changes still present through `dispatch`.
+- **`generation_turn_spec.lua:305-317`**: the order of control effects is now pinned at the runner. The revoke lands one step before the turn moves. Before this, that order was covered only end to end through `batch_lifecycle_spec`.
+- **`response_topic.lua:182`**: removing the unreachable `'waiting'` branch is correct. The turn is confirmed a line earlier, `D.apply` is synchronous, and the commit message explains why the branch could never have woken anyway.
+
+## 2. Critical findings
+None.
+
+## 3. Important findings
+
+**N1 — `workshop/targets/transcript-is-the-whole-truth.md:145-146`: "none is a partial slice of a larger write. This holds unconditionally" is false whenever a human edit lands mid-write.**
+- **This is the 2nd finding in family `invariant-statement-omits-exception`.** BR-2 fixed the pause and per-grant instances, and the fix itself introduced this one. The lesson added in this round already states the rule: "list every event that ends the grouping, and check each against the code that emits it." It was not applied to the new sentence.
+- **Do not just delete the word "unconditionally".** Derive every undo-grouping statement from the predicate that decides grouping. `Editor:can_join_undo` (`editor.lua:194-202`) joins only when:
+  - the epoch, generation and grant all match the last receipt, and
+  - the native undo sequence and tick are unchanged since that receipt.
+- The receipt is also cleared by every observed edit (`:67`, human typing and undo/redo included), by lifecycle transitions (`:132`, `:179`), and by any write that is not `applied` (`:268`).
+- The only property that survives all of those events is: **no undo step mixes two generations.** Everything else is conditional on no human edit landing mid-run:
+  - one step per (generation, grant) run;
+  - no partial slice.
+- Sweep every site that makes the claim:
+  - the target, `:145-146`;
+  - the target's first Revision, `:120` ("never a partial 4 KiB slice", not struck);
+  - the plan's Target reconciliation, `:717-718` ("holds unconditionally");
+  - `atlas/chat/ownership.md:15` ("Undo groups per (generation, grant) run" implies one step per run).
+- `README.md:52` ("never mixes two answers") is already exact.
+- Optionally, pin the exception: a human edit between two slices splits one run into two steps, and neither step mixes generations. The scratch shape above takes about 15 lines.
+- This matters beyond wording: parley#261 plans to delete the recovery sidecar on the strength of this target's undo guarantees.
+
+## 4. Minor findings
+- **N2 — plan milestone labels are stale after the M1/M2 merge renumbered the milestones.** The plan's `:669` has Chunk 3 (now M2) close with `--milestone M3`. `:675` says "after **M3** (Task 3.2b)" where it means M2. `:690` commits as `#266 M4:` for Chunk 4 (now M3), and `:510` says "M2–M4". **This is the 2nd finding in family `table-row-milestone-scope`.** The rule: every milestone reference in the plan must match the issue's current `## Plan` tags. After any renumbering, grep `M[0-9]` across the whole plan and reconcile every hit, not only the rows a review names. (The Estimate section's item order is a historical record and should stay as written.)
+- The pause-then-resume undo test (`generation_turn_spec.lua:446`) says it asserts that a's text leaves "in two runs, around b's". But the stale-input edit (`nvim_buf_set_text` at `:470`) also sits between a's runs, so `seen={3000,0}` would split even if the pause yielded nothing. The key assertion (no step mixes generations) and the proof that b wrote during the pause (`:474`) do hold.
+
+## 5. Test coverage notes
+- **BR-2** is a prose finding. The corrected text matches the code:
+  - release on pause: `generation.lua:97, :407, :415`;
+  - per-grant undo keys: `editor.lua:196-199`.
+  - The new test at `generation_turn_spec.lua:446` supports it.
+- **BR-3** changes performance only, not observable behavior, so no regression test was expected. The presentation test "reports the holder … clears it on handover" (`:360`) still passes and pins that the waiting note clears on handover.
+- **Suite:** `make -k test-spec SPEC=chat/ownership` ran 27 files with 0 failed and 0 errors.
+- **Uncovered:**
+  - a human edit mid-run, which is what N1 is about;
+  - `document/init.lua:539`: `append` still snapshots before `waits_for_turn`. The snapshot was already there at base, and the waiting path is rare because the machine gates writes on `may_write`, so I am not raising it.
+
+## 6. Architectural notes
+
+| Principle | Result | Notes |
+|---|---|---|
+| ARCH-DRY | pass | `blocked_key` has one source; `G.phase` is an accessor rather than a second snapshot. |
+| ARCH-PURE | pass | Unchanged since round 3. |
+| ARCH-PURPOSE | flag (N1, N2) | Both are cases of fixing the instance a finding named while its siblings remained. |
+| ARCH-MOCK | pass | No new external dependency. |
+| ARCH-CONSTRAINTS | pass | BR-3 is fixed. The per-sync snapshots that remain were all present at base: `sync`'s `D.snapshot` (`:95`), `alive` (`:122`), and `present` via `dispatch`. The new snapshot sites (`:243`, `:269`, `:461`) run once per event. |
+| ARCH-SECURE | pass | N/A holds: no new untrusted input and no credentials. |
+| ARCH-ORDER | pass | Control-effect order is now pinned at the runner with controllable stepping. |
+| ARCH-FUNERAL | pass | This round creates nothing durable. |
+
+## 7. Plan revision recommendations
+- Add a Revision to the target, the plan's Target reconciliation, and `atlas/chat/ownership.md`: "unconditional: no undo step mixes two generations. Conditional on no human edit landing mid-run: one step per (generation, grant) run, and no partial slice."
+- Reconcile the plan's milestone references (`:510`, `:669`, `:675`, `:690`) with the issue's M1/M2/M3 numbering.
+
+```findings
+dispose:
+  - id: BR-2
+    disposition: addressed
+    note: |
+      Pause and per-grant exceptions are now carried at atlas/chat/ownership.md:12-17, the target's Revision 2 and the plan's Decisions entry; README:52 was already exact. Supported by generation_turn_spec.lua:446. The new "unconditionally" sentence is raised separately below in the same family.
+  - id: BR-3
+    disposition: addressed
+    note: |
+      blocker checks turn_status and doc.turn first (generation_runner.lua:72); phases read via O(1) G.phase (generation.lua:218); sync presents only when blocked_key changes (:116-117). Behavior-preserving since present was already key-deduped. Remaining per-sync snapshots were present at base.
+  - id: BR-4
+    disposition: addressed
+    note: |
+      Plan rows at :103 and :105 now carry the (M2) tag. Stale milestone references elsewhere in the plan are raised separately below in the same family.
+findings:
+  - id: new
+    severity: Important
+    family: invariant-statement-omits-exception
+    title: |
+      Target says no undo step is a partial slice "unconditionally"; a human edit between 4 KiB slices splits one write
+    detail: |
+      2nd finding in this family; the BR-2 fix introduced it. transcript-is-the-whole-truth.md:145-146 and :120, plan :717-718, atlas/chat/ownership.md:15. editor.lua:67 clears undo_receipt on every observed edit, and a scratch spec confirmed it: 9000 bytes plus a disjoint human edit after the first slice undoes as 9000 to 4096 to 0. Rule to apply: derive undo-grouping claims from can_join_undo (editor.lua:194-202) and every undo_receipt clear (:67, :132, :179, :268). Only "no undo step mixes two generations" is unconditional; one step per run and no partial slice both require that no human edit lands mid-run. Sweep all four sites.
+  - id: new
+    severity: Minor
+    family: table-row-milestone-scope
+    title: |
+      Plan milestone references are stale after the M1/M2 merge renumbered them
+    detail: |
+      2nd finding in this family. Plan :669 closes Chunk 3 (now M2) with --milestone M3; :675 says "after M3 (Task 3.2b)" but means M2; :690 commits as "#266 M4:" for Chunk 4 (now M3); :510 says "M2-M4". Rule: every milestone reference in the plan must match the issue's current Plan tags. After a renumbering, grep M[0-9] across the whole plan and reconcile each hit; leave the Estimate section's historical item order as written.
+```

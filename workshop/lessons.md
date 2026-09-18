@@ -1,5 +1,20 @@
 # Lessons
 
+## 2026-09-17 (#266 M1 review round 3 — a rule restated in prose drifts)
+
+- **State a code-derived rule once, next to a pointer to the code, and link to it
+  everywhere else.** Undo grouping was restated in the atlas, the target and the
+  plan; each fix to one copy introduced a new overclaim in another ("no partial
+  slice, unconditionally"). Rule: when a guarantee is a consequence of one
+  predicate (here `Editor:can_join_undo`), write it in exactly one document,
+  enumerate every event the predicate reacts to, and make the other documents
+  say "see there" rather than paraphrase.
+
+- **A renumbering is a whole-document edit.** Merging two milestones renamed
+  every later one; a review found one stale label, the next found twelve more.
+  Rule: after renumbering milestones, grep `M[0-9]` across the plan and reconcile
+  every hit outside historical records before the next review boundary.
+
 ## 2026-09-17 (#266 M1 review round 2 — the same family, twice)
 
 - **A pattern a review names is a grep over the whole diff, not an edit at the

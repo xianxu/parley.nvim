@@ -501,13 +501,13 @@ for _,row in ipairs({'terminal','stop','pause_unknown','pause_revoke','pause_sta
 
 **What to assert, and what not to.** Not "undo steps == generation runs": `can_join_undo` keys on `(epoch,generation,grant)` (`editor.lua:192-199`, identity mismatch at `:199`) and a single run legitimately writes through preparation grants (`generation_runner.lua:488-492`) *and* a completion-acquired grant (`response_completion.lua:55-58`), so a run spans several grants and therefore several undo entries. Not "backwards in document position" either — generations write to different answers, so regenerating Q3 then Q1 writes Q3's region first.
 
-The invariant to assert is the issue's own: **no undo entry mixes two generations, and no entry is a partial chunk.** Within a single tool round, insertion is monotonic at the tail, so document order *is* additionally guaranteed there (assert that in Chunk 2).
+The invariant to assert is the issue's own: **no undo entry mixes two generations, and — with nothing intervening, as in this test — no entry is a partial chunk.** Within a single tool round, insertion is monotonic at the tail, so document order *is* additionally guaranteed there (assert that in Chunk 2).
 
 - [x] **Step 1:** On a real buffer, run two generations to completion serialized, then loop `vim.cmd('silent undo')` capturing `vim.fn.changenr()` (via `nvim_buf_call`, the idiom at `document/editor.lua:13`) and the buffer text at each step. Assert every removed span lies wholly within one generation's output region, and that no step removes a 4096-byte fragment of a larger contiguous write.
 - [x] **Step 2: Run.** `make test-spec SPEC=chat/ownership`
   **Expected: PASS.** This is a *characterization* test, not a TDD red step — by Task 1.9 the serialization from 1.4–1.6 has landed, so undo coherence should already hold and writing a test that fails here would mean writing a test for behavior we just removed. Say so rather than scheduling a red that cannot occur (the vacuous-red-step class, same as Task 1.3's).
   If it *does* fail, the receipt invalidation at `editor.lua:67` is the suspect — a foreign write between two of a generation's chunks.
-- [x] **Step 3:** No production change expected. If Step 2 passed, the value is regression protection for M2–M4.
+- [x] **Step 3:** No production change expected. If Step 2 passed, the value is regression protection for M2–M3.
 - [x] **Step 4: Green.** Do **not** add a seed to `document_native_history_spec.lua` — that spec drives only human edits, undo and redo (`:51-78`) and never runs a generation, so a new seed would not exercise the writer path of `can_join_undo`.
 - [x] ~~**Step 5:** Invert `chat_scoped_response_spec.lua:47` — rename to `'serializes two answers while the next question is edited'`, keep the reverse-order delivery, assert the second answer commits nothing until the first terminates, and keep the existing draft-preservation assertion.~~ — superseded — never inverted; Chunk 2 restored option (b) and the original concurrent test passes
 - [x] **Step 6: Commit** — `#266 M1: assert undo entries never mix generations`
@@ -547,7 +547,7 @@ waiting, `:88-115` the write steps, `:145-149` subscriber);
 - [x] **Step 1:** Failing test — a generation whose preparation is turn-blocked still reports `prepared` and still reaches `requesting`.
 - [x] **Step 2: Run, fail.** `make test-spec SPEC=chat/ownership`
 - [x] **Step 3:** Implement the split. The region reservation (grant acquisition) stays where it is; only the byte-writing defers.
-- [x] **Step 4: Green. Step 5: Commit** — `#266 M2: report prepared without writing`
+- [x] **Step 4: Green. Step 5: Commit** — `#266 M1: report prepared without writing`
 
 ### Task 2.2: land the deferred gap with the first output
 
@@ -556,7 +556,7 @@ waiting, `:88-115` the write steps, `:145-149` subscriber);
 
 - [x] **Step 1:** Failing test — the gap bytes appear exactly once, immediately before the first output bytes, under the same turn, and are absent if the generation is cancelled before any output.
 - [x] **Step 2: Run, fail.**
-- [x] **Step 3:** Implement. **Step 4: Green. Step 5: Commit** — `#266 M2: write the preparation gap with the first output`
+- [x] **Step 3:** Implement. **Step 4: Green. Step 5: Commit** — `#266 M1: write the preparation gap with the first output`
 
 ### Task 2.3: restore the concurrency assertions
 
@@ -582,7 +582,7 @@ waiting, `:88-115` the write steps, `:145-149` subscriber);
 - [ ] **Step 2: Failing test.** Signatures: `Seq.new(calls) -> seq`, `Seq.next(seq) -> {kind='call'|'result', index=n} | nil`, `Seq.outcome(seq,index,value) -> seq`, `Seq.written(seq,item) -> seq`, `Seq.complete(seq) -> boolean`; all pure and immutable (each returns a new record). Cases: the first call is offered before anything arrives; a later outcome cannot skip ahead while an earlier result is outstanding; the round drains in declared order once the earlier outcome lands; an unresolved outcome is writable evidence, not a stall.
 - [ ] **Step 3: Run, fail.** `make test-spec SPEC=providers/tool_use` → `provides the module` false.
 - [ ] **Step 4: Implement** as a pure immutable record.
-- [ ] **Step 5: Green. Commit** — `#266 M3: add the pure tool insertion sequence`
+- [ ] **Step 5: Green. Commit** — `#266 M2: add the pure tool insertion sequence`
 
 ### Task 3.2a: remove capacity tickets from the document layer
 
@@ -590,7 +590,7 @@ waiting, `:88-115` the write steps, `:145-149` subscriber);
 **Delete:** `tests/unit/document_capacity_spec.lua` **and** its entry at `atlas/traceability.yaml:325` — `single_source_sweeps_spec.lua:723` fails on a named path that no longer exists.
 
 - [ ] Confirm no callers remain: `grep -rn "reserve_capacity\|release_capacity" lua/ tests/`. Record in `## Log` which invariant `document_capacity_spec.lua` was defending, so a later reader can tell deliberate removal from erosion.
-- [ ] `make test` → exit 0. Commit `#266 M3: remove capacity tickets`.
+- [ ] `make test` → exit 0. Commit `#266 M2: remove capacity tickets`.
 
 ### Task 3.2b: remove the round-reservation lifecycle from the machine and runner
 
@@ -598,7 +598,7 @@ waiting, `:88-115` the write steps, `:145-149` subscriber);
 **Test:** `tests/unit/generation_spec.lua` — the reservation tests at `:155-176`, `:292-304`, `:366-371` are removed with the contract they pin.
 
 - [ ] Red/green per removal. `make test-spec SPEC=chat/lifecycle` between each.
-- [ ] Commit `#266 M3: remove round reservation from the generation lifecycle`.
+- [ ] Commit `#266 M2: remove round reservation from the generation lifecycle`.
 
 ### Task 3.2c: the ordered-append pump
 
@@ -609,7 +609,7 @@ waiting, `:88-115` the write steps, `:145-149` subscriber);
 - [ ] **Step 2: Add a bounded-step variant.** `f.drain()` runs to quiescence (`:37-42`) and cannot exercise "call 2's block written while result 1's multi-chunk write is mid-flight" (4096-byte slices, `generation_runner.lua:265`). Add `step(n)`.
 - [ ] **Step 3: Run, fail.** `make test-spec SPEC=providers/tool_use`
 - [ ] **Step 4: Implement.** `begin_round` freezes `s.rounds[ctx.round]`, builds a `ToolSequence`, writes nothing, takes no ticket. A pump appends `Serialize.render_call` / `render_result` at the parent grant tail via `ctx.append`, one item per `adapter.step()`, driven by `Seq.next`. **Collector for the frozen round record (ARCH-FUNERAL):** `s.rounds[ctx.round]` is cleared twice over: per-round on the normal path at `response_tools.lua:237`, and wholesale by `adapter.close()` (`:241-242`, `s.rounds={}`), which production reaches via `response_session.lua:46` (`if tools then tools.close() end`) — **not** via the `terminal` hook, which is `finish(result,false)` at `:189`; only the test harness wires `terminal=adapter.close` — `retire_reservation` was only ever the collector for the *reservation*, not the round record. Assert it in Task 3.2c's test rather than assuming.
-- [ ] **Step 5: Green. Commit** — `#266 M3: append tool call and result pairs in declared order`
+- [ ] **Step 5: Green. Commit** — `#266 M2: append tool call and result pairs in declared order`
 
 ### Task 3.3: unresolved outcomes become transcript text
 
@@ -640,7 +640,7 @@ Constraint: the marker must not parse as a tool block. `chat_parser.lua:833-852`
 - [ ] **Step 3:** Implement the unresolved rendering.
 - [ ] **Step 4: Green**, plus `make test-spec SPEC=chat/exchange_model` — assert the unresolved marker does **not** become a `tool_result` block and that the synthesized dangling text appears instead.
 - [ ] **Step 5: Batch-facing check (Done-when).** `batch.lua:91-94` latches `s.unknown` and `:99` refuses resume permanently on this outcome. Assert a batch survives an unresolved tool call now that it is recorded in the transcript. Run: `make test-spec SPEC=chat/batch`.
-- [ ] **Step 6: Commit** — `#266 M3: record an unresolved tool outcome in the transcript`
+- [ ] **Step 6: Commit** — `#266 M2: record an unresolved tool outcome in the transcript`
 
 ### Task 3.4: keep concurrency visible
 
@@ -654,7 +654,7 @@ There is no tool → pending edge today. Add one so both tools read as in flight
 - [ ] **Step 1:** Failing test — two tools running, one written, assert both appear in flight.
 - [ ] **Step 2: Run, fail.** `make test-spec SPEC=chat/response_progress`
 - [ ] **Step 3:** Add the `session:progress{tool=…}` edge (`chat_pending.lua:160-165`; `chat_presentation.lua:58` already accepts `event.tool`).
-- [ ] **Step 4: Green. Step 5: Commit** — `#266 M3: show concurrent tool progress in presentation`
+- [ ] **Step 4: Green. Step 5: Commit** — `#266 M2: show concurrent tool progress in presentation`
 ### Task 3.5: end-to-end and wire shape
 
 **Precondition: a clean working tree.** `scripts/refresh_goldens.lua` and 11 golden payloads are currently modified from `f1818ee1` (#218). Resolve that before this task or a real regression will be indistinguishable from pre-existing churn.
@@ -666,13 +666,13 @@ There is no tool → pending edge today. Add one so both tools read as in flight
 ### Task 3.6: atlas + milestone close
 
 - [ ] Rewrite `atlas/providers/tool_use.md` (ordered child slots and reserved result slots are gone); record the accepted four-message resubmit shape.
-- [ ] `make test` → exit 0. `sdlc milestone-close --issue 266 --milestone M3`
+- [ ] `make test` → exit 0. `sdlc milestone-close --issue 266 --milestone M2`
 
 ---
 
 ## Chunk 4 — M3: the residual exclusion sweep
 
-What remains after **M3** (Task 3.2b) removes child grants: the geometry that only existed to carve them out of a parent.
+What remains after **M2** (Task 3.2b) removes child grants: the geometry that only existed to carve them out of a parent.
 
 ### Task 4.1: remove parent-slot exclusion
 
@@ -687,7 +687,7 @@ What remains after **M3** (Task 3.2b) removes child grants: the geometry that on
 
 These exist solely to disambiguate excluded seams, but they thread through the same helpers M1's turn logic uses. Remove only after **Task 4.1** is green, and run the full suite immediately.
 
-- [ ] `make test` → exit 0. Commit `#266 M4: drop half-open seam handling with the last child grant`.
+- [ ] `make test` → exit 0. Commit `#266 M3: drop half-open seam handling with the last child grant`.
 
 ### Task 4.3: residual lifecycle cleanup
 
@@ -714,8 +714,10 @@ preparation grants (`generation_runner.lua:488-492`), the main grant, and a
 completion-acquired grant (`response_completion.lua:55-58`). So the guarantee is
 **one undo entry per (generation, grant) run** — not per generation, as the issue
 Log currently says. That is still a large improvement over today's one entry per
-4096-byte chunk, and Task 1.9's invariant (no entry mixes two generations, none
-is a partial chunk) holds unconditionally. Correct the Log's phrasing when M1
+4096-byte chunk, and Task 1.9's invariant (no entry mixes two generations
+~~, none is a partial chunk) holds unconditionally~~ — *only the first clause is
+unconditional; grouping is stated once, in `atlas/chat/ownership.md` "Undo
+grouping", see Revisions round 3*). Correct the Log's phrasing when M1
 closes. Fold this narrowing into the target when M1 closes, so the target does not drift against the work defending it.
 
 ## Decisions taken, so they are not re-opened
@@ -989,4 +991,29 @@ class, with a test that fails without the fix unless noted.
   woken it. Control-effect ordering among themselves is now pinned at the runner
   (revoke one step before the turn moves), not only end to end.
 - **BR-1 (round-1 plan-gate carry-over)** was withdrawn by the reviewer.
+
+### 2026-09-17 — M1 boundary review round 3 (FIX-THEN-SHIP): rules, not instances
+
+The gate reported both families repeating, so each response is a rule.
+
+- **BR-5 (Important), family `invariant-statement-omits-exception` (2nd).** Round
+  2's restatement said "no partial slice … unconditionally", which a human edit
+  between two 4 KiB slices falsifies. *Rule applied:* undo grouping is a
+  code-derived fact, so it is stated **once** — `atlas/chat/ownership.md` "Undo
+  grouping", derived from `Editor:can_join_undo` and every `undo_receipt` clear
+  (observed edit, lifecycle event, epoch change, a write that did not fully apply)
+  plus the identity mismatch another generation's write causes. The target now
+  defends only the unconditional property (no undo step mixes generations) and
+  points there; its earlier revisions and this plan's Target reconciliation and
+  Task 1.9 text are struck or qualified to match. The exception is pinned by a
+  test: one write with a human edit between its slices leaves undo in pieces.
+- **N2 (Minor), family `table-row-milestone-scope` (2nd).** *Rule applied:* after
+  the M1/M2 merge, every `M[0-9]` outside `## Revisions` was grepped and
+  reconciled to the issue's tags (M1 = Chunks 1–2, M2 = Chunk 3, M3 = Chunk 4):
+  12 references, including Chunk 3's `--milestone` and Chunk 4's commit label.
+  Entries inside `## Revisions` keep the numbering they were written under.
+- The pause-then-resume undo test's comment no longer claims the split proves the
+  pause: the stale-input edit that causes the pause would split the run by
+  itself. What it pins is the unconditional half, with the turn moving
+  mid-answer.
 
