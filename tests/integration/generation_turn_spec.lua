@@ -334,3 +334,58 @@ describe('write turn matrix',function()
         assert.is_nil(D.turn(doc)==Runner.snapshot(r.a).generation or nil)
     end)
 end)
+
+-- #266 Task 1.9: undo coherence on a real buffer. Characterization, not red-first:
+-- by now serialization has landed, and the invariant is the issue's own — no undo
+-- entry mixes two generations, and none is a 4 KiB slice of a larger write.
+-- (Not "undo walks backwards in document position": generations write different
+-- answers, so admission order need not match document order.)
+describe('undo coherence under the write turn',function()
+    it('never lets an undo step mix two generations or split one generation\'s run',function()
+        local buf=vim.api.nvim_create_buf(false,true)
+        vim.api.nvim_buf_set_lines(buf,0,-1,false,{'💬: q','draft','🤖: first','','💬: q2','🤖: second',''})
+        local doc=D.attach(buf,{schedule=false})
+        assert.equals('idle',D.drain(doc,1000).status)
+        local fakes,runners={},{}
+        for _,item in ipairs({{'a',2},{'b',5}}) do  -- a is admitted first, so a holds the turn
+            local name,row=item[1],item[2]
+            local marker=D.query(doc,row,row+1)[1];local body=D.query(doc,row+1,row+2)[1]
+            fakes[name]=FakeRunner.new()
+            runners[name]=assert(Runner.start(doc,{entity=marker.handle,first=marker.start_byte,last=body.end_byte-1,
+                input={message='frozen'},dependencies={{first=0,last=4}},capabilities={'read'},schedule=false},
+                fakes[name].adapters))
+            Runner.drain(runners[name],100)
+        end
+        -- Alternate single steps: the finest interleaving two concurrent writers
+        -- could produce. With batched steps each writer finishes its slices
+        -- before the other moves, and this test passed with the turn disabled.
+        local function pump()for _=1,600 do Runner.drain(runners.a,1);Runner.drain(runners.b,1) end end
+        fakes.a:prepare();fakes.b:prepare();pump()
+        -- b streams and completes first, but a was admitted first and holds the turn.
+        fakes.b:output(1,string.rep('Y',9000));fakes.b:complete(1)
+        fakes.a:output(1,string.rep('X',9000));fakes.a:complete(1);pump()
+        assert.equals('success',Runner.snapshot(runners.a).outcome)
+        assert.equals('success',Runner.snapshot(runners.b).outcome)
+        local function counts()
+            local text=table.concat(vim.api.nvim_buf_get_lines(buf,0,-1,false),'\n')
+            return select(2,text:gsub('X','')),select(2,text:gsub('Y',''))
+        end
+        local x,y=counts();assert.equals(9000,x);assert.equals(9000,y)
+        local steps={}
+        for _=1,50 do
+            if x==0 and y==0 then break end
+            vim.api.nvim_buf_call(buf,function()vim.cmd('silent undo')end)
+            local nx,ny=counts()
+            if nx~=x or ny~=y then steps[#steps+1]={x=nx,y=ny} end
+            assert.is_false(nx~=x and ny~=y,'one undo step removed text from both generations')
+            assert.is_true(nx==0 or nx==9000,'a partial slice of a\'s run: '..nx)
+            assert.is_true(ny==0 or ny==9000,'a partial slice of b\'s run: '..ny)
+            x,y=nx,ny
+        end
+        assert.equals(0,x);assert.equals(0,y)
+        assert.equals(2,#steps,'one undo step per generation run: '..vim.inspect(steps))
+        assert.equals(0,steps[1].y,'the later writer, b, is undone first')
+        D.detach(doc);vim.api.nvim_buf_delete(buf,{force=true})
+    end)
+end)
+
