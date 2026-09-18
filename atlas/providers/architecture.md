@@ -26,8 +26,9 @@ primitives.
 The Session composes guarded preparation, `response_provider`, `response_tools`,
 and pending presentation. Provider callbacks deliver bytes and round outcomes to
 `response_runner`; they hold no saved buffer ranges. The runner applies output
-through current Document grants, so disjoint human edits and sibling generations
-can proceed in the same buffer.
+through current Document grants, so disjoint human edits proceed in the same
+buffer; sibling generations run concurrently but write one at a time under the
+document's write turn (see [write ownership](../chat/ownership.md)).
 
 `response_provider` freezes decoded tool declarations from a successful response.
 `response_tools` reserves ordered result slots before starting children, then

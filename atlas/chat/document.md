@@ -20,7 +20,8 @@ the materialized exchange model supplies request input only.
 | `semantic` | Scheduled semantic transitions, scoped answer sections, confirmed-region tracking. |
 | `structure` | Document lifetime, publication, edit invalidation, and repair orchestration. |
 | `projection` | Derived index summaries for exchange boundaries, folds, outline, and diagnostics. |
-| `state` | Pure generation/grant transitions, dependency staleness, and write-plan revisions. |
+| `state` | Pure generation/grant transitions, dependency staleness, write-plan revisions, and the write turn. |
+| `write_turn` | Pure holder decision for the write turn: an eligible incumbent keeps it, else the lowest admitted id. |
 | `editor` | One native buffer attachment, normalized edit events, exact mutation receipts, and undo ownership. |
 | `replacement` | Finite replacement cursors, bounded native writes, and private successor evidence across deletion/insertion receipts. |
 | `init` | Per-buffer coordinator, immediate authority invalidation, bounded repair, and subscriptions. |

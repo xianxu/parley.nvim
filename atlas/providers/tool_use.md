@@ -151,7 +151,8 @@ tool rounds, and pending presentation under one document generation. The
 adapters receive operation handles, not authority to write arbitrary positions.
 
 1. Submission captures the target and request source before asynchronous
-   preparation. Preparation validates ownership before changing the answer shell.
+   preparation. Preparation validates ownership before changing the answer shell,
+   and changes it immediately before the generation's first write.
 2. `response_provider` streams position-free output into the runner. On successful
    completion it decodes and freezes tool declarations using the request's wire.
 3. `response_tools` reserves document capacity, appends calls and ordered

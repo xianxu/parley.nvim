@@ -23,7 +23,16 @@ not consult pending identity to decide whether an edit is allowed.
 ## Provider and tool completion
 
 Position-free provider chunks are admitted into bounded generation queues and
-committed through document operations. Tool result slots have independent child
+committed through document operations. Consecutive chunks of one operation extend
+one queued item, so output held behind the write turn is bounded by bytes (1 MiB
+per generation), not by how many deltas it arrived in. At the budget the
+generation stops, and the host reports why — naming the answer it waited behind.
+
+A generation held behind the write turn replaces its spinner with *Waiting for
+the answer to line N (streaming | running tools | preparing | finishing);
+:ParleyStop there stops it*. The runner recomputes the holder and its phase on
+every sync, so on every holder write, and the line returns to a working status
+when the turn arrives. Tool result slots have independent child
 grants. Neither process exit alone nor successful signaling proves cleanup:
 transport ownership persists until exit and both pipes settle.
 
@@ -53,4 +62,5 @@ retain the detached luabar progress UI by default.
 - `dispatcher.lua`, `tasker.lua`, `attempt.lua`: transport admission and positive cleanup.
 - `response_topic.lua`: independent automatic-topic source and header ownership.
 - `tests/integration/chat_progress_process_spec.lua`: native editor with a stateful process fixture.
-- `tests/integration/response_session_spec.lua`: disjoint sessions, tool continuation and cleanup.
+- `tests/integration/response_session_spec.lua`: deferred preparation, held answers, the waiting note, tool continuation and cleanup.
+- `tests/integration/generation_turn_spec.lua`: the write turn — enforcement, release matrix, wake, held budget, undo coherence.

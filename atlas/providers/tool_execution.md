@@ -29,8 +29,9 @@ records are pruned without accumulating tombstones.
 `tools/resources.lua` admits all claims atomically or queues the operation.
 Canonical file/subtree claims support shared reads and exclusive writes; a global
 claim is exclusive. Queued conflicting requests keep FIFO order, and an older runnable waiter
-gets available capacity first. Disjoint work, including in the same document,
-may proceed around a blocked resource claim.
+gets available capacity first. Disjoint work may proceed around a blocked
+resource claim. Across generations in one document it first waits for the write
+turn, since a round writes its call blocks before its tools start (#266).
 Cancellation removes queued work immediately. Running work retains its claims
 until both effect certainty and physical completion are positive.
 
