@@ -1,5 +1,22 @@
 # Lessons
 
+## 2026-09-17 (#266 M1 review round 2 — the same family, twice)
+
+- **A pattern a review names is a grep over the whole diff, not an edit at the
+  named file.** Round 1 flagged "snapshot before an O(1) check on a hot path" at
+  the coordinator; I fixed the coordinator and added the same shape to the
+  runner in the same change. Round 2 found it there. Rule: when a finding names
+  a pattern, search every file the diff touches for it before closing the
+  finding, and say in the response which other sites were checked.
+
+- **An invariant written for users or for a later issue must carry its
+  exceptions in the same sentence.** "Each generation's writes stay one
+  contiguous run" was true only while the turn is held uninterrupted — and the
+  pause that interrupts it was a release this same milestone made work. Rule:
+  when you state an ordering or grouping guarantee in the atlas or a target,
+  list every event that ends the grouping, and check each against the code that
+  emits it.
+
 ## 2026-09-17 (#266 M1 boundary review, REWORK — what the review caught)
 
 - **Removing plan rows can silently remove a mechanism a surviving row needs.**

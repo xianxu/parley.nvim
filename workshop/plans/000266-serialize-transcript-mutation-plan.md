@@ -62,7 +62,7 @@ So: **`M.transition` notifies whenever the turn value differs before and after**
 | `write_turn` — WriteTurn: `holder` | `lua/parley/document/write_turn.lua` | new |
 | `sequence` — ToolSequence *(M2)* | `lua/parley/tools/sequence.lua` | new |
 | `state` — DocumentState: the `turn`, `waits_for_turn` | `lua/parley/document/state.lua` | modified |
-| `generation` — GenerationMachine | `lua/parley/generation.lua` | modified |
+| `generation` — GenerationMachine: an O(1) `phase` | `lua/parley/generation.lua` | modified |
 | `init` — DocumentCoordinatorStatus: `turn`, the `'waiting'` status | `lua/parley/document/init.lua` | modified |
 | `chat_presentation` — the waiting note and overflow report: `waiting_message`, `overflow_message` | `lua/parley/chat_presentation.lua` | modified |
 
@@ -100,9 +100,9 @@ code→table direction finds them.*
 |------|----------|--------|-------|
 | `init` — DocumentCoordinator | `lua/parley/document/init.lua` | modified | reducer event whitelist + snapshot |
 | `generation_runner` — GenerationRunner | `lua/parley/generation_runner.lua` | modified | turn polling + turn effects |
-| `response_tools` — ToolAdapter | `lua/parley/response_tools.lua` | modified | append-only round insertion |
+| `response_tools` — ToolAdapter *(M2)* | `lua/parley/response_tools.lua` | modified | append-only round insertion |
 | `response_topic` — TopicGeneration | `lua/parley/response_topic.lua` | modified | the `D.apply` path that bypasses the runner |
-| `response_session` — PendingProgress | `lua/parley/response_session.lua` | modified | tool → `lua/parley/chat_pending.lua` progress edge |
+| `response_session` — PendingProgress *(M2)* | `lua/parley/response_session.lua` | modified | tool → `lua/parley/chat_pending.lua` progress edge |
 
 - **DocumentCoordinator** — enforces the turn at the five generated write entry points, adds `request_turn`/`release_turn` to the whitelist at `:323-324`, and notifies on turn movement.
   - **Note:** `tests/arch/document_ownership_spec.lua:69-90` is a forbid-list scoped to `chat_pending.lua` / `chat_presentation.lua`; it does **not** enumerate the coordinator whitelist (`grep -rn "coordinator-owned"` has one hit, `document/init.lua:324` itself). Adding the events breaks nothing there. Do not expect or "fix" a failure.
@@ -736,7 +736,8 @@ closes. Fold this narrowing into the target when M1 closes, so the target does n
   structure cannot classify at once — and with "an eligible incumbent keeps the
   turn", a holder that released for a millisecond would wait behind the next
   generation's whole lifetime, splitting its answer's history around another's.
-  Holding keeps each generation's writes one contiguous run. Accepted cost: a
+  Holding keeps a generation's writes contiguous while it holds the turn
+  uninterrupted (a pause still yields it; see Revisions, round 2). Accepted cost: a
   long suspension is a fourth visible stall shape, escaped by `:ParleyStop`.
 - **Four-message resubmit wire shape** accepted (see the issue's `## Open decisions`).
 - **Held-output budget stays at 1 MiB**, basis measured — largest answer block
@@ -958,4 +959,34 @@ class, with a test that fails without the fix unless noted.
   obfuscated assertion in `generation_turn_spec` is plain. *Not changed:*
   `chat_presentation` has no `paused` reason — after C1 a paused generation gives
   the turn up, so it is never the holder a waiter names.
+
+### 2026-09-17 — M1 boundary review round 2 (FIX-THEN-SHIP): the response
+
+- **BR-2 (Important) — the contiguity claim, with its exceptions.** The atlas and
+  the target said each generation's writes are one contiguous run and one undo
+  step. A pause yields the turn (by design — a paused generation must not block
+  every other answer), so resumed writes start a new run; and undo groups per
+  (generation, grant). *Class:* an invariant stated without its exceptions. Swept
+  every statement of it — `atlas/chat/ownership.md`, the target's previous
+  Revision (struck, with a correcting Revision appended), and this plan's
+  Decisions entry; README's "never mixes two answers" was already exact. The
+  invariant is now: no undo step mixes generations (unconditional); contiguous
+  while the turn is held uninterrupted; a pause starts a new run; undo per
+  (generation, grant). Pinned by a pause-then-resume variant of the undo test on
+  a real buffer (a's text leaves in two runs around b's, no step mixes them).
+- **BR-3 (Minor) — snapshots ahead of cheap checks, again.** Round 1's I5 was
+  fixed at the coordinator only; the runner's new `blocker`/`present` did the
+  same on every sync, holder included. Swept the diff's per-chunk paths:
+  `blocker` now checks `turn_status`/`doc.turn` first and reads phases through a
+  new O(1) `G.phase`; `sync` presents only when the blocker actually changed.
+  The other snapshot sites in the diff (overflow refusal, `cb.failed`, gap
+  execution) run once per event, not per chunk.
+- **BR-4 (Minor)** — the `response_tools` and `response_session` rows above are
+  tagged *(M2)*, like `sequence`.
+- **Also:** `response_topic`'s unreachable `applied.status=='waiting'` branch is
+  removed — the turn was confirmed held a line earlier, and had it ever run,
+  the job's own subscriber was suppressed by `s.writing` and nothing would have
+  woken it. Control-effect ordering among themselves is now pinned at the runner
+  (revoke one step before the turn moves), not only end to end.
+- **BR-1 (round-1 plan-gate carry-over)** was withdrawn by the reviewer.
 

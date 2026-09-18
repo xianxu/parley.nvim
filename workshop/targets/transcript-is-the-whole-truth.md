@@ -115,10 +115,11 @@ one asked for and which would re-introduce interleaving.
 **Delta — what the target now defends:**
 
 - **Across generations:** one writer at a time, and each generation's writes form
-  **one contiguous run** — so each undo step removes exactly one generation's
-  coherent contribution, never a mix and never a partial 4 KiB slice. A holder
-  keeps the write turn for its lifetime, including through a transient grant
-  suspension, precisely so its run is never split around another's.
+  ~~**one contiguous run** — so each undo step removes exactly one generation's
+  coherent contribution~~ *(overstated; corrected in the next revision)*, never a
+  mix and never a partial 4 KiB slice. A holder keeps the write turn for its
+  lifetime, including through a transient grant suspension ~~precisely so its
+  run is never split around another's~~.
 - **Within one generation's tool round:** document order does hold — insertion is
   monotonic at the answer's tail (parley#266 M2).
 - **Human edits** are never serialized behind a generation; they may land between
@@ -127,4 +128,27 @@ one asked for and which would re-introduce interleaving.
 `atlas/chat/ownership.md` no longer promises disjoint concurrent answer writes;
 it describes the write turn. The "Why now" paragraph above records the promise
 as it stood when this target was written.
+
+### 2026-09-17 — the contiguity claim, with its exceptions (parley#266 M1 review round 2)
+
+**Reason.** The previous revision said each generation's writes form one run
+that is never split. Two exceptions make that false as stated: a **pause**
+(unknown tool outcome, revoked tool output, stale input at a continuation)
+yields the turn — deliberately, or a paused generation would block every other
+answer until the operator acts — so its resumed writes start a new run with
+another generation's between them; and native undo groups per **(generation,
+grant)** run, so one answer written through its main grant and then its
+completion grant is already several undo steps.
+
+**Delta — the invariant, stated the way the code behaves:**
+
+- **No undo step ever mixes two generations**, and none is a partial slice of a
+  larger write. This holds unconditionally.
+- A generation's writes are **contiguous for as long as it holds the turn
+  uninterrupted** — a transient grant suspension does not interrupt it. A pause
+  does: the resumed writes start a new run.
+- Undo entries are per **(generation, grant)** run.
+
+`atlas/chat/ownership.md` says the same; `tests/integration/generation_turn_spec.lua`
+pins both the uninterrupted case and the pause-then-resume case.
 

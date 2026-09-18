@@ -9,8 +9,12 @@ Generations run concurrently but write one at a time (#266). Requests stream
 and tools execute in parallel; mutation is serialized by a per-document **write
 turn** (`document/write_turn.lua`, held in the reducer), granted in admission
 order and held for the holder's whole lifetime. It passes on terminal, stop,
-pause, detach and reload — not on a transient grant suspension, so each
-generation's writes stay one contiguous run and one undo step. A queued
+pause, detach and reload — not on a transient grant suspension. So no undo step
+ever mixes two generations, and a generation's writes stay contiguous for as long
+as it holds the turn uninterrupted; a pause yields the turn, and its resumed
+writes start a new run. Undo groups per (generation, grant) run, so one answer
+written through several grants (say its main grant, then its completion prompt's)
+is several undo steps — each still from that answer alone. A queued
 generation's output is held (one coalesced item, bounded by the 1 MiB staging
 budget) and applied whole once the turn arrives; meanwhile its pending line names
 the answer it is waiting for. Human edits are never subject to the turn.
