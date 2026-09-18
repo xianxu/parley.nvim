@@ -84,7 +84,7 @@ function M.start(doc,spec,opts)
             root_policy=opts.root_policy,allowed_tools=profile.allowed_tools or opts.allowed_tools or {},
             buf=opts.buf,state_dir=opts.state_dir,chat_roots=opts.chat_roots,help_root=opts.help_root,page_limit=opts.page_limit,
             max_iterations=limit('max_iterations'),
-            max_result_bytes=limit('max_result_bytes'),build_input=opts.build_input,schedule=frozen.schedule})
+            max_result_bytes=limit('max_result_bytes'),build_input=opts.build_input})
         if not ok then return false,tostring(adapter)end
         tools=adapter;s.tools=adapter
         if profile.agent and profile.agent~=opts.agent then
@@ -186,7 +186,7 @@ function M.start(doc,spec,opts)
             presentation(ctx)
             return provider.request(ctx,cb)
         end),
-        reserve_round=tool_adapter('reserve_round'),cancel_reservation=tool_adapter('cancel_reservation'),
+        insert_tool=tool_adapter('insert_tool'),
         start_child=wrap('tool',tool_adapter('start_child')),continue_round=wrap('continuation',tool_adapter('continue_round')),
         finalize=function(ctx,done)
             if opts.finalize then return opts.finalize(ctx,done)end
@@ -200,9 +200,13 @@ function M.start(doc,spec,opts)
             if not s.active then return end
             if value.phase=='paused' and s.pending then s.pending:cancel();s.pending=nil end
             -- #266: a generation held behind the write turn names what it waits
-            -- for. Presentation only: the note is an extmark, never transcript.
+            -- for; one running tools says how far they are, since their blocks
+            -- land one at a time. Presentation only: an extmark, never transcript.
             local note
-            if value.blocked then note=Presentation.waiting_message(value.blocked.line,value.blocked.phase) end
+            if value.blocked then note=Presentation.waiting_message(value.blocked.line,value.blocked.phase)
+            elseif value.tools and value.phase=='executing_tools' then
+                note=Presentation.tools_message(value.tools.finished,value.tools.total)
+            end
             if s.pending and note~=s.note then s.note=note;s.pending:progress({message=note or 'Working...'})end
             safe(opts.changed,value)
         end,
@@ -242,7 +246,6 @@ function M.step(session)
     local s=state(session)
     if s.active then
         for r in pairs(s.preparations)do if r.op and not r.local_done then Preparation.step(r.op)end end
-        if s.tools then s.tools.step()end
     end
     return Submission.step(s.submission)
 end

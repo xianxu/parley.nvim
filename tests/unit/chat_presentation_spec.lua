@@ -105,6 +105,11 @@ describe("progress_message", function()
         end
         assert.truthy(presentation.waiting_message(nil,nil):find('another answer',1,true))
     end)
+    -- #266 M2: a round's blocks land one at a time, so the tools still running
+    -- are counted here rather than seen in the transcript.
+    it('counts a round\'s tools as they finish',function()
+        assert.equals('Running tools: 1 of 3 finished',presentation.tools_message(1,3))
+    end)
     it('says why a response stopped at its staging budget, naming the answer it waited behind',function()
         local held=presentation.overflow_message(7)
         assert.truthy(held:find('staging budget',1,true));assert.truthy(held:find('line 7',1,true))

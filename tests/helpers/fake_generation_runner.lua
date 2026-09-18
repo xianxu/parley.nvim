@@ -1,8 +1,14 @@
 -- Stateful async producer: declarations, bytes and cleanup are independently driven.
 local M={}
 function M.new()
-    local fake={preparations={},requests={},cancellations={},finalizations={}}
+    local fake={preparations={},requests={},cancellations={},finalizations={},inserted={}}
     fake.adapters={
+        -- #266 M2: each tool block the machine asks for lands as a short stand-in,
+        -- `<call1>` or `<result1>`, and the order it was asked in is recorded.
+        insert_tool=function(ctx,done)
+            fake.inserted[#fake.inserted+1]=ctx.kind..ctx.index
+            if not ctx.append('<'..ctx.kind..ctx.index..'>',function(result)done(result.status)end)then done('failed')end
+        end,
         prepare=function(ctx,callbacks)
             local item={ctx=ctx,callbacks=callbacks};fake.preparations[#fake.preparations+1]=item;return item
         end,

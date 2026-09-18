@@ -112,19 +112,7 @@ describe('generation runner sequences',function()
     end)
 
     it('releases superseded inputs and round payloads across one hundred rounds',function()
-        local doc=document();local fake=Fake.new();local child
-        fake.adapters.reserve_round=function(ctx,done)
-            assert.is_table(ctx.children[1].arguments)
-            ctx.children[1].arguments.value='reservation mutation'
-            if not child or not D.snapshot(doc).grants[child] or D.snapshot(doc).grants[child].status=='revoked' then
-                local parent=D.snapshot(doc).grants[ctx.grant]
-                local result=D.transition(doc,{kind='acquire',generation=ctx.generation,parent=ctx.grant,
-                    regions={{entity=parent.entity,first=parent.last,last=parent.last,marker_revision=1,
-                        revision=1,confirmed=true}}})
-                assert.is_true(result.ok,result.reason);child=result.grants[1]
-            end
-            done({child},{layout='owned'})
-        end
+        local doc=document();local fake=Fake.new()
         fake.adapters.start_child=function(ctx,cb)cb.outcome('known',{value=ctx.arguments.value});cb.resolved()end
         fake.adapters.continue_round=function(ctx,cb)
             local n=ctx.results[1].value
@@ -145,55 +133,40 @@ describe('generation runner sequences',function()
         assert.equals('terminal',Runner.snapshot(r).phase)
     end)
 
-    it('releases unstarted argument refs after reservation failure or cancellation exactly once',function()
+    it('releases every blob exactly once when a tool block fails or the round is cancelled',function()
         for _,cancel in ipairs({false,true})do
-            local doc=document();local fake=Fake.new();local finish_reservation
-            fake.adapters.reserve_round=function(ctx,done)
-                assert.same({nested={value='source'}},ctx.children[1].arguments)
-                finish_reservation=done
+            local doc=document();local fake=Fake.new();local finish
+            fake.adapters.insert_tool=function(_,done)finish=done end
+            fake.adapters.start_child=function(ctx,cb)
+                assert.same({nested={value='source'}},ctx.arguments)
+                cb.outcome('cancelled_before_effect',{});cb.resolved()
             end
             local r=start(doc,fake,2);fake:prepare();Runner.drain(r,100)
             local cb=fake.requests[1].callbacks
             cb.round({{call_id='one',arguments={nested={value='source'}}}});cb.resolved()
-            Runner.drain(r,100);assert.is_function(finish_reservation)
+            Runner.drain(r,100);assert.is_function(finish)
             assert.is_true(Runner.snapshot(r).retained_blobs>0)
             if cancel then
                 Runner.cancel(r);Runner.drain(r,100)
-                assert.equals('stopping',Runner.snapshot(r).phase)
+                assert.equals('stopping',Runner.snapshot(r).phase,'the issued block is still owed an answer')
             end
-            finish_reservation(nil)
+            finish('failed')
             Runner.drain(r,100)
             assert.equals('terminal',Runner.snapshot(r).phase)
+            assert.equals(cancel and 'cancelled' or 'insert_failed',Runner.snapshot(r).outcome)
             assert.equals(0,Runner.snapshot(r).retained_blobs)
-            finish_reservation(nil);cb.resolved();Runner.drain(r,100)
+            finish('failed');cb.resolved();Runner.drain(r,100)
             assert.equals(0,Runner.snapshot(r).retained_blobs)
         end
     end)
 
-    it('cancels a live reservation by handle and waits for positive cleanup acknowledgement',function()
-        local doc=document();local fake=Fake.new();local handle={};local ack;local calls=0
-        fake.adapters.reserve_round=function()return handle end
-        fake.adapters.cancel_reservation=function(ctx,resolved)
-            assert.equals(handle,ctx.handle);assert.is_not_nil(ctx.round);calls=calls+1;ack=resolved
-        end
-        local r=start(doc,fake,2);fake:prepare();Runner.drain(r,100)
-        local cb=fake.requests[1].callbacks
-        cb.round({{call_id='one',arguments={value=1}}});cb.resolved();Runner.drain(r,100)
-        Runner.cancel(r);Runner.drain(r,100)
-        assert.equals(1,calls);assert.equals('stopping',Runner.snapshot(r).phase)
-        Runner.cancel(r);Runner.drain(r,100);assert.equals(1,calls)
-        ack();Runner.drain(r,100)
-        assert.equals('terminal',Runner.snapshot(r).phase);assert.equals(0,Runner.snapshot(r).retained_blobs)
-        ack();assert.equals('terminal',Runner.snapshot(r).phase)
-    end)
-    it('settles queued reservation writes before acknowledging cancellation terminal',function()
+    it('settles a tool block\'s queued write before terminal after cancellation',function()
         local doc=document();local fake=Fake.new();local r;local write_done=false
-        fake.adapters.reserve_round=function(ctx)
-            assert.is_true(ctx.append('pending shell',function()write_done=true end))
+        fake.adapters.insert_tool=function(ctx,done)
+            assert.is_true(ctx.append('pending block',function(result)write_done=true;done(result.status)end))
             Runner.cancel(r)
-            return {}
         end
-        fake.adapters.cancel_reservation=function(_,resolved)resolved()end
+        fake.adapters.start_child=function(_,cb)cb.outcome('cancelled_before_effect',{});cb.resolved()end
         fake.adapters.terminal=function()assert.is_true(write_done)end
         r=start(doc,fake,2);fake:prepare();Runner.drain(r,100)
         local cb=fake.requests[1].callbacks
@@ -201,26 +174,35 @@ describe('generation runner sequences',function()
         assert.is_true(write_done);assert.equals('terminal',Runner.snapshot(r).phase)
         assert.equals(0,Runner.snapshot(r).retained_blobs)
     end)
-    it('does not start queued reservation adapters after cancellation',function()
+    it('does not render a queued tool block after cancellation',function()
         local doc=document();local fake=Fake.new();local called=false
-        fake.adapters.reserve_round=function()called=true end
+        fake.adapters.insert_tool=function()called=true end
         local r=start(doc,fake,2);fake:prepare();Runner.drain(r,100)
         local cb=fake.requests[1].callbacks
         cb.round({{call_id='one',arguments={}}});cb.resolved();Runner.cancel(r);Runner.drain(r,100)
         assert.is_false(called);assert.equals('terminal',Runner.snapshot(r).phase)
     end)
-    it('keeps missing or throwing reservation cleanup unresolved',function()
-        for _,throws in ipairs({false,true})do
-            local doc=document();local fake=Fake.new();local done
-            fake.adapters.reserve_round=function(_,complete)done=complete;return {}end
-            if throws then fake.adapters.cancel_reservation=function()error('not resolved')end end
-            local r=start(doc,fake,2);fake:prepare();Runner.drain(r,100)
-            local cb=fake.requests[1].callbacks
-            cb.round({{call_id='one',arguments={}}});cb.resolved();Runner.drain(r,100)
-            Runner.cancel(r);Runner.drain(r,100)
-            assert.equals('stopping',Runner.snapshot(r).phase)
-            done(nil);Runner.drain(r,100);assert.equals('terminal',Runner.snapshot(r).phase)
-        end
+    it('keeps a stopping generation until its issued tool block is answered',function()
+        local doc=document();local fake=Fake.new();local done
+        fake.adapters.insert_tool=function(_,complete)done=complete end
+        fake.adapters.start_child=function(_,cb)cb.outcome('cancelled_before_effect',{});cb.resolved()end
+        local r=start(doc,fake,2);fake:prepare();Runner.drain(r,100)
+        local cb=fake.requests[1].callbacks
+        cb.round({{call_id='one',arguments={}}});cb.resolved();Runner.drain(r,100)
+        Runner.cancel(r);Runner.drain(r,100)
+        assert.equals('stopping',Runner.snapshot(r).phase)
+        done('applied');Runner.drain(r,100);assert.equals('terminal',Runner.snapshot(r).phase)
+    end)
+    it('stops a generation whose tool adapter throws, without waiting on an answer that cannot come',function()
+        local doc=document();local fake=Fake.new()
+        fake.adapters.insert_tool=function()error('adapter failed')end
+        fake.adapters.start_child=function(_,cb)cb.outcome('cancelled_before_effect',{});cb.resolved()end
+        local r=start(doc,fake,2);fake:prepare();Runner.drain(r,100)
+        local cb=fake.requests[1].callbacks
+        cb.round({{call_id='one',arguments={}}});cb.resolved();Runner.drain(r,100)
+        assert.equals('terminal',Runner.snapshot(r).phase)
+        assert.equals('insert_failed',Runner.snapshot(r).outcome)
+        assert.truthy(Runner.snapshot(r).failure:find('adapter failed',1,true))
     end)
 
     it('binds context writes to private authority despite mutated context fields',function()
@@ -274,12 +256,6 @@ describe('generation runner sequences',function()
 
     it('pauses stale-input continuation and can cancel the held preparation',function()
         local doc,editor=document();local fake=Fake.new();local continued=false
-        fake.adapters.reserve_round=function(ctx,done)
-            local parent=D.snapshot(doc).grants[ctx.grant]
-            local result=D.transition(doc,{kind='acquire',generation=ctx.generation,parent=ctx.grant,
-                regions={{entity=parent.entity,first=parent.last,last=parent.last,marker_revision=1,revision=1,confirmed=true}}})
-            assert.is_true(result.ok);done(result.grants)
-        end
         fake.adapters.start_child=function(ctx,cb)cb.outcome('known','result');cb.resolved()end
         fake.adapters.continue_round=function()continued=true end
         local r=start(doc,fake,2);fake:prepare();Runner.drain(r,100)
@@ -359,37 +335,25 @@ describe('generation runner sequences',function()
         fake:complete(1);Runner.drain(r,100)
         assert.equals('success',Runner.snapshot(r).outcome);assert.equals(1,#notices)
     end)
-    it('reclaims the parent tail only after the child effect resolves',function()
+    it('reclaims the parent tail only after the tool resolves',function()
         local doc,editor=document();local fake=Fake.new();local child_cb
-        fake.adapters.reserve_round=function(ctx,done)
-            local p=D.snapshot(doc).grants[ctx.grant]
-            local c=D.transition(doc,{kind='acquire',generation=ctx.generation,parent=ctx.grant,
-                regions={{entity=p.entity,first=p.last,last=p.last,marker_revision=1,revision=1,confirmed=true}}})
-            done(c.grants,{})
-        end
         fake.adapters.start_child=function(_,cb)child_cb=cb;cb.outcome('known',{})end
         fake.adapters.continue_round=function(ctx,cb)cb.prepared(ctx.input);cb.resolved()end
         local r=start(doc,fake,2);fake:prepare();Runner.drain(r,100)
         fake.requests[1].callbacks.round({{call_id='one',arguments={}}});fake.requests[1].callbacks.resolved()
         Runner.drain(r,100);assert.equals(1,#fake.requests)
+        assert.same({'call1','result1'},fake.inserted,'both blocks land before the tool is cleaned up')
         local gid=Runner.snapshot(r).grant;local before=D.snapshot(doc).grants[gid]
         assert.is_true(before.first<before.last)
         child_cb.resolved();Runner.drain(r,100)
         local after=D.snapshot(doc).grants[gid];assert.equals(after.first,after.last)
         fake:output(2,'after tool');Runner.drain(r,100)
-        assert.equals('after tool',editor.lines[4])
+        assert.equals('<call1><result1>after tool',editor.lines[4])
     end)
     for _,mode in ipairs({'cancel','detach'})do
         it('transfers cancelled child cleanup to its supervisor after '..mode,function()
             local doc,editor=document();local fake=Fake.new();local child_cb,ack
             local supervisor={owned=true,cancelled=false}
-            fake.adapters.reserve_round=function(ctx,done)
-                local parent=D.snapshot(doc).grants[ctx.grant]
-                local acquired=D.transition(doc,{kind='acquire',generation=ctx.generation,parent=ctx.grant,
-                    regions={{entity=parent.entity,first=parent.last,last=parent.last,
-                        marker_revision=1,revision=1,confirmed=true}}})
-                done(acquired.grants,{})
-            end
             fake.adapters.start_child=function(_,cb)child_cb=cb;cb.outcome('unknown',{effect='unknown'})end
             fake.adapters.cancel_operation=function(_,done)
                 supervisor.cancelled=true;ack=done
@@ -397,14 +361,15 @@ describe('generation runner sequences',function()
             local runner=start(doc,fake,2);fake:prepare();Runner.drain(runner,100)
             fake.requests[1].callbacks.round({{call_id='one',arguments={}}})
             fake.requests[1].callbacks.resolved();Runner.drain(runner,100)
-            assert.equals('paused',Runner.snapshot(runner).phase)
-            assert.is_false(child_cb.resolved({supervised=true}))
+            -- #266 M2: an unknown outcome is written and the round goes on; only
+            -- the tool's own cleanup is still outstanding.
+            assert.equals('executing_tools',Runner.snapshot(runner).phase)
+            assert.same({'call1','result1'},fake.inserted)
             if mode=='detach'then D.detach(doc)else Runner.cancel(runner)end
             Runner.drain(runner,100);assert.equals('stopping',Runner.snapshot(runner).phase)
             assert.is_true(supervisor.cancelled);assert.is_function(ack)
             assert.is_false(ack(true));assert.is_false(ack({}));assert.is_false(ack({supervised=true,known=true}))
             assert.is_false(ack(setmetatable({supervised=true},{})))
-            assert.is_false(child_cb.resolved({supervised=true}))
             assert.is_true(ack({supervised=true}));Runner.drain(runner,100)
             local final=Runner.snapshot(runner)
             assert.equals('terminal',final.phase);assert.equals(0,final.retained_blobs)

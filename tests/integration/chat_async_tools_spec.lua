@@ -88,6 +88,14 @@ describe('public asynchronous chat tools',function()
         end end
         error('question missing: '..question)
     end
+    -- Stop at the cursor resolves the exchange it points into, which needs a
+    -- settled structure. #266 M2 writes a tool's result the moment it arrives,
+    -- so a test that stops right after an outcome must let that write settle.
+    local function stop(question)
+        local D=require('parley.document')
+        wait(function()return D.repair_step(D.get(buf)).status=='idle' end)
+        cursor(question);Respond.cmd_stop()
+    end
     local function submit(question)
         cursor(question)
         local session=assert(Respond.respond({range=0,root_policy={write_root=root,read_roots={root}}}))
@@ -169,31 +177,41 @@ describe('public asynchronous chat tools',function()
         tool_round(providers()[1],{{id='a',name='held_fixture',input={file_path=root..'/one/a'}}})
         wait(function()return #held==1 end)
         held[1].done({certainty='unknown',effect='unknown',physical_resolved=false,result={content='uncertain'}})
+        -- #266 M2: an unknown outcome is written as an error result at once and
+        -- the round goes on (it waits only for the tool's cleanup). Let it land
+        -- before the next question captures its input, which includes this answer.
+        wait(function()return buffer_text(buf):find('id=a error=true',1,true)~=nil end)
         local second=submit('second');wait(function()return #providers()==2 end)
         tool_round(providers()[2],{{id='b',name='held_fixture',input={file_path=root..'/two/b'}}})
         wait(function()return #held==2 end)
-        cursor('first');Respond.cmd_stop()
+        -- The second generation's tool runs, but first still holds the turn (it
+        -- waits for its unknown tool's cleanup), so nothing of second is written.
+        assert.is_nil(buffer_text(buf):find('id=b',1,true))
+        stop('first')
         wait(function()return Respond.response_snapshot(first).status=='terminal'end)
         assert.is_true(held[1].cancelled);assert.is_false(held[2].cancelled)
         assert.is_true(Producer.stats().records>=2)
         known(held[2],'SIBLING_RESULT');finish(second,3)
-        -- #266: the disjoint call shares a round with the conflicting one. Across
-        -- generations it could not run here — the conflicting generation holds the
-        -- write turn for its lifetime, so a second generation cannot even write its
-        -- call block. Within one round the path-scoped admission this test defends
-        -- is unchanged: the disjoint path runs while the conflicting path waits on
-        -- the stopped generation's unresolved claim.
-        local conflicting=submit('third');wait(function()return #providers()==4 end)
-        tool_round(providers()[4],{{id='conflict',name='held_fixture',input={file_path=root..'/one/a'}},
-            {id='disjoint',name='held_fixture',input={file_path=root..'/two/c'}}})
+        -- Across generations: the conflicting call waits on the stopped
+        -- generation's unresolved claim while a disjoint call in ANOTHER generation
+        -- runs. The disjoint generation sits above the conflicting one, so neither
+        -- one's writes touch the other's input.
+        local conflicting=submit('next');wait(function()return #providers()==4 end)
+        tool_round(providers()[4],{{id='conflict',name='held_fixture',input={file_path=root..'/one/a'}}})
+        vim.wait(30,function()return false end,1);assert.equals(2,#held)
+        local disjoint=submit('third');wait(function()return #providers()==5 end)
+        tool_round(providers()[5],{{id='disjoint',name='held_fixture',input={file_path=root..'/two/c'}}})
         wait(function()return #held==3 end)
-        assert.equals(root..'/two/c',held[3].path)
-        vim.wait(30,function()return false end,1);assert.equals(3,#held)
+        assert.equals(root..'/two/c',held[3].path,'the waiting generation\'s tool runs')
         known(held[3],'DISJOINT_RESULT')
+        vim.wait(30,function()return false end,1)
+        assert.is_nil(buffer_text(buf):find('DISJOINT_RESULT',1,true),'its blocks wait for the turn')
         assert.equals('running',Respond.response_snapshot(conflicting).status)
         known(held[1],'LATE_FIRST_RESULT')
         wait(function()return #held==4 end);assert.equals(root..'/one/a',held[4].path)
-        known(held[4],'CONFLICT_RESOLVED');finish(conflicting,5)
+        known(held[4],'CONFLICT_RESOLVED');finish(conflicting,6)
+        finish(disjoint,7)
+        assert.is_not_nil(buffer_text(buf):find('DISJOINT_RESULT',1,true))
         assert.is_nil(buffer_text(buf):find('LATE_FIRST_RESULT',1,true))
     end)
     it('hands reloaded parents to supervision and ignores later backend document callbacks',function()
@@ -238,7 +256,7 @@ describe('public asynchronous chat tools',function()
         tool_round(providers()[1],{{id='reconcile',name='held_fixture',input={file_path=root..'/one/a'}}})
         wait(function()return #held==1 end)
         held[1].done({certainty='unknown',effect='unknown',physical_resolved=false,result={content='unknown'}})
-        cursor('first');Respond.cmd_stop()
+        stop('first')
         wait(function()return Respond.response_snapshot(session).status=='terminal'end)
         local entries=Producer.list();assert.equals(1,#entries)
         assert.is_true(Producer.reconcile(entries[1].id,{certainty='known',effect='partial',physical_resolved=true,

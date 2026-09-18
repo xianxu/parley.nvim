@@ -17,29 +17,32 @@ local function setup(options)
     local requests={}
     local adapter=Tools.new(doc,{producer=not options.actual and producer or nil,root_policy=options.root_policy,
         buf=serial,allowed_tools=options.actual and {'read_file','write_file'} or {},
-        max_iterations=options.max_iterations,max_result_bytes=options.max_result_bytes,schedule=false,build_input=function(previous,messages)
+        max_iterations=options.max_iterations,max_result_bytes=options.max_result_bytes,build_input=function(previous,messages)
         previous.messages=messages;previous.payload={model='fixture',messages=messages};return previous
     end})
     local hooks={prepare=function(ctx,cb)cb.prepared(ctx.input);cb.resolved()end,
         request=function(ctx,cb)requests[#requests+1]={ctx=ctx,cb=cb};return {}end,
         finalize=function(_,done)done('applied')end,terminal=adapter.close,
-        reserve_round=adapter.reserve_round,start_child=function(ctx,cb)
+        insert_tool=adapter.insert_tool,start_child=function(ctx,cb)
             if options.on_outcome then
                 local outcome=cb.outcome
                 cb.outcome=function(kind,value)local accepted=outcome(kind,value);options.on_outcome(kind);return accepted end
             end
             return adapter.start_child(ctx,cb)
         end,continue_round=adapter.continue_round,
-        cancel_operation=adapter.cancel_operation,cancel_reservation=adapter.cancel_reservation}
+        cancel_operation=adapter.cancel_operation}
     local marker=D.query(doc,0,1)[1];local body=D.query(doc,2,3)[1]
     local runner=assert(Runner.start(doc,{entity=marker.handle,first=marker.end_byte-1,last=body.end_byte-1,
         input={messages={{role='user',content='question'}},payload={}},schedule=false},hooks));runners[#runners+1]=runner
     local function drain()
         for _=1,2000 do
-            D.repair_step(doc);Runner.step(runner);adapter.step()
+            D.repair_step(doc);Runner.step(runner)
             if Runner.snapshot(runner).phase=='terminal'then return end
         end
     end
+    -- Bounded: `n` runner steps, so a test can look between the slices of one
+    -- multi-chunk write (drain runs to quiescence and cannot).
+    local function step(n)for _=1,n do D.repair_step(doc);Runner.step(runner)end end
     drain()
     local function round(calls)
         local req=requests[#requests]
@@ -51,7 +54,7 @@ local function setup(options)
             drain();return #requests>=expected
         end,1),'asynchronous real tool round did not settle')end
     end
-    local fixture={doc=doc,editor=editor,producer=producer,requests=requests,runner=runner,adapter=adapter,drain=drain,round=round}
+    local fixture={doc=doc,editor=editor,producer=producer,requests=requests,runner=runner,adapter=adapter,drain=drain,step=step,round=round}
     fixtures[#fixtures+1]=fixture
     return fixture
 end
@@ -104,51 +107,95 @@ describe('production concurrent tool round composition',function()
         end
         return results,wire,openai
     end
-    for _,stop in ipairs({'pending','cancel','reload','unknown','rejected'})do
-        it('never publishes completed results from '..stop..' reservations',function()
+    local function text(f)return table.concat(f.editor.lines,'\n')end
+    -- Where each tool block starts in the transcript, or nil.
+    local function at(f,marker,id)return text(f):find(marker..' read_file id='..id,1,true)end
+
+    for _,stop in ipairs({'pending','cancel','reload'})do
+        it('writes nothing but the blocks already due when the round is left '..stop,function()
             local f=setup();f.round(calls)
-            assert.equals(2,#f.producer.started,'reservations must admit both producers')
-            if stop=='unknown' or stop=='rejected'then
-                f.producer.started[1].events.outcome(stop,{content='no confirmed result'})
-                f.producer.started[1].events.resolved();f.drain()
-            elseif stop=='cancel'then Runner.cancel(f.runner);f.drain()
+            assert.equals(2,#f.producer.started,'both tools run at once')
+            if stop=='cancel'then Runner.cancel(f.runner);f.drain()
             elseif stop=='reload'then f.editor:reload(f.editor.lines);f.drain()end
             local results,wire,openai=projected(f)
-            assert.same({},results,'only positive tool outcomes may serialize result blocks')
-            for _,c in ipairs(calls)do
-                assert.is_true(wire[c.id].is_error,'missing results must remain missing on provider projection')
-                assert.is_nil(wire[c.id].content:find('(pending)',1,true))
-                assert.is_truthy(openai[c.id]:find(wire[c.id].content,1,true))
-            end
-            assert.equals(1,#f.requests,'reservation alone cannot admit provider continuation')
-            if stop=='unknown'then
-                f.producer.started[1].events.outcome('known',{content='later confirmation'});f.drain()
-            end
+            assert.same({},results,'no result without an outcome')
+            assert.is_not_nil(at(f,'🔧:','a'),'the first call block is written before any outcome')
+            assert.is_nil(at(f,'🔧:','b'),'the second waits behind the first result')
+            assert.is_nil(text(f):find('pending',1,true),'no placeholder is ever written')
+            assert.is_true(wire.a.is_error,'an unanswered call stays unanswered on the wire')
+            assert.is_truthy(openai.a:find(wire.a.content,1,true))
+            assert.equals(1,#f.requests,'no continuation without every result')
         end)
     end
-    it('publishes only confirmed sibling outcomes when a live transcript is reparsed',function()
+
+    -- #266 M2 (operator, 2026-09-18): a failed call is written as an ordinary
+    -- error result the model reads, and the round goes on — no pause.
+    for _,failure in ipairs({'unknown','rejected','cancelled_before_effect'})do
+        it('writes a '..failure..' outcome as an error result and continues the round',function()
+            local f=setup();f.round(calls)
+            local first,second=unpack(f.producer.started)
+            first.events.outcome(failure,{content='detail from the producer'});first.events.resolved()
+            second.events.outcome('known',{content='second result'});second.events.resolved();f.drain()
+            assert.equals(2,#f.requests,'the round continued')
+            assert.equals('requesting',Runner.snapshot(f.runner).phase)
+            local results,wire=projected(f)
+            assert.is_true(results.a.is_error)
+            assert.truthy(results.a.content:find('detail from the producer',1,true))
+            assert.equals('second result',results.b.content)
+            local messages=f.requests[2].ctx.input.messages
+            local sent=messages[#messages].content[1]
+            assert.equals(results.a.content,sent.content,'the model reads exactly what the transcript says')
+            assert.is_true(sent.is_error);assert.same(wire.a.content,sent.content)
+        end)
+    end
+
+    it('holds a result that arrives early until the one before it is written',function()
         local f=setup();f.round(calls)
         local first,second=unpack(f.producer.started)
         second.events.outcome('known',{content='confirmed second'});second.events.resolved();f.drain()
-        local results,wire=projected(f)
-        assert.is_nil(results.a);assert.equals('confirmed second',results.b.content)
-        assert.is_true(wire.a.is_error);assert.is_false(wire.b.is_error)
+        local results=projected(f)
+        assert.same({},results,'b arrived first but is held behind a')
+        assert.is_nil(at(f,'🔧:','b'))
         first.events.outcome('known',{content='confirmed first'});first.events.resolved();f.drain()
-        results,wire=projected(f)
+        results=projected(f)
         assert.equals('confirmed first',results.a.content);assert.equals('confirmed second',results.b.content)
-        assert.is_false(wire.a.is_error);assert.is_false(wire.b.is_error)
     end)
-    it('declares all call blocks and result grants before any producer starts',function()
+
+    it('writes each call block immediately before its own result',function()
         local f=setup();f.round(calls)
-        assert.equals(2,#f.producer.started)
-        local text=table.concat(f.editor.lines,'\n')
-        local a=text:find('🔧: read_file id=a',1,true)
-        local b=text:find('🔧: read_file id=b',1,true)
-        local ra=text:find('(Tool result pending)',1,true)
-        local rb=text:find('(Tool result pending)',ra+1,true)
-        assert.is_true(a<b and b<ra and ra<rb)
-        assert.equals('executing_tools',Runner.snapshot(f.runner).phase)
+        assert.equals(2,#f.producer.started,'execution stays concurrent')
+        local first,second=unpack(f.producer.started)
+        second.events.outcome('known',{content='second'});second.events.resolved();f.drain()
+        first.events.outcome('known',{content='first'});first.events.resolved();f.drain()
+        local ca,ra,cb,rb=at(f,'🔧:','a'),at(f,'📎:','a'),at(f,'🔧:','b'),at(f,'📎:','b')
+        assert.is_true(ca<ra and ra<cb and cb<rb,'call a, result a, call b, result b')
+        assert.is_nil(text(f):find('(Tool result pending)',1,true))
+        assert.truthy(text(f):find('\ntext\n\n🔧: read_file id=a',1,true),'a blank line after the answer text')
+        assert.truthy(text(f):find('```\n\n📎: read_file id=a',1,true),'a blank line between blocks')
+        assert.equals(2,#f.requests)
     end)
+
+    -- Task 3.2c Step 2: one result larger than a 4 KiB slice is written over
+    -- several steps; the next call block must wait for all of it.
+    it('never starts the next block while a multi-slice result is still being written',function()
+        local f=setup();f.round(calls)
+        local first,second=unpack(f.producer.started)
+        second.events.outcome('known',{content='second'});second.events.resolved()
+        first.events.outcome('known',{content=string.rep('x',10000)});first.events.resolved()
+        local saw_partial=false
+        for _=1,400 do
+            f.step(1)
+            local body=select(2,text(f):gsub('x',''))
+            if body>0 and body<10000 then
+                saw_partial=true
+                assert.is_nil(at(f,'🔧:','b'),'call b landed inside result a')
+            end
+            if at(f,'📎:','b') then break end
+        end
+        assert.is_true(saw_partial,'the result must actually be written in slices')
+        assert.is_true(at(f,'📎:','a')<at(f,'🔧:','b'))
+    end)
+
     it('joins out-of-order result writes in declared order and preserves a human draft',function()
         local f=setup();f.round(calls)
         local first,second=unpack(f.producer.started)
@@ -165,49 +212,35 @@ describe('production concurrent tool round composition',function()
         f.requests[2].cb.complete();f.requests[2].cb.resolved();f.drain()
         assert.equals('success',Runner.snapshot(f.runner).outcome)
     end)
-    it('refuses insufficient capacity before placeholder writes or tool effects',function()
-        local f=setup();local before=table.concat(f.editor.lines,'\n')
-        local registered=D.transition(f.doc,{kind='register_generation',input_snapshot={}})
-        assert.is_true(registered.ok)
-        local reserved=D.reserve_capacity(f.doc,{epoch=D.snapshot(f.doc).epoch,generation=registered.generation,
-            operation='competing round',count=14})
-        assert.is_true(reserved.ok)
-        f.round(calls)
-        assert.equals(0,#f.producer.started)
-        assert.equals(before,table.concat(f.editor.lines,'\n'))
-        assert.equals('reservation_failed',Runner.snapshot(f.runner).outcome)
-    end)
-    it('retains unknown outcomes until later positive evidence permits an explicit resume',function()
+
+    it('treats an unknown outcome as final once written, and does not wait for a confirmation',function()
         local f=setup();f.round({calls[1]})
         local op=f.producer.started[1]
         op.events.outcome('unknown',{content='not yet known'});op.events.resolved();f.drain()
-        assert.equals('paused',Runner.snapshot(f.runner).phase)
-        assert.equals(1,Runner.snapshot(f.runner).outstanding_operations)
-        assert.is_true(op.events.outcome('known',{content='confirmed result'}))
-        f.drain()
-        assert.equals(0,Runner.snapshot(f.runner).outstanding_operations)
-        assert.is_true(Runner.resume(f.runner,'operator confirmed continuation').accepted)
-        f.drain();assert.equals(2,#f.requests)
+        assert.equals(2,#f.requests,'continued without the operator')
+        assert.is_false(op.events.outcome('known',{content='confirmed result'}),'too late to change what was written')
+        assert.is_nil(text(f):find('confirmed result',1,true))
         f.requests[2].cb.complete();f.requests[2].cb.resolved();f.drain()
         assert.equals('success',Runner.snapshot(f.runner).outcome)
     end)
 
-    it('cancels only the edited child and lets its running sibling finish',function()
+    -- A tool's slot no longer exists to be edited on its own: its blocks are the
+    -- answer's text. An edit inside the answer while tools run revokes the answer.
+    it('stops the whole round when a human edits inside the answer while its tools run',function()
         local f=setup();f.round(calls)
-        local first,second=unpack(f.producer.started)
         local row
-        for i,line in ipairs(f.editor.lines)do if line:find('(Tool result pending)',1,true)then row=i-1;break end end
+        for i,line in ipairs(f.editor.lines)do if line:find('🔧: read_file id=a',1,true)then row=i-1;break end end
         assert.is_not_nil(row)
         f.editor:edit(row,0,row,0,{'human '});f.drain()
-        assert.equals(1,#f.producer.cancelled)
-        first.events.outcome('cancelled_before_effect',{})
-        f.producer.cancelled[1].resolved()
-        second.events.outcome('known',{content='sibling result'});second.events.resolved();f.drain()
-        local text=table.concat(f.editor.lines,'\n')
-        assert.is_not_nil(text:find('human (Tool result pending)',1,true))
-        assert.is_not_nil(text:find('sibling result',1,true))
+        assert.equals(2,#f.producer.cancelled,'both running tools are cancelled')
+        for _,op in ipairs(f.producer.started)do op.events.outcome('known',{content='late output'})end
+        for _,cancellation in ipairs(f.producer.cancelled)do cancellation.resolved()end
+        f.drain()
+        assert.equals('terminal',Runner.snapshot(f.runner).phase)
+        assert.equals('revoked',Runner.snapshot(f.runner).outcome)
+        assert.is_nil(text(f):find('late output',1,true),'nothing is written once the answer is revoked')
+        assert.truthy(text(f):find('human 🔧:',1,true),'the human edit stands')
         assert.equals(1,#f.requests)
-        assert.is_false(first.events.outcome('known',{content='late output'}))
     end)
 
     it('enforces the round limit before serializing or starting another tool',function()
@@ -258,8 +291,10 @@ describe('production concurrent tool round composition',function()
         assert.truthy(f.requests[2].ctx.input.messages[3].content[1].content:find('local x = 1',1,true))
     end)
 
+    -- An unknown outcome is written at once, so a confirmation can never change
+    -- it; what races is the stop against the tool's cleanup. (Cleanup before the
+    -- stop simply continues the round — see the unknown case above.)
     local orders={
-        {'physical','stop','ack','known'},{'physical','stop','known','ack'},
         {'stop','physical','ack','known'},{'stop','physical','known','ack'},
         {'stop','ack','physical','known'},{'stop','ack','known','physical'},
         {'stop','known','physical','ack'},{'stop','known','ack','physical'},
@@ -269,6 +304,7 @@ describe('production concurrent tool round composition',function()
             local f=setup();f.round({calls[1]});local op=f.producer.started[1]
             op.events.outcome('unknown',{content='awaiting confirmation'});f.drain()
             local before=table.concat(f.editor.lines,'\n')
+            assert.truthy(before:find('awaiting confirmation',1,true),'written before anything else happens')
             for _,event in ipairs(order)do
                 if event=='physical'then op.events.resolved();op.events.resolved()
                 elseif event=='stop'then
@@ -277,8 +313,7 @@ describe('production concurrent tool round composition',function()
                     assert.equals(1,#f.producer.cancelled)
                     f.producer.cancelled[1].resolved();f.producer.cancelled[1].resolved()
                 else
-                    assert.is_true(op.events.outcome('known',{content='confirmed after cancellation'}))
-                    assert.is_false(op.events.outcome('known',{content='duplicate'}))
+                    assert.is_false(op.events.outcome('known',{content='confirmed after cancellation'}))
                 end
                 f.drain()
                 if event~='known' and op.events.outcome('unknown',{})then error('duplicate unknown accepted')end
@@ -289,7 +324,63 @@ describe('production concurrent tool round composition',function()
             assert.equals(before,table.concat(f.editor.lines,'\n'));assert.equals(1,#f.requests)
         end)
     end end
-    it('reserves publication before a reentrant physical-resolution callback',function()
+
+    -- #266 M2 Task 3.3 Step 1: every interleaving of two outcomes, a stop and
+    -- the tools' cleanup. Whatever the order, the transcript only ever holds an
+    -- in-order prefix of call a, result a, call b, result b; nothing lands after
+    -- the stop; and the round continues exactly when everything came first.
+    local function permutations(items)
+        if #items<=1 then return {items} end
+        local out={}
+        for i,item in ipairs(items)do
+            local rest={};for j,other in ipairs(items)do if j~=i then rest[#rest+1]=other end end
+            for _,tail in ipairs(permutations(rest))do out[#out+1]={item,unpack(tail)}end
+        end
+        return out
+    end
+    local blocks={{'🔧:','a'},{'📎:','a'},{'🔧:','b'},{'📎:','b'}}
+    local function assert_prefix(f,label)
+        local previous,missing=0,false
+        for _,b in ipairs(blocks)do
+            local position=at(f,b[1],b[2])
+            if position then
+                assert.is_false(missing,label..': '..b[1]..b[2]..' written after a hole')
+                assert.is_true(position>previous,label..': '..b[1]..b[2]..' out of order');previous=position
+            else missing=true end
+        end
+    end
+    for _,mode in ipairs({'cancel','detach'})do
+        for _,order in ipairs(permutations({'first','second','stop','cleanup'}))do
+            local label=mode..': '..table.concat(order,',')
+            it('keeps an in-order prefix through '..label,function()
+                local f=setup();f.round(calls)
+                local first,second=unpack(f.producer.started)
+                local frozen
+                for _,event in ipairs(order)do
+                    if event=='first'then first.events.outcome('known',{content='one'})
+                    elseif event=='second'then second.events.outcome('known',{content='two'})
+                    elseif event=='stop'then
+                        if mode=='detach'then D.detach(f.doc)else Runner.cancel(f.runner)end
+                    else
+                        first.events.resolved();second.events.resolved()
+                        for _,c in ipairs(f.producer.cancelled)do c.resolved()end
+                    end
+                    f.drain();assert_prefix(f,label)
+                    if frozen then assert.equals(frozen,text(f),label..': written after the stop')end
+                    if event=='stop'then frozen=text(f)end
+                end
+                for _,c in ipairs(f.producer.cancelled)do c.resolved()end
+                for _,request in ipairs(f.requests)do request.cb.resolved()end
+                f.drain()
+                assert.equals('terminal',Runner.snapshot(f.runner).phase,label)
+                assert.equals(0,Runner.snapshot(f.runner).outstanding_operations,label)
+                assert.is_true(f.adapter.close(),label)
+                assert.equals(order[4]=='stop' and 2 or 1,#f.requests,label..': continuation')
+            end)
+        end
+    end
+
+    it('records the outcome before a reentrant physical-resolution callback',function()
         local f
         f=setup({on_outcome=function(kind)
             if kind=='known'then f.producer.started[1].events.resolved()end
@@ -307,12 +398,13 @@ describe('production concurrent tool round composition',function()
             local f=setup();f.round({calls[1]});local op=f.producer.started[1]
             op.events.resolved();op.events.resolved()
             assert.is_true(op.events.outcome(outcome,{content='not executed'}));f.drain()
+            assert.equals(2,#f.requests,'the round continues past a failed call')
+            Runner.cancel(f.runner);f.requests[2].cb.resolved();f.drain()
             assert.equals(0,Runner.snapshot(f.runner).outstanding_operations)
-            assert.equals(1,#f.requests)
-            Runner.cancel(f.runner);f.drain();assert.equals('terminal',Runner.snapshot(f.runner).phase)
+            assert.equals('terminal',Runner.snapshot(f.runner).phase)
         end)
     end
-    it('waits for the publication decision when cancellation overtakes a known result',function()
+    it('never writes a result once cancellation overtakes it',function()
         local f=setup();f.round({calls[1]});local op=f.producer.started[1]
         local before=table.concat(f.editor.lines,'\n')
         op.events.outcome('known',{content='must not publish after cancellation'})

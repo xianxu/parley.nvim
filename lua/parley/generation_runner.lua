@@ -47,7 +47,9 @@ local function present(s)
     if not s.adapters.changed then return end
     local current=G.snapshot(s.machine)
     local b=s.blocked;current.blocked=b and copy(b)
+    local t=current.tools
     local key=current.phase..':'..tostring(current.stale_input)..blocked_key(b)
+        ..(t and ':'..t.finished..'/'..t.total or '')
     if key~=s.presentation_key then
         s.presentation_key=key
         local ok,err=pcall(s.adapters.changed,current)
@@ -151,6 +153,10 @@ local function slice(bytes,first,limit)
     end
     return bytes:sub(first,last)
 end
+-- Effects that write but are not operations: nothing resolves them, so the
+-- liveness check below must not look for one. A set, not a comparison, so a
+-- renamed effect cannot silently drop out of it.
+local unscoped={finalize=true,insert_tool=true}
 local function context(s,effect)
     local grant=effect.grant or s.grant
     local ctx={epoch=s.epoch,generation=s.generation,operation=effect.operation or effect.id,grant=grant,
@@ -161,7 +167,7 @@ local function context(s,effect)
     local function mutation(kind,bytes,done,options)
         sync(s)
         if sealed or s.detached or s.terminal or G.snapshot(s.machine).phase=='stopping'
-            or (not alive(s,effect.operation) and effect.type~='finalize' and effect.type~='reserve_round') then
+            or (not alive(s,effect.operation) and not unscoped[effect.type]) then
             return false,'stale operation'
         end
         if type(done)~='function' or not stage(s,bytes) or s.manual_items>=s.queue_limit then
@@ -425,16 +431,8 @@ local function execute(s,effect)
             local phase=G.snapshot(s.machine).phase
             if phase=='paused' then return true,'waiting' end
             if phase~='stopping' and phase~='terminal' and not effect.reclaimed then
-                -- This effect exists only after every declared child has a
-                -- known outcome and positively resolved effect ownership.
-                for gid in pairs(s.grants) do
-                    if gid~=s.grant then
-                        s.grants[gid]=nil
-                        if not s.detached and D.snapshot(s.doc).grants[gid] then
-                            D.transition(s.doc,{kind='revoke',grant=gid})
-                        end
-                    end
-                end
+                -- This effect exists only after every declared tool's blocks are
+                -- written and its effect ownership positively resolved.
                 local parent=not s.detached and D.snapshot(s.doc).grants[s.grant]
                 if not parent then dispatch(s,{type='cancel'});return true end
                 local reclaimed=D.reclaim_tail(s.doc,{epoch=s.epoch,generation=s.generation,
@@ -486,14 +484,6 @@ local function execute(s,effect)
             end)
             if not ok then issue(s,err) end
         end
-    elseif effect.type=='cancel_reservation' then
-        local reservation=s.reservation
-        if not reservation or reservation.round~=effect.round then return false end
-        local adapter=s.adapters.cancel_reservation
-        if not adapter then issue(s,'reservation cancel adapter missing; reservation unresolved');return false end
-        local ok,err=pcall(adapter,{epoch=s.epoch,generation=s.generation,round=effect.round,
-            handle=reservation.handle},function()reservation.done(nil,nil,'cancelled')end)
-        if not ok then issue(s,err) end
     elseif effect.type=='finalize' then
         if s.detached or G.snapshot(s.machine).phase=='stopping' then
             dispatch(s,{type='finalize_result',finalize=effect.id,status='failed'});return false
@@ -508,37 +498,28 @@ local function execute(s,effect)
         end
         local ok,err=pcall(s.adapters.finalize,ctx,complete)
         if not ok then issue(s,err);complete('failed') end
-    elseif effect.type=='reserve_round' then
-        if s.detached or G.snapshot(s.machine).phase=='stopping' then
-            dispatch(s,{type='round_reservation_failed',round=effect.round,status='cancelled'});return false
+    elseif effect.type=='insert_tool' then
+        -- One tool block (#266 M2): the machine chose which and when; the adapter
+        -- renders and appends it. Always answered, so a stopping machine is never
+        -- left waiting on a block it issued. A result is the same blob the next
+        -- request carries, so the transcript and the continuation cannot differ.
+        local settled=false
+        local function settle(status)
+            if settled or s.terminal then return end;settled=true
+            dispatch(s,{type='inserted',insert=effect.id,status=status})
         end
-        local ctx,after_writes=context(s,effect);ctx.children=copy(effect.children)
-        for _,child in ipairs(ctx.children) do
-            -- Reservation is a borrowed view, not consumption: the unchanged
-            -- private blob is retained until this child actually starts.
-            child.arguments=copy(s.blobs[child.arguments_ref].value)
-        end
-        local completed=false
-        local reservation={round=effect.round};s.reservation=reservation
-        local adapter=s.adapters.reserve_round
-        local function done(grants,receipt,status)
-            if completed or s.terminal then return end;completed=true
+        if s.detached or G.phase(s.machine)=='stopping' or not s.adapters.insert_tool then settle('failed');return false end
+        local ctx,after_writes=context(s,effect)
+        ctx.index=effect.index;ctx.kind=effect.kind
+        local result=effect.result_ref and s.blobs[effect.result_ref]
+        ctx.result=result and copy(result.value)
+        local function complete(status)
             after_writes(function(failed)
-                if s.reservation==reservation then s.reservation=nil end
-                if failed or not grants then
-                    dispatch(s,{type='round_reservation_failed',round=effect.round,status=status or 'failed'});return
-                end
-                for _,grant in ipairs(grants) do s.grants[grant]='valid' end
-                local ref=blob(s,receipt or true,false)
-                dispatch(s,{type='round_reserved',round=effect.round,grants=grants,receipt_ref=ref});release(s,ref)
+                settle(status=='applied' and (failed and 'failed' or 'applied') or tostring(status))
             end)
         end
-        reservation.done=done
-        if not adapter then done(nil) else
-            local ok,handle=pcall(adapter,ctx,done)
-            if not ok then issue(s,handle);done(nil)
-            elseif s.reservation==reservation then reservation.handle=handle end
-        end
+        local ok,err=pcall(s.adapters.insert_tool,ctx,complete)
+        if not ok then issue(s,err);settle('failed') end
     elseif effect.type=='terminal' then
         if not s.detached then D.transition(s.doc,{kind='finish_generation',generation=s.generation}) end
         s.terminal=true;s.written=nil;s.off();s.work:close();active=active-1

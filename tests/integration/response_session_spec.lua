@@ -212,6 +212,43 @@ describe('production response session composition',function()
         assert.equals('success',Session.snapshot(s).generation.outcome)
     end)
 
+    -- #266 M2 Task 3.4: the transcript now shows only the blocks that have
+    -- landed — call a until a's result arrives — so the tools still running are
+    -- reported where concurrency belongs: on the pending extmark.
+    it('shows every tool in flight while only the first call block is written',function()
+        local events={}
+        local producer={start=function(call,_,cb)events[call.id]=cb;return {}end,
+            cancel=function(_,done)done()end}
+        local s=start(doc,spec(0),{buf=buf,agent='fixture',producer=producer,
+            prepare_input=function(_,cb)cb.prepared(input(buf));cb.resolved();return {}end,
+            build_input=function(previous,messages)previous.messages=messages;previous.payload.messages=messages;return previous end},sessions)
+        pump(s)
+        local ns=vim.api.nvim_create_namespace('parley_chat_pending')
+        local function notes()
+            local out={}
+            for _,mark in ipairs(vim.api.nvim_buf_get_extmarks(buf,ns,0,-1,{details=true}))do
+                local virt=mark[4].virt_lines;if virt then out[#out+1]=virt[1][1][1] end
+            end
+            return table.concat(out,'\n')
+        end
+        local function text()return table.concat(lines(),'\n')end
+        local p=processes.processes[4242]
+        p:emit('stdout','data: '..vim.json.encode({choices={{delta={tool_calls={
+            {index=0,id='call-a',type='function',['function']={name='read_file',arguments='{"path":"a"}'}},
+            {index=1,id='call-b',type='function',['function']={name='read_file',arguments='{"path":"b"}'}}}}}}})..'\n\n')
+        status(p);p:finish();vim.wait(100,function()return #Tasker._handles==0 end,1);pump(s)
+        assert.is_not_nil(events['call-a']);assert.is_not_nil(events['call-b'])
+        assert.truthy(text():find('id=call-a',1,true));assert.is_nil(text():find('id=call-b',1,true))
+        assert.is_true(vim.wait(500,function()return notes():find('0 of 2',1,true)~=nil end,5),notes())
+        events['call-b'].outcome('known',{content='b done'});events['call-b'].resolved();pump(s)
+        assert.is_nil(text():find('id=call-b',1,true),'b is held behind a')
+        assert.is_true(vim.wait(500,function()return notes():find('1 of 2',1,true)~=nil end,5),notes())
+        events['call-a'].outcome('known',{content='a done'});events['call-a'].resolved();pump(s)
+        assert.truthy(text():find('b done',1,true))
+        assert.is_true(vim.wait(500,function()return not notes():find('of 2',1,true)end,5),
+            'the note clears once the round continues: '..notes())
+    end)
+
     it('releases host payloads before terminal notification even when IO retains callbacks',function()
         local callbacks,observed
         local retained=setmetatable({},{__mode='v'})

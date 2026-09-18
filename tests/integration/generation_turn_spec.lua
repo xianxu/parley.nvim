@@ -210,7 +210,7 @@ describe('write turn matrix',function()
         end
         local fa,fb=FakeRunner.new(),FakeRunner.new()
         fakes[#fakes+1]=fa;fakes[#fakes+1]=fb
-        if opts and opts.setup then opts.setup(fa,doc) end
+        if opts and opts.setup then opts.setup(fa,doc,fb) end
         if opts and opts.changed then fa.adapters.changed=opts.changed.a;fb.adapters.changed=opts.changed.b end
         local a=start(2,fa);local b=start(5,fb,opts and opts.limits)
         return doc,editor,{a=a,b=b},{a=fa,b=fb}
@@ -269,32 +269,56 @@ describe('write turn matrix',function()
     -- until resumed). The release_turn that pause emits must not queue behind it,
     -- or a paused generation holds the turn for good and every waiter's output
     -- piles up toward its budget. Asserted at the document, not the machine: the
-    -- machine emitting release_turn is exactly what already passed.
-    for _,cause in ipairs({'stale input','unknown outcome'}) do
-        it('hands the turn on when the holder pauses on a '..cause,function()
-            local doc,editor,r,f=pair({setup=function(fa,d)
-                fa.adapters.reserve_round=function(ctx,done)
-                    local parent=D.snapshot(d).grants[ctx.grant]
-                    local result=D.transition(d,{kind='acquire',generation=ctx.generation,parent=ctx.grant,
-                        regions={{entity=parent.entity,first=parent.last,last=parent.last,marker_revision=1,revision=1,confirmed=true}}})
-                    assert.is_true(result.ok);done(result.grants)
-                end
-                fa.adapters.start_child=function(_,cb)
-                    if cause=='unknown outcome' then cb.outcome('unknown','uncertain')
-                    else cb.outcome('known','result');cb.resolved() end
-                end
-                fa.adapters.continue_round=function()end
-            end})
-            f.a:prepare();f.b:prepare();pump(r,schedules[1])
-            f.b:output(1,'beta');f.b:complete(1)
-            if cause=='stale input' then editor:edit(0,0,0,0,{'x'});D.drain(doc,1000) end
-            local cb=f.a.requests[1].callbacks;cb.round({{call_id='one',arguments={}}});cb.resolved()
-            pump(r,schedules[1])
-            assert.equals('paused',Runner.snapshot(r.a).phase)
-            assert.equals('success',Runner.snapshot(r.b).outcome,'the waiter must get the turn and finish')
-            assert.truthy(table.concat(editor.lines,'\n'):find('beta',1,true))
-        end)
-    end
+    -- machine emitting release_turn is exactly what already passed. (An unknown
+    -- tool outcome was the other pause; since M2 it is written and the round goes
+    -- on, so it holds the turn like any other write.)
+    it('hands the turn on when the holder pauses on a stale input',function()
+        local doc,editor,r,f=pair({setup=function(fa)
+            fa.adapters.start_child=function(_,cb)cb.outcome('known','result');cb.resolved() end
+            fa.adapters.continue_round=function()end
+        end})
+        f.a:prepare();f.b:prepare();pump(r,schedules[1])
+        f.b:output(1,'beta');f.b:complete(1)
+        editor:edit(0,0,0,0,{'x'});D.drain(doc,1000)
+        local cb=f.a.requests[1].callbacks;cb.round({{call_id='one',arguments={}}});cb.resolved()
+        pump(r,schedules[1])
+        assert.equals('paused',Runner.snapshot(r.a).phase)
+        assert.equals('success',Runner.snapshot(r.b).outcome,'the waiter must get the turn and finish')
+        assert.truthy(table.concat(editor.lines,'\n'):find('beta',1,true))
+    end)
+
+    -- #266 M2: concurrency is in execution, never in mutation. A generation
+    -- waiting for the turn still runs its tools; only their blocks wait, and
+    -- they land once the holder is done.
+    it('runs both generations\' tools at once while their blocks land one generation at a time',function()
+        local running={}
+        local function tools(name,fake)
+            fake.adapters.start_child=function(_,cb)running[#running+1]={name=name,cb=cb};return {} end
+            fake.adapters.continue_round=function(ctx,cb)cb.prepared(ctx.input);cb.resolved() end
+        end
+        local doc,editor,r,f=pair({setup=function(fa,_,fb)tools('a',fa);tools('b',fb) end})
+        f.a:prepare();f.b:prepare();pump(r,schedules[2])
+        assert.equals(Runner.snapshot(r.a).generation,D.turn(doc))
+        f.a:output(1,'alpha');pump(r,schedules[2])
+        for _,name in ipairs({'b','a'}) do
+            local cb=f[name].requests[1].callbacks;cb.round({{call_id=name..'1',arguments={}}});cb.resolved()
+        end
+        pump(r,schedules[2])
+        assert.equals(2,#running,'both tools run at once, the waiter\'s included')
+        assert.same({'call1'},f.a.inserted,'the holder writes its call block')
+        assert.same({},f.b.inserted,'the waiter writes nothing')
+        for _,tool in ipairs(running) do tool.cb.outcome('known',{});tool.cb.resolved() end
+        pump(r,schedules[2])
+        assert.same({},f.b.inserted,'still nothing while the holder continues')
+        f.a:complete(2);pump(r,schedules[2])
+        assert.equals('success',Runner.snapshot(r.a).outcome)
+        assert.same({'call1','result1'},f.b.inserted,'the waiter\'s blocks land once the holder is done')
+        f.b:complete(2);pump(r,schedules[2])
+        assert.equals('success',Runner.snapshot(r.b).outcome)
+        local t=text(editor)
+        assert.truthy(t:find('alpha<call1><result1>',1,true),t)
+        assert.truthy(t:find('🤖: second\n<call1><result1>',1,true),t)
+    end)
 
     -- Control effects keep FIFO order among themselves after being hoisted ahead
     -- of parked work: stop() emits revoke before release_turn, so the region is
@@ -459,12 +483,6 @@ describe('undo coherence under the write turn',function()
             local marker=D.query(doc,row,row+1)[1];local body=D.query(doc,row+1,row+2)[1]
             local fake=FakeRunner.new();fakes[name]=fake
             if name=='a' then
-                fake.adapters.reserve_round=function(ctx,done)
-                    local parent=D.snapshot(doc).grants[ctx.grant]
-                    local result=D.transition(doc,{kind='acquire',generation=ctx.generation,parent=ctx.grant,
-                        regions={{entity=parent.entity,first=parent.last,last=parent.last,marker_revision=1,revision=1,confirmed=true}}})
-                    assert.is_true(result.ok);done(result.grants)
-                end
                 fake.adapters.start_child=function(_,cb)cb.outcome('known','result');cb.resolved()end
                 fake.adapters.continue_round=function(ctx,cb)cb.prepared(ctx.input);cb.resolved()end
             end
