@@ -282,14 +282,14 @@ Durable plan: `workshop/plans/000266-serialize-transcript-mutation-plan.md`
             `milestone-close`
 - [ ] M3 — Stop writes the tool round out; a crashed tool is a plain failure
       (operator decisions 2026-09-18).
-      - [ ] a tool whose process has ended releases its claims whatever its
+      - [x] a tool whose process has ended releases its claims whatever its
             outcome; remove the self-quarantine refusal it made unnecessary
-      - [ ] `flushing` phase: Stop during a tool round cancels every tool, then
+      - [x] `flushing` phase: Stop during a tool round cancels every tool, then
             writes each pair in order — a finished tool's real result, otherwise
             "cancelled by user" (while running / before it ran) — then ends
-      - [ ] a stopped generation that does not hold the turn keeps its place and
+      - [x] a stopped generation that does not hold the turn keeps its place and
             flushes when the turn arrives; a second Stop drops the rest
-      - [ ] atlas + target revision; `milestone-close`
+      - [x] atlas + target revision; `milestone-close`
 - [ ] M4 — residual exclusion sweep (`exclude`, parent-slot carving, the
       half-open seam flags, the ancestor walk).
 
@@ -929,3 +929,29 @@ generation that does not hold the write turn (see the reply of this date).
   "unlabeled wait on an unknown lock" disappears with the lock.
 
 Both land in a new **M3**; the residual exclusion sweep moves to **M4**.
+
+### 2026-09-18 — M3 landed: crashed tools are failures; Stop writes the round out
+
+Commits: `ecb7dbb0` crash = failure · `83c3122d` Stop flush.
+
+- **A crashed tool holds nothing once its process ends.** The ledger now
+  releases an `unknown` outcome once physical; the resource release names its
+  evidence (`known` or `ended`). M2 round 5's self-quarantine refusal is removed
+  — `resources.lua` and `scheduler.lua` now differ from `main` only in that
+  evidence naming. A tool whose process still runs keeps its claims.
+- **`flushing`.** A user's Stop during a not-fully-written round cancels the
+  running tools, starts none, and writes each pair in order — a finished tool's
+  real result, otherwise "Cancelled by the user while running; it may have
+  partly taken effect" / "…before it ran" — then stops as before. It keeps the
+  turn, so behind another answer it waits and says so. A second Stop, revocation
+  or overflow drops the rest. Everything outside a tool round, or after its last
+  block, stops at once as before.
+- **Tests that meant a hard stop now use one** (Stop twice, or revocation) —
+  three in `generation_sequences_spec`, three in `generation_spec`; their meaning
+  (in-flight ownership, supervision while stopping) is unchanged.
+- **A test fake that did not match its seam:** `response_session_spec`'s producer
+  answered `cancel` with no evidence; the real producer hands a started tool to
+  its supervisor (`done({supervised=true})`), which is what lets a tool that
+  never reported an outcome retire. Fixed to match.
+- `chat_respond` keeps a response listed until terminal, so a second
+  `:ParleyStop` reaches a flushing answer — checked, no change needed.
