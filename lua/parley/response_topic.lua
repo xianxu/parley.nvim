@@ -179,7 +179,6 @@ function M.step(job)
         -- buffer this write just changed — waking it mid-sequence stops the job.
         D.transition(s.doc,{kind='release_turn',generation=s.generation,epoch=s.epoch})
         s.writing=false
-        if applied.status=='waiting' then return {status='waiting'} end
         retire(s,applied.status=='applied' and 'applied' or 'failed',applied.reason or applied.error)
     end
     return M.snapshot(job)

@@ -40,12 +40,14 @@ end
 --- Presentation receives the machine snapshot plus, while this generation waits
 --- for the write turn, `blocked`: which generation holds it, its exchange, and
 --- what it is doing (#266). A held generation must never read as a frozen editor.
+local function blocked_key(b)
+    return b and ':'..tostring(b.generation)..':'..tostring(b.entity)..':'..tostring(b.phase)..':'..tostring(b.line) or ''
+end
 local function present(s)
     if not s.adapters.changed then return end
     local current=G.snapshot(s.machine)
     local b=s.blocked;current.blocked=b and copy(b)
-    local key=current.phase..':'..tostring(current.stale_input)
-        ..(b and ':'..tostring(b.generation)..':'..tostring(b.entity)..':'..tostring(b.phase)..':'..tostring(b.line) or '')
+    local key=current.phase..':'..tostring(current.stale_input)..blocked_key(b)
     if key~=s.presentation_key then
         s.presentation_key=key
         local ok,err=pcall(s.adapters.changed,current)
@@ -65,8 +67,11 @@ end
 --- The turn holder this generation is waiting behind, or nil. Only a generation
 --- that wants the turn is blocked: a paused one gave it up, a stopping one is done.
 local function blocker(s,doc)
-    local phase=G.snapshot(s.machine).phase
-    if s.turn_status~='waiting' or doc.turn==nil or phase=='paused' or phase=='stopping' or phase=='terminal' then return nil end
+    -- Constant-time checks first: this runs on every sync — every step, every
+    -- provider delta, every document notification — the holder's included.
+    if s.turn_status~='waiting' or doc.turn==nil then return nil end
+    local phase=G.phase(s.machine)
+    if phase=='paused' or phase=='stopping' or phase=='terminal' then return nil end
     -- The one place a holder's exchange becomes a line number; presentation and
     -- the overflow report both read `line` rather than re-deriving it.
     local function located(entity,holder_phase)
@@ -76,7 +81,7 @@ local function blocker(s,doc)
     end
     for _,other in pairs(runners) do
         if other.generation==doc.turn and other.doc==s.doc and not other.terminal then
-            return located(other.entity,G.snapshot(other.machine).phase)
+            return located(other.entity,G.phase(other.machine))
         end
     end
     -- Not a runner (an automatic topic writes through the coordinator directly).
@@ -107,7 +112,9 @@ local function sync(s)
     if generation and generation.stale then dispatch(s,{type='input_changed',dependencies_ref=s.dependencies_ref}) end
     -- Recomputed on every sync, and sync runs on every document notification —
     -- which includes each of the holder's writes, so its phase stays current.
-    s.blocked=blocker(s,doc);present(s)
+    -- Present only when the blocker changed; dispatch presents machine changes.
+    local blocked=blocker(s,doc)
+    if blocked_key(blocked)~=blocked_key(s.blocked) then s.blocked=blocked;present(s) end
 end
 local function alive(s,operation)
     sync(s)

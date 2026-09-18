@@ -296,6 +296,24 @@ describe('write turn matrix',function()
         end)
     end
 
+    -- Control effects keep FIFO order among themselves after being hoisted ahead
+    -- of parked work: stop() emits revoke before release_turn, so the region is
+    -- given up a step before the turn moves (an immediate regenerate would
+    -- otherwise be refused 'overlap').
+    it('revokes the stopping holder\'s grant one step before the turn moves',function()
+        local doc,_,r,f=pair()
+        f.a:prepare();f.b:prepare();pump(r,schedules[1])
+        local a=Runner.snapshot(r.a)
+        assert.equals(a.generation,D.turn(doc))
+        Runner.cancel(r.a)
+        Runner.step(r.a)
+        local grant=D.snapshot(doc).grants[a.grant]
+        assert.is_true(grant==nil or grant.status=='revoked','the first control effect is the revoke')
+        assert.equals(a.generation,D.turn(doc),'the turn has not moved yet')
+        Runner.step(r.a)
+        assert.equals(Runner.snapshot(r.b).generation,D.turn(doc),'then the release hands it on')
+    end)
+
     -- #266 Task 1.7. Providers deliver one SSE delta per output callback, so a
     -- generation held behind the turn receives hundreds of tiny chunks. The held
     -- answer must be bounded by BYTES (the 1 MiB budget), not by how many chunks
@@ -419,6 +437,64 @@ describe('undo coherence under the write turn',function()
         assert.equals(0,x);assert.equals(0,y)
         assert.equals(2,#steps,'one undo step per generation run: '..vim.inspect(steps))
         assert.equals(0,steps[1].y,'the later writer, b, is undone first')
+        D.detach(doc);vim.api.nvim_buf_delete(buf,{force=true})
+    end)
+
+    -- M1 review round 2 (BR-2): a pause yields the turn, so a resumed generation's
+    -- writes start a NEW run with the waiter's between them. What must still hold
+    -- is that no undo step mixes two generations.
+    it('keeps undo steps single-generation when a paused holder resumes after a waiter wrote',function()
+        local buf=vim.api.nvim_create_buf(false,true)
+        vim.api.nvim_buf_set_lines(buf,0,-1,false,{'💬: q','draft','🤖: first','','💬: q2','🤖: second',''})
+        local doc=D.attach(buf,{schedule=false})
+        assert.equals('idle',D.drain(doc,1000).status)
+        local fakes,runners={},{}
+        for _,item in ipairs({{'a',2},{'b',5}}) do
+            local name,row=item[1],item[2]
+            local marker=D.query(doc,row,row+1)[1];local body=D.query(doc,row+1,row+2)[1]
+            local fake=FakeRunner.new();fakes[name]=fake
+            if name=='a' then
+                fake.adapters.reserve_round=function(ctx,done)
+                    local parent=D.snapshot(doc).grants[ctx.grant]
+                    local result=D.transition(doc,{kind='acquire',generation=ctx.generation,parent=ctx.grant,
+                        regions={{entity=parent.entity,first=parent.last,last=parent.last,marker_revision=1,revision=1,confirmed=true}}})
+                    assert.is_true(result.ok);done(result.grants)
+                end
+                fake.adapters.start_child=function(_,cb)cb.outcome('known','result');cb.resolved()end
+                fake.adapters.continue_round=function(ctx,cb)cb.prepared(ctx.input);cb.resolved()end
+            end
+            runners[name]=assert(Runner.start(doc,{entity=marker.handle,first=marker.start_byte,last=body.end_byte-1,
+                input={message='frozen'},dependencies={{first=0,last=4}},capabilities={'read'},schedule=false},fake.adapters))
+            Runner.drain(runners[name],100)
+        end
+        local function pump()for _=1,600 do Runner.drain(runners.a,1);Runner.drain(runners.b,1) end end
+        fakes.a:prepare();fakes.b:prepare();pump()
+        fakes.a:output(1,string.rep('X',3000));pump()
+        -- An earlier edit makes a's input stale; its continuation pauses and yields.
+        vim.api.nvim_buf_set_text(buf,0,4,0,4,{'!'});D.drain(doc,1000)
+        local cb=fakes.a.requests[1].callbacks;cb.round({{call_id='one',arguments={}}});cb.resolved();pump()
+        assert.equals('paused',Runner.snapshot(runners.a).phase)
+        fakes.b:output(1,string.rep('Y',3000));fakes.b:complete(1);pump()
+        assert.equals('success',Runner.snapshot(runners.b).outcome,'the waiter wrote while a was paused')
+        assert.is_true(Runner.resume(runners.a,'operator:test').accepted);pump()
+        fakes.a:output(2,string.rep('X',2000));fakes.a:complete(2);pump()
+        assert.equals('success',Runner.snapshot(runners.a).outcome)
+        local function counts()
+            local text=table.concat(vim.api.nvim_buf_get_lines(buf,0,-1,false),'\n')
+            return select(2,text:gsub('X','')),select(2,text:gsub('Y',''))
+        end
+        local x,y=counts();assert.equals(5000,x);assert.equals(3000,y)
+        local seen={}
+        for _=1,50 do
+            if x==0 and y==0 then break end
+            vim.api.nvim_buf_call(buf,function()vim.cmd('silent undo')end)
+            local nx,ny=counts()
+            assert.is_false(nx~=x and ny~=y,'one undo step removed text from both generations')
+            if nx~=x then seen[#seen+1]=nx end
+            x,y=nx,ny
+        end
+        assert.equals(0,x);assert.equals(0,y)
+        assert.same({3000,0},seen,'a\'s text leaves in two runs, around b\'s: '..vim.inspect(seen))
         D.detach(doc);vim.api.nvim_buf_delete(buf,{force=true})
     end)
 end)

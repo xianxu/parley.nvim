@@ -213,6 +213,9 @@ function M.new(spec)
         phase='preparing',grant_status='valid',turn_status='held',gap='none',serial=0,operations={},operation_order={},queue={},
         accepted_bytes=0,committed_bytes=0,discarded_bytes=0,limits={staged_bytes=bytes,queued_items=items}})
 end
+--- O(1) phase, for per-sync callers that need nothing else: M.snapshot builds
+--- a fresh table and walks the operations.
+function M.phase(handle) return get(handle).phase end
 function M.snapshot(handle)
     local s=get(handle);local bytes,items=staged(s)
     local retained=0;for _ in pairs(s.operations) do retained=retained+1 end
