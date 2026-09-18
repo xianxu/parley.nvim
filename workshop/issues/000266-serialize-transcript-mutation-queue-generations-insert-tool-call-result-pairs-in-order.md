@@ -280,7 +280,17 @@ Durable plan: `workshop/plans/000266-serialize-transcript-mutation-plan.md`
       - [x] tool progress shown in presentation while pairs are held
       - [x] goldens/e2e unchanged in message shape; atlas `tool_use.md` rewritten;
             `milestone-close`
-- [ ] M3 — residual exclusion sweep (`exclude`, parent-slot carving, the
+- [ ] M3 — Stop writes the tool round out; a crashed tool is a plain failure
+      (operator decisions 2026-09-18).
+      - [ ] a tool whose process has ended releases its claims whatever its
+            outcome; remove the self-quarantine refusal it made unnecessary
+      - [ ] `flushing` phase: Stop during a tool round cancels every tool, then
+            writes each pair in order — a finished tool's real result, otherwise
+            "cancelled by user" (while running / before it ran) — then ends
+      - [ ] a stopped generation that does not hold the turn keeps its place and
+            flushes when the turn arrives; a second Stop drops the rest
+      - [ ] atlas + target revision; `milestone-close`
+- [ ] M4 — residual exclusion sweep (`exclude`, parent-slot carving, the
       half-open seam flags, the ancestor walk).
 
 ## Log
@@ -900,3 +910,22 @@ that already finished gets its real result; one that had not gets an error
 result ("cancelled by user"). The round is written in full, then the generation
 ends; no continuation request. Scheduled after M2; open design point: a stopped
 generation that does not hold the write turn (see the reply of this date).
+
+### 2026-09-18 — operator decisions: stopped-and-waiting keeps its place; a crashed tool is a plain failure
+
+- **Stop while not holding the turn** (option (a)): the stopped generation keeps
+  its place in line and writes its round's pairs when the turn reaches it, then
+  ends. Its tools are cancelled at once either way.
+- **A crashed tool is a failure, not a lock** (operator: "this is too complex,
+  operator will not pay attention to tool call. if tool call process crash,
+  desired behavior is just treat it as failed, write fail error as tool call
+  result."). Today an `unknown` outcome keeps the tool's resource claims until
+  someone confirms it in `:ParleyToolOperations`. New rule: once the tool's
+  process has ended, its claims are released and the call is a failure like any
+  other. A process still running keeps its claims — that is a real effect in
+  progress, not a quarantine. Consequence: M2's round-5 self-quarantine refusal
+  (`resources.lua` `quarantined`) has nothing left to guard — a round continues
+  only after every tool has ended — so it is removed, and the review's
+  "unlabeled wait on an unknown lock" disappears with the lock.
+
+Both land in a new **M3**; the residual exclusion sweep moves to **M4**.
