@@ -100,3 +100,31 @@ hold in their head.
 - **Does serialization extend across chats, or only within one transcript?** Two
   different files have independent histories; nothing yet requires their writes
   to order against each other, but batch and branch flows touch more than one.
+
+## Revisions
+
+### 2026-09-17 — "in the order the reader sees them", made precise (parley#266 M1)
+
+**Reason.** Implementing the serialization showed the phrase promises more than
+serialization can deliver *across* generations: two generations write different
+answers, and the one admitted first need not be the one earlier in the file —
+regenerating Q3 and then Q1 writes Q3's region first. Holding the target to the
+literal wording would demand reordering writes by document position, which no
+one asked for and which would re-introduce interleaving.
+
+**Delta — what the target now defends:**
+
+- **Across generations:** one writer at a time, and each generation's writes form
+  **one contiguous run** — so each undo step removes exactly one generation's
+  coherent contribution, never a mix and never a partial 4 KiB slice. A holder
+  keeps the write turn for its lifetime, including through a transient grant
+  suspension, precisely so its run is never split around another's.
+- **Within one generation's tool round:** document order does hold — insertion is
+  monotonic at the answer's tail (parley#266 M2).
+- **Human edits** are never serialized behind a generation; they may land between
+  runs, and undo reflects that honestly.
+
+`atlas/chat/ownership.md` no longer promises disjoint concurrent answer writes;
+it describes the write turn. The "Why now" paragraph above records the promise
+as it stood when this target was written.
+

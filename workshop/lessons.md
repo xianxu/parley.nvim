@@ -1,5 +1,42 @@
 # Lessons
 
+## 2026-09-17 (#266 M1 — a budget, a vacuous test, a stash, and "one cause")
+
+- **A budget analysis must cover every limit on the path, at the real delivery
+  granularity.** The plan measured answer *bytes* and kept a 1 MiB budget, but
+  the machine also caps *items* at 256 and providers deliver one item per SSE
+  delta — so a held answer died after a paragraph. Only a test that fed
+  hundreds of tiny deltas found it. Rule: when you size a buffer, list every cap
+  the data passes through, and drive the test with the producer's real chunking,
+  not one big write.
+
+- **A characterization test needs its counterfactual run, not assumed.** The
+  undo-coherence test passed with the write turn disabled: batched runner steps
+  let each writer finish its slices before the other moved, so interleaving never
+  happened. Rule: for every test written "expected PASS", disable the mechanism
+  it claims to protect and watch it fail; if it doesn't, the harness is hiding
+  the hazard (here: step granularity) — make it finer.
+
+- **Never use `git stash push <path>` + `pop` for a counterfactual.** On a path
+  with no changes, `push` creates nothing and `pop` pops an unrelated older stash
+  (here it refused only because that stash held untracked files). Rule: edit the
+  clean committed file, run, then `git checkout -- <file>`; confirm the file was
+  clean first (`git diff --quiet -- <file>`).
+
+- **"N failures, one cause" is a hypothesis — trace each one.** The plan said nine
+  tests failed only because a second request never started. Deferral fixed four;
+  the other five were an effect-order regression (release before revoke), a
+  recovery check that could not wait out a transient suspension, and two tests
+  asserting the very concurrency the issue reverses. Rule: when a fix is
+  predicted to clear a list, run the list after it and debug every survivor on
+  its own — and check survivors against `main` to separate "ours" from "theirs".
+
+- **An effect's position in an emitted list is behaviour.** The runner executes one
+  effect per step while the machine may already report `terminal`, so queuing
+  `release_turn` ahead of `revoke` left a region held while the phase said free.
+  Rule: when a transition emits several effects, order them by what an observer
+  of the *phase* may assume has already happened, and pin the order in a test.
+
 ## 2026-09-16 (#263 close round 4 — prose is not enforcement)
 
 - **A rule written in a module header does not stop the fifth copy.** Round 3
