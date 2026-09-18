@@ -141,10 +141,6 @@ local function pump(s,effects)
         s.phase='requesting'
         s.attempt=operation(s,effects,'request',{input_ref=s.input_ref,capabilities_ref=s.capabilities_ref})
     end
-    if s.gap=='deferred' and s.turn_status=='held' and s.grant_status=='valid' and s.phase~='paused'
-        and write_due(s,staged(s)) then
-        s.gap='writing';emit(s,effects,'write_gap',{grant=s.grant})
-    end
     if not s.inflight then
         for i,item in ipairs(s.queue) do
             if writable(s,item.grant) then
@@ -160,6 +156,12 @@ local function pump(s,effects)
         stop(s,effects,'provider_failed')
         pump(s,effects)
         return
+    end
+    -- After the failure check, not before: a provider that failed with nothing
+    -- staged has nothing to write, so its gap must never be (M1 review I3).
+    if s.gap=='deferred' and s.turn_status=='held' and s.grant_status=='valid' and s.phase~='paused'
+        and write_due(s,bytes) then
+        s.gap='writing';emit(s,effects,'write_gap',{grant=s.grant})
     end
     if s.round and s.round.prepared_input_ref and s.phase=='executing_tools'
         and bytes==0 and s.grant_status=='valid' then

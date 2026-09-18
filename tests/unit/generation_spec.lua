@@ -760,6 +760,17 @@ describe('pure generation lifecycle',function()
         assert.is_false(all(results,'write_gap'),'a response with nothing to say must not touch the transcript')
     end)
 
+    -- M1 review I3: a provider that fails before its first byte has nothing to
+    -- write, so the transcript — including a regenerated answer — stays as it was.
+    it('never writes the gap when the provider fails before any output',function()
+        local s,request=deferred()
+        local r
+        s,r=send(s,{type='provider_failed',attempt=request.operation})
+        assert.is_nil(effect(r,'write_gap'),'a failure with nothing staged must not write the gap')
+        assert.equals('stopping',G.snapshot(s).phase)
+        assert.equals('provider_failed',G.snapshot(s).outcome)
+    end)
+
     it('writes the gap before a tool round reserves its slots',function()
         local s,request=deferred()
         local r
