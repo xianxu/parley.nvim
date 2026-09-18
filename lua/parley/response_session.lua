@@ -50,6 +50,13 @@ function M.start(doc,spec,opts)
         opts=nil;doc=nil;plan=nil;frozen=nil;tools=nil
         safe(callback,result)
     end
+    -- #266: a wait note is state, not an event. The status line it lives on is
+    -- cleared by every output write and recreated after a pause, so the current
+    -- note is shown again on both — or an answer that got the turn runs its
+    -- tools with nothing on screen while the others say they wait on it.
+    local function show_note()
+        if s.pending and s.note then s.pending:progress({message=s.note})end
+    end
     local function presentation(ctx)
         if s.pending or opts.pending==false or not opts.buf then return end
         local cancelled=ctx.cancelled
@@ -60,7 +67,7 @@ function M.start(doc,spec,opts)
                 local grant=D.snapshot(s.doc).grants[ctx.grant]
                 return grant and grant.status~='revoked' and D.byte_position(s.doc,grant.last) or nil
             end})
-        if success then s.pending=pending end
+        if success then s.pending=pending;show_note()end
     end
     local function capture_profile(input,ctx)
         local profile=input.response_profile
@@ -193,7 +200,9 @@ function M.start(doc,spec,opts)
             done('applied')
         end,
         written=function(ctx,receipt)
-            if s.pending and receipt.kind=='output' and receipt.tip then s.pending:written(receipt.tip.row,receipt.tip.col)end
+            if s.pending and receipt.kind=='output' and receipt.tip then
+                s.pending:written(receipt.tip.row,receipt.tip.col);show_note()
+            end
             safe(opts.written,ctx,receipt)
         end,
         changed=function(value)
@@ -208,7 +217,12 @@ function M.start(doc,spec,opts)
             elseif value.tools and value.phase=='executing_tools' then
                 note=Presentation.tools_message(value.tools)
             end
-            if s.pending and note~=s.note then s.note=note;s.pending:progress({message=note or 'Working...'})end
+            -- Recorded even with no status line up (after a pause), so the next
+            -- one shows the current note rather than a stale comparison.
+            if note~=s.note then
+                s.note=note
+                if s.pending then s.pending:progress({message=note or 'Working...'})end
+            end
             safe(opts.changed,value)
         end,
         terminal=function(result)finish(result,false)end,rejected=function(reason)finish(reason,true)end}

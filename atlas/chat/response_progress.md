@@ -41,7 +41,13 @@ snapshot, re-presented whenever a count changes. Once every outcome is in but a
 tool has not cleaned up, it says so — *Tools finished; waiting for 1 to clean
 up* — since the round continues only after cleanup. A waiting note takes
 precedence. An answer stopped during a tool round says *Stopped; writing its tool
-results* — *after the answer to line N* when it is waiting for the turn. Neither process exit alone nor successful signaling proves cleanup:
+results* — *after the answer to line N* when it is waiting for the turn.
+
+These notes are state, not events: `response_session` keeps the current one and
+shows it again whenever its status line is cleared (every output write) or
+recreated (after a pause). A new note, or a new way to clear the line, keeps
+that rule. Otherwise an answer that just got the turn would run its tools with
+nothing on screen. Neither process exit alone nor successful signaling proves cleanup:
 transport ownership persists until exit and both pipes settle.
 
 A provider failure lets already-admitted valid bytes drain, then reports the

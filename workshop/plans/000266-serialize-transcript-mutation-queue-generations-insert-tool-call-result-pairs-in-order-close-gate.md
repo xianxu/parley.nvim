@@ -315,6 +315,55 @@ rounds:
       boundary: M4
       recipe: milestone-review
       blocked: false
+    - "n": 11
+      timestamp: "2026-09-18T15:17:32-07:00"
+      agent: claude
+      dispose:
+        - id: BR-7
+          disposition: addressed
+          note: README:50-52 now says "finishes or pauses"; plan Target reconciliation strikes the lifetime/undo-entry sentences with a pointer to ownership.md; the family grep over README, atlas and target finds no live residual.
+          round: 11
+        - id: BR-8
+          disposition: addressed
+          note: Plan :459 struck with its Chunk-2 note, and :461 now reads "why Chunk 2 (the preparation deferral) exists".
+          round: 11
+        - id: BR-12
+          disposition: addressed
+          note: Operator decision logged 2026-09-18 ("Stop flushes the tool round, it does not drop it"), implemented in M3; the target revision "the gap closed" replaces the narrowing.
+          round: 11
+        - id: BR-14
+          disposition: withdrawn
+          note: 'Overtaken by M3''s operator decision: an unknown outcome releases its claims once its process ends (operation.lua:103-108, scheduler.lua:80-87), the self-quarantine refusal text is gone, and every tools note names :ParleyStop via wait_note. A new visibility gap in the same family is raised separately.'
+          round: 11
+        - id: BR-20
+          disposition: addressed
+          note: insert_tool carries no outcome (generation.lua:125-127), the runner passes only ctx.failure/ctx.result (generation_runner.lua:518-522), settled() takes two parameters, and plan mechanism (3) is struck by a Revision.
+          round: 11
+        - id: BR-21
+          disposition: addressed
+          note: README:73-77 now points at tool_use.md#stop-during-a-tool-round instead of paraphrasing what a Stop writes.
+          round: 11
+        - id: BR-22
+          disposition: addressed
+          note: response_tools_spec:479-490 drives the queued-in-scheduler case through the runner and asserts the rendered "Tool cancelled before execution" result text.
+          round: 11
+        - id: BR-23
+          disposition: addressed
+          note: Plan :88 struck with a pointer to the M4 Revision; no `parent` identifier remains in generation_runner, response_tools or state; lessons.md:3137-3152 states the sweep scope once, with terms taken from the diff.
+          round: 11
+        - id: BR-24
+          disposition: addressed
+          note: document_state_spec:110-154 checks disjointness after each of 80 steps over 40 seeds. In a scratch copy, planting "human edits revoke nothing" at state.lua:260 made it fail; document_write_plan_spec gains the same assertion.
+          round: 11
+      findings:
+        - id: BR-25
+          severity: Minor
+          title: An output receipt erases the tools note, so an answer that gets the turn after being held shows no status while its tools run or clean up
+          detail: 'This is the 4th finding in family stall-visibility, so the fix is the rule, not the instance. Rule: a wait note is state, not an event; re-show it after anything that clears the status line. What clears it: output write receipts (response_session.lua:195-196 calls s.pending:written, which hides the extmark and drops any pending progress update, chat_pending.lua:166-170); provider progress is already suppressed while s.note is set, and the playful spinner is inactive once released. changed() re-presents only when the note string changes (response_session.lua:211), so s.note stays set while nothing shows. Confirmed with a scratch integration test: answer B (text plus two tool calls) held behind A; after A finishes, B''s text and its first call block land, both tools still run, and the parley_chat_pending namespace has no extmark. Re-showing s.note after written makes "Running tools: 0 of 2 finished" appear. Worst case: all outcomes arrived while B was held and one cleanup hangs; B holds the turn and shows nothing while every other answer reads "Waiting for the answer to line N (running tools)". This contradicts atlas/chat/response_progress.md ("While the round runs, the status line counts them") and tests/manual/chat-concurrency.md ("a tool still running shows only in the pending line"). The BR-17 test exercised the composer''s strings, not the composed session; add the held-answer case to response_session_spec as the regression test.'
+          family: stall-visibility
+          round: 11
+      recipe: milestone-review
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#266 (boundary-review)
@@ -479,14 +528,25 @@ later rounds disposed of them. Generated — edit the gate, not this file.
   seeded interleaving loop (document_write_plan_spec:178), and add reclaim_tail/successor_finish and
   owned boundary insertions to that event mix.
 
+## Round 11 — 2026-09-18T15:17:32-07:00 (claude) — passed
+
+### Disposed
+
+- BR-7 — addressed — README:50-52 now says "finishes or pauses"; plan Target reconciliation strikes the lifetime/undo-entry sentences with a pointer to ownership.md; the family grep over README, atlas and target finds no live residual.
+- BR-8 — addressed — Plan :459 struck with its Chunk-2 note, and :461 now reads "why Chunk 2 (the preparation deferral) exists".
+- BR-12 — addressed — Operator decision logged 2026-09-18 ("Stop flushes the tool round, it does not drop it"), implemented in M3; the target revision "the gap closed" replaces the narrowing.
+- BR-14 — withdrawn — Overtaken by M3's operator decision: an unknown outcome releases its claims once its process ends (operation.lua:103-108, scheduler.lua:80-87), the self-quarantine refusal text is gone, and every tools note names :ParleyStop via wait_note. A new visibility gap in the same family is raised separately.
+- BR-20 — addressed — insert_tool carries no outcome (generation.lua:125-127), the runner passes only ctx.failure/ctx.result (generation_runner.lua:518-522), settled() takes two parameters, and plan mechanism (3) is struck by a Revision.
+- BR-21 — addressed — README:73-77 now points at tool_use.md#stop-during-a-tool-round instead of paraphrasing what a Stop writes.
+- BR-22 — addressed — response_tools_spec:479-490 drives the queued-in-scheduler case through the runner and asserts the rendered "Tool cancelled before execution" result text.
+- BR-23 — addressed — Plan :88 struck with a pointer to the M4 Revision; no `parent` identifier remains in generation_runner, response_tools or state; lessons.md:3137-3152 states the sweep scope once, with terms taken from the diff.
+- BR-24 — addressed — document_state_spec:110-154 checks disjointness after each of 80 steps over 40 seeds. In a scratch copy, planting "human edits revoke nothing" at state.lua:260 made it fail; document_write_plan_spec gains the same assertion.
+
+### Raised
+
+- **BR-25** [Minor] `stall-visibility` An output receipt erases the tools note, so an answer that gets the turn after being held shows no status while its tools run or clean up
+  This is the 4th finding in family stall-visibility, so the fix is the rule, not the instance. Rule: a wait note is state, not an event; re-show it after anything that clears the status line. What clears it: output write receipts (response_session.lua:195-196 calls s.pending:written, which hides the extmark and drops any pending progress update, chat_pending.lua:166-170); provider progress is already suppressed while s.note is set, and the playful spinner is inactive once released. changed() re-presents only when the note string changes (response_session.lua:211), so s.note stays set while nothing shows. Confirmed with a scratch integration test: answer B (text plus two tool calls) held behind A; after A finishes, B's text and its first call block land, both tools still run, and the parley_chat_pending namespace has no extmark. Re-showing s.note after written makes "Running tools: 0 of 2 finished" appear. Worst case: all outcomes arrived while B was held and one cleanup hangs; B holds the turn and shows nothing while every other answer reads "Waiting for the answer to line N (running tools)". This contradicts atlas/chat/response_progress.md ("While the round runs, the status line counts them") and tests/manual/chat-concurrency.md ("a tool still running shows only in the pending line"). The BR-17 test exercised the composer's strings, not the composed session; add the held-answer case to response_session_spec as the regression test.
+
 ## Open findings
 
-- **BR-7** [Minor] `invariant-statement-omits-exception` Plan Target reconciliation and README still state turn/undo grouping without the pause and intervening-edit exceptions
-- **BR-8** [Minor] `table-row-milestone-scope` Plan Task 1.6 Step 4 still uses the milestone numbering from before the merge
-- **BR-12** [Minor] `target-narrowing-unratified` Target revision now accepts that Stop drops tool pairs whose tools already ran; logged as still to raise with the operator
-- **BR-14** [Minor] `stall-visibility` A tool queued behind another answer's unknown effect reads "Running tools: 0 of 1 finished" while holding the write turn indefinitely
-- **BR-20** [Minor] `fix-without-reachable-consumer` The insert_tool `outcome` field and settled()'s third parameter have no reachable consumer, and the second caller was not updated
-- **BR-21** [Minor] `invariant-statement-omits-exception` README restates what a Stop writes instead of pointing at the single statement created this round
-- **BR-22** [Minor] `composed-claim-tested-at-one-seam` The "queued in the scheduler, never run" row is asserted only at the producer seam, never as transcript text
-- **BR-23** [Minor] `behavior-change-sweep-by-claim` Plan Core concepts still says state.lua's `writable`/`resolve` are unchanged, which M4 falsified
-- **BR-24** [Minor] `composed-claim-tested-at-one-seam` Disjointness — the invariant that replaced reclaim_tail's overlap scan — is asserted at no seam that composes events
+- **BR-25** [Minor] `stall-visibility` An output receipt erases the tools note, so an answer that gets the turn after being held shows no status while its tools run or clean up

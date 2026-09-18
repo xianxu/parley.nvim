@@ -1330,3 +1330,23 @@ Review sidecar: `workshop/plans/000266-…-m4-review.md`.
 - **Minor, ARCH-DRY** — `document_append_spec`'s fixture `intent` takes a grant,
   so the leaf case no longer copies its shape.
 
+
+### 2026-09-18 — issue close review (FIX-THEN-SHIP, no blocking): the response
+
+Review sidecar: `workshop/plans/000266-…-close-review.md`.
+
+- **Minor, `stall-visibility` (4th) — the rule, in code and on the page.** A
+  wait note was re-presented only when its text changed, but every output write
+  clears the status line (`chat_pending` `written` hides the extmark and drops a
+  queued update). So an answer that got the turn wrote its text and first call
+  block and then ran both tools with nothing on screen. Now `response_session`
+  keeps the note as state and shows it again when the line is cleared (every
+  output write) or recreated (after a pause). `changed` records the note even
+  with no line up, so a recreated line compares against the current note, not a
+  stale one. The rule is written beside the code and in
+  `atlas/chat/response_progress.md`. Regression test, red before the fix:
+  `response_session_spec` "keeps the tools note on screen after a held answer's
+  writes land". The recreate-after-pause path follows from the same helper; no
+  test drives a pause while held.
+- **Minor, ARCH-DRY (test code)** — `response_session_spec`'s three copies of
+  `notes()` are one describe-level helper.

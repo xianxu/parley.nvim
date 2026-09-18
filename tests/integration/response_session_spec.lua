@@ -98,6 +98,15 @@ describe('production response session composition',function()
             prepare_input=function(_,cb)cb.prepared(input(buf));cb.resolved();return {}end}
     end
     local function lines()return vim.api.nvim_buf_get_lines(buf,0,-1,false)end
+    -- The pending status lines: presentation only, never transcript.
+    local function notes()
+        local ns=vim.api.nvim_create_namespace('parley_chat_pending')
+        local out={}
+        for _,mark in ipairs(vim.api.nvim_buf_get_extmarks(buf,ns,0,-1,{details=true}))do
+            local virt=mark[4].virt_lines;if virt then out[#out+1]=virt[1][1][1] end
+        end
+        return table.concat(out,'\n')
+    end
     it('starts the request before the gap and lands the gap once, immediately before the first output',function()
         local before=lines()
         local s=start(doc,spec(0),lone_opts(),sessions);pump(s)
@@ -166,14 +175,6 @@ describe('production response session composition',function()
         local a=start(doc,spec(0),lone_opts(),sessions);local b=start(doc,spec(3),lone_opts(),sessions)
         pump(a);pump(b)
         local before=lines()
-        local ns=vim.api.nvim_create_namespace('parley_chat_pending')
-        local function notes()
-            local out={}
-            for _,mark in ipairs(vim.api.nvim_buf_get_extmarks(buf,ns,0,-1,{details=true}))do
-                local virt=mark[4].virt_lines;if virt then out[#out+1]=virt[1][1][1] end
-            end
-            return table.concat(out,'\n')
-        end
         assert.is_true(vim.wait(500,function()return notes():find('Waiting for the answer to line 1',1,true)~=nil end,5),notes())
         assert.truthy(notes():find('(streaming)',1,true),notes())
         assert.same(before,lines(),'the note is presentation, never transcript')
@@ -223,14 +224,6 @@ describe('production response session composition',function()
             prepare_input=function(_,cb)cb.prepared(input(buf));cb.resolved();return {}end,
             build_input=function(previous,messages)previous.messages=messages;previous.payload.messages=messages;return previous end},sessions)
         pump(s)
-        local ns=vim.api.nvim_create_namespace('parley_chat_pending')
-        local function notes()
-            local out={}
-            for _,mark in ipairs(vim.api.nvim_buf_get_extmarks(buf,ns,0,-1,{details=true}))do
-                local virt=mark[4].virt_lines;if virt then out[#out+1]=virt[1][1][1] end
-            end
-            return table.concat(out,'\n')
-        end
         local function text()return table.concat(lines(),'\n')end
         local p=processes.processes[4242]
         p:emit('stdout','data: '..vim.json.encode({choices={{delta={tool_calls={
@@ -272,14 +265,6 @@ describe('production response session composition',function()
         assert.is_not_nil(events['call-b'],'b\'s tool runs while a streams')
         Session.cancel(b,'operator stopped response');pump(b)
         assert.equals('flushing',Session.snapshot(b).generation.phase)
-        local ns=vim.api.nvim_create_namespace('parley_chat_pending')
-        local function notes()
-            local out={}
-            for _,mark in ipairs(vim.api.nvim_buf_get_extmarks(buf,ns,0,-1,{details=true}))do
-                local virt=mark[4].virt_lines;if virt then out[#out+1]=virt[1][1][1] end
-            end
-            return table.concat(out,'\n')
-        end
         assert.is_true(vim.wait(500,function()return notes():find('Stopped; writing its tool results after the answer to line 1',1,true)~=nil end,5),notes())
         assert.is_nil(table.concat(lines(),'\n'):find('id=call-b',1,true),'nothing written before the turn arrives')
         local pa=processes.processes[4242]
@@ -290,6 +275,35 @@ describe('production response session composition',function()
         assert.truthy(text:find('Cancelled by the user while running',1,true),text)
         assert.equals('terminal',Session.snapshot(b).generation.phase)
         assert.equals('cancelled',Session.snapshot(b).generation.outcome)
+    end)
+
+    -- #266 close review (stall-visibility, 4th): a wait note is state, not an
+    -- event. A held answer gets the turn and writes its text and first call
+    -- block while both its tools still run; each write clears the status line,
+    -- so the tools note must be shown again after it.
+    it('keeps the tools note on screen after a held answer\'s writes land',function()
+        local events={}
+        local producer={start=function(call,_,cb)events[call.id]=cb;return {}end,cancel=function(_,done)done({supervised=true})end}
+        local o=lone_opts();o.producer=producer
+        o.build_input=function(previous,messages)previous.messages=messages;previous.payload.messages=messages;return previous end
+        local a=start(doc,spec(0),lone_opts(),sessions);local b=start(doc,spec(3),o,sessions)
+        pump(a);pump(b)
+        local pb=processes.processes[4243]
+        pb:emit('stdout','data: {"choices":[{"delta":{"content":"beta"}}]}\n\n')
+        pb:emit('stdout','data: '..vim.json.encode({choices={{delta={tool_calls={
+            {index=0,id='call-a',type='function',['function']={name='read_file',arguments='{"path":"a"}'}},
+            {index=1,id='call-b',type='function',['function']={name='read_file',arguments='{"path":"b"}'}}}}}}})..'\n\n')
+        status(pb);pb:finish();vim.wait(100,function()return #Tasker._handles==1 end,1);pump(b);pump(a);pump(b)
+        assert.is_not_nil(events['call-a']);assert.is_not_nil(events['call-b'])
+        assert.is_true(vim.wait(500,function()return notes():find('Waiting for the answer to line 1',1,true)~=nil end,5),notes())
+        local pa=processes.processes[4242]
+        pa:emit('stdout','data: {"choices":[{"delta":{"content":"alpha"}}]}\n\n');status(pa);pa:finish()
+        vim.wait(100,function()return #Tasker._handles==0 end,1);pump(a);pump(b)
+        local text=table.concat(lines(),'\n')
+        assert.truthy(text:find('beta',1,true),text)
+        assert.truthy(text:find('id=call-a',1,true),text)
+        assert.is_true(vim.wait(500,function()return notes():find('0 of 2',1,true)~=nil end,5),
+            'the tools note must survive the writes: ['..notes()..']')
     end)
 
     it('releases host payloads before terminal notification even when IO retains callbacks',function()

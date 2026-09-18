@@ -3164,3 +3164,11 @@ download.
   each transition that maintains it and watch the test fail. The first draft
   caught only three of four mutations: its generator never packed grants close
   enough for one edit to span two.
+- #266 close review (4th in `stall-visibility`): a status the user needs while
+  something waits is STATE, and the display it lives on has a lifecycle of its
+  own. The note was pushed only when its text changed. The status line was
+  cleared by every output write and recreated after a pause, so the note
+  vanished right when a held answer started writing. Tie such state to the
+  display: re-assert it on every clear and recreate, and test it in the composed
+  session across the event that clears it. A test of the composer's strings
+  cannot see this.

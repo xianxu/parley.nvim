@@ -1,13 +1,14 @@
 ---
 id: 000266
-status: working
+status: codecomplete
 deps: []
 github_issue:
 target: transcript-is-the-whole-truth
 created: 2026-09-17
-updated: 2026-09-17
+updated: 2026-09-18
 estimate_hours: 13.17
 started: 2026-09-17T11:06:53-07:00
+actual_hours: 19.79
 ---
 
 # Serialize transcript mutation: queue generations, insert tool call/result pairs in order
@@ -306,6 +307,8 @@ Durable plan: `workshop/plans/000266-serialize-transcript-mutation-plan.md`
 
 
 
+
+- 2026-09-18: closed — at 21c5f3d0 (M4 close): lint 0 warnings/0 errors (635 files); unit 213/213 PASS (make test-unit JOBS=4); integration 161/163 (make test-integration JOBS=4) — highlight_typing_spec and perf_chat_typing_spec aborted with no assertion and pass alone; both are the uniformly-slow-process pattern measured this milestone (a 4-17 s spec occasionally runs 57 s), recorded at M3 and present on pre-#266 main. All four milestones closed with fresh-context reviews (M1 round 4, M2 round 5 SHIP, M3 round 2, M4 round 1 FIX-THEN-SHIP, no blocking). Done-when: one writer per transcript (write turn), ordered (call,result) append with no placeholder, reserved-slot/child-grant/capacity-ticket machinery and the nesting geometry deleted (arch guard), undo coherence asserted in generation_turn_spec, held-output 1 MiB budget with overflow test, a failed or crashed call written as an error result and the round continues, atlas ownership/tool_use describe the serialized model.; review verdict: FIX-THEN-SHIP
 - 2026-09-18: closed M4 — code at bb3ee0bf (later commits docs/log only): lint 0 warnings/0 errors (634 files); unit 213/213 PASS (make test-unit JOBS=4); integration 162/163 (make test-integration JOBS=4), the abort perf_document_spec at Plenary 50 s limit, passes alone; the prior integration run's two aborts (response_tools_spec, highlight_typing_spec) pass in this one. make test between every removal: 374-375/376, only recorded load aborts, each passing alone. Nesting refused as overlap (test red before the removal); arch guard counterfactual-checked with probes in state.lua and response_tools.lua. Aborts investigated: the 50 s ones are a uniformly 7-8x slow process, also on pre-#266 main; document_dependencies_spec predates M4 (8/64 at M3 vs 2/64 under stress), noted on #267. Actual: sdlc active-time since the M3 close e48362ab (repo+brain transcripts, --include-assistant) = 2.33 h, incl. 38.5 min post-M3-close activity and one overlapping segment.; review verdict: FIX-THEN-SHIP
 - 2026-09-18: closed M3 — at b6cfcd97: lint 0 warnings/0 errors (634 files); unit 213/213 PASS; integration 163/163 PASS (phases run separately, JOBS=4). Round-1 fixes: BR-15 flush results from settlement evidence (tests at machine, tool-round and producer levels; producer test fails without the fix), flush guarantees stated once in tool_use.md from every stop() reachable from flushing, one wait-note composer requiring an escape (walked by a unit test), tool-operations strings, plan phase line. Tool-round fixture drains to quiescence (38 s to 9 s). Actual measured by sdlc active-time since the M2 close (1.40 h).; review verdict: FIX-THEN-SHIP
 - 2026-09-18: closed M2 — at 274f82e: lint 0 warnings/0 errors (634 files); unit 213/213 PASS; integration 163/163 PASS (make test-unit / test-integration JOBS=4, run as separate phases so a #267 abort cannot hide integration). Review round 5 fixes: BR-11 same-generation self-quarantine refused with a readable error (resource, scheduler and chat-level tests; chat test fails without the fix), BR-9 undo rule on the atlas page plus two tool-round undo tests, BR-10 claim sweep by wording. Goldens regenerate to key-order churn only. Actual measured by sdlc active-time since the M1 close commit (2.72 h).; review verdict: SHIP
@@ -1087,3 +1090,12 @@ one found by the same sweep); the superseded-claim sweep stated once in
 the invariant `reclaim_tail` now relies on — driven by a seeded fuzz over every
 grant transition and by the coordinator-level loop, with five mutation runs, all
 caught; the append fixture's `intent` takes a grant.
+
+### 2026-09-18 — issue close review: FIX-THEN-SHIP, no blocking; the note fixed at the rule
+
+Response in the plan's `## Revisions` (issue close review). An output write
+cleared the tools note, so an answer that had just got the turn ran its tools
+with no status shown. The note is now state, shown again whenever its line
+is cleared or recreated. The rule sits in the code and in
+`atlas/chat/response_progress.md`, with a session-level regression test that
+was red before the fix.
