@@ -260,6 +260,14 @@ Durable plan: `workshop/plans/000266-serialize-transcript-mutation-plan.md`
       - [x] atlas rewrite + `milestone-close`
 - [ ] M2 — ordered `(call, result)` append; removes capacity tickets, the round
       reservation lifecycle, and child grants.
+      - [ ] tool execution no longer waits on a reservation write: re-assert it
+            across generations (two generations' tools run concurrently while
+            their writes stay serialized), and restore the cross-generation cases
+            M1 restated — `chat_stop_generation_spec` "keeps an earlier target
+            independent…" (b as a concurrent transport) and `chat_async_tools_spec`
+            "scopes Stop…" (disjoint path in a second generation)
+      - [ ] revert `atlas/providers/tool_execution.md`'s "first waits for the
+            write turn" sentence once `begin_round` writes nothing
 - [ ] M3 — residual exclusion sweep (`exclude`, parent-slot carving, the
       half-open seam flags, the ancestor walk).
 
