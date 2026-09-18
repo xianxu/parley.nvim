@@ -860,3 +860,41 @@ common, and releasing would produce `A… | edit | B | …A` histories.
   when the turn arrives. The holder's phase names why it blocks (preparing,
   streaming, running tools, finishing) — the stall shapes.
 
+### 2026-09-17 — Task 1.7: held output was bounded by chunks, not bytes
+
+**Reason.** Writing Step 2's test exposed a gap the budget analysis missed.
+Providers call `cb.output` once per SSE delta (`dispatcher.create_output_handler`),
+and each call was one machine queue item. A generation held behind the turn hit
+the **256-item** cap after a few hundred deltas — a paragraph — and was stopped
+as `overflow`, far below the 1 MiB byte budget. And `generation.lua`'s
+transition deep-copies its whole state on every event, so a long held queue made
+every event O(n).
+
+**Delta.**
+
+- **Coalescing.** An `output` event may carry `extend=true`: it grows the *last*
+  queued item, which must be this operation's and carry this blob. An in-flight
+  item is not in the queue, so it can never grow under an issued write. The
+  runner tries the extension first and falls back to a new item when refused;
+  appends go to a parts list joined once on read. A held answer is now one item,
+  bounded by bytes (`generation_turn_spec`: 600 deltas held, one item, written
+  whole).
+- **Step 1, re-measured** (one-off count of the bytes from each `🤖:` line to
+  the next `💬:`/`🤖:` line, over every `workshop/parley/*.md` in the sibling
+  repos): **59 files, n=359 answer blocks,
+  p50 573 B, p95 16,525 B, p99 36,420 B, max 116,723 B.** p99 is far under the
+  ~100 KiB revisit threshold, so the budget is unchanged: 1 MiB per generation
+  (~9× the largest answer), 16 MiB process-wide.
+- **Step 5, the bound stated rather than tested at 16 MiB:** at most 16 runners
+  (`generation_runner.lua` `active>=16`) × 1 MiB each is exactly the process
+  cap, so the per-generation limit always binds first. Stated at the `stage()`
+  site.
+- **Steps 2–4.** Both overflow sites now end as outcome `overflow` (the runner's
+  pre-admission refusal used to end as `cancelled`), via one `overflow_reason`
+  that names the answer the generation was held behind. The reason reaches the
+  host through the terminal snapshot's `failure`, and `chat_respond` warns
+  "Response stopped: …". Found on the way: the transport's abort after a refused
+  chunk re-reported `cancelled` through `cb.failed` and overwrote the cause — a
+  failure reported while already stopping is now treated as an echo, not a
+  reason.
+
