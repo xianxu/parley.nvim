@@ -34,6 +34,15 @@ function M.next(seq)
     return item
 end
 
+--- The index of the result the walk is blocked on — the next block is call
+--- `index`'s result and its outcome has not arrived — or nil (#266 M3: Stop
+--- cancels exactly that call and moves on).
+function M.waiting(seq)
+    local item=item_at(seq)
+    if item and item.kind=='result' and not seq.arrived[item.index] then return item.index end
+    return nil
+end
+
 --- Record that call `index`'s outcome arrived. Once its result is written the
 --- outcome is final, so a later one (an unknown effect confirmed after the
 --- fact) changes nothing.

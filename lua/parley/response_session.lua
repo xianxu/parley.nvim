@@ -203,7 +203,8 @@ function M.start(doc,spec,opts)
             -- for; one running tools says how far they are, since their blocks
             -- land one at a time. Presentation only: an extmark, never transcript.
             local note
-            if value.blocked then note=Presentation.waiting_message(value.blocked.line,value.blocked.phase)
+            if value.phase=='flushing' then note=Presentation.flushing_message(value.blocked and value.blocked.line)
+            elseif value.blocked then note=Presentation.waiting_message(value.blocked.line,value.blocked.phase)
             elseif value.tools and value.phase=='executing_tools' then
                 note=Presentation.tools_message(value.tools)
             end

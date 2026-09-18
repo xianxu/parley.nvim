@@ -249,6 +249,49 @@ describe('production response session composition',function()
             'the note clears once the round continues: '..notes())
     end)
 
+    -- #266 M3 (operator): Stop during a tool round writes the round out; a
+    -- stopped answer behind another keeps its place, says so, and writes its
+    -- pairs when the turn arrives.
+    it('writes a stopped answer\'s tool round when its turn arrives, saying so meanwhile',function()
+        local events={}
+        -- As the real producer does for a started tool: cancellation hands it to
+        -- its supervisor (tools/producer.lua cancel), which is what lets a tool
+        -- that never reported an outcome retire.
+        local producer={start=function(call,_,cb)events[call.id]=cb;return {}end,cancel=function(_,done)done({supervised=true})end}
+        local function tool_opts()
+            local o=lone_opts();o.producer=producer
+            o.build_input=function(previous,messages)previous.messages=messages;previous.payload.messages=messages;return previous end
+            return o
+        end
+        local a=start(doc,spec(0),lone_opts(),sessions);local b=start(doc,spec(3),tool_opts(),sessions)
+        pump(a);pump(b)
+        local pb=processes.processes[4243]
+        pb:emit('stdout','data: '..vim.json.encode({choices={{delta={tool_calls={
+            {index=0,id='call-b',type='function',['function']={name='read_file',arguments='{"path":"b"}'}}}}}}})..'\n\n')
+        status(pb);pb:finish();vim.wait(100,function()return #Tasker._handles==1 end,1);pump(b);pump(a);pump(b)
+        assert.is_not_nil(events['call-b'],'b\'s tool runs while a streams')
+        Session.cancel(b,'operator stopped response');pump(b)
+        assert.equals('flushing',Session.snapshot(b).generation.phase)
+        local ns=vim.api.nvim_create_namespace('parley_chat_pending')
+        local function notes()
+            local out={}
+            for _,mark in ipairs(vim.api.nvim_buf_get_extmarks(buf,ns,0,-1,{details=true}))do
+                local virt=mark[4].virt_lines;if virt then out[#out+1]=virt[1][1][1] end
+            end
+            return table.concat(out,'\n')
+        end
+        assert.is_true(vim.wait(500,function()return notes():find('Stopped; writing its tool results after the answer to line 1',1,true)~=nil end,5),notes())
+        assert.is_nil(table.concat(lines(),'\n'):find('id=call-b',1,true),'nothing written before the turn arrives')
+        local pa=processes.processes[4242]
+        pa:emit('stdout','data: {"choices":[{"delta":{"content":"alpha"}}]}\n\n');status(pa);pa:finish()
+        vim.wait(100,function()return #Tasker._handles==0 end,1);pump(a);pump(b)
+        local text=table.concat(lines(),'\n')
+        assert.truthy(text:find('id=call-b error=true',1,true),text)
+        assert.truthy(text:find('Cancelled by the user while running',1,true),text)
+        assert.equals('terminal',Session.snapshot(b).generation.phase)
+        assert.equals('cancelled',Session.snapshot(b).generation.outcome)
+    end)
+
     it('releases host payloads before terminal notification even when IO retains callbacks',function()
         local callbacks,observed
         local retained=setmetatable({},{__mode='v'})

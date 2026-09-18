@@ -26,6 +26,9 @@ local failures={
     unknown='The tool call failed: it ended without reporting a result, so it may have partly taken effect.',
     rejected='The tool call was rejected before it ran.',
     cancelled_before_effect='The tool call was cancelled before it ran.',
+    -- #266 M3: written by a Stop that lands during a tool round.
+    cancelled_running='Cancelled by the user while running; it may have partly taken effect.',
+    cancelled_queued='Cancelled by the user before it ran.',
 }
 local function failure_text(outcome,value)
     local detail=type(value)=='table' and (value.content or value.error) or nil
@@ -135,6 +138,8 @@ function M.new(doc,opts)
         local block
         if ctx.kind=='call'then
             block=Serialize.render_call(c);assert(#block<=65536,'tool argument limit')
+        elseif ctx.failure then
+            block=Serialize.render_result({id=c.id,name=c.name,content=failure_text(ctx.failure),is_error=true})
         else block=Serialize.render_result(settled(c,ctx.result))end
         local text=(ctx.kind=='call' and ctx.index==1 and '\n\n' or '')..block..'\n\n'
         local admitted=ctx.append(text,function(result)done(result.status)end)

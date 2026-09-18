@@ -100,7 +100,7 @@ describe("progress_message", function()
         assert.truthy(message:find('running tools',1,true))
         assert.truthy(message:find(':ParleyStop',1,true))
         for phase,why in pairs({preparing='preparing',requesting='streaming',draining='finishing',
-            finalizing='finishing',stopping='stopping'}) do
+            finalizing='finishing',flushing='stopping',stopping='stopping'}) do
             assert.truthy(presentation.waiting_message(3,phase):find(why,1,true),phase)
         end
         assert.truthy(presentation.waiting_message(nil,nil):find('another answer',1,true))
@@ -110,6 +110,11 @@ describe("progress_message", function()
     it('counts a round\'s tools as they finish, then names a wait on cleanup',function()
         assert.equals('Running tools: 1 of 3 finished',presentation.tools_message({total=3,finished=1,settled=1}))
         assert.equals('Tools finished; waiting for 2 to clean up',presentation.tools_message({total=3,finished=3,settled=1}))
+    end)
+    -- #266 M3: a Stop during a tool round writes the round out first.
+    it('says a stopped answer is writing its tool results, and after whom',function()
+        assert.equals('Stopped; writing its tool results after the answer to line 4',presentation.flushing_message(4))
+        assert.equals('Stopped; writing its tool results',presentation.flushing_message(nil))
     end)
     it('says why a response stopped at its staging budget, naming the answer it waited behind',function()
         local held=presentation.overflow_message(7)

@@ -147,7 +147,8 @@ describe('generation runner sequences',function()
             Runner.drain(r,100);assert.is_function(finish)
             assert.is_true(Runner.snapshot(r).retained_blobs>0)
             if cancel then
-                Runner.cancel(r);Runner.drain(r,100)
+                -- A hard stop: a first Stop writes the round out (#266 M3); a second drops the rest.
+                Runner.cancel(r);Runner.cancel(r);Runner.drain(r,100)
                 assert.equals('stopping',Runner.snapshot(r).phase,'the issued block is still owed an answer')
             end
             finish('failed')
@@ -174,12 +175,12 @@ describe('generation runner sequences',function()
         assert.is_true(write_done);assert.equals('terminal',Runner.snapshot(r).phase)
         assert.equals(0,Runner.snapshot(r).retained_blobs)
     end)
-    it('does not render a queued tool block after cancellation',function()
+    it('does not render a queued tool block after a hard stop',function()
         local doc=document();local fake=Fake.new();local called=false
         fake.adapters.insert_tool=function()called=true end
         local r=start(doc,fake,2);fake:prepare();Runner.drain(r,100)
         local cb=fake.requests[1].callbacks
-        cb.round({{call_id='one',arguments={}}});cb.resolved();Runner.cancel(r);Runner.drain(r,100)
+        cb.round({{call_id='one',arguments={}}});cb.resolved();Runner.cancel(r);Runner.cancel(r);Runner.drain(r,100)
         assert.is_false(called);assert.equals('terminal',Runner.snapshot(r).phase)
     end)
     it('keeps a stopping generation until its issued tool block is answered',function()
@@ -189,7 +190,7 @@ describe('generation runner sequences',function()
         local r=start(doc,fake,2);fake:prepare();Runner.drain(r,100)
         local cb=fake.requests[1].callbacks
         cb.round({{call_id='one',arguments={}}});cb.resolved();Runner.drain(r,100)
-        Runner.cancel(r);Runner.drain(r,100)
+        Runner.cancel(r);Runner.cancel(r);Runner.drain(r,100)
         assert.equals('stopping',Runner.snapshot(r).phase)
         done('applied');Runner.drain(r,100);assert.equals('terminal',Runner.snapshot(r).phase)
     end)

@@ -40,7 +40,8 @@ line counts them — *Running tools: 1 of 2 finished* — from the generation's
 snapshot, re-presented whenever a count changes. Once every outcome is in but a
 tool has not cleaned up, it says so — *Tools finished; waiting for 1 to clean
 up* — since the round continues only after cleanup. A waiting note takes
-precedence. Neither process exit alone nor successful signaling proves cleanup:
+precedence. An answer stopped during a tool round says *Stopped; writing its tool
+results* — *after the answer to line N* when it is waiting for the turn. Neither process exit alone nor successful signaling proves cleanup:
 transport ownership persists until exit and both pipes settle.
 
 A provider failure lets already-admitted valid bytes drain, then reports the

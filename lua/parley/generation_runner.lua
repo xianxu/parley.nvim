@@ -300,7 +300,10 @@ local function callbacks(s,effect,after_writes)
     return cb
 end
 local function start_operation(s,effect)
-    if s.detached or G.snapshot(s.machine).phase=='stopping' then
+    local phase=G.phase(s.machine)
+    -- A tool queued before a Stop must not start while its round is written out
+    -- (#266 M3): flushing only writes.
+    if s.detached or phase=='stopping' or (phase=='flushing' and effect.type=='start_child') then
         -- Never-started effects are positively resolved without spawning IO.
         if effect.type=='start_child' then
             local ref=blob(s,true,false)
@@ -513,6 +516,8 @@ local function execute(s,effect)
         end
         local ctx,after_writes=context(s,effect)
         ctx.index=effect.index;ctx.kind=effect.kind
+        -- #266 M3: a result the Stop walk recorded as cancelled has no blob.
+        ctx.failure=effect.cancelled and 'cancelled_'..effect.cancelled or nil
         local result=effect.result_ref and s.blobs[effect.result_ref]
         ctx.result=result and copy(result.value)
         local function complete(status)

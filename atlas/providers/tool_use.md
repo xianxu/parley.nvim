@@ -179,8 +179,12 @@ adapters receive operation handles, not authority to write arbitrary positions.
    continues so the model can try another way; an outcome is final once written.
    Only a call whose outcome never arrives holds the blocks behind it: those tools
    still run and presentation counts them
-   ([response progress](../chat/response_progress.md)), and `:ParleyStop` drops
-   pairs not yet written, like any held output.
+   ([response progress](../chat/response_progress.md)). `:ParleyStop` during
+   the round cancels every running tool and still writes the round out, in order
+   — a tool finished by the time its pair is reached gets its real result, any
+   other "Cancelled by the user" (while running, or before it ran) — and then
+   ends the answer with no continuation. A second Stop drops what is left
+   (#266 M3; the generation's `flushing` phase).
 5. After the round is settled, `response_tools` builds continuation messages from
    the frozen previous request, assistant text, calls, and each call's recorded
    result — the error result of a failed call included. The same

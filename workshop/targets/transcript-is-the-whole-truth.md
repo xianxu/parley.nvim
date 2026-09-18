@@ -195,3 +195,19 @@ the model can try another way.
   like any held output. Before M2 a call block was always written before its tool
   started. The transcript still never *claims* an effect that did not happen; it
   can omit one that did, if the generation is stopped first.
+
+### 2026-09-18 — the gap closed: Stop writes the round out (parley#266 M3)
+
+**Reason.** Operator decision after the M2 close: the tolerated gap recorded in
+the previous revision — Stop dropping `(call, result)` pairs whose tools had
+already run — is not acceptable.
+
+**Delta.** The gap is closed. A Stop during a tool round cancels every running
+tool and then writes the whole round out, in declared order: a tool finished by
+the time its pair is reached gets its real result, any other an error result
+saying the user cancelled it (while running — it may have partly taken effect —
+or before it ran). Only then does the answer end. A stopped answer behind another
+keeps its place and writes when the turn arrives. So the file records every tool
+call the model made in that round, and what is known of each one's outcome. The
+remaining ways to lose a pair are the hard stops: a second Stop, reload, or an
+edit that revokes the answer.

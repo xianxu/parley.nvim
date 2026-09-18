@@ -60,11 +60,11 @@ So: **`M.transition` notifies whenever the turn value differs before and after**
 | Name | Lives in | Status |
 |------|----------|--------|
 | `write_turn` — WriteTurn: `holder` | `lua/parley/document/write_turn.lua` | new |
-| `sequence` — ToolSequence *(M2)*: `new`, `next`, `outcome`, `written`, `final`, `complete` | `lua/parley/tools/sequence.lua` | new |
+| `sequence` — ToolSequence *(M2; `waiting` M3)*: `new`, `next`, `outcome`, `written`, `final`, `complete`, `waiting` | `lua/parley/tools/sequence.lua` | new |
 | `state` — DocumentState: the `turn`, `waits_for_turn` | `lua/parley/document/state.lua` | modified |
 | `generation` — GenerationMachine: an O(1) `phase` | `lua/parley/generation.lua` | modified |
 | `init` — DocumentCoordinatorStatus: `turn`, the `'waiting'` status | `lua/parley/document/init.lua` | modified |
-| `chat_presentation` — the waiting note, overflow report and tool count: `waiting_message`, `overflow_message`, `tools_message` | `lua/parley/chat_presentation.lua` | modified |
+| `chat_presentation` — the waiting note, overflow report and tool count: `waiting_message`, `overflow_message`, `tools_message`, `flushing_message` | `lua/parley/chat_presentation.lua` | modified |
 
 *Name cells lead with the module file, which the arch table sweep
 (`tests/arch/single_source_sweeps_spec.lua`) resolves; the concept name follows,

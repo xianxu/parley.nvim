@@ -71,8 +71,10 @@ The stale note clears when a fresh response starts or the file is reloaded.
 - A tool round's tools run at once, but each call is written immediately before
   its own result, in the order the model asked for them; the status line counts
   the tools still running. A failed call is written as an error result and the
-  answer goes on. Already started effects may still need to finish cleanup after
-  Stop; stopping does not undo an external effect.
+  answer goes on. Stopping during a tool round cancels its running tools but
+  still writes every call with its result — or a "cancelled by the user" error —
+  so the transcript records what ran; a second `:ParleyStop` drops the rest.
+  Stopping does not undo an external effect.
 
 These controls apply to concurrent work in one Neovim instance.
 
@@ -112,8 +114,10 @@ conflicting file operations wait for earlier work. Capabilities, roots and tool
 configuration are captured for the response. Custom tools need an `execute_async`
 implementation to run in this workflow; a synchronous handler alone is refused.
 
-Stop and reload prevent further chat writes, while the process supervisor keeps
-unfinished tool effects and their resource claims. `:ParleyToolOperations` shows
+Reload prevents further chat writes, and so does Stop once it has written out a
+tool round in progress, while the process supervisor keeps tools that are still
+running and their resource claims. A tool whose process has ended holds nothing,
+even when its outcome is unknown: it is reported to the model as a failure. `:ParleyToolOperations` shows
 retained operations and their evidence. After independently inspecting an effect,
 you can record whether it happened, did not happen, or partially happened. This
 never reruns it or invents process/file cleanup; conflicting work remains blocked

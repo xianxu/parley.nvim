@@ -47,8 +47,10 @@ end
 --- write, whatever kind that write turns out to be.
 local function write_due(s,bytes)
     if #s.queue>0 then return true end
-    if s.phase=='executing_tools' then
-        return s.round~=nil and not s.round.inserting and bytes==0 and Seq.next(s.round.seq)~=nil
+    if s.phase=='executing_tools' or s.phase=='flushing' then
+        local round=s.round
+        return round~=nil and not round.inserting and bytes==0
+            and (Seq.next(round.seq)~=nil or s.phase=='flushing' and Seq.waiting(round.seq)~=nil)
     end
     return s.phase=='finalizing' and bytes==0 and not s.finalized
 end
@@ -119,8 +121,31 @@ local function insert_next(s,effects,bytes)
     local item=Seq.next(round.seq)
     if not item then return end
     local child=round.children[item.index]
+    local result=item.kind=='result'
     round.inserting={id=emit(s,effects,'insert_tool',{round=round.id,index=item.index,kind=item.kind,
-        call_id=child.call_id,result_ref=item.kind=='result' and child.result_ref or nil}).id,item=item}
+        call_id=child.call_id,result_ref=result and not child.cancelled and child.result_ref or nil,
+        cancelled=result and child.cancelled or nil}).id,item=item}
+end
+--- #266 M3 (operator): Stop during a tool round writes the round out rather than
+--- dropping the pairs of tools that already ran. Every tool still running is
+--- cancelled and none starts; the walk then writes each pair in declared order
+--- (`flushing` in pump). The turn is kept: a stopped generation behind another
+--- answer keeps its place and writes when the turn arrives.
+local function flush(s,effects)
+    s.phase='flushing'
+    for _,child in ipairs(s.round.children) do
+        local op=s.operations[child.operation]
+        if child.started and not child.outcome and op and not op.resolved then
+            emit(s,effects,'cancel_operation',{operation=child.operation})
+        end
+    end
+end
+--- A tool the walk reaches with no outcome is recorded as cancelled by the user:
+--- `running` if it had started (it may have partly taken effect), else `queued`.
+local function cancel_child(s,child)
+    child.outcome='cancelled_by_user';child.cancelled=child.started and 'running' or 'queued'
+    if not child.started then child.resolved=true end
+    s.round.seq=Seq.outcome(s.round.seq,child.index)
 end
 local function pump(s,effects)
     if s.phase=='stopping' then
@@ -175,6 +200,17 @@ local function pump(s,effects)
             round.join_pending=true
             round.preparation=operation(s,effects,'continue_round',{round=round.id,result_refs=results,
                 input_seed_ref=s.input_seed_ref,dependencies_ref=s.dependencies_ref})
+        end
+    end
+    if s.phase=='flushing' then
+        local round=s.round
+        if s.grant_status=='valid' then
+            local index=not round.inserting and bytes==0 and may_write(s) and Seq.waiting(round.seq)
+            if index then cancel_child(s,round.children[index]) end
+            insert_next(s,effects,bytes)
+        end
+        if Seq.complete(round.seq) and not round.inserting then
+            stop(s,effects,'cancelled');pump(s,effects);return
         end
     end
     if phase(s)=='draining' and bytes==0 and not s.provider_failed then advance(s,'finalizing') end
@@ -390,7 +426,7 @@ function M.transition(handle,event)
         if not op or op.resolved then return reject('operation') end
         -- Transfer is local retirement only: a separate supervisor retains the
         -- physical operation and unknown effect ledger. It can never join a round.
-        if supervised and (s.phase~='stopping' or op.kind~='child')then return reject('supervision')end
+        if supervised and ((s.phase~='stopping' and s.phase~='flushing') or op.kind~='child')then return reject('supervision')end
         -- A tool resolves on cleanup whatever its outcome (#266 M2): an unknown
         -- one is written as an error result and the round goes on. It still
         -- needs *an* outcome — cleanup alone says nothing about the effect.
@@ -407,7 +443,13 @@ function M.transition(handle,event)
         for _,child in ipairs(s.round and s.round.children or {}) do
             if child.operation==event.operation then
                 child.resolved=true
-                if supervised then child.supervised=true;child.outcome=child.outcome or 'unknown' end
+                if supervised then
+                    child.supervised=true
+                    -- Handed off mid-flush with nothing reported: it was cancelled
+                    -- while running, and the walk writes it so.
+                    if not child.outcome and s.phase=='flushing' then cancel_child(s,child) end
+                    child.outcome=child.outcome or 'unknown'
+                end
             end
         end
     elseif kind=='finalize_result' then
@@ -419,7 +461,11 @@ function M.transition(handle,event)
         if event.reason~=nil and event.reason~='overflow' then return reject('cancel reason') end
         -- The runner's byte check refuses before admission and cancels; the
         -- machine's own check stops. Both are an overflow, not a user's Stop.
-        stop(s,effects,event.reason=='overflow' and 'overflow' or 'cancelled')
+        -- A user's Stop during a tool round writes the round out first (#266 M3);
+        -- a second Stop, while it does, drops the rest.
+        if event.reason==nil and s.phase=='executing_tools' and s.round and not Seq.complete(s.round.seq)
+            and s.grant_status~='revoked' then flush(s,effects)
+        else stop(s,effects,event.reason=='overflow' and 'overflow' or 'cancelled') end
     else return reject('event') end
     pump(s,effects)
     return wrap(s),{accepted=true,admitted_bytes=s.accepted_bytes-old.accepted_bytes,effects=copy(effects)}

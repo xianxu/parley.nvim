@@ -49,10 +49,15 @@ M.bounded_message=bounded
 -- frozen. `line` is the 1-based row of the holder's question, `phase` its
 -- generation phase; either may be unknown.
 local waiting_reasons={preparing='preparing',requesting='streaming',executing_tools='running tools',
-    draining='finishing',finalizing='finishing',stopping='stopping'}
+    draining='finishing',finalizing='finishing',flushing='stopping',stopping='stopping'}
 local function holder(line)return line and ('the answer to line '..line) or 'another answer' end
 function M.waiting_message(line,phase)
     return 'Waiting for '..holder(line)..' ('..(waiting_reasons[phase] or 'writing')..'); :ParleyStop there stops it'
+end
+-- #266 M3: a Stop during a tool round writes the round out before the answer
+-- ends — after the answer to `line` when another holds the turn.
+function M.flushing_message(line)
+    return 'Stopped; writing its tool results'..(line and ' after '..holder(line) or '')
 end
 -- #266 M2: a round's tools run at once but their blocks land one at a time, in
 -- declared order, so the transcript can lag them. This is what shows they run —
