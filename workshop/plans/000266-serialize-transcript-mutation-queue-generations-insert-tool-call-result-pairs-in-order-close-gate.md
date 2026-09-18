@@ -182,6 +182,43 @@ rounds:
       boundary: M2
       recipe: milestone-review
       blocked: false
+    - "n": 8
+      timestamp: "2026-09-18T11:58:22-07:00"
+      agent: claude
+      findings:
+        - id: BR-15
+          severity: Important
+          title: A tool refused at start during flushing is written as an unknown failure, not as cancelled by the user
+          detail: 'generation_runner.lua:306-313 answers a start_child still queued when Stop lands with cancelled_before_effect and a bare `true` blob. insert_tool passes it on, and response_tools.lua:42-47 settled() renders any result without an identity as failure_text(''unknown''). Scratch reproduction with the response_tools_spec harness (round declared, Runner.cancel, then drain): producer started 0 tools, yet the transcript reads "The tool call failed: it ended without reporting a result, so it may have partly taken effect." This contradicts the README, atlas/chat/ownership.md:65, tool_use.md:184 and the target, which all promise a "cancelled by the user" result. Same class, second instance: a tool queued in the scheduler at Stop. producer.cancel clears r.events (producer.lua:171) before service:cancel, so the known "cancelled before execution" outcome is dropped (:130), and the machine writes "Cancelled by the user while running; it may have partly taken effect" for a tool that never ran. Fix the class in one round: render from the outcome kind the machine records (put outcome on the insert_tool effect) instead of defaulting to unknown, and carry never-started evidence through the supervisor handoff. Add a test for each path.'
+          family: result-text-weaker-than-evidence
+          round: 8
+        - id: BR-16
+          severity: Minor
+          title: Flush guarantee statements describe the machine alone, and the "remaining ways to lose a pair" list is incomplete
+          detail: 'This is the 5th finding in this family, so fix the rule, not the instance. Target :206-208 and tool_use.md:184 say "a tool finished by the time its pair is reached gets its real result". In the full system the Stop cancels every running tool, the producer cuts off its callbacks (producer.lua:171, response_tools maybe_resolve), and only outcomes that arrived before the Stop are real, which matters most for a stopped answer waiting behind another. Target :212-213 says the remaining ways to lose a pair are "a second Stop, reload, or an edit that revokes the answer". Every stop() reachable from flushing also includes a failed write (generation.lua:342), a failed insert (:396), a failed gap write (:296) and an overflow (:468). Rule: a sentence stating what a mechanism guarantees, or listing how it can fail, must be derived from the composed system''s enumeration (every stop() reachable from the phase, plus the adapter''s cancel semantics), marked as non-exhaustive, or point to the one place that enumerates. Measured prevalence: 5 findings across M1 rounds 2-5, M2 and this M3 round.'
+          family: invariant-statement-omits-exception
+          round: 8
+        - id: BR-17
+          severity: Minor
+          title: The flushing note names the answer it waits behind but not what ends the wait
+          detail: 'This is the 3rd finding in this family. The M2 round already stated the rule: every indefinite wait a generation can sit in is named in presentation with what it waits on AND what ends it. chat_presentation.lua:59-61 flushing_message omits the escape (a second :ParleyStop drops the rest, or stop the answer ahead), although waiting_message names :ParleyStop and the answer ahead can hang. Fix at the rule: build every wait note from one composer that requires an escape clause, and add a unit test that walks each phase the session presents while blocked (waiting, running tools, cleanup, flushing, paused) and asserts that an escape is named.'
+          family: stall-visibility
+          round: 8
+        - id: BR-18
+          severity: Minor
+          title: :ParleyToolOperations still speaks of quarantine that M3 removed for crashed tools
+          detail: 'This is the 2nd finding in this family. tool_operations.lua:21 prompts "Esc keeps quarantine" and :29 says "Resources remain reserved until cleanup is confirmed". A crashed tool whose process has ended (listed until its generation closes) holds nothing, and its cleanup is already confirmed. The M2 rule swept atlas, README, code comments and the plan. It must also cover user-visible strings (prompts, notifications, model-facing results): `git grep -i quarantin lua/` finds this one. Measured: 1 residual site (2 strings) after the M3 sweep.'
+          family: behavior-change-sweep-by-claim
+          round: 8
+        - id: BR-19
+          severity: Minor
+          title: The plan's ARCH-ORDER phase line omits flushing; Chunk 3b steps are unticked
+          detail: Plan :129-130 still lists preparing, requesting, executing_tools, draining, finalizing and terminal, plus stopping; it has no executing_tools to flushing to stopping arrow, although that section calls itself "the design". Chunk 3b's step checkboxes are all unticked while the issue marks the work done. Add a Revisions entry extending the phase line with flushing's entry and exits, and tick the steps.
+          family: design-enumeration-lags-code
+          round: 8
+      boundary: M3
+      recipe: milestone-review
+      blocked: true
 ---
 
 # Gate ledger — parley.nvim#266 (boundary-review)
@@ -275,9 +312,29 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-14** [Minor] `stall-visibility` A tool queued behind another answer's unknown effect reads "Running tools: 0 of 1 finished" while holding the write turn indefinitely
   This is the 2nd finding in family stall-visibility, so the rule is stated rather than just this instance. Rule: every indefinite wait a generation can sit in must be named in presentation with what it waits on and what ends it. Enumeration: turn wait (named, with :ParleyStop), tool running (counted), cleanup wait (named, from BR-13), stale-input pause (named, with ChatResumeResponse), and resource-queued behind another generation's unknown effect (NOT named). In that last case the waiting generation holds the document's write turn, so every later answer shows "Waiting for the answer to line N (running tools)" until someone runs :ParleyToolOperations or stops it. The only hint is one WARN five seconds after the original unknown outcome. Before M2 the originating answer paused visibly; now it completes, and the stall surfaces in a different answer. In the same family, the model-facing refusal (scheduler.lua:103-105) blames "the same resource" even when own unknowns only fill per-generation capacity, and does not name the reconcile command. Fix sketch: pass the resource admission status (queued) through to the tools snapshot, show a note naming the held resource and :ParleyToolOperations, and word the refusal by its actual cause.
 
+## Round 8 — 2026-09-18T11:58:22-07:00 (claude) — BLOCKED
+
+### Raised
+
+- **BR-15** [Important] `result-text-weaker-than-evidence` A tool refused at start during flushing is written as an unknown failure, not as cancelled by the user
+  generation_runner.lua:306-313 answers a start_child still queued when Stop lands with cancelled_before_effect and a bare `true` blob. insert_tool passes it on, and response_tools.lua:42-47 settled() renders any result without an identity as failure_text('unknown'). Scratch reproduction with the response_tools_spec harness (round declared, Runner.cancel, then drain): producer started 0 tools, yet the transcript reads "The tool call failed: it ended without reporting a result, so it may have partly taken effect." This contradicts the README, atlas/chat/ownership.md:65, tool_use.md:184 and the target, which all promise a "cancelled by the user" result. Same class, second instance: a tool queued in the scheduler at Stop. producer.cancel clears r.events (producer.lua:171) before service:cancel, so the known "cancelled before execution" outcome is dropped (:130), and the machine writes "Cancelled by the user while running; it may have partly taken effect" for a tool that never ran. Fix the class in one round: render from the outcome kind the machine records (put outcome on the insert_tool effect) instead of defaulting to unknown, and carry never-started evidence through the supervisor handoff. Add a test for each path.
+- **BR-16** [Minor] `invariant-statement-omits-exception` Flush guarantee statements describe the machine alone, and the "remaining ways to lose a pair" list is incomplete
+  This is the 5th finding in this family, so fix the rule, not the instance. Target :206-208 and tool_use.md:184 say "a tool finished by the time its pair is reached gets its real result". In the full system the Stop cancels every running tool, the producer cuts off its callbacks (producer.lua:171, response_tools maybe_resolve), and only outcomes that arrived before the Stop are real, which matters most for a stopped answer waiting behind another. Target :212-213 says the remaining ways to lose a pair are "a second Stop, reload, or an edit that revokes the answer". Every stop() reachable from flushing also includes a failed write (generation.lua:342), a failed insert (:396), a failed gap write (:296) and an overflow (:468). Rule: a sentence stating what a mechanism guarantees, or listing how it can fail, must be derived from the composed system's enumeration (every stop() reachable from the phase, plus the adapter's cancel semantics), marked as non-exhaustive, or point to the one place that enumerates. Measured prevalence: 5 findings across M1 rounds 2-5, M2 and this M3 round.
+- **BR-17** [Minor] `stall-visibility` The flushing note names the answer it waits behind but not what ends the wait
+  This is the 3rd finding in this family. The M2 round already stated the rule: every indefinite wait a generation can sit in is named in presentation with what it waits on AND what ends it. chat_presentation.lua:59-61 flushing_message omits the escape (a second :ParleyStop drops the rest, or stop the answer ahead), although waiting_message names :ParleyStop and the answer ahead can hang. Fix at the rule: build every wait note from one composer that requires an escape clause, and add a unit test that walks each phase the session presents while blocked (waiting, running tools, cleanup, flushing, paused) and asserts that an escape is named.
+- **BR-18** [Minor] `behavior-change-sweep-by-claim` :ParleyToolOperations still speaks of quarantine that M3 removed for crashed tools
+  This is the 2nd finding in this family. tool_operations.lua:21 prompts "Esc keeps quarantine" and :29 says "Resources remain reserved until cleanup is confirmed". A crashed tool whose process has ended (listed until its generation closes) holds nothing, and its cleanup is already confirmed. The M2 rule swept atlas, README, code comments and the plan. It must also cover user-visible strings (prompts, notifications, model-facing results): `git grep -i quarantin lua/` finds this one. Measured: 1 residual site (2 strings) after the M3 sweep.
+- **BR-19** [Minor] `design-enumeration-lags-code` The plan's ARCH-ORDER phase line omits flushing; Chunk 3b steps are unticked
+  Plan :129-130 still lists preparing, requesting, executing_tools, draining, finalizing and terminal, plus stopping; it has no executing_tools to flushing to stopping arrow, although that section calls itself "the design". Chunk 3b's step checkboxes are all unticked while the issue marks the work done. Add a Revisions entry extending the phase line with flushing's entry and exits, and tick the steps.
+
 ## Open findings
 
 - **BR-7** [Minor] `invariant-statement-omits-exception` Plan Target reconciliation and README still state turn/undo grouping without the pause and intervening-edit exceptions
 - **BR-8** [Minor] `table-row-milestone-scope` Plan Task 1.6 Step 4 still uses the milestone numbering from before the merge
 - **BR-12** [Minor] `target-narrowing-unratified` Target revision now accepts that Stop drops tool pairs whose tools already ran; logged as still to raise with the operator
 - **BR-14** [Minor] `stall-visibility` A tool queued behind another answer's unknown effect reads "Running tools: 0 of 1 finished" while holding the write turn indefinitely
+- **BR-15** [Important] `result-text-weaker-than-evidence` A tool refused at start during flushing is written as an unknown failure, not as cancelled by the user
+- **BR-16** [Minor] `invariant-statement-omits-exception` Flush guarantee statements describe the machine alone, and the "remaining ways to lose a pair" list is incomplete
+- **BR-17** [Minor] `stall-visibility` The flushing note names the answer it waits behind but not what ends the wait
+- **BR-18** [Minor] `behavior-change-sweep-by-claim` :ParleyToolOperations still speaks of quarantine that M3 removed for crashed tools
+- **BR-19** [Minor] `design-enumeration-lags-code` The plan's ARCH-ORDER phase line omits flushing; Chunk 3b steps are unticked

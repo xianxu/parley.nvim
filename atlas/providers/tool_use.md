@@ -180,16 +180,42 @@ adapters receive operation handles, not authority to write arbitrary positions.
    Only a call whose outcome never arrives holds the blocks behind it: those tools
    still run and presentation counts them
    ([response progress](../chat/response_progress.md)). `:ParleyStop` during
-   the round cancels every running tool and still writes the round out, in order
-   — a tool finished by the time its pair is reached gets its real result, any
-   other "Cancelled by the user" (while running, or before it ran) — and then
-   ends the answer with no continuation. A second Stop drops what is left
-   (#266 M3; the generation's `flushing` phase).
+   the round writes the round out before the answer ends — see
+   [Stop during a tool round](#stop-during-a-tool-round).
 5. After the round is settled, `response_tools` builds continuation messages from
    the frozen previous request, assistant text, calls, and each call's recorded
    result — the error result of a failed call included. The same
    Session admits the next provider operation; it neither recursively calls
    `respond` nor rebuilds the request from the mutable transcript.
+
+### Stop during a tool round
+
+The one statement of what a Stop writes (#266 M3; the generation's `flushing`
+phase). Other pages point here rather than restate it. It is derived from the
+composed system — the machine's walk plus the producer's cancel — not from the
+machine alone.
+
+A user's Stop while a round is not fully written cancels every running tool,
+starts none, and writes each `(call, result)` pair in declared order. A tool's
+result is written from what is known about it when its pair is reached:
+
+| The tool, at that point | Written result |
+|---|---|
+| reported an outcome before its cancellation took effect | that outcome, as is |
+| running — the producer hands it to its supervisor | "Cancelled by the user while running; it may have partly taken effect." |
+| queued in the scheduler, never run | the scheduler's own "Tool cancelled before execution" |
+| never started by the runner, or never started at all | "Cancelled by the user before it ran." |
+
+The walk waits for a running tool's cancellation to settle before writing its
+pair; the real producer settles it at once. Then the answer ends, with no
+continuation. It keeps the write turn throughout, so behind another answer it
+waits and says so.
+
+A flush ends early — dropping the pairs not yet written — on exactly the
+`stop()` calls reachable from `flushing` (`generation.lua`): a second Stop; an
+overflow; revocation of the answer (an edit inside it, reload, detach); or a
+failed write of its held text, its gap, or one of its blocks. A change that adds
+a `stop()` reachable from `flushing` updates this list.
 
 The prepared response profile captures iteration and result-byte limits once per
 generation, including an agent explicitly chosen during onboarding. Limits are

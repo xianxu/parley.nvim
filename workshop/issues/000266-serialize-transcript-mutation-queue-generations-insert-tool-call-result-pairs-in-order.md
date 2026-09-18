@@ -955,3 +955,18 @@ Commits: `ecb7dbb0` crash = failure · `83c3122d` Stop flush.
   never reported an outcome retire. Fixed to match.
 - `chat_respond` keeps a response listed until terminal, so a second
   `:ParleyStop` reaches a flushing answer — checked, no change needed.
+
+### 2026-09-18 — M3 boundary review round 1: FIX-THEN-SHIP, BR-15 and four Minors fixed
+
+Response in the plan's `## Revisions` (M3 round 1). BR-15: results written during
+a flush now come from settlement evidence, not timing — a tool refused before it
+ran reads "cancelled before it ran", a tool the scheduler never ran keeps its own
+"cancelled before execution" (the producer no longer erases it), and rendering
+follows the recorded outcome kind. Minors: the flush's guarantees stated once in
+`tool_use.md` (derived from every `stop()` reachable from `flushing`); one wait-note
+composer that requires an escape; `:ParleyToolOperations` strings; the plan's
+phase line.
+
+Also noted: `perf_ownership_spec` is bimodal on this machine — ~26 s pass or a
+hang to Plenary's 50 s limit — on both this branch and the M2 close commit; a
+sporadic wait, not slowness, and not #266's. Worth its own look alongside #267.

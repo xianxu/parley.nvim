@@ -128,6 +128,10 @@ orthogonal overlay via `s.resume_phase` (`:28-31`):
 
 `preparing → requesting → executing_tools ⇄ requesting → draining → finalizing → terminal`,
 with `stopping → terminal` reachable from any phase and `paused` shadowing any of them.
+*(M3)* `executing_tools → flushing → stopping`: a user's Stop while the round is not
+fully written enters `flushing`; it leaves for `stopping` when every block is
+written, or early on a second Stop, an overflow, revocation, or a failed write
+(the list is kept in `atlas/providers/tool_use.md` "Stop during a tool round").
 
 **`draining`** — provider complete, staged bytes outstanding, no further provider
 work. Entered when a completion event arrives with `staged(s)>0`; exits to
@@ -691,16 +695,16 @@ remove `refuse` and the pump-after-every-outcome), `lua/parley/response_tools.lu
 **Tests:** `tool_operation_spec`, `tool_resources_spec`, `tool_scheduler_spec`,
 `chat_async_tools_spec`.
 
-- [ ] **Step 1: Failing tests.** An `unknown` outcome with physical completion
+- [x] **Step 1: Failing tests.** An `unknown` outcome with physical completion
   releases its claims: a same-generation retry and another generation's call on
   the same path both run. An `unknown` outcome *without* physical completion still
   holds its claims (a process still running is a real effect in progress). The
   round-5 refusal tests are replaced by these, not kept beside them.
-- [ ] **Step 2: Implement.** `release` is permitted for `outcome_unknown` once
+- [x] **Step 2: Implement.** `release` is permitted for `outcome_unknown` once
   physical. Resource release evidence names *why* (`known` or `ended`). Remove the
   self-quarantine refusal (ARCH-PURPOSE: it guarded a lock that no longer outlives
   its process — a round continues only after every tool has ended).
-- [ ] **Step 3:** the model-facing text for `unknown` says the call failed and may
+- [x] **Step 3:** the model-facing text for `unknown` says the call failed and may
   have partly taken effect — no reconciliation to wait for.
 
 ### Task 3b.2: `flushing` — Stop during a tool round writes the round out
@@ -725,23 +729,23 @@ block is written → `stop('cancelled')` → `stopping` → `terminal` as today.
 `stopping`; an `overflow` cancel → `stopping`. Every other phase's Stop is
 unchanged. The turn is **not** released on entering `flushing` (decision (a)).
 
-- [ ] **Step 1:** `Seq.waiting(seq)` — the index of the result the walk is
+- [x] **Step 1:** `Seq.waiting(seq)` — the index of the result the walk is
   blocked on, or nil. Pure, tested.
-- [ ] **Step 2: Failing machine tests** for every arrow above, plus: a finished
+- [x] **Step 2: Failing machine tests** for every arrow above, plus: a finished
   outcome arriving mid-flush is written as is; supervision during `flushing` is
   accepted and writes "cancelled by user while running"; a flush waiting for the
   turn holds its place and writes when the turn arrives.
-- [ ] **Step 3: Implement.** **Step 4:** integration — Stop mid-round leaves every
+- [x] **Step 3: Implement.** **Step 4:** integration — Stop mid-round leaves every
   pair in the transcript, in order, finished results real and the rest cancelled.
-- [ ] **Step 5:** presentation — a flushing generation behind another answer says
+- [x] **Step 5:** presentation — a flushing generation behind another answer says
   so ("Stopped — writing its tool results after the answer to line N").
 
 ### Task 3b.3: atlas, target, close
 
-- [ ] `atlas/providers/tool_use.md`, `tool_execution.md`, `chat/ownership.md`,
+- [x] `atlas/providers/tool_use.md`, `tool_execution.md`, `chat/ownership.md`,
   `chat/response_progress.md`; the target's Revision replaces the "Stop drops
   pairs" gap with the flush. Sweep by the superseded claims' wording.
-- [ ] `make test` (phases run separately) → `sdlc milestone-close --issue 266 --milestone M3`.
+- [x] `make test` (phases run separately) → `sdlc milestone-close --issue 266 --milestone M3`.
 
 ---
 
@@ -1222,3 +1226,36 @@ that already ran; and a crashed tool is a plain failure, not a lock someone must
 confirm. Both are new behavior, so they get their own boundary (Chunk 3b, **M3**);
 the residual exclusion sweep becomes **M4**. Every milestone label outside
 `## Revisions` was checked by referent and updated (lines naming the sweep).
+
+### 2026-09-18 — M3 boundary review round 1 (FIX-THEN-SHIP): the response
+
+Review sidecar: `workshop/plans/000266-…-m3-review.md`.
+
+- **BR-15 (Important), `result-text-weaker-than-evidence` — fixed at the class.**
+  The walk wrote "cancelled while running" the moment it reached a started tool,
+  from timing, so a tool the runner refused at start (a `true` blob, rendered by
+  `settled()` as *unknown*) and a tool still queued in the scheduler (whose
+  "cancelled before execution" outcome the producer's cancel erased by severing
+  its events) were both misdescribed. Now: (1) the walk cancels on the spot only
+  a tool never started; for a started one it waits for its cancellation to settle
+  — an outcome, or the supervisor handoff that says it was running; (2) a
+  `cancelled_before_effect` arriving mid-flush is recorded as cancelled by the
+  user before it ran; (3) `insert_tool` carries the recorded outcome kind and
+  `settled()` renders from it, `unknown` only when that is what it was;
+  (4) `producer.cancel` leaves a tool the scheduler never started to settle by its
+  own outcome. Tests: `generation_spec` (refused-before-it-ran, and every flush
+  case now settles through the handoff), `response_tools_spec` (a tool the Stop
+  refused at start), `tool_producer_spec` (queued in the scheduler — fails
+  without the fix).
+- **Minor, `invariant-statement-omits-exception` (5th) — one statement.** What a
+  Stop writes per tool state, and every `stop()` reachable from `flushing`, are
+  now listed once in `atlas/providers/tool_use.md` "Stop during a tool round";
+  `ownership.md` and the target point there, and the target's two incomplete
+  sentences are withdrawn by a Revision.
+- **Minor, stall-visibility (3rd) — one composer.** Every wait note is built by
+  `chat_presentation`'s `wait_note`, which refuses a note without an escape; a
+  unit test walks every note shown while an answer waits.
+- **Minor, sweep by claim (2nd) — user-visible strings too.** `:ParleyToolOperations`
+  no longer speaks of quarantine or of resources held after cleanup.
+- **Minor, design enumeration** — the phase line above gains `flushing`; Chunk 3b
+  ticked.

@@ -34,10 +34,13 @@ local function setup(options)
     local marker=D.query(doc,0,1)[1];local body=D.query(doc,2,3)[1]
     local runner=assert(Runner.start(doc,{entity=marker.handle,first=marker.end_byte-1,last=body.end_byte-1,
         input={messages={{role='user',content='question'}},payload={}},schedule=false},hooks));runners[#runners+1]=runner
+    -- To quiescence, as Runner.drain does: nothing queued in the runner and the
+    -- document repaired. A fixed step count burned 2000 steps per call whenever
+    -- the runner waited on an external event, which a Stop's flush does.
     local function drain()
         for _=1,2000 do
-            D.repair_step(doc);Runner.step(runner)
-            if Runner.snapshot(runner).phase=='terminal'then return end
+            local repair=D.repair_step(doc);local step=Runner.step(runner)
+            if step.status=='terminal' or step.status=='waiting' and repair.status=='idle' then return end
         end
     end
     -- Bounded: `n` runner steps, so a test can look between the slices of one
@@ -136,6 +139,9 @@ describe('production concurrent tool round composition',function()
         second.events.outcome('known',{content='second finished'});f.drain()
         Runner.cancel(f.runner);f.drain()
         assert.equals(first,f.producer.cancelled[1].op,'the running tool is cancelled at the Stop')
+        assert.is_nil(at(f,'📎:','a'),'its result waits for the cancellation to settle')
+        -- As the real producer does for a running tool: hand it to its supervisor.
+        f.producer.cancelled[1].resolved({supervised=true});f.drain()
         local results=projected(f)
         assert.is_true(results.a.is_error)
         assert.truthy(results.a.content:find('Cancelled by the user while running',1,true),results.a.content)
@@ -143,8 +149,8 @@ describe('production concurrent tool round composition',function()
         local ca,ra,cb,rb=at(f,'🔧:','a'),at(f,'📎:','a'),at(f,'🔧:','b'),at(f,'📎:','b')
         assert.is_true(ca<ra and ra<cb and cb<rb)
         local before=text(f)
-        first.events.outcome('known',{content='too late'})
-        for _,c in ipairs(f.producer.cancelled)do c.resolved()end
+        assert.is_false(first.events.outcome('known',{content='too late'}))
+        for _,c in ipairs(f.producer.cancelled)do c.resolved({supervised=true})end
         second.events.resolved();first.events.resolved();f.drain()
         assert.equals(before,text(f),'a cancelled call\'s late result changes nothing')
         assert.equals('terminal',Runner.snapshot(f.runner).phase)
@@ -393,30 +399,33 @@ describe('production concurrent tool round composition',function()
                     elseif event=='stop'then
                         if mode=='detach'then D.detach(f.doc)else Runner.cancel(f.runner)end
                     else
+                        -- Cleanup: tools report it; a cancelled running tool is
+                        -- handed to its supervisor, as the real producer does.
                         first.events.resolved();second.events.resolved()
-                        for _,c in ipairs(f.producer.cancelled)do c.resolved()end
+                        for _,c in ipairs(f.producer.cancelled)do c.resolved({supervised=true})end
                     end
                     f.drain();assert_prefix(f,label)
-                    if frozen then assert.equals(frozen,text(f),label..': written after the stop settled')end
-                    if event=='stop'then
-                        frozen=text(f)
-                        if mode=='cancel'then
-                            -- #266 M3: the Stop wrote the round out within its drain.
-                            for _,b in ipairs(blocks)do assert.is_not_nil(at(f,b[1],b[2]),label..': '..b[1]..b[2]..' missing')end
+                    if mode=='detach' and frozen then assert.equals(frozen,text(f),label..': written after a detach')end
+                    if event=='stop'then frozen=text(f)end
+                end
+                for _,c in ipairs(f.producer.cancelled)do c.resolved({supervised=true})end
+                f.drain()
+                if mode=='cancel'then
+                    -- #266 M3: a Stop writes the whole round out, each result either
+                    -- real or cancelled by the user — never an unknown failure.
+                    for _,b in ipairs(blocks)do assert.is_not_nil(at(f,b[1],b[2]),label..': '..b[1]..b[2]..' missing')end
+                    local results=projected(f)
+                    for id,content in pairs({a='one',b='two'})do
+                        local c=results[id].content
+                        assert.is_true(c==content or c:find('Cancelled by the user',1,true)~=nil,label..': '..id..' '..c)
+                    end
+                    local before={};for i,event in ipairs(order)do before[event]=i end
+                    for id,event in pairs({a='first',b='second'})do
+                        if before[event]<before.stop then
+                            assert.equals(id=='a' and 'one' or 'two',results[id].content,label..': an outcome before the Stop is written')
                         end
                     end
                 end
-                if mode=='cancel'then
-                    local results=projected(f)
-                    local before={}
-                    for i,event in ipairs(order)do before[event]=i end
-                    for id,event in pairs({a='first',b='second'})do
-                        local real=before[event]<before.stop
-                        assert.equals(real,not results[id].content:find('Cancelled by the user',1,true),
-                            label..': '..id..' real iff its outcome came before the stop')
-                    end
-                end
-                for _,c in ipairs(f.producer.cancelled)do c.resolved()end
                 for _,request in ipairs(f.requests)do request.cb.resolved()end
                 f.drain()
                 assert.equals('terminal',Runner.snapshot(f.runner).phase,label)
@@ -451,6 +460,20 @@ describe('production concurrent tool round composition',function()
             assert.equals('terminal',Runner.snapshot(f.runner).phase)
         end)
     end
+    -- M3 review BR-15: a tool whose start was still queued when the Stop landed
+    -- never ran, and the transcript says so — not an unknown failure.
+    it('writes a tool the Stop refused before it ran as cancelled before it ran',function()
+        local f=setup()
+        local req=f.requests[#f.requests]
+        f.adapter.on_result(req.ctx,{response='tool text'},{calls[1]})
+        assert.is_true(req.cb.round({{call_id='a',arguments=calls[1]}}));req.cb.resolved()
+        Runner.cancel(f.runner);f.drain()
+        assert.equals(0,#f.producer.started,'it never started')
+        local results=projected(f)
+        assert.truthy(results.a.content:find('Cancelled by the user before it ran',1,true),results.a.content)
+        assert.equals('cancelled',Runner.snapshot(f.runner).outcome)
+    end)
+
     -- #266 M3: a result that arrived before the Stop is part of the round the
     -- Stop writes out, even when its block had not landed yet.
     it('writes a result that arrived before the Stop, even if its block had not landed',function()

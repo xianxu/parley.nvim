@@ -18,7 +18,7 @@ function M.open()
             end
             if action~='Record confirmed effect' then return end
             local effects={'applied','not_applied','partial'}
-            vim.ui.select(effects,{prompt='Effect independently verified (Esc keeps quarantine):'},function(effect)
+            vim.ui.select(effects,{prompt='Effect independently verified (Esc changes nothing):'},function(effect)
                 if not vim.tbl_contains(effects,effect)then return end
                 vim.ui.input({prompt='Describe the evidence you inspected: '},function(evidence)
                     if type(evidence)~='string' or not evidence:match('%S')then return end
@@ -26,7 +26,9 @@ function M.open()
                     local ok=producer.reconcile(value.id,{certainty='known',effect=effect,
                         evidence={operator=evidence},result={content='Operator confirmed '..effect..': '..evidence,
                             is_error=effect~='applied'}})
-                    vim.notify(ok and 'Effect recorded. Resources remain reserved until cleanup is confirmed.'
+                    -- #266 M3: only a tool whose process still runs holds its resources.
+                    vim.notify(ok and ('Effect recorded.'..(value.physical_resolved and ''
+                        or ' Its resources stay held until its process ends.'))
                         or 'Operation changed or evidence was refused',ok and vim.log.levels.INFO or vim.log.levels.WARN)
                 end)
             end)

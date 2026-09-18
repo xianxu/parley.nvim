@@ -211,3 +211,20 @@ keeps its place and writes when the turn arrives. So the file records every tool
 call the model made in that round, and what is known of each one's outcome. The
 remaining ways to lose a pair are the hard stops: a second Stop, reload, or an
 edit that revokes the answer.
+
+### 2026-09-18 — the flush's guarantees have one statement (parley#266 M3 review)
+
+**Reason.** The previous revision restated what a Stop writes, from the machine
+alone: "a tool finished by the time its pair is reached gets its real result",
+and "the remaining ways to lose a pair are a second Stop, reload, or an edit".
+Both were incomplete for the composed system — the producer's cancel settles a
+running tool as cancelled, and several more `stop()` calls are reachable
+mid-flush (an overflow, a failed write of the held text, the gap or a block).
+
+**Delta.** Those two sentences are withdrawn. What a Stop writes for each tool,
+and the complete list of what ends a flush early, are stated once, in
+[`atlas/providers/tool_use.md`](../../atlas/providers/tool_use.md) "Stop during
+a tool round", derived from every `stop()` reachable from `flushing`. This
+target defends only the property: a Stop during a tool round leaves every call
+of that round in the file with what is known of its outcome, unless one of the
+listed hard stops intervenes.

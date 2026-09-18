@@ -518,6 +518,7 @@ local function execute(s,effect)
         ctx.index=effect.index;ctx.kind=effect.kind
         -- #266 M3: a result the Stop walk recorded as cancelled has no blob.
         ctx.failure=effect.cancelled and 'cancelled_'..effect.cancelled or nil
+        ctx.outcome=effect.outcome
         local result=effect.result_ref and s.blobs[effect.result_ref]
         ctx.result=result and copy(result.value)
         local function complete(status)

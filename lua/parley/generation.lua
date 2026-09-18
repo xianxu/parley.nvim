@@ -122,9 +122,11 @@ local function insert_next(s,effects,bytes)
     if not item then return end
     local child=round.children[item.index]
     local result=item.kind=='result'
+    -- The outcome kind travels with the block, so a result is rendered from what
+    -- was recorded — never defaulted to "unknown" (#266 M3 review BR-15).
     round.inserting={id=emit(s,effects,'insert_tool',{round=round.id,index=item.index,kind=item.kind,
         call_id=child.call_id,result_ref=result and not child.cancelled and child.result_ref or nil,
-        cancelled=result and child.cancelled or nil}).id,item=item}
+        outcome=result and child.outcome or nil,cancelled=result and child.cancelled or nil}).id,item=item}
 end
 --- #266 M3 (operator): Stop during a tool round writes the round out rather than
 --- dropping the pairs of tools that already ran. Every tool still running is
@@ -140,8 +142,10 @@ local function flush(s,effects)
         end
     end
 end
---- A tool the walk reaches with no outcome is recorded as cancelled by the user:
---- `running` if it had started (it may have partly taken effect), else `queued`.
+--- Record a tool as cancelled by the user — `running` (it may have partly taken
+--- effect) or `queued` (it never ran) — from evidence, not from timing: the walk
+--- records `queued` only for a tool never started, and `running` only on the
+--- supervisor handoff that says it was (#266 M3 review BR-15).
 local function cancel_child(s,child)
     child.outcome='cancelled_by_user';child.cancelled=child.started and 'running' or 'queued'
     if not child.started then child.resolved=true end
@@ -205,8 +209,12 @@ local function pump(s,effects)
     if s.phase=='flushing' then
         local round=s.round
         if s.grant_status=='valid' then
+            -- The walk is blocked on a result with no outcome. A tool never started
+            -- is cancelled here and now; a started one was sent cancel_operation on
+            -- entry, and its settlement (an outcome, or the supervisor handoff) is
+            -- what the walk waits for, so what is written is what happened.
             local index=not round.inserting and bytes==0 and may_write(s) and Seq.waiting(round.seq)
-            if index then cancel_child(s,round.children[index]) end
+            if index and not round.children[index].started then cancel_child(s,round.children[index]) end
             insert_next(s,effects,bytes)
         end
         if Seq.complete(round.seq) and not round.inserting then
@@ -407,6 +415,8 @@ function M.transition(handle,event)
         local writing=round.inserting and round.inserting.item.kind=='result' and round.inserting.item.index==found.index
         if writing or Seq.final(round.seq,found.index) then return reject('written') end
         found.outcome=event.outcome;found.result_ref=event.result_ref
+        -- Refused before it ran because of a Stop: that is the user cancelling it.
+        if s.phase=='flushing' and event.outcome=='cancelled_before_effect' then found.cancelled='queued' end
         if s.operations[event.operation] then s.operations[event.operation].complete=true end
         round.seq=Seq.outcome(round.seq,found.index)
     elseif kind=='round_prepared' then

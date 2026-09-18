@@ -62,10 +62,9 @@ returns an exact receipt, and interrupted commands preserve intervening human
 text. Undo and redo remain native edits observed by the same coordinator.
 
 Cancellation revokes write authority immediately — except a Stop that lands during
-a tool round, which first writes the round out (each pair in order; a tool not
-finished is written as cancelled by the user) and only then stops. Behind another
-answer it keeps its place in line and writes when the turn arrives; a second Stop
-drops the rest (#266 M3). Provider and tool cleanup
+a tool round, which first writes the round out and only then stops
+([what it writes, and what ends it early](../providers/tool_use.md#stop-during-a-tool-round)).
+Provider and tool cleanup
 remain tracked until positive completion evidence arrives; a cancellation request
 alone does not prove an effect stopped. Stop selects one generation, while
 StopDocument explicitly selects every generation in the current chat.

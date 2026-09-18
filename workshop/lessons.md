@@ -3111,3 +3111,17 @@ download.
   generation; removing the pause turned a retry into a self-deadlock. When a
   change lets work continue past uncertainty, list every mechanism that holds
   something for that uncertainty and ask who can now wait on it.
+
+- #266 M3 review BR-15: write what the evidence says, not what the timing
+  suggests. The Stop walk labelled a tool "cancelled while running" because it
+  had been *told* to start, while the runner had refused it and the scheduler had
+  never run another. When a label claims something about the world (ran / never
+  ran), derive it from the settlement that proves it, and wait for that
+  settlement rather than guessing at the moment you happen to look.
+
+- #266 M3 review (5th in `invariant-statement-omits-exception`): a guarantee
+  about a mechanism must be derived from the COMPOSED system, not the component
+  you just wrote. The flush's promises were true of the machine alone and false
+  once the producer's cancel semantics and every `stop()` reachable from the
+  phase were included. State such lists once, next to the code that makes them
+  true, with "a change that adds X updates this list", and point to it.
