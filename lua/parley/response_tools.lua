@@ -35,17 +35,18 @@ local function failure_text(outcome,value)
     detail=detail~=nil and tostring(detail) or ''
     return failures[outcome]..(detail~='' and '\n\n'..detail or '')
 end
--- The result call `c`'s block and its continuation both carry. A result the
--- runner records without identity — a tool refused before it ran, or whose
--- adapter threw — is rendered from the outcome kind the machine recorded
--- (#266 M3 review BR-15), `unknown` only when that is what it was. One function
--- for both readers, so the transcript and the wire cannot differ.
-local function settled(c,r,outcome)
+-- The result call `c`'s block and its continuation both carry. The only result
+-- that arrives without identity is a failure the runner reports for a tool that
+-- never got a producer (its adapter threw) — an unknown outcome. A tool refused
+-- before it ran during a Stop is written from the machine's `cancelled` record
+-- instead (`ctx.failure`). One function for both readers, so the transcript and
+-- the wire cannot differ.
+local function settled(c,r)
     if type(r)=='table' and r.id~=nil then
         assert(r.id==c.id and r.name==c.name and type(r.content)=='string','tool result identity')
         return r
     end
-    return {id=c.id,name=c.name,content=failure_text(failures[outcome] and outcome or 'unknown',r),is_error=true}
+    return {id=c.id,name=c.name,content=failure_text('unknown',r),is_error=true}
 end
 local function maybe_resolve(s,r)
     if r.retired or not r.producer_done then return end
@@ -141,7 +142,7 @@ function M.new(doc,opts)
             block=Serialize.render_call(c);assert(#block<=65536,'tool argument limit')
         elseif ctx.failure then
             block=Serialize.render_result({id=c.id,name=c.name,content=failure_text(ctx.failure),is_error=true})
-        else block=Serialize.render_result(settled(c,ctx.result,ctx.outcome))end
+        else block=Serialize.render_result(settled(c,ctx.result))end
         local text=(ctx.kind=='call' and ctx.index==1 and '\n\n' or '')..block..'\n\n'
         local admitted=ctx.append(text,function(result)done(result.status)end)
         if not admitted then done('failed')end

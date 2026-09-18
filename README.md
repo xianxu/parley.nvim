@@ -71,9 +71,10 @@ The stale note clears when a fresh response starts or the file is reloaded.
 - A tool round's tools run at once, but each call is written immediately before
   its own result, in the order the model asked for them; the status line counts
   the tools still running. A failed call is written as an error result and the
-  answer goes on. Stopping during a tool round cancels its running tools but
-  still writes every call with its result — or a "cancelled by the user" error —
-  so the transcript records what ran; a second `:ParleyStop` drops the rest.
+  answer goes on. Stopping during a tool round cancels its running tools and
+  still writes the round out before the answer ends; what each call's result
+  says, and what ends that early, is in
+  [Stop during a tool round](atlas/providers/tool_use.md#stop-during-a-tool-round).
   Stopping does not undo an external effect.
 
 These controls apply to concurrent work in one Neovim instance.

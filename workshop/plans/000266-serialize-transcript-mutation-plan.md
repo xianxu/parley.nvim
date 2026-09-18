@@ -1240,10 +1240,11 @@ Review sidecar: `workshop/plans/000266-…-m3-review.md`.
   a tool never started; for a started one it waits for its cancellation to settle
   — an outcome, or the supervisor handoff that says it was running; (2) a
   `cancelled_before_effect` arriving mid-flush is recorded as cancelled by the
-  user before it ran; (3) `insert_tool` carries the recorded outcome kind and
-  `settled()` renders from it, `unknown` only when that is what it was;
-  (4) `producer.cancel` leaves a tool the scheduler never started to settle by its
-  own outcome. Tests: `generation_spec` (refused-before-it-ran, and every flush
+  user before it ran; ~~(3) `insert_tool` carries the recorded outcome kind and
+  `settled()` renders from it~~ *(withdrawn in round 2: no reachable consumer —
+  (2) already routes the only identity-less non-unknown result; the plumbing was
+  deleted)*; (4) `producer.cancel` leaves a tool the scheduler never started to
+  settle by its own outcome. Tests: `generation_spec` (refused-before-it-ran, and every flush
   case now settles through the handoff), `response_tools_spec` (a tool the Stop
   refused at start), `tool_producer_spec` (queued in the scheduler — fails
   without the fix).
@@ -1259,3 +1260,16 @@ Review sidecar: `workshop/plans/000266-…-m3-review.md`.
   no longer speaks of quarantine or of resources held after cleanup.
 - **Minor, design enumeration** — the phase line above gains `flushing`; Chunk 3b
   ticked.
+
+### 2026-09-18 — M3 boundary review round 2 (FIX-THEN-SHIP, no blocking): the response
+
+- **Unreachable plumbing deleted.** Round 1's outcome-kind rendering (mechanism
+  (3) above, now struck) had no reachable consumer: the only identity-less result
+  that is not unknown is a tool refused before it ran during a Stop, which (2)
+  already writes from the machine's `cancelled` record. Removed from the effect,
+  the runner and `settled()`.
+- **README points at the one statement** of what a Stop writes
+  (`atlas/providers/tool_use.md` "Stop during a tool round") rather than
+  paraphrasing it — the rule's scope now includes user-facing pages.
+- **The "queued in the scheduler" row is tested as transcript text**
+  (`response_tools_spec`), not only at the producer seam.

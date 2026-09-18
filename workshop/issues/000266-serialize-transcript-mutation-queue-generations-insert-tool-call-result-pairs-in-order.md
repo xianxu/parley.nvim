@@ -280,7 +280,7 @@ Durable plan: `workshop/plans/000266-serialize-transcript-mutation-plan.md`
       - [x] tool progress shown in presentation while pairs are held
       - [x] goldens/e2e unchanged in message shape; atlas `tool_use.md` rewritten;
             `milestone-close`
-- [ ] M3 — Stop writes the tool round out; a crashed tool is a plain failure
+- [x] M3 — Stop writes the tool round out; a crashed tool is a plain failure
       (operator decisions 2026-09-18).
       - [x] a tool whose process has ended releases its claims whatever its
             outcome; remove the self-quarantine refusal it made unnecessary
@@ -296,6 +296,8 @@ Durable plan: `workshop/plans/000266-serialize-transcript-mutation-plan.md`
 ## Log
 
 
+
+- 2026-09-18: closed M3 — at b6cfcd97: lint 0 warnings/0 errors (634 files); unit 213/213 PASS; integration 163/163 PASS (phases run separately, JOBS=4). Round-1 fixes: BR-15 flush results from settlement evidence (tests at machine, tool-round and producer levels; producer test fails without the fix), flush guarantees stated once in tool_use.md from every stop() reachable from flushing, one wait-note composer requiring an escape (walked by a unit test), tool-operations strings, plan phase line. Tool-round fixture drains to quiescence (38 s to 9 s). Actual measured by sdlc active-time since the M2 close (1.40 h).; review verdict: FIX-THEN-SHIP
 - 2026-09-18: closed M2 — at 274f82e: lint 0 warnings/0 errors (634 files); unit 213/213 PASS; integration 163/163 PASS (make test-unit / test-integration JOBS=4, run as separate phases so a #267 abort cannot hide integration). Review round 5 fixes: BR-11 same-generation self-quarantine refused with a readable error (resource, scheduler and chat-level tests; chat test fails without the fix), BR-9 undo rule on the atlas page plus two tool-round undo tests, BR-10 claim sweep by wording. Goldens regenerate to key-order churn only. Actual measured by sdlc active-time since the M1 close commit (2.72 h).; review verdict: SHIP
 ### 2026-09-17
 - 2026-09-17: closed M1 — make test JOBS=4: lint 0 warnings/0 errors, 375/376 spec files PASS; document_fold_batches_spec (known 50k-row load flake, issue Log) aborted with no failing assertion and passes alone 5/5. Review round 3: BR-5 undo grouping stated once in atlas/chat/ownership.md derived from Editor:can_join_undo, target defends only "no undo step mixes generations" and points there, mid-write-edit split pinned by test; all 12 stale milestone labels reconciled. sdlc built from ariadne committed HEAD 9ca1d6c (peer working tree mid-edit).; review verdict: FIX-THEN-SHIP
@@ -970,3 +972,12 @@ phase line.
 Also noted: `perf_ownership_spec` is bimodal on this machine — ~26 s pass or a
 hang to Plenary's 50 s limit — on both this branch and the M2 close commit; a
 sporadic wait, not slowness, and not #266's. Worth its own look alongside #267.
+
+### 2026-09-18 — M3 closed (review round 2: FIX-THEN-SHIP, no blocking)
+
+Round 2's three Minors fixed in the close commit: round 1's outcome-kind
+rendering deleted (no reachable consumer — the plan's credit for it struck);
+README points at `tool_use.md` "Stop during a tool round" instead of restating
+it; the "queued in the scheduler" row tested as transcript text. Final run: unit
+213/213; integration 162/163 — `highlighting_spec` (identical to `main`) aborted
+under JOBS=4 with no assertion and passes 3/3 alone.

@@ -219,6 +219,52 @@ rounds:
       boundary: M3
       recipe: milestone-review
       blocked: true
+    - "n": 9
+      timestamp: "2026-09-18T12:32:53-07:00"
+      agent: claude
+      dispose:
+        - id: BR-15
+          disposition: addressed
+          note: 'Both instances fixed and each pinned by a test that fails without it (scratch-worktree reverts): generation.lua:418-419 + generation_spec "records a tool refused before it ran during the flush"; producer.lua:177-178 + tool_producer_spec "settles a cancelled tool that never started by its own outcome"; plus end-to-end response_tools_spec asserting zero producer starts and the rendered text. Residual: the third claimed mechanism (insert_tool outcome field) is unreachable — raised separately.'
+          round: 9
+        - id: BR-16
+          disposition: addressed
+          note: atlas/providers/tool_use.md:191-219 now states the flush's per-tool results and its early exits once; I re-enumerated every stop() in generation.lua and the reachable set matches exactly. The target withdraws the two incomplete sentences by Revision and points there, and lessons.md records the composed-system rule.
+          round: 9
+        - id: BR-17
+          disposition: addressed
+          note: chat_presentation.lua:57-60 wait_note asserts an escape clause, so a wait note cannot be written without one; chat_presentation_spec walks every note. Reverting flushing_message to a bare string reds two tests in a scratch copy.
+          round: 9
+        - id: BR-18
+          disposition: addressed
+          note: tool_operations.lua:21,30 reworded and the resource sentence conditioned on physical_resolved; `git grep -i quarantin lua/` now returns only operation.lua:105, a comment stating it is not a quarantine. The two remaining atlas hits are file-descriptor quarantine, an unrelated concept.
+          round: 9
+        - id: BR-19
+          disposition: addressed
+          note: Plan :131-134 adds executing_tools → flushing → stopping with its entry and exits and points at the single statement; Chunk 3b steps are ticked; a Revisions entry records the round-1 response.
+          round: 9
+      findings:
+        - id: BR-20
+          severity: Minor
+          title: The insert_tool `outcome` field and settled()'s third parameter have no reachable consumer, and the second caller was not updated
+          detail: 'generation.lua:129 adds `outcome` to the insert_tool effect, generation_runner.lua:521 forwards it as ctx.outcome, and response_tools.lua:43,144 renders from it. The branch is unreachable: a cancelled_before_effect during a flush already sets child.cancelled=''queued'' (generation.lua:419), which routes to ctx.failure, and every other blob reaching settled() carries identity. Evidence - reverting both hunks leaves the whole providers/tool_use key green (617/617); planting an assert in the branch and running the full suite in a scratch worktree fires it in none of 213 unit + 161 integration spec files. The plan''s round-1 Revisions entry credits this as mechanism (3) of the BR-15 fix. Separately, continue_round still calls settled(c,ctx.results[i]) with no outcome (response_tools.lua:193), so the function''s own comment "One function for both readers, so the transcript and the wire cannot differ" is false the moment the branch becomes reachable. Rule: a mechanism a fix claims must have a consumer a test enters, and a shared renderer that gains an input must gain it at every call site. Either delete the plumbing and correct the plan bullet, or make it the mechanism, pass it from continue_round too, and cover it.'
+          family: fix-without-reachable-consumer
+          round: 9
+        - id: BR-21
+          severity: Minor
+          title: README restates what a Stop writes instead of pointing at the single statement created this round
+          detail: 'This is the 6th finding in this family. Earlier rounds fixed instances; this round finally stated the rule (lessons.md, and atlas/providers/tool_use.md:191-219 "Stop during a tool round"). Do NOT fix this instance by rewording README - apply the rule that was just written. README.md:73-77 says a Stop "writes every call with its result - or a ''cancelled by the user'' error" and that "a second :ParleyStop drops the rest". Neither is derived from the composed system the new section enumerates: a tool queued in the scheduler is written with the scheduler''s own "Tool cancelled before execution" (tool_use.md:203, verified through producer.cancel -> service:cancel -> cancelled_before_effect -> outcome ''known''), and a second Stop is one of four early exits. The rule''s own remedy - "point to the one place that enumerates" - has been applied to ownership.md and the target but not to the one user-facing page. Extend the rule''s scope to README and user-visible strings, and sweep. Measured prevalence: 6 findings across M1 rounds 2-5, M2, and M3 rounds 1-2.'
+          family: invariant-statement-omits-exception
+          round: 9
+        - id: BR-22
+          severity: Minor
+          title: The "queued in the scheduler, never run" row is asserted only at the producer seam, never as transcript text
+          detail: 'tool_use.md:203 states a composed-system outcome - a tool the scheduler never started is written into the transcript as "Tool cancelled before execution". The only test is tool_producer_spec "settles a cancelled tool that never started by its own outcome", which asserts the producer callback, not the rendered block; no spec drives that case through response_tools into the buffer. This is the exact case BR-15 named as its second instance, so the fix''s end-to-end effect rests on my reading of the composition rather than on an oracle. Rule - a row of a behavior table that states composed-system output needs a test at the composition, not only at the seam whose contract changed. Cheapest fix: in response_tools_spec, a fake producer whose cancel delivers a known "cancelled before execution" outcome instead of the supervisor handoff, asserting the written result text.'
+          family: composed-claim-tested-at-one-seam
+          round: 9
+      boundary: M3
+      recipe: milestone-review
+      blocked: false
 ---
 
 # Gate ledger — parley.nvim#266 (boundary-review)
@@ -327,14 +373,31 @@ later rounds disposed of them. Generated — edit the gate, not this file.
 - **BR-19** [Minor] `design-enumeration-lags-code` The plan's ARCH-ORDER phase line omits flushing; Chunk 3b steps are unticked
   Plan :129-130 still lists preparing, requesting, executing_tools, draining, finalizing and terminal, plus stopping; it has no executing_tools to flushing to stopping arrow, although that section calls itself "the design". Chunk 3b's step checkboxes are all unticked while the issue marks the work done. Add a Revisions entry extending the phase line with flushing's entry and exits, and tick the steps.
 
+## Round 9 — 2026-09-18T12:32:53-07:00 (claude) — passed
+
+### Disposed
+
+- BR-15 — addressed — Both instances fixed and each pinned by a test that fails without it (scratch-worktree reverts): generation.lua:418-419 + generation_spec "records a tool refused before it ran during the flush"; producer.lua:177-178 + tool_producer_spec "settles a cancelled tool that never started by its own outcome"; plus end-to-end response_tools_spec asserting zero producer starts and the rendered text. Residual: the third claimed mechanism (insert_tool outcome field) is unreachable — raised separately.
+- BR-16 — addressed — atlas/providers/tool_use.md:191-219 now states the flush's per-tool results and its early exits once; I re-enumerated every stop() in generation.lua and the reachable set matches exactly. The target withdraws the two incomplete sentences by Revision and points there, and lessons.md records the composed-system rule.
+- BR-17 — addressed — chat_presentation.lua:57-60 wait_note asserts an escape clause, so a wait note cannot be written without one; chat_presentation_spec walks every note. Reverting flushing_message to a bare string reds two tests in a scratch copy.
+- BR-18 — addressed — tool_operations.lua:21,30 reworded and the resource sentence conditioned on physical_resolved; `git grep -i quarantin lua/` now returns only operation.lua:105, a comment stating it is not a quarantine. The two remaining atlas hits are file-descriptor quarantine, an unrelated concept.
+- BR-19 — addressed — Plan :131-134 adds executing_tools → flushing → stopping with its entry and exits and points at the single statement; Chunk 3b steps are ticked; a Revisions entry records the round-1 response.
+
+### Raised
+
+- **BR-20** [Minor] `fix-without-reachable-consumer` The insert_tool `outcome` field and settled()'s third parameter have no reachable consumer, and the second caller was not updated
+  generation.lua:129 adds `outcome` to the insert_tool effect, generation_runner.lua:521 forwards it as ctx.outcome, and response_tools.lua:43,144 renders from it. The branch is unreachable: a cancelled_before_effect during a flush already sets child.cancelled='queued' (generation.lua:419), which routes to ctx.failure, and every other blob reaching settled() carries identity. Evidence - reverting both hunks leaves the whole providers/tool_use key green (617/617); planting an assert in the branch and running the full suite in a scratch worktree fires it in none of 213 unit + 161 integration spec files. The plan's round-1 Revisions entry credits this as mechanism (3) of the BR-15 fix. Separately, continue_round still calls settled(c,ctx.results[i]) with no outcome (response_tools.lua:193), so the function's own comment "One function for both readers, so the transcript and the wire cannot differ" is false the moment the branch becomes reachable. Rule: a mechanism a fix claims must have a consumer a test enters, and a shared renderer that gains an input must gain it at every call site. Either delete the plumbing and correct the plan bullet, or make it the mechanism, pass it from continue_round too, and cover it.
+- **BR-21** [Minor] `invariant-statement-omits-exception` README restates what a Stop writes instead of pointing at the single statement created this round
+  This is the 6th finding in this family. Earlier rounds fixed instances; this round finally stated the rule (lessons.md, and atlas/providers/tool_use.md:191-219 "Stop during a tool round"). Do NOT fix this instance by rewording README - apply the rule that was just written. README.md:73-77 says a Stop "writes every call with its result - or a 'cancelled by the user' error" and that "a second :ParleyStop drops the rest". Neither is derived from the composed system the new section enumerates: a tool queued in the scheduler is written with the scheduler's own "Tool cancelled before execution" (tool_use.md:203, verified through producer.cancel -> service:cancel -> cancelled_before_effect -> outcome 'known'), and a second Stop is one of four early exits. The rule's own remedy - "point to the one place that enumerates" - has been applied to ownership.md and the target but not to the one user-facing page. Extend the rule's scope to README and user-visible strings, and sweep. Measured prevalence: 6 findings across M1 rounds 2-5, M2, and M3 rounds 1-2.
+- **BR-22** [Minor] `composed-claim-tested-at-one-seam` The "queued in the scheduler, never run" row is asserted only at the producer seam, never as transcript text
+  tool_use.md:203 states a composed-system outcome - a tool the scheduler never started is written into the transcript as "Tool cancelled before execution". The only test is tool_producer_spec "settles a cancelled tool that never started by its own outcome", which asserts the producer callback, not the rendered block; no spec drives that case through response_tools into the buffer. This is the exact case BR-15 named as its second instance, so the fix's end-to-end effect rests on my reading of the composition rather than on an oracle. Rule - a row of a behavior table that states composed-system output needs a test at the composition, not only at the seam whose contract changed. Cheapest fix: in response_tools_spec, a fake producer whose cancel delivers a known "cancelled before execution" outcome instead of the supervisor handoff, asserting the written result text.
+
 ## Open findings
 
 - **BR-7** [Minor] `invariant-statement-omits-exception` Plan Target reconciliation and README still state turn/undo grouping without the pause and intervening-edit exceptions
 - **BR-8** [Minor] `table-row-milestone-scope` Plan Task 1.6 Step 4 still uses the milestone numbering from before the merge
 - **BR-12** [Minor] `target-narrowing-unratified` Target revision now accepts that Stop drops tool pairs whose tools already ran; logged as still to raise with the operator
 - **BR-14** [Minor] `stall-visibility` A tool queued behind another answer's unknown effect reads "Running tools: 0 of 1 finished" while holding the write turn indefinitely
-- **BR-15** [Important] `result-text-weaker-than-evidence` A tool refused at start during flushing is written as an unknown failure, not as cancelled by the user
-- **BR-16** [Minor] `invariant-statement-omits-exception` Flush guarantee statements describe the machine alone, and the "remaining ways to lose a pair" list is incomplete
-- **BR-17** [Minor] `stall-visibility` The flushing note names the answer it waits behind but not what ends the wait
-- **BR-18** [Minor] `behavior-change-sweep-by-claim` :ParleyToolOperations still speaks of quarantine that M3 removed for crashed tools
-- **BR-19** [Minor] `design-enumeration-lags-code` The plan's ARCH-ORDER phase line omits flushing; Chunk 3b steps are unticked
+- **BR-20** [Minor] `fix-without-reachable-consumer` The insert_tool `outcome` field and settled()'s third parameter have no reachable consumer, and the second caller was not updated
+- **BR-21** [Minor] `invariant-statement-omits-exception` README restates what a Stop writes instead of pointing at the single statement created this round
+- **BR-22** [Minor] `composed-claim-tested-at-one-seam` The "queued in the scheduler, never run" row is asserted only at the producer seam, never as transcript text

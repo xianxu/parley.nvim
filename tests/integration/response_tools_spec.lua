@@ -474,6 +474,21 @@ describe('production concurrent tool round composition',function()
         assert.equals('cancelled',Runner.snapshot(f.runner).outcome)
     end)
 
+    -- M3 review: the "queued in the scheduler, never run" row of tool_use.md's
+    -- Stop table, asserted as transcript text. The real producer's cancel leaves
+    -- such a tool to settle by its own outcome (no supervisor handoff), which the
+    -- scheduler reports as a known "Tool cancelled before execution".
+    it('writes a tool the scheduler never ran with its own cancelled-before-execution result',function()
+        local f=setup();f.round({calls[1]})
+        local op=f.producer.started[1]
+        Runner.cancel(f.runner);f.drain()
+        assert.equals(op,f.producer.cancelled[1].op)
+        op.events.outcome('known',{content='Tool cancelled before execution',is_error=true});op.events.resolved();f.drain()
+        local results=projected(f)
+        assert.equals('Tool cancelled before execution',results.a.content);assert.is_true(results.a.is_error)
+        assert.equals('terminal',Runner.snapshot(f.runner).phase)
+    end)
+
     -- #266 M3: a result that arrived before the Stop is part of the round the
     -- Stop writes out, even when its block had not landed yet.
     it('writes a result that arrived before the Stop, even if its block had not landed',function()

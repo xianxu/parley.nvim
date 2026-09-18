@@ -3125,3 +3125,11 @@ download.
   once the producer's cancel semantics and every `stop()` reachable from the
   phase were included. State such lists once, next to the code that makes them
   true, with "a change that adds X updates this list", and point to it.
+
+- #266 M3 review round 2: a rule's scope is every place a reader meets the claim.
+  The "state it once, point to it" rule was applied to the atlas and the target,
+  and README — the one page a user reads — still paraphrased the same guarantee.
+  Sweep README and user-visible strings with the atlas. And a mechanism a fix
+  claims must have a consumer a test actually enters: round 1's outcome-kind
+  rendering was credited as part of the fix, but no test (and no code path)
+  reached it, so it was deleted rather than kept as dead insurance.

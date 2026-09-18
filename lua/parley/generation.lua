@@ -122,11 +122,9 @@ local function insert_next(s,effects,bytes)
     if not item then return end
     local child=round.children[item.index]
     local result=item.kind=='result'
-    -- The outcome kind travels with the block, so a result is rendered from what
-    -- was recorded — never defaulted to "unknown" (#266 M3 review BR-15).
     round.inserting={id=emit(s,effects,'insert_tool',{round=round.id,index=item.index,kind=item.kind,
         call_id=child.call_id,result_ref=result and not child.cancelled and child.result_ref or nil,
-        outcome=result and child.outcome or nil,cancelled=result and child.cancelled or nil}).id,item=item}
+        cancelled=result and child.cancelled or nil}).id,item=item}
 end
 --- #266 M3 (operator): Stop during a tool round writes the round out rather than
 --- dropping the pairs of tools that already ran. Every tool still running is
