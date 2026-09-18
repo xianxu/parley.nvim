@@ -38,10 +38,6 @@ end
 -- grant's boundary is inside it.
 local function overlaps(a,b) return not (a.last<b.first or b.last<a.first) end
 local function contains(a,b) return a.first<=b.first and b.last<=a.last end
-local function writable(grant, wanted)
-    for _,slot in ipairs(grant.slots) do if contains(slot,wanted) then return true end end
-    return false
-end
 local function effect(result,kind,object,reason)
     local e={kind=kind,reason=reason}; e[kind=='stale' and 'generation' or 'grant']=object
     result.effects[#result.effects+1]=e
@@ -109,10 +105,10 @@ function M.resolve(doc,request,current)
     if not identity(g,current) then revoke(g,result,'identity'); result.ok=false; result.reason='identity'; return result end
     if current.confirmed~=true then suspend(g,result,'uncertain'); result.ok=false; result.reason='uncertain'; return result end
     if request.first~=nil or request.last~=nil then
-        if not range(request) or not writable(g,request) then return reject('outside grant') end
-    elseif #g.slots~=1 or not contains(g.slots[1],g) then return reject('patch range required') end
+        if not range(request) or not contains(g,request) then return reject('outside grant') end
+    end
     result.epoch=s.epoch; result.grant=g.id; result.generation=g.generation; result.entity=g.entity
-    result.first=g.first; result.last=g.last; result.revision=g.revision; result.slots=copy(g.slots)
+    result.first=g.first; result.last=g.last; result.revision=g.revision
     return result
 end
 
@@ -136,7 +132,7 @@ end
 function M.successor_arm(doc,token,patch)
     local w,g=successor(doc,token)
     if not w or w.armed or not range(patch) or not integer(patch.new_bytes)
-        or patch.last-patch.first>4096 or patch.new_bytes>4096 or not writable(g,patch)
+        or patch.last-patch.first>4096 or patch.new_bytes>4096 or not contains(g,patch)
         or g.revision~=w.revision then return false end
     w.armed={first=patch.first,last=patch.last,new_bytes=patch.new_bytes}
     return true
@@ -152,8 +148,8 @@ end
 function M.successor_finish(doc,token,last)
     local w,g=successor(doc,token)
     if not w or w.armed or w.revision~=g.revision or not integer(last)
-        or last<g.first or last>g.last or #g.slots~=1 then return false end
-    if last~=g.last then g.last=last;g.slots[1].last=last;g.revision=g.revision+1 end
+        or last<g.first or last>g.last then return false end
+    if last~=g.last then g.last=last;g.revision=g.revision+1 end
     successors[token]=nil
     return true
 end
@@ -225,9 +221,7 @@ function M.transition(doc,event)
         for i,p in ipairs(regions) do
             for j=1,i-1 do if overlaps(p,regions[j]) then return reject('overlap') end end
             for _,g in pairs(s.grants) do
-                if g.status~='revoked' then
-                    for _,slot in ipairs(g.slots) do if overlaps(p,slot) then return reject('overlap') end end
-                end
+                if g.status~='revoked' and overlaps(p,g) then return reject('overlap') end
             end
         end
         -- Revoked IDs are never reused; missing authority fails closed without a
@@ -237,7 +231,7 @@ function M.transition(doc,event)
         for _,p in ipairs(regions) do
             local gid=id(); s.grants[gid]={id=gid,generation=event.generation,entity=p.entity,
                 marker_revision=p.marker_revision,revision=p.revision,first=p.first,last=p.last,
-                slots={{first=p.first,last=p.last}},status='valid'}
+                status='valid'}
             result.grants[#result.grants+1]=gid
         end
     elseif kind=='reclaim_tail' then
@@ -248,7 +242,7 @@ function M.transition(doc,event)
         if not identity(g,event.current) or not proof(event.current) then return reject('unconfirmed identity') end
         -- No other live grant can cover g.last: grants are disjoint at acquire,
         -- and an edit reaching a grant it does not own revokes it.
-        g.first=g.last;g.slots={{first=g.last,last=g.last}};g.revision=g.revision+1;g.status='valid';g.reason=nil
+        g.first=g.last;g.revision=g.revision+1;g.status='valid';g.reason=nil
         result.first=g.first;result.last=g.last;result.revision=g.revision
     elseif kind=='observed_edit' then
         if not range(event) or not integer(event.new_bytes) or (event.revision~=nil and not integer(event.revision)) then
@@ -260,17 +254,13 @@ function M.transition(doc,event)
         local continued=owner and wg==owner and armed and armed.first==event.first
             and armed.last==event.last and armed.new_bytes==event.new_bytes and w.revision==owner.revision
         if w then w.armed=nil end
-        if owner and ((owner.status~='valid' and not continued) or not writable(owner,event)) then owner=nil end
+        if owner and ((owner.status~='valid' and not continued) or not contains(owner,event)) then owner=nil end
         for _,g in pairs(s.grants) do
-            if g.status~='revoked' then
-                for _,slot in ipairs(g.slots) do
-                    if overlaps(slot,event) and g~=owner then revoke(g,result,'output edit'); break end
-                end
-            end
+            if g.status~='revoked' and g~=owner and overlaps(g,event) then revoke(g,result,'output edit') end
         end
         for _,g in pairs(s.grants) do
             local first,last=g.first,g.last
-            move(g,event); for _,slot in ipairs(g.slots) do move(slot,event) end
+            move(g,event)
             -- Plans contain absolute byte coordinates. A disjoint edit moving
             -- this grant invalidates old plans without revoking the writer.
             if g.status~='revoked' and (g==owner or first~=g.first or last~=g.last) then
