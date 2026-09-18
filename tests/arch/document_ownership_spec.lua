@@ -95,5 +95,18 @@ describe('arch: captured document ownership',function()
         forbid('lua/parley/**/*.lua','%.create_handler%s*%(',
             '#254: production streaming uses the position-free provider and captured document grants',true)
     end)
+    it('does not restore nested grants or the geometry that carved them',function()
+        -- `.parent` and `.slots` are forbidden only where grants live: the
+        -- document's sequence tree and append cursors use those names too.
+        for _,pattern in ipairs({'%.parent','%.slots','open_first','open_last','tail_lost'})do
+            forbid({'lua/parley/document/state.lua','lua/parley/document/init.lua'},pattern,
+                '#266 M4: a tool round writes through its answer\'s own grant, so a grant is one closed range'
+                ..' and none is carved out of another',true)
+        end
+        for _,pattern in ipairs({'result_slot','call_block','receipt%.markers'})do
+            forbid('lua/parley/**/*.lua',pattern,
+                '#266: tool results are appended in call order; no block reserves a slot to fill later',true)
+        end
+    end)
 
 end)
