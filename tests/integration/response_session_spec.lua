@@ -143,6 +143,28 @@ describe('production response session composition',function()
         local text=table.concat(lines(),'\n')
         assert.truthy(text:find('alpha',1,true));assert.truthy(text:find('🤖: fixture%s+beta'),text)
     end)
+    it('tells a held answer what it waits for, without touching the transcript',function()
+        local a=start(doc,spec(0),lone_opts(),sessions);local b=start(doc,spec(3),lone_opts(),sessions)
+        pump(a);pump(b)
+        local before=lines()
+        local ns=vim.api.nvim_create_namespace('parley_chat_pending')
+        local function notes()
+            local out={}
+            for _,mark in ipairs(vim.api.nvim_buf_get_extmarks(buf,ns,0,-1,{details=true}))do
+                local virt=mark[4].virt_lines;if virt then out[#out+1]=virt[1][1][1] end
+            end
+            return table.concat(out,'\n')
+        end
+        assert.is_true(vim.wait(500,function()return notes():find('Waiting for the answer to line 1',1,true)~=nil end,5),notes())
+        assert.truthy(notes():find('(streaming)',1,true),notes())
+        assert.same(before,lines(),'the note is presentation, never transcript')
+        local pa=processes.processes[4242]
+        pa:emit('stdout','data: {"choices":[{"delta":{"content":"alpha"}}]}\n\n');status(pa);pa:finish()
+        vim.wait(100,function()return #Tasker._handles==1 end,1);pump(a);pump(b)
+        assert.equals('success',Session.snapshot(a).generation.outcome)
+        assert.is_true(vim.wait(500,function()return not notes():find('Waiting for',1,true)end,5),
+            'the note must clear once the turn arrives: '..notes())
+    end)
     it('composes a tool round and rebuilds the provider from frozen ordered results',function()
         local events,continued
         local producer={start=function(_,_,cb)events=cb;return {}end,

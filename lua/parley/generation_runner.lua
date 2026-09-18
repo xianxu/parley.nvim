@@ -26,6 +26,21 @@ local function enqueue(s,effect)
     s.queue[#s.queue+1]=effect
     if s.schedule then s.work:request() end
 end
+--- Presentation receives the machine snapshot plus, while this generation waits
+--- for the write turn, `blocked`: which generation holds it, its exchange, and
+--- what it is doing (#266). A held generation must never read as a frozen editor.
+local function present(s)
+    if not s.adapters.changed then return end
+    local current=G.snapshot(s.machine)
+    local b=s.blocked;current.blocked=b and copy(b)
+    local key=current.phase..':'..tostring(current.stale_input)
+        ..(b and ':'..tostring(b.generation)..':'..tostring(b.entity)..':'..tostring(b.phase) or '')
+    if key~=s.presentation_key then
+        s.presentation_key=key
+        local ok,err=pcall(s.adapters.changed,current)
+        if not ok then s.presentation_failure=tostring(err):sub(1,4096)end
+    end
+end
 local function dispatch(s,event)
     event.epoch,event.generation=s.epoch,s.generation
     local result
@@ -33,16 +48,26 @@ local function dispatch(s,event)
     for _,effect in ipairs(result.effects) do
         if effect.type=='release_blob' then release(s,effect.blob_ref) else enqueue(s,effect) end
     end
-    if result.accepted and s.adapters.changed then
-        local current=G.snapshot(s.machine)
-        local key=current.phase..':'..tostring(current.stale_input)
-        if key~=s.presentation_key then
-            s.presentation_key=key
-            local ok,err=pcall(s.adapters.changed,current)
-            if not ok then s.presentation_failure=tostring(err):sub(1,4096)end
+    if result.accepted then present(s) end
+    return result
+end
+--- The turn holder this generation is waiting behind, or nil. Only a generation
+--- that wants the turn is blocked: a paused one gave it up, a stopping one is done.
+local function blocker(s,doc)
+    local phase=G.snapshot(s.machine).phase
+    if s.turn_status~='waiting' or doc.turn==nil or phase=='paused' or phase=='stopping' or phase=='terminal' then return nil end
+    for _,other in pairs(runners) do
+        if other.generation==doc.turn and other.doc==s.doc and not other.terminal then
+            return {generation=doc.turn,entity=other.entity,phase=G.snapshot(other.machine).phase}
         end
     end
-    return result
+    -- Not a runner (an automatic topic writes through the coordinator directly).
+    for _,grant in pairs(doc.grants) do
+        if grant.generation==doc.turn and grant.status~='revoked' then
+            return {generation=doc.turn,entity=grant.entity}
+        end
+    end
+    return {generation=doc.turn}
 end
 local function sync(s)
     if s.terminal then return end
@@ -64,6 +89,9 @@ local function sync(s)
     if turn~=s.turn_status then s.turn_status=turn; dispatch(s,{type='turn',status=turn}) end
     local generation=doc.generations[s.generation]
     if generation and generation.stale then dispatch(s,{type='input_changed',dependencies_ref=s.dependencies_ref}) end
+    -- Recomputed on every sync, and sync runs on every document notification —
+    -- which includes each of the holder's writes, so its phase stays current.
+    s.blocked=blocker(s,doc);present(s)
 end
 local function alive(s,operation)
     sync(s)

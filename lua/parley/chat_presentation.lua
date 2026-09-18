@@ -45,6 +45,15 @@ local function bounded(text,limit)
     return text:sub(1,last)
 end
 M.bounded_message=bounded
+-- #266: what a generation held behind the write turn shows instead of looking
+-- frozen. `line` is the 1-based row of the holder's question, `phase` its
+-- generation phase; either may be unknown.
+local waiting_reasons={preparing='preparing',requesting='streaming',executing_tools='running tools',
+    draining='finishing',finalizing='finishing',stopping='stopping'}
+function M.waiting_message(line,phase)
+    local where=line and ('the answer to line '..line) or 'another answer'
+    return 'Waiting for '..where..' ('..(waiting_reasons[phase] or 'writing')..'); :ParleyStop there stops it'
+end
 -- Accumulate one provider detail stream and derive its meaningful status text.
 M.progress_message = function(detail_state, event)
     local detail = bounded(event.text)

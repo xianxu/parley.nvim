@@ -6,6 +6,7 @@ local Preparation=require('parley.response_preparation')
 local Provider=require('parley.response_provider')
 local Tools=require('parley.response_tools')
 local Pending=require('parley.chat_pending')
+local Presentation=require('parley.chat_presentation')
 local D=require('parley.document')
 local M={}
 local states=setmetatable({},{__mode='k'})
@@ -191,6 +192,15 @@ function M.start(doc,spec,opts)
         changed=function(value)
             if not s.active then return end
             if value.phase=='paused' and s.pending then s.pending:cancel();s.pending=nil end
+            -- #266: a generation held behind the write turn names what it waits
+            -- for. Presentation only: the note is an extmark, never transcript.
+            local note
+            if value.blocked then
+                local marker=value.blocked.entity and D.lookup(doc,value.blocked.entity)
+                local line=marker and not marker.opaque and marker.start_row+1 or nil
+                note=Presentation.waiting_message(line,value.blocked.phase)
+            end
+            if s.pending and note~=s.note then s.note=note;s.pending:progress({message=note or 'Working...'})end
             safe(opts.changed,value)
         end,
         terminal=function(result)finish(result,false)end,rejected=function(reason)finish(reason,true)end}

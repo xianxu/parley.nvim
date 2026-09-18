@@ -91,4 +91,18 @@ describe("progress_message", function()
         assert.are.same({}, cleared)
         assert.are.equal("Done", message)
     end)
+
+    -- #266: a generation held behind the write turn names what it waits for and
+    -- why, so a stalled holder never reads as a frozen editor.
+    it('names the answer holding the write turn and what it is doing',function()
+        local message=presentation.waiting_message(12,'executing_tools')
+        assert.truthy(message:find('line 12',1,true))
+        assert.truthy(message:find('running tools',1,true))
+        assert.truthy(message:find(':ParleyStop',1,true))
+        for phase,why in pairs({preparing='preparing',requesting='streaming',draining='finishing',
+            finalizing='finishing',stopping='stopping'}) do
+            assert.truthy(presentation.waiting_message(3,phase):find(why,1,true),phase)
+        end
+        assert.truthy(presentation.waiting_message(nil,nil):find('another answer',1,true))
+    end)
 end)
