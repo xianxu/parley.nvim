@@ -243,15 +243,24 @@ than the doc, so per-primitive hours are provisional (ariadne#127).
 Durable plan: `workshop/plans/000266-serialize-transcript-mutation-plan.md`
 (six revisions, six fresh-context reviews).
 
-- [~] M1 — the write turn (Tasks 1.1–1.5 done; 1.4 landed, test inversion pending): pure `WriteTurn`, turn state in the document reducer,
-      the `draining` phase, `'waiting'` refusal at the coordinator's write entry
-      points and in `Replacement.step`, the release/re-request matrix, and the
-      wake. **Ships deliberately over-serialized — see the Log entry below.**
-- [ ] M2 — defer preparation's write until there is output, restoring the Spec's
-      option (b): concurrent provider execution with serialized writes.
-- [ ] M3 — ordered `(call, result)` append; removes capacity tickets, the round
+- [~] M1 — the write turn **and** the preparation-write deferral. One boundary,
+      not two: the turn alone leaves nine end-to-end tests red purely because a
+      second generation's request never starts, and the deferral is what removes
+      that. A milestone that cannot go green on its own is not a review boundary
+      (AGENTS.md §3), so these close together.
+      - [x] `WriteTurn` pure entity
+      - [x] turn state in the document reducer
+      - [x] coordinator passthrough + notify-on-turn-change
+      - [x] `draining` phase and `turn_status` mirror
+      - [x] `'waiting'` refusal at the coordinator and in `Replacement.step`
+      - [ ] defer preparation's write until there is output (restores option (b))
+      - [ ] release/re-request matrix + end-to-end wake
+      - [ ] held-output budget message; writer-enumeration verification
+      - [ ] undo coherence assertion
+      - [ ] atlas rewrite + `milestone-close`
+- [ ] M2 — ordered `(call, result)` append; removes capacity tickets, the round
       reservation lifecycle, and child grants.
-- [ ] M4 — residual exclusion sweep (`exclude`, parent-slot carving, the
+- [ ] M3 — residual exclusion sweep (`exclude`, parent-slot carving, the
       half-open seam flags, the ancestor walk).
 
 ## Log
@@ -591,3 +600,18 @@ these nine tests keep asserting what they were written to assert and are never
 rewritten at all. M1's mechanism is already complete and green on its own specs;
 what is outstanding is only the consequence M2 removes. Nothing in M2 depends on
 the inversions — it depends on M1's turn, which has landed.
+
+### 2026-09-17 — M1 and the preparation deferral share one boundary
+
+Operator decision: push the nine concurrency-test inversions to the preparation
+deferral rather than rewriting them twice. Consequence, followed through: the
+deferral is no longer a separate milestone. M1's turn mechanism cannot produce a
+green suite by itself — nine end-to-end tests fail purely because a second
+generation's provider request never starts — and per AGENTS.md §3 an `Mx` row
+commits to its own `milestone-close`. A milestone that cannot close is not a
+boundary, so the former M1 and M2 are now one, and the later milestones shift up.
+
+This also protects coverage rather than only saving churn: `chat_stop_generation_spec`
+verifies Stop targeting one generation among several **concurrent transports**,
+and `chat_async_tools_spec` verifies overlapping tool processes. Way-station
+versions of those would assert materially less while M2 was pending.
